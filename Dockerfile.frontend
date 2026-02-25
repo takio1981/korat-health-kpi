@@ -1,0 +1,45 @@
+# Stage 1: Build Angular App
+FROM node:20-alpine AS builder
+WORKDIR /app
+# Copy package files จากโฟลเดอร์ kpi-web
+COPY kpi-web/package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy source code ทั้งหมด (จะข้าม node_modules เพราะมี .dockerignore แล้ว)
+COPY kpi-web/ .
+# Build Project (กำหนด base-href ให้ตรงกับ nginx location)
+RUN npm run build -- --base-href /khupskpi/
+
+# Stage 2: Serve with Nginx
+FROM nginx:alpine
+
+# Install openssl for self-signed cert generation
+RUN apk add --no-cache openssl
+
+# Copy custom nginx config
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Copy built assets from builder stage
+# หมายเหตุ: หากใช้ Angular 17+ path อาจเป็น /app/dist/kpi-web/browser ให้ลองตรวจสอบถ้า build ไม่ผ่าน
+COPY --from=builder /app/dist/kpi-web/browser /usr/share/nginx/html/khupskpi
+
+# แก้ไขสิทธิ์ไฟล์ (Permissions) ให้ Nginx อ่านได้แน่นอน (สำคัญมาก)
+RUN chmod -R 755 /usr/share/nginx/html
+
+# แก้ไข API URL: ค้นหาไฟล์ main*.js ทุกไฟล์ แล้วแทนที่ URL
+# ใช้ grep ตรวจสอบก่อนว่ามีไฟล์ที่ต้องแก้ไหม เพื่อความชัวร์
+RUN find /usr/share/nginx/html/khupskpi -type f -name "main*.js" -exec sed -i 's|http://localhost:3000|/khupskpi|g' {} + && \
+    echo "API URL replacement completed."
+
+# Create directory for SSL and generate self-signed certificate
+RUN mkdir -p /etc/nginx/ssl && \
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout /etc/nginx/ssl/server.key \
+    -out /etc/nginx/ssl/server.crt \
+    -subj "/C=TH/ST=NakhonRatchasima/L=Korat/O=KoratHealth/OU=IT/CN=localhost"
+
+EXPOSE 8881 8843
+
+CMD ["nginx", "-g", "daemon off;"]

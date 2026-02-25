@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment Variables (ความลับ ห้ามขึ้น Git)
+.env
+
+# Build Output
+dist/
+**/dist/
+
+# IDE & System Files
+.idea/
+.vscode/
+.DS_Store
+*.log
+
+# Angular specific
+.angular/
+**/.angular/

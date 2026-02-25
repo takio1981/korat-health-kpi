@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  # 2. Backend Service
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: khups_kpi_backend
+    restart: always
+    ports:
+      - "8830:8830" # Host 8830 -> Container 8830
+    environment:
+      PORT: 8830
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      SECRET_KEY: ${SECRET_KEY}
+    networks:
+      - kpi_network
+
+  # 3. Frontend Service (Nginx serving Web)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: khups_kpi_frontend
+    restart: always
+    ports:
+      - "80:8881"   # Host 80 -> Container 8881 (HTTP)
+      - "443:8843"  # Host 443 -> Container 8843 (HTTPS)
+    depends_on:
+      - backend
+    networks:
+      - kpi_network
+
+networks:
+  kpi_network:
+    driver: bridge
