@@ -3,15 +3,52 @@ const cors = require('cors');
 const db = require('./db'); // แก้ไข path ให้ถูกต้อง (เนื่องจากใน Docker ไฟล์จะอยู่ระดับเดียวกัน)
 const bcrypt = require('bcryptjs'); // แนะนำใช้ bcryptjs เพื่อเลี่ยงปัญหา compile ใน docker alpine
 const jwt = require('jsonwebtoken');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 const app = express();
 // ใช้ Port จาก ENV หรือ Default 8830 ตามโจทย์
 const port = process.env.PORT || 8830; 
 
+// Security Middleware
+app.set('trust proxy', 1); // จำเป็นเมื่ออยู่หลัง Nginx Proxy เพื่อให้ Rate Limit ทำงานถูกต้องกับ IP จริง
+app.use(helmet()); // เพิ่ม HTTP Headers เพื่อความปลอดภัย (XSS, Clickjacking, etc.)
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Global settings variables
+let maxLoginAttempts = 10;
+
+const updateSystemSettings = async () => {
+    try {
+        const [rows] = await db.query("SELECT setting_value FROM system_settings WHERE setting_key = 'max_login_attempts'");
+        if (rows.length > 0) {
+            maxLoginAttempts = parseInt(rows[0].setting_value, 10) || 10;
+        }
+    } catch (error) {
+        console.error("Failed to load system settings:", error);
+    }
+};
+// Load settings on start
+updateSystemSettings();
+
+// Rate Limiting: ป้องกัน Brute Force และ DDoS
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 นาที
+    limit: (req, res) => maxLoginAttempts, // ใช้ค่าจากตัวแปรที่โหลดจาก DB
+    message: { success: false, message: 'ทำรายการเกินกำหนด กรุณาลองใหม่ในอีก 15 นาที' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+const apiLimiter = rateLimit({
+    windowMs: 1 * 60 * 1000, // 1 นาที
+    max: 300, // เรียก API ทั่วไปได้ 300 ครั้งต่อนาที (ปรับตามความเหมาะสม)
+    standardHeaders: true,
+    legacyHeaders: false,
+});
 
 const SECRET_KEY = process.env.SECRET_KEY || "Korat_Health_Secret_Key_2026";
 
@@ -37,7 +74,7 @@ apiRouter.get('/status', (req, res) => {
     res.json({ message: '🚀 API พร้อมใช้งานที่ /khupskpi/api' });
 });
 
-apiRouter.post('/login', async (req, res) => {
+apiRouter.post('/login', loginLimiter, async (req, res) => {
     const { username, password } = req.body;
     // ใช้ req.headers['x-forwarded-for'] กรณีอยู่หลัง Nginx/Docker Proxy
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
@@ -93,6 +130,9 @@ apiRouter.post('/login', async (req, res) => {
         res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดที่ Server' });
     }
 });
+
+// ใช้ apiLimiter กับ Route ที่เหลือทั้งหมด (ป้องกันการยิง API รัวๆ)
+apiRouter.use(apiLimiter);
 
 apiRouter.get('/kpi-results', async (req, res) => {
     try {
@@ -550,6 +590,213 @@ apiRouter.get('/system-logs', async (req, res) => {
         res.json({ success: true, data: logs });
     } catch (error) {
         res.status(500).json({ success: false });
+    }
+});
+
+apiRouter.get('/settings', async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM system_settings');
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error fetching settings' });
+    }
+});
+
+apiRouter.post('/settings', async (req, res) => {
+    const settings = req.body; // Expect array of { key, value }
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (!token) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    let user;
+    try { user = jwt.verify(token, SECRET_KEY); } catch (err) { return res.status(403).json({ success: false }); }
+
+    if (user.role !== 'admin') return res.status(403).json({ success: false, message: 'Admin only' });
+
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        for (const item of settings) {
+            await connection.query(
+                'INSERT INTO system_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?',
+                [item.setting_key, item.setting_value, item.setting_value]
+            );
+        }
+        await connection.commit();
+        // Reload settings เพื่อให้ค่าใหม่มีผลทันที
+        updateSystemSettings();
+        res.json({ success: true, message: 'Settings updated' });
+    } catch (error) {
+        await connection.rollback();
+        res.status(500).json({ success: false, message: 'Update failed' });
+    } finally {
+        connection.release();
+    }
+});
+
+// --- CRUD Main Yut (ยุทธศาสตร์) ---
+apiRouter.get('/main-yut', async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM main_yut ORDER BY id');
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error fetching strategies' });
+    }
+});
+
+apiRouter.post('/main-yut', async (req, res) => {
+    const { yut_name } = req.body;
+    try {
+        await db.query('INSERT INTO main_yut (yut_name) VALUES (?)', [yut_name]);
+        res.json({ success: true, message: 'Created successfully' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error creating strategy' });
+    }
+});
+
+apiRouter.put('/main-yut/:id', async (req, res) => {
+    const { yut_name } = req.body;
+    try {
+        await db.query('UPDATE main_yut SET yut_name = ? WHERE id = ?', [yut_name, req.params.id]);
+        res.json({ success: true, message: 'Updated successfully' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error updating strategy' });
+    }
+});
+
+apiRouter.delete('/main-yut/:id', async (req, res) => {
+    try {
+        await db.query('DELETE FROM main_yut WHERE id = ?', [req.params.id]);
+        res.json({ success: true, message: 'Deleted successfully' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error deleting strategy' });
+    }
+});
+
+// --- CRUD Main Indicators (ตัวชี้วัดหลัก) ---
+apiRouter.get('/main-indicators', async (req, res) => {
+    try {
+        const [rows] = await db.query(`
+            SELECT mi.*, my.yut_name 
+            FROM kpi_main_indicators mi 
+            LEFT JOIN main_yut my ON mi.yut_id = my.id 
+            ORDER BY mi.id
+        `);
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error fetching main indicators' });
+    }
+});
+
+apiRouter.post('/main-indicators', async (req, res) => {
+    const { indicator_name, yut_id } = req.body;
+    try {
+        await db.query('INSERT INTO kpi_main_indicators (indicator_name, yut_id) VALUES (?, ?)', [indicator_name, yut_id]);
+        res.json({ success: true, message: 'Created successfully' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error creating main indicator' });
+    }
+});
+
+apiRouter.put('/main-indicators/:id', async (req, res) => {
+    const { indicator_name, yut_id } = req.body;
+    try {
+        await db.query('UPDATE kpi_main_indicators SET indicator_name = ?, yut_id = ? WHERE id = ?', [indicator_name, yut_id, req.params.id]);
+        res.json({ success: true, message: 'Updated successfully' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error updating main indicator' });
+    }
+});
+
+apiRouter.delete('/main-indicators/:id', async (req, res) => {
+    try {
+        await db.query('DELETE FROM kpi_main_indicators WHERE id = ?', [req.params.id]);
+        res.json({ success: true, message: 'Deleted successfully' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error deleting main indicator' });
+    }
+});
+
+// --- CRUD KPI Indicators (ตัวชี้วัดย่อย) ---
+apiRouter.get('/indicators', async (req, res) => {
+    try {
+        const [rows] = await db.query(`
+            SELECT i.*, mi.main_indicator_name as main_indicator_name, d.dept_name 
+            FROM kpi_indicators i
+            LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
+            LEFT JOIN departments d ON i.dept_id = d.id
+            ORDER BY i.id DESC
+        `);
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        console.error('Error fetching indicators:', error);
+        res.status(500).json({ success: false, message: 'Error fetching indicators' });
+    }
+});
+
+apiRouter.post('/indicators', async (req, res) => {
+    const { kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code } = req.body;
+    try {
+        await db.query(
+            'INSERT INTO kpi_indicators (kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code) VALUES (?, ?, ?, ?, ?, ?)',
+            [kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code]
+        );
+        res.json({ success: true, message: 'Created successfully' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error creating indicator' });
+    }
+});
+
+apiRouter.put('/indicators/:id', async (req, res) => {
+    const { kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code, is_active } = req.body;
+    try {
+        await db.query(
+            'UPDATE kpi_indicators SET kpi_indicators_name=?, main_indicator_id=?, dept_id=?, target_percentage=?, weight=?, kpi_indicators_code=?, is_active=? WHERE id=?',
+            [kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code, is_active, req.params.id]
+        );
+        res.json({ success: true, message: 'Updated successfully' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error updating indicator' });
+    }
+});
+
+apiRouter.delete('/indicators/:id', async (req, res) => {
+    try {
+        await db.query('DELETE FROM kpi_indicators WHERE id = ?', [req.params.id]);
+        res.json({ success: true, message: 'Deleted successfully' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error deleting indicator' });
+    }
+});
+
+// --- CRUD Departments (เพิ่มเติมจากที่มีอยู่) ---
+apiRouter.post('/departments', async (req, res) => {
+    const { dept_code, dept_name } = req.body;
+    try {
+        await db.query('INSERT INTO departments (dept_code, dept_name) VALUES (?, ?)', [dept_code, dept_name]);
+        res.json({ success: true, message: 'Created successfully' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error creating department' });
+    }
+});
+
+apiRouter.put('/departments/:id', async (req, res) => {
+    const { dept_code, dept_name } = req.body;
+    try {
+        await db.query('UPDATE departments SET dept_code=?, dept_name=? WHERE id=?', [dept_code, dept_name, req.params.id]);
+        res.json({ success: true, message: 'Updated successfully' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error updating department' });
+    }
+});
+
+apiRouter.delete('/departments/:id', async (req, res) => {
+    try {
+        await db.query('DELETE FROM departments WHERE id = ?', [req.params.id]);
+        res.json({ success: true, message: 'Deleted successfully' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error deleting department' });
     }
 });
 

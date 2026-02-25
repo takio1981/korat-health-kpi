@@ -29,8 +29,8 @@ services:
     container_name: khups_kpi_frontend
     restart: always
     ports:
-      - "80:8881"   # Host 80 -> Container 8881 (HTTP)
-      - "443:8843"  # Host 443 -> Container 8843 (HTTPS)
+      - "8881:8881"   # Host 8881 -> Container 8881 (HTTP) - เลี่ยง Port 80 ชน
+      - "8843:8843"   # Host 8843 -> Container 8843 (HTTPS) - เลี่ยง Port 443 ชน
     depends_on:
       - backend
     networks:
