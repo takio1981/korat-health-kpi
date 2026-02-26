@@ -165,9 +165,9 @@ apiRouter.get('/kpi-results', async (req, res) => {
             SELECT 
                 if (mi.main_indicator_name is NULL,"ยังไม่กำหนด",mi.main_indicator_name) main_indicator_name,
                 i.kpi_indicators_name,
+                r.year_bh,
                 i.id AS indicator_id,
                 d.dept_name,
-                r.year_bh,
                 SUM(r.target_value) AS target_value,
                 SUM(CASE WHEN r.month_bh = 10 THEN r.actual_value ELSE 0 END) AS oct,
                 SUM(CASE WHEN r.month_bh = 11 THEN r.actual_value ELSE 0 END) AS nov,
@@ -195,11 +195,11 @@ apiRouter.get('/kpi-results', async (req, res) => {
                 d.dept_name,
                 r.year_bh                
             ORDER BY 
+                r.year_bh DESC,
                 mi.main_indicator_name DESC, 
                 i.kpi_indicators_name DESC, 
                 i.id DESC,
-                d.dept_name DESC,
-                r.year_bh DESC;
+                d.dept_name DESC;
         `;
         const [rows] = await db.query(sql, params);
         res.json({ success: true, data: rows });
@@ -496,6 +496,47 @@ apiRouter.post('/users', async (req, res) => {
         res.json({ success: true, message: 'User created' });
     } catch (error) {
         res.status(500).json({ success: false });
+    }
+});
+
+// เปลี่ยนรหัสผ่านตัวเอง (ทุก role ใช้ได้)
+apiRouter.put('/users/change-password', async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) return res.status(401).json({ success: false, message: 'กรุณาเข้าสู่ระบบ' });
+
+    let user;
+    try { user = jwt.verify(token, SECRET_KEY); } catch (err) {
+        return res.status(403).json({ success: false, message: 'Token ไม่ถูกต้อง' });
+    }
+
+    if (!currentPassword || !newPassword) {
+        return res.status(400).json({ success: false, message: 'กรุณากรอกข้อมูลให้ครบ' });
+    }
+    if (newPassword.length < 6) {
+        return res.status(400).json({ success: false, message: 'รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร' });
+    }
+
+    try {
+        const [users] = await db.query('SELECT password_hash FROM users WHERE id = ?', [user.userId]);
+        if (users.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
+
+        const isMatch = await bcrypt.compare(currentPassword, users[0].password_hash);
+        if (!isMatch) return res.status(400).json({ success: false, message: 'รหัสผ่านปัจจุบันไม่ถูกต้อง' });
+
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [hashedPassword, user.userId]);
+
+        await db.query(
+            'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [user.userId, user.deptId, 'UPDATE', 'users', user.userId, JSON.stringify({ message: 'เปลี่ยนรหัสผ่านตัวเอง' }), req.ip]
+        );
+
+        res.json({ success: true, message: 'เปลี่ยนรหัสผ่านเรียบร้อยแล้ว' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดที่ Server' });
     }
 });
 
