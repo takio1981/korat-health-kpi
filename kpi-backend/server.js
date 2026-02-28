@@ -404,25 +404,119 @@ apiRouter.post('/approve-kpi', async (req, res) => {
     if (!token) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     let user;
-    try { user = jwt.verify(token, SECRET_KEY); } catch (err) { return res.status(403).json({ success: false }); }
+    try { user = jwt.verify(token, SECRET_KEY); } catch (err) { return res.status(403).json({ success: false, message: 'Invalid Token' }); }
 
     if (user.role !== 'admin') return res.status(403).json({ success: false, message: 'Admin only' });
-    if (!Array.isArray(approvals) || approvals.length === 0) return res.status(400).json({ success: false });
+    if (!Array.isArray(approvals) || approvals.length === 0) return res.status(400).json({ success: false, message: 'No approval data' });
 
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
+
+        // ดึงข้อมูล dept_id ทั้งหมดของ indicators ที่จะอนุมัติ
+        const indicatorIds = approvals.map(item => item.indicator_id);
+        const [indicators] = await connection.query('SELECT id, dept_id FROM kpi_indicators WHERE id IN (?)', [indicatorIds]);
+        const indicatorDeptMap = new Map(indicators.map(i => [i.id, i.dept_id]));
+
         for (const item of approvals) {
-            await connection.query(
-                `UPDATE kpi_results SET status = 'Approved' WHERE indicator_id = ? AND year_bh = ? AND status = 'Pending'`,
-                [item.indicator_id, item.year_bh]
-            );
+            const indicatorDeptId = indicatorDeptMap.get(item.indicator_id);
+
+            // Super Admin (deptId is null) can approve anything
+            // Dept Admin can only approve KPIs in their department
+            const isSuperAdmin = !user.deptId;
+            const isDeptAdmin = user.deptId && user.deptId === indicatorDeptId;
+
+            if (isSuperAdmin || isDeptAdmin) {
+                await connection.query(
+                    `UPDATE kpi_results SET status = 'Approved' WHERE indicator_id = ? AND year_bh = ? AND status = 'Pending'`,
+                    [item.indicator_id, item.year_bh]
+                );
+            } else {
+                // หากไม่มีสิทธิ์แม้แต่รายการเดียว ให้ยกเลิกทั้งหมด
+                throw new Error(`ไม่มีสิทธิ์อนุมัติตัวชี้วัด ID: ${item.indicator_id}`);
+            }
         }
+        
+        await connection.query(
+            'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+            [user.userId, user.deptId, 'UPDATE', 'kpi_results', JSON.stringify({ message: `อนุมัติ KPI ${approvals.length} รายการ` }), req.ip]
+        );
+
         await connection.commit();
-        res.json({ success: true, message: 'Approved' });
+        res.json({ success: true, message: 'อนุมัติข้อมูลเรียบร้อยแล้ว' });
     } catch (error) {
         await connection.rollback();
-        res.status(500).json({ success: false });
+        console.error("Approve KPI Error:", error.message);
+        res.status(500).json({ success: false, message: error.message || 'เกิดข้อผิดพลาดในการอนุมัติ' });
+    } finally {
+        connection.release();
+    }
+});
+
+// --- Log Management ---
+apiRouter.get('/logs/backup', async (req, res) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    let user;
+    try { user = jwt.verify(token, SECRET_KEY); } catch (err) { return res.status(403).json({ success: false }); }
+    if (user.role !== 'admin') return res.status(403).json({ success: false, message: 'Admin only' });
+
+    try {
+        const [systemLogs] = await db.query(`SELECT l.*, u.username FROM system_logs l LEFT JOIN users u ON l.user_id = u.id ORDER BY l.created_at DESC`);
+        const [loginLogs] = await db.query(`SELECT * FROM login_logs ORDER BY created_at DESC`);
+
+        let csv = 'log_type,id,timestamp,username,action,details,ip_address\n';
+
+        systemLogs.forEach(row => {
+            const details = row.new_value ? JSON.parse(row.new_value).message : (row.old_value || '');
+            csv += `SYSTEM,${row.id},"${row.created_at}","${row.username || ''}","${row.action_type}","${details.replace(/"/g, '""')}","${row.ip_address || ''}"\n`;
+        });
+
+        loginLogs.forEach(row => {
+            csv += `LOGIN,${row.id},"${row.created_at}","${row.username || ''}","${row.action}","${row.details.replace(/"/g, '""')}","${row.ip_address || ''}"\n`;
+        });
+
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="korat_kpi_logs.csv"');
+        // Add BOM for UTF-8 Excel compatibility
+        res.send('\ufeff' + csv);
+
+    } catch (error) {
+        console.error("Log Backup Error:", error);
+        res.status(500).json({ success: false, message: 'ไม่สามารถสำรองข้อมูลได้' });
+    }
+});
+
+apiRouter.delete('/logs/clear', async (req, res) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    let user;
+    try { user = jwt.verify(token, SECRET_KEY); } catch (err) { return res.status(403).json({ success: false }); }
+    if (user.role !== 'admin') return res.status(403).json({ success: false, message: 'Admin only' });
+    
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        
+        // Log the clear action before actually clearing
+        await connection.query(
+            'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+            [user.userId, user.deptId, 'DELETE', 'ALL_LOGS', JSON.stringify({ message: `ล้างข้อมูล Log ทั้งหมดโดย ${user.username}` }), req.ip]
+        );
+        
+        await connection.query('TRUNCATE TABLE system_logs');
+        await connection.query('TRUNCATE TABLE login_logs');
+
+        await connection.commit();
+        res.json({ success: true, message: 'ล้างข้อมูล Log ทั้งหมดเรียบร้อยแล้ว' });
+    } catch (error) {
+        await connection.rollback();
+        console.error("Log Clear Error:", error);
+        res.status(500).json({ success: false, message: 'ไม่สามารถล้างข้อมูล Log ได้' });
     } finally {
         connection.release();
     }
