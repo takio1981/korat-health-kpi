@@ -1,0 +1,315 @@
+<div class="flex h-screen bg-gray-100 font-sans overflow-hidden">
+  <!-- Sidebar -->
+  <aside class="bg-gradient-to-b from-green-800 to-green-600 text-white flex flex-col shadow-xl z-20 transition-all duration-700 ease-in-out overflow-hidden whitespace-nowrap" [ngClass]="isSidebarOpen ? 'w-64 opacity-100' : 'w-0 opacity-0'">
+    <div class="h-16 flex items-center px-6 border-b border-green-500/30 bg-green-900/20">
+      <i class="fas fa-heartbeat text-2xl mr-3"></i>
+      <span class="text-lg font-bold tracking-wide">Korat Health KPI</span>
+    </div>
+
+    <nav class="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+      <a routerLink="/charts" class="flex items-center px-4 py-3 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
+        <i class="fas fa-chart-bar text-xl mr-3"></i> รายงานสถิติ
+      </a>
+      <a routerLink="/dashboard" class="flex items-center px-4 py-3 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
+        <i class="fas fa-th-large text-xl mr-3"></i>
+        <span class="truncate flex justify-between items-center w-full">
+          ภาพรวมตัวชี้วัด
+          <span *ngIf="(isAdmin || isSuperAdmin) && pendingKpiCount > 0" class="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ml-2 animate-pulse shadow-lg">
+            {{ pendingKpiCount }}
+          </span>
+        </span>
+      </a>
+      <a *ngIf="isAdmin || isSuperAdmin" routerLink="/users" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer text-sm">
+        <i class="fas fa-users-cog text-lg mr-3 min-w-[24px]"></i> 
+        <span class="truncate flex justify-between items-center w-full">
+          จัดการผู้ใช้งาน
+          
+        </span>
+      </a>
+      <a *ngIf="isAdmin || isSuperAdmin" routerLink="/kpi-manage" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer text-sm">
+        <i class="fas fa-tasks text-lg mr-3 min-w-[24px]"></i> 
+        <span class="truncate flex justify-between items-center w-full">
+          จัดการตัวชี้วัด
+          
+        </span>
+      </a>
+      <a *ngIf="isAdmin || isSuperAdmin" routerLink="/audit-logs" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer text-sm">
+        <i class="fas fa-history text-lg mr-3 min-w-[24px]"></i> 
+        <span class="truncate flex justify-between items-center w-full">
+          ประวัติการใช้งาน
+          
+        </span>
+      </a>
+      <a *ngIf="isAdmin || isSuperAdmin" routerLink="/kpi-setup" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer text-sm">
+        <i class="fas fa-plus-circle text-lg mr-3 min-w-[24px]"></i> 
+        <span class="truncate flex justify-between items-center w-full">
+          +KPI ปีงบประมาณใหม่
+          
+        </span>
+      </a>
+      <!-- เพิ่มปุ่มตั้งค่าระบบ (Admin/Super Admin) -->
+      <a *ngIf="isAdmin || isSuperAdmin" routerLink="/settings" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer text-sm">
+        <i class="fas fa-sliders-h text-lg mr-3 min-w-[24px]"></i> 
+        <span class="truncate flex justify-between items-center w-full">
+          ตั้งค่าระบบ
+          
+        </span>
+      </a>
+    </nav>
+
+    <div class="p-4 border-t border-green-500/30">
+      <button (click)="openChangePasswordModal()" class="flex items-center w-full px-4 py-3 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer mb-1">
+        <i class="fas fa-key text-xl mr-3 min-w-[24px]"></i>
+        <span class="truncate">เปลี่ยนรหัสผ่าน</span>
+      </button>
+      <button (click)="logout()" class="flex items-center w-full px-4 py-3 text-green-100 hover:bg-red-500 hover:text-white rounded-xl transition-colors cursor-pointer">
+        <i class="fas fa-sign-out-alt text-xl mr-3"></i> ออกจากระบบ
+      </button>
+      <div class="mt-4 text-center text-xs text-green-200/60 font-mono">
+        {{ systemVersion }}
+      </div>
+    </div>
+  </aside>
+
+  <div class="flex-1 flex flex-col overflow-hidden">
+    <header class="h-16 bg-gradient-to-r from-green-800 to-green-600 shadow-md flex items-center justify-between px-6 z-10">
+      <div class="flex items-center">
+        <button (click)="toggleSidebar()" class="text-white hover:text-green-200 focus:outline-none mr-4 lg:hidden" [ngClass]="isSidebarOpen ? 'block' : 'block'">
+          <i class="fas fa-bars text-xl"></i>
+        </button>
+        <button (click)="toggleSidebar()" class="text-white hover:text-green-200 focus:outline-none mr-4 hidden lg:block" [ngClass]="isSidebarOpen ? 'hidden' : 'block'">
+          <i class="fas fa-bars text-xl"></i>
+        </button>
+        <h2 class="text-xl font-semibold text-white">ระบบจัดการผู้ใช้งาน</h2>
+        <span *ngIf="(isAdmin || isSuperAdmin) && pendingKpiCount > 0" class="flex h-6 min-w-[24px] px-1.5 items-center justify-center rounded-full bg-red-500 text-[11px] font-bold text-white ml-2 animate-pulse shadow-lg">
+          {{ pendingKpiCount }}
+        </span>
+      </div>
+      <div class="flex items-center">
+        <div class="text-right mr-3 hidden sm:block">
+          <p class="text-sm font-bold text-white">({{ currentUserDisplay?.role }}) {{ currentUserDisplay?.firstname }} {{ currentUserDisplay?.lastname }}</p>
+          <p class="text-xs text-green-100">{{ currentUserDisplay?.service_unit || currentUserDisplay?.role }}</p>
+        </div>
+        <div class="h-10 w-10 rounded-full bg-white/20 border-2 border-white/30 flex items-center justify-center text-white font-bold backdrop-blur-sm">
+          {{ currentUserDisplay?.username?.charAt(0).toUpperCase() }}
+        </div>
+      </div>
+    </header>
+
+    <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 p-6">
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="p-6 border-b border-gray-100 flex justify-between items-center">
+          <h3 class="text-lg font-bold text-gray-800">รายชื่อผู้ใช้งานในระบบ</h3>
+          <button (click)="openModal()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold">
+            <i class="fas fa-user-plus mr-2"></i> เพิ่มผู้ใช้งาน
+          </button>
+        </div>
+        
+        <!-- ส่วนค้นหาและตัวกรอง -->
+        <div class="p-6 bg-gray-50 border-b border-gray-100 grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="relative mt-2">
+            <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">ค้นหา</label>
+            <input type="text" [(ngModel)]="searchTerm" (input)="applyFilters()" placeholder="ชื่อผู้ใช้ / หน่วยงาน..." 
+                   class="w-full pl-4 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm hover:border-green-400 transition-colors">
+          </div>
+          
+          <div class="relative mt-2">
+            <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">สิทธิ์การใช้งาน</label>
+            <select [(ngModel)]="selectedRole" (change)="applyFilters()" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm hover:border-green-400 transition-colors">
+              <option value="">ทั้งหมด</option>
+              <option value="admin">Admin</option>
+              <option value="user">User</option>
+            </select>
+          </div>
+
+          <div class="relative mt-2">
+            <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">หน่วยงาน</label>
+            <select [(ngModel)]="selectedDept" (change)="applyFilters()" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm hover:border-green-400 transition-colors">
+              <option value="">ทั้งหมด</option>
+              <option *ngFor="let dept of departments" [value]="dept.id">{{ dept.dept_name }}</option>
+            </select>
+          </div>
+
+          <div class="flex items-end">
+            <button (click)="searchTerm=''; selectedRole=''; selectedDept=''; applyFilters()" class="w-full py-2.5 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl text-sm transition-colors shadow-md"><i class="fas fa-times-circle mr-2"></i> ล้างตัวกรอง</button>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead class="bg-gradient-to-r from-green-700 to-green-600 text-white">
+              <tr>
+                <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider rounded-tl-xl">Username</th>
+                <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider">ชื่อ-นามสกุล</th>
+                <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider">สิทธิ์การใช้งาน (Role)</th>
+                <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider">หน่วยงานที่สังกัด</th>
+                <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider">หน่วยบริการ</th>
+                <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider">เบอร์โทร</th>
+                <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider text-right rounded-tr-xl">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr *ngFor="let user of pagedUsers" class="hover:bg-gray-50">
+                <td class="px-6 py-4 font-medium text-gray-900">{{ user.username }}</td>
+                <td class="px-6 py-4 text-gray-700">{{ user.firstname }} {{ user.lastname }}</td>
+                <td class="px-6 py-4">
+                  <span [ngClass]="user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'" class="px-2 py-1 rounded-full text-xs font-bold uppercase">
+                    {{ user.role }}
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-gray-600">{{ user.dept_name || '-' }}</td>
+                <td class="px-6 py-4 text-gray-600">{{ user.hosname || user.hospcode || '-' }}</td>
+                <td class="px-6 py-4 text-gray-600">{{ user.phone || '-' }}</td>
+                <td class="px-6 py-4 text-right space-x-2">
+                  <button (click)="resetPassword(user)" class="text-orange-500 hover:text-orange-600" title="รีเซ็ตรหัสผ่าน"><i class="fas fa-key"></i></button>
+                  <button (click)="openModal(user)" class="text-yellow-500 hover:text-yellow-600" title="แก้ไข"><i class="fas fa-edit"></i></button>
+                  <button (click)="deleteUser(user.id)" class="text-red-500 hover:text-red-600" title="ลบ"><i class="fas fa-trash"></i></button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="p-4 bg-white border-t border-gray-100 flex justify-between items-center">
+            <span class="text-xs text-gray-500 font-medium">แสดงหน้า {{currentPage}} จาก {{totalPages}} (ทั้งหมด {{filteredUsers.length}} รายการ)</span>
+            <div class="flex gap-2">
+              <button (click)="setPage(currentPage - 1)" [disabled]="currentPage === 1" 
+                      class="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-bold hover:bg-gray-50 disabled:opacity-50">
+                ก่อนหน้า
+              </button>
+              <button (click)="setPage(currentPage + 1)" [disabled]="currentPage === totalPages" 
+                      class="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-bold hover:bg-gray-50 disabled:opacity-50">
+                ถัดไป
+              </button>
+            </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal -->
+  <div *ngIf="showModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6 transform transition-all scale-100 overflow-y-auto max-h-[90vh]">
+      <h3 class="text-xl font-bold text-gray-800 mb-4">{{ isEditMode ? 'แก้ไขข้อมูลผู้ใช้งาน' : 'เพิ่มผู้ใช้งานใหม่' }}</h3>
+      
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+          <input type="text" [(ngModel)]="currentUser.username" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Password {{ isEditMode ? '(เว้นว่างถ้าไม่เปลี่ยน)' : '' }}</label>
+          <input type="password" [(ngModel)]="currentUser.password" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อ</label>
+            <input type="text" [(ngModel)]="currentUser.firstname" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">นามสกุล</label>
+            <input type="text" [(ngModel)]="currentUser.lastname" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">อำเภอ</label>
+            <select [(ngModel)]="selectedDistrictId" (change)="onDistrictChange()" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+              <option value="">-- เลือกอำเภอ --</option>
+              <option *ngFor="let d of districts" [value]="d.distid">{{ d.distname }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">หน่วยบริการ (รพ./สสอ.)</label>
+            <select [(ngModel)]="currentUser.hospcode" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+              <option value="">-- เลือกหน่วยบริการ --</option>
+              <option *ngFor="let h of filteredHospitals" [value]="h.hoscode">{{ h.hoscode }}: {{ h.hosname }}</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">เบอร์โทรศัพท์</label>
+          <input type="text" [(ngModel)]="currentUser.phone" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">สิทธิ์การใช้งาน (Role)</label>
+          <select [(ngModel)]="currentUser.role" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+            <option value="user">User (ผู้ใช้งานทั่วไป)</option>
+            <option value="admin">Admin (ผู้ดูแลระบบ)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">สังกัดหน่วยงาน</label>
+          <select [(ngModel)]="currentUser.dept_id" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+            <option value="">-- ไม่ระบุ --</option>
+            <option *ngFor="let dept of departments" [value]="dept.id">{{ dept.dept_name }}</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="mt-6 flex justify-end gap-3">
+        <button (click)="closeModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-bold">ยกเลิก</button>
+        <button (click)="saveUser()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold shadow-md">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal เปลี่ยนรหัสผ่าน -->
+  <div *ngIf="showChangePasswordModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-4 sm:p-6 transform transition-all scale-100">
+      <div class="flex items-center mb-4 sm:mb-5">
+        <div class="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mr-3">
+          <i class="fas fa-key text-green-600"></i>
+        </div>
+        <h3 class="text-lg sm:text-xl font-bold text-gray-800">เปลี่ยนรหัสผ่าน</h3>
+      </div>
+      <div class="space-y-3 sm:space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">รหัสผ่านปัจจุบัน</label>
+          <div class="relative">
+            <input [type]="showCurrentPw ? 'text' : 'password'" [(ngModel)]="changePasswordForm.currentPassword" placeholder="กรอกรหัสผ่านปัจจุบัน"
+              class="w-full px-3 sm:px-4 py-2.5 sm:py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+            <button type="button" (click)="showCurrentPw = !showCurrentPw" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none">
+              <i [class]="showCurrentPw ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+            </button>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">รหัสผ่านใหม่</label>
+          <div class="relative">
+            <input [type]="showNewPw ? 'text' : 'password'" [(ngModel)]="changePasswordForm.newPassword" placeholder="อย่างน้อย 6 ตัวอักษร"
+              class="w-full px-3 sm:px-4 py-2.5 sm:py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+            <button type="button" (click)="showNewPw = !showNewPw" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none">
+              <i [class]="showNewPw ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+            </button>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">ยืนยันรหัสผ่านใหม่</label>
+          <div class="relative">
+            <input [type]="showConfirmPw ? 'text' : 'password'" [(ngModel)]="changePasswordForm.confirmPassword" placeholder="กรอกรหัสผ่านใหม่อีกครั้ง"
+              class="w-full px-3 sm:px-4 py-2.5 sm:py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors"
+              [ngClass]="changePasswordForm.confirmPassword && changePasswordForm.newPassword !== changePasswordForm.confirmPassword ? 'border-red-400 focus:ring-red-400' : ''">
+            <button type="button" (click)="showConfirmPw = !showConfirmPw" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none">
+              <i [class]="showConfirmPw ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+            </button>
+          </div>
+          <p *ngIf="changePasswordForm.confirmPassword && changePasswordForm.newPassword !== changePasswordForm.confirmPassword" class="text-xs text-red-500 mt-1">รหัสผ่านไม่ตรงกัน</p>
+        </div>
+      </div>
+      <div class="mt-4 sm:mt-6 flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
+        <button (click)="closeChangePasswordModal()" class="w-full sm:w-auto px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-bold transition-colors">ยกเลิก</button>
+        <button (click)="saveNewPassword()" class="w-full sm:w-auto px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold shadow-md transition-colors">
+          <i class="fas fa-save mr-2"></i>บันทึก
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

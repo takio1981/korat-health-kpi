@@ -1,0 +1,248 @@
+<div class="flex h-screen bg-gray-100 font-sans overflow-hidden">
+  <!-- Sidebar -->
+  <aside class="bg-gradient-to-b from-green-800 to-green-600 text-white flex flex-col shadow-xl z-20 transition-all duration-700 ease-in-out overflow-hidden whitespace-nowrap" [ngClass]="isSidebarOpen ? 'w-64 opacity-100' : 'w-0 opacity-0'">
+    <div class="h-16 flex items-center px-6 border-b border-green-500/30 bg-green-900/20">
+      <i class="fas fa-heartbeat text-2xl mr-3"></i>
+      <span class="text-lg font-bold tracking-wide">Korat Health KPI</span>
+    </div>
+
+    <nav class="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+      <a routerLink="/charts" class="flex items-center px-4 py-3 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
+        <i class="fas fa-chart-bar text-xl mr-3"></i> รายงานสถิติ
+      </a>
+      <a routerLink="/dashboard" class="flex items-center px-4 py-3 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
+        <i class="fas fa-th-large text-xl mr-3"></i>
+        <span class="truncate flex justify-between items-center w-full">
+          ภาพรวมตัวชี้วัด
+          <span *ngIf="(isAdmin || isSuperAdmin) && pendingKpiCount > 0" class="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ml-2 animate-pulse shadow-lg">
+            {{ pendingKpiCount }}
+          </span>
+        </span>
+      </a>
+      <a *ngIf="isAdmin || isSuperAdmin" routerLink="/users" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer text-sm">
+        <i class="fas fa-users-cog text-lg mr-3 min-w-[24px]"></i> 
+        <span class="truncate flex justify-between items-center w-full">
+          จัดการผู้ใช้งาน
+          
+        </span>
+      </a>
+      <a *ngIf="isAdmin || isSuperAdmin" routerLink="/kpi-manage" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer text-sm">
+        <i class="fas fa-tasks text-lg mr-3 min-w-[24px]"></i> 
+        <span class="truncate flex justify-between items-center w-full">
+          จัดการตัวชี้วัด
+          
+        </span>
+      </a>
+      <a *ngIf="isAdmin || isSuperAdmin" routerLink="/audit-logs" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer text-sm">
+        <i class="fas fa-history text-lg mr-3 min-w-[24px]"></i> 
+        <span class="truncate flex justify-between items-center w-full">
+          ประวัติการใช้งาน
+          
+        </span>
+      </a>
+      <a *ngIf="isAdmin || isSuperAdmin" routerLink="/kpi-setup" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer text-sm">
+        <i class="fas fa-plus-circle text-lg mr-3 min-w-[24px]"></i> 
+        <span class="truncate flex justify-between items-center w-full">
+          +KPI ปีงบประมาณใหม่
+          
+        </span>
+      </a>
+      <a *ngIf="isAdmin || isSuperAdmin" routerLink="/settings" class="flex items-center px-4 py-2.5 bg-white/10 text-white rounded-xl transition-colors cursor-pointer text-sm font-medium">
+        <i class="fas fa-sliders-h text-lg mr-3 min-w-[24px]"></i> 
+        <span class="truncate flex justify-between items-center w-full">
+          ตั้งค่าระบบ
+          
+        </span>
+      </a>
+    </nav>
+
+    <div class="p-4 border-t border-green-500/30">
+      <button (click)="openChangePasswordModal()" class="flex items-center w-full px-4 py-3 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer mb-1">
+        <i class="fas fa-key text-xl mr-3 min-w-[24px]"></i>
+        <span class="truncate">เปลี่ยนรหัสผ่าน</span>
+      </button>
+      <button (click)="logout()" class="flex items-center w-full px-4 py-3 text-green-100 hover:bg-red-500 hover:text-white rounded-xl transition-colors cursor-pointer">
+        <i class="fas fa-sign-out-alt text-xl mr-3"></i> ออกจากระบบ
+      </button>
+      <div class="mt-4 text-center text-xs text-green-200/60 font-mono">
+        {{ systemVersion }}
+      </div>
+    </div>
+  </aside>
+
+  <div class="flex-1 flex flex-col overflow-hidden">
+    <header class="h-16 bg-gradient-to-r from-green-800 to-green-600 shadow-md flex items-center justify-between px-6 z-10">
+      <div class="flex items-center">
+        <button (click)="toggleSidebar()" class="text-white hover:text-green-200 focus:outline-none mr-4 lg:hidden" [ngClass]="isSidebarOpen ? 'block' : 'block'">
+          <i class="fas fa-bars text-xl"></i>
+        </button>
+        <button (click)="toggleSidebar()" class="text-white hover:text-green-200 focus:outline-none mr-4 hidden lg:block" [ngClass]="isSidebarOpen ? 'hidden' : 'block'">
+          <i class="fas fa-bars text-xl"></i>
+        </button>
+        <h2 class="text-xl font-semibold text-white">ตั้งค่าระบบ</h2>
+        <span *ngIf="(isAdmin || isSuperAdmin) && pendingKpiCount > 0" class="flex h-6 min-w-[24px] px-1.5 items-center justify-center rounded-full bg-red-500 text-[11px] font-bold text-white ml-2 animate-pulse shadow-lg">
+          {{ pendingKpiCount }}
+        </span>
+      </div>
+      <div class="flex items-center">
+        <div class="text-right mr-3 hidden sm:block">
+          <p class="text-sm font-bold text-white">({{ currentUserDisplay?.role }}) {{ currentUserDisplay?.firstname }} {{ currentUserDisplay?.lastname }}</p>
+          <p class="text-xs text-green-100">{{ currentUserDisplay?.service_unit || currentUserDisplay?.role }}</p>
+        </div>
+        <div class="h-10 w-10 rounded-full bg-white/20 border-2 border-white/30 flex items-center justify-center text-white font-bold backdrop-blur-sm">
+          {{ currentUserDisplay?.username?.charAt(0).toUpperCase() }}
+        </div>
+      </div>
+    </header>
+
+    <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 p-6">
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+        <div class="p-6 border-b border-gray-100">
+          <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-cog me-2 text-green-600"></i>การตั้งค่าทั่วไป</h3>
+          
+          <form (ngSubmit)="saveSettings()">
+            <div class="mb-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+              <label class="block text-sm font-bold text-gray-700 mb-2">
+                <i class="fas fa-clock me-2 text-yellow-500"></i>เวลา Auto Logout
+              </label>
+              <div class="flex gap-4">
+                <div class="flex items-center w-full">
+                  <input type="number" id="idleTimeoutMinutes" [(ngModel)]="idleTimeoutMinutes" name="idleTimeoutMinutes" min="0" max="120" required
+                         class="w-full px-4 py-2 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+                  <span class="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 font-medium text-sm">นาที</span>
+                </div>
+                <div class="flex items-center w-full">
+                  <input type="number" id="idleTimeoutSeconds" [(ngModel)]="idleTimeoutSeconds" name="idleTimeoutSeconds" min="0" max="59" required
+                         class="w-full px-4 py-2 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+                  <span class="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 font-medium text-sm">วินาที</span>
+                </div>
+              </div>
+              <p class="mt-2 text-xs text-gray-500">หากไม่มีการใช้งานระบบเกินเวลาที่กำหนด ระบบจะทำการออกจากระบบอัตโนมัติ</p>
+              </div>
+
+              <div>
+                <label for="idleCountdown" class="block text-sm font-bold text-gray-700 mb-2">
+                  <i class="fas fa-hourglass-half me-2 text-orange-500"></i>เวลานับถอยหลังแจ้งเตือน
+                </label>
+                <div class="flex items-center max-w-xs">
+                  <input type="number" id="idleCountdown" [(ngModel)]="idleCountdownSeconds" name="idleCountdownSeconds" min="5" max="60" required
+                         class="w-full px-4 py-2 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+                  <span class="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 font-medium text-sm">วินาที</span>
+                </div>
+                <p class="mt-2 text-xs text-gray-500">ระยะเวลาที่จะแสดงหน้าต่างแจ้งเตือนก่อนออกจากระบบจริง</p>
+              </div>
+
+              <div>
+                <label for="maxLoginAttempts" class="block text-sm font-bold text-gray-700 mb-2">
+                  <i class="fas fa-user-lock me-2 text-red-500"></i>จำนวนครั้งที่ Login ผิดพลาดสูงสุด
+                </label>
+                <div class="flex items-center max-w-xs">
+                  <input type="number" id="maxLoginAttempts" [(ngModel)]="maxLoginAttempts" name="maxLoginAttempts" min="3" max="20" required
+                         class="w-full px-4 py-2 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+                  <span class="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 font-medium text-sm">ครั้ง</span>
+                </div>
+                <p class="mt-2 text-xs text-gray-500">หาก Login ผิดเกินจำนวนครั้งที่กำหนด จะถูกระงับการใช้งานชั่วคราว (15 นาที)</p>
+              </div>
+
+              <div>
+                <label for="systemVersion" class="block text-sm font-bold text-gray-700 mb-2">
+                  <i class="fas fa-code-branch me-2 text-blue-500"></i>เลขเวอร์ชันระบบ
+                </label>
+                <div class="flex items-center max-w-xs">
+                  <input type="text" id="systemVersion" [(ngModel)]="systemVersion" name="systemVersion" required
+                         class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+                </div>
+                <p class="mt-2 text-xs text-gray-500">เลขเวอร์ชันที่จะแสดงที่แถบเมนูด้านซ้ายล่าง</p>
+              </div>
+            </div>
+
+            <!-- เพิ่มส่วนการจัดการ Logs -->
+            <div class="mt-8 pt-6 border-t border-gray-100">
+              <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-history me-2 text-blue-600"></i>การจัดการ Logs</h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label for="logRetentionDays" class="block text-sm font-bold text-gray-700 mb-2">
+                    <i class="fas fa-calendar-alt me-2 text-purple-500"></i>ระยะเวลาเก็บรักษา Logs (วัน)
+                  </label>
+                  <div class="flex items-center max-w-xs">
+                    <input type="number" id="logRetentionDays" [(ngModel)]="logRetentionDays" name="logRetentionDays" min="30" max="365" required
+                           class="w-full px-4 py-2 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+                    <span class="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 font-medium text-sm">วัน</span>
+                  </div>
+                  <p class="mt-2 text-xs text-gray-500">จำนวนวันที่ระบบจะเก็บ Logs ไว้ก่อนที่จะมีการทำความสะอาด (Clean up)</p>
+                </div>
+
+                <div class="flex items-center">
+                  <label class="inline-flex items-center cursor-pointer">
+                    <input type="checkbox" [(ngModel)]="autoBackupEnabled" name="autoBackupEnabled" class="sr-only peer">
+                    <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                    <span class="ms-3 text-sm font-bold text-gray-700">เปิดใช้งานสำรองข้อมูลอัตโนมัติก่อนล้าง Logs</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex justify-end pt-4 border-t border-gray-100">
+              <button type="submit" class="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-md transition-colors">
+                <i class="fas fa-save me-2"></i>บันทึกการตั้งค่า
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal เปลี่ยนรหัสผ่าน -->
+  <div *ngIf="showChangePasswordModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-4 sm:p-6 transform transition-all scale-100">
+      <div class="flex items-center mb-4 sm:mb-5">
+        <div class="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mr-3">
+          <i class="fas fa-key text-green-600"></i>
+        </div>
+        <h3 class="text-lg sm:text-xl font-bold text-gray-800">เปลี่ยนรหัสผ่าน</h3>
+      </div>
+      <div class="space-y-3 sm:space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">รหัสผ่านปัจจุบัน</label>
+          <div class="relative">
+            <input [type]="showCurrentPw ? 'text' : 'password'" [(ngModel)]="changePasswordForm.currentPassword" placeholder="กรอกรหัสผ่านปัจจุบัน"
+              class="w-full px-3 sm:px-4 py-2.5 sm:py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+            <button type="button" (click)="showCurrentPw = !showCurrentPw" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none">
+              <i [class]="showCurrentPw ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+            </button>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">รหัสผ่านใหม่</label>
+          <div class="relative">
+            <input [type]="showNewPw ? 'text' : 'password'" [(ngModel)]="changePasswordForm.newPassword" placeholder="อย่างน้อย 6 ตัวอักษร"
+              class="w-full px-3 sm:px-4 py-2.5 sm:py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+            <button type="button" (click)="showNewPw = !showNewPw" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none">
+              <i [class]="showNewPw ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+            </button>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">ยืนยันรหัสผ่านใหม่</label>
+          <div class="relative">
+            <input [type]="showConfirmPw ? 'text' : 'password'" [(ngModel)]="changePasswordForm.confirmPassword" placeholder="กรอกรหัสผ่านใหม่อีกครั้ง"
+              class="w-full px-3 sm:px-4 py-2.5 sm:py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors"
+              [ngClass]="changePasswordForm.confirmPassword && changePasswordForm.newPassword !== changePasswordForm.confirmPassword ? 'border-red-400 focus:ring-red-400' : ''">
+            <button type="button" (click)="showConfirmPw = !showConfirmPw" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none">
+              <i [class]="showConfirmPw ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+            </button>
+          </div>
+          <p *ngIf="changePasswordForm.confirmPassword && changePasswordForm.newPassword !== changePasswordForm.confirmPassword" class="text-xs text-red-500 mt-1">รหัสผ่านไม่ตรงกัน</p>
+        </div>
+      </div>
+      <div class="mt-4 sm:mt-6 flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
+        <button (click)="closeChangePasswordModal()" class="w-full sm:w-auto px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-bold transition-colors">ยกเลิก</button>
+        <button (click)="saveNewPassword()" class="w-full sm:w-auto px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold shadow-md transition-colors">
+          <i class="fas fa-save mr-2"></i>บันทึก
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

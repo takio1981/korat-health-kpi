@@ -1,0 +1,85 @@
+/* จัดพื้นหลังและให้กล่องอยู่กึ่งกลางหน้าจอ */
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh; /* ความสูงเต็มหน้าจอ */
+  background-color: #f0f4f8; /* สีพื้นหลังโทนฟ้าอมเทาสบายตา */
+  font-family: 'Sarabun', sans-serif; /* แนะนำให้ใช้ฟอนต์ภาษาไทยที่อ่านง่าย */
+}
+
+/* ตกแต่งกล่องฟอร์มล็อกอิน */
+.login-card {
+  background-color: #ffffff;
+  padding: 40px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); /* ใส่เงาให้กล่องดูมีมิติ */
+  width: 100%;
+  max-width: 400px; /* ไม่ให้กล่องกว้างเกินไปบนจอใหญ่ */
+}
+
+/* ส่วนหัว */
+.login-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.form-title {
+  margin: 0;
+  color: #1a365d;
+  font-size: 24px;
+}
+
+.form-subtitle {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+/* จัดระยะห่างของแต่ละช่องกรอกข้อมูล */
+.form-group {
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  margin-bottom: 8px;
+  color: #334155;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.form-group input {
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.3s;
+}
+
+/* เปลี่ยนสีขอบเวลาคลิกที่ช่องพิมพ์ */
+.form-group input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* ตกแต่งปุ่ม */
+.btn-submit {
+  width: 100%;
+  padding: 12px;
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  margin-top: 10px;
+}
+
+.btn-submit:hover {
+  background-color: #1d4ed8; /* สีเข้มขึ้นนิดหน่อยตอนเอาเมาส์ชี้ */
+}

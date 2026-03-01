@@ -50,7 +50,43 @@ const apiLimiter = rateLimit({
     legacyHeaders: false,
 });
 
-const SECRET_KEY = process.env.SECRET_KEY || "Korat_Health_Secret_Key_2026";
+const SECRET_KEY = process.env.SECRET_KEY;
+if (!SECRET_KEY) {
+    console.error('FATAL ERROR: SECRET_KEY is not defined.');
+    process.exit(1);
+}
+
+// Middleware ตรวจสอบ JWT Token
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) return res.status(401).json({ success: false, message: 'กรุณาเข้าสู่ระบบ' });
+
+    jwt.verify(token, SECRET_KEY, (err, user) => {
+        if (err) return res.status(403).json({ success: false, message: 'Token ไม่ถูกต้องหรือหมดอายุ' });
+        req.user = user;
+        next();
+    });
+};
+
+// Middleware ตรวจสอบสิทธิ์ Admin หรือ Super Admin
+const isAdmin = (req, res, next) => {
+    if (req.user && (req.user.role === 'admin' || req.user.role === 'super_admin')) {
+        next();
+    } else {
+        res.status(403).json({ success: false, message: 'สิทธิ์การเข้าถึงจำกัดเฉพาะผู้ดูแลระบบเท่านั้น' });
+    }
+};
+
+// Middleware ตรวจสอบสิทธิ์ Super Admin เท่านั้น
+const isSuperAdmin = (req, res, next) => {
+    if (req.user && req.user.role === 'super_admin') {
+        next();
+    } else {
+        res.status(403).json({ success: false, message: 'สิทธิ์การเข้าถึงจำกัดเฉพาะผู้ดูแลระบบสูงสุด (Super Admin) เท่านั้น' });
+    }
+};
 
 // สร้าง Router เพื่อรองรับ Prefix /khupskpi/api
 const apiRouter = express.Router();
@@ -134,16 +170,9 @@ apiRouter.post('/login', loginLimiter, async (req, res) => {
 // ใช้ apiLimiter กับ Route ที่เหลือทั้งหมด (ป้องกันการยิง API รัวๆ)
 apiRouter.use(apiLimiter);
 
-apiRouter.get('/kpi-results', async (req, res) => {
+apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
     try {
-        const authHeader = req.headers['authorization'];
-        const token = authHeader && authHeader.split(' ')[1];
-        let user = null;
-        if (token) {
-            try {
-                user = jwt.verify(token, SECRET_KEY);
-            } catch (e) {}
-        }
+        const user = req.user;
 
         let whereClause = '';
         let params = [];
@@ -182,7 +211,10 @@ apiRouter.get('/kpi-results', async (req, res) => {
                 SUM(CASE WHEN r.month_bh = 8 THEN r.actual_value ELSE 0 END) AS aug,
                 SUM(CASE WHEN r.month_bh = 9 THEN r.actual_value ELSE 0 END) AS sep,
                 SUM(r.actual_value) AS total_actual,
-                SUM(CASE WHEN r.status = 'Pending' THEN 1 ELSE 0 END) AS pending_count
+                SUM(CASE WHEN r.status = 'Pending' THEN 1 ELSE 0 END) AS pending_count,
+                MAX(r.status) as indicator_status,
+                MAX(CASE WHEN r.is_locked = 1 THEN 1 ELSE 0 END) as is_locked,
+                r.hospcode
             FROM kpi_results r
             LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
@@ -193,7 +225,8 @@ apiRouter.get('/kpi-results', async (req, res) => {
                 i.kpi_indicators_name, 
                 i.id,
                 d.dept_name,
-                r.year_bh                
+                r.year_bh,
+                r.hospcode
             ORDER BY 
                 r.year_bh DESC,
                 mi.main_indicator_name DESC, 
@@ -228,7 +261,7 @@ apiRouter.post('/update-kpi', async (req, res) => {
         return res.status(403).json({ success: false, message: 'Token ไม่ถูกต้อง' });
     }
 
-    const hospcodeToSave = (user.role === 'admin' && targetHospcode) ? targetHospcode : user.hospcode;
+    const hospcodeToSave = ((user.role === 'admin' || user.role === 'super_admin') && targetHospcode) ? targetHospcode : user.hospcode;
 
     if (!Array.isArray(updates) || updates.length === 0) {
         return res.status(400).json({ success: false, message: 'ไม่มีข้อมูล' });
@@ -238,7 +271,7 @@ apiRouter.post('/update-kpi', async (req, res) => {
     try {
         await connection.beginTransaction();
 
-        if (user.role !== 'admin') {
+        if (user.role !== 'admin' && user.role !== 'super_admin') {
             const indicatorIds = [...new Set(updates.map(u => u.indicator_id))];
             if (indicatorIds.length > 0) {
                 const [allowed] = await connection.query(
@@ -320,14 +353,9 @@ apiRouter.get('/kpi-template', async (req, res) => {
     }
 });
 
-apiRouter.get('/dashboard-stats', async (req, res) => {
+apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
     try {
-        const authHeader = req.headers['authorization'];
-        const token = authHeader && authHeader.split(' ')[1];
-        let user = null;
-        if (token) {
-            try { user = jwt.verify(token, SECRET_KEY); } catch (e) {}
-        }
+        const user = req.user;
 
         const year = req.query.year || (new Date().getFullYear() + 543).toString();
         let whereClause = '';
@@ -397,72 +425,9 @@ apiRouter.get('/dashboard-stats', async (req, res) => {
     }
 });
 
-apiRouter.post('/approve-kpi', async (req, res) => {
-    const approvals = req.body;
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (!token) return res.status(401).json({ success: false, message: 'Unauthorized' });
-
-    let user;
-    try { user = jwt.verify(token, SECRET_KEY); } catch (err) { return res.status(403).json({ success: false, message: 'Invalid Token' }); }
-
-    if (user.role !== 'admin') return res.status(403).json({ success: false, message: 'Admin only' });
-    if (!Array.isArray(approvals) || approvals.length === 0) return res.status(400).json({ success: false, message: 'No approval data' });
-
-    const connection = await db.getConnection();
-    try {
-        await connection.beginTransaction();
-
-        // ดึงข้อมูล dept_id ทั้งหมดของ indicators ที่จะอนุมัติ
-        const indicatorIds = approvals.map(item => item.indicator_id);
-        const [indicators] = await connection.query('SELECT id, dept_id FROM kpi_indicators WHERE id IN (?)', [indicatorIds]);
-        const indicatorDeptMap = new Map(indicators.map(i => [i.id, i.dept_id]));
-
-        for (const item of approvals) {
-            const indicatorDeptId = indicatorDeptMap.get(item.indicator_id);
-
-            // Super Admin (deptId is null) can approve anything
-            // Dept Admin can only approve KPIs in their department
-            const isSuperAdmin = !user.deptId;
-            const isDeptAdmin = user.deptId && user.deptId === indicatorDeptId;
-
-            if (isSuperAdmin || isDeptAdmin) {
-                await connection.query(
-                    `UPDATE kpi_results SET status = 'Approved' WHERE indicator_id = ? AND year_bh = ? AND status = 'Pending'`,
-                    [item.indicator_id, item.year_bh]
-                );
-            } else {
-                // หากไม่มีสิทธิ์แม้แต่รายการเดียว ให้ยกเลิกทั้งหมด
-                throw new Error(`ไม่มีสิทธิ์อนุมัติตัวชี้วัด ID: ${item.indicator_id}`);
-            }
-        }
-        
-        await connection.query(
-            'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
-            [user.userId, user.deptId, 'UPDATE', 'kpi_results', JSON.stringify({ message: `อนุมัติ KPI ${approvals.length} รายการ` }), req.ip]
-        );
-
-        await connection.commit();
-        res.json({ success: true, message: 'อนุมัติข้อมูลเรียบร้อยแล้ว' });
-    } catch (error) {
-        await connection.rollback();
-        console.error("Approve KPI Error:", error.message);
-        res.status(500).json({ success: false, message: error.message || 'เกิดข้อผิดพลาดในการอนุมัติ' });
-    } finally {
-        connection.release();
-    }
-});
 
 // --- Log Management ---
-apiRouter.get('/logs/backup', async (req, res) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (!token) return res.status(401).json({ success: false, message: 'Unauthorized' });
-
-    let user;
-    try { user = jwt.verify(token, SECRET_KEY); } catch (err) { return res.status(403).json({ success: false }); }
-    if (user.role !== 'admin') return res.status(403).json({ success: false, message: 'Admin only' });
-
+apiRouter.get('/logs/backup', authenticateToken, isAdmin, async (req, res) => {
     try {
         const [systemLogs] = await db.query(`SELECT l.*, u.username FROM system_logs l LEFT JOIN users u ON l.user_id = u.id ORDER BY l.created_at DESC`);
         const [loginLogs] = await db.query(`SELECT * FROM login_logs ORDER BY created_at DESC`);
@@ -470,39 +435,34 @@ apiRouter.get('/logs/backup', async (req, res) => {
         let csv = 'log_type,id,timestamp,username,action,details,ip_address\n';
 
         systemLogs.forEach(row => {
-            const details = row.new_value ? JSON.parse(row.new_value).message : (row.old_value || '');
-            csv += `SYSTEM,${row.id},"${row.created_at}","${row.username || ''}","${row.action_type}","${details.replace(/"/g, '""')}","${row.ip_address || ''}"\n`;
+            let details = '';
+            try {
+                details = row.new_value ? (JSON.parse(row.new_value).message || row.new_value) : (row.old_value || '');
+            } catch (e) {
+                details = row.new_value || '';
+            }
+            csv += `SYSTEM,${row.id},"${row.created_at}","${row.username || ''}","${row.action_type}","${details.toString().replace(/"/g, '""')}","${row.ip_address || ''}"\n`;
         });
 
         loginLogs.forEach(row => {
-            csv += `LOGIN,${row.id},"${row.created_at}","${row.username || ''}","${row.action}","${row.details.replace(/"/g, '""')}","${row.ip_address || ''}"\n`;
+            csv += `LOGIN,${row.id},"${row.created_at}","${row.username || ''}","${row.action}","${(row.details || '').toString().replace(/"/g, '""')}","${row.ip_address || ''}"\n`;
         });
 
         res.setHeader('Content-Type', 'text/csv; charset=utf-8');
         res.setHeader('Content-Disposition', 'attachment; filename="korat_kpi_logs.csv"');
-        // Add BOM for UTF-8 Excel compatibility
         res.send('\ufeff' + csv);
-
     } catch (error) {
         console.error("Log Backup Error:", error);
         res.status(500).json({ success: false, message: 'ไม่สามารถสำรองข้อมูลได้' });
     }
 });
 
-apiRouter.delete('/logs/clear', async (req, res) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (!token) return res.status(401).json({ success: false, message: 'Unauthorized' });
-
-    let user;
-    try { user = jwt.verify(token, SECRET_KEY); } catch (err) { return res.status(403).json({ success: false }); }
-    if (user.role !== 'admin') return res.status(403).json({ success: false, message: 'Admin only' });
-    
+apiRouter.delete('/logs/clear', authenticateToken, isAdmin, async (req, res) => {
+    const user = req.user;
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
         
-        // Log the clear action before actually clearing
         await connection.query(
             'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
             [user.userId, user.deptId, 'DELETE', 'ALL_LOGS', JSON.stringify({ message: `ล้างข้อมูล Log ทั้งหมดโดย ${user.username}` }), req.ip]
@@ -522,7 +482,7 @@ apiRouter.delete('/logs/clear', async (req, res) => {
     }
 });
 
-apiRouter.get('/users', async (req, res) => {
+apiRouter.get('/users', authenticateToken, isAdmin, async (req, res) => {
     try {
         const [users] = await db.query(`
             SELECT u.id, u.username, u.role, u.dept_id, u.firstname, u.lastname, u.phone, u.hospcode, d.dept_name,
@@ -539,7 +499,7 @@ apiRouter.get('/users', async (req, res) => {
     }
 });
 
-apiRouter.get('/departments', async (req, res) => {
+apiRouter.get('/departments', authenticateToken, async (req, res) => {
     try {
         const [depts] = await db.query('SELECT * FROM departments ORDER BY dept_name');
         res.json({ success: true, data: depts });
@@ -548,7 +508,7 @@ apiRouter.get('/departments', async (req, res) => {
     }
 });
 
-apiRouter.get('/hospitals', async (req, res) => {
+apiRouter.get('/hospitals', authenticateToken, async (req, res) => {
     try {
         const [hospitals] = await db.query('SELECT hoscode, hosname, CONCAT(provcode, distcode) as distid FROM chospital ORDER BY hoscode');
         res.json({ success: true, data: hospitals });
@@ -557,21 +517,18 @@ apiRouter.get('/hospitals', async (req, res) => {
     }
 });
 
-apiRouter.get('/districts', async (req, res) => {
+apiRouter.get('/districts', authenticateToken, async (req, res) => {
     try {
-        const [districts] = await db.query('SELECT distid, distname FROM co_district WHERE distid LIKE "30%" ORDER BY distname');
+        const [districts] = await db.query('SELECT distid, distname FROM co_district WHERE distid LIKE ? ORDER BY distname', ['30%']);
         res.json({ success: true, data: districts });
     } catch (error) {
         res.status(500).json({ success: false });
     }
 });
 
-apiRouter.post('/users', async (req, res) => {
+apiRouter.post('/users', authenticateToken, isAdmin, async (req, res) => {
     const { username, password, role, dept_id, firstname, lastname, hospcode, phone } = req.body;
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    let user;
-    try { user = jwt.verify(token, SECRET_KEY); } catch (err) { return res.status(401).json({ success: false }); }
+    const user = req.user;
 
     try {
         const [existing] = await db.query('SELECT id FROM users WHERE username = ?', [username]);
@@ -634,13 +591,10 @@ apiRouter.put('/users/change-password', async (req, res) => {
     }
 });
 
-apiRouter.put('/users/:id', async (req, res) => {
+apiRouter.put('/users/:id', authenticateToken, isAdmin, async (req, res) => {
     const userId = req.params.id;
     const { username, password, role, dept_id, firstname, lastname, hospcode, phone } = req.body;
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    let user;
-    try { user = jwt.verify(token, SECRET_KEY); } catch (err) { return res.status(401).json({ success: false }); }
+    const user = req.user;
 
     try {
         let sql = 'UPDATE users SET username = ?, role = ?, dept_id = ?, firstname = ?, lastname = ?, hospcode = ?, phone = ?';
@@ -665,12 +619,9 @@ apiRouter.put('/users/:id', async (req, res) => {
     }
 });
 
-apiRouter.delete('/users/:id', async (req, res) => {
+apiRouter.delete('/users/:id', authenticateToken, isAdmin, async (req, res) => {
     const userId = req.params.id;
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    let user;
-    try { user = jwt.verify(token, SECRET_KEY); } catch (err) { return res.status(401).json({ success: false }); }
+    const user = req.user;
 
     try {
         await db.query('DELETE FROM users WHERE id = ?', [userId]);
@@ -684,13 +635,9 @@ apiRouter.delete('/users/:id', async (req, res) => {
     }
 });
 
-apiRouter.put('/users/:id/reset-password', async (req, res) => {
+apiRouter.put('/users/:id/reset-password', authenticateToken, isAdmin, async (req, res) => {
     const userId = req.params.id;
-    const defaultPassword = 'password123';
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    let user;
-    try { user = jwt.verify(token, SECRET_KEY); } catch (err) { return res.status(401).json({ success: false }); }
+    const user = req.user;
 
     try {
         const hashedPassword = await bcrypt.hash(defaultPassword, 10);
@@ -711,8 +658,8 @@ apiRouter.get('/system-logs', async (req, res) => {
     if (!token) return res.status(401).json({ success: false });
 
     let user;
-    try { user = jwt.verify(token, SECRET_KEY); } catch (err) { return res.status(403).json({ success: false }); }
-    if (user.role !== 'admin') return res.status(403).json({ success: false });
+    try { user = jwt.verify(token, SECRET_KEY); } catch (err) { return res.status(403).json({ success: false, message: 'Token ไม่ถูกต้องหรือหมดอายุ' }); }
+    if (user.role !== 'admin' && user.role !== 'super_admin') return res.status(403).json({ success: false, message: 'สิทธิ์การเข้าถึงจำกัดเฉพาะผู้ดูแลระบบเท่านั้น' });
 
     try {
         const [logs] = await db.query(`
@@ -771,7 +718,7 @@ apiRouter.post('/settings', async (req, res) => {
 });
 
 // --- CRUD Main Yut (ยุทธศาสตร์) ---
-apiRouter.get('/main-yut', async (req, res) => {
+apiRouter.get('/main-yut', authenticateToken, async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM main_yut ORDER BY id');
         res.json({ success: true, data: rows });
@@ -780,7 +727,7 @@ apiRouter.get('/main-yut', async (req, res) => {
     }
 });
 
-apiRouter.post('/main-yut', async (req, res) => {
+apiRouter.post('/main-yut', authenticateToken, isAdmin, async (req, res) => {
     const { yut_name } = req.body;
     try {
         await db.query('INSERT INTO main_yut (yut_name) VALUES (?)', [yut_name]);
@@ -790,7 +737,7 @@ apiRouter.post('/main-yut', async (req, res) => {
     }
 });
 
-apiRouter.put('/main-yut/:id', async (req, res) => {
+apiRouter.put('/main-yut/:id', authenticateToken, isAdmin, async (req, res) => {
     const { yut_name } = req.body;
     try {
         await db.query('UPDATE main_yut SET yut_name = ? WHERE id = ?', [yut_name, req.params.id]);
@@ -800,7 +747,7 @@ apiRouter.put('/main-yut/:id', async (req, res) => {
     }
 });
 
-apiRouter.delete('/main-yut/:id', async (req, res) => {
+apiRouter.delete('/main-yut/:id', authenticateToken, isAdmin, async (req, res) => {
     try {
         await db.query('DELETE FROM main_yut WHERE id = ?', [req.params.id]);
         res.json({ success: true, message: 'Deleted successfully' });
@@ -810,7 +757,7 @@ apiRouter.delete('/main-yut/:id', async (req, res) => {
 });
 
 // --- CRUD Main Indicators (ตัวชี้วัดหลัก) ---
-apiRouter.get('/main-indicators', async (req, res) => {
+apiRouter.get('/main-indicators', authenticateToken, async (req, res) => {
     try {
         const [rows] = await db.query(`
             SELECT mi.*, my.yut_name 
@@ -824,7 +771,7 @@ apiRouter.get('/main-indicators', async (req, res) => {
     }
 });
 
-apiRouter.post('/main-indicators', async (req, res) => {
+apiRouter.post('/main-indicators', authenticateToken, isAdmin, async (req, res) => {
     const { indicator_name, yut_id } = req.body;
     try {
         await db.query('INSERT INTO kpi_main_indicators (indicator_name, yut_id) VALUES (?, ?)', [indicator_name, yut_id]);
@@ -834,7 +781,7 @@ apiRouter.post('/main-indicators', async (req, res) => {
     }
 });
 
-apiRouter.put('/main-indicators/:id', async (req, res) => {
+apiRouter.put('/main-indicators/:id', authenticateToken, isAdmin, async (req, res) => {
     const { indicator_name, yut_id } = req.body;
     try {
         await db.query('UPDATE kpi_main_indicators SET indicator_name = ?, yut_id = ? WHERE id = ?', [indicator_name, yut_id, req.params.id]);
@@ -844,7 +791,7 @@ apiRouter.put('/main-indicators/:id', async (req, res) => {
     }
 });
 
-apiRouter.delete('/main-indicators/:id', async (req, res) => {
+apiRouter.delete('/main-indicators/:id', authenticateToken, isAdmin, async (req, res) => {
     try {
         await db.query('DELETE FROM kpi_main_indicators WHERE id = ?', [req.params.id]);
         res.json({ success: true, message: 'Deleted successfully' });
@@ -854,7 +801,7 @@ apiRouter.delete('/main-indicators/:id', async (req, res) => {
 });
 
 // --- CRUD KPI Indicators (ตัวชี้วัดย่อย) ---
-apiRouter.get('/indicators', async (req, res) => {
+apiRouter.get('/indicators', authenticateToken, async (req, res) => {
     try {
         const [rows] = await db.query(`
             SELECT i.*, mi.main_indicator_name as main_indicator_name, d.dept_name 
@@ -870,7 +817,7 @@ apiRouter.get('/indicators', async (req, res) => {
     }
 });
 
-apiRouter.post('/indicators', async (req, res) => {
+apiRouter.post('/indicators', authenticateToken, isAdmin, async (req, res) => {
     const { kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code } = req.body;
     try {
         await db.query(
@@ -883,7 +830,7 @@ apiRouter.post('/indicators', async (req, res) => {
     }
 });
 
-apiRouter.put('/indicators/:id', async (req, res) => {
+apiRouter.put('/indicators/:id', authenticateToken, isAdmin, async (req, res) => {
     const { kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code, is_active } = req.body;
     try {
         await db.query(
@@ -896,7 +843,7 @@ apiRouter.put('/indicators/:id', async (req, res) => {
     }
 });
 
-apiRouter.delete('/indicators/:id', async (req, res) => {
+apiRouter.delete('/indicators/:id', authenticateToken, isAdmin, async (req, res) => {
     try {
         await db.query('DELETE FROM kpi_indicators WHERE id = ?', [req.params.id]);
         res.json({ success: true, message: 'Deleted successfully' });
@@ -905,8 +852,97 @@ apiRouter.delete('/indicators/:id', async (req, res) => {
     }
 });
 
-// --- CRUD Departments (เพิ่มเติมจากที่มีอยู่) ---
-apiRouter.post('/departments', async (req, res) => {
+// อนุมัติผล KPI และ Lock ข้อมูล (รองรับทั้งรายการเดียวและหลายรายการ)
+apiRouter.post('/approve-kpi', authenticateToken, isAdmin, async (req, res) => {
+    const user = req.user;
+    // รองรับทั้ง object เดียว และ array หลายรายการ
+    const items = Array.isArray(req.body) ? req.body : [req.body];
+
+    if (items.length === 0 || !items[0].indicator_id) {
+        return res.status(400).json({ success: false, message: 'No approval data' });
+    }
+
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        for (const item of items) {
+            let whereClause = 'indicator_id = ? AND year_bh = ?';
+            let params = [item.indicator_id, item.year_bh];
+
+            if (user.role !== 'super_admin') {
+                whereClause += ' AND hospcode = ?';
+                params.push(user.hospcode);
+            } else if (item.hospcode) {
+                whereClause += ' AND hospcode = ?';
+                params.push(item.hospcode);
+            }
+
+            await connection.query(
+                `UPDATE kpi_results SET status = 'Approved', is_locked = 1 WHERE ${whereClause}`,
+                params
+            );
+        }
+
+        await connection.query(
+            'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+            [user.userId, user.deptId, 'APPROVE', 'kpi_results', JSON.stringify({ count: items.length, message: `อนุมัติและล็อคข้อมูล ${items.length} รายการ` }), req.ip]
+        );
+
+        await connection.commit();
+        res.json({ success: true, message: `อนุมัติและล็อคข้อมูลเรียบร้อยแล้ว ${items.length} รายการ` });
+    } catch (error) {
+        await connection.rollback();
+        res.status(500).json({ success: false, message: error.message });
+    } finally {
+        connection.release();
+    }
+});
+
+// ปลดล็อคข้อมูล KPI (เฉพาะ super_admin)
+apiRouter.post('/unlock-kpi', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { indicator_id, year_bh, hospcode } = req.body;
+    const user = req.user;
+
+    try {
+        await db.query(
+            "UPDATE kpi_results SET is_locked = 0, status = 'Pending' WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?",
+            [indicator_id, year_bh, hospcode]
+        );
+
+        await db.query(
+            'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+            [user.userId, user.deptId, 'UNLOCK', 'kpi_results', JSON.stringify({ indicator_id, year_bh, hospcode, message: 'ปลดล็อคข้อมูล' }), req.ip]
+        );
+
+        res.json({ success: true, message: 'ปลดล็อคข้อมูลเรียบร้อยแล้ว' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ดึงจำนวนตัวชี้วัดที่รอการตรวจสอบ
+apiRouter.get('/notifications/pending-kpi', authenticateToken, isAdmin, async (req, res) => {
+    const user = req.user;
+    try {
+        let whereClause = "WHERE status = 'Pending'";
+        let params = [];
+
+        if (user.role !== 'super_admin') {
+            whereClause += " AND hospcode = ?";
+            params.push(user.hospcode);
+        }
+
+        const [rows] = await db.query(
+            `SELECT COUNT(DISTINCT indicator_id, year_bh, hospcode) as pending_count FROM kpi_results ${whereClause}`,
+            params
+        );
+        res.json({ success: true, count: rows[0].pending_count });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+apiRouter.post('/departments', authenticateToken, isAdmin, async (req, res) => {
     const { dept_code, dept_name } = req.body;
     try {
         await db.query('INSERT INTO departments (dept_code, dept_name) VALUES (?, ?)', [dept_code, dept_name]);
@@ -916,7 +952,7 @@ apiRouter.post('/departments', async (req, res) => {
     }
 });
 
-apiRouter.put('/departments/:id', async (req, res) => {
+apiRouter.put('/departments/:id', authenticateToken, isAdmin, async (req, res) => {
     const { dept_code, dept_name } = req.body;
     try {
         await db.query('UPDATE departments SET dept_code=?, dept_name=? WHERE id=?', [dept_code, dept_name, req.params.id]);
@@ -926,7 +962,7 @@ apiRouter.put('/departments/:id', async (req, res) => {
     }
 });
 
-apiRouter.delete('/departments/:id', async (req, res) => {
+apiRouter.delete('/departments/:id', authenticateToken, isAdmin, async (req, res) => {
     try {
         await db.query('DELETE FROM departments WHERE id = ?', [req.params.id]);
         res.json({ success: true, message: 'Deleted successfully' });

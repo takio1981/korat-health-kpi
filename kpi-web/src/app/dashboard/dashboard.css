@@ -1,0 +1,156 @@
+/* Dashboard Table Styles */
+
+/* Table container with both scrollbars */
+.kpi-table-wrapper {
+  overflow: auto;
+  max-height: calc(100vh - 400px);
+  position: relative;
+  scrollbar-gutter: stable;
+}
+
+/* Custom scrollbar styling */
+.kpi-table-wrapper::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.kpi-table-wrapper::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 5px;
+}
+
+.kpi-table-wrapper::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 5px;
+}
+
+.kpi-table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+.kpi-table-wrapper::-webkit-scrollbar-corner {
+  background: #f1f5f9;
+}
+
+/* Table - must use separate for sticky to work properly */
+.kpi-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: max-content;
+  min-width: 100%;
+}
+
+/* Sticky header */
+.kpi-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+/* Frozen column cells (body) */
+.kpi-table td.frozen {
+  position: sticky;
+  z-index: 20;
+}
+
+/* Frozen column cells (header) - highest z-index */
+.kpi-table thead th.frozen {
+  z-index: 40;
+}
+
+/* Column 1 - หมวดหมู่หลัก */
+.col-1 {
+  left: 0;
+  min-width: 180px;
+  max-width: 180px;
+  width: 180px;
+}
+
+/* Column 2 - ชื่อตัวชี้วัด */
+.col-2 {
+  left: 180px;
+  min-width: 280px;
+  max-width: 280px;
+  width: 280px;
+}
+
+/* Column 3 - สถานะ (last frozen - with shadow separator) */
+.col-3 {
+  left: 460px;
+  min-width: 110px;
+  max-width: 110px;
+  width: 110px;
+}
+
+/* Shadow separator on last frozen column */
+.col-3::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: -6px;
+  bottom: 0;
+  width: 6px;
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.08), transparent);
+  pointer-events: none;
+}
+
+/* Scrollable month columns */
+.month-col {
+  min-width: 75px;
+  width: 75px;
+}
+
+/* 2-line text clamp for category and indicator name */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal !important;
+  word-break: break-word;
+  line-height: 1.5;
+  max-height: 3em;
+}
+
+/* Hover state for frozen cells - body rows */
+.kpi-table tbody tr:hover td.frozen {
+  background-color: #f0fdf4 !important;
+}
+.kpi-table tbody tr:hover td.frozen.col-1 {
+  background-color: #ecfdf5 !important;
+}
+
+/* Status badge styles */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-approved {
+  background-color: #d1fae5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
+.status-pending {
+  background-color: #fef3c7;
+  color: #d97706;
+  border: 1px solid #fde68a;
+}
+
+.status-locked {
+  background-color: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+/* RowSpan cell for grouped category */
+.kpi-table td.rowspan-cell {
+  vertical-align: top;
+}
