@@ -7,12 +7,14 @@ import { AuditLogComponent } from './audit-log/audit-log';
 import { KpiSetupComponent } from './kpi-setup/kpi-setup';
 import { SettingsComponent } from './settings/settings';
 import { KpiManageComponent } from './kpi-manage/kpi-manage';
+import { ReportComponent } from './report/report';
 import { authGuard } from './guards/auth-guard';
 
 export const routes: Routes = [
   { path: 'login', component: LoginComponent },
   { path: 'dashboard', component: DashboardComponent, canActivate: [authGuard] }, // ป้องกันหน้า Dashboard ด้วย Auth Guard
   { path: 'charts', component: ChartComponent, canActivate: [authGuard] }, // หน้ากราฟใหม่
+  { path: 'reports', component: ReportComponent, canActivate: [authGuard] }, // หน้ารายงานสรุปผล
   { path: 'users', component: UserManagementComponent, canActivate: [authGuard] }, // หน้าจัดการผู้ใช้
   { path: 'audit-logs', component: AuditLogComponent, canActivate: [authGuard] }, // หน้า Audit Log
   { path: 'kpi-setup', component: KpiSetupComponent, canActivate: [authGuard] }, // หน้า Setup KPI

@@ -315,4 +315,33 @@ export class AuthService {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.delete(`${this.apiUrl}/departments/${id}`, { headers });
   }
+
+  // --- Report Summary APIs ---
+  getReportByIndicator(params: any = {}): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const queryStr = new URLSearchParams(params).toString();
+    return this.http.get(`${this.apiUrl}/report/by-indicator${queryStr ? '?' + queryStr : ''}`, { headers });
+  }
+
+  getReportByHospital(params: any = {}): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const queryStr = new URLSearchParams(params).toString();
+    return this.http.get(`${this.apiUrl}/report/by-hospital${queryStr ? '?' + queryStr : ''}`, { headers });
+  }
+
+  getReportByDistrict(params: any = {}): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const queryStr = new URLSearchParams(params).toString();
+    return this.http.get(`${this.apiUrl}/report/by-district${queryStr ? '?' + queryStr : ''}`, { headers });
+  }
+
+  getReportByYear(params: any = {}): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const queryStr = new URLSearchParams(params).toString();
+    return this.http.get(`${this.apiUrl}/report/by-year${queryStr ? '?' + queryStr : ''}`, { headers });
+  }
 }

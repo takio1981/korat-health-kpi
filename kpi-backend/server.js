@@ -971,6 +971,213 @@ apiRouter.delete('/departments/:id', authenticateToken, isAdmin, async (req, res
     }
 });
 
+// ========== Report Summary APIs ==========
+
+// รายงานสรุป: รายข้อตัวชี้วัด
+apiRouter.get('/report/by-indicator', authenticateToken, async (req, res) => {
+    try {
+        const user = req.user;
+        const { year_bh, dept_id, distid } = req.query;
+        let whereClauses = [];
+        let params = [];
+
+        if (user.role !== 'admin' && user.role !== 'super_admin') {
+            if (user.hospcode === '00018' && user.deptId) {
+                whereClauses.push('i.dept_id = ?');
+                params.push(user.deptId);
+            } else if (user.hospcode) {
+                whereClauses.push('r.hospcode = ?');
+                params.push(user.hospcode);
+            }
+        }
+        if (year_bh) { whereClauses.push('r.year_bh = ?'); params.push(year_bh); }
+        if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
+        if (distid) { whereClauses.push("CONCAT(h.provcode, h.distcode) = ?"); params.push(distid); }
+
+        const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+        const sql = `
+            SELECT
+                i.id AS indicator_id,
+                i.kpi_indicators_name,
+                IFNULL(mi.main_indicator_name, 'ยังไม่กำหนด') AS main_indicator_name,
+                d.dept_name,
+                r.year_bh,
+                MAX(CASE WHEN r.month_bh = 10 THEN r.target_value ELSE 0 END) AS target_value,
+                SUM(CASE WHEN r.month_bh = 10 THEN r.actual_value ELSE 0 END) AS oct,
+                SUM(CASE WHEN r.month_bh = 11 THEN r.actual_value ELSE 0 END) AS nov,
+                SUM(CASE WHEN r.month_bh = 12 THEN r.actual_value ELSE 0 END) AS dece,
+                SUM(CASE WHEN r.month_bh = 1 THEN r.actual_value ELSE 0 END) AS jan,
+                SUM(CASE WHEN r.month_bh = 2 THEN r.actual_value ELSE 0 END) AS feb,
+                SUM(CASE WHEN r.month_bh = 3 THEN r.actual_value ELSE 0 END) AS mar,
+                SUM(CASE WHEN r.month_bh = 4 THEN r.actual_value ELSE 0 END) AS apr,
+                SUM(CASE WHEN r.month_bh = 5 THEN r.actual_value ELSE 0 END) AS may_val,
+                SUM(CASE WHEN r.month_bh = 6 THEN r.actual_value ELSE 0 END) AS jun,
+                SUM(CASE WHEN r.month_bh = 7 THEN r.actual_value ELSE 0 END) AS jul,
+                SUM(CASE WHEN r.month_bh = 8 THEN r.actual_value ELSE 0 END) AS aug,
+                SUM(CASE WHEN r.month_bh = 9 THEN r.actual_value ELSE 0 END) AS sep,
+                SUM(r.actual_value) AS total_actual,
+                COUNT(DISTINCT r.hospcode) AS hospital_count
+            FROM kpi_results r
+            LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
+            LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
+            LEFT JOIN departments d ON i.dept_id = d.id
+            LEFT JOIN chospital h ON r.hospcode = h.hoscode
+            ${whereStr}
+            GROUP BY i.id, i.kpi_indicators_name, mi.main_indicator_name, d.dept_name, r.year_bh
+            ORDER BY mi.main_indicator_name, i.kpi_indicators_name
+        `;
+        const [rows] = await db.query(sql, params);
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        console.error('Report by-indicator error:', error);
+        res.status(500).json({ success: false, message: 'ไม่สามารถดึงข้อมูลรายงานได้' });
+    }
+});
+
+// รายงานสรุป: รายหน่วยบริการ
+apiRouter.get('/report/by-hospital', authenticateToken, async (req, res) => {
+    try {
+        const user = req.user;
+        const { year_bh, dept_id, distid } = req.query;
+        let whereClauses = [];
+        let params = [];
+
+        if (user.role !== 'admin' && user.role !== 'super_admin') {
+            if (user.hospcode) {
+                whereClauses.push('r.hospcode = ?');
+                params.push(user.hospcode);
+            }
+        }
+        if (year_bh) { whereClauses.push('r.year_bh = ?'); params.push(year_bh); }
+        if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
+        if (distid) { whereClauses.push("CONCAT(h.provcode, h.distcode) = ?"); params.push(distid); }
+
+        const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+        const sql = `
+            SELECT
+                r.hospcode,
+                h.hosname,
+                CONCAT(h.provcode, h.distcode) AS distid,
+                dist.distname,
+                r.year_bh,
+                COUNT(DISTINCT r.indicator_id) AS indicator_count,
+                SUM(CASE WHEN r.month_bh = 10 THEN r.target_value ELSE 0 END) AS total_target,
+                SUM(r.actual_value) AS total_actual,
+                CASE WHEN SUM(CASE WHEN r.month_bh = 10 THEN r.target_value ELSE 0 END) > 0
+                     THEN ROUND((SUM(r.actual_value) / SUM(CASE WHEN r.month_bh = 10 THEN r.target_value ELSE 0 END)) * 100, 2)
+                     ELSE 0 END AS achievement_pct,
+                SUM(CASE WHEN r.status = 'Approved' THEN 1 ELSE 0 END) AS approved_count,
+                SUM(CASE WHEN r.status = 'Pending' THEN 1 ELSE 0 END) AS pending_count
+            FROM kpi_results r
+            LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
+            LEFT JOIN chospital h ON r.hospcode = h.hoscode
+            LEFT JOIN co_district dist ON dist.distid = CONCAT(h.provcode, h.distcode)
+            ${whereStr}
+            GROUP BY r.hospcode, h.hosname, CONCAT(h.provcode, h.distcode), dist.distname, r.year_bh
+            ORDER BY dist.distname, h.hosname
+        `;
+        const [rows] = await db.query(sql, params);
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        console.error('Report by-hospital error:', error);
+        res.status(500).json({ success: false, message: 'ไม่สามารถดึงข้อมูลรายงานได้' });
+    }
+});
+
+// รายงานสรุป: รายอำเภอ
+apiRouter.get('/report/by-district', authenticateToken, async (req, res) => {
+    try {
+        const user = req.user;
+        const { year_bh, dept_id } = req.query;
+        let whereClauses = [];
+        let params = [];
+
+        if (user.role !== 'admin' && user.role !== 'super_admin') {
+            if (user.hospcode) {
+                whereClauses.push('r.hospcode = ?');
+                params.push(user.hospcode);
+            }
+        }
+        if (year_bh) { whereClauses.push('r.year_bh = ?'); params.push(year_bh); }
+        if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
+
+        const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+        const sql = `
+            SELECT
+                CONCAT(h.provcode, h.distcode) AS distid,
+                dist.distname,
+                r.year_bh,
+                COUNT(DISTINCT r.hospcode) AS hospital_count,
+                COUNT(DISTINCT r.indicator_id) AS indicator_count,
+                SUM(CASE WHEN r.month_bh = 10 THEN r.target_value ELSE 0 END) AS total_target,
+                SUM(r.actual_value) AS total_actual,
+                CASE WHEN SUM(CASE WHEN r.month_bh = 10 THEN r.target_value ELSE 0 END) > 0
+                     THEN ROUND((SUM(r.actual_value) / SUM(CASE WHEN r.month_bh = 10 THEN r.target_value ELSE 0 END)) * 100, 2)
+                     ELSE 0 END AS achievement_pct
+            FROM kpi_results r
+            LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
+            LEFT JOIN chospital h ON r.hospcode = h.hoscode
+            LEFT JOIN co_district dist ON dist.distid = CONCAT(h.provcode, h.distcode)
+            ${whereStr}
+            GROUP BY CONCAT(h.provcode, h.distcode), dist.distname, r.year_bh
+            ORDER BY dist.distname
+        `;
+        const [rows] = await db.query(sql, params);
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        console.error('Report by-district error:', error);
+        res.status(500).json({ success: false, message: 'ไม่สามารถดึงข้อมูลรายงานได้' });
+    }
+});
+
+// รายงานสรุป: รายปีงบประมาณ
+apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
+    try {
+        const user = req.user;
+        const { dept_id, distid } = req.query;
+        let whereClauses = [];
+        let params = [];
+
+        if (user.role !== 'admin' && user.role !== 'super_admin') {
+            if (user.hospcode === '00018' && user.deptId) {
+                whereClauses.push('i.dept_id = ?');
+                params.push(user.deptId);
+            } else if (user.hospcode) {
+                whereClauses.push('r.hospcode = ?');
+                params.push(user.hospcode);
+            }
+        }
+        if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
+        if (distid) { whereClauses.push("CONCAT(h.provcode, h.distcode) = ?"); params.push(distid); }
+
+        const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+        const sql = `
+            SELECT
+                r.year_bh,
+                COUNT(DISTINCT r.indicator_id) AS indicator_count,
+                COUNT(DISTINCT r.hospcode) AS hospital_count,
+                SUM(CASE WHEN r.month_bh = 10 THEN r.target_value ELSE 0 END) AS total_target,
+                SUM(r.actual_value) AS total_actual,
+                CASE WHEN SUM(CASE WHEN r.month_bh = 10 THEN r.target_value ELSE 0 END) > 0
+                     THEN ROUND((SUM(r.actual_value) / SUM(CASE WHEN r.month_bh = 10 THEN r.target_value ELSE 0 END)) * 100, 2)
+                     ELSE 0 END AS achievement_pct,
+                SUM(CASE WHEN r.status = 'Approved' THEN 1 ELSE 0 END) AS approved_count,
+                SUM(CASE WHEN r.status = 'Pending' THEN 1 ELSE 0 END) AS pending_count
+            FROM kpi_results r
+            LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
+            LEFT JOIN chospital h ON r.hospcode = h.hoscode
+            ${whereStr}
+            GROUP BY r.year_bh
+            ORDER BY r.year_bh DESC
+        `;
+        const [rows] = await db.query(sql, params);
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        console.error('Report by-year error:', error);
+        res.status(500).json({ success: false, message: 'ไม่สามารถดึงข้อมูลรายงานได้' });
+    }
+});
+
 // Mount Router ที่ path /khupskpi/api
 app.use('/khupskpi/api', apiRouter);
 
