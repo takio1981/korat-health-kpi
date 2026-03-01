@@ -1,5 +1,5 @@
 // d:\it-ssjnma-project\korat-health-kpi\kpi-web\src\app\settings\settings.ts
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
@@ -15,6 +15,7 @@ import Swal from 'sweetalert2';
 export class SettingsComponent implements OnInit {
   private authService = inject(AuthService);
   private router = inject(Router);
+  private cdr = inject(ChangeDetectorRef);
 
   settings: any[] = [];
   idleTimeoutMinutes: number = 15;
@@ -29,6 +30,9 @@ export class SettingsComponent implements OnInit {
   isAdmin: boolean = false;
   isSuperAdmin: boolean = false;
   pendingKpiCount: number = 0;
+  unreadNotifCount: number = 0;
+  notifications: any[] = [];
+  showNotifDropdown: boolean = false;
 
   ngOnInit() {
     this.currentUserDisplay = this.authService.getUser();
@@ -44,6 +48,7 @@ export class SettingsComponent implements OnInit {
 
     this.loadSettings();
     this.loadPendingKpiCount();
+    this.loadUnreadNotifCount();
   }
 
   loadPendingKpiCount() {
@@ -52,6 +57,7 @@ export class SettingsComponent implements OnInit {
         if (res.success) {
           this.pendingKpiCount = res.data.filter((item: any) => item.indicator_status === 'pending').length;
         }
+        this.cdr.detectChanges();
       }
     });
   }
@@ -91,6 +97,7 @@ export class SettingsComponent implements OnInit {
             this.systemVersion = versionSetting.setting_value;
           }
         }
+        this.cdr.detectChanges();
       }
     });
   }
@@ -162,8 +169,46 @@ export class SettingsComponent implements OnInit {
           this.closeChangePasswordModal();
           Swal.fire({ title: 'เปลี่ยนรหัสผ่านสำเร็จ', text: 'รหัสผ่านของคุณถูกเปลี่ยนเรียบร้อยแล้ว', icon: 'success', confirmButtonColor: '#28a745' });
         }
+        this.cdr.detectChanges();
       },
       error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถเปลี่ยนรหัสผ่านได้', 'error')
+    });
+  }
+
+  loadUnreadNotifCount() {
+    this.authService.getUnreadNotificationCount().subscribe({
+      next: (res: any) => {
+        if (res.success) this.unreadNotifCount = res.count;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  toggleNotifDropdown() {
+    this.showNotifDropdown = !this.showNotifDropdown;
+    if (this.showNotifDropdown) {
+      this.authService.getNotifications().subscribe({
+        next: (res: any) => {
+          if (res.success) this.notifications = res.data;
+          this.cdr.detectChanges();
+        }
+      });
+    }
+  }
+
+  markNotifAsRead(ids: number[]) {
+    this.authService.markNotificationsRead({ ids }).subscribe({
+      next: () => this.loadUnreadNotifCount()
+    });
+  }
+
+  markAllNotifsRead() {
+    this.authService.markNotificationsRead({ all: true }).subscribe({
+      next: () => {
+        this.unreadNotifCount = 0;
+        this.notifications.forEach(n => n.is_read = 1);
+        this.cdr.detectChanges();
+      }
     });
   }
 

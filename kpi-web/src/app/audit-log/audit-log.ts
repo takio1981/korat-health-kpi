@@ -31,6 +31,9 @@ export class AuditLogComponent implements OnInit {
   isSuperAdmin: boolean = false;
   systemVersion: string = 'v1.0.0';
   pendingKpiCount: number = 0;
+  unreadNotifCount: number = 0;
+  notifications: any[] = [];
+  showNotifDropdown: boolean = false;
 
   ngOnInit() {
     this.currentUserDisplay = this.authService.getUser();
@@ -45,6 +48,7 @@ export class AuditLogComponent implements OnInit {
     this.loadLogs();
     this.loadSettings();
     this.loadPendingKpiCount();
+    this.loadUnreadNotifCount();
   }
 
   loadSettings() {
@@ -242,6 +246,50 @@ export class AuditLogComponent implements OnInit {
         }
       },
       error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถเปลี่ยนรหัสผ่านได้', 'error')
+    });
+  }
+
+  loadUnreadNotifCount() {
+    this.authService.getUnreadNotificationCount().subscribe({
+      next: (res: any) => {
+        if (res.success) {
+          this.unreadNotifCount = res.count;
+          this.cdr.detectChanges();
+        }
+      }
+    });
+  }
+
+  toggleNotifDropdown() {
+    this.showNotifDropdown = !this.showNotifDropdown;
+    if (this.showNotifDropdown) {
+      this.authService.getNotifications().subscribe({
+        next: (res: any) => {
+          if (res.success) {
+            this.notifications = res.data;
+            this.cdr.detectChanges();
+          }
+        }
+      });
+    }
+  }
+
+  markNotifAsRead(ids: number[]) {
+    this.authService.markNotificationsRead({ ids }).subscribe({
+      next: () => {
+        this.loadUnreadNotifCount();
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  markAllNotifsRead() {
+    this.authService.markNotificationsRead({ all: true }).subscribe({
+      next: () => {
+        this.unreadNotifCount = 0;
+        this.notifications.forEach(n => n.is_read = 1);
+        this.cdr.detectChanges();
+      }
     });
   }
 

@@ -884,6 +884,17 @@ apiRouter.post('/approve-kpi', authenticateToken, isAdmin, async (req, res) => {
             );
         }
 
+        // Create notifications for approved items
+        for (const item of items) {
+            const targetHospcode = item.hospcode || user.hospcode;
+            const [indRows] = await connection.query('SELECT kpi_indicators_name FROM kpi_indicators WHERE id = ?', [item.indicator_id]);
+            const indName = indRows.length > 0 ? indRows[0].kpi_indicators_name : `ตัวชี้วัด #${item.indicator_id}`;
+            await connection.query(
+                'INSERT INTO notifications (hospcode, type, title, message, indicator_id, year_bh, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [targetHospcode, 'approve', 'ตัวชี้วัดได้รับการอนุมัติ', `"${indName}" ปีงบ ${item.year_bh} ได้รับการอนุมัติและล็อคข้อมูลแล้ว`, item.indicator_id, item.year_bh, user.userId]
+            );
+        }
+
         await connection.query(
             'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
             [user.userId, user.deptId, 'APPROVE', 'kpi_results', JSON.stringify({ count: items.length, message: `อนุมัติและล็อคข้อมูล ${items.length} รายการ` }), req.ip]
@@ -1175,6 +1186,191 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Report by-year error:', error);
         res.status(500).json({ success: false, message: 'ไม่สามารถดึงข้อมูลรายงานได้' });
+    }
+});
+
+// ========== Auto-create tables for Approval & Notification system ==========
+(async () => {
+    try {
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NULL,
+                hospcode VARCHAR(10) NULL,
+                type ENUM('approve','reject','info') NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                message TEXT,
+                indicator_id INT NULL,
+                year_bh VARCHAR(10) NULL,
+                is_read TINYINT(1) DEFAULT 0,
+                created_by INT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_user (user_id),
+                INDEX idx_hospcode (hospcode),
+                INDEX idx_read (is_read)
+            )
+        `);
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS kpi_rejection_comments (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                indicator_id INT NOT NULL,
+                year_bh VARCHAR(10) NOT NULL,
+                hospcode VARCHAR(10) NOT NULL,
+                comment TEXT NOT NULL,
+                rejected_by INT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_kpi (indicator_id, year_bh, hospcode)
+            )
+        `);
+        console.log('✅ Notification & Rejection tables ready');
+    } catch (err) {
+        console.error('⚠️ Auto-create tables error:', err.message);
+    }
+})();
+
+// ========== Rejection & Notification APIs ==========
+
+// ตีกลับ KPI (admin only) - รองรับทั้งรายการเดียวและหลายรายการ
+apiRouter.post('/reject-kpi', authenticateToken, isAdmin, async (req, res) => {
+    const user = req.user;
+    const items = Array.isArray(req.body) ? req.body : [req.body];
+
+    if (items.length === 0 || !items[0].indicator_id) {
+        return res.status(400).json({ success: false, message: 'No rejection data' });
+    }
+
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        for (const item of items) {
+            const { indicator_id, year_bh, hospcode, comment } = item;
+
+            if (!comment || !comment.trim()) {
+                throw new Error('กรุณาระบุเหตุผลการส่งคืนแก้ไข');
+            }
+
+            let whereClause = 'indicator_id = ? AND year_bh = ?';
+            let params = [indicator_id, year_bh];
+
+            if (user.role !== 'super_admin') {
+                whereClause += ' AND hospcode = ?';
+                params.push(user.hospcode);
+            } else if (hospcode) {
+                whereClause += ' AND hospcode = ?';
+                params.push(hospcode);
+            }
+
+            // Update status to Rejected and unlock
+            await connection.query(
+                `UPDATE kpi_results SET status = 'Rejected', is_locked = 0 WHERE ${whereClause}`,
+                params
+            );
+
+            // Save rejection comment
+            const targetHospcode = hospcode || user.hospcode;
+            await connection.query(
+                'INSERT INTO kpi_rejection_comments (indicator_id, year_bh, hospcode, comment, rejected_by) VALUES (?, ?, ?, ?, ?)',
+                [indicator_id, year_bh, targetHospcode, comment.trim(), user.userId]
+            );
+
+            // Get indicator name for notification
+            const [indRows] = await connection.query('SELECT kpi_indicators_name FROM kpi_indicators WHERE id = ?', [indicator_id]);
+            const indName = indRows.length > 0 ? indRows[0].kpi_indicators_name : `ตัวชี้วัด #${indicator_id}`;
+
+            // Create notification for the hospcode owner
+            await connection.query(
+                'INSERT INTO notifications (hospcode, type, title, message, indicator_id, year_bh, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [targetHospcode, 'reject', 'ตัวชี้วัดถูกส่งคืนแก้ไข', `"${indName}" ปีงบ ${year_bh} ถูกส่งคืนแก้ไข เหตุผล: ${comment.trim()}`, indicator_id, year_bh, user.userId]
+            );
+        }
+
+        // Log action
+        await connection.query(
+            'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+            [user.userId, user.deptId, 'REJECT', 'kpi_results', JSON.stringify({ count: items.length, message: `ส่งคืนแก้ไข ${items.length} รายการ` }), req.ip]
+        );
+
+        await connection.commit();
+        res.json({ success: true, message: `ส่งคืนแก้ไขเรียบร้อยแล้ว ${items.length} รายการ` });
+    } catch (error) {
+        await connection.rollback();
+        res.status(500).json({ success: false, message: error.message });
+    } finally {
+        connection.release();
+    }
+});
+
+// ดึงรายการแจ้งเตือนของผู้ใช้
+apiRouter.get('/notifications', authenticateToken, async (req, res) => {
+    const user = req.user;
+    try {
+        const [rows] = await db.query(
+            `SELECT n.*, u.firstname AS created_by_name, u.lastname AS created_by_lastname
+             FROM notifications n
+             LEFT JOIN users u ON n.created_by = u.id
+             WHERE n.user_id = ? OR n.hospcode = ? OR (n.user_id IS NULL AND n.hospcode IS NULL)
+             ORDER BY n.created_at DESC LIMIT 50`,
+            [user.userId, user.hospcode]
+        );
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// นับจำนวนแจ้งเตือนที่ยังไม่อ่าน
+apiRouter.get('/notifications/unread-count', authenticateToken, async (req, res) => {
+    const user = req.user;
+    try {
+        const [rows] = await db.query(
+            `SELECT COUNT(*) AS count FROM notifications
+             WHERE is_read = 0 AND (user_id = ? OR hospcode = ? OR (user_id IS NULL AND hospcode IS NULL))`,
+            [user.userId, user.hospcode]
+        );
+        res.json({ success: true, count: rows[0].count });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Mark notifications as read
+apiRouter.post('/notifications/mark-read', authenticateToken, async (req, res) => {
+    const user = req.user;
+    const { ids, all } = req.body;
+    try {
+        if (all) {
+            await db.query(
+                `UPDATE notifications SET is_read = 1 WHERE is_read = 0 AND (user_id = ? OR hospcode = ? OR (user_id IS NULL AND hospcode IS NULL))`,
+                [user.userId, user.hospcode]
+            );
+        } else if (ids && Array.isArray(ids) && ids.length > 0) {
+            await db.query(
+                `UPDATE notifications SET is_read = 1 WHERE id IN (?) AND (user_id = ? OR hospcode = ? OR (user_id IS NULL AND hospcode IS NULL))`,
+                [ids, user.userId, user.hospcode]
+            );
+        }
+        res.json({ success: true, message: 'อ่านแจ้งเตือนเรียบร้อยแล้ว' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ดึงประวัติเหตุผลการตีกลับ
+apiRouter.get('/rejection-comments/:indicator_id/:year_bh/:hospcode', authenticateToken, async (req, res) => {
+    const { indicator_id, year_bh, hospcode } = req.params;
+    try {
+        const [rows] = await db.query(
+            `SELECT rc.*, u.firstname, u.lastname
+             FROM kpi_rejection_comments rc
+             LEFT JOIN users u ON rc.rejected_by = u.id
+             WHERE rc.indicator_id = ? AND rc.year_bh = ? AND rc.hospcode = ?
+             ORDER BY rc.created_at DESC`,
+            [indicator_id, year_bh, hospcode]
+        );
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 

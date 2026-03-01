@@ -317,6 +317,37 @@ export class AuthService {
   }
 
   // --- Report Summary APIs ---
+  // --- Rejection & Notification APIs ---
+  rejectKpi(data: any): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/reject-kpi`, data, { headers });
+  }
+
+  getNotifications(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/notifications`, { headers });
+  }
+
+  markNotificationsRead(data: any): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/notifications/mark-read`, data, { headers });
+  }
+
+  getUnreadNotificationCount(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/notifications/unread-count`, { headers });
+  }
+
+  getRejectionComments(indicatorId: number, yearBh: string, hospcode: string): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/rejection-comments/${indicatorId}/${yearBh}/${hospcode}`, { headers });
+  }
+
   getReportByIndicator(params: any = {}): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

@@ -38,7 +38,11 @@ export class UserManagementComponent implements OnInit {
   isSuperAdmin: boolean = false;
   systemVersion: string = 'v1.0.0';
   pendingKpiCount: number = 0;
-  
+
+  unreadNotifCount: number = 0;
+  notifications: any[] = [];
+  showNotifDropdown: boolean = false;
+
   showModal: boolean = false;
   isEditMode: boolean = false;
   currentUser: any = { id: null, username: '', password: '', role: 'user', dept_id: '', firstname: '', lastname: '', hospcode: '', phone: '' };
@@ -60,6 +64,7 @@ export class UserManagementComponent implements OnInit {
     this.loadDistricts();
     this.loadSettings();
     this.loadPendingKpiCount();
+    this.loadUnreadNotifCount();
   }
 
   loadPendingKpiCount() {
@@ -125,6 +130,7 @@ export class UserManagementComponent implements OnInit {
   onDistrictChange() {
     this.filteredHospitals = this.hospitals.filter(h => h.distid === this.selectedDistrictId);
     this.currentUser.hospcode = '';
+    this.cdr.detectChanges();
   }
 
   applyFilters() {
@@ -322,5 +328,49 @@ export class UserManagementComponent implements OnInit {
 
   toggleSidebar() {
     this.isSidebarOpen = !this.isSidebarOpen;
+  }
+
+  loadUnreadNotifCount() {
+    this.authService.getUnreadNotificationCount().subscribe({
+      next: (res: any) => {
+        if (res.success) {
+          this.unreadNotifCount = res.count;
+          this.cdr.detectChanges();
+        }
+      }
+    });
+  }
+
+  toggleNotifDropdown() {
+    this.showNotifDropdown = !this.showNotifDropdown;
+    if (this.showNotifDropdown) {
+      this.authService.getNotifications().subscribe({
+        next: (res: any) => {
+          if (res.success) {
+            this.notifications = res.data;
+            this.cdr.detectChanges();
+          }
+        }
+      });
+    }
+  }
+
+  markNotifAsRead(ids: number[]) {
+    this.authService.markNotificationsRead({ ids }).subscribe({
+      next: () => {
+        this.loadUnreadNotifCount();
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  markAllNotifsRead() {
+    this.authService.markNotificationsRead({ all: true }).subscribe({
+      next: () => {
+        this.unreadNotifCount = 0;
+        this.notifications.forEach(n => n.is_read = 1);
+        this.cdr.detectChanges();
+      }
+    });
   }
 }

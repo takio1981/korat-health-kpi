@@ -150,6 +150,12 @@
   border: 1px solid #e2e8f0;
 }
 
+.status-rejected {
+  background-color: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+}
+
 /* RowSpan cell for grouped category */
 .kpi-table td.rowspan-cell {
   vertical-align: top;

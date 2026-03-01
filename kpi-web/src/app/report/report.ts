@@ -27,6 +27,10 @@ export class ReportComponent implements OnInit {
   systemVersion: string = 'v1.0.0';
   pendingKpiCount: number = 0;
 
+  unreadNotifCount: number = 0;
+  notifications: any[] = [];
+  showNotifDropdown: boolean = false;
+
   // Change Password Modal
   showChangePasswordModal: boolean = false;
   changePasswordForm: any = { currentPassword: '', newPassword: '', confirmPassword: '' };
@@ -72,6 +76,7 @@ export class ReportComponent implements OnInit {
     this.isSuperAdmin = role === 'super_admin';
     this.loadSettings();
     this.loadPendingKpiCount();
+    this.loadUnreadNotifCount();
     this.loadFilters();
   }
 
@@ -373,5 +378,49 @@ export class ReportComponent implements OnInit {
 
   toggleSidebar() {
     this.isSidebarOpen = !this.isSidebarOpen;
+  }
+
+  loadUnreadNotifCount() {
+    this.authService.getUnreadNotificationCount().subscribe({
+      next: (res: any) => {
+        if (res.success) {
+          this.unreadNotifCount = res.count;
+          this.cdr.detectChanges();
+        }
+      }
+    });
+  }
+
+  toggleNotifDropdown() {
+    this.showNotifDropdown = !this.showNotifDropdown;
+    if (this.showNotifDropdown) {
+      this.authService.getNotifications().subscribe({
+        next: (res: any) => {
+          if (res.success) {
+            this.notifications = res.data;
+            this.cdr.detectChanges();
+          }
+        }
+      });
+    }
+  }
+
+  markNotifAsRead(ids: number[]) {
+    this.authService.markNotificationsRead({ ids }).subscribe({
+      next: () => {
+        this.loadUnreadNotifCount();
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  markAllNotifsRead() {
+    this.authService.markNotificationsRead({ all: true }).subscribe({
+      next: () => {
+        this.unreadNotifCount = 0;
+        this.notifications.forEach(n => n.is_read = 1);
+        this.cdr.detectChanges();
+      }
+    });
   }
 }

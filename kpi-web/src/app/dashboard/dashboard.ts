@@ -62,6 +62,16 @@ export class DashboardComponent implements OnInit {
   showNewPw: boolean = false;
   showConfirmPw: boolean = false;
 
+  // Reject & Notification properties
+  showRejectModal: boolean = false;
+  rejectComment: string = '';
+  rejectingItem: any = null;
+  notifications: any[] = [];
+  unreadNotifCount: number = 0;
+  showNotifDropdown: boolean = false;
+  showRejectionHistoryModal: boolean = false;
+  rejectionHistory: any[] = [];
+
   stats: any = {
     successRate: 0,
     recordedCount: 0,
@@ -78,6 +88,8 @@ export class DashboardComponent implements OnInit {
     this.loadKpiData();
     this.loadSettings();
     this.loadPendingCount();
+    this.loadUnreadNotifCount();
+    this.checkLoginNotifications();
   }
 
   loadKpiData() {
@@ -140,6 +152,7 @@ export class DashboardComponent implements OnInit {
         next: (res) => {
           if (res.success) {
             this.pendingKpiCount = res.count;
+            this.cdr.detectChanges();
           }
         },
         error: (err) => console.error('Error loading pending count:', err)
@@ -256,6 +269,7 @@ export class DashboardComponent implements OnInit {
     });
     this.totalPages = Math.ceil(this.filteredData.length / this.pageSize);
     this.currentPage = 1;
+    this.cdr.detectChanges();
   }
 
   toggleEditMode() {
@@ -634,5 +648,163 @@ export class DashboardComponent implements OnInit {
     if (page >= 1 && page <= this.totalPages) {
       this.currentPage = page;
     }
+  }
+
+  // ========== Rejection Methods ==========
+  openRejectModal(item: any) {
+    this.rejectingItem = item;
+    this.rejectComment = '';
+    this.showRejectModal = true;
+  }
+
+  confirmReject() {
+    if (!this.rejectComment.trim()) {
+      Swal.fire('แจ้งเตือน', 'กรุณาระบุเหตุผลการส่งคืนแก้ไข', 'warning');
+      return;
+    }
+    const data = {
+      indicator_id: this.rejectingItem.indicator_id,
+      year_bh: this.rejectingItem.year_bh,
+      hospcode: this.rejectingItem.hospcode,
+      comment: this.rejectComment
+    };
+    this.authService.rejectKpi(data).subscribe({
+      next: (res) => {
+        if (res.success) {
+          this.showRejectModal = false;
+          Swal.fire('สำเร็จ', 'ส่งคืนแก้ไขเรียบร้อยแล้ว', 'success');
+          this.loadKpiData();
+          this.loadPendingCount();
+          this.loadUnreadNotifCount();
+        }
+      },
+      error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถดำเนินการได้', 'error')
+    });
+  }
+
+  rejectAll() {
+    const pendingItems = this.filteredData.filter(item => item.pending_count > 0);
+    if (pendingItems.length === 0) return;
+    Swal.fire({
+      title: 'ส่งคืนแก้ไขทั้งหมด',
+      input: 'textarea',
+      inputLabel: 'เหตุผลการส่งคืนแก้ไข',
+      inputPlaceholder: 'กรุณาระบุเหตุผล...',
+      inputAttributes: { 'aria-label': 'เหตุผลการส่งคืนแก้ไข' },
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      confirmButtonText: `ส่งคืนทั้งหมด (${pendingItems.length})`,
+      cancelButtonText: 'ยกเลิก',
+      inputValidator: (value) => {
+        if (!value || !value.trim()) return 'กรุณาระบุเหตุผล';
+        return null;
+      }
+    }).then((result) => {
+      if (result.isConfirmed && result.value) {
+        const rejections = pendingItems.map(item => ({
+          indicator_id: item.indicator_id,
+          year_bh: item.year_bh,
+          hospcode: item.hospcode,
+          comment: result.value
+        }));
+        this.authService.rejectKpi(rejections).subscribe({
+          next: (res) => {
+            Swal.fire('สำเร็จ', `ส่งคืนแก้ไขเรียบร้อยแล้ว ${pendingItems.length} รายการ`, 'success');
+            this.loadKpiData();
+            this.loadDashboardStats();
+            this.loadPendingCount();
+            this.loadUnreadNotifCount();
+          },
+          error: (err) => Swal.fire('ผิดพลาด', 'ไม่สามารถดำเนินการได้', 'error')
+        });
+      }
+    });
+  }
+
+  viewRejectionHistory(item: any) {
+    this.authService.getRejectionComments(item.indicator_id, item.year_bh, item.hospcode).subscribe({
+      next: (res) => {
+        if (res.success) {
+          this.rejectionHistory = res.data;
+          this.showRejectionHistoryModal = true;
+          this.cdr.detectChanges();
+        }
+      },
+      error: (err) => Swal.fire('ผิดพลาด', 'ไม่สามารถดึงข้อมูลได้', 'error')
+    });
+  }
+
+  // ========== Notification Methods ==========
+  loadUnreadNotifCount() {
+    this.authService.getUnreadNotificationCount().subscribe({
+      next: (res) => {
+        if (res.success) {
+          this.unreadNotifCount = res.count;
+          this.cdr.detectChanges();
+        }
+      },
+      error: (err) => console.error('Error loading unread count:', err)
+    });
+  }
+
+  loadNotifications() {
+    this.authService.getNotifications().subscribe({
+      next: (res) => {
+        if (res.success) {
+          this.notifications = res.data;
+          this.cdr.detectChanges();
+        }
+      },
+      error: (err) => console.error('Error loading notifications:', err)
+    });
+  }
+
+  toggleNotifDropdown() {
+    this.showNotifDropdown = !this.showNotifDropdown;
+    if (this.showNotifDropdown) {
+      this.loadNotifications();
+    }
+  }
+
+  markAsRead(ids: number[]) {
+    this.authService.markNotificationsRead({ ids }).subscribe({
+      next: () => {
+        this.loadUnreadNotifCount();
+        this.loadNotifications();
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  markAllAsRead() {
+    this.authService.markNotificationsRead({ all: true }).subscribe({
+      next: () => {
+        this.unreadNotifCount = 0;
+        this.notifications.forEach(n => n.is_read = 1);
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  checkLoginNotifications() {
+    this.authService.getUnreadNotificationCount().subscribe({
+      next: (res) => {
+        if (res.success && res.count > 0) {
+          Swal.fire({
+            title: 'การแจ้งเตือน',
+            html: `คุณมีการแจ้งเตือนที่ยังไม่ได้อ่าน <b>${res.count}</b> รายการ`,
+            icon: 'info',
+            confirmButtonText: 'ดูรายละเอียด',
+            showCancelButton: true,
+            cancelButtonText: 'ปิด',
+            confirmButtonColor: '#10b981'
+          }).then((result) => {
+            if (result.isConfirmed) {
+              this.router.navigate(['/notifications']);
+            }
+          });
+        }
+      }
+    });
   }
 }
