@@ -156,6 +156,12 @@
   border: 1px solid #fca5a5;
 }
 
+.status-resubmit {
+  background-color: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fcd34d;
+}
+
 /* RowSpan cell for grouped category */
 .kpi-table td.rowspan-cell {
   vertical-align: top;

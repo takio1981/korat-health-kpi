@@ -1,14 +1,14 @@
 import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterModule } from '@angular/router';
+import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
 import Swal from 'sweetalert2';
 
 @Component({
   selector: 'app-kpi-setup',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule],
+  imports: [CommonModule, FormsModule],
   templateUrl: './kpi-setup.html'
 })
 export class KpiSetupComponent implements OnInit {
@@ -25,18 +25,10 @@ export class KpiSetupComponent implements OnInit {
   selectedDistrict: string = '';
   selectedHospital: string = '';
 
-  isSidebarOpen: boolean = true;
-  currentUserDisplay: any = null;
   isAdmin: boolean = false;
   isSuperAdmin: boolean = false;
-  systemVersion: string = 'v1.0.0';
-  pendingKpiCount: number = 0;
-  unreadNotifCount: number = 0;
-  notifications: any[] = [];
-  showNotifDropdown: boolean = false;
 
   ngOnInit() {
-    this.currentUserDisplay = this.authService.getUser();
     const role = this.authService.getUserRole();
     this.isAdmin = role === 'admin' || role === 'super_admin';
     this.isSuperAdmin = role === 'super_admin';
@@ -53,24 +45,10 @@ export class KpiSetupComponent implements OnInit {
       return;
     }
 
-    this.selectedYear = (new Date().getFullYear() + 543 + 1).toString(); // ปีปัจจุบัน + 1
+    this.selectedYear = (new Date().getFullYear() + 543 + 1).toString();
     this.loadTemplate();
     this.loadDistricts();
     this.loadHospitals();
-    this.loadSettings();
-    this.loadPendingKpiCount();
-    this.loadUnreadNotifCount();
-  }
-
-  loadPendingKpiCount() {
-    this.authService.getKpiResults().subscribe({
-      next: (res) => {
-        if (res.success) {
-          this.pendingKpiCount = res.data.filter((item: any) => item.indicator_status === 'pending').length;
-          this.cdr.detectChanges();
-        }
-      }
-    });
   }
 
   loadTemplate() {
@@ -79,26 +57,13 @@ export class KpiSetupComponent implements OnInit {
         if (res.success) {
           this.kpiTemplate = res.data.map((item: any) => ({
             ...item,
-            year_bh: this.selectedYear, // กำหนดปีงบประมาณ
-            target_value: 0, // ค่าเริ่มต้น
+            year_bh: this.selectedYear,
+            target_value: 0,
             oct: 0, nov: 0, dece: 0, jan: 0, feb: 0, mar: 0,
             apr: 0, may: 0, jun: 0, jul: 0, aug: 0, sep: 0,
             total_actual: 0
           }));
-          this.cdr.detectChanges(); // ✅ บังคับอัปเดตหน้าจอทันทีเมื่อข้อมูลมา
-        }
-      }
-    });
-  }
-
-  loadSettings() {
-    this.authService.getSettings().subscribe({
-      next: (res) => {
-        if (res.success && res.data) {
-          const versionSetting = res.data.find((s: any) => s.setting_key === 'system_version');
-          if (versionSetting) {
-            this.systemVersion = versionSetting.setting_value;
-          }
+          this.cdr.detectChanges();
         }
       }
     });
@@ -117,7 +82,7 @@ export class KpiSetupComponent implements OnInit {
     this.authService.getHospitals().subscribe(res => {
       if (res.success) {
         this.hospitals = res.data;
-        this.filteredHospitals = [...this.hospitals]; // ✅ เริ่มต้นให้แสดงทั้งหมด
+        this.filteredHospitals = [...this.hospitals];
         this.cdr.detectChanges();
       }
     });
@@ -127,10 +92,10 @@ export class KpiSetupComponent implements OnInit {
     if (this.selectedDistrict) {
       this.filteredHospitals = this.hospitals.filter(h => h.distid === this.selectedDistrict);
     } else {
-      this.filteredHospitals = [...this.hospitals]; // ถ้าเลือกทั้งหมด ให้แสดงทุกโรงพยาบาล
+      this.filteredHospitals = [...this.hospitals];
     }
     this.selectedHospital = '';
-    this.cdr.detectChanges(); // อัปเดต Dropdown หน่วยบริการ
+    this.cdr.detectChanges();
   }
 
   onValueChange(item: any, month: string) {
@@ -166,9 +131,8 @@ export class KpiSetupComponent implements OnInit {
       cancelButtonColor: '#d33'
     }).then((result) => {
       if (result.isConfirmed) {
-        // ✅ สร้าง Object ใหม่สำหรับส่งไปบันทึก โดยตัด field ที่เป็นข้อความออก (ลดขนาด Payload)
         const dataToSave = this.kpiTemplate.map(item => ({
-            indicator_id: item.indicator_id, // ส่งเฉพาะรหัส
+            indicator_id: item.indicator_id,
             year_bh: this.selectedYear,
             target_value: item.target_value,
             oct: item.oct, nov: item.nov, dece: item.dece,
@@ -197,101 +161,5 @@ export class KpiSetupComponent implements OnInit {
         });
       }
     });
-  }
-
-  // --- Change Password ---
-  showChangePasswordModal: boolean = false;
-  changePasswordForm: any = { currentPassword: '', newPassword: '', confirmPassword: '' };
-  showCurrentPw: boolean = false;
-  showNewPw: boolean = false;
-  showConfirmPw: boolean = false;
-
-  openChangePasswordModal() {
-    this.changePasswordForm = { currentPassword: '', newPassword: '', confirmPassword: '' };
-    this.showCurrentPw = false;
-    this.showNewPw = false;
-    this.showConfirmPw = false;
-    this.showChangePasswordModal = true;
-  }
-
-  closeChangePasswordModal() {
-    this.showChangePasswordModal = false;
-  }
-
-  saveNewPassword() {
-    if (!this.changePasswordForm.currentPassword || !this.changePasswordForm.newPassword || !this.changePasswordForm.confirmPassword) {
-      Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลให้ครบทุกช่อง', 'warning');
-      return;
-    }
-    if (this.changePasswordForm.newPassword !== this.changePasswordForm.confirmPassword) {
-      Swal.fire('แจ้งเตือน', 'รหัสผ่านใหม่และยืนยันรหัสผ่านไม่ตรงกัน', 'warning');
-      return;
-    }
-    if (this.changePasswordForm.newPassword.length < 6) {
-      Swal.fire('แจ้งเตือน', 'รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร', 'warning');
-      return;
-    }
-    this.authService.changePassword({
-      currentPassword: this.changePasswordForm.currentPassword,
-      newPassword: this.changePasswordForm.newPassword
-    }).subscribe({
-      next: (res) => {
-        if (res.success) {
-          this.closeChangePasswordModal();
-          this.cdr.detectChanges();
-          Swal.fire({ title: 'เปลี่ยนรหัสผ่านสำเร็จ', text: 'รหัสผ่านของคุณถูกเปลี่ยนเรียบร้อยแล้ว', icon: 'success', confirmButtonColor: '#28a745' });
-        }
-      },
-      error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถเปลี่ยนรหัสผ่านได้', 'error')
-    });
-  }
-
-  loadUnreadNotifCount() {
-    this.authService.getUnreadNotificationCount().subscribe({
-      next: (res: any) => {
-        if (res.success) this.unreadNotifCount = res.count;
-        this.cdr.detectChanges();
-      }
-    });
-  }
-
-  toggleNotifDropdown() {
-    this.showNotifDropdown = !this.showNotifDropdown;
-    if (this.showNotifDropdown) {
-      this.authService.getNotifications().subscribe({
-        next: (res: any) => {
-          if (res.success) this.notifications = res.data;
-          this.cdr.detectChanges();
-        }
-      });
-    }
-  }
-
-  markNotifAsRead(ids: number[]) {
-    this.authService.markNotificationsRead({ ids }).subscribe({
-      next: () => {
-        this.loadUnreadNotifCount();
-        this.cdr.detectChanges();
-      }
-    });
-  }
-
-  markAllNotifsRead() {
-    this.authService.markNotificationsRead({ all: true }).subscribe({
-      next: () => {
-        this.unreadNotifCount = 0;
-        this.notifications.forEach(n => n.is_read = 1);
-        this.cdr.detectChanges();
-      }
-    });
-  }
-
-  toggleSidebar() {
-    this.isSidebarOpen = !this.isSidebarOpen;
-  }
-
-  logout() {
-    this.authService.logout();
-    this.router.navigate(['/login']);
   }
 }

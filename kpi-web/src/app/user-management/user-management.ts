@@ -1,14 +1,14 @@
 import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterModule } from '@angular/router';
+import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
 import Swal from 'sweetalert2';
 
 @Component({
   selector: 'app-user-management',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule],
+  imports: [CommonModule, FormsModule],
   templateUrl: './user-management.html'
 })
 export class UserManagementComponent implements OnInit {
@@ -17,42 +17,34 @@ export class UserManagementComponent implements OnInit {
   private cdr = inject(ChangeDetectorRef);
 
   users: any[] = [];
-  filteredUsers: any[] = []; 
-  
+  filteredUsers: any[] = [];
+
   searchTerm: string = '';
   selectedRole: string = '';
   selectedDept: string = '';
-  currentUserDisplay: any = null; 
 
   currentPage: number = 1;
   pageSize: number = 10;
   totalPages: number = 0;
 
   departments: any[] = [];
-  hospitals: any[] = []; 
-  districts: any[] = []; 
-  filteredHospitals: any[] = []; 
-  selectedDistrictId: string = ''; 
-  isSidebarOpen: boolean = true;
+  hospitals: any[] = [];
+  districts: any[] = [];
+  filteredHospitals: any[] = [];
+  selectedDistrictId: string = '';
+
   isAdmin: boolean = false;
   isSuperAdmin: boolean = false;
-  systemVersion: string = 'v1.0.0';
-  pendingKpiCount: number = 0;
-
-  unreadNotifCount: number = 0;
-  notifications: any[] = [];
-  showNotifDropdown: boolean = false;
 
   showModal: boolean = false;
   isEditMode: boolean = false;
   currentUser: any = { id: null, username: '', password: '', role: 'user', dept_id: '', firstname: '', lastname: '', hospcode: '', phone: '' };
 
   ngOnInit() {
-    this.currentUserDisplay = this.authService.getUser();
     const role = this.authService.getUserRole();
     this.isAdmin = role === 'admin' || role === 'super_admin';
     this.isSuperAdmin = role === 'super_admin';
-    
+
     if (!this.isAdmin) {
       Swal.fire('Access Denied', 'คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'error');
       this.router.navigate(['/dashboard']);
@@ -62,20 +54,6 @@ export class UserManagementComponent implements OnInit {
     this.loadDepartments();
     this.loadHospitals();
     this.loadDistricts();
-    this.loadSettings();
-    this.loadPendingKpiCount();
-    this.loadUnreadNotifCount();
-  }
-
-  loadPendingKpiCount() {
-    this.authService.getKpiResults().subscribe({
-      next: (res) => {
-        if (res.success) {
-          this.pendingKpiCount = res.data.filter((item: any) => item.indicator_status === 'pending').length;
-          this.cdr.detectChanges();
-        }
-      }
-    });
   }
 
   loadUsers() {
@@ -114,19 +92,6 @@ export class UserManagementComponent implements OnInit {
     });
   }
 
-  loadSettings() {
-    this.authService.getSettings().subscribe({
-      next: (res) => {
-        if (res.success && res.data) {
-          const versionSetting = res.data.find((s: any) => s.setting_key === 'system_version');
-          if (versionSetting) {
-            this.systemVersion = versionSetting.setting_value;
-          }
-        }
-      }
-    });
-  }
-
   onDistrictChange() {
     this.filteredHospitals = this.hospitals.filter(h => h.distid === this.selectedDistrictId);
     this.currentUser.hospcode = '';
@@ -140,7 +105,7 @@ export class UserManagementComponent implements OnInit {
                           (user.dept_name && user.dept_name.toLowerCase().includes(search)) ||
                           (user.firstname && user.firstname.toLowerCase().includes(search)) ||
                           (user.lastname && user.lastname.toLowerCase().includes(search));
-      
+
       const matchRole = this.selectedRole === '' || user.role === this.selectedRole;
       const matchDept = this.selectedDept === '' || (user.dept_id && user.dept_id.toString() === this.selectedDept);
 
@@ -167,7 +132,7 @@ export class UserManagementComponent implements OnInit {
     if (user) {
       this.isEditMode = true;
       this.currentUser = { ...user, password: '' };
-      
+
       const currentHospital = this.hospitals.find(h => h.hoscode === user.hospcode);
       if (currentHospital) {
         this.selectedDistrictId = currentHospital.distid;
@@ -189,7 +154,7 @@ export class UserManagementComponent implements OnInit {
   }
 
   saveUser() {
-    if (!this.currentUser.username || 
+    if (!this.currentUser.username ||
         (!this.isEditMode && !this.currentUser.password) ||
         !this.currentUser.firstname ||
         !this.currentUser.lastname ||
@@ -270,106 +235,6 @@ export class UserManagementComponent implements OnInit {
           },
           error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถรีเซ็ตรหัสผ่านได้', 'error')
         });
-      }
-    });
-  }
-
-  // --- Change Password ---
-  showChangePasswordModal: boolean = false;
-  changePasswordForm: any = { currentPassword: '', newPassword: '', confirmPassword: '' };
-  showCurrentPw: boolean = false;
-  showNewPw: boolean = false;
-  showConfirmPw: boolean = false;
-
-  openChangePasswordModal() {
-    this.changePasswordForm = { currentPassword: '', newPassword: '', confirmPassword: '' };
-    this.showCurrentPw = false;
-    this.showNewPw = false;
-    this.showConfirmPw = false;
-    this.showChangePasswordModal = true;
-  }
-
-  closeChangePasswordModal() {
-    this.showChangePasswordModal = false;
-  }
-
-  saveNewPassword() {
-    if (!this.changePasswordForm.currentPassword || !this.changePasswordForm.newPassword || !this.changePasswordForm.confirmPassword) {
-      Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลให้ครบทุกช่อง', 'warning');
-      return;
-    }
-    if (this.changePasswordForm.newPassword !== this.changePasswordForm.confirmPassword) {
-      Swal.fire('แจ้งเตือน', 'รหัสผ่านใหม่และยืนยันรหัสผ่านไม่ตรงกัน', 'warning');
-      return;
-    }
-    if (this.changePasswordForm.newPassword.length < 6) {
-      Swal.fire('แจ้งเตือน', 'รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร', 'warning');
-      return;
-    }
-    this.authService.changePassword({
-      currentPassword: this.changePasswordForm.currentPassword,
-      newPassword: this.changePasswordForm.newPassword
-    }).subscribe({
-      next: (res) => {
-        if (res.success) {
-          this.closeChangePasswordModal();
-          this.cdr.detectChanges();
-          Swal.fire({ title: 'เปลี่ยนรหัสผ่านสำเร็จ', text: 'รหัสผ่านของคุณถูกเปลี่ยนเรียบร้อยแล้ว', icon: 'success', confirmButtonColor: '#28a745' });
-        }
-      },
-      error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถเปลี่ยนรหัสผ่านได้', 'error')
-    });
-  }
-
-  logout() {
-    this.authService.logout();
-    this.router.navigate(['/login']);
-  }
-
-  toggleSidebar() {
-    this.isSidebarOpen = !this.isSidebarOpen;
-  }
-
-  loadUnreadNotifCount() {
-    this.authService.getUnreadNotificationCount().subscribe({
-      next: (res: any) => {
-        if (res.success) {
-          this.unreadNotifCount = res.count;
-          this.cdr.detectChanges();
-        }
-      }
-    });
-  }
-
-  toggleNotifDropdown() {
-    this.showNotifDropdown = !this.showNotifDropdown;
-    if (this.showNotifDropdown) {
-      this.authService.getNotifications().subscribe({
-        next: (res: any) => {
-          if (res.success) {
-            this.notifications = res.data;
-            this.cdr.detectChanges();
-          }
-        }
-      });
-    }
-  }
-
-  markNotifAsRead(ids: number[]) {
-    this.authService.markNotificationsRead({ ids }).subscribe({
-      next: () => {
-        this.loadUnreadNotifCount();
-        this.cdr.detectChanges();
-      }
-    });
-  }
-
-  markAllNotifsRead() {
-    this.authService.markNotificationsRead({ all: true }).subscribe({
-      next: () => {
-        this.unreadNotifCount = 0;
-        this.notifications.forEach(n => n.is_read = 1);
-        this.cdr.detectChanges();
       }
     });
   }

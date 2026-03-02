@@ -1,15 +1,24 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http'; // Import HttpClient และ HttpHeaders
-import { Observable } from 'rxjs';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { Observable, BehaviorSubject } from 'rxjs';
+import { tap } from 'rxjs/operators';
 
 @Injectable({
   providedIn: 'root'
 })
 
 export class AuthService {
-  private http = inject(HttpClient); // ใช้ inject แทน Constructor
-  private apiUrl = 'http://localhost:3000/api'; // URL ของ Node.js ที่เราสร้างไว้
-  
+  private http = inject(HttpClient);
+  private apiUrl = 'http://localhost:3000/api';
+
+  // Shared realtime notification count
+  private _unreadCount$ = new BehaviorSubject<number>(0);
+  unreadCount$ = this._unreadCount$.asObservable();
+
+  // Shared realtime pending KPI stats
+  private _pendingStats$ = new BehaviorSubject<any>({ deptCount: 0, hosCount: 0, indicatorCount: 0 });
+  pendingStats$ = this._pendingStats$.asObservable();
+
   constructor() { }
 
   // ฟังก์ชันยิง API ไปที่ Backend เพื่อ Login
@@ -339,13 +348,37 @@ export class AuthService {
   getUnreadNotificationCount(): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.get(`${this.apiUrl}/notifications/unread-count`, { headers });
+    return this.http.get(`${this.apiUrl}/notifications/unread-count`, { headers }).pipe(
+      tap((res: any) => {
+        if (res.success) this._unreadCount$.next(res.count);
+      })
+    );
+  }
+
+  /** เรียกเพื่อ refresh unread count จากทุกที่ (layout, notifications, dashboard) */
+  refreshUnreadCount() {
+    this.getUnreadNotificationCount().subscribe();
+  }
+
+  /** อัพเดท pending stats จากทุกที่ */
+  refreshPendingStats() {
+    this.getPendingKpiCount().subscribe({
+      next: (res: any) => {
+        if (res.success) this._pendingStats$.next(res.data);
+      }
+    });
   }
 
   getRejectionComments(indicatorId: number, yearBh: string, hospcode: string): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.get(`${this.apiUrl}/rejection-comments/${indicatorId}/${yearBh}/${hospcode}`, { headers });
+  }
+
+  replyKpi(data: any): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/reply-kpi`, data, { headers });
   }
 
   getReportByIndicator(params: any = {}): Observable<any> {

@@ -5,6 +5,7 @@ import { NgApexchartsModule } from 'ng-apexcharts';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import Swal from 'sweetalert2';
+import { HttpErrorResponse } from '@angular/common/http';
 
 @Component({
   selector: 'app-dashboard',
@@ -14,8 +15,8 @@ import Swal from 'sweetalert2';
   styleUrl: './dashboard.css'
 })
 export class DashboardComponent implements OnInit {
-  private router = inject(Router);
   private authService = inject(AuthService);
+  private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
   private ngZone = inject(NgZone);
 
@@ -27,13 +28,22 @@ export class DashboardComponent implements OnInit {
   selectedDept: string = '';
   selectedYear: string = '';
   selectedStatus: string = '';
+  selectedHospital: string = '';
+  selectedDistrict: string = '';
 
   mainCategories: string[] = [];
   indicatorNames: string[] = [];
   deptNames: string[] = [];
   filterYears: string[] = [];
+  hospitalNames: string[] = [];
+  districtNames: string[] = [];
   addKpiYears: string[] = [];
   addKpiSelectedYear: string = '';
+  addKpiDistrictList: any[] = [];
+  addKpiHospitalList: any[] = [];
+  addKpiFilteredHospitals: any[] = [];
+  addKpiSelectedDistrict: string = '';
+  addKpiSelectedHospcode: string = '';
 
   isEditing: boolean = false;
   showAddModal: boolean = false;
@@ -43,34 +53,33 @@ export class DashboardComponent implements OnInit {
   selectedKpiName: string = '';
   kpiTrendOptions: any = {};
   
-  isSidebarOpen: boolean = true;
   isLoading: boolean = false;
   private animationTimer: any;
   isAdmin: boolean = false;
   isSuperAdmin: boolean = false;
   currentUser: any = null;
-  systemVersion: string = 'v1.0.0';
-  pendingKpiCount: number = 0;
 
   currentPage: number = 1;
   pageSize: number = 20;
   totalPages: number = 0;
 
-  showChangePasswordModal: boolean = false;
-  changePasswordForm: any = { currentPassword: '', newPassword: '', confirmPassword: '' };
-  showCurrentPw: boolean = false;
-  showNewPw: boolean = false;
-  showConfirmPw: boolean = false;
-
-  // Reject & Notification properties
   showRejectModal: boolean = false;
   rejectComment: string = '';
   rejectingItem: any = null;
-  notifications: any[] = [];
-  unreadNotifCount: number = 0;
-  showNotifDropdown: boolean = false;
+  rejectSelectedMonths: string[] = [];
+  rejectMonthOptions = [
+    { key: 'oct', name: 'ต.ค.' }, { key: 'nov', name: 'พ.ย.' }, { key: 'dece', name: 'ธ.ค.' },
+    { key: 'jan', name: 'ม.ค.' }, { key: 'feb', name: 'ก.พ.' }, { key: 'mar', name: 'มี.ค.' },
+    { key: 'apr', name: 'เม.ย.' }, { key: 'may', name: 'พ.ค.' }, { key: 'jun', name: 'มิ.ย.' },
+    { key: 'jul', name: 'ก.ค.' }, { key: 'aug', name: 'ส.ค.' }, { key: 'sep', name: 'ก.ย.' }
+  ];
   showRejectionHistoryModal: boolean = false;
   rejectionHistory: any[] = [];
+
+  showReplyModal: boolean = false;
+  replyingItem: any = null;
+  replyMessage: string = '';
+  replyRejectionInfo: any = null;
 
   stats: any = {
     successRate: 0,
@@ -86,10 +95,6 @@ export class DashboardComponent implements OnInit {
     this.isAdmin = ['admin', 'super_admin'].includes(role);
     this.isSuperAdmin = role === 'super_admin';
     this.loadKpiData();
-    this.loadSettings();
-    this.loadPendingCount();
-    this.loadUnreadNotifCount();
-    this.checkLoginNotifications();
   }
 
   loadKpiData() {
@@ -121,19 +126,6 @@ export class DashboardComponent implements OnInit {
     });
   }
 
-  loadSettings() {
-    this.authService.getSettings().subscribe({
-      next: (res) => {
-        if (res.success && res.data) {
-          const versionSetting = res.data.find((s: any) => s.setting_key === 'system_version');
-          if (versionSetting) {
-            this.systemVersion = versionSetting.setting_value;
-          }
-        }
-      }
-    });
-  }
-
   loadDashboardStats() {
     if (!this.selectedYear) return;
     this.authService.getDashboardStats(this.selectedYear).subscribe({
@@ -144,20 +136,6 @@ export class DashboardComponent implements OnInit {
       },
       error: (err) => console.error('Error loading stats:', err)
     });
-  }
-
-  loadPendingCount() {
-    if (this.isAdmin) {
-      this.authService.getPendingKpiCount().subscribe({
-        next: (res) => {
-          if (res.success) {
-            this.pendingKpiCount = res.count;
-            this.cdr.detectChanges();
-          }
-        },
-        error: (err) => console.error('Error loading pending count:', err)
-      });
-    }
   }
 
   animateStats(target: any) {
@@ -212,11 +190,10 @@ export class DashboardComponent implements OnInit {
     return pageItems;
   }
 
-  // ฟังก์ชันหาปีงบประมาณปัจจุบัน
   setDefaultYear() {
     const today = new Date();
     let year = today.getFullYear();
-    if (today.getMonth() >= 9) { // เดือน 10 (ดัชนี 9) เป็นต้นไป คือปีงบประมาณถัดไป
+    if (today.getMonth() >= 9) {
       year += 1;
     }
     this.selectedYear = (year + 543).toString();
@@ -226,6 +203,8 @@ export class DashboardComponent implements OnInit {
     this.mainCategories = [...new Set(this.kpiData.map(item => item.main_indicator_name))];
     this.indicatorNames = [...new Set(this.kpiData.map(item => item.kpi_indicators_name))];
     this.deptNames = [...new Set(this.kpiData.map(item => item.dept_name))];
+    this.hospitalNames = [...new Set(this.kpiData.map(item => item.hosname).filter(Boolean))].sort();
+    this.districtNames = [...new Set(this.kpiData.map(item => item.distname).filter(Boolean))].sort();
     this.filterYears = [...new Set(this.kpiData.map(item => item.year_bh))].sort().reverse();
   }
 
@@ -234,8 +213,15 @@ export class DashboardComponent implements OnInit {
     this.loadDashboardStats();
   }
 
-  filterPending() {
-    this.selectedStatus = 'pending';
+  clearFilters() {
+    this.searchTerm = '';
+    this.selectedMain = '';
+    this.selectedIndicator = '';
+    this.selectedDept = '';
+    this.selectedYear = '';
+    this.selectedStatus = '';
+    this.selectedHospital = '';
+    this.selectedDistrict = '';
     this.applyFilters();
   }
 
@@ -246,20 +232,26 @@ export class DashboardComponent implements OnInit {
       const mainindicatorName = item.main_indicator_name || '';
       const indicatorName = item.kpi_indicators_name || '';
       const recorderName = item.recorder_name || '';
+      const hosname = item.hosname || '';
+      const distname = item.distname || '';
       const search = this.searchTerm.toLowerCase();
       const matchSearch = indicatorName.toLowerCase().includes(search) ||
                         recorderName.toLowerCase().includes(search) ||
                         deptName.toLowerCase().includes(search) ||
-                        mainindicatorName.toLowerCase().includes(search);
+                        mainindicatorName.toLowerCase().includes(search) ||
+                        hosname.toLowerCase().includes(search) ||
+                        distname.toLowerCase().includes(search);
       const matchMain = this.selectedMain === '' || item.main_indicator_name === this.selectedMain;
       const matchIndicator = this.selectedIndicator === '' || item.kpi_indicators_name === this.selectedIndicator;
       const matchdept = this.selectedDept === '' || item.dept_name === this.selectedDept;
       const matchYear = this.selectedYear === '' || item.year_bh === this.selectedYear;
-      const matchStatus = this.selectedStatus === '' || 
+      const matchHospital = this.selectedHospital === '' || item.hosname === this.selectedHospital;
+      const matchDistrict = this.selectedDistrict === '' || item.distname === this.selectedDistrict;
+      const matchStatus = this.selectedStatus === '' ||
                           (this.selectedStatus === 'pass' && item.total_actual >= item.target_value) ||
                           (this.selectedStatus === 'fail' && item.total_actual < item.target_value) ||
                           (this.selectedStatus === 'pending' && item.pending_count > 0);
-      return matchSearch && matchMain && matchIndicator && matchdept && matchYear && matchStatus;
+      return matchSearch && matchMain && matchIndicator && matchdept && matchYear && matchStatus && matchHospital && matchDistrict;
     });
     this.filteredData.sort((a, b) => {
       if (b.year_bh !== a.year_bh) return b.year_bh.localeCompare(a.year_bh);
@@ -292,17 +284,106 @@ export class DashboardComponent implements OnInit {
   }
 
   saveKpiData() {
-    const invalidItems = this.filteredData.filter(item => Number(item.target_value) === 0);
+    const months = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
+    const monthNames: any = {
+      oct: 'ต.ค.', nov: 'พ.ย.', dece: 'ธ.ค.', jan: 'ม.ค.', feb: 'ก.พ.', mar: 'มี.ค.',
+      apr: 'เม.ย.', may: 'พ.ค.', jun: 'มิ.ย.', jul: 'ก.ค.', aug: 'ส.ค.', sep: 'ก.ย.'
+    };
+    const changedItems = this.filteredData.filter(item => {
+      if (!item._original) return false;
+      if (Number(item.target_value) !== Number(item._original.target_value)) return true;
+      return months.some(m => Number(item[m]) !== Number(item._original[m]));
+    });
+
+    if (changedItems.length === 0) {
+      Swal.fire({ icon: 'info', title: 'ไม่มีข้อมูลที่เปลี่ยนแปลง', text: 'ไม่พบรายการที่มีการแก้ไข', confirmButtonText: 'ตกลง' });
+      return;
+    }
+
+    const invalidItems = changedItems.filter(item => Number(item.target_value) === 0);
     if (invalidItems.length > 0) {
       Swal.fire({
         icon: 'warning',
         title: 'พบค่าเป้าหมายเป็น 0',
-        text: `มีข้อมูล ${invalidItems.length} รายการ ที่ค่าเป้าหมายเป็น 0 ซึ่งจะทำให้คำนวณ % ไม่ได้ กรุณาแก้ไขก่อนบันทึก`,
+        text: `มีข้อมูลที่แก้ไข ${invalidItems.length} รายการ ที่ค่าเป้าหมายเป็น 0 ซึ่งจะทำให้คำนวณ % ไม่ได้ กรุณาแก้ไขก่อนบันทึก`,
         confirmButtonText: 'ตกลง, ไปแก้ไข'
       });
       return;
     }
-    this.saveDataToBackend(this.filteredData, false);
+
+    // ตรวจสอบคะแนนที่น้อยกว่าเดิม
+    const decreasedList: string[] = [];
+    for (const item of changedItems) {
+      for (const m of months) {
+        const oldVal = Number(item._original[m]) || 0;
+        const newVal = Number(item[m]) || 0;
+        if (oldVal > 0 && newVal < oldVal) {
+          decreasedList.push(`<b>${item.kpi_indicators_name}</b> ${monthNames[m]}: ${oldVal} → ${newVal}`);
+        }
+      }
+    }
+    if (decreasedList.length > 0) {
+      Swal.fire({
+        icon: 'error',
+        title: 'พบคะแนนที่น้อยกว่าเดิม',
+        html: `<div class="text-left text-sm max-h-60 overflow-y-auto">
+                <p class="mb-2 text-gray-600">กรุณาตรวจสอบรายการต่อไปนี้ให้ถูกต้องก่อนบันทึก:</p>
+                <ul class="list-disc pl-5 space-y-1 text-red-600">${decreasedList.map(d => `<li>${d}</li>`).join('')}</ul>
+               </div>`,
+        confirmButtonText: 'ตกลง, ไปตรวจสอบ'
+      });
+      return;
+    }
+
+    // สร้างสรุปรายละเอียดการแก้ไข
+    const changeDetails: string[] = [];
+    for (const item of changedItems) {
+      const changes: string[] = [];
+      if (Number(item.target_value) !== Number(item._original.target_value)) {
+        changes.push(`เป้าหมาย: ${item._original.target_value} → ${item.target_value}`);
+      }
+      for (const m of months) {
+        if (Number(item[m]) !== Number(item._original[m])) {
+          changes.push(`${monthNames[m]}: ${item._original[m]} → ${item[m]}`);
+        }
+      }
+      if (changes.length > 0) {
+        changeDetails.push(`<b>${item.kpi_indicators_name}</b><br><span class="text-gray-500 text-xs">${changes.join(', ')}</span>`);
+      }
+    }
+
+    // Clean data - ส่งเฉพาะ fields ที่ backend ต้องการ ไม่ส่ง _original
+    const cleanData = changedItems.map(item => ({
+      indicator_id: item.indicator_id,
+      year_bh: item.year_bh,
+      hospcode: item.hospcode,
+      target_value: item.target_value,
+      oct: item.oct, nov: item.nov, dece: item.dece,
+      jan: item.jan, feb: item.feb, mar: item.mar,
+      apr: item.apr, may: item.may, jun: item.jun,
+      jul: item.jul, aug: item.aug, sep: item.sep
+    }));
+
+    Swal.fire({
+      title: 'ยืนยันการบันทึก',
+      html: `<div class="text-left text-sm">
+              <p class="mb-2 font-bold text-gray-700">พบข้อมูลที่เปลี่ยนแปลง ${cleanData.length} รายการ:</p>
+              <div class="max-h-60 overflow-y-auto border rounded-lg p-3 bg-gray-50 space-y-2">
+                ${changeDetails.join('<hr class="my-2 border-gray-200">')}
+              </div>
+              <p class="mt-3 text-gray-600">ต้องการบันทึกใช่หรือไม่?</p>
+             </div>`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#10b981',
+      confirmButtonText: 'บันทึก',
+      cancelButtonText: 'ยกเลิก',
+      width: 600
+    }).then((result) => {
+      if (result.isConfirmed) {
+        this.saveDataToBackend(cleanData, false);
+      }
+    });
   }
 
   saveDataToBackend(data: any[], isNew: boolean) {
@@ -342,7 +423,6 @@ export class DashboardComponent implements OnInit {
             if (res.success) {
               Swal.fire('สำเร็จ', 'รับรองและล็อคข้อมูลเรียบร้อยแล้ว', 'success');
               this.loadKpiData();
-              this.loadPendingCount();
             }
           },
           error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถดำเนินการได้', 'error')
@@ -375,7 +455,6 @@ export class DashboardComponent implements OnInit {
             Swal.fire('สำเร็จ', 'อนุมัติข้อมูลเรียบร้อยแล้ว', 'success');
             this.loadKpiData();
             this.loadDashboardStats();
-            this.loadPendingCount();
           },
           error: (err) => Swal.fire('เกิดข้อผิดพลาด', 'ไม่สามารถอนุมัติข้อมูลได้', 'error')
         });
@@ -399,7 +478,6 @@ export class DashboardComponent implements OnInit {
             if (res.success) {
               Swal.fire('สำเร็จ', 'ปลดล็อคข้อมูลเรียบร้อยแล้ว', 'success');
               this.loadKpiData();
-              this.loadPendingCount();
             }
           },
           error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถดำเนินการได้', 'error')
@@ -415,7 +493,64 @@ export class DashboardComponent implements OnInit {
     } else {
       this.addKpiSelectedYear = this.addKpiYears[0];
     }
-    this.loadAddKpiList();
+    if (this.isAdmin) {
+      this.addKpiSelectedDistrict = '';
+      this.addKpiSelectedHospcode = '';
+      this.loadAddKpiDistrictsAndHospitals();
+    } else {
+      this.addKpiSelectedHospcode = this.currentUser?.hospcode || '';
+      this.loadAddKpiList();
+    }
+  }
+
+  loadAddKpiDistrictsAndHospitals() {
+    Swal.fire({ title: 'กำลังโหลดข้อมูล...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    this.authService.getDistricts().subscribe({
+      next: (distRes) => {
+        if (distRes.success) {
+          this.addKpiDistrictList = distRes.data;
+        }
+        this.authService.getHospitals().subscribe({
+          next: (hosRes) => {
+            Swal.close();
+            if (hosRes.success) {
+              this.addKpiHospitalList = hosRes.data;
+              this.addKpiFilteredHospitals = hosRes.data;
+            }
+            setTimeout(() => {
+              this.showAddModal = true;
+              this.newKpiList = [];
+              this.cdr.detectChanges();
+            }, 150);
+          },
+          error: () => { Swal.close(); Swal.fire('ผิดพลาด', 'ไม่สามารถโหลดข้อมูลหน่วยบริการได้', 'error'); }
+        });
+      },
+      error: () => { Swal.close(); Swal.fire('ผิดพลาด', 'ไม่สามารถโหลดข้อมูลอำเภอได้', 'error'); }
+    });
+  }
+
+  onAddKpiDistrictChange() {
+    if (this.addKpiSelectedDistrict) {
+      this.addKpiFilteredHospitals = this.addKpiHospitalList.filter(
+        (h: any) => {
+          const distid = (h.provcode || '') + (h.distcode || '');
+          return distid === this.addKpiSelectedDistrict;
+        }
+      );
+    } else {
+      this.addKpiFilteredHospitals = this.addKpiHospitalList;
+    }
+    this.addKpiSelectedHospcode = '';
+    this.newKpiList = [];
+  }
+
+  onAddKpiHospitalChange() {
+    if (this.addKpiSelectedHospcode) {
+      this.loadAddKpiList();
+    } else {
+      this.newKpiList = [];
+    }
   }
 
   calculateAddKpiYears() {
@@ -432,6 +567,7 @@ export class DashboardComponent implements OnInit {
   }
 
   loadAddKpiList() {
+    const targetHospcode = this.addKpiSelectedHospcode || this.currentUser?.hospcode || '';
     Swal.fire({
       title: 'กำลังโหลดข้อมูล...',
       allowOutsideClick: false,
@@ -439,11 +575,11 @@ export class DashboardComponent implements OnInit {
     });
     this.authService.getKpiTemplate().subscribe({
       next: (res) => {
-        Swal.close();
         if (res.success) {
+          // กรอง existingIds ตาม hospcode + ปีงบ เพื่อให้แต่ละหน่วยบริการเพิ่มได้
           const existingIds = new Set(
             this.kpiData
-              .filter(k => k.year_bh === this.addKpiSelectedYear)
+              .filter(k => k.year_bh === this.addKpiSelectedYear && k.hospcode === targetHospcode)
               .map(k => k.indicator_id)
           );
           let available = res.data.filter((item: any) => !existingIds.has(item.indicator_id));
@@ -453,17 +589,23 @@ export class DashboardComponent implements OnInit {
           this.newKpiList = available.map((item: any) => ({
             ...item,
             year_bh: this.addKpiSelectedYear,
+            hospcode: targetHospcode,
             target_value: 0,
             oct: 0, nov: 0, dece: 0, jan: 0, feb: 0, mar: 0,
             apr: 0, may: 0, jun: 0, jul: 0, aug: 0, sep: 0,
             total_actual: 0
           }));
-          this.ngZone.run(() => {
-            this.showAddModal = true;
+          Swal.close();
+          if (!this.showAddModal) {
             setTimeout(() => {
+              this.showAddModal = true;
               this.cdr.detectChanges();
-            }, 50);
-          });
+            }, 150);
+          } else {
+            this.cdr.detectChanges();
+          }
+        } else {
+          Swal.close();
         }
       },
       error: () => {
@@ -567,97 +709,33 @@ export class DashboardComponent implements OnInit {
     return item[month] != item._original[month];
   }
 
-  logout() {
-    Swal.fire({
-      title: 'ยืนยันการออกจากระบบ',
-      text: "คุณต้องการออกจากระบบใช่หรือไม่?",
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#3085d6',
-      cancelButtonColor: '#d33',
-      confirmButtonText: 'ใช่, ออกจากระบบ',
-      cancelButtonText: 'ยกเลิก'
-    }).then((result) => {
-      if (result.isConfirmed) {
-        sessionStorage.removeItem('welcomeShown');
-        this.authService.logout();
-        this.router.navigate(['/login']);
-      }
-    });
-  }
-
-  openChangePasswordModal() {
-    this.changePasswordForm = { currentPassword: '', newPassword: '', confirmPassword: '' };
-    this.showCurrentPw = false;
-    this.showNewPw = false;
-    this.showConfirmPw = false;
-    this.showChangePasswordModal = true;
-  }
-
-  closeChangePasswordModal() {
-    this.showChangePasswordModal = false;
-  }
-
-  saveNewPassword() {
-    if (!this.changePasswordForm.currentPassword || !this.changePasswordForm.newPassword || !this.changePasswordForm.confirmPassword) {
-      Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลให้ครบทุกช่อง', 'warning');
-      return;
-    }
-    if (this.changePasswordForm.newPassword !== this.changePasswordForm.confirmPassword) {
-      Swal.fire('แจ้งเตือน', 'รหัสผ่านใหม่และยืนยันรหัสผ่านไม่ตรงกัน', 'warning');
-      return;
-    }
-    if (this.changePasswordForm.newPassword.length < 6) {
-      Swal.fire('แจ้งเตือน', 'รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร', 'warning');
-      return;
-    }
-    this.authService.changePassword({
-      currentPassword: this.changePasswordForm.currentPassword,
-      newPassword: this.changePasswordForm.newPassword
-    }).subscribe({
-      next: (res) => {
-        if (res.success) {
-          this.closeChangePasswordModal();
-          this.cdr.detectChanges();
-          Swal.fire({
-            title: 'เปลี่ยนรหัสผ่านสำเร็จ',
-            text: res.message,
-            icon: 'success',
-            showConfirmButton: true,
-            showDenyButton: true,
-            confirmButtonText: 'ตกลง',
-            denyButtonText: 'กลับหน้า Login',
-            denyButtonColor: '#3b82f6'
-          }).then((result) => {
-            if (result.isDenied) {
-              this.authService.logout();
-              this.router.navigate(['/login']);
-            }
-          });
-        }
-      },
-      error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถเปลี่ยนรหัสผ่านได้', 'error')
-    });
-  }
-
-  toggleSidebar() {
-    this.isSidebarOpen = !this.isSidebarOpen;
-  }
-
   setPage(page: number) {
     if (page >= 1 && page <= this.totalPages) {
       this.currentPage = page;
     }
   }
 
-  // ========== Rejection Methods ==========
   openRejectModal(item: any) {
     this.rejectingItem = item;
     this.rejectComment = '';
+    this.rejectSelectedMonths = [];
     this.showRejectModal = true;
   }
 
+  toggleRejectMonth(key: string) {
+    const idx = this.rejectSelectedMonths.indexOf(key);
+    if (idx >= 0) {
+      this.rejectSelectedMonths.splice(idx, 1);
+    } else {
+      this.rejectSelectedMonths.push(key);
+    }
+  }
+
   confirmReject() {
+    if (this.rejectSelectedMonths.length === 0) {
+      Swal.fire('แจ้งเตือน', 'กรุณาเลือกเดือนที่ต้องแก้ไขอย่างน้อย 1 เดือน', 'warning');
+      return;
+    }
     if (!this.rejectComment.trim()) {
       Swal.fire('แจ้งเตือน', 'กรุณาระบุเหตุผลการส่งคืนแก้ไข', 'warning');
       return;
@@ -666,7 +744,8 @@ export class DashboardComponent implements OnInit {
       indicator_id: this.rejectingItem.indicator_id,
       year_bh: this.rejectingItem.year_bh,
       hospcode: this.rejectingItem.hospcode,
-      comment: this.rejectComment
+      comment: this.rejectComment,
+      reject_months: this.rejectSelectedMonths
     };
     this.authService.rejectKpi(data).subscribe({
       next: (res) => {
@@ -674,30 +753,49 @@ export class DashboardComponent implements OnInit {
           this.showRejectModal = false;
           Swal.fire('สำเร็จ', 'ส่งคืนแก้ไขเรียบร้อยแล้ว', 'success');
           this.loadKpiData();
-          this.loadPendingCount();
-          this.loadUnreadNotifCount();
         }
       },
-      error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถดำเนินการได้', 'error')
+      error: (err: HttpErrorResponse) => this.handleApiError(err, 'ไม่สามารถส่งคืนแก้ไขได้')
     });
   }
 
   rejectAll() {
     const pendingItems = this.filteredData.filter(item => item.pending_count > 0);
     if (pendingItems.length === 0) return;
+
+    // สร้าง month checkboxes HTML
+    const monthOpts = [
+      { key: 'oct', name: 'ต.ค.' }, { key: 'nov', name: 'พ.ย.' }, { key: 'dece', name: 'ธ.ค.' },
+      { key: 'jan', name: 'ม.ค.' }, { key: 'feb', name: 'ก.พ.' }, { key: 'mar', name: 'มี.ค.' },
+      { key: 'apr', name: 'เม.ย.' }, { key: 'may', name: 'พ.ค.' }, { key: 'jun', name: 'มิ.ย.' },
+      { key: 'jul', name: 'ก.ค.' }, { key: 'aug', name: 'ส.ค.' }, { key: 'sep', name: 'ก.ย.' }
+    ];
+    const monthCheckboxes = monthOpts.map(m =>
+      `<label style="display:inline-flex;align-items:center;gap:4px;margin:4px 6px;font-size:13px;cursor:pointer;">
+        <input type="checkbox" name="reject_month" value="${m.key}" style="accent-color:#ef4444;"> ${m.name}
+      </label>`
+    ).join('');
+
     Swal.fire({
       title: 'ส่งคืนแก้ไขทั้งหมด',
-      input: 'textarea',
-      inputLabel: 'เหตุผลการส่งคืนแก้ไข',
-      inputPlaceholder: 'กรุณาระบุเหตุผล...',
-      inputAttributes: { 'aria-label': 'เหตุผลการส่งคืนแก้ไข' },
+      html: `<div class="text-left">
+        <p class="text-sm text-gray-600 mb-2">จำนวน ${pendingItems.length} รายการ</p>
+        <label class="block text-sm font-bold text-gray-700 mb-1">เดือนที่ต้องแก้ไข <span class="text-red-500">*</span></label>
+        <div style="display:flex;flex-wrap:wrap;margin-bottom:12px;">${monthCheckboxes}</div>
+        <label class="block text-sm font-bold text-gray-700 mb-1">เหตุผลการส่งคืนแก้ไข <span class="text-red-500">*</span></label>
+        <textarea id="swal-reject-comment" rows="3" placeholder="กรุณาระบุเหตุผล..." style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;"></textarea>
+      </div>`,
       showCancelButton: true,
       confirmButtonColor: '#ef4444',
       confirmButtonText: `ส่งคืนทั้งหมด (${pendingItems.length})`,
       cancelButtonText: 'ยกเลิก',
-      inputValidator: (value) => {
-        if (!value || !value.trim()) return 'กรุณาระบุเหตุผล';
-        return null;
+      width: 520,
+      preConfirm: () => {
+        const checkedMonths = Array.from(document.querySelectorAll('input[name="reject_month"]:checked')).map((el: any) => el.value);
+        const comment = (document.getElementById('swal-reject-comment') as HTMLTextAreaElement)?.value || '';
+        if (checkedMonths.length === 0) { Swal.showValidationMessage('กรุณาเลือกเดือนที่ต้องแก้ไข'); return false; }
+        if (!comment.trim()) { Swal.showValidationMessage('กรุณาระบุเหตุผล'); return false; }
+        return { months: checkedMonths, comment: comment.trim() };
       }
     }).then((result) => {
       if (result.isConfirmed && result.value) {
@@ -705,27 +803,51 @@ export class DashboardComponent implements OnInit {
           indicator_id: item.indicator_id,
           year_bh: item.year_bh,
           hospcode: item.hospcode,
-          comment: result.value
+          comment: result.value.comment,
+          reject_months: result.value.months
         }));
         this.authService.rejectKpi(rejections).subscribe({
           next: (res) => {
             Swal.fire('สำเร็จ', `ส่งคืนแก้ไขเรียบร้อยแล้ว ${pendingItems.length} รายการ`, 'success');
             this.loadKpiData();
             this.loadDashboardStats();
-            this.loadPendingCount();
-            this.loadUnreadNotifCount();
           },
-          error: (err) => Swal.fire('ผิดพลาด', 'ไม่สามารถดำเนินการได้', 'error')
+          error: (err: HttpErrorResponse) => this.handleApiError(err, 'ไม่สามารถส่งคืนแก้ไขได้')
         });
       }
     });
+  }
+
+  private handleApiError(err: HttpErrorResponse, defaultMsg: string) {
+    if (err.status === 401 || err.status === 403) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'เซสชันหมดอายุ',
+        text: 'กรุณาเข้าสู่ระบบใหม่',
+        confirmButtonText: 'เข้าสู่ระบบ'
+      }).then(() => {
+        this.authService.logout();
+        this.router.navigate(['/login']);
+      });
+    } else {
+      Swal.fire('ผิดพลาด', err.error?.message || defaultMsg, 'error');
+    }
   }
 
   viewRejectionHistory(item: any) {
     this.authService.getRejectionComments(item.indicator_id, item.year_bh, item.hospcode).subscribe({
       next: (res) => {
         if (res.success) {
-          this.rejectionHistory = res.data;
+          const monthNames: any = {
+            oct: 'ต.ค.', nov: 'พ.ย.', dece: 'ธ.ค.', jan: 'ม.ค.', feb: 'ก.พ.', mar: 'มี.ค.',
+            apr: 'เม.ย.', may: 'พ.ค.', jun: 'มิ.ย.', jul: 'ก.ค.', aug: 'ส.ค.', sep: 'ก.ย.'
+          };
+          this.rejectionHistory = res.data.map((h: any) => ({
+            ...h,
+            reject_months_display: h.reject_months
+              ? h.reject_months.split(',').map((m: string) => monthNames[m.trim()] || m.trim()).join(', ')
+              : ''
+          }));
           this.showRejectionHistoryModal = true;
           this.cdr.detectChanges();
         }
@@ -734,77 +856,56 @@ export class DashboardComponent implements OnInit {
     });
   }
 
-  // ========== Notification Methods ==========
-  loadUnreadNotifCount() {
-    this.authService.getUnreadNotificationCount().subscribe({
+  openReplyModal(item: any) {
+    this.replyingItem = item;
+    this.replyMessage = '';
+    this.replyRejectionInfo = null;
+    // โหลดเหตุผลตีกลับล่าสุด
+    this.authService.getRejectionComments(item.indicator_id, item.year_bh, item.hospcode).subscribe({
       next: (res) => {
-        if (res.success) {
-          this.unreadNotifCount = res.count;
-          this.cdr.detectChanges();
+        if (res.success && res.data.length > 0) {
+          const latest = res.data.find((h: any) => h.type === 'reject') || res.data[0];
+          const monthNames: any = {
+            oct: 'ต.ค.', nov: 'พ.ย.', dece: 'ธ.ค.', jan: 'ม.ค.', feb: 'ก.พ.', mar: 'มี.ค.',
+            apr: 'เม.ย.', may: 'พ.ค.', jun: 'มิ.ย.', jul: 'ก.ค.', aug: 'ส.ค.', sep: 'ก.ย.'
+          };
+          this.replyRejectionInfo = {
+            ...latest,
+            reject_months_display: latest.reject_months
+              ? latest.reject_months.split(',').map((m: string) => monthNames[m.trim()] || m.trim()).join(', ')
+              : ''
+          };
         }
+        this.showReplyModal = true;
+        this.cdr.detectChanges();
       },
-      error: (err) => console.error('Error loading unread count:', err)
+      error: () => {
+        this.showReplyModal = true;
+        this.cdr.detectChanges();
+      }
     });
   }
 
-  loadNotifications() {
-    this.authService.getNotifications().subscribe({
-      next: (res) => {
-        if (res.success) {
-          this.notifications = res.data;
-          this.cdr.detectChanges();
-        }
-      },
-      error: (err) => console.error('Error loading notifications:', err)
-    });
-  }
-
-  toggleNotifDropdown() {
-    this.showNotifDropdown = !this.showNotifDropdown;
-    if (this.showNotifDropdown) {
-      this.loadNotifications();
+  confirmReply() {
+    if (!this.replyMessage.trim()) {
+      Swal.fire('แจ้งเตือน', 'กรุณาระบุข้อความตอบกลับ', 'warning');
+      return;
     }
-  }
-
-  markAsRead(ids: number[]) {
-    this.authService.markNotificationsRead({ ids }).subscribe({
-      next: () => {
-        this.loadUnreadNotifCount();
-        this.loadNotifications();
-        this.cdr.detectChanges();
-      }
-    });
-  }
-
-  markAllAsRead() {
-    this.authService.markNotificationsRead({ all: true }).subscribe({
-      next: () => {
-        this.unreadNotifCount = 0;
-        this.notifications.forEach(n => n.is_read = 1);
-        this.cdr.detectChanges();
-      }
-    });
-  }
-
-  checkLoginNotifications() {
-    this.authService.getUnreadNotificationCount().subscribe({
+    const data = {
+      indicator_id: this.replyingItem.indicator_id,
+      year_bh: this.replyingItem.year_bh,
+      hospcode: this.replyingItem.hospcode,
+      message: this.replyMessage
+    };
+    this.authService.replyKpi(data).subscribe({
       next: (res) => {
-        if (res.success && res.count > 0) {
-          Swal.fire({
-            title: 'การแจ้งเตือน',
-            html: `คุณมีการแจ้งเตือนที่ยังไม่ได้อ่าน <b>${res.count}</b> รายการ`,
-            icon: 'info',
-            confirmButtonText: 'ดูรายละเอียด',
-            showCancelButton: true,
-            cancelButtonText: 'ปิด',
-            confirmButtonColor: '#10b981'
-          }).then((result) => {
-            if (result.isConfirmed) {
-              this.router.navigate(['/notifications']);
-            }
-          });
+        if (res.success) {
+          this.showReplyModal = false;
+          Swal.fire('สำเร็จ', 'ส่งตอบกลับเรียบร้อยแล้ว สถานะเปลี่ยนเป็น "รอตรวจสอบ"', 'success');
+          this.loadKpiData();
         }
-      }
+      },
+      error: (err: HttpErrorResponse) => this.handleApiError(err, 'ไม่สามารถส่งตอบกลับได้')
     });
   }
 }

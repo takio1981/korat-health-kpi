@@ -18,25 +18,7 @@ export class ReportComponent implements OnInit {
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
 
-  // Sidebar & Header
-  isSidebarOpen: boolean = true;
   isLoading: boolean = false;
-  isAdmin: boolean = false;
-  isSuperAdmin: boolean = false;
-  currentUser: any = null;
-  systemVersion: string = 'v1.0.0';
-  pendingKpiCount: number = 0;
-
-  unreadNotifCount: number = 0;
-  notifications: any[] = [];
-  showNotifDropdown: boolean = false;
-
-  // Change Password Modal
-  showChangePasswordModal: boolean = false;
-  changePasswordForm: any = { currentPassword: '', newPassword: '', confirmPassword: '' };
-  showCurrentPw: boolean = false;
-  showNewPw: boolean = false;
-  showConfirmPw: boolean = false;
 
   // Report Tab
   activeTab: string = 'by-indicator';
@@ -70,36 +52,7 @@ export class ReportComponent implements OnInit {
   };
 
   ngOnInit() {
-    this.currentUser = this.authService.getUser();
-    const role = this.authService.getUserRole();
-    this.isAdmin = role === 'admin' || role === 'super_admin';
-    this.isSuperAdmin = role === 'super_admin';
-    this.loadSettings();
-    this.loadPendingKpiCount();
-    this.loadUnreadNotifCount();
     this.loadFilters();
-  }
-
-  loadPendingKpiCount() {
-    this.authService.getKpiResults().subscribe({
-      next: (res) => {
-        if (res.success) {
-          this.pendingKpiCount = res.data.filter((item: any) => item.indicator_status === 'pending').length;
-          this.cdr.detectChanges();
-        }
-      }
-    });
-  }
-
-  loadSettings() {
-    this.authService.getSettings().subscribe({
-      next: (res) => {
-        if (res.success && res.data) {
-          const v = res.data.find((s: any) => s.setting_key === 'system_version');
-          if (v) this.systemVersion = v.setting_value;
-        }
-      }
-    });
   }
 
   loadFilters() {
@@ -314,113 +267,5 @@ export class ReportComponent implements OnInit {
 
   printReport() {
     window.print();
-  }
-
-  // Change Password
-  openChangePasswordModal() {
-    this.changePasswordForm = { currentPassword: '', newPassword: '', confirmPassword: '' };
-    this.showCurrentPw = false;
-    this.showNewPw = false;
-    this.showConfirmPw = false;
-    this.showChangePasswordModal = true;
-  }
-
-  closeChangePasswordModal() {
-    this.showChangePasswordModal = false;
-  }
-
-  saveNewPassword() {
-    if (!this.changePasswordForm.currentPassword || !this.changePasswordForm.newPassword || !this.changePasswordForm.confirmPassword) {
-      Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลให้ครบทุกช่อง', 'warning');
-      return;
-    }
-    if (this.changePasswordForm.newPassword !== this.changePasswordForm.confirmPassword) {
-      Swal.fire('แจ้งเตือน', 'รหัสผ่านใหม่และยืนยันรหัสผ่านไม่ตรงกัน', 'warning');
-      return;
-    }
-    if (this.changePasswordForm.newPassword.length < 6) {
-      Swal.fire('แจ้งเตือน', 'รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร', 'warning');
-      return;
-    }
-    this.authService.changePassword({
-      currentPassword: this.changePasswordForm.currentPassword,
-      newPassword: this.changePasswordForm.newPassword
-    }).subscribe({
-      next: (res) => {
-        if (res.success) {
-          this.closeChangePasswordModal();
-          this.cdr.detectChanges();
-          Swal.fire({
-            title: 'เปลี่ยนรหัสผ่านสำเร็จ',
-            text: res.message,
-            icon: 'success',
-            showConfirmButton: true,
-            showDenyButton: true,
-            confirmButtonText: 'ตกลง',
-            denyButtonText: 'กลับหน้า Login',
-            denyButtonColor: '#3b82f6'
-          }).then((result) => {
-            if (result.isDenied) {
-              this.authService.logout();
-              this.router.navigate(['/login']);
-            }
-          });
-        }
-      },
-      error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถเปลี่ยนรหัสผ่านได้', 'error')
-    });
-  }
-
-  logout() {
-    this.authService.logout();
-    this.router.navigate(['/login']);
-  }
-
-  toggleSidebar() {
-    this.isSidebarOpen = !this.isSidebarOpen;
-  }
-
-  loadUnreadNotifCount() {
-    this.authService.getUnreadNotificationCount().subscribe({
-      next: (res: any) => {
-        if (res.success) {
-          this.unreadNotifCount = res.count;
-          this.cdr.detectChanges();
-        }
-      }
-    });
-  }
-
-  toggleNotifDropdown() {
-    this.showNotifDropdown = !this.showNotifDropdown;
-    if (this.showNotifDropdown) {
-      this.authService.getNotifications().subscribe({
-        next: (res: any) => {
-          if (res.success) {
-            this.notifications = res.data;
-            this.cdr.detectChanges();
-          }
-        }
-      });
-    }
-  }
-
-  markNotifAsRead(ids: number[]) {
-    this.authService.markNotificationsRead({ ids }).subscribe({
-      next: () => {
-        this.loadUnreadNotifCount();
-        this.cdr.detectChanges();
-      }
-    });
-  }
-
-  markAllNotifsRead() {
-    this.authService.markNotificationsRead({ all: true }).subscribe({
-      next: () => {
-        this.unreadNotifCount = 0;
-        this.notifications.forEach(n => n.is_read = 1);
-        this.cdr.detectChanges();
-      }
-    });
   }
 }

@@ -10,17 +10,25 @@ import { KpiManageComponent } from './kpi-manage/kpi-manage';
 import { ReportComponent } from './report/report';
 import { NotificationsComponent } from './notifications/notifications';
 import { authGuard } from './guards/auth-guard';
+import { LayoutComponent } from './layout/layout';
 
 export const routes: Routes = [
   { path: 'login', component: LoginComponent },
-  { path: 'dashboard', component: DashboardComponent, canActivate: [authGuard] }, // ป้องกันหน้า Dashboard ด้วย Auth Guard
-  { path: 'charts', component: ChartComponent, canActivate: [authGuard] }, // หน้ากราฟใหม่
-  { path: 'reports', component: ReportComponent, canActivate: [authGuard] }, // หน้ารายงานสรุปผล
-  { path: 'notifications', component: NotificationsComponent, canActivate: [authGuard] }, // หน้าแจ้งเตือน
-  { path: 'users', component: UserManagementComponent, canActivate: [authGuard] }, // หน้าจัดการผู้ใช้
-  { path: 'audit-logs', component: AuditLogComponent, canActivate: [authGuard] }, // หน้า Audit Log
-  { path: 'kpi-setup', component: KpiSetupComponent, canActivate: [authGuard] }, // หน้า Setup KPI
-  { path: 'kpi-manage', component: KpiManageComponent, canActivate: [authGuard] }, // หน้าจัดการตัวชี้วัด
-  { path: 'settings', component: SettingsComponent, canActivate: [authGuard] }, // หน้าตั้งค่าระบบ
-  { path: '', redirectTo: '/login', pathMatch: 'full' } // ถ้าเข้าเว็บมาตรงๆ ให้เด้งไปหน้า login ก่อนเลย
+  { path: '', redirectTo: '/login', pathMatch: 'full' },
+  {
+    path: '',
+    component: LayoutComponent,
+    canActivate: [authGuard],
+    children: [
+      { path: 'dashboard', component: DashboardComponent, data: { title: 'ภาพรวมตัวชี้วัด' } },
+      { path: 'charts', component: ChartComponent, data: { title: 'รายงานสถิติและกราฟ' } },
+      { path: 'reports', component: ReportComponent, data: { title: 'รายงานสรุปผล' } },
+      { path: 'notifications', component: NotificationsComponent, data: { title: 'การแจ้งเตือน' } },
+      { path: 'users', component: UserManagementComponent, data: { title: 'จัดการผู้ใช้งาน' } },
+      { path: 'audit-logs', component: AuditLogComponent, data: { title: 'ประวัติการใช้งาน' } },
+      { path: 'kpi-setup', component: KpiSetupComponent, data: { title: 'สร้าง KPI ปีงบประมาณใหม่' } },
+      { path: 'kpi-manage', component: KpiManageComponent, data: { title: 'จัดการตัวชี้วัด' } },
+      { path: 'settings', component: SettingsComponent, data: { title: 'ตั้งค่าระบบ' } },
+    ]
+  }
 ];

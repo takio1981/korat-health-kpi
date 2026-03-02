@@ -177,7 +177,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         let whereClause = '';
         let params = [];
 
-        if (user && user.role !== 'admin') {
+        if (user && user.role !== 'admin' && user.role !== 'super_admin') {
             if (user.hospcode === '00018' && user.deptId) {
                 whereClause = 'WHERE i.dept_id = ?';
                 params.push(user.deptId);
@@ -191,7 +191,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         }
 
         const sql = `
-            SELECT 
+            SELECT
                 if (mi.main_indicator_name is NULL,"ยังไม่กำหนด",mi.main_indicator_name) main_indicator_name,
                 i.kpi_indicators_name,
                 r.year_bh,
@@ -214,23 +214,29 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 SUM(CASE WHEN r.status = 'Pending' THEN 1 ELSE 0 END) AS pending_count,
                 MAX(r.status) as indicator_status,
                 MAX(CASE WHEN r.is_locked = 1 THEN 1 ELSE 0 END) as is_locked,
-                r.hospcode
+                r.hospcode,
+                h.hosname,
+                dist.distname
             FROM kpi_results r
             LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
             LEFT JOIN departments d on d.id = i.dept_id
+            LEFT JOIN chospital h ON r.hospcode = h.hoscode
+            LEFT JOIN co_district dist ON dist.distid = CONCAT(h.provcode, h.distcode)
             ${whereClause}
-            GROUP BY 
-                mi.main_indicator_name, 
-                i.kpi_indicators_name, 
+            GROUP BY
+                mi.main_indicator_name,
+                i.kpi_indicators_name,
                 i.id,
                 d.dept_name,
                 r.year_bh,
-                r.hospcode
-            ORDER BY 
+                r.hospcode,
+                h.hosname,
+                dist.distname
+            ORDER BY
                 r.year_bh DESC,
-                mi.main_indicator_name DESC, 
-                i.kpi_indicators_name DESC, 
+                mi.main_indicator_name DESC,
+                i.kpi_indicators_name DESC,
                 i.id DESC,
                 d.dept_name DESC;
         `;
@@ -286,6 +292,8 @@ apiRouter.post('/update-kpi', async (req, res) => {
 
         for (const row of updates) {
             const { indicator_id, year_bh } = row;
+            // ใช้ hospcode จาก row ถ้ามี (admin แก้ไขข้อมูลของ hospcode อื่น) หรือ fallback เป็น hospcodeToSave
+            const rowHospcode = ((user.role === 'admin' || user.role === 'super_admin') && row.hospcode) ? row.hospcode : hospcodeToSave;
             const months = [
                 { col: 'oct', val: 10 }, { col: 'nov', val: 11 }, { col: 'dece', val: 12 },
                 { col: 'jan', val: 1 }, { col: 'feb', val: 2 }, { col: 'mar', val: 3 },
@@ -304,14 +312,14 @@ apiRouter.post('/update-kpi', async (req, res) => {
 
                 await connection.query(
                     'DELETE FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND month_bh = ? AND hospcode = ?',
-                    [indicator_id, year_bh, m.val, hospcodeToSave]
+                    [indicator_id, year_bh, m.val, rowHospcode]
                 );
 
                 if (actualValue > 0 || targetValue > 0) {
                     await connection.query(
-                        `INSERT INTO kpi_results (indicator_id, year_bh, month_bh, actual_value, target_value, user_id, status, hospcode) 
+                        `INSERT INTO kpi_results (indicator_id, year_bh, month_bh, actual_value, target_value, user_id, status, hospcode)
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                        [indicator_id, year_bh, m.val, actualValue, targetValue, user.userId, 'Pending', hospcodeToSave]
+                        [indicator_id, year_bh, m.val, actualValue, targetValue, user.userId, 'Pending', rowHospcode]
                     );
                 }
             }
@@ -932,23 +940,45 @@ apiRouter.post('/unlock-kpi', authenticateToken, isSuperAdmin, async (req, res) 
     }
 });
 
-// ดึงจำนวนตัวชี้วัดที่รอการตรวจสอบ
+// ดึงจำนวนตัวชี้วัดที่รอการตรวจสอบ (ปีงบปัจจุบัน, แสดง dept/hospital/indicator)
 apiRouter.get('/notifications/pending-kpi', authenticateToken, isAdmin, async (req, res) => {
     const user = req.user;
     try {
-        let whereClause = "WHERE status = 'Pending'";
-        let params = [];
+        // คำนวณปีงบประมาณปัจจุบัน (ต.ค. = เดือน 9 ของ JS → ปี+1+543)
+        const today = new Date();
+        let fyYear = today.getFullYear();
+        if (today.getMonth() >= 9) fyYear += 1; // เดือน ต.ค. ขึ้นปีใหม่
+        const currentFY = (fyYear + 543).toString();
+
+        let whereClause = "WHERE r.status = 'Pending' AND r.year_bh = ?";
+        let params = [currentFY];
 
         if (user.role !== 'super_admin') {
-            whereClause += " AND hospcode = ?";
+            whereClause += " AND r.hospcode = ?";
             params.push(user.hospcode);
         }
 
         const [rows] = await db.query(
-            `SELECT COUNT(DISTINCT indicator_id, year_bh, hospcode) as pending_count FROM kpi_results ${whereClause}`,
+            `SELECT
+                COUNT(DISTINCT i.dept_id) AS dept_count,
+                COUNT(DISTINCT r.hospcode) AS hos_count,
+                COUNT(DISTINCT r.indicator_id) AS indicator_count
+             FROM kpi_results r
+             LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
+             ${whereClause}`,
             params
         );
-        res.json({ success: true, count: rows[0].pending_count });
+        const data = rows[0] || { dept_count: 0, hos_count: 0, indicator_count: 0 };
+        res.json({
+            success: true,
+            count: data.indicator_count, // backward compat
+            data: {
+                deptCount: data.dept_count,
+                hosCount: data.hos_count,
+                indicatorCount: data.indicator_count,
+                yearBh: currentFY
+            }
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -1217,11 +1247,22 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
                 year_bh VARCHAR(10) NOT NULL,
                 hospcode VARCHAR(10) NOT NULL,
                 comment TEXT NOT NULL,
-                rejected_by INT NOT NULL,
+                reject_months VARCHAR(255) NULL,
+                type ENUM('reject','reply') DEFAULT 'reject',
+                rejected_by INT NULL,
+                replied_by INT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 INDEX idx_kpi (indicator_id, year_bh, hospcode)
             )
         `);
+        // Add columns if not exist (for existing tables)
+        try {
+            await db.query(`ALTER TABLE kpi_rejection_comments ADD COLUMN IF NOT EXISTS reject_months VARCHAR(255) NULL AFTER comment`);
+            await db.query(`ALTER TABLE kpi_rejection_comments ADD COLUMN IF NOT EXISTS type ENUM('reject','reply') DEFAULT 'reject' AFTER reject_months`);
+            await db.query(`ALTER TABLE kpi_rejection_comments ADD COLUMN IF NOT EXISTS replied_by INT NULL AFTER rejected_by`);
+        } catch (e) {
+            // columns may already exist
+        }
         console.log('✅ Notification & Rejection tables ready');
     } catch (err) {
         console.error('⚠️ Auto-create tables error:', err.message);
@@ -1244,7 +1285,7 @@ apiRouter.post('/reject-kpi', authenticateToken, isAdmin, async (req, res) => {
         await connection.beginTransaction();
 
         for (const item of items) {
-            const { indicator_id, year_bh, hospcode, comment } = item;
+            const { indicator_id, year_bh, hospcode, comment, reject_months } = item;
 
             if (!comment || !comment.trim()) {
                 throw new Error('กรุณาระบุเหตุผลการส่งคืนแก้ไข');
@@ -1253,12 +1294,14 @@ apiRouter.post('/reject-kpi', authenticateToken, isAdmin, async (req, res) => {
             let whereClause = 'indicator_id = ? AND year_bh = ?';
             let params = [indicator_id, year_bh];
 
-            if (user.role !== 'super_admin') {
-                whereClause += ' AND hospcode = ?';
-                params.push(user.hospcode);
-            } else if (hospcode) {
+            // ใช้ hospcode จาก request body (ของหน่วยบริการเป้าหมาย) ถ้ามี
+            // ถ้าไม่มีและไม่ใช่ super_admin ให้ใช้ hospcode ของ admin เอง
+            if (hospcode) {
                 whereClause += ' AND hospcode = ?';
                 params.push(hospcode);
+            } else if (user.role !== 'super_admin') {
+                whereClause += ' AND hospcode = ?';
+                params.push(user.hospcode);
             }
 
             // Update status to Rejected and unlock
@@ -1267,21 +1310,27 @@ apiRouter.post('/reject-kpi', authenticateToken, isAdmin, async (req, res) => {
                 params
             );
 
-            // Save rejection comment
+            // Save rejection comment with reject_months
             const targetHospcode = hospcode || user.hospcode;
+            const monthsStr = Array.isArray(reject_months) ? reject_months.join(',') : (reject_months || '');
             await connection.query(
-                'INSERT INTO kpi_rejection_comments (indicator_id, year_bh, hospcode, comment, rejected_by) VALUES (?, ?, ?, ?, ?)',
-                [indicator_id, year_bh, targetHospcode, comment.trim(), user.userId]
+                'INSERT INTO kpi_rejection_comments (indicator_id, year_bh, hospcode, comment, reject_months, type, rejected_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [indicator_id, year_bh, targetHospcode, comment.trim(), monthsStr, 'reject', user.userId]
             );
 
             // Get indicator name for notification
             const [indRows] = await connection.query('SELECT kpi_indicators_name FROM kpi_indicators WHERE id = ?', [indicator_id]);
             const indName = indRows.length > 0 ? indRows[0].kpi_indicators_name : `ตัวชี้วัด #${indicator_id}`;
 
+            // สร้างชื่อเดือนไทยสำหรับ notification
+            const monthNamesTh = { oct: 'ต.ค.', nov: 'พ.ย.', dece: 'ธ.ค.', jan: 'ม.ค.', feb: 'ก.พ.', mar: 'มี.ค.', apr: 'เม.ย.', may: 'พ.ค.', jun: 'มิ.ย.', jul: 'ก.ค.', aug: 'ส.ค.', sep: 'ก.ย.' };
+            const monthsDisplay = monthsStr ? monthsStr.split(',').map(m => monthNamesTh[m.trim()] || m.trim()).join(', ') : '';
+            const monthsMsg = monthsDisplay ? ` เดือนที่ต้องแก้ไข: ${monthsDisplay}` : '';
+
             // Create notification for the hospcode owner
             await connection.query(
                 'INSERT INTO notifications (hospcode, type, title, message, indicator_id, year_bh, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                [targetHospcode, 'reject', 'ตัวชี้วัดถูกส่งคืนแก้ไข', `"${indName}" ปีงบ ${year_bh} ถูกส่งคืนแก้ไข เหตุผล: ${comment.trim()}`, indicator_id, year_bh, user.userId]
+                [targetHospcode, 'reject', 'ตัวชี้วัดถูกส่งคืนแก้ไข', `"${indName}" ปีงบ ${year_bh} ถูกส่งคืนแก้ไข${monthsMsg} เหตุผล: ${comment.trim()}`, indicator_id, year_bh, user.userId]
             );
         }
 
@@ -1339,31 +1388,60 @@ apiRouter.post('/notifications/mark-read', authenticateToken, async (req, res) =
     const user = req.user;
     const { ids, all } = req.body;
     try {
+        // ดึง rejection notifications ที่ยังไม่อ่าน ก่อน mark as read
+        let rejNotifs = [];
         if (all) {
+            const [rows] = await db.query(
+                `SELECT indicator_id, year_bh, hospcode FROM notifications
+                 WHERE type = 'reject' AND is_read = 0 AND indicator_id IS NOT NULL
+                 AND (user_id = ? OR hospcode = ? OR (user_id IS NULL AND hospcode IS NULL))`,
+                [user.userId, user.hospcode]
+            );
+            rejNotifs = rows;
             await db.query(
                 `UPDATE notifications SET is_read = 1 WHERE is_read = 0 AND (user_id = ? OR hospcode = ? OR (user_id IS NULL AND hospcode IS NULL))`,
                 [user.userId, user.hospcode]
             );
         } else if (ids && Array.isArray(ids) && ids.length > 0) {
+            const [rows] = await db.query(
+                `SELECT indicator_id, year_bh, hospcode FROM notifications
+                 WHERE id IN (?) AND type = 'reject' AND is_read = 0 AND indicator_id IS NOT NULL`,
+                [ids]
+            );
+            rejNotifs = rows;
             await db.query(
                 `UPDATE notifications SET is_read = 1 WHERE id IN (?) AND (user_id = ? OR hospcode = ? OR (user_id IS NULL AND hospcode IS NULL))`,
                 [ids, user.userId, user.hospcode]
             );
         }
+
+        // เมื่ออ่านแจ้งเตือนตีกลับแล้ว → เปลี่ยนสถานะจาก Rejected เป็น Resubmit
+        for (const n of rejNotifs) {
+            if (n.indicator_id && n.year_bh && n.hospcode) {
+                await db.query(
+                    `UPDATE kpi_results SET status = 'Resubmit' WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? AND status = 'Rejected'`,
+                    [n.indicator_id, n.year_bh, n.hospcode]
+                );
+            }
+        }
+
         res.json({ success: true, message: 'อ่านแจ้งเตือนเรียบร้อยแล้ว' });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
-// ดึงประวัติเหตุผลการตีกลับ
+// ดึงประวัติเหตุผลการตีกลับ + การตอบกลับ
 apiRouter.get('/rejection-comments/:indicator_id/:year_bh/:hospcode', authenticateToken, async (req, res) => {
     const { indicator_id, year_bh, hospcode } = req.params;
     try {
         const [rows] = await db.query(
-            `SELECT rc.*, u.firstname, u.lastname
+            `SELECT rc.*,
+                    COALESCE(u1.firstname, u2.firstname) AS firstname,
+                    COALESCE(u1.lastname, u2.lastname) AS lastname
              FROM kpi_rejection_comments rc
-             LEFT JOIN users u ON rc.rejected_by = u.id
+             LEFT JOIN users u1 ON rc.rejected_by = u1.id
+             LEFT JOIN users u2 ON rc.replied_by = u2.id
              WHERE rc.indicator_id = ? AND rc.year_bh = ? AND rc.hospcode = ?
              ORDER BY rc.created_at DESC`,
             [indicator_id, year_bh, hospcode]
@@ -1371,6 +1449,82 @@ apiRouter.get('/rejection-comments/:indicator_id/:year_bh/:hospcode', authentica
         res.json({ success: true, data: rows });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ตอบกลับการตีกลับ KPI (หน่วยบริการ)
+apiRouter.post('/reply-kpi', authenticateToken, async (req, res) => {
+    const user = req.user;
+    const { indicator_id, year_bh, hospcode, message } = req.body;
+
+    if (!indicator_id || !year_bh || !message || !message.trim()) {
+        return res.status(400).json({ success: false, message: 'กรุณาระบุข้อมูลให้ครบถ้วน' });
+    }
+
+    const targetHospcode = hospcode || user.hospcode;
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        // บันทึกข้อความตอบกลับ
+        await connection.query(
+            'INSERT INTO kpi_rejection_comments (indicator_id, year_bh, hospcode, comment, type, replied_by) VALUES (?, ?, ?, ?, ?, ?)',
+            [indicator_id, year_bh, targetHospcode, message.trim(), 'reply', user.userId]
+        );
+
+        // เปลี่ยนสถานะกลับเป็น Pending เพื่อให้ admin ตรวจสอบใหม่
+        await connection.query(
+            `UPDATE kpi_results SET status = 'Pending' WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? AND status = 'Resubmit'`,
+            [indicator_id, year_bh, targetHospcode]
+        );
+
+        // Get indicator name for notification
+        const [indRows] = await connection.query('SELECT kpi_indicators_name FROM kpi_indicators WHERE id = ?', [indicator_id]);
+        const indName = indRows.length > 0 ? indRows[0].kpi_indicators_name : `ตัวชี้วัด #${indicator_id}`;
+
+        // Get hospital name
+        const [hosRows] = await connection.query('SELECT hosname FROM chospital WHERE hoscode = ?', [targetHospcode]);
+        const hosName = hosRows.length > 0 ? hosRows[0].hosname : targetHospcode;
+
+        // หา admin ที่เคย reject ตัวชี้วัดนี้ (ไม่ซ้ำ)
+        const [rejecters] = await connection.query(
+            `SELECT DISTINCT rejected_by FROM kpi_rejection_comments
+             WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? AND type = 'reject' AND rejected_by IS NOT NULL`,
+            [indicator_id, year_bh, targetHospcode]
+        );
+        const rejecterIds = rejecters.map(r => r.rejected_by);
+
+        // ถ้าไม่เจอ admin ที่ reject → ส่งให้ super_admin ทุกคน
+        let targetAdminIds = rejecterIds;
+        if (targetAdminIds.length === 0) {
+            const [superAdmins] = await connection.query("SELECT id FROM users WHERE role = 'super_admin'");
+            targetAdminIds = superAdmins.map(a => a.id);
+        }
+
+        // สร้าง notification เฉพาะ admin ที่เกี่ยวข้อง (ไม่ซ้ำ)
+        const uniqueAdminIds = [...new Set(targetAdminIds)];
+        for (const adminId of uniqueAdminIds) {
+            await connection.query(
+                'INSERT INTO notifications (user_id, hospcode, type, title, message, indicator_id, year_bh, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                [adminId, targetHospcode, 'info', 'หน่วยบริการตอบกลับการตีกลับ',
+                 `${hosName} ตอบกลับตัวชี้วัด "${indName}" ปีงบ ${year_bh}: ${message.trim()}`,
+                 indicator_id, year_bh, user.userId]
+            );
+        }
+
+        // Log action
+        await connection.query(
+            'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+            [user.userId, user.deptId, 'REPLY', 'kpi_results', JSON.stringify({ indicator_id, year_bh, hospcode: targetHospcode, message: message.trim() }), req.ip]
+        );
+
+        await connection.commit();
+        res.json({ success: true, message: 'ส่งตอบกลับเรียบร้อยแล้ว' });
+    } catch (error) {
+        await connection.rollback();
+        res.status(500).json({ success: false, message: error.message });
+    } finally {
+        connection.release();
     }
 });
 
