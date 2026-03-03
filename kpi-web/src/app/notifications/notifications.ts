@@ -23,8 +23,13 @@ export class NotificationsComponent implements OnInit {
   isLoading: boolean = false;
   approveCount: number = 0;
   rejectCount: number = 0;
+  replyCount: number = 0;
   unreadNotifCount: number = 0;
   isAdmin: boolean = false;
+
+  // Reply tab data
+  replies: any[] = [];
+  isLoadingReplies: boolean = false;
 
   ngOnInit() {
     const role = this.authService.getUserRole();
@@ -62,6 +67,24 @@ export class NotificationsComponent implements OnInit {
     });
   }
 
+  loadReplies() {
+    this.isLoadingReplies = true;
+    this.authService.getKpiReplies().subscribe({
+      next: (res) => {
+        this.isLoadingReplies = false;
+        if (res.success) {
+          this.replies = res.data;
+          this.replyCount = this.replies.length;
+        }
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.isLoadingReplies = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
   applyFilter() {
     this.approveCount = this.notifications.filter(n => n.type === 'approve').length;
     this.rejectCount = this.notifications.filter(n => n.type === 'reject').length;
@@ -73,12 +96,17 @@ export class NotificationsComponent implements OnInit {
       this.filteredNotifications = this.notifications.filter(n => n.type === 'approve');
     } else if (this.activeFilter === 'reject') {
       this.filteredNotifications = this.notifications.filter(n => n.type === 'reject');
+    } else if (this.activeFilter === 'reply') {
+      this.filteredNotifications = [];
     }
   }
 
   setFilter(filter: string) {
     this.activeFilter = filter;
     this.applyFilter();
+    if (filter === 'reply') {
+      this.loadReplies();
+    }
   }
 
   markAsRead(notif: any) {
@@ -166,7 +194,6 @@ export class NotificationsComponent implements OnInit {
         });
       },
       error: () => {
-        // แม้โหลดเหตุผลไม่ได้ก็ยังให้ตอบกลับได้
         Swal.fire({
           title: 'ตอบกลับการตีกลับ',
           html: `<div class="text-left">

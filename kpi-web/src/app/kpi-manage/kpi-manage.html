@@ -9,55 +9,90 @@
     </div>
 
     <div class="p-6">
-      <div class="flex justify-between items-center mb-4">
-        <div class="relative w-full md:w-1/3 mt-2">
-          <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">ค้นหา</label>
-          <input type="text" [(ngModel)]="searchTerm" (input)="applyFilter()"
-                 [placeholder]="activeTab === 'indicators' ? 'ชื่อ / รหัสตัวชี้วัด...' : activeTab === 'main-indicators' ? 'ชื่อหมวดหมู่หลัก...' : activeTab === 'strategies' ? 'ชื่อยุทธศาสตร์...' : 'ชื่อ / รหัสหน่วยงาน...'"
-                 class="w-full pl-4 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-sm hover:border-green-400 transition-colors">
+      <!-- Search + Status Filter + Add Button -->
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-3 mb-4">
+        <div class="flex gap-3 flex-1 flex-wrap items-end">
+          <div class="relative w-full md:w-64">
+            <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">ค้นหา</label>
+            <input type="text" [(ngModel)]="searchTerm" (input)="applyFilter()"
+                   [placeholder]="activeTab === 'indicators' ? 'ชื่อ / รหัสตัวชี้วัด...' : activeTab === 'main-indicators' ? 'ชื่อหมวดหมู่หลัก...' : activeTab === 'strategies' ? 'ชื่อยุทธศาสตร์...' : 'ชื่อ / รหัสหน่วยงาน...'"
+                   class="w-full pl-4 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-sm hover:border-green-400 transition-colors">
+          </div>
+          <!-- Status Filter -->
+          <div class="flex gap-1">
+            <button (click)="filterActive = ''; applyFilter()"
+                    [ngClass]="filterActive === '' ? 'bg-gray-700 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
+                    class="px-3 py-2 rounded-lg text-xs font-bold transition-all">
+              ทั้งหมด
+            </button>
+            <button (click)="filterActive = '1'; applyFilter()"
+                    [ngClass]="filterActive === '1' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
+                    class="px-3 py-2 rounded-lg text-xs font-bold transition-all">
+              <i class="fas fa-check-circle mr-1"></i>เปิด ({{ getActiveCount() }})
+            </button>
+            <button (click)="filterActive = '0'; applyFilter()"
+                    [ngClass]="filterActive === '0' ? 'bg-red-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
+                    class="px-3 py-2 rounded-lg text-xs font-bold transition-all">
+              <i class="fas fa-times-circle mr-1"></i>ปิด ({{ getInactiveCount() }})
+            </button>
+          </div>
         </div>
-        <button (click)="openModal()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold"><i class="fas fa-plus mr-2"></i> เพิ่มข้อมูล</button>
+        <button (click)="openModal()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold whitespace-nowrap"><i class="fas fa-plus mr-2"></i> เพิ่มข้อมูล</button>
       </div>
 
       <div class="overflow-x-auto">
         <table class="w-full text-left border-collapse">
           <thead class="bg-gradient-to-r from-green-700 to-green-600 text-white">
             <tr>
-              <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider rounded-tl-xl">ID</th>
-              <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'indicators'">ชื่อตัวชี้วัด</th>
-              <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'indicators'">หมวดหมู่หลัก</th>
-              <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'indicators'">หน่วยงาน</th>
-              <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'main-indicators'">ชื่อหมวดหมู่หลัก</th>
-              <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'strategies'">ชื่อยุทธศาสตร์</th>
-              <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'departments'">รหัส</th>
-              <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'departments'">ชื่อหน่วยงาน</th>
-              <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider text-right rounded-tr-xl">จัดการ</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider rounded-tl-xl w-14">ID</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'indicators'">ชื่อตัวชี้วัด</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'indicators'">หมวดหมู่หลัก</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'indicators'">หน่วยงาน</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'main-indicators'">ชื่อหมวดหมู่หลัก</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'main-indicators'">ยุทธศาสตร์</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'strategies'">ชื่อยุทธศาสตร์</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'departments'">รหัส</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'departments'">ชื่อหน่วยงาน</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-24">สถานะ</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-right rounded-tr-xl w-24">จัดการ</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
-            <tr *ngFor="let item of (activeTab === 'indicators' ? filteredIndicators : (activeTab === 'main-indicators' ? filteredMainIndicators : (activeTab === 'strategies' ? filteredStrategies : filteredDepartments)))" class="hover:bg-gray-50">
-              <td class="px-6 py-4 text-gray-600">{{ item.id }}</td>
+            <tr *ngFor="let item of (activeTab === 'indicators' ? filteredIndicators : (activeTab === 'main-indicators' ? filteredMainIndicators : (activeTab === 'strategies' ? filteredStrategies : filteredDepartments)))"
+                class="hover:bg-gray-50 text-sm"
+                [ngClass]="{'opacity-50 bg-gray-50': item.is_active === 0 || item.is_active === '0'}">
+              <td class="px-4 py-3 text-gray-500 text-xs">{{ item.id }}</td>
 
               <ng-container *ngIf="activeTab === 'indicators'">
-                <td class="px-6 py-4 font-medium text-gray-900">{{ item.kpi_indicators_name }}</td>
-                <td class="px-6 py-4 text-gray-600">{{ item.main_indicator_name }}</td>
-                <td class="px-6 py-4 text-gray-600">{{ item.dept_name }}</td>
+                <td class="px-4 py-3 font-medium text-gray-900">{{ item.kpi_indicators_name }}</td>
+                <td class="px-4 py-3 text-gray-600 text-xs">{{ item.main_indicator_name }}</td>
+                <td class="px-4 py-3 text-gray-600 text-xs">{{ item.dept_name }}</td>
               </ng-container>
 
               <ng-container *ngIf="activeTab === 'main-indicators'">
-                <td class="px-6 py-4 font-medium text-gray-900">{{ item.main_indicator_name }}</td>
+                <td class="px-4 py-3 font-medium text-gray-900">{{ item.main_indicator_name }}</td>
+                <td class="px-4 py-3 text-gray-600 text-xs">{{ item.yut_name }}</td>
               </ng-container>
 
               <ng-container *ngIf="activeTab === 'strategies'">
-                <td class="px-6 py-4 font-medium text-gray-900">{{ item.yut_name }}</td>
+                <td class="px-4 py-3 font-medium text-gray-900">{{ item.yut_name }}</td>
               </ng-container>
 
               <ng-container *ngIf="activeTab === 'departments'">
-                <td class="px-6 py-4 text-gray-600">{{ item.dept_code }}</td>
-                <td class="px-6 py-4 font-medium text-gray-900">{{ item.dept_name }}</td>
+                <td class="px-4 py-3 text-gray-600">{{ item.dept_code }}</td>
+                <td class="px-4 py-3 font-medium text-gray-900">{{ item.dept_name }}</td>
               </ng-container>
 
-              <td class="px-6 py-4 text-right space-x-2">
+              <!-- Toggle Switch -->
+              <td class="px-4 py-3 text-center">
+                <button (click)="toggleActive(item)" class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none"
+                        [ngClass]="item.is_active === 1 || item.is_active === '1' || item.is_active === true ? 'bg-green-500' : 'bg-gray-300'">
+                  <span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm"
+                        [ngClass]="item.is_active === 1 || item.is_active === '1' || item.is_active === true ? 'translate-x-6' : 'translate-x-1'"></span>
+                </button>
+              </td>
+
+              <td class="px-4 py-3 text-right space-x-2">
                 <button (click)="openModal(item)" class="text-yellow-500 hover:text-yellow-600"><i class="fas fa-edit"></i></button>
                 <button (click)="deleteItem(item.id)" class="text-red-500 hover:text-red-600"><i class="fas fa-trash"></i></button>
               </td>

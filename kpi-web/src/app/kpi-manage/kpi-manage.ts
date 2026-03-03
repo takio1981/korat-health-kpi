@@ -32,6 +32,7 @@ export class KpiManageComponent implements OnInit {
   filteredStrategies: any[] = [];
   filteredDepartments: any[] = [];
   searchTerm: string = '';
+  filterActive: string = ''; // '' = ทั้งหมด, '1' = เปิดใช้งาน, '0' = ปิดใช้งาน
 
   // Modal
   showModal: boolean = false;
@@ -86,23 +87,35 @@ export class KpiManageComponent implements OnInit {
 
   applyFilter() {
     const search = this.searchTerm.toLowerCase();
+    const activeFilter = this.filterActive;
+
+    const matchActive = (item: any) => {
+      if (activeFilter === '') return true;
+      const isActive = item.is_active !== undefined ? Number(item.is_active) : 1;
+      return activeFilter === '1' ? isActive === 1 : isActive === 0;
+    };
+
     if (this.activeTab === 'indicators') {
       this.filteredIndicators = this.indicators.filter(i =>
-        (i.kpi_indicators_name && i.kpi_indicators_name.toLowerCase().includes(search)) ||
-        (i.kpi_indicators_code && i.kpi_indicators_code.toLowerCase().includes(search))
+        matchActive(i) && (
+          (i.kpi_indicators_name && i.kpi_indicators_name.toLowerCase().includes(search)) ||
+          (i.kpi_indicators_code && i.kpi_indicators_code.toLowerCase().includes(search))
+        )
       );
     } else if (this.activeTab === 'main-indicators') {
       this.filteredMainIndicators = this.mainIndicators.filter(i =>
-        i.main_indicator_name && i.main_indicator_name.toLowerCase().includes(search)
+        matchActive(i) && i.main_indicator_name && i.main_indicator_name.toLowerCase().includes(search)
       );
     } else if (this.activeTab === 'strategies') {
       this.filteredStrategies = this.strategies.filter(s =>
-        s.yut_name && s.yut_name.toLowerCase().includes(search)
+        matchActive(s) && s.yut_name && s.yut_name.toLowerCase().includes(search)
       );
     } else if (this.activeTab === 'departments') {
       this.filteredDepartments = this.departments.filter(d =>
-        (d.dept_name && d.dept_name.toLowerCase().includes(search)) ||
-        (d.dept_code && d.dept_code.toLowerCase().includes(search))
+        matchActive(d) && (
+          (d.dept_name && d.dept_name.toLowerCase().includes(search)) ||
+          (d.dept_code && d.dept_code.toLowerCase().includes(search))
+        )
       );
     }
     this.cdr.detectChanges();
@@ -111,6 +124,7 @@ export class KpiManageComponent implements OnInit {
   switchTab(tab: string) {
     this.activeTab = tab;
     this.searchTerm = '';
+    this.filterActive = '';
     this.applyFilter();
   }
 
@@ -185,5 +199,48 @@ export class KpiManageComponent implements OnInit {
         }
       }
     });
+  }
+
+  toggleActive(item: any) {
+    const newStatus = !item.is_active || item.is_active === 0;
+    let observable;
+
+    if (this.activeTab === 'indicators') {
+      observable = this.authService.toggleIndicatorActive(item.id, newStatus);
+    } else if (this.activeTab === 'main-indicators') {
+      observable = this.authService.toggleMainIndicatorActive(item.id, newStatus);
+    } else if (this.activeTab === 'strategies') {
+      observable = this.authService.toggleStrategyActive(item.id, newStatus);
+    } else if (this.activeTab === 'departments') {
+      observable = this.authService.toggleDepartmentActive(item.id, newStatus);
+    }
+
+    if (observable) {
+      observable.subscribe({
+        next: (res) => {
+          if (res.success) {
+            item.is_active = newStatus ? 1 : 0;
+            this.applyFilter();
+          }
+        },
+        error: () => Swal.fire('ผิดพลาด', 'ไม่สามารถเปลี่ยนสถานะได้', 'error')
+      });
+    }
+  }
+
+  getActiveCount(): number {
+    if (this.activeTab === 'indicators') return this.indicators.filter(i => Number(i.is_active) === 1).length;
+    if (this.activeTab === 'main-indicators') return this.mainIndicators.filter(i => Number(i.is_active) === 1).length;
+    if (this.activeTab === 'strategies') return this.strategies.filter(i => Number(i.is_active) === 1).length;
+    if (this.activeTab === 'departments') return this.departments.filter(i => Number(i.is_active) === 1).length;
+    return 0;
+  }
+
+  getInactiveCount(): number {
+    if (this.activeTab === 'indicators') return this.indicators.filter(i => Number(i.is_active) === 0).length;
+    if (this.activeTab === 'main-indicators') return this.mainIndicators.filter(i => Number(i.is_active) === 0).length;
+    if (this.activeTab === 'strategies') return this.strategies.filter(i => Number(i.is_active) === 0).length;
+    if (this.activeTab === 'departments') return this.departments.filter(i => Number(i.is_active) === 0).length;
+    return 0;
   }
 }

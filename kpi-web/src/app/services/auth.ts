@@ -336,6 +336,35 @@ export class AuthService {
     return this.http.delete(`${this.apiUrl}/departments/${id}`, { headers });
   }
 
+  // --- Toggle is_active APIs ---
+  toggleIndicatorActive(id: number, isActive: boolean): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/indicators/${id}/toggle-active`, { is_active: isActive }, { headers });
+  }
+  toggleMainIndicatorActive(id: number, isActive: boolean): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/main-indicators/${id}/toggle-active`, { is_active: isActive }, { headers });
+  }
+  toggleStrategyActive(id: number, isActive: boolean): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/main-yut/${id}/toggle-active`, { is_active: isActive }, { headers });
+  }
+  toggleDepartmentActive(id: number, isActive: boolean): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/departments/${id}/toggle-active`, { is_active: isActive }, { headers });
+  }
+
+  // --- KPI Replies API ---
+  getKpiReplies(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/kpi-replies`, { headers });
+  }
+
   // --- Report Summary APIs ---
   // --- Rejection & Notification APIs ---
   rejectKpi(data: any): Observable<any> {

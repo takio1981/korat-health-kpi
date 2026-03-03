@@ -526,6 +526,7 @@ apiRouter.get('/kpi-template', async (req, res) => {
             FROM kpi_indicators i
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
             LEFT JOIN departments d on d.id = i.dept_id
+            WHERE i.is_active = 1
             ORDER BY mi.main_indicator_name DESC, i.kpi_indicators_name DESC, d.dept_name DESC
         `;
         const [rows] = await db.query(sql);
@@ -1082,6 +1083,47 @@ apiRouter.delete('/indicators/:id', authenticateToken, isAdmin, async (req, res)
     }
 });
 
+// --- Toggle is_active สำหรับ Master Data ทั้ง 4 ตาราง ---
+apiRouter.put('/indicators/:id/toggle-active', authenticateToken, isAdmin, async (req, res) => {
+    try {
+        const { is_active } = req.body;
+        await db.query('UPDATE kpi_indicators SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, req.params.id]);
+        res.json({ success: true, message: is_active ? 'เปิดใช้งานแล้ว' : 'ปิดใช้งานแล้ว' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error toggling indicator' });
+    }
+});
+
+apiRouter.put('/main-indicators/:id/toggle-active', authenticateToken, isAdmin, async (req, res) => {
+    try {
+        const { is_active } = req.body;
+        await db.query('UPDATE kpi_main_indicators SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, req.params.id]);
+        res.json({ success: true, message: is_active ? 'เปิดใช้งานแล้ว' : 'ปิดใช้งานแล้ว' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error toggling main indicator' });
+    }
+});
+
+apiRouter.put('/main-yut/:id/toggle-active', authenticateToken, isAdmin, async (req, res) => {
+    try {
+        const { is_active } = req.body;
+        await db.query('UPDATE main_yut SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, req.params.id]);
+        res.json({ success: true, message: is_active ? 'เปิดใช้งานแล้ว' : 'ปิดใช้งานแล้ว' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error toggling strategy' });
+    }
+});
+
+apiRouter.put('/departments/:id/toggle-active', authenticateToken, isAdmin, async (req, res) => {
+    try {
+        const { is_active } = req.body;
+        await db.query('UPDATE departments SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, req.params.id]);
+        res.json({ success: true, message: is_active ? 'เปิดใช้งานแล้ว' : 'ปิดใช้งานแล้ว' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error toggling department' });
+    }
+});
+
 // อนุมัติผล KPI และ Lock ข้อมูล (รองรับทั้งรายการเดียวและหลายรายการ)
 apiRouter.post('/approve-kpi', authenticateToken, isAdmin, async (req, res) => {
     const user = req.user;
@@ -1530,7 +1572,15 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         } catch (e) {
             // columns may already exist
         }
-        console.log('✅ Notification & Rejection tables ready');
+        // เพิ่ม is_active ให้ตาราง master data ที่ยังไม่มี
+        try {
+            await db.query(`ALTER TABLE kpi_main_indicators ADD COLUMN IF NOT EXISTS is_active TINYINT(1) DEFAULT 1`);
+            await db.query(`ALTER TABLE main_yut ADD COLUMN IF NOT EXISTS is_active TINYINT(1) DEFAULT 1`);
+            await db.query(`ALTER TABLE departments ADD COLUMN IF NOT EXISTS is_active TINYINT(1) DEFAULT 1`);
+        } catch (e) {
+            // columns may already exist
+        }
+        console.log('✅ Notification & Rejection tables ready, is_active columns ensured');
     } catch (err) {
         console.error('⚠️ Auto-create tables error:', err.message);
     }
@@ -1799,6 +1849,61 @@ apiRouter.post('/reply-kpi', authenticateToken, async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     } finally {
         connection.release();
+    }
+});
+
+// ดึงรายการตอบกลับทั้งหมด (สำหรับ admin/user)
+apiRouter.get('/kpi-replies', authenticateToken, async (req, res) => {
+    try {
+        const user = req.user;
+        let whereClause = "WHERE rc.type = 'reply'";
+        let params = [];
+
+        // super_admin: เห็นทั้งหมด
+        // admin: เฉพาะหน่วยงานตัวเอง (ทุก hospcode)
+        // user: เฉพาะ hospcode + dept ของตัวเอง
+        if (user.role === 'super_admin') {
+            // ไม่มี filter เพิ่ม
+        } else if (user.role === 'admin') {
+            if (user.deptId !== null && user.deptId !== undefined) {
+                whereClause += ' AND i.dept_id = ?';
+                params.push(user.deptId);
+            }
+        } else {
+            if (user.hospcode) {
+                whereClause += ' AND rc.hospcode = ?';
+                params.push(user.hospcode);
+            }
+            if (user.deptId !== null && user.deptId !== undefined) {
+                whereClause += ' AND i.dept_id = ?';
+                params.push(user.deptId);
+            }
+        }
+
+        const [rows] = await db.query(`
+            SELECT rc.id, rc.indicator_id, rc.year_bh, rc.hospcode, rc.comment, rc.created_at,
+                   i.kpi_indicators_name, d.dept_name,
+                   h.hosname,
+                   u.firstname AS replied_firstname, u.lastname AS replied_lastname,
+                   (SELECT rc2.comment FROM kpi_rejection_comments rc2
+                    WHERE rc2.indicator_id = rc.indicator_id AND rc2.year_bh = rc.year_bh
+                    AND rc2.hospcode = rc.hospcode AND rc2.type = 'reject'
+                    AND rc2.created_at < rc.created_at
+                    ORDER BY rc2.created_at DESC LIMIT 1) AS original_reject_comment
+            FROM kpi_rejection_comments rc
+            LEFT JOIN kpi_indicators i ON rc.indicator_id = i.id
+            LEFT JOIN departments d ON i.dept_id = d.id
+            LEFT JOIN chospital h ON rc.hospcode = h.hoscode
+            LEFT JOIN users u ON rc.replied_by = u.id
+            ${whereClause}
+            ORDER BY rc.created_at DESC
+            LIMIT 100
+        `, params);
+
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        console.error('KPI Replies Error:', error);
+        res.status(500).json({ success: false, message: 'ไม่สามารถดึงข้อมูลตอบกลับได้' });
     }
 });
 
