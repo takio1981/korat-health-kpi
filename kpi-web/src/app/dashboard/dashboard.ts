@@ -44,6 +44,8 @@ export class DashboardComponent implements OnInit {
   addKpiFilteredHospitals: any[] = [];
   addKpiSelectedDistrict: string = '';
   addKpiSelectedHospcode: string = '';
+  addKpiExistingCount: number = 0;
+  addKpiTotalTemplateCount: number = 0;
 
   isEditing: boolean = false;
   showAddModal: boolean = false;
@@ -95,6 +97,19 @@ export class DashboardComponent implements OnInit {
     const role = this.authService.getUserRole();
     this.isAdmin = ['admin', 'super_admin'].includes(role);
     this.isSuperAdmin = role === 'super_admin';
+
+    // Fallback: ดึง hospcode/dept_id จาก JWT token กรณี user object ไม่มี (login เก่า)
+    if (this.currentUser && !this.currentUser.hospcode) {
+      try {
+        const token = localStorage.getItem('kpi_token');
+        if (token) {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          if (payload.hospcode) this.currentUser.hospcode = payload.hospcode;
+          if (payload.deptId) this.currentUser.dept_id = payload.deptId;
+        }
+      } catch (e) { /* ignore */ }
+    }
+
     this.loadKpiData();
   }
 
@@ -705,16 +720,32 @@ export class DashboardComponent implements OnInit {
     this.authService.getKpiTemplate().subscribe({
       next: (res) => {
         if (res.success) {
-          // กรอง existingIds ตาม hospcode + ปีงบ เพื่อให้แต่ละหน่วยบริการเพิ่มได้
+          // สร้าง existingIds จาก kpiData
+          // สำหรับ user ปกติ: kpiData ถูก filter ด้วย hospcode จาก server แล้ว ใช้แค่ปีงบ
+          // สำหรับ admin: ต้อง filter ด้วย hospcode + ปีงบ
           const existingIds = new Set(
             this.kpiData
-              .filter(k => k.year_bh === this.addKpiSelectedYear && k.hospcode === targetHospcode)
-              .map(k => k.indicator_id)
+              .filter(k => {
+                const yearMatch = String(k.year_bh) === String(this.addKpiSelectedYear);
+                if (this.isAdmin && targetHospcode) {
+                  return yearMatch && k.hospcode === targetHospcode;
+                }
+                return yearMatch; // Non-admin: server already filters by hospcode
+              })
+              .map(k => Number(k.indicator_id))
           );
-          let available = res.data.filter((item: any) => !existingIds.has(item.indicator_id));
+
+          // กรองตัวชี้วัดตามหน่วยงาน (user เห็นเฉพาะ dept ตัวเอง)
+          let allForDept = res.data;
           if (!this.isAdmin && this.currentUser?.dept_name) {
-             available = available.filter((item: any) => item.dept_name === this.currentUser.dept_name);
+            allForDept = allForDept.filter((item: any) => item.dept_name === this.currentUser.dept_name);
           }
+
+          // คำนวณจำนวนทั้งหมด vs มีอยู่แล้ว vs ยังไม่มี
+          this.addKpiTotalTemplateCount = allForDept.length;
+          const available = allForDept.filter((item: any) => !existingIds.has(Number(item.indicator_id)));
+          this.addKpiExistingCount = this.addKpiTotalTemplateCount - available.length;
+
           this.newKpiList = available.map((item: any) => ({
             ...item,
             year_bh: this.addKpiSelectedYear,
@@ -722,7 +753,8 @@ export class DashboardComponent implements OnInit {
             target_value: 0,
             oct: 0, nov: 0, dece: 0, jan: 0, feb: 0, mar: 0,
             apr: 0, may: 0, jun: 0, jul: 0, aug: 0, sep: 0,
-            total_actual: 0
+            total_actual: 0,
+            _original: { target_value: 0, oct: 0, nov: 0, dece: 0, jan: 0, feb: 0, mar: 0, apr: 0, may: 0, jun: 0, jul: 0, aug: 0, sep: 0 }
           }));
           Swal.close();
           if (!this.showAddModal) {
@@ -750,12 +782,111 @@ export class DashboardComponent implements OnInit {
   }
 
   saveNewKpis() {
-     const itemsToSave = this.newKpiList.filter(item => item.target_value > 0 || item.total_actual > 0);
-     if (itemsToSave.length === 0) {
-        Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลอย่างน้อย 1 รายการ (เป้าหมาย หรือ ผลงาน)', 'warning');
-        return;
-     }
-     this.saveDataToBackend(itemsToSave, true);
+    const targetHospcode = this.addKpiSelectedHospcode || this.currentUser?.hospcode || '';
+    if (!targetHospcode) {
+      Swal.fire('แจ้งเตือน', 'กรุณาเลือกหน่วยบริการก่อนบันทึก', 'warning');
+      return;
+    }
+    // ตรวจสอบว่ามีข้อมูลที่กรอกแล้วหรือไม่
+    const months = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
+    const itemsWithData = this.newKpiList.filter((item: any) =>
+      item.target_value > 0 || months.some(m => item[m] > 0)
+    );
+    if (itemsWithData.length === 0) {
+      Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลอย่างน้อย 1 รายการ (เป้าหมาย หรือ ผลงาน)', 'warning');
+      return;
+    }
+
+    Swal.fire({
+      title: 'ยืนยันการบันทึก',
+      html: `<div class="text-left text-sm">
+        <p class="text-gray-600">พบข้อมูลที่กรอก <b>${itemsWithData.length}</b> รายการ จากทั้งหมด <b>${this.newKpiList.length}</b> รายการ</p>
+        <p class="text-gray-500 text-xs mt-2">ปีงบประมาณ: <b>${this.addKpiSelectedYear}</b></p>
+        <p class="mt-2 text-gray-600">ต้องการบันทึกใช่หรือไม่?</p>
+      </div>`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#10b981',
+      confirmButtonText: '<i class="fas fa-save mr-1"></i> บันทึก',
+      cancelButtonText: 'ยกเลิก'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        this.executeAddKpiSave(targetHospcode);
+      }
+    });
+  }
+
+  private executeAddKpiSave(hospcode: string) {
+    Swal.fire({
+      title: 'กำลังบันทึกข้อมูล...',
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading()
+    });
+
+    const dataToSave = this.newKpiList
+      .filter((item: any) => item.target_value > 0 || ['oct','nov','dece','jan','feb','mar','apr','may','jun','jul','aug','sep'].some(m => item[m] > 0))
+      .map((item: any) => ({
+        indicator_id: item.indicator_id,
+        year_bh: this.addKpiSelectedYear,
+        target_value: item.target_value,
+        oct: item.oct, nov: item.nov, dece: item.dece,
+        jan: item.jan, feb: item.feb, mar: item.mar,
+        apr: item.apr, may: item.may, jun: item.jun,
+        jul: item.jul, aug: item.aug, sep: item.sep
+      }));
+
+    this.authService.updateKpiResults(dataToSave, hospcode, 'setup_insert_new').subscribe({
+      next: (res) => {
+        let message = `เพิ่มตัวชี้วัดเรียบร้อยแล้ว ${dataToSave.length} รายการ`;
+        if (res.inserted !== undefined) {
+          message = `เพิ่มตัวชี้วัดใหม่ ${res.inserted} รายการ` + (res.skipped ? ` (ข้าม ${res.skipped} รายการที่มีอยู่แล้ว)` : '');
+        }
+        Swal.fire('สำเร็จ', res.message || message, 'success');
+        this.showAddModal = false;
+        this.loadKpiData();
+        this.loadDashboardStats();
+      },
+      error: (err) => {
+        Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถบันทึกข้อมูลได้', 'error');
+      }
+    });
+  }
+
+  // === Add KPI Modal: ตรวจสอบการแก้ไข / Undo / Reset ===
+  isAddKpiModified(item: any, field: string): boolean {
+    if (!item._original) return false;
+    return Number(item[field]) !== Number(item._original[field]);
+  }
+
+  isAddKpiRowModified(item: any): boolean {
+    if (!item._original) return false;
+    const fields = ['target_value', 'oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
+    return fields.some(f => Number(item[f]) !== Number(item._original[f]));
+  }
+
+  undoAddKpiRow(item: any) {
+    if (!item._original) return;
+    const fields = ['target_value', 'oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
+    fields.forEach(f => item[f] = item._original[f]);
+    item.total_actual = 0;
+    this.cdr.detectChanges();
+  }
+
+  resetAddKpi() {
+    Swal.fire({
+      title: 'คืนค่าเริ่มต้น',
+      text: 'ต้องการคืนค่าข้อมูลทั้งหมดเป็น 0 ใช่หรือไม่?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#f59e0b',
+      confirmButtonText: '<i class="fas fa-undo mr-1"></i> ใช่, คืนค่า',
+      cancelButtonText: 'ยกเลิก'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        this.newKpiList.forEach((item: any) => this.undoAddKpiRow(item));
+        Swal.fire({ icon: 'success', title: 'คืนค่าเรียบร้อยแล้ว', toast: true, position: 'top-end', timer: 2000, showConfirmButton: false });
+      }
+    });
   }
 
   openTrendModal(item: any) {

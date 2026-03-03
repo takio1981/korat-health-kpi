@@ -139,18 +139,20 @@ apiRouter.post('/login', loginLimiter, async (req, res) => {
                     SECRET_KEY,
                     { expiresIn: '8h' }
                 );
-                res.json({ 
-                    success: true, 
-                    token, 
-                    user: { 
-                        id: user.id, 
-                        username: user.username, 
+                res.json({
+                    success: true,
+                    token,
+                    user: {
+                        id: user.id,
+                        username: user.username,
                         role: user.role,
                         firstname: user.firstname,
                         lastname: user.lastname,
                         service_unit: serviceUnitDisplay,
-                        dept_name: user.dept_name
-                    } 
+                        dept_name: user.dept_name,
+                        hospcode: user.hospcode,
+                        dept_id: user.dept_id
+                    }
                 });
             } else {
                 await saveLog(username, 'login_failed', 'รหัสผ่านไม่ถูกต้อง', ip);
