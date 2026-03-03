@@ -83,21 +83,32 @@ export class AuthService {
   }
 
   // ฟังก์ชันสำหรับบันทึกผล KPI ที่แก้ไขแล้ว
-  updateKpiResults(data: any[], targetHospcode: string = ''): Observable<any> {
+  // mode: 'setup_overwrite' = KPI-Setup เพิ่มทั้งหมด (เขียนทับ)
+  //        'setup_insert_new' = KPI-Setup เพิ่มเฉพาะที่ยังไม่มี
+  //        undefined = Dashboard ปกติ
+  updateKpiResults(data: any[], targetHospcode: string = '', mode: string = ''): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({
       'Authorization': `Bearer ${token}`
     });
-    
-    // ถ้ามี targetHospcode ให้ห่อข้อมูลใส่ property 'updates'
-    let payload;
-    if (targetHospcode) {
-        payload = { updates: data, targetHospcode };
+
+    let payload: any;
+    if (targetHospcode || mode) {
+        payload = { updates: data, targetHospcode, mode };
     } else {
         payload = data; // กรณีปกติส่งเป็น Array ตรงๆ
     }
-    
+
     return this.http.post(`${this.apiUrl}/update-kpi`, payload, { headers });
+  }
+
+  // ตรวจสอบข้อมูล KPI ที่มีอยู่สำหรับ KPI-Setup
+  checkKpiSetup(hospcode: string, yearBh: string, deptId: string = ''): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    let url = `${this.apiUrl}/kpi-setup-check?hospcode=${hospcode}&year_bh=${yearBh}`;
+    if (deptId) url += `&dept_id=${deptId}`;
+    return this.http.get(url, { headers });
   }
 
   // ฟังก์ชันสำหรับอนุมัติผล KPI

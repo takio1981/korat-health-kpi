@@ -170,7 +170,7 @@
                   <div class="bg-yellow-50 p-2 rounded">
                     <span class="text-gray-600">เป้าหมาย:</span>
                     <span *ngIf="!isEditing" class="font-bold ml-1">{{ item.target_value | number }}</span>
-                    <input *ngIf="isEditing" type="number" min="0" [(ngModel)]="item.target_value" class="w-full border border-gray-300 rounded px-1 py-1 text-right text-xs focus:outline-none focus:border-green-500 bg-white hover:border-green-400 transition-colors" [ngClass]="isModified(item, 'target_value') ? 'bg-yellow-100 font-bold text-orange-700' : 'bg-white'">
+                    <input *ngIf="isEditing" type="number" min="0" [(ngModel)]="item.target_value" class="w-full border border-gray-300 rounded px-1 py-1 text-right text-xs focus:outline-none focus:border-green-500 bg-white hover:border-green-400 transition-colors" [ngClass]="isModified(item, 'target_value') ? 'bg-orange-200 font-bold text-red-600 ring-2 ring-orange-400' : 'bg-white'">
                   </div>
                   <div class="bg-blue-50 p-2 rounded">
                     <span class="text-gray-600">ผลงาน:</span>
@@ -187,7 +187,7 @@
                        class="text-center p-1 rounded"
                        [ngClass]="item[month.key] > 0 ? 'bg-green-100' : 'bg-gray-50'">
                     <div class="text-gray-600 mb-1">{{ month.name }}</div>
-                    <input *ngIf="isEditing" type="number" min="0" [(ngModel)]="item[month.key]" (ngModelChange)="onValueChange(item, month.key)" class="w-full border border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:border-green-500 hover:border-green-400 transition-colors" [ngClass]="isModified(item, month.key) ? 'bg-yellow-100 font-bold text-orange-700' : 'bg-white'">
+                    <input *ngIf="isEditing" type="number" min="0" [(ngModel)]="item[month.key]" (ngModelChange)="onValueChange(item, month.key)" class="w-full border border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:border-green-500 hover:border-green-400 transition-colors" [ngClass]="isModified(item, month.key) ? 'bg-orange-200 font-bold text-red-600 ring-2 ring-orange-400' : 'bg-white'">
                     <span *ngIf="!isEditing">{{ item[month.key] > 0 ? (item[month.key] | number) : '-' }}</span>
                   </div>
                 </div>
@@ -334,7 +334,7 @@
                   <span *ngIf="!isEditing || item.is_locked">{{ item.target_value | number }}</span>
                   <input *ngIf="isEditing && !item.is_locked" type="number" min="0" [(ngModel)]="item.target_value"
                          class="w-20 border border-amber-200 rounded px-1 py-1 text-right text-xs focus:ring-1 focus:ring-green-500 outline-none bg-white hover:border-green-400 transition-all"
-                         [ngClass]="isModified(item, 'target_value') ? 'bg-amber-100 text-amber-900' : ''">
+                         [ngClass]="isModified(item, 'target_value') ? '!bg-orange-200 !text-red-600 ring-2 ring-orange-400 font-bold' : ''">
                 </td>
 
                 <!-- Col 7: ผลงานรวม -->
@@ -356,7 +356,7 @@
                   <span *ngIf="!isEditing || item.is_locked">{{ item[m] > 0 ? (item[m] | number) : '-' }}</span>
                   <input *ngIf="isEditing && !item.is_locked" type="number" min="0" [(ngModel)]="item[m]" (ngModelChange)="onValueChange(item, m)"
                          class="w-full border border-green-200 rounded px-1 py-1 text-center text-xs focus:ring-1 focus:ring-green-500 outline-none hover:border-green-400 transition-all bg-white/80 group-hover:bg-white"
-                         [ngClass]="isModified(item, m) ? 'bg-amber-100 text-amber-900' : ''">
+                         [ngClass]="isModified(item, m) ? '!bg-orange-200 !text-red-600 ring-2 ring-orange-400 font-bold' : ''">
                 </td>
               </tr>
             </tbody>
@@ -536,7 +536,7 @@
 <div *ngIf="showRejectionHistoryModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
   <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 transform transition-all scale-100 overflow-y-auto max-h-[90vh]">
     <div class="flex justify-between items-center mb-4">
-      <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-history text-orange-500 mr-2"></i>ประวัติการตีกลับ</h3>
+      <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-history text-orange-500 mr-2"></i>ประวัติการตีกลับ <span class="text-xs text-gray-400 font-normal">(ล่าสุด)</span></h3>
       <button (click)="showRejectionHistoryModal = false" class="text-gray-400 hover:text-gray-600 text-xl"><i class="fas fa-times"></i></button>
     </div>
     <div *ngIf="rejectionHistory.length === 0" class="text-center text-gray-400 py-8">ไม่มีประวัติการตีกลับ</div>
@@ -557,7 +557,12 @@
         <p class="text-sm text-gray-700 bg-blue-50 rounded-lg p-2">{{ h.comment }}</p>
       </div>
     </div>
-    <div class="mt-4 flex justify-end">
+    <div class="mt-4 flex justify-between items-center">
+      <button *ngIf="rejectionHistoryFull.length > 1" (click)="goToNotificationsReject()"
+              class="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold text-sm shadow-md">
+        <i class="fas fa-list mr-1"></i>ดูทั้งหมด ({{ rejectionHistoryFull.length }})
+      </button>
+      <div *ngIf="rejectionHistoryFull.length <= 1"></div>
       <button (click)="showRejectionHistoryModal = false" class="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-bold text-sm">ปิด</button>
     </div>
   </div>

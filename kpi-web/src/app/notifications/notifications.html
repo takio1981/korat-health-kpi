@@ -64,6 +64,17 @@
                 <span *ngIf="notif.created_by_name" class="text-xs text-gray-400">
                   <i class="fas fa-user mr-1"></i>{{ notif.created_by_name }} {{ notif.created_by_lastname }}
                 </span>
+                <!-- ปุ่มตอบกลับ: แสดงเฉพาะ reject ที่ยังไม่เคยตอบกลับ -->
+                <button *ngIf="!isAdmin && notif.type === 'reject' && notif.indicator_id && !notif.has_reply"
+                        (click)="replyNotification(notif); $event.stopPropagation()"
+                        class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-full text-xs font-bold transition-all shadow-sm">
+                  <i class="fas fa-paper-plane mr-1"></i>ตอบกลับ
+                </button>
+                <!-- แสดงสถานะ: ตอบกลับแล้ว -->
+                <span *ngIf="!isAdmin && notif.type === 'reject' && notif.has_reply"
+                      class="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">
+                  <i class="fas fa-check-circle mr-1"></i>ตอบกลับแล้ว
+                </span>
               </div>
             </div>
           </div>

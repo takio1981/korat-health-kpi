@@ -75,6 +75,7 @@ export class DashboardComponent implements OnInit {
   ];
   showRejectionHistoryModal: boolean = false;
   rejectionHistory: any[] = [];
+  rejectionHistoryFull: any[] = [];
 
   showReplyModal: boolean = false;
   replyingItem: any = null;
@@ -322,116 +323,134 @@ export class DashboardComponent implements OnInit {
         }
       }
     }
+    // ถ้ามีค่าน้อยกว่าเดิม → แจ้งเตือนยืนยัน/ยกเลิก ก่อน
+    const proceedToSave = () => {
+      // สร้างสรุปรายละเอียดการแก้ไข
+      const changeDetails: string[] = [];
+      for (const item of changedItems) {
+        const changes: string[] = [];
+        if (Number(item.target_value) !== Number(item._original.target_value)) {
+          changes.push(`เป้าหมาย: ${item._original.target_value} → ${item.target_value}`);
+        }
+        for (const m of months) {
+          if (Number(item[m]) !== Number(item._original[m])) {
+            changes.push(`${monthNames[m]}: ${item._original[m]} → ${item[m]}`);
+          }
+        }
+        if (changes.length > 0) {
+          changeDetails.push(`<b>${item.kpi_indicators_name}</b><br><span class="text-gray-500 text-xs">${changes.join(', ')}</span>`);
+        }
+      }
+
+      // Clean data - ส่งเฉพาะ fields ที่ backend ต้องการ ไม่ส่ง _original
+      const cleanData = changedItems.map(item => ({
+        indicator_id: item.indicator_id,
+        year_bh: item.year_bh,
+        hospcode: item.hospcode,
+        target_value: item.target_value,
+        oct: item.oct, nov: item.nov, dece: item.dece,
+        jan: item.jan, feb: item.feb, mar: item.mar,
+        apr: item.apr, may: item.may, jun: item.jun,
+        jul: item.jul, aug: item.aug, sep: item.sep
+      }));
+
+      // ตรวจสอบว่ามีรายการที่สถานะ "รอตอบกลับ" (Resubmit) หรือไม่
+      const resubmitItems = changedItems.filter(item =>
+        item.indicator_status === 'resubmit' || item.indicator_status === 'Resubmit'
+      );
+      const hasResubmitItems = resubmitItems.length > 0 && !this.isAdmin;
+
+      // สร้าง HTML สำหรับส่วนตอบกลับ (ถ้ามีรายการ Resubmit)
+      const replySection = hasResubmitItems
+        ? `<div class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+             <div class="flex items-center gap-2 mb-2">
+               <input type="checkbox" id="swal-reply-check" checked style="accent-color:#3b82f6;width:16px;height:16px;">
+               <label for="swal-reply-check" class="font-bold text-blue-700 text-sm cursor-pointer">
+                 <i class="fas fa-reply mr-1"></i>นำข้อมูลที่แก้ไขไปตอบกลับด้วย (${resubmitItems.length} รายการ)
+               </label>
+             </div>
+             <div id="swal-reply-area">
+               <textarea id="swal-reply-message" rows="3" placeholder="ข้อความตอบกลับ (ไม่บังคับ)..."
+                 style="width:100%;padding:8px;border:1px solid #93c5fd;border-radius:8px;font-size:13px;margin-top:4px;"></textarea>
+             </div>
+           </div>`
+        : '';
+
+      Swal.fire({
+        title: 'ยืนยันการบันทึก',
+        html: `<div class="text-left text-sm">
+                <p class="mb-2 font-bold text-gray-700">พบข้อมูลที่เปลี่ยนแปลง ${cleanData.length} รายการ:</p>
+                <div class="max-h-48 overflow-y-auto border rounded-lg p-3 bg-gray-50 space-y-2">
+                  ${changeDetails.join('<hr class="my-2 border-gray-200">')}
+                </div>
+                ${replySection}
+                <p class="mt-3 text-gray-600">ต้องการบันทึกใช่หรือไม่?</p>
+               </div>`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#10b981',
+        confirmButtonText: 'บันทึก',
+        cancelButtonText: 'ยกเลิก',
+        width: 600,
+        didOpen: () => {
+          const checkbox = document.getElementById('swal-reply-check') as HTMLInputElement;
+          const replyArea = document.getElementById('swal-reply-area');
+          if (checkbox && replyArea) {
+            checkbox.addEventListener('change', () => {
+              replyArea.style.display = checkbox.checked ? 'block' : 'none';
+            });
+          }
+        },
+        preConfirm: () => {
+          if (hasResubmitItems) {
+            const checkbox = document.getElementById('swal-reply-check') as HTMLInputElement;
+            const replyMsg = (document.getElementById('swal-reply-message') as HTMLTextAreaElement)?.value || '';
+            return { wantReply: checkbox?.checked || false, replyMessage: replyMsg.trim() };
+          }
+          return { wantReply: false, replyMessage: '' };
+        }
+      }).then((result) => {
+        if (result.isConfirmed) {
+          const replyInfo = result.value;
+          if (replyInfo && replyInfo.wantReply) {
+            this.saveDataWithReply(cleanData, resubmitItems, replyInfo.replyMessage);
+          } else {
+            if (hasResubmitItems) {
+              const resubmitIds = new Set(resubmitItems.map(r => `${r.indicator_id}_${r.year_bh}_${r.hospcode}`));
+              cleanData.forEach((item: any) => {
+                const key = `${item.indicator_id}_${item.year_bh}_${item.hospcode}`;
+                if (resubmitIds.has(key)) {
+                  item.preserve_status = 'Resubmit';
+                }
+              });
+            }
+            this.saveDataToBackend(cleanData, false);
+          }
+        }
+      });
+    };
+
     if (decreasedList.length > 0) {
       Swal.fire({
-        icon: 'error',
+        icon: 'warning',
         title: 'พบคะแนนที่น้อยกว่าเดิม',
         html: `<div class="text-left text-sm max-h-60 overflow-y-auto">
-                <p class="mb-2 text-gray-600">กรุณาตรวจสอบรายการต่อไปนี้ให้ถูกต้องก่อนบันทึก:</p>
+                <p class="mb-2 text-gray-600">กรุณาตรวจสอบรายการต่อไปนี้:</p>
                 <ul class="list-disc pl-5 space-y-1 text-red-600">${decreasedList.map(d => `<li>${d}</li>`).join('')}</ul>
                </div>`,
-        confirmButtonText: 'ตกลง, ไปตรวจสอบ'
+        showCancelButton: true,
+        confirmButtonColor: '#10b981',
+        confirmButtonText: 'ยืนยัน บันทึก',
+        cancelButtonColor: '#6b7280',
+        cancelButtonText: 'ยกเลิก กลับไปตรวจสอบ'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          proceedToSave();
+        }
       });
-      return;
+    } else {
+      proceedToSave();
     }
-
-    // สร้างสรุปรายละเอียดการแก้ไข
-    const changeDetails: string[] = [];
-    for (const item of changedItems) {
-      const changes: string[] = [];
-      if (Number(item.target_value) !== Number(item._original.target_value)) {
-        changes.push(`เป้าหมาย: ${item._original.target_value} → ${item.target_value}`);
-      }
-      for (const m of months) {
-        if (Number(item[m]) !== Number(item._original[m])) {
-          changes.push(`${monthNames[m]}: ${item._original[m]} → ${item[m]}`);
-        }
-      }
-      if (changes.length > 0) {
-        changeDetails.push(`<b>${item.kpi_indicators_name}</b><br><span class="text-gray-500 text-xs">${changes.join(', ')}</span>`);
-      }
-    }
-
-    // Clean data - ส่งเฉพาะ fields ที่ backend ต้องการ ไม่ส่ง _original
-    const cleanData = changedItems.map(item => ({
-      indicator_id: item.indicator_id,
-      year_bh: item.year_bh,
-      hospcode: item.hospcode,
-      target_value: item.target_value,
-      oct: item.oct, nov: item.nov, dece: item.dece,
-      jan: item.jan, feb: item.feb, mar: item.mar,
-      apr: item.apr, may: item.may, jun: item.jun,
-      jul: item.jul, aug: item.aug, sep: item.sep
-    }));
-
-    // ตรวจสอบว่ามีรายการที่สถานะ "รอตอบกลับ" (Resubmit) หรือไม่
-    const resubmitItems = changedItems.filter(item =>
-      item.indicator_status === 'resubmit' || item.indicator_status === 'Resubmit'
-    );
-    const hasResubmitItems = resubmitItems.length > 0 && !this.isAdmin;
-
-    // สร้าง HTML สำหรับส่วนตอบกลับ (ถ้ามีรายการ Resubmit)
-    const replySection = hasResubmitItems
-      ? `<div class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-           <div class="flex items-center gap-2 mb-2">
-             <input type="checkbox" id="swal-reply-check" checked style="accent-color:#3b82f6;width:16px;height:16px;">
-             <label for="swal-reply-check" class="font-bold text-blue-700 text-sm cursor-pointer">
-               <i class="fas fa-reply mr-1"></i>นำข้อมูลที่แก้ไขไปตอบกลับด้วย (${resubmitItems.length} รายการ)
-             </label>
-           </div>
-           <div id="swal-reply-area">
-             <textarea id="swal-reply-message" rows="3" placeholder="ข้อความตอบกลับ (ไม่บังคับ)..."
-               style="width:100%;padding:8px;border:1px solid #93c5fd;border-radius:8px;font-size:13px;margin-top:4px;"></textarea>
-           </div>
-         </div>`
-      : '';
-
-    Swal.fire({
-      title: 'ยืนยันการบันทึก',
-      html: `<div class="text-left text-sm">
-              <p class="mb-2 font-bold text-gray-700">พบข้อมูลที่เปลี่ยนแปลง ${cleanData.length} รายการ:</p>
-              <div class="max-h-48 overflow-y-auto border rounded-lg p-3 bg-gray-50 space-y-2">
-                ${changeDetails.join('<hr class="my-2 border-gray-200">')}
-              </div>
-              ${replySection}
-              <p class="mt-3 text-gray-600">ต้องการบันทึกใช่หรือไม่?</p>
-             </div>`,
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonColor: '#10b981',
-      confirmButtonText: 'บันทึก',
-      cancelButtonText: 'ยกเลิก',
-      width: 600,
-      didOpen: () => {
-        // Toggle reply area visibility based on checkbox
-        const checkbox = document.getElementById('swal-reply-check') as HTMLInputElement;
-        const replyArea = document.getElementById('swal-reply-area');
-        if (checkbox && replyArea) {
-          checkbox.addEventListener('change', () => {
-            replyArea.style.display = checkbox.checked ? 'block' : 'none';
-          });
-        }
-      },
-      preConfirm: () => {
-        if (hasResubmitItems) {
-          const checkbox = document.getElementById('swal-reply-check') as HTMLInputElement;
-          const replyMsg = (document.getElementById('swal-reply-message') as HTMLTextAreaElement)?.value || '';
-          return { wantReply: checkbox?.checked || false, replyMessage: replyMsg.trim() };
-        }
-        return { wantReply: false, replyMessage: '' };
-      }
-    }).then((result) => {
-      if (result.isConfirmed) {
-        const replyInfo = result.value;
-        if (replyInfo && replyInfo.wantReply) {
-          // บันทึกข้อมูล + ตอบกลับ
-          this.saveDataWithReply(cleanData, resubmitItems, replyInfo.replyMessage);
-        } else {
-          // บันทึกข้อมูลอย่างเดียว
-          this.saveDataToBackend(cleanData, false);
-        }
-      }
-    });
   }
 
   saveDataWithReply(data: any[], resubmitItems: any[], replyMessage: string) {
@@ -511,7 +530,7 @@ export class DashboardComponent implements OnInit {
         this.loadDashboardStats();
       },
       error: (err) => {
-        Swal.fire('เกิดข้อผิดพลาด', 'ไม่สามารถบันทึกข้อมูลได้', 'error');
+        Swal.fire('เกิดข้อผิดพลาด', err.error?.message || 'ไม่สามารถบันทึกข้อมูลได้', 'error');
         console.error(err);
       }
     });
@@ -952,18 +971,55 @@ export class DashboardComponent implements OnInit {
             oct: 'ต.ค.', nov: 'พ.ย.', dece: 'ธ.ค.', jan: 'ม.ค.', feb: 'ก.พ.', mar: 'มี.ค.',
             apr: 'เม.ย.', may: 'พ.ค.', jun: 'มิ.ย.', jul: 'ก.ค.', aug: 'ส.ค.', sep: 'ก.ย.'
           };
-          this.rejectionHistory = res.data.map((h: any) => ({
+          const allHistory = res.data.map((h: any) => ({
             ...h,
             reject_months_display: h.reject_months
               ? h.reject_months.split(',').map((m: string) => monthNames[m.trim()] || m.trim()).join(', ')
               : ''
           }));
+          // แสดงเฉพาะรายการล่าสุด (1 รายการ)
+          this.rejectionHistory = allHistory.slice(0, 1);
+          this.rejectionHistoryFull = allHistory;
           this.showRejectionHistoryModal = true;
           this.cdr.detectChanges();
+
+          // หน่วยบริการ: เมื่อดูประวัติตีกลับจากช่องสถานะ ให้ mark notification เป็นอ่านแล้วด้วย
+          if (!this.isAdmin) {
+            this.markRelatedNotificationsRead(item);
+          }
         }
       },
       error: (err) => Swal.fire('ผิดพลาด', 'ไม่สามารถดึงข้อมูลได้', 'error')
     });
+  }
+
+  markRelatedNotificationsRead(item: any) {
+    // ดึง notifications ที่เกี่ยวข้องกับตัวชี้วัดนี้แล้ว mark as read
+    this.authService.getNotifications().subscribe({
+      next: (res) => {
+        if (res.success) {
+          const unreadIds = res.data
+            .filter((n: any) => !n.is_read && n.type === 'reject' &&
+              n.indicator_id === item.indicator_id &&
+              n.year_bh === item.year_bh)
+            .map((n: any) => n.id);
+          if (unreadIds.length > 0) {
+            this.authService.markNotificationsRead({ ids: unreadIds }).subscribe({
+              next: () => {
+                this.authService.refreshUnreadCount();
+                // โหลดข้อมูลใหม่เพื่ออัปเดตสถานะ (Rejected → Resubmit)
+                this.loadKpiData();
+              }
+            });
+          }
+        }
+      }
+    });
+  }
+
+  goToNotificationsReject() {
+    this.showRejectionHistoryModal = false;
+    this.router.navigate(['/notifications'], { queryParams: { filter: 'reject' } });
   }
 
   openReplyModal(item: any) {

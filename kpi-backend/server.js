@@ -177,16 +177,30 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         let whereClause = '';
         let params = [];
 
-        if (user && user.role !== 'admin' && user.role !== 'super_admin') {
-            if (user.hospcode === '00018' && user.deptId) {
+        // super_admin: เห็นทั้งหมด (ไม่มี filter)
+        // admin: เห็นทุกหน่วยบริการ(hospcode) แต่เฉพาะหน่วยงาน(dept_id)ตัวเอง
+        // user: เห็นเฉพาะหน่วยบริการ(hospcode) และหน่วยงาน(dept_id)ตัวเอง
+        if (user.role === 'super_admin') {
+            // ไม่มี filter - เห็นทั้งหมด
+        } else if (user.role === 'admin') {
+            // admin เห็นทุก hospcode แต่เฉพาะหน่วยงานตัวเอง
+            if (user.deptId !== null && user.deptId !== undefined) {
                 whereClause = 'WHERE i.dept_id = ?';
                 params.push(user.deptId);
-            } else if (user.hospcode) {
-                whereClause = 'WHERE r.hospcode = ?';
+            }
+        } else {
+            // user: filter ทั้ง hospcode และ dept_id
+            const conditions = [];
+            if (user.hospcode) {
+                conditions.push('r.hospcode = ?');
                 params.push(user.hospcode);
-            } else if (user.deptId) {
-                whereClause = 'WHERE i.dept_id = ?';
+            }
+            if (user.deptId !== null && user.deptId !== undefined) {
+                conditions.push('i.dept_id = ?');
                 params.push(user.deptId);
+            }
+            if (conditions.length > 0) {
+                whereClause = 'WHERE ' + conditions.join(' AND ');
             }
         }
 
@@ -253,11 +267,15 @@ apiRouter.post('/update-kpi', async (req, res) => {
     if (req.body && req.body.updates && Array.isArray(req.body.updates)) {
         updates = req.body.updates;
     }
-    const targetHospcode = req.body.targetHospcode; 
-    
+    const targetHospcode = req.body.targetHospcode;
+    // mode: 'setup_overwrite' = KPI-Setup เพิ่มทั้งหมด (เขียนทับ, บันทึก 0 ได้)
+    //        'setup_insert_new' = KPI-Setup เพิ่มเฉพาะที่ยังไม่มี (บันทึก 0 ได้)
+    //        undefined/default = Dashboard ปกติ (ข้าม row ที่ค่า 0 ทั้งหมด)
+    const saveMode = req.body.mode || 'default';
+
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-    
+
     if (!token) return res.status(401).json({ success: false, message: 'กรุณาเข้าสู่ระบบ' });
 
     let user;
@@ -290,16 +308,171 @@ apiRouter.post('/update-kpi', async (req, res) => {
             }
         }
 
+        const months = [
+            { col: 'oct', val: 10 }, { col: 'nov', val: 11 }, { col: 'dece', val: 12 },
+            { col: 'jan', val: 1 }, { col: 'feb', val: 2 }, { col: 'mar', val: 3 },
+            { col: 'apr', val: 4 }, { col: 'may', val: 5 }, { col: 'jun', val: 6 },
+            { col: 'jul', val: 7 }, { col: 'aug', val: 8 }, { col: 'sep', val: 9 }
+        ];
+
+        // Batch: ตรวจสอบล็อคทั้งหมดในคราวเดียว
+        const uniqueKeys = [...new Set(updates.map(row => {
+            const hc = ((user.role === 'admin' || user.role === 'super_admin') && row.hospcode) ? row.hospcode : hospcodeToSave;
+            return `${row.indicator_id}_${row.year_bh}_${hc}`;
+        }))];
+        for (const key of uniqueKeys) {
+            const [indId, ybh, hc] = key.split('_');
+            const [lockedRows] = await connection.query(
+                'SELECT COUNT(*) as cnt FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? AND is_locked = 1',
+                [indId, ybh, hc]
+            );
+            if (lockedRows[0].cnt > 0) {
+                throw new Error(`ไม่สามารถแก้ไขได้ ข้อมูลตัวชี้วัด ID ${indId} ถูกล็อคอยู่`);
+            }
+        }
+
+        // --- Mode: setup_insert_new → เพิ่มเฉพาะที่ยังไม่มี (ข้ามตัวที่มีอยู่แล้ว) ---
+        if (saveMode === 'setup_insert_new') {
+            // ตรวจสอบว่า indicator ไหนมีข้อมูลอยู่แล้ว
+            const existingKeys = new Set();
+            for (const key of uniqueKeys) {
+                const [indId, ybh, hc] = key.split('_');
+                const [existRows] = await connection.query(
+                    'SELECT COUNT(*) as cnt FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?',
+                    [indId, ybh, hc]
+                );
+                if (existRows[0].cnt > 0) {
+                    existingKeys.add(key);
+                }
+            }
+
+            // กรองเฉพาะ indicator ที่ยังไม่มีข้อมูล
+            const newUpdates = updates.filter(row => {
+                const hc = ((user.role === 'admin' || user.role === 'super_admin') && row.hospcode) ? row.hospcode : hospcodeToSave;
+                const key = `${row.indicator_id}_${row.year_bh}_${hc}`;
+                return !existingKeys.has(key);
+            });
+
+            if (newUpdates.length === 0) {
+                await connection.commit();
+                return res.json({ success: true, message: 'ไม่มีตัวชี้วัดใหม่ที่ต้องเพิ่ม (ทั้งหมดมีอยู่แล้ว)', skipped: updates.length });
+            }
+
+            // INSERT เฉพาะ indicator ใหม่ (รวม 0 ด้วย)
+            const insertValues = [];
+            const insertParams = [];
+            for (const row of newUpdates) {
+                const { indicator_id, year_bh } = row;
+                const rowHospcode = ((user.role === 'admin' || user.role === 'super_admin') && row.hospcode) ? row.hospcode : hospcodeToSave;
+
+                for (const m of months) {
+                    const rawActual = row[m.col];
+                    const actualValue = (rawActual !== undefined && rawActual !== null && rawActual !== '') ? Number(rawActual) : 0;
+                    let targetValue = 0;
+                    if (m.val === 10) {
+                        const rawTarget = row.target_value;
+                        targetValue = (rawTarget !== undefined && rawTarget !== null && rawTarget !== '') ? Number(rawTarget) : 0;
+                    }
+                    insertValues.push('(?, ?, ?, ?, ?, ?, ?, ?, 0)');
+                    insertParams.push(indicator_id, year_bh, m.val, actualValue, targetValue, user.userId, 'Pending', rowHospcode);
+                }
+            }
+
+            if (insertValues.length > 0) {
+                await connection.query(
+                    `INSERT INTO kpi_results (indicator_id, year_bh, month_bh, actual_value, target_value, user_id, status, hospcode, is_locked)
+                     VALUES ${insertValues.join(', ')}`,
+                    insertParams
+                );
+            }
+
+            await connection.query(
+                'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+                [user.userId, user.deptId || 0, 'INSERT', 'kpi_results',
+                 JSON.stringify({ message: `KPI-Setup: เพิ่มเฉพาะที่ยังไม่มี ${newUpdates.length} ตัวชี้วัด (ข้าม ${updates.length - newUpdates.length} ที่มีอยู่แล้ว)` }),
+                 req.ip]
+            );
+
+            await connection.commit();
+            return res.json({
+                success: true,
+                message: `เพิ่มตัวชี้วัดใหม่ ${newUpdates.length} รายการ (ข้าม ${updates.length - newUpdates.length} รายการที่มีอยู่แล้ว)`,
+                inserted: newUpdates.length,
+                skipped: updates.length - newUpdates.length
+            });
+        }
+
+        // --- Mode: setup_overwrite → เพิ่มทั้งหมด เขียนทับ (บันทึก 0 ได้) ---
+        if (saveMode === 'setup_overwrite') {
+            // DELETE ข้อมูลเก่าทั้งหมด
+            for (const key of uniqueKeys) {
+                const [indId, ybh, hc] = key.split('_');
+                await connection.query(
+                    'DELETE FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?',
+                    [indId, ybh, hc]
+                );
+            }
+
+            // INSERT ทั้งหมด (รวม 0 ด้วย)
+            const insertValues = [];
+            const insertParams = [];
+            for (const row of updates) {
+                const { indicator_id, year_bh } = row;
+                const rowHospcode = ((user.role === 'admin' || user.role === 'super_admin') && row.hospcode) ? row.hospcode : hospcodeToSave;
+
+                for (const m of months) {
+                    const rawActual = row[m.col];
+                    const actualValue = (rawActual !== undefined && rawActual !== null && rawActual !== '') ? Number(rawActual) : 0;
+                    let targetValue = 0;
+                    if (m.val === 10) {
+                        const rawTarget = row.target_value;
+                        targetValue = (rawTarget !== undefined && rawTarget !== null && rawTarget !== '') ? Number(rawTarget) : 0;
+                    }
+                    insertValues.push('(?, ?, ?, ?, ?, ?, ?, ?, 0)');
+                    insertParams.push(indicator_id, year_bh, m.val, actualValue, targetValue, user.userId, 'Pending', rowHospcode);
+                }
+            }
+
+            if (insertValues.length > 0) {
+                await connection.query(
+                    `INSERT INTO kpi_results (indicator_id, year_bh, month_bh, actual_value, target_value, user_id, status, hospcode, is_locked)
+                     VALUES ${insertValues.join(', ')}`,
+                    insertParams
+                );
+            }
+
+            await connection.query(
+                'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+                [user.userId, user.deptId || 0, 'INSERT', 'kpi_results',
+                 JSON.stringify({ message: `KPI-Setup: เขียนทับทั้งหมด ${updates.length} ตัวชี้วัด` }),
+                 req.ip]
+            );
+
+            await connection.commit();
+            return res.json({
+                success: true,
+                message: `บันทึกตัวชี้วัดทั้งหมด ${updates.length} รายการเรียบร้อยแล้ว (เขียนทับ)`,
+                inserted: updates.length
+            });
+        }
+
+        // --- Mode: default → Dashboard ปกติ (DELETE + INSERT เฉพาะ row ที่มีค่า) ---
+        // Batch DELETE: ลบข้อมูลเก่าทั้งหมดของแต่ละ indicator/year/hospcode
+        for (const key of uniqueKeys) {
+            const [indId, ybh, hc] = key.split('_');
+            await connection.query(
+                'DELETE FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?',
+                [indId, ybh, hc]
+            );
+        }
+
+        // Batch INSERT: รวมข้อมูลทั้งหมดแล้ว INSERT ทีเดียว (ข้าม row ที่ค่า 0 ทั้งหมด)
+        const insertValues = [];
+        const insertParams = [];
         for (const row of updates) {
             const { indicator_id, year_bh } = row;
-            // ใช้ hospcode จาก row ถ้ามี (admin แก้ไขข้อมูลของ hospcode อื่น) หรือ fallback เป็น hospcodeToSave
             const rowHospcode = ((user.role === 'admin' || user.role === 'super_admin') && row.hospcode) ? row.hospcode : hospcodeToSave;
-            const months = [
-                { col: 'oct', val: 10 }, { col: 'nov', val: 11 }, { col: 'dece', val: 12 },
-                { col: 'jan', val: 1 }, { col: 'feb', val: 2 }, { col: 'mar', val: 3 },
-                { col: 'apr', val: 4 }, { col: 'may', val: 5 }, { col: 'jun', val: 6 },
-                { col: 'jul', val: 7 }, { col: 'aug', val: 8 }, { col: 'sep', val: 9 }
-            ];
+            const rowStatus = row.preserve_status || 'Pending';
 
             for (const m of months) {
                 const rawActual = row[m.col];
@@ -310,24 +483,24 @@ apiRouter.post('/update-kpi', async (req, res) => {
                     targetValue = (rawTarget !== undefined && rawTarget !== null && rawTarget !== '') ? Number(rawTarget) : 0;
                 }
 
-                await connection.query(
-                    'DELETE FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND month_bh = ? AND hospcode = ?',
-                    [indicator_id, year_bh, m.val, rowHospcode]
-                );
-
                 if (actualValue > 0 || targetValue > 0) {
-                    await connection.query(
-                        `INSERT INTO kpi_results (indicator_id, year_bh, month_bh, actual_value, target_value, user_id, status, hospcode)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-                        [indicator_id, year_bh, m.val, actualValue, targetValue, user.userId, 'Pending', rowHospcode]
-                    );
+                    insertValues.push('(?, ?, ?, ?, ?, ?, ?, ?, 0)');
+                    insertParams.push(indicator_id, year_bh, m.val, actualValue, targetValue, user.userId, rowStatus, rowHospcode);
                 }
             }
         }
 
+        if (insertValues.length > 0) {
+            await connection.query(
+                `INSERT INTO kpi_results (indicator_id, year_bh, month_bh, actual_value, target_value, user_id, status, hospcode, is_locked)
+                 VALUES ${insertValues.join(', ')}`,
+                insertParams
+            );
+        }
+
         await connection.query(
             'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
-            [user.userId, user.deptId, 'UPDATE', 'kpi_results', JSON.stringify({ message: `บันทึก KPI ${updates.length} รายการ` }), req.ip]
+            [user.userId, user.deptId || 0, 'UPDATE', 'kpi_results', JSON.stringify({ message: `บันทึก KPI ${updates.length} รายการ` }), req.ip]
         );
 
         await connection.commit();
@@ -335,7 +508,7 @@ apiRouter.post('/update-kpi', async (req, res) => {
     } catch (error) {
         await connection.rollback();
         console.error('Update Error:', error);
-        res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในการบันทึก' });
+        res.status(500).json({ success: false, message: error.message || 'เกิดข้อผิดพลาดในการบันทึก' });
     } finally {
         connection.release();
     }
@@ -344,10 +517,11 @@ apiRouter.post('/update-kpi', async (req, res) => {
 apiRouter.get('/kpi-template', async (req, res) => {
     try {
         const sql = `
-            SELECT 
+            SELECT
                 if (mi.main_indicator_name is NULL,"ยังไม่กำหนด",mi.main_indicator_name) main_indicator_name,
                 i.kpi_indicators_name,
                 i.id AS indicator_id,
+                i.dept_id,
                 d.dept_name
             FROM kpi_indicators i
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
@@ -361,6 +535,47 @@ apiRouter.get('/kpi-template', async (req, res) => {
     }
 });
 
+// ตรวจสอบข้อมูล KPI ที่มีอยู่แล้วสำหรับ KPI-Setup
+apiRouter.get('/kpi-setup-check', authenticateToken, async (req, res) => {
+    try {
+        const { hospcode, year_bh, dept_id } = req.query;
+        if (!hospcode || !year_bh) {
+            return res.status(400).json({ success: false, message: 'กรุณาระบุ hospcode และ year_bh' });
+        }
+
+        let deptFilter = '';
+        let params = [hospcode, year_bh];
+        if (dept_id) {
+            deptFilter = 'AND i.dept_id = ?';
+            params.push(dept_id);
+        }
+
+        // นับจำนวนตัวชี้วัดที่มีข้อมูลอยู่แล้ว + ตัวชี้วัดที่มีคะแนนจริง
+        const [rows] = await db.query(`
+            SELECT
+                COUNT(DISTINCT r.indicator_id) AS total_existing,
+                COUNT(DISTINCT CASE WHEN r.actual_value > 0 THEN r.indicator_id END) AS scored_indicators,
+                SUM(r.actual_value) AS total_score
+            FROM kpi_results r
+            LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
+            WHERE r.hospcode = ? AND r.year_bh = ? ${deptFilter}
+        `, params);
+
+        const data = rows[0] || { total_existing: 0, scored_indicators: 0, total_score: 0 };
+        res.json({
+            success: true,
+            data: {
+                totalExisting: Number(data.total_existing) || 0,
+                scoredIndicators: Number(data.scored_indicators) || 0,
+                totalScore: Number(data.total_score) || 0
+            }
+        });
+    } catch (error) {
+        console.error('KPI Setup Check Error:', error);
+        res.status(500).json({ success: false, message: 'ไม่สามารถตรวจสอบข้อมูลได้' });
+    }
+});
+
 apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
     try {
         const user = req.user;
@@ -369,15 +584,22 @@ apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
         let whereClause = '';
         let filterParams = [];
 
-        if (user && user.role !== 'admin') {
-            if (user.hospcode === '00018' && user.deptId) {
+        // super_admin: เห็นทั้งหมด, admin: ทุก hospcode เฉพาะหน่วยงาน, user: เฉพาะหน่วยบริการ+หน่วยงาน
+        if (user.role === 'super_admin') {
+            // ไม่มี filter
+        } else if (user.role === 'admin') {
+            // admin เห็นทุก hospcode แต่เฉพาะหน่วยงานตัวเอง
+            if (user.deptId !== null && user.deptId !== undefined) {
                 whereClause = 'AND i.dept_id = ?';
                 filterParams.push(user.deptId);
-            } else if (user.hospcode) {
-                whereClause = 'AND r.hospcode = ?';
+            }
+        } else {
+            if (user.hospcode) {
+                whereClause += ' AND r.hospcode = ?';
                 filterParams.push(user.hospcode);
-            } else if (user.deptId) {
-                whereClause = 'AND i.dept_id = ?';
+            }
+            if (user.deptId !== null && user.deptId !== undefined) {
+                whereClause += ' AND i.dept_id = ?';
                 filterParams.push(user.deptId);
             }
         }
@@ -955,9 +1177,10 @@ apiRouter.get('/notifications/pending-kpi', authenticateToken, isAdmin, async (r
         let whereClause = "WHERE r.status = 'Pending' AND r.year_bh = ?";
         let params = [currentFY];
 
-        if (user.role !== 'super_admin') {
-            whereClause += " AND r.hospcode = ?";
-            params.push(user.hospcode);
+        // admin: เฉพาะหน่วยงานตัวเอง (ทุก hospcode)
+        if (user.role !== 'super_admin' && user.deptId !== null && user.deptId !== undefined) {
+            whereClause += " AND i.dept_id = ?";
+            params.push(user.deptId);
         }
 
         const [rows] = await db.query(
@@ -1024,13 +1247,22 @@ apiRouter.get('/report/by-indicator', authenticateToken, async (req, res) => {
         let whereClauses = [];
         let params = [];
 
-        if (user.role !== 'admin' && user.role !== 'super_admin') {
-            if (user.hospcode === '00018' && user.deptId) {
+        // super_admin: เห็นทั้งหมด, admin: ทุก hospcode เฉพาะหน่วยงาน, user: เฉพาะ hospcode+dept
+        if (user.role === 'super_admin') {
+            // ไม่มี filter
+        } else if (user.role === 'admin') {
+            if (user.deptId !== null && user.deptId !== undefined) {
                 whereClauses.push('i.dept_id = ?');
                 params.push(user.deptId);
-            } else if (user.hospcode) {
+            }
+        } else {
+            if (user.hospcode) {
                 whereClauses.push('r.hospcode = ?');
                 params.push(user.hospcode);
+            }
+            if (user.deptId !== null && user.deptId !== undefined) {
+                whereClauses.push('i.dept_id = ?');
+                params.push(user.deptId);
             }
         }
         if (year_bh) { whereClauses.push('r.year_bh = ?'); params.push(year_bh); }
@@ -1085,10 +1317,22 @@ apiRouter.get('/report/by-hospital', authenticateToken, async (req, res) => {
         let whereClauses = [];
         let params = [];
 
-        if (user.role !== 'admin' && user.role !== 'super_admin') {
+        // super_admin: เห็นทั้งหมด, admin: ทุก hospcode เฉพาะหน่วยงาน, user: เฉพาะ hospcode+dept
+        if (user.role === 'super_admin') {
+            // ไม่มี filter
+        } else if (user.role === 'admin') {
+            if (user.deptId !== null && user.deptId !== undefined) {
+                whereClauses.push('i.dept_id = ?');
+                params.push(user.deptId);
+            }
+        } else {
             if (user.hospcode) {
                 whereClauses.push('r.hospcode = ?');
                 params.push(user.hospcode);
+            }
+            if (user.deptId !== null && user.deptId !== undefined) {
+                whereClauses.push('i.dept_id = ?');
+                params.push(user.deptId);
             }
         }
         if (year_bh) { whereClauses.push('r.year_bh = ?'); params.push(year_bh); }
@@ -1135,10 +1379,22 @@ apiRouter.get('/report/by-district', authenticateToken, async (req, res) => {
         let whereClauses = [];
         let params = [];
 
-        if (user.role !== 'admin' && user.role !== 'super_admin') {
+        // super_admin: เห็นทั้งหมด, admin: ทุก hospcode เฉพาะหน่วยงาน, user: เฉพาะ hospcode+dept
+        if (user.role === 'super_admin') {
+            // ไม่มี filter
+        } else if (user.role === 'admin') {
+            if (user.deptId !== null && user.deptId !== undefined) {
+                whereClauses.push('i.dept_id = ?');
+                params.push(user.deptId);
+            }
+        } else {
             if (user.hospcode) {
                 whereClauses.push('r.hospcode = ?');
                 params.push(user.hospcode);
+            }
+            if (user.deptId !== null && user.deptId !== undefined) {
+                whereClauses.push('i.dept_id = ?');
+                params.push(user.deptId);
             }
         }
         if (year_bh) { whereClauses.push('r.year_bh = ?'); params.push(year_bh); }
@@ -1181,13 +1437,22 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         let whereClauses = [];
         let params = [];
 
-        if (user.role !== 'admin' && user.role !== 'super_admin') {
-            if (user.hospcode === '00018' && user.deptId) {
+        // super_admin: เห็นทั้งหมด, admin: ทุก hospcode เฉพาะหน่วยงาน, user: เฉพาะ hospcode+dept
+        if (user.role === 'super_admin') {
+            // ไม่มี filter
+        } else if (user.role === 'admin') {
+            if (user.deptId !== null && user.deptId !== undefined) {
                 whereClauses.push('i.dept_id = ?');
                 params.push(user.deptId);
-            } else if (user.hospcode) {
+            }
+        } else {
+            if (user.hospcode) {
                 whereClauses.push('r.hospcode = ?');
                 params.push(user.hospcode);
+            }
+            if (user.deptId !== null && user.deptId !== undefined) {
+                whereClauses.push('i.dept_id = ?');
+                params.push(user.deptId);
             }
         }
         if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
@@ -1357,7 +1622,11 @@ apiRouter.get('/notifications', authenticateToken, async (req, res) => {
     const user = req.user;
     try {
         const [rows] = await db.query(
-            `SELECT n.*, u.firstname AS created_by_name, u.lastname AS created_by_lastname
+            `SELECT n.*, u.firstname AS created_by_name, u.lastname AS created_by_lastname,
+                    (SELECT COUNT(*) FROM kpi_rejection_comments rc
+                     WHERE rc.indicator_id = n.indicator_id AND rc.year_bh = n.year_bh
+                     AND rc.hospcode = n.hospcode AND rc.type = 'reply'
+                     AND rc.created_at > n.created_at) AS has_reply
              FROM notifications n
              LEFT JOIN users u ON n.created_by = u.id
              WHERE n.user_id = ? OR n.hospcode = ? OR (n.user_id IS NULL AND n.hospcode IS NULL)

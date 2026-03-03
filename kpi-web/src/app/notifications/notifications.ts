@@ -1,6 +1,6 @@
 import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router, RouterModule } from '@angular/router';
+import { Router, RouterModule, ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth';
 import Swal from 'sweetalert2';
@@ -15,6 +15,7 @@ import Swal from 'sweetalert2';
 export class NotificationsComponent implements OnInit {
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
+  private route = inject(ActivatedRoute);
 
   notifications: any[] = [];
   filteredNotifications: any[] = [];
@@ -23,8 +24,17 @@ export class NotificationsComponent implements OnInit {
   approveCount: number = 0;
   rejectCount: number = 0;
   unreadNotifCount: number = 0;
+  isAdmin: boolean = false;
 
   ngOnInit() {
+    const role = this.authService.getUserRole();
+    this.isAdmin = ['admin', 'super_admin'].includes(role);
+    // อ่าน query parameter สำหรับ filter (เช่น ?filter=reject)
+    this.route.queryParams.subscribe(params => {
+      if (params['filter']) {
+        this.activeFilter = params['filter'];
+      }
+    });
     this.loadNotifications();
     // Subscribe shared unread count
     this.authService.unreadCount$.subscribe(count => {
@@ -91,6 +101,107 @@ export class NotificationsComponent implements OnInit {
         this.applyFilter();
         this.cdr.detectChanges();
         Swal.fire('สำเร็จ', 'อ่านการแจ้งเตือนทั้งหมดแล้ว', 'success');
+      }
+    });
+  }
+
+  replyNotification(notif: any) {
+    // โหลดเหตุผลตีกลับล่าสุด
+    this.authService.getRejectionComments(notif.indicator_id, notif.year_bh, notif.hospcode).subscribe({
+      next: (res) => {
+        const monthNames: any = {
+          oct: 'ต.ค.', nov: 'พ.ย.', dece: 'ธ.ค.', jan: 'ม.ค.', feb: 'ก.พ.', mar: 'มี.ค.',
+          apr: 'เม.ย.', may: 'พ.ค.', jun: 'มิ.ย.', jul: 'ก.ค.', aug: 'ส.ค.', sep: 'ก.ย.'
+        };
+        let rejectionInfo = '';
+        if (res.success && res.data.length > 0) {
+          const latest = res.data.find((h: any) => h.type === 'reject') || res.data[0];
+          const monthsDisplay = latest.reject_months
+            ? latest.reject_months.split(',').map((m: string) => monthNames[m.trim()] || m.trim()).join(', ')
+            : '';
+          rejectionInfo = `<div class="bg-red-50 border border-red-200 rounded-lg p-3 mb-3 text-left">
+            <div class="text-xs font-bold text-red-600 mb-1"><i class="fas fa-exclamation-triangle mr-1"></i>เหตุผลที่ถูกตีกลับ:</div>
+            <p class="text-sm text-gray-700">${latest.comment}</p>
+            ${monthsDisplay ? `<div class="mt-1"><span class="text-xs font-bold text-red-500">เดือนที่ต้องแก้ไข: </span><span class="text-xs text-gray-600">${monthsDisplay}</span></div>` : ''}
+            <div class="text-xs text-gray-400 mt-1">ตีกลับโดย: ${latest.firstname || ''} ${latest.lastname || ''}</div>
+          </div>`;
+        }
+
+        Swal.fire({
+          title: 'ตอบกลับการตีกลับ',
+          html: `<div class="text-left">
+            <p class="text-sm text-gray-600 mb-3">${notif.title}</p>
+            ${rejectionInfo}
+            <label class="block text-sm font-medium text-gray-700 mb-1">ข้อความตอบกลับ <span class="text-gray-400 text-xs">(ไม่บังคับ)</span></label>
+            <textarea id="swal-reply-msg" rows="3" placeholder="ระบุรายละเอียดการแก้ไข... (หากไม่ระบุ ระบบจะใช้ข้อความเริ่มต้น)"
+              style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;"></textarea>
+          </div>`,
+          showCancelButton: true,
+          confirmButtonColor: '#3b82f6',
+          confirmButtonText: '<i class="fas fa-paper-plane mr-1"></i>ส่งตอบกลับ',
+          cancelButtonText: 'ยกเลิก',
+          width: 500,
+          preConfirm: () => {
+            return (document.getElementById('swal-reply-msg') as HTMLTextAreaElement)?.value || '';
+          }
+        }).then((result) => {
+          if (result.isConfirmed) {
+            Swal.fire({ title: 'กำลังส่งตอบกลับ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            const data = {
+              indicator_id: notif.indicator_id,
+              year_bh: notif.year_bh,
+              hospcode: notif.hospcode,
+              message: result.value
+            };
+            this.authService.replyKpi(data).subscribe({
+              next: (res2: any) => {
+                if (res2.success) {
+                  Swal.fire('สำเร็จ', 'ส่งตอบกลับเรียบร้อยแล้ว สถานะเปลี่ยนเป็น "รอตรวจสอบ"', 'success');
+                  this.loadNotifications();
+                }
+              },
+              error: () => Swal.fire('ผิดพลาด', 'ไม่สามารถส่งตอบกลับได้', 'error')
+            });
+          }
+        });
+      },
+      error: () => {
+        // แม้โหลดเหตุผลไม่ได้ก็ยังให้ตอบกลับได้
+        Swal.fire({
+          title: 'ตอบกลับการตีกลับ',
+          html: `<div class="text-left">
+            <p class="text-sm text-gray-600 mb-3">${notif.title}</p>
+            <label class="block text-sm font-medium text-gray-700 mb-1">ข้อความตอบกลับ <span class="text-gray-400 text-xs">(ไม่บังคับ)</span></label>
+            <textarea id="swal-reply-msg" rows="3" placeholder="ระบุรายละเอียดการแก้ไข..."
+              style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;"></textarea>
+          </div>`,
+          showCancelButton: true,
+          confirmButtonColor: '#3b82f6',
+          confirmButtonText: '<i class="fas fa-paper-plane mr-1"></i>ส่งตอบกลับ',
+          cancelButtonText: 'ยกเลิก',
+          preConfirm: () => {
+            return (document.getElementById('swal-reply-msg') as HTMLTextAreaElement)?.value || '';
+          }
+        }).then((result) => {
+          if (result.isConfirmed) {
+            Swal.fire({ title: 'กำลังส่งตอบกลับ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            const data = {
+              indicator_id: notif.indicator_id,
+              year_bh: notif.year_bh,
+              hospcode: notif.hospcode,
+              message: result.value
+            };
+            this.authService.replyKpi(data).subscribe({
+              next: (res2: any) => {
+                if (res2.success) {
+                  Swal.fire('สำเร็จ', 'ส่งตอบกลับเรียบร้อยแล้ว', 'success');
+                  this.loadNotifications();
+                }
+              },
+              error: () => Swal.fire('ผิดพลาด', 'ไม่สามารถส่งตอบกลับได้', 'error')
+            });
+          }
+        });
       }
     });
   }

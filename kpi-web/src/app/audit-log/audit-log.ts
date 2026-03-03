@@ -19,6 +19,15 @@ export class AuditLogComponent implements OnInit {
   logs: any[] = [];
   filteredLogs: any[] = [];
   searchTerm: string = '';
+  selectedAction: string = '';
+  actionTypes = [
+    { value: 'INSERT', label: 'เพิ่มข้อมูล' },
+    { value: 'UPDATE', label: 'แก้ไขข้อมูล' },
+    { value: 'DELETE', label: 'ลบข้อมูล' },
+    { value: 'APPROVE', label: 'อนุมัติ' },
+    { value: 'REJECT', label: 'ตีกลับ' },
+    { value: 'REPLY', label: 'ตอบกลับ' }
+  ];
 
   // Pagination
   currentPage: number = 1;
@@ -136,7 +145,12 @@ export class AuditLogComponent implements OnInit {
 
   applyFilters() {
     this.filteredLogs = this.logs.filter(log => {
+      // กรองตามประเภทการกระทำ
+      if (this.selectedAction && log.action_type !== this.selectedAction) return false;
+
       const search = this.searchTerm.toLowerCase();
+      if (!search) return true;
+
       const username = log.username ? log.username.toLowerCase() : '';
       const action = log.action_type ? log.action_type.toLowerCase() : '';
       const table = log.table_name ? log.table_name.toLowerCase() : '';
@@ -163,5 +177,17 @@ export class AuditLogComponent implements OnInit {
     if (page >= 1 && page <= this.totalPages) {
       this.currentPage = page;
     }
+  }
+
+  getActionLabel(type: string): string {
+    const labels: any = {
+      INSERT: 'เพิ่มข้อมูล',
+      UPDATE: 'แก้ไขข้อมูล',
+      DELETE: 'ลบข้อมูล',
+      APPROVE: 'อนุมัติ',
+      REJECT: 'ตีกลับ',
+      REPLY: 'ตอบกลับ'
+    };
+    return labels[type] || type;
   }
 }
