@@ -364,13 +364,36 @@ export class DashboardComponent implements OnInit {
       jul: item.jul, aug: item.aug, sep: item.sep
     }));
 
+    // ตรวจสอบว่ามีรายการที่สถานะ "รอตอบกลับ" (Resubmit) หรือไม่
+    const resubmitItems = changedItems.filter(item =>
+      item.indicator_status === 'resubmit' || item.indicator_status === 'Resubmit'
+    );
+    const hasResubmitItems = resubmitItems.length > 0 && !this.isAdmin;
+
+    // สร้าง HTML สำหรับส่วนตอบกลับ (ถ้ามีรายการ Resubmit)
+    const replySection = hasResubmitItems
+      ? `<div class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+           <div class="flex items-center gap-2 mb-2">
+             <input type="checkbox" id="swal-reply-check" checked style="accent-color:#3b82f6;width:16px;height:16px;">
+             <label for="swal-reply-check" class="font-bold text-blue-700 text-sm cursor-pointer">
+               <i class="fas fa-reply mr-1"></i>นำข้อมูลที่แก้ไขไปตอบกลับด้วย (${resubmitItems.length} รายการ)
+             </label>
+           </div>
+           <div id="swal-reply-area">
+             <textarea id="swal-reply-message" rows="3" placeholder="ข้อความตอบกลับ (ไม่บังคับ)..."
+               style="width:100%;padding:8px;border:1px solid #93c5fd;border-radius:8px;font-size:13px;margin-top:4px;"></textarea>
+           </div>
+         </div>`
+      : '';
+
     Swal.fire({
       title: 'ยืนยันการบันทึก',
       html: `<div class="text-left text-sm">
               <p class="mb-2 font-bold text-gray-700">พบข้อมูลที่เปลี่ยนแปลง ${cleanData.length} รายการ:</p>
-              <div class="max-h-60 overflow-y-auto border rounded-lg p-3 bg-gray-50 space-y-2">
+              <div class="max-h-48 overflow-y-auto border rounded-lg p-3 bg-gray-50 space-y-2">
                 ${changeDetails.join('<hr class="my-2 border-gray-200">')}
               </div>
+              ${replySection}
               <p class="mt-3 text-gray-600">ต้องการบันทึกใช่หรือไม่?</p>
              </div>`,
       icon: 'question',
@@ -378,10 +401,97 @@ export class DashboardComponent implements OnInit {
       confirmButtonColor: '#10b981',
       confirmButtonText: 'บันทึก',
       cancelButtonText: 'ยกเลิก',
-      width: 600
+      width: 600,
+      didOpen: () => {
+        // Toggle reply area visibility based on checkbox
+        const checkbox = document.getElementById('swal-reply-check') as HTMLInputElement;
+        const replyArea = document.getElementById('swal-reply-area');
+        if (checkbox && replyArea) {
+          checkbox.addEventListener('change', () => {
+            replyArea.style.display = checkbox.checked ? 'block' : 'none';
+          });
+        }
+      },
+      preConfirm: () => {
+        if (hasResubmitItems) {
+          const checkbox = document.getElementById('swal-reply-check') as HTMLInputElement;
+          const replyMsg = (document.getElementById('swal-reply-message') as HTMLTextAreaElement)?.value || '';
+          return { wantReply: checkbox?.checked || false, replyMessage: replyMsg.trim() };
+        }
+        return { wantReply: false, replyMessage: '' };
+      }
     }).then((result) => {
       if (result.isConfirmed) {
-        this.saveDataToBackend(cleanData, false);
+        const replyInfo = result.value;
+        if (replyInfo && replyInfo.wantReply) {
+          // บันทึกข้อมูล + ตอบกลับ
+          this.saveDataWithReply(cleanData, resubmitItems, replyInfo.replyMessage);
+        } else {
+          // บันทึกข้อมูลอย่างเดียว
+          this.saveDataToBackend(cleanData, false);
+        }
+      }
+    });
+  }
+
+  saveDataWithReply(data: any[], resubmitItems: any[], replyMessage: string) {
+    Swal.fire({
+      title: 'กำลังบันทึกข้อมูลและตอบกลับ...',
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading()
+    });
+
+    // บันทึกข้อมูลก่อน
+    this.authService.updateKpiResults(data).subscribe({
+      next: (res) => {
+        // หลังบันทึกสำเร็จ → ส่งตอบกลับทีละรายการ
+        const replyMsg = replyMessage || 'แก้ไขข้อมูลตามที่แจ้งเรียบร้อยแล้ว';
+        const replyObservables = resubmitItems.map(item => {
+          const replyData = {
+            indicator_id: item.indicator_id,
+            year_bh: item.year_bh,
+            hospcode: item.hospcode,
+            message: replyMsg
+          };
+          return this.authService.replyKpi(replyData);
+        });
+
+        if (replyObservables.length === 0) {
+          Swal.fire('สำเร็จ', 'บันทึกข้อมูลเรียบร้อยแล้ว', 'success');
+          this.isEditing = false;
+          this.loadKpiData();
+          this.loadDashboardStats();
+          return;
+        }
+
+        // ส่งตอบกลับทั้งหมด
+        let completed = 0;
+        let hasError = false;
+        for (const obs of replyObservables) {
+          obs.subscribe({
+            next: () => {
+              completed++;
+              if (completed === replyObservables.length && !hasError) {
+                Swal.fire('สำเร็จ', `บันทึกข้อมูลและตอบกลับเรียบร้อยแล้ว (${resubmitItems.length} รายการ)`, 'success');
+                this.isEditing = false;
+                this.loadKpiData();
+                this.loadDashboardStats();
+              }
+            },
+            error: (err: any) => {
+              hasError = true;
+              console.error('Reply error:', err);
+              Swal.fire('แจ้งเตือน', 'บันทึกข้อมูลสำเร็จ แต่การตอบกลับบางรายการผิดพลาด', 'warning');
+              this.isEditing = false;
+              this.loadKpiData();
+              this.loadDashboardStats();
+            }
+          });
+        }
+      },
+      error: (err) => {
+        Swal.fire('เกิดข้อผิดพลาด', 'ไม่สามารถบันทึกข้อมูลได้', 'error');
+        console.error(err);
       }
     });
   }
@@ -887,10 +997,6 @@ export class DashboardComponent implements OnInit {
   }
 
   confirmReply() {
-    if (!this.replyMessage.trim()) {
-      Swal.fire('แจ้งเตือน', 'กรุณาระบุข้อความตอบกลับ', 'warning');
-      return;
-    }
     const data = {
       indicator_id: this.replyingItem.indicator_id,
       year_bh: this.replyingItem.year_bh,

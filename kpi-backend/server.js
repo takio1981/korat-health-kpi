@@ -878,12 +878,14 @@ apiRouter.post('/approve-kpi', authenticateToken, isAdmin, async (req, res) => {
             let whereClause = 'indicator_id = ? AND year_bh = ?';
             let params = [item.indicator_id, item.year_bh];
 
-            if (user.role !== 'super_admin') {
-                whereClause += ' AND hospcode = ?';
-                params.push(user.hospcode);
-            } else if (item.hospcode) {
+            // ใช้ hospcode จาก request body (ของหน่วยบริการเป้าหมาย) ถ้ามี
+            // ถ้าไม่มีและไม่ใช่ super_admin ให้ใช้ hospcode ของ admin เอง
+            if (item.hospcode) {
                 whereClause += ' AND hospcode = ?';
                 params.push(item.hospcode);
+            } else if (user.role !== 'super_admin') {
+                whereClause += ' AND hospcode = ?';
+                params.push(user.hospcode);
             }
 
             await connection.query(
@@ -1457,9 +1459,12 @@ apiRouter.post('/reply-kpi', authenticateToken, async (req, res) => {
     const user = req.user;
     const { indicator_id, year_bh, hospcode, message } = req.body;
 
-    if (!indicator_id || !year_bh || !message || !message.trim()) {
+    if (!indicator_id || !year_bh) {
         return res.status(400).json({ success: false, message: 'กรุณาระบุข้อมูลให้ครบถ้วน' });
     }
+
+    // ถ้าไม่มีข้อความตอบกลับ ใช้ข้อความเริ่มต้น
+    const replyMessage = (message && message.trim()) ? message.trim() : 'แก้ไขข้อมูลตามที่แจ้งเรียบร้อยแล้ว';
 
     const targetHospcode = hospcode || user.hospcode;
     const connection = await db.getConnection();
@@ -1469,7 +1474,7 @@ apiRouter.post('/reply-kpi', authenticateToken, async (req, res) => {
         // บันทึกข้อความตอบกลับ
         await connection.query(
             'INSERT INTO kpi_rejection_comments (indicator_id, year_bh, hospcode, comment, type, replied_by) VALUES (?, ?, ?, ?, ?, ?)',
-            [indicator_id, year_bh, targetHospcode, message.trim(), 'reply', user.userId]
+            [indicator_id, year_bh, targetHospcode, replyMessage, 'reply', user.userId]
         );
 
         // เปลี่ยนสถานะกลับเป็น Pending เพื่อให้ admin ตรวจสอบใหม่
@@ -1507,7 +1512,7 @@ apiRouter.post('/reply-kpi', authenticateToken, async (req, res) => {
             await connection.query(
                 'INSERT INTO notifications (user_id, hospcode, type, title, message, indicator_id, year_bh, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
                 [adminId, targetHospcode, 'info', 'หน่วยบริการตอบกลับการตีกลับ',
-                 `${hosName} ตอบกลับตัวชี้วัด "${indName}" ปีงบ ${year_bh}: ${message.trim()}`,
+                 `${hosName} ตอบกลับตัวชี้วัด "${indName}" ปีงบ ${year_bh}: ${replyMessage}`,
                  indicator_id, year_bh, user.userId]
             );
         }
@@ -1515,7 +1520,7 @@ apiRouter.post('/reply-kpi', authenticateToken, async (req, res) => {
         // Log action
         await connection.query(
             'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
-            [user.userId, user.deptId, 'REPLY', 'kpi_results', JSON.stringify({ indicator_id, year_bh, hospcode: targetHospcode, message: message.trim() }), req.ip]
+            [user.userId, user.deptId, 'REPLY', 'kpi_results', JSON.stringify({ indicator_id, year_bh, hospcode: targetHospcode, message: replyMessage }), req.ip]
         );
 
         await connection.commit();
