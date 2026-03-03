@@ -41,9 +41,9 @@ export class KpiManageComponent implements OnInit {
 
   ngOnInit() {
     const role = this.authService.getUserRole();
-    this.isAdmin = role === 'admin' || role === 'super_admin';
+    this.isAdmin = role === 'admin_ssj' || role === 'super_admin';
     this.isSuperAdmin = role === 'super_admin';
-    if (!this.isAdmin) {
+    if (!this.isSuperAdmin) {
       this.router.navigate(['/dashboard']);
       return;
     }

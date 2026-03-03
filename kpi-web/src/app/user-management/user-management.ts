@@ -35,21 +35,23 @@ export class UserManagementComponent implements OnInit {
 
   isAdmin: boolean = false;
   isSuperAdmin: boolean = false;
+  loggedInUser: any = null;
 
   showModal: boolean = false;
   isEditMode: boolean = false;
   currentUser: any = { id: null, username: '', password: '', role: 'user', dept_id: '', firstname: '', lastname: '', hospcode: '', phone: '' };
 
+  // Password & validation
+  confirmPassword: string = '';
+  showPassword: boolean = false;
+  showConfirmPassword: boolean = false;
+
   ngOnInit() {
     const role = this.authService.getUserRole();
-    this.isAdmin = role === 'admin' || role === 'super_admin';
+    this.isAdmin = role === 'admin_ssj' || role === 'super_admin';
     this.isSuperAdmin = role === 'super_admin';
+    this.loggedInUser = this.authService.getUser();
 
-    if (!this.isAdmin) {
-      Swal.fire('Access Denied', 'คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'error');
-      this.router.navigate(['/dashboard']);
-      return;
-    }
     this.loadUsers();
     this.loadDepartments();
     this.loadHospitals();
@@ -129,6 +131,9 @@ export class UserManagementComponent implements OnInit {
 
   openModal(user: any = null) {
     this.showModal = true;
+    this.confirmPassword = '';
+    this.showPassword = false;
+    this.showConfirmPassword = false;
     if (user) {
       this.isEditMode = true;
       this.currentUser = { ...user, password: '' };
@@ -143,7 +148,11 @@ export class UserManagementComponent implements OnInit {
       }
     } else {
       this.isEditMode = false;
-      this.currentUser = { id: null, username: '', password: '', role: 'user', dept_id: '', firstname: '', lastname: '', hospcode: '', phone: '' };
+      this.currentUser = {
+        id: null, username: '', password: '', role: 'user',
+        dept_id: this.isAdmin ? '' : (this.loggedInUser?.dept_id || ''),
+        firstname: '', lastname: '', hospcode: '', phone: ''
+      };
       this.selectedDistrictId = '';
       this.filteredHospitals = [];
     }
@@ -153,9 +162,42 @@ export class UserManagementComponent implements OnInit {
     this.showModal = false;
   }
 
+  // === Phone formatting ===
+  onPhoneInput(event: any) {
+    let value = event.target.value.replace(/\D/g, '');
+    if (value.length > 10) value = value.substring(0, 10);
+    this.currentUser.phone = value;
+    event.target.value = this.formatPhoneDisplay(value);
+  }
+
+  formatPhoneDisplay(phone: string): string {
+    if (!phone) return '';
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 6) return digits.substring(0, 2) + '-' + digits.substring(2);
+    return digits.substring(0, 2) + '-' + digits.substring(2, 6) + '-' + digits.substring(6, 10);
+  }
+
+  // === Password validation ===
+  validatePassword(pw: string): string | null {
+    if (!pw) return null;
+    if (pw.length < 6) return 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
+    if (!/^[a-zA-Z0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]+$/.test(pw)) {
+      return 'รหัสผ่านต้องเป็น a-z, A-Z, 0-9 หรืออักขระพิเศษเท่านั้น';
+    }
+    return null;
+  }
+
+  // === Phone validation ===
+  validatePhone(phone: string): boolean {
+    if (!phone) return false;
+    const digits = phone.replace(/\D/g, '');
+    return digits.length === 10;
+  }
+
   saveUser() {
+    // ตรวจสอบข้อมูลครบถ้วน
     if (!this.currentUser.username ||
-        (!this.isEditMode && !this.currentUser.password) ||
         !this.currentUser.firstname ||
         !this.currentUser.lastname ||
         !this.currentUser.phone ||
@@ -164,8 +206,47 @@ export class UserManagementComponent implements OnInit {
       return;
     }
 
+    // ตรวจสอบเบอร์โทร 10 หลัก
+    if (!this.validatePhone(this.currentUser.phone)) {
+      Swal.fire('แจ้งเตือน', 'เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก', 'warning');
+      return;
+    }
+
+    // ตรวจสอบ password สำหรับสร้างใหม่
+    if (!this.isEditMode) {
+      if (!this.currentUser.password) {
+        Swal.fire('แจ้งเตือน', 'กรุณากรอกรหัสผ่าน', 'warning');
+        return;
+      }
+      const pwError = this.validatePassword(this.currentUser.password);
+      if (pwError) {
+        Swal.fire('แจ้งเตือน', pwError, 'warning');
+        return;
+      }
+      if (this.currentUser.password !== this.confirmPassword) {
+        Swal.fire('แจ้งเตือน', 'รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน', 'warning');
+        return;
+      }
+    }
+
+    // ตรวจสอบ password สำหรับแก้ไข (ถ้ากรอก)
+    if (this.isEditMode && this.currentUser.password) {
+      const pwError = this.validatePassword(this.currentUser.password);
+      if (pwError) {
+        Swal.fire('แจ้งเตือน', pwError, 'warning');
+        return;
+      }
+      if (this.currentUser.password !== this.confirmPassword) {
+        Swal.fire('แจ้งเตือน', 'รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน', 'warning');
+        return;
+      }
+    }
+
+    // Strip dashes from phone before saving
+    const userData = { ...this.currentUser, phone: this.currentUser.phone.replace(/\D/g, '') };
+
     if (this.isEditMode) {
-      this.authService.updateUser(this.currentUser.id, this.currentUser).subscribe({
+      this.authService.updateUser(userData.id, userData).subscribe({
         next: (res) => {
           if (res.success) {
             Swal.fire('สำเร็จ', 'แก้ไขข้อมูลผู้ใช้งานเรียบร้อย', 'success').then(() => {
@@ -177,7 +258,7 @@ export class UserManagementComponent implements OnInit {
         error: () => Swal.fire('ผิดพลาด', 'ไม่สามารถแก้ไขข้อมูลได้', 'error')
       });
     } else {
-      this.authService.createUser(this.currentUser).subscribe({
+      this.authService.createUser(userData).subscribe({
         next: (res) => {
           if (res.success) {
             Swal.fire('สำเร็จ', 'สร้างผู้ใช้งานใหม่เรียบร้อย', 'success').then(() => {

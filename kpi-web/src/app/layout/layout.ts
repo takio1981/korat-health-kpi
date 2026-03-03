@@ -26,7 +26,8 @@ export class LayoutComponent implements OnInit {
 
   isSidebarOpen: boolean = true;
   isLoading: boolean = false;
-  isAdmin: boolean = false;
+  isAdmin: boolean = false;       // admin_ssj + super_admin (ส่วนกลาง)
+  isAnyAdmin: boolean = false;    // admin_cup + admin_ssj + super_admin (ทุกระดับ admin)
   isSuperAdmin: boolean = false;
   currentUser: any = null;
   systemVersion: string = 'v1.0.0';
@@ -46,7 +47,8 @@ export class LayoutComponent implements OnInit {
   ngOnInit() {
     this.currentUser = this.authService.getUser();
     const role = this.authService.getUserRole();
-    this.isAdmin = ['admin', 'super_admin'].includes(role);
+    this.isAdmin = ['admin_ssj', 'super_admin'].includes(role);
+    this.isAnyAdmin = ['admin_cup', 'admin_ssj', 'super_admin'].includes(role);
     this.isSuperAdmin = role === 'super_admin';
     this.loadSettings();
     this.loadPendingCount();

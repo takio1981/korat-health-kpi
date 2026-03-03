@@ -65,7 +65,11 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
             </div>
-            <input type="password" id="password"formControlName="password" class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors bg-gray-50 focus:bg-white text-gray-800" placeholder="Password">
+            <input [type]="showPassword ? 'text' : 'password'" id="password" formControlName="password" class="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors bg-gray-50 focus:bg-white text-gray-800" placeholder="Password">
+            <button type="button" (click)="showPassword = !showPassword"
+                    class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+              <i class="fas" [ngClass]="showPassword ? 'fa-eye-slash' : 'fa-eye'"></i>
+            </button>
           </div>
         </div>
 
@@ -81,7 +85,14 @@
           เข้าสู่ระบบ
         </button>
       </form>
-      
+
+      <div class="text-center mt-6">
+        <p class="text-sm text-gray-500">
+          ยังไม่มีบัญชี?
+          <a routerLink="/register" class="font-semibold text-green-600 hover:text-green-800 transition-colors">ลงทะเบียน</a>
+        </p>
+      </div>
+
     </div>
   </div>
 </div>

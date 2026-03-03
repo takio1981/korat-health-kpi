@@ -95,7 +95,7 @@ export class DashboardComponent implements OnInit {
   ngOnInit() {
     this.currentUser = this.authService.getUser();
     const role = this.authService.getUserRole();
-    this.isAdmin = ['admin', 'super_admin'].includes(role);
+    this.isAdmin = ['admin_ssj', 'super_admin'].includes(role);
     this.isSuperAdmin = role === 'super_admin';
 
     // Fallback: ดึง hospcode/dept_id จาก JWT token กรณี user object ไม่มี (login เก่า)

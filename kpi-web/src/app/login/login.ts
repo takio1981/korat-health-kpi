@@ -1,21 +1,22 @@
 import { Component, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormGroup, FormControl, Validators } from '@angular/forms';
-import { Router } from '@angular/router'; // นำเข้า Router สำหรับเปลี่ยนหน้า
+import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth';
 import Swal from 'sweetalert2';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [ReactiveFormsModule], // เปิดใช้งาน Reactive Forms
+  imports: [CommonModule, ReactiveFormsModule, RouterModule],
   templateUrl: './login.html'
 })
 export class LoginComponent {
-  // 1. เรียกใช้งาน Router
   private router = inject(Router);
   private authService = inject(AuthService);
 
-  // 2. สร้างโครงสร้างฟอร์ม
+  showPassword: boolean = false;
+
   loginForm = new FormGroup({
     username: new FormControl('', Validators.required),
     password: new FormControl('', Validators.required)

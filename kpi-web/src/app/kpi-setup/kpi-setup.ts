@@ -30,11 +30,13 @@ export class KpiSetupComponent implements OnInit {
 
   isAdmin: boolean = false;
   isSuperAdmin: boolean = false;
+  loggedInUser: any = null;
 
   ngOnInit() {
     const role = this.authService.getUserRole();
-    this.isAdmin = role === 'admin' || role === 'super_admin';
+    this.isAdmin = role === 'admin_ssj' || role === 'super_admin';
     this.isSuperAdmin = role === 'super_admin';
+    this.loggedInUser = this.authService.getUser();
 
     if (!this.isAdmin) {
       Swal.fire({
@@ -49,6 +51,12 @@ export class KpiSetupComponent implements OnInit {
     }
 
     this.selectedYear = (new Date().getFullYear() + 543 + 1).toString();
+
+    // admin_ssj: ล็อค dept_id เป็นหน่วยงานของตัวเอง
+    if (!this.isSuperAdmin && this.loggedInUser?.dept_id) {
+      this.selectedDept = this.loggedInUser.dept_id.toString();
+    }
+
     this.loadTemplate();
     this.loadDepartments();
     this.loadDistricts();

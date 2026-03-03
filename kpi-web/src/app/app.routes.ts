@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { LoginComponent } from './login/login';
+import { RegisterComponent } from './register/register';
 import { DashboardComponent } from './dashboard/dashboard';
 import { ChartComponent } from './chart/chart';
 import { UserManagementComponent } from './user-management/user-management';
@@ -10,10 +11,14 @@ import { KpiManageComponent } from './kpi-manage/kpi-manage';
 import { ReportComponent } from './report/report';
 import { NotificationsComponent } from './notifications/notifications';
 import { authGuard } from './guards/auth-guard';
+import { adminGuard } from './guards/admin-guard';
+import { anyAdminGuard } from './guards/any-admin-guard';
+import { superAdminGuard } from './guards/super-admin-guard';
 import { LayoutComponent } from './layout/layout';
 
 export const routes: Routes = [
   { path: 'login', component: LoginComponent },
+  { path: 'register', component: RegisterComponent },
   { path: '', redirectTo: '/login', pathMatch: 'full' },
   {
     path: '',
@@ -24,11 +29,11 @@ export const routes: Routes = [
       { path: 'charts', component: ChartComponent, data: { title: 'รายงานสถิติและกราฟ' } },
       { path: 'reports', component: ReportComponent, data: { title: 'รายงานสรุปผล' } },
       { path: 'notifications', component: NotificationsComponent, data: { title: 'การแจ้งเตือน' } },
-      { path: 'users', component: UserManagementComponent, data: { title: 'จัดการผู้ใช้งาน' } },
-      { path: 'audit-logs', component: AuditLogComponent, data: { title: 'ประวัติการใช้งาน' } },
-      { path: 'kpi-setup', component: KpiSetupComponent, data: { title: 'สร้าง KPI ปีงบประมาณใหม่' } },
-      { path: 'kpi-manage', component: KpiManageComponent, data: { title: 'จัดการตัวชี้วัด' } },
-      { path: 'settings', component: SettingsComponent, data: { title: 'ตั้งค่าระบบ' } },
+      { path: 'users', component: UserManagementComponent, canActivate: [anyAdminGuard], data: { title: 'จัดการผู้ใช้งาน' } },
+      { path: 'kpi-setup', component: KpiSetupComponent, canActivate: [adminGuard], data: { title: 'สร้าง KPI ปีงบประมาณใหม่' } },
+      { path: 'audit-logs', component: AuditLogComponent, canActivate: [superAdminGuard], data: { title: 'ประวัติการใช้งาน' } },
+      { path: 'kpi-manage', component: KpiManageComponent, canActivate: [superAdminGuard], data: { title: 'จัดการตัวชี้วัด' } },
+      { path: 'settings', component: SettingsComponent, canActivate: [superAdminGuard], data: { title: 'ตั้งค่าระบบ' } },
     ]
   }
 ];

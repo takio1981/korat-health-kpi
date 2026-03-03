@@ -8,23 +8,24 @@
     </div>
 
     <!-- ส่วนค้นหาและตัวกรอง -->
-    <div class="p-6 bg-gray-50 border-b border-gray-100 grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="p-6 bg-gray-50 border-b border-gray-100 grid grid-cols-1 gap-4" [ngClass]="isAdmin ? 'md:grid-cols-4' : 'md:grid-cols-2'">
       <div class="relative mt-2">
         <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">ค้นหา</label>
         <input type="text" [(ngModel)]="searchTerm" (input)="applyFilters()" placeholder="ชื่อผู้ใช้ / หน่วยงาน..."
                class="w-full pl-4 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm hover:border-green-400 transition-colors">
       </div>
 
-      <div class="relative mt-2">
+      <div *ngIf="isAdmin" class="relative mt-2">
         <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">สิทธิ์การใช้งาน</label>
         <select [(ngModel)]="selectedRole" (change)="applyFilters()" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm hover:border-green-400 transition-colors">
           <option value="">ทั้งหมด</option>
-          <option value="admin">Admin</option>
+          <option value="admin_cup">Admin CUP (หน่วยบริการ)</option>
+          <option value="admin_ssj">Admin SSJ (ส่วนกลาง)</option>
           <option value="user">User</option>
         </select>
       </div>
 
-      <div class="relative mt-2">
+      <div *ngIf="isAdmin" class="relative mt-2">
         <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">หน่วยงาน</label>
         <select [(ngModel)]="selectedDept" (change)="applyFilters()" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm hover:border-green-400 transition-colors">
           <option value="">ทั้งหมด</option>
@@ -55,13 +56,17 @@
             <td class="px-6 py-4 font-medium text-gray-900">{{ user.username }}</td>
             <td class="px-6 py-4 text-gray-700">{{ user.firstname }} {{ user.lastname }}</td>
             <td class="px-6 py-4">
-              <span [ngClass]="user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'" class="px-2 py-1 rounded-full text-xs font-bold uppercase">
-                {{ user.role }}
+              <span class="px-2 py-1 rounded-full text-xs font-bold uppercase"
+                    [ngClass]="user.role === 'super_admin' ? 'bg-red-100 text-red-800' :
+                               user.role === 'admin_ssj' ? 'bg-purple-100 text-purple-800' :
+                               user.role === 'admin_cup' ? 'bg-orange-100 text-orange-800' :
+                               'bg-blue-100 text-blue-800'">
+                {{ user.role === 'admin_ssj' ? 'Admin SSJ' : user.role === 'admin_cup' ? 'Admin CUP' : user.role }}
               </span>
             </td>
             <td class="px-6 py-4 text-gray-600">{{ user.dept_name || '-' }}</td>
             <td class="px-6 py-4 text-gray-600">{{ user.hosname || user.hospcode || '-' }}</td>
-            <td class="px-6 py-4 text-gray-600">{{ user.phone || '-' }}</td>
+            <td class="px-6 py-4 text-gray-600">{{ formatPhoneDisplay(user.phone) || '-' }}</td>
             <td class="px-6 py-4 text-right space-x-2">
               <button (click)="resetPassword(user)" class="text-orange-500 hover:text-orange-600" title="รีเซ็ตรหัสผ่าน"><i class="fas fa-key"></i></button>
               <button (click)="openModal(user)" class="text-yellow-500 hover:text-yellow-600" title="แก้ไข"><i class="fas fa-edit"></i></button>
@@ -95,27 +100,67 @@
     <h3 class="text-xl font-bold text-gray-800 mb-4">{{ isEditMode ? 'แก้ไขข้อมูลผู้ใช้งาน' : 'เพิ่มผู้ใช้งานใหม่' }}</h3>
 
     <div class="space-y-4">
+      <!-- Username -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
-        <input type="text" [(ngModel)]="currentUser.username" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Username <span class="text-red-500">*</span></label>
+        <input type="text" [(ngModel)]="currentUser.username" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors" placeholder="กรอกชื่อผู้ใช้งาน">
       </div>
 
+      <!-- Password -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Password {{ isEditMode ? '(เว้นว่างถ้าไม่เปลี่ยน)' : '' }}</label>
-        <input type="password" [(ngModel)]="currentUser.password" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+        <label class="block text-sm font-medium text-gray-700 mb-1">
+          Password <span *ngIf="!isEditMode" class="text-red-500">*</span>
+          <span *ngIf="isEditMode" class="text-gray-400 text-xs font-normal">(เว้นว่างถ้าไม่เปลี่ยน)</span>
+        </label>
+        <div class="relative">
+          <input [type]="showPassword ? 'text' : 'password'" [(ngModel)]="currentUser.password"
+                 class="w-full px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors"
+                 placeholder="ขั้นต่ำ 6 ตัวอักษร">
+          <button type="button" (click)="showPassword = !showPassword"
+                  class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+            <i class="fas" [ngClass]="showPassword ? 'fa-eye-slash' : 'fa-eye'"></i>
+          </button>
+        </div>
+        <p class="text-xs text-gray-400 mt-1">ขั้นต่ำ 6 ตัวอักษร (a-z, A-Z, 0-9, อักขระพิเศษ)</p>
+        <p *ngIf="currentUser.password && validatePassword(currentUser.password)" class="text-xs text-red-500 mt-1">
+          <i class="fas fa-exclamation-circle mr-1"></i>{{ validatePassword(currentUser.password) }}
+        </p>
       </div>
 
+      <!-- Confirm Password (แสดงเมื่อสร้างใหม่ หรือ แก้ไขที่กรอก password) -->
+      <div *ngIf="!isEditMode || currentUser.password">
+        <label class="block text-sm font-medium text-gray-700 mb-1">ยืนยันรหัสผ่าน <span *ngIf="!isEditMode" class="text-red-500">*</span></label>
+        <div class="relative">
+          <input [type]="showConfirmPassword ? 'text' : 'password'" [(ngModel)]="confirmPassword"
+                 class="w-full px-4 py-2 pr-10 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors"
+                 [ngClass]="confirmPassword && confirmPassword !== currentUser.password ? 'border-red-400' : 'border-gray-300'"
+                 placeholder="กรอกรหัสผ่านอีกครั้ง">
+          <button type="button" (click)="showConfirmPassword = !showConfirmPassword"
+                  class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+            <i class="fas" [ngClass]="showConfirmPassword ? 'fa-eye-slash' : 'fa-eye'"></i>
+          </button>
+        </div>
+        <p *ngIf="confirmPassword && confirmPassword !== currentUser.password" class="text-xs text-red-500 mt-1">
+          <i class="fas fa-times-circle mr-1"></i>รหัสผ่านไม่ตรงกัน
+        </p>
+        <p *ngIf="confirmPassword && confirmPassword === currentUser.password && currentUser.password" class="text-xs text-green-600 mt-1">
+          <i class="fas fa-check-circle mr-1"></i>รหัสผ่านตรงกัน
+        </p>
+      </div>
+
+      <!-- ชื่อ / นามสกุล -->
       <div class="grid grid-cols-2 gap-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อ</label>
-          <input type="text" [(ngModel)]="currentUser.firstname" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+          <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อ <span class="text-red-500">*</span></label>
+          <input type="text" [(ngModel)]="currentUser.firstname" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors" placeholder="กรอกชื่อ">
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">นามสกุล</label>
-          <input type="text" [(ngModel)]="currentUser.lastname" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+          <label class="block text-sm font-medium text-gray-700 mb-1">นามสกุล <span class="text-red-500">*</span></label>
+          <input type="text" [(ngModel)]="currentUser.lastname" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors" placeholder="กรอกนามสกุล">
         </div>
       </div>
 
+      <!-- อำเภอ / หน่วยบริการ -->
       <div class="grid grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">อำเภอ</label>
@@ -125,7 +170,7 @@
           </select>
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">หน่วยบริการ (รพ./สสอ.)</label>
+          <label class="block text-sm font-medium text-gray-700 mb-1">หน่วยบริการ (รพ./สสอ.) <span class="text-red-500">*</span></label>
           <select [(ngModel)]="currentUser.hospcode" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
             <option value="">-- เลือกหน่วยบริการ --</option>
             <option *ngFor="let h of filteredHospitals" [value]="h.hoscode">{{ h.hoscode }}: {{ h.hosname }}</option>
@@ -133,20 +178,35 @@
         </div>
       </div>
 
+      <!-- เบอร์โทร -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">เบอร์โทรศัพท์</label>
-        <input type="text" [(ngModel)]="currentUser.phone" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+        <label class="block text-sm font-medium text-gray-700 mb-1">เบอร์โทรศัพท์ <span class="text-red-500">*</span></label>
+        <div class="relative">
+          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <i class="fas fa-phone text-gray-400"></i>
+          </div>
+          <input type="text" [value]="formatPhoneDisplay(currentUser.phone)" (input)="onPhoneInput($event)"
+                 class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors"
+                 placeholder="0X-XXXX-XXXX" maxlength="12">
+        </div>
+        <p class="text-xs text-gray-400 mt-1">ตัวเลข 10 หลัก (ระบบจะจัดรูปแบบให้อัตโนมัติ)</p>
+        <p *ngIf="currentUser.phone && !validatePhone(currentUser.phone)" class="text-xs text-red-500 mt-1">
+          <i class="fas fa-exclamation-circle mr-1"></i>เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก (ขณะนี้ {{ currentUser.phone.length }} หลัก)
+        </p>
       </div>
 
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">สิทธิ์การใช้งาน (Role)</label>
+      <!-- Role (เฉพาะ Admin เท่านั้นที่เห็น) -->
+      <div *ngIf="isAdmin">
+        <label class="block text-sm font-medium text-gray-700 mb-1">สิทธิ์การใช้งาน (Role) <span class="text-red-500">*</span></label>
         <select [(ngModel)]="currentUser.role" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
           <option value="user">User (ผู้ใช้งานทั่วไป)</option>
-          <option value="admin">Admin (ผู้ดูแลระบบ)</option>
+          <option value="admin_cup">Admin CUP (ผู้ดูแลหน่วยบริการ)</option>
+          <option value="admin_ssj">Admin SSJ (ผู้ดูแลส่วนกลาง)</option>
         </select>
       </div>
 
-      <div>
+      <!-- Department (เฉพาะ Admin เท่านั้นที่เปลี่ยนได้) -->
+      <div *ngIf="isAdmin">
         <label class="block text-sm font-medium text-gray-700 mb-1">สังกัดหน่วยงาน</label>
         <select [(ngModel)]="currentUser.dept_id" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
           <option value="">-- ไม่ระบุ --</option>

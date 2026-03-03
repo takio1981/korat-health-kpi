@@ -25,6 +25,22 @@ export class AuthService {
   login(credentials: any): Observable<any> {
     return this.http.post(`${this.apiUrl}/login`, credentials);
   }
+  // ฟังก์ชันลงทะเบียนผู้ใช้งานใหม่ (Public - ไม่ต้อง login)
+  register(userData: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}/register`, userData);
+  }
+
+  // === Public endpoints สำหรับหน้าลงทะเบียน (ไม่ต้อง login) ===
+  getPublicDepartments(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/public/departments`);
+  }
+  getPublicHospitals(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/public/hospitals`);
+  }
+  getPublicDistricts(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/public/districts`);
+  }
+
   // 1. ฟังก์ชันบันทึก Token เมื่อล็อกอินสำเร็จ
   saveToken(token: string) {
     localStorage.setItem('kpi_token', token);

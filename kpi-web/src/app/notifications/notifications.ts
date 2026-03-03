@@ -33,7 +33,7 @@ export class NotificationsComponent implements OnInit {
 
   ngOnInit() {
     const role = this.authService.getUserRole();
-    this.isAdmin = ['admin', 'super_admin'].includes(role);
+    this.isAdmin = ['admin_ssj', 'super_admin'].includes(role);
     // อ่าน query parameter สำหรับ filter (เช่น ?filter=reject)
     this.route.queryParams.subscribe(params => {
       if (params['filter']) {
