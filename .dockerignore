@@ -1,6 +1,9 @@
 **/node_modules
-**/dist
 **/.angular
 .git
 .gitignore
+
+# env files (never bake into image)
 .env
+api/.env
+api/.env.dev

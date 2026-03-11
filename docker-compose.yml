@@ -1,38 +1,46 @@
-version: '3.8'
-
 services:
-  # 2. Backend Service
+  # Backend API Service (Node.js + PM2)
   backend:
-    build: 
-      context: .
-      dockerfile: Dockerfile.backend
+    build:
+      context: ./api
+      dockerfile: Dockerfile
     container_name: khups_kpi_backend
     restart: always
     ports:
-      - "8830:8830" # Host 8830 -> Container 8830
+      - "8830:8830"
     environment:
       PORT: 8830
-      DB_HOST: ${DB_HOST}
+      # host.docker.internal resolves to host machine IP automatically (Docker Desktop)
+      # DB_HOST in .env is IGNORED — container always reaches the host via host.docker.internal
+      DB_HOST: host.docker.internal
       DB_PORT: ${DB_PORT}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
       SECRET_KEY: ${SECRET_KEY}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - kpi_network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8830/khupskpi/api/"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
-  # 3. Frontend Service (Nginx serving Web)
+  # Frontend Service (Nginx)
   frontend:
     build:
-      context: .
-      dockerfile: Dockerfile.frontend
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: khups_kpi_frontend
     restart: always
     ports:
-      - "8881:8881"   # Host 8881 -> Container 8881 (HTTP) - เลี่ยง Port 80 ชน
-      - "8843:8843"   # Host 8843 -> Container 8843 (HTTPS) - เลี่ยง Port 443 ชน
+      - "8881:8881"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - kpi_network
 

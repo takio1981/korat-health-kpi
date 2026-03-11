@@ -1,0 +1,12 @@
+# Exclude source files (already compiled into dist/)
+server.js
+db.js
+
+# Exclude env files
+.env
+.env.dev
+.env.dev.example
+.env*.example
+
+# Exclude dev/build artifacts
+package-lock.json

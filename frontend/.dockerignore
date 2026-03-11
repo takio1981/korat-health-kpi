@@ -1,0 +1,9 @@
+# Exclude source files (already compiled into dist/)
+src/
+public/
+angular.json
+tsconfig*.json
+tailwind.config.js
+package*.json
+.angular/
+node_modules/
