@@ -28,6 +28,16 @@ export class SettingsComponent implements OnInit {
   isAdmin: boolean = false;
   isSuperAdmin: boolean = false;
 
+  // Export KPI Tables
+  exportYear: string = '';
+  exportLoading: boolean = false;
+  exportResult: any = null;
+  exportIndicators: any[] = [];
+  filteredExportIndicators: any[] = [];
+  selectedIndicatorIds: Set<number> = new Set();
+  selectAll: boolean = true;
+  exportSearch: string = '';
+
   ngOnInit() {
     const role = this.authService.getUserRole();
     this.isAdmin = role === 'admin_ssj' || role === 'super_admin';
@@ -39,7 +49,13 @@ export class SettingsComponent implements OnInit {
       return;
     }
 
+    // คำนวณปีงบประมาณไทยปัจจุบัน
+    const now = new Date();
+    const thaiYear = now.getFullYear() + 543;
+    this.exportYear = (now.getMonth() >= 9 ? thaiYear + 1 : thaiYear).toString();
+
     this.loadSettings();
+    this.loadExportableIndicators();
   }
 
   loadSettings() {
@@ -104,6 +120,110 @@ export class SettingsComponent implements OnInit {
       },
       error: (err) => {
         Swal.fire('ผิดพลาด', 'ไม่สามารถบันทึกการตั้งค่าได้', 'error');
+      }
+    });
+  }
+
+  // === Export KPI Tables ===
+
+  loadExportableIndicators() {
+    this.authService.getExportableIndicators().subscribe({
+      next: (res) => {
+        if (res.success) {
+          this.exportIndicators = res.data;
+          this.filteredExportIndicators = res.data;
+          // เลือกทั้งหมดเป็นค่าเริ่มต้น
+          this.selectedIndicatorIds = new Set(res.data.map((i: any) => i.id));
+          this.selectAll = true;
+        }
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  filterExportIndicators() {
+    const search = this.exportSearch.toLowerCase().trim();
+    if (!search) {
+      this.filteredExportIndicators = this.exportIndicators;
+    } else {
+      this.filteredExportIndicators = this.exportIndicators.filter((i: any) =>
+        i.kpi_indicators_name.toLowerCase().includes(search) ||
+        i.table_process.toLowerCase().includes(search)
+      );
+    }
+  }
+
+  toggleSelectAll() {
+    if (this.selectAll) {
+      this.selectedIndicatorIds = new Set(this.exportIndicators.map((i: any) => i.id));
+    } else {
+      this.selectedIndicatorIds.clear();
+    }
+  }
+
+  toggleIndicator(id: number) {
+    if (this.selectedIndicatorIds.has(id)) {
+      this.selectedIndicatorIds.delete(id);
+    } else {
+      this.selectedIndicatorIds.add(id);
+    }
+    this.selectAll = this.selectedIndicatorIds.size === this.exportIndicators.length;
+  }
+
+  isIndicatorSelected(id: number): boolean {
+    return this.selectedIndicatorIds.has(id);
+  }
+
+  exportKpiTables() {
+    if (this.selectedIndicatorIds.size === 0) {
+      Swal.fire('แจ้งเตือน', 'กรุณาเลือกตัวชี้วัดอย่างน้อย 1 รายการ', 'warning');
+      return;
+    }
+
+    const count = this.selectedIndicatorIds.size;
+    const isAll = count === this.exportIndicators.length;
+
+    Swal.fire({
+      title: 'ยืนยันการส่งออกข้อมูล',
+      html: `จะสร้างตาราง MySQL สำหรับ <b>${isAll ? 'ทุกตัวชี้วัด' : count + ' ตัวชี้วัด'}</b><br>ปีงบประมาณ <b>${this.exportYear}</b><br><br><small class="text-red-500">หากตารางมีอยู่แล้ว ข้อมูลเดิมของปีนี้จะถูกแทนที่</small>`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'ส่งออก',
+      cancelButtonText: 'ยกเลิก',
+      confirmButtonColor: '#28a745'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        this.exportLoading = true;
+        this.exportResult = null;
+        this.cdr.detectChanges();
+
+        const ids = isAll ? 'all' as const : Array.from(this.selectedIndicatorIds);
+
+        this.authService.exportKpiTables(this.exportYear, ids).subscribe({
+          next: (res) => {
+            this.exportLoading = false;
+            this.exportResult = res;
+            this.cdr.detectChanges();
+
+            if (res.success) {
+              Swal.fire({
+                title: 'สำเร็จ',
+                html: `สร้างตารางสำเร็จ <b>${res.created_tables.length}</b> ตาราง` +
+                  (res.skipped.length > 0 ? `<br>ข้าม <b>${res.skipped.length}</b> รายการ` : '') +
+                  `<br>จำนวน hospcode: <b>${res.total_hospitals}</b>`,
+                icon: 'success',
+                confirmButtonColor: '#28a745'
+              });
+            } else {
+              Swal.fire('ผิดพลาด', res.message, 'error');
+            }
+          },
+          error: (err) => {
+            this.exportLoading = false;
+            this.cdr.detectChanges();
+            Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถส่งออกข้อมูลได้', 'error');
+          }
+        });
       }
     });
   }

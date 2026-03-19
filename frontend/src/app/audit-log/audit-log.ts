@@ -85,9 +85,17 @@ export class AuditLogComponent implements OnInit {
             document.body.removeChild(a);
             Swal.fire('สำเร็จ', 'สำรองข้อมูลเรียบร้อยแล้ว', 'success');
           },
-          error: (err) => {
-            console.error('Backup error:', err);
-            Swal.fire('ผิดพลาด', 'ไม่สามารถสำรองข้อมูลได้', 'error');
+          error: async (err) => {
+            let msg = 'ไม่สามารถสำรองข้อมูลได้';
+            try {
+              const text = await (err.error as Blob).text();
+              const json = JSON.parse(text);
+              msg = json.message || msg;
+              console.error('Backup error detail:', json);
+            } catch {
+              console.error('Backup error:', err);
+            }
+            Swal.fire('ผิดพลาด', msg, 'error');
           }
         });
       }

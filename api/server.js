@@ -1,11 +1,21 @@
+// Dev: load .env.dev | Production (Docker): env vars injected via docker-compose
+// MUST be first — before any require('./db') that creates the MySQL pool
+if (process.env.NODE_ENV !== 'production') {
+    const result = require('dotenv').config({ path: '.env.dev' });
+    if (result.error) {
+        console.error('[dotenv] Failed to load .env.dev:', result.error.message);
+    } else {
+        console.log('[dotenv] Loaded .env.dev — DB_HOST:', process.env.DB_HOST, '| PORT:', process.env.PORT);
+    }
+}
+
 const express = require('express');
 const cors = require('cors');
-const db = require('./db'); // แก้ไข path ให้ถูกต้อง (เนื่องจากใน Docker ไฟล์จะอยู่ระดับเดียวกัน)
-const bcrypt = require('bcryptjs'); // แนะนำใช้ bcryptjs เพื่อเลี่ยงปัญหา compile ใน docker alpine
+const db = require('./db');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-require('dotenv').config();
 
 const app = express();
 // ใช้ Port จาก ENV หรือ Default 8830 ตามโจทย์
@@ -101,6 +111,11 @@ const isSuperAdmin = (req, res, next) => {
 
 // สร้าง Router เพื่อรองรับ Prefix /khupskpi/api
 const apiRouter = express.Router();
+
+// Root endpoint — used by Docker healthcheck (returns 200 so wget --spider succeeds)
+apiRouter.get('/', (req, res) => {
+    res.json({ status: 'ok', service: 'KHUPS KPI API' });
+});
 
 const saveLog = async (username, action, details, ip) => {
     try {
@@ -781,7 +796,8 @@ apiRouter.get('/logs/backup', authenticateToken, isSuperAdmin, async (req, res) 
         res.send('\ufeff' + csv);
     } catch (error) {
         console.error("Log Backup Error:", error);
-        res.status(500).json({ success: false, message: 'ไม่สามารถสำรองข้อมูลได้' });
+        const detail = process.env.NODE_ENV !== 'production' ? error.message : undefined;
+        res.status(500).json({ success: false, message: detail || 'ไม่สามารถสำรองข้อมูลได้' });
     }
 });
 
@@ -1428,6 +1444,166 @@ apiRouter.delete('/departments/:id', authenticateToken, isSuperAdmin, async (req
     }
 });
 
+// ========== Export KPI Tables ==========
+
+// ดึงรายการ KPI indicators ที่มี table_process (สำหรับเลือก export)
+apiRouter.get('/exportable-indicators', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            `SELECT id, kpi_indicators_name, table_process, dept_id
+             FROM kpi_indicators
+             WHERE is_active = 1 AND table_process IS NOT NULL AND table_process != ''
+             ORDER BY id`
+        );
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// สร้างตาราง MySQL แยกรายตัวชี้วัด พร้อมข้อมูลคะแนนทุก hospcode
+apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { year_bh, indicator_ids } = req.body;
+
+    // Validate year_bh
+    if (!year_bh || !/^\d{4}$/.test(year_bh)) {
+        return res.status(400).json({ success: false, message: 'กรุณาระบุปีงบประมาณ (year_bh) เป็นตัวเลข 4 หลัก' });
+    }
+
+    // Validate indicator_ids
+    if (!indicator_ids || (indicator_ids !== 'all' && !Array.isArray(indicator_ids))) {
+        return res.status(400).json({ success: false, message: 'กรุณาระบุ indicator_ids เป็น array หรือ "all"' });
+    }
+
+    const conn = await db.getConnection();
+    try {
+        // 1. Get indicators with valid table_process
+        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name FROM kpi_indicators
+            WHERE is_active = 1 AND table_process IS NOT NULL AND table_process != ''`;
+        let indicatorParams = [];
+
+        if (indicator_ids !== 'all' && Array.isArray(indicator_ids) && indicator_ids.length > 0) {
+            indicatorQuery += ` AND id IN (${indicator_ids.map(() => '?').join(',')})`;
+            indicatorParams = indicator_ids;
+        }
+
+        const [indicators] = await conn.query(indicatorQuery, indicatorParams);
+
+        // 2. Get all hospcodes
+        const [hospitals] = await conn.query('SELECT hoscode FROM chospital');
+        const allHospcodes = hospitals.map(h => h.hoscode);
+
+        const created = [];
+        const skipped = [];
+
+        const tableDDL = (name) => `CREATE TABLE IF NOT EXISTS \`${name}\` (
+            hospcode VARCHAR(5) NOT NULL,
+            byear VARCHAR(4) NOT NULL,
+            target DECIMAL(10,2) DEFAULT 0,
+            result DECIMAL(10,2) DEFAULT 0,
+            m10 DECIMAL(10,2) DEFAULT 0,
+            m11 DECIMAL(10,2) DEFAULT 0,
+            m12 DECIMAL(10,2) DEFAULT 0,
+            m01 DECIMAL(10,2) DEFAULT 0,
+            m02 DECIMAL(10,2) DEFAULT 0,
+            m03 DECIMAL(10,2) DEFAULT 0,
+            m04 DECIMAL(10,2) DEFAULT 0,
+            m05 DECIMAL(10,2) DEFAULT 0,
+            m06 DECIMAL(10,2) DEFAULT 0,
+            m07 DECIMAL(10,2) DEFAULT 0,
+            m08 DECIMAL(10,2) DEFAULT 0,
+            m09 DECIMAL(10,2) DEFAULT 0,
+            create_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+            update_date DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (hospcode, byear)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`;
+
+        const months = ['m10', 'm11', 'm12', 'm01', 'm02', 'm03', 'm04', 'm05', 'm06', 'm07', 'm08', 'm09'];
+
+        for (const indicator of indicators) {
+            // Sanitize table name: replace - with _, then validate
+            let tableName = indicator.table_process.trim().replace(/-/g, '_');
+            if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(tableName)) {
+                skipped.push({ id: indicator.id, name: indicator.kpi_indicators_name, table_process: indicator.table_process, reason: 'ชื่อตารางไม่ถูกต้อง' });
+                continue;
+            }
+
+            await conn.beginTransaction();
+            try {
+                // Create table
+                await conn.query(tableDDL(tableName));
+
+                // Delete existing data for this year
+                await conn.query(`DELETE FROM \`${tableName}\` WHERE byear = ?`, [year_bh]);
+
+                // Fetch kpi_results for this indicator + year
+                const [results] = await conn.query(
+                    'SELECT hospcode, month_bh, target_value, actual_value FROM kpi_results WHERE indicator_id = ? AND year_bh = ?',
+                    [indicator.id, year_bh]
+                );
+
+                // Build hospcode -> month data map
+                const dataMap = new Map();
+                for (const row of results) {
+                    if (!dataMap.has(row.hospcode)) dataMap.set(row.hospcode, {});
+                    const entry = dataMap.get(row.hospcode);
+                    const mKey = 'm' + String(row.month_bh).padStart(2, '0');
+                    entry[mKey] = Number(row.actual_value) || 0;
+                    if (String(row.month_bh) === '10') {
+                        entry.target = Number(row.target_value) || 0;
+                    }
+                }
+
+                // Build INSERT rows for ALL hospcodes
+                const insertRows = [];
+                for (const hc of allHospcodes) {
+                    const d = dataMap.get(hc) || {};
+                    const target = d.target || 0;
+                    const monthValues = months.map(m => d[m] || 0);
+                    const result = monthValues.reduce((a, b) => a + b, 0);
+                    insertRows.push([hc, year_bh, target, result, ...monthValues]);
+                }
+
+                // Batch insert (100 rows per batch)
+                const cols = 'hospcode, byear, target, result, m10, m11, m12, m01, m02, m03, m04, m05, m06, m07, m08, m09';
+                for (let i = 0; i < insertRows.length; i += 100) {
+                    const batch = insertRows.slice(i, i + 100);
+                    const placeholders = batch.map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').join(',');
+                    const flatValues = batch.flat();
+                    await conn.query(`INSERT INTO \`${tableName}\` (${cols}) VALUES ${placeholders}`, flatValues);
+                }
+
+                await conn.commit();
+                created.push({ table: tableName, name: indicator.kpi_indicators_name, rows: insertRows.length });
+            } catch (tableErr) {
+                await conn.rollback();
+                skipped.push({ id: indicator.id, name: indicator.kpi_indicators_name, table_process: indicator.table_process, reason: tableErr.message });
+            }
+        }
+
+        conn.release();
+
+        // Log action
+        try {
+            await db.query(
+                'INSERT INTO system_logs (user_id, action, details, ip_address) VALUES (?, ?, ?, ?)',
+                [req.user.id, 'export_kpi_tables', `Export ${created.length} tables for year ${year_bh}`, req.ip]
+            );
+        } catch (_) {}
+
+        res.json({
+            success: true,
+            message: `สร้างตารางข้อมูลสำเร็จ ${created.length} ตาราง`,
+            created_tables: created,
+            skipped,
+            total_hospitals: allHospcodes.length
+        });
+    } catch (err) {
+        conn.release();
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 // ========== Report Summary APIs ==========
 
 // รายงานสรุป: รายข้อตัวชี้วัด
@@ -1681,6 +1857,33 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
 (async () => {
     try {
         await db.query(`
+            CREATE TABLE IF NOT EXISTS login_logs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                username VARCHAR(100) NULL,
+                action VARCHAR(100) NULL,
+                details TEXT NULL,
+                ip_address VARCHAR(45) NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_created_at (created_at)
+            )
+        `);
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS system_logs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NULL,
+                dept_id INT NULL,
+                action_type ENUM('INSERT','UPDATE','DELETE') NULL,
+                table_name VARCHAR(50) NULL,
+                record_id INT NULL,
+                old_value LONGTEXT NULL,
+                new_value LONGTEXT NULL,
+                ip_address VARCHAR(45) NULL,
+                user_agent TEXT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_created_at (created_at)
+            )
+        `);
+        await db.query(`
             CREATE TABLE IF NOT EXISTS notifications (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 user_id INT NULL,
@@ -1729,7 +1932,7 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         } catch (e) {
             // columns may already exist
         }
-        console.log('✅ Notification & Rejection tables ready, is_active columns ensured');
+        console.log('✅ login_logs, system_logs, notifications & rejection tables ready');
     } catch (err) {
         console.error('⚠️ Auto-create tables error:', err.message);
     }

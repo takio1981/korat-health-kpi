@@ -1,22 +1,21 @@
 FROM node:18-alpine
 
-# ติดตั้ง PM2 globally
+# Install PM2 globally
 RUN npm install -g pm2
 
 WORKDIR /app
 
-# Copy package files และติดตั้ง dependencies (production only)
-COPY package*.json ./
-RUN npm install --production
+# Copy pre-installed node_modules (installed on host before docker build)
+COPY node_modules/ ./node_modules/
 
-# Copy source files (server.js, db.js)
-COPY server.js ./
-COPY db.js ./
+# Copy PM2 ecosystem config and package.json
+COPY package.json ecosystem.config.js ./
 
-# Copy PM2 ecosystem config
-COPY ecosystem.config.js ./
+# Copy pre-built application files (server.js, db.js)
+# Prepared by deploy.sh: copies api/server.js + db.js -> api/dist/
+COPY dist/ ./dist/
 
 EXPOSE 8830
 
-# Start ด้วย PM2 (no-daemon mode สำหรับ Docker)
+# Start with PM2 (no-daemon mode for Docker)
 CMD ["pm2-runtime", "ecosystem.config.js"]

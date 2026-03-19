@@ -1,5 +1,5 @@
 const mysql = require('mysql2');
-require('dotenv').config();
+// dotenv is loaded by server.js before this module is required
 
 const pool = mysql.createPool({
     host: process.env.DB_HOST,

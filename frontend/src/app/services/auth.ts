@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable, BehaviorSubject } from 'rxjs';
 import { tap } from 'rxjs/operators';
+import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
@@ -9,7 +10,7 @@ import { tap } from 'rxjs/operators';
 
 export class AuthService {
   private http = inject(HttpClient);
-  private apiUrl = 'http://localhost:3000/api';
+  private apiUrl = environment.apiUrl;
 
   // Shared realtime notification count
   private _unreadCount$ = new BehaviorSubject<number>(0);
@@ -463,5 +464,18 @@ export class AuthService {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     const queryStr = new URLSearchParams(params).toString();
     return this.http.get(`${this.apiUrl}/report/by-year${queryStr ? '?' + queryStr : ''}`, { headers });
+  }
+
+  // Export KPI Tables
+  getExportableIndicators(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/exportable-indicators`, { headers });
+  }
+
+  exportKpiTables(yearBh: string, indicatorIds: number[] | 'all'): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/export-kpi-tables`, { year_bh: yearBh, indicator_ids: indicatorIds }, { headers });
   }
 }

@@ -73,7 +73,7 @@ export class UserManagementComponent implements OnInit {
   loadDepartments() {
     this.authService.getDepartments().subscribe({
       next: (res) => {
-        if (res.success) this.departments = res.data;
+        if (res.success) { this.departments = res.data; this.cdr.detectChanges(); }
       }
     });
   }
@@ -81,7 +81,7 @@ export class UserManagementComponent implements OnInit {
   loadHospitals() {
     this.authService.getHospitals().subscribe({
       next: (res) => {
-        if (res.success) this.hospitals = res.data;
+        if (res.success) { this.hospitals = res.data; this.cdr.detectChanges(); }
       }
     });
   }
@@ -89,7 +89,7 @@ export class UserManagementComponent implements OnInit {
   loadDistricts() {
     this.authService.getDistricts().subscribe({
       next: (res) => {
-        if (res.success) this.districts = res.data;
+        if (res.success) { this.districts = res.data; this.cdr.detectChanges(); }
       }
     });
   }
