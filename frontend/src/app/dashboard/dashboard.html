@@ -19,12 +19,15 @@
                     class="flex-1 md:flex-none px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2">
               <i class="fas fa-sync-alt"></i> ล้างตัวกรอง
             </button>
-            <button *ngIf="!isEditing" (click)="openAddModal()" class="flex-1 md:flex-none px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-md transition-all text-xs font-bold flex items-center justify-center gap-2">
+            <button *ngIf="!isEditing && !isEntryLocked" (click)="openAddModal()" class="flex-1 md:flex-none px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-md transition-all text-xs font-bold flex items-center justify-center gap-2">
               <i class="fas fa-plus"></i> เพิ่ม
             </button>
-            <button *ngIf="!isEditing" (click)="toggleEditMode()" class="flex-1 md:flex-none px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-md transition-all text-xs font-bold flex items-center justify-center gap-2">
+            <button *ngIf="!isEditing && !isEntryLocked" (click)="toggleEditMode()" class="flex-1 md:flex-none px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-md transition-all text-xs font-bold flex items-center justify-center gap-2">
               <i class="fas fa-edit"></i> แก้ไข
             </button>
+            <span *ngIf="isEntryLocked && !isEditing" class="flex-1 md:flex-none px-4 py-2 bg-red-100 text-red-700 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border border-red-200">
+              <i class="fas fa-lock"></i> {{dataEntryLock.lock_reason || 'ระบบปิดการคีย์ข้อมูลชั่วคราว'}}
+            </span>
             
             <div *ngIf="isEditing" class="flex gap-2 w-full md:w-auto">
               <button (click)="saveKpiData()" class="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-md transition-all text-xs font-bold flex items-center justify-center gap-2">
@@ -138,6 +141,9 @@
                   <span *ngIf="item.indicator_status === 'resubmit' || item.indicator_status === 'Resubmit'" class="status-badge status-resubmit cursor-pointer" (click)="viewRejectionHistory(item)">
                     <i class="fas fa-reply"></i> รอตอบกลับ
                   </span>
+                  <span *ngIf="item.indicator_status === 'appeal' || item.indicator_status === 'Appeal'" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 cursor-pointer" (click)="viewRejectionHistory(item)">
+                    <i class="fas fa-gavel"></i> ยื่นอุทธรณ์
+                  </span>
                   <span *ngIf="item.is_locked" class="status-badge status-locked" title="เป้าหมายถูกล็อค">
                     <i class="fas fa-lock"></i> ล็อค
                   </span>
@@ -216,6 +222,39 @@
                             class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
                       <i class="fas fa-lock-open mr-1"></i> ปลดล็อค
                     </button>
+                    <!-- ปุ่มยื่นอุทธรณ์ (user) -->
+                    <button *ngIf="!isAdmin && appealSettings.is_open && (item.indicator_status === 'approved' || item.indicator_status === 'Approved')"
+                            (click)="openAppealModal(item)"
+                            class="px-3 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
+                      <i class="fas fa-gavel mr-1"></i> ยื่นอุทธรณ์
+                    </button>
+                    <!-- Admin จัดการอุทธรณ์ -->
+                    <button *ngIf="(isAdmin || isSuperAdmin) && (item.indicator_status === 'appeal' || item.indicator_status === 'Appeal')"
+                            (click)="approveAppeal(item)"
+                            class="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
+                      <i class="fas fa-check mr-1"></i> อนุมัติอุทธรณ์
+                    </button>
+                    <button *ngIf="(isAdmin || isSuperAdmin) && (item.indicator_status === 'appeal' || item.indicator_status === 'Appeal')"
+                            (click)="rejectAppeal(item)"
+                            class="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
+                      <i class="fas fa-times mr-1"></i> ปฏิเสธอุทธรณ์
+                    </button>
+                    <!-- ปุ่มแก้ไขเฉพาะข้อ (Mobile) -->
+                    <button *ngIf="!isAdmin && !isEditing && item.appeal_approved > 0 && !item.is_locked && (item.indicator_status === 'pending' || item.indicator_status === 'Pending') && !isSingleEditing(item)"
+                            (click)="startEditSingle(item)"
+                            class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
+                      <i class="fas fa-pen-square mr-1"></i> แก้ไขข้อนี้
+                    </button>
+                    <button *ngIf="isSingleEditing(item)"
+                            (click)="saveSingleItem()"
+                            class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
+                      <i class="fas fa-save mr-1"></i> บันทึกและส่งตรวจสอบ
+                    </button>
+                    <button *ngIf="isSingleEditing(item)"
+                            (click)="cancelEditSingle()"
+                            class="px-3 py-1.5 bg-gray-500 hover:bg-gray-600 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
+                      <i class="fas fa-times mr-1"></i> ยกเลิก
+                    </button>
                   </div>
                 </div>
               </div>
@@ -284,6 +323,43 @@
                               title="ปลดล็อคเป้าหมาย">
                         <i class="fas fa-lock-open text-xs"></i>
                       </button>
+                      <button *ngIf="!isAdmin && appealSettings.is_open && (item.indicator_status === 'approved' || item.indicator_status === 'Approved')"
+                              (click)="openAppealModal(item)"
+                              class="text-purple-500 hover:text-purple-700 p-0.5 transition-colors"
+                              title="ยื่นอุทธรณ์">
+                        <i class="fas fa-gavel text-xs"></i>
+                      </button>
+                      <!-- ปุ่มแก้ไขเฉพาะข้อ (อุทธรณ์ได้รับอนุมัติ) -->
+                      <button *ngIf="!isAdmin && !isEditing && item.appeal_approved > 0 && !item.is_locked && (item.indicator_status === 'pending' || item.indicator_status === 'Pending') && !isSingleEditing(item)"
+                              (click)="startEditSingle(item)"
+                              class="text-purple-600 hover:text-purple-800 p-0.5 transition-colors"
+                              title="แก้ไขข้อนี้ (อุทธรณ์อนุมัติแล้ว)">
+                        <i class="fas fa-pen-square text-xs"></i>
+                      </button>
+                      <button *ngIf="isSingleEditing(item)"
+                              (click)="saveSingleItem()"
+                              class="text-green-600 hover:text-green-800 p-0.5 transition-colors"
+                              title="บันทึกและส่งตรวจสอบ">
+                        <i class="fas fa-save text-xs"></i>
+                      </button>
+                      <button *ngIf="isSingleEditing(item)"
+                              (click)="cancelEditSingle()"
+                              class="text-gray-500 hover:text-gray-700 p-0.5 transition-colors"
+                              title="ยกเลิกการแก้ไข">
+                        <i class="fas fa-times text-xs"></i>
+                      </button>
+                      <button *ngIf="(isAdmin || isSuperAdmin) && (item.indicator_status === 'appeal' || item.indicator_status === 'Appeal')"
+                              (click)="approveAppeal(item)"
+                              class="text-green-500 hover:text-green-700 p-0.5 transition-colors"
+                              title="อนุมัติอุทธรณ์">
+                        <i class="fas fa-check-circle text-xs"></i>
+                      </button>
+                      <button *ngIf="(isAdmin || isSuperAdmin) && (item.indicator_status === 'appeal' || item.indicator_status === 'Appeal')"
+                              (click)="rejectAppeal(item)"
+                              class="text-red-500 hover:text-red-700 p-0.5 transition-colors"
+                              title="ปฏิเสธอุทธรณ์">
+                        <i class="fas fa-times-circle text-xs"></i>
+                      </button>
                       <button (click)="openTrendModal(item)" class="text-blue-500 hover:text-blue-700 p-0.5 focus:outline-none" title="ดูแนวโน้ม">
                         <i class="fas fa-chart-line text-xs"></i>
                       </button>
@@ -305,6 +381,9 @@
                     </span>
                     <span *ngIf="item.indicator_status === 'resubmit' || item.indicator_status === 'Resubmit'" class="status-badge status-resubmit cursor-pointer" (click)="viewRejectionHistory(item)" title="คลิกดูเหตุผล">
                       <i class="fas fa-reply"></i> รอตอบกลับ
+                    </span>
+                    <span *ngIf="item.indicator_status === 'appeal' || item.indicator_status === 'Appeal'" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 cursor-pointer" (click)="viewRejectionHistory(item)" title="คลิกดูรายละเอียด">
+                      <i class="fas fa-gavel"></i> ยื่นอุทธรณ์
                     </span>
                     <button *ngIf="!isAdmin && (item.indicator_status === 'resubmit' || item.indicator_status === 'Resubmit')"
                             (click)="openReplyModal(item)"
@@ -331,8 +410,8 @@
 
                 <!-- Col 8: เป้าหมาย -->
                 <td class="px-1 py-2 bg-amber-50/30 font-bold text-gray-800 text-right whitespace-nowrap">
-                  <span *ngIf="!isEditing || item.is_locked">{{ item.target_value | number }}</span>
-                  <input *ngIf="isEditing && !item.is_locked" type="number" min="0" [(ngModel)]="item.target_value"
+                  <span *ngIf="(!isEditing && !isSingleEditing(item)) || item.is_locked">{{ item.target_value | number }}</span>
+                  <input *ngIf="(isEditing || isSingleEditing(item)) && !item.is_locked" type="number" min="0" [(ngModel)]="item.target_value"
                          class="w-20 border border-amber-200 rounded px-1 py-1 text-right text-xs focus:ring-1 focus:ring-green-500 outline-none bg-white hover:border-green-400 transition-all"
                          [ngClass]="isModified(item, 'target_value') ? '!bg-orange-200 !text-red-600 ring-2 ring-orange-400 font-bold' : ''">
                 </td>
@@ -353,8 +432,8 @@
                 <td *ngFor="let m of ['oct','nov','dece','jan','feb','mar','apr','may','jun','jul','aug','sep']"
                     class="px-1 py-2 text-center border-x group whitespace-nowrap month-col"
                     [ngClass]="item[m] > 0 ? 'bg-green-100/40 text-gray-900 font-bold' : 'text-gray-300'">
-                  <span *ngIf="!isEditing || item.is_locked">{{ item[m] > 0 ? (item[m] | number) : '-' }}</span>
-                  <input *ngIf="isEditing && !item.is_locked" type="number" min="0" [(ngModel)]="item[m]" (ngModelChange)="onValueChange(item, m)"
+                  <span *ngIf="(!isEditing && !isSingleEditing(item)) || item.is_locked">{{ item[m] > 0 ? (item[m] | number) : '-' }}</span>
+                  <input *ngIf="(isEditing || isSingleEditing(item)) && !item.is_locked" type="number" min="0" [(ngModel)]="item[m]" (ngModelChange)="onValueChange(item, m)"
                          class="w-full border border-green-200 rounded px-1 py-1 text-center text-xs focus:ring-1 focus:ring-green-500 outline-none hover:border-green-400 transition-all bg-white/80 group-hover:bg-white"
                          [ngClass]="isModified(item, m) ? '!bg-orange-200 !text-red-600 ring-2 ring-orange-400 font-bold' : ''">
                 </td>

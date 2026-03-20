@@ -23,9 +23,11 @@ export class NotificationsComponent implements OnInit {
   isLoading: boolean = false;
   approveCount: number = 0;
   rejectCount: number = 0;
+  appealCount: number = 0;
   replyCount: number = 0;
   unreadNotifCount: number = 0;
   isAdmin: boolean = false;
+  appealSettings: any = { is_open: false };
 
   // Reply tab data
   replies: any[] = [];
@@ -41,6 +43,7 @@ export class NotificationsComponent implements OnInit {
       }
     });
     this.loadNotifications();
+    this.loadAppealSettings();
     // Subscribe shared unread count
     this.authService.unreadCount$.subscribe(count => {
       this.unreadNotifCount = count;
@@ -85,9 +88,19 @@ export class NotificationsComponent implements OnInit {
     });
   }
 
+  loadAppealSettings() {
+    this.authService.getAppealSettings().subscribe({
+      next: (res) => {
+        if (res.success) this.appealSettings = res.data;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
   applyFilter() {
     this.approveCount = this.notifications.filter(n => n.type === 'approve').length;
     this.rejectCount = this.notifications.filter(n => n.type === 'reject').length;
+    this.appealCount = this.notifications.filter(n => n.type === 'appeal').length;
     if (this.activeFilter === 'all') {
       this.filteredNotifications = this.notifications;
     } else if (this.activeFilter === 'unread') {
@@ -96,6 +109,8 @@ export class NotificationsComponent implements OnInit {
       this.filteredNotifications = this.notifications.filter(n => n.type === 'approve');
     } else if (this.activeFilter === 'reject') {
       this.filteredNotifications = this.notifications.filter(n => n.type === 'reject');
+    } else if (this.activeFilter === 'appeal') {
+      this.filteredNotifications = this.notifications.filter(n => n.type === 'appeal');
     } else if (this.activeFilter === 'reply') {
       this.filteredNotifications = [];
     }
@@ -228,6 +243,101 @@ export class NotificationsComponent implements OnInit {
               error: () => Swal.fire('ผิดพลาด', 'ไม่สามารถส่งตอบกลับได้', 'error')
             });
           }
+        });
+      }
+    });
+  }
+
+  // === อุทธรณ์ ===
+
+  openAppealFromNotif(notif: any) {
+    Swal.fire({
+      title: 'ยื่นอุทธรณ์ขอแก้ไขคะแนน',
+      html: `<p class="text-sm text-gray-600 mb-3">${notif.title}</p>`,
+      input: 'textarea',
+      inputLabel: 'เหตุผลในการยื่นอุทธรณ์',
+      inputPlaceholder: 'ระบุเหตุผลที่ต้องการขอแก้ไขคะแนน...',
+      inputValidator: (value) => !value ? 'กรุณาระบุเหตุผล' : null,
+      showCancelButton: true,
+      confirmButtonText: 'ยื่นอุทธรณ์',
+      cancelButtonText: 'ยกเลิก',
+      confirmButtonColor: '#7c3aed'
+    }).then((result) => {
+      if (result.isConfirmed && result.value) {
+        this.authService.appealKpi({
+          indicator_id: notif.indicator_id,
+          year_bh: notif.year_bh,
+          hospcode: notif.hospcode,
+          reason: result.value
+        }).subscribe({
+          next: (res) => {
+            if (res.success) {
+              Swal.fire('สำเร็จ', 'ยื่นอุทธรณ์เรียบร้อยแล้ว รอ Admin พิจารณา', 'success');
+              this.loadNotifications();
+            }
+          },
+          error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถยื่นอุทธรณ์ได้', 'error')
+        });
+      }
+    });
+  }
+
+  approveAppealFromNotif(notif: any) {
+    Swal.fire({
+      title: 'อนุมัติอุทธรณ์',
+      html: `<p class="text-sm">${notif.title}<br>ข้อมูลจะถูกปลดล็อคให้หน่วยบริการแก้ไขได้</p>`,
+      input: 'textarea',
+      inputLabel: 'ความเห็น (ไม่บังคับ)',
+      showCancelButton: true,
+      confirmButtonText: 'อนุมัติอุทธรณ์',
+      cancelButtonText: 'ยกเลิก',
+      confirmButtonColor: '#16a34a'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        this.authService.approveAppeal({
+          indicator_id: notif.indicator_id,
+          year_bh: notif.year_bh,
+          hospcode: notif.hospcode,
+          comment: result.value || ''
+        }).subscribe({
+          next: (res) => {
+            if (res.success) {
+              Swal.fire('สำเร็จ', 'อนุมัติอุทธรณ์เรียบร้อย ข้อมูลถูกปลดล็อคแล้ว', 'success');
+              this.loadNotifications();
+            }
+          },
+          error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถอนุมัติอุทธรณ์ได้', 'error')
+        });
+      }
+    });
+  }
+
+  rejectAppealFromNotif(notif: any) {
+    Swal.fire({
+      title: 'ปฏิเสธอุทธรณ์',
+      html: `<p class="text-sm">${notif.title}<br>ข้อมูลจะยังคงถูกล็อคไว้</p>`,
+      input: 'textarea',
+      inputLabel: 'เหตุผลในการปฏิเสธ',
+      inputValidator: (value) => !value ? 'กรุณาระบุเหตุผล' : null,
+      showCancelButton: true,
+      confirmButtonText: 'ปฏิเสธอุทธรณ์',
+      cancelButtonText: 'ยกเลิก',
+      confirmButtonColor: '#dc2626'
+    }).then((result) => {
+      if (result.isConfirmed && result.value) {
+        this.authService.rejectAppeal({
+          indicator_id: notif.indicator_id,
+          year_bh: notif.year_bh,
+          hospcode: notif.hospcode,
+          comment: result.value
+        }).subscribe({
+          next: (res) => {
+            if (res.success) {
+              Swal.fire('สำเร็จ', 'ปฏิเสธอุทธรณ์เรียบร้อย', 'success');
+              this.loadNotifications();
+            }
+          },
+          error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถปฏิเสธอุทธรณ์ได้', 'error')
         });
       }
     });

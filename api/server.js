@@ -340,6 +340,9 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 SUM(CASE WHEN r.status = 'Pending' THEN 1 ELSE 0 END) AS pending_count,
                 MAX(r.status) as indicator_status,
                 MAX(CASE WHEN r.is_locked = 1 THEN 1 ELSE 0 END) as is_locked,
+                (SELECT COUNT(*) FROM kpi_rejection_comments rc2
+                 WHERE rc2.indicator_id = r.indicator_id AND rc2.year_bh = r.year_bh
+                 AND rc2.hospcode = r.hospcode AND rc2.type = 'appeal_approve') AS appeal_approved,
                 r.hospcode,
                 h.hosname,
                 dist.distname
@@ -1371,6 +1374,307 @@ apiRouter.post('/unlock-kpi', authenticateToken, isSuperAdmin, async (req, res) 
     }
 });
 
+// ========== ล็อคการคีย์ข้อมูล ==========
+
+// ดึงสถานะล็อคการคีย์ข้อมูล
+apiRouter.get('/data-entry-lock', authenticateToken, async (req, res) => {
+    try {
+        const keys = ['data_entry_locked', 'data_entry_lock_start', 'data_entry_lock_end', 'data_entry_lock_days'];
+        const [rows] = await db.query('SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN (?)', [keys]);
+        const settings = {};
+        for (const r of rows) settings[r.setting_key] = r.setting_value;
+
+        const manualLock = settings.data_entry_locked === 'true';
+        const startDate = settings.data_entry_lock_start || '';
+        const endDate = settings.data_entry_lock_end || '';
+        const lockDays = parseInt(settings.data_entry_lock_days) || 0;
+
+        const today = new Date().toISOString().split('T')[0];
+
+        // คำนวณวันสิ้นสุดจากจำนวนวัน (ถ้ามี startDate + lockDays > 0)
+        let effectiveEnd = endDate;
+        if (startDate && lockDays > 0) {
+            const d = new Date(startDate);
+            d.setDate(d.getDate() + lockDays);
+            effectiveEnd = d.toISOString().split('T')[0];
+        }
+
+        const inDateRange = startDate && effectiveEnd && today >= startDate && today <= effectiveEnd;
+        const isLocked = manualLock || inDateRange;
+
+        let lockReason = '';
+        if (manualLock) lockReason = 'ล็อคโดย Admin';
+        else if (inDateRange) lockReason = `ล็อคตามช่วงวันที่ ${startDate} - ${effectiveEnd}`;
+
+        res.json({
+            success: true,
+            data: {
+                data_entry_locked: manualLock,
+                data_entry_lock_start: startDate,
+                data_entry_lock_end: endDate,
+                data_entry_lock_days: lockDays,
+                effective_end: effectiveEnd,
+                is_locked: isLocked,
+                lock_reason: lockReason
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ========== ระบบอุทธรณ์ (Appeal) ==========
+
+// ดึงการตั้งค่าอุทธรณ์ + คำนวณว่าเปิดรับอยู่หรือไม่
+apiRouter.get('/appeal-settings', authenticateToken, async (req, res) => {
+    try {
+        const keys = ['appeal_enabled', 'appeal_start_date', 'appeal_end_date', 'appeal_days_after_approve'];
+        const [rows] = await db.query('SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN (?)', [keys]);
+        const settings = {};
+        for (const r of rows) settings[r.setting_key] = r.setting_value;
+
+        const enabled = settings.appeal_enabled === 'true';
+        const startDate = settings.appeal_start_date || '';
+        const endDate = settings.appeal_end_date || '';
+        const daysAfter = parseInt(settings.appeal_days_after_approve) || 0;
+
+        // คำนวณว่าวันนี้อยู่ในช่วงเปิดรับหรือไม่
+        const today = new Date().toISOString().split('T')[0];
+        const inDateRange = (!startDate || today >= startDate) && (!endDate || today <= endDate);
+        const isOpen = enabled && inDateRange;
+
+        res.json({ success: true, data: { appeal_enabled: enabled, appeal_start_date: startDate, appeal_end_date: endDate, appeal_days_after_approve: daysAfter, is_open: isOpen } });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// หน่วยบริการยื่นอุทธรณ์
+apiRouter.post('/appeal-kpi', authenticateToken, async (req, res) => {
+    const { indicator_id, year_bh, hospcode, reason } = req.body;
+    const user = req.user;
+
+    if (!indicator_id || !year_bh || !hospcode || !reason) {
+        return res.status(400).json({ success: false, message: 'กรุณากรอกข้อมูลให้ครบถ้วน' });
+    }
+
+    try {
+        // ตรวจสอบการตั้งค่าอุทธรณ์
+        const [settingsRows] = await db.query('SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN (?)',
+            [['appeal_enabled', 'appeal_start_date', 'appeal_end_date', 'appeal_days_after_approve']]);
+        const settings = {};
+        for (const r of settingsRows) settings[r.setting_key] = r.setting_value;
+
+        if (settings.appeal_enabled !== 'true') {
+            return res.status(400).json({ success: false, message: 'ระบบอุทธรณ์ยังไม่เปิดใช้งาน' });
+        }
+
+        const today = new Date().toISOString().split('T')[0];
+        if (settings.appeal_start_date && today < settings.appeal_start_date) {
+            return res.status(400).json({ success: false, message: `ยังไม่ถึงช่วงเวลายื่นอุทธรณ์ (เริ่ม ${settings.appeal_start_date})` });
+        }
+        if (settings.appeal_end_date && today > settings.appeal_end_date) {
+            return res.status(400).json({ success: false, message: `หมดช่วงเวลายื่นอุทธรณ์แล้ว (สิ้นสุด ${settings.appeal_end_date})` });
+        }
+
+        // ตรวจสอบว่า KPI ต้อง Approved + locked (ดูจาก row ใดก็ได้ ไม่จำกัดเดือน)
+        const [kpiRows] = await db.query(
+            "SELECT status, is_locked, created_at FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? ORDER BY month_bh LIMIT 1",
+            [indicator_id, year_bh, hospcode]
+        );
+        if (kpiRows.length === 0) {
+            return res.status(404).json({ success: false, message: 'ไม่พบข้อมูล KPI' });
+        }
+        if (kpiRows[0].status !== 'Approved' || !kpiRows[0].is_locked) {
+            return res.status(400).json({ success: false, message: 'สามารถยื่นอุทธรณ์ได้เฉพาะ KPI ที่ถูกอนุมัติและล็อคแล้วเท่านั้น' });
+        }
+
+        // ตรวจสอบจำนวนวันหลัง approve
+        const daysAfter = parseInt(settings.appeal_days_after_approve) || 0;
+        if (daysAfter > 0) {
+            // หา approve date จาก system_logs หรือใช้ created_at
+            const [logRows] = await db.query(
+                "SELECT created_at FROM system_logs WHERE action_type = 'APPROVE' AND new_value LIKE ? ORDER BY created_at DESC LIMIT 1",
+                [`%"indicator_id":${indicator_id}%${hospcode}%`]
+            );
+            const approveDate = logRows.length > 0 ? new Date(logRows[0].created_at) : new Date(kpiRows[0].created_at);
+            const diffDays = Math.floor((new Date() - approveDate) / (1000 * 60 * 60 * 24));
+            if (diffDays > daysAfter) {
+                return res.status(400).json({ success: false, message: `เลยกำหนดยื่นอุทธรณ์แล้ว (ภายใน ${daysAfter} วันหลังอนุมัติ)` });
+            }
+        }
+
+        // ตรวจสอบว่ายังไม่ได้ยื่นอุทธรณ์อยู่แล้ว
+        const [existingAppeal] = await db.query(
+            "SELECT id FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? AND status = 'Appeal' LIMIT 1",
+            [indicator_id, year_bh, hospcode]
+        );
+        if (existingAppeal.length > 0) {
+            return res.status(400).json({ success: false, message: 'ตัวชี้วัดนี้มีการยื่นอุทธรณ์อยู่แล้ว' });
+        }
+
+        // อัปเดตสถานะเป็น Appeal (ยังคง locked)
+        await db.query(
+            "UPDATE kpi_results SET status = 'Appeal' WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?",
+            [indicator_id, year_bh, hospcode]
+        );
+
+        // บันทึกเหตุผลอุทธรณ์
+        await db.query(
+            "INSERT INTO kpi_rejection_comments (indicator_id, year_bh, hospcode, comment, type, replied_by, rejected_by) VALUES (?, ?, ?, ?, 'appeal', ?, NULL)",
+            [indicator_id, year_bh, hospcode, reason, user.userId]
+        );
+
+        // ดึงชื่อตัวชี้วัด
+        const [indRows] = await db.query('SELECT kpi_indicators_name, dept_id FROM kpi_indicators WHERE id = ?', [indicator_id]);
+        const indName = indRows[0]?.kpi_indicators_name || `ID ${indicator_id}`;
+        const deptId = indRows[0]?.dept_id;
+
+        // แจ้งเตือน admin_ssj ในหน่วยงานเดียวกัน + super_admin ทั้งหมด
+        const [admins] = await db.query(
+            "SELECT id, role, dept_id FROM users WHERE (role = 'super_admin') OR (role = 'admin_ssj' AND dept_id = ?)",
+            [deptId]
+        );
+        for (const admin of admins) {
+            await db.query(
+                "INSERT INTO notifications (user_id, hospcode, type, title, message, indicator_id, year_bh, created_by) VALUES (?, ?, 'appeal', ?, ?, ?, ?, ?)",
+                [admin.id, hospcode, `ยื่นอุทธรณ์: ${indName}`, `หน่วยบริการ ${hospcode} ขออุทธรณ์แก้ไขคะแนน ปี ${year_bh}\nเหตุผล: ${reason}`, indicator_id, year_bh, user.userId]
+            );
+        }
+
+        await db.query(
+            'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+            [user.userId, user.deptId, 'APPEAL', 'kpi_results', JSON.stringify({ indicator_id, year_bh, hospcode, reason }), req.ip]
+        );
+
+        res.json({ success: true, message: 'ยื่นอุทธรณ์เรียบร้อยแล้ว' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Admin อนุมัติอุทธรณ์ → ปลดล็อค
+apiRouter.post('/appeal-approve', authenticateToken, isAdmin, async (req, res) => {
+    const { indicator_id, year_bh, hospcode, comment } = req.body;
+    const user = req.user;
+
+    try {
+        // ปลดล็อคและเปลี่ยนสถานะเป็น Pending
+        await db.query(
+            "UPDATE kpi_results SET status = 'Pending', is_locked = 0 WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?",
+            [indicator_id, year_bh, hospcode]
+        );
+
+        // บันทึก comment
+        await db.query(
+            "INSERT INTO kpi_rejection_comments (indicator_id, year_bh, hospcode, comment, type, rejected_by) VALUES (?, ?, ?, ?, 'appeal_approve', ?)",
+            [indicator_id, year_bh, hospcode, comment || 'อนุมัติอุทธรณ์', user.userId]
+        );
+
+        // ดึงชื่อตัวชี้วัด
+        const [indRows] = await db.query('SELECT kpi_indicators_name FROM kpi_indicators WHERE id = ?', [indicator_id]);
+        const indName = indRows[0]?.kpi_indicators_name || `ID ${indicator_id}`;
+
+        // แจ้ง hospcode
+        await db.query(
+            "INSERT INTO notifications (hospcode, type, title, message, indicator_id, year_bh, created_by) VALUES (?, 'approve', ?, ?, ?, ?, ?)",
+            [hospcode, `อุทธรณ์ได้รับการอนุมัติ: ${indName}`, `การอุทธรณ์ได้รับการอนุมัติแล้ว ข้อมูลถูกปลดล็อค สามารถแก้ไขคะแนนได้${comment ? '\nความเห็น: ' + comment : ''}`, indicator_id, year_bh, user.userId]
+        );
+
+        await db.query(
+            'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+            [user.userId, user.deptId, 'APPEAL_APPROVE', 'kpi_results', JSON.stringify({ indicator_id, year_bh, hospcode, comment }), req.ip]
+        );
+
+        res.json({ success: true, message: 'อนุมัติอุทธรณ์เรียบร้อย ปลดล็อคข้อมูลแล้ว' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Admin ปฏิเสธอุทธรณ์ → กลับ Approved/locked
+apiRouter.post('/appeal-reject', authenticateToken, isAdmin, async (req, res) => {
+    const { indicator_id, year_bh, hospcode, comment } = req.body;
+    const user = req.user;
+
+    if (!comment) {
+        return res.status(400).json({ success: false, message: 'กรุณาระบุเหตุผลในการปฏิเสธอุทธรณ์' });
+    }
+
+    try {
+        // กลับสถานะ Approved + locked
+        await db.query(
+            "UPDATE kpi_results SET status = 'Approved', is_locked = 1 WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?",
+            [indicator_id, year_bh, hospcode]
+        );
+
+        // บันทึก comment
+        await db.query(
+            "INSERT INTO kpi_rejection_comments (indicator_id, year_bh, hospcode, comment, type, rejected_by) VALUES (?, ?, ?, ?, 'appeal_reject', ?)",
+            [indicator_id, year_bh, hospcode, comment, user.userId]
+        );
+
+        // ดึงชื่อตัวชี้วัด
+        const [indRows] = await db.query('SELECT kpi_indicators_name FROM kpi_indicators WHERE id = ?', [indicator_id]);
+        const indName = indRows[0]?.kpi_indicators_name || `ID ${indicator_id}`;
+
+        // แจ้ง hospcode
+        await db.query(
+            "INSERT INTO notifications (hospcode, type, title, message, indicator_id, year_bh, created_by) VALUES (?, 'reject', ?, ?, ?, ?, ?)",
+            [hospcode, `อุทธรณ์ถูกปฏิเสธ: ${indName}`, `การอุทธรณ์ถูกปฏิเสธ ข้อมูลยังคงถูกล็อค\nเหตุผล: ${comment}`, indicator_id, year_bh, user.userId]
+        );
+
+        await db.query(
+            'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+            [user.userId, user.deptId, 'APPEAL_REJECT', 'kpi_results', JSON.stringify({ indicator_id, year_bh, hospcode, comment }), req.ip]
+        );
+
+        res.json({ success: true, message: 'ปฏิเสธอุทธรณ์เรียบร้อย' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// แจ้ง admin ว่าหน่วยบริการแก้ไขข้อมูลจากอุทธรณ์เสร็จแล้ว ให้ตรวจสอบรับรอง
+apiRouter.post('/appeal-edited', authenticateToken, async (req, res) => {
+    const { indicator_id, year_bh, hospcode } = req.body;
+    const user = req.user;
+
+    try {
+        const [indRows] = await db.query('SELECT kpi_indicators_name, dept_id FROM kpi_indicators WHERE id = ?', [indicator_id]);
+        const indName = indRows[0]?.kpi_indicators_name || `ID ${indicator_id}`;
+        const deptId = indRows[0]?.dept_id;
+
+        // ดึงชื่อหน่วยบริการ
+        const [hosRows] = await db.query('SELECT hosname FROM chospital WHERE hoscode = ?', [hospcode]);
+        const hosName = hosRows[0]?.hosname || hospcode;
+
+        // แจ้ง admin_ssj ในหน่วยงานเดียวกัน + super_admin ทั้งหมด
+        const [admins] = await db.query(
+            "SELECT id FROM users WHERE (role = 'super_admin') OR (role = 'admin_ssj' AND dept_id = ?)",
+            [deptId]
+        );
+        for (const admin of admins) {
+            await db.query(
+                "INSERT INTO notifications (user_id, hospcode, type, title, message, indicator_id, year_bh, created_by) VALUES (?, ?, 'info', ?, ?, ?, ?, ?)",
+                [admin.id, hospcode,
+                 `แก้ไขข้อมูลอุทธรณ์แล้ว: ${indName}`,
+                 `${hosName} (${hospcode}) แก้ไขข้อมูลจากการอุทธรณ์เรียบร้อยแล้ว ปี ${year_bh}\nกรุณาเข้าตรวจสอบและรับรองข้อมูล`,
+                 indicator_id, year_bh, user.userId]
+            );
+        }
+
+        await db.query(
+            'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+            [user.userId, user.deptId, 'APPEAL_EDITED', 'kpi_results', JSON.stringify({ indicator_id, year_bh, hospcode }), req.ip]
+        );
+
+        res.json({ success: true, message: 'แจ้ง Admin เรียบร้อยแล้ว' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 // ดึงจำนวนตัวชี้วัดที่รอการตรวจสอบ (ปีงบปัจจุบัน, แสดง dept/hospital/indicator)
 apiRouter.get('/notifications/pending-kpi', authenticateToken, isAdmin, async (req, res) => {
     const user = req.user;
@@ -2077,7 +2381,42 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         } catch (e) {
             // columns may already exist
         }
-        console.log('✅ login_logs, system_logs, notifications & rejection tables ready');
+        // ========== Appeal system migration ==========
+        // เพิ่ม type สำหรับอุทธรณ์ใน kpi_rejection_comments
+        try {
+            await db.query(`ALTER TABLE kpi_rejection_comments MODIFY type ENUM('reject','reply','appeal','appeal_approve','appeal_reject') DEFAULT 'reject'`);
+            await db.query(`ALTER TABLE kpi_rejection_comments MODIFY rejected_by INT NULL DEFAULT NULL`);
+            await db.query(`ALTER TABLE kpi_rejection_comments MODIFY replied_by INT NULL DEFAULT NULL`);
+        } catch (e) { /* may already be correct */ }
+
+        // เพิ่ม data entry lock settings
+        const entryLockDefaults = [
+            ['data_entry_locked', 'false', 'ล็อคการคีย์ข้อมูล (เปิด/ปิดด้วยมือ)'],
+            ['data_entry_lock_start', '', 'วันที่เริ่มล็อคการคีย์ (YYYY-MM-DD)'],
+            ['data_entry_lock_end', '', 'วันที่สิ้นสุดล็อค (YYYY-MM-DD)'],
+            ['data_entry_lock_days', '0', 'จำนวนวันที่ล็อค (นับจากวันเริ่ม, 0=ใช้วันสิ้นสุดแทน)']
+        ];
+        for (const [key, val, desc] of entryLockDefaults) {
+            await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)', [key, val, desc]);
+        }
+
+        // เพิ่ม appeal settings defaults
+        const appealDefaults = [
+            ['appeal_enabled', 'false', 'เปิด/ปิดระบบอุทธรณ์'],
+            ['appeal_start_date', '', 'วันที่เริ่มเปิดรับอุทธรณ์ (YYYY-MM-DD)'],
+            ['appeal_end_date', '', 'วันที่ปิดรับอุทธรณ์ (YYYY-MM-DD)'],
+            ['appeal_days_after_approve', '0', 'จำนวนวันหลัง approve ที่ยื่นอุทธรณ์ได้ (0=ไม่จำกัด)']
+        ];
+        for (const [key, val, desc] of appealDefaults) {
+            await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)', [key, val, desc]);
+        }
+
+        // เพิ่ม type 'appeal' ใน notifications
+        try {
+            await db.query(`ALTER TABLE notifications MODIFY type ENUM('approve','reject','info','appeal') NOT NULL`);
+        } catch (e) { /* may already be correct */ }
+
+        console.log('✅ login_logs, system_logs, notifications, rejection & appeal tables ready');
     } catch (err) {
         console.error('⚠️ Auto-create tables error:', err.message);
     }
@@ -2173,7 +2512,10 @@ apiRouter.get('/notifications', authenticateToken, async (req, res) => {
                     (SELECT COUNT(*) FROM kpi_rejection_comments rc
                      WHERE rc.indicator_id = n.indicator_id AND rc.year_bh = n.year_bh
                      AND rc.hospcode = n.hospcode AND rc.type = 'reply'
-                     AND rc.created_at > n.created_at) AS has_reply
+                     AND rc.created_at > n.created_at) AS has_reply,
+                    (SELECT r.status FROM kpi_results r
+                     WHERE r.indicator_id = n.indicator_id AND r.year_bh = n.year_bh
+                     AND r.hospcode = n.hospcode ORDER BY r.month_bh LIMIT 1) AS kpi_status
              FROM notifications n
              LEFT JOIN users u ON n.created_by = u.id
              WHERE n.user_id = ? OR n.hospcode = ? OR (n.user_id IS NULL AND n.hospcode IS NULL)

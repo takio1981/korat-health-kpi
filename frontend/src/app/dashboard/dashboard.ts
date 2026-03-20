@@ -84,6 +84,16 @@ export class DashboardComponent implements OnInit {
   replyMessage: string = '';
   replyRejectionInfo: any = null;
 
+  // Data Entry Lock
+  dataEntryLock: any = { is_locked: false, lock_reason: '' };
+
+  // แก้ไขเฉพาะข้อ (จากอุทธรณ์ที่ได้รับอนุมัติ)
+  editingSingleItem: any = null;
+
+  // Appeal (อุทธรณ์)
+  appealSettings: any = { is_open: false };
+  appealReason: string = '';
+
   stats: any = {
     successRate: 0,
     recordedCount: 0,
@@ -111,6 +121,30 @@ export class DashboardComponent implements OnInit {
     }
 
     this.loadKpiData();
+    this.loadAppealSettings();
+    this.loadDataEntryLock();
+  }
+
+  loadDataEntryLock() {
+    this.authService.getDataEntryLock().subscribe({
+      next: (res) => {
+        if (res.success) this.dataEntryLock = res.data;
+      }
+    });
+  }
+
+  // user ทั่วไปถูกล็อคหรือไม่ (admin/super_admin ไม่ถูกล็อค)
+  get isEntryLocked(): boolean {
+    if (this.isAdmin || this.isSuperAdmin) return false;
+    return this.dataEntryLock.is_locked;
+  }
+
+  loadAppealSettings() {
+    this.authService.getAppealSettings().subscribe({
+      next: (res) => {
+        if (res.success) this.appealSettings = res.data;
+      }
+    });
   }
 
   loadKpiData() {
@@ -1199,6 +1233,189 @@ export class DashboardComponent implements OnInit {
         }
       },
       error: (err: HttpErrorResponse) => this.handleApiError(err, 'ไม่สามารถส่งตอบกลับได้')
+    });
+  }
+
+  // === แก้ไขเฉพาะข้อ (จากอุทธรณ์ที่ได้รับอนุมัติ) ===
+
+  startEditSingle(item: any) {
+    item._original = { ...item };
+    this.editingSingleItem = item;
+    Swal.fire({ icon: 'info', title: 'แก้ไขข้อที่อุทธรณ์', text: `กำลังแก้ไข: ${item.kpi_indicators_name}`, timer: 1500, showConfirmButton: false });
+  }
+
+  isSingleEditing(item: any): boolean {
+    return this.editingSingleItem &&
+      this.editingSingleItem.indicator_id === item.indicator_id &&
+      this.editingSingleItem.year_bh === item.year_bh &&
+      this.editingSingleItem.hospcode === item.hospcode;
+  }
+
+  cancelEditSingle() {
+    if (this.editingSingleItem && this.editingSingleItem._original) {
+      const orig = this.editingSingleItem._original;
+      Object.assign(this.editingSingleItem, orig);
+    }
+    this.editingSingleItem = null;
+  }
+
+  saveSingleItem() {
+    const item = this.editingSingleItem;
+    if (!item || !item._original) return;
+
+    const months = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
+    const hasChange = Number(item.target_value) !== Number(item._original.target_value) ||
+      months.some(m => Number(item[m]) !== Number(item._original[m]));
+
+    if (!hasChange) {
+      Swal.fire('ไม่มีการเปลี่ยนแปลง', 'ไม่พบข้อมูลที่แก้ไข', 'info');
+      return;
+    }
+
+    const cleanData = [{
+      indicator_id: item.indicator_id,
+      year_bh: item.year_bh,
+      hospcode: item.hospcode,
+      target_value: item.target_value,
+      oct: item.oct, nov: item.nov, dece: item.dece,
+      jan: item.jan, feb: item.feb, mar: item.mar,
+      apr: item.apr, may: item.may, jun: item.jun,
+      jul: item.jul, aug: item.aug, sep: item.sep
+    }];
+
+    Swal.fire({
+      title: 'ยืนยันบันทึกและส่งตรวจสอบ',
+      html: `<p class="text-sm">บันทึกข้อมูล <b>${item.kpi_indicators_name}</b> และส่งให้ Admin ตรวจสอบรับรอง</p>`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'บันทึกและส่งตรวจสอบ',
+      cancelButtonText: 'ยกเลิก',
+      confirmButtonColor: '#10b981'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        Swal.fire({ title: 'กำลังบันทึก...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+        this.authService.updateKpiResults(cleanData).subscribe({
+          next: (res) => {
+            if (res.success) {
+              // แจ้ง admin ว่าแก้ไขข้อมูลอุทธรณ์เสร็จแล้ว
+              this.authService.notifyAppealEdited({
+                indicator_id: item.indicator_id,
+                year_bh: item.year_bh,
+                hospcode: item.hospcode
+              }).subscribe();
+
+              this.editingSingleItem = null;
+              Swal.fire('สำเร็จ', 'บันทึกข้อมูลและแจ้ง Admin ให้ตรวจสอบรับรองเรียบร้อยแล้ว', 'success');
+              this.loadKpiData();
+            } else {
+              Swal.fire('ผิดพลาด', res.message, 'error');
+            }
+          },
+          error: (err: HttpErrorResponse) => this.handleApiError(err, 'ไม่สามารถบันทึกข้อมูลได้')
+        });
+      }
+    });
+  }
+
+  // === ระบบอุทธรณ์ ===
+
+  openAppealModal(item: any) {
+    this.appealReason = '';
+    Swal.fire({
+      title: 'ยื่นอุทธรณ์ขอแก้ไขคะแนน',
+      html: `<div class="text-left text-sm mb-3">
+        <p class="font-bold">${item.kpi_indicators_name}</p>
+        <p class="text-gray-500">ปี ${item.year_bh} | ${item.hosname || item.hospcode}</p>
+      </div>`,
+      input: 'textarea',
+      inputLabel: 'เหตุผลในการยื่นอุทธรณ์',
+      inputPlaceholder: 'ระบุเหตุผลที่ต้องการขอแก้ไขคะแนน...',
+      inputValidator: (value) => !value ? 'กรุณาระบุเหตุผล' : null,
+      showCancelButton: true,
+      confirmButtonText: 'ยื่นอุทธรณ์',
+      cancelButtonText: 'ยกเลิก',
+      confirmButtonColor: '#7c3aed'
+    }).then((result) => {
+      if (result.isConfirmed && result.value) {
+        this.authService.appealKpi({
+          indicator_id: item.indicator_id,
+          year_bh: item.year_bh,
+          hospcode: item.hospcode,
+          reason: result.value
+        }).subscribe({
+          next: (res) => {
+            if (res.success) {
+              Swal.fire('สำเร็จ', 'ยื่นอุทธรณ์เรียบร้อยแล้ว รอ Admin พิจารณา', 'success');
+              this.loadKpiData();
+            }
+          },
+          error: (err: HttpErrorResponse) => this.handleApiError(err, 'ไม่สามารถยื่นอุทธรณ์ได้')
+        });
+      }
+    });
+  }
+
+  approveAppeal(item: any) {
+    Swal.fire({
+      title: 'อนุมัติอุทธรณ์',
+      html: `<p class="text-sm">อนุมัติอุทธรณ์ <b>${item.kpi_indicators_name}</b><br>ข้อมูลจะถูกปลดล็อคให้หน่วยบริการแก้ไขได้</p>`,
+      input: 'textarea',
+      inputLabel: 'ความเห็น (ไม่บังคับ)',
+      inputPlaceholder: 'ระบุความเห็นเพิ่มเติม...',
+      showCancelButton: true,
+      confirmButtonText: 'อนุมัติอุทธรณ์',
+      cancelButtonText: 'ยกเลิก',
+      confirmButtonColor: '#16a34a'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        this.authService.approveAppeal({
+          indicator_id: item.indicator_id,
+          year_bh: item.year_bh,
+          hospcode: item.hospcode,
+          comment: result.value || ''
+        }).subscribe({
+          next: (res) => {
+            if (res.success) {
+              Swal.fire('สำเร็จ', 'อนุมัติอุทธรณ์เรียบร้อย ข้อมูลถูกปลดล็อคแล้ว', 'success');
+              this.loadKpiData();
+            }
+          },
+          error: (err: HttpErrorResponse) => this.handleApiError(err, 'ไม่สามารถอนุมัติอุทธรณ์ได้')
+        });
+      }
+    });
+  }
+
+  rejectAppeal(item: any) {
+    Swal.fire({
+      title: 'ปฏิเสธอุทธรณ์',
+      html: `<p class="text-sm">ปฏิเสธอุทธรณ์ <b>${item.kpi_indicators_name}</b><br>ข้อมูลจะยังคงถูกล็อคไว้</p>`,
+      input: 'textarea',
+      inputLabel: 'เหตุผลในการปฏิเสธ',
+      inputPlaceholder: 'ระบุเหตุผลที่ปฏิเสธอุทธรณ์...',
+      inputValidator: (value) => !value ? 'กรุณาระบุเหตุผล' : null,
+      showCancelButton: true,
+      confirmButtonText: 'ปฏิเสธอุทธรณ์',
+      cancelButtonText: 'ยกเลิก',
+      confirmButtonColor: '#dc2626'
+    }).then((result) => {
+      if (result.isConfirmed && result.value) {
+        this.authService.rejectAppeal({
+          indicator_id: item.indicator_id,
+          year_bh: item.year_bh,
+          hospcode: item.hospcode,
+          comment: result.value
+        }).subscribe({
+          next: (res) => {
+            if (res.success) {
+              Swal.fire('สำเร็จ', 'ปฏิเสธอุทธรณ์เรียบร้อย', 'success');
+              this.loadKpiData();
+            }
+          },
+          error: (err: HttpErrorResponse) => this.handleApiError(err, 'ไม่สามารถปฏิเสธอุทธรณ์ได้')
+        });
+      }
     });
   }
 }

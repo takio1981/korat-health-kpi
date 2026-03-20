@@ -484,4 +484,42 @@ export class AuthService {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.post(`${this.apiUrl}/check-kpi-export`, { year_bh: yearBh, indicator_ids: indicatorIds }, { headers });
   }
+
+  // Data Entry Lock
+  getDataEntryLock(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/data-entry-lock`, { headers });
+  }
+
+  // Appeal (อุทธรณ์)
+  getAppealSettings(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/appeal-settings`, { headers });
+  }
+
+  appealKpi(data: any): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/appeal-kpi`, data, { headers });
+  }
+
+  approveAppeal(data: any): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/appeal-approve`, data, { headers });
+  }
+
+  notifyAppealEdited(data: any): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/appeal-edited`, data, { headers });
+  }
+
+  rejectAppeal(data: any): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/appeal-reject`, data, { headers });
+  }
 }

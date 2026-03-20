@@ -28,6 +28,18 @@ export class SettingsComponent implements OnInit {
   isAdmin: boolean = false;
   isSuperAdmin: boolean = false;
 
+  // Data Entry Lock
+  dataEntryLocked: boolean = false;
+  dataEntryLockStart: string = '';
+  dataEntryLockEnd: string = '';
+  dataEntryLockDays: number = 0;
+
+  // Appeal settings
+  appealEnabled: boolean = false;
+  appealStartDate: string = '';
+  appealEndDate: string = '';
+  appealDaysAfterApprove: number = 0;
+
   ngOnInit() {
     const role = this.authService.getUserRole();
     this.isAdmin = role === 'admin_ssj' || role === 'super_admin';
@@ -76,6 +88,26 @@ export class SettingsComponent implements OnInit {
           if (versionSetting) {
             this.systemVersion = versionSetting.setting_value;
           }
+
+          // Data Entry Lock settings
+          const entryLocked = this.settings.find(s => s.setting_key === 'data_entry_locked');
+          const entryLockStart = this.settings.find(s => s.setting_key === 'data_entry_lock_start');
+          const entryLockEnd = this.settings.find(s => s.setting_key === 'data_entry_lock_end');
+          const entryLockDays = this.settings.find(s => s.setting_key === 'data_entry_lock_days');
+          if (entryLocked) this.dataEntryLocked = entryLocked.setting_value === 'true';
+          if (entryLockStart) this.dataEntryLockStart = entryLockStart.setting_value || '';
+          if (entryLockEnd) this.dataEntryLockEnd = entryLockEnd.setting_value || '';
+          if (entryLockDays) this.dataEntryLockDays = parseInt(entryLockDays.setting_value, 10) || 0;
+
+          // Appeal settings
+          const appealEn = this.settings.find(s => s.setting_key === 'appeal_enabled');
+          const appealStart = this.settings.find(s => s.setting_key === 'appeal_start_date');
+          const appealEnd = this.settings.find(s => s.setting_key === 'appeal_end_date');
+          const appealDays = this.settings.find(s => s.setting_key === 'appeal_days_after_approve');
+          if (appealEn) this.appealEnabled = appealEn.setting_value === 'true';
+          if (appealStart) this.appealStartDate = appealStart.setting_value || '';
+          if (appealEnd) this.appealEndDate = appealEnd.setting_value || '';
+          if (appealDays) this.appealDaysAfterApprove = parseInt(appealDays.setting_value, 10) || 0;
         }
         this.cdr.detectChanges();
       }
@@ -90,7 +122,15 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'max_login_attempts', setting_value: this.maxLoginAttempts.toString() },
       { setting_key: 'log_retention_days', setting_value: this.logRetentionDays.toString() },
       { setting_key: 'auto_backup_enabled', setting_value: this.autoBackupEnabled.toString() },
-      { setting_key: 'system_version', setting_value: this.systemVersion }
+      { setting_key: 'system_version', setting_value: this.systemVersion },
+      { setting_key: 'data_entry_locked', setting_value: this.dataEntryLocked.toString() },
+      { setting_key: 'data_entry_lock_start', setting_value: this.dataEntryLockStart },
+      { setting_key: 'data_entry_lock_end', setting_value: this.dataEntryLockEnd },
+      { setting_key: 'data_entry_lock_days', setting_value: this.dataEntryLockDays.toString() },
+      { setting_key: 'appeal_enabled', setting_value: this.appealEnabled.toString() },
+      { setting_key: 'appeal_start_date', setting_value: this.appealStartDate },
+      { setting_key: 'appeal_end_date', setting_value: this.appealEndDate },
+      { setting_key: 'appeal_days_after_approve', setting_value: this.appealDaysAfterApprove.toString() }
     ];
 
     this.authService.updateSettings(settingsToSave).subscribe({
@@ -108,4 +148,17 @@ export class SettingsComponent implements OnInit {
     });
   }
 
+  resetDataEntryLock() {
+    this.dataEntryLocked = false;
+    this.dataEntryLockStart = '';
+    this.dataEntryLockEnd = '';
+    this.dataEntryLockDays = 0;
+  }
+
+  resetAppealSettings() {
+    this.appealEnabled = false;
+    this.appealStartDate = '';
+    this.appealEndDate = '';
+    this.appealDaysAfterApprove = 0;
+  }
 }
