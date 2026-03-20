@@ -10,6 +10,7 @@ import { SettingsComponent } from './settings/settings';
 import { KpiManageComponent } from './kpi-manage/kpi-manage';
 import { ReportComponent } from './report/report';
 import { NotificationsComponent } from './notifications/notifications';
+import { ExportKpiComponent } from './export-kpi/export-kpi';
 import { authGuard } from './guards/auth-guard';
 import { adminGuard } from './guards/admin-guard';
 import { anyAdminGuard } from './guards/any-admin-guard';
@@ -33,6 +34,7 @@ export const routes: Routes = [
       { path: 'kpi-setup', component: KpiSetupComponent, canActivate: [adminGuard], data: { title: 'สร้าง KPI ปีงบประมาณใหม่' } },
       { path: 'audit-logs', component: AuditLogComponent, canActivate: [superAdminGuard], data: { title: 'ประวัติการใช้งาน' } },
       { path: 'kpi-manage', component: KpiManageComponent, canActivate: [superAdminGuard], data: { title: 'จัดการตัวชี้วัด' } },
+      { path: 'export-kpi', component: ExportKpiComponent, canActivate: [superAdminGuard], data: { title: 'Export ข้อมูล KPI' } },
       { path: 'settings', component: SettingsComponent, canActivate: [superAdminGuard], data: { title: 'ตั้งค่าระบบ' } },
     ]
   }

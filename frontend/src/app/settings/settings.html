@@ -1,4 +1,5 @@
 <div class="p-6">
+
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
     <div class="p-6 border-b border-gray-100">
       <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-cog me-2 text-green-600"></i>การตั้งค่าทั่วไป</h3>
@@ -92,99 +93,6 @@
           </button>
         </div>
       </form>
-    </div>
-  </div>
-
-  <!-- Export KPI Tables Section -->
-  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
-    <div class="p-6">
-      <h3 class="text-lg font-bold text-gray-800 mb-2">
-        <i class="fas fa-database me-2 text-indigo-600"></i>Export ข้อมูล KPI ลงตารางรายตัวชี้วัด
-      </h3>
-      <p class="text-sm text-gray-500 mb-6">สร้างตาราง MySQL แยกสำหรับแต่ละตัวชี้วัด โดยรวมข้อมูลคะแนนของทุกหน่วยบริการ (hospcode ที่ไม่มีข้อมูลจะได้ค่า 0)</p>
-
-      <!-- ปีงบประมาณ -->
-      <div class="mb-4">
-        <label class="block text-sm font-bold text-gray-700 mb-2">
-          <i class="fas fa-calendar me-2 text-blue-500"></i>ปีงบประมาณ
-        </label>
-        <input type="text" [(ngModel)]="exportYear" class="w-40 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none hover:border-indigo-400 transition-colors" maxlength="4">
-      </div>
-
-      <!-- เลือกตัวชี้วัด -->
-      <div class="mb-4">
-        <label class="block text-sm font-bold text-gray-700 mb-2">
-          <i class="fas fa-list-check me-2 text-green-500"></i>เลือกตัวชี้วัด
-          <span class="text-indigo-600 font-normal ms-2">(เลือกแล้ว {{selectedIndicatorIds.size}}/{{exportIndicators.length}})</span>
-        </label>
-
-        <!-- Select All + Search -->
-        <div class="flex flex-wrap items-center gap-4 mb-3">
-          <label class="inline-flex items-center cursor-pointer">
-            <input type="checkbox" [(ngModel)]="selectAll" (change)="toggleSelectAll()" class="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
-            <span class="ms-2 text-sm font-medium text-gray-700">เลือกทั้งหมด</span>
-          </label>
-          <div class="flex-1 min-w-[200px] max-w-md">
-            <input type="text" [(ngModel)]="exportSearch" (ngModelChange)="filterExportIndicators()" placeholder="ค้นหาตัวชี้วัด..."
-                   class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
-          </div>
-        </div>
-
-        <!-- Indicator List -->
-        <div class="border border-gray-200 rounded-lg max-h-64 overflow-y-auto bg-gray-50">
-          @for (ind of filteredExportIndicators; track ind.id) {
-            <label class="flex items-start gap-3 px-4 py-2.5 hover:bg-indigo-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors">
-              <input type="checkbox" [checked]="isIndicatorSelected(ind.id)" (change)="toggleIndicator(ind.id)"
-                     class="w-4 h-4 mt-0.5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
-              <div class="flex-1 min-w-0">
-                <div class="text-sm text-gray-800 leading-snug">{{ind.kpi_indicators_name}}</div>
-                <div class="text-xs text-gray-400 mt-0.5">table: {{ind.table_process}}</div>
-              </div>
-            </label>
-          }
-          @if (filteredExportIndicators.length === 0) {
-            <div class="px-4 py-6 text-center text-sm text-gray-400">ไม่พบตัวชี้วัดที่ตรงกับคำค้นหา</div>
-          }
-        </div>
-      </div>
-
-      <!-- Export Button -->
-      <div class="flex items-center gap-4 mt-6">
-        <button (click)="exportKpiTables()" [disabled]="exportLoading || selectedIndicatorIds.size === 0"
-                class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-bold rounded-xl shadow-md transition-colors">
-          @if (exportLoading) {
-            <i class="fas fa-spinner fa-spin me-2"></i>กำลังส่งออก...
-          } @else {
-            <i class="fas fa-file-export me-2"></i>ส่งออกข้อมูล
-          }
-        </button>
-      </div>
-
-      <!-- Export Result -->
-      @if (exportResult) {
-        <div class="mt-4 p-4 rounded-lg" [class]="exportResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'">
-          <div class="font-bold text-sm mb-2" [class]="exportResult.success ? 'text-green-800' : 'text-red-800'">
-            <i [class]="exportResult.success ? 'fas fa-check-circle me-1' : 'fas fa-times-circle me-1'"></i>
-            {{exportResult.message}}
-          </div>
-
-          @if (exportResult.success && exportResult.created_tables?.length > 0) {
-            <div class="text-xs text-green-700 mb-2">ตารางที่สร้างสำเร็จ ({{exportResult.created_tables.length}}):</div>
-            <div class="max-h-32 overflow-y-auto">
-              @for (t of exportResult.created_tables; track t.table) {
-                <div class="text-xs text-green-600 py-0.5"><i class="fas fa-table me-1"></i>{{t.table}} ({{t.rows}} rows)</div>
-              }
-            </div>
-          }
-
-          @if (exportResult.skipped?.length > 0) {
-            <div class="text-xs text-orange-700 mt-2 mb-1">ข้ามรายการ ({{exportResult.skipped.length}}):</div>
-            @for (s of exportResult.skipped; track s.id) {
-              <div class="text-xs text-orange-600 py-0.5"><i class="fas fa-exclamation-triangle me-1"></i>{{s.name}} - {{s.reason}}</div>
-            }
-          }
-        </div>
-      }
     </div>
   </div>
 </div>

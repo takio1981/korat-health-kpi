@@ -1446,18 +1446,130 @@ apiRouter.delete('/departments/:id', authenticateToken, isSuperAdmin, async (req
 
 // ========== Export KPI Tables ==========
 
-// ดึงรายการ KPI indicators ที่มี table_process (สำหรับเลือก export)
+// ดึงรายการ KPI indicators ที่มี table_process (สำหรับเลือก export) พร้อมชื่อหมวดหมู่และหน่วยงาน
 apiRouter.get('/exportable-indicators', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
         const [rows] = await db.query(
-            `SELECT id, kpi_indicators_name, table_process, dept_id
-             FROM kpi_indicators
-             WHERE is_active = 1 AND table_process IS NOT NULL AND table_process != ''
-             ORDER BY id`
+            `SELECT i.id, i.kpi_indicators_name, i.table_process, i.dept_id, i.main_indicator_id, i.is_active,
+                    d.dept_name, mi.main_indicator_name
+             FROM kpi_indicators i
+             LEFT JOIN departments d ON i.dept_id = d.id
+             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
+             WHERE i.table_process IS NOT NULL AND i.table_process != ''
+             ORDER BY i.id`
         );
         res.json({ success: true, data: rows });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ตรวจสอบเปรียบเทียบข้อมูล KPI ก่อน export (dry-run)
+apiRouter.post('/check-kpi-export', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { year_bh, indicator_ids } = req.body;
+
+    if (!year_bh || !/^\d{4}$/.test(year_bh)) {
+        return res.status(400).json({ success: false, message: 'กรุณาระบุปีงบประมาณ (year_bh) เป็นตัวเลข 4 หลัก' });
+    }
+
+    try {
+        // Get indicators
+        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name FROM kpi_indicators
+            WHERE table_process IS NOT NULL AND table_process != ''`;
+        let indicatorParams = [];
+        if (indicator_ids && indicator_ids !== 'all' && Array.isArray(indicator_ids) && indicator_ids.length > 0) {
+            indicatorQuery += ` AND id IN (${indicator_ids.map(() => '?').join(',')})`;
+            indicatorParams = indicator_ids;
+        }
+        const [indicators] = await db.query(indicatorQuery, indicatorParams);
+
+        const months = ['m10', 'm11', 'm12', 'm01', 'm02', 'm03', 'm04', 'm05', 'm06', 'm07', 'm08', 'm09'];
+        const results = [];
+
+        for (const indicator of indicators) {
+            let tableName = indicator.table_process.trim().replace(/-/g, '_');
+            if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(tableName)) {
+                results.push({ id: indicator.id, status: 'invalid_name', has_data: false, new_count: 0, changed_count: 0, unchanged_count: 0, no_data: true });
+                continue;
+            }
+
+            // ตรวจสอบว่ามีข้อมูลใน kpi_results หรือไม่
+            const [kpiRows] = await db.query(
+                'SELECT hospcode, month_bh, target_value, actual_value FROM kpi_results WHERE indicator_id = ? AND year_bh = ?',
+                [indicator.id, year_bh]
+            );
+
+            if (kpiRows.length === 0) {
+                results.push({ id: indicator.id, status: 'no_data', has_data: false, new_count: 0, changed_count: 0, unchanged_count: 0, no_data: true });
+                continue;
+            }
+
+            // Pivot kpi_results
+            const dataMap = new Map();
+            for (const row of kpiRows) {
+                if (!dataMap.has(row.hospcode)) dataMap.set(row.hospcode, {});
+                const entry = dataMap.get(row.hospcode);
+                const mKey = 'm' + String(row.month_bh).padStart(2, '0');
+                entry[mKey] = Number(row.actual_value) || 0;
+                if (String(row.month_bh) === '10') entry.target = Number(row.target_value) || 0;
+            }
+
+            // ตรวจสอบตาราง export มีอยู่หรือไม่
+            let existingMap = new Map();
+            try {
+                const [existingRows] = await db.query(
+                    `SELECT hospcode, target, result, m10, m11, m12, m01, m02, m03, m04, m05, m06, m07, m08, m09 FROM \`${tableName}\` WHERE byear = ?`,
+                    [year_bh]
+                );
+                for (const row of existingRows) existingMap.set(row.hospcode, row);
+            } catch (_) {
+                // ตารางยังไม่มี — ทุก row เป็น new
+            }
+
+            let newCount = 0, changedCount = 0, unchangedCount = 0;
+            for (const [hc, d] of dataMap) {
+                const target = d.target || 0;
+                const monthValues = months.map(m => d[m] || 0);
+                const result = monthValues.reduce((a, b) => a + b, 0);
+
+                const existing = existingMap.get(hc);
+                if (!existing) {
+                    newCount++;
+                } else {
+                    const changed = Number(existing.target) !== target ||
+                        Number(existing.result) !== result ||
+                        months.some((m, idx) => Number(existing[m]) !== monthValues[idx]);
+                    if (changed) changedCount++;
+                    else unchangedCount++;
+                }
+            }
+
+            results.push({
+                id: indicator.id,
+                status: (newCount > 0 || changedCount > 0) ? 'has_changes' : 'up_to_date',
+                has_data: true,
+                hospcode_count: dataMap.size,
+                new_count: newCount,
+                changed_count: changedCount,
+                unchanged_count: unchangedCount,
+                no_data: false
+            });
+        }
+
+        const totalWithData = results.filter(r => r.has_data).length;
+        const totalChanges = results.filter(r => r.status === 'has_changes').length;
+        const totalUpToDate = results.filter(r => r.status === 'up_to_date').length;
+        const totalNoData = results.filter(r => r.no_data).length;
+
+        res.json({
+            success: true,
+            check_date: new Date().toISOString(),
+            year_bh,
+            summary: { total: results.length, with_data: totalWithData, has_changes: totalChanges, up_to_date: totalUpToDate, no_data: totalNoData },
+            details: results
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
     }
 });
 
@@ -1488,10 +1600,6 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
         }
 
         const [indicators] = await conn.query(indicatorQuery, indicatorParams);
-
-        // 2. Get all hospcodes
-        const [hospitals] = await conn.query('SELECT hoscode FROM chospital');
-        const allHospcodes = hospitals.map(h => h.hoscode);
 
         const created = [];
         const skipped = [];
@@ -1530,19 +1638,16 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
 
             await conn.beginTransaction();
             try {
-                // Create table
+                // Create table if not exists
                 await conn.query(tableDDL(tableName));
 
-                // Delete existing data for this year
-                await conn.query(`DELETE FROM \`${tableName}\` WHERE byear = ?`, [year_bh]);
-
-                // Fetch kpi_results for this indicator + year
+                // Fetch kpi_results for this indicator + year (เฉพาะ hospcode ที่มีข้อมูล)
                 const [results] = await conn.query(
                     'SELECT hospcode, month_bh, target_value, actual_value FROM kpi_results WHERE indicator_id = ? AND year_bh = ?',
                     [indicator.id, year_bh]
                 );
 
-                // Build hospcode -> month data map
+                // Build hospcode -> month data map (เฉพาะที่มีข้อมูลจริง)
                 const dataMap = new Map();
                 for (const row of results) {
                     if (!dataMap.has(row.hospcode)) dataMap.set(row.hospcode, {});
@@ -1554,27 +1659,63 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
                     }
                 }
 
-                // Build INSERT rows for ALL hospcodes
-                const insertRows = [];
-                for (const hc of allHospcodes) {
-                    const d = dataMap.get(hc) || {};
+                // ดึงข้อมูลเดิมในตารางเพื่อเปรียบเทียบ
+                const [existingRows] = await conn.query(
+                    `SELECT hospcode, target, result, m10, m11, m12, m01, m02, m03, m04, m05, m06, m07, m08, m09 FROM \`${tableName}\` WHERE byear = ?`,
+                    [year_bh]
+                );
+                const existingMap = new Map();
+                for (const row of existingRows) {
+                    existingMap.set(row.hospcode, row);
+                }
+
+                // Build rows เฉพาะ hospcode ที่มีข้อมูลใน kpi_results
+                const upsertRows = [];
+                let updatedCount = 0;
+                let insertedCount = 0;
+
+                for (const [hc, d] of dataMap) {
                     const target = d.target || 0;
                     const monthValues = months.map(m => d[m] || 0);
                     const result = monthValues.reduce((a, b) => a + b, 0);
-                    insertRows.push([hc, year_bh, target, result, ...monthValues]);
+
+                    // ตรวจสอบว่ามีข้อมูลเดิมหรือไม่ และค่าเปลี่ยนแปลงหรือไม่
+                    const existing = existingMap.get(hc);
+                    if (existing) {
+                        const changed = Number(existing.target) !== target ||
+                            Number(existing.result) !== result ||
+                            months.some((m, idx) => Number(existing[m]) !== monthValues[idx]);
+                        if (!changed) continue; // ข้ามถ้าค่าเหมือนเดิม
+                        updatedCount++;
+                    } else {
+                        insertedCount++;
+                    }
+
+                    upsertRows.push([hc, year_bh, target, result, ...monthValues]);
                 }
 
-                // Batch insert (100 rows per batch)
-                const cols = 'hospcode, byear, target, result, m10, m11, m12, m01, m02, m03, m04, m05, m06, m07, m08, m09';
-                for (let i = 0; i < insertRows.length; i += 100) {
-                    const batch = insertRows.slice(i, i + 100);
-                    const placeholders = batch.map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').join(',');
-                    const flatValues = batch.flat();
-                    await conn.query(`INSERT INTO \`${tableName}\` (${cols}) VALUES ${placeholders}`, flatValues);
+                // Batch UPSERT (INSERT ... ON DUPLICATE KEY UPDATE) เฉพาะ row ที่มีการเปลี่ยนแปลง
+                if (upsertRows.length > 0) {
+                    const cols = 'hospcode, byear, target, result, m10, m11, m12, m01, m02, m03, m04, m05, m06, m07, m08, m09';
+                    const onDup = 'target=VALUES(target), result=VALUES(result), m10=VALUES(m10), m11=VALUES(m11), m12=VALUES(m12), m01=VALUES(m01), m02=VALUES(m02), m03=VALUES(m03), m04=VALUES(m04), m05=VALUES(m05), m06=VALUES(m06), m07=VALUES(m07), m08=VALUES(m08), m09=VALUES(m09)';
+
+                    for (let i = 0; i < upsertRows.length; i += 100) {
+                        const batch = upsertRows.slice(i, i + 100);
+                        const placeholders = batch.map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').join(',');
+                        const flatValues = batch.flat();
+                        await conn.query(`INSERT INTO \`${tableName}\` (${cols}) VALUES ${placeholders} ON DUPLICATE KEY UPDATE ${onDup}`, flatValues);
+                    }
                 }
 
                 await conn.commit();
-                created.push({ table: tableName, name: indicator.kpi_indicators_name, rows: insertRows.length });
+                created.push({
+                    table: tableName,
+                    name: indicator.kpi_indicators_name,
+                    total_hospcode: dataMap.size,
+                    inserted: insertedCount,
+                    updated: updatedCount,
+                    unchanged: dataMap.size - insertedCount - updatedCount
+                });
             } catch (tableErr) {
                 await conn.rollback();
                 skipped.push({ id: indicator.id, name: indicator.kpi_indicators_name, table_process: indicator.table_process, reason: tableErr.message });
@@ -1591,12 +1732,16 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
             );
         } catch (_) {}
 
+        const totalInserted = created.reduce((s, t) => s + t.inserted, 0);
+        const totalUpdated = created.reduce((s, t) => s + t.updated, 0);
+        const totalUnchanged = created.reduce((s, t) => s + t.unchanged, 0);
+
         res.json({
             success: true,
-            message: `สร้างตารางข้อมูลสำเร็จ ${created.length} ตาราง`,
+            message: `สร้าง/อัปเดตตารางสำเร็จ ${created.length} ตาราง`,
             created_tables: created,
             skipped,
-            total_hospitals: allHospcodes.length
+            summary: { inserted: totalInserted, updated: totalUpdated, unchanged: totalUnchanged }
         });
     } catch (err) {
         conn.release();

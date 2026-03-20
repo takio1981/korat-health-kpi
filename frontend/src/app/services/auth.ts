@@ -478,4 +478,10 @@ export class AuthService {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.post(`${this.apiUrl}/export-kpi-tables`, { year_bh: yearBh, indicator_ids: indicatorIds }, { headers });
   }
+
+  checkKpiExport(yearBh: string, indicatorIds: number[] | 'all'): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/check-kpi-export`, { year_bh: yearBh, indicator_ids: indicatorIds }, { headers });
+  }
 }

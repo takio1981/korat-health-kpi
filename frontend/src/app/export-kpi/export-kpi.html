@@ -1,0 +1,300 @@
+<div class="p-6">
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <div class="p-6">
+
+      <!-- หัวข้อ -->
+      <div class="mb-2">
+        <h3 class="text-lg font-bold text-gray-800 mb-1">
+          <i class="fas fa-database me-2 text-indigo-600"></i>Export ข้อมูล KPI ลงตารางรายตัวชี้วัด
+        </h3>
+        <div class="flex flex-wrap items-center gap-2">
+          <p class="text-sm text-gray-500">สร้าง/อัปเดตตาราง MySQL แยกสำหรับแต่ละตัวชี้วัด เฉพาะ hospcode ที่มีข้อมูล อัปเดตเฉพาะค่าที่เปลี่ยนแปลง</p>
+          <button (click)="showGuide = !showGuide" class="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 shrink-0">
+            <i class="fas" [class]="showGuide ? 'fa-chevron-up' : 'fa-question-circle'"></i>
+            {{showGuide ? 'ซ่อนคำแนะนำ' : 'คำแนะนำ'}}
+          </button>
+        </div>
+      </div>
+
+      <!-- คำแนะนำขั้นตอน (ซ่อนได้) -->
+      @if (showGuide) {
+        <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs text-blue-700">
+            <div class="flex gap-2">
+              <span class="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white font-bold shrink-0">1</span>
+              <div><b>เลือกปีงบประมาณ</b>และใช้ตัวกรองจำกัดขอบเขต KPI (หมวดหมู่ / หน่วยงาน / สถานะ)</div>
+            </div>
+            <div class="flex gap-2">
+              <span class="flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white font-bold shrink-0">2</span>
+              <div><b>กดปุ่ม "ตรวจสอบข้อมูล"</b> เปรียบเทียบ kpi_results กับตารางที่ export ไว้ แสดงสถานะแต่ละ KPI</div>
+            </div>
+            <div class="flex gap-2">
+              <span class="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-600 text-white font-bold shrink-0">3</span>
+              <div><b>เลือก KPI ที่ต้องการส่งออก</b> ติ๊กในรายการ หรือกด "เลือกเฉพาะที่มีการเปลี่ยนแปลง"</div>
+            </div>
+            <div class="flex gap-2">
+              <span class="flex items-center justify-center w-5 h-5 rounded-full bg-green-600 text-white font-bold shrink-0">4</span>
+              <div><b>กดปุ่ม "ส่งออกข้อมูล"</b> สร้าง/อัปเดตตาราง MySQL ตามชื่อ table_process ของแต่ละ KPI</div>
+            </div>
+          </div>
+          <div class="mt-3 pt-3 border-t border-blue-200 text-xs text-blue-600 grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div><i class="fas fa-search-plus text-amber-500 me-1"></i><b>ตรวจสอบข้อมูล</b> — เปรียบเทียบคะแนนปัจจุบันกับตารางที่ export ไว้</div>
+            <div><i class="fas fa-undo text-gray-500 me-1"></i><b>Reset</b> — ล้างตัวกรอง ผลตรวจสอบ ผลการส่งออก คืนค่าทั้งหมด</div>
+            <div><i class="fas fa-file-export text-indigo-600 me-1"></i><b>ส่งออกข้อมูล</b> — สร้าง/อัปเดตตาราง MySQL เฉพาะค่าที่เปลี่ยน</div>
+            <div><i class="fas fa-mouse-pointer text-blue-600 me-1"></i><b>ช่องสรุปตัวเลข</b> — คลิกเพื่อกรองแสดงเฉพาะสถานะนั้น คลิกซ้ำเพื่อยกเลิก</div>
+          </div>
+        </div>
+      }
+
+      <!-- ขั้นตอนที่ 1: ปีงบประมาณ + ขั้นตอนที่ 2: ตรวจสอบ + Reset -->
+      <div class="flex flex-wrap items-end gap-3 mb-4">
+        <div>
+          <div class="text-xs font-bold text-gray-600 mb-1 flex items-center gap-1">
+            <span class="flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] font-bold">1</span>
+            ปีงบประมาณ
+          </div>
+          <select [(ngModel)]="exportYear"
+                  class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-28">
+            @for (y of yearOptions; track y) {
+              <option [value]="y">{{y}}</option>
+            }
+          </select>
+        </div>
+        <div class="flex items-end gap-2">
+          <button (click)="checkBeforeExport()" [disabled]="checkLoading || exportLoading"
+                  class="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-400 text-white font-bold text-sm rounded-lg shadow transition-colors flex items-center gap-1.5">
+            <span class="flex items-center justify-center w-4 h-4 rounded-full bg-white/30 text-white text-[10px] font-bold">2</span>
+            @if (checkLoading) {
+              <i class="fas fa-spinner fa-spin"></i>กำลังตรวจสอบ...
+            } @else {
+              <i class="fas fa-search-plus"></i>ตรวจสอบข้อมูล
+            }
+          </button>
+          <button (click)="resetAll()" [disabled]="checkLoading || exportLoading"
+                  class="px-4 py-2 bg-gray-500 hover:bg-gray-600 disabled:bg-gray-300 text-white font-bold text-sm rounded-lg shadow transition-colors">
+            <i class="fas fa-undo me-1"></i>Reset
+          </button>
+        </div>
+      </div>
+
+      <!-- Progress Bar -->
+      @if (checkLoading) {
+        <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+          <div class="flex justify-between items-center mb-1">
+            <span class="text-xs font-bold text-gray-600">
+              ตรวจสอบแล้ว {{checkProgress.done}}/{{checkProgress.total}} รายการ
+              <span class="text-gray-400 ms-1">(คงเหลือ {{checkProgress.total - checkProgress.done}})</span>
+            </span>
+            <span class="text-xs font-bold text-indigo-600">{{checkProgress.percent}}%</span>
+          </div>
+          <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+            <div class="bg-gradient-to-r from-amber-400 to-amber-500 h-3 rounded-full transition-all duration-300 ease-out"
+                 [style.width.%]="checkProgress.percent"></div>
+          </div>
+        </div>
+      }
+
+      <!-- สรุปจำนวน (เลขวิ่ง animated, คงค่าจากผลตรวจสอบ) -->
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
+        <div class="bg-white rounded-xl p-4 border-2 text-center cursor-pointer hover:border-indigo-400 transition-all"
+             [class.border-indigo-400]="!filterCheckStatus" [class.shadow-md]="!filterCheckStatus"
+             (click)="filterCheckStatus = ''; applyFilters()">
+          <div class="text-3xl font-bold text-gray-800 tabular-nums">{{displayCounters.total}}</div>
+          <div class="text-xs text-gray-500 mt-1">ตัวชี้วัดทั้งหมด</div>
+        </div>
+        <div class="bg-white rounded-xl p-4 border-2 text-center cursor-pointer hover:border-orange-400 transition-all"
+             [class.border-orange-400]="filterCheckStatus === 'has_changes'" [class.shadow-md]="filterCheckStatus === 'has_changes'"
+             (click)="filterCheckStatus = filterCheckStatus === 'has_changes' ? '' : 'has_changes'; applyFilters()">
+          <div class="text-3xl font-bold text-orange-600 tabular-nums">{{displayCounters.has_changes}}</div>
+          <div class="text-xs text-orange-600 mt-1">มีการเปลี่ยนแปลง</div>
+        </div>
+        <div class="bg-white rounded-xl p-4 border-2 text-center cursor-pointer hover:border-green-400 transition-all"
+             [class.border-green-400]="filterCheckStatus === 'up_to_date'" [class.shadow-md]="filterCheckStatus === 'up_to_date'"
+             (click)="filterCheckStatus = filterCheckStatus === 'up_to_date' ? '' : 'up_to_date'; applyFilters()">
+          <div class="text-3xl font-bold text-green-600 tabular-nums">{{displayCounters.up_to_date}}</div>
+          <div class="text-xs text-green-600 mt-1">ข้อมูลล่าสุดแล้ว</div>
+        </div>
+        <div class="bg-white rounded-xl p-4 border-2 text-center cursor-pointer hover:border-gray-400 transition-all"
+             [class.border-gray-400]="filterCheckStatus === 'no_data'" [class.shadow-md]="filterCheckStatus === 'no_data'"
+             (click)="filterCheckStatus = filterCheckStatus === 'no_data' ? '' : 'no_data'; applyFilters()">
+          <div class="text-3xl font-bold text-gray-400 tabular-nums">{{displayCounters.no_data}}</div>
+          <div class="text-xs text-gray-400 mt-1">ไม่มีข้อมูล</div>
+        </div>
+        <div class="bg-white rounded-xl p-4 border-2 text-center">
+          <div class="text-3xl font-bold text-slate-400 tabular-nums">{{displayCounters.unchecked}}</div>
+          <div class="text-xs text-slate-400 mt-1">ยังไม่ตรวจสอบ</div>
+        </div>
+      </div>
+
+      @if (checkResult) {
+        <div class="flex flex-wrap items-center gap-3 text-xs mb-4 px-1">
+          <span class="text-gray-500"><i class="fas fa-clock me-1"></i>ตรวจสอบเมื่อ: {{checkResult.check_date | date:'dd/MM/yyyy HH:mm:ss'}}</span>
+          @if (checkResult.summary.has_changes > 0) {
+            <button (click)="selectOnlyChanged()" class="text-orange-600 hover:text-orange-800 font-bold underline">
+              <i class="fas fa-filter me-1"></i>เลือกเฉพาะที่มีการเปลี่ยนแปลง ({{checkResult.summary.has_changes}})
+            </button>
+          }
+        </div>
+      }
+
+      <!-- ตัวกรอง -->
+      <div class="mb-4">
+        <div class="text-xs font-bold text-gray-500 mb-2">ตัวกรองรายการ</div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-gray-600 mb-1"><i class="fas fa-layer-group me-1 text-purple-500"></i>หมวดหมู่หลัก</label>
+            <select [(ngModel)]="filterMainIndicator" (ngModelChange)="onFilterChange()"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+              <option value="">ทั้งหมด</option>
+              @for (mi of mainIndicators; track mi.id) {
+                <option [value]="mi.id">{{mi.indicator_name}}</option>
+              }
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-600 mb-1"><i class="fas fa-building me-1 text-green-500"></i>หน่วยงาน</label>
+            <select [(ngModel)]="filterDept" (ngModelChange)="onFilterChange()"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+              <option value="">ทั้งหมด</option>
+              @for (dept of departments; track dept.id) {
+                <option [value]="dept.id">{{dept.dept_name}}</option>
+              }
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-600 mb-1"><i class="fas fa-toggle-on me-1 text-yellow-500"></i>สถานะ</label>
+            <select [(ngModel)]="filterStatus" (ngModelChange)="onFilterChange()"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+              <option value="">ทั้งหมด</option>
+              <option value="active">เปิดใช้งาน</option>
+              <option value="inactive">ปิดใช้งาน</option>
+            </select>
+          </div>
+          <div class="flex items-end">
+            <button (click)="clearFilters()"
+                    class="w-full px-3 py-2 border border-gray-300 hover:bg-gray-50 text-gray-600 text-sm rounded-lg transition-colors">
+              <i class="fas fa-times me-1"></i>ล้างตัวกรอง
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ขั้นตอนที่ 3: เลือกตัวชี้วัด -->
+      <div class="mb-4">
+        <div class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+          <span class="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-600 text-white text-xs font-bold">3</span>
+          เลือกตัวชี้วัดที่ต้องการส่งออก
+          <span class="text-indigo-600 font-normal text-xs ms-1">(เลือกแล้ว {{selectedIndicatorIds.size}} / แสดง {{filteredExportIndicators.length}} / ทั้งหมด {{exportIndicators.length}})</span>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-4 mb-3">
+          <label class="inline-flex items-center cursor-pointer">
+            <input type="checkbox" [(ngModel)]="selectAll" (change)="toggleSelectAll()" class="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+            <span class="ms-2 text-sm font-medium text-gray-700">เลือกทั้งหมด</span>
+          </label>
+          <div class="flex-1 min-w-[200px] max-w-md">
+            <input type="text" [(ngModel)]="exportSearch" (ngModelChange)="applyFilters()" placeholder="ค้นหาตัวชี้วัด..."
+                   class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+          </div>
+        </div>
+
+        <div class="border border-gray-200 rounded-lg max-h-80 overflow-y-auto bg-gray-50">
+          @for (ind of filteredExportIndicators; track ind.id) {
+            <label class="flex items-start gap-3 px-4 py-2.5 hover:bg-indigo-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors"
+                   [class.bg-orange-50]="getCheckStatus(ind.id)?.status === 'has_changes'"
+                   [class.bg-green-50]="getCheckStatus(ind.id)?.status === 'up_to_date'">
+              <input type="checkbox" [checked]="isIndicatorSelected(ind.id)" (change)="toggleIndicator(ind.id)"
+                     class="w-4 h-4 mt-0.5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+              <div class="flex-1 min-w-0">
+                <div class="text-sm text-gray-800 leading-snug">{{ind.kpi_indicators_name}}</div>
+                <div class="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
+                  <span class="text-xs text-gray-400">table: {{ind.table_process}}</span>
+                  <span *ngIf="ind.dept_name" class="text-xs text-green-600"><i class="fas fa-building me-0.5"></i>{{ind.dept_name}}</span>
+                  <span *ngIf="ind.main_indicator_name" class="text-xs text-purple-600"><i class="fas fa-layer-group me-0.5"></i>{{ind.main_indicator_name}}</span>
+                  <span class="text-xs" [class]="ind.is_active ? 'text-emerald-500' : 'text-red-400'">
+                    <i class="fas" [class]="ind.is_active ? 'fa-check-circle' : 'fa-times-circle'"></i>
+                    {{ind.is_active ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}}
+                  </span>
+                </div>
+                @if (getCheckStatus(ind.id); as chk) {
+                  <div class="flex flex-wrap gap-x-3 mt-1">
+                    @if (chk.status === 'has_changes') {
+                      <span class="text-xs font-bold text-orange-600"><i class="fas fa-exclamation-circle me-0.5"></i>มีการเปลี่ยนแปลง</span>
+                      <span class="text-xs text-blue-600">+{{chk.new_count}} ใหม่</span>
+                      <span class="text-xs text-orange-500">~{{chk.changed_count}} แก้ไข</span>
+                      <span class="text-xs text-gray-400">=={{chk.unchanged_count}} เหมือนเดิม</span>
+                      <span class="text-xs text-gray-400">({{chk.hospcode_count}} hospcode)</span>
+                    } @else if (chk.status === 'up_to_date') {
+                      <span class="text-xs font-bold text-green-600"><i class="fas fa-check-circle me-0.5"></i>ข้อมูลล่าสุดแล้ว ({{chk.hospcode_count}} hospcode)</span>
+                    } @else if (chk.status === 'no_data') {
+                      <span class="text-xs font-bold text-gray-400"><i class="fas fa-minus-circle me-0.5"></i>ไม่มีข้อมูลในปีนี้</span>
+                    } @else if (chk.status === 'invalid_name') {
+                      <span class="text-xs font-bold text-red-400"><i class="fas fa-times-circle me-0.5"></i>ชื่อตารางไม่ถูกต้อง</span>
+                    }
+                  </div>
+                }
+              </div>
+            </label>
+          }
+          @if (filteredExportIndicators.length === 0) {
+            <div class="px-4 py-6 text-center text-sm text-gray-400">ไม่พบตัวชี้วัดที่ตรงกับเงื่อนไข</div>
+          }
+        </div>
+      </div>
+
+      <!-- ขั้นตอนที่ 4: ส่งออก -->
+      <div class="mb-4">
+        <div class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+          <span class="flex items-center justify-center w-5 h-5 rounded-full bg-green-600 text-white text-xs font-bold">4</span>
+          ส่งออกข้อมูล
+        </div>
+        <button (click)="exportKpiTables()" [disabled]="exportLoading || selectedIndicatorIds.size === 0"
+                class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-bold rounded-xl shadow-md transition-colors">
+          @if (exportLoading) {
+            <i class="fas fa-spinner fa-spin me-2"></i>กำลังส่งออก...
+          } @else {
+            <i class="fas fa-file-export me-2"></i>ส่งออกข้อมูล ({{selectedIndicatorIds.size}})
+          }
+        </button>
+      </div>
+
+      <!-- ผลการส่งออก -->
+      @if (exportResult) {
+        <div class="mt-4 p-4 rounded-lg" [class]="exportResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'">
+          <div class="font-bold text-sm mb-2" [class]="exportResult.success ? 'text-green-800' : 'text-red-800'">
+            <i [class]="exportResult.success ? 'fas fa-check-circle me-1' : 'fas fa-times-circle me-1'"></i>
+            {{exportResult.message}}
+          </div>
+
+          @if (exportResult.success && exportResult.summary) {
+            <div class="flex gap-4 text-xs mb-3">
+              <span class="text-blue-600"><i class="fas fa-plus-circle me-1"></i>เพิ่มใหม่: {{exportResult.summary.inserted}}</span>
+              <span class="text-orange-600"><i class="fas fa-sync-alt me-1"></i>อัปเดต: {{exportResult.summary.updated}}</span>
+              <span class="text-gray-500"><i class="fas fa-check me-1"></i>ไม่เปลี่ยนแปลง: {{exportResult.summary.unchanged}}</span>
+            </div>
+          }
+
+          @if (exportResult.success && exportResult.created_tables?.length > 0) {
+            <div class="text-xs text-green-700 mb-2">ตารางที่ดำเนินการ ({{exportResult.created_tables.length}}):</div>
+            <div class="max-h-40 overflow-y-auto">
+              @for (t of exportResult.created_tables; track t.table) {
+                <div class="text-xs text-green-600 py-0.5">
+                  <i class="fas fa-table me-1"></i>{{t.table}}
+                  <span class="text-gray-400 ms-1">(hospcode: {{t.total_hospcode}} | +{{t.inserted}} / ~{{t.updated}} / ={{t.unchanged}})</span>
+                </div>
+              }
+            </div>
+          }
+
+          @if (exportResult.skipped?.length > 0) {
+            <div class="text-xs text-orange-700 mt-2 mb-1">ข้ามรายการ ({{exportResult.skipped.length}}):</div>
+            @for (s of exportResult.skipped; track s.id) {
+              <div class="text-xs text-orange-600 py-0.5"><i class="fas fa-exclamation-triangle me-1"></i>{{s.name}} - {{s.reason}}</div>
+            }
+          }
+        </div>
+      }
+
+    </div>
+  </div>
+</div>
