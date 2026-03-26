@@ -23,8 +23,17 @@ export class RegisterComponent implements OnInit {
     lastname: '',
     hospcode: '',
     phone: '',
-    dept_id: ''
+    email: '',
+    dept_id: '',
+    cid: '',
+    role: 'user'
   };
+
+  roleOptions = [
+    { value: 'user', label: 'User — ผู้ใช้งานทั่วไป (บันทึก KPI)' },
+    { value: 'admin_cup', label: 'Admin CUP — ผู้ดูแลหน่วยบริการ' },
+    { value: 'admin_ssj', label: 'Admin SSJ — ผู้ดูแลส่วนกลาง (สสจ.)' }
+  ];
 
   confirmPassword: string = '';
   showPassword: boolean = false;
@@ -82,6 +91,46 @@ export class RegisterComponent implements OnInit {
     this.cdr.detectChanges();
   }
 
+  // === National ID formatting ===
+  onNationalIdInput(event: any) {
+    let value = event.target.value.replace(/\D/g, '');
+    if (value.length > 13) value = value.substring(0, 13);
+    this.formData.cid = value;
+    event.target.value = this.formatNationalIdDisplay(value);
+  }
+
+  formatNationalIdDisplay(id: string): string {
+    if (!id) return '';
+    const d = id.replace(/\D/g, '');
+    if (d.length <= 1) return d;
+    if (d.length <= 5) return d.substring(0, 1) + '-' + d.substring(1);
+    if (d.length <= 10) return d.substring(0, 1) + '-' + d.substring(1, 5) + '-' + d.substring(5);
+    if (d.length <= 12) return d.substring(0, 1) + '-' + d.substring(1, 5) + '-' + d.substring(5, 10) + '-' + d.substring(10);
+    return d.substring(0, 1) + '-' + d.substring(1, 5) + '-' + d.substring(5, 10) + '-' + d.substring(10, 12) + '-' + d.substring(12);
+  }
+
+  validateNationalId(id: string): boolean {
+    if (!/^\d{13}$/.test(id)) return false;
+    // Check Digit — Modulus 11
+    const digits = id.split('').map(Number);
+    let sum = 0;
+    for (let i = 0; i < 12; i++) {
+      sum += digits[i] * (13 - i);
+    }
+    const checkDigit = (11 - (sum % 11)) % 10;
+    return checkDigit === digits[12];
+  }
+
+  // === Username validation ===
+  validateUsername(name: string): string | null {
+    if (!name) return null;
+    if (name.length < 6) return 'ชื่อผู้ใช้งานต้องมีอย่างน้อย 6 ตัวอักษร';
+    if (!/^[a-zA-Z0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]+$/.test(name)) {
+      return 'ชื่อผู้ใช้งานต้องเป็น a-z, A-Z, 0-9 หรืออักขระพิเศษเท่านั้น';
+    }
+    return null;
+  }
+
   // === Phone formatting ===
   onPhoneInput(event: any) {
     let value = event.target.value.replace(/\D/g, '');
@@ -117,8 +166,27 @@ export class RegisterComponent implements OnInit {
     // ตรวจสอบข้อมูลครบถ้วน
     if (!this.formData.username || !this.formData.password ||
         !this.formData.firstname || !this.formData.lastname ||
-        !this.formData.hospcode || !this.formData.phone) {
+        !this.formData.hospcode || !this.formData.phone || !this.formData.cid) {
       Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลให้ครบถ้วนทุกช่อง', 'warning');
+      return;
+    }
+
+    // ตรวจสอบ username
+    const usernameError = this.validateUsername(this.formData.username);
+    if (usernameError) {
+      Swal.fire('แจ้งเตือน', usernameError, 'warning');
+      return;
+    }
+
+    // ตรวจสอบ email (ถ้ากรอก)
+    if (this.formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.formData.email)) {
+      Swal.fire('แจ้งเตือน', 'รูปแบบอีเมลไม่ถูกต้อง', 'warning');
+      return;
+    }
+
+    // ตรวจสอบ cid (13 หลัก + Check Digit Modulus 11)
+    if (!this.validateNationalId(this.formData.cid)) {
+      Swal.fire('แจ้งเตือน', 'เลขบัตรประชาชนไม่ถูกต้อง (ตรวจสอบ 13 หลักและ Check Digit แล้ว)', 'warning');
       return;
     }
 
@@ -151,9 +219,9 @@ export class RegisterComponent implements OnInit {
           Swal.fire({
             icon: 'success',
             title: 'ลงทะเบียนสำเร็จ',
-            text: 'กรุณาเข้าสู่ระบบด้วยชื่อผู้ใช้งานและรหัสผ่านที่ลงทะเบียน',
+            html: '<p>ระบบได้รับคำขอของคุณแล้ว</p><p class="text-sm text-gray-500 mt-1">กรุณารอการอนุมัติจากผู้ดูแลระบบก่อนเข้าสู่ระบบ</p>',
             confirmButtonColor: '#10b981',
-            confirmButtonText: 'ไปหน้าเข้าสู่ระบบ'
+            confirmButtonText: 'รับทราบ'
           }).then(() => {
             this.router.navigate(['/login']);
           });

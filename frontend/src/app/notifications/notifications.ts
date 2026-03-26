@@ -343,6 +343,55 @@ export class NotificationsComponent implements OnInit {
     });
   }
 
+  viewPendingUserDetail(notif: any) {
+    if (!notif.created_by) {
+      Swal.fire('แจ้งเตือน', 'ไม่พบข้อมูลผู้สมัคร', 'warning');
+      return;
+    }
+    this.authService.getUserById(notif.created_by).subscribe({
+      next: (res) => {
+        if (res.success) {
+          const u = res.data;
+          const roleLabel: any = { user: 'User', admin_cup: 'Admin CUP', admin_ssj: 'Admin SSJ', super_admin: 'Super Admin' };
+          const statusBadge = u.is_approved === 0
+            ? '<span style="background:#fef3c7;color:#92400e;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:bold;">รอการอนุมัติ</span>'
+            : u.is_approved === 1
+            ? '<span style="background:#d1fae5;color:#065f46;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:bold;">อนุมัติแล้ว</span>'
+            : '<span style="background:#fee2e2;color:#991b1b;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:bold;">ถูกปฏิเสธ</span>';
+          const cidFormatted = u.cid
+            ? `${u.cid.slice(0,1)}-${u.cid.slice(1,5)}-${u.cid.slice(5,10)}-${u.cid.slice(10,12)}-${u.cid.slice(12)}`
+            : '-';
+          Swal.fire({
+            title: 'ข้อมูลผู้สมัครใช้งานใหม่',
+            html: `
+              <div style="text-align:left;font-size:14px;line-height:2">
+                <div style="text-align:center;margin-bottom:12px">${statusBadge}</div>
+                <table style="width:100%;border-collapse:collapse">
+                  <tr><td style="color:#6b7280;width:40%">ชื่อ-นามสกุล</td><td style="font-weight:600">${u.firstname} ${u.lastname}</td></tr>
+                  <tr><td style="color:#6b7280">ชื่อผู้ใช้งาน</td><td style="font-weight:600">${u.username}</td></tr>
+                  <tr><td style="color:#6b7280">สิทธิ์ที่ขอ</td><td style="font-weight:600">${roleLabel[u.role] || u.role}</td></tr>
+                  <tr><td style="color:#6b7280">หน่วยบริการ</td><td style="font-weight:600">${u.hosname || u.hospcode || '-'}</td></tr>
+                  <tr><td style="color:#6b7280">เลขบัตรประชาชน</td><td style="font-weight:600;font-family:monospace">${cidFormatted}</td></tr>
+                  <tr><td style="color:#6b7280">หน่วยงาน</td><td style="font-weight:600">${u.dept_name || '-'}</td></tr>
+                </table>
+              </div>`,
+            icon: 'info',
+            showCancelButton: true,
+            confirmButtonColor: '#16a34a',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: '<i class="fas fa-user-check mr-1"></i>ไปอนุมัติ',
+            cancelButtonText: 'ปิด'
+          }).then((result) => {
+            if (result.isConfirmed) {
+              window.location.href = '/user-management?status=pending';
+            }
+          });
+        }
+      },
+      error: () => Swal.fire('ผิดพลาด', 'ไม่สามารถโหลดข้อมูลผู้สมัครได้', 'error')
+    });
+  }
+
   getTimeAgo(dateStr: string): string {
     const now = new Date();
     const date = new Date(dateStr);

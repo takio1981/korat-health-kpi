@@ -8,10 +8,10 @@
     </div>
 
     <!-- ส่วนค้นหาและตัวกรอง -->
-    <div class="p-6 bg-gray-50 border-b border-gray-100 grid grid-cols-1 gap-4" [ngClass]="isAdmin ? 'md:grid-cols-4' : 'md:grid-cols-2'">
+    <div class="p-6 bg-gray-50 border-b border-gray-100 grid grid-cols-1 gap-4" [ngClass]="isAdmin ? 'md:grid-cols-5' : 'md:grid-cols-2'">
       <div class="relative mt-2">
         <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">ค้นหา</label>
-        <input type="text" [(ngModel)]="searchTerm" (input)="applyFilters()" placeholder="ชื่อผู้ใช้ / หน่วยงาน..."
+        <input type="text" [(ngModel)]="searchTerm" (input)="applyFilters()" placeholder="ชื่อผู้ใช้ / เลข ปชช. / หน่วยงาน..."
                class="w-full pl-4 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm hover:border-green-400 transition-colors">
       </div>
 
@@ -33,8 +33,18 @@
         </select>
       </div>
 
+      <div *ngIf="isAdmin" class="relative mt-2">
+        <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">สถานะบัญชี</label>
+        <select [(ngModel)]="selectedStatus" (change)="applyFilters()" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm hover:border-green-400 transition-colors">
+          <option value="">ทั้งหมด</option>
+          <option value="pending">รอการอนุมัติ</option>
+          <option value="approved">อนุมัติแล้ว</option>
+          <option value="rejected">ถูกปฏิเสธ</option>
+        </select>
+      </div>
+
       <div class="flex items-end">
-        <button (click)="searchTerm=''; selectedRole=''; selectedDept=''; applyFilters()" class="w-full py-2.5 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl text-sm transition-colors shadow-md"><i class="fas fa-times-circle mr-2"></i> ล้างตัวกรอง</button>
+        <button (click)="searchTerm=''; selectedRole=''; selectedDept=''; selectedStatus=''; applyFilters()" class="w-full py-2.5 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl text-sm transition-colors shadow-md"><i class="fas fa-times-circle mr-2"></i> ล้างตัวกรอง</button>
       </div>
     </div>
 
@@ -42,35 +52,92 @@
       <table class="w-full text-left border-collapse">
         <thead class="bg-gradient-to-r from-green-700 to-green-600 text-white">
           <tr>
-            <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider rounded-tl-xl">Username</th>
-            <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider">ชื่อ-นามสกุล</th>
-            <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider">สิทธิ์การใช้งาน (Role)</th>
-            <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider">หน่วยงานที่สังกัด</th>
-            <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider">หน่วยบริการ</th>
-            <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider">เบอร์โทร</th>
-            <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider text-right rounded-tr-xl">จัดการ</th>
+            <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider rounded-tl-xl">Username</th>
+            <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider">ชื่อ-นามสกุล</th>
+            <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider">เลข ปชช.</th>
+            <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider">สิทธิ์ (Role)</th>
+            <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider">หน่วยงาน</th>
+            <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider">หน่วยบริการ</th>
+            <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider">เบอร์โทร</th>
+            <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider">สถานะ</th>
+            <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider text-center">ใช้งาน</th>
+            <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider text-right rounded-tr-xl">จัดการ</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
-          <tr *ngFor="let user of pagedUsers" class="hover:bg-gray-50">
-            <td class="px-6 py-4 font-medium text-gray-900">{{ user.username }}</td>
-            <td class="px-6 py-4 text-gray-700">{{ user.firstname }} {{ user.lastname }}</td>
-            <td class="px-6 py-4">
+          <tr *ngFor="let user of pagedUsers"
+              class="hover:bg-gray-50 transition-colors"
+              [ngClass]="user.is_approved === 0 ? 'bg-yellow-50' : user.is_approved === -1 ? 'bg-red-50' : ''">
+            <td class="px-4 py-3 font-medium text-gray-900 text-sm">{{ user.username }}</td>
+            <td class="px-4 py-3 text-gray-700 text-sm">{{ user.firstname }} {{ user.lastname }}</td>
+            <td class="px-4 py-3 text-gray-600 text-xs font-mono">
+              <span *ngIf="user.cid" class="inline-flex items-center gap-1 text-green-600"><i class="fas fa-shield-alt"></i> มี (hashed)</span>
+              <span *ngIf="!user.cid" class="text-gray-400">-</span>
+            </td>
+            <td class="px-4 py-3">
               <span class="px-2 py-1 rounded-full text-xs font-bold uppercase"
                     [ngClass]="user.role === 'super_admin' ? 'bg-red-100 text-red-800' :
                                user.role === 'admin_ssj' ? 'bg-purple-100 text-purple-800' :
                                user.role === 'admin_cup' ? 'bg-orange-100 text-orange-800' :
                                'bg-blue-100 text-blue-800'">
-                {{ user.role === 'admin_ssj' ? 'Admin SSJ' : user.role === 'admin_cup' ? 'Admin CUP' : user.role }}
+                {{ user.role === 'admin_ssj' ? 'Admin SSJ' : user.role === 'admin_cup' ? 'Admin CUP' : user.role === 'super_admin' ? 'Super Admin' : 'User' }}
               </span>
             </td>
-            <td class="px-6 py-4 text-gray-600">{{ user.dept_name || '-' }}</td>
-            <td class="px-6 py-4 text-gray-600">{{ user.hosname || user.hospcode || '-' }}</td>
-            <td class="px-6 py-4 text-gray-600">{{ formatPhoneDisplay(user.phone) || '-' }}</td>
-            <td class="px-6 py-4 text-right space-x-2">
-              <button (click)="resetPassword(user)" class="text-orange-500 hover:text-orange-600" title="รีเซ็ตรหัสผ่าน"><i class="fas fa-key"></i></button>
-              <button (click)="openModal(user)" class="text-yellow-500 hover:text-yellow-600" title="แก้ไข"><i class="fas fa-edit"></i></button>
-              <button (click)="deleteUser(user.id)" class="text-red-500 hover:text-red-600" title="ลบ"><i class="fas fa-trash"></i></button>
+            <td class="px-4 py-3 text-gray-600 text-sm">{{ user.dept_name || '-' }}</td>
+            <td class="px-4 py-3 text-gray-600 text-xs">{{ user.hosname || user.hospcode || '-' }}</td>
+            <td class="px-4 py-3 text-gray-600 text-sm">{{ formatPhoneDisplay(user.phone) || '-' }}</td>
+            <td class="px-4 py-3">
+              <span *ngIf="user.is_approved === 0"
+                    class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-yellow-100 text-yellow-700 border border-yellow-300 animate-pulse">
+                <i class="fas fa-clock"></i> รอการอนุมัติ
+              </span>
+              <span *ngIf="user.is_approved === 1"
+                    class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">
+                <i class="fas fa-check-circle"></i> อนุมัติแล้ว
+              </span>
+              <span *ngIf="user.is_approved === -1"
+                    class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700">
+                <i class="fas fa-ban"></i> ถูกปฏิเสธ
+              </span>
+            </td>
+            <!-- Toggle Active Switch -->
+            <td class="px-4 py-3 text-center">
+              <button *ngIf="isAdmin; else viewOnlyActive"
+                      (click)="toggleActive(user)"
+                      [disabled]="user.id === loggedInUser?.id"
+                      [title]="user.id === loggedInUser?.id ? 'ไม่สามารถเปลี่ยนสถานะตัวเองได้' : (user.is_active === 1 ? 'คลิกเพื่อปิดใช้งาน' : 'คลิกเพื่อเปิดใช้งาน')"
+                      class="relative inline-flex items-center h-6 w-11 rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
+                      [ngClass]="user.is_active === 1 ? 'bg-green-500' : 'bg-gray-300'">
+                <span class="inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform duration-200"
+                      [ngClass]="user.is_active === 1 ? 'translate-x-6' : 'translate-x-1'"></span>
+              </button>
+              <ng-template #viewOnlyActive>
+                <span class="inline-flex h-6 w-11 rounded-full items-center justify-center"
+                      [ngClass]="user.is_active === 1 ? 'bg-green-100' : 'bg-gray-200'">
+                  <span class="text-xs font-bold" [ngClass]="user.is_active === 1 ? 'text-green-700' : 'text-gray-500'">
+                    {{ user.is_active === 1 ? 'ON' : 'OFF' }}
+                  </span>
+                </span>
+              </ng-template>
+            </td>
+            <td class="px-4 py-3 text-right">
+              <!-- อนุมัติ/ปฏิเสธ (เฉพาะ pending) -->
+              <ng-container *ngIf="isAdmin && user.is_approved === 0">
+                <button (click)="approveUser(user)"
+                        class="inline-flex items-center gap-1 px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold mr-1 transition-colors"
+                        title="อนุมัติการลงทะเบียน">
+                  <i class="fas fa-check"></i> อนุมัติ
+                </button>
+                <button (click)="rejectUser(user)"
+                        class="inline-flex items-center gap-1 px-2 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs font-bold mr-1 transition-colors"
+                        title="ปฏิเสธการลงทะเบียน">
+                  <i class="fas fa-times"></i> ปฏิเสธ
+                </button>
+              </ng-container>
+              <!-- ปุ่มจัดการปกติ -->
+              <button (click)="resetPassword(user)" class="text-orange-500 hover:text-orange-600 mx-1" title="รีเซ็ตรหัสผ่าน"><i class="fas fa-key"></i></button>
+              <button (click)="openModal(user)" class="text-yellow-500 hover:text-yellow-600 mx-1" title="แก้ไข"><i class="fas fa-edit"></i></button>
+              <button (click)="deleteUser(user.id)" class="text-red-500 hover:text-red-600 mx-1" title="ลบ"><i class="fas fa-trash"></i></button>
             </td>
           </tr>
         </tbody>
@@ -192,6 +259,31 @@
         <p class="text-xs text-gray-400 mt-1">ตัวเลข 10 หลัก (ระบบจะจัดรูปแบบให้อัตโนมัติ)</p>
         <p *ngIf="currentUser.phone && !validatePhone(currentUser.phone)" class="text-xs text-red-500 mt-1">
           <i class="fas fa-exclamation-circle mr-1"></i>เบอร์โทรศัพท์ต้องเป็นตัวเลข 10 หลัก (ขณะนี้ {{ currentUser.phone.length }} หลัก)
+        </p>
+      </div>
+
+      <!-- อีเมล -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">อีเมล (Email)</label>
+        <div class="relative">
+          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <i class="fas fa-envelope text-gray-400"></i>
+          </div>
+          <input type="email" [(ngModel)]="currentUser.email"
+                 class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors"
+                 placeholder="example@email.com">
+        </div>
+      </div>
+
+      <!-- เลขบัตรประชาชน -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">เลขบัตรประชาชน 13 หลัก</label>
+        <input type="text" [(ngModel)]="currentUser.cid"
+               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors font-mono"
+               placeholder="กรอกเลข 13 หลัก (ไม่มีขีด)" maxlength="13"
+               (input)="currentUser.cid = $any($event.target).value.replace(/\D/g, '').substring(0, 13)">
+        <p *ngIf="currentUser.cid && currentUser.cid.length !== 13" class="text-xs text-red-500 mt-1">
+          <i class="fas fa-exclamation-circle mr-1"></i>ต้องกรอกให้ครบ 13 หลัก (ขณะนี้ {{ currentUser.cid.length }} หลัก)
         </p>
       </div>
 

@@ -59,6 +59,7 @@ export class DashboardComponent implements OnInit {
   private animationTimer: any;
   isAdmin: boolean = false;
   isSuperAdmin: boolean = false;
+  isAdminCup: boolean = false;
   currentUser: any = null;
 
   currentPage: number = 1;
@@ -86,13 +87,30 @@ export class DashboardComponent implements OnInit {
 
   // Data Entry Lock
   dataEntryLock: any = { is_locked: false, lock_reason: '' };
+  targetEditLocked: boolean = false;
+
+  // Target Edit Requests
+  targetEditRequests: any[] = [];
 
   // แก้ไขเฉพาะข้อ (จากอุทธรณ์ที่ได้รับอนุมัติ)
   editingSingleItem: any = null;
 
+  // (state แก้ไขเป้าหมายรายข้อเก็บไว้บน item._editingTarget ตรงๆ)
+
   // Appeal (อุทธรณ์)
   appealSettings: any = { is_open: false };
   appealReason: string = '';
+
+  // Dynamic Form Modal
+  showDynamicFormModal: boolean = false;
+  dynamicFormItem: any = null;
+  dynamicFormSchema: any = null;
+  dynamicFormTab: 'form' | 'list' = 'form';
+  dynamicFormData: any = {};
+  isDynamicFormSaving: boolean = false;
+  isDynamicDataLoading: boolean = false;
+  dynamicDataList: any[] = [];
+  availableYears: string[] = [];
 
   stats: any = {
     successRate: 0,
@@ -107,6 +125,7 @@ export class DashboardComponent implements OnInit {
     const role = this.authService.getUserRole();
     this.isAdmin = ['admin_ssj', 'super_admin'].includes(role);
     this.isSuperAdmin = role === 'super_admin';
+    this.isAdminCup = role === 'admin_cup';
 
     // Fallback: ดึง hospcode/dept_id จาก JWT token กรณี user object ไม่มี (login เก่า)
     if (this.currentUser && !this.currentUser.hospcode) {
@@ -123,12 +142,16 @@ export class DashboardComponent implements OnInit {
     this.loadKpiData();
     this.loadAppealSettings();
     this.loadDataEntryLock();
+    if (this.isAdmin || this.isAdminCup) this.loadTargetEditRequests();
   }
 
   loadDataEntryLock() {
     this.authService.getDataEntryLock().subscribe({
       next: (res) => {
-        if (res.success) this.dataEntryLock = res.data;
+        if (res.success) {
+          this.dataEntryLock = res.data;
+          this.targetEditLocked = res.data.target_edit_locked === true;
+        }
       }
     });
   }
@@ -137,6 +160,16 @@ export class DashboardComponent implements OnInit {
   get isEntryLocked(): boolean {
     if (this.isAdmin || this.isSuperAdmin) return false;
     return this.dataEntryLock.is_locked;
+  }
+
+  // ทุกสิทธิ์แก้ไขเป้าหมายได้เมื่อไม่ล็อค; เมื่อล็อคต้องผ่านขั้นตอนขออนุมัติ
+  get canEditTarget(): boolean {
+    return !this.targetEditLocked;
+  }
+
+  // admin_cup / admin_ssj / super_admin เห็นปุ่มขอแก้ไขเป้าหมายเมื่อล็อค
+  get canRequestTargetEdit(): boolean {
+    return this.targetEditLocked && (this.isAdmin || this.isAdminCup);
   }
 
   loadAppealSettings() {
@@ -157,8 +190,9 @@ export class DashboardComponent implements OnInit {
           this.kpiData.forEach(item => {
             item.target_value = Number(item.target_value) || 0;
             item.total_actual = Number(item.total_actual) || 0;
+            item.last_actual = String(item.last_actual ?? '');
             item.pending_count = Number(item.pending_count) || 0;
-            ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'].forEach(m => item[m] = Number(item[m]) || 0);
+            ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'].forEach(m => item[m] = item[m] != null ? String(item[m]) : '');
           });
 
           this.filteredData = res.data;
@@ -342,7 +376,7 @@ export class DashboardComponent implements OnInit {
     const changedItems = this.filteredData.filter(item => {
       if (!item._original) return false;
       if (Number(item.target_value) !== Number(item._original.target_value)) return true;
-      return months.some(m => Number(item[m]) !== Number(item._original[m]));
+      return months.some(m => String(item[m] ?? '') !== String(item._original[m] ?? ''));
     });
 
     if (changedItems.length === 0) {
@@ -365,10 +399,10 @@ export class DashboardComponent implements OnInit {
     const decreasedList: string[] = [];
     for (const item of changedItems) {
       for (const m of months) {
-        const oldVal = Number(item._original[m]) || 0;
-        const newVal = Number(item[m]) || 0;
-        if (oldVal > 0 && newVal < oldVal) {
-          decreasedList.push(`<b>${item.kpi_indicators_name}</b> ${monthNames[m]}: ${oldVal} → ${newVal}`);
+        const oldVal = parseFloat(item._original[m]);
+        const newVal = parseFloat(item[m]);
+        if (!isNaN(oldVal) && oldVal > 0 && !isNaN(newVal) && newVal < oldVal) {
+          decreasedList.push(`<b>${item.kpi_indicators_name}</b> ${monthNames[m]}: ${item._original[m]} → ${item[m]}`);
         }
       }
     }
@@ -382,7 +416,7 @@ export class DashboardComponent implements OnInit {
           changes.push(`เป้าหมาย: ${item._original.target_value} → ${item.target_value}`);
         }
         for (const m of months) {
-          if (Number(item[m]) !== Number(item._original[m])) {
+          if (String(item[m] ?? '') !== String(item._original[m] ?? '')) {
             changes.push(`${monthNames[m]}: ${item._original[m]} → ${item[m]}`);
           }
         }
@@ -785,10 +819,11 @@ export class DashboardComponent implements OnInit {
             year_bh: this.addKpiSelectedYear,
             hospcode: targetHospcode,
             target_value: 0,
-            oct: 0, nov: 0, dece: 0, jan: 0, feb: 0, mar: 0,
-            apr: 0, may: 0, jun: 0, jul: 0, aug: 0, sep: 0,
+            oct: '', nov: '', dece: '', jan: '', feb: '', mar: '',
+            apr: '', may: '', jun: '', jul: '', aug: '', sep: '',
             total_actual: 0,
-            _original: { target_value: 0, oct: 0, nov: 0, dece: 0, jan: 0, feb: 0, mar: 0, apr: 0, may: 0, jun: 0, jul: 0, aug: 0, sep: 0 }
+            last_actual: '',
+            _original: { target_value: 0, oct: '', nov: '', dece: '', jan: '', feb: '', mar: '', apr: '', may: '', jun: '', jul: '', aug: '', sep: '' }
           }));
           Swal.close();
           if (!this.showAddModal) {
@@ -889,19 +924,20 @@ export class DashboardComponent implements OnInit {
   // === Add KPI Modal: ตรวจสอบการแก้ไข / Undo / Reset ===
   isAddKpiModified(item: any, field: string): boolean {
     if (!item._original) return false;
-    return Number(item[field]) !== Number(item._original[field]);
+    return String(item[field] ?? '') !== String(item._original[field] ?? '');
   }
 
   isAddKpiRowModified(item: any): boolean {
     if (!item._original) return false;
     const fields = ['target_value', 'oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
-    return fields.some(f => Number(item[f]) !== Number(item._original[f]));
+    return fields.some(f => String(item[f] ?? '') !== String(item._original[f] ?? ''));
   }
 
   undoAddKpiRow(item: any) {
     if (!item._original) return;
     const fields = ['target_value', 'oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
     fields.forEach(f => item[f] = item._original[f]);
+    item.last_actual = '';
     item.total_actual = 0;
     this.cdr.detectChanges();
   }
@@ -987,15 +1023,14 @@ export class DashboardComponent implements OnInit {
   }
 
   onValueChange(item: any, month: string) {
-    if (item[month] < 0) {
-      item[month] = 0;
+    const fiscalOrder = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
+    let lastActual = '';
+    for (const m of fiscalOrder) {
+      const v = String(item[m] ?? '').trim();
+      if (v && v !== '0') lastActual = v;
     }
-    const months = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
-    let sum = 0;
-    for (const m of months) {
-      sum += Number(item[m]) || 0;
-    }
-    item.total_actual = sum;
+    item.last_actual = lastActual;
+    item.total_actual = parseFloat(lastActual) || 0;
   }
 
   isModified(item: any, month: string): boolean {
@@ -1236,6 +1271,199 @@ export class DashboardComponent implements OnInit {
     });
   }
 
+  // === Target Edit Request Workflow ===
+
+  loadTargetEditRequests() {
+    this.authService.getTargetEditRequests().subscribe({
+      next: (res) => {
+        if (res.success) {
+          this.targetEditRequests = res.data;
+          this.cdr.detectChanges();
+        }
+      }
+    });
+  }
+
+  getTargetEditRequest(item: any): any {
+    return this.targetEditRequests.find(r =>
+      r.indicator_id == item.indicator_id &&
+      r.year_bh == item.year_bh &&
+      r.hospcode == item.hospcode
+    ) || null;
+  }
+
+  requestTargetEdit(item: any) {
+    Swal.fire({
+      title: 'ขอแก้ไขเป้าหมาย',
+      html: `<p class="text-sm font-semibold">${item.kpi_indicators_name}</p><p class="text-xs text-gray-500 mt-1">ปีงบ ${item.year_bh} | ${item.hosname || item.hospcode}</p>`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'ส่งคำขอ',
+      cancelButtonText: 'ยกเลิก',
+      confirmButtonColor: '#f97316'
+    }).then((result) => {
+      if (!result.isConfirmed) return;
+      this.authService.requestTargetEdit({
+        indicator_id: item.indicator_id,
+        year_bh: item.year_bh,
+        hospcode: item.hospcode
+      }).subscribe({
+        next: (res) => {
+          if (res.success) {
+            Swal.fire({ icon: 'success', title: 'ส่งคำขอแล้ว', text: 'รอการอนุมัติจาก Admin', timer: 2000, showConfirmButton: false });
+            this.loadTargetEditRequests();
+            this.authService.refreshUnreadCount();
+          } else {
+            Swal.fire('ผิดพลาด', res.message, 'error');
+          }
+        },
+        error: (err: HttpErrorResponse) => this.handleApiError(err, 'ไม่สามารถส่งคำขอได้')
+      });
+    });
+  }
+
+  approveTargetRequest(request: any) {
+    Swal.fire({
+      title: 'อนุมัติคำขอแก้ไขเป้าหมาย?',
+      html: `<p class="text-sm">จาก: <b>${request.requested_by_name || request.username || ''}</b></p>`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'อนุมัติ',
+      cancelButtonText: 'ยกเลิก',
+      confirmButtonColor: '#16a34a'
+    }).then((result) => {
+      if (!result.isConfirmed) return;
+      this.authService.approveTargetEditRequest(request.id).subscribe({
+        next: (res) => {
+          if (res.success) {
+            Swal.fire({ icon: 'success', title: 'อนุมัติแล้ว', timer: 1500, showConfirmButton: false });
+            this.loadTargetEditRequests();
+            this.authService.refreshUnreadCount();
+          } else {
+            Swal.fire('ผิดพลาด', res.message, 'error');
+          }
+        },
+        error: (err: HttpErrorResponse) => this.handleApiError(err, 'ไม่สามารถอนุมัติได้')
+      });
+    });
+  }
+
+  rejectTargetRequest(request: any) {
+    Swal.fire({
+      title: 'ปฏิเสธคำขอแก้ไขเป้าหมาย?',
+      input: 'text',
+      inputLabel: 'เหตุผลการปฏิเสธ (ถ้ามี)',
+      inputPlaceholder: 'ระบุเหตุผล...',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'ปฏิเสธ',
+      cancelButtonText: 'ยกเลิก',
+      confirmButtonColor: '#dc2626'
+    }).then((result) => {
+      if (!result.isConfirmed) return;
+      this.authService.rejectTargetEditRequest(request.id, result.value || '').subscribe({
+        next: (res) => {
+          if (res.success) {
+            Swal.fire({ icon: 'success', title: 'ปฏิเสธแล้ว', timer: 1500, showConfirmButton: false });
+            this.loadTargetEditRequests();
+            this.authService.refreshUnreadCount();
+          } else {
+            Swal.fire('ผิดพลาด', res.message, 'error');
+          }
+        },
+        error: (err: HttpErrorResponse) => this.handleApiError(err, 'ไม่สามารถปฏิเสธได้')
+      });
+    });
+  }
+
+  // helper: ตรวจสอบว่าควรแสดง input ช่องเป้าหมายหรือไม่
+  canShowTargetInput(item: any): boolean {
+    if (item.is_locked) return false;
+    if (this.isEditing && this.canEditTarget) return true;
+    if (this.isSingleEditing(item)) return true;
+    if (this.isEditingTarget(item)) return true;
+    return false;
+  }
+
+  // === แก้ไขเป้าหมายรายข้อ (ทุกสิทธิ์เมื่อไม่ล็อค / ผ่านอนุมัติเมื่อล็อค) ===
+
+  startEditTarget(item: any) {
+    item._originalTarget = item.target_value;
+    item._editingTarget = true;
+    this.cdr.detectChanges();
+  }
+
+  isEditingTarget(item: any): boolean {
+    return item._editingTarget === true;
+  }
+
+  cancelEditTarget(item: any) {
+    item.target_value = item._originalTarget;
+    item._editingTarget = false;
+    this.cdr.detectChanges();
+  }
+
+  saveTargetOnly(item: any) {
+    if (Number(item.target_value) === Number(item._originalTarget)) {
+      Swal.fire({ icon: 'info', title: 'ไม่มีการเปลี่ยนแปลง', text: 'ค่าเป้าหมายไม่ได้รับการแก้ไข', timer: 1500, showConfirmButton: false });
+      item._editingTarget = false;
+      this.cdr.detectChanges();
+      return;
+    }
+    if (Number(item.target_value) <= 0) {
+      Swal.fire({ icon: 'warning', title: 'ค่าเป้าหมายต้องมากกว่า 0', confirmButtonText: 'ตกลง' });
+      return;
+    }
+
+    const oldVal = item._originalTarget;
+    const newVal = item.target_value;
+
+    Swal.fire({
+      title: 'ยืนยันแก้ไขเป้าหมาย',
+      html: `<p class="text-sm"><b>${item.kpi_indicators_name}</b></p><p class="mt-2">เป้าหมาย: <b>${oldVal}</b> → <b class="text-orange-600">${newVal}</b></p>`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'บันทึก',
+      cancelButtonText: 'ยกเลิก',
+      confirmButtonColor: '#f97316'
+    }).then((result) => {
+      if (!result.isConfirmed) return;
+      const payload = [{
+        indicator_id: item.indicator_id,
+        year_bh: item.year_bh,
+        hospcode: item.hospcode,
+        target_value: item.target_value,
+        oct: item.oct, nov: item.nov, dece: item.dece,
+        jan: item.jan, feb: item.feb, mar: item.mar,
+        apr: item.apr, may: item.may, jun: item.jun,
+        jul: item.jul, aug: item.aug, sep: item.sep
+      }];
+      this.authService.updateKpiResults(payload).subscribe({
+        next: (res) => {
+          if (res.success) {
+            item._originalTarget = item.target_value;
+            item._editingTarget = false;
+            this.cdr.detectChanges();
+            // ปิด request ถ้ามีการอนุมัติไว้
+            const request = this.getTargetEditRequest(item);
+            if (request && request.status === 'approved') {
+              this.authService.completeTargetEditRequest(request.id).subscribe({
+                next: () => {
+                  this.loadTargetEditRequests();
+                  this.authService.refreshUnreadCount();
+                }
+              });
+            }
+            Swal.fire({ icon: 'success', title: 'บันทึกเป้าหมายแล้ว', timer: 1500, showConfirmButton: false });
+          } else {
+            Swal.fire('ผิดพลาด', res.message || 'ไม่สามารถบันทึกได้', 'error');
+          }
+        },
+        error: (err: HttpErrorResponse) => this.handleApiError(err, 'ไม่สามารถบันทึกเป้าหมายได้')
+      });
+    });
+  }
+
   // === แก้ไขเฉพาะข้อ (จากอุทธรณ์ที่ได้รับอนุมัติ) ===
 
   startEditSingle(item: any) {
@@ -1417,5 +1645,144 @@ export class DashboardComponent implements OnInit {
         });
       }
     });
+  }
+
+  // ============================================================
+  // === Dynamic Form Modal (แบบฟอร์มบันทึกข้อมูล KPI) ===
+  // ============================================================
+
+  openDynamicForm(item: any) {
+    this.dynamicFormItem = item;
+    this.dynamicFormTab = 'form';
+    this.dynamicFormData = {};
+    this.dynamicDataList = [];
+    this.dynamicFormSchema = null;
+    // สร้าง availableYears (ปีงบฯ ± 2 ปีปัจจุบัน)
+    const currentYear = new Date().getFullYear() + 543;
+    this.availableYears = [
+      String(currentYear + 1), String(currentYear), String(currentYear - 1), String(currentYear - 2)
+    ];
+    this.dynamicFormData.year_bh = item.year_bh || String(currentYear);
+    this.dynamicFormData.hospcode = item.hospcode || this.currentUser?.hospcode;
+    this.dynamicFormData.indicator_id = item.indicator_id;
+
+    // โหลด schema
+    this.authService.getFormSchemaByIndicator(item.indicator_id).subscribe({
+      next: (res) => {
+        if (res.success && res.data) {
+          this.dynamicFormSchema = res.data;
+          this.showDynamicFormModal = true;
+          this.cdr.detectChanges();
+        } else {
+          Swal.fire('แจ้งเตือน', 'ยังไม่มีแบบฟอร์มสำหรับตัวชี้วัดนี้', 'info');
+        }
+      },
+      error: () => Swal.fire('ผิดพลาด', 'ไม่สามารถโหลดแบบฟอร์มได้', 'error')
+    });
+  }
+
+  switchDynamicFormTab(tab: 'form' | 'list') {
+    this.dynamicFormTab = tab;
+    if (tab === 'list') this.loadDynamicDataList();
+    this.cdr.detectChanges();
+  }
+
+  loadDynamicDataList() {
+    if (!this.dynamicFormSchema?.table_process) return;
+    this.isDynamicDataLoading = true;
+    const params: any = {
+      hospcode: this.dynamicFormItem.hospcode,
+      year_bh: this.dynamicFormData.year_bh
+    };
+    this.authService.getDynamicData(this.dynamicFormSchema.table_process, params).subscribe({
+      next: (res) => {
+        this.isDynamicDataLoading = false;
+        if (res.success) this.dynamicDataList = res.data;
+        this.cdr.detectChanges();
+      },
+      error: () => { this.isDynamicDataLoading = false; this.cdr.detectChanges(); }
+    });
+  }
+
+  saveDynamicFormData() {
+    if (!this.dynamicFormSchema?.table_process) return;
+    // ตรวจสอบฟิลด์บังคับ
+    const missingFields = (this.dynamicFormSchema.fields || [])
+      .filter((f: any) => f.is_required && !this.dynamicFormData[f.field_name]);
+    if (missingFields.length > 0) {
+      Swal.fire('ข้อมูลไม่ครบ', `กรุณากรอก: ${missingFields.map((f: any) => f.field_label).join(', ')}`, 'warning');
+      return;
+    }
+    this.isDynamicFormSaving = true;
+    const payload = { ...this.dynamicFormData };
+    this.authService.saveDynamicData(this.dynamicFormSchema.table_process, payload).subscribe({
+      next: (res) => {
+        this.isDynamicFormSaving = false;
+        if (res.success) {
+          Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', timer: 1500, showConfirmButton: false });
+          this.resetDynamicForm();
+          if (this.dynamicFormTab === 'list') this.loadDynamicDataList();
+        } else {
+          Swal.fire('ผิดพลาด', res.message, 'error');
+        }
+        this.cdr.detectChanges();
+      },
+      error: (e: HttpErrorResponse) => {
+        this.isDynamicFormSaving = false;
+        Swal.fire('ผิดพลาด', e.error?.message || 'เกิดข้อผิดพลาด', 'error');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  resetDynamicForm() {
+    const year = this.dynamicFormData.year_bh;
+    const hospcode = this.dynamicFormData.hospcode;
+    const indicator_id = this.dynamicFormData.indicator_id;
+    this.dynamicFormData = { year_bh: year, hospcode, indicator_id };
+  }
+
+  editDynamicRow(row: any) {
+    this.dynamicFormData = { ...row };
+    this.dynamicFormTab = 'form';
+    this.cdr.detectChanges();
+  }
+
+  deleteDynamicRow(row: any) {
+    if (!this.dynamicFormSchema?.table_process) return;
+    Swal.fire({
+      title: 'ลบข้อมูล?',
+      text: 'ต้องการลบรายการนี้ใช่หรือไม่?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      confirmButtonText: 'ลบ',
+      cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (r.isConfirmed) {
+        this.authService.deleteDynamicData(this.dynamicFormSchema.table_process, row.id).subscribe({
+          next: (res) => {
+            if (res.success) {
+              Swal.fire({ icon: 'success', title: 'ลบเรียบร้อย', timer: 1200, showConfirmButton: false });
+              this.loadDynamicDataList();
+            }
+          }
+        });
+      }
+    });
+  }
+
+  parseFieldOptions(raw: any): string[] {
+    if (Array.isArray(raw)) return raw;
+    if (!raw) return [];
+    try { return JSON.parse(raw); } catch { return []; }
+  }
+
+  closeDynamicForm() {
+    this.showDynamicFormModal = false;
+    this.dynamicFormItem = null;
+    this.dynamicFormSchema = null;
+    this.dynamicFormData = {};
+    this.dynamicDataList = [];
   }
 }

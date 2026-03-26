@@ -1,0 +1,384 @@
+<ng-container>
+  @if (isLoading) {
+    <div class="flex justify-center items-center py-20">
+      <div class="animate-spin rounded-full h-12 w-12 border-t-4 border-green-600"></div>
+    </div>
+  }
+
+  @if (!isLoading) {
+    <div class="space-y-6">
+      <!-- Header -->
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+              <i class="fas fa-wpforms text-green-600"></i>
+              สร้างแบบฟอร์มบันทึกข้อมูล KPI
+            </h2>
+            <p class="text-sm text-gray-500 mt-1">เลือกตัวชี้วัดและกำหนดฟิลด์ข้อมูลที่ต้องการบันทึก</p>
+          </div>
+          <div class="relative w-full md:w-72">
+            <input type="text" [(ngModel)]="searchText" (ngModelChange)="applyFilter()"
+                   placeholder="ค้นหาตัวชี้วัด..."
+                   class="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-400">
+            <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- Indicators List -->
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="px-6 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+          <i class="fas fa-list text-green-600"></i>
+          <span class="font-semibold text-gray-700 text-sm">รายการตัวชี้วัด ({{ filteredIndicators.length }} รายการ)</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="bg-green-700 text-white text-left">
+                <th class="px-4 py-3">ตัวชี้วัด</th>
+                <th class="px-4 py-3">หน่วยงาน</th>
+                <th class="px-4 py-3">ชื่อตาราง (table_process)</th>
+                <th class="px-4 py-3 text-center">แบบฟอร์ม</th>
+                <th class="px-4 py-3 text-center">จำนวนฟิลด์</th>
+                <th class="px-4 py-3 text-center">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              @for (ind of filteredIndicators; track ind.id) {
+                <tr class="hover:bg-green-50/30 transition-colors">
+                  <td class="px-4 py-3 font-medium text-gray-800 max-w-xs">
+                    <span [title]="ind.kpi_indicators_name" class="line-clamp-2">{{ ind.kpi_indicators_name }}</span>
+                  </td>
+                  <td class="px-4 py-3 text-gray-600">{{ ind.dept_name || '-' }}</td>
+                  <td class="px-4 py-3">
+                    @if (ind.table_process) {
+                      <span class="font-mono text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-100">
+                        {{ ind.table_process }}
+                      </span>
+                    } @else {
+                      <span class="text-red-400 italic text-xs">
+                        <i class="fas fa-exclamation-triangle mr-1"></i>ยังไม่กำหนด
+                      </span>
+                    }
+                  </td>
+                  <td class="px-4 py-3 text-center">
+                    @if (ind.schema_id) {
+                      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-bold">
+                        <i class="fas fa-check-circle"></i> มีแบบฟอร์ม
+                      </span>
+                    } @else {
+                      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 text-xs">
+                        <i class="fas fa-minus-circle"></i> ยังไม่มี
+                      </span>
+                    }
+                  </td>
+                  <td class="px-4 py-3 text-center text-gray-500">{{ ind.field_count || '-' }}</td>
+                  <td class="px-4 py-3 text-center">
+                    <div class="flex items-center justify-center gap-2">
+                      <button (click)="openCreateForm(ind)"
+                              [disabled]="!ind.table_process"
+                              class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                              [ngClass]="ind.schema_id ? 'bg-amber-100 hover:bg-amber-200 text-amber-700' : 'bg-green-100 hover:bg-green-200 text-green-700'">
+                        <i [class]="ind.schema_id ? 'fas fa-edit mr-1' : 'fas fa-plus mr-1'"></i>
+                        {{ ind.schema_id ? 'แก้ไข' : 'สร้าง' }}
+                      </button>
+                      @if (ind.schema_id) {
+                        <button (click)="deleteSchema(ind)"
+                                class="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg text-xs font-bold transition-all">
+                          <i class="fas fa-trash"></i>
+                        </button>
+                      }
+                    </div>
+                  </td>
+                </tr>
+              }
+              @if (filteredIndicators.length === 0) {
+                <tr>
+                  <td colspan="6" class="px-4 py-12 text-center text-gray-400">
+                    <i class="fas fa-search text-3xl mb-2 block"></i>
+                    ไม่พบตัวชี้วัด
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- คำอธิบาย -->
+      <div class="bg-blue-50 border border-blue-100 rounded-2xl p-4 text-sm text-blue-700">
+        <div class="flex gap-2">
+          <i class="fas fa-info-circle mt-0.5 shrink-0"></i>
+          <div>
+            <p class="font-bold mb-1">วิธีใช้งาน</p>
+            <ul class="list-disc ml-4 space-y-1 text-xs text-blue-600">
+              <li>กำหนด <b>ชื่อตาราง (table_process)</b> ในหน้า "จัดการตัวชี้วัด" ก่อน จึงจะสร้างแบบฟอร์มได้</li>
+              <li>ชื่อตารางต้องเป็นภาษาอังกฤษ ตัวเลข หรือ _ เท่านั้น เช่น <code class="bg-blue-100 px-1 rounded">kpi_tb_001</code></li>
+              <li>เลือก <b>ฟิลด์ที่ใช้แสดงผลใน Dashboard</b> เพื่อให้ค่าที่กรอกไปอัปเดตตาราง kpi_results อัตโนมัติ</li>
+              <li>ปุ่ม <i class="fas fa-clipboard-list"></i> จะปรากฏในหน้า "ภาพรวมตัวชี้วัด" ตรงแถวของตัวชี้วัดที่มีแบบฟอร์ม</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ===== Form Builder Modal ===== -->
+  @if (showBuilderModal && selectedIndicator) {
+    <div class="fixed inset-0 z-50 flex items-start justify-center bg-black/60 overflow-y-auto py-4 px-2">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl my-auto">
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-green-700 to-green-600 rounded-t-2xl">
+          <div>
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <i class="fas fa-wpforms"></i>
+              {{ editingSchemaId ? 'แก้ไข' : 'สร้าง' }}แบบฟอร์ม
+            </h3>
+            <p class="text-green-200 text-xs mt-0.5 truncate max-w-xs">{{ selectedIndicator.kpi_indicators_name }}</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button (click)="openPreview()"
+                    class="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-lg text-xs font-bold transition-all">
+              <i class="fas fa-eye mr-1"></i>Preview
+            </button>
+            <button (click)="closeBuilderModal()" class="text-white/70 hover:text-white">
+              <i class="fas fa-times text-lg"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+          <!-- ชื่อตาราง -->
+          <div class="bg-blue-50 border border-blue-100 rounded-xl px-4 py-2 flex items-center gap-2 text-sm">
+            <i class="fas fa-database text-blue-500"></i>
+            <span class="text-blue-700">ตารางฐานข้อมูล: <b class="font-mono">{{ selectedIndicator.table_process }}</b></span>
+          </div>
+
+          <!-- ข้อมูลฟอร์ม -->
+          <div class="grid grid-cols-1 gap-4">
+            <div>
+              <label class="block text-xs font-bold text-gray-600 mb-1">ชื่อแบบฟอร์ม <span class="text-red-500">*</span></label>
+              <input type="text" [(ngModel)]="formTitle"
+                     class="w-full border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                     placeholder="เช่น แบบบันทึกข้อมูลตัวชี้วัด...">
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-gray-600 mb-1">คำอธิบาย (ไม่บังคับ)</label>
+              <textarea [(ngModel)]="formDescription" rows="2"
+                        class="w-full border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 resize-none"
+                        placeholder="คำอธิบายแบบฟอร์ม..."></textarea>
+            </div>
+          </div>
+
+          <!-- Fields -->
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h4 class="text-sm font-bold text-gray-700 flex items-center gap-2">
+                <i class="fas fa-columns text-green-600"></i>
+                ฟิลด์ข้อมูล ({{ fields.length }} ฟิลด์)
+              </h4>
+              <button (click)="addField()"
+                      class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm">
+                <i class="fas fa-plus mr-1"></i>เพิ่มฟิลด์
+              </button>
+            </div>
+
+            <!-- Note: default fields -->
+            <div class="mb-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs text-gray-500">
+              <i class="fas fa-lock mr-1"></i>
+              ฟิลด์เริ่มต้น (สร้างอัตโนมัติ): <b>id, hospcode, year_bh, month_bh, created_by, created_at</b>
+            </div>
+
+            <div class="space-y-3">
+              @for (field of fields; track $index; let i = $index) {
+                <div class="border border-gray-200 rounded-xl p-4 bg-white hover:border-green-300 transition-colors">
+                  <div class="flex items-center justify-between mb-3">
+                    <span class="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">ฟิลด์ {{ i + 1 }}</span>
+                    <div class="flex items-center gap-1">
+                      <button (click)="moveField(i, -1)" [disabled]="i === 0"
+                              class="text-gray-400 hover:text-gray-600 disabled:opacity-30 p-1">
+                        <i class="fas fa-chevron-up text-xs"></i>
+                      </button>
+                      <button (click)="moveField(i, 1)" [disabled]="i === fields.length - 1"
+                              class="text-gray-400 hover:text-gray-600 disabled:opacity-30 p-1">
+                        <i class="fas fa-chevron-down text-xs"></i>
+                      </button>
+                      <button (click)="removeField(i)"
+                              class="text-red-400 hover:text-red-600 p-1 ml-1">
+                        <i class="fas fa-trash text-xs"></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="block text-xs font-bold text-gray-600 mb-1">
+                        ชื่อคอลัมน์ (field_name) <span class="text-red-500">*</span>
+                      </label>
+                      <input type="text" [(ngModel)]="field.field_name" (blur)="autoFieldName(field)"
+                             class="w-full border rounded-lg px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-green-400 transition-colors"
+                             [ngClass]="field.field_name && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(field.field_name) ? 'border-red-400 bg-red-50' : 'border-gray-200'"
+                             placeholder="เช่น score, value_q1">
+                      @if (field.field_name && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(field.field_name)) {
+                        <p class="text-red-500 text-xs mt-0.5">ใช้ a-z, A-Z, 0-9, _ เท่านั้น ขึ้นต้นด้วยตัวอักษร</p>
+                      }
+                    </div>
+                    <div>
+                      <label class="block text-xs font-bold text-gray-600 mb-1">
+                        ชื่อแสดงผล (label) <span class="text-red-500">*</span>
+                      </label>
+                      <input type="text" [(ngModel)]="field.field_label" (blur)="autoFieldName(field)"
+                             class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-green-400"
+                             placeholder="เช่น คะแนน, ผลลัพธ์ไตรมาส 1">
+                    </div>
+                    <div>
+                      <label class="block text-xs font-bold text-gray-600 mb-1">ประเภทข้อมูล</label>
+                      <select [(ngModel)]="field.field_type"
+                              class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-green-400 bg-white">
+                        @for (t of fieldTypeOptions; track t.value) {
+                          <option [value]="t.value">{{ t.label }}</option>
+                        }
+                      </select>
+                    </div>
+                    <div class="flex items-center gap-2 mt-5">
+                      <input type="checkbox" [(ngModel)]="field.is_required" [id]="'req_'+i"
+                             class="rounded text-green-600 focus:ring-green-400">
+                      <label [for]="'req_'+i" class="text-xs text-gray-600 cursor-pointer">บังคับกรอก</label>
+                    </div>
+                  </div>
+
+                  @if (field.field_type === 'select') {
+                    <div class="mt-3">
+                      <label class="block text-xs font-bold text-gray-600 mb-1">
+                        ตัวเลือก <small class="font-normal text-gray-400">(แต่ละบรรทัด = 1 ตัวเลือก)</small>
+                      </label>
+                      <textarea [(ngModel)]="field._optionsText" (ngModelChange)="onOptionsTextChange(field)"
+                                rows="3" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-green-400 resize-none"
+                                placeholder="ตัวเลือก 1&#10;ตัวเลือก 2&#10;ตัวเลือก 3"></textarea>
+                    </div>
+                  }
+                </div>
+              }
+
+              @if (fields.length === 0) {
+                <div class="text-center py-8 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
+                  <i class="fas fa-plus-circle text-3xl mb-2 block"></i>
+                  <p class="text-sm">คลิก "เพิ่มฟิลด์" เพื่อเริ่มสร้างแบบฟอร์ม</p>
+                </div>
+              }
+            </div>
+          </div>
+
+          <!-- actual_value_field — เลือกฟิลด์ที่ sync ไปยัง dashboard -->
+          @if (fields.length > 0) {
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <label class="block text-xs font-bold text-amber-700 mb-2">
+                <i class="fas fa-link mr-1"></i>
+                ฟิลด์ที่ใช้แสดงผลในหน้า Dashboard (ผลงานรวม)
+              </label>
+              <select [(ngModel)]="actualValueField"
+                      class="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white">
+                <option value="">-- ไม่ sync (ใช้แค่บันทึกข้อมูลเพิ่มเติม) --</option>
+                @for (f of fields; track f.field_name) {
+                  <option [value]="f.field_name" [disabled]="!f.field_name">
+                    {{ f.field_label || f.field_name }} ({{ f.field_name }})
+                  </option>
+                }
+              </select>
+              <p class="text-xs text-amber-600 mt-1">
+                <i class="fas fa-info-circle mr-1"></i>
+                เมื่อบันทึกฟอร์ม ระบบจะนำค่าของฟิลด์นี้ไปอัปเดต <b>kpi_results.actual_value</b> ให้อัตโนมัติ (ต้องกรอก "เดือน" ในฟอร์ม)
+              </p>
+            </div>
+          }
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3 bg-gray-50 rounded-b-2xl">
+          <div class="text-xs text-gray-400">
+            <i class="fas fa-info-circle mr-1"></i>
+            ระบบจะ CREATE/ALTER TABLE <b class="font-mono">{{ selectedIndicator.table_process }}</b> อัตโนมัติ
+          </div>
+          <div class="flex gap-2">
+            <button (click)="closeBuilderModal()"
+                    class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl text-sm font-bold transition-all">
+              ยกเลิก
+            </button>
+            <button (click)="saveSchema()" [disabled]="!isFormValid || isSaving"
+                    class="px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-bold transition-all shadow-md disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
+              @if (isSaving) {
+                <i class="fas fa-spinner fa-spin"></i>
+              } @else {
+                <i class="fas fa-save"></i>
+              }
+              {{ isSaving ? 'กำลังบันทึก...' : 'บันทึกและสร้างตาราง' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ===== Preview Modal ===== -->
+  @if (showPreviewModal) {
+    <div class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50 rounded-t-2xl">
+          <h3 class="font-bold text-gray-800 flex items-center gap-2">
+            <i class="fas fa-eye text-green-600"></i> Preview แบบฟอร์ม
+          </h3>
+          <button (click)="showPreviewModal = false" class="text-gray-400 hover:text-gray-700">
+            <i class="fas fa-times text-lg"></i>
+          </button>
+        </div>
+        <div class="p-6 max-h-[65vh] overflow-y-auto">
+          <h4 class="font-bold text-gray-800 mb-1">{{ formTitle }}</h4>
+          @if (formDescription) {
+            <p class="text-sm text-gray-500 mb-4">{{ formDescription }}</p>
+          }
+          <div class="space-y-4">
+            @for (field of fields; track field.field_name) {
+              <div class="space-y-1">
+                <label class="block text-sm font-medium text-gray-700">
+                  {{ field.field_label }}
+                  @if (field.is_required) { <span class="text-red-500 ml-0.5">*</span> }
+                </label>
+                @if (['text','number','date'].includes(field.field_type)) {
+                  <input [type]="field.field_type" [(ngModel)]="previewData[field.field_name]"
+                         class="w-full border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400">
+                }
+                @if (field.field_type === 'textarea') {
+                  <textarea [(ngModel)]="previewData[field.field_name]"
+                            rows="3" class="w-full border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 resize-none"></textarea>
+                }
+                @if (field.field_type === 'select') {
+                  <select [(ngModel)]="previewData[field.field_name]"
+                          class="w-full border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 bg-white">
+                    <option value="">-- เลือก --</option>
+                    @for (opt of field.field_options; track opt) {
+                      <option [value]="opt">{{ opt }}</option>
+                    }
+                  </select>
+                }
+                @if (field.field_type === 'checkbox') {
+                  <div class="flex items-center gap-2">
+                    <input type="checkbox" [(ngModel)]="previewData[field.field_name]"
+                           class="rounded text-green-600 focus:ring-green-400">
+                    <span class="text-sm text-gray-600">{{ field.field_label }}</span>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        </div>
+        <div class="px-6 py-3 bg-gray-50 rounded-b-2xl flex justify-end">
+          <button (click)="showPreviewModal = false"
+                  class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-bold">
+            ปิด Preview
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</ng-container>

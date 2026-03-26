@@ -69,6 +69,12 @@
             Export ข้อมูล KPI
           </span>
         </a>
+        <a *ngIf="isSuperAdmin" routerLink="/form-builder" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
+          <i class="fas fa-wpforms text-lg mr-3 min-w-[24px]"></i>
+          <span class="truncate flex justify-between items-center w-full">
+            สร้างแบบฟอร์ม KPI
+          </span>
+        </a>
         <a *ngIf="isSuperAdmin" routerLink="/settings" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-sliders-h text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
@@ -96,7 +102,7 @@
       
       <header class="h-16 bg-gradient-to-r from-green-800 to-green-600 shadow-md flex items-center justify-between px-6 z-[60] relative">
         <div class="flex items-center">
-          <button (click)="toggleSidebar()" class="text-white hover:text-green-200 focus:outline-none mr-4 lg:hidden">
+          <button (click)="toggleSidebar()" class="text-white hover:text-green-200 focus:outline-none mr-4">
             <i class="fas fa-bars text-xl"></i>
           </button>
           <h2 class="text-lg sm:text-xl font-semibold text-white mr-0 sm:mr-6">{{ pageTitle }}</h2>

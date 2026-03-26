@@ -41,6 +41,12 @@ export class AuthService {
   getPublicDistricts(): Observable<any> {
     return this.http.get(`${this.apiUrl}/public/districts`);
   }
+  getPublicKpiResults(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/public/kpi-results`);
+  }
+  getPublicDashboardStats(year: string): Observable<any> {
+    return this.http.get(`${this.apiUrl}/public/dashboard-stats?year=${year}`);
+  }
 
   // 1. ฟังก์ชันบันทึก Token เมื่อล็อกอินสำเร็จ
   saveToken(token: string) {
@@ -192,6 +198,30 @@ export class AuthService {
       'Authorization': `Bearer ${token}`
     });
     return this.http.put(`${this.apiUrl}/users/${id}/reset-password`, {}, { headers });
+  }
+
+  approveUser(id: number): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/users/${id}/approve`, {}, { headers });
+  }
+
+  rejectUser(id: number): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/users/${id}/reject`, {}, { headers });
+  }
+
+  toggleUserActive(id: number, isActive: boolean): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/users/${id}/toggle-active`, { is_active: isActive }, { headers });
+  }
+
+  getUserById(id: number): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/users/${id}/basic`, { headers });
   }
 
   changePassword(data: { currentPassword: string; newPassword: string }): Observable<any> {
@@ -521,5 +551,86 @@ export class AuthService {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.post(`${this.apiUrl}/appeal-reject`, data, { headers });
+  }
+
+  // --- Target Edit Request APIs ---
+  getTargetEditRequests(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/target-edit-requests`, { headers });
+  }
+
+  requestTargetEdit(data: any): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/target-edit-request`, data, { headers });
+  }
+
+  approveTargetEditRequest(requestId: number): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/target-edit-approve`, { request_id: requestId }, { headers });
+  }
+
+  rejectTargetEditRequest(requestId: number, reason: string): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/target-edit-reject`, { request_id: requestId, reason }, { headers });
+  }
+
+  completeTargetEditRequest(requestId: number): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/target-edit-complete`, { request_id: requestId }, { headers });
+  }
+
+  // --- Form Builder APIs ---
+  getFormSchemas(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/form-schemas`, { headers });
+  }
+
+  getAllIndicatorsWithSchema(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/form-schemas/all-indicators`, { headers });
+  }
+
+  getFormSchemaByIndicator(indicatorId: number): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/form-schemas/indicator/${indicatorId}`, { headers });
+  }
+
+  saveFormSchema(data: any): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/form-schemas`, data, { headers });
+  }
+
+  deleteFormSchema(id: number): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.delete(`${this.apiUrl}/form-schemas/${id}`, { headers });
+  }
+
+  getDynamicData(tableName: string, params: any = {}): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const queryStr = new URLSearchParams(params).toString();
+    return this.http.get(`${this.apiUrl}/dynamic-data/${tableName}${queryStr ? '?' + queryStr : ''}`, { headers });
+  }
+
+  saveDynamicData(tableName: string, data: any): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/dynamic-data/${tableName}`, data, { headers });
+  }
+
+  deleteDynamicData(tableName: string, recordId: number): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.delete(`${this.apiUrl}/dynamic-data/${tableName}/${recordId}`, { headers });
   }
 }

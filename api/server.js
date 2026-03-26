@@ -16,6 +16,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const crypto = require('crypto');
 
 const app = express();
 // ใช้ Port จาก ENV หรือ Default 8830 ตามโจทย์
@@ -157,6 +158,19 @@ apiRouter.post('/login', loginLimiter, async (req, res) => {
             const isMatch = await bcrypt.compare(password, user.password_hash);
 
             if (isMatch) {
+                // ตรวจสอบสถานะการอนุมัติ
+                if (user.is_approved === 0) {
+                    await saveLog(username, 'login_failed', 'บัญชีรอการอนุมัติ', ip);
+                    return res.status(403).json({ success: false, message: 'บัญชีของคุณยังรอการอนุมัติจากผู้ดูแลระบบ กรุณารอการติดต่อกลับ' });
+                }
+                if (user.is_approved === -1) {
+                    await saveLog(username, 'login_failed', 'บัญชีถูกปฏิเสธ', ip);
+                    return res.status(403).json({ success: false, message: 'คำขอลงทะเบียนถูกปฏิเสธ กรุณาติดต่อผู้ดูแลระบบ' });
+                }
+                if (user.is_active === 0) {
+                    await saveLog(username, 'login_failed', 'บัญชีถูกปิดใช้งาน', ip);
+                    return res.status(403).json({ success: false, message: 'บัญชีนี้ถูกปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ' });
+                }
                 const serviceUnitDisplay = user.hosname ? `${user.hosname} ${user.distname ? 'อ.' + user.distname : ''}` : user.service_unit;
 
                 await saveLog(username, 'login_success', 'เข้าสู่ระบบสำเร็จ', ip);
@@ -197,7 +211,7 @@ apiRouter.post('/login', loginLimiter, async (req, res) => {
 
 // === ลงทะเบียนผู้ใช้งานใหม่ (Public - ไม่ต้อง login) ===
 apiRouter.post('/register', loginLimiter, async (req, res) => {
-    const { username, password, firstname, lastname, hospcode, phone, dept_id } = req.body;
+    const { username, password, firstname, lastname, hospcode, phone, email, dept_id, cid, role: reqRole } = req.body;
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
     try {
@@ -205,6 +219,37 @@ apiRouter.post('/register', loginLimiter, async (req, res) => {
         if (!username || !password || !firstname || !lastname || !hospcode || !phone) {
             return res.status(400).json({ success: false, message: 'กรุณากรอกข้อมูลให้ครบทุกช่อง' });
         }
+
+        // ตรวจสอบ username ขั้นต่ำ 6 ตัวอักษร + เฉพาะ a-z, A-Z, 0-9, อักขระพิเศษ
+        if (username.length < 6) {
+            return res.status(400).json({ success: false, message: 'ชื่อผู้ใช้งานต้องมีอย่างน้อย 6 ตัวอักษร' });
+        }
+        if (!/^[a-zA-Z0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]+$/.test(username)) {
+            return res.status(400).json({ success: false, message: 'ชื่อผู้ใช้งานต้องเป็น a-z, A-Z, 0-9 หรืออักขระพิเศษเท่านั้น' });
+        }
+
+        // ตรวจสอบ email (ถ้ากรอก)
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return res.status(400).json({ success: false, message: 'รูปแบบอีเมลไม่ถูกต้อง' });
+        }
+
+        // ตรวจสอบ cid — 13 หลัก + Check Digit (Modulus 11)
+        if (cid) {
+            if (!/^\d{13}$/.test(cid)) {
+                return res.status(400).json({ success: false, message: 'เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก' });
+            }
+            const digits = cid.split('').map(Number);
+            let sum = 0;
+            for (let i = 0; i < 12; i++) sum += digits[i] * (13 - i);
+            const checkDigit = (11 - (sum % 11)) % 10;
+            if (checkDigit !== digits[12]) {
+                return res.status(400).json({ success: false, message: 'เลขบัตรประชาชนไม่ผ่านการตรวจสอบ Check Digit (Modulus 11)' });
+            }
+        }
+
+        // role ที่อนุญาตให้เลือกได้ (ไม่รวม super_admin)
+        const allowedRoles = ['user', 'admin_cup', 'admin_ssj'];
+        const finalRole = allowedRoles.includes(reqRole) ? reqRole : 'user';
 
         // ตรวจสอบ password ขั้นต่ำ 6 ตัวอักษร
         if (password.length < 6) {
@@ -231,20 +276,40 @@ apiRouter.post('/register', loginLimiter, async (req, res) => {
         // Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // บันทึกผู้ใช้ (default role = 'user')
+        // Hash CID ด้วย SHA-256 ก่อนบันทึก
+        const hashedCid = cid ? crypto.createHash('sha256').update(cid).digest('hex') : null;
+
+        // บันทึกผู้ใช้ is_approved = 0 (รอการอนุมัติ)
         const [result] = await db.query(
-            'INSERT INTO users (username, password_hash, role, dept_id, firstname, lastname, hospcode, phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [username, hashedPassword, 'user', dept_id || null, firstname, lastname, hospcode, cleanPhone]
+            'INSERT INTO users (username, password_hash, role, dept_id, firstname, lastname, hospcode, phone, email, cid, is_approved) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)',
+            [username, hashedPassword, finalRole, dept_id || null, firstname, lastname, hospcode, cleanPhone, email || null, hashedCid]
         );
 
         // บันทึก log
         await db.query(
             'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [result.insertId, dept_id || null, 'INSERT', 'users', result.insertId, JSON.stringify({ username, action: 'self_register' }), ip]
+            [result.insertId, dept_id || null, 'INSERT', 'users', result.insertId, JSON.stringify({ username, role: finalRole, action: 'self_register' }), ip]
         );
 
-        await saveLog(username, 'register_success', 'ลงทะเบียนผู้ใช้งานใหม่สำเร็จ', ip);
-        res.json({ success: true, message: 'ลงทะเบียนสำเร็จ กรุณาเข้าสู่ระบบ' });
+        // ดึงข้อมูลหน่วยบริการเพื่อแจ้งเตือน
+        const [hosRows] = await db.query('SELECT hosname FROM chospital WHERE hoscode = ?', [hospcode]);
+        const hosName = hosRows[0]?.hosname || hospcode;
+        const roleLabel = finalRole === 'admin_cup' ? 'Admin CUP' : finalRole === 'admin_ssj' ? 'Admin SSJ' : 'User';
+
+        // แจ้ง super_admin ทุกคน
+        const [superAdmins] = await db.query("SELECT id FROM users WHERE role = 'super_admin' AND is_approved = 1");
+        for (const sa of superAdmins) {
+            await db.query(
+                "INSERT INTO notifications (user_id, type, title, message, created_by) VALUES (?, 'info', ?, ?, ?)",
+                [sa.id,
+                 `ผู้ใช้งานใหม่รอการอนุมัติ`,
+                 `${firstname} ${lastname} (${username}) จาก ${hosName} ขอลงทะเบียนในสิทธิ์ ${roleLabel} กรุณาตรวจสอบและอนุมัติ`,
+                 result.insertId]
+            );
+        }
+
+        await saveLog(username, 'register_success', 'ลงทะเบียนผู้ใช้งานใหม่ — รอการอนุมัติ', ip);
+        res.json({ success: true, message: 'ลงทะเบียนสำเร็จ กรุณารอการอนุมัติจากผู้ดูแลระบบก่อนเข้าสู่ระบบ' });
     } catch (error) {
         console.error('Register Error:', error);
         res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง' });
@@ -274,6 +339,86 @@ apiRouter.get('/public/districts', async (req, res) => {
     try {
         const [districts] = await db.query('SELECT distid, distname FROM co_district WHERE distid LIKE ? ORDER BY distname', ['30%']);
         res.json({ success: true, data: districts });
+    } catch (error) {
+        res.status(500).json({ success: false });
+    }
+});
+
+// === Public KPI endpoints (ไม่ต้อง login) ===
+apiRouter.get('/public/kpi-results', async (req, res) => {
+    try {
+        const sql = `
+            SELECT
+                if(mi.main_indicator_name IS NULL,'ยังไม่กำหนด',mi.main_indicator_name) main_indicator_name,
+                i.kpi_indicators_name,
+                r.year_bh,
+                i.id AS indicator_id,
+                d.dept_name,
+                MAX(r.target_value) AS target_value,
+                MAX(CASE WHEN r.month_bh = 10 THEN r.actual_value ELSE NULL END) AS oct,
+                MAX(CASE WHEN r.month_bh = 11 THEN r.actual_value ELSE NULL END) AS nov,
+                MAX(CASE WHEN r.month_bh = 12 THEN r.actual_value ELSE NULL END) AS dece,
+                MAX(CASE WHEN r.month_bh = 1  THEN r.actual_value ELSE NULL END) AS jan,
+                MAX(CASE WHEN r.month_bh = 2  THEN r.actual_value ELSE NULL END) AS feb,
+                MAX(CASE WHEN r.month_bh = 3  THEN r.actual_value ELSE NULL END) AS mar,
+                MAX(CASE WHEN r.month_bh = 4  THEN r.actual_value ELSE NULL END) AS apr,
+                MAX(CASE WHEN r.month_bh = 5  THEN r.actual_value ELSE NULL END) AS may,
+                MAX(CASE WHEN r.month_bh = 6  THEN r.actual_value ELSE NULL END) AS jun,
+                MAX(CASE WHEN r.month_bh = 7  THEN r.actual_value ELSE NULL END) AS jul,
+                MAX(CASE WHEN r.month_bh = 8  THEN r.actual_value ELSE NULL END) AS aug,
+                MAX(CASE WHEN r.month_bh = 9  THEN r.actual_value ELSE NULL END) AS sep,
+                (SELECT r2.actual_value FROM kpi_results r2
+                 WHERE r2.indicator_id = r.indicator_id AND r2.year_bh = r.year_bh AND r2.hospcode = r.hospcode
+                   AND r2.actual_value IS NOT NULL AND r2.actual_value != ''
+                   AND (CAST(r2.actual_value AS DECIMAL(15,4)) != 0 OR r2.actual_value NOT REGEXP '^-?[0-9.]+$')
+                 ORDER BY FIELD(r2.month_bh,10,11,12,1,2,3,4,5,6,7,8,9) DESC LIMIT 1
+                ) AS last_actual,
+                COALESCE(CAST(
+                  (SELECT r2.actual_value FROM kpi_results r2
+                   WHERE r2.indicator_id = r.indicator_id AND r2.year_bh = r.year_bh AND r2.hospcode = r.hospcode
+                     AND r2.actual_value IS NOT NULL AND r2.actual_value != ''
+                     AND (CAST(r2.actual_value AS DECIMAL(15,4)) != 0 OR r2.actual_value NOT REGEXP '^-?[0-9.]+$')
+                   ORDER BY FIELD(r2.month_bh,10,11,12,1,2,3,4,5,6,7,8,9) DESC LIMIT 1
+                  ) AS DECIMAL(15,4)), 0) AS total_actual,
+                r.hospcode, h.hosname, dist.distname
+            FROM kpi_results r
+            LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
+            LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
+            LEFT JOIN departments d ON d.id = i.dept_id
+            LEFT JOIN chospital h ON r.hospcode = h.hoscode
+            LEFT JOIN co_district dist ON dist.distid = CONCAT(h.provcode, h.distcode)
+            GROUP BY mi.main_indicator_name, i.kpi_indicators_name, i.id, d.dept_name, r.year_bh, r.hospcode, h.hosname, dist.distname
+            ORDER BY r.year_bh DESC, mi.main_indicator_name, i.kpi_indicators_name, i.id`;
+        const [rows] = await db.query(sql);
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        res.status(500).json({ success: false });
+    }
+});
+
+apiRouter.get('/public/dashboard-stats', async (req, res) => {
+    try {
+        const year = req.query.year || (new Date().getFullYear() + 543).toString();
+        const [kpiRows] = await db.query(
+            `SELECT r.indicator_id, SUM(r.target_value) as total_target, SUM(r.actual_value) as total_actual
+             FROM kpi_results r WHERE r.year_bh = ? GROUP BY r.indicator_id`,
+            [year]
+        );
+        let passedCount = 0;
+        kpiRows.forEach(row => {
+            if (Number(row.total_target) > 0 && Number(row.total_actual) >= Number(row.total_target)) passedCount++;
+        });
+        const successRate = kpiRows.length > 0 ? ((passedCount / kpiRows.length) * 100).toFixed(1) : 0;
+
+        const [[{ recorded_count }]] = await db.query(
+            `SELECT COUNT(DISTINCT i.dept_id) as recorded_count FROM kpi_results r
+             JOIN kpi_indicators i ON r.indicator_id = i.id WHERE r.year_bh = ?`, [year]);
+        const [[{ total_depts }]] = await db.query(
+            `SELECT COUNT(*) as total_depts FROM departments`);
+        const [[{ pending_count }]] = await db.query(
+            `SELECT COUNT(*) as pending_count FROM kpi_results WHERE year_bh = ? AND status = 'Pending'`, [year]);
+
+        res.json({ success: true, data: { successRate, recordedCount: recorded_count, totalDepts: total_depts, pendingCount: pending_count, rank: 1 } });
     } catch (error) {
         res.status(500).json({ success: false });
     }
@@ -323,26 +468,40 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 r.year_bh,
                 i.id AS indicator_id,
                 d.dept_name,
-                SUM(r.target_value) AS target_value,
-                SUM(CASE WHEN r.month_bh = 10 THEN r.actual_value ELSE 0 END) AS oct,
-                SUM(CASE WHEN r.month_bh = 11 THEN r.actual_value ELSE 0 END) AS nov,
-                SUM(CASE WHEN r.month_bh = 12 THEN r.actual_value ELSE 0 END) AS dece,
-                SUM(CASE WHEN r.month_bh = 1 THEN r.actual_value ELSE 0 END) AS jan,
-                SUM(CASE WHEN r.month_bh = 2 THEN r.actual_value ELSE 0 END) AS feb,
-                SUM(CASE WHEN r.month_bh = 3 THEN r.actual_value ELSE 0 END) AS mar,
-                SUM(CASE WHEN r.month_bh = 4 THEN r.actual_value ELSE 0 END) AS apr,
-                SUM(CASE WHEN r.month_bh = 5 THEN r.actual_value ELSE 0 END) AS may,
-                SUM(CASE WHEN r.month_bh = 6 THEN r.actual_value ELSE 0 END) AS jun,
-                SUM(CASE WHEN r.month_bh = 7 THEN r.actual_value ELSE 0 END) AS jul,
-                SUM(CASE WHEN r.month_bh = 8 THEN r.actual_value ELSE 0 END) AS aug,
-                SUM(CASE WHEN r.month_bh = 9 THEN r.actual_value ELSE 0 END) AS sep,
-                SUM(r.actual_value) AS total_actual,
+                MAX(r.target_value) AS target_value,
+                MAX(CASE WHEN r.month_bh = 10 THEN r.actual_value ELSE NULL END) AS oct,
+                MAX(CASE WHEN r.month_bh = 11 THEN r.actual_value ELSE NULL END) AS nov,
+                MAX(CASE WHEN r.month_bh = 12 THEN r.actual_value ELSE NULL END) AS dece,
+                MAX(CASE WHEN r.month_bh = 1  THEN r.actual_value ELSE NULL END) AS jan,
+                MAX(CASE WHEN r.month_bh = 2  THEN r.actual_value ELSE NULL END) AS feb,
+                MAX(CASE WHEN r.month_bh = 3  THEN r.actual_value ELSE NULL END) AS mar,
+                MAX(CASE WHEN r.month_bh = 4  THEN r.actual_value ELSE NULL END) AS apr,
+                MAX(CASE WHEN r.month_bh = 5  THEN r.actual_value ELSE NULL END) AS may,
+                MAX(CASE WHEN r.month_bh = 6  THEN r.actual_value ELSE NULL END) AS jun,
+                MAX(CASE WHEN r.month_bh = 7  THEN r.actual_value ELSE NULL END) AS jul,
+                MAX(CASE WHEN r.month_bh = 8  THEN r.actual_value ELSE NULL END) AS aug,
+                MAX(CASE WHEN r.month_bh = 9  THEN r.actual_value ELSE NULL END) AS sep,
+                (SELECT r2.actual_value FROM kpi_results r2
+                 WHERE r2.indicator_id = r.indicator_id AND r2.year_bh = r.year_bh AND r2.hospcode = r.hospcode
+                   AND r2.actual_value IS NOT NULL AND r2.actual_value != ''
+                   AND (CAST(r2.actual_value AS DECIMAL(15,4)) != 0 OR r2.actual_value NOT REGEXP '^-?[0-9.]+$')
+                 ORDER BY FIELD(r2.month_bh,10,11,12,1,2,3,4,5,6,7,8,9) DESC LIMIT 1
+                ) AS last_actual,
+                COALESCE(CAST(
+                  (SELECT r2.actual_value FROM kpi_results r2
+                   WHERE r2.indicator_id = r.indicator_id AND r2.year_bh = r.year_bh AND r2.hospcode = r.hospcode
+                     AND r2.actual_value IS NOT NULL AND r2.actual_value != ''
+                     AND (CAST(r2.actual_value AS DECIMAL(15,4)) != 0 OR r2.actual_value NOT REGEXP '^-?[0-9.]+$')
+                   ORDER BY FIELD(r2.month_bh,10,11,12,1,2,3,4,5,6,7,8,9) DESC LIMIT 1
+                  ) AS DECIMAL(15,4)), 0) AS total_actual,
                 SUM(CASE WHEN r.status = 'Pending' THEN 1 ELSE 0 END) AS pending_count,
                 MAX(r.status) as indicator_status,
                 MAX(CASE WHEN r.is_locked = 1 THEN 1 ELSE 0 END) as is_locked,
                 (SELECT COUNT(*) FROM kpi_rejection_comments rc2
                  WHERE rc2.indicator_id = r.indicator_id AND rc2.year_bh = r.year_bh
                  AND rc2.hospcode = r.hospcode AND rc2.type = 'appeal_approve') AS appeal_approved,
+                i.table_process,
+                (SELECT COUNT(*) FROM kpi_form_schemas fs WHERE fs.indicator_id = i.id AND fs.is_active = 1 LIMIT 1) AS has_form_schema,
                 r.hospcode,
                 h.hosname,
                 dist.distname
@@ -357,6 +516,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 mi.main_indicator_name,
                 i.kpi_indicators_name,
                 i.id,
+                i.table_process,
                 d.dept_name,
                 r.year_bh,
                 r.hospcode,
@@ -482,7 +642,7 @@ apiRouter.post('/update-kpi', async (req, res) => {
 
                 for (const m of months) {
                     const rawActual = row[m.col];
-                    const actualValue = (rawActual !== undefined && rawActual !== null && rawActual !== '') ? Number(rawActual) : 0;
+                    const actualValue = (rawActual !== undefined && rawActual !== null && rawActual !== '') ? String(rawActual).trim() : '';
                     let targetValue = 0;
                     if (m.val === 10) {
                         const rawTarget = row.target_value;
@@ -537,7 +697,7 @@ apiRouter.post('/update-kpi', async (req, res) => {
 
                 for (const m of months) {
                     const rawActual = row[m.col];
-                    const actualValue = (rawActual !== undefined && rawActual !== null && rawActual !== '') ? Number(rawActual) : 0;
+                    const actualValue = (rawActual !== undefined && rawActual !== null && rawActual !== '') ? String(rawActual).trim() : '';
                     let targetValue = 0;
                     if (m.val === 10) {
                         const rawTarget = row.target_value;
@@ -591,14 +751,14 @@ apiRouter.post('/update-kpi', async (req, res) => {
 
             for (const m of months) {
                 const rawActual = row[m.col];
-                const actualValue = (rawActual !== undefined && rawActual !== null && rawActual !== '') ? Number(rawActual) : 0;
+                const actualValue = (rawActual !== undefined && rawActual !== null && rawActual !== '') ? String(rawActual).trim() : null;
                 let targetValue = 0;
                 if (m.val === 10) {
                     const rawTarget = row.target_value;
                     targetValue = (rawTarget !== undefined && rawTarget !== null && rawTarget !== '') ? Number(rawTarget) : 0;
                 }
 
-                if (actualValue > 0 || targetValue > 0) {
+                if ((actualValue && actualValue !== '0') || targetValue > 0) {
                     insertValues.push('(?, ?, ?, ?, ?, ?, ?, ?, 0)');
                     insertParams.push(indicator_id, year_bh, m.val, actualValue, targetValue, user.userId, rowStatus, rowHospcode);
                 }
@@ -629,6 +789,264 @@ apiRouter.post('/update-kpi', async (req, res) => {
     }
 });
 
+// ============================================================
+// === Form Builder APIs (สร้างแบบฟอร์มบันทึกข้อมูล KPI) ===
+// ============================================================
+
+// ตรวจสอบชื่อตาราง/คอลัมน์ (ป้องกัน SQL Injection)
+const isValidIdentifier = (name) => /^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(name);
+
+// GET /form-schemas — รายการ schema ทั้งหมด (super_admin ดูทั้งหมด, อื่น ๆ ดูเฉพาะที่มี schema)
+apiRouter.get('/form-schemas', authenticateToken, async (req, res) => {
+    try {
+        const [rows] = await db.query(`
+            SELECT fs.*, i.kpi_indicators_name, i.table_process, d.dept_name,
+                   u.username AS created_by_name,
+                   (SELECT COUNT(*) FROM kpi_form_fields ff WHERE ff.schema_id = fs.id) AS field_count
+            FROM kpi_form_schemas fs
+            LEFT JOIN kpi_indicators i ON fs.indicator_id = i.id
+            LEFT JOIN departments d ON i.dept_id = d.id
+            LEFT JOIN users u ON fs.created_by = u.id
+            ORDER BY fs.updated_at DESC
+        `);
+        res.json({ success: true, data: rows });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// GET /form-schemas/indicator/:indicator_id — schema ของ indicator นั้น ๆ พร้อม fields
+apiRouter.get('/form-schemas/indicator/:indicator_id', authenticateToken, async (req, res) => {
+    try {
+        const [schemas] = await db.query(
+            `SELECT fs.*, i.kpi_indicators_name, i.table_process FROM kpi_form_schemas fs
+             LEFT JOIN kpi_indicators i ON fs.indicator_id = i.id
+             WHERE fs.indicator_id = ? AND fs.is_active = 1 LIMIT 1`,
+            [req.params.indicator_id]
+        );
+        if (schemas.length === 0) return res.json({ success: true, data: null });
+        const schema = schemas[0];
+        const [fields] = await db.query(
+            'SELECT * FROM kpi_form_fields WHERE schema_id = ? ORDER BY sort_order, id',
+            [schema.id]
+        );
+        schema.fields = fields;
+        res.json({ success: true, data: schema });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// GET /form-schemas/all-indicators — รายการ indicators ทั้งหมดพร้อมสถานะ schema
+apiRouter.get('/form-schemas/all-indicators', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query(`
+            SELECT i.id, i.kpi_indicators_name, i.table_process, d.dept_name,
+                   fs.id AS schema_id, fs.form_title, fs.is_active AS schema_active,
+                   (SELECT COUNT(*) FROM kpi_form_fields ff WHERE ff.schema_id = fs.id) AS field_count
+            FROM kpi_indicators i
+            LEFT JOIN departments d ON i.dept_id = d.id
+            LEFT JOIN kpi_form_schemas fs ON fs.indicator_id = i.id AND fs.is_active = 1
+            WHERE i.is_active = 1
+            ORDER BY d.dept_name, i.kpi_indicators_name
+        `);
+        res.json({ success: true, data: rows });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// POST /form-schemas — สร้าง/อัปเดต schema + CREATE TABLE ในฐานข้อมูล
+apiRouter.post('/form-schemas', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { indicator_id, form_title, form_description, fields, schema_id, actual_value_field } = req.body;
+    if (!indicator_id || !form_title || !Array.isArray(fields) || fields.length === 0) {
+        return res.status(400).json({ success: false, message: 'ข้อมูลไม่ครบถ้วน' });
+    }
+    // ตรวจสอบชื่อ field ทุกตัว
+    for (const f of fields) {
+        if (!f.field_name || !isValidIdentifier(f.field_name)) {
+            return res.status(400).json({ success: false, message: `ชื่อคอลัมน์ "${f.field_name}" ไม่ถูกต้อง (ใช้ตัวอักษร a-z, A-Z, 0-9, _ เท่านั้น, ขึ้นต้นด้วยตัวอักษร)` });
+        }
+    }
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        // ดึง table_process จาก kpi_indicators
+        const [indRows] = await connection.query('SELECT table_process, kpi_indicators_name FROM kpi_indicators WHERE id = ?', [indicator_id]);
+        if (indRows.length === 0) throw new Error('ไม่พบตัวชี้วัด');
+        const tableProcess = indRows[0].table_process;
+        if (!tableProcess || !isValidIdentifier(tableProcess)) {
+            throw new Error('ตัวชี้วัดนี้ยังไม่ได้กำหนดชื่อตาราง (table_process) กรุณาแก้ไขในหน้าจัดการตัวชี้วัดก่อน');
+        }
+        const avField = actual_value_field || null;
+        let currentSchemaId = schema_id;
+        if (currentSchemaId) {
+            // อัปเดต schema เดิม
+            await connection.query(
+                'UPDATE kpi_form_schemas SET form_title=?, form_description=?, actual_value_field=?, updated_at=NOW() WHERE id=?',
+                [form_title, form_description || null, avField, currentSchemaId]
+            );
+            await connection.query('DELETE FROM kpi_form_fields WHERE schema_id = ?', [currentSchemaId]);
+        } else {
+            // ปิด schema เก่า (ถ้ามี) แล้วสร้างใหม่
+            await connection.query('UPDATE kpi_form_schemas SET is_active = 0 WHERE indicator_id = ?', [indicator_id]);
+            const [ins] = await connection.query(
+                'INSERT INTO kpi_form_schemas (indicator_id, form_title, form_description, actual_value_field, created_by) VALUES (?, ?, ?, ?, ?)',
+                [indicator_id, form_title, form_description || null, avField, req.user.userId]
+            );
+            currentSchemaId = ins.insertId;
+        }
+        // บันทึก fields
+        for (let i = 0; i < fields.length; i++) {
+            const f = fields[i];
+            await connection.query(
+                'INSERT INTO kpi_form_fields (schema_id, field_name, field_label, field_type, field_options, is_required, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [currentSchemaId, f.field_name, f.field_label, f.field_type || 'text', f.field_options ? JSON.stringify(f.field_options) : null, f.is_required ? 1 : 0, i]
+            );
+        }
+        // สร้าง / อัปเดตตาราง Dynamic
+        const reservedFields = ['id','hospcode','year_bh','month_bh','created_by','created_at','updated_at'];
+        const customCols = fields.filter(f => !reservedFields.includes(f.field_name));
+        let colDefs = customCols.map(f => {
+            const sqlType = f.field_type === 'number' ? 'DECIMAL(15,4) NULL' : 'TEXT NULL';
+            return `\`${f.field_name}\` ${sqlType}`;
+        }).join(', ');
+        if (colDefs) colDefs = ', ' + colDefs;
+        await connection.query(`
+            CREATE TABLE IF NOT EXISTS \`${tableProcess}\` (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                hospcode VARCHAR(20) NOT NULL,
+                year_bh INT NOT NULL,
+                month_bh INT NULL,
+                indicator_id INT NULL${colDefs},
+                created_by INT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_hym (hospcode, year_bh, month_bh)
+            )
+        `);
+        // เพิ่มคอลัมน์ใหม่ที่ยังไม่มี (ALTER TABLE ADD COLUMN IF NOT EXISTS)
+        for (const f of customCols) {
+            try {
+                const sqlType = f.field_type === 'number' ? 'DECIMAL(15,4) NULL' : 'TEXT NULL';
+                await connection.query(`ALTER TABLE \`${tableProcess}\` ADD COLUMN IF NOT EXISTS \`${f.field_name}\` ${sqlType}`);
+            } catch (e) { /* ignore */ }
+        }
+        await connection.query(
+            'INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+            [req.user.userId, 'INSERT', 'kpi_form_schemas', JSON.stringify({ indicator_id, form_title, table: tableProcess }), req.ip]
+        );
+        await connection.commit();
+        res.json({ success: true, message: `สร้างแบบฟอร์มและตาราง "${tableProcess}" เรียบร้อยแล้ว`, schema_id: currentSchemaId });
+    } catch (e) {
+        await connection.rollback();
+        res.status(500).json({ success: false, message: e.message });
+    } finally { connection.release(); }
+});
+
+// DELETE /form-schemas/:id — ลบ schema (super_admin)
+apiRouter.delete('/form-schemas/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        await db.query('UPDATE kpi_form_schemas SET is_active = 0 WHERE id = ?', [req.params.id]);
+        res.json({ success: true, message: 'ลบแบบฟอร์มเรียบร้อยแล้ว (ตารางข้อมูลยังคงอยู่)' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// GET /dynamic-data/:table_name — ดึงข้อมูลจากตาราง dynamic
+apiRouter.get('/dynamic-data/:table_name', authenticateToken, async (req, res) => {
+    const { table_name } = req.params;
+    if (!isValidIdentifier(table_name)) return res.status(400).json({ success: false, message: 'ชื่อตารางไม่ถูกต้อง' });
+    try {
+        const { hospcode, year_bh, month_bh } = req.query;
+        let where = 'WHERE 1=1';
+        const params = [];
+        if (hospcode) { where += ' AND t.hospcode = ?'; params.push(hospcode); }
+        if (year_bh) { where += ' AND t.year_bh = ?'; params.push(year_bh); }
+        if (month_bh) { where += ' AND t.month_bh = ?'; params.push(month_bh); }
+        const [rows] = await db.query(`SELECT t.*, u.username AS created_by_name FROM \`${table_name}\` t LEFT JOIN users u ON t.created_by = u.id ${where} ORDER BY t.year_bh DESC, t.month_bh DESC, t.created_at DESC`, params);
+        res.json({ success: true, data: rows });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// POST /dynamic-data/:table_name — บันทึกข้อมูลลงตาราง dynamic + sync kpi_results
+apiRouter.post('/dynamic-data/:table_name', authenticateToken, async (req, res) => {
+    const { table_name } = req.params;
+    if (!isValidIdentifier(table_name)) return res.status(400).json({ success: false, message: 'ชื่อตารางไม่ถูกต้อง' });
+    const isUpdate = !!(req.body.id && Number(req.body.id) > 0);
+    const rowId = isUpdate ? Number(req.body.id) : null;
+    const data = { ...req.body };
+    delete data.id; delete data.created_at; delete data.updated_at; delete data.created_by_name;
+    data.created_by = req.user.userId;
+    if (!data.hospcode) data.hospcode = req.user.hospcode;
+    if (req.user.role === 'user') data.hospcode = req.user.hospcode;
+
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        const cols = Object.keys(data).filter(k => isValidIdentifier(k));
+        const vals = cols.map(k => data[k]);
+        let insertedId = rowId;
+
+        if (isUpdate) {
+            const setClauses = cols.map(c => `\`${c}\` = ?`).join(', ');
+            await connection.query(`UPDATE \`${table_name}\` SET ${setClauses} WHERE id = ?`, [...vals, rowId]);
+        } else {
+            const placeholders = cols.map(() => '?').join(', ');
+            const [result] = await connection.query(`INSERT INTO \`${table_name}\` (\`${cols.join('`, `')}\`) VALUES (${placeholders})`, vals);
+            insertedId = result.insertId;
+        }
+
+        // === Sync ไปยัง kpi_results ถ้า schema มี actual_value_field ===
+        const indicatorId = data.indicator_id;
+        const yearBh = data.year_bh;
+        const monthBh = data.month_bh;
+        const hospcode = data.hospcode;
+
+        if (indicatorId && yearBh && monthBh) {
+            const [schemaRows] = await connection.query(
+                'SELECT actual_value_field FROM kpi_form_schemas WHERE indicator_id = ? AND is_active = 1 LIMIT 1',
+                [indicatorId]
+            );
+            if (schemaRows.length > 0 && schemaRows[0].actual_value_field) {
+                const avField = schemaRows[0].actual_value_field;
+                const actualValue = data[avField] !== undefined ? String(data[avField]) : null;
+                if (actualValue !== null) {
+                    // DELETE แถวเดิมของ month นั้น แล้ว INSERT ใหม่
+                    await connection.query(
+                        'DELETE FROM kpi_results WHERE indicator_id=? AND year_bh=? AND month_bh=? AND hospcode=?',
+                        [indicatorId, yearBh, monthBh, hospcode]
+                    );
+                    // คงค่า target_value เดิม (เดือน 10 เท่านั้น)
+                    let targetValue = 0;
+                    if (Number(monthBh) === 10) {
+                        const [tRows] = await connection.query(
+                            'SELECT MAX(target_value) AS tv FROM kpi_results WHERE indicator_id=? AND year_bh=? AND hospcode=?',
+                            [indicatorId, yearBh, hospcode]
+                        );
+                        targetValue = Number(tRows[0]?.tv) || 0;
+                    }
+                    await connection.query(
+                        'INSERT INTO kpi_results (indicator_id, year_bh, month_bh, actual_value, target_value, user_id, status, hospcode, is_locked) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)',
+                        [indicatorId, yearBh, monthBh, actualValue, targetValue, req.user.userId, 'Pending', hospcode]
+                    );
+                }
+            }
+        }
+
+        await connection.commit();
+        res.json({ success: true, message: isUpdate ? 'อัปเดตข้อมูลเรียบร้อยแล้ว' : 'บันทึกข้อมูลเรียบร้อยแล้ว', id: insertedId });
+    } catch (e) {
+        await connection.rollback();
+        res.status(500).json({ success: false, message: e.message });
+    } finally { connection.release(); }
+});
+
+// DELETE /dynamic-data/:table_name/:record_id — ลบรายการ
+apiRouter.delete('/dynamic-data/:table_name/:record_id', authenticateToken, async (req, res) => {
+    const { table_name, record_id } = req.params;
+    if (!isValidIdentifier(table_name)) return res.status(400).json({ success: false, message: 'ชื่อตารางไม่ถูกต้อง' });
+    try {
+        await db.query(`DELETE FROM \`${table_name}\` WHERE id = ?`, [record_id]);
+        res.json({ success: true, message: 'ลบข้อมูลเรียบร้อยแล้ว' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// ===========================
 apiRouter.get('/kpi-template', async (req, res) => {
     try {
         const sql = `
@@ -834,8 +1252,8 @@ apiRouter.get('/users', authenticateToken, isAnyAdmin, async (req, res) => {
     const isAdminUser = user.role === 'admin_ssj' || user.role === 'super_admin';
     try {
         let sql = `
-            SELECT u.id, u.username, u.role, u.dept_id, u.firstname, u.lastname, u.phone, u.hospcode, d.dept_name,
-                   h.hosname, dist.distname
+            SELECT u.id, u.username, u.role, u.dept_id, u.firstname, u.lastname, u.phone, u.hospcode,
+                   u.email, u.cid, u.is_approved, u.is_active, d.dept_name, h.hosname, dist.distname
             FROM users u
             LEFT JOIN departments d ON u.dept_id = d.id
             LEFT JOIN chospital h ON u.hospcode = h.hoscode
@@ -884,7 +1302,7 @@ apiRouter.get('/districts', authenticateToken, async (req, res) => {
 });
 
 apiRouter.post('/users', authenticateToken, isAnyAdmin, async (req, res) => {
-    const { username, password, role, dept_id, firstname, lastname, hospcode, phone } = req.body;
+    const { username, password, role, dept_id, firstname, lastname, hospcode, phone, email, cid } = req.body;
     const user = req.user;
     const isAdminUser = user.role === 'admin_ssj' || user.role === 'super_admin';
 
@@ -897,9 +1315,10 @@ apiRouter.post('/users', authenticateToken, isAnyAdmin, async (req, res) => {
         if (existing.length > 0) return res.status(400).json({ success: false, message: 'Username exists' });
 
         const hashedPassword = await bcrypt.hash(password, 10);
+        const hashedCid = cid ? crypto.createHash('sha256').update(cid).digest('hex') : null;
         const [result] = await db.query(
-            'INSERT INTO users (username, password_hash, role, dept_id, firstname, lastname, hospcode, phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [username, hashedPassword, finalRole, finalDeptId, firstname, lastname, hospcode, phone]
+            'INSERT INTO users (username, password_hash, role, dept_id, firstname, lastname, hospcode, phone, email, cid, is_approved) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)',
+            [username, hashedPassword, finalRole, finalDeptId, firstname, lastname, hospcode, phone, email || null, hashedCid]
         );
 
         await db.query(
@@ -955,7 +1374,7 @@ apiRouter.put('/users/change-password', async (req, res) => {
 
 apiRouter.put('/users/:id', authenticateToken, isAnyAdmin, async (req, res) => {
     const userId = req.params.id;
-    const { username, password, role, dept_id, firstname, lastname, hospcode, phone } = req.body;
+    const { username, password, role, dept_id, firstname, lastname, hospcode, phone, email, cid } = req.body;
     const user = req.user;
     const isAdminUser = user.role === 'admin_ssj' || user.role === 'super_admin';
 
@@ -971,9 +1390,10 @@ apiRouter.put('/users/:id', authenticateToken, isAnyAdmin, async (req, res) => {
 
         const finalRole = isAdminUser ? role : 'user'; // Non-admin ไม่สามารถเปลี่ยน role
         const finalDeptId = isAdminUser ? (dept_id || null) : user.deptId;
+        const hashedCid = cid ? crypto.createHash('sha256').update(cid).digest('hex') : null;
 
-        let sql = 'UPDATE users SET username = ?, role = ?, dept_id = ?, firstname = ?, lastname = ?, hospcode = ?, phone = ?';
-        let params = [username, finalRole, finalDeptId, firstname, lastname, hospcode, phone];
+        let sql = 'UPDATE users SET username = ?, role = ?, dept_id = ?, firstname = ?, lastname = ?, hospcode = ?, phone = ?, email = ?, cid = ?';
+        let params = [username, finalRole, finalDeptId, firstname, lastname, hospcode, phone, email || null, hashedCid];
 
         if (password && password.trim() !== '') {
             const hashedPassword = await bcrypt.hash(password, 10);
@@ -1048,6 +1468,95 @@ apiRouter.put('/users/:id/reset-password', authenticateToken, isAnyAdmin, async 
         res.json({ success: true, message: `Reset to "${defaultPassword}"` });
     } catch (error) {
         res.status(500).json({ success: false });
+    }
+});
+
+// อนุมัติการลงทะเบียน
+apiRouter.put('/users/:id/approve', authenticateToken, isAdmin, async (req, res) => {
+    const userId = req.params.id;
+    const user = req.user;
+    try {
+        const [rows] = await db.query('SELECT * FROM users WHERE id = ?', [userId]);
+        if (rows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
+        const target = rows[0];
+        if (target.is_approved !== 0) return res.status(400).json({ success: false, message: 'ผู้ใช้งานนี้ไม่ได้อยู่ในสถานะรอการอนุมัติ' });
+
+        await db.query('UPDATE users SET is_approved = 1 WHERE id = ?', [userId]);
+
+        await db.query(
+            'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [user.userId, user.deptId, 'APPROVE_USER', 'users', userId, JSON.stringify({ username: target.username }), req.ip]
+        );
+        res.json({ success: true, message: 'อนุมัติผู้ใช้งานเรียบร้อย' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ปฏิเสธการลงทะเบียน
+apiRouter.put('/users/:id/reject', authenticateToken, isAdmin, async (req, res) => {
+    const userId = req.params.id;
+    const user = req.user;
+    try {
+        const [rows] = await db.query('SELECT * FROM users WHERE id = ?', [userId]);
+        if (rows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
+        const target = rows[0];
+        if (target.is_approved !== 0) return res.status(400).json({ success: false, message: 'ผู้ใช้งานนี้ไม่ได้อยู่ในสถานะรอการอนุมัติ' });
+
+        await db.query('UPDATE users SET is_approved = -1 WHERE id = ?', [userId]);
+
+        await db.query(
+            'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [user.userId, user.deptId, 'REJECT_USER', 'users', userId, JSON.stringify({ username: target.username }), req.ip]
+        );
+        res.json({ success: true, message: 'ปฏิเสธผู้ใช้งานเรียบร้อย' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// เปิด/ปิดใช้งาน user account
+apiRouter.put('/users/:id/toggle-active', authenticateToken, isAdmin, async (req, res) => {
+    const userId = req.params.id;
+    const { is_active } = req.body;
+    const user = req.user;
+    try {
+        const [rows] = await db.query('SELECT * FROM users WHERE id = ?', [userId]);
+        if (rows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
+        // ป้องกันปิดตัวเอง
+        if (Number(userId) === user.userId) {
+            return res.status(400).json({ success: false, message: 'ไม่สามารถปิดใช้งานบัญชีของตัวเองได้' });
+        }
+        const newStatus = is_active ? 1 : 0;
+        await db.query('UPDATE users SET is_active = ? WHERE id = ?', [newStatus, userId]);
+        await db.query(
+            'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [user.userId, user.deptId, newStatus ? 'ACTIVATE_USER' : 'DEACTIVATE_USER', 'users', userId,
+             JSON.stringify({ username: rows[0].username, is_active: newStatus }), req.ip]
+        );
+        res.json({ success: true, message: newStatus ? 'เปิดใช้งานแล้ว' : 'ปิดใช้งานแล้ว' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ดูข้อมูลผู้ใช้งานที่รอการอนุมัติ (super_admin/admin_ssj เท่านั้น)
+apiRouter.get('/users/:id/basic', authenticateToken, isAdmin, async (req, res) => {
+    const userId = req.params.id;
+    try {
+        const [rows] = await db.query(
+            `SELECT u.id, u.username, u.firstname, u.lastname, u.role, u.hospcode, u.phone, u.email, u.cid, u.is_approved,
+                    h.hosname, d.dept_name
+             FROM users u
+             LEFT JOIN chospital h ON u.hospcode = h.hoscode
+             LEFT JOIN departments d ON u.dept_id = d.id
+             WHERE u.id = ?`,
+            [userId]
+        );
+        if (rows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
+        res.json({ success: true, data: rows[0] });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
@@ -1217,11 +1726,14 @@ apiRouter.get('/indicators', authenticateToken, async (req, res) => {
 });
 
 apiRouter.post('/indicators', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code } = req.body;
+    const { kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code, table_process } = req.body;
+    if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
+        return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
+    }
     try {
         await db.query(
-            'INSERT INTO kpi_indicators (kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code) VALUES (?, ?, ?, ?, ?, ?)',
-            [kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code]
+            'INSERT INTO kpi_indicators (kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code, table_process) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code, table_process || null]
         );
         res.json({ success: true, message: 'Created successfully' });
     } catch (error) {
@@ -1230,11 +1742,14 @@ apiRouter.post('/indicators', authenticateToken, isSuperAdmin, async (req, res) 
 });
 
 apiRouter.put('/indicators/:id', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code, is_active } = req.body;
+    const { kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code, is_active, table_process } = req.body;
+    if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
+        return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
+    }
     try {
         await db.query(
-            'UPDATE kpi_indicators SET kpi_indicators_name=?, main_indicator_id=?, dept_id=?, target_percentage=?, weight=?, kpi_indicators_code=?, is_active=? WHERE id=?',
-            [kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code, is_active, req.params.id]
+            'UPDATE kpi_indicators SET kpi_indicators_name=?, main_indicator_id=?, dept_id=?, target_percentage=?, weight=?, kpi_indicators_code=?, is_active=?, table_process=? WHERE id=?',
+            [kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code, is_active, table_process || null, req.params.id]
         );
         res.json({ success: true, message: 'Updated successfully' });
     } catch (error) {
@@ -1379,7 +1894,7 @@ apiRouter.post('/unlock-kpi', authenticateToken, isSuperAdmin, async (req, res) 
 // ดึงสถานะล็อคการคีย์ข้อมูล
 apiRouter.get('/data-entry-lock', authenticateToken, async (req, res) => {
     try {
-        const keys = ['data_entry_locked', 'data_entry_lock_start', 'data_entry_lock_end', 'data_entry_lock_days'];
+        const keys = ['data_entry_locked', 'data_entry_lock_start', 'data_entry_lock_end', 'data_entry_lock_days', 'target_edit_locked'];
         const [rows] = await db.query('SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN (?)', [keys]);
         const settings = {};
         for (const r of rows) settings[r.setting_key] = r.setting_value;
@@ -1415,7 +1930,8 @@ apiRouter.get('/data-entry-lock', authenticateToken, async (req, res) => {
                 data_entry_lock_days: lockDays,
                 effective_end: effectiveEnd,
                 is_locked: isLocked,
-                lock_reason: lockReason
+                lock_reason: lockReason,
+                target_edit_locked: settings.target_edit_locked === 'true'
             }
         });
     } catch (error) {
@@ -1670,6 +2186,189 @@ apiRouter.post('/appeal-edited', authenticateToken, async (req, res) => {
         );
 
         res.json({ success: true, message: 'แจ้ง Admin เรียบร้อยแล้ว' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ========== Target Edit Request APIs ==========
+
+// ดึงรายการขอแก้ไขเป้าหมาย
+apiRouter.get('/target-edit-requests', authenticateToken, isAnyAdmin, async (req, res) => {
+    const user = req.user;
+    try {
+        let rows;
+        if (user.role === 'admin_ssj' || user.role === 'super_admin') {
+            [rows] = await db.query(
+                `SELECT t.*, u.firstname, u.lastname, u.username
+                 FROM target_edit_requests t
+                 LEFT JOIN users u ON t.requested_by = u.id
+                 WHERE t.status IN ('pending','approved')
+                 ORDER BY t.created_at DESC`
+            );
+        } else {
+            [rows] = await db.query(
+                `SELECT t.*, u.firstname, u.lastname, u.username
+                 FROM target_edit_requests t
+                 LEFT JOIN users u ON t.requested_by = u.id
+                 WHERE t.requested_by = ? AND t.status IN ('pending','approved','rejected')
+                 ORDER BY t.created_at DESC`,
+                [user.userId]
+            );
+        }
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ส่งคำขอแก้ไขเป้าหมาย (admin_cup / admin_ssj / super_admin)
+apiRouter.post('/target-edit-request', authenticateToken, isAnyAdmin, async (req, res) => {
+    const { indicator_id, year_bh, hospcode } = req.body;
+    const user = req.user;
+    try {
+        const [existing] = await db.query(
+            "SELECT id FROM target_edit_requests WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? AND status IN ('pending','approved')",
+            [indicator_id, year_bh, hospcode]
+        );
+        if (existing.length > 0) {
+            return res.status(400).json({ success: false, message: 'มีคำขออยู่แล้ว กรุณารอการอนุมัติ' });
+        }
+
+        const [indRows] = await db.query('SELECT kpi_indicators_name, dept_id FROM kpi_indicators WHERE id = ?', [indicator_id]);
+        const indName = indRows[0]?.kpi_indicators_name || `ID ${indicator_id}`;
+        const deptId = indRows[0]?.dept_id;
+
+        const [hosRows] = await db.query('SELECT hosname FROM chospital WHERE hoscode = ?', [hospcode]);
+        const hosName = hosRows[0]?.hosname || hospcode;
+
+        const byName = `${user.firstname || ''} ${user.lastname || ''}`.trim() || user.username;
+
+        const [result] = await db.query(
+            'INSERT INTO target_edit_requests (indicator_id, year_bh, hospcode, requested_by, requested_by_name, status) VALUES (?, ?, ?, ?, ?, ?)',
+            [indicator_id, year_bh, hospcode, user.userId, byName, 'pending']
+        );
+
+        // แจ้ง admin_ssj + super_admin
+        const [admins] = await db.query(
+            "SELECT id FROM users WHERE (role = 'super_admin') OR (role = 'admin_ssj' AND (dept_id = ? OR dept_id IS NULL))",
+            [deptId]
+        );
+        for (const admin of admins) {
+            if (admin.id !== user.userId) {
+                await db.query(
+                    "INSERT INTO notifications (user_id, hospcode, type, title, message, indicator_id, year_bh, created_by) VALUES (?, ?, 'target_request', ?, ?, ?, ?, ?)",
+                    [admin.id, hospcode,
+                     `ขอแก้ไขเป้าหมาย: ${indName}`,
+                     `${byName} (${hosName}) ขอแก้ไขเป้าหมาย "${indName}" ปี ${year_bh} กรุณาอนุมัติหรือปฏิเสธ`,
+                     indicator_id, year_bh, user.userId]
+                );
+            }
+        }
+
+        res.json({ success: true, message: 'ส่งคำขอแล้ว รอการอนุมัติ', request_id: result.insertId });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// อนุมัติคำขอแก้ไขเป้าหมาย (admin_ssj / super_admin)
+apiRouter.post('/target-edit-approve', authenticateToken, isAdmin, async (req, res) => {
+    const { request_id } = req.body;
+    const user = req.user;
+    try {
+        const [rows] = await db.query('SELECT * FROM target_edit_requests WHERE id = ?', [request_id]);
+        if (rows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบคำขอ' });
+        const reqRow = rows[0];
+        if (reqRow.status !== 'pending') return res.status(400).json({ success: false, message: 'คำขอนี้ไม่ได้รออนุมัติ' });
+
+        await db.query('UPDATE target_edit_requests SET status = ?, approved_by = ?, updated_at = NOW() WHERE id = ?',
+            ['approved', user.userId, request_id]);
+
+        const [indRows] = await db.query('SELECT kpi_indicators_name FROM kpi_indicators WHERE id = ?', [reqRow.indicator_id]);
+        const indName = indRows[0]?.kpi_indicators_name || `ID ${reqRow.indicator_id}`;
+
+        await db.query(
+            "INSERT INTO notifications (user_id, hospcode, type, title, message, indicator_id, year_bh, created_by) VALUES (?, ?, 'approve', ?, ?, ?, ?, ?)",
+            [reqRow.requested_by, reqRow.hospcode,
+             `อนุมัติแก้ไขเป้าหมาย: ${indName}`,
+             `คำขอแก้ไขเป้าหมาย "${indName}" ปี ${reqRow.year_bh} ได้รับการอนุมัติแล้ว กรุณาแก้ไขและบันทึก`,
+             reqRow.indicator_id, reqRow.year_bh, user.userId]
+        );
+
+        res.json({ success: true, message: 'อนุมัติคำขอแล้ว' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ปฏิเสธคำขอแก้ไขเป้าหมาย (admin_ssj / super_admin)
+apiRouter.post('/target-edit-reject', authenticateToken, isAdmin, async (req, res) => {
+    const { request_id, reason } = req.body;
+    const user = req.user;
+    try {
+        const [rows] = await db.query('SELECT * FROM target_edit_requests WHERE id = ?', [request_id]);
+        if (rows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบคำขอ' });
+        const reqRow = rows[0];
+        if (reqRow.status !== 'pending') return res.status(400).json({ success: false, message: 'คำขอนี้ไม่ได้รออนุมัติ' });
+
+        await db.query('UPDATE target_edit_requests SET status = ?, reject_reason = ?, updated_at = NOW() WHERE id = ?',
+            ['rejected', reason || '', request_id]);
+
+        const [indRows] = await db.query('SELECT kpi_indicators_name FROM kpi_indicators WHERE id = ?', [reqRow.indicator_id]);
+        const indName = indRows[0]?.kpi_indicators_name || `ID ${reqRow.indicator_id}`;
+
+        await db.query(
+            "INSERT INTO notifications (user_id, hospcode, type, title, message, indicator_id, year_bh, created_by) VALUES (?, ?, 'reject', ?, ?, ?, ?, ?)",
+            [reqRow.requested_by, reqRow.hospcode,
+             `ปฏิเสธการแก้ไขเป้าหมาย: ${indName}`,
+             `คำขอแก้ไขเป้าหมาย "${indName}" ปี ${reqRow.year_bh} ถูกปฏิเสธ${reason ? ': ' + reason : ''}`,
+             reqRow.indicator_id, reqRow.year_bh, user.userId]
+        );
+
+        res.json({ success: true, message: 'ปฏิเสธคำขอแล้ว' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// ปิดคำขอแก้ไขเป้าหมาย หลังบันทึกสำเร็จ
+apiRouter.post('/target-edit-complete', authenticateToken, isAnyAdmin, async (req, res) => {
+    const { request_id } = req.body;
+    const user = req.user;
+    try {
+        const [rows] = await db.query('SELECT * FROM target_edit_requests WHERE id = ?', [request_id]);
+        if (rows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบคำขอ' });
+        const reqRow = rows[0];
+        if (reqRow.status !== 'approved') return res.status(400).json({ success: false, message: 'คำขอนี้ยังไม่ได้รับอนุมัติ' });
+
+        await db.query('UPDATE target_edit_requests SET status = ?, updated_at = NOW() WHERE id = ?', ['completed', request_id]);
+
+        const [indRows] = await db.query('SELECT kpi_indicators_name, dept_id FROM kpi_indicators WHERE id = ?', [reqRow.indicator_id]);
+        const indName = indRows[0]?.kpi_indicators_name || `ID ${reqRow.indicator_id}`;
+        const deptId = indRows[0]?.dept_id;
+
+        const [hosRows] = await db.query('SELECT hosname FROM chospital WHERE hoscode = ?', [reqRow.hospcode]);
+        const hosName = hosRows[0]?.hosname || reqRow.hospcode;
+        const byName = reqRow.requested_by_name || `ผู้ใช้ #${reqRow.requested_by}`;
+
+        const [admins] = await db.query(
+            "SELECT id FROM users WHERE (role = 'super_admin') OR (role = 'admin_ssj' AND (dept_id = ? OR dept_id IS NULL))",
+            [deptId]
+        );
+        for (const admin of admins) {
+            if (admin.id !== reqRow.requested_by) {
+                await db.query(
+                    "INSERT INTO notifications (user_id, hospcode, type, title, message, indicator_id, year_bh, created_by) VALUES (?, ?, 'info', ?, ?, ?, ?, ?)",
+                    [admin.id, reqRow.hospcode,
+                     `บันทึกเป้าหมายแล้ว: ${indName}`,
+                     `${byName} (${hosName}) บันทึกเป้าหมาย "${indName}" ปี ${reqRow.year_bh} เรียบร้อยแล้ว`,
+                     reqRow.indicator_id, reqRow.year_bh, user.userId]
+                );
+            }
+        }
+
+        res.json({ success: true, message: 'ปิดคำขอแล้ว' });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -2400,6 +3099,10 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
             await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)', [key, val, desc]);
         }
 
+        // เพิ่ม target edit lock setting
+        await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)',
+            ['target_edit_locked', 'false', 'ล็อคการแก้ไขเป้าหมาย (เฉพาะ admin_ssj และ super_admin)']);
+
         // เพิ่ม appeal settings defaults
         const appealDefaults = [
             ['appeal_enabled', 'false', 'เปิด/ปิดระบบอุทธรณ์'],
@@ -2415,6 +3118,97 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         try {
             await db.query(`ALTER TABLE notifications MODIFY type ENUM('approve','reject','info','appeal') NOT NULL`);
         } catch (e) { /* may already be correct */ }
+
+        // เพิ่ม cid และ is_approved ใน users table
+        try {
+            await db.query(`ALTER TABLE users ADD COLUMN cid VARCHAR(13) NULL`);
+        } catch (e) { /* already exists */ }
+        // rename national_id → cid ถ้ายังใช้ชื่อเก่าอยู่
+        try {
+            const [cols] = await db.query(`SHOW COLUMNS FROM users LIKE 'national_id'`);
+            if (cols.length > 0) {
+                await db.query(`ALTER TABLE users CHANGE national_id cid VARCHAR(13) NULL`);
+            }
+        } catch (e) { /* ignore */ }
+        // ขยาย cid เป็น VARCHAR(64) เพื่อรองรับ SHA-256 hash
+        try {
+            await db.query(`ALTER TABLE users MODIFY cid VARCHAR(64) NULL`);
+        } catch (e) { /* ignore */ }
+        // เพิ่ม email column
+        try {
+            await db.query(`ALTER TABLE users ADD COLUMN email VARCHAR(255) NULL`);
+        } catch (e) { /* already exists */ }
+        // เพิ่ม is_active ใน users table
+        try {
+            await db.query(`ALTER TABLE users ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1`);
+            await db.query(`UPDATE users SET is_active = 1 WHERE is_active != 1`);
+        } catch (e) { /* already exists */ }
+        // เปลี่ยน actual_value เป็น VARCHAR เพื่อรองรับข้อความ
+        try {
+            await db.query(`ALTER TABLE kpi_results MODIFY actual_value VARCHAR(100) NULL`);
+        } catch (e) { /* ignore */ }
+        try {
+            await db.query(`ALTER TABLE users ADD COLUMN is_approved TINYINT(1) NOT NULL DEFAULT 1`);
+            // ผู้ใช้เดิมทั้งหมดถือว่า approved
+            await db.query(`UPDATE users SET is_approved = 1 WHERE is_approved != 1`);
+        } catch (e) { /* already exists */ }
+
+        // สร้างตาราง target_edit_requests
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS target_edit_requests (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                indicator_id INT NOT NULL,
+                year_bh VARCHAR(10) NOT NULL,
+                hospcode VARCHAR(10) NOT NULL,
+                requested_by INT NOT NULL,
+                requested_by_name VARCHAR(255) NULL,
+                status ENUM('pending','approved','rejected','completed') DEFAULT 'pending',
+                approved_by INT NULL,
+                reject_reason VARCHAR(500) NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+        `);
+        // เพิ่ม type 'target_request' ใน notifications
+        try {
+            await db.query(`ALTER TABLE notifications MODIFY type ENUM('approve','reject','info','appeal','target_request') NOT NULL`);
+        } catch (e) { /* may already be correct */ }
+
+        // ========== Form Builder migration ==========
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS kpi_form_schemas (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                indicator_id INT NOT NULL,
+                form_title VARCHAR(200) NOT NULL,
+                form_description TEXT NULL,
+                created_by INT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                is_active TINYINT(1) DEFAULT 1,
+                INDEX idx_indicator (indicator_id)
+            )
+        `);
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS kpi_form_fields (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                schema_id INT NOT NULL,
+                field_name VARCHAR(100) NOT NULL,
+                field_label VARCHAR(200) NOT NULL,
+                field_type ENUM('text','number','textarea','select','date','checkbox') DEFAULT 'text',
+                field_options TEXT NULL,
+                is_required TINYINT(1) DEFAULT 0,
+                sort_order INT DEFAULT 0,
+                FOREIGN KEY (schema_id) REFERENCES kpi_form_schemas(id) ON DELETE CASCADE
+            )
+        `);
+        // เพิ่ม table_process ใน kpi_indicators ถ้ายังไม่มี
+        try {
+            await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS table_process VARCHAR(100) NULL`);
+        } catch (e) { /* may already exist */ }
+        // เพิ่ม actual_value_field ใน kpi_form_schemas
+        try {
+            await db.query(`ALTER TABLE kpi_form_schemas ADD COLUMN IF NOT EXISTS actual_value_field VARCHAR(100) NULL COMMENT 'ชื่อฟิลด์ที่ใช้ sync ไปยัง kpi_results.actual_value'`);
+        } catch (e) { /* may already exist */ }
 
         console.log('✅ login_logs, system_logs, notifications, rejection & appeal tables ready');
     } catch (err) {

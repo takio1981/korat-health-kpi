@@ -67,15 +67,28 @@ export class ChartComponent implements OnInit {
     rank: 1
   };
   private animationTimer: any;
-  isLoading: boolean = true; // เริ่มต้นเป็น true เพื่อรอโหลดข้อมูล และป้องกันกราฟเรนเดอร์ก่อนข้อมูลมา
+  isLoading: boolean = true;
+  isPublicView: boolean = false;
 
   ngOnInit() {
+    this.isPublicView = !this.authService.isLoggedIn();
+    if (!this.isPublicView) {
+      // logged in: ถ้าเปิด root path ให้ redirect ไป dashboard
+      const currentUrl = this.router.url;
+      if (currentUrl === '/' || currentUrl === '') {
+        this.router.navigate(['/dashboard']);
+        return;
+      }
+    }
     this.loadKpiData();
   }
 
   loadKpiData() {
     this.isLoading = true;
-    this.authService.getKpiResults().subscribe({
+    const source$ = this.isPublicView
+      ? this.authService.getPublicKpiResults()
+      : this.authService.getKpiResults();
+    source$.subscribe({
       next: (res) => {
         if (res && res.success) {
           this.kpiData = res.data;
@@ -106,7 +119,10 @@ export class ChartComponent implements OnInit {
 
   loadDashboardStats() {
     if (!this.selectedYear) return;
-    this.authService.getDashboardStats(this.selectedYear).subscribe({
+    const stats$ = this.isPublicView
+      ? this.authService.getPublicDashboardStats(this.selectedYear)
+      : this.authService.getDashboardStats(this.selectedYear);
+    stats$.subscribe({
       next: (res) => {
         if (res && res.success) {
           this.animateStats(res.data);

@@ -74,6 +74,12 @@
                   <span *ngIf="notif.created_by_name" class="text-xs text-gray-400">
                     <i class="fas fa-user mr-1"></i>{{ notif.created_by_name }} {{ notif.created_by_lastname }}
                   </span>
+                  <!-- ปุ่มดูรายละเอียด: แสดงเฉพาะ super_admin/admin_ssj ที่แจ้งเตือนผู้สมัครใหม่ -->
+                  <button *ngIf="isAdmin && notif.title && notif.title.includes('รอการอนุมัติ') && notif.created_by"
+                          (click)="viewPendingUserDetail(notif); $event.stopPropagation()"
+                          class="px-3 py-1 bg-indigo-500 hover:bg-indigo-600 text-white rounded-full text-xs font-bold transition-all shadow-sm">
+                    <i class="fas fa-user-circle mr-1"></i>ดูรายละเอียด
+                  </button>
                   <!-- ปุ่มตอบกลับ: แสดงเฉพาะ reject ที่ยังไม่เคยตอบกลับ -->
                   <button *ngIf="!isAdmin && notif.type === 'reject' && notif.indicator_id && !notif.has_reply"
                           (click)="replyNotification(notif); $event.stopPropagation()"

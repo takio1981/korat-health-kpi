@@ -39,7 +39,9 @@ export class UserManagementComponent implements OnInit {
 
   showModal: boolean = false;
   isEditMode: boolean = false;
-  currentUser: any = { id: null, username: '', password: '', role: 'user', dept_id: '', firstname: '', lastname: '', hospcode: '', phone: '' };
+  currentUser: any = { id: null, username: '', password: '', role: 'user', dept_id: '', firstname: '', lastname: '', hospcode: '', phone: '', email: '', cid: '' };
+
+  selectedStatus: string = '';
 
   // Password & validation
   confirmPassword: string = '';
@@ -106,12 +108,17 @@ export class UserManagementComponent implements OnInit {
       const matchSearch = (user.username && user.username.toLowerCase().includes(search)) ||
                           (user.dept_name && user.dept_name.toLowerCase().includes(search)) ||
                           (user.firstname && user.firstname.toLowerCase().includes(search)) ||
-                          (user.lastname && user.lastname.toLowerCase().includes(search));
+                          (user.lastname && user.lastname.toLowerCase().includes(search)) ||
+                          (user.email && user.email.toLowerCase().includes(search));
 
       const matchRole = this.selectedRole === '' || user.role === this.selectedRole;
       const matchDept = this.selectedDept === '' || (user.dept_id && user.dept_id.toString() === this.selectedDept);
+      const matchStatus = this.selectedStatus === '' ||
+                          (this.selectedStatus === 'pending' && user.is_approved === 0) ||
+                          (this.selectedStatus === 'approved' && user.is_approved === 1) ||
+                          (this.selectedStatus === 'rejected' && user.is_approved === -1);
 
-      return matchSearch && matchRole && matchDept;
+      return matchSearch && matchRole && matchDept && matchStatus;
     });
 
     this.totalPages = Math.ceil(this.filteredUsers.length / this.pageSize);
@@ -151,7 +158,7 @@ export class UserManagementComponent implements OnInit {
       this.currentUser = {
         id: null, username: '', password: '', role: 'user',
         dept_id: this.isAdmin ? '' : (this.loggedInUser?.dept_id || ''),
-        firstname: '', lastname: '', hospcode: '', phone: ''
+        firstname: '', lastname: '', hospcode: '', phone: '', email: '', cid: ''
       };
       this.selectedDistrictId = '';
       this.filteredHospitals = [];
@@ -291,6 +298,83 @@ export class UserManagementComponent implements OnInit {
             }
           },
           error: () => Swal.fire('ผิดพลาด', 'ไม่สามารถลบผู้ใช้งานได้', 'error')
+        });
+      }
+    });
+  }
+
+  approveUser(user: any) {
+    Swal.fire({
+      title: 'อนุมัติการลงทะเบียน',
+      html: `<p>ยืนยันอนุมัติผู้ใช้งาน <b>${user.firstname} ${user.lastname}</b> (${user.username})</p>
+             <p class="text-sm text-gray-500 mt-1">สิทธิ์: ${user.role} | หน่วยบริการ: ${user.hosname || user.hospcode}</p>`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#16a34a',
+      confirmButtonText: 'อนุมัติ',
+      cancelButtonText: 'ยกเลิก'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        this.authService.approveUser(user.id).subscribe({
+          next: (res) => {
+            if (res.success) {
+              Swal.fire({ icon: 'success', title: 'อนุมัติแล้ว', timer: 1500, showConfirmButton: false });
+              this.loadUsers();
+            }
+          },
+          error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถอนุมัติได้', 'error')
+        });
+      }
+    });
+  }
+
+  rejectUser(user: any) {
+    Swal.fire({
+      title: 'ปฏิเสธการลงทะเบียน',
+      html: `<p>ยืนยันปฏิเสธผู้ใช้งาน <b>${user.firstname} ${user.lastname}</b> (${user.username})?</p>`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      confirmButtonText: 'ปฏิเสธ',
+      cancelButtonText: 'ยกเลิก'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        this.authService.rejectUser(user.id).subscribe({
+          next: (res) => {
+            if (res.success) {
+              Swal.fire({ icon: 'success', title: 'ปฏิเสธแล้ว', timer: 1500, showConfirmButton: false });
+              this.loadUsers();
+            }
+          },
+          error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถปฏิเสธได้', 'error')
+        });
+      }
+    });
+  }
+
+  toggleActive(user: any) {
+    const willActivate = user.is_active === 0;
+    const actionText = willActivate ? 'เปิดใช้งาน' : 'ปิดใช้งาน';
+    Swal.fire({
+      title: `${actionText}บัญชีผู้ใช้`,
+      html: `<p>ยืนยัน<b>${actionText}</b>บัญชี <b>${user.firstname} ${user.lastname}</b> (${user.username})?</p>
+             ${!willActivate ? '<p class="text-sm text-orange-500 mt-1">ผู้ใช้งานนี้จะไม่สามารถเข้าสู่ระบบได้</p>' : ''}`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: willActivate ? '#16a34a' : '#d97706',
+      confirmButtonText: actionText,
+      cancelButtonText: 'ยกเลิก'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        this.authService.toggleUserActive(user.id, willActivate).subscribe({
+          next: (res) => {
+            if (res.success) {
+              user.is_active = willActivate ? 1 : 0;
+              Swal.fire({ icon: 'success', title: res.message, timer: 1500, showConfirmButton: false });
+              this.cdr.detectChanges();
+            }
+          },
+          error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถเปลี่ยนสถานะได้', 'error')
         });
       }
     });

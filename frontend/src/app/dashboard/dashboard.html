@@ -175,12 +175,12 @@
                 <div class="grid grid-cols-2 gap-3 text-xs">
                   <div class="bg-yellow-50 p-2 rounded">
                     <span class="text-gray-600">เป้าหมาย:</span>
-                    <span *ngIf="!isEditing" class="font-bold ml-1">{{ item.target_value | number }}</span>
-                    <input *ngIf="isEditing" type="number" min="0" [(ngModel)]="item.target_value" class="w-full border border-gray-300 rounded px-1 py-1 text-right text-xs focus:outline-none focus:border-green-500 bg-white hover:border-green-400 transition-colors" [ngClass]="isModified(item, 'target_value') ? 'bg-orange-200 font-bold text-red-600 ring-2 ring-orange-400' : 'bg-white'">
+                    <span *ngIf="!canShowTargetInput(item)" class="font-bold ml-1">{{ item.target_value | number }}</span>
+                    <input *ngIf="canShowTargetInput(item)" type="number" min="0" [(ngModel)]="item.target_value" class="w-full border border-orange-300 rounded px-1 py-1 text-right text-xs focus:outline-none focus:border-orange-500 transition-colors" [ngClass]="(isModified(item, 'target_value') || isEditingTarget(item)) ? 'bg-orange-100 font-bold text-orange-700 ring-2 ring-orange-400' : 'bg-white'">
                   </div>
                   <div class="bg-blue-50 p-2 rounded">
                     <span class="text-gray-600">ผลงาน:</span>
-                    <span class="font-bold ml-1" [ngClass]="item.total_actual < item.target_value ? 'text-red-600' : 'text-blue-600'">{{ item.total_actual | number }}</span>
+                    <span class="font-bold ml-1" [ngClass]="item.total_actual < item.target_value ? 'text-red-600' : 'text-blue-600'">{{ item.last_actual || '-' }}</span>
                   </div>
                   <div class="bg-gray-50 p-2 rounded col-span-2">
                     <span class="text-gray-600">%:</span>
@@ -191,19 +191,19 @@
                 <div class="grid grid-cols-3 gap-2 text-xs" *ngIf="isEditing">
                   <div *ngFor="let month of [{key: 'oct', name: 'ต.ค.'}, {key: 'nov', name: 'พ.ย.'}, {key: 'dece', name: 'ธ.ค.'}, {key: 'jan', name: 'ม.ค.'}, {key: 'feb', name: 'ก.พ.'}, {key: 'mar', name: 'มี.ค.'}, {key: 'apr', name: 'เม.ย.'}, {key: 'may', name: 'พ.ค.'}, {key: 'jun', name: 'มิ.ย.'}, {key: 'jul', name: 'ก.ค.'}, {key: 'aug', name: 'ส.ค.'}, {key: 'sep', name: 'ก.ย.'}]"
                        class="text-center p-1 rounded"
-                       [ngClass]="item[month.key] > 0 ? 'bg-green-100' : 'bg-gray-50'">
+                       [ngClass]="(item[month.key] && item[month.key] !== '0') ? 'bg-green-100' : 'bg-gray-50'">
                     <div class="text-gray-600 mb-1">{{ month.name }}</div>
-                    <input *ngIf="isEditing" type="number" min="0" [(ngModel)]="item[month.key]" (ngModelChange)="onValueChange(item, month.key)" class="w-full border border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:border-green-500 hover:border-green-400 transition-colors" [ngClass]="isModified(item, month.key) ? 'bg-orange-200 font-bold text-red-600 ring-2 ring-orange-400' : 'bg-white'">
-                    <span *ngIf="!isEditing">{{ item[month.key] > 0 ? (item[month.key] | number) : '-' }}</span>
+                    <input *ngIf="isEditing" type="text" [(ngModel)]="item[month.key]" (ngModelChange)="onValueChange(item, month.key)" class="w-full border border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:border-green-500 hover:border-green-400 transition-colors" [ngClass]="isModified(item, month.key) ? 'bg-orange-200 font-bold text-red-600 ring-2 ring-orange-400' : 'bg-white'">
+                    <span *ngIf="!isEditing">{{ (item[month.key] && item[month.key] !== '0') ? item[month.key] : '-' }}</span>
                   </div>
                 </div>
 
                 <div class="grid grid-cols-4 gap-2 text-xs" *ngIf="!isEditing">
                   <div *ngFor="let month of [{key: 'oct', name: 'ต.ค.'}, {key: 'nov', name: 'พ.ย.'}, {key: 'dece', name: 'ธ.ค.'}, {key: 'jan', name: 'ม.ค.'}]"
                        class="text-center p-1 rounded"
-                       [ngClass]="item[month.key] > 0 ? 'bg-green-100 font-bold text-gray-900' : 'text-gray-400 bg-white'">
+                       [ngClass]="(item[month.key] && item[month.key] !== '0') ? 'bg-green-100 font-bold text-gray-900' : 'text-gray-400 bg-white'">
                     <div class="text-gray-600 mb-1">{{ month.name }}</div>
-                    <div>{{ item[month.key] > 0 ? (item[month.key] | number) : '-' }}</div>
+                    <div>{{ (item[month.key] && item[month.key] !== '0') ? item[month.key] : '-' }}</div>
                   </div>
                 </div>
                   <div class="flex gap-2">
@@ -245,6 +245,63 @@
                             class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
                       <i class="fas fa-pen-square mr-1"></i> แก้ไขข้อนี้
                     </button>
+                    <!-- ปุ่มแก้ไขเป้าหมายรายข้อ (Mobile - ทุกสิทธิ์ เมื่อไม่ล็อค) -->
+                    <button *ngIf="!targetEditLocked && !isEditing && !isSingleEditing(item) && !isEditingTarget(item) && !item.is_locked"
+                            (click)="startEditTarget(item)"
+                            class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
+                      <i class="fas fa-bullseye mr-1"></i> แก้ไขเป้าหมาย
+                    </button>
+                    <!-- บันทึก/ยกเลิกเมื่อกำลังแก้ไข -->
+                    <button *ngIf="isEditingTarget(item)"
+                            (click)="saveTargetOnly(item)"
+                            class="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
+                      <i class="fas fa-save mr-1"></i> บันทึกเป้าหมาย
+                    </button>
+                    <button *ngIf="isEditingTarget(item)"
+                            (click)="cancelEditTarget(item)"
+                            class="px-3 py-1.5 bg-gray-500 hover:bg-gray-600 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
+                      <i class="fas fa-times mr-1"></i> ยกเลิก
+                    </button>
+                    <!-- ปุ่มขออนุมัติ/แสดงสถานะ (Mobile - เมื่อล็อค) -->
+                    <ng-container *ngIf="canRequestTargetEdit && !isEditing && !isSingleEditing(item) && !isEditingTarget(item) && !item.is_locked">
+                      <ng-container *ngIf="!getTargetEditRequest(item)">
+                        <button (click)="requestTargetEdit(item)"
+                                class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
+                          <i class="fas fa-bullseye mr-1"></i> ขอแก้ไขเป้าหมาย
+                        </button>
+                      </ng-container>
+                      <ng-container *ngIf="getTargetEditRequest(item) as req">
+                        <span *ngIf="req.status === 'pending'"
+                              class="px-3 py-1.5 bg-yellow-100 text-yellow-700 rounded-lg text-[10px] font-bold flex items-center border border-yellow-300">
+                          <i class="fas fa-clock mr-1"></i> รอการอนุมัติ...
+                        </span>
+                        <button *ngIf="req.status === 'pending' && isAdmin"
+                                (click)="approveTargetRequest(req)"
+                                class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
+                          <i class="fas fa-check mr-1"></i> อนุมัติคำขอ
+                        </button>
+                        <button *ngIf="req.status === 'pending' && isAdmin"
+                                (click)="rejectTargetRequest(req)"
+                                class="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
+                          <i class="fas fa-ban mr-1"></i> ปฏิเสธ
+                        </button>
+                        <button *ngIf="req.status === 'approved'"
+                                (click)="startEditTarget(item)"
+                                class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
+                          <i class="fas fa-pen mr-1"></i> แก้ไขเป้าหมาย
+                        </button>
+                        <span *ngIf="req.status === 'rejected'"
+                              class="px-3 py-1.5 bg-red-100 text-red-600 rounded-lg text-[10px] font-bold flex items-center border border-red-300"
+                              [title]="'ถูกปฏิเสธ' + (req.reject_reason ? ': ' + req.reject_reason : '')">
+                          <i class="fas fa-ban mr-1"></i> ถูกปฏิเสธ
+                        </span>
+                        <button *ngIf="req.status === 'rejected'"
+                                (click)="requestTargetEdit(item)"
+                                class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
+                          <i class="fas fa-redo mr-1"></i> ขอใหม่
+                        </button>
+                      </ng-container>
+                    </ng-container>
                     <button *ngIf="isSingleEditing(item)"
                             (click)="saveSingleItem()"
                             class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
@@ -348,6 +405,72 @@
                               title="ยกเลิกการแก้ไข">
                         <i class="fas fa-times text-xs"></i>
                       </button>
+                      <!-- ปุ่มแก้ไขเป้าหมายรายข้อ (ทุกสิทธิ์ เมื่อไม่ล็อค) -->
+                      <button *ngIf="!targetEditLocked && !isEditing && !isSingleEditing(item) && !isEditingTarget(item) && !item.is_locked"
+                              (click)="startEditTarget(item)"
+                              class="text-orange-500 hover:text-orange-700 p-0.5 transition-colors"
+                              title="แก้ไขเป้าหมาย">
+                        <i class="fas fa-bullseye text-xs"></i>
+                      </button>
+                      <!-- บันทึก/ยกเลิกเมื่อกำลังแก้ไขเป้าหมาย -->
+                      <button *ngIf="isEditingTarget(item)"
+                              (click)="saveTargetOnly(item)"
+                              class="text-orange-600 hover:text-orange-800 p-0.5 transition-colors"
+                              title="บันทึกเป้าหมาย">
+                        <i class="fas fa-save text-xs"></i>
+                      </button>
+                      <button *ngIf="isEditingTarget(item)"
+                              (click)="cancelEditTarget(item)"
+                              class="text-gray-500 hover:text-gray-700 p-0.5 transition-colors"
+                              title="ยกเลิกแก้ไขเป้าหมาย">
+                        <i class="fas fa-times text-xs"></i>
+                      </button>
+                      <!-- ปุ่มขออนุมัติ/แสดงสถานะ (เมื่อล็อค: admin_cup/admin_ssj/super_admin) -->
+                      <ng-container *ngIf="canRequestTargetEdit && !isEditing && !isSingleEditing(item) && !isEditingTarget(item) && !item.is_locked">
+                        <ng-container *ngIf="!getTargetEditRequest(item)">
+                          <button (click)="requestTargetEdit(item)"
+                                  class="text-orange-500 hover:text-orange-700 p-0.5 transition-colors"
+                                  title="ขอแก้ไขเป้าหมาย">
+                            <i class="fas fa-bullseye text-xs"></i>
+                          </button>
+                        </ng-container>
+                        <ng-container *ngIf="getTargetEditRequest(item) as req">
+                          <span *ngIf="req.status === 'pending'"
+                                class="text-yellow-500 p-0.5"
+                                title="รอการอนุมัติจาก Admin">
+                            <i class="fas fa-clock text-xs"></i>
+                          </span>
+                          <button *ngIf="req.status === 'pending' && isAdmin"
+                                  (click)="approveTargetRequest(req)"
+                                  class="text-green-500 hover:text-green-700 p-0.5 transition-colors"
+                                  title="อนุมัติคำขอ">
+                            <i class="fas fa-check text-xs"></i>
+                          </button>
+                          <button *ngIf="req.status === 'pending' && isAdmin"
+                                  (click)="rejectTargetRequest(req)"
+                                  class="text-red-500 hover:text-red-700 p-0.5 transition-colors"
+                                  title="ปฏิเสธคำขอ">
+                            <i class="fas fa-ban text-xs"></i>
+                          </button>
+                          <button *ngIf="req.status === 'approved'"
+                                  (click)="startEditTarget(item)"
+                                  class="text-green-600 hover:text-green-800 p-0.5 transition-colors"
+                                  title="แก้ไขเป้าหมาย (ได้รับอนุมัติแล้ว)">
+                            <i class="fas fa-pen text-xs"></i>
+                          </button>
+                          <span *ngIf="req.status === 'rejected'"
+                                class="text-red-400 p-0.5"
+                                [title]="'ถูกปฏิเสธ' + (req.reject_reason ? ': ' + req.reject_reason : '')">
+                            <i class="fas fa-ban text-xs"></i>
+                          </span>
+                          <button *ngIf="req.status === 'rejected'"
+                                  (click)="requestTargetEdit(item)"
+                                  class="text-orange-500 hover:text-orange-700 p-0.5 transition-colors"
+                                  title="ขอแก้ไขใหม่">
+                            <i class="fas fa-redo text-xs"></i>
+                          </button>
+                        </ng-container>
+                      </ng-container>
                       <button *ngIf="(isAdmin || isSuperAdmin) && (item.indicator_status === 'appeal' || item.indicator_status === 'Appeal')"
                               (click)="approveAppeal(item)"
                               class="text-green-500 hover:text-green-700 p-0.5 transition-colors"
@@ -359,6 +482,12 @@
                               class="text-red-500 hover:text-red-700 p-0.5 transition-colors"
                               title="ปฏิเสธอุทธรณ์">
                         <i class="fas fa-times-circle text-xs"></i>
+                      </button>
+                      <button *ngIf="item.table_process && item.has_form_schema"
+                              (click)="openDynamicForm(item)"
+                              class="text-purple-500 hover:text-purple-700 p-0.5 transition-colors"
+                              title="กรอกข้อมูลแบบฟอร์ม">
+                        <i class="fas fa-clipboard-list text-xs"></i>
                       </button>
                       <button (click)="openTrendModal(item)" class="text-blue-500 hover:text-blue-700 p-0.5 focus:outline-none" title="ดูแนวโน้ม">
                         <i class="fas fa-chart-line text-xs"></i>
@@ -410,16 +539,16 @@
 
                 <!-- Col 8: เป้าหมาย -->
                 <td class="px-1 py-2 bg-amber-50/30 font-bold text-gray-800 text-right whitespace-nowrap">
-                  <span *ngIf="(!isEditing && !isSingleEditing(item)) || item.is_locked">{{ item.target_value | number }}</span>
-                  <input *ngIf="(isEditing || isSingleEditing(item)) && !item.is_locked" type="number" min="0" [(ngModel)]="item.target_value"
-                         class="w-20 border border-amber-200 rounded px-1 py-1 text-right text-xs focus:ring-1 focus:ring-green-500 outline-none bg-white hover:border-green-400 transition-all"
-                         [ngClass]="isModified(item, 'target_value') ? '!bg-orange-200 !text-red-600 ring-2 ring-orange-400 font-bold' : ''">
+                  <span *ngIf="!canShowTargetInput(item)">{{ item.target_value | number }}</span>
+                  <input *ngIf="canShowTargetInput(item)" type="number" min="0" [(ngModel)]="item.target_value"
+                         class="w-20 border border-amber-200 rounded px-1 py-1 text-right text-xs focus:ring-1 focus:ring-orange-500 outline-none bg-orange-50 hover:border-orange-400 transition-all"
+                         [ngClass]="isModified(item, 'target_value') || isEditingTarget(item) ? '!bg-orange-100 !text-orange-700 ring-2 ring-orange-400 font-bold' : ''">
                 </td>
 
                 <!-- Col 7: ผลงานรวม -->
                 <td class="px-2 py-2 bg-blue-50/30 font-bold text-right whitespace-nowrap"
                   [ngClass]="item.total_actual < item.target_value ? 'text-red-600' : 'text-blue-600'">
-                  {{ item.total_actual | number }}
+                  {{ item.last_actual || '-' }}
                 </td>
 
                 <!-- Col 8: % -->
@@ -431,9 +560,9 @@
                 <!-- Scrollable monthly columns -->
                 <td *ngFor="let m of ['oct','nov','dece','jan','feb','mar','apr','may','jun','jul','aug','sep']"
                     class="px-1 py-2 text-center border-x group whitespace-nowrap month-col"
-                    [ngClass]="item[m] > 0 ? 'bg-green-100/40 text-gray-900 font-bold' : 'text-gray-300'">
-                  <span *ngIf="(!isEditing && !isSingleEditing(item)) || item.is_locked">{{ item[m] > 0 ? (item[m] | number) : '-' }}</span>
-                  <input *ngIf="(isEditing || isSingleEditing(item)) && !item.is_locked" type="number" min="0" [(ngModel)]="item[m]" (ngModelChange)="onValueChange(item, m)"
+                    [ngClass]="(item[m] && item[m] !== '0') ? 'bg-green-100/40 text-gray-900 font-bold' : 'text-gray-300'">
+                  <span *ngIf="(!isEditing && !isSingleEditing(item)) || item.is_locked">{{ (item[m] && item[m] !== '0') ? item[m] : '-' }}</span>
+                  <input *ngIf="(isEditing || isSingleEditing(item)) && !item.is_locked" type="text" [(ngModel)]="item[m]" (ngModelChange)="onValueChange(item, m)"
                          class="w-full border border-green-200 rounded px-1 py-1 text-center text-xs focus:ring-1 focus:ring-green-500 outline-none hover:border-green-400 transition-all bg-white/80 group-hover:bg-white"
                          [ngClass]="isModified(item, m) ? '!bg-orange-200 !text-red-600 ring-2 ring-orange-400 font-bold' : ''">
                 </td>
@@ -633,7 +762,7 @@
                      [ngClass]="isAddKpiModified(item, 'target_value') ? 'bg-yellow-200 !text-red-600 font-bold border-orange-400' : 'border-gray-300'">
             </td>
             <td class="px-1 py-2" *ngFor="let m of ['oct','nov','dece','jan','feb','mar','apr','may','jun','jul','aug','sep']">
-              <input type="number" min="0" [(ngModel)]="item[m]" (ngModelChange)="onValueChange(item, m)"
+              <input type="text" [(ngModel)]="item[m]" (ngModelChange)="onValueChange(item, m)"
                      class="w-full border rounded px-1 py-1 text-center text-xs focus:outline-none focus:border-green-500 transition-colors"
                      [ngClass]="isAddKpiModified(item, m) ? 'bg-yellow-200 !text-red-600 font-bold border-orange-400' : 'border-gray-300'">
             </td>
@@ -694,6 +823,165 @@
       </button>
       <div *ngIf="rejectionHistoryFull.length <= 1"></div>
       <button (click)="showRejectionHistoryModal = false" class="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-bold text-sm">ปิด</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Dynamic Form Modal ===== -->
+<div *ngIf="showDynamicFormModal && dynamicFormItem" class="fixed inset-0 z-50 flex items-start justify-center bg-black/60 overflow-y-auto py-4 px-2">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-auto">
+    <!-- Header -->
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-purple-700 to-purple-600 rounded-t-2xl">
+      <div>
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <i class="fas fa-clipboard-list"></i>
+          {{ dynamicFormSchema?.form_title || 'กรอกข้อมูล' }}
+        </h3>
+        <p class="text-purple-200 text-xs mt-0.5 truncate max-w-xs">{{ dynamicFormItem?.kpi_indicators_name }}</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button (click)="switchDynamicFormTab('form')"
+                class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                [ngClass]="dynamicFormTab === 'form' ? 'bg-white text-purple-700' : 'bg-white/20 text-white hover:bg-white/30'">
+          <i class="fas fa-edit mr-1"></i>กรอกข้อมูล
+        </button>
+        <button (click)="switchDynamicFormTab('list')"
+                class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                [ngClass]="dynamicFormTab === 'list' ? 'bg-white text-purple-700' : 'bg-white/20 text-white hover:bg-white/30'">
+          <i class="fas fa-list mr-1"></i>ข้อมูลที่บันทึก
+        </button>
+        <button (click)="closeDynamicForm()" class="text-white/70 hover:text-white ml-1">
+          <i class="fas fa-times text-lg"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Tab: Form -->
+    <div *ngIf="dynamicFormTab === 'form'" class="p-6">
+      <!-- ข้อมูลพื้นฐาน -->
+      <div class="grid grid-cols-2 gap-3 mb-5 bg-gray-50 rounded-xl p-3 text-xs">
+        <div>
+          <label class="block font-bold text-gray-500 mb-1">ปีงบประมาณ</label>
+          <select [(ngModel)]="dynamicFormData.year_bh"
+                  class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white">
+            <option *ngFor="let y of availableYears" [value]="y">{{ y }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-bold text-gray-500 mb-1">เดือน (ถ้ามี)</label>
+          <select [(ngModel)]="dynamicFormData.month_bh"
+                  class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white">
+            <option value="">-- ไม่ระบุเดือน --</option>
+            <option value="10">ตุลาคม (10)</option>
+            <option value="11">พฤศจิกายน (11)</option>
+            <option value="12">ธันวาคม (12)</option>
+            <option value="1">มกราคม (1)</option>
+            <option value="2">กุมภาพันธ์ (2)</option>
+            <option value="3">มีนาคม (3)</option>
+            <option value="4">เมษายน (4)</option>
+            <option value="5">พฤษภาคม (5)</option>
+            <option value="6">มิถุนายน (6)</option>
+            <option value="7">กรกฎาคม (7)</option>
+            <option value="8">สิงหาคม (8)</option>
+            <option value="9">กันยายน (9)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- คำอธิบาย -->
+      <p *ngIf="dynamicFormSchema?.form_description" class="text-sm text-gray-500 mb-4 italic">
+        {{ dynamicFormSchema?.form_description }}
+      </p>
+
+      <!-- Dynamic Fields -->
+      <div class="space-y-4">
+        <div *ngFor="let field of dynamicFormSchema?.fields || []">
+          <label class="block text-sm font-medium text-gray-700 mb-1">
+            {{ field.field_label }}
+            <span *ngIf="field.is_required" class="text-red-500 ml-0.5">*</span>
+          </label>
+          <input *ngIf="['text','number','date'].includes(field.field_type)"
+                 [type]="field.field_type" [(ngModel)]="dynamicFormData[field.field_name]"
+                 class="w-full border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
+                 [required]="field.is_required">
+          <textarea *ngIf="field.field_type === 'textarea'"
+                    [(ngModel)]="dynamicFormData[field.field_name]" rows="3"
+                    class="w-full border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 resize-none"
+                    [required]="field.is_required"></textarea>
+          <select *ngIf="field.field_type === 'select'"
+                  [(ngModel)]="dynamicFormData[field.field_name]"
+                  class="w-full border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white"
+                  [required]="field.is_required">
+            <option value="">-- เลือก --</option>
+            <option *ngFor="let opt of parseFieldOptions(field.field_options)" [value]="opt">{{ opt }}</option>
+          </select>
+          <div *ngIf="field.field_type === 'checkbox'" class="flex items-center gap-2">
+            <input type="checkbox" [(ngModel)]="dynamicFormData[field.field_name]"
+                   class="rounded text-purple-600 focus:ring-purple-400">
+            <span class="text-sm text-gray-600">{{ field.field_label }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Save button -->
+      <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+        <button (click)="resetDynamicForm()"
+                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl text-sm font-bold transition-all">
+          <i class="fas fa-undo mr-1"></i>ล้างข้อมูล
+        </button>
+        <button (click)="saveDynamicFormData()" [disabled]="isDynamicFormSaving"
+                class="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-bold transition-all shadow-md disabled:opacity-40 flex items-center gap-2">
+          <i *ngIf="isDynamicFormSaving" class="fas fa-spinner fa-spin"></i>
+          <i *ngIf="!isDynamicFormSaving" class="fas fa-save"></i>
+          {{ isDynamicFormSaving ? 'กำลังบันทึก...' : 'บันทึกข้อมูล' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Tab: List -->
+    <div *ngIf="dynamicFormTab === 'list'" class="p-4">
+      <div *ngIf="isDynamicDataLoading" class="flex justify-center py-8">
+        <div class="animate-spin rounded-full h-8 w-8 border-t-4 border-purple-600"></div>
+      </div>
+      <div *ngIf="!isDynamicDataLoading">
+        <div *ngIf="dynamicDataList.length === 0" class="text-center py-10 text-gray-400">
+          <i class="fas fa-inbox text-3xl mb-2 block"></i>
+          ยังไม่มีข้อมูลที่บันทึก
+        </div>
+        <div class="overflow-x-auto" *ngIf="dynamicDataList.length > 0">
+          <table class="w-full text-xs border-collapse">
+            <thead>
+              <tr class="bg-purple-50 text-purple-800">
+                <th class="px-3 py-2 text-left">ปีงบฯ</th>
+                <th class="px-3 py-2 text-left">เดือน</th>
+                <th *ngFor="let field of dynamicFormSchema?.fields || []" class="px-3 py-2 text-left">{{ field.field_label }}</th>
+                <th class="px-3 py-2 text-left">บันทึกโดย</th>
+                <th class="px-3 py-2 text-center">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr *ngFor="let row of dynamicDataList" class="hover:bg-purple-50/30">
+                <td class="px-3 py-2">{{ row.year_bh }}</td>
+                <td class="px-3 py-2">{{ row.month_bh || '-' }}</td>
+                <td *ngFor="let field of dynamicFormSchema?.fields || []" class="px-3 py-2">
+                  {{ row[field.field_name] ?? '-' }}
+                </td>
+                <td class="px-3 py-2 text-gray-500">{{ row.created_by_name || '-' }}</td>
+                <td class="px-3 py-2 text-center">
+                  <button (click)="editDynamicRow(row)"
+                          class="text-amber-500 hover:text-amber-700 p-0.5 mr-1" title="แก้ไข">
+                    <i class="fas fa-edit"></i>
+                  </button>
+                  <button (click)="deleteDynamicRow(row)"
+                          class="text-red-500 hover:text-red-700 p-0.5" title="ลบ">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 </div>

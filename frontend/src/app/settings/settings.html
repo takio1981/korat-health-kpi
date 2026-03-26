@@ -138,6 +138,29 @@
           <p class="mt-3 text-xs text-amber-600"><i class="fas fa-info-circle me-1"></i>ล็อค = toggle เปิดด้วยมือ หรือ วันนี้อยู่ในช่วงวันที่กำหนด (อย่างใดอย่างหนึ่ง) Admin/Super Admin ยังใช้งานได้ตามปกติ</p>
         </div>
 
+        <!-- ล็อคการแก้ไขเป้าหมาย -->
+        <div class="mt-8 pt-6 border-t border-gray-100">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-bullseye me-2 text-orange-600"></i>ล็อคการแก้ไขเป้าหมาย</h3>
+            <button type="button" (click)="targetEditLocked = false" class="px-3 py-1.5 text-xs font-bold text-orange-600 hover:bg-orange-50 border border-orange-200 rounded-lg transition-colors">
+              <i class="fas fa-lock-open me-1"></i>ปลดล็อค
+            </button>
+          </div>
+          <p class="text-xs text-gray-500 mb-4">ควบคุมการแก้ไขค่าเป้าหมาย (เป้าหมาย) ในตาราง Dashboard — user ทั่วไปและ admin_cup ไม่สามารถแก้ไขเป้าหมายได้เลย, admin_ssj และ super_admin แก้ไขได้เมื่อปลดล็อคเท่านั้น</p>
+          <div class="flex items-center">
+            <label class="inline-flex items-center cursor-pointer">
+              <input type="checkbox" [(ngModel)]="targetEditLocked" name="targetEditLocked" class="sr-only peer">
+              <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
+              <span class="ms-3 text-sm font-bold text-gray-700">ล็อคการแก้ไขเป้าหมาย</span>
+            </label>
+            <span class="ms-4 text-xs" [ngClass]="targetEditLocked ? 'text-orange-600 font-bold' : 'text-green-600'">
+              <i [class]="targetEditLocked ? 'fas fa-lock' : 'fas fa-lock-open'" class="me-1"></i>
+              {{ targetEditLocked ? 'ล็อคอยู่ — admin_ssj/super_admin ไม่สามารถแก้ไขเป้าหมายได้' : 'เปิด — admin_ssj/super_admin สามารถแก้ไขเป้าหมายได้' }}
+            </span>
+          </div>
+          <p class="mt-3 text-xs text-amber-600"><i class="fas fa-info-circle me-1"></i>user ทั่วไปและ admin_cup ไม่สามารถแก้ไขเป้าหมายได้ทุกกรณี ไม่ว่าสวิทจะเปิดหรือปิด</p>
+        </div>
+
         <!-- ตั้งค่าอุทธรณ์ -->
         <div class="mt-8 pt-6 border-t border-gray-100">
           <div class="flex items-center justify-between mb-4">
