@@ -31,6 +31,7 @@ export class RegisterComponent implements OnInit {
 
   roleOptions = [
     { value: 'user', label: 'User — ผู้ใช้งานทั่วไป (บันทึก KPI)' },
+    { value: 'user_ssj', label: 'User SSJ — ผู้ใช้งานส่วนกลาง (สสจ.)' },
     { value: 'admin_cup', label: 'Admin CUP — ผู้ดูแลหน่วยบริการ' },
     { value: 'admin_ssj', label: 'Admin SSJ — ผู้ดูแลส่วนกลาง (สสจ.)' }
   ];

@@ -1,7 +1,7 @@
 import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../services/auth';
 import Swal from 'sweetalert2';
 
@@ -14,6 +14,7 @@ import Swal from 'sweetalert2';
 export class UserManagementComponent implements OnInit {
   private authService = inject(AuthService);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
   private cdr = inject(ChangeDetectorRef);
 
   users: any[] = [];
@@ -50,9 +51,16 @@ export class UserManagementComponent implements OnInit {
 
   ngOnInit() {
     const role = this.authService.getUserRole();
-    this.isAdmin = role === 'admin_ssj' || role === 'super_admin';
+    this.isAdmin = role === 'admin_ssj' || role === 'super_admin' || role === 'admin_cup';
     this.isSuperAdmin = role === 'super_admin';
     this.loggedInUser = this.authService.getUser();
+
+    // อ่าน query param ?status=pending จาก URL (เช่น navigate มาจากหน้าแจ้งเตือน)
+    this.route.queryParams.subscribe(params => {
+      if (params['status']) {
+        this.selectedStatus = params['status'];
+      }
+    });
 
     this.loadUsers();
     this.loadDepartments();

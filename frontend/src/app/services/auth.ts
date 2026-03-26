@@ -628,6 +628,13 @@ export class AuthService {
     return this.http.post(`${this.apiUrl}/dynamic-data/${tableName}`, data, { headers });
   }
 
+  getDynamicDataMonths(tableName: string, params: any = {}): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const queryStr = new URLSearchParams(params).toString();
+    return this.http.get(`${this.apiUrl}/dynamic-data-months/${tableName}${queryStr ? '?' + queryStr : ''}`, { headers });
+  }
+
   deleteDynamicData(tableName: string, recordId: number): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

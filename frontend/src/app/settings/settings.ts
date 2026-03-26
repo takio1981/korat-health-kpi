@@ -37,6 +37,11 @@ export class SettingsComponent implements OnInit {
   // Target Edit Lock
   targetEditLocked: boolean = false;
 
+  // Toggle switches
+  loginAttemptsEnabled: boolean = true;
+  autoLogoutEnabled: boolean = true;
+  idleCountdownEnabled: boolean = true;
+
   // Appeal settings
   appealEnabled: boolean = false;
   appealStartDate: string = '';
@@ -92,6 +97,14 @@ export class SettingsComponent implements OnInit {
             this.systemVersion = versionSetting.setting_value;
           }
 
+          // Toggle switches
+          const loginAttemptsEn = this.settings.find(s => s.setting_key === 'login_attempts_enabled');
+          const autoLogoutEn = this.settings.find(s => s.setting_key === 'auto_logout_enabled');
+          const idleCountdownEn = this.settings.find(s => s.setting_key === 'idle_countdown_enabled');
+          if (loginAttemptsEn) this.loginAttemptsEnabled = loginAttemptsEn.setting_value === 'true';
+          if (autoLogoutEn) this.autoLogoutEnabled = autoLogoutEn.setting_value === 'true';
+          if (idleCountdownEn) this.idleCountdownEnabled = idleCountdownEn.setting_value === 'true';
+
           // Data Entry Lock settings
           const entryLocked = this.settings.find(s => s.setting_key === 'data_entry_locked');
           const entryLockStart = this.settings.find(s => s.setting_key === 'data_entry_lock_start');
@@ -128,6 +141,9 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'log_retention_days', setting_value: this.logRetentionDays.toString() },
       { setting_key: 'auto_backup_enabled', setting_value: this.autoBackupEnabled.toString() },
       { setting_key: 'system_version', setting_value: this.systemVersion },
+      { setting_key: 'login_attempts_enabled', setting_value: this.loginAttemptsEnabled.toString() },
+      { setting_key: 'auto_logout_enabled', setting_value: this.autoLogoutEnabled.toString() },
+      { setting_key: 'idle_countdown_enabled', setting_value: this.idleCountdownEnabled.toString() },
       { setting_key: 'data_entry_locked', setting_value: this.dataEntryLocked.toString() },
       { setting_key: 'data_entry_lock_start', setting_value: this.dataEntryLockStart },
       { setting_key: 'data_entry_lock_end', setting_value: this.dataEntryLockEnd },

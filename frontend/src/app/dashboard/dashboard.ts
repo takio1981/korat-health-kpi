@@ -44,6 +44,8 @@ export class DashboardComponent implements OnInit {
   addKpiFilteredHospitals: any[] = [];
   addKpiSelectedDistrict: string = '';
   addKpiSelectedHospcode: string = '';
+  addKpiDeptList: any[] = [];
+  addKpiSelectedDept: string = '';
   addKpiExistingCount: number = 0;
   addKpiTotalTemplateCount: number = 0;
 
@@ -188,9 +190,9 @@ export class DashboardComponent implements OnInit {
         if (res && res.success) {
           this.kpiData = res.data;
           this.kpiData.forEach(item => {
-            item.target_value = Number(item.target_value) || 0;
-            item.total_actual = Number(item.total_actual) || 0;
+            item.target_value = item.target_value != null ? String(item.target_value) : '';
             item.last_actual = String(item.last_actual ?? '');
+            item.total_actual = parseFloat(item.last_actual) || 0;
             item.pending_count = Number(item.pending_count) || 0;
             ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'].forEach(m => item[m] = item[m] != null ? String(item[m]) : '');
           });
@@ -200,7 +202,8 @@ export class DashboardComponent implements OnInit {
           this.applyFilters();
           this.loadDashboardStats();
           this.extractFilterLists();
-          this.cdr.detectChanges(); 
+          this.loadDynamicFormMonths();
+          this.cdr.detectChanges();
         }
       },
       error: (err) => {
@@ -332,8 +335,8 @@ export class DashboardComponent implements OnInit {
       const matchHospital = this.selectedHospital === '' || item.hosname === this.selectedHospital;
       const matchDistrict = this.selectedDistrict === '' || item.distname === this.selectedDistrict;
       const matchStatus = this.selectedStatus === '' ||
-                          (this.selectedStatus === 'pass' && item.total_actual >= item.target_value) ||
-                          (this.selectedStatus === 'fail' && item.total_actual < item.target_value) ||
+                          (this.selectedStatus === 'pass' && this.isTargetMet(item)) ||
+                          (this.selectedStatus === 'fail' && !this.isTargetMet(item)) ||
                           (this.selectedStatus === 'pending' && item.pending_count > 0);
       return matchSearch && matchMain && matchIndicator && matchdept && matchYear && matchStatus && matchHospital && matchDistrict;
     });
@@ -375,23 +378,12 @@ export class DashboardComponent implements OnInit {
     };
     const changedItems = this.filteredData.filter(item => {
       if (!item._original) return false;
-      if (Number(item.target_value) !== Number(item._original.target_value)) return true;
+      if (String(item.target_value ?? '') !== String(item._original.target_value ?? '')) return true;
       return months.some(m => String(item[m] ?? '') !== String(item._original[m] ?? ''));
     });
 
     if (changedItems.length === 0) {
       Swal.fire({ icon: 'info', title: 'ไม่มีข้อมูลที่เปลี่ยนแปลง', text: 'ไม่พบรายการที่มีการแก้ไข', confirmButtonText: 'ตกลง' });
-      return;
-    }
-
-    const invalidItems = changedItems.filter(item => Number(item.target_value) === 0);
-    if (invalidItems.length > 0) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'พบค่าเป้าหมายเป็น 0',
-        text: `มีข้อมูลที่แก้ไข ${invalidItems.length} รายการ ที่ค่าเป้าหมายเป็น 0 ซึ่งจะทำให้คำนวณ % ไม่ได้ กรุณาแก้ไขก่อนบันทึก`,
-        confirmButtonText: 'ตกลง, ไปแก้ไข'
-      });
       return;
     }
 
@@ -412,7 +404,7 @@ export class DashboardComponent implements OnInit {
       const changeDetails: string[] = [];
       for (const item of changedItems) {
         const changes: string[] = [];
-        if (Number(item.target_value) !== Number(item._original.target_value)) {
+        if (String(item.target_value ?? '') !== String(item._original.target_value ?? '')) {
           changes.push(`เป้าหมาย: ${item._original.target_value} → ${item.target_value}`);
         }
         for (const m of months) {
@@ -705,9 +697,10 @@ export class DashboardComponent implements OnInit {
     } else {
       this.addKpiSelectedYear = this.addKpiYears[0];
     }
-    if (this.isAdmin) {
+    if (this.isAdmin || this.isAdminCup) {
       this.addKpiSelectedDistrict = '';
       this.addKpiSelectedHospcode = '';
+      this.addKpiSelectedDept = '';
       this.loadAddKpiDistrictsAndHospitals();
     } else {
       this.addKpiSelectedHospcode = this.currentUser?.hospcode || '';
@@ -717,23 +710,40 @@ export class DashboardComponent implements OnInit {
 
   loadAddKpiDistrictsAndHospitals() {
     Swal.fire({ title: 'กำลังโหลดข้อมูล...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    // โหลด 3 รายการพร้อมกัน: อำเภอ, หน่วยบริการ, หน่วยงาน
     this.authService.getDistricts().subscribe({
       next: (distRes) => {
-        if (distRes.success) {
-          this.addKpiDistrictList = distRes.data;
-        }
+        if (distRes.success) this.addKpiDistrictList = distRes.data;
         this.authService.getHospitals().subscribe({
           next: (hosRes) => {
-            Swal.close();
-            if (hosRes.success) {
-              this.addKpiHospitalList = hosRes.data;
-              this.addKpiFilteredHospitals = hosRes.data;
-            }
-            setTimeout(() => {
-              this.showAddModal = true;
-              this.newKpiList = [];
-              this.cdr.detectChanges();
-            }, 150);
+            if (hosRes.success) this.addKpiHospitalList = hosRes.data;
+            this.authService.getDepartments().subscribe({
+              next: (deptRes) => {
+                Swal.close();
+                if (deptRes.success) this.addKpiDeptList = deptRes.data;
+
+                // admin_cup: หาอำเภอตัวเอง แล้ว auto-select + filter hospitals ในอำเภอ
+                if (this.isAdminCup && this.currentUser?.hospcode) {
+                  const myHos = this.addKpiHospitalList.find((h: any) => h.hoscode === this.currentUser.hospcode);
+                  if (myHos && myHos.distid) {
+                    this.addKpiSelectedDistrict = myHos.distid;
+                    this.addKpiDistrictList = this.addKpiDistrictList.filter((d: any) => d.distid === myHos.distid);
+                    this.addKpiFilteredHospitals = this.addKpiHospitalList.filter((h: any) => h.distid === myHos.distid);
+                  } else {
+                    this.addKpiFilteredHospitals = this.addKpiHospitalList;
+                  }
+                } else {
+                  this.addKpiFilteredHospitals = this.addKpiHospitalList;
+                }
+
+                setTimeout(() => {
+                  this.showAddModal = true;
+                  this.newKpiList = [];
+                  this.cdr.detectChanges();
+                }, 150);
+              },
+              error: () => { Swal.close(); Swal.fire('ผิดพลาด', 'ไม่สามารถโหลดข้อมูลหน่วยงานได้', 'error'); }
+            });
           },
           error: () => { Swal.close(); Swal.fire('ผิดพลาด', 'ไม่สามารถโหลดข้อมูลหน่วยบริการได้', 'error'); }
         });
@@ -745,10 +755,7 @@ export class DashboardComponent implements OnInit {
   onAddKpiDistrictChange() {
     if (this.addKpiSelectedDistrict) {
       this.addKpiFilteredHospitals = this.addKpiHospitalList.filter(
-        (h: any) => {
-          const distid = (h.provcode || '') + (h.distcode || '');
-          return distid === this.addKpiSelectedDistrict;
-        }
+        (h: any) => h.distid === this.addKpiSelectedDistrict
       );
     } else {
       this.addKpiFilteredHospitals = this.addKpiHospitalList;
@@ -795,7 +802,7 @@ export class DashboardComponent implements OnInit {
             this.kpiData
               .filter(k => {
                 const yearMatch = String(k.year_bh) === String(this.addKpiSelectedYear);
-                if (this.isAdmin && targetHospcode) {
+                if ((this.isAdmin || this.isAdminCup) && targetHospcode) {
                   return yearMatch && k.hospcode === targetHospcode;
                 }
                 return yearMatch; // Non-admin: server already filters by hospcode
@@ -803,9 +810,13 @@ export class DashboardComponent implements OnInit {
               .map(k => Number(k.indicator_id))
           );
 
-          // กรองตัวชี้วัดตามหน่วยงาน (user เห็นเฉพาะ dept ตัวเอง)
+          // กรองตัวชี้วัดตามหน่วยงาน
           let allForDept = res.data;
-          if (!this.isAdmin && this.currentUser?.dept_name) {
+          if ((this.isAdmin || this.isAdminCup) && this.addKpiSelectedDept) {
+            // admin ที่เลือก dept → กรองตาม dept ที่เลือก
+            allForDept = allForDept.filter((item: any) => String(item.dept_id) === String(this.addKpiSelectedDept));
+          } else if (!this.isAdmin && !this.isAdminCup && this.currentUser?.dept_name) {
+            // user ทั่วไป → กรองตาม dept ตัวเอง
             allForDept = allForDept.filter((item: any) => item.dept_name === this.currentUser.dept_name);
           }
 
@@ -818,12 +829,12 @@ export class DashboardComponent implements OnInit {
             ...item,
             year_bh: this.addKpiSelectedYear,
             hospcode: targetHospcode,
-            target_value: 0,
+            target_value: '',
             oct: '', nov: '', dece: '', jan: '', feb: '', mar: '',
             apr: '', may: '', jun: '', jul: '', aug: '', sep: '',
             total_actual: 0,
             last_actual: '',
-            _original: { target_value: 0, oct: '', nov: '', dece: '', jan: '', feb: '', mar: '', apr: '', may: '', jun: '', jul: '', aug: '', sep: '' }
+            _original: { target_value: '', oct: '', nov: '', dece: '', jan: '', feb: '', mar: '', apr: '', may: '', jun: '', jul: '', aug: '', sep: '' }
           }));
           Swal.close();
           if (!this.showAddModal) {
@@ -856,20 +867,23 @@ export class DashboardComponent implements OnInit {
       Swal.fire('แจ้งเตือน', 'กรุณาเลือกหน่วยบริการก่อนบันทึก', 'warning');
       return;
     }
-    // ตรวจสอบว่ามีข้อมูลที่กรอกแล้วหรือไม่
-    const months = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
-    const itemsWithData = this.newKpiList.filter((item: any) =>
-      item.target_value > 0 || months.some(m => item[m] > 0)
-    );
-    if (itemsWithData.length === 0) {
-      Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลอย่างน้อย 1 รายการ (เป้าหมาย หรือ ผลงาน)', 'warning');
+    if (this.newKpiList.length === 0) {
+      Swal.fire('แจ้งเตือน', 'ไม่มีรายการตัวชี้วัดที่จะบันทึก', 'warning');
       return;
     }
+
+    // นับจำนวนที่มีข้อมูล (เพื่อแสดงสรุป)
+    const months = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
+    const itemsWithData = this.newKpiList.filter((item: any) => {
+      const tv = String(item.target_value ?? '').trim();
+      if (tv && tv !== '0') return true;
+      return months.some(m => { const v = String(item[m] ?? '').trim(); return v && v !== '0'; });
+    });
 
     Swal.fire({
       title: 'ยืนยันการบันทึก',
       html: `<div class="text-left text-sm">
-        <p class="text-gray-600">พบข้อมูลที่กรอก <b>${itemsWithData.length}</b> รายการ จากทั้งหมด <b>${this.newKpiList.length}</b> รายการ</p>
+        <p class="text-gray-600">บันทึกตัวชี้วัดทั้งหมด <b>${this.newKpiList.length}</b> รายการ (มีข้อมูล <b>${itemsWithData.length}</b> รายการ)</p>
         <p class="text-gray-500 text-xs mt-2">ปีงบประมาณ: <b>${this.addKpiSelectedYear}</b></p>
         <p class="mt-2 text-gray-600">ต้องการบันทึกใช่หรือไม่?</p>
       </div>`,
@@ -892,16 +906,14 @@ export class DashboardComponent implements OnInit {
       didOpen: () => Swal.showLoading()
     });
 
-    const dataToSave = this.newKpiList
-      .filter((item: any) => item.target_value > 0 || ['oct','nov','dece','jan','feb','mar','apr','may','jun','jul','aug','sep'].some(m => item[m] > 0))
-      .map((item: any) => ({
+    const dataToSave = this.newKpiList.map((item: any) => ({
         indicator_id: item.indicator_id,
         year_bh: this.addKpiSelectedYear,
-        target_value: item.target_value,
-        oct: item.oct, nov: item.nov, dece: item.dece,
-        jan: item.jan, feb: item.feb, mar: item.mar,
-        apr: item.apr, may: item.may, jun: item.jun,
-        jul: item.jul, aug: item.aug, sep: item.sep
+        target_value: String(item.target_value ?? '').trim(),
+        oct: String(item.oct ?? '').trim(), nov: String(item.nov ?? '').trim(), dece: String(item.dece ?? '').trim(),
+        jan: String(item.jan ?? '').trim(), feb: String(item.feb ?? '').trim(), mar: String(item.mar ?? '').trim(),
+        apr: String(item.apr ?? '').trim(), may: String(item.may ?? '').trim(), jun: String(item.jun ?? '').trim(),
+        jul: String(item.jul ?? '').trim(), aug: String(item.aug ?? '').trim(), sep: String(item.sep ?? '').trim()
       }));
 
     this.authService.updateKpiResults(dataToSave, hospcode, 'setup_insert_new').subscribe({
@@ -1031,6 +1043,31 @@ export class DashboardComponent implements OnInit {
     }
     item.last_actual = lastActual;
     item.total_actual = parseFloat(lastActual) || 0;
+  }
+
+  calcPercent(item: any): number {
+    const tv = String(item.target_value ?? '').trim();
+    const la = String(item.last_actual ?? '').trim();
+    if (!tv) return 0;
+    const target = parseFloat(tv);
+    const actual = parseFloat(la);
+    // ทั้งคู่เป็นตัวเลข → คำนวณปกติ
+    if (!isNaN(target) && target !== 0 && !isNaN(actual)) return (actual / target) * 100;
+    // เป็นข้อความ → เปรียบเทียบตรงกัน = 100%, ไม่ตรง = 0%
+    if (la && tv === la) return 100;
+    return 0;
+  }
+
+  isTargetMet(item: any): boolean {
+    const tv = String(item.target_value ?? '').trim();
+    const la = String(item.last_actual ?? '').trim();
+    if (!tv) return true; // ไม่มีเป้าหมาย → ไม่แสดงสีแดง
+    const target = parseFloat(tv);
+    const actual = parseFloat(la);
+    // ทั้งคู่เป็นตัวเลข → เปรียบเทียบปกติ
+    if (!isNaN(target) && !isNaN(actual)) return actual >= target;
+    // เป็นข้อความ → ตรงกัน = ผ่าน
+    return la === tv;
   }
 
   isModified(item: any, month: string): boolean {
@@ -1404,17 +1441,12 @@ export class DashboardComponent implements OnInit {
   }
 
   saveTargetOnly(item: any) {
-    if (Number(item.target_value) === Number(item._originalTarget)) {
+    if (String(item.target_value ?? '') === String(item._originalTarget ?? '')) {
       Swal.fire({ icon: 'info', title: 'ไม่มีการเปลี่ยนแปลง', text: 'ค่าเป้าหมายไม่ได้รับการแก้ไข', timer: 1500, showConfirmButton: false });
       item._editingTarget = false;
       this.cdr.detectChanges();
       return;
     }
-    if (Number(item.target_value) <= 0) {
-      Swal.fire({ icon: 'warning', title: 'ค่าเป้าหมายต้องมากกว่า 0', confirmButtonText: 'ตกลง' });
-      return;
-    }
-
     const oldVal = item._originalTarget;
     const newVal = item.target_value;
 
@@ -1492,8 +1524,8 @@ export class DashboardComponent implements OnInit {
     if (!item || !item._original) return;
 
     const months = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
-    const hasChange = Number(item.target_value) !== Number(item._original.target_value) ||
-      months.some(m => Number(item[m]) !== Number(item._original[m]));
+    const hasChange = String(item.target_value ?? '') !== String(item._original.target_value ?? '') ||
+      months.some(m => String(item[m] ?? '') !== String(item._original[m] ?? ''));
 
     if (!hasChange) {
       Swal.fire('ไม่มีการเปลี่ยนแปลง', 'ไม่พบข้อมูลที่แก้ไข', 'info');
@@ -1651,6 +1683,34 @@ export class DashboardComponent implements OnInit {
   // === Dynamic Form Modal (แบบฟอร์มบันทึกข้อมูล KPI) ===
   // ============================================================
 
+  // โหลดเดือนที่มีข้อมูลจาก dynamic form สำหรับแต่ละ item ที่มี form schema
+  private monthBhToKey: any = { 10: 'oct', 11: 'nov', 12: 'dece', 1: 'jan', 2: 'feb', 3: 'mar', 4: 'apr', 5: 'may', 6: 'jun', 7: 'jul', 8: 'aug', 9: 'sep' };
+
+  loadDynamicFormMonths() {
+    const items = this.kpiData.filter(i => i.table_process && i.has_form_schema);
+    for (const item of items) {
+      item._formMonths = {}; // { oct: true, jan: true, ... }
+      this.authService.getDynamicDataMonths(item.table_process, {
+        hospcode: item.hospcode,
+        year_bh: item.year_bh
+      }).subscribe({
+        next: (res) => {
+          if (res.success && res.data) {
+            for (const mb of res.data) {
+              const key = this.monthBhToKey[Number(mb)];
+              if (key) item._formMonths[key] = true;
+            }
+            this.cdr.detectChanges();
+          }
+        }
+      });
+    }
+  }
+
+  hasFormData(item: any, month: string): boolean {
+    return item._formMonths && item._formMonths[month];
+  }
+
   openDynamicForm(item: any) {
     this.dynamicFormItem = item;
     this.dynamicFormTab = 'form';
@@ -1722,6 +1782,7 @@ export class DashboardComponent implements OnInit {
           Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', timer: 1500, showConfirmButton: false });
           this.resetDynamicForm();
           if (this.dynamicFormTab === 'list') this.loadDynamicDataList();
+          this.loadKpiData(); // reload dashboard data to reflect synced values
         } else {
           Swal.fire('ผิดพลาด', res.message, 'error');
         }

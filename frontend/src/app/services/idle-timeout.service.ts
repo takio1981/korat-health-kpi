@@ -14,6 +14,7 @@ export class IdleTimeoutService {
 
   private idleTimeoutMs = 15 * 60 * 1000; // Default 15 นาที
   private promptTimeoutS = 10; // Default 10 วินาที
+  private countdownEnabled = true; // เปิด/ปิดนับถอยหลังแจ้งเตือน
 
   constructor(private ngZone: NgZone, private router: Router, private authService: AuthService) {}
 
@@ -24,6 +25,12 @@ export class IdleTimeoutService {
     this.authService.getSettings().subscribe({
       next: (res) => {
         if (res.success && res.data) {
+          // ตรวจสอบ toggle เปิด/ปิด Auto Logout
+          const autoLogoutEn = res.data.find((s: any) => s.setting_key === 'auto_logout_enabled');
+          if (autoLogoutEn && autoLogoutEn.setting_value === 'false') {
+            return; // ไม่เริ่ม timer ถ้าปิด Auto Logout
+          }
+
           const minutesSetting = res.data.find((s: any) => s.setting_key === 'idle_timeout_minutes');
           const secondsSetting = res.data.find((s: any) => s.setting_key === 'idle_timeout_seconds');
           const countdownSetting = res.data.find((s: any) => s.setting_key === 'idle_countdown_seconds');
@@ -38,6 +45,10 @@ export class IdleTimeoutService {
           if (countdownSetting) {
             this.promptTimeoutS = parseInt(countdownSetting.setting_value, 10);
           }
+
+          // ตรวจสอบ toggle เปิด/ปิดนับถอยหลัง
+          const countdownEn = res.data.find((s: any) => s.setting_key === 'idle_countdown_enabled');
+          this.countdownEnabled = !(countdownEn && countdownEn.setting_value === 'false');
         }
         this.initializeTimer();
       },
@@ -79,6 +90,12 @@ export class IdleTimeoutService {
   private showTimeoutPrompt(): void {
     // ตรวจสอบว่าล็อกอินอยู่หรือไม่ ถ้าไม่ล็อกอินก็ไม่ต้องแจ้งเตือน
     if (!this.authService.isLoggedIn()) {
+      return;
+    }
+
+    // ถ้าปิดนับถอยหลัง → logout ทันทีไม่ต้องแสดง popup
+    if (!this.countdownEnabled) {
+      this.logout();
       return;
     }
 

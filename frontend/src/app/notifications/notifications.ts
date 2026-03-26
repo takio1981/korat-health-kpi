@@ -15,6 +15,7 @@ import Swal from 'sweetalert2';
 export class NotificationsComponent implements OnInit {
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
+  private router = inject(Router);
   private route = inject(ActivatedRoute);
 
   notifications: any[] = [];
@@ -352,7 +353,7 @@ export class NotificationsComponent implements OnInit {
       next: (res) => {
         if (res.success) {
           const u = res.data;
-          const roleLabel: any = { user: 'User', admin_cup: 'Admin CUP', admin_ssj: 'Admin SSJ', super_admin: 'Super Admin' };
+          const roleLabel: any = { user: 'User', user_ssj: 'User SSJ', admin_cup: 'Admin CUP', admin_ssj: 'Admin SSJ', super_admin: 'Super Admin' };
           const statusBadge = u.is_approved === 0
             ? '<span style="background:#fef3c7;color:#92400e;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:bold;">รอการอนุมัติ</span>'
             : u.is_approved === 1
@@ -383,7 +384,7 @@ export class NotificationsComponent implements OnInit {
             cancelButtonText: 'ปิด'
           }).then((result) => {
             if (result.isConfirmed) {
-              window.location.href = '/user-management?status=pending';
+              this.router.navigate(['/users'], { queryParams: { status: 'pending' } });
             }
           });
         }

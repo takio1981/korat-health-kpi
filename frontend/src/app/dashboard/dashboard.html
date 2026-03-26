@@ -159,8 +159,8 @@
                 <div class="flex justify-between items-start">
                   <div class="flex-1">
                     <div class="flex items-center mb-2">
-                      <span *ngIf="item.total_actual >= item.target_value" class="text-green-600 mr-2 text-sm">✓</span>
-                      <span *ngIf="item.total_actual < item.target_value" class="text-red-600 mr-2 text-sm">✗</span>
+                      <span *ngIf="isTargetMet(item)" class="text-green-600 mr-2 text-sm">✓</span>
+                      <span *ngIf="!isTargetMet(item)" class="text-red-600 mr-2 text-sm">✗</span>
                       <h3 class="font-semibold text-gray-900 text-sm">{{ item.kpi_indicators_name }}</h3>
                     </div>
                     <p class="text-xs text-gray-600 mb-1">{{ item.main_indicator_name }}</p>
@@ -175,16 +175,16 @@
                 <div class="grid grid-cols-2 gap-3 text-xs">
                   <div class="bg-yellow-50 p-2 rounded">
                     <span class="text-gray-600">เป้าหมาย:</span>
-                    <span *ngIf="!canShowTargetInput(item)" class="font-bold ml-1">{{ item.target_value | number }}</span>
-                    <input *ngIf="canShowTargetInput(item)" type="number" min="0" [(ngModel)]="item.target_value" class="w-full border border-orange-300 rounded px-1 py-1 text-right text-xs focus:outline-none focus:border-orange-500 transition-colors" [ngClass]="(isModified(item, 'target_value') || isEditingTarget(item)) ? 'bg-orange-100 font-bold text-orange-700 ring-2 ring-orange-400' : 'bg-white'">
+                    <span *ngIf="!canShowTargetInput(item)" class="font-bold ml-1">{{ item.target_value || '-' }}</span>
+                    <input *ngIf="canShowTargetInput(item)" type="text" [(ngModel)]="item.target_value" class="w-full border border-orange-300 rounded px-1 py-1 text-right text-xs focus:outline-none focus:border-orange-500 transition-colors" [ngClass]="(isModified(item, 'target_value') || isEditingTarget(item)) ? 'bg-orange-100 font-bold text-orange-700 ring-2 ring-orange-400' : 'bg-white'">
                   </div>
                   <div class="bg-blue-50 p-2 rounded">
                     <span class="text-gray-600">ผลงาน:</span>
-                    <span class="font-bold ml-1" [ngClass]="item.total_actual < item.target_value ? 'text-red-600' : 'text-blue-600'">{{ item.last_actual || '-' }}</span>
+                    <span class="font-bold ml-1" [ngClass]="!isTargetMet(item) ? 'text-red-600' : 'text-blue-600'">{{ item.last_actual || '-' }}</span>
                   </div>
                   <div class="bg-gray-50 p-2 rounded col-span-2">
                     <span class="text-gray-600">%:</span>
-                    <span class="font-bold ml-1" [ngClass]="item.total_actual < item.target_value ? 'text-red-600' : 'text-green-600'">{{ (item.target_value > 0 ?(item.total_actual / item.target_value * 100) : 0) | number:'1.2-2' }}%</span>
+                    <span class="font-bold ml-1" [ngClass]="isTargetMet(item) ? 'text-green-600' : 'text-red-600'">{{ calcPercent(item) | number:'1.2-2' }}%</span>
                   </div>
                 </div>
 
@@ -357,8 +357,8 @@
                 <td class="px-3 py-2 frozen col-2 bg-white border-r border-gray-100">
                   <div class="flex items-center justify-between gap-2">
                     <div class="flex items-start gap-1.5 min-w-0">
-                      <i *ngIf="item.total_actual >= item.target_value" class="fas fa-check-circle text-green-500 mt-0.5 shrink-0 text-xs"></i>
-                      <i *ngIf="item.total_actual < item.target_value" class="fas fa-times-circle text-red-500 mt-0.5 shrink-0 text-xs"></i>
+                      <i *ngIf="isTargetMet(item)" class="fas fa-check-circle text-green-500 mt-0.5 shrink-0 text-xs"></i>
+                      <i *ngIf="!isTargetMet(item)" class="fas fa-times-circle text-red-500 mt-0.5 shrink-0 text-xs"></i>
                       <span class="line-clamp-2 font-medium text-gray-900" [title]="item.kpi_indicators_name">{{ item.kpi_indicators_name }}</span>
                     </div>
                     <div class="flex gap-0.5 shrink-0">
@@ -539,29 +539,32 @@
 
                 <!-- Col 8: เป้าหมาย -->
                 <td class="px-1 py-2 bg-amber-50/30 font-bold text-gray-800 text-right whitespace-nowrap">
-                  <span *ngIf="!canShowTargetInput(item)">{{ item.target_value | number }}</span>
-                  <input *ngIf="canShowTargetInput(item)" type="number" min="0" [(ngModel)]="item.target_value"
+                  <span *ngIf="!canShowTargetInput(item)">{{ item.target_value || '-' }}</span>
+                  <input *ngIf="canShowTargetInput(item)" type="text" [(ngModel)]="item.target_value"
                          class="w-20 border border-amber-200 rounded px-1 py-1 text-right text-xs focus:ring-1 focus:ring-orange-500 outline-none bg-orange-50 hover:border-orange-400 transition-all"
                          [ngClass]="isModified(item, 'target_value') || isEditingTarget(item) ? '!bg-orange-100 !text-orange-700 ring-2 ring-orange-400 font-bold' : ''">
                 </td>
 
                 <!-- Col 7: ผลงานรวม -->
                 <td class="px-2 py-2 bg-blue-50/30 font-bold text-right whitespace-nowrap"
-                  [ngClass]="item.total_actual < item.target_value ? 'text-red-600' : 'text-blue-600'">
+                  [ngClass]="isTargetMet(item) ? 'text-blue-600' : 'text-red-600'">
                   {{ item.last_actual || '-' }}
                 </td>
 
                 <!-- Col 8: % -->
                 <td class="px-2 py-2 bg-gray-50/50 font-bold border-r text-center whitespace-nowrap"
-                  [ngClass]="item.total_actual < item.target_value ? 'text-red-600' : 'text-green-600'">
-                  {{ (item.target_value > 0 ? (item.total_actual / item.target_value * 100) : 0) | number:'1.2-2' }}%
+                  [ngClass]="isTargetMet(item) ? 'text-green-600' : 'text-red-600'">
+                  {{ calcPercent(item) | number:'1.2-2' }}%
                 </td>
 
                 <!-- Scrollable monthly columns -->
                 <td *ngFor="let m of ['oct','nov','dece','jan','feb','mar','apr','may','jun','jul','aug','sep']"
-                    class="px-1 py-2 text-center border-x group whitespace-nowrap month-col"
-                    [ngClass]="(item[m] && item[m] !== '0') ? 'bg-green-100/40 text-gray-900 font-bold' : 'text-gray-300'">
-                  <span *ngIf="(!isEditing && !isSingleEditing(item)) || item.is_locked">{{ (item[m] && item[m] !== '0') ? item[m] : '-' }}</span>
+                    class="px-1 py-2 text-center border-x group whitespace-nowrap month-col relative"
+                    [ngClass]="hasFormData(item, m) ? 'bg-purple-50/60 text-gray-900 font-bold' : (item[m] && item[m] !== '0') ? 'bg-green-100/40 text-gray-900 font-bold' : 'text-gray-300'">
+                  <span *ngIf="(!isEditing && !isSingleEditing(item)) || item.is_locked">
+                    {{ (item[m] && item[m] !== '0') ? item[m] : '-' }}
+                    <i *ngIf="hasFormData(item, m)" class="fas fa-clipboard-check text-purple-400 text-[8px] ml-0.5" title="ข้อมูลจากแบบฟอร์ม"></i>
+                  </span>
                   <input *ngIf="(isEditing || isSingleEditing(item)) && !item.is_locked" type="text" [(ngModel)]="item[m]" (ngModelChange)="onValueChange(item, m)"
                          class="w-full border border-green-200 rounded px-1 py-1 text-center text-xs focus:ring-1 focus:ring-green-500 outline-none hover:border-green-400 transition-all bg-white/80 group-hover:bg-white"
                          [ngClass]="isModified(item, m) ? '!bg-orange-200 !text-red-600 ring-2 ring-orange-400 font-bold' : ''">
@@ -687,8 +690,8 @@
           <option *ngFor="let y of addKpiYears" [value]="y">{{ y }}</option>
         </select>
       </div>
-      <!-- Admin: เลือกอำเภอ/หน่วยบริการ -->
-      <ng-container *ngIf="isAdmin">
+      <!-- Admin/Admin CUP: เลือกอำเภอ/หน่วยบริการ -->
+      <ng-container *ngIf="isAdmin || isAdminCup">
         <div class="space-y-1">
           <label class="text-xs font-bold text-gray-500">อำเภอ</label>
           <select [(ngModel)]="addKpiSelectedDistrict" (change)="onAddKpiDistrictChange()" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-sm">
@@ -703,9 +706,16 @@
             <option *ngFor="let h of addKpiFilteredHospitals" [value]="h.hoscode">{{ h.hosname }}</option>
           </select>
         </div>
+        <div class="space-y-1">
+          <label class="text-xs font-bold text-gray-500">หน่วยงาน</label>
+          <select [(ngModel)]="addKpiSelectedDept" (change)="loadAddKpiList()" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-sm">
+            <option value="">-- ทุกหน่วยงาน --</option>
+            <option *ngFor="let dept of addKpiDeptList" [value]="dept.id">{{ dept.dept_name }}</option>
+          </select>
+        </div>
       </ng-container>
       <!-- User: แสดงข้อมูลหน่วยบริการ/หน่วยงาน อัตโนมัติ -->
-      <ng-container *ngIf="!isAdmin">
+      <ng-container *ngIf="!isAdmin && !isAdminCup">
         <div class="space-y-1">
           <label class="text-xs font-bold text-gray-500">หน่วยบริการ</label>
           <div class="px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 font-medium">
@@ -757,7 +767,7 @@
             <td class="px-3 py-2 text-gray-600">{{ item.dept_name }}</td>
             <td class="px-2 py-2 text-center text-gray-500 font-medium">{{ item.year_bh }}</td>
             <td class="px-2 py-2">
-              <input type="number" min="0" [(ngModel)]="item.target_value"
+              <input type="text" [(ngModel)]="item.target_value"
                      class="w-full border rounded px-1 py-1 text-right text-xs focus:outline-none focus:border-green-500 transition-colors"
                      [ngClass]="isAddKpiModified(item, 'target_value') ? 'bg-yellow-200 !text-red-600 font-bold border-orange-400' : 'border-gray-300'">
             </td>
