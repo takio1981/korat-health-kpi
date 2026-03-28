@@ -122,6 +122,17 @@ export class ReportComponent implements OnInit {
         this.isLoading = false;
         if (res.success) {
           this.reportData = res.data;
+          // แปลงค่าให้ปลอดภัย (รองรับข้อความ)
+          const numMonths = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may_val', 'jun', 'jul', 'aug', 'sep'];
+          this.reportData.forEach((item: any) => {
+            item._target_display = item.target_value != null ? String(item.target_value) : '';
+            item.target_value = parseFloat(item.target_value) || 0;
+            item.total_actual = parseFloat(item.total_actual) || parseFloat(item.last_actual) || 0;
+            numMonths.forEach(m => {
+              item['_' + m + '_display'] = item[m] != null ? String(item[m]) : '';
+              item[m] = parseFloat(item[m]) || 0;
+            });
+          });
           this.calculateSummary();
           this.updateChart();
         }

@@ -62,6 +62,8 @@ export class DashboardComponent implements OnInit {
   isAdmin: boolean = false;
   isSuperAdmin: boolean = false;
   isAdminCup: boolean = false;
+  isLocalAdmin: boolean = false;
+  isDistrictScope: boolean = false;
   currentUser: any = null;
 
   currentPage: number = 1;
@@ -125,9 +127,11 @@ export class DashboardComponent implements OnInit {
   ngOnInit() {
     this.currentUser = this.authService.getUser();
     const role = this.authService.getUserRole();
-    this.isAdmin = ['admin_ssj', 'super_admin'].includes(role);
+    this.isAdmin = ['admin_ssj', 'super_admin'].includes(role);      // admin ส่วนกลาง
     this.isSuperAdmin = role === 'super_admin';
-    this.isAdminCup = role === 'admin_cup';
+    this.isAdminCup = role === 'admin_cup';                          // admin อำเภอ
+    this.isLocalAdmin = ['admin_hos', 'admin_sso', 'admin_cup'].includes(role); // admin พื้นที่ทุกระดับ
+    this.isDistrictScope = ['user_cup', 'admin_cup'].includes(role); // เห็นทั้งอำเภอ
 
     // Fallback: ดึง hospcode/dept_id จาก JWT token กรณี user object ไม่มี (login เก่า)
     if (this.currentUser && !this.currentUser.hospcode) {
@@ -144,7 +148,7 @@ export class DashboardComponent implements OnInit {
     this.loadKpiData();
     this.loadAppealSettings();
     this.loadDataEntryLock();
-    if (this.isAdmin || this.isAdminCup) this.loadTargetEditRequests();
+    if (this.isAdmin || this.isLocalAdmin) this.loadTargetEditRequests();
   }
 
   loadDataEntryLock() {
@@ -158,9 +162,9 @@ export class DashboardComponent implements OnInit {
     });
   }
 
-  // user ทั่วไปถูกล็อคหรือไม่ (admin/super_admin ไม่ถูกล็อค)
+  // admin ทุกระดับไม่ถูกล็อค, user ถูกล็อคเมื่อเปิดล็อค
   get isEntryLocked(): boolean {
-    if (this.isAdmin || this.isSuperAdmin) return false;
+    if (this.isAdmin || this.isLocalAdmin) return false;
     return this.dataEntryLock.is_locked;
   }
 
@@ -171,7 +175,7 @@ export class DashboardComponent implements OnInit {
 
   // admin_cup / admin_ssj / super_admin เห็นปุ่มขอแก้ไขเป้าหมายเมื่อล็อค
   get canRequestTargetEdit(): boolean {
-    return this.targetEditLocked && (this.isAdmin || this.isAdminCup);
+    return this.targetEditLocked && (this.isAdmin || this.isLocalAdmin);
   }
 
   loadAppealSettings() {
@@ -697,7 +701,7 @@ export class DashboardComponent implements OnInit {
     } else {
       this.addKpiSelectedYear = this.addKpiYears[0];
     }
-    if (this.isAdmin || this.isAdminCup) {
+    if (this.isAdmin || this.isLocalAdmin) {
       this.addKpiSelectedDistrict = '';
       this.addKpiSelectedHospcode = '';
       this.addKpiSelectedDept = '';
@@ -722,15 +726,22 @@ export class DashboardComponent implements OnInit {
                 Swal.close();
                 if (deptRes.success) this.addKpiDeptList = deptRes.data;
 
-                // admin_cup: หาอำเภอตัวเอง แล้ว auto-select + filter hospitals ในอำเภอ
-                if (this.isAdminCup && this.currentUser?.hospcode) {
+                // Local admin: auto-select ตามขอบเขต
+                if (this.isLocalAdmin && this.currentUser?.hospcode) {
                   const myHos = this.addKpiHospitalList.find((h: any) => h.hoscode === this.currentUser.hospcode);
-                  if (myHos && myHos.distid) {
+                  if (this.isAdminCup && myHos?.distid) {
+                    // admin_cup: ล็อคอำเภอ เลือก hospcode ในอำเภอได้
                     this.addKpiSelectedDistrict = myHos.distid;
                     this.addKpiDistrictList = this.addKpiDistrictList.filter((d: any) => d.distid === myHos.distid);
                     this.addKpiFilteredHospitals = this.addKpiHospitalList.filter((h: any) => h.distid === myHos.distid);
                   } else {
-                    this.addKpiFilteredHospitals = this.addKpiHospitalList;
+                    // admin_hos / admin_sso: ล็อค hospcode ตัวเอง
+                    this.addKpiSelectedHospcode = this.currentUser.hospcode;
+                    this.addKpiFilteredHospitals = this.addKpiHospitalList.filter((h: any) => h.hoscode === this.currentUser.hospcode);
+                    if (myHos?.distid) {
+                      this.addKpiSelectedDistrict = myHos.distid;
+                      this.addKpiDistrictList = this.addKpiDistrictList.filter((d: any) => d.distid === myHos.distid);
+                    }
                   }
                 } else {
                   this.addKpiFilteredHospitals = this.addKpiHospitalList;
@@ -739,6 +750,10 @@ export class DashboardComponent implements OnInit {
                 setTimeout(() => {
                   this.showAddModal = true;
                   this.newKpiList = [];
+                  // Admin ที่มี hospcode ถูกเลือกแล้ว (auto-select) → โหลดรายการทันที
+                  if (this.addKpiSelectedHospcode || (this.isAdmin || this.isLocalAdmin)) {
+                    this.loadAddKpiList();
+                  }
                   this.cdr.detectChanges();
                 }, 150);
               },
@@ -765,7 +780,7 @@ export class DashboardComponent implements OnInit {
   }
 
   onAddKpiHospitalChange() {
-    if (this.addKpiSelectedHospcode) {
+    if (this.addKpiSelectedHospcode || (this.isAdmin || this.isLocalAdmin)) {
       this.loadAddKpiList();
     } else {
       this.newKpiList = [];
@@ -786,7 +801,10 @@ export class DashboardComponent implements OnInit {
   }
 
   loadAddKpiList() {
-    const targetHospcode = this.addKpiSelectedHospcode || this.currentUser?.hospcode || '';
+    // Admin: ใช้ hospcode ที่เลือก (อาจยังไม่เลือก = ''), User: ใช้ hospcode ตัวเอง
+    const targetHospcode = (this.isAdmin || this.isLocalAdmin)
+      ? (this.addKpiSelectedHospcode || '')
+      : (this.addKpiSelectedHospcode || this.currentUser?.hospcode || '');
     Swal.fire({
       title: 'กำลังโหลดข้อมูล...',
       allowOutsideClick: false,
@@ -802,7 +820,7 @@ export class DashboardComponent implements OnInit {
             this.kpiData
               .filter(k => {
                 const yearMatch = String(k.year_bh) === String(this.addKpiSelectedYear);
-                if ((this.isAdmin || this.isAdminCup) && targetHospcode) {
+                if ((this.isAdmin || this.isLocalAdmin) && targetHospcode) {
                   return yearMatch && k.hospcode === targetHospcode;
                 }
                 return yearMatch; // Non-admin: server already filters by hospcode
@@ -812,10 +830,10 @@ export class DashboardComponent implements OnInit {
 
           // กรองตัวชี้วัดตามหน่วยงาน
           let allForDept = res.data;
-          if ((this.isAdmin || this.isAdminCup) && this.addKpiSelectedDept) {
+          if ((this.isAdmin || this.isLocalAdmin) && this.addKpiSelectedDept) {
             // admin ที่เลือก dept → กรองตาม dept ที่เลือก
             allForDept = allForDept.filter((item: any) => String(item.dept_id) === String(this.addKpiSelectedDept));
-          } else if (!this.isAdmin && !this.isAdminCup && this.currentUser?.dept_name) {
+          } else if (!this.isAdmin && !this.isLocalAdmin && this.currentUser?.dept_name) {
             // user ทั่วไป → กรองตาม dept ตัวเอง
             allForDept = allForDept.filter((item: any) => item.dept_name === this.currentUser.dept_name);
           }
@@ -862,7 +880,9 @@ export class DashboardComponent implements OnInit {
   }
 
   saveNewKpis() {
-    const targetHospcode = this.addKpiSelectedHospcode || this.currentUser?.hospcode || '';
+    const targetHospcode = (this.isAdmin || this.isLocalAdmin)
+      ? this.addKpiSelectedHospcode
+      : (this.addKpiSelectedHospcode || this.currentUser?.hospcode || '');
     if (!targetHospcode) {
       Swal.fire('แจ้งเตือน', 'กรุณาเลือกหน่วยบริการก่อนบันทึก', 'warning');
       return;
@@ -973,31 +993,88 @@ export class DashboardComponent implements OnInit {
 
   openTrendModal(item: any) {
     this.selectedKpiName = item.kpi_indicators_name;
-    const data = [
-      item.oct, item.nov, item.dece, item.jan, item.feb, item.mar,
-      item.apr, item.may, item.jun, item.jul, item.aug, item.sep
-    ];
+    const months = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
+    const labels = ['ต.ค.', 'พ.ย.', 'ธ.ค.', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.'];
+
+    // แยกข้อมูลตัวเลข vs ข้อความ
+    const rawData = months.map(m => String(item[m] ?? '').trim());
+    const numericData = rawData.map(v => { const n = parseFloat(v); return isNaN(n) ? null : n; });
+    const hasTextValues = rawData.some(v => v !== '' && isNaN(parseFloat(v)));
+
+    // สร้าง annotations สำหรับเดือนที่เป็นข้อความ (แสดงเป็น label บนกราฟ)
+    const pointAnnotations = rawData.map((v, i) => {
+      if (v !== '' && isNaN(parseFloat(v))) {
+        return { x: labels[i], y: 0, marker: { size: 0 }, label: { text: v, borderColor: '#9333ea', style: { background: '#f3e8ff', color: '#7e22ce', fontSize: '11px', fontWeight: 'bold', padding: { left: 6, right: 6, top: 3, bottom: 3 } } } };
+      }
+      return null;
+    }).filter(a => a !== null);
+
+    // เป้าหมาย: ถ้าเป็นตัวเลข → เส้นปะ, ถ้าเป็นข้อความ → annotation label
+    const targetRaw = String(item.target_value ?? '').trim();
+    const targetNum = parseFloat(targetRaw);
+    const hasNumericTarget = !isNaN(targetNum) && targetNum !== 0;
+
+    // Series: ผลงาน + เส้นเป้าหมาย (ถ้าเป็นตัวเลข)
+    const series: any[] = [{ name: 'ผลงาน', data: numericData }];
+    const strokeWidth: number[] = [3];
+    const strokeDash: number[] = [0];
+    const colors: string[] = ['#10B981'];
+
+    if (hasNumericTarget) {
+      series.push({ name: 'เป้าหมาย (' + targetRaw + ')', data: Array(12).fill(targetNum) });
+      strokeWidth.push(2);
+      strokeDash.push(6);
+      colors.push('#EF4444');
+    }
+
+    // Y-axis annotation สำหรับเป้าหมายที่เป็นข้อความ
+    const yAnnotations: any[] = [];
+    if (!hasNumericTarget && targetRaw) {
+      // เป้าหมายเป็นข้อความ → แสดง label ที่แกน Y
+      yAnnotations.push({
+        y: 0, borderColor: '#9333ea', strokeDashArray: 4,
+        label: { text: 'เป้าหมาย: ' + targetRaw, borderColor: '#9333ea', position: 'front',
+          style: { background: '#f3e8ff', color: '#7e22ce', fontSize: '12px', fontWeight: 'bold', padding: { left: 8, right: 8, top: 4, bottom: 4 } }
+        }
+      });
+    }
+
     this.kpiTrendOptions = {
-      series: [{
-        name: "ผลงาน",
-        data: data
-      }],
+      series,
       chart: {
         height: 350,
-        type: "line",
+        type: 'line',
         zoom: { enabled: false },
-        fontFamily: 'Prompt, sans-serif',
+        fontFamily: 'Sarabun, sans-serif',
         toolbar: { show: false }
       },
-      dataLabels: { enabled: true },
-      stroke: { curve: "smooth", width: 3 },
-      title: { text: "แนวโน้มผลงานรายเดือน", align: "left" },
-      grid: { row: { colors: ["#f3f3f3", "transparent"], opacity: 0.5 } },
-      xaxis: {
-        categories: ["ต.ค.", "พ.ย.", "ธ.ค.", "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย."],
+      dataLabels: {
+        enabled: true,
+        enabledOnSeries: [0],
+        formatter: (val: any) => val !== null && val !== undefined ? val : ''
       },
-      colors: ['#10B981'],
-      markers: { size: 5, hover: { size: 7 } }
+      stroke: { curve: 'smooth', width: strokeWidth, dashArray: strokeDash },
+      title: {
+        text: 'แนวโน้มผลงานรายเดือน' + (hasTextValues ? ' (ข้อความแสดงเป็น label)' : ''),
+        align: 'left'
+      },
+      grid: { row: { colors: ['#f3f3f3', 'transparent'], opacity: 0.5 } },
+      xaxis: { categories: labels },
+      yaxis: { labels: { formatter: (val: any) => val !== null && val !== undefined ? val : '' } },
+      colors,
+      markers: { size: [5, 0], hover: { size: 7 } },
+      legend: { show: series.length > 1, position: 'top' },
+      annotations: { points: pointAnnotations, yaxis: yAnnotations },
+      tooltip: {
+        y: {
+          formatter: (val: any, opts: any) => {
+            if (opts.seriesIndex === 1) return val;
+            const txt = rawData[opts.dataPointIndex];
+            if (val === null && txt) return txt;
+            return val !== null && val !== undefined ? val : '-';
+          }
+        }
+      }
     };
     this.showTrendModal = true;
   }

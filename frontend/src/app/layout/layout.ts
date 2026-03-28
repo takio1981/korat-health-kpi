@@ -48,7 +48,7 @@ export class LayoutComponent implements OnInit {
     this.currentUser = this.authService.getUser();
     const role = this.authService.getUserRole();
     this.isAdmin = ['admin_ssj', 'super_admin'].includes(role);
-    this.isAnyAdmin = ['admin_cup', 'admin_ssj', 'super_admin'].includes(role);
+    this.isAnyAdmin = ['admin_hos', 'admin_sso', 'admin_cup', 'admin_ssj', 'super_admin'].includes(role);
     this.isSuperAdmin = role === 'super_admin';
     this.loadSettings();
     this.loadPendingCount();

@@ -12,7 +12,7 @@ export const anyAdminGuard: CanActivateFn = (route, state) => {
   }
 
   const role = authService.getUserRole();
-  if (['admin_cup', 'admin_ssj', 'super_admin'].includes(role)) {
+  if (['admin_hos', 'admin_sso', 'admin_cup', 'admin_ssj', 'super_admin'].includes(role)) {
     return true;
   }
 

@@ -144,7 +144,7 @@
         </div>
         <!-- กราฟวงกลม -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <apx-chart
+          <apx-chart *ngIf="pieChartOptions.series && pieChartOptions.series.length > 0"
             [series]="pieChartOptions.series"
             [chart]="pieChartOptions.chart"
             [labels]="pieChartOptions.labels"
@@ -153,6 +153,10 @@
             [responsive]="pieChartOptions.responsive"
             [title]="pieChartOptions.title"
           ></apx-chart>
+          <div *ngIf="!pieChartOptions.series || pieChartOptions.series.length === 0" class="flex flex-col items-center justify-center py-16 text-gray-400">
+            <i class="fas fa-chart-pie text-4xl mb-3"></i>
+            <p class="text-sm font-bold">ไม่มีข้อมูลที่เป็นตัวเลขสำหรับแสดงกราฟวงกลม</p>
+          </div>
         </div>
       </div>
 </div>

@@ -21,7 +21,6 @@ import { LayoutComponent } from './layout/layout';
 export const routes: Routes = [
   { path: 'login', component: LoginComponent },
   { path: 'register', component: RegisterComponent },
-  { path: '', component: ChartComponent, pathMatch: 'full' },
   {
     path: '',
     component: LayoutComponent,
@@ -32,12 +31,13 @@ export const routes: Routes = [
       { path: 'reports', component: ReportComponent, data: { title: 'รายงานสรุปผล' } },
       { path: 'notifications', component: NotificationsComponent, data: { title: 'การแจ้งเตือน' } },
       { path: 'users', component: UserManagementComponent, canActivate: [anyAdminGuard], data: { title: 'จัดการผู้ใช้งาน' } },
-      { path: 'kpi-setup', component: KpiSetupComponent, canActivate: [anyAdminGuard], data: { title: 'สร้าง KPI ปีงบประมาณใหม่' } },
+      { path: 'kpi-setup', component: KpiSetupComponent, canActivate: [adminGuard], data: { title: 'สร้าง KPI ปีงบประมาณใหม่' } },
       { path: 'audit-logs', component: AuditLogComponent, canActivate: [superAdminGuard], data: { title: 'ประวัติการใช้งาน' } },
-      { path: 'kpi-manage', component: KpiManageComponent, canActivate: [anyAdminGuard], data: { title: 'จัดการตัวชี้วัด' } },
+      { path: 'kpi-manage', component: KpiManageComponent, canActivate: [superAdminGuard], data: { title: 'จัดการตัวชี้วัด' } },
       { path: 'export-kpi', component: ExportKpiComponent, canActivate: [superAdminGuard], data: { title: 'Export ข้อมูล KPI' } },
       { path: 'settings', component: SettingsComponent, canActivate: [superAdminGuard], data: { title: 'ตั้งค่าระบบ' } },
       { path: 'form-builder', component: FormBuilderComponent, canActivate: [superAdminGuard], data: { title: 'สร้างแบบฟอร์ม KPI' } },
     ]
-  }
+  },
+  { path: '**', redirectTo: 'login' }
 ];

@@ -76,13 +76,13 @@
                   </span>
                   <!-- ปุ่มดูรายละเอียด: แสดงเฉพาะ super_admin/admin_ssj ที่แจ้งเตือนผู้สมัครใหม่ -->
                   <button *ngIf="isAdmin && notif.title && notif.title.includes('รอการอนุมัติ') && notif.created_by"
-                          (click)="viewPendingUserDetail(notif); $event.stopPropagation()"
+                          (click)="markAsRead(notif); viewPendingUserDetail(notif); $event.stopPropagation()"
                           class="px-3 py-1 bg-indigo-500 hover:bg-indigo-600 text-white rounded-full text-xs font-bold transition-all shadow-sm">
                     <i class="fas fa-user-circle mr-1"></i>ดูรายละเอียด
                   </button>
                   <!-- ปุ่มตอบกลับ: แสดงเฉพาะ reject ที่ยังไม่เคยตอบกลับ -->
                   <button *ngIf="!isAdmin && notif.type === 'reject' && notif.indicator_id && !notif.has_reply"
-                          (click)="replyNotification(notif); $event.stopPropagation()"
+                          (click)="markAsRead(notif); replyNotification(notif); $event.stopPropagation()"
                           class="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-full text-xs font-bold transition-all shadow-sm">
                     <i class="fas fa-paper-plane mr-1"></i>ตอบกลับ
                   </button>
@@ -93,18 +93,18 @@
                   </span>
                   <!-- ปุ่มยื่นอุทธรณ์: user เห็นใน notification approve ถ้าช่วงอุทธรณ์เปิด -->
                   <button *ngIf="!isAdmin && notif.type === 'approve' && appealSettings.is_open && notif.indicator_id"
-                          (click)="openAppealFromNotif(notif); $event.stopPropagation()"
+                          (click)="markAsRead(notif); openAppealFromNotif(notif); $event.stopPropagation()"
                           class="px-3 py-1 bg-purple-500 hover:bg-purple-600 text-white rounded-full text-xs font-bold transition-all shadow-sm">
                     <i class="fas fa-gavel mr-1"></i>ยื่นอุทธรณ์
                   </button>
                   <!-- Admin จัดการอุทธรณ์ (แสดงเฉพาะ KPI ที่ยังเป็นสถานะ Appeal) -->
                   <button *ngIf="isAdmin && notif.type === 'appeal' && notif.indicator_id && notif.kpi_status === 'Appeal'"
-                          (click)="approveAppealFromNotif(notif); $event.stopPropagation()"
+                          (click)="markAsRead(notif); approveAppealFromNotif(notif); $event.stopPropagation()"
                           class="px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded-full text-xs font-bold transition-all shadow-sm">
                     <i class="fas fa-check mr-1"></i>อนุมัติ
                   </button>
                   <button *ngIf="isAdmin && notif.type === 'appeal' && notif.indicator_id && notif.kpi_status === 'Appeal'"
-                          (click)="rejectAppealFromNotif(notif); $event.stopPropagation()"
+                          (click)="markAsRead(notif); rejectAppealFromNotif(notif); $event.stopPropagation()"
                           class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded-full text-xs font-bold transition-all shadow-sm">
                     <i class="fas fa-times mr-1"></i>ปฏิเสธ
                   </button>

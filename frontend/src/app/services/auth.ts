@@ -206,10 +206,10 @@ export class AuthService {
     return this.http.put(`${this.apiUrl}/users/${id}/approve`, {}, { headers });
   }
 
-  rejectUser(id: number): Observable<any> {
+  rejectUser(id: number, reason: string = ''): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.put(`${this.apiUrl}/users/${id}/reject`, {}, { headers });
+    return this.http.put(`${this.apiUrl}/users/${id}/reject`, { reason }, { headers });
   }
 
   toggleUserActive(id: number, isActive: boolean): Observable<any> {

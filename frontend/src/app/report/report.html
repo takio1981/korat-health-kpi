@@ -152,22 +152,22 @@
                 <td class="px-4 py-2.5 text-gray-700 max-w-[150px] truncate">{{ item.main_indicator_name }}</td>
                 <td class="px-4 py-2.5 text-gray-800 font-medium max-w-[200px] truncate">{{ item.kpi_indicators_name }}</td>
                 <td class="px-4 py-2.5 text-gray-600">{{ item.dept_name }}</td>
-                <td class="px-4 py-2.5 text-right text-gray-700">{{ (item.target_value | number:'1.2-2') || '0.00' }}</td>
-                <td class="px-4 py-2.5 text-right" [class]="(item.oct || 0) > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ (item.oct | number:'1.2-2') || '-' }}</td>
-                <td class="px-4 py-2.5 text-right" [class]="(item.nov || 0) > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ (item.nov | number:'1.2-2') || '-' }}</td>
-                <td class="px-4 py-2.5 text-right" [class]="(item.dece || 0) > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ (item.dece | number:'1.2-2') || '-' }}</td>
-                <td class="px-4 py-2.5 text-right" [class]="(item.jan || 0) > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ (item.jan | number:'1.2-2') || '-' }}</td>
-                <td class="px-4 py-2.5 text-right" [class]="(item.feb || 0) > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ (item.feb | number:'1.2-2') || '-' }}</td>
-                <td class="px-4 py-2.5 text-right" [class]="(item.mar || 0) > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ (item.mar | number:'1.2-2') || '-' }}</td>
-                <td class="px-4 py-2.5 text-right" [class]="(item.apr || 0) > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ (item.apr | number:'1.2-2') || '-' }}</td>
-                <td class="px-4 py-2.5 text-right" [class]="(item.may_val || 0) > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ (item.may_val | number:'1.2-2') || '-' }}</td>
-                <td class="px-4 py-2.5 text-right" [class]="(item.jun || 0) > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ (item.jun | number:'1.2-2') || '-' }}</td>
-                <td class="px-4 py-2.5 text-right" [class]="(item.jul || 0) > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ (item.jul | number:'1.2-2') || '-' }}</td>
-                <td class="px-4 py-2.5 text-right" [class]="(item.aug || 0) > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ (item.aug | number:'1.2-2') || '-' }}</td>
-                <td class="px-4 py-2.5 text-right" [class]="(item.sep || 0) > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ (item.sep | number:'1.2-2') || '-' }}</td>
-                <td class="px-4 py-2.5 text-right font-bold text-green-700">{{ (item.total_actual | number:'1.2-2') || '0.00' }}</td>
+                <td class="px-4 py-2.5 text-right text-gray-700">{{ item._target_display || '-' }}</td>
+                <td class="px-4 py-2.5 text-right" [class]="item._oct_display && item.oct > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._oct_display || '-' }}</td>
+                <td class="px-4 py-2.5 text-right" [class]="item._nov_display && item.nov > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._nov_display || '-' }}</td>
+                <td class="px-4 py-2.5 text-right" [class]="item._dece_display && item.dece > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._dece_display || '-' }}</td>
+                <td class="px-4 py-2.5 text-right" [class]="item._jan_display && item.jan > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._jan_display || '-' }}</td>
+                <td class="px-4 py-2.5 text-right" [class]="item._feb_display && item.feb > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._feb_display || '-' }}</td>
+                <td class="px-4 py-2.5 text-right" [class]="item._mar_display && item.mar > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._mar_display || '-' }}</td>
+                <td class="px-4 py-2.5 text-right" [class]="item._apr_display && item.apr > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._apr_display || '-' }}</td>
+                <td class="px-4 py-2.5 text-right" [class]="item._may_val_display && item.may_val > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._may_val_display || '-' }}</td>
+                <td class="px-4 py-2.5 text-right" [class]="item._jun_display && item.jun > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._jun_display || '-' }}</td>
+                <td class="px-4 py-2.5 text-right" [class]="item._jul_display && item.jul > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._jul_display || '-' }}</td>
+                <td class="px-4 py-2.5 text-right" [class]="item._aug_display && item.aug > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._aug_display || '-' }}</td>
+                <td class="px-4 py-2.5 text-right" [class]="item._sep_display && item.sep > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._sep_display || '-' }}</td>
+                <td class="px-4 py-2.5 text-right font-bold text-green-700">{{ item.total_actual > 0 ? (item.total_actual | number:'1.2-2') : '-' }}</td>
                 <td class="px-4 py-2.5 text-right font-bold" [class]="(item.target_value > 0 && item.total_actual >= item.target_value) ? 'text-green-600' : 'text-red-500'">
-                  {{ item.target_value > 0 ? ((item.total_actual / item.target_value * 100) | number:'1.2-2') + '%' : '-' }}
+                  {{ item.target_value > 0 ? ((item.total_actual / item.target_value * 100) | number:'1.2-2') + '%' : (item._target_display && item._target_display === (item._oct_display || item._nov_display || item._dece_display || item._jan_display || item._feb_display || item._mar_display || item._apr_display || item._may_val_display || item._jun_display || item._jul_display || item._aug_display || item._sep_display) ? '100%' : '-') }}
                 </td>
                 <td class="px-4 py-2.5 text-center text-gray-600">{{ item.hospital_count }}</td>
               </tr>

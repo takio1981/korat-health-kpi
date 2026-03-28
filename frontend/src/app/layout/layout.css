@@ -7,6 +7,26 @@
   animation: heartbeat-spin 1.5s ease-in-out infinite;
 }
 
+/* Bell shake animation */
+.bell-shake {
+  display: inline-block;
+  animation: bell-ring 2s ease-in-out infinite;
+  transform-origin: top center;
+}
+
+@keyframes bell-ring {
+  0%   { transform: rotate(0deg); }
+  5%   { transform: rotate(14deg); }
+  10%  { transform: rotate(-12deg); }
+  15%  { transform: rotate(10deg); }
+  20%  { transform: rotate(-8deg); }
+  25%  { transform: rotate(6deg); }
+  30%  { transform: rotate(-4deg); }
+  35%  { transform: rotate(2deg); }
+  40%  { transform: rotate(0deg); }
+  100% { transform: rotate(0deg); }
+}
+
 @keyframes heartbeat-spin {
   0% {
     transform: rotate(0deg) scale(1);

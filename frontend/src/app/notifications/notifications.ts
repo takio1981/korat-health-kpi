@@ -353,7 +353,7 @@ export class NotificationsComponent implements OnInit {
       next: (res) => {
         if (res.success) {
           const u = res.data;
-          const roleLabel: any = { user: 'User', user_ssj: 'User SSJ', admin_cup: 'Admin CUP', admin_ssj: 'Admin SSJ', super_admin: 'Super Admin' };
+          const roleLabel: any = { user_hos: 'User รพ.', user_sso: 'User รพ.สต.', user_cup: 'User CUP', user_ssj: 'User SSJ', admin_hos: 'Admin รพ.', admin_sso: 'Admin รพ.สต.', admin_cup: 'Admin CUP', admin_ssj: 'Admin SSJ', super_admin: 'Super Admin' };
           const statusBadge = u.is_approved === 0
             ? '<span style="background:#fef3c7;color:#92400e;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:bold;">รอการอนุมัติ</span>'
             : u.is_approved === 1

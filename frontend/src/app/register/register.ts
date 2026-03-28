@@ -30,10 +30,14 @@ export class RegisterComponent implements OnInit {
   };
 
   roleOptions = [
-    { value: 'user', label: 'User — ผู้ใช้งานทั่วไป (บันทึก KPI)' },
-    { value: 'user_ssj', label: 'User SSJ — ผู้ใช้งานส่วนกลาง (สสจ.)' },
-    { value: 'admin_cup', label: 'Admin CUP — ผู้ดูแลหน่วยบริการ' },
-    { value: 'admin_ssj', label: 'Admin SSJ — ผู้ดูแลส่วนกลาง (สสจ.)' }
+    { value: 'user_hos', label: 'User รพ. — ผู้ใช้งาน (โรงพยาบาล)' },
+    { value: 'user_sso', label: 'User รพ.สต. — ผู้ใช้งาน (รพ.สต.)' },
+    { value: 'user_cup', label: 'User CUP — ผู้ใช้งาน (อำเภอ)' },
+    { value: 'user_ssj', label: 'User SSJ — ผู้ใช้งาน (สสจ.)' },
+    { value: 'admin_hos', label: 'Admin รพ. — ผู้ดูแล (โรงพยาบาล)' },
+    { value: 'admin_sso', label: 'Admin รพ.สต. — ผู้ดูแล (รพ.สต.)' },
+    { value: 'admin_cup', label: 'Admin CUP — ผู้ดูแล (อำเภอ)' },
+    { value: 'admin_ssj', label: 'Admin SSJ — ผู้ดูแล (สสจ.)' }
   ];
 
   confirmPassword: string = '';
@@ -152,10 +156,28 @@ export class RegisterComponent implements OnInit {
   validatePassword(pw: string): string | null {
     if (!pw) return null;
     if (pw.length < 6) return 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
+    if (!/[a-z]/.test(pw)) return 'รหัสผ่านต้องมีตัวอักษรพิมพ์เล็ก (a-z) อย่างน้อย 1 ตัว';
+    if (!/[A-Z]/.test(pw)) return 'รหัสผ่านต้องมีตัวอักษรพิมพ์ใหญ่ (A-Z) อย่างน้อย 1 ตัว';
+    if (!/[0-9]/.test(pw)) return 'รหัสผ่านต้องมีตัวเลข (0-9) อย่างน้อย 1 ตัว';
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(pw)) return 'รหัสผ่านต้องมีอักขระพิเศษอย่างน้อย 1 ตัว';
     if (!/^[a-zA-Z0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]+$/.test(pw)) {
-      return 'รหัสผ่านต้องเป็น a-z, A-Z, 0-9 หรืออักขระพิเศษเท่านั้น';
+      return 'รหัสผ่านมีอักขระที่ไม่อนุญาต';
     }
     return null;
+  }
+
+  getPasswordStrength(pw: string): { level: number; text: string; color: string } {
+    if (!pw) return { level: 0, text: '', color: '' };
+    let score = 0;
+    if (pw.length >= 6) score++;
+    if (/[a-z]/.test(pw)) score++;
+    if (/[A-Z]/.test(pw)) score++;
+    if (/[0-9]/.test(pw)) score++;
+    if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(pw)) score++;
+    if (pw.length >= 10) score++;
+    if (score <= 2) return { level: score, text: 'อ่อน', color: 'bg-red-500' };
+    if (score <= 4) return { level: score, text: 'ปานกลาง', color: 'bg-yellow-500' };
+    return { level: score, text: 'แข็งแรง', color: 'bg-green-500' };
   }
 
   validatePhone(phone: string): boolean {
@@ -167,8 +189,8 @@ export class RegisterComponent implements OnInit {
     // ตรวจสอบข้อมูลครบถ้วน
     if (!this.formData.username || !this.formData.password ||
         !this.formData.firstname || !this.formData.lastname ||
-        !this.formData.hospcode || !this.formData.phone || !this.formData.cid) {
-      Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลให้ครบถ้วนทุกช่อง', 'warning');
+        !this.formData.hospcode || !this.formData.phone || !this.formData.cid || !this.formData.dept_id) {
+      Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลให้ครบถ้วนทุกช่อง (รวมเลขบัตรประชาชนและหน่วยงาน)', 'warning');
       return;
     }
 

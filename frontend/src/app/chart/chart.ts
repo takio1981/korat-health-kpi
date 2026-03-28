@@ -92,12 +92,17 @@ export class ChartComponent implements OnInit {
       next: (res) => {
         if (res && res.success) {
           this.kpiData = res.data;
-          // แปลงข้อมูลเป็นตัวเลข
+          // แปลงข้อมูล (รองรับทั้งตัวเลขและข้อความ)
           this.kpiData.forEach(item => {
-            item.target_value = Number(item.target_value) || 0;
-            item.total_actual = Number(item.total_actual) || 0;
-            item.year_bh = String(item.year_bh); // บังคับแปลงปีเป็น String เพื่อความเสถียรในการกรอง
-            ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'].forEach(m => item[m] = Number(item[m]) || 0);
+            item.target_value = item.target_value != null ? String(item.target_value) : '';
+            item.last_actual = String(item.last_actual ?? '');
+            item.total_actual = parseFloat(item.last_actual) || 0;
+            item.target_num = parseFloat(item.target_value) || 0;
+            item.year_bh = String(item.year_bh);
+            ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'].forEach(m => {
+              item[m + '_raw'] = item[m] != null ? String(item[m]) : '';
+              item[m] = parseFloat(item[m]) || 0;
+            });
           });
           
           this.filteredData = [...this.kpiData]; // เริ่มต้นให้ข้อมูลแสดงทั้งหมด
@@ -217,8 +222,8 @@ export class ChartComponent implements OnInit {
       if (!categoryData[key]) {
         categoryData[key] = { target: 0, actual: 0 };
       }
-      categoryData[key].target += Number(item.target_value) || 0;
-      categoryData[key].actual += Number(item.total_actual) || 0;
+      categoryData[key].target += item.target_num;
+      categoryData[key].actual += item.total_actual;
     });
 
     const labels = Object.keys(categoryData);
@@ -262,8 +267,8 @@ export class ChartComponent implements OnInit {
     const months = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
     const monthLabels = ['ต.ค.', 'พ.ย.', 'ธ.ค.', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.'];
     
-    const monthlyActuals = months.map(m => this.filteredData.reduce((sum, item) => sum + (Number(item[m]) || 0), 0));
-    const totalTarget = this.filteredData.reduce((sum, item) => sum + (Number(item.target_value) || 0), 0);
+    const monthlyActuals = months.map(m => this.filteredData.reduce((sum, item) => sum + (item[m] || 0), 0));
+    const totalTarget = this.filteredData.reduce((sum, item) => sum + item.target_num, 0);
     const avgTarget = totalTarget / 12;
     const targetLine = new Array(12).fill(avgTarget);
 
@@ -297,11 +302,12 @@ export class ChartComponent implements OnInit {
     this.filteredData.forEach(item => {
       const key = item.dept_name || 'ไม่ระบุ';
       if (!deptData[key]) deptData[key] = 0;
-      deptData[key] += Number(item.total_actual) || 0;
+      deptData[key] += item.total_actual;
     });
 
-    const pieLabels = Object.keys(deptData);
-    const pieValues = Object.values(deptData);
+    // กรองเฉพาะ dept ที่มีค่า > 0 (Pie ไม่แสดง 0)
+    const pieLabels = Object.keys(deptData).filter(k => deptData[k] > 0);
+    const pieValues = pieLabels.map(k => deptData[k]);
 
     // 3. Pie Chart Config (สัดส่วนหน่วยงาน)
     this.pieChartOptions = {

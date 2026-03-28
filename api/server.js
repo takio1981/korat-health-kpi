@@ -17,8 +17,30 @@ const jwt = require('jsonwebtoken');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 
 const app = express();
+
+// === Email Transporter ===
+const mailTransporter = process.env.SMTP_HOST ? nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: Number(process.env.SMTP_PORT) === 465,
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+}) : null;
+
+const sendMail = async (to, subject, html) => {
+    if (!mailTransporter || !to) return;
+    try {
+        await mailTransporter.sendMail({
+            from: process.env.SMTP_FROM || process.env.SMTP_USER,
+            to, subject, html
+        });
+        console.log(`[Email] Sent to ${to}: ${subject}`);
+    } catch (err) {
+        console.error(`[Email] Failed to ${to}:`, err.message);
+    }
+};
 // ใช้ Port จาก ENV หรือ Default 8830 ตามโจทย์
 const port = process.env.PORT || 8830; 
 
@@ -87,20 +109,32 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
+// === Role Groups ===
+const ROLE_ADMIN_ALL = ['admin_hos', 'admin_sso', 'admin_cup', 'admin_ssj', 'super_admin'];
+const ROLE_ADMIN_CENTRAL = ['admin_ssj', 'super_admin'];
+const ROLE_ADMIN_LOCAL = ['admin_hos', 'admin_sso', 'admin_cup']; // admin ระดับพื้นที่
+const ROLE_SCOPE_DISTRICT = ['user_cup', 'admin_cup']; // เห็นทุก hospcode ในอำเภอ
+const ROLE_SCOPE_HOSPCODE = ['user', 'user_hos', 'user_sso', 'admin_hos', 'admin_sso']; // เห็นเฉพาะ hospcode ตัวเอง (รวม 'user' เดิม)
+
+// Helper: ดึง distid ของ hospcode
+const getDistrictId = async (hospcode) => {
+    if (!hospcode) return null;
+    const [rows] = await db.query('SELECT CONCAT(provcode, distcode) AS distid FROM chospital WHERE hoscode = ?', [hospcode]);
+    return rows.length > 0 ? rows[0].distid : null;
+};
+
 // Middleware ตรวจสอบสิทธิ์ Admin ส่วนกลาง (admin_ssj + super_admin)
-// ใช้สำหรับ: อนุมัติ/ปฏิเสธ KPI, ดูแจ้งเตือน KPI รอตรวจสอบ, KPI Setup
 const isAdmin = (req, res, next) => {
-    if (req.user && (req.user.role === 'admin_ssj' || req.user.role === 'super_admin')) {
+    if (req.user && ROLE_ADMIN_CENTRAL.includes(req.user.role)) {
         next();
     } else {
         res.status(403).json({ success: false, message: 'สิทธิ์การเข้าถึงจำกัดเฉพาะผู้ดูแลระบบส่วนกลาง (สสจ.) เท่านั้น' });
     }
 };
 
-// Middleware ตรวจสอบสิทธิ์ Admin ทุกระดับ (admin_cup + admin_ssj + super_admin)
-// ใช้สำหรับ: จัดการผู้ใช้งาน
+// Middleware ตรวจสอบสิทธิ์ Admin ทุกระดับ
 const isAnyAdmin = (req, res, next) => {
-    if (req.user && ['admin_cup', 'admin_ssj', 'super_admin'].includes(req.user.role)) {
+    if (req.user && ROLE_ADMIN_ALL.includes(req.user.role)) {
         next();
     } else {
         res.status(403).json({ success: false, message: 'สิทธิ์การเข้าถึงจำกัดเฉพาะผู้ดูแลระบบเท่านั้น' });
@@ -221,8 +255,8 @@ apiRouter.post('/register', loginLimiter, async (req, res) => {
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
     try {
-        // ตรวจสอบข้อมูลครบถ้วน
-        if (!username || !password || !firstname || !lastname || !hospcode || !phone) {
+        // ตรวจสอบข้อมูลครบถ้วน (บังคับทุกช่อง)
+        if (!username || !password || !firstname || !lastname || !hospcode || !phone || !cid || !dept_id) {
             return res.status(400).json({ success: false, message: 'กรุณากรอกข้อมูลให้ครบทุกช่อง' });
         }
 
@@ -239,32 +273,36 @@ apiRouter.post('/register', loginLimiter, async (req, res) => {
             return res.status(400).json({ success: false, message: 'รูปแบบอีเมลไม่ถูกต้อง' });
         }
 
-        // ตรวจสอบ cid — 13 หลัก + Check Digit (Modulus 11)
-        if (cid) {
-            if (!/^\d{13}$/.test(cid)) {
-                return res.status(400).json({ success: false, message: 'เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก' });
-            }
-            const digits = cid.split('').map(Number);
-            let sum = 0;
-            for (let i = 0; i < 12; i++) sum += digits[i] * (13 - i);
-            const checkDigit = (11 - (sum % 11)) % 10;
-            if (checkDigit !== digits[12]) {
-                return res.status(400).json({ success: false, message: 'เลขบัตรประชาชนไม่ผ่านการตรวจสอบ Check Digit (Modulus 11)' });
-            }
+        // ตรวจสอบ cid — บังคับ 13 หลัก + Check Digit (Modulus 11) + ไม่ซ้ำ
+        if (!/^\d{13}$/.test(cid)) {
+            return res.status(400).json({ success: false, message: 'เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก' });
+        }
+        const digits = cid.split('').map(Number);
+        let sum = 0;
+        for (let i = 0; i < 12; i++) sum += digits[i] * (13 - i);
+        const checkDigit = (11 - (sum % 11)) % 10;
+        if (checkDigit !== digits[12]) {
+            return res.status(400).json({ success: false, message: 'เลขบัตรประชาชนไม่ผ่านการตรวจสอบ Check Digit (Modulus 11)' });
+        }
+        // ตรวจสอบ cid ซ้ำ (hash แล้วเทียบกับ DB)
+        const hashedCidCheck = crypto.createHash('sha256').update(cid).digest('hex');
+        const [existingCid] = await db.query('SELECT id FROM users WHERE cid = ?', [hashedCidCheck]);
+        if (existingCid.length > 0) {
+            return res.status(400).json({ success: false, message: 'เลขบัตรประชาชนนี้ถูกลงทะเบียนไปแล้ว' });
         }
 
         // role ที่อนุญาตให้เลือกได้ (ไม่รวม super_admin)
-        const allowedRoles = ['user', 'user_ssj', 'admin_cup', 'admin_ssj'];
-        const finalRole = allowedRoles.includes(reqRole) ? reqRole : 'user';
+        const allowedRoles = ['user_hos', 'user_sso', 'user_cup', 'user_ssj', 'admin_hos', 'admin_sso', 'admin_cup', 'admin_ssj'];
+        const finalRole = allowedRoles.includes(reqRole) ? reqRole : 'user_hos';
 
-        // ตรวจสอบ password ขั้นต่ำ 6 ตัวอักษร
-        if (password.length < 6) {
-            return res.status(400).json({ success: false, message: 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร' });
-        }
-
-        // ตรวจสอบ password เฉพาะ a-z, A-Z, 0-9, อักขระพิเศษ
+        // ตรวจสอบ password ขั้นต่ำ 6 ตัวอักษร + ครบทุกประเภท
+        if (password.length < 6) return res.status(400).json({ success: false, message: 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร' });
+        if (!/[a-z]/.test(password)) return res.status(400).json({ success: false, message: 'รหัสผ่านต้องมีตัวอักษรพิมพ์เล็ก (a-z) อย่างน้อย 1 ตัว' });
+        if (!/[A-Z]/.test(password)) return res.status(400).json({ success: false, message: 'รหัสผ่านต้องมีตัวอักษรพิมพ์ใหญ่ (A-Z) อย่างน้อย 1 ตัว' });
+        if (!/[0-9]/.test(password)) return res.status(400).json({ success: false, message: 'รหัสผ่านต้องมีตัวเลข (0-9) อย่างน้อย 1 ตัว' });
+        if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(password)) return res.status(400).json({ success: false, message: 'รหัสผ่านต้องมีอักขระพิเศษอย่างน้อย 1 ตัว' });
         if (!/^[a-zA-Z0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]+$/.test(password)) {
-            return res.status(400).json({ success: false, message: 'รหัสผ่านต้องเป็นตัวอักษร a-z, A-Z, 0-9 หรืออักขระพิเศษเท่านั้น' });
+            return res.status(400).json({ success: false, message: 'รหัสผ่านมีอักขระที่ไม่อนุญาต' });
         }
 
         // ตรวจสอบเบอร์โทร 10 หลัก
@@ -300,7 +338,7 @@ apiRouter.post('/register', loginLimiter, async (req, res) => {
         // ดึงข้อมูลหน่วยบริการเพื่อแจ้งเตือน
         const [hosRows] = await db.query('SELECT hosname FROM chospital WHERE hoscode = ?', [hospcode]);
         const hosName = hosRows[0]?.hosname || hospcode;
-        const roleLabelMap = { admin_cup: 'Admin CUP', admin_ssj: 'Admin SSJ', user_ssj: 'User SSJ', user: 'User' };
+        const roleLabelMap = { user_hos: 'User รพ.', user_sso: 'User รพ.สต.', user_cup: 'User CUP', user_ssj: 'User SSJ', admin_hos: 'Admin รพ.', admin_sso: 'Admin รพ.สต.', admin_cup: 'Admin CUP', admin_ssj: 'Admin SSJ' };
         const roleLabel = roleLabelMap[finalRole] || finalRole;
 
         // แจ้ง super_admin ทุกคน
@@ -433,44 +471,34 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         let whereClause = '';
         let params = [];
 
-        // super_admin: เห็นทั้งหมด (ไม่มี filter)
-        // admin_ssj: เห็นทุกหน่วยบริการ(hospcode) แต่เฉพาะหน่วยงาน(dept_id)ตัวเอง
-        // admin_cup: เห็นทุกตัวชี้วัด ในอำเภอเดียวกัน (ทุก hospcode ในอำเภอ)
-        // user/user_ssj: เห็นเฉพาะหน่วยบริการ(hospcode) และหน่วยงาน(dept_id)ตัวเอง
+        // === Role-based KPI visibility ===
         if (user.role === 'super_admin') {
-            // ไม่มี filter - เห็นทั้งหมด
+            // เห็นทั้งหมด
         } else if (user.role === 'admin_ssj') {
-            // admin_ssj เห็นทุก hospcode แต่เฉพาะหน่วยงานตัวเอง
-            if (user.deptId !== null && user.deptId !== undefined) {
-                whereClause = 'WHERE i.dept_id = ?';
-                params.push(user.deptId);
-            }
-        } else if (user.role === 'admin_cup') {
-            // admin_cup เห็นทุกตัวชี้วัด ในอำเภอเดียวกับ hospcode ของตัวเอง
-            if (user.hospcode) {
-                const [myHos] = await db.query('SELECT CONCAT(provcode, distcode) AS distid FROM chospital WHERE hoscode = ?', [user.hospcode]);
-                if (myHos.length > 0 && myHos[0].distid) {
-                    whereClause = 'WHERE CONCAT(h.provcode, h.distcode) = ?';
-                    params.push(myHos[0].distid);
-                } else {
-                    whereClause = 'WHERE r.hospcode = ?';
-                    params.push(user.hospcode);
+            // เห็นทุก hospcode แต่เฉพาะหน่วยงานตัวเอง
+            if (user.deptId != null) { whereClause = 'WHERE i.dept_id = ?'; params.push(user.deptId); }
+        } else if (ROLE_SCOPE_DISTRICT.includes(user.role)) {
+            // admin_cup / user_cup: ทุกตัวชี้วัด ทุก hospcode ในอำเภอ
+            const distid = await getDistrictId(user.hospcode);
+            if (distid) {
+                whereClause = 'WHERE CONCAT(h.provcode, h.distcode) = ?';
+                params.push(distid);
+                // user_cup เห็นเฉพาะ dept ตัวเอง, admin_cup เห็นทุก dept
+                if (user.role === 'user_cup' && user.deptId != null) {
+                    whereClause += ' AND i.dept_id = ?'; params.push(user.deptId);
                 }
+            } else {
+                whereClause = 'WHERE r.hospcode = ?'; params.push(user.hospcode);
             }
+        } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
+            // admin_hos / admin_sso: ทุก dept แต่เฉพาะ hospcode ตัวเอง
+            if (user.hospcode) { whereClause = 'WHERE r.hospcode = ?'; params.push(user.hospcode); }
         } else {
-            // user/user_ssj: filter ทั้ง hospcode และ dept_id
+            // user_hos / user_sso / user_ssj: hospcode + dept ตัวเอง
             const conditions = [];
-            if (user.hospcode) {
-                conditions.push('r.hospcode = ?');
-                params.push(user.hospcode);
-            }
-            if (user.deptId !== null && user.deptId !== undefined) {
-                conditions.push('i.dept_id = ?');
-                params.push(user.deptId);
-            }
-            if (conditions.length > 0) {
-                whereClause = 'WHERE ' + conditions.join(' AND ');
-            }
+            if (user.hospcode) { conditions.push('r.hospcode = ?'); params.push(user.hospcode); }
+            if (user.deptId != null) { conditions.push('i.dept_id = ?'); params.push(user.deptId); }
+            if (conditions.length > 0) whereClause = 'WHERE ' + conditions.join(' AND ');
         }
 
         const sql = `
@@ -564,7 +592,11 @@ apiRouter.post('/update-kpi', async (req, res) => {
         return res.status(403).json({ success: false, message: 'Token ไม่ถูกต้อง' });
     }
 
-    const hospcodeToSave = ((['admin_cup', 'admin_ssj', 'super_admin'].includes(user.role)) && targetHospcode) ? targetHospcode : user.hospcode;
+    const hospcodeToSave = (ROLE_ADMIN_ALL.includes(user.role) && targetHospcode) ? targetHospcode : user.hospcode;
+
+    if (!hospcodeToSave) {
+        return res.status(400).json({ success: false, message: 'ไม่พบรหัสหน่วยบริการ กรุณาเลือกหน่วยบริการ' });
+    }
 
     if (!Array.isArray(updates) || updates.length === 0) {
         return res.status(400).json({ success: false, message: 'ไม่มีข้อมูล' });
@@ -574,7 +606,8 @@ apiRouter.post('/update-kpi', async (req, res) => {
     try {
         await connection.beginTransaction();
 
-        if (user.role !== 'admin_ssj' && user.role !== 'super_admin') {
+        // Admin ทุกระดับเพิ่มตัวชี้วัดทุก dept ได้, User ต้องเป็น dept ตัวเอง
+        if (!ROLE_ADMIN_ALL.includes(user.role)) {
             const indicatorIds = [...new Set(updates.map(u => u.indicator_id))];
             if (indicatorIds.length > 0) {
                 const [allowed] = await connection.query(
@@ -596,7 +629,7 @@ apiRouter.post('/update-kpi', async (req, res) => {
 
         // Batch: ตรวจสอบล็อคทั้งหมดในคราวเดียว
         const uniqueKeys = [...new Set(updates.map(row => {
-            const hc = (['admin_cup', 'admin_ssj', 'super_admin'].includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
+            const hc = (ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
             return `${row.indicator_id}_${row.year_bh}_${hc}`;
         }))];
         for (const key of uniqueKeys) {
@@ -627,7 +660,7 @@ apiRouter.post('/update-kpi', async (req, res) => {
 
             // กรองเฉพาะ indicator ที่ยังไม่มีข้อมูล
             const newUpdates = updates.filter(row => {
-                const hc = (['admin_cup', 'admin_ssj', 'super_admin'].includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
+                const hc = (ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
                 const key = `${row.indicator_id}_${row.year_bh}_${hc}`;
                 return !existingKeys.has(key);
             });
@@ -642,7 +675,7 @@ apiRouter.post('/update-kpi', async (req, res) => {
             const insertParams = [];
             for (const row of newUpdates) {
                 const { indicator_id, year_bh } = row;
-                const rowHospcode = (['admin_cup', 'admin_ssj', 'super_admin'].includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
+                const rowHospcode = (ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
 
                 for (const m of months) {
                     const rawActual = row[m.col];
@@ -697,7 +730,7 @@ apiRouter.post('/update-kpi', async (req, res) => {
             const insertParams = [];
             for (const row of updates) {
                 const { indicator_id, year_bh } = row;
-                const rowHospcode = (['admin_cup', 'admin_ssj', 'super_admin'].includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
+                const rowHospcode = (ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
 
                 for (const m of months) {
                     const rawActual = row[m.col];
@@ -750,7 +783,7 @@ apiRouter.post('/update-kpi', async (req, res) => {
         const insertParams = [];
         for (const row of updates) {
             const { indicator_id, year_bh } = row;
-            const rowHospcode = (['admin_cup', 'admin_ssj', 'super_admin'].includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
+            const rowHospcode = (ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
             const rowStatus = row.preserve_status || 'Pending';
 
             for (const m of months) {
@@ -1134,40 +1167,28 @@ apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
         let whereClause = '';
         let filterParams = [];
 
-        // super_admin: เห็นทั้งหมด, admin_ssj: ทุก hospcode เฉพาะหน่วยงาน
-        // admin_cup: ทุกตัวชี้วัดในอำเภอเดียวกัน, user: เฉพาะหน่วยบริการ+หน่วยงาน
+        // === Role-based stats filtering (same logic as /kpi-results) ===
+        const needsHosJoin = ROLE_SCOPE_DISTRICT.includes(user.role);
         if (user.role === 'super_admin') {
-            // ไม่มี filter
+            // no filter
         } else if (user.role === 'admin_ssj') {
-            if (user.deptId !== null && user.deptId !== undefined) {
-                whereClause = 'AND i.dept_id = ?';
-                filterParams.push(user.deptId);
-            }
-        } else if (user.role === 'admin_cup') {
-            if (user.hospcode) {
-                const [myHos] = await db.query('SELECT CONCAT(provcode, distcode) AS distid FROM chospital WHERE hoscode = ?', [user.hospcode]);
-                if (myHos.length > 0 && myHos[0].distid) {
-                    whereClause = 'AND CONCAT(h.provcode, h.distcode) = ?';
-                    filterParams.push(myHos[0].distid);
-                } else {
-                    whereClause = 'AND r.hospcode = ?';
-                    filterParams.push(user.hospcode);
-                }
-            }
+            if (user.deptId != null) { whereClause = 'AND i.dept_id = ?'; filterParams.push(user.deptId); }
+        } else if (ROLE_SCOPE_DISTRICT.includes(user.role)) {
+            const distid = await getDistrictId(user.hospcode);
+            if (distid) {
+                whereClause = 'AND CONCAT(h.provcode, h.distcode) = ?'; filterParams.push(distid);
+                if (user.role === 'user_cup' && user.deptId != null) { whereClause += ' AND i.dept_id = ?'; filterParams.push(user.deptId); }
+            } else { whereClause = 'AND r.hospcode = ?'; filterParams.push(user.hospcode); }
+        } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
+            // ทุก dept แต่เฉพาะ hospcode ตัวเอง
+            if (user.hospcode) { whereClause += ' AND r.hospcode = ?'; filterParams.push(user.hospcode); }
         } else {
-            if (user.hospcode) {
-                whereClause += ' AND r.hospcode = ?';
-                filterParams.push(user.hospcode);
-            }
-            if (user.deptId !== null && user.deptId !== undefined) {
-                whereClause += ' AND i.dept_id = ?';
-                filterParams.push(user.deptId);
-            }
+            if (user.hospcode) { whereClause += ' AND r.hospcode = ?'; filterParams.push(user.hospcode); }
+            if (user.deptId != null) { whereClause += ' AND i.dept_id = ?'; filterParams.push(user.deptId); }
         }
-        
-        const queryParams = [year, ...filterParams];
 
-        const hosJoin = user.role === 'admin_cup' ? 'LEFT JOIN chospital h ON r.hospcode = h.hoscode' : '';
+        const queryParams = [year, ...filterParams];
+        const hosJoin = needsHosJoin ? 'LEFT JOIN chospital h ON r.hospcode = h.hoscode' : '';
 
         const kpiSql = `
             SELECT r.indicator_id, SUM(r.target_value) as total_target, SUM(r.actual_value) as total_actual
@@ -1292,26 +1313,25 @@ apiRouter.get('/users', authenticateToken, isAnyAdmin, async (req, res) => {
         let params = [];
 
         if (user.role === 'super_admin') {
-            // super_admin: เห็นทั้งหมด (รวม super_admin อื่น)
+            // เห็นทั้งหมด
         } else if (user.role === 'admin_ssj') {
-            // admin_ssj: เห็นทุกคนยกเว้น super_admin
             sql += ` WHERE u.role != 'super_admin'`;
         } else if (user.role === 'admin_cup') {
-            // admin_cup: เห็นทุกคนในอำเภอเดียวกัน ยกเว้น super_admin
-            if (user.hospcode) {
-                const [myHos] = await db.query('SELECT CONCAT(provcode, distcode) AS distid FROM chospital WHERE hoscode = ?', [user.hospcode]);
-                if (myHos.length > 0 && myHos[0].distid) {
-                    sql += ` WHERE u.role != 'super_admin' AND CONCAT(h.provcode, h.distcode) = ?`;
-                    params.push(myHos[0].distid);
-                } else {
-                    sql += ` WHERE u.role != 'super_admin' AND u.hospcode = ?`;
-                    params.push(user.hospcode);
-                }
+            // admin_cup: ทุกคนในอำเภอเดียวกัน ยกเว้น super_admin
+            const distid = await getDistrictId(user.hospcode);
+            if (distid) {
+                sql += ` WHERE u.role != 'super_admin' AND CONCAT(h.provcode, h.distcode) = ?`;
+                params.push(distid);
             } else {
-                sql += ` WHERE u.role != 'super_admin'`;
+                sql += ` WHERE u.role != 'super_admin' AND u.hospcode = ?`;
+                params.push(user.hospcode);
             }
+        } else if (ROLE_SCOPE_HOSPCODE.includes(user.role) && ROLE_ADMIN_ALL.includes(user.role)) {
+            // admin_hos / admin_sso: เฉพาะ hospcode ตัวเอง ยกเว้น super_admin
+            sql += ` WHERE u.role != 'super_admin' AND u.hospcode = ?`;
+            params.push(user.hospcode);
         } else {
-            // อื่นๆ: เห็นเฉพาะ dept_id เดียวกัน ยกเว้น super_admin
+            // user ทั่วไป: เฉพาะ dept_id เดียวกัน ยกเว้น super_admin
             sql += ` WHERE u.role != 'super_admin' AND u.dept_id = ?`;
             params.push(user.deptId);
         }
@@ -1354,12 +1374,12 @@ apiRouter.get('/districts', authenticateToken, async (req, res) => {
 apiRouter.post('/users', authenticateToken, isAnyAdmin, async (req, res) => {
     const { username, password, role, dept_id, firstname, lastname, hospcode, phone, email, cid } = req.body;
     const user = req.user;
-    const isCentralAdmin = user.role === 'admin_ssj' || user.role === 'super_admin';
-    const isCupAdmin = user.role === 'admin_cup';
+    const isCentralAdmin = ROLE_ADMIN_CENTRAL.includes(user.role);
+    const isLocalAdmin = ROLE_ADMIN_LOCAL.includes(user.role);
 
-    // central admin: เปลี่ยน role+dept ได้, admin_cup: เปลี่ยน dept ได้แต่ role ไม่ได้
-    const finalRole = isCentralAdmin ? (role || 'user') : 'user';
-    const finalDeptId = (isCentralAdmin || isCupAdmin) ? (dept_id || null) : user.deptId;
+    // central admin: เปลี่ยน role+dept ได้, local admin: เปลี่ยน dept ได้แต่ role ไม่ได้
+    const finalRole = isCentralAdmin ? (role || 'user_hos') : 'user_hos';
+    const finalDeptId = (isCentralAdmin || isLocalAdmin) ? (dept_id || null) : user.deptId;
 
     try {
         const [existing] = await db.query('SELECT id FROM users WHERE username = ?', [username]);
@@ -1427,39 +1447,37 @@ apiRouter.put('/users/:id', authenticateToken, isAnyAdmin, async (req, res) => {
     const userId = req.params.id;
     const { username, password, role, dept_id, firstname, lastname, hospcode, phone, email, cid } = req.body;
     const user = req.user;
-    const isCentralAdmin = user.role === 'admin_ssj' || user.role === 'super_admin';
-    const isCupAdmin = user.role === 'admin_cup';
+    const isCentralAdmin = ROLE_ADMIN_CENTRAL.includes(user.role);
+    const isDistrictAdmin = user.role === 'admin_cup';
+    const isHosAdmin = ['admin_hos', 'admin_sso'].includes(user.role);
 
     try {
-        // admin_cup: ตรวจสอบว่าเป้าหมายอยู่ในอำเภอเดียวกัน
-        if (isCupAdmin) {
-            const [target] = await db.query(
-                `SELECT u.hospcode, CONCAT(h.provcode, h.distcode) AS distid FROM users u
-                 LEFT JOIN chospital h ON u.hospcode = h.hoscode WHERE u.id = ?`, [userId]);
+        // ตรวจสอบสิทธิ์ตามขอบเขต
+        if (isDistrictAdmin) {
+            // admin_cup: ต้องอยู่อำเภอเดียวกัน
+            const [target] = await db.query(`SELECT CONCAT(h.provcode, h.distcode) AS distid FROM users u LEFT JOIN chospital h ON u.hospcode = h.hoscode WHERE u.id = ?`, [userId]);
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
-            const [myHos] = await db.query('SELECT CONCAT(provcode, distcode) AS distid FROM chospital WHERE hoscode = ?', [user.hospcode]);
-            if (!myHos.length || target[0].distid !== myHos[0].distid) {
-                return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์แก้ไขผู้ใช้งานต่างอำเภอ' });
-            }
+            const myDistid = await getDistrictId(user.hospcode);
+            if (!myDistid || target[0].distid !== myDistid) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์แก้ไขผู้ใช้งานต่างอำเภอ' });
+        } else if (isHosAdmin) {
+            // admin_hos/admin_sso: ต้อง hospcode เดียวกัน
+            const [target] = await db.query('SELECT hospcode FROM users WHERE id = ?', [userId]);
+            if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
+            if (target[0].hospcode !== user.hospcode) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์แก้ไขผู้ใช้งานต่างหน่วยบริการ' });
         } else if (!isCentralAdmin) {
-            // Non-admin อื่นๆ: ตรวจสอบ dept_id เดียวกัน
-            const [target] = await db.query('SELECT dept_id FROM users WHERE id = ?', [userId]);
-            if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
-            if (String(target[0].dept_id) !== String(user.deptId)) {
-                return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์แก้ไขผู้ใช้งานต่างหน่วยงาน' });
-            }
+            return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์แก้ไขผู้ใช้งาน' });
         }
 
-        const finalDeptId = (isCentralAdmin || isCupAdmin) ? (dept_id || null) : user.deptId;
+        const isLocalAdmin = ROLE_ADMIN_LOCAL.includes(user.role);
+        const finalDeptId = (isCentralAdmin || isLocalAdmin) ? (dept_id || null) : user.deptId;
         const hashedCid = cid ? crypto.createHash('sha256').update(cid).digest('hex') : null;
 
         let sql, params;
         if (isCentralAdmin) {
-            // central admin: แก้ role ได้
             sql = 'UPDATE users SET username = ?, role = ?, dept_id = ?, firstname = ?, lastname = ?, hospcode = ?, phone = ?, email = ?, cid = ?';
             params = [username, role, finalDeptId, firstname, lastname, hospcode, phone, email || null, hashedCid];
         } else {
-            // admin_cup + อื่นๆ: ไม่แก้ role (คง role เดิม)
+            // local admin: ไม่แก้ role
             sql = 'UPDATE users SET username = ?, dept_id = ?, firstname = ?, lastname = ?, hospcode = ?, phone = ?, email = ?, cid = ?';
             params = [username, finalDeptId, firstname, lastname, hospcode, phone, email || null, hashedCid];
         }
@@ -1486,26 +1504,20 @@ apiRouter.put('/users/:id', authenticateToken, isAnyAdmin, async (req, res) => {
 apiRouter.delete('/users/:id', authenticateToken, isAnyAdmin, async (req, res) => {
     const userId = req.params.id;
     const user = req.user;
-    const isCentralAdmin = user.role === 'admin_ssj' || user.role === 'super_admin';
-    const isCupAdmin = user.role === 'admin_cup';
+    const isCentralAdmin = ROLE_ADMIN_CENTRAL.includes(user.role);
 
     try {
-        if (isCupAdmin) {
-            // admin_cup: ตรวจสอบว่าเป้าหมายอยู่ในอำเภอเดียวกัน
-            const [target] = await db.query(
-                `SELECT CONCAT(h.provcode, h.distcode) AS distid FROM users u
-                 LEFT JOIN chospital h ON u.hospcode = h.hoscode WHERE u.id = ?`, [userId]);
+        if (user.role === 'admin_cup') {
+            const [target] = await db.query(`SELECT CONCAT(h.provcode, h.distcode) AS distid FROM users u LEFT JOIN chospital h ON u.hospcode = h.hoscode WHERE u.id = ?`, [userId]);
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
-            const [myHos] = await db.query('SELECT CONCAT(provcode, distcode) AS distid FROM chospital WHERE hoscode = ?', [user.hospcode]);
-            if (!myHos.length || target[0].distid !== myHos[0].distid) {
-                return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์ลบผู้ใช้งานต่างอำเภอ' });
-            }
+            const myDistid = await getDistrictId(user.hospcode);
+            if (!myDistid || target[0].distid !== myDistid) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์ลบผู้ใช้งานต่างอำเภอ' });
+        } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
+            const [target] = await db.query('SELECT hospcode FROM users WHERE id = ?', [userId]);
+            if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
+            if (target[0].hospcode !== user.hospcode) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์ลบผู้ใช้งานต่างหน่วยบริการ' });
         } else if (!isCentralAdmin) {
-            const [target] = await db.query('SELECT dept_id FROM users WHERE id = ?', [userId]);
-            if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
-            if (String(target[0].dept_id) !== String(user.deptId)) {
-                return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์ลบผู้ใช้งานต่างหน่วยงาน' });
-            }
+            return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์ลบผู้ใช้งาน' });
         }
 
         await db.query('DELETE FROM users WHERE id = ?', [userId]);
@@ -1522,20 +1534,23 @@ apiRouter.delete('/users/:id', authenticateToken, isAnyAdmin, async (req, res) =
 apiRouter.put('/users/:id/reset-password', authenticateToken, isAnyAdmin, async (req, res) => {
     const userId = req.params.id;
     const user = req.user;
-    const isCentralAdmin = user.role === 'admin_ssj' || user.role === 'super_admin';
-    const isCupAdmin = user.role === 'admin_cup';
+    const isCentralAdmin = ROLE_ADMIN_CENTRAL.includes(user.role);
 
-    // ตรวจสอบสิทธิ์ตามอำเภอ/หน่วยงาน
-    if (isCupAdmin) {
+    // ตรวจสอบสิทธิ์ตามขอบเขต
+    if (user.role === 'admin_cup') {
         try {
-            const [target] = await db.query(
-                `SELECT CONCAT(h.provcode, h.distcode) AS distid FROM users u
-                 LEFT JOIN chospital h ON u.hospcode = h.hoscode WHERE u.id = ?`, [userId]);
+            const [target] = await db.query(`SELECT CONCAT(h.provcode, h.distcode) AS distid FROM users u LEFT JOIN chospital h ON u.hospcode = h.hoscode WHERE u.id = ?`, [userId]);
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
-            const [myHos] = await db.query('SELECT CONCAT(provcode, distcode) AS distid FROM chospital WHERE hoscode = ?', [user.hospcode]);
-            if (!myHos.length || target[0].distid !== myHos[0].distid) {
-                return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์รีเซ็ตรหัสผ่านผู้ใช้งานต่างอำเภอ' });
-            }
+            const myDistid = await getDistrictId(user.hospcode);
+            if (!myDistid || target[0].distid !== myDistid) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์รีเซ็ตรหัสผ่านผู้ใช้งานต่างอำเภอ' });
+        } catch (error) {
+            return res.status(500).json({ success: false, message: error.message });
+        }
+    } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
+        try {
+            const [target] = await db.query('SELECT hospcode FROM users WHERE id = ?', [userId]);
+            if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
+            if (target[0].hospcode !== user.hospcode) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์รีเซ็ตรหัสผ่านผู้ใช้งานต่างหน่วยบริการ' });
         } catch (error) {
             return res.status(500).json({ success: false, message: error.message });
         }
@@ -1580,16 +1595,39 @@ apiRouter.put('/users/:id/approve', authenticateToken, isAdmin, async (req, res)
             'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [user.userId, user.deptId, 'APPROVE_USER', 'users', userId, JSON.stringify({ username: target.username }), req.ip]
         );
+
+        // ส่ง Email แจ้งผลอนุมัติ
+        if (target.email) {
+            sendMail(target.email, '✅ บัญชีของคุณได้รับการอนุมัติแล้ว — ระบบ KPI สสจ.นครราชสีมา',
+                `<div style="font-family:Sarabun,sans-serif;max-width:500px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
+                    <div style="background:linear-gradient(135deg,#16a34a,#22c55e);padding:24px;text-align:center;color:white">
+                        <h2 style="margin:0;font-size:20px">✅ อนุมัติเรียบร้อยแล้ว</h2>
+                    </div>
+                    <div style="padding:24px">
+                        <p>เรียน คุณ${target.firstname} ${target.lastname},</p>
+                        <p>คำขอลงทะเบียนใช้งาน <b>ระบบบันทึกผลงาน KPI ด้านสุขภาพ สสจ.นครราชสีมา</b> ได้รับการ <span style="color:#16a34a;font-weight:bold">อนุมัติ</span> แล้ว</p>
+                        <table style="width:100%;border-collapse:collapse;font-size:14px;margin:16px 0">
+                            <tr><td style="padding:6px 0;color:#6b7280">ชื่อผู้ใช้</td><td style="font-weight:bold">${target.username}</td></tr>
+                            <tr><td style="padding:6px 0;color:#6b7280">สิทธิ์</td><td style="font-weight:bold">${target.role}</td></tr>
+                        </table>
+                        <p>คุณสามารถเข้าสู่ระบบได้ทันที</p>
+                        <p style="color:#9ca3af;font-size:12px;margin-top:24px">อีเมลฉบับนี้ส่งโดยอัตโนมัติ กรุณาอย่าตอบกลับ</p>
+                    </div>
+                </div>`
+            );
+        }
+
         res.json({ success: true, message: 'อนุมัติผู้ใช้งานเรียบร้อย' });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
-// ปฏิเสธการลงทะเบียน
+// ปฏิเสธการลงทะเบียน (รับ reason จาก body)
 apiRouter.put('/users/:id/reject', authenticateToken, isAdmin, async (req, res) => {
     const userId = req.params.id;
     const user = req.user;
+    const reason = req.body.reason || '';
     try {
         const [rows] = await db.query('SELECT * FROM users WHERE id = ?', [userId]);
         if (rows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
@@ -1600,8 +1638,33 @@ apiRouter.put('/users/:id/reject', authenticateToken, isAdmin, async (req, res) 
 
         await db.query(
             'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [user.userId, user.deptId, 'REJECT_USER', 'users', userId, JSON.stringify({ username: target.username }), req.ip]
+            [user.userId, user.deptId, 'REJECT_USER', 'users', userId, JSON.stringify({ username: target.username, reason }), req.ip]
         );
+
+        // ส่ง Email แจ้งผลปฏิเสธ พร้อมเหตุผล
+        if (target.email) {
+            const reasonHtml = reason
+                ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;margin:12px 0">
+                     <p style="color:#991b1b;font-weight:bold;margin:0 0 4px">เหตุผล:</p>
+                     <p style="color:#dc2626;margin:0">${reason}</p>
+                   </div>`
+                : '';
+            sendMail(target.email, '❌ คำขอลงทะเบียนถูกปฏิเสธ — ระบบ KPI สสจ.นครราชสีมา',
+                `<div style="font-family:Sarabun,sans-serif;max-width:500px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
+                    <div style="background:linear-gradient(135deg,#dc2626,#ef4444);padding:24px;text-align:center;color:white">
+                        <h2 style="margin:0;font-size:20px">❌ คำขอถูกปฏิเสธ</h2>
+                    </div>
+                    <div style="padding:24px">
+                        <p>เรียน คุณ${target.firstname} ${target.lastname},</p>
+                        <p>คำขอลงทะเบียนใช้งาน <b>ระบบบันทึกผลงาน KPI ด้านสุขภาพ สสจ.นครราชสีมา</b> <span style="color:#dc2626;font-weight:bold">ไม่ได้รับการอนุมัติ</span></p>
+                        ${reasonHtml}
+                        <p>หากมีข้อสงสัย กรุณาติดต่อผู้ดูแลระบบ</p>
+                        <p style="color:#9ca3af;font-size:12px;margin-top:24px">อีเมลฉบับนี้ส่งโดยอัตโนมัติ กรุณาอย่าตอบกลับ</p>
+                    </div>
+                </div>`
+            );
+        }
+
         res.json({ success: true, message: 'ปฏิเสธผู้ใช้งานเรียบร้อย' });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -1772,7 +1835,7 @@ apiRouter.get('/main-indicators', authenticateToken, async (req, res) => {
     }
 });
 
-apiRouter.post('/main-indicators', authenticateToken, isAnyAdmin, async (req, res) => {
+apiRouter.post('/main-indicators', authenticateToken, isSuperAdmin, async (req, res) => {
     const { indicator_name, yut_id } = req.body;
     try {
         await db.query('INSERT INTO kpi_main_indicators (indicator_name, yut_id) VALUES (?, ?)', [indicator_name, yut_id]);
@@ -1782,7 +1845,7 @@ apiRouter.post('/main-indicators', authenticateToken, isAnyAdmin, async (req, re
     }
 });
 
-apiRouter.put('/main-indicators/:id', authenticateToken, isAnyAdmin, async (req, res) => {
+apiRouter.put('/main-indicators/:id', authenticateToken, isSuperAdmin, async (req, res) => {
     const { indicator_name, yut_id } = req.body;
     try {
         await db.query('UPDATE kpi_main_indicators SET indicator_name = ?, yut_id = ? WHERE id = ?', [indicator_name, yut_id, req.params.id]);
@@ -1792,7 +1855,7 @@ apiRouter.put('/main-indicators/:id', authenticateToken, isAnyAdmin, async (req,
     }
 });
 
-apiRouter.delete('/main-indicators/:id', authenticateToken, isAnyAdmin, async (req, res) => {
+apiRouter.delete('/main-indicators/:id', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
         await db.query('DELETE FROM kpi_main_indicators WHERE id = ?', [req.params.id]);
         res.json({ success: true, message: 'Deleted successfully' });
@@ -1818,7 +1881,7 @@ apiRouter.get('/indicators', authenticateToken, async (req, res) => {
     }
 });
 
-apiRouter.post('/indicators', authenticateToken, isAnyAdmin, async (req, res) => {
+apiRouter.post('/indicators', authenticateToken, isSuperAdmin, async (req, res) => {
     const { kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code, table_process } = req.body;
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
         return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
@@ -1834,7 +1897,7 @@ apiRouter.post('/indicators', authenticateToken, isAnyAdmin, async (req, res) =>
     }
 });
 
-apiRouter.put('/indicators/:id', authenticateToken, isAnyAdmin, async (req, res) => {
+apiRouter.put('/indicators/:id', authenticateToken, isSuperAdmin, async (req, res) => {
     const { kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code, is_active, table_process } = req.body;
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
         return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
@@ -1850,7 +1913,7 @@ apiRouter.put('/indicators/:id', authenticateToken, isAnyAdmin, async (req, res)
     }
 });
 
-apiRouter.delete('/indicators/:id', authenticateToken, isAnyAdmin, async (req, res) => {
+apiRouter.delete('/indicators/:id', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
         await db.query('DELETE FROM kpi_indicators WHERE id = ?', [req.params.id]);
         res.json({ success: true, message: 'Deleted successfully' });
@@ -1860,7 +1923,7 @@ apiRouter.delete('/indicators/:id', authenticateToken, isAnyAdmin, async (req, r
 });
 
 // --- Toggle is_active สำหรับ Master Data ทั้ง 4 ตาราง ---
-apiRouter.put('/indicators/:id/toggle-active', authenticateToken, isAnyAdmin, async (req, res) => {
+apiRouter.put('/indicators/:id/toggle-active', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
         const { is_active } = req.body;
         await db.query('UPDATE kpi_indicators SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, req.params.id]);
@@ -1870,7 +1933,7 @@ apiRouter.put('/indicators/:id/toggle-active', authenticateToken, isAnyAdmin, as
     }
 });
 
-apiRouter.put('/main-indicators/:id/toggle-active', authenticateToken, isAnyAdmin, async (req, res) => {
+apiRouter.put('/main-indicators/:id/toggle-active', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
         const { is_active } = req.body;
         await db.query('UPDATE kpi_main_indicators SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, req.params.id]);

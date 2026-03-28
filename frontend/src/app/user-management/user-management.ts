@@ -43,6 +43,7 @@ export class UserManagementComponent implements OnInit {
   currentUser: any = { id: null, username: '', password: '', role: 'user', dept_id: '', firstname: '', lastname: '', hospcode: '', phone: '', email: '', cid: '' };
 
   selectedStatus: string = '';
+  pendingCount: number = 0;
 
   // Password & validation
   confirmPassword: string = '';
@@ -51,7 +52,7 @@ export class UserManagementComponent implements OnInit {
 
   ngOnInit() {
     const role = this.authService.getUserRole();
-    this.isAdmin = role === 'admin_ssj' || role === 'super_admin' || role === 'admin_cup';
+    this.isAdmin = ['admin_hos', 'admin_sso', 'admin_cup', 'admin_ssj', 'super_admin'].includes(role);
     this.isSuperAdmin = role === 'super_admin';
     this.loggedInUser = this.authService.getUser();
 
@@ -73,6 +74,7 @@ export class UserManagementComponent implements OnInit {
       next: (res) => {
         if (res.success) {
           this.users = res.data;
+          this.pendingCount = this.users.filter(u => u.is_approved === 0).length;
           this.applyFilters();
           this.cdr.detectChanges();
         }
@@ -339,18 +341,24 @@ export class UserManagementComponent implements OnInit {
   rejectUser(user: any) {
     Swal.fire({
       title: 'ปฏิเสธการลงทะเบียน',
-      html: `<p>ยืนยันปฏิเสธผู้ใช้งาน <b>${user.firstname} ${user.lastname}</b> (${user.username})?</p>`,
+      html: `<p>ปฏิเสธผู้ใช้งาน <b>${user.firstname} ${user.lastname}</b> (${user.username})</p>
+             <p class="text-sm text-gray-500 mt-1">${user.email ? 'จะส่ง Email แจ้งไปที่ ' + user.email : '<span class="text-amber-500">ไม่มี Email — ไม่สามารถแจ้งผลทาง Email ได้</span>'}</p>`,
+      input: 'textarea',
+      inputLabel: 'เหตุผลในการปฏิเสธ (จะส่งให้ผู้สมัครทาง Email)',
+      inputPlaceholder: 'ระบุเหตุผล เช่น ข้อมูลไม่ครบถ้วน, ไม่มีสิทธิ์ใช้งาน...',
+      inputAttributes: { 'aria-label': 'เหตุผลในการปฏิเสธ' },
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#dc2626',
-      confirmButtonText: 'ปฏิเสธ',
+      confirmButtonText: '<i class="fas fa-times mr-1"></i> ปฏิเสธ',
       cancelButtonText: 'ยกเลิก'
     }).then((result) => {
       if (result.isConfirmed) {
-        this.authService.rejectUser(user.id).subscribe({
+        const reason = result.value || '';
+        this.authService.rejectUser(user.id, reason).subscribe({
           next: (res) => {
             if (res.success) {
-              Swal.fire({ icon: 'success', title: 'ปฏิเสธแล้ว', timer: 1500, showConfirmButton: false });
+              Swal.fire({ icon: 'success', title: 'ปฏิเสธแล้ว', text: user.email ? 'ส่ง Email แจ้งผลเรียบร้อย' : '', timer: 2000, showConfirmButton: false });
               this.loadUsers();
             }
           },
@@ -358,6 +366,70 @@ export class UserManagementComponent implements OnInit {
         });
       }
     });
+  }
+
+  approveAllPending() {
+    const pendingUsers = this.users.filter(u => u.is_approved === 0);
+    if (pendingUsers.length === 0) return;
+    Swal.fire({
+      title: 'อนุมัติทั้งหมด',
+      html: `<p>ยืนยันอนุมัติผู้ใช้งานที่รออนุมัติทั้งหมด <b>${pendingUsers.length}</b> คน?</p>
+             <div class="mt-2 max-h-40 overflow-y-auto text-left text-xs text-gray-600">
+               ${pendingUsers.map(u => `<div class="py-0.5">• ${u.firstname} ${u.lastname} (${u.username})</div>`).join('')}
+             </div>`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#16a34a',
+      confirmButtonText: `<i class="fas fa-check-double mr-1"></i> อนุมัติ ${pendingUsers.length} คน`,
+      cancelButtonText: 'ยกเลิก'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        let done = 0, fail = 0;
+        const total = pendingUsers.length;
+        Swal.fire({ title: 'กำลังอนุมัติ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        pendingUsers.forEach(u => {
+          this.authService.approveUser(u.id).subscribe({
+            next: () => { done++; if (done + fail === total) this.onBatchComplete(done, fail); },
+            error: () => { fail++; if (done + fail === total) this.onBatchComplete(done, fail); }
+          });
+        });
+      }
+    });
+  }
+
+  rejectAllPending() {
+    const pendingUsers = this.users.filter(u => u.is_approved === 0);
+    if (pendingUsers.length === 0) return;
+    Swal.fire({
+      title: 'ปฏิเสธทั้งหมด',
+      html: `<p class="text-red-600">ยืนยันปฏิเสธผู้ใช้งานที่รออนุมัติทั้งหมด <b>${pendingUsers.length}</b> คน?</p>`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      confirmButtonText: `<i class="fas fa-times-circle mr-1"></i> ปฏิเสธ ${pendingUsers.length} คน`,
+      cancelButtonText: 'ยกเลิก'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        let done = 0, fail = 0;
+        const total = pendingUsers.length;
+        Swal.fire({ title: 'กำลังปฏิเสธ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        pendingUsers.forEach(u => {
+          this.authService.rejectUser(u.id).subscribe({
+            next: () => { done++; if (done + fail === total) this.onBatchComplete(done, fail, 'ปฏิเสธ'); },
+            error: () => { fail++; if (done + fail === total) this.onBatchComplete(done, fail, 'ปฏิเสธ'); }
+          });
+        });
+      }
+    });
+  }
+
+  private onBatchComplete(done: number, fail: number, action: string = 'อนุมัติ') {
+    this.loadUsers();
+    if (fail === 0) {
+      Swal.fire({ icon: 'success', title: `${action}ทั้งหมดสำเร็จ`, text: `${action}แล้ว ${done} คน`, timer: 2000, showConfirmButton: false });
+    } else {
+      Swal.fire({ icon: 'warning', title: `${action}เสร็จสิ้น`, text: `สำเร็จ ${done} คน, ล้มเหลว ${fail} คน` });
+    }
   }
 
   toggleActive(user: any) {

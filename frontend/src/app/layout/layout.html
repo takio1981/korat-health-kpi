@@ -22,7 +22,7 @@
           <span class="truncate">รายงานสรุปผล</span>
         </a>
         <a routerLink="/notifications" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-bell text-lg mr-3 min-w-[24px]"></i>
+          <i class="fas fa-bell text-lg mr-3 min-w-[24px]" [class.bell-shake]="unreadNotifCount > 0"></i>
           <span class="truncate flex justify-between items-center w-full">
             แจ้งเตือน
             <span *ngIf="unreadNotifCount > 0" class="flex h-5 min-w-[20px] px-1 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white animate-pulse">{{ unreadNotifCount }}</span>
@@ -45,7 +45,7 @@
             จัดการผู้ใช้งาน
           </span>
         </a>
-        <a *ngIf="isAnyAdmin" routerLink="/kpi-manage" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
+        <a *ngIf="isSuperAdmin" routerLink="/kpi-manage" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-tasks text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
             จัดการตัวชี้วัด
@@ -57,7 +57,7 @@
             ประวัติการใช้งาน
           </span>
         </a>
-        <a *ngIf="isAnyAdmin" routerLink="/kpi-setup" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
+        <a *ngIf="isAdmin" routerLink="/kpi-setup" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-plus-circle text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
             +KPI ปีงบประมาณใหม่
@@ -112,7 +112,7 @@
           <!-- Bell Icon + Notification Dropdown -->
           <div class="relative mr-4">
             <button (click)="toggleNotifDropdown()" class="relative text-white hover:text-green-200 focus:outline-none">
-              <i class="fas fa-bell text-xl"></i>
+              <i class="fas fa-bell text-xl" [class.bell-shake]="unreadNotifCount > 0"></i>
               <span *ngIf="unreadNotifCount > 0" class="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-0.5 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white animate-pulse">
                 {{ unreadNotifCount > 99 ? '99+' : unreadNotifCount }}
               </span>

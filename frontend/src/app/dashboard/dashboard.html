@@ -223,7 +223,7 @@
                       <i class="fas fa-lock-open mr-1"></i> ปลดล็อค
                     </button>
                     <!-- ปุ่มยื่นอุทธรณ์ (user) -->
-                    <button *ngIf="!isAdmin && appealSettings.is_open && (item.indicator_status === 'approved' || item.indicator_status === 'Approved')"
+                    <button *ngIf="(isLocalAdmin || (!isAdmin && !isSuperAdmin)) && appealSettings.is_open && (item.indicator_status === 'approved' || item.indicator_status === 'Approved')"
                             (click)="openAppealModal(item)"
                             class="px-3 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
                       <i class="fas fa-gavel mr-1"></i> ยื่นอุทธรณ์
@@ -240,7 +240,7 @@
                       <i class="fas fa-times mr-1"></i> ปฏิเสธอุทธรณ์
                     </button>
                     <!-- ปุ่มแก้ไขเฉพาะข้อ (Mobile) -->
-                    <button *ngIf="!isAdmin && !isEditing && item.appeal_approved > 0 && !item.is_locked && (item.indicator_status === 'pending' || item.indicator_status === 'Pending') && !isSingleEditing(item)"
+                    <button *ngIf="(isLocalAdmin || (!isAdmin && !isSuperAdmin)) && !isEditing && item.appeal_approved > 0 && !item.is_locked && (item.indicator_status === 'pending' || item.indicator_status === 'Pending') && !isSingleEditing(item)"
                             (click)="startEditSingle(item)"
                             class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
                       <i class="fas fa-pen-square mr-1"></i> แก้ไขข้อนี้
@@ -380,14 +380,14 @@
                               title="ปลดล็อคเป้าหมาย">
                         <i class="fas fa-lock-open text-xs"></i>
                       </button>
-                      <button *ngIf="!isAdmin && appealSettings.is_open && (item.indicator_status === 'approved' || item.indicator_status === 'Approved')"
+                      <button *ngIf="(isLocalAdmin || (!isAdmin && !isSuperAdmin)) && appealSettings.is_open && (item.indicator_status === 'approved' || item.indicator_status === 'Approved')"
                               (click)="openAppealModal(item)"
                               class="text-purple-500 hover:text-purple-700 p-0.5 transition-colors"
                               title="ยื่นอุทธรณ์">
                         <i class="fas fa-gavel text-xs"></i>
                       </button>
                       <!-- ปุ่มแก้ไขเฉพาะข้อ (อุทธรณ์ได้รับอนุมัติ) -->
-                      <button *ngIf="!isAdmin && !isEditing && item.appeal_approved > 0 && !item.is_locked && (item.indicator_status === 'pending' || item.indicator_status === 'Pending') && !isSingleEditing(item)"
+                      <button *ngIf="(isLocalAdmin || (!isAdmin && !isSuperAdmin)) && !isEditing && item.appeal_approved > 0 && !item.is_locked && (item.indicator_status === 'pending' || item.indicator_status === 'Pending') && !isSingleEditing(item)"
                               (click)="startEditSingle(item)"
                               class="text-purple-600 hover:text-purple-800 p-0.5 transition-colors"
                               title="แก้ไขข้อนี้ (อุทธรณ์อนุมัติแล้ว)">
@@ -691,7 +691,7 @@
         </select>
       </div>
       <!-- Admin/Admin CUP: เลือกอำเภอ/หน่วยบริการ -->
-      <ng-container *ngIf="isAdmin || isAdminCup">
+      <ng-container *ngIf="isAdmin || isLocalAdmin">
         <div class="space-y-1">
           <label class="text-xs font-bold text-gray-500">อำเภอ</label>
           <select [(ngModel)]="addKpiSelectedDistrict" (change)="onAddKpiDistrictChange()" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-sm">
@@ -715,7 +715,7 @@
         </div>
       </ng-container>
       <!-- User: แสดงข้อมูลหน่วยบริการ/หน่วยงาน อัตโนมัติ -->
-      <ng-container *ngIf="!isAdmin && !isAdminCup">
+      <ng-container *ngIf="!isAdmin && !isLocalAdmin">
         <div class="space-y-1">
           <label class="text-xs font-bold text-gray-500">หน่วยบริการ</label>
           <div class="px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 font-medium">
