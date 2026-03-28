@@ -286,9 +286,14 @@ apiRouter.post('/register', loginLimiter, async (req, res) => {
         }
         // ตรวจสอบ cid ซ้ำ (hash แล้วเทียบกับ DB)
         const hashedCidCheck = crypto.createHash('sha256').update(cid).digest('hex');
-        const [existingCid] = await db.query('SELECT id FROM users WHERE cid = ?', [hashedCidCheck]);
+        const [existingCid] = await db.query('SELECT id, is_approved FROM users WHERE cid = ?', [hashedCidCheck]);
         if (existingCid.length > 0) {
-            return res.status(400).json({ success: false, message: 'เลขบัตรประชาชนนี้ถูกลงทะเบียนไปแล้ว' });
+            if (existingCid[0].is_approved === -1) {
+                // ถูกปฏิเสธ → ลบ account เก่าแล้วให้สมัครใหม่ได้
+                await db.query('DELETE FROM users WHERE id = ?', [existingCid[0].id]);
+            } else {
+                return res.status(400).json({ success: false, message: 'เลขบัตรประชาชนนี้ถูกลงทะเบียนไปแล้ว' });
+            }
         }
 
         // role ที่อนุญาตให้เลือกได้ (ไม่รวม super_admin)
@@ -312,9 +317,14 @@ apiRouter.post('/register', loginLimiter, async (req, res) => {
         }
 
         // ตรวจสอบ username ซ้ำ
-        const [existing] = await db.query('SELECT id FROM users WHERE username = ?', [username]);
+        const [existing] = await db.query('SELECT id, is_approved FROM users WHERE username = ?', [username]);
         if (existing.length > 0) {
-            return res.status(400).json({ success: false, message: 'ชื่อผู้ใช้งานนี้ถูกใช้แล้ว กรุณาเปลี่ยนชื่อผู้ใช้งาน' });
+            if (existing[0].is_approved === -1) {
+                // ถูกปฏิเสธ → ลบ account เก่า
+                await db.query('DELETE FROM users WHERE id = ?', [existing[0].id]);
+            } else {
+                return res.status(400).json({ success: false, message: 'ชื่อผู้ใช้งานนี้ถูกใช้แล้ว กรุณาเปลี่ยนชื่อผู้ใช้งาน' });
+            }
         }
 
         // Hash password
@@ -1658,7 +1668,7 @@ apiRouter.put('/users/:id/reject', authenticateToken, isAdmin, async (req, res) 
                         <p>เรียน คุณ${target.firstname} ${target.lastname},</p>
                         <p>คำขอลงทะเบียนใช้งาน <b>ระบบบันทึกผลงาน KPI ด้านสุขภาพ สสจ.นครราชสีมา</b> <span style="color:#dc2626;font-weight:bold">ไม่ได้รับการอนุมัติ</span></p>
                         ${reasonHtml}
-                        <p>หากมีข้อสงสัย กรุณาติดต่อผู้ดูแลระบบ</p>
+                        <p>คุณสามารถแก้ไขข้อมูลแล้ว <b>ลงทะเบียนใหม่</b> ได้อีกครั้ง หรือติดต่อผู้ดูแลระบบ</p>
                         <p style="color:#9ca3af;font-size:12px;margin-top:24px">อีเมลฉบับนี้ส่งโดยอัตโนมัติ กรุณาอย่าตอบกลับ</p>
                     </div>
                 </div>`
@@ -2918,23 +2928,24 @@ apiRouter.get('/report/by-indicator', authenticateToken, async (req, res) => {
         let whereClauses = [];
         let params = [];
 
-        // super_admin: เห็นทั้งหมด, admin: ทุก hospcode เฉพาะหน่วยงาน, user: เฉพาะ hospcode+dept
+        // === Role-based report filtering ===
         if (user.role === 'super_admin') {
-            // ไม่มี filter
+            // เห็นทั้งหมด
         } else if (user.role === 'admin_ssj') {
-            if (user.deptId !== null && user.deptId !== undefined) {
-                whereClauses.push('i.dept_id = ?');
-                params.push(user.deptId);
-            }
+            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+        } else if (user.role === 'admin_cup') {
+            const distid_auto = await getDistrictId(user.hospcode);
+            if (distid_auto) { whereClauses.push('CONCAT(h.provcode, h.distcode) = ?'); params.push(distid_auto); }
+            else if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+        } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
+            if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+        } else if (user.role === 'user_cup') {
+            const distid_auto = await getDistrictId(user.hospcode);
+            if (distid_auto) { whereClauses.push('CONCAT(h.provcode, h.distcode) = ?'); params.push(distid_auto); }
+            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
         } else {
-            if (user.hospcode) {
-                whereClauses.push('r.hospcode = ?');
-                params.push(user.hospcode);
-            }
-            if (user.deptId !== null && user.deptId !== undefined) {
-                whereClauses.push('i.dept_id = ?');
-                params.push(user.deptId);
-            }
+            if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
         }
         if (year_bh) { whereClauses.push('r.year_bh = ?'); params.push(year_bh); }
         if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
@@ -2988,23 +2999,24 @@ apiRouter.get('/report/by-hospital', authenticateToken, async (req, res) => {
         let whereClauses = [];
         let params = [];
 
-        // super_admin: เห็นทั้งหมด, admin: ทุก hospcode เฉพาะหน่วยงาน, user: เฉพาะ hospcode+dept
+        // === Role-based report filtering ===
         if (user.role === 'super_admin') {
-            // ไม่มี filter
+            // เห็นทั้งหมด
         } else if (user.role === 'admin_ssj') {
-            if (user.deptId !== null && user.deptId !== undefined) {
-                whereClauses.push('i.dept_id = ?');
-                params.push(user.deptId);
-            }
+            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+        } else if (user.role === 'admin_cup') {
+            const distid_auto = await getDistrictId(user.hospcode);
+            if (distid_auto) { whereClauses.push('CONCAT(h.provcode, h.distcode) = ?'); params.push(distid_auto); }
+            else if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+        } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
+            if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+        } else if (user.role === 'user_cup') {
+            const distid_auto = await getDistrictId(user.hospcode);
+            if (distid_auto) { whereClauses.push('CONCAT(h.provcode, h.distcode) = ?'); params.push(distid_auto); }
+            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
         } else {
-            if (user.hospcode) {
-                whereClauses.push('r.hospcode = ?');
-                params.push(user.hospcode);
-            }
-            if (user.deptId !== null && user.deptId !== undefined) {
-                whereClauses.push('i.dept_id = ?');
-                params.push(user.deptId);
-            }
+            if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
         }
         if (year_bh) { whereClauses.push('r.year_bh = ?'); params.push(year_bh); }
         if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
@@ -3050,23 +3062,24 @@ apiRouter.get('/report/by-district', authenticateToken, async (req, res) => {
         let whereClauses = [];
         let params = [];
 
-        // super_admin: เห็นทั้งหมด, admin: ทุก hospcode เฉพาะหน่วยงาน, user: เฉพาะ hospcode+dept
+        // === Role-based report filtering ===
         if (user.role === 'super_admin') {
-            // ไม่มี filter
+            // เห็นทั้งหมด
         } else if (user.role === 'admin_ssj') {
-            if (user.deptId !== null && user.deptId !== undefined) {
-                whereClauses.push('i.dept_id = ?');
-                params.push(user.deptId);
-            }
+            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+        } else if (user.role === 'admin_cup') {
+            const distid_auto = await getDistrictId(user.hospcode);
+            if (distid_auto) { whereClauses.push('CONCAT(h.provcode, h.distcode) = ?'); params.push(distid_auto); }
+            else if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+        } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
+            if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+        } else if (user.role === 'user_cup') {
+            const distid_auto = await getDistrictId(user.hospcode);
+            if (distid_auto) { whereClauses.push('CONCAT(h.provcode, h.distcode) = ?'); params.push(distid_auto); }
+            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
         } else {
-            if (user.hospcode) {
-                whereClauses.push('r.hospcode = ?');
-                params.push(user.hospcode);
-            }
-            if (user.deptId !== null && user.deptId !== undefined) {
-                whereClauses.push('i.dept_id = ?');
-                params.push(user.deptId);
-            }
+            if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
         }
         if (year_bh) { whereClauses.push('r.year_bh = ?'); params.push(year_bh); }
         if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
@@ -3108,23 +3121,24 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         let whereClauses = [];
         let params = [];
 
-        // super_admin: เห็นทั้งหมด, admin: ทุก hospcode เฉพาะหน่วยงาน, user: เฉพาะ hospcode+dept
+        // === Role-based report filtering ===
         if (user.role === 'super_admin') {
-            // ไม่มี filter
+            // เห็นทั้งหมด
         } else if (user.role === 'admin_ssj') {
-            if (user.deptId !== null && user.deptId !== undefined) {
-                whereClauses.push('i.dept_id = ?');
-                params.push(user.deptId);
-            }
+            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+        } else if (user.role === 'admin_cup') {
+            const distid_auto = await getDistrictId(user.hospcode);
+            if (distid_auto) { whereClauses.push('CONCAT(h.provcode, h.distcode) = ?'); params.push(distid_auto); }
+            else if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+        } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
+            if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+        } else if (user.role === 'user_cup') {
+            const distid_auto = await getDistrictId(user.hospcode);
+            if (distid_auto) { whereClauses.push('CONCAT(h.provcode, h.distcode) = ?'); params.push(distid_auto); }
+            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
         } else {
-            if (user.hospcode) {
-                whereClauses.push('r.hospcode = ?');
-                params.push(user.hospcode);
-            }
-            if (user.deptId !== null && user.deptId !== undefined) {
-                whereClauses.push('i.dept_id = ?');
-                params.push(user.deptId);
-            }
+            if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
         }
         if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
         if (distid) { whereClauses.push("CONCAT(h.provcode, h.distcode) = ?"); params.push(distid); }

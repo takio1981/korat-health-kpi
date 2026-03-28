@@ -432,6 +432,31 @@ export class UserManagementComponent implements OnInit {
     }
   }
 
+  allowReRegister(user: any) {
+    Swal.fire({
+      title: 'เปิดให้สมัครใหม่',
+      html: `<p>ลบ account ที่ถูกปฏิเสธของ <b>${user.firstname} ${user.lastname}</b> (${user.username})</p>
+             <p class="text-sm text-gray-500 mt-2">ผู้ใช้จะสามารถลงทะเบียนด้วยเลขบัตรประชาชนเดิมได้อีกครั้ง</p>`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#3b82f6',
+      confirmButtonText: '<i class="fas fa-user-plus mr-1"></i> ยืนยัน ลบและเปิดให้สมัครใหม่',
+      cancelButtonText: 'ยกเลิก'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        this.authService.deleteUser(user.id).subscribe({
+          next: (res) => {
+            if (res.success) {
+              Swal.fire({ icon: 'success', title: 'เปิดให้สมัครใหม่แล้ว', text: 'ผู้ใช้สามารถลงทะเบียนใหม่ได้', timer: 2000, showConfirmButton: false });
+              this.loadUsers();
+            }
+          },
+          error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถดำเนินการได้', 'error')
+        });
+      }
+    });
+  }
+
   toggleActive(user: any) {
     const willActivate = user.is_active === 0;
     const actionText = willActivate ? 'เปิดใช้งาน' : 'ปิดใช้งาน';

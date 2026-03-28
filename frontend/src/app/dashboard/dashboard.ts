@@ -111,6 +111,7 @@ export class DashboardComponent implements OnInit {
   dynamicFormSchema: any = null;
   dynamicFormTab: 'form' | 'list' = 'form';
   dynamicFormData: any = {};
+  dynamicFormUsedMonths: number[] = []; // เดือนที่คีย์ไปแล้ว
   isDynamicFormSaving: boolean = false;
   isDynamicDataLoading: boolean = false;
   dynamicDataList: any[] = [];
@@ -1789,11 +1790,22 @@ export class DashboardComponent implements OnInit {
   }
 
   openDynamicForm(item: any) {
+    // ตรวจสอบล็อค (user ถูกล็อค + item ถูกล็อค)
+    if (this.isEntryLocked) {
+      Swal.fire('ล็อคการคีย์', this.dataEntryLock.lock_reason || 'ระบบปิดการคีย์ข้อมูลชั่วคราว', 'warning');
+      return;
+    }
+    if (item.is_locked) {
+      Swal.fire('ล็อคข้อมูล', 'ตัวชี้วัดนี้ถูกล็อคแล้ว ไม่สามารถคีย์ข้อมูลได้', 'warning');
+      return;
+    }
+
     this.dynamicFormItem = item;
     this.dynamicFormTab = 'form';
     this.dynamicFormData = {};
     this.dynamicDataList = [];
     this.dynamicFormSchema = null;
+    this.dynamicFormUsedMonths = [];
     // สร้าง availableYears (ปีงบฯ ± 2 ปีปัจจุบัน)
     const currentYear = new Date().getFullYear() + 543;
     this.availableYears = [
@@ -1809,6 +1821,8 @@ export class DashboardComponent implements OnInit {
         if (res.success && res.data) {
           this.dynamicFormSchema = res.data;
           this.showDynamicFormModal = true;
+          // โหลดเดือนที่คีย์ไปแล้ว
+          this.loadDynamicFormUsedMonths();
           this.cdr.detectChanges();
         } else {
           Swal.fire('แจ้งเตือน', 'ยังไม่มีแบบฟอร์มสำหรับตัวชี้วัดนี้', 'info');
@@ -1822,6 +1836,19 @@ export class DashboardComponent implements OnInit {
     this.dynamicFormTab = tab;
     if (tab === 'list') this.loadDynamicDataList();
     this.cdr.detectChanges();
+  }
+
+  loadDynamicFormUsedMonths() {
+    if (!this.dynamicFormSchema?.table_process) return;
+    this.authService.getDynamicDataMonths(this.dynamicFormSchema.table_process, {
+      hospcode: this.dynamicFormData.hospcode,
+      year_bh: this.dynamicFormData.year_bh
+    }).subscribe({
+      next: (res) => {
+        this.dynamicFormUsedMonths = res.success ? res.data.map((m: any) => Number(m)) : [];
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   loadDynamicDataList() {
@@ -1858,6 +1885,7 @@ export class DashboardComponent implements OnInit {
         if (res.success) {
           Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', timer: 1500, showConfirmButton: false });
           this.resetDynamicForm();
+          this.loadDynamicFormUsedMonths(); // อัปเดตเดือนที่คีย์แล้ว
           if (this.dynamicFormTab === 'list') this.loadDynamicDataList();
           this.loadKpiData(); // reload dashboard data to reflect synced values
         } else {

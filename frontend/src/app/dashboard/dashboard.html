@@ -872,7 +872,7 @@
       <div class="grid grid-cols-2 gap-3 mb-5 bg-gray-50 rounded-xl p-3 text-xs">
         <div>
           <label class="block font-bold text-gray-500 mb-1">ปีงบประมาณ</label>
-          <select [(ngModel)]="dynamicFormData.year_bh"
+          <select [(ngModel)]="dynamicFormData.year_bh" (ngModelChange)="loadDynamicFormUsedMonths()"
                   class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white">
             <option *ngFor="let y of availableYears" [value]="y">{{ y }}</option>
           </select>
@@ -882,19 +882,22 @@
           <select [(ngModel)]="dynamicFormData.month_bh"
                   class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white">
             <option value="">-- ไม่ระบุเดือน --</option>
-            <option value="10">ตุลาคม (10)</option>
-            <option value="11">พฤศจิกายน (11)</option>
-            <option value="12">ธันวาคม (12)</option>
-            <option value="1">มกราคม (1)</option>
-            <option value="2">กุมภาพันธ์ (2)</option>
-            <option value="3">มีนาคม (3)</option>
-            <option value="4">เมษายน (4)</option>
-            <option value="5">พฤษภาคม (5)</option>
-            <option value="6">มิถุนายน (6)</option>
-            <option value="7">กรกฎาคม (7)</option>
-            <option value="8">สิงหาคม (8)</option>
-            <option value="9">กันยายน (9)</option>
+            <option value="10" *ngIf="!dynamicFormUsedMonths.includes(10)">ตุลาคม (10)</option>
+            <option value="11" *ngIf="!dynamicFormUsedMonths.includes(11)">พฤศจิกายน (11)</option>
+            <option value="12" *ngIf="!dynamicFormUsedMonths.includes(12)">ธันวาคม (12)</option>
+            <option value="1" *ngIf="!dynamicFormUsedMonths.includes(1)">มกราคม (1)</option>
+            <option value="2" *ngIf="!dynamicFormUsedMonths.includes(2)">กุมภาพันธ์ (2)</option>
+            <option value="3" *ngIf="!dynamicFormUsedMonths.includes(3)">มีนาคม (3)</option>
+            <option value="4" *ngIf="!dynamicFormUsedMonths.includes(4)">เมษายน (4)</option>
+            <option value="5" *ngIf="!dynamicFormUsedMonths.includes(5)">พฤษภาคม (5)</option>
+            <option value="6" *ngIf="!dynamicFormUsedMonths.includes(6)">มิถุนายน (6)</option>
+            <option value="7" *ngIf="!dynamicFormUsedMonths.includes(7)">กรกฎาคม (7)</option>
+            <option value="8" *ngIf="!dynamicFormUsedMonths.includes(8)">สิงหาคม (8)</option>
+            <option value="9" *ngIf="!dynamicFormUsedMonths.includes(9)">กันยายน (9)</option>
           </select>
+          <p *ngIf="dynamicFormUsedMonths.length > 0" class="text-xs text-amber-500 mt-1">
+            <i class="fas fa-info-circle mr-1"></i>เดือนที่คีย์ไปแล้วจะไม่แสดงใน dropdown (ดูได้ในแท็บ "ข้อมูลที่บันทึก")
+          </p>
         </div>
       </div>
 
