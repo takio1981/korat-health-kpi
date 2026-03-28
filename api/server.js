@@ -1325,7 +1325,9 @@ apiRouter.get('/users', authenticateToken, isAnyAdmin, async (req, res) => {
         if (user.role === 'super_admin') {
             // เห็นทั้งหมด
         } else if (user.role === 'admin_ssj') {
+            // เห็นเฉพาะ dept เดียวกัน ยกเว้น super_admin
             sql += ` WHERE u.role != 'super_admin'`;
+            if (user.deptId != null) { sql += ' AND u.dept_id = ?'; params.push(user.deptId); }
         } else if (user.role === 'admin_cup') {
             // admin_cup: ทุกคนในอำเภอเดียวกัน ยกเว้น super_admin
             const distid = await getDistrictId(user.hospcode);
@@ -1457,24 +1459,28 @@ apiRouter.put('/users/:id', authenticateToken, isAnyAdmin, async (req, res) => {
     const userId = req.params.id;
     const { username, password, role, dept_id, firstname, lastname, hospcode, phone, email, cid } = req.body;
     const user = req.user;
+    const isSuperAdmin = user.role === 'super_admin';
     const isCentralAdmin = ROLE_ADMIN_CENTRAL.includes(user.role);
     const isDistrictAdmin = user.role === 'admin_cup';
     const isHosAdmin = ['admin_hos', 'admin_sso'].includes(user.role);
 
     try {
         // ตรวจสอบสิทธิ์ตามขอบเขต
-        if (isDistrictAdmin) {
-            // admin_cup: ต้องอยู่อำเภอเดียวกัน
+        if (user.role === 'admin_ssj') {
+            // admin_ssj: ต้อง dept_id เดียวกัน
+            const [target] = await db.query('SELECT dept_id FROM users WHERE id = ?', [userId]);
+            if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
+            if (user.deptId != null && String(target[0].dept_id) !== String(user.deptId)) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์แก้ไขผู้ใช้งานต่างหน่วยงาน' });
+        } else if (isDistrictAdmin) {
             const [target] = await db.query(`SELECT CONCAT(h.provcode, h.distcode) AS distid FROM users u LEFT JOIN chospital h ON u.hospcode = h.hoscode WHERE u.id = ?`, [userId]);
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
             const myDistid = await getDistrictId(user.hospcode);
             if (!myDistid || target[0].distid !== myDistid) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์แก้ไขผู้ใช้งานต่างอำเภอ' });
         } else if (isHosAdmin) {
-            // admin_hos/admin_sso: ต้อง hospcode เดียวกัน
             const [target] = await db.query('SELECT hospcode FROM users WHERE id = ?', [userId]);
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
             if (target[0].hospcode !== user.hospcode) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์แก้ไขผู้ใช้งานต่างหน่วยบริการ' });
-        } else if (!isCentralAdmin) {
+        } else if (!isSuperAdmin) {
             return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์แก้ไขผู้ใช้งาน' });
         }
 
@@ -1514,10 +1520,13 @@ apiRouter.put('/users/:id', authenticateToken, isAnyAdmin, async (req, res) => {
 apiRouter.delete('/users/:id', authenticateToken, isAnyAdmin, async (req, res) => {
     const userId = req.params.id;
     const user = req.user;
-    const isCentralAdmin = ROLE_ADMIN_CENTRAL.includes(user.role);
 
     try {
-        if (user.role === 'admin_cup') {
+        if (user.role === 'admin_ssj') {
+            const [target] = await db.query('SELECT dept_id FROM users WHERE id = ?', [userId]);
+            if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
+            if (user.deptId != null && String(target[0].dept_id) !== String(user.deptId)) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์ลบผู้ใช้งานต่างหน่วยงาน' });
+        } else if (user.role === 'admin_cup') {
             const [target] = await db.query(`SELECT CONCAT(h.provcode, h.distcode) AS distid FROM users u LEFT JOIN chospital h ON u.hospcode = h.hoscode WHERE u.id = ?`, [userId]);
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
             const myDistid = await getDistrictId(user.hospcode);
@@ -1526,7 +1535,7 @@ apiRouter.delete('/users/:id', authenticateToken, isAnyAdmin, async (req, res) =
             const [target] = await db.query('SELECT hospcode FROM users WHERE id = ?', [userId]);
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
             if (target[0].hospcode !== user.hospcode) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์ลบผู้ใช้งานต่างหน่วยบริการ' });
-        } else if (!isCentralAdmin) {
+        } else if (user.role !== 'super_admin') {
             return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์ลบผู้ใช้งาน' });
         }
 
@@ -1544,36 +1553,26 @@ apiRouter.delete('/users/:id', authenticateToken, isAnyAdmin, async (req, res) =
 apiRouter.put('/users/:id/reset-password', authenticateToken, isAnyAdmin, async (req, res) => {
     const userId = req.params.id;
     const user = req.user;
-    const isCentralAdmin = ROLE_ADMIN_CENTRAL.includes(user.role);
-
     // ตรวจสอบสิทธิ์ตามขอบเขต
-    if (user.role === 'admin_cup') {
-        try {
+    try {
+        if (user.role === 'admin_ssj') {
+            const [target] = await db.query('SELECT dept_id FROM users WHERE id = ?', [userId]);
+            if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
+            if (user.deptId != null && String(target[0].dept_id) !== String(user.deptId)) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์รีเซ็ตรหัสผ่านผู้ใช้งานต่างหน่วยงาน' });
+        } else if (user.role === 'admin_cup') {
             const [target] = await db.query(`SELECT CONCAT(h.provcode, h.distcode) AS distid FROM users u LEFT JOIN chospital h ON u.hospcode = h.hoscode WHERE u.id = ?`, [userId]);
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
             const myDistid = await getDistrictId(user.hospcode);
             if (!myDistid || target[0].distid !== myDistid) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์รีเซ็ตรหัสผ่านผู้ใช้งานต่างอำเภอ' });
-        } catch (error) {
-            return res.status(500).json({ success: false, message: error.message });
-        }
-    } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
-        try {
+        } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
             const [target] = await db.query('SELECT hospcode FROM users WHERE id = ?', [userId]);
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
             if (target[0].hospcode !== user.hospcode) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์รีเซ็ตรหัสผ่านผู้ใช้งานต่างหน่วยบริการ' });
-        } catch (error) {
-            return res.status(500).json({ success: false, message: error.message });
+        } else if (user.role !== 'super_admin') {
+            return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์รีเซ็ตรหัสผ่าน' });
         }
-    } else if (!isCentralAdmin) {
-        try {
-            const [target] = await db.query('SELECT dept_id FROM users WHERE id = ?', [userId]);
-            if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
-            if (String(target[0].dept_id) !== String(user.deptId)) {
-                return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์รีเซ็ตรหัสผ่านผู้ใช้งานต่างหน่วยงาน' });
-            }
-        } catch (error) {
-            return res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาด' });
-        }
+    } catch (error) {
+        return res.status(500).json({ success: false, message: error.message });
     }
 
     try {
