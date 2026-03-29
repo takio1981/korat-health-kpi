@@ -8,8 +8,8 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "audit": "npm audit --production",
-    "audit:fix": "npm audit fix --production"
+    "audit": "npm audit --omit=dev",
+    "audit:fix": "npm audit fix --omit=dev"
   },
   "prettier": {
     "printWidth": 100,
