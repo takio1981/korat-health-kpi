@@ -15,23 +15,23 @@
       <nav class="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
         <a routerLink="/charts" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-chart-bar text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate">รายงานสถิติ</span>
+          <span class="truncate">{{ lang.t('menu.charts') }}</span>
         </a>
         <a routerLink="/reports" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-file-alt text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate">รายงานสรุปผล</span>
+          <span class="truncate">{{ lang.t('menu.reports') }}</span>
         </a>
         <a routerLink="/notifications" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-bell text-lg mr-3 min-w-[24px]" [class.bell-shake]="unreadNotifCount > 0"></i>
           <span class="truncate flex justify-between items-center w-full">
-            แจ้งเตือน
+            {{ lang.t('menu.notifications') }}
             <span *ngIf="unreadNotifCount > 0" class="flex h-5 min-w-[20px] px-1 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white animate-pulse">{{ unreadNotifCount }}</span>
           </span>
         </a>
         <a routerLink="/dashboard" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-th-large text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
-            ภาพรวมตัวชี้วัด
+            {{ lang.t('menu.dashboard') }}
             <span *ngIf="(isAdmin || isSuperAdmin) && pendingKpiCount > 0"
                   class="flex h-5 min-w-[20px] px-1 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ml-2 animate-pulse shadow-lg"
                   [title]="'รอตรวจสอบ: ' + pendingStats.indicatorCount + ' ตัวชี้วัด / ' + pendingStats.hosCount + ' หน่วยบริการ / ' + pendingStats.deptCount + ' หน่วยงาน'">
@@ -42,43 +42,43 @@
         <a *ngIf="isAnyAdmin" routerLink="/users" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-users-cog text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
-            จัดการผู้ใช้งาน
+            {{ lang.t('menu.users') }}
           </span>
         </a>
         <a *ngIf="isSuperAdmin" routerLink="/kpi-manage" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-tasks text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
-            จัดการตัวชี้วัด
+            {{ lang.t('menu.kpi_manage') }}
           </span>
         </a>
         <a *ngIf="isSuperAdmin" routerLink="/audit-logs" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-history text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
-            ประวัติการใช้งาน
+            {{ lang.t('menu.audit_logs') }}
           </span>
         </a>
         <a *ngIf="isAdmin" routerLink="/kpi-setup" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-plus-circle text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
-            +KPI ปีงบประมาณใหม่
+            {{ lang.t('menu.kpi_setup') }}
           </span>
         </a>
         <a *ngIf="isSuperAdmin" routerLink="/export-kpi" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-file-export text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
-            Export ข้อมูล KPI
+            {{ lang.t('menu.export') }}
           </span>
         </a>
         <a *ngIf="isSuperAdmin" routerLink="/form-builder" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-wpforms text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
-            สร้างแบบฟอร์ม KPI
+            {{ lang.t('menu.form_builder') }}
           </span>
         </a>
         <a *ngIf="isSuperAdmin" routerLink="/settings" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-sliders-h text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
-            ตั้งค่าระบบ
+            {{ lang.t('menu.settings') }}
           </span>
         </a>
       </nav>
