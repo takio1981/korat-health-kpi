@@ -496,6 +496,62 @@
         </div>
       </section>
 
+      <!-- ==================== Dark Mode + Language + Backup ==================== -->
+      <section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-gray-800 flex items-center justify-center"><i class="fas fa-moon text-yellow-300"></i></div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-800">Dark Mode + ภาษา + สำรองข้อมูล</h2>
+            <p class="text-xs text-gray-400">ฟีเจอร์เสริมสำหรับทุก Role</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- Dark Mode -->
+          <div class="border border-gray-200 rounded-xl p-4">
+            <h4 class="font-bold text-gray-800 text-sm mb-2"><i class="fas fa-moon text-indigo-500 mr-2"></i>Dark Mode</h4>
+            <div class="space-y-2 text-xs text-gray-600">
+              <p>กดปุ่ม <b>🌙</b> ที่ Header → เปลี่ยนเป็นโหมดมืด</p>
+              <p>กดปุ่ม <b>☀️</b> → กลับเป็นโหมดสว่าง</p>
+              <p class="text-gray-400"><i class="fas fa-info-circle mr-1"></i>ระบบจำค่าไว้ ครอบคลุมทุกหน้า</p>
+            </div>
+          </div>
+
+          <!-- Language -->
+          <div class="border border-gray-200 rounded-xl p-4">
+            <h4 class="font-bold text-gray-800 text-sm mb-2"><i class="fas fa-globe text-blue-500 mr-2"></i>เปลี่ยนภาษา (TH/EN)</h4>
+            <div class="space-y-2 text-xs text-gray-600">
+              <p>กดปุ่ม <b>🌐 EN</b> → เปลี่ยนเป็นภาษาอังกฤษ</p>
+              <p>กดปุ่ม <b>🌐 TH</b> → กลับเป็นภาษาไทย</p>
+              <p class="text-gray-400"><i class="fas fa-info-circle mr-1"></i>แปลเมนู, Login, Dashboard ทั้งหมด</p>
+            </div>
+          </div>
+
+          <!-- Backup -->
+          <div class="border border-gray-200 rounded-xl p-4">
+            <h4 class="font-bold text-gray-800 text-sm mb-2"><i class="fas fa-database text-indigo-500 mr-2"></i>สำรองฐานข้อมูล</h4>
+            <div class="space-y-2 text-xs text-gray-600">
+              <p>เข้า <b>ตั้งค่าระบบ</b> → กด <b>"สำรองฐานข้อมูล"</b></p>
+              <p>Download ไฟล์ JSON ครบ 16 ตาราง</p>
+              <p class="text-red-400"><i class="fas fa-lock mr-1"></i>super_admin เท่านั้น</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Admin Reset Password -->
+        <div class="mt-4 bg-orange-50 border border-orange-200 rounded-xl p-4">
+          <h4 class="font-bold text-orange-800 text-sm mb-2"><i class="fas fa-key mr-2"></i>Admin รีเซ็ตรหัสผ่าน</h4>
+          <div class="flex flex-wrap items-center gap-2 text-xs font-bold">
+            <span class="bg-orange-100 text-orange-800 px-2.5 py-1 rounded-full">1. กดปุ่ม 🔑 ที่ user</span>
+            <i class="fas fa-arrow-right text-gray-300"></i>
+            <span class="bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full">2. สร้างรหัส 6 หลัก + ส่ง Email</span>
+            <i class="fas fa-arrow-right text-gray-300"></i>
+            <span class="bg-green-100 text-green-800 px-2.5 py-1 rounded-full">3. User login ด้วยรหัสชั่วคราว → เปลี่ยนรหัสใหม่</span>
+          </div>
+          <p class="text-xs text-orange-600 mt-2"><i class="fas fa-clock mr-1"></i>รหัสชั่วคราวหมดอายุ 15 นาที | ถ้าไม่มี Email → แสดงรหัสให้ admin แจ้ง user เอง</p>
+        </div>
+      </section>
+
       <!-- ==================== 10. FAQ ==================== -->
       <section id="section-faq" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
@@ -527,7 +583,23 @@
           </div>
           <div class="bg-gray-50 rounded-xl p-4">
             <p class="text-sm font-bold text-gray-800">ถาม: ระบบออกจากระบบเอง?</p>
-            <p class="text-xs text-gray-600 mt-1">ตอบ: ระบบมี Auto Logout เมื่อไม่ใช้งานเกินเวลาที่กำหนด เปิด browser/tab ใหม่ก็ต้อง login ใหม่ทุกครั้ง</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: ระบบมี Auto Logout เมื่อไม่ใช้งานเกินเวลาที่กำหนด เปิด browser/tab ใหม่จะ login ใหม่เมื่อ token หมดอายุ</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-bold text-gray-800">ถาม: เปิด Dark Mode ได้อย่างไร?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: กดปุ่ม 🌙 ที่ Header bar (หรือมุมขวาบนในหน้า Login) ระบบจำค่าไว้ กลับมาก็ยัง Dark อยู่</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-bold text-gray-800">ถาม: เปลี่ยนภาษาเป็นอังกฤษได้ไหม?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: กดปุ่ม 🌐 EN ที่ Header bar เมนู, Login, Dashboard จะแสดงเป็นภาษาอังกฤษ กด 🌐 TH เพื่อกลับภาษาไทย</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-bold text-gray-800">ถาม: สำรองข้อมูลได้อย่างไร?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: super_admin เข้า "ตั้งค่าระบบ" → กดปุ่ม "สำรองฐานข้อมูลทั้งหมด" → download ไฟล์ JSON ครบทุกตาราง</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-bold text-gray-800">ถาม: Admin รีเซ็ตรหัสผ่านให้ user ได้ไหม?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: ได้ กดปุ่ม 🔑 ในหน้าจัดการผู้ใช้ → ระบบสร้างรหัสชั่วคราว 6 หลัก + ส่ง Email แจ้ง user → user login แล้วเปลี่ยนรหัสใหม่</p>
           </div>
         </div>
       </section>

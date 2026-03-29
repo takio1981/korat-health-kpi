@@ -572,6 +572,66 @@
 
 ---
 
+## 16. Dark Mode (โหมดมืด)
+
+### วิธีเปิด/ปิด
+- กดปุ่ม **🌙** (พระจันทร์) ที่ Header bar → เปลี่ยนเป็น **โหมดมืด**
+- กดปุ่ม **☀️** (ดวงอาทิตย์) → กลับเป็น **โหมดสว่าง**
+- ปุ่มอยู่ที่:
+  - **หน้า Login / Register** → มุมขวาบน (ปุ่มวงกลมลอย)
+  - **หน้าหลัก (หลัง Login)** → Header bar ข้างไอคอนระฆัง
+
+### คุณสมบัติ
+- ระบบจำค่าไว้ → เปิด Dark Mode แล้วปิด browser กลับมาก็ยัง Dark อยู่
+- ครอบคลุมทุกหน้า: Login, Register, Dashboard, กราฟ, รายงาน, ตั้งค่า, คู่มือ
+- พื้นหลัง, ข้อความ, ตาราง, input, popup (SweetAlert) เปลี่ยนสีทั้งหมด
+
+---
+
+## 17. Multi-language (ภาษาไทย / English)
+
+### วิธีเปลี่ยนภาษา
+- กดปุ่ม **🌐 EN** → เปลี่ยนเป็นภาษาอังกฤษ
+- กดปุ่ม **🌐 TH** → กลับเป็นภาษาไทย
+- ปุ่มอยู่ตำแหน่งเดียวกับ Dark Mode (Header bar + หน้า Login/Register)
+
+### ส่วนที่แปลภาษา
+- **Sidebar เมนูทั้งหมด** (11 เมนู + คู่มือ + เปลี่ยนรหัส + ออกจากระบบ)
+- **หน้า Login** (ชื่อระบบ, หน่วยงาน, slogan, หัวข้อ, ปุ่ม, ลิงก์)
+- **หน้า Dashboard** (หัวข้อ, ปุ่มทั้งหมด, ข้อความ loading/locked)
+- ระบบจำภาษาไว้ใน browser
+
+---
+
+## 18. สำรองฐานข้อมูล (Database Backup)
+
+> **ใครเข้าถึงได้:** super_admin เท่านั้น
+
+### ขั้นตอน
+1. เข้าเมนู **"ตั้งค่าระบบ"**
+2. ส่วน **"การจัดการ Logs"** → กดปุ่ม **"สำรองฐานข้อมูลทั้งหมด (JSON)"**
+3. ระบบจะ download ไฟล์ JSON ที่มีข้อมูลทุกตาราง (16 ตาราง)
+4. ชื่อไฟล์: `khups_kpi_backup_YYYY-MM-DD.json`
+
+### ตารางที่สำรอง
+users, departments, kpi_indicators, kpi_main_indicators, main_yut, kpi_results, chospital, co_district, system_settings, notifications, kpi_rejection_comments, kpi_form_schemas, kpi_form_fields, target_edit_requests, login_logs, system_logs
+
+---
+
+## 19. รีเซ็ตรหัสผ่านโดย Admin
+
+### ขั้นตอน
+1. Admin เข้าหน้า **"จัดการผู้ใช้งาน"**
+2. กดปุ่ม **🔑** (กุญแจ) ที่ user ที่ต้องการรีเซ็ต
+3. ระบบสร้าง **รหัสชั่วคราว 6 หลัก** + ส่ง Email แจ้ง user
+4. user ใช้รหัสชั่วคราวเข้าสู่ระบบ → **บังคับเปลี่ยนรหัสผ่านใหม่ทันที**
+
+### หมายเหตุ
+- ถ้า user ไม่มี Email → ระบบจะแสดงรหัสชั่วคราวให้ admin แจ้ง user เอง
+- รหัสชั่วคราว **หมดอายุใน 15 นาที**
+
+---
+
 ## ข้อมูลทางเทคนิค
 
 | รายการ | รายละเอียด |
@@ -583,10 +643,16 @@
 | Icon | FontAwesome 7 (npm package) |
 | Chart | ApexCharts (ng-apexcharts) |
 | ปีงบประมาณ | ต.ค. (เดือน 10) ถึง ก.ย. (เดือน 9) |
-| Session | ล้างทุกครั้งที่เปิด browser/tab ใหม่ |
+| Session | ล้างเมื่อ token หมดอายุ + เปิด browser ใหม่ |
 | Email | Nodemailer + Gmail SMTP |
 | Password Hash | bcryptjs (10 rounds) |
 | CID Hash | SHA-256 |
+| Dark Mode | Tailwind CSS `darkMode: 'class'` + ThemeService |
+| Multi-language | LanguageService (TH/EN) 50+ translations |
+| Database Backup | JSON export ทุกตาราง (super_admin) |
+| DB Connection Pool | 50 connections, queue 200 |
+| Security Headers | X-Frame-Options, X-Content-Type-Options, X-XSS-Protection, Referrer-Policy |
+| DB Indexes | 16 composite/single indexes สำหรับ 500 concurrent users |
 
 ---
 
