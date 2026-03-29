@@ -1103,7 +1103,7 @@ apiRouter.post('/dynamic-data/:table_name', authenticateToken, async (req, res) 
     delete data.id; delete data.created_at; delete data.updated_at; delete data.created_by_name;
     data.created_by = req.user.userId;
     if (!data.hospcode) data.hospcode = req.user.hospcode;
-    if (req.user.role === 'user') data.hospcode = req.user.hospcode;
+    if (!ROLE_ADMIN_ALL.includes(req.user.role)) data.hospcode = req.user.hospcode;
 
     const connection = await db.getConnection();
     try {
