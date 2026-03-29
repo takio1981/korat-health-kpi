@@ -340,6 +340,57 @@
         </div>
       </section>
 
+      <!-- ==================== 7.5 สร้างแบบฟอร์ม + Export ==================== -->
+      <section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center"><i class="fas fa-wpforms text-purple-600"></i></div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-800">สร้างแบบฟอร์ม KPI + Export</h2>
+            <p class="text-xs text-gray-400">super_admin เท่านั้น</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Form Builder -->
+          <div class="border border-purple-200 rounded-xl p-4 bg-purple-50/30">
+            <h4 class="font-bold text-purple-800 text-sm mb-2"><i class="fas fa-wpforms mr-2"></i>สร้างแบบฟอร์ม</h4>
+            <ol class="list-decimal list-inside text-xs text-gray-600 space-y-1">
+              <li>เลือกตัวชี้วัด</li>
+              <li>กำหนดชื่อฟอร์ม + คำอธิบาย</li>
+              <li>เพิ่มฟิลด์ (text, number, date, select, textarea, checkbox)</li>
+              <li>กำหนดฟิลด์ที่ sync ไปยังผลงาน</li>
+              <li>บันทึก → ระบบสร้างตาราง <code class="bg-purple-100 px-1 rounded text-purple-700">form_ชื่อตาราง</code></li>
+            </ol>
+            <div class="mt-3 bg-purple-100 rounded-lg p-2 text-xs text-purple-700">
+              <i class="fas fa-info-circle mr-1"></i>ฟอร์มจะแสดงเป็นไอคอน 📋 ในตาราง Dashboard เดือนที่คีย์แล้วจะไม่แสดงซ้ำ
+            </div>
+          </div>
+
+          <!-- Export -->
+          <div class="border border-teal-200 rounded-xl p-4 bg-teal-50/30">
+            <h4 class="font-bold text-teal-800 text-sm mb-2"><i class="fas fa-file-export mr-2"></i>Export ข้อมูล KPI</h4>
+            <ol class="list-decimal list-inside text-xs text-gray-600 space-y-1">
+              <li>เลือกปีงบประมาณ + ตัวชี้วัด</li>
+              <li>กดตรวจสอบ → เปรียบเทียบข้อมูล</li>
+              <li>กดส่งออก → สร้างตาราง <code class="bg-teal-100 px-1 rounded text-teal-700">ชื่อตาราง</code></li>
+            </ol>
+            <div class="mt-3 bg-teal-100 rounded-lg p-2 text-xs text-teal-700">
+              <p><i class="fas fa-table mr-1"></i><b>ไม่มีฟอร์ม:</b> hospcode, byear, target, result, m10-m09</p>
+              <p class="mt-1"><i class="fas fa-clipboard-list mr-1"></i><b>มีฟอร์ม:</b> hospcode, byear, target, result + ฟิลด์จากฟอร์ม (ไม่มีเดือน)</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ตาราง DB -->
+        <div class="mt-4 bg-gray-50 rounded-xl p-3">
+          <h4 class="text-xs font-bold text-gray-600 mb-2"><i class="fas fa-database mr-1"></i>การแบ่งชื่อตารางในฐานข้อมูล</h4>
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="bg-purple-50 border border-purple-200 rounded-lg p-2"><b>ตารางฟอร์ม:</b> <code>form_kpi_tab_001</code><br><span class="text-gray-500">เก็บข้อมูลรายเดือนจากแบบฟอร์ม</span></div>
+            <div class="bg-teal-50 border border-teal-200 rounded-lg p-2"><b>ตาราง Export:</b> <code>kpi_tab_001</code><br><span class="text-gray-500">สรุปรายปีต่อ hospcode</span></div>
+          </div>
+        </div>
+      </section>
+
       <!-- ==================== 8. ตั้งค่าระบบ ==================== -->
       <section id="section-settings" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
