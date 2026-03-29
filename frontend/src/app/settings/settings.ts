@@ -183,4 +183,20 @@ export class SettingsComponent implements OnInit {
     this.appealEndDate = '';
     this.appealDaysAfterApprove = 0;
   }
+
+  backupDatabase() {
+    Swal.fire({ title: 'กำลังสำรองข้อมูล...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    this.authService.backupDatabase().subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `khups_kpi_backup_${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        Swal.fire({ icon: 'success', title: 'สำรองข้อมูลสำเร็จ', timer: 2000, showConfirmButton: false });
+      },
+      error: () => Swal.fire('ผิดพลาด', 'ไม่สามารถสำรองข้อมูลได้', 'error')
+    });
+  }
 }

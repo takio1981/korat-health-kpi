@@ -3897,6 +3897,37 @@ apiRouter.get('/kpi-replies', authenticateToken, async (req, res) => {
     }
 });
 
+// === Database Backup (super_admin เท่านั้น) ===
+apiRouter.get('/backup-database', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const tables = [
+            'users', 'departments', 'kpi_indicators', 'kpi_main_indicators', 'main_yut',
+            'kpi_results', 'chospital', 'co_district', 'system_settings', 'notifications',
+            'kpi_rejection_comments', 'kpi_form_schemas', 'kpi_form_fields',
+            'target_edit_requests', 'login_logs', 'system_logs'
+        ];
+        const backup = {};
+        for (const table of tables) {
+            try {
+                const [rows] = await db.query(`SELECT * FROM \`${table}\``);
+                backup[table] = { count: rows.length, data: rows };
+            } catch (e) { backup[table] = { count: 0, data: [], error: e.message }; }
+        }
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const filename = `khups_kpi_backup_${timestamp}.json`;
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.json({ backup_date: new Date().toISOString(), db_name: process.env.DB_NAME, tables: backup });
+
+        try {
+            await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+                [req.user.userId, 'BACKUP', 'ALL', JSON.stringify({ tables: tables.length, filename }), req.ip]);
+        } catch (_) {}
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 // Mount Router ที่ path /khupskpi/api
 app.use('/khupskpi/api', apiRouter);
 

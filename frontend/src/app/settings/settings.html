@@ -110,6 +110,12 @@
                 <span class="ms-3 text-sm font-bold text-gray-700">เปิดใช้งานสำรองข้อมูลอัตโนมัติก่อนล้าง Logs</span>
               </label>
             </div>
+            <div class="flex items-center mt-3">
+              <button type="button" (click)="backupDatabase()" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm transition-colors shadow-md">
+                <i class="fas fa-database mr-2"></i>สำรองฐานข้อมูลทั้งหมด (JSON)
+              </button>
+              <p class="text-xs text-gray-500 ml-3">Download ข้อมูลทุกตารางเป็นไฟล์ JSON</p>
+            </div>
           </div>
         </div>
 

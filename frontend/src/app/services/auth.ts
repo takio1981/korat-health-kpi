@@ -265,6 +265,12 @@ export class AuthService {
   }
 
   // --- Log Management APIs ---
+  backupDatabase(): Observable<Blob> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/backup-database`, { headers, responseType: 'blob' });
+  }
+
   backupLogs(): Observable<Blob> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({

@@ -1,6 +1,8 @@
 import { Component, OnInit, inject, ChangeDetectorRef, NgZone } from '@angular/core';
 import { Router, RouterModule, RouterOutlet, NavigationEnd, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../services/auth';
+import { ThemeService } from '../services/theme.service';
+import { LanguageService } from '../services/language.service';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import Swal from 'sweetalert2';
@@ -21,6 +23,8 @@ export class LayoutComponent implements OnInit {
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
   private ngZone = inject(NgZone);
+  themeService = inject(ThemeService);
+  lang = inject(LanguageService);
 
   pageTitle: string = '';
 

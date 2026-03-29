@@ -8,6 +8,31 @@
 @tailwind components;
 @tailwind utilities;
 
+/* === Dark Mode Global Styles === */
+@layer base {
+  .dark body,
+  .dark .bg-white { background-color: #1e1e2e !important; color: #cdd6f4 !important; }
+  .dark .bg-gray-50, .dark .bg-gray-100 { background-color: #313244 !important; }
+  .dark .bg-white.rounded-2xl, .dark .bg-white.rounded-xl { background-color: #24243a !important; }
+  .dark .border-gray-100, .dark .border-gray-200 { border-color: #45475a !important; }
+  .dark .text-gray-800, .dark .text-gray-900, .dark .text-gray-700 { color: #cdd6f4 !important; }
+  .dark .text-gray-600, .dark .text-gray-500 { color: #a6adc8 !important; }
+  .dark .text-gray-400, .dark .text-gray-300 { color: #7f849c !important; }
+  .dark input, .dark select, .dark textarea {
+    background-color: #313244 !important; color: #cdd6f4 !important; border-color: #45475a !important;
+  }
+  .dark input:focus, .dark select:focus, .dark textarea:focus {
+    border-color: #89b4fa !important;
+  }
+  .dark table thead { background: linear-gradient(135deg, #1e3a3a, #1e4040) !important; }
+  .dark table tbody tr { border-color: #313244 !important; }
+  .dark table tbody tr:hover { background-color: #313244 !important; }
+  .dark .shadow-sm, .dark .shadow-md, .dark .shadow-lg { box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important; }
+  .dark .swal2-popup { background: #24243a !important; color: #cdd6f4 !important; }
+  .dark .swal2-title { color: #cdd6f4 !important; }
+  .dark .swal2-html-container { color: #a6adc8 !important; }
+}
+
 /* Custom Responsive Typography */
 @layer base {
   html {

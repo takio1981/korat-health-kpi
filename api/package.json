@@ -7,7 +7,10 @@
     "start": "node dist/server.js",
     "dev": "npx nodemon server.js",
     "build": "node -e \"const{mkdirSync,copyFileSync}=require('fs');mkdirSync('dist',{recursive:true});['server.js','db.js'].forEach(f=>copyFileSync(f,'dist/'+f));console.log('API build complete: dist/server.js, dist/db.js');\"",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "audit": "npm audit --production",
+    "audit:fix": "npm audit fix --production",
+    "prebuild": "npm audit --production --audit-level=high || true"
   },
   "keywords": [],
   "author": "",
