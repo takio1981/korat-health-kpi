@@ -172,6 +172,28 @@
           <h4 class="font-bold text-blue-800 text-sm"><i class="fas fa-sign-out-alt mr-2"></i>Auto Logout</h4>
           <p class="text-xs text-blue-700 mt-1">ระบบจะออกจากระบบอัตโนมัติเมื่อไม่มีการใช้งานเกินเวลาที่กำหนด โดยจะแสดง popup นับถอยหลังก่อนออก กด "ยกเลิก" เพื่อใช้งานต่อ</p>
         </div>
+
+        <!-- ลืมรหัสผ่าน -->
+        <div class="mt-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4">
+          <h4 class="font-bold text-blue-800 text-sm mb-3"><i class="fas fa-key mr-2"></i>ลืมรหัสผ่าน?</h4>
+          <div class="flex flex-wrap items-center gap-2 text-xs font-bold mb-3">
+            <span class="bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full">1. กด "ลืมรหัสผ่าน?"</span>
+            <i class="fas fa-arrow-right text-gray-300"></i>
+            <span class="bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full">2. กรอก Username</span>
+            <i class="fas fa-arrow-right text-gray-300"></i>
+            <span class="bg-indigo-100 text-indigo-800 px-2.5 py-1 rounded-full">3. รับรหัส 6 หลักทาง Email</span>
+            <i class="fas fa-arrow-right text-gray-300"></i>
+            <span class="bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full">4. Login ด้วยรหัสชั่วคราว</span>
+            <i class="fas fa-arrow-right text-gray-300"></i>
+            <span class="bg-green-100 text-green-800 px-2.5 py-1 rounded-full">5. เปลี่ยนรหัสผ่านใหม่</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-blue-700">
+            <div class="bg-white/60 rounded-lg p-2"><i class="fas fa-clock text-amber-500 mr-1"></i>รหัสชั่วคราวหมดอายุ <b>15 นาที</b></div>
+            <div class="bg-white/60 rounded-lg p-2"><i class="fas fa-shield-alt text-green-500 mr-1"></i>มี <b>Strength bar</b> + Checklist ตรวจรหัส</div>
+            <div class="bg-white/60 rounded-lg p-2"><i class="fas fa-eye text-gray-500 mr-1"></i>ปุ่มดวงตา <b>เปิด/ปิด</b> ดูรหัสที่พิมพ์</div>
+          </div>
+          <p class="text-[10px] text-blue-500 mt-2"><i class="fas fa-info-circle mr-1"></i>ต้องมี Email ลงทะเบียนไว้ ถ้าไม่มีให้ติดต่อผู้ดูแลระบบ</p>
+        </div>
       </section>
 
       <!-- ==================== 4. Dashboard ==================== -->
@@ -249,6 +271,17 @@
           <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-chart-line text-green-500 text-lg mr-2"></i><b class="text-sm">กราฟเส้น</b><p class="text-xs text-gray-500 mt-1">แนวโน้มผลงานรายเดือน + เส้นเป้าหมาย</p></div>
           <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-map-marked-alt text-teal-500 text-lg mr-2"></i><b class="text-sm">แผนที่อำเภอ</b><p class="text-xs text-gray-500 mt-1">ผลงานรายอำเภอ สี 3 ระดับ: เขียว ≥80% / เหลือง 50-79% / แดง &lt;50%</p></div>
           <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-chart-pie text-purple-500 text-lg mr-2"></i><b class="text-sm">กราฟวงกลม</b><p class="text-xs text-gray-500 mt-1">สัดส่วนผลงานแยกตามหน่วยงาน</p></div>
+        </div>
+
+        <!-- District map detail -->
+        <div class="mt-4 bg-teal-50 border border-teal-200 rounded-xl p-4">
+          <h4 class="font-bold text-teal-800 text-sm mb-2"><i class="fas fa-map-marked-alt mr-2"></i>แผนที่ผลงาน KPI รายอำเภอ — จ.นครราชสีมา</h4>
+          <div class="grid grid-cols-3 gap-2 text-xs mb-2">
+            <div class="flex items-center gap-1.5"><span class="w-4 h-4 rounded bg-green-500 inline-block"></span><b>≥80%</b> บรรลุเป้าหมาย</div>
+            <div class="flex items-center gap-1.5"><span class="w-4 h-4 rounded bg-yellow-400 inline-block"></span><b>50-79%</b> ปานกลาง</div>
+            <div class="flex items-center gap-1.5"><span class="w-4 h-4 rounded bg-red-500 inline-block"></span><b>&lt;50%</b> ต้องปรับปรุง</div>
+          </div>
+          <p class="text-xs text-teal-700">แต่ละอำเภอแสดงเป็น card พร้อมวงกลมเปอร์เซ็นต์ เรียงจากมากไปน้อย hover ดูรายละเอียดเป้าหมาย/ผลงาน เปลี่ยนตามตัวกรองที่เลือก</p>
         </div>
       </section>
 
@@ -431,7 +464,7 @@
           </div>
           <div class="bg-gray-50 rounded-xl p-4">
             <p class="text-sm font-bold text-gray-800">ถาม: ลืมรหัสผ่าน?</p>
-            <p class="text-xs text-gray-600 mt-1">ตอบ: ติดต่อผู้ดูแลระบบให้รีเซ็ตรหัสผ่าน (ปุ่มกุญแจ 🔑 ในหน้าจัดการผู้ใช้)</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: กดปุ่ม <b>"ลืมรหัสผ่าน?"</b> ในหน้า Login → กรอก Username → รับรหัสชั่วคราว 6 หลักทาง Email → ใช้ Login แล้วเปลี่ยนรหัสใหม่ | ถ้าไม่มี Email ลงทะเบียนไว้ ให้ติดต่อผู้ดูแลระบบ</p>
           </div>
           <div class="bg-gray-50 rounded-xl p-4">
             <p class="text-sm font-bold text-gray-800">ถาม: กดแก้ไขข้อมูลไม่ได้ ขึ้น "ระบบปิดการคีย์"?</p>
