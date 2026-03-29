@@ -84,17 +84,6 @@
       </nav>
   
       <div class="p-4 border-t border-green-500/30">
-        <!-- Dark Mode + Language toggles -->
-        <div class="flex items-center gap-2 px-4 py-2 mb-2">
-          <button (click)="themeService.toggle()" class="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-green-100 rounded-lg text-xs font-bold transition-all" title="Dark/Light Mode">
-            <i class="fas" [ngClass]="themeService.isDark ? 'fa-sun text-yellow-300' : 'fa-moon'"></i>
-            {{ themeService.isDark ? 'Light' : 'Dark' }}
-          </button>
-          <button (click)="lang.toggle()" class="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-green-100 rounded-lg text-xs font-bold transition-all" title="TH/EN">
-            <i class="fas fa-globe"></i>
-            {{ lang.lang === 'th' ? 'EN' : 'TH' }}
-          </button>
-        </div>
         <a routerLink="/help" routerLinkActive="bg-white/10 text-white font-medium" class="flex items-center w-full px-4 py-3 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer mb-1">
           <i class="fas fa-book-open text-xl mr-3 min-w-[24px]"></i>
           <span class="truncate">{{ lang.t('menu.help') }}</span>
@@ -159,6 +148,14 @@
               </a>
             </div>
           </div>
+          <!-- Dark Mode + Language toggles (Header) -->
+          <button (click)="themeService.toggle()" class="text-white/70 hover:text-white mr-3 transition-all" [title]="themeService.isDark ? 'Light Mode' : 'Dark Mode'">
+            <i class="fas text-lg" [ngClass]="themeService.isDark ? 'fa-sun text-yellow-300' : 'fa-moon'"></i>
+          </button>
+          <button (click)="lang.toggle()" class="text-white/70 hover:text-white mr-4 transition-all flex items-center gap-1 text-xs font-bold border border-white/30 px-2 py-1 rounded-lg" title="เปลี่ยนภาษา">
+            <i class="fas fa-globe"></i>
+            {{ lang.lang === 'th' ? 'EN' : 'TH' }}
+          </button>
           <div class="relative flex items-center cursor-pointer">
             <div class="text-right mr-3 hidden sm:block">
               <p class="text-sm font-bold text-white">({{ currentUser?.role }}) {{ currentUser?.firstname }} {{ currentUser?.lastname }}</p>

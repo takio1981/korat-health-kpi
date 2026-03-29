@@ -1,6 +1,7 @@
 import { Component, signal, OnInit, OnDestroy, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { IdleTimeoutService } from './services/idle-timeout.service';
+import { ThemeService } from './services/theme.service';
 
 @Component({
   selector: 'app-root',
@@ -11,6 +12,7 @@ import { IdleTimeoutService } from './services/idle-timeout.service';
 export class App implements OnInit, OnDestroy {
   protected readonly title = signal('Korat Health KPI');
   private idleTimeoutService = inject(IdleTimeoutService);
+  private themeService = inject(ThemeService); // โหลด theme ตั้งแต่เริ่ม app
 
   ngOnInit() {
     // เคลียร์ session เก่าเมื่อเปิด browser/tab ใหม่

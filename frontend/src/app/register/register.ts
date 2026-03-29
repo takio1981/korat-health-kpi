@@ -3,6 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth';
+import { ThemeService } from '../services/theme.service';
+import { LanguageService } from '../services/language.service';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -15,6 +17,8 @@ export class RegisterComponent implements OnInit {
   private authService = inject(AuthService);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
+  themeService = inject(ThemeService);
+  lang = inject(LanguageService);
 
   formData: any = {
     username: '',
