@@ -1010,7 +1010,8 @@ apiRouter.post('/form-schemas', authenticateToken, isSuperAdmin, async (req, res
                 [currentSchemaId, f.field_name, f.field_label, f.field_type || 'text', f.field_options ? JSON.stringify(f.field_options) : null, f.is_required ? 1 : 0, i]
             );
         }
-        // สร้าง / อัปเดตตาราง Dynamic
+        // สร้าง / อัปเดตตาราง Dynamic (ใช้ prefix form_ เพื่อไม่ซ้ำกับตาราง export)
+        const formTableName = 'form_' + tableProcess;
         const reservedFields = ['id','hospcode','year_bh','month_bh','created_by','created_at','updated_at'];
         const customCols = fields.filter(f => !reservedFields.includes(f.field_name));
         let colDefs = customCols.map(f => {
@@ -1019,7 +1020,7 @@ apiRouter.post('/form-schemas', authenticateToken, isSuperAdmin, async (req, res
         }).join(', ');
         if (colDefs) colDefs = ', ' + colDefs;
         await connection.query(`
-            CREATE TABLE IF NOT EXISTS \`${tableProcess}\` (
+            CREATE TABLE IF NOT EXISTS \`${formTableName}\` (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 hospcode VARCHAR(20) NOT NULL,
                 year_bh INT NOT NULL,
@@ -1035,7 +1036,7 @@ apiRouter.post('/form-schemas', authenticateToken, isSuperAdmin, async (req, res
         for (const f of customCols) {
             try {
                 const sqlType = f.field_type === 'number' ? 'DECIMAL(15,4) NULL' : 'TEXT NULL';
-                await connection.query(`ALTER TABLE \`${tableProcess}\` ADD COLUMN IF NOT EXISTS \`${f.field_name}\` ${sqlType}`);
+                await connection.query(`ALTER TABLE \`${formTableName}\` ADD COLUMN IF NOT EXISTS \`${f.field_name}\` ${sqlType}`);
             } catch (e) { /* ignore */ }
         }
         await connection.query(
@@ -1058,10 +1059,11 @@ apiRouter.delete('/form-schemas/:id', authenticateToken, isSuperAdmin, async (re
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-// GET /dynamic-data/:table_name — ดึงข้อมูลจากตาราง dynamic
+// GET /dynamic-data/:table_name — ดึงข้อมูลจากตาราง dynamic (form_ prefix)
 apiRouter.get('/dynamic-data/:table_name', authenticateToken, async (req, res) => {
     const { table_name } = req.params;
     if (!isValidIdentifier(table_name)) return res.status(400).json({ success: false, message: 'ชื่อตารางไม่ถูกต้อง' });
+    const formTable = 'form_' + table_name;
     try {
         const { hospcode, year_bh, month_bh } = req.query;
         let where = 'WHERE 1=1';
@@ -1069,7 +1071,7 @@ apiRouter.get('/dynamic-data/:table_name', authenticateToken, async (req, res) =
         if (hospcode) { where += ' AND t.hospcode = ?'; params.push(hospcode); }
         if (year_bh) { where += ' AND t.year_bh = ?'; params.push(year_bh); }
         if (month_bh) { where += ' AND t.month_bh = ?'; params.push(month_bh); }
-        const [rows] = await db.query(`SELECT t.*, u.username AS created_by_name FROM \`${table_name}\` t LEFT JOIN users u ON t.created_by = u.id ${where} ORDER BY t.year_bh DESC, t.month_bh DESC, t.created_at DESC`, params);
+        const [rows] = await db.query(`SELECT t.*, u.username AS created_by_name FROM \`${formTable}\` t LEFT JOIN users u ON t.created_by = u.id ${where} ORDER BY t.year_bh DESC, t.month_bh DESC, t.created_at DESC`, params);
         res.json({ success: true, data: rows });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
@@ -1084,15 +1086,17 @@ apiRouter.get('/dynamic-data-months/:table_name', authenticateToken, async (req,
         const params = [];
         if (hospcode) { where += ' AND hospcode = ?'; params.push(hospcode); }
         if (year_bh) { where += ' AND year_bh = ?'; params.push(year_bh); }
-        const [rows] = await db.query(`SELECT DISTINCT month_bh FROM \`${table_name}\` ${where} AND month_bh IS NOT NULL ORDER BY month_bh`, params);
+        const formTable = 'form_' + table_name;
+        const [rows] = await db.query(`SELECT DISTINCT month_bh FROM \`${formTable}\` ${where} AND month_bh IS NOT NULL ORDER BY month_bh`, params);
         res.json({ success: true, data: rows.map(r => r.month_bh) });
     } catch (e) { res.status(500).json({ success: false, data: [] }); }
 });
 
-// POST /dynamic-data/:table_name — บันทึกข้อมูลลงตาราง dynamic + sync kpi_results
+// POST /dynamic-data/:table_name — บันทึกข้อมูลลงตาราง dynamic (form_ prefix) + sync kpi_results
 apiRouter.post('/dynamic-data/:table_name', authenticateToken, async (req, res) => {
     const { table_name } = req.params;
     if (!isValidIdentifier(table_name)) return res.status(400).json({ success: false, message: 'ชื่อตารางไม่ถูกต้อง' });
+    const formTable = 'form_' + table_name;
     const isUpdate = !!(req.body.id && Number(req.body.id) > 0);
     const rowId = isUpdate ? Number(req.body.id) : null;
     const data = { ...req.body };
@@ -1111,10 +1115,10 @@ apiRouter.post('/dynamic-data/:table_name', authenticateToken, async (req, res) 
 
         if (isUpdate) {
             const setClauses = cols.map(c => `\`${c}\` = ?`).join(', ');
-            await connection.query(`UPDATE \`${table_name}\` SET ${setClauses} WHERE id = ?`, [...vals, rowId]);
+            await connection.query(`UPDATE \`${formTable}\` SET ${setClauses} WHERE id = ?`, [...vals, rowId]);
         } else {
             const placeholders = cols.map(() => '?').join(', ');
-            const [result] = await connection.query(`INSERT INTO \`${table_name}\` (\`${cols.join('`, `')}\`) VALUES (${placeholders})`, vals);
+            const [result] = await connection.query(`INSERT INTO \`${formTable}\` (\`${cols.join('`, `')}\`) VALUES (${placeholders})`, vals);
             insertedId = result.insertId;
         }
 
@@ -1165,7 +1169,8 @@ apiRouter.delete('/dynamic-data/:table_name/:record_id', authenticateToken, asyn
     const { table_name, record_id } = req.params;
     if (!isValidIdentifier(table_name)) return res.status(400).json({ success: false, message: 'ชื่อตารางไม่ถูกต้อง' });
     try {
-        await db.query(`DELETE FROM \`${table_name}\` WHERE id = ?`, [record_id]);
+        const formTable = 'form_' + table_name;
+        await db.query(`DELETE FROM \`${formTable}\` WHERE id = ?`, [record_id]);
         res.json({ success: true, message: 'ลบข้อมูลเรียบร้อยแล้ว' });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
@@ -2841,32 +2846,28 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
         const created = [];
         const skipped = [];
 
-        const tableDDL = (name) => `CREATE TABLE IF NOT EXISTS \`${name}\` (
-            hospcode VARCHAR(5) NOT NULL,
-            byear VARCHAR(4) NOT NULL,
-            target DECIMAL(10,2) DEFAULT 0,
-            result DECIMAL(10,2) DEFAULT 0,
-            m10 DECIMAL(10,2) DEFAULT 0,
-            m11 DECIMAL(10,2) DEFAULT 0,
-            m12 DECIMAL(10,2) DEFAULT 0,
-            m01 DECIMAL(10,2) DEFAULT 0,
-            m02 DECIMAL(10,2) DEFAULT 0,
-            m03 DECIMAL(10,2) DEFAULT 0,
-            m04 DECIMAL(10,2) DEFAULT 0,
-            m05 DECIMAL(10,2) DEFAULT 0,
-            m06 DECIMAL(10,2) DEFAULT 0,
-            m07 DECIMAL(10,2) DEFAULT 0,
-            m08 DECIMAL(10,2) DEFAULT 0,
-            m09 DECIMAL(10,2) DEFAULT 0,
-            create_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-            update_date DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY (hospcode, byear)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`;
+        const baseColsWithMonths = 'hospcode VARCHAR(5) NOT NULL, byear VARCHAR(4) NOT NULL, target VARCHAR(100) DEFAULT NULL, result VARCHAR(100) DEFAULT NULL, m10 VARCHAR(100) DEFAULT NULL, m11 VARCHAR(100) DEFAULT NULL, m12 VARCHAR(100) DEFAULT NULL, m01 VARCHAR(100) DEFAULT NULL, m02 VARCHAR(100) DEFAULT NULL, m03 VARCHAR(100) DEFAULT NULL, m04 VARCHAR(100) DEFAULT NULL, m05 VARCHAR(100) DEFAULT NULL, m06 VARCHAR(100) DEFAULT NULL, m07 VARCHAR(100) DEFAULT NULL, m08 VARCHAR(100) DEFAULT NULL, m09 VARCHAR(100) DEFAULT NULL';
+        const baseColsNoMonths = 'hospcode VARCHAR(5) NOT NULL, byear VARCHAR(4) NOT NULL, target VARCHAR(100) DEFAULT NULL, result VARCHAR(100) DEFAULT NULL';
+
+        const tableDDL = (name, extraCols, hasForm) => {
+            let cols = hasForm ? baseColsNoMonths : baseColsWithMonths;
+            if (extraCols && extraCols.length > 0) {
+                cols += ', ' + extraCols.map(f => `\`${f.field_name}\` VARCHAR(500) DEFAULT NULL`).join(', ');
+            }
+            return `CREATE TABLE IF NOT EXISTS \`${name}\` (${cols}, create_date DATETIME DEFAULT CURRENT_TIMESTAMP, update_date DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (hospcode, byear)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`;
+        };
+
+        // Helper: ALTER TABLE เพิ่มคอลัมน์ dynamic ที่ยังไม่มี
+        const ensureDynamicCols = async (conn2, tableName2, extraCols) => {
+            for (const f of extraCols) {
+                try { await conn2.query(`ALTER TABLE \`${tableName2}\` ADD COLUMN \`${f.field_name}\` VARCHAR(500) DEFAULT NULL`); } catch (e) { /* already exists */ }
+            }
+        };
 
         const months = ['m10', 'm11', 'm12', 'm01', 'm02', 'm03', 'm04', 'm05', 'm06', 'm07', 'm08', 'm09'];
 
         for (const indicator of indicators) {
-            // Sanitize table name: replace - with _, then validate
+            // Sanitize table name (export ใช้ชื่อ table_process ตรงๆ, form builder ใช้ form_ prefix)
             let tableName = indicator.table_process.trim().replace(/-/g, '_');
             if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(tableName)) {
                 skipped.push({ id: indicator.id, name: indicator.kpi_indicators_name, table_process: indicator.table_process, reason: 'ชื่อตารางไม่ถูกต้อง' });
@@ -2875,70 +2876,117 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
 
             await conn.beginTransaction();
             try {
-                // Create table if not exists
-                await conn.query(tableDDL(tableName));
+                // ดึง form schema + fields สำหรับ indicator นี้
+                const [schemaRows] = await conn.query(
+                    `SELECT fs.id, fs.actual_value_field FROM kpi_form_schemas fs WHERE fs.indicator_id = ? AND fs.is_active = 1 LIMIT 1`,
+                    [indicator.id]
+                );
+                let formFields = [];
+                let dynamicTableName = null;
+                if (schemaRows.length > 0) {
+                    const [fields] = await conn.query(
+                        'SELECT field_name, field_label, field_type FROM kpi_form_fields WHERE schema_id = ? ORDER BY sort_order',
+                        [schemaRows[0].id]
+                    );
+                    formFields = fields.filter(f => isValidIdentifier(f.field_name));
+                    // ดึงชื่อ dynamic table จาก kpi_indicators.table_process (ใช้ตัวเดียวกับ export)
+                    // dynamic data table ใช้ prefix form_ + table_process
+                    const [dynTbl] = await conn.query('SELECT table_process FROM kpi_indicators WHERE id = ?', [indicator.id]);
+                    if (dynTbl.length > 0 && dynTbl[0].table_process) {
+                        const dynName = 'form_' + dynTbl[0].table_process;
+                        try {
+                            await conn.query(`SELECT 1 FROM \`${dynName}\` LIMIT 0`);
+                            dynamicTableName = dynName;
+                        } catch (e) { /* table ไม่มี = ไม่มี dynamic data */ }
+                    }
+                }
 
-                // Fetch kpi_results for this indicator + year (เฉพาะ hospcode ที่มีข้อมูล)
+                const hasForm = formFields.length > 0;
+                // Create export table (ถ้ามี form → ไม่มีคอลัมน์เดือน, ใช้คอลัมน์จาก form แทน)
+                await conn.query(tableDDL(tableName, formFields, hasForm));
+                if (hasForm) await ensureDynamicCols(conn, tableName, formFields);
+
+                // Fetch kpi_results for this indicator + year
                 const [results] = await conn.query(
                     'SELECT hospcode, month_bh, target_value, actual_value FROM kpi_results WHERE indicator_id = ? AND year_bh = ?',
                     [indicator.id, year_bh]
                 );
 
-                // Build hospcode -> month data map (เฉพาะที่มีข้อมูลจริง)
+                // Build hospcode -> month data map
                 const dataMap = new Map();
                 for (const row of results) {
                     if (!dataMap.has(row.hospcode)) dataMap.set(row.hospcode, {});
                     const entry = dataMap.get(row.hospcode);
                     const mKey = 'm' + String(row.month_bh).padStart(2, '0');
-                    entry[mKey] = Number(row.actual_value) || 0;
+                    entry[mKey] = row.actual_value != null ? String(row.actual_value) : null;
                     if (String(row.month_bh) === '10') {
-                        entry.target = Number(row.target_value) || 0;
+                        entry.target = row.target_value != null ? String(row.target_value) : null;
                     }
                 }
 
-                // ดึงข้อมูลเดิมในตารางเพื่อเปรียบเทียบ
-                const [existingRows] = await conn.query(
-                    `SELECT hospcode, target, result, m10, m11, m12, m01, m02, m03, m04, m05, m06, m07, m08, m09 FROM \`${tableName}\` WHERE byear = ?`,
-                    [year_bh]
-                );
-                const existingMap = new Map();
-                for (const row of existingRows) {
-                    existingMap.set(row.hospcode, row);
+                // ดึง dynamic form data (ถ้ามี) → merge เข้า dataMap
+                if (dynamicTableName && formFields.length > 0) {
+                    const dynFieldNames = formFields.map(f => `\`${f.field_name}\``).join(', ');
+                    try {
+                        const [dynRows] = await conn.query(
+                            `SELECT hospcode, ${dynFieldNames} FROM \`${dynamicTableName}\` WHERE year_bh = ? AND indicator_id = ?`,
+                            [year_bh, indicator.id]
+                        );
+                        for (const row of dynRows) {
+                            if (!dataMap.has(row.hospcode)) dataMap.set(row.hospcode, {});
+                            const entry = dataMap.get(row.hospcode);
+                            for (const f of formFields) {
+                                // ถ้ามีหลาย record ต่อ hospcode → ใช้ค่าล่าสุด (อาจ overwrite)
+                                if (row[f.field_name] !== undefined && row[f.field_name] !== null) {
+                                    entry['_dyn_' + f.field_name] = String(row[f.field_name]);
+                                }
+                            }
+                        }
+                    } catch (e) { /* dynamic table query failed - skip */ }
                 }
 
-                // Build rows เฉพาะ hospcode ที่มีข้อมูลใน kpi_results
+                // Build upsert rows
                 const upsertRows = [];
                 let updatedCount = 0;
                 let insertedCount = 0;
+                const dynFieldKeys = formFields.map(f => f.field_name);
 
                 for (const [hc, d] of dataMap) {
-                    const target = d.target || 0;
-                    const monthValues = months.map(m => d[m] || 0);
-                    const result = monthValues.reduce((a, b) => a + b, 0);
+                    const target = d.target || '';
+                    const dynValues = dynFieldKeys.map(k => d['_dyn_' + k] || '');
 
-                    // ตรวจสอบว่ามีข้อมูลเดิมหรือไม่ และค่าเปลี่ยนแปลงหรือไม่
-                    const existing = existingMap.get(hc);
-                    if (existing) {
-                        const changed = Number(existing.target) !== target ||
-                            Number(existing.result) !== result ||
-                            months.some((m, idx) => Number(existing[m]) !== monthValues[idx]);
-                        if (!changed) continue; // ข้ามถ้าค่าเหมือนเดิม
-                        updatedCount++;
+                    if (hasForm) {
+                        // มี form → ส่งออกเฉพาะ hospcode, byear, target, result + dynamic fields (ไม่มีเดือน)
+                        const resultStr = dynValues.join('') ? '' : ''; // ไม่มี result สำหรับ form-based
+                        upsertRows.push([hc, year_bh, target, resultStr, ...dynValues]);
                     } else {
-                        insertedCount++;
+                        // ไม่มี form → ส่งออกแบบเดิม (hospcode, byear, target, result, m10-m09)
+                        const monthValues = months.map(m => d[m] || '');
+                        const numericMonths = monthValues.map(v => parseFloat(v) || 0);
+                        const result = numericMonths.reduce((a, b) => a + b, 0);
+                        const resultStr = result > 0 ? String(result) : '';
+                        upsertRows.push([hc, year_bh, target, resultStr, ...monthValues]);
                     }
-
-                    upsertRows.push([hc, year_bh, target, result, ...monthValues]);
+                    insertedCount++;
                 }
 
-                // Batch UPSERT (INSERT ... ON DUPLICATE KEY UPDATE) เฉพาะ row ที่มีการเปลี่ยนแปลง
+                // Batch UPSERT
                 if (upsertRows.length > 0) {
-                    const cols = 'hospcode, byear, target, result, m10, m11, m12, m01, m02, m03, m04, m05, m06, m07, m08, m09';
-                    const onDup = 'target=VALUES(target), result=VALUES(result), m10=VALUES(m10), m11=VALUES(m11), m12=VALUES(m12), m01=VALUES(m01), m02=VALUES(m02), m03=VALUES(m03), m04=VALUES(m04), m05=VALUES(m05), m06=VALUES(m06), m07=VALUES(m07), m08=VALUES(m08), m09=VALUES(m09)';
+                    let colsList, onDupParts;
+                    if (hasForm) {
+                        colsList = ['hospcode', 'byear', 'target', 'result', ...dynFieldKeys.map(k => `\`${k}\``)];
+                        onDupParts = ['target=VALUES(target)', 'result=VALUES(result)', ...dynFieldKeys.map(k => `\`${k}\`=VALUES(\`${k}\`)`)];
+                    } else {
+                        colsList = ['hospcode', 'byear', 'target', 'result', ...months];
+                        onDupParts = ['target=VALUES(target)', 'result=VALUES(result)', ...months.map(m => `${m}=VALUES(${m})`)];
+                    }
+                    const cols = colsList.join(', ');
+                    const onDup = onDupParts.join(', ');
+                    const singlePlaceholder = '(' + Array(colsList.length).fill('?').join(',') + ')';
 
                     for (let i = 0; i < upsertRows.length; i += 100) {
                         const batch = upsertRows.slice(i, i + 100);
-                        const placeholders = batch.map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').join(',');
+                        const placeholders = batch.map(() => singlePlaceholder).join(',');
                         const flatValues = batch.flat();
                         await conn.query(`INSERT INTO \`${tableName}\` (${cols}) VALUES ${placeholders} ON DUPLICATE KEY UPDATE ${onDup}`, flatValues);
                     }
