@@ -1,5 +1,5 @@
 services:
-  # Backend API Service (Node.js + PM2)
+  # Backend API Service (Node.js)
   backend:
     build:
       context: ./api
@@ -10,14 +10,18 @@ services:
       - "8830:8830"
     environment:
       PORT: 8830
-      # host.docker.internal resolves to host machine IP automatically (Docker Desktop)
-      # DB_HOST in .env is IGNORED — container always reaches the host via host.docker.internal
+      NODE_ENV: production
       DB_HOST: host.docker.internal
       DB_PORT: ${DB_PORT}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
       SECRET_KEY: ${SECRET_KEY}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -28,6 +32,19 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1024M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   # Frontend Service (Nginx)
   frontend:
@@ -43,6 +60,19 @@ services:
         condition: service_healthy
     networks:
       - kpi_network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
 
 networks:
   kpi_network:

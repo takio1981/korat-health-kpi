@@ -8,10 +8,14 @@ const pool = mysql.createPool({
     database: process.env.DB_NAME,
     port: process.env.DB_PORT || 3306,
     waitForConnections: true,
-    connectionLimit: 20, // เพิ่ม Limit สำหรับ Production
-    queueLimit: 0,
+    connectionLimit: 50,          // รองรับ 500 users (1 connection : 10 users)
+    maxIdle: 20,                  // idle connections ที่เก็บไว้
+    idleTimeout: 60000,           // ปิด idle connection หลัง 60 วินาที
+    queueLimit: 200,              // queue สูงสุด 200 คำขอ (ป้องกัน memory leak)
     enableKeepAlive: true,
-    keepAliveInitialDelay: 0
+    keepAliveInitialDelay: 10000, // keep alive ทุก 10 วินาที
+    connectTimeout: 10000,        // timeout connect 10 วินาที
+    charset: 'utf8mb4'
 });
 
 module.exports = pool.promise();

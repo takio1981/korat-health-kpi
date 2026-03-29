@@ -83,7 +83,7 @@ const loginLimiter = rateLimit({
 });
 
 const apiLimiter = rateLimit({
-    windowMs: 1 * 60 * 1000, // 1 นาที
+    windowMs: 1 * 60 * 1000, // 1 นาที per IP
     max: 300, // เรียก API ทั่วไปได้ 300 ครั้งต่อนาที (ปรับตามความเหมาะสม)
     standardHeaders: true,
     legacyHeaders: false,
@@ -1650,15 +1650,45 @@ apiRouter.put('/users/:id/reset-password', authenticateToken, isAnyAdmin, async 
     }
 
     try {
-        const hashedPassword = await bcrypt.hash(defaultPassword, 10);
-        await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [hashedPassword, userId]);
+        // สร้างรหัสชั่วคราว 6 หลัก + hash
+        const tempCode = String(Math.floor(100000 + Math.random() * 900000));
+        const hashedTemp = await bcrypt.hash(tempCode, 10);
+        const expiry = new Date(Date.now() + 15 * 60 * 1000);
+
+        await db.query('UPDATE users SET temp_password = ?, temp_password_expiry = ?, must_change_password = 1 WHERE id = ?',
+            [hashedTemp, expiry, userId]);
+
+        // ดึงข้อมูล user เพื่อส่ง email
+        const [targetUser] = await db.query('SELECT username, email, firstname, lastname FROM users WHERE id = ?', [userId]);
+        const target = targetUser[0];
+
+        // ส่ง Email แจ้งรหัสชั่วคราว (ถ้ามี email)
+        if (target && target.email) {
+            sendMail(target.email, '🔑 รหัสผ่านของคุณถูกรีเซ็ต — ระบบ KPI สสจ.นครราชสีมา',
+                `<div style="font-family:Sarabun,sans-serif;max-width:500px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
+                    <div style="background:linear-gradient(135deg,#f97316,#fb923c);padding:24px;text-align:center;color:white">
+                        <h2 style="margin:0;font-size:20px">🔑 รีเซ็ตรหัสผ่าน</h2>
+                    </div>
+                    <div style="padding:24px;text-align:center">
+                        <p>เรียน คุณ${target.firstname} ${target.lastname},</p>
+                        <p>ผู้ดูแลระบบได้ทำการรีเซ็ตรหัสผ่านของคุณ<br>รหัสชั่วคราวสำหรับเข้าสู่ระบบคือ:</p>
+                        <div style="background:#fff7ed;border:2px dashed #f97316;border-radius:12px;padding:20px;margin:16px 0">
+                            <span style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#c2410c;font-family:monospace">${tempCode}</span>
+                        </div>
+                        <p style="color:#dc2626;font-weight:bold;font-size:14px">รหัสนี้จะหมดอายุใน 15 นาที</p>
+                        <p style="font-size:13px;color:#6b7280">ใช้รหัสนี้แทนรหัสผ่านเดิมเพื่อเข้าสู่ระบบ<br>ระบบจะบังคับให้เปลี่ยนรหัสผ่านใหม่ทันที</p>
+                    </div>
+                </div>`
+            );
+        }
+
         await db.query(
             'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [user.userId, user.deptId, 'UPDATE', 'users', userId, JSON.stringify({ message: 'Reset Password' }), req.ip]
+            [user.userId, user.deptId, 'UPDATE', 'users', userId, JSON.stringify({ message: 'Reset Password', email_sent: !!target?.email }), req.ip]
         );
-        res.json({ success: true, message: `Reset to "${defaultPassword}"` });
+        res.json({ success: true, message: target?.email ? `รีเซ็ตสำเร็จ — ส่งรหัสชั่วคราวไปที่ Email ของผู้ใช้แล้ว` : `รีเซ็ตสำเร็จ — ผู้ใช้ไม่มี Email ให้แจ้งรหัสชั่วคราว: ${tempCode}` });
     } catch (error) {
-        res.status(500).json({ success: false });
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
@@ -3514,7 +3544,30 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
             await db.query(`ALTER TABLE kpi_form_schemas ADD COLUMN IF NOT EXISTS actual_value_field VARCHAR(100) NULL COMMENT 'ชื่อฟิลด์ที่ใช้ sync ไปยัง kpi_results.actual_value'`);
         } catch (e) { /* may already exist */ }
 
-        console.log('✅ login_logs, system_logs, notifications, rejection & appeal tables ready');
+        // === Performance Indexes สำหรับ 500 concurrent users ===
+        const indexes = [
+            'CREATE INDEX IF NOT EXISTS idx_kpi_results_composite ON kpi_results (indicator_id, year_bh, hospcode)',
+            'CREATE INDEX IF NOT EXISTS idx_kpi_results_status ON kpi_results (status)',
+            'CREATE INDEX IF NOT EXISTS idx_kpi_results_year ON kpi_results (year_bh)',
+            'CREATE INDEX IF NOT EXISTS idx_kpi_results_month ON kpi_results (month_bh)',
+            'CREATE INDEX IF NOT EXISTS idx_kpi_results_hospcode ON kpi_results (hospcode)',
+            'CREATE INDEX IF NOT EXISTS idx_users_role ON users (role)',
+            'CREATE INDEX IF NOT EXISTS idx_users_approved ON users (is_approved)',
+            'CREATE INDEX IF NOT EXISTS idx_users_hospcode ON users (hospcode)',
+            'CREATE INDEX IF NOT EXISTS idx_users_dept ON users (dept_id)',
+            'CREATE INDEX IF NOT EXISTS idx_users_cid ON users (cid)',
+            'CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications (user_id, is_read)',
+            'CREATE INDEX IF NOT EXISTS idx_kpi_indicators_dept ON kpi_indicators (dept_id)',
+            'CREATE INDEX IF NOT EXISTS idx_kpi_indicators_main ON kpi_indicators (main_indicator_id)',
+            'CREATE INDEX IF NOT EXISTS idx_kpi_indicators_active ON kpi_indicators (is_active)',
+            'CREATE INDEX IF NOT EXISTS idx_login_logs_username ON login_logs (username)',
+            'CREATE INDEX IF NOT EXISTS idx_system_logs_user ON system_logs (user_id)'
+        ];
+        for (const idx of indexes) {
+            try { await db.query(idx); } catch (e) { /* index อาจมีอยู่แล้ว */ }
+        }
+
+        console.log('✅ login_logs, system_logs, notifications, rejection & appeal tables + indexes ready');
     } catch (err) {
         console.error('⚠️ Auto-create tables error:', err.message);
     }
