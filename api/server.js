@@ -195,7 +195,17 @@ apiRouter.post('/login', loginLimiter, async (req, res) => {
         if (users.length > 0) {
             const user = users[0];
             // ใช้ bcryptjs.compare
-            const isMatch = await bcrypt.compare(password, user.password_hash);
+            // ตรวจสอบรหัสผ่านปกติ หรือ รหัสชั่วคราว
+            let isMatch = await bcrypt.compare(password, user.password_hash);
+            let usedTempPassword = false;
+
+            if (!isMatch && user.temp_password && user.temp_password_expiry) {
+                const tempMatch = await bcrypt.compare(password, user.temp_password);
+                if (tempMatch && new Date(user.temp_password_expiry) > new Date()) {
+                    isMatch = true;
+                    usedTempPassword = true;
+                }
+            }
 
             if (isMatch) {
                 // ตรวจสอบสถานะการอนุมัติ
@@ -213,7 +223,12 @@ apiRouter.post('/login', loginLimiter, async (req, res) => {
                 }
                 const serviceUnitDisplay = user.hosname ? `${user.hosname} ${user.distname ? 'อ.' + user.distname : ''}` : user.service_unit;
 
-                await saveLog(username, 'login_success', 'เข้าสู่ระบบสำเร็จ', ip);
+                // ถ้าใช้รหัสชั่วคราว → ยังไม่ล้าง (จะล้างตอน change-password สำเร็จ)
+                // เพื่อให้ change-password ยังตรวจ temp_password ได้
+
+                const forceChange = user.must_change_password === 1 || usedTempPassword;
+
+                await saveLog(username, 'login_success', usedTempPassword ? 'เข้าสู่ระบบด้วยรหัสชั่วคราว' : 'เข้าสู่ระบบสำเร็จ', ip);
                 const token = jwt.sign(
                     { userId: user.id, username: user.username, deptId: user.dept_id, role: user.role, hospcode: user.hospcode },
                     SECRET_KEY,
@@ -222,6 +237,7 @@ apiRouter.post('/login', loginLimiter, async (req, res) => {
                 res.json({
                     success: true,
                     token,
+                    force_change: forceChange,
                     user: {
                         id: user.id,
                         username: user.username,
@@ -246,6 +262,55 @@ apiRouter.post('/login', loginLimiter, async (req, res) => {
         console.error(error);
         await saveLog(username, 'system_error', error.message, ip);
         res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดที่ Server' });
+    }
+});
+
+// === ลืมรหัสผ่าน: ส่งรหัสชั่วคราว 6 หลักทาง Email ===
+apiRouter.post('/forgot-password', loginLimiter, async (req, res) => {
+    const { username } = req.body;
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    if (!username) return res.status(400).json({ success: false, message: 'กรุณากรอก Username' });
+
+    try {
+        const [users] = await db.query('SELECT id, email, firstname, lastname FROM users WHERE username = ? AND is_approved = 1 AND is_active = 1', [username]);
+        if (users.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบ Username นี้ในระบบ หรือบัญชียังไม่ได้รับการอนุมัติ' });
+
+        const user = users[0];
+        if (!user.email) return res.status(400).json({ success: false, message: 'บัญชีนี้ไม่มี Email ลงทะเบียนไว้ กรุณาติดต่อผู้ดูแลระบบ' });
+
+        // สร้างรหัสชั่วคราว 6 หลัก
+        const tempCode = String(Math.floor(100000 + Math.random() * 900000));
+        const hashedTemp = await bcrypt.hash(tempCode, 10);
+        const expiry = new Date(Date.now() + 15 * 60 * 1000); // หมดอายุ 15 นาที
+
+        await db.query('UPDATE users SET temp_password = ?, temp_password_expiry = ?, must_change_password = 1 WHERE id = ?',
+            [hashedTemp, expiry, user.id]);
+
+        // ส่ง Email
+        const emailMask = user.email.replace(/(.{2})(.*)(@.*)/, '$1***$3');
+        sendMail(user.email, '🔑 รหัสชั่วคราวสำหรับเข้าสู่ระบบ — ระบบ KPI สสจ.นครราชสีมา',
+            `<div style="font-family:Sarabun,sans-serif;max-width:500px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
+                <div style="background:linear-gradient(135deg,#2563eb,#3b82f6);padding:24px;text-align:center;color:white">
+                    <h2 style="margin:0;font-size:20px">🔑 รหัสชั่วคราว</h2>
+                </div>
+                <div style="padding:24px;text-align:center">
+                    <p>เรียน คุณ${user.firstname} ${user.lastname},</p>
+                    <p>รหัสชั่วคราวสำหรับเข้าสู่ระบบของคุณคือ:</p>
+                    <div style="background:#f0f9ff;border:2px dashed #3b82f6;border-radius:12px;padding:20px;margin:16px 0">
+                        <span style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#1d4ed8;font-family:monospace">${tempCode}</span>
+                    </div>
+                    <p style="color:#dc2626;font-weight:bold;font-size:14px">รหัสนี้จะหมดอายุใน 15 นาที</p>
+                    <p style="font-size:13px;color:#6b7280">ใช้รหัสนี้แทนรหัสผ่านเดิมเพื่อเข้าสู่ระบบ<br>ระบบจะบังคับให้เปลี่ยนรหัสผ่านใหม่ทันที</p>
+                    <p style="color:#9ca3af;font-size:11px;margin-top:24px">หากคุณไม่ได้ขอรีเซ็ตรหัสผ่าน กรุณาเพิกเฉยอีเมลนี้<br>อีเมลฉบับนี้ส่งโดยอัตโนมัติ กรุณาอย่าตอบกลับ</p>
+                </div>
+            </div>`
+        );
+
+        await saveLog(username, 'forgot_password', `ส่งรหัสชั่วคราวไปที่ ${emailMask}`, ip);
+        res.json({ success: true, message: `ส่งรหัสชั่วคราว 6 หลักไปที่ ${emailMask} แล้ว กรุณาตรวจสอบ Email`, email_masked: emailMask });
+    } catch (error) {
+        console.error('Forgot password error:', error);
+        res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาด กรุณาลองใหม่' });
     }
 });
 
@@ -1434,14 +1499,18 @@ apiRouter.put('/users/change-password', async (req, res) => {
     }
 
     try {
-        const [users] = await db.query('SELECT password_hash FROM users WHERE id = ?', [user.userId]);
+        const [users] = await db.query('SELECT password_hash, temp_password, temp_password_expiry FROM users WHERE id = ?', [user.userId]);
         if (users.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
 
-        const isMatch = await bcrypt.compare(currentPassword, users[0].password_hash);
+        // ตรวจสอบรหัสผ่านปัจจุบัน หรือ รหัสชั่วคราว
+        let isMatch = await bcrypt.compare(currentPassword, users[0].password_hash);
+        if (!isMatch && users[0].temp_password) {
+            isMatch = await bcrypt.compare(currentPassword, users[0].temp_password);
+        }
         if (!isMatch) return res.status(400).json({ success: false, message: 'รหัสผ่านปัจจุบันไม่ถูกต้อง' });
 
         const hashedPassword = await bcrypt.hash(newPassword, 10);
-        await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [hashedPassword, user.userId]);
+        await db.query('UPDATE users SET password_hash = ?, must_change_password = 0, temp_password = NULL, temp_password_expiry = NULL WHERE id = ?', [hashedPassword, user.userId]);
 
         await db.query(
             'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -3317,6 +3386,10 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         try {
             await db.query(`ALTER TABLE users ADD COLUMN email VARCHAR(255) NULL`);
         } catch (e) { /* already exists */ }
+        // เพิ่ม forgot-password columns
+        try { await db.query(`ALTER TABLE users ADD COLUMN temp_password VARCHAR(255) NULL`); } catch (e) {}
+        try { await db.query(`ALTER TABLE users ADD COLUMN temp_password_expiry DATETIME NULL`); } catch (e) {}
+        try { await db.query(`ALTER TABLE users ADD COLUMN must_change_password TINYINT(1) NOT NULL DEFAULT 0`); } catch (e) {}
         // เพิ่ม is_active ใน users table
         try {
             await db.query(`ALTER TABLE users ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1`);

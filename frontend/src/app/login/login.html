@@ -24,7 +24,14 @@
 
       <div class="w-24 h-1 bg-green-400 rounded-full mb-6"></div>
 
-      <p class="text-green-50 text-lg">เชื่อมโยงข้อมูล ยกระดับบริการ เพื่อสุขภาพที่ดีของชาวโคราช</p>
+      <p class="text-green-50 text-lg mb-6">เชื่อมโยงข้อมูล ยกระดับบริการ เพื่อสุขภาพที่ดีของชาวโคราช</p>
+
+      <button (click)="showAbout = !showAbout"
+              class="inline-flex items-center gap-2 px-5 py-2.5 bg-white/15 hover:bg-white/25 backdrop-blur-sm text-white rounded-xl text-sm font-bold transition-all border border-white/20">
+        <i class="fas fa-info-circle"></i>
+        เกี่ยวกับระบบและวัตถุประสงค์
+        <i class="fas fa-chevron-down text-xs transition-transform" [class.rotate-180]="showAbout"></i>
+      </button>
     </div>
   </div>
 
@@ -75,12 +82,10 @@
           </div>
         </div>
 
-        <div class="flex items-center justify-between mt-4">
-          <!-- <div class="flex items-center">
-            <input type="checkbox" id="remember" class="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded cursor-pointer">
-            <label for="remember" class="ml-2 block text-sm text-gray-600 cursor-pointer">จดจำฉัน</label>
-          </div> -->
-          <!-- <a href="#" class="text-sm font-semibold text-green-600 hover:text-green-800 transition-colors">ลืมรหัสผ่าน?</a> -->
+        <div class="flex items-center justify-end mt-4">
+          <button type="button" (click)="forgotPassword()" class="text-sm font-semibold text-green-600 hover:text-green-800 transition-colors">
+            <i class="fas fa-key mr-1"></i>ลืมรหัสผ่าน?
+          </button>
         </div>
 
         <button type="submit" class="mt-6 w-full py-3 px-4 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
@@ -95,6 +100,115 @@
         </p>
       </div>
 
+      <!-- Link เกี่ยวกับระบบ (mobile) -->
+      <div class="text-center mt-4 lg:hidden">
+        <button (click)="showAbout = !showAbout" class="text-xs text-gray-400 hover:text-green-600 transition-colors">
+          <i class="fas fa-info-circle mr-1"></i>เกี่ยวกับระบบและวัตถุประสงค์
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- About Overlay -->
+  <div *ngIf="showAbout" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" (click)="showAbout = false">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" (click)="$event.stopPropagation()">
+      <!-- Header -->
+      <div class="bg-gradient-to-r from-green-700 to-teal-600 text-white p-6 rounded-t-2xl">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+              <i class="fas fa-heartbeat text-2xl"></i>
+            </div>
+            <div>
+              <h2 class="text-xl font-bold">เกี่ยวกับระบบ</h2>
+              <p class="text-green-100 text-sm">ระบบบันทึกผลงาน KPI ด้านสุขภาพ</p>
+            </div>
+          </div>
+          <button (click)="showAbout = false" class="text-white/70 hover:text-white text-xl"><i class="fas fa-times"></i></button>
+        </div>
+      </div>
+
+      <div class="p-6 space-y-5">
+        <!-- วัตถุประสงค์ -->
+        <div>
+          <h3 class="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+            <i class="fas fa-bullseye text-green-600"></i>วัตถุประสงค์
+          </h3>
+          <ol class="space-y-2 text-sm text-gray-600">
+            <li class="flex gap-3">
+              <span class="shrink-0 w-6 h-6 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs font-bold">1</span>
+              <span>เพื่อเป็นเครื่องมือในการ <b>บันทึก ติดตาม และประเมินผลตัวชี้วัดด้านสุขภาพ</b> ของหน่วยบริการในจังหวัดนครราชสีมาอย่างเป็นระบบ</span>
+            </li>
+            <li class="flex gap-3">
+              <span class="shrink-0 w-6 h-6 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs font-bold">2</span>
+              <span>เพื่อ <b>ลดขั้นตอนการรวบรวมข้อมูล</b> จากเอกสารกระดาษและ Excel เป็นระบบออนไลน์ที่เข้าถึงได้ทุกที่ทุกเวลา</span>
+            </li>
+            <li class="flex gap-3">
+              <span class="shrink-0 w-6 h-6 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs font-bold">3</span>
+              <span>เพื่อให้ผู้บริหารและผู้ที่เกี่ยวข้อง สามารถ <b>ดูรายงานสรุปผลเปรียบเทียบ</b> ได้แบบ Real-time ผ่านกราฟและแผนที่</span>
+            </li>
+            <li class="flex gap-3">
+              <span class="shrink-0 w-6 h-6 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs font-bold">4</span>
+              <span>เพื่อ <b>เพิ่มความโปร่งใส</b> ในกระบวนการตรวจสอบและอนุมัติข้อมูลผลงาน ผ่านระบบสิทธิ์หลายระดับ</span>
+            </li>
+            <li class="flex gap-3">
+              <span class="shrink-0 w-6 h-6 bg-green-100 text-green-700 rounded-full flex items-center justify-center text-xs font-bold">5</span>
+              <span>เพื่อ <b>รองรับการทำงานแบบกระจายศูนย์</b> โดยหน่วยบริการแต่ละแห่งสามารถบันทึกข้อมูลของตนเอง และส่งให้ส่วนกลางตรวจสอบ</span>
+            </li>
+          </ol>
+        </div>
+
+        <!-- ความจำเป็น -->
+        <div>
+          <h3 class="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+            <i class="fas fa-exclamation-circle text-amber-500"></i>ความจำเป็นที่ต้องพัฒนาระบบนี้
+          </h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-3">
+              <p class="text-sm font-bold text-amber-800"><i class="fas fa-file-excel mr-1"></i>ปัญหาเดิม</p>
+              <p class="text-xs text-gray-600 mt-1">การรวบรวมข้อมูล KPI ใช้ไฟล์ Excel ส่งผ่าน Email ทำให้ข้อมูลกระจัดกระจาย ตรวจสอบย้อนหลังยาก และเกิดข้อผิดพลาดจากการคัดลอก</p>
+            </div>
+            <div class="bg-red-50 border border-red-200 rounded-xl p-3">
+              <p class="text-sm font-bold text-red-800"><i class="fas fa-clock mr-1"></i>ความล่าช้า</p>
+              <p class="text-xs text-gray-600 mt-1">การรวบรวมข้อมูลจากหน่วยบริการกว่า 300 แห่ง ใน 32 อำเภอ ใช้เวลามาก ผู้บริหารไม่สามารถดูผลงานแบบ Real-time ได้</p>
+            </div>
+            <div class="bg-blue-50 border border-blue-200 rounded-xl p-3">
+              <p class="text-sm font-bold text-blue-800"><i class="fas fa-shield-alt mr-1"></i>ความปลอดภัย</p>
+              <p class="text-xs text-gray-600 mt-1">ต้องการระบบที่มีการแบ่งสิทธิ์ชัดเจน ตรวจสอบได้ว่าใครแก้ไขข้อมูลอะไร เมื่อไหร่ พร้อม Audit Trail</p>
+            </div>
+            <div class="bg-green-50 border border-green-200 rounded-xl p-3">
+              <p class="text-sm font-bold text-green-800"><i class="fas fa-chart-line mr-1"></i>การวิเคราะห์</p>
+              <p class="text-xs text-gray-600 mt-1">ต้องการรายงานกราฟ แผนที่ เปรียบเทียบผลงานรายอำเภอ เพื่อวางแผนและจัดสรรทรัพยากรได้อย่างมีประสิทธิภาพ</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ขอบเขตของระบบ -->
+        <div>
+          <h3 class="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+            <i class="fas fa-sitemap text-indigo-500"></i>ขอบเขตของระบบ
+          </h3>
+          <div class="flex flex-wrap gap-2 text-xs font-bold">
+            <span class="bg-green-100 text-green-700 px-3 py-1.5 rounded-full"><i class="fas fa-check mr-1"></i>บันทึกผลงาน KPI รายเดือน</span>
+            <span class="bg-green-100 text-green-700 px-3 py-1.5 rounded-full"><i class="fas fa-check mr-1"></i>อนุมัติ/ตรวจสอบผลงาน</span>
+            <span class="bg-green-100 text-green-700 px-3 py-1.5 rounded-full"><i class="fas fa-check mr-1"></i>ระบบอุทธรณ์</span>
+            <span class="bg-green-100 text-green-700 px-3 py-1.5 rounded-full"><i class="fas fa-check mr-1"></i>รายงานกราฟ/แผนที่</span>
+            <span class="bg-green-100 text-green-700 px-3 py-1.5 rounded-full"><i class="fas fa-check mr-1"></i>จัดการผู้ใช้ 10 ระดับสิทธิ์</span>
+            <span class="bg-green-100 text-green-700 px-3 py-1.5 rounded-full"><i class="fas fa-check mr-1"></i>แบบฟอร์มบันทึกข้อมูลแบบกำหนดเอง</span>
+            <span class="bg-green-100 text-green-700 px-3 py-1.5 rounded-full"><i class="fas fa-check mr-1"></i>แจ้งเตือนอัตโนมัติ + Email</span>
+            <span class="bg-green-100 text-green-700 px-3 py-1.5 rounded-full"><i class="fas fa-check mr-1"></i>ส่งออกข้อมูล Excel</span>
+          </div>
+        </div>
+
+        <!-- หน่วยงาน -->
+        <div class="bg-gray-50 rounded-xl p-4 text-center">
+          <p class="text-xs text-gray-400 mb-1">พัฒนาโดย</p>
+          <p class="text-sm font-bold text-gray-700">กลุ่มงานสุขภาพดิจิทัล</p>
+          <p class="text-sm text-gray-600">สำนักงานสาธารณสุขจังหวัดนครราชสีมา</p>
+          <p class="text-xs text-gray-400 mt-2">ปีงบประมาณ พ.ศ. 2569</p>
+        </div>
+      </div>
     </div>
   </div>
 </div>

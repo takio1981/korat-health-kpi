@@ -1,0 +1,459 @@
+<div class="min-h-screen bg-gray-50">
+
+  <!-- Hero Header -->
+  <div class="bg-gradient-to-br from-green-700 via-green-600 to-teal-500 text-white px-6 py-10 rounded-b-3xl shadow-lg">
+    <div class="max-w-5xl mx-auto text-center">
+      <div class="inline-flex items-center justify-center w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl mb-4">
+        <i class="fas fa-book-open text-3xl"></i>
+      </div>
+      <h1 class="text-3xl font-bold mb-2">คู่มือการใช้งานระบบ</h1>
+      <p class="text-green-100 text-lg">ระบบบันทึกผลงาน KPI ด้านสุขภาพ — สสจ.นครราชสีมา</p>
+      <p class="text-green-200 text-sm mt-2">สิทธิ์ปัจจุบันของคุณ:
+        <span class="bg-white/20 px-3 py-0.5 rounded-full font-bold text-white ml-1">{{ currentRole || 'ไม่ได้ระบุ' }}</span>
+      </p>
+    </div>
+  </div>
+
+  <div class="max-w-6xl mx-auto px-4 py-6 flex gap-6">
+
+    <!-- Sidebar Nav -->
+    <nav class="hidden lg:block w-60 shrink-0 sticky top-4 self-start">
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 space-y-1">
+        <p class="text-xs font-bold text-gray-400 uppercase px-3 mb-2">หัวข้อ</p>
+        <button *ngFor="let s of sections" (click)="scrollTo(s.id)"
+                class="w-full text-left px-3 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2"
+                [ngClass]="activeSection === s.id ? 'bg-green-100 text-green-800 font-bold' : 'text-gray-600 hover:bg-gray-50'">
+          <i class="fas {{ s.icon }} w-5 text-center" [ngClass]="activeSection === s.id ? 'text-green-600' : 'text-gray-400'"></i>
+          {{ s.label }}
+        </button>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="flex-1 space-y-8">
+
+      <!-- ==================== 1. ภาพรวมระบบ ==================== -->
+      <section id="section-overview" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center"><i class="fas fa-home text-green-600"></i></div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-800">1. ภาพรวมระบบ</h2>
+            <p class="text-xs text-gray-400">ระบบนี้ใช้สำหรับอะไร?</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+          <div class="bg-gradient-to-br from-green-50 to-teal-50 border border-green-200 rounded-xl p-4">
+            <h4 class="font-bold text-green-800 mb-2"><i class="fas fa-clipboard-check mr-2"></i>บันทึกผลงาน KPI</h4>
+            <p class="text-sm text-gray-600">บันทึกผลงานตัวชี้วัดด้านสุขภาพรายเดือน ตามปีงบประมาณ (ต.ค. - ก.ย.)</p>
+          </div>
+          <div class="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4">
+            <h4 class="font-bold text-blue-800 mb-2"><i class="fas fa-chart-line mr-2"></i>ติดตามเป้าหมาย</h4>
+            <p class="text-sm text-gray-600">เปรียบเทียบผลงานกับเป้าหมาย แยกตามหน่วยบริการ/อำเภอ/หน่วยงาน</p>
+          </div>
+          <div class="bg-gradient-to-br from-amber-50 to-yellow-50 border border-amber-200 rounded-xl p-4">
+            <h4 class="font-bold text-amber-800 mb-2"><i class="fas fa-check-double mr-2"></i>อนุมัติ/ตรวจสอบ</h4>
+            <p class="text-sm text-gray-600">ผู้ดูแลระบบตรวจสอบและอนุมัติผลงานที่หน่วยบริการส่งมา</p>
+          </div>
+          <div class="bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200 rounded-xl p-4">
+            <h4 class="font-bold text-purple-800 mb-2"><i class="fas fa-file-alt mr-2"></i>รายงานสรุป</h4>
+            <p class="text-sm text-gray-600">รายงานกราฟ ตาราง แผนที่ แยกตามตัวชี้วัด/หน่วยบริการ/อำเภอ/ปี</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== 2. การลงทะเบียน ==================== -->
+      <section id="section-register" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center"><i class="fas fa-user-plus text-blue-600"></i></div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-800">2. การลงทะเบียน</h2>
+            <p class="text-xs text-gray-400">สร้างบัญชีผู้ใช้งานใหม่</p>
+          </div>
+        </div>
+
+        <!-- Flow -->
+        <div class="flex flex-wrap items-center gap-2 mb-6 text-xs font-bold">
+          <span class="bg-blue-100 text-blue-800 px-3 py-1.5 rounded-full">1. เปิดหน้าลงทะเบียน</span>
+          <i class="fas fa-arrow-right text-gray-300"></i>
+          <span class="bg-blue-100 text-blue-800 px-3 py-1.5 rounded-full">2. กรอกข้อมูล</span>
+          <i class="fas fa-arrow-right text-gray-300"></i>
+          <span class="bg-blue-100 text-blue-800 px-3 py-1.5 rounded-full">3. กดลงทะเบียน</span>
+          <i class="fas fa-arrow-right text-gray-300"></i>
+          <span class="bg-yellow-100 text-yellow-800 px-3 py-1.5 rounded-full">4. รออนุมัติ</span>
+          <i class="fas fa-arrow-right text-gray-300"></i>
+          <span class="bg-green-100 text-green-800 px-3 py-1.5 rounded-full">5. ได้รับ Email แจ้งผล</span>
+          <i class="fas fa-arrow-right text-gray-300"></i>
+          <span class="bg-green-100 text-green-800 px-3 py-1.5 rounded-full">6. เข้าสู่ระบบ</span>
+        </div>
+
+        <!-- Fields table -->
+        <h4 class="font-bold text-gray-700 mb-2"><i class="fas fa-list-alt mr-2 text-blue-500"></i>ข้อมูลที่ต้องกรอก</h4>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm border-collapse">
+            <thead>
+              <tr class="bg-gray-50 text-gray-600">
+                <th class="px-3 py-2 text-left">ลำดับ</th>
+                <th class="px-3 py-2 text-left">ช่องข้อมูล</th>
+                <th class="px-3 py-2 text-center">บังคับ</th>
+                <th class="px-3 py-2 text-left">เงื่อนไข</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr><td class="px-3 py-2 font-bold">1</td><td class="px-3 py-2">ชื่อผู้ใช้งาน (Username)</td><td class="px-3 py-2 text-center text-green-600 font-bold">*</td><td class="px-3 py-2 text-xs text-gray-500">ขั้นต่ำ 6 ตัว, a-z A-Z 0-9 อักขระพิเศษ</td></tr>
+              <tr class="bg-gray-50"><td class="px-3 py-2 font-bold">2</td><td class="px-3 py-2">รหัสผ่าน</td><td class="px-3 py-2 text-center text-green-600 font-bold">*</td><td class="px-3 py-2 text-xs text-gray-500">ขั้นต่ำ 6 ตัว + ต้องมี a-z, A-Z, 0-9, อักขระพิเศษ ครบ</td></tr>
+              <tr><td class="px-3 py-2 font-bold">3</td><td class="px-3 py-2">ยืนยันรหัสผ่าน</td><td class="px-3 py-2 text-center text-green-600 font-bold">*</td><td class="px-3 py-2 text-xs text-gray-500">ต้องตรงกับรหัสผ่าน</td></tr>
+              <tr class="bg-gray-50"><td class="px-3 py-2 font-bold">4</td><td class="px-3 py-2">ชื่อ-นามสกุล</td><td class="px-3 py-2 text-center text-green-600 font-bold">*</td><td class="px-3 py-2 text-xs text-gray-500">—</td></tr>
+              <tr><td class="px-3 py-2 font-bold">5</td><td class="px-3 py-2">อำเภอ + หน่วยบริการ</td><td class="px-3 py-2 text-center text-green-600 font-bold">*</td><td class="px-3 py-2 text-xs text-gray-500">เลือกอำเภอแล้วเลือกหน่วยบริการ</td></tr>
+              <tr class="bg-gray-50"><td class="px-3 py-2 font-bold">6</td><td class="px-3 py-2">เบอร์โทรศัพท์</td><td class="px-3 py-2 text-center text-green-600 font-bold">*</td><td class="px-3 py-2 text-xs text-gray-500">ตัวเลข 10 หลัก</td></tr>
+              <tr><td class="px-3 py-2 font-bold">7</td><td class="px-3 py-2">อีเมล (Email)</td><td class="px-3 py-2 text-center text-gray-400">—</td><td class="px-3 py-2 text-xs text-blue-500">ใช้รับแจ้งผลอนุมัติ ถ้าไม่กรอกจะไม่ส่ง</td></tr>
+              <tr class="bg-gray-50"><td class="px-3 py-2 font-bold">8</td><td class="px-3 py-2">หน่วยงาน</td><td class="px-3 py-2 text-center text-green-600 font-bold">*</td><td class="px-3 py-2 text-xs text-gray-500">เลือกจาก dropdown</td></tr>
+              <tr><td class="px-3 py-2 font-bold">9</td><td class="px-3 py-2">เลขบัตรประชาชน 13 หลัก</td><td class="px-3 py-2 text-center text-green-600 font-bold">*</td><td class="px-3 py-2 text-xs text-gray-500">ตรวจ Check Digit + ไม่ซ้ำ</td></tr>
+              <tr class="bg-gray-50"><td class="px-3 py-2 font-bold">10</td><td class="px-3 py-2">สิทธิ์ที่ต้องการ</td><td class="px-3 py-2 text-center text-green-600 font-bold">*</td><td class="px-3 py-2 text-xs text-gray-500">เลือก Role (ผู้ดูแลเป็นผู้อนุมัติ)</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Password strength -->
+        <div class="mt-4 bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <h4 class="font-bold text-amber-800 text-sm mb-2"><i class="fas fa-lock mr-2"></i>ระบบตรวจความแข็งแรงรหัสผ่าน</h4>
+          <div class="flex items-center gap-3 text-xs">
+            <span class="flex items-center gap-1"><span class="w-8 h-2 rounded-full bg-red-500 inline-block"></span> อ่อน</span>
+            <span class="flex items-center gap-1"><span class="w-8 h-2 rounded-full bg-yellow-500 inline-block"></span> ปานกลาง</span>
+            <span class="flex items-center gap-1"><span class="w-8 h-2 rounded-full bg-green-500 inline-block"></span> แข็งแรง</span>
+          </div>
+          <p class="text-xs text-amber-700 mt-2">ขณะพิมพ์รหัสผ่าน ระบบจะแสดง checklist ว่าครบเงื่อนไขหรือยัง พร้อมแถบสีแสดงความแข็งแรง</p>
+        </div>
+
+        <!-- Rejection note -->
+        <div class="mt-4 bg-red-50 border border-red-200 rounded-xl p-4">
+          <h4 class="font-bold text-red-800 text-sm mb-1"><i class="fas fa-undo mr-2"></i>ถ้าถูกปฏิเสธ?</h4>
+          <p class="text-xs text-red-700">คุณจะได้รับ Email แจ้งพร้อมเหตุผล และสามารถ <b>ลงทะเบียนใหม่</b> ด้วยเลขบัตรประชาชนเดิมได้ทันที (ระบบจะลบ account เก่าอัตโนมัติ)</p>
+        </div>
+      </section>
+
+      <!-- ==================== 3. การเข้าสู่ระบบ ==================== -->
+      <section id="section-login" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center"><i class="fas fa-sign-in-alt text-teal-600"></i></div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-800">3. การเข้าสู่ระบบ</h2>
+            <p class="text-xs text-gray-400">Login เข้าใช้งาน</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+          <div class="bg-gray-50 rounded-xl p-4 text-center">
+            <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2"><i class="fas fa-user text-green-600 text-xl"></i></div>
+            <p class="text-sm font-bold">ขั้นตอนที่ 1</p>
+            <p class="text-xs text-gray-500">กรอก Username</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4 text-center">
+            <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2"><i class="fas fa-lock text-blue-600 text-xl"></i></div>
+            <p class="text-sm font-bold">ขั้นตอนที่ 2</p>
+            <p class="text-xs text-gray-500">กรอก Password</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4 text-center">
+            <div class="w-12 h-12 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-2"><i class="fas fa-arrow-right text-teal-600 text-xl"></i></div>
+            <p class="text-sm font-bold">ขั้นตอนที่ 3</p>
+            <p class="text-xs text-gray-500">กดปุ่ม "เข้าสู่ระบบ"</p>
+          </div>
+        </div>
+
+        <h4 class="font-bold text-gray-700 text-sm mb-2"><i class="fas fa-info-circle mr-2 text-blue-500"></i>สถานะที่อาจพบ</h4>
+        <div class="space-y-2 text-sm">
+          <div class="flex items-center gap-2 bg-green-50 rounded-lg px-3 py-2"><i class="fas fa-check-circle text-green-600"></i><span>สำเร็จ — เข้าสู่หน้า Dashboard</span></div>
+          <div class="flex items-center gap-2 bg-yellow-50 rounded-lg px-3 py-2"><i class="fas fa-clock text-yellow-600"></i><span>รอการอนุมัติ — บัญชีของคุณยังรอผู้ดูแลอนุมัติ</span></div>
+          <div class="flex items-center gap-2 bg-red-50 rounded-lg px-3 py-2"><i class="fas fa-ban text-red-600"></i><span>ถูกปฏิเสธ — คำขอลงทะเบียนถูกปฏิเสธ</span></div>
+          <div class="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2"><i class="fas fa-lock text-gray-500"></i><span>ถูกปิดใช้งาน — บัญชีถูกระงับ ติดต่อผู้ดูแล</span></div>
+          <div class="flex items-center gap-2 bg-orange-50 rounded-lg px-3 py-2"><i class="fas fa-exclamation-triangle text-orange-500"></i><span>Login ผิดเกินกำหนด — ถูกล็อค 15 นาที</span></div>
+        </div>
+
+        <div class="mt-4 bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <h4 class="font-bold text-blue-800 text-sm"><i class="fas fa-sign-out-alt mr-2"></i>Auto Logout</h4>
+          <p class="text-xs text-blue-700 mt-1">ระบบจะออกจากระบบอัตโนมัติเมื่อไม่มีการใช้งานเกินเวลาที่กำหนด โดยจะแสดง popup นับถอยหลังก่อนออก กด "ยกเลิก" เพื่อใช้งานต่อ</p>
+        </div>
+      </section>
+
+      <!-- ==================== 4. Dashboard ==================== -->
+      <section id="section-dashboard" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center"><i class="fas fa-th-large text-amber-600"></i></div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-800">4. หน้า Dashboard — ภาพรวมตัวชี้วัด</h2>
+            <p class="text-xs text-gray-400">หน้าหลักสำหรับบันทึกและตรวจสอบ KPI</p>
+          </div>
+        </div>
+
+        <!-- Toolbar buttons -->
+        <h4 class="font-bold text-gray-700 text-sm mb-2"><i class="fas fa-tools mr-2 text-amber-500"></i>แถบปุ่มด้านบน</h4>
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
+          <div class="bg-gray-50 rounded-lg p-3 border"><p class="text-xs font-bold text-gray-700"><i class="fas fa-sync-alt text-gray-500 mr-1"></i>ล้างตัวกรอง</p><p class="text-[10px] text-gray-400">ล้าง filter ทั้งหมด</p></div>
+          <div class="bg-green-50 rounded-lg p-3 border border-green-200"><p class="text-xs font-bold text-green-700"><i class="fas fa-plus mr-1"></i>เพิ่ม</p><p class="text-[10px] text-gray-400">เพิ่มตัวชี้วัดใหม่</p></div>
+          <div class="bg-amber-50 rounded-lg p-3 border border-amber-200"><p class="text-xs font-bold text-amber-700"><i class="fas fa-edit mr-1"></i>แก้ไข</p><p class="text-[10px] text-gray-400">เปิดโหมดแก้ไขตาราง</p></div>
+          <div class="bg-blue-50 rounded-lg p-3 border border-blue-200"><p class="text-xs font-bold text-blue-700"><i class="fas fa-check-double mr-1"></i>อนุมัติทั้งหมด</p><p class="text-[10px] text-gray-400">admin_ssj + super_admin</p></div>
+          <div class="bg-red-50 rounded-lg p-3 border border-red-200"><p class="text-xs font-bold text-red-700"><i class="fas fa-undo-alt mr-1"></i>ตีกลับทั้งหมด</p><p class="text-[10px] text-gray-400">admin_ssj + super_admin</p></div>
+          <div class="bg-red-100 rounded-lg p-3 border border-red-300"><p class="text-xs font-bold text-red-700"><i class="fas fa-lock mr-1"></i>ระบบปิดการคีย์</p><p class="text-[10px] text-gray-400">แสดงเมื่อ user ถูกล็อค</p></div>
+        </div>
+
+        <!-- Table columns -->
+        <h4 class="font-bold text-gray-700 text-sm mb-2"><i class="fas fa-table mr-2 text-green-500"></i>คอลัมน์ในตาราง</h4>
+        <div class="bg-gray-50 rounded-xl p-4 text-xs text-gray-600 grid grid-cols-2 md:grid-cols-4 gap-2">
+          <span><b>หมวดหมู่</b> — ชื่อหมวดหมู่หลัก</span>
+          <span><b>ตัวชี้วัด</b> — ชื่อ KPI + ปุ่มจัดการ</span>
+          <span><b>หน่วยงาน</b> — ชื่อหน่วยงาน</span>
+          <span><b>ปีงบฯ</b> — ปีงบประมาณ</span>
+          <span><b>หน่วยบริการ</b> — ชื่อ รพ./รพ.สต.</span>
+          <span><b>อำเภอ</b> — ชื่ออำเภอ</span>
+          <span><b>เป้าหมาย</b> — ตัวเลข/ข้อความ</span>
+          <span><b>ผลงานรวม</b> — ค่าล่าสุด</span>
+          <span><b>%</b> — เปอร์เซ็นต์</span>
+          <span><b>ต.ค.-ก.ย.</b> — ข้อมูล 12 เดือน</span>
+        </div>
+
+        <!-- Edit mode steps -->
+        <div class="mt-4 bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <h4 class="font-bold text-amber-800 text-sm mb-2"><i class="fas fa-edit mr-2"></i>วิธีแก้ไขข้อมูล</h4>
+          <ol class="list-decimal list-inside text-xs text-amber-700 space-y-1">
+            <li>กดปุ่ม <b>"แก้ไข"</b> — ตารางเปลี่ยนเป็น input fields</li>
+            <li>แก้ไขค่าเป้าหมายหรือคะแนนรายเดือน (ตัวเลข/ข้อความ)</li>
+            <li>ช่องที่แก้ไขจะ <b class="text-orange-600">เปลี่ยนสีส้ม</b> แสดงว่ามีการเปลี่ยนแปลง</li>
+            <li>กด <b>"บันทึก"</b> → ยืนยัน → บันทึก | กด <b>"คืนค่า"</b> → กลับค่าเดิม | กด <b>"ยกเลิก"</b> → ออกจากโหมดแก้ไข</li>
+          </ol>
+        </div>
+
+        <!-- Action buttons per KPI -->
+        <h4 class="font-bold text-gray-700 text-sm mt-4 mb-2"><i class="fas fa-mouse-pointer mr-2 text-purple-500"></i>ปุ่มจัดการรายตัวชี้วัด</h4>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+          <div class="flex items-center gap-2 bg-green-50 rounded-lg p-2"><i class="fas fa-check-circle text-green-600"></i><span>อนุมัติ</span></div>
+          <div class="flex items-center gap-2 bg-red-50 rounded-lg p-2"><i class="fas fa-undo-alt text-red-500"></i><span>ตีกลับ</span></div>
+          <div class="flex items-center gap-2 bg-purple-50 rounded-lg p-2"><i class="fas fa-gavel text-purple-600"></i><span>ยื่นอุทธรณ์</span></div>
+          <div class="flex items-center gap-2 bg-blue-50 rounded-lg p-2"><i class="fas fa-chart-line text-blue-500"></i><span>ดูกราฟแนวโน้ม</span></div>
+          <div class="flex items-center gap-2 bg-purple-50 rounded-lg p-2"><i class="fas fa-clipboard-list text-purple-500"></i><span>กรอกแบบฟอร์ม</span></div>
+          <div class="flex items-center gap-2 bg-amber-50 rounded-lg p-2"><i class="fas fa-lock-open text-amber-500"></i><span>ปลดล็อค</span></div>
+          <div class="flex items-center gap-2 bg-green-50 rounded-lg p-2"><i class="fas fa-check text-green-600"></i><span>อนุมัติอุทธรณ์</span></div>
+          <div class="flex items-center gap-2 bg-red-50 rounded-lg p-2"><i class="fas fa-times text-red-500"></i><span>ปฏิเสธอุทธรณ์</span></div>
+        </div>
+      </section>
+
+      <!-- ==================== 5. กราฟและสถิติ ==================== -->
+      <section id="section-charts" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center"><i class="fas fa-chart-bar text-indigo-600"></i></div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-800">5. กราฟและสถิติ</h2>
+            <p class="text-xs text-gray-400">รายงานภาพรวมแบบกราฟ</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-chart-bar text-blue-500 text-lg mr-2"></i><b class="text-sm">กราฟแท่ง</b><p class="text-xs text-gray-500 mt-1">เปรียบเทียบเป้าหมาย VS ผลงาน แยกตามหมวดหมู่</p></div>
+          <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-chart-line text-green-500 text-lg mr-2"></i><b class="text-sm">กราฟเส้น</b><p class="text-xs text-gray-500 mt-1">แนวโน้มผลงานรายเดือน + เส้นเป้าหมาย</p></div>
+          <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-map-marked-alt text-teal-500 text-lg mr-2"></i><b class="text-sm">แผนที่อำเภอ</b><p class="text-xs text-gray-500 mt-1">ผลงานรายอำเภอ สี 3 ระดับ: เขียว ≥80% / เหลือง 50-79% / แดง &lt;50%</p></div>
+          <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-chart-pie text-purple-500 text-lg mr-2"></i><b class="text-sm">กราฟวงกลม</b><p class="text-xs text-gray-500 mt-1">สัดส่วนผลงานแยกตามหน่วยงาน</p></div>
+        </div>
+      </section>
+
+      <!-- ==================== 6. แจ้งเตือน ==================== -->
+      <section id="section-notifications" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center"><i class="fas fa-bell text-red-500"></i></div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-800">6. แจ้งเตือน</h2>
+            <p class="text-xs text-gray-400">ระบบแจ้งเตือนอัตโนมัติ</p>
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-2 mb-4">
+          <span class="px-3 py-1.5 rounded-full text-xs font-bold bg-gray-100 text-gray-600">ทั้งหมด</span>
+          <span class="px-3 py-1.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700">ยังไม่อ่าน</span>
+          <span class="px-3 py-1.5 rounded-full text-xs font-bold bg-green-100 text-green-700"><i class="fas fa-check-circle mr-1"></i>อนุมัติ</span>
+          <span class="px-3 py-1.5 rounded-full text-xs font-bold bg-red-100 text-red-700"><i class="fas fa-undo-alt mr-1"></i>ตีกลับ</span>
+          <span class="px-3 py-1.5 rounded-full text-xs font-bold bg-purple-100 text-purple-700"><i class="fas fa-gavel mr-1"></i>อุทธรณ์</span>
+          <span class="px-3 py-1.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700"><i class="fas fa-reply mr-1"></i>ตอบกลับ</span>
+        </div>
+        <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-700">
+          <i class="fas fa-info-circle mr-1"></i> <b>กดที่กล่องข้อความ</b> หรือ <b>กดปุ่มใดๆ ในกล่อง</b> → ระบบมาร์คว่า "อ่านแล้ว" อัตโนมัติ | ไอคอนระฆังจะ <b>สั่น</b> เมื่อมีแจ้งเตือนใหม่
+        </div>
+      </section>
+
+      <!-- ==================== 7. จัดการผู้ใช้งาน ==================== -->
+      <section id="section-users" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center"><i class="fas fa-users-cog text-orange-600"></i></div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-800">7. จัดการผู้ใช้งาน</h2>
+            <p class="text-xs text-gray-400">Admin ทุกระดับเข้าถึงได้</p>
+          </div>
+        </div>
+
+        <!-- Approval flow -->
+        <div class="flex flex-wrap items-center gap-2 mb-4 text-xs font-bold">
+          <span class="bg-yellow-100 text-yellow-800 px-3 py-1.5 rounded-full">ผู้สมัครรอการอนุมัติ</span>
+          <i class="fas fa-arrow-right text-gray-300"></i>
+          <span class="bg-green-100 text-green-800 px-3 py-1.5 rounded-full"><i class="fas fa-check mr-1"></i>อนุมัติ → Email ✉️</span>
+          <span class="text-gray-400 mx-1">หรือ</span>
+          <span class="bg-red-100 text-red-800 px-3 py-1.5 rounded-full"><i class="fas fa-times mr-1"></i>ปฏิเสธ + เหตุผล → Email ✉️</span>
+        </div>
+
+        <h4 class="font-bold text-gray-700 text-sm mb-2">ขอบเขตการจัดการ user ตาม Role</h4>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs border-collapse">
+            <thead><tr class="bg-gray-50 text-gray-600"><th class="px-3 py-2 text-left">Role</th><th class="px-3 py-2 text-left">เห็น user</th><th class="px-3 py-2 text-center">เปลี่ยน Role</th></tr></thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr><td class="px-3 py-2 font-bold text-red-700">super_admin</td><td class="px-3 py-2">ทุกคน</td><td class="px-3 py-2 text-center text-green-600">✅</td></tr>
+              <tr class="bg-gray-50"><td class="px-3 py-2 font-bold text-purple-700">admin_ssj</td><td class="px-3 py-2">dept เดียวกัน (ยกเว้น super_admin)</td><td class="px-3 py-2 text-center text-green-600">✅</td></tr>
+              <tr><td class="px-3 py-2 font-bold text-orange-700">admin_cup</td><td class="px-3 py-2">อำเภอเดียวกัน (ยกเว้น super_admin)</td><td class="px-3 py-2 text-center text-red-500">❌</td></tr>
+              <tr class="bg-gray-50"><td class="px-3 py-2 font-bold text-amber-700">admin_hos / admin_sso</td><td class="px-3 py-2">hospcode เดียวกัน (ยกเว้น super_admin)</td><td class="px-3 py-2 text-center text-red-500">❌</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ==================== 8. ตั้งค่าระบบ ==================== -->
+      <section id="section-settings" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-gray-200 flex items-center justify-center"><i class="fas fa-sliders-h text-gray-600"></i></div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-800">8. ตั้งค่าระบบ</h2>
+            <p class="text-xs text-gray-400">super_admin เท่านั้น</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-3"><p class="text-sm font-bold text-yellow-800"><i class="fas fa-clock mr-2"></i>Auto Logout</p><p class="text-xs text-gray-500">ตั้งเวลาออกจากระบบอัตโนมัติ + นับถอยหลัง</p></div>
+          <div class="bg-red-50 border border-red-200 rounded-xl p-3"><p class="text-sm font-bold text-red-800"><i class="fas fa-user-lock mr-2"></i>จำนวน Login ผิดสูงสุด</p><p class="text-xs text-gray-500">ล็อค 15 นาทีเมื่อเกินกำหนด</p></div>
+          <div class="bg-red-50 border border-red-200 rounded-xl p-3"><p class="text-sm font-bold text-red-800"><i class="fas fa-lock mr-2"></i>ล็อคการคีย์ข้อมูล</p><p class="text-xs text-gray-500">ปิดปุ่มแก้ไข/เพิ่ม สำหรับ user (Admin ไม่ถูกล็อค)</p></div>
+          <div class="bg-orange-50 border border-orange-200 rounded-xl p-3"><p class="text-sm font-bold text-orange-800"><i class="fas fa-bullseye mr-2"></i>ล็อคแก้ไขเป้าหมาย</p><p class="text-xs text-gray-500">ควบคุมการแก้ไขค่าเป้าหมาย</p></div>
+          <div class="bg-purple-50 border border-purple-200 rounded-xl p-3"><p class="text-sm font-bold text-purple-800"><i class="fas fa-gavel mr-2"></i>ระบบอุทธรณ์</p><p class="text-xs text-gray-500">เปิด/ปิด + กำหนดช่วงวันที่</p></div>
+          <div class="bg-blue-50 border border-blue-200 rounded-xl p-3"><p class="text-sm font-bold text-blue-800"><i class="fas fa-history mr-2"></i>จัดการ Logs</p><p class="text-xs text-gray-500">ระยะเวลาเก็บ + สำรองอัตโนมัติ</p></div>
+        </div>
+      </section>
+
+      <!-- ==================== 9. สิทธิ์การใช้งาน ==================== -->
+      <section id="section-roles" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center"><i class="fas fa-shield-alt text-emerald-600"></i></div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-800">9. สิทธิ์การใช้งาน (Roles)</h2>
+            <p class="text-xs text-gray-400">ตารางเปรียบเทียบทุก Role</p>
+          </div>
+        </div>
+
+        <!-- Role cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <!-- User roles -->
+          <div class="border border-blue-200 rounded-xl p-4 bg-blue-50/50">
+            <span class="px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs font-bold">user_hos</span>
+            <p class="text-sm font-bold mt-2">ผู้ใช้ รพ.</p>
+            <ul class="text-xs text-gray-600 mt-2 space-y-1">
+              <li><i class="fas fa-check text-green-500 mr-1"></i>ดู/แก้ไข KPI เฉพาะ hospcode + dept ตัวเอง</li>
+              <li><i class="fas fa-check text-green-500 mr-1"></i>ยื่นอุทธรณ์ได้</li>
+              <li><i class="fas fa-times text-red-400 mr-1"></i>จัดการผู้ใช้ไม่ได้</li>
+            </ul>
+          </div>
+          <div class="border border-emerald-200 rounded-xl p-4 bg-emerald-50/50">
+            <span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-xs font-bold">user_sso</span>
+            <p class="text-sm font-bold mt-2">ผู้ใช้ รพ.สต.</p>
+            <ul class="text-xs text-gray-600 mt-2 space-y-1">
+              <li><i class="fas fa-check text-green-500 mr-1"></i>ดู/แก้ไข KPI เฉพาะ hospcode + dept ตัวเอง</li>
+              <li><i class="fas fa-check text-green-500 mr-1"></i>ยื่นอุทธรณ์ได้</li>
+            </ul>
+          </div>
+          <div class="border border-cyan-200 rounded-xl p-4 bg-cyan-50/50">
+            <span class="px-2 py-0.5 bg-cyan-100 text-cyan-800 rounded-full text-xs font-bold">user_cup</span>
+            <p class="text-sm font-bold mt-2">ผู้ใช้ CUP (อำเภอ)</p>
+            <ul class="text-xs text-gray-600 mt-2 space-y-1">
+              <li><i class="fas fa-check text-green-500 mr-1"></i>ดู KPI ทุก hospcode ในอำเภอ (เฉพาะ dept ตัวเอง)</li>
+              <li><i class="fas fa-check text-green-500 mr-1"></i>ยื่นอุทธรณ์ได้</li>
+            </ul>
+          </div>
+
+          <!-- Admin roles -->
+          <div class="border border-amber-200 rounded-xl p-4 bg-amber-50/50">
+            <span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full text-xs font-bold">admin_hos</span>
+            <p class="text-sm font-bold mt-2">ผู้ดูแล รพ.</p>
+            <ul class="text-xs text-gray-600 mt-2 space-y-1">
+              <li><i class="fas fa-check text-green-500 mr-1"></i>ดู KPI <b>ทุก dept</b> เฉพาะ hospcode ตัวเอง</li>
+              <li><i class="fas fa-check text-green-500 mr-1"></i>จัดการผู้ใช้ใน hospcode เดียวกัน</li>
+              <li><i class="fas fa-check text-green-500 mr-1"></i>ไม่ถูกล็อคการคีย์ข้อมูล</li>
+              <li><i class="fas fa-times text-red-400 mr-1"></i>เปลี่ยน Role ผู้ใช้ไม่ได้</li>
+            </ul>
+          </div>
+          <div class="border border-orange-200 rounded-xl p-4 bg-orange-50/50">
+            <span class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded-full text-xs font-bold">admin_cup</span>
+            <p class="text-sm font-bold mt-2">ผู้ดูแล CUP (อำเภอ)</p>
+            <ul class="text-xs text-gray-600 mt-2 space-y-1">
+              <li><i class="fas fa-check text-green-500 mr-1"></i>ดู KPI <b>ทุก dept + ทุก hospcode ในอำเภอ</b></li>
+              <li><i class="fas fa-check text-green-500 mr-1"></i>จัดการผู้ใช้ในอำเภอเดียวกัน</li>
+              <li><i class="fas fa-check text-green-500 mr-1"></i>เพิ่มตัวชี้วัดทุก dept ทุก hospcode ในอำเภอ</li>
+            </ul>
+          </div>
+          <div class="border border-purple-200 rounded-xl p-4 bg-purple-50/50">
+            <span class="px-2 py-0.5 bg-purple-100 text-purple-800 rounded-full text-xs font-bold">admin_ssj</span>
+            <p class="text-sm font-bold mt-2">ผู้ดูแล สสจ.</p>
+            <ul class="text-xs text-gray-600 mt-2 space-y-1">
+              <li><i class="fas fa-check text-green-500 mr-1"></i>ดู KPI ทุก hospcode เฉพาะ dept</li>
+              <li><i class="fas fa-check text-green-500 mr-1"></i><b>อนุมัติ/ปฏิเสธ KPI</b></li>
+              <li><i class="fas fa-check text-green-500 mr-1"></i>เปลี่ยน Role ผู้ใช้ได้</li>
+              <li><i class="fas fa-check text-green-500 mr-1"></i>+KPI ปีงบประมาณใหม่</li>
+            </ul>
+          </div>
+          <div class="border border-red-200 rounded-xl p-4 bg-red-50/50 md:col-span-2 lg:col-span-3">
+            <span class="px-2 py-0.5 bg-red-100 text-red-800 rounded-full text-xs font-bold">super_admin</span>
+            <p class="text-sm font-bold mt-2">ผู้ดูแลระบบสูงสุด</p>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2 text-xs text-gray-600">
+              <span><i class="fas fa-check text-green-500 mr-1"></i>เห็น/แก้ไขข้อมูลทั้งหมด</span>
+              <span><i class="fas fa-check text-green-500 mr-1"></i>จัดการตัวชี้วัด Master</span>
+              <span><i class="fas fa-check text-green-500 mr-1"></i>ตั้งค่าระบบทั้งหมด</span>
+              <span><i class="fas fa-check text-green-500 mr-1"></i>สร้างแบบฟอร์ม KPI</span>
+              <span><i class="fas fa-check text-green-500 mr-1"></i>Export ข้อมูล</span>
+              <span><i class="fas fa-check text-green-500 mr-1"></i>ดู Audit Log</span>
+              <span><i class="fas fa-check text-green-500 mr-1"></i>จัดการผู้ใช้ทุกคน</span>
+              <span><i class="fas fa-check text-green-500 mr-1"></i>เปลี่ยน Role ได้</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== 10. FAQ ==================== -->
+      <section id="section-faq" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-pink-100 flex items-center justify-center"><i class="fas fa-question-circle text-pink-600"></i></div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-800">10. คำถามที่พบบ่อย (FAQ)</h2>
+          </div>
+        </div>
+        <div class="space-y-3">
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-bold text-gray-800">ถาม: ลงทะเบียนแล้วเข้าใช้งานไม่ได้?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: ต้องรอผู้ดูแลระบบอนุมัติก่อน จะได้รับแจ้งทาง Email เมื่ออนุมัติแล้ว</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-bold text-gray-800">ถาม: ถูกปฏิเสธแล้วทำอย่างไร?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: สมัครใหม่ด้วยเลขบัตรประชาชนเดิมได้เลย ระบบจะลบ account เก่าให้อัตโนมัติ</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-bold text-gray-800">ถาม: ลืมรหัสผ่าน?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: ติดต่อผู้ดูแลระบบให้รีเซ็ตรหัสผ่าน (ปุ่มกุญแจ 🔑 ในหน้าจัดการผู้ใช้)</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-bold text-gray-800">ถาม: กดแก้ไขข้อมูลไม่ได้ ขึ้น "ระบบปิดการคีย์"?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: ผู้ดูแลระบบ (super_admin) ล็อคการคีย์ไว้ ให้ติดต่อผู้ดูแลเพื่อปลดล็อค</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-bold text-gray-800">ถาม: ข้อมูลที่กรอกเป็นข้อความ (ไม่ใช่ตัวเลข) คำนวณ % อย่างไร?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: ถ้าเป้าหมายเป็นข้อความ เช่น "ผ่าน" และผลงานตรงกัน → 100% | ไม่ตรง → 0% | ถ้าเป็นตัวเลข → คำนวณปกติ</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-bold text-gray-800">ถาม: ระบบออกจากระบบเอง?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: ระบบมี Auto Logout เมื่อไม่ใช้งานเกินเวลาที่กำหนด เปิด browser/tab ใหม่ก็ต้อง login ใหม่ทุกครั้ง</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Footer -->
+      <div class="text-center py-6 text-xs text-gray-400">
+        <p>ระบบบันทึกผลงาน KPI ด้านสุขภาพ — สำนักงานสาธารณสุขจังหวัดนครราชสีมา</p>
+        <p class="mt-1">คู่มือนี้สร้างจากซอร์สโค้ดของระบบ ปรับปรุงล่าสุด มีนาคม 2569</p>
+      </div>
+
+    </div>
+  </div>
+</div>

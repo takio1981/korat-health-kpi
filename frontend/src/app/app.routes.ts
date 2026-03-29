@@ -12,6 +12,7 @@ import { ReportComponent } from './report/report';
 import { NotificationsComponent } from './notifications/notifications';
 import { ExportKpiComponent } from './export-kpi/export-kpi';
 import { FormBuilderComponent } from './form-builder/form-builder';
+import { HelpComponent } from './help/help';
 import { authGuard } from './guards/auth-guard';
 import { adminGuard } from './guards/admin-guard';
 import { anyAdminGuard } from './guards/any-admin-guard';
@@ -37,6 +38,7 @@ export const routes: Routes = [
       { path: 'export-kpi', component: ExportKpiComponent, canActivate: [superAdminGuard], data: { title: 'Export ข้อมูล KPI' } },
       { path: 'settings', component: SettingsComponent, canActivate: [superAdminGuard], data: { title: 'ตั้งค่าระบบ' } },
       { path: 'form-builder', component: FormBuilderComponent, canActivate: [superAdminGuard], data: { title: 'สร้างแบบฟอร์ม KPI' } },
+      { path: 'help', component: HelpComponent, data: { title: 'คู่มือการใช้งาน' } },
     ]
   },
   { path: '**', redirectTo: 'login' }

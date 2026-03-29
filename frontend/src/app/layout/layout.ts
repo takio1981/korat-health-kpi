@@ -156,10 +156,10 @@ export class LayoutComponent implements OnInit {
       Swal.fire('แจ้งเตือน', 'รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร', 'warning');
       return;
     }
-    this.authService.changePassword({
-      currentPassword: this.changePasswordForm.currentPassword,
-      newPassword: this.changePasswordForm.newPassword
-    }).subscribe({
+    this.authService.changePassword(
+      this.changePasswordForm.currentPassword,
+      this.changePasswordForm.newPassword
+    ).subscribe({
       next: (res) => {
         if (res.success) {
           this.closeChangePasswordModal();

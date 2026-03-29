@@ -224,10 +224,14 @@ export class AuthService {
     return this.http.get(`${this.apiUrl}/users/${id}/basic`, { headers });
   }
 
-  changePassword(data: { currentPassword: string; newPassword: string }): Observable<any> {
+  changePassword(currentPassword: string, newPassword: string): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.put(`${this.apiUrl}/users/change-password`, data, { headers });
+    return this.http.put(`${this.apiUrl}/users/change-password`, { currentPassword, newPassword }, { headers });
+  }
+
+  forgotPassword(username: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/forgot-password`, { username });
   }
 
   getSystemLogs(): Observable<any> {

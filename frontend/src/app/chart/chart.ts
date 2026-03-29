@@ -58,6 +58,9 @@ export class ChartComponent implements OnInit {
     }
   };
 
+  // ตัวแปรสำหรับแผนที่อำเภอ
+  districtMapData: any[] = [];
+
   // ตัวแปรสำหรับ Stats
   stats: any = {
     successRate: 0,
@@ -208,6 +211,7 @@ export class ChartComponent implements OnInit {
     
     // อัปเดตกราฟด้วยข้อมูลที่กรองแล้ว
     this.updateChart();
+    this.updateDistrictMap();
     this.loadDashboardStats(); // อัปเดต Stats เมื่อมีการกรอง (ถ้าต้องการให้ Stats เปลี่ยนตามปีที่เลือก)
     this.cdr.detectChanges(); // บังคับอัปเดตหน้าจอทันทีหลังจากคำนวณกราฟเสร็จ
   }
@@ -331,6 +335,44 @@ export class ChartComponent implements OnInit {
         }
       }]
     };
+  }
+
+  updateDistrictMap() {
+    // สร้างข้อมูลรายอำเภอจาก filteredData (ใช้ distname จาก kpiData)
+    const distMap: any = {};
+    this.filteredData.forEach(item => {
+      const key = item.distname || 'ไม่ระบุ';
+      if (!distMap[key]) distMap[key] = { target: 0, actual: 0 };
+      distMap[key].target += item.target_num || 0;
+      distMap[key].actual += item.total_actual || 0;
+    });
+
+    this.districtMapData = Object.keys(distMap)
+      .filter(k => k !== 'ไม่ระบุ')
+      .map(name => {
+        const d = distMap[name];
+        const pct = d.target > 0 ? Math.round((d.actual / d.target) * 10000) / 100 : 0;
+        return { name, target: d.target, actual: d.actual, pct };
+      })
+      .sort((a, b) => b.pct - a.pct);
+  }
+
+  getDistrictColor(pct: number): string {
+    if (pct >= 80) return '#16a34a'; // เขียว
+    if (pct >= 50) return '#eab308'; // เหลือง
+    return '#dc2626'; // แดง
+  }
+
+  countDistricts(level: string): number {
+    if (level === 'green') return this.districtMapData.filter((d: any) => d.pct >= 80).length;
+    if (level === 'yellow') return this.districtMapData.filter((d: any) => d.pct >= 50 && d.pct < 80).length;
+    return this.districtMapData.filter((d: any) => d.pct < 50).length;
+  }
+
+  getDistrictBg(pct: number): string {
+    if (pct >= 80) return 'bg-green-100 border-green-400 text-green-800';
+    if (pct >= 50) return 'bg-yellow-100 border-yellow-400 text-yellow-800';
+    return 'bg-red-100 border-red-400 text-red-800';
   }
 
   goBack() {
