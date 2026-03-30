@@ -4,7 +4,7 @@
     <div *ngIf="isSidebarOpen" class="fixed inset-0 bg-black/50 z-40 lg:hidden" (click)="closeSidebar()"></div>
 
     <!-- Mobile: Top dropdown menu -->
-    <div *ngIf="isSidebarOpen" class="lg:hidden fixed top-16 left-0 right-0 z-50 bg-gradient-to-b from-green-800 to-green-700 text-white shadow-2xl max-h-[75vh] overflow-y-auto rounded-b-2xl">
+    <div *ngIf="isSidebarOpen" class="lg:hidden fixed top-16 left-0 right-0 z-50 bg-gradient-to-b from-green-800 to-green-700 text-white shadow-2xl max-h-[75vh] overflow-y-auto rounded-b-2xl animate-slideDown">
       <nav class="px-3 py-3 space-y-0.5">
         <a routerLink="/charts" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-chart-bar mr-3 min-w-[20px]"></i>{{ lang.t('menu.charts') }}</a>
         <a routerLink="/reports" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-file-alt mr-3 min-w-[20px]"></i>{{ lang.t('menu.reports') }}</a>
