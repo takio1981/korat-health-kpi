@@ -480,6 +480,12 @@ apiRouter.post('/register', loginLimiter, async (req, res) => {
             );
         }
 
+        // สร้าง URL สำหรับ link อนุมัติ
+        const proto = req.headers['x-forwarded-proto'] || 'http';
+        const host = req.headers['x-forwarded-host'] || req.headers['host'] || 'localhost';
+        const appUrl = process.env.APP_URL || `${proto}://${host}/khupskpi/`;
+        const approveUrl = `${appUrl}users?status=pending`;
+
         // แจ้ง Telegram + Email Admin
         notifyAdmins(
             '🆕 ผู้สมัครใหม่รอการอนุมัติ — ระบบ KPI สสจ.นครราชสีมา',
@@ -496,10 +502,15 @@ apiRouter.post('/register', loginLimiter, async (req, res) => {
                         <tr><td style="padding:6px 0;color:#6b7280">เบอร์โทร</td><td>${cleanPhone}</td></tr>
                         <tr><td style="padding:6px 0;color:#6b7280">Email</td><td>${email || '-'}</td></tr>
                     </table>
-                    <p style="margin-top:16px;font-size:13px;color:#6b7280">กรุณาเข้าสู่ระบบเพื่อตรวจสอบและอนุมัติ</p>
+                    <div style="text-align:center;margin-top:20px">
+                        <a href="${approveUrl}" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#16a34a,#22c55e);color:white;font-weight:bold;font-size:14px;text-decoration:none;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.15)">
+                            ✅ เข้าสู่ระบบเพื่ออนุมัติ
+                        </a>
+                    </div>
+                    <p style="margin-top:12px;font-size:11px;color:#9ca3af;text-align:center">${approveUrl}</p>
                 </div>
             </div>`,
-            `🆕 ผู้สมัครใหม่รอการอนุมัติ\n━━━━━━━━━━━━━━━\n👤 ${firstname} ${lastname}\n🔑 Username: ${username}\n🏥 ${hosName}\n📋 สิทธิ์: ${roleLabel}\n📱 โทร: ${cleanPhone}\n📧 Email: ${email || '-'}\n━━━━━━━━━━━━━━━\nกรุณาเข้าระบบเพื่ออนุมัติ`
+            `🆕 ผู้สมัครใหม่รอการอนุมัติ\n━━━━━━━━━━━━━━━\n👤 ${firstname} ${lastname}\n🔑 Username: ${username}\n🏥 ${hosName}\n📋 สิทธิ์: ${roleLabel}\n📱 โทร: ${cleanPhone}\n📧 Email: ${email || '-'}\n━━━━━━━━━━━━━━━\n👉 อนุมัติ: ${approveUrl}`
         );
 
         await saveLog(username, 'register_success', 'ลงทะเบียนผู้ใช้งานใหม่ — รอการอนุมัติ', ip);
