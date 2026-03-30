@@ -72,10 +72,12 @@ export class LayoutComponent implements OnInit {
       this.cdr.detectChanges();
     });
 
-    // Auto-close sidebar on route change (mobile)
+    // Auto-close sidebar on route change (mobile เท่านั้น, desktop เปิดค้างไว้)
     this.router.events.pipe(filter(e => e instanceof NavigationEnd)).subscribe(() => {
-      this.isSidebarOpen = false;
-      this.cdr.detectChanges();
+      if (window.innerWidth < 1024) {
+        this.isSidebarOpen = false;
+        this.cdr.detectChanges();
+      }
     });
 
     // Set title from current route immediately (for initial navigation)

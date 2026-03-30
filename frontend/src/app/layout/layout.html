@@ -26,7 +26,8 @@
     </div>
 
     <!-- Desktop: Side sidebar -->
-    <aside class="hidden lg:flex bg-gradient-to-b from-green-800 to-green-600 text-white flex-col shadow-xl w-64">
+    <aside class="hidden lg:flex bg-gradient-to-b from-green-800 to-green-600 text-white flex-col shadow-xl transition-all duration-500 ease-in-out overflow-hidden"
+           [ngClass]="isSidebarOpen ? 'w-64' : 'w-0'">
       <div class="h-16 flex items-center px-6 border-b border-green-500/30 bg-green-900/20">
         <i class="fas fa-heartbeat text-2xl mr-3 refresh-icon cursor-pointer" (click)="refreshDashboard()"></i>
         <span class="text-lg font-bold tracking-wide">Korat Health KPI</span>
