@@ -1,0 +1,104 @@
+<div class="p-4 sm:p-6">
+
+  <!-- Header -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div>
+        <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+          <i class="fas fa-cogs text-purple-600"></i>
+          Environment Configuration
+        </h3>
+        <p class="text-xs text-gray-500 mt-1">จัดการตั้งค่าระบบทั้ง Development และ Production ผ่าน UI</p>
+        <p class="text-[10px] text-amber-500 mt-1"><i class="fas fa-info-circle mr-1"></i>ค่าที่บันทึกจะ override .env file | ค่า Database/Secret มีผลหลัง restart server</p>
+      </div>
+      <div class="flex gap-2">
+        <button (click)="loadConfig()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-sm transition-all">
+          <i class="fas fa-sync-alt mr-1"></i>Refresh
+        </button>
+        <button (click)="saveConfig()" [disabled]="!hasChanges()"
+                class="px-5 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-sm shadow-md transition-all disabled:opacity-40">
+          <i class="fas fa-save mr-1"></i>บันทึก ({{ changedCount() }})
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div *ngIf="isLoading" class="flex items-center justify-center py-16">
+    <div class="animate-spin rounded-full h-10 w-10 border-4 border-purple-200 border-t-purple-600"></div>
+  </div>
+
+  <div *ngIf="!isLoading && configItems.length > 0">
+
+    <!-- Group Tabs -->
+    <div class="flex flex-wrap gap-2 mb-6">
+      <button *ngFor="let g of groups" (click)="activeGroup = g.id"
+              class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+              [ngClass]="activeGroup === g.id ? 'bg-purple-600 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'">
+        <i class="fas {{ g.icon }}"></i>{{ g.label }}
+        <span class="bg-white/20 px-1.5 py-0.5 rounded-full text-[10px]" *ngIf="activeGroup === g.id">
+          {{ g.id === 'all' ? configItems.length : configItems.length }}
+        </span>
+      </button>
+    </div>
+
+    <!-- Config Items -->
+    <div class="space-y-3">
+      <div *ngFor="let item of filteredItems"
+           class="bg-white rounded-xl border shadow-sm p-4 transition-all"
+           [ngClass]="editValues[item.key] ? 'border-green-400 ring-2 ring-green-200' : 'border-gray-200'">
+
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+          <!-- Label + Key -->
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-sm font-bold text-gray-800">{{ item.label }}</span>
+              <span class="px-1.5 py-0.5 rounded text-[9px] font-bold" [ngClass]="getSourceBadge(item.source).class">
+                {{ getSourceBadge(item.source).text }}
+              </span>
+            </div>
+            <p class="text-xs font-mono text-gray-400">{{ item.key }}</p>
+          </div>
+
+          <!-- Current Value -->
+          <div class="sm:w-48 shrink-0">
+            <p class="text-[10px] text-gray-400 mb-0.5">ค่าปัจจุบัน:</p>
+            <div class="flex items-center gap-1">
+              <span *ngIf="item.has_value && !item.sensitive" class="text-xs text-gray-700 font-mono bg-gray-50 px-2 py-1 rounded break-all">{{ item.source === 'db' ? item.db_value : item.env_value }}</span>
+              <span *ngIf="item.has_value && item.sensitive && !showSensitive[item.key]" class="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded">••••••••
+                <button (click)="showSensitive[item.key] = true" class="text-blue-500 ml-1"><i class="fas fa-eye text-[10px]"></i></button>
+              </span>
+              <span *ngIf="item.has_value && item.sensitive && showSensitive[item.key]" class="text-xs text-gray-700 font-mono bg-gray-50 px-2 py-1 rounded break-all">{{ item.source === 'db' ? item.db_value : item.env_value }}
+                <button (click)="showSensitive[item.key] = false" class="text-gray-400 ml-1"><i class="fas fa-eye-slash text-[10px]"></i></button>
+              </span>
+              <span *ngIf="!item.has_value" class="text-xs text-red-400 italic">ยังไม่ตั้งค่า</span>
+            </div>
+          </div>
+
+          <!-- Edit Input -->
+          <div class="sm:w-64 shrink-0">
+            <p class="text-[10px] text-gray-400 mb-0.5">ค่าใหม่ (เว้นว่าง = ไม่เปลี่ยน):</p>
+            <div class="relative">
+              <input [type]="item.sensitive && !showSensitive['edit_' + item.key] ? 'password' : 'text'"
+                     [(ngModel)]="editValues[item.key]"
+                     class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-400 outline-none font-mono"
+                     [ngClass]="editValues[item.key] ? 'border-green-400 bg-green-50' : 'border-gray-200'"
+                     [placeholder]="item.sensitive ? '••••••' : 'ค่าใหม่...'">
+              <button *ngIf="item.sensitive" (click)="showSensitive['edit_' + item.key] = !showSensitive['edit_' + item.key]"
+                      class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <i class="fas" [ngClass]="showSensitive['edit_' + item.key] ? 'fa-eye-slash' : 'fa-eye'" style="font-size:12px"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom save -->
+    <div *ngIf="hasChanges()" class="mt-6 flex justify-end">
+      <button (click)="saveConfig()" class="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-sm shadow-md transition-all">
+        <i class="fas fa-save mr-2"></i>บันทึกการเปลี่ยนแปลง ({{ changedCount() }} รายการ)
+      </button>
+    </div>
+  </div>
+</div>

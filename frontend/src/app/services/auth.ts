@@ -265,6 +265,18 @@ export class AuthService {
   }
 
   // --- Log Management APIs ---
+  // === ENV Config ===
+  getEnvConfig(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/env-config`, { headers });
+  }
+  saveEnvConfig(settings: any[]): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/env-config`, { settings }, { headers });
+  }
+
   // === DB Compare (HDC) ===
   dbCompare(): Observable<any> {
     const token = localStorage.getItem('kpi_token');

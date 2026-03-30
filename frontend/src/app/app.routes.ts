@@ -14,6 +14,7 @@ import { ExportKpiComponent } from './export-kpi/export-kpi';
 import { FormBuilderComponent } from './form-builder/form-builder';
 import { HelpComponent } from './help/help';
 import { DbCompareComponent } from './db-compare/db-compare';
+import { EnvConfigComponent } from './env-config/env-config';
 import { authGuard } from './guards/auth-guard';
 import { adminGuard } from './guards/admin-guard';
 import { anyAdminGuard } from './guards/any-admin-guard';
@@ -42,6 +43,7 @@ export const routes: Routes = [
       { path: 'form-builder', component: FormBuilderComponent, canActivate: [superAdminGuard], data: { title: 'สร้างแบบฟอร์ม KPI' } },
       { path: 'help', component: HelpComponent, data: { title: 'คู่มือการใช้งาน' } },
       { path: 'db-compare', component: DbCompareComponent, canActivate: [superAdminGuard], data: { title: 'DB Compare' } },
+      { path: 'env-config', component: EnvConfigComponent, canActivate: [superAdminGuard], data: { title: 'Environment Config' } },
     ]
   },
   { path: '**', redirectTo: 'login' }

@@ -4175,6 +4175,77 @@ apiRouter.post('/db-compare/sync-data', authenticateToken, isSuperAdmin, async (
     res.json({ success: true, message: `Sync สำเร็จ ${synced.length} ตาราง`, synced, errors });
 });
 
+// === Environment Config Management ===
+// GET /env-config — ดึง config ทั้งหมด (DB override + ENV fallback)
+apiRouter.get('/env-config', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const envKeys = [
+            { key: 'DB_HOST', group: 'database', label: 'Database Host', sensitive: false },
+            { key: 'DB_PORT', group: 'database', label: 'Database Port', sensitive: false },
+            { key: 'DB_NAME', group: 'database', label: 'Database Name', sensitive: false },
+            { key: 'DB_USER', group: 'database', label: 'Database User', sensitive: false },
+            { key: 'DB_PASSWORD', group: 'database', label: 'Database Password', sensitive: true },
+            { key: 'SMTP_HOST', group: 'email', label: 'SMTP Host', sensitive: false },
+            { key: 'SMTP_PORT', group: 'email', label: 'SMTP Port', sensitive: false },
+            { key: 'SMTP_USER', group: 'email', label: 'SMTP Email', sensitive: false },
+            { key: 'SMTP_PASS', group: 'email', label: 'SMTP Password (App Password)', sensitive: true },
+            { key: 'SMTP_FROM', group: 'email', label: 'SMTP From Name', sensitive: false },
+            { key: 'TELEGRAM_BOT_TOKEN', group: 'notification', label: 'Telegram Bot Token', sensitive: true },
+            { key: 'TELEGRAM_CHAT_ID', group: 'notification', label: 'Telegram Chat ID', sensitive: false },
+            { key: 'ADMIN_EMAILS', group: 'notification', label: 'Admin Emails (comma)', sensitive: false },
+            { key: 'APP_URL', group: 'app', label: 'Application URL (Frontend)', sensitive: false },
+            { key: 'SECRET_KEY', group: 'app', label: 'JWT Secret Key', sensitive: true },
+            { key: 'PORT', group: 'app', label: 'Backend Port', sensitive: false },
+            { key: 'HDC_DB_HOST', group: 'hdc', label: 'HDC Database Host', sensitive: false },
+            { key: 'HDC_DB_PORT', group: 'hdc', label: 'HDC Database Port', sensitive: false },
+            { key: 'HDC_DB_NAME', group: 'hdc', label: 'HDC Database Name', sensitive: false },
+            { key: 'HDC_DB_USER', group: 'hdc', label: 'HDC Database User', sensitive: false },
+            { key: 'HDC_DB_PASSWORD', group: 'hdc', label: 'HDC Database Password', sensitive: true },
+        ];
+
+        // ดึงค่าจาก system_settings (DB override)
+        const settingKeys = envKeys.map(e => 'env_' + e.key);
+        const [dbRows] = await db.query('SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN (?)', [settingKeys]);
+        const dbMap = new Map(dbRows.map(r => [r.setting_key.replace('env_', ''), r.setting_value]));
+
+        const config = envKeys.map(e => ({
+            ...e,
+            env_value: e.sensitive ? (process.env[e.key] ? '••••••••' : '') : (process.env[e.key] || ''),
+            db_value: e.sensitive ? (dbMap.get(e.key) ? '••••••••' : '') : (dbMap.get(e.key) || ''),
+            source: dbMap.has(e.key) && dbMap.get(e.key) ? 'db' : (process.env[e.key] ? 'env' : 'none'),
+            has_value: !!(dbMap.get(e.key) || process.env[e.key])
+        }));
+
+        res.json({ success: true, data: config });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// POST /env-config — บันทึก config ลง DB (override .env)
+apiRouter.post('/env-config', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { settings } = req.body; // [{ key: 'SMTP_HOST', value: 'smtp.gmail.com' }, ...]
+    if (!Array.isArray(settings)) return res.status(400).json({ success: false, message: 'Invalid data' });
+
+    try {
+        for (const s of settings) {
+            if (!s.key || s.value === undefined) continue;
+            const dbKey = 'env_' + s.key;
+            await db.query(
+                'INSERT INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = ?',
+                [dbKey, s.value, `ENV override: ${s.key}`, s.value]
+            );
+        }
+
+        await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+            [req.user.userId, 'UPDATE', 'env_config', JSON.stringify({ keys: settings.map(s => s.key) }), req.ip]).catch(() => {});
+
+        res.json({ success: true, message: `บันทึก ${settings.length} รายการสำเร็จ (มีผลหลัง restart server)` });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 apiRouter.post('/test-telegram', authenticateToken, isSuperAdmin, async (req, res) => {
     const { bot_token, chat_id } = req.body;
     if (!bot_token || !chat_id) return res.status(400).json({ success: false, message: 'กรุณากรอก Bot Token และ Chat ID' });
