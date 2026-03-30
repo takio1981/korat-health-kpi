@@ -480,11 +480,12 @@ apiRouter.post('/register', loginLimiter, async (req, res) => {
             );
         }
 
-        // สร้าง URL สำหรับ link อนุมัติ
-        const proto = req.headers['x-forwarded-proto'] || 'http';
-        const host = req.headers['x-forwarded-host'] || req.headers['host'] || 'localhost';
-        const appUrl = process.env.APP_URL || `${proto}://${host}/khupskpi/`;
-        const approveUrl = `${appUrl}users?status=pending`;
+        // สร้าง URL ของ Frontend (ไม่ใช่ backend)
+        // APP_URL ต้องชี้ไป frontend เช่น https://yourdomain.com/khupskpi/ หรือ http://localhost:8881/khupskpi/
+        // ถ้าอยู่หลัง Nginx proxy → ใช้ origin จาก referer header
+        const referer = req.headers['referer'] || req.headers['origin'] || '';
+        const appUrl = process.env.APP_URL || (referer ? referer.split('/khupskpi/')[0] + '/khupskpi/' : 'http://localhost:8881/khupskpi/');
+        const approveUrl = `${appUrl.replace(/\/+$/, '')}/users?status=pending`;
 
         // แจ้ง Telegram + Email Admin
         notifyAdmins(
@@ -507,7 +508,6 @@ apiRouter.post('/register', loginLimiter, async (req, res) => {
                             ✅ เข้าสู่ระบบเพื่ออนุมัติ
                         </a>
                     </div>
-                    <p style="margin-top:12px;font-size:11px;color:#9ca3af;text-align:center">${approveUrl}</p>
                 </div>
             </div>`,
             `🆕 ผู้สมัครใหม่รอการอนุมัติ\n━━━━━━━━━━━━━━━\n👤 ${firstname} ${lastname}\n🔑 Username: ${username}\n🏥 ${hosName}\n📋 สิทธิ์: ${roleLabel}\n📱 โทร: ${cleanPhone}\n📧 Email: ${email || '-'}\n━━━━━━━━━━━━━━━\n👉 อนุมัติ: ${approveUrl}`
