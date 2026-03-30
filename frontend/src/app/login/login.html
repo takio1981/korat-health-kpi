@@ -70,7 +70,7 @@
       <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="space-y-6">
 
         <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-2" for="username">ชื่อผู้ใช้งาน</label>
+          <label class="block text-sm font-semibold text-gray-700 mb-2" for="username">{{ lang.t('login.username') }}</label>
           <div class="relative">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -82,7 +82,7 @@
         </div>
 
         <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-2" for="password">รหัสผ่าน</label>
+          <label class="block text-sm font-semibold text-gray-700 mb-2" for="password">{{ lang.t('login.password') }}</label>
           <div class="relative">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
