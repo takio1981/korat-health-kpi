@@ -44,17 +44,23 @@
     </div>
   </div>
 
-  <div class="flex-grow flex items-center justify-center p-6 lg:w-1/2">
-    <div class="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
-
-      <div class="text-center lg:hidden mb-8">
-        <div class="bg-green-50 inline-block p-3 rounded-full mb-3">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-          </svg>
+  <div class="flex-grow flex items-center justify-center p-4 sm:p-6 lg:w-1/2">
+    <!-- Mobile: Header branding -->
+    <div class="w-full max-w-md">
+      <div class="lg:hidden mb-6">
+        <div class="bg-gradient-to-br from-green-700 via-green-600 to-teal-500 rounded-2xl p-6 text-white text-center shadow-lg">
+          <div class="bg-white rounded-full w-16 h-16 mx-auto mb-3 flex items-center justify-center shadow-md">
+            <img alt="ตรากระทรวงสาธารณสุข" src="//upload.wikimedia.org/wikipedia/commons/f/f9/%E0%B8%95%E0%B8%A3%E0%B8%B2%E0%B8%81%E0%B8%A3%E0%B8%B0%E0%B8%97%E0%B8%A3%E0%B8%A7%E0%B8%87%E0%B8%AA%E0%B8%B2%E0%B8%98%E0%B8%B2%E0%B8%A3%E0%B8%93%E0%B8%AA%E0%B8%B8%E0%B8%82%E0%B9%83%E0%B8%AB%E0%B8%A1%E0%B9%88.png"
+                 decoding="async" class="w-12 h-12 object-contain">
           </div>
-        <h2 class="text-2xl font-bold text-green-800">สสจ.นครราชสีมา</h2>
+          <h1 class="text-lg font-bold leading-tight">{{ lang.t('login.system_name') }}</h1>
+          <p class="text-green-100 text-sm mt-1">{{ lang.t('login.org_name') }}</p>
+          <div class="w-12 h-0.5 bg-green-400 rounded-full mx-auto mt-3 mb-2"></div>
+          <p class="text-green-200 text-xs">{{ lang.t('login.slogan') }}</p>
+        </div>
       </div>
+
+    <div class="bg-white dark:bg-[#24243a] rounded-2xl shadow-xl p-6 sm:p-8 border border-gray-100 dark:border-gray-700">
 
       <div class="text-center mb-8 hidden lg:block">
         <h2 class="text-3xl font-bold text-gray-800 dark:text-white">{{ lang.t('login.title') }}</h2>
@@ -120,6 +126,7 @@
         </a>
       </div>
 
+    </div>
     </div>
   </div>
 
