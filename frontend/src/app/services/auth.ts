@@ -265,6 +265,18 @@ export class AuthService {
   }
 
   // --- Log Management APIs ---
+  testTelegram(token: string, chatId: string): Observable<any> {
+    const authToken = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${authToken}` });
+    return this.http.post(`${this.apiUrl}/test-telegram`, { bot_token: token, chat_id: chatId }, { headers });
+  }
+
+  testAdminEmail(emails: string): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/test-admin-email`, { emails }, { headers });
+  }
+
   backupDatabase(): Observable<Blob> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

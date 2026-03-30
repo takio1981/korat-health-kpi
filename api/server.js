@@ -43,35 +43,51 @@ const sendMail = async (to, subject, html) => {
 };
 
 // === Telegram Bot Notification ===
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
-
-const sendTelegram = async (message) => {
-    if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
+const sendTelegramDirect = async (botToken, chatId, message) => {
+    if (!botToken || !chatId) return false;
     try {
-        const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+        const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
         const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: message, parse_mode: 'HTML' })
+            body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' })
         });
         const data = await res.json();
-        if (data.ok) console.log('[Telegram] Message sent');
-        else console.error('[Telegram] Failed:', data.description);
+        if (data.ok) { console.log('[Telegram] Message sent'); return true; }
+        else { console.error('[Telegram] Failed:', data.description); return false; }
     } catch (err) {
         console.error('[Telegram] Error:', err.message);
+        return false;
     }
 };
 
-// === Send notification to Admin Email(s) ===
-const ADMIN_EMAILS = process.env.ADMIN_EMAILS || ''; // comma-separated
+// Helper: ดึง notification settings จาก DB (fallback ENV)
+const getNotifSettings = async () => {
+    try {
+        const [rows] = await db.query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('telegram_bot_token','telegram_chat_id','admin_emails')");
+        const s = {};
+        for (const r of rows) s[r.setting_key] = r.setting_value;
+        return {
+            tgToken: s.telegram_bot_token || process.env.TELEGRAM_BOT_TOKEN || '',
+            tgChatId: s.telegram_chat_id || process.env.TELEGRAM_CHAT_ID || '',
+            adminEmails: s.admin_emails || process.env.ADMIN_EMAILS || ''
+        };
+    } catch (e) {
+        return {
+            tgToken: process.env.TELEGRAM_BOT_TOKEN || '',
+            tgChatId: process.env.TELEGRAM_CHAT_ID || '',
+            adminEmails: process.env.ADMIN_EMAILS || ''
+        };
+    }
+};
 
 const notifyAdmins = async (subject, html, telegramMsg) => {
+    const ns = await getNotifSettings();
     // 1. Telegram
-    if (telegramMsg) sendTelegram(telegramMsg);
+    if (telegramMsg) sendTelegramDirect(ns.tgToken, ns.tgChatId, telegramMsg);
     // 2. Email to admin list
-    if (ADMIN_EMAILS) {
-        const emails = ADMIN_EMAILS.split(',').map(e => e.trim()).filter(Boolean);
+    if (ns.adminEmails) {
+        const emails = ns.adminEmails.split(',').map(e => e.trim()).filter(Boolean);
         for (const email of emails) {
             sendMail(email, subject, html);
         }
@@ -3498,6 +3514,16 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
             await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)', [key, val, desc]);
         }
 
+        // เพิ่ม notification settings defaults
+        const notifDefaults = [
+            ['telegram_bot_token', '', 'Telegram Bot Token สำหรับแจ้งเตือนผู้สมัครใหม่'],
+            ['telegram_chat_id', '', 'Telegram Chat ID (Group) สำหรับแจ้งเตือน'],
+            ['admin_emails', '', 'Email Admin สำหรับแจ้งเตือนผู้สมัครใหม่ (คั่นด้วย comma)']
+        ];
+        for (const [key, val, desc] of notifDefaults) {
+            await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)', [key, val, desc]);
+        }
+
         // เพิ่ม type 'appeal' ใน notifications
         try {
             await db.query(`ALTER TABLE notifications MODIFY type ENUM('approve','reject','info','appeal') NOT NULL`);
@@ -3953,6 +3979,31 @@ apiRouter.get('/kpi-replies', authenticateToken, async (req, res) => {
         console.error('KPI Replies Error:', error);
         res.status(500).json({ success: false, message: 'ไม่สามารถดึงข้อมูลตอบกลับได้' });
     }
+});
+
+// === Test Telegram (super_admin) ===
+apiRouter.post('/test-telegram', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { bot_token, chat_id } = req.body;
+    if (!bot_token || !chat_id) return res.status(400).json({ success: false, message: 'กรุณากรอก Bot Token และ Chat ID' });
+    const ok = await sendTelegramDirect(bot_token, chat_id, '🔔 ทดสอบการแจ้งเตือน\nจากระบบ KPI สสจ.นครราชสีมา\n✅ การเชื่อมต่อสำเร็จ!');
+    res.json({ success: ok, message: ok ? 'ส่ง Telegram สำเร็จ' : 'ส่งไม่สำเร็จ ตรวจสอบ Token และ Chat ID' });
+});
+
+// === Test Admin Email (super_admin) ===
+apiRouter.post('/test-admin-email', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { emails } = req.body;
+    if (!emails) return res.status(400).json({ success: false, message: 'กรุณากรอก Email' });
+    const list = emails.split(',').map(e => e.trim()).filter(Boolean);
+    if (list.length === 0) return res.status(400).json({ success: false, message: 'ไม่มี Email ที่ถูกต้อง' });
+    for (const email of list) {
+        sendMail(email, '🔔 ทดสอบการแจ้งเตือน — ระบบ KPI สสจ.นครราชสีมา',
+            `<div style="font-family:Sarabun,sans-serif;max-width:400px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
+                <div style="background:#16a34a;padding:16px;text-align:center;color:white"><h3 style="margin:0">🔔 ทดสอบการแจ้งเตือน</h3></div>
+                <div style="padding:20px;text-align:center"><p>การเชื่อมต่อ Email สำเร็จ!</p><p style="color:#6b7280;font-size:13px">ระบบบันทึกผลงาน KPI ด้านสุขภาพ สสจ.นครราชสีมา</p></div>
+            </div>`
+        );
+    }
+    res.json({ success: true, message: `ส่ง Email ทดสอบไปที่ ${list.length} ที่อยู่แล้ว` });
 });
 
 // === Database Backup (super_admin เท่านั้น) ===

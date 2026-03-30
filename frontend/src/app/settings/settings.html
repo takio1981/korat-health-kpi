@@ -242,6 +242,71 @@
           </div>
         </div>
 
+        <!-- ตั้งค่าการแจ้งเตือนผู้สมัครใหม่ -->
+        <div class="mt-8 pt-6 border-t border-gray-100">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-bell me-2 text-blue-600"></i>แจ้งเตือนผู้สมัครใหม่</h3>
+          </div>
+          <p class="text-xs text-gray-500 mb-4">เมื่อมีผู้ลงทะเบียนใหม่ ระบบจะส่งแจ้งเตือนไปยังช่องทางที่ตั้งค่าไว้ (ตั้งค่าใน .env / docker-compose)</p>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Telegram -->
+            <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <h4 class="font-bold text-blue-800 text-sm mb-3"><i class="fab fa-telegram-plane me-2"></i>Telegram Bot</h4>
+              <div class="space-y-2">
+                <div>
+                  <label class="block text-xs font-bold text-gray-600 mb-1">Bot Token</label>
+                  <input type="text" [(ngModel)]="telegramBotToken" name="telegramBotToken"
+                         class="w-full px-3 py-2 border border-blue-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 outline-none font-mono"
+                         placeholder="7123456789:AAHxxxxxxxxxx">
+                </div>
+                <div>
+                  <label class="block text-xs font-bold text-gray-600 mb-1">Chat ID (Group)</label>
+                  <input type="text" [(ngModel)]="telegramChatId" name="telegramChatId"
+                         class="w-full px-3 py-2 border border-blue-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 outline-none font-mono"
+                         placeholder="-1001234567890">
+                </div>
+                <button type="button" (click)="testTelegram()"
+                        class="w-full py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-colors">
+                  <i class="fab fa-telegram-plane me-1"></i>ทดสอบส่ง Telegram
+                </button>
+              </div>
+              <p class="mt-2 text-xs text-blue-600"><i class="fas fa-info-circle me-1"></i>สร้าง Bot ผ่าน @BotFather แล้วเพิ่มเข้า Group</p>
+            </div>
+
+            <!-- Admin Email -->
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <h4 class="font-bold text-amber-800 text-sm mb-3"><i class="fas fa-envelope me-2"></i>Email แจ้ง Admin</h4>
+              <div class="space-y-2">
+                <div>
+                  <label class="block text-xs font-bold text-gray-600 mb-1">Email Admin (คั่นด้วย comma)</label>
+                  <textarea [(ngModel)]="adminEmails" name="adminEmails" rows="3"
+                            class="w-full px-3 py-2 border border-amber-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-400 outline-none"
+                            placeholder="admin1@email.com, admin2@email.com"></textarea>
+                </div>
+                <button type="button" (click)="testAdminEmail()"
+                        class="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold transition-colors">
+                  <i class="fas fa-paper-plane me-1"></i>ทดสอบส่ง Email
+                </button>
+              </div>
+              <p class="mt-2 text-xs text-amber-600"><i class="fas fa-info-circle me-1"></i>ใช้ SMTP ที่ตั้งค่าไว้ใน .env (Gmail App Password)</p>
+            </div>
+          </div>
+
+          <!-- สถานะปัจจุบัน -->
+          <div class="mt-4 bg-gray-50 rounded-xl p-3 flex flex-wrap gap-3 text-xs">
+            <span class="flex items-center gap-1.5" [ngClass]="telegramBotToken && telegramChatId ? 'text-green-600' : 'text-gray-400'">
+              <i class="fab fa-telegram-plane"></i>Telegram: {{ telegramBotToken && telegramChatId ? 'ตั้งค่าแล้ว' : 'ยังไม่ตั้งค่า' }}
+            </span>
+            <span class="flex items-center gap-1.5" [ngClass]="adminEmails ? 'text-green-600' : 'text-gray-400'">
+              <i class="fas fa-envelope"></i>Email Admin: {{ adminEmails ? 'ตั้งค่าแล้ว (' + adminEmails.split(',').length + ' คน)' : 'ยังไม่ตั้งค่า' }}
+            </span>
+            <span class="flex items-center gap-1.5 text-green-600">
+              <i class="fas fa-bell"></i>แจ้งเตือนในระบบ: เปิดอยู่เสมอ
+            </span>
+          </div>
+        </div>
+
         <div class="flex justify-end pt-4 border-t border-gray-100">
           <button type="submit" class="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-md transition-colors">
             <i class="fas fa-save me-2"></i>บันทึกการตั้งค่า

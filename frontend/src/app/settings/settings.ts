@@ -42,6 +42,11 @@ export class SettingsComponent implements OnInit {
   autoLogoutEnabled: boolean = true;
   idleCountdownEnabled: boolean = true;
 
+  // Notification settings
+  telegramBotToken: string = '';
+  telegramChatId: string = '';
+  adminEmails: string = '';
+
   // Appeal settings
   appealEnabled: boolean = false;
   appealStartDate: string = '';
@@ -105,6 +110,14 @@ export class SettingsComponent implements OnInit {
           if (autoLogoutEn) this.autoLogoutEnabled = autoLogoutEn.setting_value === 'true';
           if (idleCountdownEn) this.idleCountdownEnabled = idleCountdownEn.setting_value === 'true';
 
+          // Notification settings
+          const tgToken = this.settings.find(s => s.setting_key === 'telegram_bot_token');
+          const tgChat = this.settings.find(s => s.setting_key === 'telegram_chat_id');
+          const admEmails = this.settings.find(s => s.setting_key === 'admin_emails');
+          if (tgToken) this.telegramBotToken = tgToken.setting_value || '';
+          if (tgChat) this.telegramChatId = tgChat.setting_value || '';
+          if (admEmails) this.adminEmails = admEmails.setting_value || '';
+
           // Data Entry Lock settings
           const entryLocked = this.settings.find(s => s.setting_key === 'data_entry_locked');
           const entryLockStart = this.settings.find(s => s.setting_key === 'data_entry_lock_start');
@@ -144,6 +157,9 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'login_attempts_enabled', setting_value: this.loginAttemptsEnabled.toString() },
       { setting_key: 'auto_logout_enabled', setting_value: this.autoLogoutEnabled.toString() },
       { setting_key: 'idle_countdown_enabled', setting_value: this.idleCountdownEnabled.toString() },
+      { setting_key: 'telegram_bot_token', setting_value: this.telegramBotToken },
+      { setting_key: 'telegram_chat_id', setting_value: this.telegramChatId },
+      { setting_key: 'admin_emails', setting_value: this.adminEmails },
       { setting_key: 'data_entry_locked', setting_value: this.dataEntryLocked.toString() },
       { setting_key: 'data_entry_lock_start', setting_value: this.dataEntryLockStart },
       { setting_key: 'data_entry_lock_end', setting_value: this.dataEntryLockEnd },
@@ -182,6 +198,36 @@ export class SettingsComponent implements OnInit {
     this.appealStartDate = '';
     this.appealEndDate = '';
     this.appealDaysAfterApprove = 0;
+  }
+
+  testTelegram() {
+    if (!this.telegramBotToken || !this.telegramChatId) {
+      Swal.fire('แจ้งเตือน', 'กรุณากรอก Bot Token และ Chat ID ก่อน', 'warning');
+      return;
+    }
+    Swal.fire({ title: 'กำลังส่ง...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    this.authService.testTelegram(this.telegramBotToken, this.telegramChatId).subscribe({
+      next: (res: any) => {
+        if (res.success) Swal.fire({ icon: 'success', title: 'ส่ง Telegram สำเร็จ', text: 'ตรวจสอบข้อความใน Group', timer: 2000, showConfirmButton: false });
+        else Swal.fire('ผิดพลาด', res.message || 'ส่งไม่สำเร็จ', 'error');
+      },
+      error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถส่งได้', 'error')
+    });
+  }
+
+  testAdminEmail() {
+    if (!this.adminEmails) {
+      Swal.fire('แจ้งเตือน', 'กรุณากรอก Email Admin ก่อน', 'warning');
+      return;
+    }
+    Swal.fire({ title: 'กำลังส่ง...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    this.authService.testAdminEmail(this.adminEmails).subscribe({
+      next: (res: any) => {
+        if (res.success) Swal.fire({ icon: 'success', title: 'ส่ง Email สำเร็จ', text: 'ตรวจสอบ Email ของ Admin', timer: 2000, showConfirmButton: false });
+        else Swal.fire('ผิดพลาด', res.message || 'ส่งไม่สำเร็จ', 'error');
+      },
+      error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถส่งได้', 'error')
+    });
   }
 
   backupDatabase() {
