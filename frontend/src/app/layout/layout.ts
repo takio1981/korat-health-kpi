@@ -28,7 +28,7 @@ export class LayoutComponent implements OnInit {
 
   pageTitle: string = '';
 
-  isSidebarOpen: boolean = true;
+  isSidebarOpen: boolean = window.innerWidth >= 1024; // desktop เปิด, mobile ซ่อน
   isLoading: boolean = false;
   isAdmin: boolean = false;       // admin_ssj + super_admin (ส่วนกลาง)
   isAnyAdmin: boolean = false;    // admin_cup + admin_ssj + super_admin (ทุกระดับ admin)
