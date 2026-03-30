@@ -549,10 +549,26 @@
 📱 โทร: 0812345678
 📧 Email: somchai@email.com
 ━━━━━━━━━━━━━━━
-กรุณาเข้าระบบเพื่ออนุมัติ
+🔑 เข้าสู่ระบบ: https://yourdomain.com/khupskpi/login
 ```
 
-#### ลำดับการอ่านค่า
+#### Link เข้าสู่ระบบเพื่ออนุมัติ
+- **Email**: มีปุ่ม "🔑 เข้าสู่ระบบเพื่ออนุมัติ" → กดแล้วเปิดหน้า Login
+- **Telegram**: มี link `🔑 เข้าสู่ระบบ: ...` → กดแล้วเปิดหน้า Login
+- Login ด้วย super_admin หรือ admin_ssj → ไปเมนู "จัดการผู้ใช้งาน" → อนุมัติ
+
+#### ตั้งค่า APP_URL (สำหรับ link ในการแจ้งเตือน)
+ใส่ใน `.env` เฉพาะ origin ไม่ต้องมี path:
+```
+# Production
+APP_URL=https://yourdomain.com
+
+# Development
+APP_URL=http://localhost:4200
+```
+ถ้าไม่ตั้ง → ระบบจะสร้างจาก referer header อัตโนมัติ
+
+#### ลำดับการอ่านค่า Telegram / Email
 1. อ่านจาก **system_settings** (DB) ← ตั้งค่าผ่านหน้า Settings
 2. ถ้าไม่มี → อ่านจาก **.env** / docker-compose ← fallback
 3. ถ้าไม่มีทั้งสอง → ข้ามการส่ง (ไม่ crash)
