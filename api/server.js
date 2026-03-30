@@ -12,6 +12,7 @@ if (process.env.NODE_ENV !== 'production') {
 const express = require('express');
 const cors = require('cors');
 const db = require('./db');
+const { getRemotePool } = require('./db-remote');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const helmet = require('helmet');
@@ -3999,6 +4000,181 @@ apiRouter.get('/kpi-replies', authenticateToken, async (req, res) => {
 });
 
 // === Test Telegram (super_admin) ===
+// ============================================================
+// === Structure Compare: Local DB vs Remote HDC DB ===
+// ============================================================
+
+// GET /db-compare — เปรียบเทียบ structure ตาราง table_process ระหว่าง local กับ hdc
+apiRouter.get('/db-compare', authenticateToken, isSuperAdmin, async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (HDC) ใน .env (HDC_DB_HOST)' });
+
+    try {
+        // 1. ดึง table_process ทั้งหมดจาก kpi_indicators
+        const [indicators] = await db.query("SELECT id, kpi_indicators_name, table_process FROM kpi_indicators WHERE table_process IS NOT NULL AND table_process != ''");
+
+        const results = [];
+        const localDbName = process.env.DB_NAME || 'khups_kpi_db';
+        const remoteDbName = process.env.HDC_DB_NAME || 'hdc';
+
+        for (const ind of indicators) {
+            const tableName = ind.table_process.trim().replace(/-/g, '_');
+            if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(tableName)) continue;
+
+            const item = { id: ind.id, name: ind.kpi_indicators_name, table: tableName, local: null, remote: null, status: 'unknown', diff: [] };
+
+            // Local structure
+            try {
+                const [localCols] = await db.query(`SHOW COLUMNS FROM \`${tableName}\``);
+                const [localCount] = await db.query(`SELECT COUNT(*) AS cnt FROM \`${tableName}\``);
+                item.local = { exists: true, columns: localCols.map(c => ({ field: c.Field, type: c.Type, nullable: c.Null, key: c.Key, default: c.Default })), row_count: localCount[0].cnt };
+            } catch (e) { item.local = { exists: false, columns: [], row_count: 0 }; }
+
+            // Remote structure
+            try {
+                const [remoteCols] = await remoteDb.query(`SHOW COLUMNS FROM \`${tableName}\``);
+                const [remoteCount] = await remoteDb.query(`SELECT COUNT(*) AS cnt FROM \`${tableName}\``);
+                item.remote = { exists: true, columns: remoteCols.map(c => ({ field: c.Field, type: c.Type, nullable: c.Null, key: c.Key, default: c.Default })), row_count: remoteCount[0].cnt };
+            } catch (e) { item.remote = { exists: false, columns: [], row_count: 0 }; }
+
+            // Compare
+            if (!item.local.exists && !item.remote.exists) { item.status = 'missing_both'; }
+            else if (!item.local.exists) { item.status = 'missing_local'; }
+            else if (!item.remote.exists) { item.status = 'missing_remote'; }
+            else {
+                // เปรียบเทียบ columns
+                const localFields = new Map(item.local.columns.map(c => [c.field, c]));
+                const remoteFields = new Map(item.remote.columns.map(c => [c.field, c]));
+                for (const [name, col] of remoteFields) {
+                    if (!localFields.has(name)) { item.diff.push({ field: name, issue: 'missing_in_local', remote_type: col.type }); }
+                    else if (localFields.get(name).type !== col.type) { item.diff.push({ field: name, issue: 'type_mismatch', local_type: localFields.get(name).type, remote_type: col.type }); }
+                }
+                for (const [name] of localFields) {
+                    if (!remoteFields.has(name)) { item.diff.push({ field: name, issue: 'missing_in_remote' }); }
+                }
+                item.status = item.diff.length === 0 ? 'match' : 'different';
+            }
+
+            results.push(item);
+        }
+
+        const summary = {
+            total: results.length,
+            match: results.filter(r => r.status === 'match').length,
+            different: results.filter(r => r.status === 'different').length,
+            missing_local: results.filter(r => r.status === 'missing_local').length,
+            missing_remote: results.filter(r => r.status === 'missing_remote').length,
+            missing_both: results.filter(r => r.status === 'missing_both').length
+        };
+
+        res.json({ success: true, local_db: localDbName, remote_db: remoteDbName, summary, tables: results });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// POST /db-compare/create-local — สร้าง/แก้ไขตารางใน local ให้ตรงกับ remote
+apiRouter.post('/db-compare/create-local', authenticateToken, isSuperAdmin, async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (HDC)' });
+
+    const { tables } = req.body; // ['table1', 'table2']
+    if (!Array.isArray(tables) || tables.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตาราง' });
+
+    const created = [], altered = [], errors = [];
+
+    for (const tableName of tables) {
+        if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(tableName)) { errors.push({ table: tableName, error: 'ชื่อไม่ถูกต้อง' }); continue; }
+        try {
+            // ดึง CREATE TABLE จาก remote
+            const [ddlRows] = await remoteDb.query(`SHOW CREATE TABLE \`${tableName}\``);
+            if (ddlRows.length === 0) { errors.push({ table: tableName, error: 'ไม่พบตารางใน remote' }); continue; }
+
+            let ddl = ddlRows[0]['Create Table'];
+
+            // ตรวจว่า local มีตารางนี้หรือยัง
+            let localExists = false;
+            try { await db.query(`SELECT 1 FROM \`${tableName}\` LIMIT 0`); localExists = true; } catch (e) {}
+
+            if (!localExists) {
+                // สร้างใหม่
+                await db.query(ddl);
+                created.push(tableName);
+            } else {
+                // ALTER เพิ่มคอลัมน์ที่ขาด
+                const [remoteCols] = await remoteDb.query(`SHOW COLUMNS FROM \`${tableName}\``);
+                const [localCols] = await db.query(`SHOW COLUMNS FROM \`${tableName}\``);
+                const localFieldSet = new Set(localCols.map(c => c.Field));
+                let alteredCount = 0;
+                for (const col of remoteCols) {
+                    if (!localFieldSet.has(col.Field)) {
+                        const nullable = col.Null === 'YES' ? 'NULL' : 'NOT NULL';
+                        const def = col.Default !== null ? `DEFAULT '${col.Default}'` : (col.Null === 'YES' ? 'DEFAULT NULL' : '');
+                        try {
+                            await db.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`${col.Field}\` ${col.Type} ${nullable} ${def}`);
+                            alteredCount++;
+                        } catch (e) { /* column อาจมีอยู่แล้ว */ }
+                    }
+                }
+                if (alteredCount > 0) altered.push({ table: tableName, added_columns: alteredCount });
+            }
+        } catch (e) { errors.push({ table: tableName, error: e.message }); }
+    }
+
+    await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+        [req.user.userId, 'DB_COMPARE_CREATE', 'MULTIPLE', JSON.stringify({ created, altered }), req.ip]).catch(() => {});
+
+    res.json({ success: true, message: `สร้าง ${created.length} ตาราง, แก้ไข ${altered.length} ตาราง`, created, altered, errors });
+});
+
+// POST /db-compare/sync-data — Sync ข้อมูลจาก remote (hdc) เข้า local
+apiRouter.post('/db-compare/sync-data', authenticateToken, isSuperAdmin, async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (HDC)' });
+
+    const { tables } = req.body;
+    if (!Array.isArray(tables) || tables.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตาราง' });
+
+    const synced = [], errors = [];
+
+    for (const tableName of tables) {
+        if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(tableName)) { errors.push({ table: tableName, error: 'ชื่อไม่ถูกต้อง' }); continue; }
+        try {
+            // ตรวจว่า local มีตารางนี้
+            try { await db.query(`SELECT 1 FROM \`${tableName}\` LIMIT 0`); } catch (e) {
+                errors.push({ table: tableName, error: 'ตารางไม่มีใน local กรุณาสร้างก่อน' }); continue;
+            }
+
+            // ดึงข้อมูลจาก remote
+            const [remoteRows] = await remoteDb.query(`SELECT * FROM \`${tableName}\``);
+            if (remoteRows.length === 0) { synced.push({ table: tableName, rows: 0, message: 'ไม่มีข้อมูลใน remote' }); continue; }
+
+            // ดึง column names
+            const columns = Object.keys(remoteRows[0]);
+            const colList = columns.map(c => `\`${c}\``).join(', ');
+            const placeholders = columns.map(() => '?').join(', ');
+            const onDup = columns.map(c => `\`${c}\`=VALUES(\`${c}\`)`).join(', ');
+
+            // Batch upsert (100 rows per batch)
+            let totalInserted = 0;
+            for (let i = 0; i < remoteRows.length; i += 100) {
+                const batch = remoteRows.slice(i, i + 100);
+                const allPlaceholders = batch.map(() => `(${placeholders})`).join(', ');
+                const flatValues = batch.flatMap(row => columns.map(c => row[c]));
+                await db.query(`INSERT INTO \`${tableName}\` (${colList}) VALUES ${allPlaceholders} ON DUPLICATE KEY UPDATE ${onDup}`, flatValues);
+                totalInserted += batch.length;
+            }
+
+            synced.push({ table: tableName, rows: totalInserted });
+        } catch (e) { errors.push({ table: tableName, error: e.message }); }
+    }
+
+    await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+        [req.user.userId, 'DB_COMPARE_SYNC', 'MULTIPLE', JSON.stringify({ synced: synced.length, total_rows: synced.reduce((s, t) => s + t.rows, 0) }), req.ip]).catch(() => {});
+
+    res.json({ success: true, message: `Sync สำเร็จ ${synced.length} ตาราง`, synced, errors });
+});
+
 apiRouter.post('/test-telegram', authenticateToken, isSuperAdmin, async (req, res) => {
     const { bot_token, chat_id } = req.body;
     if (!bot_token || !chat_id) return res.status(400).json({ success: false, message: 'กรุณากรอก Bot Token และ Chat ID' });

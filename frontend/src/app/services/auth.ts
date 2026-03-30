@@ -265,6 +265,23 @@ export class AuthService {
   }
 
   // --- Log Management APIs ---
+  // === DB Compare (HDC) ===
+  dbCompare(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/db-compare`, { headers });
+  }
+  dbCompareCreateLocal(tables: string[]): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/db-compare/create-local`, { tables }, { headers });
+  }
+  dbCompareSyncData(tables: string[]): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/db-compare/sync-data`, { tables }, { headers });
+  }
+
   testTelegram(token: string, chatId: string): Observable<any> {
     const authToken = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${authToken}` });
