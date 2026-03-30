@@ -1,9 +1,11 @@
-/* Mobile menu slide down animation */
+/* Mobile menu slide down animation — smooth */
 @keyframes slideDown {
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 1; transform: translateY(0); }
+  0% { opacity: 0; transform: translateY(-100%); }
+  60% { opacity: 1; transform: translateY(5px); }
+  80% { transform: translateY(-2px); }
+  100% { opacity: 1; transform: translateY(0); }
 }
-.animate-slideDown { animation: slideDown 0.7s ease-out; }
+.animate-slideDown { animation: slideDown 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
 
 .refresh-icon {
   display: inline-block;

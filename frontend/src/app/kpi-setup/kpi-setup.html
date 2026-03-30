@@ -44,10 +44,10 @@
     </div>
     <div class="overflow-x-auto h-[calc(100vh-320px)]">
         <table class="w-full text-left border-collapse min-w-[1600px]">
-          <thead class="sticky top-0 z-50 shadow-sm">
+          <thead class="sticky top-0 z-10 shadow-sm">
             <tr class="bg-gradient-to-r from-green-700 to-green-600 text-white text-sm uppercase font-bold">
-              <th class="px-4 py-4 w-48 sticky left-0 bg-green-700 z-50 rounded-tl-xl">หมวดหมู่หลัก</th>
-              <th class="px-4 py-4 w-64 sticky left-48 bg-green-700 border-r border-green-600 z-50">ชื่อตัวชี้วัด</th>
+              <th class="px-4 py-4 w-48 sticky left-0 bg-green-700 z-20 rounded-tl-xl">หมวดหมู่หลัก</th>
+              <th class="px-4 py-4 w-64 sticky left-48 bg-green-700 border-r border-green-600 z-20">ชื่อตัวชี้วัด</th>
               <th class="px-4 py-4 w-24 bg-green-700 border-r border-green-600 text-center">ปีงบฯ</th>
               <th class="px-4 py-4 w-64 border-r border-green-600">หน่วยงาน</th>
               <th class="px-3 py-4 text-right bg-green-800">เป้าหมาย</th>
@@ -59,8 +59,8 @@
           </thead>
           <tbody class="divide-y divide-gray-100 bg-white">
             <tr *ngFor="let item of kpiTemplate" class="hover:bg-gray-50 transition-colors text-xs">
-              <td class="px-4 py-3 font-bold text-green-800 bg-green-50 border-r border-gray-100 align-top sticky left-0 z-20">{{ item.main_indicator_name }}</td>
-              <td class="px-4 py-3 border-r font-medium text-gray-900 sticky left-48 bg-white z-20">{{ item.kpi_indicators_name }}</td>
+              <td class="px-4 py-3 font-bold text-green-800 bg-green-50 border-r border-gray-100 align-top sticky left-0 z-[5]">{{ item.main_indicator_name }}</td>
+              <td class="px-4 py-3 border-r font-medium text-gray-900 sticky left-48 bg-white z-[5]">{{ item.kpi_indicators_name }}</td>
               <td class="px-4 py-3 text-center font-medium text-gray-600 border-r">{{ selectedYear }}</td>
               <td class="px-4 py-3 border-r font-medium text-gray-900">{{ item.dept_name }}</td>
               <td class="px-3 py-3 text-right bg-yellow-50/30 font-bold">
