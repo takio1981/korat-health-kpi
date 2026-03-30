@@ -57,10 +57,10 @@ export class ReportComponent implements OnInit {
 
   loadFilters() {
     this.authService.getDepartments().subscribe({
-      next: (res) => { if (res.success) this.departments = res.data; }
+      next: (res) => { if (res.success) { this.departments = res.data; this.cdr.detectChanges(); } }
     });
     this.authService.getDistricts().subscribe({
-      next: (res) => { if (res.success) this.districts = res.data; }
+      next: (res) => { if (res.success) { this.districts = res.data; this.cdr.detectChanges(); } }
     });
     // Get available years from kpi_results
     this.authService.getKpiResults().subscribe({
