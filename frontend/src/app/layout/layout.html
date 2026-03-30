@@ -1,10 +1,13 @@
 <div class="flex h-screen bg-gray-100 font-sans overflow-hidden">
 
     <!-- Mobile Menu Overlay -->
-    <div *ngIf="isSidebarOpen" class="fixed inset-0 bg-black/50 z-40 lg:hidden" (click)="closeSidebar()"></div>
+    <div class="fixed inset-0 z-40 lg:hidden transition-all duration-[1500ms]"
+         [ngClass]="isSidebarOpen ? 'bg-black/50 pointer-events-auto' : 'bg-transparent pointer-events-none'"
+         (click)="closeSidebar()"></div>
 
-    <!-- Mobile: Top dropdown menu -->
-    <div *ngIf="isSidebarOpen" class="lg:hidden fixed top-16 left-0 right-0 z-50 bg-gradient-to-b from-green-800 to-green-700 text-white shadow-2xl max-h-[75vh] overflow-y-auto rounded-b-2xl animate-slideDown">
+    <!-- Mobile: Top dropdown menu (ใช้ class แทน *ngIf เพื่อให้มี exit animation) -->
+    <div class="lg:hidden fixed top-[64px] left-0 right-0 z-50 bg-gradient-to-b from-green-800 to-green-700 text-white shadow-2xl overflow-y-auto transition-all duration-[1500ms] ease-in-out"
+         [ngClass]="isSidebarOpen ? 'max-h-[75vh] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'">
       <nav class="px-3 py-3 space-y-0.5">
         <a routerLink="/charts" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-chart-bar mr-3 min-w-[20px]"></i>{{ lang.t('menu.charts') }}</a>
         <a routerLink="/reports" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-file-alt mr-3 min-w-[20px]"></i>{{ lang.t('menu.reports') }}</a>
@@ -26,7 +29,7 @@
     </div>
 
     <!-- Desktop: Side sidebar -->
-    <aside class="hidden lg:flex bg-gradient-to-b from-green-800 to-green-600 text-white flex-col shadow-xl transition-all duration-500 ease-in-out overflow-hidden"
+    <aside class="hidden lg:flex bg-gradient-to-b from-green-800 to-green-600 text-white flex-col shadow-xl shrink-0 transition-all duration-500 ease-in-out overflow-hidden"
            [ngClass]="isSidebarOpen ? 'w-64' : 'w-0'">
       <div class="h-16 flex items-center px-6 border-b border-green-500/30 bg-green-900/20">
         <i class="fas fa-heartbeat text-2xl mr-3 refresh-icon cursor-pointer" (click)="refreshDashboard()"></i>
