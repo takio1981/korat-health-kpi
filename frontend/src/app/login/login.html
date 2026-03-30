@@ -109,11 +109,15 @@
         </p>
       </div>
 
-      <!-- Link เกี่ยวกับระบบ (mobile) -->
-      <div class="text-center mt-4 lg:hidden">
-        <button (click)="showAbout = !showAbout" class="text-xs text-gray-400 hover:text-green-600 transition-colors">
-          <i class="fas fa-info-circle mr-1"></i>เกี่ยวกับระบบและวัตถุประสงค์
+      <!-- Links ด้านล่าง -->
+      <div class="flex items-center justify-center gap-4 mt-4 text-xs text-gray-400">
+        <button (click)="showAbout = !showAbout" class="hover:text-green-600 transition-colors">
+          <i class="fas fa-info-circle mr-1"></i>{{ lang.lang === 'th' ? 'เกี่ยวกับระบบ' : 'About' }}
         </button>
+        <span class="text-gray-300">|</span>
+        <a routerLink="/help-public" class="hover:text-green-600 transition-colors">
+          <i class="fas fa-book-open mr-1"></i>{{ lang.t('menu.help') }}
+        </a>
       </div>
 
     </div>

@@ -22,6 +22,7 @@ import { LayoutComponent } from './layout/layout';
 export const routes: Routes = [
   { path: 'login', component: LoginComponent },
   { path: 'register', component: RegisterComponent },
+  { path: 'help-public', component: HelpComponent },
   {
     path: '',
     component: LayoutComponent,
