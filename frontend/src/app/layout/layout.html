@@ -1,15 +1,35 @@
 <div class="flex h-screen bg-gray-100 font-sans overflow-hidden">
 
-    <!-- Mobile Sidebar Overlay -->
-    <div *ngIf="isSidebarOpen" class="fixed inset-0 bg-black/50 z-10 lg:hidden" (click)="toggleSidebar()"></div>
-  
-    <aside class="bg-gradient-to-b from-green-800 to-green-600 text-white flex flex-col shadow-xl z-20 transition-all duration-700 ease-in-out overflow-hidden whitespace-nowrap fixed lg:relative h-full lg:h-auto" [ngClass]="isSidebarOpen ? 'w-64 opacity-100 translate-x-0' : 'w-0 opacity-0 -translate-x-full lg:translate-x-0'">
+    <!-- Mobile Menu Overlay -->
+    <div *ngIf="isSidebarOpen" class="fixed inset-0 bg-black/50 z-40 lg:hidden" (click)="closeSidebar()"></div>
+
+    <!-- Mobile: Top dropdown menu -->
+    <div *ngIf="isSidebarOpen" class="lg:hidden fixed top-16 left-0 right-0 z-50 bg-gradient-to-b from-green-800 to-green-700 text-white shadow-2xl max-h-[75vh] overflow-y-auto rounded-b-2xl">
+      <nav class="px-3 py-3 space-y-0.5">
+        <a routerLink="/charts" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-chart-bar mr-3 min-w-[20px]"></i>{{ lang.t('menu.charts') }}</a>
+        <a routerLink="/reports" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-file-alt mr-3 min-w-[20px]"></i>{{ lang.t('menu.reports') }}</a>
+        <a routerLink="/notifications" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-bell mr-3 min-w-[20px]" [class.bell-shake]="unreadNotifCount > 0"></i>{{ lang.t('menu.notifications') }} <span *ngIf="unreadNotifCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 rounded-full text-[10px] font-bold">{{ unreadNotifCount }}</span></a>
+        <a routerLink="/dashboard" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-th-large mr-3 min-w-[20px]"></i>{{ lang.t('menu.dashboard') }} <span *ngIf="pendingKpiCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 rounded-full text-[10px] font-bold">{{ pendingKpiCount }}</span></a>
+        <a *ngIf="isAnyAdmin" routerLink="/users" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-users-cog mr-3 min-w-[20px]"></i>{{ lang.t('menu.users') }}</a>
+        <a *ngIf="isSuperAdmin" routerLink="/kpi-manage" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-tasks mr-3 min-w-[20px]"></i>{{ lang.t('menu.kpi_manage') }}</a>
+        <a *ngIf="isSuperAdmin" routerLink="/audit-logs" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-history mr-3 min-w-[20px]"></i>{{ lang.t('menu.audit_logs') }}</a>
+        <a *ngIf="isAdmin" routerLink="/kpi-setup" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-plus-circle mr-3 min-w-[20px]"></i>{{ lang.t('menu.kpi_setup') }}</a>
+        <a *ngIf="isSuperAdmin" routerLink="/export-kpi" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-file-export mr-3 min-w-[20px]"></i>{{ lang.t('menu.export') }}</a>
+        <a *ngIf="isSuperAdmin" routerLink="/form-builder" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-wpforms mr-3 min-w-[20px]"></i>{{ lang.t('menu.form_builder') }}</a>
+        <a *ngIf="isSuperAdmin" routerLink="/settings" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-sliders-h mr-3 min-w-[20px]"></i>{{ lang.t('menu.settings') }}</a>
+      </nav>
+      <div class="px-3 pb-3 pt-1 border-t border-green-500/30 space-y-0.5">
+        <a routerLink="/help" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-book-open mr-3 min-w-[20px]"></i>{{ lang.t('menu.help') }}</a>
+        <button (click)="openChangePasswordModal(); closeSidebar()" class="flex items-center w-full px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-key mr-3 min-w-[20px]"></i>{{ lang.t('menu.change_password') }}</button>
+        <button (click)="logout()" class="flex items-center w-full px-4 py-2.5 text-green-100 hover:bg-red-500/80 rounded-xl"><i class="fas fa-sign-out-alt mr-3 min-w-[20px]"></i>{{ lang.t('menu.logout') }}</button>
+      </div>
+    </div>
+
+    <!-- Desktop: Side sidebar -->
+    <aside class="hidden lg:flex bg-gradient-to-b from-green-800 to-green-600 text-white flex-col shadow-xl w-64">
       <div class="h-16 flex items-center px-6 border-b border-green-500/30 bg-green-900/20">
-        <i class="fas fa-heartbeat text-2xl mr-3 refresh-icon cursor-pointer" (click)="refreshDashboard(); $event.stopPropagation()"></i>
+        <i class="fas fa-heartbeat text-2xl mr-3 refresh-icon cursor-pointer" (click)="refreshDashboard()"></i>
         <span class="text-lg font-bold tracking-wide">Korat Health KPI</span>
-        <button (click)="toggleSidebar(); $event.stopPropagation()" class="ml-auto text-white hover:text-green-200 focus:outline-none lg:hidden">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-        </button>
       </div>
   
       <nav class="flex-1 px-4 py-4 space-y-1 overflow-y-auto">

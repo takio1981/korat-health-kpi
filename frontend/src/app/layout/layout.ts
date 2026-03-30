@@ -72,6 +72,12 @@ export class LayoutComponent implements OnInit {
       this.cdr.detectChanges();
     });
 
+    // Auto-close sidebar on route change (mobile)
+    this.router.events.pipe(filter(e => e instanceof NavigationEnd)).subscribe(() => {
+      this.isSidebarOpen = false;
+      this.cdr.detectChanges();
+    });
+
     // Set title from current route immediately (for initial navigation)
     let currentRoute = this.activatedRoute;
     while (currentRoute.firstChild) currentRoute = currentRoute.firstChild;
@@ -187,6 +193,10 @@ export class LayoutComponent implements OnInit {
       },
       error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถเปลี่ยนรหัสผ่านได้', 'error')
     });
+  }
+
+  closeSidebar() {
+    this.isSidebarOpen = false;
   }
 
   toggleSidebar() {
