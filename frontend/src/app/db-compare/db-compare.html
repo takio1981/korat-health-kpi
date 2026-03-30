@@ -1,0 +1,190 @@
+<div class="p-4 sm:p-6">
+
+  <!-- Header -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div>
+        <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+          <i class="fas fa-database text-indigo-600"></i>
+          DB Structure Compare
+        </h3>
+        <p class="text-xs text-gray-500 mt-1">เปรียบเทียบโครงสร้างตารางระหว่าง Local DB กับ Data KPI Dashboard (HDC)</p>
+      </div>
+      <button (click)="runCompare()" [disabled]="isLoading"
+              class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm shadow-md transition-all disabled:opacity-50 flex items-center gap-2">
+        <i class="fas" [ngClass]="isLoading ? 'fa-spinner fa-spin' : 'fa-search'"></i>
+        {{ isLoading ? 'กำลังเปรียบเทียบ...' : 'เปรียบเทียบ Structure' }}
+      </button>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div *ngIf="isLoading" class="flex items-center justify-center py-20">
+    <div class="text-center">
+      <div class="animate-spin rounded-full h-12 w-12 border-4 border-indigo-200 border-t-indigo-600 mx-auto mb-3"></div>
+      <p class="text-gray-500 text-sm font-medium">กำลังเชื่อมต่อและเปรียบเทียบ...</p>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div *ngIf="compareResult && !isLoading">
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-6">
+      <div class="bg-white rounded-xl border border-gray-200 p-3 text-center cursor-pointer hover:shadow-md transition-all" (click)="filterStatus = ''">
+        <p class="text-2xl font-bold text-gray-800">{{ compareResult.summary.total }}</p>
+        <p class="text-[10px] text-gray-500 font-bold">ทั้งหมด</p>
+      </div>
+      <div class="bg-green-50 rounded-xl border border-green-200 p-3 text-center cursor-pointer hover:shadow-md transition-all" (click)="filterStatus = filterStatus === 'match' ? '' : 'match'">
+        <p class="text-2xl font-bold text-green-600">{{ compareResult.summary.match }}</p>
+        <p class="text-[10px] text-green-700 font-bold"><i class="fas fa-check-circle mr-1"></i>ตรงกัน</p>
+      </div>
+      <div class="bg-amber-50 rounded-xl border border-amber-200 p-3 text-center cursor-pointer hover:shadow-md transition-all" (click)="filterStatus = filterStatus === 'different' ? '' : 'different'">
+        <p class="text-2xl font-bold text-amber-600">{{ compareResult.summary.different }}</p>
+        <p class="text-[10px] text-amber-700 font-bold"><i class="fas fa-exclamation-triangle mr-1"></i>ต่างกัน</p>
+      </div>
+      <div class="bg-blue-50 rounded-xl border border-blue-200 p-3 text-center cursor-pointer hover:shadow-md transition-all" (click)="filterStatus = filterStatus === 'missing_local' ? '' : 'missing_local'">
+        <p class="text-2xl font-bold text-blue-600">{{ compareResult.summary.missing_local }}</p>
+        <p class="text-[10px] text-blue-700 font-bold"><i class="fas fa-arrow-down mr-1"></i>ไม่มีใน Local</p>
+      </div>
+      <div class="bg-purple-50 rounded-xl border border-purple-200 p-3 text-center cursor-pointer hover:shadow-md transition-all" (click)="filterStatus = filterStatus === 'missing_remote' ? '' : 'missing_remote'">
+        <p class="text-2xl font-bold text-purple-600">{{ compareResult.summary.missing_remote }}</p>
+        <p class="text-[10px] text-purple-700 font-bold"><i class="fas fa-arrow-up mr-1"></i>ไม่มีใน HDC</p>
+      </div>
+      <div class="bg-gray-50 rounded-xl border border-gray-200 p-3 text-center cursor-pointer hover:shadow-md transition-all" (click)="filterStatus = filterStatus === 'missing_both' ? '' : 'missing_both'">
+        <p class="text-2xl font-bold text-gray-500">{{ compareResult.summary.missing_both }}</p>
+        <p class="text-[10px] text-gray-500 font-bold"><i class="fas fa-ban mr-1"></i>ไม่มีทั้งสอง</p>
+      </div>
+    </div>
+
+    <!-- DB Info -->
+    <div class="flex flex-wrap items-center gap-3 mb-4 text-xs">
+      <span class="bg-green-100 text-green-800 px-3 py-1.5 rounded-full font-bold"><i class="fas fa-server mr-1"></i>Local: {{ compareResult.local_db }}</span>
+      <i class="fas fa-exchange-alt text-gray-400"></i>
+      <span class="bg-blue-100 text-blue-800 px-3 py-1.5 rounded-full font-bold"><i class="fas fa-cloud mr-1"></i>HDC: {{ compareResult.remote_db }}</span>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="bg-white rounded-xl border border-gray-200 p-3 mb-4 flex flex-wrap items-center gap-2">
+      <input type="text" [(ngModel)]="searchTerm" placeholder="ค้นหาตาราง..."
+             class="px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-400 outline-none flex-1 min-w-[150px]">
+      <div class="flex gap-1">
+        <button (click)="selectAll()" class="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-bold text-gray-600"><i class="fas fa-check-double mr-1"></i>เลือกทั้งหมด</button>
+        <button (click)="selectNone()" class="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-bold text-gray-600"><i class="fas fa-times mr-1"></i>ยกเลิก</button>
+        <button (click)="selectByStatus('missing_local')" class="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 rounded-lg text-xs font-bold text-blue-700"><i class="fas fa-arrow-down mr-1"></i>เลือก Missing</button>
+        <button (click)="selectByStatus('different')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 rounded-lg text-xs font-bold text-amber-700"><i class="fas fa-exclamation-triangle mr-1"></i>เลือก Different</button>
+      </div>
+      <span class="text-xs text-gray-500 ml-auto">เลือก: <b>{{ selectedTables.size }}</b></span>
+    </div>
+
+    <!-- Action Buttons -->
+    <div *ngIf="selectedTables.size > 0" class="flex flex-wrap gap-2 mb-4">
+      <button (click)="createLocal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm shadow-md transition-all">
+        <i class="fas fa-hammer mr-1"></i>สร้าง/แก้ไข Local ({{ selectedTables.size }})
+      </button>
+      <button (click)="syncData()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-sm shadow-md transition-all">
+        <i class="fas fa-sync mr-1"></i>Sync ข้อมูลจาก HDC ({{ selectedTables.size }})
+      </button>
+    </div>
+
+    <!-- Table List -->
+    <div class="space-y-2">
+      <div *ngFor="let t of filteredTables"
+           class="bg-white rounded-xl border shadow-sm overflow-hidden transition-all"
+           [ngClass]="selectedTables.has(t.table) ? 'border-indigo-400 ring-2 ring-indigo-200' : 'border-gray-200'">
+
+        <!-- Row Header -->
+        <div class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50" (click)="toggleExpand(t.table)">
+          <!-- Checkbox -->
+          <input type="checkbox" [checked]="selectedTables.has(t.table)" (click)="toggleSelect(t.table); $event.stopPropagation()"
+                 class="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-400">
+
+          <!-- Status badge -->
+          <span class="px-2 py-0.5 rounded-full text-[10px] font-bold" [ngClass]="getStatusBadge(t.status).bg">
+            <i class="fas mr-1" [ngClass]="getStatusBadge(t.status).icon"></i>{{ getStatusBadge(t.status).text }}
+          </span>
+
+          <!-- Table name + indicator name -->
+          <div class="flex-1 min-w-0">
+            <p class="font-bold text-gray-900 text-sm font-mono">{{ t.table }}</p>
+            <p class="text-[10px] text-gray-400 whitespace-normal break-words">{{ t.name }}</p>
+          </div>
+
+          <!-- Row counts -->
+          <div class="hidden sm:flex gap-4 text-xs text-gray-500 shrink-0">
+            <span title="Local rows"><i class="fas fa-server text-green-500 mr-1"></i>{{ t.local?.row_count || 0 }}</span>
+            <span title="HDC rows"><i class="fas fa-cloud text-blue-500 mr-1"></i>{{ t.remote?.row_count || 0 }}</span>
+          </div>
+
+          <!-- Expand icon -->
+          <i class="fas text-gray-400 transition-transform" [ngClass]="expandedTable === t.table ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+        </div>
+
+        <!-- Expanded Detail -->
+        <div *ngIf="expandedTable === t.table" class="border-t border-gray-100 bg-gray-50/50 p-4">
+
+          <!-- Row count comparison -->
+          <div class="grid grid-cols-2 gap-3 mb-4">
+            <div class="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+              <p class="text-xs text-green-600 font-bold mb-1"><i class="fas fa-server mr-1"></i>Local ({{ compareResult.local_db }})</p>
+              <p class="text-lg font-bold text-green-800">{{ t.local?.exists ? t.local.row_count + ' rows' : 'ไม่มีตาราง' }}</p>
+              <p class="text-[10px] text-green-600">{{ t.local?.columns?.length || 0 }} columns</p>
+            </div>
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+              <p class="text-xs text-blue-600 font-bold mb-1"><i class="fas fa-cloud mr-1"></i>HDC ({{ compareResult.remote_db }})</p>
+              <p class="text-lg font-bold text-blue-800">{{ t.remote?.exists ? t.remote.row_count + ' rows' : 'ไม่มีตาราง' }}</p>
+              <p class="text-[10px] text-blue-600">{{ t.remote?.columns?.length || 0 }} columns</p>
+            </div>
+          </div>
+
+          <!-- Diff list -->
+          <div *ngIf="t.diff && t.diff.length > 0" class="mb-3">
+            <p class="text-xs font-bold text-gray-700 mb-2"><i class="fas fa-not-equal text-amber-500 mr-1"></i>ความแตกต่าง ({{ t.diff.length }})</p>
+            <div class="space-y-1">
+              <div *ngFor="let d of t.diff" class="flex items-center gap-2 text-xs bg-white rounded-lg px-3 py-1.5 border"
+                   [ngClass]="d.issue === 'missing_in_local' ? 'border-blue-200' : d.issue === 'type_mismatch' ? 'border-amber-200' : 'border-purple-200'">
+                <i class="fas"
+                   [ngClass]="d.issue === 'missing_in_local' ? 'fa-plus-circle text-blue-500' : d.issue === 'type_mismatch' ? 'fa-exchange-alt text-amber-500' : 'fa-minus-circle text-purple-500'"></i>
+                <span class="font-mono font-bold">{{ d.field }}</span>
+                <span *ngIf="d.issue === 'missing_in_local'" class="text-blue-600">ไม่มีใน Local (HDC: {{ d.remote_type }})</span>
+                <span *ngIf="d.issue === 'type_mismatch'" class="text-amber-600">Type ต่างกัน — Local: {{ d.local_type }} / HDC: {{ d.remote_type }}</span>
+                <span *ngIf="d.issue === 'missing_in_remote'" class="text-purple-600">ไม่มีใน HDC (มีเฉพาะ Local)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Column list -->
+          <div *ngIf="t.remote?.columns?.length > 0">
+            <p class="text-xs font-bold text-gray-700 mb-2"><i class="fas fa-columns text-gray-500 mr-1"></i>Columns ใน HDC ({{ t.remote.columns.length }})</p>
+            <div class="flex flex-wrap gap-1">
+              <span *ngFor="let col of t.remote.columns"
+                    class="px-2 py-0.5 rounded text-[10px] font-mono"
+                    [ngClass]="(t.local?.columns | json)?.includes(col.field) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'">
+                {{ col.field }} <span class="opacity-60">({{ col.type }})</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty -->
+      <div *ngIf="filteredTables.length === 0" class="text-center py-10 text-gray-400">
+        <i class="fas fa-search text-3xl mb-2"></i>
+        <p class="text-sm">{{ compareResult.tables.length === 0 ? 'ไม่พบตารางที่มี table_process' : 'ไม่พบตารางตามเงื่อนไข' }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Not started -->
+  <div *ngIf="!compareResult && !isLoading" class="text-center py-20">
+    <div class="inline-flex items-center justify-center w-20 h-20 bg-indigo-100 rounded-2xl mb-4">
+      <i class="fas fa-database text-indigo-500 text-3xl"></i>
+    </div>
+    <h3 class="text-lg font-bold text-gray-700 mb-2">เปรียบเทียบโครงสร้างฐานข้อมูล</h3>
+    <p class="text-sm text-gray-400 mb-6 max-w-md mx-auto">ตรวจสอบว่าตาราง table_process ใน Local DB มีโครงสร้างตรงกับ Data KPI Dashboard (HDC) หรือไม่</p>
+    <button (click)="runCompare()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg transition-all">
+      <i class="fas fa-search mr-2"></i>เริ่มเปรียบเทียบ
+    </button>
+  </div>
+
+</div>

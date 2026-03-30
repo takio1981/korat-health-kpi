@@ -20,6 +20,7 @@
         <a *ngIf="isSuperAdmin" routerLink="/export-kpi" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-file-export mr-3 min-w-[20px]"></i>{{ lang.t('menu.export') }}</a>
         <a *ngIf="isSuperAdmin" routerLink="/form-builder" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-wpforms mr-3 min-w-[20px]"></i>{{ lang.t('menu.form_builder') }}</a>
         <a *ngIf="isSuperAdmin" routerLink="/settings" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-sliders-h mr-3 min-w-[20px]"></i>{{ lang.t('menu.settings') }}</a>
+        <a *ngIf="isSuperAdmin" routerLink="/db-compare" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-database mr-3 min-w-[20px]"></i>DB Compare</a>
       </nav>
       <div class="px-3 pb-3 pt-1 border-t border-green-500/30">
         <a routerLink="/help" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-book-open mr-3 min-w-[20px]"></i>{{ lang.t('menu.help') }}</a>
@@ -103,8 +104,12 @@
             {{ lang.t('menu.settings') }}
           </span>
         </a>
+        <a *ngIf="isSuperAdmin" routerLink="/db-compare" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
+          <i class="fas fa-database text-lg mr-3 min-w-[24px]"></i>
+          <span class="truncate">DB Compare</span>
+        </a>
       </nav>
-  
+
       <div class="p-4 border-t border-green-500/30">
         <a routerLink="/help" routerLinkActive="bg-white/10 text-white font-medium" class="flex items-center w-full px-4 py-3 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-book-open text-xl mr-3 min-w-[24px]"></i>
