@@ -704,6 +704,50 @@ users, departments, kpi_indicators, kpi_main_indicators, main_yut, kpi_results, 
 
 ---
 
+## 20. การใช้งานบน Mobile
+
+### เมนู (Sidebar)
+- **Mobile**: เมนูเลื่อนลงจากด้านบน (ใต้ header) กดปุ่ม ☰ เพื่อเปิด
+- **Desktop**: เมนูด้านซ้ายเหมือนเดิม กดปุ่ม ☰ เพื่อซ่อน/แสดง
+- เมื่อ **login เข้ามา** → mobile ซ่อนเมนูไว้ (ไม่แสดงทันที)
+- เมื่อ **เลือกเมนู** → ซ่อนเมนูอัตโนมัติ (mobile)
+- **Animation**: 500ms smooth slide (เท่ากันทั้ง mobile + desktop)
+- กดพื้นที่ว่าง (overlay) → ปิดเมนู
+
+### ตารางข้อมูล
+ทุกหน้าที่มีตารางจะแสดง 2 รูปแบบ:
+- **Desktop** (≥768px): ตารางแบบเต็ม (table)
+- **Mobile** (<768px): **Card View** อ่านง่ายบนหน้าจอเล็ก
+
+| หน้า | Mobile Card แสดงอะไร |
+|------|---------------------|
+| จัดการผู้ใช้ | ชื่อ+role badge, ข้อมูล 4 grid, สถานะ, ปุ่มจัดการ |
+| จัดการตัวชี้วัด | ชื่อ item+tags, toggle/edit/delete |
+| ประวัติการใช้งาน | เวลา+action badge, username, table+IP |
+| รายงาน | ชื่อ + 3 grid (เป้าหมาย/ผลงาน/%) ทุก tab |
+| Dashboard | Card view ครบทุกข้อมูล (มีอยู่แล้ว) |
+
+---
+
+## 21. Profile Dropdown (ข้อมูลส่วนตัว)
+
+### วิธีเปิด
+กดที่ **รูป Avatar** (ตัวอักษรแรก) มุมขวาบนของ Header
+
+### ข้อมูลที่แสดง
+- ชื่อ-นามสกุล + Username
+- สิทธิ์ (Role)
+- หน่วยงาน
+- หน่วยบริการ
+- อีเมล
+- เบอร์โทร
+
+### ปุ่มใน Dropdown
+- 🔑 **เปลี่ยนรหัสผ่าน**
+- 🚪 **ออกจากระบบ** (สีแดง)
+
+---
+
 ## ข้อมูลทางเทคนิค
 
 | รายการ | รายละเอียด |
@@ -725,6 +769,9 @@ users, departments, kpi_indicators, kpi_main_indicators, main_yut, kpi_results, 
 | DB Connection Pool | 50 connections, queue 200 |
 | Security Headers | X-Frame-Options, X-Content-Type-Options, X-XSS-Protection, Referrer-Policy |
 | DB Indexes | 16 composite/single indexes สำหรับ 500 concurrent users |
+| Mobile Responsive | Card View ทุกตาราง + เมนู dropdown จากบน |
+| Notification | Telegram Bot + Email Admin + ในระบบ (3 ช่องทาง) |
+| Profile | Avatar dropdown แสดงข้อมูล user + เปลี่ยนรหัส + logout |
 
 ---
 
