@@ -480,12 +480,16 @@ apiRouter.post('/register', loginLimiter, async (req, res) => {
             );
         }
 
-        // สร้าง URL ของ Frontend (ไม่ใช่ backend)
-        // APP_URL ต้องชี้ไป frontend เช่น https://yourdomain.com/khupskpi/ หรือ http://localhost:8881/khupskpi/
-        // ถ้าอยู่หลัง Nginx proxy → ใช้ origin จาก referer header
+        // สร้าง URL ของ Frontend → ชี้ไปหน้า login (ต้อง login ก่อนเข้าหน้าอนุมัติ)
+        // APP_URL ตั้งค่าใน .env เช่น http://localhost:4200/khupskpi หรือ https://yourdomain.com/khupskpi
         const referer = req.headers['referer'] || req.headers['origin'] || '';
-        const appUrl = process.env.APP_URL || (referer ? referer.split('/khupskpi/')[0] + '/khupskpi/' : 'http://localhost:8881/khupskpi/');
-        const approveUrl = `${appUrl.replace(/\/+$/, '')}/users?status=pending`;
+        let baseUrl = process.env.APP_URL || '';
+        if (!baseUrl && referer) {
+            // ดึง origin จาก referer เช่น http://localhost:4200
+            try { baseUrl = new URL(referer).origin; } catch (e) { baseUrl = ''; }
+        }
+        if (!baseUrl) baseUrl = 'http://localhost:8881';
+        const approveUrl = `${baseUrl.replace(/\/+$/, '')}/khupskpi/login`;
 
         // แจ้ง Telegram + Email Admin
         notifyAdmins(
@@ -505,12 +509,12 @@ apiRouter.post('/register', loginLimiter, async (req, res) => {
                     </table>
                     <div style="text-align:center;margin-top:20px">
                         <a href="${approveUrl}" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#16a34a,#22c55e);color:white;font-weight:bold;font-size:14px;text-decoration:none;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.15)">
-                            ✅ เข้าสู่ระบบเพื่ออนุมัติ
+                            🔑 เข้าสู่ระบบเพื่ออนุมัติ
                         </a>
                     </div>
                 </div>
             </div>`,
-            `🆕 ผู้สมัครใหม่รอการอนุมัติ\n━━━━━━━━━━━━━━━\n👤 ${firstname} ${lastname}\n🔑 Username: ${username}\n🏥 ${hosName}\n📋 สิทธิ์: ${roleLabel}\n📱 โทร: ${cleanPhone}\n📧 Email: ${email || '-'}\n━━━━━━━━━━━━━━━\n👉 อนุมัติ: ${approveUrl}`
+            `🆕 ผู้สมัครใหม่รอการอนุมัติ\n━━━━━━━━━━━━━━━\n👤 ${firstname} ${lastname}\n🔑 Username: ${username}\n🏥 ${hosName}\n📋 สิทธิ์: ${roleLabel}\n📱 โทร: ${cleanPhone}\n📧 Email: ${email || '-'}\n━━━━━━━━━━━━━━━\n🔑 เข้าสู่ระบบ: ${approveUrl}`
         );
 
         await saveLog(username, 'register_success', 'ลงทะเบียนผู้ใช้งานใหม่ — รอการอนุมัติ', ip);
