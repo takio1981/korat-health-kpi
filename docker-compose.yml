@@ -22,6 +22,9 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:

@@ -41,6 +41,42 @@ const sendMail = async (to, subject, html) => {
         console.error(`[Email] Failed to ${to}:`, err.message);
     }
 };
+
+// === Telegram Bot Notification ===
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
+
+const sendTelegram = async (message) => {
+    if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return;
+    try {
+        const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: message, parse_mode: 'HTML' })
+        });
+        const data = await res.json();
+        if (data.ok) console.log('[Telegram] Message sent');
+        else console.error('[Telegram] Failed:', data.description);
+    } catch (err) {
+        console.error('[Telegram] Error:', err.message);
+    }
+};
+
+// === Send notification to Admin Email(s) ===
+const ADMIN_EMAILS = process.env.ADMIN_EMAILS || ''; // comma-separated
+
+const notifyAdmins = async (subject, html, telegramMsg) => {
+    // 1. Telegram
+    if (telegramMsg) sendTelegram(telegramMsg);
+    // 2. Email to admin list
+    if (ADMIN_EMAILS) {
+        const emails = ADMIN_EMAILS.split(',').map(e => e.trim()).filter(Boolean);
+        for (const email of emails) {
+            sendMail(email, subject, html);
+        }
+    }
+};
 // ใช้ Port จาก ENV หรือ Default 8830 ตามโจทย์
 const port = process.env.PORT || 8830; 
 
@@ -427,6 +463,28 @@ apiRouter.post('/register', loginLimiter, async (req, res) => {
                  result.insertId]
             );
         }
+
+        // แจ้ง Telegram + Email Admin
+        notifyAdmins(
+            '🆕 ผู้สมัครใหม่รอการอนุมัติ — ระบบ KPI สสจ.นครราชสีมา',
+            `<div style="font-family:Sarabun,sans-serif;max-width:500px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
+                <div style="background:linear-gradient(135deg,#2563eb,#3b82f6);padding:20px;text-align:center;color:white">
+                    <h2 style="margin:0;font-size:18px">🆕 ผู้สมัครใหม่รอการอนุมัติ</h2>
+                </div>
+                <div style="padding:20px">
+                    <table style="width:100%;font-size:14px;border-collapse:collapse">
+                        <tr><td style="padding:6px 0;color:#6b7280">ชื่อ-นามสกุล</td><td style="font-weight:bold">${firstname} ${lastname}</td></tr>
+                        <tr><td style="padding:6px 0;color:#6b7280">Username</td><td style="font-weight:bold">${username}</td></tr>
+                        <tr><td style="padding:6px 0;color:#6b7280">สิทธิ์ที่ขอ</td><td style="font-weight:bold">${roleLabel}</td></tr>
+                        <tr><td style="padding:6px 0;color:#6b7280">หน่วยบริการ</td><td style="font-weight:bold">${hosName}</td></tr>
+                        <tr><td style="padding:6px 0;color:#6b7280">เบอร์โทร</td><td>${cleanPhone}</td></tr>
+                        <tr><td style="padding:6px 0;color:#6b7280">Email</td><td>${email || '-'}</td></tr>
+                    </table>
+                    <p style="margin-top:16px;font-size:13px;color:#6b7280">กรุณาเข้าสู่ระบบเพื่อตรวจสอบและอนุมัติ</p>
+                </div>
+            </div>`,
+            `🆕 ผู้สมัครใหม่รอการอนุมัติ\n━━━━━━━━━━━━━━━\n👤 ${firstname} ${lastname}\n🔑 Username: ${username}\n🏥 ${hosName}\n📋 สิทธิ์: ${roleLabel}\n📱 โทร: ${cleanPhone}\n📧 Email: ${email || '-'}\n━━━━━━━━━━━━━━━\nกรุณาเข้าระบบเพื่ออนุมัติ`
+        );
 
         await saveLog(username, 'register_success', 'ลงทะเบียนผู้ใช้งานใหม่ — รอการอนุมัติ', ip);
         res.json({ success: true, message: 'ลงทะเบียนสำเร็จ กรุณารอการอนุมัติจากผู้ดูแลระบบก่อนเข้าสู่ระบบ' });
