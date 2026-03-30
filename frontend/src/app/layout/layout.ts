@@ -47,6 +47,7 @@ export class LayoutComponent implements OnInit {
   notifications: any[] = [];
   unreadNotifCount: number = 0;
   showNotifDropdown: boolean = false;
+  showProfileDropdown: boolean = false;
 
   ngOnInit() {
     this.currentUser = this.authService.getUser();

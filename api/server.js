@@ -299,7 +299,9 @@ apiRouter.post('/login', loginLimiter, async (req, res) => {
                         service_unit: serviceUnitDisplay,
                         dept_name: user.dept_name,
                         hospcode: user.hospcode,
-                        dept_id: user.dept_id
+                        dept_id: user.dept_id,
+                        email: user.email || '',
+                        phone: user.phone || ''
                     }
                 });
             } else {

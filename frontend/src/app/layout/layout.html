@@ -1,12 +1,12 @@
 <div class="flex h-screen bg-gray-100 font-sans overflow-hidden">
 
     <!-- Mobile Menu Overlay -->
-    <div class="fixed inset-0 z-40 lg:hidden transition-all duration-[1500ms]"
+    <div class="fixed inset-0 z-40 lg:hidden transition-all duration-500"
          [ngClass]="isSidebarOpen ? 'bg-black/50 pointer-events-auto' : 'bg-transparent pointer-events-none'"
          (click)="closeSidebar()"></div>
 
     <!-- Mobile: Top dropdown menu (ใช้ class แทน *ngIf เพื่อให้มี exit animation) -->
-    <div class="lg:hidden fixed top-[64px] left-0 right-0 z-50 bg-gradient-to-b from-green-800 to-green-700 text-white shadow-2xl overflow-y-auto transition-all duration-[1500ms] ease-in-out"
+    <div class="lg:hidden fixed top-[64px] left-0 right-0 z-50 bg-gradient-to-b from-green-800 to-green-700 text-white shadow-2xl overflow-y-auto transition-all duration-500 ease-in-out"
          [ngClass]="isSidebarOpen ? 'max-h-[75vh] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'">
       <nav class="px-3 py-3 space-y-0.5">
         <a routerLink="/charts" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-chart-bar mr-3 min-w-[20px]"></i>{{ lang.t('menu.charts') }}</a>
@@ -21,10 +21,8 @@
         <a *ngIf="isSuperAdmin" routerLink="/form-builder" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-wpforms mr-3 min-w-[20px]"></i>{{ lang.t('menu.form_builder') }}</a>
         <a *ngIf="isSuperAdmin" routerLink="/settings" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-sliders-h mr-3 min-w-[20px]"></i>{{ lang.t('menu.settings') }}</a>
       </nav>
-      <div class="px-3 pb-3 pt-1 border-t border-green-500/30 space-y-0.5">
+      <div class="px-3 pb-3 pt-1 border-t border-green-500/30">
         <a routerLink="/help" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-book-open mr-3 min-w-[20px]"></i>{{ lang.t('menu.help') }}</a>
-        <button (click)="openChangePasswordModal(); closeSidebar()" class="flex items-center w-full px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-key mr-3 min-w-[20px]"></i>{{ lang.t('menu.change_password') }}</button>
-        <button (click)="logout()" class="flex items-center w-full px-4 py-2.5 text-green-100 hover:bg-red-500/80 rounded-xl"><i class="fas fa-sign-out-alt mr-3 min-w-[20px]"></i>{{ lang.t('menu.logout') }}</button>
       </div>
     </div>
 
@@ -108,18 +106,10 @@
       </nav>
   
       <div class="p-4 border-t border-green-500/30">
-        <a routerLink="/help" routerLinkActive="bg-white/10 text-white font-medium" class="flex items-center w-full px-4 py-3 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer mb-1">
+        <a routerLink="/help" routerLinkActive="bg-white/10 text-white font-medium" class="flex items-center w-full px-4 py-3 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-book-open text-xl mr-3 min-w-[24px]"></i>
           <span class="truncate">{{ lang.t('menu.help') }}</span>
         </a>
-        <button (click)="openChangePasswordModal()" class="flex items-center w-full px-4 py-3 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer mb-1">
-          <i class="fas fa-key text-xl mr-3 min-w-[24px]"></i>
-          <span class="truncate">{{ lang.t('menu.change_password') }}</span>
-        </button>
-        <button (click)="logout()" class="flex items-center w-full px-4 py-3 text-green-100 hover:bg-red-500 hover:text-white rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-sign-out-alt text-xl mr-3 min-w-[24px]"></i>
-          <span class="truncate">{{ lang.t('menu.logout') }}</span>
-        </button>
         <div class="mt-4 text-center text-xs text-green-200/60 font-mono">
           {{ systemVersion }}
         </div>
@@ -180,16 +170,47 @@
             <i class="fas fa-globe"></i>
             {{ lang.lang === 'th' ? 'EN' : 'TH' }}
           </button>
-          <div class="relative flex items-center cursor-pointer">
-            <div class="text-right mr-3 hidden sm:block">
-              <p class="text-sm font-bold text-white">({{ currentUser?.role }}) {{ currentUser?.firstname }} {{ currentUser?.lastname }}</p>
-              <p class="text-xs text-green-100">
-                {{ currentUser?.dept_name ? currentUser?.dept_name : '' }}
-                {{ currentUser?.service_unit }}
-              </p>
-            </div>
-            <div class="h-10 w-10 rounded-full bg-white/20 border-2 border-white/30 flex items-center justify-center text-white font-bold backdrop-blur-sm">
-              {{ currentUser?.username?.charAt(0).toUpperCase() }}
+          <!-- Profile Avatar + Dropdown -->
+          <div class="relative">
+            <button (click)="showProfileDropdown = !showProfileDropdown; showNotifDropdown = false" class="flex items-center gap-2 cursor-pointer">
+              <div class="text-right mr-1 hidden sm:block">
+                <p class="text-sm font-bold text-white">{{ currentUser?.firstname }} {{ currentUser?.lastname }}</p>
+                <p class="text-[10px] text-green-200">{{ currentUser?.role }}</p>
+              </div>
+              <div class="h-10 w-10 rounded-full bg-white/20 border-2 border-white/30 flex items-center justify-center text-white font-bold backdrop-blur-sm hover:bg-white/30 transition-all">
+                {{ currentUser?.username?.charAt(0).toUpperCase() }}
+              </div>
+            </button>
+            <!-- Profile Dropdown -->
+            <div *ngIf="showProfileDropdown" class="absolute right-0 top-12 w-72 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
+              <!-- Profile info -->
+              <div class="bg-gradient-to-r from-green-700 to-green-600 p-4 text-white">
+                <div class="flex items-center gap-3">
+                  <div class="h-12 w-12 rounded-full bg-white/20 border-2 border-white/40 flex items-center justify-center text-xl font-bold">
+                    {{ currentUser?.username?.charAt(0).toUpperCase() }}
+                  </div>
+                  <div>
+                    <p class="font-bold">{{ currentUser?.firstname }} {{ currentUser?.lastname }}</p>
+                    <p class="text-green-200 text-xs">@{{ currentUser?.username }}</p>
+                  </div>
+                </div>
+              </div>
+              <div class="p-3 space-y-1.5 text-xs text-gray-600 border-b border-gray-100">
+                <div class="flex items-center gap-2"><i class="fas fa-shield-alt w-4 text-center text-green-500"></i><span class="font-bold">{{ currentUser?.role }}</span></div>
+                <div class="flex items-center gap-2"><i class="fas fa-building w-4 text-center text-blue-500"></i><span>{{ currentUser?.dept_name || '-' }}</span></div>
+                <div class="flex items-center gap-2"><i class="fas fa-hospital w-4 text-center text-teal-500"></i><span>{{ currentUser?.service_unit || '-' }}</span></div>
+                <div class="flex items-center gap-2"><i class="fas fa-envelope w-4 text-center text-amber-500"></i><span>{{ currentUser?.email || '-' }}</span></div>
+                <div class="flex items-center gap-2"><i class="fas fa-phone w-4 text-center text-purple-500"></i><span>{{ currentUser?.phone || '-' }}</span></div>
+              </div>
+              <!-- Actions -->
+              <div class="p-2 space-y-0.5">
+                <button (click)="openChangePasswordModal(); showProfileDropdown = false" class="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
+                  <i class="fas fa-key w-4 text-center text-orange-500"></i>{{ lang.t('menu.change_password') }}
+                </button>
+                <button (click)="logout()" class="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors font-bold">
+                  <i class="fas fa-sign-out-alt w-4 text-center"></i>{{ lang.t('menu.logout') }}
+                </button>
+              </div>
             </div>
           </div>
         </div>
