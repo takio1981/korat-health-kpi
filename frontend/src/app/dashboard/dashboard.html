@@ -348,7 +348,7 @@
                 <td *ngIf="item.rowSpan > 0"
                     [attr.rowspan]="item.rowSpan"
                     class="px-3 py-2 frozen col-1 bg-green-50 border-r border-gray-100 align-top rowspan-cell">
-                  <div class="mt-1 sticky top-10 line-clamp-2 font-bold text-green-800" [title]="item.main_indicator_name">
+                  <div class="mt-1 sticky top-10 font-bold text-green-800 whitespace-normal break-words" [title]="item.main_indicator_name">
                     {{ item.main_indicator_name }}
                   </div>
                 </td>
@@ -359,7 +359,7 @@
                     <div class="flex items-start gap-1.5 min-w-0">
                       <i *ngIf="isTargetMet(item)" class="fas fa-check-circle text-green-500 mt-0.5 shrink-0 text-xs"></i>
                       <i *ngIf="!isTargetMet(item)" class="fas fa-times-circle text-red-500 mt-0.5 shrink-0 text-xs"></i>
-                      <span class="line-clamp-2 font-medium text-gray-900" [title]="item.kpi_indicators_name">{{ item.kpi_indicators_name }}</span>
+                      <span class="font-medium text-gray-900 whitespace-normal break-words" [title]="item.kpi_indicators_name">{{ item.kpi_indicators_name }}</span>
                     </div>
                     <div class="flex gap-0.5 shrink-0">
                       <button *ngIf="(isAdmin || isSuperAdmin) && (item.indicator_status === 'pending' || item.indicator_status === 'Pending')"
@@ -847,7 +847,7 @@
           <i class="fas fa-clipboard-list"></i>
           {{ dynamicFormSchema?.form_title || 'กรอกข้อมูล' }}
         </h3>
-        <p class="text-purple-200 text-xs mt-0.5 truncate max-w-xs">{{ dynamicFormItem?.kpi_indicators_name }}</p>
+        <p class="text-purple-200 text-xs mt-0.5 whitespace-normal break-words">{{ dynamicFormItem?.kpi_indicators_name }}</p>
       </div>
       <div class="flex items-center gap-2">
         <button (click)="switchDynamicFormTab('form')"

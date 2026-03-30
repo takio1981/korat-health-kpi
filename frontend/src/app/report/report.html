@@ -125,8 +125,8 @@
           <div *ngFor="let item of reportData; let i = index" class="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
             <!-- by-indicator -->
             <ng-container *ngIf="activeTab === 'by-indicator'">
-              <p class="font-bold text-gray-900 text-sm truncate">{{ item.kpi_indicators_name }}</p>
-              <p class="text-[10px] text-gray-400 truncate">{{ item.main_indicator_name }} | {{ item.dept_name }}</p>
+              <p class="font-bold text-gray-900 text-sm whitespace-normal break-words">{{ item.kpi_indicators_name }}</p>
+              <p class="text-[10px] text-gray-400 whitespace-normal break-words">{{ item.main_indicator_name }} | {{ item.dept_name }}</p>
               <div class="grid grid-cols-3 gap-1 mt-2 text-xs text-center">
                 <div class="bg-amber-50 rounded p-1"><p class="text-[10px] text-gray-500">เป้าหมาย</p><p class="font-bold">{{ item._target_display || '-' }}</p></div>
                 <div class="bg-green-50 rounded p-1"><p class="text-[10px] text-gray-500">ผลงาน</p><p class="font-bold text-green-700">{{ item.total_actual > 0 ? (item.total_actual | number:'1.0-0') : '-' }}</p></div>
@@ -198,8 +198,8 @@
             <tbody>
               <tr *ngFor="let item of reportData; let i = index" class="border-b border-gray-50 hover:bg-green-50/30 transition-colors">
                 <td class="px-4 py-2.5 text-gray-500">{{ i + 1 }}</td>
-                <td class="px-4 py-2.5 text-gray-700 max-w-[150px] truncate">{{ item.main_indicator_name }}</td>
-                <td class="px-4 py-2.5 text-gray-800 font-medium max-w-[200px] truncate">{{ item.kpi_indicators_name }}</td>
+                <td class="px-4 py-2.5 text-gray-700 whitespace-normal break-words">{{ item.main_indicator_name }}</td>
+                <td class="px-4 py-2.5 text-gray-800 font-medium whitespace-normal break-words">{{ item.kpi_indicators_name }}</td>
                 <td class="px-4 py-2.5 text-gray-600">{{ item.dept_name }}</td>
                 <td class="px-4 py-2.5 text-right text-gray-700">{{ item._target_display || '-' }}</td>
                 <td class="px-4 py-2.5 text-right" [class]="item._oct_display && item.oct > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._oct_display || '-' }}</td>

@@ -167,7 +167,7 @@
                    [style.background]="getDistrictColor(dist.pct)">
                 {{ dist.pct | number:'1.0-0' }}%
               </div>
-              <p class="text-xs font-bold leading-tight truncate">{{ dist.name }}</p>
+              <p class="text-xs font-bold leading-tight whitespace-normal break-words">{{ dist.name }}</p>
               <p class="text-[10px] opacity-70">{{ dist.actual | number:'1.0-0' }}/{{ dist.target | number:'1.0-0' }}</p>
             </div>
           </div>

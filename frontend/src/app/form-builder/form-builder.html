@@ -47,8 +47,8 @@
             <tbody class="divide-y divide-gray-100">
               @for (ind of filteredIndicators; track ind.id) {
                 <tr class="hover:bg-green-50/30 transition-colors">
-                  <td class="px-4 py-3 font-medium text-gray-800 max-w-xs">
-                    <span [title]="ind.kpi_indicators_name" class="line-clamp-2">{{ ind.kpi_indicators_name }}</span>
+                  <td class="px-4 py-3 font-medium text-gray-800">
+                    <span class="whitespace-normal break-words">{{ ind.kpi_indicators_name }}</span>
                   </td>
                   <td class="px-4 py-3 text-gray-600">{{ ind.dept_name || '-' }}</td>
                   <td class="px-4 py-3">
@@ -135,7 +135,7 @@
               <i class="fas fa-wpforms"></i>
               {{ editingSchemaId ? 'แก้ไข' : 'สร้าง' }}แบบฟอร์ม
             </h3>
-            <p class="text-green-200 text-xs mt-0.5 truncate max-w-xs">{{ selectedIndicator.kpi_indicators_name }}</p>
+            <p class="text-green-200 text-xs mt-0.5 whitespace-normal break-words">{{ selectedIndicator.kpi_indicators_name }}</p>
           </div>
           <div class="flex items-center gap-2">
             <button (click)="openPreview()"

@@ -50,7 +50,7 @@
           <span><i class="fas fa-table mr-1"></i>{{ log.table_name }}</span>
           <span><i class="fas fa-globe mr-1"></i>{{ log.ip_address }}</span>
         </div>
-        <p class="text-xs text-gray-400 truncate" [title]="log.new_value | json">{{ log.new_value | json }}</p>
+        <p class="text-xs text-gray-400 whitespace-normal break-words" [title]="log.new_value | json">{{ log.new_value | json }}</p>
       </div>
       <div *ngIf="pagedLogs.length === 0" class="text-center py-10 text-gray-400">
         <i class="fas fa-history text-3xl mb-2"></i><p class="text-sm">ไม่พบข้อมูล Log</p>
@@ -88,7 +88,7 @@
               </span>
             </td>
             <td class="px-6 py-4 text-gray-600">{{ log.table_name }}</td>
-            <td class="px-6 py-4 text-gray-600 max-w-xs truncate" [title]="log.new_value | json">{{ log.new_value | json }}</td>
+            <td class="px-6 py-4 text-gray-600 whitespace-normal break-words" [title]="log.new_value | json">{{ log.new_value | json }}</td>
             <td class="px-6 py-4 text-gray-600">{{ log.ip_address }}</td>
           </tr>
         </tbody>
