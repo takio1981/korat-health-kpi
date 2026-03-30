@@ -42,8 +42,7 @@ export const routes: Routes = [
       { path: 'settings', component: SettingsComponent, canActivate: [superAdminGuard], data: { title: 'ตั้งค่าระบบ' } },
       { path: 'form-builder', component: FormBuilderComponent, canActivate: [superAdminGuard], data: { title: 'สร้างแบบฟอร์ม KPI' } },
       { path: 'help', component: HelpComponent, data: { title: 'คู่มือการใช้งาน' } },
-      { path: 'db-compare', component: DbCompareComponent, canActivate: [superAdminGuard], data: { title: 'DB Compare' } },
-      { path: 'env-config', component: EnvConfigComponent, canActivate: [superAdminGuard], data: { title: 'Environment Config' } },
+      // db-compare + env-config อยู่ในหน้า settings แล้ว
     ]
   },
   { path: '**', redirectTo: 'login' }

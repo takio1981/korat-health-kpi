@@ -3,12 +3,14 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
+import { EnvConfigComponent } from '../env-config/env-config';
+import { DbCompareComponent } from '../db-compare/db-compare';
 import Swal from 'sweetalert2';
 
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, EnvConfigComponent, DbCompareComponent],
   templateUrl: './settings.html'
 })
 export class SettingsComponent implements OnInit {
