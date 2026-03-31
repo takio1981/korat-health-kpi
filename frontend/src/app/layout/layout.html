@@ -1,4 +1,9 @@
-<div class="flex h-screen bg-gray-100 font-sans overflow-hidden">
+<!-- แถบคาดแดง "ทดสอบระบบ" — fixed เต็มจอบนสุด -->
+<div class="fixed inset-x-0 top-0 bg-red-600 text-white text-center py-0.5 text-xs font-bold tracking-widest z-30 leading-tight">
+  <i class="fas fa-flask mr-1"></i> ทดสอบระบบ <i class="fas fa-flask ml-1"></i>
+</div>
+
+<div class="flex h-screen bg-gray-100 font-sans overflow-hidden pt-[20px]">
 
     <!-- Mobile Menu Overlay -->
     <div class="fixed inset-0 z-40 lg:hidden transition-all duration-500"
@@ -6,7 +11,7 @@
          (click)="closeSidebar()"></div>
 
     <!-- Mobile: Top dropdown menu (ใช้ class แทน *ngIf เพื่อให้มี exit animation) -->
-    <div class="lg:hidden fixed top-[64px] left-0 right-0 z-50 bg-gradient-to-b from-green-800 to-green-700 text-white shadow-2xl overflow-y-auto transition-all duration-500 ease-in-out"
+    <div class="lg:hidden fixed top-[84px] left-0 right-0 z-50 bg-gradient-to-b from-green-800 to-green-700 text-white shadow-2xl overflow-y-auto transition-all duration-500 ease-in-out"
          [ngClass]="isSidebarOpen ? 'max-h-[75vh] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'">
       <nav class="px-3 py-3 space-y-0.5">
         <a routerLink="/charts" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-chart-bar mr-3 min-w-[20px]"></i>{{ lang.t('menu.charts') }}</a>
@@ -17,8 +22,7 @@
         <a *ngIf="isSuperAdmin" routerLink="/kpi-manage" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-tasks mr-3 min-w-[20px]"></i>{{ lang.t('menu.kpi_manage') }}</a>
         <a *ngIf="isSuperAdmin" routerLink="/audit-logs" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-history mr-3 min-w-[20px]"></i>{{ lang.t('menu.audit_logs') }}</a>
         <a *ngIf="isAdmin" routerLink="/kpi-setup" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-plus-circle mr-3 min-w-[20px]"></i>{{ lang.t('menu.kpi_setup') }}</a>
-        <a *ngIf="isSuperAdmin" routerLink="/export-kpi" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-file-export mr-3 min-w-[20px]"></i>{{ lang.t('menu.export') }}</a>
-        <a *ngIf="isSuperAdmin" routerLink="/form-builder" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-wpforms mr-3 min-w-[20px]"></i>{{ lang.t('menu.form_builder') }}</a>
+        <a *ngIf="isSuperAdmin" routerLink="/kpi-manager" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-layer-group mr-3 min-w-[20px]"></i>จัดการข้อมูล KPI</a>
         <a *ngIf="isSuperAdmin" routerLink="/settings" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-sliders-h mr-3 min-w-[20px]"></i>{{ lang.t('menu.settings') }}</a>
       </nav>
       <div class="px-3 pb-3 pt-1 border-t border-green-500/30">
@@ -85,16 +89,10 @@
             {{ lang.t('menu.kpi_setup') }}
           </span>
         </a>
-        <a *ngIf="isSuperAdmin" routerLink="/export-kpi" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-file-export text-lg mr-3 min-w-[24px]"></i>
+        <a *ngIf="isSuperAdmin" routerLink="/kpi-manager" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
+          <i class="fas fa-layer-group text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
-            {{ lang.t('menu.export') }}
-          </span>
-        </a>
-        <a *ngIf="isSuperAdmin" routerLink="/form-builder" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-wpforms text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate flex justify-between items-center w-full">
-            {{ lang.t('menu.form_builder') }}
+            จัดการข้อมูล KPI
           </span>
         </a>
         <a *ngIf="isSuperAdmin" routerLink="/settings" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
@@ -118,7 +116,7 @@
   
     <div class="flex-1 flex flex-col overflow-hidden">
       
-      <header class="h-16 bg-gradient-to-r from-green-800 to-green-600 shadow-md flex items-center justify-between px-6 z-[60] relative">
+      <header class="h-16 bg-gradient-to-r from-green-800 to-green-600 shadow-md flex items-center justify-between px-6 z-40 relative">
         <div class="flex items-center">
           <button (click)="toggleSidebar()" class="text-white hover:text-green-200 focus:outline-none mr-4">
             <i class="fas fa-bars text-xl"></i>
@@ -282,5 +280,25 @@
     </div>
   </div>
   
-  <div *ngIf="showNotifDropdown" class="fixed inset-0 z-[55]" (click)="showNotifDropdown = false"></div>
+  <div *ngIf="showNotifDropdown" class="fixed inset-0 z-40" (click)="showNotifDropdown = false"></div>
+
+  <!-- Maintenance Mode Overlay (บล็อกหน้าจอ — ยกเว้น super_admin) -->
+  <div *ngIf="maintenanceMode && !isSuperAdmin"
+       class="fixed inset-0 z-[200] bg-gray-900/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-8 text-center">
+      <div class="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-5">
+        <i class="fas fa-tools text-red-500 text-3xl"></i>
+      </div>
+      <h2 class="text-xl font-bold text-gray-800 mb-2">ปิดการใช้งานระบบชั่วคราว</h2>
+      <p class="text-gray-600 mb-4">{{ maintenanceMessage }}</p>
+      <div class="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+        <i class="fas fa-info-circle mr-1"></i>
+        กรุณาเข้าใช้งานอีกครั้งในภายหลัง หากมีข้อสงสัยกรุณาติดต่อผู้ดูแลระบบ
+      </div>
+      <button (click)="logout()"
+              class="mt-6 px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-md transition-all">
+        <i class="fas fa-sign-out-alt mr-2"></i>ออกจากระบบ
+      </button>
+    </div>
+  </div>
   

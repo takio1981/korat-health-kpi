@@ -44,6 +44,8 @@ export class UserManagementComponent implements OnInit {
 
   selectedStatus: string = '';
   pendingCount: number = 0;
+  maintenanceMode: boolean = false;
+  maintenanceMessage: string = 'ระบบปิดให้บริการชั่วคราวเพื่อประมวลผลงาน';
 
   // Password & validation
   confirmPassword: string = '';
@@ -67,6 +69,7 @@ export class UserManagementComponent implements OnInit {
     this.loadDepartments();
     this.loadHospitals();
     this.loadDistricts();
+    if (this.isSuperAdmin) this.loadMaintenanceStatus();
   }
 
   loadUsers() {
@@ -480,6 +483,102 @@ export class UserManagementComponent implements OnInit {
             }
           },
           error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถเปลี่ยนสถานะได้', 'error')
+        });
+      }
+    });
+  }
+
+  loadMaintenanceStatus() {
+    this.authService.getMaintenanceStatus().subscribe({
+      next: (res: any) => {
+        this.maintenanceMode = res.maintenance;
+        this.maintenanceMessage = res.message || 'ระบบปิดให้บริการชั่วคราวเพื่อประมวลผลงาน';
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  toggleMaintenanceMode() {
+    const willEnable = !this.maintenanceMode;
+    if (willEnable) {
+      Swal.fire({
+        title: 'เปิดโหมดปิดปรับปรุงระบบ',
+        html: '<p class="text-sm text-gray-600 mb-2">ผู้ใช้งานทั้งหมด (ยกเว้น super_admin) จะเห็นหน้าแจ้งเตือนและไม่สามารถใช้งานได้</p>',
+        input: 'textarea',
+        inputLabel: 'ข้อความแจ้งเตือน',
+        inputValue: this.maintenanceMessage,
+        inputPlaceholder: 'ระบบปิดให้บริการชั่วคราวเพื่อประมวลผลงาน',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc2626',
+        confirmButtonText: '<i class="fas fa-lock mr-1"></i> เปิดโหมดปิดปรับปรุง',
+        cancelButtonText: 'ยกเลิก'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          const msg = result.value || this.maintenanceMessage;
+          this.authService.setMaintenanceMode(true, msg).subscribe({
+            next: (res) => {
+              if (res.success) {
+                this.maintenanceMode = true;
+                this.maintenanceMessage = msg;
+                Swal.fire({ icon: 'success', title: res.message, timer: 2000, showConfirmButton: false });
+                this.cdr.detectChanges();
+              }
+            },
+            error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถดำเนินการได้', 'error')
+          });
+        }
+      });
+    } else {
+      Swal.fire({
+        title: 'ปิดโหมดปิดปรับปรุง',
+        text: 'เปิดให้ผู้ใช้งานทุกคนกลับเข้าใช้ระบบได้ตามปกติ',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#16a34a',
+        confirmButtonText: '<i class="fas fa-unlock mr-1"></i> เปิดระบบ',
+        cancelButtonText: 'ยกเลิก'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          this.authService.setMaintenanceMode(false, this.maintenanceMessage).subscribe({
+            next: (res) => {
+              if (res.success) {
+                this.maintenanceMode = false;
+                Swal.fire({ icon: 'success', title: res.message, timer: 2000, showConfirmButton: false });
+                this.cdr.detectChanges();
+              }
+            },
+            error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถดำเนินการได้', 'error')
+          });
+        }
+      });
+    }
+  }
+
+  bulkToggleActive(activate: boolean) {
+    const actionText = activate ? 'เปิดใช้งาน' : 'ปิดใช้งาน';
+    const nonSuperCount = this.users.filter(u => u.role !== 'super_admin').length;
+    Swal.fire({
+      title: `${actionText}ผู้ใช้งานทั้งหมด`,
+      html: `<p>ยืนยัน<b>${actionText}</b>ผู้ใช้งานทั้งหมด <b>${nonSuperCount}</b> คน?</p>
+             <p class="text-xs text-gray-500 mt-1">(ยกเว้น super_admin)</p>
+             ${!activate ? '<p class="text-sm text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>ผู้ใช้งานทุกคนจะไม่สามารถเข้าสู่ระบบได้</p>' : ''}`,
+      icon: activate ? 'question' : 'warning',
+      showCancelButton: true,
+      confirmButtonColor: activate ? '#16a34a' : '#dc2626',
+      confirmButtonText: `<i class="fas ${activate ? 'fa-toggle-on' : 'fa-toggle-off'} mr-1"></i> ${actionText}ทั้งหมด`,
+      cancelButtonText: 'ยกเลิก'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        Swal.fire({ title: 'กำลังดำเนินการ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        this.authService.bulkToggleActive(activate).subscribe({
+          next: (res) => {
+            if (res.success) {
+              Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2000, showConfirmButton: false });
+              this.loadUsers();
+            }
+          },
+          error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถดำเนินการได้', 'error')
         });
       }
     });

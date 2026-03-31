@@ -1,7 +1,6 @@
-import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
 import Swal from 'sweetalert2';
 
@@ -13,8 +12,9 @@ import Swal from 'sweetalert2';
 })
 export class DbCompareComponent implements OnInit {
   private authService = inject(AuthService);
-  private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
+
+  @Output() createFormEvent = new EventEmitter<{ table: string, name: string, columns: any[] }>();
 
   isLoading = false;
   compareResult: any = null;
@@ -24,12 +24,7 @@ export class DbCompareComponent implements OnInit {
   expandedTable = '';
 
   ngOnInit() {
-    const role = this.authService.getUserRole();
-    if (role !== 'super_admin') {
-      Swal.fire('Access Denied', 'super_admin เท่านั้น', 'error');
-      this.router.navigate(['/dashboard']);
-      return;
-    }
+    // access control อยู่ที่ kpi-manager parent component
   }
 
   runCompare() {
@@ -109,6 +104,18 @@ export class DbCompareComponent implements OnInit {
         },
         error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถสร้างได้', 'error')
       });
+    });
+  }
+
+  emitCreateForm(t: any) {
+    if (!t.remote?.columns || t.remote.columns.length === 0) {
+      Swal.fire('แจ้งเตือน', 'ตารางนี้ไม่มี columns จาก HDC', 'warning');
+      return;
+    }
+    this.createFormEvent.emit({
+      table: t.table,
+      name: t.name,
+      columns: t.remote.columns.map((c: any) => ({ ...c, _selected: false }))
     });
   }
 

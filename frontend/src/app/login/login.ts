@@ -24,6 +24,18 @@ export class LoginComponent {
   showAbout: boolean = false;
   private lastLoginPassword: string = '';
 
+  maintenanceMode: boolean = false;
+  maintenanceMessage: string = '';
+
+  ngOnInit() {
+    this.authService.getMaintenanceStatus().subscribe({
+      next: (res: any) => {
+        this.maintenanceMode = res.maintenance;
+        this.maintenanceMessage = res.message;
+      }
+    });
+  }
+
   loginForm = new FormGroup({
     username: new FormControl('', Validators.required),
     password: new FormControl('', Validators.required)

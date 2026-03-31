@@ -218,6 +218,22 @@ export class AuthService {
     return this.http.put(`${this.apiUrl}/users/${id}/toggle-active`, { is_active: isActive }, { headers });
   }
 
+  bulkToggleActive(isActive: boolean): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/users/bulk-toggle-active`, { is_active: isActive }, { headers });
+  }
+
+  getMaintenanceStatus(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/system/maintenance-status`);
+  }
+
+  setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/system/maintenance-mode`, { enabled, message }, { headers });
+  }
+
   getUserById(id: number): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

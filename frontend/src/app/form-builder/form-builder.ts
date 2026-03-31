@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef, inject } from '@angular/core';
+import { Component, OnInit, OnChanges, SimpleChanges, ChangeDetectorRef, inject, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
@@ -22,9 +22,15 @@ interface FormField {
   imports: [CommonModule, FormsModule, RouterModule],
   templateUrl: './form-builder.html'
 })
-export class FormBuilderComponent implements OnInit {
+export class FormBuilderComponent implements OnInit, OnChanges {
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
+
+  @Input() hdcColumns: any[] = [];
+  @Input() hdcTableName: string = '';
+  @Input() hdcTrigger: number = 0;
+
+  private pendingAutoOpen = '';
 
   isLoading = false;
   isSaving = false;
@@ -41,6 +47,8 @@ export class FormBuilderComponent implements OnInit {
   formDescription = '';
   actualValueField = '';   // ฟิลด์ที่ sync ไปยัง kpi_results.actual_value
   fields: FormField[] = [];
+
+  includeDefaultFields = true;  // สร้างฟิลด์เริ่มต้น id, hospcode, year_bh, month_bh, created_by, created_at
 
   // modal
   showBuilderModal = false;
@@ -60,6 +68,24 @@ export class FormBuilderComponent implements OnInit {
     this.loadIndicators();
   }
 
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['hdcTrigger'] && this.hdcTableName) {
+      this.tryAutoOpenIndicator(this.hdcTableName);
+    }
+  }
+
+  private tryAutoOpenIndicator(tableName: string) {
+    if (this.allIndicators.length === 0) {
+      // indicators ยังไม่โหลด → จำไว้เปิดทีหลัง
+      this.pendingAutoOpen = tableName;
+      return;
+    }
+    const match = this.allIndicators.find(i => i.table_process === tableName);
+    if (match) {
+      this.openCreateForm(match);
+    }
+  }
+
   loadIndicators() {
     this.isLoading = true;
     this.authService.getAllIndicatorsWithSchema().subscribe({
@@ -68,6 +94,12 @@ export class FormBuilderComponent implements OnInit {
         if (res.success) {
           this.allIndicators = res.data;
           this.applyFilter();
+          // ถ้ามี pending auto-open จาก HDC → เปิดเลย
+          if (this.pendingAutoOpen) {
+            const tableName = this.pendingAutoOpen;
+            this.pendingAutoOpen = '';
+            this.tryAutoOpenIndicator(tableName);
+          }
         }
         this.cdr.detectChanges();
       },
@@ -92,6 +124,7 @@ export class FormBuilderComponent implements OnInit {
     this.formTitle = indicator.form_title || `แบบฟอร์ม: ${indicator.kpi_indicators_name}`;
     this.formDescription = '';
     this.fields = [];
+    this.includeDefaultFields = true;
 
     if (indicator.schema_id) {
       // โหลด fields เดิม
@@ -187,6 +220,7 @@ export class FormBuilderComponent implements OnInit {
       form_description: this.formDescription,
       schema_id: this.editingSchemaId,
       actual_value_field: this.actualValueField || null,
+      include_default_fields: this.includeDefaultFields,
       fields: this.fields.map((f, i) => ({
         field_name: f.field_name,
         field_label: f.field_label,
@@ -202,6 +236,9 @@ export class FormBuilderComponent implements OnInit {
         if (res.success) {
           Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2000, showConfirmButton: false });
           this.showBuilderModal = false;
+          // เคลียร์ HDC data
+          this.hdcColumns.forEach(c => c._selected = false);
+          this.includeDefaultFields = true;
           this.loadIndicators();
         } else {
           Swal.fire('ผิดพลาด', res.message, 'error');
@@ -243,6 +280,50 @@ export class FormBuilderComponent implements OnInit {
   openPreview() {
     this.previewData = {};
     this.showPreviewModal = true;
+  }
+
+  isAllHdcSelected(): boolean {
+    return this.hdcColumns.length > 0 && this.hdcColumns.every(c => c._selected);
+  }
+
+  toggleSelectAllHdc(event: Event) {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.hdcColumns.forEach(c => c._selected = checked);
+  }
+
+  getSelectedHdcCount(): number {
+    return this.hdcColumns.filter(c => c._selected).length;
+  }
+
+  applyHdcFields() {
+    const selected = this.hdcColumns.filter(c => c._selected);
+    if (selected.length === 0) return;
+    // ลบ field เปล่าที่ยังไม่ได้กรอก
+    this.fields = this.fields.filter(f => f.field_name.trim());
+    const existingNames = new Set(this.fields.map(f => f.field_name));
+    for (const col of selected) {
+      if (!existingNames.has(col.field)) {
+        this.fields.push({
+          field_name: col.field,
+          field_label: col.field,
+          field_type: this.mapHdcType(col.type),
+          field_options: [],
+          is_required: false,
+          sort_order: this.fields.length,
+          _optionsText: ''
+        });
+      }
+    }
+    this.cdr.detectChanges();
+  }
+
+  mapHdcType(dbType: string): 'text' | 'number' | 'textarea' | 'select' | 'date' | 'checkbox' {
+    if (!dbType) return 'text';
+    const t = dbType.toLowerCase();
+    if (t.includes('int') || t.includes('decimal') || t.includes('float') || t.includes('double')) return 'number';
+    if (t.includes('date') || t.includes('time')) return 'date';
+    if (t.includes('text') || t.includes('blob')) return 'textarea';
+    return 'text';
   }
 
   closeBuilderModal() {

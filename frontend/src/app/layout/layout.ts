@@ -38,6 +38,9 @@ export class LayoutComponent implements OnInit {
   pendingKpiCount: number = 0;
   pendingStats: any = { deptCount: 0, hosCount: 0, indicatorCount: 0 };
 
+  maintenanceMode: boolean = false;
+  maintenanceMessage: string = '';
+
   showChangePasswordModal: boolean = false;
   changePasswordForm: any = { currentPassword: '', newPassword: '', confirmPassword: '' };
   showCurrentPw: boolean = false;
@@ -58,6 +61,7 @@ export class LayoutComponent implements OnInit {
     this.loadSettings();
     this.loadPendingCount();
     this.loadUnreadNotifCount();
+    this.checkMaintenanceMode();
     this.checkLoginNotifications();
 
     // Subscribe shared unread count → update badge realtime
@@ -115,6 +119,16 @@ export class LayoutComponent implements OnInit {
             this.systemVersion = versionSetting.setting_value;
           }
         }
+      }
+    });
+  }
+
+  checkMaintenanceMode() {
+    this.authService.getMaintenanceStatus().subscribe({
+      next: (res: any) => {
+        this.maintenanceMode = res.maintenance;
+        this.maintenanceMessage = res.message;
+        this.cdr.detectChanges();
       }
     });
   }

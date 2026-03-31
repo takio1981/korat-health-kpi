@@ -1056,7 +1056,8 @@ apiRouter.get('/form-schemas/all-indicators', authenticateToken, isSuperAdmin, a
 
 // POST /form-schemas — สร้าง/อัปเดต schema + CREATE TABLE ในฐานข้อมูล
 apiRouter.post('/form-schemas', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { indicator_id, form_title, form_description, fields, schema_id, actual_value_field } = req.body;
+    const { indicator_id, form_title, form_description, fields, schema_id, actual_value_field, include_default_fields } = req.body;
+    const withDefaults = include_default_fields !== false; // default true
     if (!indicator_id || !form_title || !Array.isArray(fields) || fields.length === 0) {
         return res.status(400).json({ success: false, message: 'ข้อมูลไม่ครบถ้วน' });
     }
@@ -1104,26 +1105,40 @@ apiRouter.post('/form-schemas', authenticateToken, isSuperAdmin, async (req, res
         }
         // สร้าง / อัปเดตตาราง Dynamic (ใช้ prefix form_ เพื่อไม่ซ้ำกับตาราง export)
         const formTableName = 'form_' + tableProcess;
-        const reservedFields = ['id','hospcode','year_bh','month_bh','created_by','created_at','updated_at'];
+        const reservedFields = withDefaults ? ['id','hospcode','year_bh','month_bh','created_by','created_at','updated_at'] : ['id','created_at','updated_at'];
         const customCols = fields.filter(f => !reservedFields.includes(f.field_name));
         let colDefs = customCols.map(f => {
             const sqlType = f.field_type === 'number' ? 'DECIMAL(15,4) NULL' : 'TEXT NULL';
             return `\`${f.field_name}\` ${sqlType}`;
         }).join(', ');
         if (colDefs) colDefs = ', ' + colDefs;
-        await connection.query(`
-            CREATE TABLE IF NOT EXISTS \`${formTableName}\` (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                hospcode VARCHAR(20) NOT NULL,
-                year_bh INT NOT NULL,
-                month_bh INT NULL,
-                indicator_id INT NULL${colDefs},
-                created_by INT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                INDEX idx_hym (hospcode, year_bh, month_bh)
-            )
-        `);
+
+        if (withDefaults) {
+            // สร้างตารางพร้อมฟิลด์เริ่มต้น (id, hospcode, year_bh, month_bh, created_by, created_at)
+            await connection.query(`
+                CREATE TABLE IF NOT EXISTS \`${formTableName}\` (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    hospcode VARCHAR(20) NOT NULL,
+                    year_bh INT NOT NULL,
+                    month_bh INT NULL,
+                    indicator_id INT NULL${colDefs},
+                    created_by INT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX idx_hym (hospcode, year_bh, month_bh)
+                )
+            `);
+        } else {
+            // สร้างตารางโดยไม่มีฟิลด์เริ่มต้น — ใช้เฉพาะฟิลด์ที่กำหนดเอง
+            await connection.query(`
+                CREATE TABLE IF NOT EXISTS \`${formTableName}\` (
+                    id INT AUTO_INCREMENT PRIMARY KEY${colDefs},
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                )
+            `);
+        }
+
         // เพิ่มคอลัมน์ใหม่ที่ยังไม่มี (ALTER TABLE ADD COLUMN IF NOT EXISTS)
         for (const f of customCols) {
             try {
@@ -1157,6 +1172,11 @@ apiRouter.get('/dynamic-data/:table_name', authenticateToken, async (req, res) =
     if (!isValidIdentifier(table_name)) return res.status(400).json({ success: false, message: 'ชื่อตารางไม่ถูกต้อง' });
     const formTable = 'form_' + table_name;
     try {
+        // ตรวจสอบว่าตารางมีอยู่จริง
+        const [tableCheck] = await db.query("SELECT COUNT(*) AS cnt FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?", [formTable]);
+        if (!tableCheck[0]?.cnt) {
+            return res.json({ success: true, data: [] });
+        }
         const { hospcode, year_bh, month_bh } = req.query;
         let where = 'WHERE 1=1';
         const params = [];
@@ -1165,7 +1185,7 @@ apiRouter.get('/dynamic-data/:table_name', authenticateToken, async (req, res) =
         if (month_bh) { where += ' AND t.month_bh = ?'; params.push(month_bh); }
         const [rows] = await db.query(`SELECT t.*, u.username AS created_by_name FROM \`${formTable}\` t LEFT JOIN users u ON t.created_by = u.id ${where} ORDER BY t.year_bh DESC, t.month_bh DESC, t.created_at DESC`, params);
         res.json({ success: true, data: rows });
-    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+    } catch (e) { res.json({ success: true, data: [] }); }
 });
 
 // GET /dynamic-data-months/:table_name — ดึงเดือนที่มีข้อมูลจาก dynamic table (สำหรับแสดงไอคอนใน dashboard)
@@ -1179,9 +1199,14 @@ apiRouter.get('/dynamic-data-months/:table_name', authenticateToken, async (req,
         if (hospcode) { where += ' AND hospcode = ?'; params.push(hospcode); }
         if (year_bh) { where += ' AND year_bh = ?'; params.push(year_bh); }
         const formTable = 'form_' + table_name;
+        // ตรวจสอบว่าตารางมีอยู่จริงก่อน query
+        const [tableCheck] = await db.query("SELECT COUNT(*) AS cnt FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?", [formTable]);
+        if (!tableCheck[0]?.cnt) {
+            return res.json({ success: true, data: [] });
+        }
         const [rows] = await db.query(`SELECT DISTINCT month_bh FROM \`${formTable}\` ${where} AND month_bh IS NOT NULL ORDER BY month_bh`, params);
         res.json({ success: true, data: rows.map(r => r.month_bh) });
-    } catch (e) { res.status(500).json({ success: false, data: [] }); }
+    } catch (e) { res.json({ success: true, data: [] }); }
 });
 
 // POST /dynamic-data/:table_name — บันทึกข้อมูลลงตาราง dynamic (form_ prefix) + sync kpi_results
@@ -1618,6 +1643,68 @@ apiRouter.put('/users/change-password', async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดที่ Server' });
+    }
+});
+
+// ตรวจสอบสถานะ maintenance mode (public — ไม่ต้อง login)
+apiRouter.get('/system/maintenance-status', async (req, res) => {
+    try {
+        const [rows] = await db.query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message')");
+        const settings = {};
+        rows.forEach(r => settings[r.setting_key] = r.setting_value);
+        res.json({
+            success: true,
+            maintenance: settings['maintenance_mode'] === 'true',
+            message: settings['maintenance_message'] || 'ระบบปิดให้บริการชั่วคราวเพื่อประมวลผลงาน'
+        });
+    } catch (error) {
+        res.json({ success: true, maintenance: false, message: '' });
+    }
+});
+
+// เปิด/ปิด maintenance mode (super_admin เท่านั้น)
+apiRouter.put('/system/maintenance-mode', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { enabled, message } = req.body;
+    try {
+        await db.query(
+            "INSERT INTO system_settings (setting_key, setting_value, description) VALUES ('maintenance_mode', ?, 'โหมดปิดปรับปรุงระบบ') ON DUPLICATE KEY UPDATE setting_value = ?",
+            [enabled ? 'true' : 'false', enabled ? 'true' : 'false']
+        );
+        if (message !== undefined) {
+            await db.query(
+                "INSERT INTO system_settings (setting_key, setting_value, description) VALUES ('maintenance_message', ?, 'ข้อความแจ้งเตือนปิดปรับปรุง') ON DUPLICATE KEY UPDATE setting_value = ?",
+                [message, message]
+            );
+        }
+        await db.query(
+            'INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+            [req.user.userId, enabled ? 'MAINTENANCE_ON' : 'MAINTENANCE_OFF', 'system_settings',
+             JSON.stringify({ enabled, message }), req.ip]
+        );
+        res.json({ success: true, message: enabled ? 'เปิดโหมดปิดปรับปรุงระบบ' : 'ปิดโหมดปิดปรับปรุง — ระบบเปิดใช้งานปกติ' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// เปิด/ปิดใช้งานทั้งหมด ยกเว้น super_admin (super_admin เท่านั้น)
+apiRouter.put('/users/bulk-toggle-active', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { is_active } = req.body;
+    const newStatus = is_active ? 1 : 0;
+    const actionText = newStatus ? 'เปิดใช้งาน' : 'ปิดใช้งาน';
+    try {
+        const [result] = await db.query(
+            'UPDATE users SET is_active = ? WHERE role != ? AND id != ?',
+            [newStatus, 'super_admin', req.user.userId]
+        );
+        await db.query(
+            'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+            [req.user.userId, req.user.deptId, newStatus ? 'BULK_ACTIVATE' : 'BULK_DEACTIVATE', 'users',
+             JSON.stringify({ affected: result.affectedRows, is_active: newStatus }), req.ip]
+        );
+        res.json({ success: true, message: `${actionText}ผู้ใช้งานทั้งหมด ${result.affectedRows} คน (ยกเว้น super_admin)` });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
@@ -3506,6 +3593,12 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         for (const [key, val, desc] of entryLockDefaults) {
             await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)', [key, val, desc]);
         }
+
+        // เพิ่ม maintenance mode settings
+        await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)',
+            ['maintenance_mode', 'false', 'โหมดปิดปรับปรุงระบบ (true/false)']);
+        await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)',
+            ['maintenance_message', 'ระบบปิดให้บริการชั่วคราวเพื่อประมวลผลงาน', 'ข้อความแจ้งเตือนเมื่อปิดปรับปรุง']);
 
         // เพิ่ม target edit lock setting
         await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)',

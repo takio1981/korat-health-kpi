@@ -171,6 +171,43 @@
             </div>
           </div>
 
+          <!-- HDC Fields Selection (แสดงเมื่อมี columns จาก DB Compare) -->
+          @if (hdcColumns.length > 0) {
+            <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+              <div class="flex items-center justify-between mb-3">
+                <div>
+                  <h4 class="text-sm font-bold text-indigo-800 flex items-center gap-2">
+                    <i class="fas fa-cloud-download-alt"></i>เลือก Fields จาก HDC
+                  </h4>
+                  <p class="text-[10px] text-indigo-600 mt-0.5">ตาราง: <b class="font-mono">{{ hdcTableName }}</b></p>
+                </div>
+                <div class="flex items-center gap-3">
+                  <label class="flex items-center gap-1.5 text-xs text-indigo-700 cursor-pointer hover:text-indigo-900">
+                    <input type="checkbox" [checked]="isAllHdcSelected()" (change)="toggleSelectAllHdc($event)" class="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-400">
+                    เลือกทั้งหมด
+                  </label>
+                  <button (click)="applyHdcFields()"
+                          [disabled]="getSelectedHdcCount() === 0"
+                          class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                    <i class="fas fa-arrow-down mr-1"></i>เพิ่ม {{ getSelectedHdcCount() }} ฟิลด์
+                  </button>
+                </div>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+                @for (col of hdcColumns; track col.field) {
+                  <label class="flex items-center gap-2 bg-white rounded-lg px-3 py-2 border cursor-pointer hover:border-indigo-400 transition-all"
+                         [ngClass]="col._selected ? 'border-indigo-400 ring-2 ring-indigo-200' : 'border-gray-200'">
+                    <input type="checkbox" [(ngModel)]="col._selected" class="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-400">
+                    <div class="min-w-0">
+                      <p class="text-xs font-bold font-mono text-gray-800 truncate">{{ col.field }}</p>
+                      <p class="text-[10px] text-gray-400">{{ col.type }}</p>
+                    </div>
+                  </label>
+                }
+              </div>
+            </div>
+          }
+
           <!-- Fields -->
           <div>
             <div class="flex items-center justify-between mb-3">
@@ -184,10 +221,25 @@
               </button>
             </div>
 
-            <!-- Note: default fields -->
-            <div class="mb-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs text-gray-500">
-              <i class="fas fa-lock mr-1"></i>
-              ฟิลด์เริ่มต้น (สร้างอัตโนมัติ): <b>id, hospcode, year_bh, month_bh, created_by, created_at</b>
+            <!-- Toggle: default fields -->
+            <div class="mb-3 rounded-xl px-4 py-3 border transition-colors"
+                 [ngClass]="includeDefaultFields ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'">
+              <label class="flex items-center justify-between cursor-pointer">
+                <div>
+                  <p class="text-xs font-bold" [ngClass]="includeDefaultFields ? 'text-green-700' : 'text-gray-500'">
+                    <i class="fas mr-1" [ngClass]="includeDefaultFields ? 'fa-check-circle text-green-500' : 'fa-minus-circle text-gray-400'"></i>
+                    ฟิลด์เริ่มต้น: <span class="font-mono">id, hospcode, year_bh, month_bh, created_by, created_at</span>
+                  </p>
+                  <p class="text-[10px] mt-0.5" [ngClass]="includeDefaultFields ? 'text-green-600' : 'text-gray-400'">
+                    {{ includeDefaultFields ? 'ระบบจะสร้างฟิลด์พื้นฐานให้อัตโนมัติ' : 'ไม่สร้างฟิลด์พื้นฐาน — ใช้เฉพาะฟิลด์ที่กำหนดเอง' }}
+                  </p>
+                </div>
+                <div class="relative ml-3 shrink-0">
+                  <input type="checkbox" [(ngModel)]="includeDefaultFields" class="sr-only peer">
+                  <div class="w-10 h-5 bg-gray-300 peer-checked:bg-green-500 rounded-full transition-colors"></div>
+                  <div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-5"></div>
+                </div>
+              </label>
             </div>
 
             <div class="space-y-3">
@@ -322,7 +374,7 @@
 
   <!-- ===== Preview Modal ===== -->
   @if (showPreviewModal) {
-    <div class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
+    <div class="fixed inset-0 z-[55] flex items-center justify-center bg-black/60 p-4">
       <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
         <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50 rounded-t-2xl">
           <h3 class="font-bold text-gray-800 flex items-center gap-2">
