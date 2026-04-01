@@ -1502,11 +1502,14 @@ apiRouter.get('/users', authenticateToken, isAnyAdmin, async (req, res) => {
     try {
         let sql = `
             SELECT u.id, u.username, u.role, u.dept_id, u.firstname, u.lastname, u.phone, u.hospcode,
-                   u.email, u.cid, u.is_approved, u.is_active, d.dept_name, h.hosname, dist.distname
+                   u.email, u.cid, u.is_approved, u.is_active, u.approved_by,
+                   d.dept_name, h.hosname, dist.distname,
+                   approver.firstname AS approved_by_name, approver.lastname AS approved_by_lastname
             FROM users u
             LEFT JOIN departments d ON u.dept_id = d.id
             LEFT JOIN chospital h ON u.hospcode = h.hoscode
-            LEFT JOIN co_district dist ON dist.distid = CONCAT(h.provcode, h.distcode)`;
+            LEFT JOIN co_district dist ON dist.distid = CONCAT(h.provcode, h.distcode)
+            LEFT JOIN users approver ON u.approved_by = approver.id`;
         let params = [];
 
         if (user.role === 'super_admin') {
@@ -1586,9 +1589,12 @@ apiRouter.post('/users', authenticateToken, isAnyAdmin, async (req, res) => {
 
         const hashedPassword = await bcrypt.hash(password, 10);
         const hashedCid = cid ? crypto.createHash('sha256').update(cid).digest('hex') : null;
+        // super_admin สร้าง → อนุมัติทันที + บันทึกผู้อนุมัติ, อื่นๆ → รอ super_admin อนุมัติ
+        const autoApprove = user.role === 'super_admin' ? 1 : 0;
+        const approvedBy = autoApprove ? user.userId : null;
         const [result] = await db.query(
-            'INSERT INTO users (username, password_hash, role, dept_id, firstname, lastname, hospcode, phone, email, cid, is_approved) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)',
-            [username, hashedPassword, finalRole, finalDeptId, firstname, lastname, hospcode, phone, email || null, hashedCid]
+            'INSERT INTO users (username, password_hash, role, dept_id, firstname, lastname, hospcode, phone, email, cid, is_approved, approved_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [username, hashedPassword, finalRole, finalDeptId, firstname, lastname, hospcode, phone, email || null, hashedCid, autoApprove, approvedBy]
         );
 
         await db.query(
@@ -1881,11 +1887,11 @@ apiRouter.put('/users/:id/approve', authenticateToken, isAdmin, async (req, res)
         const target = rows[0];
         if (target.is_approved !== 0) return res.status(400).json({ success: false, message: 'ผู้ใช้งานนี้ไม่ได้อยู่ในสถานะรอการอนุมัติ' });
 
-        await db.query('UPDATE users SET is_approved = 1 WHERE id = ?', [userId]);
+        await db.query('UPDATE users SET is_approved = 1, approved_by = ? WHERE id = ?', [user.userId, userId]);
 
         await db.query(
             'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [user.userId, user.deptId, 'APPROVE_USER', 'users', userId, JSON.stringify({ username: target.username }), req.ip]
+            [user.userId, user.deptId, 'APPROVE_USER', 'users', userId, JSON.stringify({ username: target.username, approved_by: user.userId }), req.ip]
         );
 
         // ส่ง Email แจ้งผลอนุมัติ
@@ -3663,6 +3669,8 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         try { await db.query(`ALTER TABLE users ADD COLUMN temp_password VARCHAR(255) NULL`); } catch (e) {}
         try { await db.query(`ALTER TABLE users ADD COLUMN temp_password_expiry DATETIME NULL`); } catch (e) {}
         try { await db.query(`ALTER TABLE users ADD COLUMN must_change_password TINYINT(1) NOT NULL DEFAULT 0`); } catch (e) {}
+        // เพิ่ม approved_by column
+        try { await db.query(`ALTER TABLE users ADD COLUMN approved_by INT NULL`); } catch (e) {}
         // เพิ่ม is_active ใน users table
         try {
             await db.query(`ALTER TABLE users ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1`);
@@ -4096,6 +4104,128 @@ apiRouter.get('/kpi-replies', authenticateToken, async (req, res) => {
 // ============================================================
 // === Structure Compare: Local DB vs Remote HDC DB ===
 // ============================================================
+
+// GET /report-compare — เปรียบเทียบ reports (HDC) กับ kpi_indicators (Local) โดยใช้ table_process เป็น key
+apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
+    try {
+        // ดึง reports จาก HDC
+        const [hdcRows] = await remoteDb.query(`
+            SELECT report_id, report_name, dept, main_yut, report_code, table_process, data_source, is_active, updated_at
+            FROM reports
+            WHERE data_source = 'excel' AND is_active = 1
+            AND LENGTH(report_code) = LENGTH(table_process)
+            ORDER BY report_id
+        `);
+        // ดึง kpi_indicators จาก Local
+        const [localRows] = await db.query(`
+            SELECT i.id, i.kpi_indicators_name, i.table_process, i.kpi_indicators_code, i.is_active,
+                   d.dept_name, mi.main_indicator_name
+            FROM kpi_indicators i
+            LEFT JOIN departments d ON i.dept_id = d.id
+            LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
+            ORDER BY i.id
+        `);
+        // สร้าง map โดยใช้ table_process เป็น key
+        const hdcMap = new Map();
+        hdcRows.forEach(r => { if (r.table_process) hdcMap.set(r.table_process, r); });
+        const localMap = new Map();
+        localRows.forEach(r => { if (r.table_process) localMap.set(r.table_process, r); });
+
+        const items = [];
+        let match = 0, different = 0, missing_local = 0, missing_remote = 0;
+
+        // เทียบจาก HDC
+        for (const hdc of hdcRows) {
+            const tp = hdc.table_process;
+            const local = tp ? localMap.get(tp) : null;
+            if (!local) {
+                items.push({
+                    status: 'missing_local',
+                    hdc_report_id: hdc.report_id, hdc_name: hdc.report_name, hdc_dept: hdc.dept, hdc_main_yut: hdc.main_yut,
+                    report_code: hdc.report_code, table_process: tp, hdc_is_active: hdc.is_active,
+                    local_id: null, local_name: null
+                });
+                missing_local++;
+            } else {
+                // เปรียบเทียบชื่อ
+                const nameMatch = (hdc.report_name || '').trim() === (local.kpi_indicators_name || '').trim();
+                const status = nameMatch ? 'match' : 'different';
+                if (status === 'match') match++; else different++;
+                items.push({
+                    status,
+                    hdc_report_id: hdc.report_id, hdc_name: hdc.report_name, hdc_dept: hdc.dept, hdc_main_yut: hdc.main_yut,
+                    report_code: hdc.report_code, table_process: tp, hdc_is_active: hdc.is_active,
+                    local_id: local.id, local_name: local.kpi_indicators_name, local_dept: local.dept_name
+                });
+            }
+        }
+        // เทียบจาก Local ที่ไม่มีใน HDC
+        for (const local of localRows) {
+            if (local.table_process && !hdcMap.has(local.table_process)) {
+                items.push({
+                    status: 'missing_remote',
+                    hdc_report_id: null, hdc_name: null, hdc_dept: null, hdc_main_yut: null,
+                    report_code: null, table_process: local.table_process, hdc_is_active: null,
+                    local_id: local.id, local_name: local.kpi_indicators_name, local_dept: local.dept_name
+                });
+                missing_remote++;
+            }
+        }
+        res.json({
+            success: true,
+            hdc_count: hdcRows.length, local_count: localRows.length,
+            summary: { total: items.length, match, different, missing_local, missing_remote },
+            items
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// POST /report-compare/sync — Sync reports จาก HDC เข้า kpi_indicators (Local)
+apiRouter.post('/report-compare/sync', authenticateToken, isSuperAdmin, async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
+    const { hdc_report_ids } = req.body;
+    if (!Array.isArray(hdc_report_ids) || hdc_report_ids.length === 0) {
+        return res.status(400).json({ success: false, message: 'กรุณาเลือกรายการที่ต้องการ Sync' });
+    }
+    try {
+        const [hdcRows] = await remoteDb.query(
+            `SELECT report_id, report_name, dept, main_yut, report_code, table_process FROM reports WHERE report_id IN (?)`,
+            [hdc_report_ids]
+        );
+        let inserted = 0, updated = 0;
+        for (const hdc of hdcRows) {
+            if (!hdc.table_process) continue;
+            // ตรวจสอบว่ามีอยู่แล้วหรือไม่ (โดย table_process)
+            const [existing] = await db.query('SELECT id FROM kpi_indicators WHERE table_process = ?', [hdc.table_process]);
+            if (existing.length > 0) {
+                // อัปเดตชื่อ
+                await db.query('UPDATE kpi_indicators SET kpi_indicators_name = ? WHERE table_process = ?',
+                    [hdc.report_name, hdc.table_process]);
+                updated++;
+            } else {
+                // สร้างใหม่
+                await db.query(
+                    'INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_code) VALUES (?, ?, ?)',
+                    [hdc.report_name, hdc.table_process, hdc.report_code || null]
+                );
+                inserted++;
+            }
+        }
+        await db.query(
+            'INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+            [req.user.userId, 'SYNC_REPORTS', 'kpi_indicators',
+             JSON.stringify({ hdc_ids: hdc_report_ids, inserted, updated }), req.ip]
+        );
+        res.json({ success: true, message: `Sync สำเร็จ — เพิ่มใหม่ ${inserted} รายการ, อัปเดต ${updated} รายการ` });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
 
 // GET /db-compare — เปรียบเทียบ structure ตาราง table_process ระหว่าง local กับ hdc
 apiRouter.get('/db-compare', authenticateToken, isSuperAdmin, async (req, res) => {

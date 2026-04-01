@@ -17,6 +17,8 @@ export class HelpComponent {
     this.currentRole = this.authService.getUserRole();
   }
 
+  collapsedSections: { [key: string]: boolean } = {};
+
   sections = [
     { id: 'overview', icon: 'fa-home', label: 'ภาพรวมระบบ' },
     { id: 'register', icon: 'fa-user-plus', label: 'การลงทะเบียน' },
@@ -25,10 +27,20 @@ export class HelpComponent {
     { id: 'charts', icon: 'fa-chart-bar', label: 'กราฟและสถิติ' },
     { id: 'notifications', icon: 'fa-bell', label: 'แจ้งเตือน' },
     { id: 'users', icon: 'fa-users-cog', label: 'จัดการผู้ใช้งาน' },
+    { id: 'kpi-manager', icon: 'fa-layer-group', label: 'จัดการข้อมูล KPI' },
+    { id: 'maintenance', icon: 'fa-tools', label: 'Maintenance Mode' },
     { id: 'settings', icon: 'fa-sliders-h', label: 'ตั้งค่าระบบ' },
     { id: 'roles', icon: 'fa-shield-alt', label: 'สิทธิ์การใช้งาน' },
     { id: 'faq', icon: 'fa-question-circle', label: 'คำถามที่พบบ่อย' }
   ];
+
+  toggleCollapse(id: string) {
+    this.collapsedSections[id] = !this.collapsedSections[id];
+  }
+
+  isCollapsed(id: string): boolean {
+    return !!this.collapsedSections[id];
+  }
 
   scrollTo(id: string) {
     this.activeSection = id;

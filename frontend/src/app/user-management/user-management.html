@@ -26,10 +26,10 @@
     </div>
 
     <!-- ส่วนค้นหาและตัวกรอง -->
-    <div class="p-6 bg-gray-50 border-b border-gray-100 grid grid-cols-1 gap-4" [ngClass]="isAdmin ? 'md:grid-cols-5' : 'md:grid-cols-2'">
+    <div class="p-6 bg-gray-50 border-b border-gray-100 grid grid-cols-1 gap-4" [ngClass]="isAdmin ? 'md:grid-cols-6' : 'md:grid-cols-2'">
       <div class="relative mt-2">
         <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">ค้นหา</label>
-        <input type="text" [(ngModel)]="searchTerm" (input)="applyFilters()" placeholder="ชื่อผู้ใช้ / เลข ปชช. / หน่วยงาน..."
+        <input type="text" [(ngModel)]="searchTerm" (input)="applyFilters()" placeholder="Username / ชื่อ-นามสกุล / Role / หน่วยบริการ / เบอร์โทร / Email..."
                class="w-full pl-4 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm hover:border-green-400 transition-colors">
       </div>
 
@@ -57,6 +57,14 @@
       </div>
 
       <div *ngIf="isAdmin" class="relative mt-2">
+        <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">หน่วยบริการ</label>
+        <select [(ngModel)]="selectedHospcode" (change)="applyFilters()" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm hover:border-green-400 transition-colors">
+          <option value="">ทั้งหมด</option>
+          <option *ngFor="let hos of hospitals" [value]="hos.hoscode">{{ hos.hosname }} ({{ hos.hoscode }})</option>
+        </select>
+      </div>
+
+      <div *ngIf="isAdmin" class="relative mt-2">
         <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">สถานะบัญชี</label>
         <select [(ngModel)]="selectedStatus" (change)="applyFilters()" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm hover:border-green-400 transition-colors">
           <option value="">ทั้งหมด</option>
@@ -67,7 +75,7 @@
       </div>
 
       <div class="flex items-end">
-        <button (click)="searchTerm=''; selectedRole=''; selectedDept=''; selectedStatus=''; applyFilters()" class="w-full py-2.5 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl text-sm transition-colors shadow-md"><i class="fas fa-times-circle mr-2"></i> ล้างตัวกรอง</button>
+        <button (click)="searchTerm=''; selectedRole=''; selectedDept=''; selectedHospcode=''; selectedStatus=''; applyFilters()" class="w-full py-2.5 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl text-sm transition-colors shadow-md"><i class="fas fa-times-circle mr-2"></i> ล้างตัวกรอง</button>
       </div>
     </div>
 
@@ -146,11 +154,11 @@
     </div>
 
     <!-- === Desktop Table View === -->
-    <div class="overflow-x-auto hidden md:block">
+    <div class="hidden md:block overflow-auto max-h-[65vh]">
       <table class="w-full text-left border-collapse">
-        <thead class="bg-gradient-to-r from-green-700 to-green-600 text-white">
+        <thead class="bg-gradient-to-r from-green-700 to-green-600 text-white sticky top-0 z-10">
           <tr>
-            <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider rounded-tl-xl">Username</th>
+            <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider">Username</th>
             <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider">ชื่อ-นามสกุล</th>
             <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider">เลข ปชช.</th>
             <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider">สิทธิ์ (Role)</th>
@@ -159,8 +167,9 @@
             <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider">เบอร์โทร</th>
             <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider">Email</th>
             <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider">สถานะ</th>
+            <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider">ผู้อนุมัติ</th>
             <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider text-center">ใช้งาน</th>
-            <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider text-right rounded-tr-xl">จัดการ</th>
+            <th class="px-4 py-3 text-xs font-bold uppercase tracking-wider text-right">จัดการ</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
@@ -207,6 +216,13 @@
                     class="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700">
                 <i class="fas fa-ban"></i> ถูกปฏิเสธ
               </span>
+            </td>
+            <!-- ผู้อนุมัติ -->
+            <td class="px-4 py-3 text-gray-600 text-xs">
+              <span *ngIf="user.approved_by_name">{{ user.approved_by_name }} {{ user.approved_by_lastname }}</span>
+              <span *ngIf="!user.approved_by_name && user.is_approved === 1" class="text-gray-400">-</span>
+              <span *ngIf="user.is_approved === 0" class="text-yellow-500 text-[10px]">รอการอนุมัติ</span>
+              <span *ngIf="user.is_approved === -1" class="text-red-400 text-[10px]">ถูกปฏิเสธ</span>
             </td>
             <!-- Toggle Active Switch -->
             <td class="px-4 py-3 text-center">
@@ -258,19 +274,9 @@
       </table>
     </div>
 
-    <!-- Pagination -->
-    <div class="p-4 bg-white border-t border-gray-100 flex justify-between items-center">
-        <span class="text-xs text-gray-500 font-medium">แสดงหน้า {{currentPage}} จาก {{totalPages}} (ทั้งหมด {{filteredUsers.length}} รายการ)</span>
-        <div class="flex gap-2">
-          <button (click)="setPage(currentPage - 1)" [disabled]="currentPage === 1"
-                  class="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-bold hover:bg-gray-50 disabled:opacity-50">
-            ก่อนหน้า
-          </button>
-          <button (click)="setPage(currentPage + 1)" [disabled]="currentPage === totalPages"
-                  class="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-bold hover:bg-gray-50 disabled:opacity-50">
-            ถัดไป
-          </button>
-        </div>
+    <!-- Summary -->
+    <div class="p-4 bg-white border-t border-gray-100">
+        <span class="text-xs text-gray-500 font-medium">ทั้งหมด {{ filteredUsers.length }} รายการ</span>
     </div>
   </div>
 </div>
@@ -284,7 +290,12 @@
       <!-- Username -->
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">Username <span class="text-red-500">*</span></label>
-        <input type="text" [(ngModel)]="currentUser.username" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors" placeholder="กรอกชื่อผู้ใช้งาน">
+        <input type="text" [(ngModel)]="currentUser.username" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors"
+               [ngClass]="currentUser.username && validateUsername(currentUser.username) ? 'border-red-400' : 'border-gray-300'"
+               placeholder="ขั้นต่ำ 6 ตัวอักษร (a-z, A-Z, 0-9, อักขระพิเศษ)">
+        <p *ngIf="currentUser.username && validateUsername(currentUser.username)" class="text-xs text-red-500 mt-1">
+          <i class="fas fa-exclamation-circle mr-1"></i>{{ validateUsername(currentUser.username) }}
+        </p>
       </div>
 
       <!-- Password -->
@@ -302,10 +313,23 @@
             <i class="fas" [ngClass]="showPassword ? 'fa-eye-slash' : 'fa-eye'"></i>
           </button>
         </div>
-        <p class="text-xs text-gray-400 mt-1">ขั้นต่ำ 6 ตัวอักษร (a-z, A-Z, 0-9, อักขระพิเศษ)</p>
+        <p class="text-xs text-gray-400 mt-1">ต้องมี: พิมพ์เล็ก (a-z), พิมพ์ใหญ่ (A-Z), ตัวเลข (0-9), อักขระพิเศษ ขั้นต่ำ 6 ตัว</p>
         <p *ngIf="currentUser.password && validatePassword(currentUser.password)" class="text-xs text-red-500 mt-1">
           <i class="fas fa-exclamation-circle mr-1"></i>{{ validatePassword(currentUser.password) }}
         </p>
+        <!-- Password Strength Bar -->
+        <div *ngIf="currentUser.password" class="mt-2">
+          <div class="flex items-center gap-2">
+            <div class="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+              <div class="h-full rounded-full transition-all duration-300"
+                   [ngClass]="getPasswordStrength(currentUser.password).color"
+                   [style.width.%]="getPasswordStrength(currentUser.password).level * 16.7"></div>
+            </div>
+            <span class="text-xs font-bold" [ngClass]="getPasswordStrength(currentUser.password).color === 'bg-red-500' ? 'text-red-500' : getPasswordStrength(currentUser.password).color === 'bg-yellow-500' ? 'text-yellow-600' : 'text-green-600'">
+              {{ getPasswordStrength(currentUser.password).text }}
+            </span>
+          </div>
+        </div>
       </div>
 
       <!-- Confirm Password (แสดงเมื่อสร้างใหม่ หรือ แก้ไขที่กรอก password) -->
@@ -391,13 +415,19 @@
 
       <!-- เลขบัตรประชาชน -->
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">เลขบัตรประชาชน 13 หลัก</label>
-        <input type="text" [(ngModel)]="currentUser.cid"
-               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors font-mono"
-               placeholder="กรอกเลข 13 หลัก (ไม่มีขีด)" maxlength="13"
-               (input)="currentUser.cid = $any($event.target).value.replace(/\D/g, '').substring(0, 13)">
-        <p *ngIf="currentUser.cid && currentUser.cid.length !== 13" class="text-xs text-red-500 mt-1">
-          <i class="fas fa-exclamation-circle mr-1"></i>ต้องกรอกให้ครบ 13 หลัก (ขณะนี้ {{ currentUser.cid.length }} หลัก)
+        <label class="block text-sm font-medium text-gray-700 mb-1">เลขบัตรประชาชน 13 หลัก <span class="text-red-500">*</span></label>
+        <input type="text" [value]="formatNationalIdDisplay(currentUser.cid)" (input)="onNationalIdInput($event)"
+               class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors font-mono"
+               [ngClass]="currentUser.cid && currentUser.cid.length === 13 && !validateNationalId(currentUser.cid) ? 'border-red-400' : 'border-gray-300'"
+               placeholder="X-XXXX-XXXXX-XX-X" maxlength="17">
+        <p *ngIf="currentUser.cid && currentUser.cid.length < 13" class="text-xs text-amber-500 mt-1">
+          <i class="fas fa-info-circle mr-1"></i>กรอกแล้ว {{ currentUser.cid.length }}/13 หลัก
+        </p>
+        <p *ngIf="currentUser.cid && currentUser.cid.length === 13 && !validateNationalId(currentUser.cid)" class="text-xs text-red-500 mt-1">
+          <i class="fas fa-times-circle mr-1"></i>เลขบัตรประชาชนไม่ถูกต้อง (Check Digit ไม่ผ่าน)
+        </p>
+        <p *ngIf="currentUser.cid && currentUser.cid.length === 13 && validateNationalId(currentUser.cid)" class="text-xs text-green-600 mt-1">
+          <i class="fas fa-check-circle mr-1"></i>เลขบัตรประชาชนถูกต้อง
         </p>
       </div>
 
@@ -418,7 +448,7 @@
 
       <!-- Department (เฉพาะ Admin เท่านั้นที่เปลี่ยนได้) -->
       <div *ngIf="isAdmin">
-        <label class="block text-sm font-medium text-gray-700 mb-1">สังกัดหน่วยงาน</label>
+        <label class="block text-sm font-medium text-gray-700 mb-1">สังกัดหน่วยงาน <span class="text-red-500">*</span></label>
         <select [(ngModel)]="currentUser.dept_id" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
           <option value="">-- ไม่ระบุ --</option>
           <option *ngFor="let dept of departments" [value]="dept.id">{{ dept.dept_name }}</option>

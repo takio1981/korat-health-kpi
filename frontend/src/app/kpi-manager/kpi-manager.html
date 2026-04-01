@@ -29,6 +29,12 @@
       <span class="hidden sm:inline">Export ข้อมูล</span>
       <span class="sm:hidden">Export</span>
     </button>
+    <button (click)="activeTab = 'report-compare'" class="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all"
+            [ngClass]="activeTab === 'report-compare' ? 'bg-white text-teal-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+      <i class="fas fa-exchange-alt"></i>
+      <span class="hidden sm:inline">Report Compare</span>
+      <span class="sm:hidden">Reports</span>
+    </button>
   </div>
 
   <!-- Tab Content (ใช้ hidden แทน ngSwitch เพื่อไม่ destroy component — ข้อมูลจะค้างอยู่จนกว่าจะเปลี่ยนหน้า) -->
@@ -40,6 +46,9 @@
   </div>
   <div [hidden]="activeTab !== 'export'">
     <app-export-kpi></app-export-kpi>
+  </div>
+  <div [hidden]="activeTab !== 'report-compare'">
+    <app-report-compare></app-report-compare>
   </div>
 
 </div>

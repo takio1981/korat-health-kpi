@@ -23,6 +23,7 @@ export class UserManagementComponent implements OnInit {
   searchTerm: string = '';
   selectedRole: string = '';
   selectedDept: string = '';
+  selectedHospcode: string = '';
 
   currentPage: number = 1;
   pageSize: number = 10;
@@ -118,20 +119,26 @@ export class UserManagementComponent implements OnInit {
   applyFilters() {
     this.filteredUsers = this.users.filter(user => {
       const search = this.searchTerm.toLowerCase();
-      const matchSearch = (user.username && user.username.toLowerCase().includes(search)) ||
+      const fullname = ((user.firstname || '') + ' ' + (user.lastname || '')).toLowerCase();
+      const matchSearch = !search ||
+                          (user.username && user.username.toLowerCase().includes(search)) ||
+                          fullname.includes(search) ||
+                          (user.role && user.role.toLowerCase().includes(search)) ||
                           (user.dept_name && user.dept_name.toLowerCase().includes(search)) ||
-                          (user.firstname && user.firstname.toLowerCase().includes(search)) ||
-                          (user.lastname && user.lastname.toLowerCase().includes(search)) ||
+                          (user.hosname && user.hosname.toLowerCase().includes(search)) ||
+                          (user.hospcode && user.hospcode.includes(search)) ||
+                          (user.phone && user.phone.includes(search)) ||
                           (user.email && user.email.toLowerCase().includes(search));
 
       const matchRole = this.selectedRole === '' || user.role === this.selectedRole;
       const matchDept = this.selectedDept === '' || (user.dept_id && user.dept_id.toString() === this.selectedDept);
+      const matchHosp = this.selectedHospcode === '' || user.hospcode === this.selectedHospcode;
       const matchStatus = this.selectedStatus === '' ||
                           (this.selectedStatus === 'pending' && user.is_approved === 0) ||
                           (this.selectedStatus === 'approved' && user.is_approved === 1) ||
                           (this.selectedStatus === 'rejected' && user.is_approved === -1);
 
-      return matchSearch && matchRole && matchDept && matchStatus;
+      return matchSearch && matchRole && matchDept && matchHosp && matchStatus;
     });
 
     this.totalPages = Math.ceil(this.filteredUsers.length / this.pageSize);
@@ -139,8 +146,7 @@ export class UserManagementComponent implements OnInit {
   }
 
   get pagedUsers() {
-    const startIndex = (this.currentPage - 1) * this.pageSize;
-    return this.filteredUsers.slice(startIndex, startIndex + this.pageSize);
+    return this.filteredUsers;
   }
 
   setPage(page: number) {
@@ -182,6 +188,57 @@ export class UserManagementComponent implements OnInit {
     this.showModal = false;
   }
 
+  // === National ID formatting & validation ===
+  onNationalIdInput(event: any) {
+    let value = event.target.value.replace(/\D/g, '');
+    if (value.length > 13) value = value.substring(0, 13);
+    this.currentUser.cid = value;
+    event.target.value = this.formatNationalIdDisplay(value);
+  }
+
+  formatNationalIdDisplay(id: string): string {
+    if (!id) return '';
+    const d = id.replace(/\D/g, '');
+    if (d.length <= 1) return d;
+    if (d.length <= 5) return d.substring(0, 1) + '-' + d.substring(1);
+    if (d.length <= 10) return d.substring(0, 1) + '-' + d.substring(1, 5) + '-' + d.substring(5);
+    if (d.length <= 12) return d.substring(0, 1) + '-' + d.substring(1, 5) + '-' + d.substring(5, 10) + '-' + d.substring(10);
+    return d.substring(0, 1) + '-' + d.substring(1, 5) + '-' + d.substring(5, 10) + '-' + d.substring(10, 12) + '-' + d.substring(12);
+  }
+
+  validateNationalId(id: string): boolean {
+    if (!/^\d{13}$/.test(id)) return false;
+    const digits = id.split('').map(Number);
+    let sum = 0;
+    for (let i = 0; i < 12; i++) { sum += digits[i] * (13 - i); }
+    return (11 - (sum % 11)) % 10 === digits[12];
+  }
+
+  // === Username validation ===
+  validateUsername(name: string): string | null {
+    if (!name) return null;
+    if (name.length < 6) return 'ชื่อผู้ใช้งานต้องมีอย่างน้อย 6 ตัวอักษร';
+    if (!/^[a-zA-Z0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]+$/.test(name)) {
+      return 'ชื่อผู้ใช้งานต้องเป็น a-z, A-Z, 0-9 หรืออักขระพิเศษเท่านั้น';
+    }
+    return null;
+  }
+
+  // === Password strength ===
+  getPasswordStrength(pw: string): { level: number; text: string; color: string } {
+    if (!pw) return { level: 0, text: '', color: '' };
+    let score = 0;
+    if (pw.length >= 6) score++;
+    if (/[a-z]/.test(pw)) score++;
+    if (/[A-Z]/.test(pw)) score++;
+    if (/[0-9]/.test(pw)) score++;
+    if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(pw)) score++;
+    if (pw.length >= 10) score++;
+    if (score <= 2) return { level: score, text: 'อ่อน', color: 'bg-red-500' };
+    if (score <= 4) return { level: score, text: 'ปานกลาง', color: 'bg-yellow-500' };
+    return { level: score, text: 'แข็งแรง', color: 'bg-green-500' };
+  }
+
   // === Phone formatting ===
   onPhoneInput(event: any) {
     let value = event.target.value.replace(/\D/g, '');
@@ -198,12 +255,16 @@ export class UserManagementComponent implements OnInit {
     return digits.substring(0, 2) + '-' + digits.substring(2, 6) + '-' + digits.substring(6, 10);
   }
 
-  // === Password validation ===
+  // === Password validation (เหมือน register) ===
   validatePassword(pw: string): string | null {
     if (!pw) return null;
     if (pw.length < 6) return 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
+    if (!/[a-z]/.test(pw)) return 'รหัสผ่านต้องมีตัวอักษรพิมพ์เล็ก (a-z) อย่างน้อย 1 ตัว';
+    if (!/[A-Z]/.test(pw)) return 'รหัสผ่านต้องมีตัวอักษรพิมพ์ใหญ่ (A-Z) อย่างน้อย 1 ตัว';
+    if (!/[0-9]/.test(pw)) return 'รหัสผ่านต้องมีตัวเลข (0-9) อย่างน้อย 1 ตัว';
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(pw)) return 'รหัสผ่านต้องมีอักขระพิเศษอย่างน้อย 1 ตัว';
     if (!/^[a-zA-Z0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]+$/.test(pw)) {
-      return 'รหัสผ่านต้องเป็น a-z, A-Z, 0-9 หรืออักขระพิเศษเท่านั้น';
+      return 'รหัสผ่านมีอักขระที่ไม่อนุญาต';
     }
     return null;
   }
@@ -221,8 +282,30 @@ export class UserManagementComponent implements OnInit {
         !this.currentUser.firstname ||
         !this.currentUser.lastname ||
         !this.currentUser.phone ||
+        !this.currentUser.hospcode ||
+        !this.currentUser.cid ||
+        !this.currentUser.dept_id ||
         !this.currentUser.role) {
-      Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลให้ครบถ้วนทุกช่อง', 'warning');
+      Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลให้ครบถ้วนทุกช่อง (รวมเลขบัตรประชาชน, หน่วยบริการ, หน่วยงาน)', 'warning');
+      return;
+    }
+
+    // ตรวจสอบ username (เหมือน register)
+    const usernameError = this.validateUsername(this.currentUser.username);
+    if (usernameError) {
+      Swal.fire('แจ้งเตือน', usernameError, 'warning');
+      return;
+    }
+
+    // ตรวจสอบเลขบัตรประชาชน (Check Digit Modulus 11)
+    if (!this.validateNationalId(this.currentUser.cid)) {
+      Swal.fire('แจ้งเตือน', 'เลขบัตรประชาชนไม่ถูกต้อง (ตรวจสอบ 13 หลักและ Check Digit แล้ว)', 'warning');
+      return;
+    }
+
+    // ตรวจสอบ email (ถ้ากรอก)
+    if (this.currentUser.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.currentUser.email)) {
+      Swal.fire('แจ้งเตือน', 'รูปแบบอีเมลไม่ถูกต้อง', 'warning');
       return;
     }
 

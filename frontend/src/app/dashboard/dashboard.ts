@@ -264,8 +264,7 @@ export class DashboardComponent implements OnInit {
   }
 
   get pagedData() {
-    const startIndex = (this.currentPage - 1) * this.pageSize;
-    const pageItems = this.filteredData.slice(startIndex, startIndex + this.pageSize);
+    const pageItems = [...this.filteredData];
     for (let i = 0; i < pageItems.length; i++) {
       if (i === 0 || pageItems[i].main_indicator_name !== pageItems[i - 1].main_indicator_name) {
         let span = 1;

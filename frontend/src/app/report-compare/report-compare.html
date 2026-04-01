@@ -1,0 +1,144 @@
+<div>
+  <!-- Run Compare Button -->
+  <div class="flex justify-end mb-4">
+    <button (click)="runCompare()" [disabled]="isLoading"
+            class="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-sm shadow-md transition-all disabled:opacity-50 flex items-center gap-2">
+      <i class="fas" [ngClass]="isLoading ? 'fa-spinner fa-spin' : 'fa-exchange-alt'"></i>
+      {{ isLoading ? 'กำลังเปรียบเทียบ...' : 'เปรียบเทียบ Reports ↔ KPI' }}
+    </button>
+  </div>
+
+  <!-- Loading -->
+  <div *ngIf="isLoading" class="flex items-center justify-center py-20">
+    <div class="text-center">
+      <div class="animate-spin rounded-full h-12 w-12 border-4 border-teal-200 border-t-teal-600 mx-auto mb-3"></div>
+      <p class="text-gray-500 text-sm font-medium">กำลังเชื่อมต่อ HDC และเปรียบเทียบ...</p>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div *ngIf="compareResult && !isLoading">
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-5">
+      <div class="bg-white rounded-xl border border-gray-200 p-3 text-center cursor-pointer hover:shadow-md transition-all" (click)="filterStatus = ''">
+        <p class="text-2xl font-bold text-gray-800">{{ compareResult.summary.total }}</p>
+        <p class="text-[10px] text-gray-500 font-bold">ทั้งหมด</p>
+      </div>
+      <div class="bg-green-50 rounded-xl border border-green-200 p-3 text-center cursor-pointer hover:shadow-md transition-all" (click)="filterStatus = filterStatus === 'match' ? '' : 'match'">
+        <p class="text-2xl font-bold text-green-600">{{ compareResult.summary.match }}</p>
+        <p class="text-[10px] text-green-700 font-bold"><i class="fas fa-check-circle mr-1"></i>ตรงกัน</p>
+      </div>
+      <div class="bg-amber-50 rounded-xl border border-amber-200 p-3 text-center cursor-pointer hover:shadow-md transition-all" (click)="filterStatus = filterStatus === 'different' ? '' : 'different'">
+        <p class="text-2xl font-bold text-amber-600">{{ compareResult.summary.different }}</p>
+        <p class="text-[10px] text-amber-700 font-bold"><i class="fas fa-exclamation-triangle mr-1"></i>ต่างกัน</p>
+      </div>
+      <div class="bg-blue-50 rounded-xl border border-blue-200 p-3 text-center cursor-pointer hover:shadow-md transition-all" (click)="filterStatus = filterStatus === 'missing_local' ? '' : 'missing_local'">
+        <p class="text-2xl font-bold text-blue-600">{{ compareResult.summary.missing_local }}</p>
+        <p class="text-[10px] text-blue-700 font-bold"><i class="fas fa-arrow-down mr-1"></i>ไม่มีใน Local</p>
+      </div>
+      <div class="bg-purple-50 rounded-xl border border-purple-200 p-3 text-center cursor-pointer hover:shadow-md transition-all" (click)="filterStatus = filterStatus === 'missing_remote' ? '' : 'missing_remote'">
+        <p class="text-2xl font-bold text-purple-600">{{ compareResult.summary.missing_remote }}</p>
+        <p class="text-[10px] text-purple-700 font-bold"><i class="fas fa-arrow-up mr-1"></i>ไม่มีใน HDC</p>
+      </div>
+    </div>
+
+    <!-- DB Info -->
+    <div class="flex flex-wrap items-center gap-3 mb-4 text-xs">
+      <span class="bg-green-100 text-green-800 px-3 py-1.5 rounded-full font-bold"><i class="fas fa-server mr-1"></i>Local: kpi_indicators ({{ compareResult.local_count }})</span>
+      <i class="fas fa-exchange-alt text-gray-400"></i>
+      <span class="bg-blue-100 text-blue-800 px-3 py-1.5 rounded-full font-bold"><i class="fas fa-cloud mr-1"></i>HDC: reports ({{ compareResult.hdc_count }})</span>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="bg-white rounded-xl border border-gray-200 p-3 mb-4 flex flex-wrap items-center gap-2">
+      <input type="text" [(ngModel)]="searchTerm" placeholder="ค้นหาชื่อตัวชี้วัด / table_process / report_code..."
+             class="px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-teal-400 outline-none flex-1 min-w-[200px]">
+      <div class="flex gap-1">
+        <button (click)="selectAll()" class="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-bold text-gray-600"><i class="fas fa-check-double mr-1"></i>เลือกทั้งหมด</button>
+        <button (click)="selectNone()" class="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-bold text-gray-600"><i class="fas fa-times mr-1"></i>ยกเลิก</button>
+        <button (click)="selectByStatus('missing_local')" class="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 rounded-lg text-xs font-bold text-blue-700"><i class="fas fa-arrow-down mr-1"></i>Missing</button>
+        <button (click)="selectByStatus('different')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 rounded-lg text-xs font-bold text-amber-700"><i class="fas fa-exclamation-triangle mr-1"></i>Different</button>
+      </div>
+      <span class="text-xs text-gray-500 ml-auto">เลือก: <b>{{ selectedItems.size }}</b></span>
+    </div>
+
+    <!-- Sync Button -->
+    <div *ngIf="selectedItems.size > 0" class="flex flex-wrap gap-2 mb-4">
+      <button (click)="syncSelected()" [disabled]="isSyncing"
+              class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-sm shadow-md transition-all disabled:opacity-50">
+        <i class="fas fa-sync mr-1"></i>Sync เข้า Local ({{ selectedItems.size }})
+      </button>
+    </div>
+
+    <!-- Table -->
+    <div class="overflow-auto max-h-[55vh] rounded-xl border border-gray-200">
+      <table class="w-full text-xs">
+        <thead class="bg-gradient-to-r from-teal-700 to-teal-600 text-white sticky top-0 z-10">
+          <tr>
+            <th class="px-3 py-3 w-8"><input type="checkbox" (change)="$any($event.target).checked ? selectAll() : selectNone()" class="rounded"></th>
+            <th class="px-3 py-3">สถานะ</th>
+            <th class="px-3 py-3">HDC report_name</th>
+            <th class="px-3 py-3">Local kpi_indicators_name</th>
+            <th class="px-3 py-3">table_process</th>
+            <th class="px-3 py-3">report_code</th>
+            <th class="px-3 py-3">หน่วยงาน (HDC dept)</th>
+            <th class="px-3 py-3">ยุทธศาสตร์ (HDC main_yut)</th>
+            <th class="px-3 py-3 text-center">HDC active</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100 bg-white">
+          <tr *ngFor="let item of filteredItems"
+              class="hover:bg-teal-50/30 transition-colors"
+              [ngClass]="selectedItems.has(item.hdc_report_id || item.local_id) ? 'bg-teal-50' : ''">
+            <td class="px-3 py-2.5">
+              <input type="checkbox" [checked]="selectedItems.has(item.hdc_report_id || item.local_id)"
+                     (change)="toggleSelect(item.hdc_report_id || item.local_id)" class="rounded text-teal-600">
+            </td>
+            <td class="px-3 py-2.5">
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold" [ngClass]="getStatusBadge(item.status).bg">
+                <i class="fas mr-1" [ngClass]="getStatusBadge(item.status).icon"></i>{{ getStatusBadge(item.status).text }}
+              </span>
+            </td>
+            <td class="px-3 py-2.5 whitespace-normal break-words max-w-[250px]">
+              <span class="text-blue-700 font-medium">{{ item.hdc_name || '-' }}</span>
+            </td>
+            <td class="px-3 py-2.5 whitespace-normal break-words max-w-[250px]">
+              <span class="text-green-700 font-medium">{{ item.local_name || '-' }}</span>
+            </td>
+            <td class="px-3 py-2.5 font-mono text-gray-600">{{ item.table_process || '-' }}</td>
+            <td class="px-3 py-2.5 font-mono text-gray-600">{{ item.report_code || '-' }}</td>
+            <td class="px-3 py-2.5 text-gray-600">{{ item.hdc_dept || '-' }}</td>
+            <td class="px-3 py-2.5 text-gray-600">{{ item.hdc_main_yut || '-' }}</td>
+            <td class="px-3 py-2.5 text-center">
+              <span *ngIf="item.hdc_is_active === 1" class="text-green-500"><i class="fas fa-check-circle"></i></span>
+              <span *ngIf="item.hdc_is_active === 0" class="text-gray-400"><i class="fas fa-minus-circle"></i></span>
+              <span *ngIf="item.hdc_is_active == null">-</span>
+            </td>
+          </tr>
+          <tr *ngIf="filteredItems.length === 0">
+            <td colspan="9" class="text-center py-10 text-gray-400">
+              <i class="fas fa-search text-3xl mb-2 block"></i>
+              ไม่พบรายการตามเงื่อนไข
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="mt-2 text-xs text-gray-400">
+      <i class="fas fa-info-circle mr-1"></i>เปรียบเทียบโดยใช้ <b>table_process</b> เป็น key หลัก — HDC query: <code class="bg-gray-100 px-1 rounded">reports WHERE data_source='excel' AND is_active=1 AND LENGTH(report_code)=LENGTH(table_process)</code>
+    </div>
+  </div>
+
+  <!-- Not started -->
+  <div *ngIf="!compareResult && !isLoading" class="text-center py-20">
+    <div class="inline-flex items-center justify-center w-20 h-20 bg-teal-100 rounded-2xl mb-4">
+      <i class="fas fa-exchange-alt text-teal-500 text-3xl"></i>
+    </div>
+    <h3 class="text-lg font-bold text-gray-700 mb-2">เปรียบเทียบ Reports (HDC) ↔ ตัวชี้วัด (Local)</h3>
+    <p class="text-sm text-gray-400 mb-6 max-w-md mx-auto">ตรวจสอบว่า reports บน HDC กับ kpi_indicators ในระบบ Local มีข้อมูลตรงกันหรือไม่</p>
+    <button (click)="runCompare()" class="px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-lg transition-all">
+      <i class="fas fa-exchange-alt mr-2"></i>เริ่มเปรียบเทียบ
+    </button>
+  </div>
+</div>

@@ -111,6 +111,12 @@
           </div>
         </div>
         
+        <!-- คำแนะนำลดภาระระบบ -->
+        <div class="px-6 py-2 bg-amber-50 border-b border-amber-200 flex items-center gap-2 text-xs text-amber-700">
+          <i class="fas fa-lightbulb text-amber-500"></i>
+          <span><b>คำแนะนำ:</b> กรุณาเลือก <b>หน่วยงาน</b>, <b>หน่วยบริการ</b> หรือ <b>ตัวชี้วัด</b> ก่อนดูข้อมูล เพื่อลดภาระการประมวลผลของระบบ</span>
+        </div>
+
         <div class="px-6 py-2 flex items-center gap-4 bg-white border-b border-gray-100">
           <div class="relative flex-1">
             <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
@@ -574,18 +580,8 @@
           </table>
         </div>
 
-          <div class="p-4 bg-white border-t border-gray-100 flex justify-between items-center rounded-b-2xl shadow-sm">
-            <span class="text-xs text-gray-500 font-medium">แสดงหน้า {{currentPage}} จาก {{totalPages}}</span>
-            <div class="flex gap-2">
-              <button (click)="setPage(currentPage - 1)" [disabled]="currentPage === 1" 
-                      class="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-bold hover:bg-gray-50 disabled:opacity-50">
-                ก่อนหน้า
-              </button>
-              <button (click)="setPage(currentPage + 1)" [disabled]="currentPage === totalPages" 
-                      class="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-bold hover:bg-gray-50 disabled:opacity-50">
-                ถัดไป
-              </button>
-                      </div>
+          <div class="p-4 bg-white border-t border-gray-100 rounded-b-2xl shadow-sm">
+            <span class="text-xs text-gray-500 font-medium">ทั้งหมด {{ filteredData.length }} ตัวชี้วัด</span>
                 </div>
             </ng-container>
 

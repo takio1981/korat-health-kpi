@@ -6,12 +6,13 @@ import { AuthService } from '../services/auth';
 import { DbCompareComponent } from '../db-compare/db-compare';
 import { FormBuilderComponent } from '../form-builder/form-builder';
 import { ExportKpiComponent } from '../export-kpi/export-kpi';
+import { ReportCompareComponent } from '../report-compare/report-compare';
 import Swal from 'sweetalert2';
 
 @Component({
   selector: 'app-kpi-manager',
   standalone: true,
-  imports: [CommonModule, FormsModule, DbCompareComponent, FormBuilderComponent, ExportKpiComponent],
+  imports: [CommonModule, FormsModule, DbCompareComponent, FormBuilderComponent, ExportKpiComponent, ReportCompareComponent],
   templateUrl: './kpi-manager.html'
 })
 export class KpiManagerComponent implements OnInit {
@@ -19,7 +20,7 @@ export class KpiManagerComponent implements OnInit {
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
 
-  activeTab: 'db-compare' | 'form-builder' | 'export' = 'db-compare';
+  activeTab: 'db-compare' | 'form-builder' | 'export' | 'report-compare' = 'db-compare';
 
   // สำหรับส่ง columns จาก DB Compare → Form Builder
   hdcColumnsForForm: any[] = [];

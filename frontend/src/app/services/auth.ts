@@ -310,6 +310,17 @@ export class AuthService {
     return this.http.post(`${this.apiUrl}/db-compare/sync-data`, { tables }, { headers });
   }
 
+  reportCompare(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/report-compare`, { headers });
+  }
+  reportCompareSync(hdc_report_ids: number[]): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/report-compare/sync`, { hdc_report_ids }, { headers });
+  }
+
   testTelegram(token: string, chatId: string): Observable<any> {
     const authToken = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${authToken}` });

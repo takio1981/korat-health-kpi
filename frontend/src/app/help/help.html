@@ -340,56 +340,7 @@
         </div>
       </section>
 
-      <!-- ==================== 7.5 สร้างแบบฟอร์ม + Export ==================== -->
-      <section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <div class="flex items-center gap-3 mb-4">
-          <div class="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center"><i class="fas fa-wpforms text-purple-600"></i></div>
-          <div>
-            <h2 class="text-xl font-bold text-gray-800">สร้างแบบฟอร์ม KPI + Export</h2>
-            <p class="text-xs text-gray-400">super_admin เท่านั้น</p>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <!-- Form Builder -->
-          <div class="border border-purple-200 rounded-xl p-4 bg-purple-50/30">
-            <h4 class="font-bold text-purple-800 text-sm mb-2"><i class="fas fa-wpforms mr-2"></i>สร้างแบบฟอร์ม</h4>
-            <ol class="list-decimal list-inside text-xs text-gray-600 space-y-1">
-              <li>เลือกตัวชี้วัด</li>
-              <li>กำหนดชื่อฟอร์ม + คำอธิบาย</li>
-              <li>เพิ่มฟิลด์ (text, number, date, select, textarea, checkbox)</li>
-              <li>กำหนดฟิลด์ที่ sync ไปยังผลงาน</li>
-              <li>บันทึก → ระบบสร้างตาราง <code class="bg-purple-100 px-1 rounded text-purple-700">form_ชื่อตาราง</code></li>
-            </ol>
-            <div class="mt-3 bg-purple-100 rounded-lg p-2 text-xs text-purple-700">
-              <i class="fas fa-info-circle mr-1"></i>ฟอร์มจะแสดงเป็นไอคอน 📋 ในตาราง Dashboard เดือนที่คีย์แล้วจะไม่แสดงซ้ำ
-            </div>
-          </div>
-
-          <!-- Export -->
-          <div class="border border-teal-200 rounded-xl p-4 bg-teal-50/30">
-            <h4 class="font-bold text-teal-800 text-sm mb-2"><i class="fas fa-file-export mr-2"></i>Export ข้อมูล KPI</h4>
-            <ol class="list-decimal list-inside text-xs text-gray-600 space-y-1">
-              <li>เลือกปีงบประมาณ + ตัวชี้วัด</li>
-              <li>กดตรวจสอบ → เปรียบเทียบข้อมูล</li>
-              <li>กดส่งออก → สร้างตาราง <code class="bg-teal-100 px-1 rounded text-teal-700">ชื่อตาราง</code></li>
-            </ol>
-            <div class="mt-3 bg-teal-100 rounded-lg p-2 text-xs text-teal-700">
-              <p><i class="fas fa-table mr-1"></i><b>ไม่มีฟอร์ม:</b> hospcode, byear, target, result, m10-m09</p>
-              <p class="mt-1"><i class="fas fa-clipboard-list mr-1"></i><b>มีฟอร์ม:</b> hospcode, byear, target, result + ฟิลด์จากฟอร์ม (ไม่มีเดือน)</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- ตาราง DB -->
-        <div class="mt-4 bg-gray-50 rounded-xl p-3">
-          <h4 class="text-xs font-bold text-gray-600 mb-2"><i class="fas fa-database mr-1"></i>การแบ่งชื่อตารางในฐานข้อมูล</h4>
-          <div class="grid grid-cols-2 gap-2 text-xs">
-            <div class="bg-purple-50 border border-purple-200 rounded-lg p-2"><b>ตารางฟอร์ม:</b> <code>form_kpi_tab_001</code><br><span class="text-gray-500">เก็บข้อมูลรายเดือนจากแบบฟอร์ม</span></div>
-            <div class="bg-teal-50 border border-teal-200 rounded-lg p-2"><b>ตาราง Export:</b> <code>kpi_tab_001</code><br><span class="text-gray-500">สรุปรายปีต่อ hospcode</span></div>
-          </div>
-        </div>
-      </section>
+      <!-- Note: สร้างแบบฟอร์ม + Export ย้ายไปอยู่ในหัวข้อ 10 "จัดการข้อมูล KPI" แล้ว -->
 
       <!-- ==================== 8. ตั้งค่าระบบ ==================== -->
       <section id="section-settings" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
@@ -663,12 +614,105 @@
         </div>
       </section>
 
-      <!-- ==================== 10. FAQ ==================== -->
+      <!-- ==================== 10. จัดการข้อมูล KPI ==================== -->
+      <section id="section-kpi-manager" class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div (click)="toggleCollapse('kpi-manager')" class="flex items-center justify-between gap-3 p-6 cursor-pointer hover:bg-gray-50 transition-colors">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center"><i class="fas fa-layer-group text-indigo-600"></i></div>
+            <div>
+              <h2 class="text-xl font-bold text-gray-800">10. จัดการข้อมูล KPI</h2>
+              <p class="text-xs text-gray-400">DB Compare / สร้างแบบฟอร์ม / Export / Report Compare</p>
+            </div>
+          </div>
+          <i class="fas text-gray-400 transition-transform" [ngClass]="isCollapsed('kpi-manager') ? 'fa-chevron-down' : 'fa-chevron-up'"></i>
+        </div>
+        <div [hidden]="isCollapsed('kpi-manager')" class="px-6 pb-6 space-y-4">
+          <p class="text-sm text-gray-600">เมนูรวม 4 เครื่องมือสำหรับ <b>super_admin</b> บริหารจัดการข้อมูล KPI ทั้งหมด</p>
+          <!-- Tab 1 -->
+          <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+            <h4 class="font-bold text-indigo-800 mb-2"><i class="fas fa-database mr-2"></i>Tab 1: DB Compare</h4>
+            <ol class="list-decimal ml-5 text-sm text-gray-600 space-y-1">
+              <li>กดปุ่ม <b>"เปรียบเทียบ Structure"</b> → ระบบเชื่อมต่อ HDC แล้วเปรียบเทียบโครงสร้างตาราง</li>
+              <li>ดูสรุป: ตรงกัน / ต่างกัน / ไม่มีใน Local / ไม่มีใน HDC</li>
+              <li>เลือกตาราง → กด <b>"สร้าง/แก้ไข Local"</b> หรือ <b>"Sync ข้อมูลจาก HDC"</b></li>
+              <li>กดปุ่ม <b>"สร้างฟอร์มจาก HDC"</b> → ส่ง columns ไป Tab 2 เพื่อสร้างแบบฟอร์ม</li>
+            </ol>
+          </div>
+          <!-- Tab 2 -->
+          <div class="bg-purple-50 border border-purple-200 rounded-xl p-4">
+            <h4 class="font-bold text-purple-800 mb-2"><i class="fas fa-wpforms mr-2"></i>Tab 2: สร้างแบบฟอร์ม KPI</h4>
+            <ol class="list-decimal ml-5 text-sm text-gray-600 space-y-1">
+              <li>เลือกตัวชี้วัดที่มี <b>table_process</b> → กดปุ่ม <b>"สร้าง"</b></li>
+              <li>ถ้ามาจาก DB Compare → เลือก HDC fields ใน panel → กด <b>"เพิ่ม N ฟิลด์"</b></li>
+              <li>สลับ toggle <b>"ฟิลด์เริ่มต้น"</b> ตามต้องการ (id, hospcode, year_bh, ...)</li>
+              <li>กำหนดชื่อ, ประเภท, บังคับกรอก → เลือกฟิลด์แสดงใน Dashboard → กด <b>"บันทึกและสร้างตาราง"</b></li>
+            </ol>
+          </div>
+          <!-- Tab 3 -->
+          <div class="bg-green-50 border border-green-200 rounded-xl p-4">
+            <h4 class="font-bold text-green-800 mb-2"><i class="fas fa-file-export mr-2"></i>Tab 3: Export ข้อมูล KPI</h4>
+            <ol class="list-decimal ml-5 text-sm text-gray-600 space-y-1">
+              <li>เลือกตารางข้อมูล → กรองปี/หน่วยบริการ</li>
+              <li>กดปุ่ม <b>"Export Excel"</b> หรือ <b>"Export CSV"</b></li>
+            </ol>
+          </div>
+          <!-- Tab 4 -->
+          <div class="bg-teal-50 border border-teal-200 rounded-xl p-4">
+            <h4 class="font-bold text-teal-800 mb-2"><i class="fas fa-exchange-alt mr-2"></i>Tab 4: Report Compare</h4>
+            <ol class="list-decimal ml-5 text-sm text-gray-600 space-y-1">
+              <li>กดปุ่ม <b>"เปรียบเทียบ Reports ↔ KPI"</b> → เทียบ reports (HDC) กับ kpi_indicators (Local) โดยใช้ <b>table_process</b> เป็น key</li>
+              <li>ดูสรุป: ตรงกัน / ชื่อต่างกัน / ไม่มีใน Local / ไม่มีใน HDC</li>
+              <li>เลือกรายการ → กด <b>"Sync เข้า Local"</b> → เพิ่มตัวชี้วัดใหม่หรืออัปเดตชื่อ</li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== 11. Maintenance Mode ==================== -->
+      <section id="section-maintenance" class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div (click)="toggleCollapse('maintenance')" class="flex items-center justify-between gap-3 p-6 cursor-pointer hover:bg-gray-50 transition-colors">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center"><i class="fas fa-tools text-red-600"></i></div>
+            <div>
+              <h2 class="text-xl font-bold text-gray-800">11. โหมดปิดปรับปรุงระบบ (Maintenance)</h2>
+              <p class="text-xs text-gray-400">ปิดการใช้งานชั่วคราวเพื่อประมวลผลงาน</p>
+            </div>
+          </div>
+          <i class="fas text-gray-400 transition-transform" [ngClass]="isCollapsed('maintenance') ? 'fa-chevron-down' : 'fa-chevron-up'"></i>
+        </div>
+        <div [hidden]="isCollapsed('maintenance')" class="px-6 pb-6 space-y-4">
+          <div class="bg-red-50 border border-red-200 rounded-xl p-4">
+            <h4 class="font-bold text-red-800 mb-2"><i class="fas fa-lock mr-2"></i>วิธีเปิดโหมดปิดปรับปรุง</h4>
+            <ol class="list-decimal ml-5 text-sm text-gray-600 space-y-1">
+              <li>เข้าหน้า <b>"จัดการผู้ใช้งาน"</b> → กดปุ่ม <b>"โหมดปิดปรับปรุง"</b></li>
+              <li>กำหนดข้อความแจ้งเตือน (เช่น "ระบบปิดชั่วคราวเพื่อประมวลผลงาน")</li>
+              <li>กดยืนยัน → ผู้ใช้ทั้งหมด (ยกเว้น super_admin) จะเห็นหน้าแจ้งเตือนเต็มจอ</li>
+              <li>หน้า Login จะแสดงแถบแดงแจ้งเตือนด้านบน</li>
+            </ol>
+          </div>
+          <div class="bg-green-50 border border-green-200 rounded-xl p-4">
+            <h4 class="font-bold text-green-800 mb-2"><i class="fas fa-unlock mr-2"></i>วิธีเปิดระบบกลับ</h4>
+            <ol class="list-decimal ml-5 text-sm text-gray-600 space-y-1">
+              <li>กดปุ่ม <b>"ปิดปรับปรุงอยู่"</b> (สีเหลือง) อีกครั้ง</li>
+              <li>กดยืนยัน → ระบบเปิดใช้งานปกติทันที</li>
+            </ol>
+          </div>
+          <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <h4 class="font-bold text-amber-800 mb-2"><i class="fas fa-toggle-off mr-2"></i>เปิด/ปิดใช้งานทั้งหมด</h4>
+            <ul class="list-disc ml-5 text-sm text-gray-600 space-y-1">
+              <li><b>"เปิดใช้งานทั้งหมด"</b> → เปิดทุก account (ยกเว้น super_admin)</li>
+              <li><b>"ปิดใช้งานทั้งหมด"</b> → ปิดทุก account → ผู้ใช้ Login ไม่ได้</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== 12. FAQ ==================== -->
       <section id="section-faq" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-pink-100 flex items-center justify-center"><i class="fas fa-question-circle text-pink-600"></i></div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">10. คำถามที่พบบ่อย (FAQ)</h2>
+            <h2 class="text-xl font-bold text-gray-800">12. คำถามที่พบบ่อย (FAQ)</h2>
           </div>
         </div>
         <div class="space-y-3">
@@ -720,13 +764,29 @@
             <p class="text-sm font-bold text-gray-800">ถาม: แจ้งเตือนผู้สมัครใหม่ไปที่ไหนบ้าง?</p>
             <p class="text-xs text-gray-600 mt-1">ตอบ: 3 ช่องทางพร้อมกัน — Telegram Group, Email Admin, แจ้งเตือนในระบบ (super_admin) ตั้งค่าแต่ละช่องทางได้ในหน้า "ตั้งค่าระบบ"</p>
           </div>
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-bold text-gray-800">ถาม: Admin สร้างผู้ใช้ใหม่ต้องรอ super_admin อนุมัติหรือไม่?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: ใช่ ผู้ใช้ที่ถูกสร้างโดย admin อื่นๆ (ไม่ใช่ super_admin) จะอยู่สถานะ "รอการอนุมัติ" เฉพาะ super_admin สร้างจึงอนุมัติทันที</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-bold text-gray-800">ถาม: ระบบขึ้นแจ้งว่า "ปิดการใช้งานชั่วคราว" ทำอย่างไร?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: ผู้ดูแลระบบ (super_admin) เปิดโหมดปิดปรับปรุง กรุณารอจนกว่าจะเปิดให้ใช้งานอีกครั้ง</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-bold text-gray-800">ถาม: แถบแดง "ทดสอบระบบ" คืออะไร?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: แสดงเมื่อระบบอยู่ในช่วงทดสอบ เมื่อ Deploy จริงจะถูกนำออก</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-bold text-gray-800">ถาม: "จัดการข้อมูล KPI" มี Tab อะไรบ้าง?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: 4 Tab — 1) DB Compare (เปรียบเทียบ structure) 2) สร้างแบบฟอร์ม (Form Builder) 3) Export ข้อมูล 4) Report Compare (เทียบ reports HDC กับ kpi_indicators)</p>
+          </div>
         </div>
       </section>
 
       <!-- Footer -->
       <div class="text-center py-6 text-xs text-gray-400">
         <p>ระบบบันทึกผลงาน KPI ด้านสุขภาพ — สำนักงานสาธารณสุขจังหวัดนครราชสีมา</p>
-        <p class="mt-1">คู่มือนี้สร้างจากซอร์สโค้ดของระบบ ปรับปรุงล่าสุด มีนาคม 2569</p>
+        <p class="mt-1">คู่มือนี้สร้างจากซอร์สโค้ดของระบบ ปรับปรุงล่าสุด เมษายน 2569</p>
       </div>
 
     </div>
