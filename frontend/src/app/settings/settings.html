@@ -1,6 +1,6 @@
 <div class="p-6">
 
-  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-6">
     <div class="p-6 border-b border-gray-100">
       <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-cog me-2 text-green-600"></i>การตั้งค่าทั่วไป</h3>
 
@@ -9,21 +9,21 @@
         <div class="mb-6 grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-50 rounded-xl p-5 border border-gray-200">
           <div class="flex items-center">
             <label class="inline-flex items-center cursor-pointer">
-              <input type="checkbox" [(ngModel)]="autoLogoutEnabled" name="autoLogoutEnabled" class="sr-only peer">
+              <input type="checkbox" [(ngModel)]="autoLogoutEnabled" name="autoLogoutEnabled" class="peer" style="width:0;height:0;opacity:0;position:relative;margin:0;padding:0;border:0;">
               <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-yellow-500"></div>
               <span class="ms-3 text-sm font-bold text-gray-700"><i class="fas fa-clock me-1 text-yellow-500"></i>เปิดระบบ Auto Logout</span>
             </label>
           </div>
           <div class="flex items-center">
             <label class="inline-flex items-center cursor-pointer">
-              <input type="checkbox" [(ngModel)]="idleCountdownEnabled" name="idleCountdownEnabled" class="sr-only peer">
+              <input type="checkbox" [(ngModel)]="idleCountdownEnabled" name="idleCountdownEnabled" class="peer" style="width:0;height:0;opacity:0;position:relative;margin:0;padding:0;border:0;">
               <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
               <span class="ms-3 text-sm font-bold text-gray-700"><i class="fas fa-hourglass-half me-1 text-orange-500"></i>เปิดนับถอยหลังแจ้งเตือน</span>
             </label>
           </div>
           <div class="flex items-center">
             <label class="inline-flex items-center cursor-pointer">
-              <input type="checkbox" [(ngModel)]="loginAttemptsEnabled" name="loginAttemptsEnabled" class="sr-only peer">
+              <input type="checkbox" [(ngModel)]="loginAttemptsEnabled" name="loginAttemptsEnabled" class="peer" style="width:0;height:0;opacity:0;position:relative;margin:0;padding:0;border:0;">
               <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500"></div>
               <span class="ms-3 text-sm font-bold text-gray-700"><i class="fas fa-user-lock me-1 text-red-500"></i>เปิดนับ Login ผิดพลาด</span>
             </label>
@@ -105,7 +105,7 @@
 
             <div class="flex items-center">
               <label class="inline-flex items-center cursor-pointer">
-                <input type="checkbox" [(ngModel)]="autoBackupEnabled" name="autoBackupEnabled" class="sr-only peer">
+                <input type="checkbox" [(ngModel)]="autoBackupEnabled" name="autoBackupEnabled" class="peer" style="width:0;height:0;opacity:0;position:relative;margin:0;padding:0;border:0;">
                 <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
                 <span class="ms-3 text-sm font-bold text-gray-700">เปิดใช้งานสำรองข้อมูลอัตโนมัติก่อนล้าง Logs</span>
               </label>
@@ -131,7 +131,7 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div class="flex items-center">
               <label class="inline-flex items-center cursor-pointer">
-                <input type="checkbox" [(ngModel)]="dataEntryLocked" name="dataEntryLocked" class="sr-only peer">
+                <input type="checkbox" [(ngModel)]="dataEntryLocked" name="dataEntryLocked" class="peer" style="width:0;height:0;opacity:0;position:relative;margin:0;padding:0;border:0;">
                 <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
                 <span class="ms-3 text-sm font-bold text-gray-700">ล็อคการคีย์ด้วยมือ</span>
               </label>
@@ -181,7 +181,7 @@
           <p class="text-xs text-gray-500 mb-4">ควบคุมการแก้ไขค่าเป้าหมาย (เป้าหมาย) ในตาราง Dashboard — user ทั่วไปและ admin_cup ไม่สามารถแก้ไขเป้าหมายได้เลย, admin_ssj และ super_admin แก้ไขได้เมื่อปลดล็อคเท่านั้น</p>
           <div class="flex items-center">
             <label class="inline-flex items-center cursor-pointer">
-              <input type="checkbox" [(ngModel)]="targetEditLocked" name="targetEditLocked" class="sr-only peer">
+              <input type="checkbox" [(ngModel)]="targetEditLocked" name="targetEditLocked" class="peer" style="width:0;height:0;opacity:0;position:relative;margin:0;padding:0;border:0;">
               <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
               <span class="ms-3 text-sm font-bold text-gray-700">ล็อคการแก้ไขเป้าหมาย</span>
             </label>
@@ -204,7 +204,7 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div class="flex items-center">
               <label class="inline-flex items-center cursor-pointer">
-                <input type="checkbox" [(ngModel)]="appealEnabled" name="appealEnabled" class="sr-only peer">
+                <input type="checkbox" [(ngModel)]="appealEnabled" name="appealEnabled" class="peer" style="width:0;height:0;opacity:0;position:relative;margin:0;padding:0;border:0;">
                 <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
                 <span class="ms-3 text-sm font-bold text-gray-700">เปิดใช้งานระบบอุทธรณ์</span>
               </label>
@@ -247,7 +247,32 @@
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-bell me-2 text-blue-600"></i>แจ้งเตือนผู้สมัครใหม่</h3>
           </div>
-          <p class="text-xs text-gray-500 mb-4">เมื่อมีผู้ลงทะเบียนใหม่ ระบบจะส่งแจ้งเตือนไปยังช่องทางที่ตั้งค่าไว้ (ตั้งค่าใน .env / docker-compose)</p>
+          <p class="text-xs text-gray-500 mb-4">เมื่อมีผู้ลงทะเบียนใหม่ ระบบจะส่งแจ้งเตือนไปยังช่องทางที่เปิดไว้</p>
+
+          <!-- สวิทช์เปิด-ปิดแต่ละช่องทาง -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-blue-50/50 rounded-xl p-4 border border-blue-100">
+            <div class="flex items-center">
+              <label class="inline-flex items-center cursor-pointer">
+                <input type="checkbox" [(ngModel)]="notifTelegramEnabled" name="notifTelegramEnabled" class="peer" style="width:0;height:0;opacity:0;position:relative;margin:0;padding:0;border:0;">
+                <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+                <span class="ms-3 text-sm font-bold text-gray-700"><i class="fab fa-telegram-plane me-1 text-blue-500"></i>Telegram</span>
+              </label>
+            </div>
+            <div class="flex items-center">
+              <label class="inline-flex items-center cursor-pointer">
+                <input type="checkbox" [(ngModel)]="notifEmailEnabled" name="notifEmailEnabled" class="peer" style="width:0;height:0;opacity:0;position:relative;margin:0;padding:0;border:0;">
+                <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-amber-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                <span class="ms-3 text-sm font-bold text-gray-700"><i class="fas fa-envelope me-1 text-amber-500"></i>Email Admin</span>
+              </label>
+            </div>
+            <div class="flex items-center">
+              <label class="inline-flex items-center cursor-pointer">
+                <input type="checkbox" [(ngModel)]="notifSystemEnabled" name="notifSystemEnabled" class="peer" style="width:0;height:0;opacity:0;position:relative;margin:0;padding:0;border:0;">
+                <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                <span class="ms-3 text-sm font-bold text-gray-700"><i class="fas fa-bell me-1 text-green-500"></i>แจ้งเตือนในระบบ</span>
+              </label>
+            </div>
+          </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <!-- Telegram -->

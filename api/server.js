@@ -82,12 +82,14 @@ const getNotifSettings = async () => {
     }
 };
 
-const notifyAdmins = async (subject, html, telegramMsg) => {
+const notifyAdmins = async (subject, html, telegramMsg, options = {}) => {
     const ns = await getNotifSettings();
+    const sendTg = options.telegram !== false;
+    const sendEm = options.email !== false;
     // 1. Telegram
-    if (telegramMsg) sendTelegramDirect(ns.tgToken, ns.tgChatId, telegramMsg);
+    if (sendTg && telegramMsg) sendTelegramDirect(ns.tgToken, ns.tgChatId, telegramMsg);
     // 2. Email to admin list
-    if (ns.adminEmails) {
+    if (sendEm && ns.adminEmails) {
         const emails = ns.adminEmails.split(',').map(e => e.trim()).filter(Boolean);
         for (const email of emails) {
             sendMail(email, subject, html);
@@ -471,30 +473,38 @@ apiRouter.post('/register', loginLimiter, async (req, res) => {
         const roleLabelMap = { user_hos: 'User รพ.', user_sso: 'User รพ.สต.', user_cup: 'User CUP', user_ssj: 'User SSJ', admin_hos: 'Admin รพ.', admin_sso: 'Admin รพ.สต.', admin_cup: 'Admin CUP', admin_ssj: 'Admin SSJ' };
         const roleLabel = roleLabelMap[finalRole] || finalRole;
 
-        // แจ้ง super_admin ทุกคน
-        const [superAdmins] = await db.query("SELECT id FROM users WHERE role = 'super_admin' AND is_approved = 1");
-        for (const sa of superAdmins) {
-            await db.query(
-                "INSERT INTO notifications (user_id, type, title, message, created_by) VALUES (?, 'info', ?, ?, ?)",
-                [sa.id,
-                 `ผู้ใช้งานใหม่รอการอนุมัติ`,
-                 `${firstname} ${lastname} (${username}) จาก ${hosName} ขอลงทะเบียนในสิทธิ์ ${roleLabel} กรุณาตรวจสอบและอนุมัติ`,
-                 result.insertId]
-            );
+        // ดึงค่า toggle แจ้งเตือนจาก settings
+        const [notifSettings] = await db.query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('notif_telegram_enabled','notif_email_enabled','notif_system_enabled')");
+        const ntfMap = {};
+        notifSettings.forEach(r => ntfMap[r.setting_key] = r.setting_value);
+        const ntfTelegram = ntfMap['notif_telegram_enabled'] !== 'false';
+        const ntfEmail = ntfMap['notif_email_enabled'] !== 'false';
+        const ntfSystem = ntfMap['notif_system_enabled'] !== 'false';
+
+        // แจ้ง super_admin ทุกคน (ถ้าเปิดแจ้งเตือนในระบบ)
+        if (ntfSystem) {
+            const [superAdmins] = await db.query("SELECT id FROM users WHERE role = 'super_admin' AND is_approved = 1");
+            for (const sa of superAdmins) {
+                await db.query(
+                    "INSERT INTO notifications (user_id, type, title, message, created_by) VALUES (?, 'info', ?, ?, ?)",
+                    [sa.id,
+                     `ผู้ใช้งานใหม่รอการอนุมัติ`,
+                     `${firstname} ${lastname} (${username}) จาก ${hosName} ขอลงทะเบียนในสิทธิ์ ${roleLabel} กรุณาตรวจสอบและอนุมัติ`,
+                     result.insertId]
+                );
+            }
         }
 
-        // สร้าง URL ของ Frontend → ชี้ไปหน้า login (ต้อง login ก่อนเข้าหน้าอนุมัติ)
-        // APP_URL ตั้งค่าใน .env เช่น http://localhost:4200/khupskpi หรือ https://yourdomain.com/khupskpi
+        // สร้าง URL ของ Frontend
         const referer = req.headers['referer'] || req.headers['origin'] || '';
         let baseUrl = process.env.APP_URL || '';
         if (!baseUrl && referer) {
-            // ดึง origin จาก referer เช่น http://localhost:4200
             try { baseUrl = new URL(referer).origin; } catch (e) { baseUrl = ''; }
         }
         if (!baseUrl) baseUrl = 'http://localhost:8881';
         const approveUrl = `${baseUrl.replace(/\/+$/, '')}/khupskpi/login`;
 
-        // แจ้ง Telegram + Email Admin
+        // แจ้ง Telegram + Email Admin (ตาม toggle)
         notifyAdmins(
             '🆕 ผู้สมัครใหม่รอการอนุมัติ — ระบบ KPI สสจ.นครราชสีมา',
             `<div style="font-family:Sarabun,sans-serif;max-width:500px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
@@ -517,7 +527,8 @@ apiRouter.post('/register', loginLimiter, async (req, res) => {
                     </div>
                 </div>
             </div>`,
-            `🆕 ผู้สมัครใหม่รอการอนุมัติ\n━━━━━━━━━━━━━━━\n👤 ${firstname} ${lastname}\n🔑 Username: ${username}\n🏥 ${hosName}\n📋 สิทธิ์: ${roleLabel}\n📱 โทร: ${cleanPhone}\n📧 Email: ${email || '-'}\n━━━━━━━━━━━━━━━\n🔑 เข้าสู่ระบบ: ${approveUrl}`
+            `🆕 ผู้สมัครใหม่รอการอนุมัติ\n━━━━━━━━━━━━━━━\n👤 ${firstname} ${lastname}\n🔑 Username: ${username}\n🏥 ${hosName}\n📋 สิทธิ์: ${roleLabel}\n📱 โทร: ${cleanPhone}\n📧 Email: ${email || '-'}\n━━━━━━━━━━━━━━━\n🔑 เข้าสู่ระบบ: ${approveUrl}`,
+            { telegram: ntfTelegram, email: ntfEmail }
         );
 
         await saveLog(username, 'register_success', 'ลงทะเบียนผู้ใช้งานใหม่ — รอการอนุมัติ', ip);
@@ -3627,6 +3638,16 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
             ['maintenance_mode', 'false', 'โหมดปิดปรับปรุงระบบ (true/false)']);
         await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)',
             ['maintenance_message', 'ระบบปิดให้บริการชั่วคราวเพื่อประมวลผลงาน', 'ข้อความแจ้งเตือนเมื่อปิดปรับปรุง']);
+
+        // เพิ่ม notification toggle settings
+        const notifToggleDefaults = [
+            ['notif_telegram_enabled', 'true', 'เปิด/ปิดแจ้งเตือนผู้สมัครใหม่ทาง Telegram'],
+            ['notif_email_enabled', 'true', 'เปิด/ปิดแจ้งเตือนผู้สมัครใหม่ทาง Email'],
+            ['notif_system_enabled', 'true', 'เปิด/ปิดแจ้งเตือนผู้สมัครใหม่ในระบบ']
+        ];
+        for (const [key, val, desc] of notifToggleDefaults) {
+            await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)', [key, val, desc]);
+        }
 
         // เพิ่ม target edit lock setting
         await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)',

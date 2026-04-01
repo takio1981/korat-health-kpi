@@ -46,6 +46,9 @@ export class SettingsComponent implements OnInit {
   telegramBotToken: string = '';
   telegramChatId: string = '';
   adminEmails: string = '';
+  notifTelegramEnabled: boolean = true;
+  notifEmailEnabled: boolean = true;
+  notifSystemEnabled: boolean = true;
 
   // Appeal settings
   appealEnabled: boolean = false;
@@ -117,6 +120,12 @@ export class SettingsComponent implements OnInit {
           if (tgToken) this.telegramBotToken = tgToken.setting_value || '';
           if (tgChat) this.telegramChatId = tgChat.setting_value || '';
           if (admEmails) this.adminEmails = admEmails.setting_value || '';
+          const ntfTg = this.settings.find(s => s.setting_key === 'notif_telegram_enabled');
+          const ntfEm = this.settings.find(s => s.setting_key === 'notif_email_enabled');
+          const ntfSys = this.settings.find(s => s.setting_key === 'notif_system_enabled');
+          if (ntfTg) this.notifTelegramEnabled = ntfTg.setting_value !== 'false';
+          if (ntfEm) this.notifEmailEnabled = ntfEm.setting_value !== 'false';
+          if (ntfSys) this.notifSystemEnabled = ntfSys.setting_value !== 'false';
 
           // Data Entry Lock settings
           const entryLocked = this.settings.find(s => s.setting_key === 'data_entry_locked');
@@ -160,6 +169,9 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'telegram_bot_token', setting_value: this.telegramBotToken },
       { setting_key: 'telegram_chat_id', setting_value: this.telegramChatId },
       { setting_key: 'admin_emails', setting_value: this.adminEmails },
+      { setting_key: 'notif_telegram_enabled', setting_value: this.notifTelegramEnabled.toString() },
+      { setting_key: 'notif_email_enabled', setting_value: this.notifEmailEnabled.toString() },
+      { setting_key: 'notif_system_enabled', setting_value: this.notifSystemEnabled.toString() },
       { setting_key: 'data_entry_locked', setting_value: this.dataEntryLocked.toString() },
       { setting_key: 'data_entry_lock_start', setting_value: this.dataEntryLockStart },
       { setting_key: 'data_entry_lock_end', setting_value: this.dataEntryLockEnd },
@@ -184,6 +196,14 @@ export class SettingsComponent implements OnInit {
         Swal.fire('ผิดพลาด', 'ไม่สามารถบันทึกการตั้งค่าได้', 'error');
       }
     });
+  }
+
+  keepScroll(event: Event) {
+    const main = document.querySelector('main');
+    if (main) {
+      const top = main.scrollTop;
+      requestAnimationFrame(() => { main.scrollTop = top; });
+    }
   }
 
   resetDataEntryLock() {

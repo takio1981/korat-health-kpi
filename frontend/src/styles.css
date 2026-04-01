@@ -35,6 +35,10 @@
 
 /* Custom Responsive Typography */
 @layer base {
+  html, body {
+    overflow: hidden;
+    height: 100%;
+  }
   html {
     font-size: 16px;
   }
@@ -153,6 +157,28 @@
 .scrollbar-hide {
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
+}
+
+/* Notification dropdown scrollbar — always visible */
+.notif-scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #f1f5f9;
+}
+.notif-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.notif-scroll::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+.notif-scroll::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 3px;
+}
+.notif-scroll::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
 }
 
 /* Print styles */
