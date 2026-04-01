@@ -622,7 +622,7 @@ apiRouter.get('/public/dashboard-stats', async (req, res) => {
         const [[{ pending_count }]] = await db.query(
             `SELECT COUNT(*) as pending_count FROM kpi_results WHERE year_bh = ? AND status = 'Pending'`, [year]);
 
-        res.json({ success: true, data: { successRate, recordedCount: recorded_count, totalDepts: total_depts, pendingCount: pending_count, rank: 1 } });
+        res.json({ success: true, data: { successRate, recordedCount: recorded_count, totalDepts: total_depts, pendingCount: pending_count, rank: 0, totalHospitals: 0 } });
     } catch (error) {
         res.status(500).json({ success: false });
     }
@@ -1423,6 +1423,27 @@ apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
         `;
         const [pendingRows] = await db.query(pendingSql, queryParams);
 
+        // === คำนวณอันดับหน่วยบริการ ===
+        let rank = 0;
+        let totalHospitals = 0;
+        if (user.hospcode) {
+            // คำนวณ % ผลงานรวมของทุกหน่วยบริการในปีนี้
+            const [allHosRows] = await db.query(`
+                SELECT r.hospcode,
+                       CASE WHEN SUM(CASE WHEN r.target_value > 0 THEN 1 ELSE 0 END) = 0 THEN 0
+                            ELSE ROUND(SUM(CASE WHEN r.target_value > 0 AND r.actual_value >= r.target_value THEN 1 ELSE 0 END)
+                                 / SUM(CASE WHEN r.target_value > 0 THEN 1 ELSE 0 END) * 100, 2)
+                       END AS success_pct
+                FROM kpi_results r
+                WHERE r.year_bh = ?
+                GROUP BY r.hospcode
+                ORDER BY success_pct DESC
+            `, [year]);
+            totalHospitals = allHosRows.length;
+            const idx = allHosRows.findIndex(r => r.hospcode === user.hospcode);
+            rank = idx >= 0 ? idx + 1 : 0;
+        }
+
         res.json({
             success: true,
             data: {
@@ -1430,7 +1451,8 @@ apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
                 recordedCount: recordedRows[0].recorded_count || 0,
                 totalDepts: totalDeptRows[0].total || 0,
                 pendingCount: pendingRows[0].pending_count || 0,
-                rank: 1
+                rank,
+                totalHospitals
             }
         });
     } catch (error) {

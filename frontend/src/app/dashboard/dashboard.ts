@@ -1,7 +1,6 @@
 import { Component, OnInit, inject, ChangeDetectorRef, NgZone } from '@angular/core';
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth';
-import { LanguageService } from '../services/language.service';
 import { NgApexchartsModule } from 'ng-apexcharts';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -17,7 +16,6 @@ import { HttpErrorResponse } from '@angular/common/http';
 })
 export class DashboardComponent implements OnInit {
   private authService = inject(AuthService);
-  lang = inject(LanguageService);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
   private ngZone = inject(NgZone);
@@ -124,7 +122,8 @@ export class DashboardComponent implements OnInit {
     recordedCount: 0,
     totalDepts: 0,
     pendingCount: 0,
-    rank: 1
+    rank: 0,
+    totalHospitals: 0
   };
 
   ngOnInit() {
@@ -147,6 +146,9 @@ export class DashboardComponent implements OnInit {
         }
       } catch (e) { /* ignore */ }
     }
+
+    // ตั้งค่า filter เริ่มต้นตาม role เพื่อลดภาระโหลดข้อมูล
+    this.setDefaultFilters();
 
     this.loadKpiData();
     this.loadAppealSettings();
@@ -206,9 +208,27 @@ export class DashboardComponent implements OnInit {
 
           this.filteredData = res.data;
           this.setDefaultYear();
+          this.extractFilterLists();
+
+          // ตั้ง filter เริ่มต้นตาม role ของผู้ใช้ (เฉพาะครั้งแรก)
+          if (this._defaultHospcode) {
+            const matchHos = this.hospitalNames.find(n => {
+              const item = this.kpiData.find(d => d.hosname === n && d.hospcode === this._defaultHospcode);
+              return !!item;
+            });
+            if (matchHos) this.selectedHospital = matchHos;
+            this._defaultHospcode = '';
+          } else if (this._defaultDistrictScope) {
+            const user = this.currentUser;
+            if (user?.hospcode) {
+              const myItem = this.kpiData.find(d => d.hospcode === user.hospcode);
+              if (myItem?.distname) this.selectedDistrict = myItem.distname;
+            }
+            this._defaultDistrictScope = false;
+          }
+
           this.applyFilters();
           this.loadDashboardStats();
-          this.extractFilterLists();
           this.loadDynamicFormMonths();
           this.cdr.detectChanges();
         }
@@ -242,7 +262,8 @@ export class DashboardComponent implements OnInit {
       recordedCount: Number(this.stats.recordedCount) || 0,
       totalDepts: Number(this.stats.totalDepts) || 0,
       pendingCount: Number(this.stats.pendingCount) || 0,
-      rank: Number(this.stats.rank) || 1
+      rank: Number(this.stats.rank) || 0,
+      totalHospitals: Number(this.stats.totalHospitals) || 0
     };
     const end = target;
     let currentStep = 0;
@@ -255,6 +276,7 @@ export class DashboardComponent implements OnInit {
       this.stats.totalDepts = Math.round(start.totalDepts + (Number(end.totalDepts) - start.totalDepts) * ease);
       this.stats.pendingCount = Math.round(start.pendingCount + (Number(end.pendingCount) - start.pendingCount) * ease);
       this.stats.rank = Math.round(start.rank + (Number(end.rank) - start.rank) * ease);
+      this.stats.totalHospitals = Math.round(start.totalHospitals + (Number(end.totalHospitals) - start.totalHospitals) * ease);
       if (currentStep >= steps) {
         clearInterval(this.animationTimer);
         this.stats = end;
@@ -305,6 +327,25 @@ export class DashboardComponent implements OnInit {
     this.applyFilters();
     this.loadDashboardStats();
   }
+
+  setDefaultFilters() {
+    const role = this.authService.getUserRole();
+    const user = this.currentUser;
+    if (!user) return;
+
+    // super_admin / admin_ssj → ไม่ตั้งค่าเริ่มต้น (เห็นทั้งหมด ให้เลือกเอง)
+    // admin_cup / user_cup → กรองตามอำเภอ
+    // admin_hos / admin_sso / user_hos / user_sso → กรองตามหน่วยบริการ
+    if (['admin_hos', 'admin_sso', 'user_hos', 'user_sso'].includes(role)) {
+      // จะ set selectedHospital หลังจากโหลดข้อมูลเสร็จ (ใน loadKpiData callback)
+      this._defaultHospcode = user.hospcode || '';
+    } else if (['admin_cup', 'user_cup'].includes(role)) {
+      this._defaultDistrictScope = true;
+    }
+  }
+
+  private _defaultHospcode: string = '';
+  private _defaultDistrictScope: boolean = false;
 
   clearFilters() {
     this.searchTerm = '';

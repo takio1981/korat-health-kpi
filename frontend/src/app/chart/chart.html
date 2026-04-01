@@ -65,7 +65,8 @@
           </div>
           <div>
             <p class="text-xs sm:text-sm font-medium text-purple-100">อันดับผลงานระดับจังหวัด</p>
-            <p class="text-xl sm:text-3xl font-bold text-white">อันดับ {{ stats.rank }}</p>
+            <p *ngIf="stats.rank > 0" class="text-xl sm:text-3xl font-bold text-white">อันดับ {{ stats.rank }} <span class="text-xs sm:text-sm font-normal text-purple-200">/ {{ stats.totalHospitals }} หน่วยบริการ</span></p>
+            <p *ngIf="!stats.rank" class="text-xl sm:text-3xl font-bold text-white/70">- <span class="text-xs sm:text-sm font-normal text-purple-200">ยังไม่มีข้อมูล</span></p>
           </div>
         </div>
       </div>

@@ -2,7 +2,7 @@
       <!-- Loading Spinner Overlay -->
       <div *ngIf="isLoading" class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm transition-opacity duration-300">
         <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-green-600 mb-4"></div>
-        <p class="text-green-800 font-bold text-lg animate-pulse">{{ lang.t('common.loading') }}</p>
+        <p class="text-green-800 font-bold text-lg animate-pulse">กำลังโหลดข้อมูล...</p>
       </div>
 
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
@@ -10,44 +10,50 @@
           <div>
             <h4 class="text-lg font-bold text-gray-800 flex items-center gap-2">
               <i class="fas fa-list-alt text-green-600"></i>
-              {{ lang.t('dashboard.title') }}
+              รายการบันทึกผลตัวชี้วัด
             </h4>
-            <p class="text-xs text-gray-500">{{ lang.lang === 'th' ? 'จัดการและตรวจสอบผลการดำเนินงานรายตัวชี้วัด' : 'Manage and verify KPI performance results' }}</p>
+            <p class="text-xs text-gray-500">จัดการและตรวจสอบผลการดำเนินงานรายตัวชี้วัด</p>
           </div>
           <div class="flex flex-wrap gap-2 w-full md:w-auto">
-            <button (click)="clearFilters()" 
+            <button (click)="clearFilters()"
                     class="flex-1 md:flex-none px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2">
-              <i class="fas fa-sync-alt"></i> {{ lang.t('dashboard.clear_filter') }}
+              <i class="fas fa-sync-alt"></i> ล้างตัวกรอง
             </button>
             <button *ngIf="!isEditing && !isEntryLocked" (click)="openAddModal()" class="flex-1 md:flex-none px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-md transition-all text-xs font-bold flex items-center justify-center gap-2">
-              <i class="fas fa-plus"></i> {{ lang.t('dashboard.add') }}
+              <i class="fas fa-plus"></i> เพิ่ม
             </button>
             <button *ngIf="!isEditing && !isEntryLocked" (click)="toggleEditMode()" class="flex-1 md:flex-none px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-md transition-all text-xs font-bold flex items-center justify-center gap-2">
-              <i class="fas fa-edit"></i> {{ lang.t('dashboard.edit') }}
+              <i class="fas fa-edit"></i> แก้ไข
             </button>
             <span *ngIf="isEntryLocked && !isEditing" class="flex-1 md:flex-none px-4 py-2 bg-red-100 text-red-700 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border border-red-200">
-              <i class="fas fa-lock"></i> {{dataEntryLock.lock_reason || lang.t('dashboard.locked')}}
+              <i class="fas fa-lock"></i> {{dataEntryLock.lock_reason || 'ระบบปิดการคีย์ข้อมูลชั่วคราว'}}
             </span>
 
             <div *ngIf="isEditing" class="flex gap-2 w-full md:w-auto">
               <button (click)="saveKpiData()" class="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-md transition-all text-xs font-bold flex items-center justify-center gap-2">
-                <i class="fas fa-save"></i> {{ lang.t('dashboard.save') }}
+                <i class="fas fa-save"></i> บันทึก
               </button>
               <button (click)="resetData()" class="flex-1 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl shadow-md transition-all text-xs font-bold flex items-center justify-center gap-2">
-                <i class="fas fa-undo"></i> {{ lang.t('dashboard.reset') }}
+                <i class="fas fa-undo"></i> คืนค่า
               </button>
               <button (click)="toggleEditMode()" class="flex-1 px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-xl shadow-md transition-all text-xs font-bold flex items-center justify-center gap-2">
-                <i class="fas fa-times"></i> {{ lang.t('dashboard.cancel') }}
+                <i class="fas fa-times"></i> ยกเลิก
               </button>
             </div>
 
             <button *ngIf="(isAdmin || isSuperAdmin) && selectedStatus === 'pending'" (click)="approveAll()" class="w-full md:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2">
-              <i class="fas fa-check-double"></i> {{ lang.t('dashboard.approve_all') }} ({{ filteredData.length }})
+              <i class="fas fa-check-double"></i> อนุมัติทั้งหมด ({{ filteredData.length }})
             </button>
             <button *ngIf="(isAdmin || isSuperAdmin) && selectedStatus === 'pending'" (click)="rejectAll()" class="w-full md:w-auto px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2">
-              <i class="fas fa-undo-alt"></i> {{ lang.t('dashboard.reject_all') }} ({{ filteredData.length }})
+              <i class="fas fa-undo-alt"></i> ตีกลับทั้งหมด ({{ filteredData.length }})
             </button>
           </div>
+        </div>
+
+        <!-- คำแนะนำลดภาระระบบ -->
+        <div class="px-6 py-2 bg-amber-50 border-b border-amber-200 flex items-center gap-2 text-xs text-amber-700">
+          <i class="fas fa-lightbulb text-amber-500"></i>
+          <span><b>คำแนะนำ:</b> กรุณาเลือก <b>หน่วยงาน</b>, <b>หน่วยบริการ</b> หรือ <b>ตัวชี้วัด</b> ก่อนดูข้อมูล เพื่อลดภาระการประมวลผลของระบบ</span>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 px-6 py-3 bg-gray-50/50 border-b border-gray-100">
@@ -109,12 +115,6 @@
               <option value="pending" class="text-amber-600">รอตรวจสอบ</option>
             </select>
           </div>
-        </div>
-        
-        <!-- คำแนะนำลดภาระระบบ -->
-        <div class="px-6 py-2 bg-amber-50 border-b border-amber-200 flex items-center gap-2 text-xs text-amber-700">
-          <i class="fas fa-lightbulb text-amber-500"></i>
-          <span><b>คำแนะนำ:</b> กรุณาเลือก <b>หน่วยงาน</b>, <b>หน่วยบริการ</b> หรือ <b>ตัวชี้วัด</b> ก่อนดูข้อมูล เพื่อลดภาระการประมวลผลของระบบ</span>
         </div>
 
         <div class="px-6 py-2 flex items-center gap-4 bg-white border-b border-gray-100">

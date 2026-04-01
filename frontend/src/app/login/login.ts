@@ -4,7 +4,6 @@ import { ReactiveFormsModule, FormGroup, FormControl, Validators } from '@angula
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { ThemeService } from '../services/theme.service';
-import { LanguageService } from '../services/language.service';
 import { firstValueFrom } from 'rxjs';
 import Swal from 'sweetalert2';
 
@@ -18,7 +17,6 @@ export class LoginComponent {
   private router = inject(Router);
   private authService = inject(AuthService);
   themeService = inject(ThemeService);
-  lang = inject(LanguageService);
 
   showPassword: boolean = false;
   showAbout: boolean = false;

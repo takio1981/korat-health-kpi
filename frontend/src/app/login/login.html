@@ -18,9 +18,6 @@
     <button (click)="themeService.toggle()" class="w-9 h-9 rounded-full bg-white/90 dark:bg-gray-700 shadow-md flex items-center justify-center hover:scale-110 transition-all" [title]="themeService.isDark ? 'Light Mode' : 'Dark Mode'">
       <i class="fas text-base" [ngClass]="themeService.isDark ? 'fa-sun text-yellow-400' : 'fa-moon text-gray-600'"></i>
     </button>
-    <button (click)="lang.toggle()" class="h-9 px-3 rounded-full bg-white/90 dark:bg-gray-700 shadow-md flex items-center gap-1.5 hover:scale-110 transition-all text-xs font-bold" [class]="themeService.isDark ? 'text-gray-200' : 'text-gray-600'" title="เปลี่ยนภาษา">
-      <i class="fas fa-globe"></i>{{ lang.lang === 'th' ? 'EN' : 'TH' }}
-    </button>
   </div>
 
   <div class="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-green-700 via-green-600 to-green-500 text-white flex-col justify-center items-center p-12 relative overflow-hidden">
@@ -42,17 +39,17 @@
 
     </div>
 
-      <h1 class="text-4xl font-bold mb-3 drop-shadow-md">{{ lang.t('login.system_name') }}</h1>
-      <h2 class="text-2xl font-semibold mb-6 drop-shadow-md text-green-100">{{ lang.t('login.org_name') }}</h2>
+      <h1 class="text-4xl font-bold mb-3 drop-shadow-md">ระบบบันทึกผลงาน KPI ด้านสุขภาพ</h1>
+      <h2 class="text-2xl font-semibold mb-6 drop-shadow-md text-green-100">สำนักงานสาธารณสุขจังหวัดนครราชสีมา</h2>
 
       <div class="w-24 h-1 bg-green-400 rounded-full mb-6"></div>
 
-      <p class="text-green-50 text-lg mb-6">{{ lang.t('login.slogan') }}</p>
+      <p class="text-green-50 text-lg mb-6">เชื่อมโยงข้อมูล ยกระดับบริการ เพื่อสุขภาพที่ดีของชาวโคราช</p>
 
       <button (click)="showAbout = !showAbout"
               class="inline-flex items-center gap-2 px-5 py-2.5 bg-white/15 hover:bg-white/25 backdrop-blur-sm text-white rounded-xl text-sm font-bold transition-all border border-white/20">
         <i class="fas fa-info-circle"></i>
-        {{ lang.t('login.about') }}
+        เกี่ยวกับระบบและวัตถุประสงค์
         <i class="fas fa-chevron-down text-xs transition-transform" [class.rotate-180]="showAbout"></i>
       </button>
     </div>
@@ -67,24 +64,24 @@
             <img alt="ตรากระทรวงสาธารณสุข" src="//upload.wikimedia.org/wikipedia/commons/f/f9/%E0%B8%95%E0%B8%A3%E0%B8%B2%E0%B8%81%E0%B8%A3%E0%B8%B0%E0%B8%97%E0%B8%A3%E0%B8%A7%E0%B8%87%E0%B8%AA%E0%B8%B2%E0%B8%98%E0%B8%B2%E0%B8%A3%E0%B8%93%E0%B8%AA%E0%B8%B8%E0%B8%82%E0%B9%83%E0%B8%AB%E0%B8%A1%E0%B9%88.png"
                  decoding="async" class="w-12 h-12 object-contain">
           </div>
-          <h1 class="text-lg font-bold leading-tight">{{ lang.t('login.system_name') }}</h1>
-          <p class="text-green-100 text-sm mt-1">{{ lang.t('login.org_name') }}</p>
+          <h1 class="text-lg font-bold leading-tight">ระบบบันทึกผลงาน KPI ด้านสุขภาพ</h1>
+          <p class="text-green-100 text-sm mt-1">สำนักงานสาธารณสุขจังหวัดนครราชสีมา</p>
           <div class="w-12 h-0.5 bg-green-400 rounded-full mx-auto mt-3 mb-2"></div>
-          <p class="text-green-200 text-xs">{{ lang.t('login.slogan') }}</p>
+          <p class="text-green-200 text-xs">เชื่อมโยงข้อมูล ยกระดับบริการ เพื่อสุขภาพที่ดีของชาวโคราช</p>
         </div>
       </div>
 
     <div class="bg-white dark:bg-[#24243a] rounded-2xl shadow-xl p-6 sm:p-8 border border-gray-100 dark:border-gray-700">
 
       <div class="text-center mb-8 hidden lg:block">
-        <h2 class="text-3xl font-bold text-gray-800 dark:text-white">{{ lang.t('login.title') }}</h2>
-        <p class="text-gray-500 mt-2 text-sm dark:text-gray-400">{{ lang.lang === 'th' ? 'กรุณากรอกข้อมูลเพื่อเข้าถึงระบบบันทึกผลงานตัวชี้วัด' : 'Please enter your credentials to access the KPI system' }}</p>
+        <h2 class="text-3xl font-bold text-gray-800 dark:text-white">เข้าสู่ระบบ</h2>
+        <p class="text-gray-500 mt-2 text-sm dark:text-gray-400">กรุณากรอกข้อมูลเพื่อเข้าถึงระบบบันทึกผลงานตัวชี้วัด</p>
       </div>
 
       <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="space-y-6">
 
         <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-2" for="username">{{ lang.t('login.username') }}</label>
+          <label class="block text-sm font-semibold text-gray-700 mb-2" for="username">ชื่อผู้ใช้งาน</label>
           <div class="relative">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -96,7 +93,7 @@
         </div>
 
         <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-2" for="password">{{ lang.t('login.password') }}</label>
+          <label class="block text-sm font-semibold text-gray-700 mb-2" for="password">รหัสผ่าน</label>
           <div class="relative">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -113,30 +110,30 @@
 
         <div class="flex items-center justify-end mt-4">
           <button type="button" (click)="forgotPassword()" class="text-sm font-semibold text-green-600 hover:text-green-800 transition-colors">
-            <i class="fas fa-key mr-1"></i>{{ lang.t('login.forgot') }}
+            <i class="fas fa-key mr-1"></i>ลืมรหัสผ่าน?
           </button>
         </div>
 
         <button type="submit" class="mt-6 w-full py-3 px-4 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
-          {{ lang.t('login.submit') }}
+          เข้าสู่ระบบ
         </button>
       </form>
 
       <div class="text-center mt-6">
         <p class="text-sm text-gray-500 dark:text-gray-400">
-          {{ lang.t('login.no_account') }}
-          <a routerLink="/register" class="font-semibold text-green-600 hover:text-green-800 transition-colors">{{ lang.t('login.register') }}</a>
+          ยังไม่มีบัญชี?
+          <a routerLink="/register" class="font-semibold text-green-600 hover:text-green-800 transition-colors">ลงทะเบียน</a>
         </p>
       </div>
 
       <!-- Links ด้านล่าง -->
       <div class="flex items-center justify-center gap-4 mt-4 text-xs text-gray-400">
         <button (click)="showAbout = !showAbout" class="hover:text-green-600 transition-colors">
-          <i class="fas fa-info-circle mr-1"></i>{{ lang.lang === 'th' ? 'เกี่ยวกับระบบ' : 'About' }}
+          <i class="fas fa-info-circle mr-1"></i>เกี่ยวกับระบบ
         </button>
         <span class="text-gray-300">|</span>
         <a routerLink="/help-public" class="hover:text-green-600 transition-colors">
-          <i class="fas fa-book-open mr-1"></i>{{ lang.t('menu.help') }}
+          <i class="fas fa-book-open mr-1"></i>คู่มือการใช้งาน
         </a>
       </div>
 

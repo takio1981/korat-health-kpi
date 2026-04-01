@@ -2,7 +2,6 @@ import { Component, OnInit, inject, ChangeDetectorRef, NgZone } from '@angular/c
 import { Router, RouterModule, RouterOutlet, NavigationEnd, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { ThemeService } from '../services/theme.service';
-import { LanguageService } from '../services/language.service';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import Swal from 'sweetalert2';
@@ -24,7 +23,6 @@ export class LayoutComponent implements OnInit {
   private cdr = inject(ChangeDetectorRef);
   private ngZone = inject(NgZone);
   themeService = inject(ThemeService);
-  lang = inject(LanguageService);
 
   pageTitle: string = '';
 
@@ -50,6 +48,10 @@ export class LayoutComponent implements OnInit {
   notifications: any[] = [];
   unreadNotifCount: number = 0;
   showNotifDropdown: boolean = false;
+
+  get unreadNotifications(): any[] {
+    return this.notifications.filter(n => !n.is_read);
+  }
   showProfileDropdown: boolean = false;
 
   ngOnInit() {

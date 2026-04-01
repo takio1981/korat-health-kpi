@@ -1,11 +1,8 @@
 <div class="min-h-screen flex flex-col lg:flex-row font-sans bg-gray-50 dark:bg-[#1e1e2e]">
-  <!-- Dark Mode + Language toggles -->
+  <!-- Dark Mode toggle -->
   <div class="fixed top-4 right-4 z-50 flex items-center gap-2">
     <button (click)="themeService.toggle()" class="w-9 h-9 rounded-full bg-white/90 dark:bg-gray-700 shadow-md flex items-center justify-center hover:scale-110 transition-all" [title]="themeService.isDark ? 'Light Mode' : 'Dark Mode'">
       <i class="fas text-base" [ngClass]="themeService.isDark ? 'fa-sun text-yellow-400' : 'fa-moon text-gray-600'"></i>
-    </button>
-    <button (click)="lang.toggle()" class="h-9 px-3 rounded-full bg-white/90 dark:bg-gray-700 shadow-md flex items-center gap-1.5 hover:scale-110 transition-all text-xs font-bold" [class]="themeService.isDark ? 'text-gray-200' : 'text-gray-600'" title="เปลี่ยนภาษา">
-      <i class="fas fa-globe"></i>{{ lang.lang === 'th' ? 'EN' : 'TH' }}
     </button>
   </div>
 

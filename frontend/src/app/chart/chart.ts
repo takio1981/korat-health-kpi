@@ -67,7 +67,8 @@ export class ChartComponent implements OnInit {
     recordedCount: 0,
     totalDepts: 0,
     pendingCount: 0,
-    rank: 1
+    rank: 0,
+    totalHospitals: 0
   };
   private animationTimer: any;
   isLoading: boolean = true;
@@ -147,12 +148,13 @@ export class ChartComponent implements OnInit {
     const steps = 60;
     const interval = duration / steps;
 
-    const start = { 
+    const start = {
       successRate: Number(this.stats.successRate) || 0,
       recordedCount: Number(this.stats.recordedCount) || 0,
       totalDepts: Number(this.stats.totalDepts) || 0,
       pendingCount: Number(this.stats.pendingCount) || 0,
-      rank: Number(this.stats.rank) || 1
+      rank: Number(this.stats.rank) || 0,
+      totalHospitals: Number(this.stats.totalHospitals) || 0
     };
 
     const end = target;
@@ -168,6 +170,7 @@ export class ChartComponent implements OnInit {
       this.stats.totalDepts = Math.round(start.totalDepts + (Number(end.totalDepts) - start.totalDepts) * ease);
       this.stats.pendingCount = Math.round(start.pendingCount + (Number(end.pendingCount) - start.pendingCount) * ease);
       this.stats.rank = Math.round(start.rank + (Number(end.rank) - start.rank) * ease);
+      this.stats.totalHospitals = Math.round(start.totalHospitals + (Number(end.totalHospitals) - start.totalHospitals) * ease);
 
       if (currentStep >= steps) {
         clearInterval(this.animationTimer);

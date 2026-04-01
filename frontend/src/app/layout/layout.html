@@ -14,19 +14,19 @@
     <div class="lg:hidden fixed top-[84px] left-0 right-0 z-50 bg-gradient-to-b from-green-800 to-green-700 text-white shadow-2xl overflow-y-auto transition-all duration-500 ease-in-out"
          [ngClass]="isSidebarOpen ? 'max-h-[75vh] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'">
       <nav class="px-3 py-3 space-y-0.5">
-        <a routerLink="/charts" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-chart-bar mr-3 min-w-[20px]"></i>{{ lang.t('menu.charts') }}</a>
-        <a routerLink="/reports" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-file-alt mr-3 min-w-[20px]"></i>{{ lang.t('menu.reports') }}</a>
-        <a routerLink="/notifications" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-bell mr-3 min-w-[20px]" [class.bell-shake]="unreadNotifCount > 0"></i>{{ lang.t('menu.notifications') }} <span *ngIf="unreadNotifCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 rounded-full text-[10px] font-bold">{{ unreadNotifCount }}</span></a>
-        <a routerLink="/dashboard" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-th-large mr-3 min-w-[20px]"></i>{{ lang.t('menu.dashboard') }} <span *ngIf="pendingKpiCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 rounded-full text-[10px] font-bold">{{ pendingKpiCount }}</span></a>
-        <a *ngIf="isAnyAdmin" routerLink="/users" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-users-cog mr-3 min-w-[20px]"></i>{{ lang.t('menu.users') }}</a>
-        <a *ngIf="isSuperAdmin" routerLink="/kpi-manage" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-tasks mr-3 min-w-[20px]"></i>{{ lang.t('menu.kpi_manage') }}</a>
-        <a *ngIf="isSuperAdmin" routerLink="/audit-logs" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-history mr-3 min-w-[20px]"></i>{{ lang.t('menu.audit_logs') }}</a>
-        <a *ngIf="isAdmin" routerLink="/kpi-setup" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-plus-circle mr-3 min-w-[20px]"></i>{{ lang.t('menu.kpi_setup') }}</a>
+        <a routerLink="/charts" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-chart-bar mr-3 min-w-[20px]"></i>รายงานสถิติ</a>
+        <a routerLink="/reports" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-file-alt mr-3 min-w-[20px]"></i>รายงานสรุปผล</a>
+        <a routerLink="/notifications" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-bell mr-3 min-w-[20px]" [class.bell-shake]="unreadNotifCount > 0"></i>แจ้งเตือน <span *ngIf="unreadNotifCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 rounded-full text-[10px] font-bold">{{ unreadNotifCount }}</span></a>
+        <a routerLink="/dashboard" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-th-large mr-3 min-w-[20px]"></i>ภาพรวมตัวชี้วัด <span *ngIf="pendingKpiCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 rounded-full text-[10px] font-bold">{{ pendingKpiCount }}</span></a>
+        <a *ngIf="isAnyAdmin" routerLink="/users" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-users-cog mr-3 min-w-[20px]"></i>จัดการผู้ใช้งาน</a>
+        <a *ngIf="isSuperAdmin" routerLink="/kpi-manage" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-tasks mr-3 min-w-[20px]"></i>จัดการตัวชี้วัด</a>
+        <a *ngIf="isSuperAdmin" routerLink="/audit-logs" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-history mr-3 min-w-[20px]"></i>ประวัติการใช้งาน</a>
+        <a *ngIf="isAdmin" routerLink="/kpi-setup" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-plus-circle mr-3 min-w-[20px]"></i>+KPI ปีงบประมาณใหม่</a>
         <a *ngIf="isSuperAdmin" routerLink="/kpi-manager" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-layer-group mr-3 min-w-[20px]"></i>จัดการข้อมูล KPI</a>
-        <a *ngIf="isSuperAdmin" routerLink="/settings" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-sliders-h mr-3 min-w-[20px]"></i>{{ lang.t('menu.settings') }}</a>
+        <a *ngIf="isSuperAdmin" routerLink="/settings" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-sliders-h mr-3 min-w-[20px]"></i>ตั้งค่าระบบ</a>
       </nav>
       <div class="px-3 pb-3 pt-1 border-t border-green-500/30">
-        <a routerLink="/help" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-book-open mr-3 min-w-[20px]"></i>{{ lang.t('menu.help') }}</a>
+        <a routerLink="/help" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-book-open mr-3 min-w-[20px]"></i>คู่มือการใช้งาน</a>
       </div>
     </div>
 
@@ -41,23 +41,23 @@
       <nav class="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
         <a routerLink="/charts" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-chart-bar text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate">{{ lang.t('menu.charts') }}</span>
+          <span class="truncate">รายงานสถิติ</span>
         </a>
         <a routerLink="/reports" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-file-alt text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate">{{ lang.t('menu.reports') }}</span>
+          <span class="truncate">รายงานสรุปผล</span>
         </a>
         <a routerLink="/notifications" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-bell text-lg mr-3 min-w-[24px]" [class.bell-shake]="unreadNotifCount > 0"></i>
           <span class="truncate flex justify-between items-center w-full">
-            {{ lang.t('menu.notifications') }}
+            แจ้งเตือน
             <span *ngIf="unreadNotifCount > 0" class="flex h-5 min-w-[20px] px-1 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white animate-pulse">{{ unreadNotifCount }}</span>
           </span>
         </a>
         <a routerLink="/dashboard" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-th-large text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
-            {{ lang.t('menu.dashboard') }}
+            ภาพรวมตัวชี้วัด
             <span *ngIf="(isAdmin || isSuperAdmin) && pendingKpiCount > 0"
                   class="flex h-5 min-w-[20px] px-1 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ml-2 animate-pulse shadow-lg"
                   [title]="'รอตรวจสอบ: ' + pendingStats.indicatorCount + ' ตัวชี้วัด / ' + pendingStats.hosCount + ' หน่วยบริการ / ' + pendingStats.deptCount + ' หน่วยงาน'">
@@ -68,25 +68,25 @@
         <a *ngIf="isAnyAdmin" routerLink="/users" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-users-cog text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
-            {{ lang.t('menu.users') }}
+            จัดการผู้ใช้งาน
           </span>
         </a>
         <a *ngIf="isSuperAdmin" routerLink="/kpi-manage" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-tasks text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
-            {{ lang.t('menu.kpi_manage') }}
+            จัดการตัวชี้วัด
           </span>
         </a>
         <a *ngIf="isSuperAdmin" routerLink="/audit-logs" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-history text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
-            {{ lang.t('menu.audit_logs') }}
+            ประวัติการใช้งาน
           </span>
         </a>
         <a *ngIf="isAdmin" routerLink="/kpi-setup" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-plus-circle text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
-            {{ lang.t('menu.kpi_setup') }}
+            +KPI ปีงบประมาณใหม่
           </span>
         </a>
         <a *ngIf="isSuperAdmin" routerLink="/kpi-manager" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
@@ -98,7 +98,7 @@
         <a *ngIf="isSuperAdmin" routerLink="/settings" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-sliders-h text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
-            {{ lang.t('menu.settings') }}
+            ตั้งค่าระบบ
           </span>
         </a>
       </nav>
@@ -106,7 +106,7 @@
       <div class="p-4 border-t border-green-500/30">
         <a routerLink="/help" routerLinkActive="bg-white/10 text-white font-medium" class="flex items-center w-full px-4 py-3 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-book-open text-xl mr-3 min-w-[24px]"></i>
-          <span class="truncate">{{ lang.t('menu.help') }}</span>
+          <span class="truncate">คู่มือการใช้งาน</span>
         </a>
         <div class="mt-4 text-center text-xs text-green-200/60 font-mono">
           {{ systemVersion }}
@@ -133,17 +133,21 @@
                 {{ unreadNotifCount > 99 ? '99+' : unreadNotifCount }}
               </span>
             </button>
-            <div *ngIf="showNotifDropdown" class="absolute right-0 top-10 w-80 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 max-h-96 overflow-hidden">
-              <div class="flex items-center justify-between px-4 py-3 border-b bg-gray-50 rounded-t-xl">
-                <span class="font-bold text-gray-700 text-sm">การแจ้งเตือน</span>
-                <button *ngIf="unreadNotifCount > 0" (click)="markAllAsRead()" class="text-xs text-green-600 hover:text-green-800 font-medium">อ่านทั้งหมด</button>
+            <!-- Notification Dropdown — แสดงเฉพาะที่ยังไม่อ่าน, scrollbar เมื่อ > 3 ข้อ -->
+            <!-- Desktop -->
+            <div *ngIf="showNotifDropdown" class="hidden sm:flex absolute right-0 top-10 w-80 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 flex-col">
+              <div class="flex items-center justify-between px-4 py-3 border-b bg-gray-50 rounded-t-xl shrink-0">
+                <span class="font-bold text-gray-700 text-sm">แจ้งเตือนที่ยังไม่อ่าน ({{ unreadNotifications.length }})</span>
+                <button *ngIf="unreadNotifications.length > 0" (click)="markAllAsRead()" class="text-xs text-green-600 hover:text-green-800 font-medium">อ่านทั้งหมด</button>
               </div>
-              <div class="overflow-y-auto max-h-72">
-                <div *ngIf="notifications.length === 0" class="p-6 text-center text-gray-400 text-sm">ไม่มีการแจ้งเตือน</div>
-                <div *ngFor="let notif of notifications.slice(0, 10)"
-                     (click)="!notif.is_read && markAsRead([notif.id])"
-                     class="px-4 py-3 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
-                     [ngClass]="notif.is_read ? 'bg-white' : 'bg-blue-50/50'">
+              <div class="overflow-y-auto" [ngClass]="unreadNotifications.length > 3 ? 'max-h-[280px]' : ''">
+                <div *ngIf="unreadNotifications.length === 0" class="p-6 text-center text-gray-400 text-sm">
+                  <i class="fas fa-check-circle text-green-400 text-2xl mb-2 block"></i>
+                  ไม่มีการแจ้งเตือนใหม่
+                </div>
+                <div *ngFor="let notif of unreadNotifications"
+                     (click)="markAsRead([notif.id])"
+                     class="px-4 py-3 border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors bg-blue-50/50">
                   <div class="flex items-start gap-2">
                     <i class="fas mt-0.5 text-sm" [ngClass]="notif.type === 'approve' ? 'fa-check-circle text-green-500' : notif.type === 'reject' ? 'fa-times-circle text-red-500' : 'fa-info-circle text-blue-500'"></i>
                     <div class="flex-1 min-w-0">
@@ -151,11 +155,44 @@
                       <p class="text-[11px] text-gray-500 line-clamp-2">{{ notif.message }}</p>
                       <p class="text-[10px] text-gray-400 mt-1">{{ notif.created_at | date:'dd/MM/yyyy HH:mm' }}</p>
                     </div>
-                    <span *ngIf="!notif.is_read" class="h-2 w-2 rounded-full bg-blue-500 mt-1 shrink-0"></span>
+                    <span class="h-2 w-2 rounded-full bg-blue-500 mt-1 shrink-0"></span>
                   </div>
                 </div>
               </div>
-              <a routerLink="/notifications" (click)="showNotifDropdown = false" class="block text-center py-2.5 text-xs text-green-600 hover:text-green-800 font-medium border-t bg-gray-50 rounded-b-xl hover:bg-gray-100 transition-colors">
+              <a routerLink="/notifications" (click)="showNotifDropdown = false" class="block text-center py-2.5 text-xs text-green-600 hover:text-green-800 font-medium border-t bg-gray-50 rounded-b-xl hover:bg-gray-100 transition-colors shrink-0">
+                ดูทั้งหมด →
+              </a>
+            </div>
+            <!-- Mobile -->
+            <div *ngIf="showNotifDropdown" class="sm:hidden fixed inset-x-0 top-[84px] z-50 bg-white shadow-2xl flex flex-col"
+                 [ngClass]="unreadNotifications.length > 3 ? 'max-h-[70vh]' : ''">
+              <div class="flex items-center justify-between px-4 py-3 border-b bg-gray-50 shrink-0">
+                <span class="font-bold text-gray-700 text-sm">แจ้งเตือนที่ยังไม่อ่าน ({{ unreadNotifications.length }})</span>
+                <div class="flex items-center gap-3">
+                  <button *ngIf="unreadNotifications.length > 0" (click)="markAllAsRead()" class="text-xs text-green-600 hover:text-green-800 font-medium">อ่านทั้งหมด</button>
+                  <button (click)="showNotifDropdown = false" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-lg"></i></button>
+                </div>
+              </div>
+              <div class="overflow-y-auto flex-1">
+                <div *ngIf="unreadNotifications.length === 0" class="p-6 text-center text-gray-400 text-sm">
+                  <i class="fas fa-check-circle text-green-400 text-2xl mb-2 block"></i>
+                  ไม่มีการแจ้งเตือนใหม่
+                </div>
+                <div *ngFor="let notif of unreadNotifications"
+                     (click)="markAsRead([notif.id])"
+                     class="px-4 py-3 border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors bg-blue-50/50">
+                  <div class="flex items-start gap-2">
+                    <i class="fas mt-0.5 text-sm" [ngClass]="notif.type === 'approve' ? 'fa-check-circle text-green-500' : notif.type === 'reject' ? 'fa-times-circle text-red-500' : 'fa-info-circle text-blue-500'"></i>
+                    <div class="flex-1 min-w-0">
+                      <p class="text-sm font-semibold text-gray-800">{{ notif.title }}</p>
+                      <p class="text-xs text-gray-500 mt-0.5">{{ notif.message }}</p>
+                      <p class="text-[10px] text-gray-400 mt-1">{{ notif.created_at | date:'dd/MM/yyyy HH:mm' }}</p>
+                    </div>
+                    <span class="h-2.5 w-2.5 rounded-full bg-blue-500 mt-1 shrink-0"></span>
+                  </div>
+                </div>
+              </div>
+              <a routerLink="/notifications" (click)="showNotifDropdown = false" class="block text-center py-3 text-sm text-green-600 hover:text-green-800 font-bold border-t bg-gray-50 hover:bg-gray-100 transition-colors shrink-0">
                 ดูทั้งหมด →
               </a>
             </div>
@@ -163,10 +200,6 @@
           <!-- Dark Mode + Language toggles (Header) -->
           <button (click)="themeService.toggle()" class="text-white/70 hover:text-white mr-3 transition-all" [title]="themeService.isDark ? 'Light Mode' : 'Dark Mode'">
             <i class="fas text-lg" [ngClass]="themeService.isDark ? 'fa-sun text-yellow-300' : 'fa-moon'"></i>
-          </button>
-          <button (click)="lang.toggle()" class="text-white/70 hover:text-white mr-4 transition-all flex items-center gap-1 text-xs font-bold border border-white/30 px-2 py-1 rounded-lg" title="เปลี่ยนภาษา">
-            <i class="fas fa-globe"></i>
-            {{ lang.lang === 'th' ? 'EN' : 'TH' }}
           </button>
           <!-- Profile Avatar + Dropdown -->
           <div class="relative">
@@ -203,10 +236,10 @@
               <!-- Actions -->
               <div class="p-2 space-y-0.5">
                 <button (click)="openChangePasswordModal(); showProfileDropdown = false" class="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
-                  <i class="fas fa-key w-4 text-center text-orange-500"></i>{{ lang.t('menu.change_password') }}
+                  <i class="fas fa-key w-4 text-center text-orange-500"></i>เปลี่ยนรหัสผ่าน
                 </button>
                 <button (click)="logout()" class="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors font-bold">
-                  <i class="fas fa-sign-out-alt w-4 text-center"></i>{{ lang.t('menu.logout') }}
+                  <i class="fas fa-sign-out-alt w-4 text-center"></i>ออกจากระบบ
                 </button>
               </div>
             </div>

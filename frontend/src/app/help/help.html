@@ -243,6 +243,22 @@
           </ol>
         </div>
 
+        <!-- Dashboard Auto Filter -->
+        <div class="mt-4 bg-green-50 border border-green-200 rounded-xl p-4">
+          <h4 class="font-bold text-green-800 text-sm mb-2"><i class="fas fa-filter mr-2"></i>กรองข้อมูลอัตโนมัติตาม Role</h4>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs border-collapse">
+              <thead><tr class="bg-green-100 text-green-800"><th class="px-3 py-1.5 text-left">Role</th><th class="px-3 py-1.5 text-left">Filter เริ่มต้น</th></tr></thead>
+              <tbody class="divide-y divide-green-100">
+                <tr><td class="px-3 py-1.5 font-bold">user_hos / user_sso / admin_hos / admin_sso</td><td class="px-3 py-1.5">กรองตาม <b>หน่วยบริการ</b> ของตัวเอง</td></tr>
+                <tr><td class="px-3 py-1.5 font-bold">user_cup / admin_cup</td><td class="px-3 py-1.5">กรองตาม <b>อำเภอ</b> ของตัวเอง</td></tr>
+                <tr><td class="px-3 py-1.5 font-bold">admin_ssj / super_admin</td><td class="px-3 py-1.5">ไม่กรอง (แสดงทั้งหมด) + แสดงคำแนะนำให้เลือก filter</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="text-[10px] text-green-600 mt-2"><i class="fas fa-info-circle mr-1"></i>กดปุ่ม "ล้างตัวกรอง" เพื่อดูข้อมูลทั้งหมดได้ทุกเมื่อ</p>
+        </div>
+
         <!-- Action buttons per KPI -->
         <h4 class="font-bold text-gray-700 text-sm mt-4 mb-2"><i class="fas fa-mouse-pointer mr-2 text-purple-500"></i>ปุ่มจัดการรายตัวชี้วัด</h4>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
@@ -283,6 +299,13 @@
           </div>
           <p class="text-xs text-teal-700">แต่ละอำเภอแสดงเป็น card พร้อมวงกลมเปอร์เซ็นต์ เรียงจากมากไปน้อย hover ดูรายละเอียดเป้าหมาย/ผลงาน เปลี่ยนตามตัวกรองที่เลือก</p>
         </div>
+
+        <!-- Rank calculation -->
+        <div class="mt-4 bg-purple-50 border border-purple-200 rounded-xl p-4">
+          <h4 class="font-bold text-purple-800 text-sm mb-2"><i class="fas fa-trophy mr-2"></i>อันดับผลงานระดับจังหวัด</h4>
+          <p class="text-xs text-purple-700">คำนวณจาก <b>% ตัวชี้วัดที่ผ่านเป้าหมาย</b> ของทุกหน่วยบริการในปีงบประมาณนั้น → เรียงจากมากไปน้อย → แสดง "อันดับ X / Y หน่วยบริการ"</p>
+          <p class="text-[10px] text-purple-500 mt-1"><i class="fas fa-info-circle mr-1"></i>super_admin / admin_ssj ไม่มี hospcode จะไม่แสดงอันดับ</p>
+        </div>
       </section>
 
       <!-- ==================== 6. แจ้งเตือน ==================== -->
@@ -302,8 +325,10 @@
           <span class="px-3 py-1.5 rounded-full text-xs font-bold bg-purple-100 text-purple-700"><i class="fas fa-gavel mr-1"></i>อุทธรณ์</span>
           <span class="px-3 py-1.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700"><i class="fas fa-reply mr-1"></i>ตอบกลับ</span>
         </div>
-        <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-700">
-          <i class="fas fa-info-circle mr-1"></i> <b>กดที่กล่องข้อความ</b> หรือ <b>กดปุ่มใดๆ ในกล่อง</b> → ระบบมาร์คว่า "อ่านแล้ว" อัตโนมัติ | ไอคอนระฆังจะ <b>สั่น</b> เมื่อมีแจ้งเตือนใหม่
+        <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-700 space-y-1">
+          <p><i class="fas fa-bell mr-1"></i><b>Dropdown ระฆัง</b> แสดงเฉพาะ <b>แจ้งเตือนที่ยังไม่อ่าน</b> เท่านั้น — กดที่ข้อความเพื่อมาร์คว่า "อ่านแล้ว" หรือกด "อ่านทั้งหมด"</p>
+          <p><i class="fas fa-arrows-alt-v mr-1"></i>มี <b>Scrollbar</b> เมื่อมีแจ้งเตือนมากกว่า 3 ข้อ | Mobile แสดงเต็มจอ</p>
+          <p><i class="fas fa-list mr-1"></i>กด <b>"ดูทั้งหมด →"</b> เพื่อไปหน้ารวมแจ้งเตือน (เห็นทั้งอ่านแล้ว+ยังไม่อ่าน)</p>
         </div>
       </section>
 
@@ -324,6 +349,36 @@
           <span class="bg-green-100 text-green-800 px-3 py-1.5 rounded-full"><i class="fas fa-check mr-1"></i>อนุมัติ → Email ✉️</span>
           <span class="text-gray-400 mx-1">หรือ</span>
           <span class="bg-red-100 text-red-800 px-3 py-1.5 rounded-full"><i class="fas fa-times mr-1"></i>ปฏิเสธ + เหตุผล → Email ✉️</span>
+        </div>
+
+        <!-- ปุ่มเครื่องมือ -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4 text-xs">
+          <div class="bg-amber-50 rounded-lg p-2 border border-amber-200"><i class="fas fa-lock text-amber-600 mr-1"></i><b>โหมดปิดปรับปรุง</b><p class="text-[10px] text-gray-400 mt-0.5">เปิด/ปิดระบบ Maintenance</p></div>
+          <div class="bg-emerald-50 rounded-lg p-2 border border-emerald-200"><i class="fas fa-toggle-on text-emerald-600 mr-1"></i><b>เปิดใช้งานทั้งหมด</b><p class="text-[10px] text-gray-400 mt-0.5">เปิดทุก account (ยกเว้น super_admin)</p></div>
+          <div class="bg-red-50 rounded-lg p-2 border border-red-200"><i class="fas fa-toggle-off text-red-500 mr-1"></i><b>ปิดใช้งานทั้งหมด</b><p class="text-[10px] text-gray-400 mt-0.5">ปิดทุก account</p></div>
+          <div class="bg-green-50 rounded-lg p-2 border border-green-200"><i class="fas fa-user-plus text-green-600 mr-1"></i><b>เพิ่มผู้ใช้งาน</b><p class="text-[10px] text-gray-400 mt-0.5">Validation เหมือนหน้า Register</p></div>
+        </div>
+
+        <!-- ตัวกรอง -->
+        <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-4 text-xs text-gray-600">
+          <p class="font-bold text-gray-700 mb-1"><i class="fas fa-filter mr-1"></i>ตัวกรอง 6 ช่อง</p>
+          <p>ค้นหา (ทุกฟิลด์) | สิทธิ์ | หน่วยงาน | <b>หน่วยบริการ</b> | สถานะบัญชี | ปุ่มล้างตัวกรอง</p>
+        </div>
+
+        <!-- คอลัมน์ตาราง -->
+        <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4 text-xs text-blue-700">
+          <p class="font-bold mb-1"><i class="fas fa-table mr-1"></i>คอลัมน์ในตาราง</p>
+          <p>Username | ชื่อ-นามสกุล | เลข ปชช. | สิทธิ์ (Role) | หน่วยงาน | หน่วยบริการ | เบอร์โทร | Email | สถานะ | <b>ผู้อนุมัติ</b> | ใช้งาน | จัดการ</p>
+        </div>
+
+        <!-- การอนุมัติ -->
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 text-xs text-amber-700">
+          <p class="font-bold mb-1"><i class="fas fa-shield-alt mr-1"></i>การอนุมัติผู้ใช้</p>
+          <ul class="list-disc ml-4 space-y-0.5">
+            <li>ผู้ใช้ที่ register หรือ admin สร้างใหม่ → ต้องรอ <b>super_admin</b> อนุมัติเท่านั้น</li>
+            <li>super_admin สร้างเอง → อนุมัติทันที + บันทึกผู้อนุมัติอัตโนมัติ</li>
+            <li>คอลัมน์ <b>"ผู้อนุมัติ"</b> แสดงชื่อ admin ที่กดอนุมัติ</li>
+          </ul>
         </div>
 
         <h4 class="font-bold text-gray-700 text-sm mb-2">ขอบเขตการจัดการ user ตาม Role</h4>
@@ -452,12 +507,12 @@
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-gray-800 flex items-center justify-center"><i class="fas fa-moon text-yellow-300"></i></div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">Dark Mode + ภาษา + สำรองข้อมูล</h2>
+            <h2 class="text-xl font-bold text-gray-800">Dark Mode + สำรองข้อมูล</h2>
             <p class="text-xs text-gray-400">ฟีเจอร์เสริมสำหรับทุก Role</p>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <!-- Dark Mode -->
           <div class="border border-gray-200 rounded-xl p-4">
             <h4 class="font-bold text-gray-800 text-sm mb-2"><i class="fas fa-moon text-indigo-500 mr-2"></i>Dark Mode</h4>
@@ -465,16 +520,6 @@
               <p>กดปุ่ม <b>🌙</b> ที่ Header → เปลี่ยนเป็นโหมดมืด</p>
               <p>กดปุ่ม <b>☀️</b> → กลับเป็นโหมดสว่าง</p>
               <p class="text-gray-400"><i class="fas fa-info-circle mr-1"></i>ระบบจำค่าไว้ ครอบคลุมทุกหน้า</p>
-            </div>
-          </div>
-
-          <!-- Language -->
-          <div class="border border-gray-200 rounded-xl p-4">
-            <h4 class="font-bold text-gray-800 text-sm mb-2"><i class="fas fa-globe text-blue-500 mr-2"></i>เปลี่ยนภาษา (TH/EN)</h4>
-            <div class="space-y-2 text-xs text-gray-600">
-              <p>กดปุ่ม <b>🌐 EN</b> → เปลี่ยนเป็นภาษาอังกฤษ</p>
-              <p>กดปุ่ม <b>🌐 TH</b> → กลับเป็นภาษาไทย</p>
-              <p class="text-gray-400"><i class="fas fa-info-circle mr-1"></i>แปลเมนู, Login, Dashboard ทั้งหมด</p>
             </div>
           </div>
 
@@ -743,10 +788,6 @@
           <div class="bg-gray-50 rounded-xl p-4">
             <p class="text-sm font-bold text-gray-800">ถาม: เปิด Dark Mode ได้อย่างไร?</p>
             <p class="text-xs text-gray-600 mt-1">ตอบ: กดปุ่ม 🌙 ที่ Header bar (หรือมุมขวาบนในหน้า Login) ระบบจำค่าไว้ กลับมาก็ยัง Dark อยู่</p>
-          </div>
-          <div class="bg-gray-50 rounded-xl p-4">
-            <p class="text-sm font-bold text-gray-800">ถาม: เปลี่ยนภาษาเป็นอังกฤษได้ไหม?</p>
-            <p class="text-xs text-gray-600 mt-1">ตอบ: กดปุ่ม 🌐 EN ที่ Header bar เมนู, Login, Dashboard จะแสดงเป็นภาษาอังกฤษ กด 🌐 TH เพื่อกลับภาษาไทย</p>
           </div>
           <div class="bg-gray-50 rounded-xl p-4">
             <p class="text-sm font-bold text-gray-800">ถาม: สำรองข้อมูลได้อย่างไร?</p>
