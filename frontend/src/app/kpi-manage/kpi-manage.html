@@ -66,7 +66,7 @@
                       [ngClass]="item.is_active === 1 || item.is_active === '1' || item.is_active === true ? 'translate-x-4' : 'translate-x-0.5'"></span>
               </button>
               <button (click)="openModal(item)" class="text-yellow-500 text-sm"><i class="fas fa-edit"></i></button>
-              <button (click)="deleteItem(item.id)" class="text-red-500 text-sm"><i class="fas fa-trash"></i></button>
+              <button *ngIf="isSuperAdmin" (click)="deleteItem(item.id)" class="text-red-500 text-sm"><i class="fas fa-trash"></i></button>
             </div>
           </div>
         </div>
@@ -127,7 +127,7 @@
 
               <td class="px-4 py-3 text-right space-x-2">
                 <button (click)="openModal(item)" class="text-yellow-500 hover:text-yellow-600"><i class="fas fa-edit"></i></button>
-                <button (click)="deleteItem(item.id)" class="text-red-500 hover:text-red-600"><i class="fas fa-trash"></i></button>
+                <button *ngIf="isSuperAdmin" (click)="deleteItem(item.id)" class="text-red-500 hover:text-red-600"><i class="fas fa-trash"></i></button>
               </td>
             </tr>
           </tbody>

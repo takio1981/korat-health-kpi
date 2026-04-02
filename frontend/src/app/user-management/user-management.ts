@@ -20,6 +20,7 @@ export class UserManagementComponent implements OnInit {
   users: any[] = [];
   filteredUsers: any[] = [];
 
+  showFilters: boolean = true;
   searchTerm: string = '';
   selectedRole: string = '';
   selectedDept: string = '';

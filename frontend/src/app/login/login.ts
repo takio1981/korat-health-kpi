@@ -58,7 +58,7 @@ export class LoginComponent {
               icon: 'success', title: 'เข้าสู่ระบบสำเร็จ',
               text: `ยินดีต้อนรับ คุณ${response.user.firstname} ${response.user.lastname}`,
               timer: 1500, showConfirmButton: false
-            }).then(() => this.router.navigate(['/charts']));
+            }).then(() => this.router.navigate(['/dashboard']));
           }
         },
         error: (err) => {

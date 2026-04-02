@@ -68,18 +68,8 @@
       <span class="text-xs text-gray-500 ml-auto">เลือก: <b>{{ selectedTables.size }}</b></span>
     </div>
 
-    <!-- Action Buttons -->
-    <div *ngIf="selectedTables.size > 0" class="flex flex-wrap gap-2 mb-4">
-      <button (click)="createLocal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm shadow-md transition-all">
-        <i class="fas fa-hammer mr-1"></i>สร้าง/แก้ไข Local ({{ selectedTables.size }})
-      </button>
-      <button (click)="syncData()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-sm shadow-md transition-all">
-        <i class="fas fa-sync mr-1"></i>Sync ข้อมูลจาก HDC ({{ selectedTables.size }})
-      </button>
-    </div>
-
-    <!-- Table List -->
-    <div class="space-y-2">
+    <!-- Table List (scrollable) -->
+    <div class="space-y-2 max-h-[60vh] overflow-y-auto pr-1" style="scrollbar-width: thin;">
       <div *ngFor="let t of filteredTables"
            class="bg-white rounded-xl border shadow-sm overflow-hidden transition-all"
            [ngClass]="selectedTables.has(t.table) ? 'border-indigo-400 ring-2 ring-indigo-200' : 'border-gray-200'">
@@ -167,6 +157,25 @@
       <div *ngIf="filteredTables.length === 0" class="text-center py-10 text-gray-400">
         <i class="fas fa-search text-3xl mb-2"></i>
         <p class="text-sm">{{ compareResult.tables.length === 0 ? 'ไม่พบตารางที่มี table_process' : 'ไม่พบตารางตามเงื่อนไข' }}</p>
+      </div>
+    </div>
+
+    <!-- Sticky Action Panel (แสดงเมื่อเลือก checkbox) -->
+    <div *ngIf="selectedTables.size > 0"
+         class="sticky bottom-0 mt-3 bg-white border-t-2 border-indigo-400 rounded-xl shadow-lg p-3 flex flex-wrap items-center justify-between gap-2 z-10">
+      <span class="text-xs font-bold text-indigo-700">
+        <i class="fas fa-check-square mr-1"></i>เลือกแล้ว {{ selectedTables.size }} ตาราง
+      </span>
+      <div class="flex flex-wrap gap-2">
+        <button (click)="createLocal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-md transition-all">
+          <i class="fas fa-hammer mr-1"></i>สร้าง/แก้ไข Local ({{ selectedTables.size }})
+        </button>
+        <button (click)="syncData()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-xs shadow-md transition-all">
+          <i class="fas fa-sync mr-1"></i>Sync ข้อมูลจาก HDC ({{ selectedTables.size }})
+        </button>
+        <button (click)="selectNone()" class="px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-600 font-bold rounded-xl text-xs transition-all">
+          <i class="fas fa-times mr-1"></i>ยกเลิกเลือก
+        </button>
       </div>
     </div>
   </div>

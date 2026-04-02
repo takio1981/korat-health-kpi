@@ -14,12 +14,12 @@
     <div class="lg:hidden fixed top-[84px] left-0 right-0 z-50 bg-gradient-to-b from-green-800 to-green-700 text-white shadow-2xl overflow-y-auto transition-all duration-500 ease-in-out"
          [ngClass]="isSidebarOpen ? 'max-h-[75vh] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'">
       <nav class="px-3 py-3 space-y-0.5">
+        <a routerLink="/dashboard" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-th-large mr-3 min-w-[20px]"></i>บันทึกผลงานตัวชี้วัด <span *ngIf="pendingKpiCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 rounded-full text-[10px] font-bold">{{ pendingKpiCount }}</span></a>
         <a routerLink="/charts" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-chart-bar mr-3 min-w-[20px]"></i>รายงานสถิติ</a>
         <a routerLink="/reports" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-file-alt mr-3 min-w-[20px]"></i>รายงานสรุปผล</a>
         <a routerLink="/notifications" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-bell mr-3 min-w-[20px]" [class.bell-shake]="unreadNotifCount > 0"></i>แจ้งเตือน <span *ngIf="unreadNotifCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 rounded-full text-[10px] font-bold">{{ unreadNotifCount }}</span></a>
-        <a routerLink="/dashboard" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-th-large mr-3 min-w-[20px]"></i>ภาพรวมตัวชี้วัด <span *ngIf="pendingKpiCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 rounded-full text-[10px] font-bold">{{ pendingKpiCount }}</span></a>
         <a *ngIf="isAnyAdmin" routerLink="/users" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-users-cog mr-3 min-w-[20px]"></i>จัดการผู้ใช้งาน</a>
-        <a *ngIf="isSuperAdmin" routerLink="/kpi-manage" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-tasks mr-3 min-w-[20px]"></i>จัดการตัวชี้วัด</a>
+        <a *ngIf="isAdmin" routerLink="/kpi-manage" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-tasks mr-3 min-w-[20px]"></i>จัดการตัวชี้วัด</a>
         <a *ngIf="isSuperAdmin" routerLink="/audit-logs" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-history mr-3 min-w-[20px]"></i>ประวัติการใช้งาน</a>
         <a *ngIf="isAdmin" routerLink="/kpi-setup" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-plus-circle mr-3 min-w-[20px]"></i>+KPI ปีงบประมาณใหม่</a>
         <a *ngIf="isSuperAdmin" routerLink="/kpi-manager" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-layer-group mr-3 min-w-[20px]"></i>จัดการข้อมูล KPI</a>
@@ -39,6 +39,17 @@
       </div>
   
       <nav class="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
+        <a routerLink="/dashboard" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
+          <i class="fas fa-th-large text-lg mr-3 min-w-[24px]"></i>
+          <span class="truncate flex justify-between items-center w-full">
+            บันทึกผลงานตัวชี้วัด
+            <span *ngIf="(isAdmin || isSuperAdmin) && pendingKpiCount > 0"
+                  class="flex h-5 min-w-[20px] px-1 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ml-2 animate-pulse shadow-lg"
+                  [title]="'รอตรวจสอบ: ' + pendingStats.indicatorCount + ' ตัวชี้วัด / ' + pendingStats.hosCount + ' หน่วยบริการ / ' + pendingStats.deptCount + ' หน่วยงาน'">
+              {{ pendingKpiCount }}
+            </span>
+          </span>
+        </a>
         <a routerLink="/charts" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-chart-bar text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate">รายงานสถิติ</span>
@@ -54,24 +65,13 @@
             <span *ngIf="unreadNotifCount > 0" class="flex h-5 min-w-[20px] px-1 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white animate-pulse">{{ unreadNotifCount }}</span>
           </span>
         </a>
-        <a routerLink="/dashboard" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-th-large text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate flex justify-between items-center w-full">
-            ภาพรวมตัวชี้วัด
-            <span *ngIf="(isAdmin || isSuperAdmin) && pendingKpiCount > 0"
-                  class="flex h-5 min-w-[20px] px-1 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ml-2 animate-pulse shadow-lg"
-                  [title]="'รอตรวจสอบ: ' + pendingStats.indicatorCount + ' ตัวชี้วัด / ' + pendingStats.hosCount + ' หน่วยบริการ / ' + pendingStats.deptCount + ' หน่วยงาน'">
-              {{ pendingKpiCount }}
-            </span>
-          </span>
-        </a>
         <a *ngIf="isAnyAdmin" routerLink="/users" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-users-cog text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
             จัดการผู้ใช้งาน
           </span>
         </a>
-        <a *ngIf="isSuperAdmin" routerLink="/kpi-manage" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
+        <a *ngIf="isAdmin" routerLink="/kpi-manage" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-tasks text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
             จัดการตัวชี้วัด

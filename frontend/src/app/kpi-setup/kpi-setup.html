@@ -30,9 +30,12 @@
                 <option *ngFor="let d of departments" [value]="d.id">{{ d.dept_name }}</option>
             </select>
         </div>
-        <div class="flex items-end lg:col-span-2">
-            <button (click)="saveSetup()" class="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-sm transition-colors shadow-lg">
-                <i class="fas fa-save mr-2"></i> บันทึกข้อมูล
+        <div class="flex items-end gap-2 lg:col-span-2">
+            <button (click)="saveSetup()" class="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-sm transition-colors shadow-lg">
+                <i class="fas fa-save mr-2"></i> บันทึก
+            </button>
+            <button (click)="bulkAddAllHospitals()" class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm transition-colors shadow-lg">
+                <i class="fas fa-layer-group mr-2"></i> เพิ่มทุกหน่วยบริการ
             </button>
         </div>
     </div>

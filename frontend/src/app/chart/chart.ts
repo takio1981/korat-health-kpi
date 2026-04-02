@@ -238,35 +238,64 @@ export class ChartComponent implements OnInit {
     const actuals = labels.map(l => categoryData[l].actual);
 
     // 1. Bar Chart Config (เป้าหมาย VS ผลงาน)
+    // คำนวณ % ผลงาน/เป้าหมาย
+    const pctData = labels.map((_: any, i: number) => {
+      const t = targets[i] || 0;
+      const a = actuals[i] || 0;
+      return t > 0 ? Math.round((a / t) * 100) : 0;
+    });
+
     this.barChartOptions = {
       series: [
-        { name: "เป้าหมาย (Target)", data: targets },
-        { name: "ผลงานรวม (Result)", data: actuals }
+        { name: "% ผลงาน/เป้าหมาย", data: pctData },
       ],
       chart: {
         type: "bar",
-        height: 450, // เพิ่มความสูง
-        fontFamily: 'Sarabun, sans-serif'
+        height: Math.max(450, labels.length * 40),
+        fontFamily: 'Sarabun, sans-serif',
+        toolbar: { show: true }
       },
       plotOptions: {
         bar: {
-          horizontal: false,
-          columnWidth: "55%",
-          borderRadius: 4
+          horizontal: true,
+          barHeight: "65%",
+          borderRadius: 4,
+          dataLabels: { position: 'top' },
+          colors: {
+            ranges: [
+              { from: 0, to: 49.99, color: '#ef4444' },
+              { from: 50, to: 79.99, color: '#f59e0b' },
+              { from: 80, to: 200, color: '#10b981' }
+            ]
+          }
         }
       },
-      dataLabels: { enabled: false },
-      stroke: { show: true, width: 2, colors: ["transparent"] },
-      xaxis: { categories: labels },
-      yaxis: { 
-        title: { text: "คะแนน" },
-        labels: { formatter: (val: number) => val.toFixed(2) } // ปรับแกน Y เป็น 2 ตำแหน่ง
+      dataLabels: {
+        enabled: true,
+        formatter: function(val: any) { return val + '%'; },
+        offsetX: 20,
+        style: { fontSize: '11px', fontWeight: 'bold' }
       },
+      stroke: { show: false },
+      xaxis: {
+        categories: labels,
+        max: 120,
+        labels: { formatter: (val: any) => val + '%' },
+        title: { text: '% ผลงาน/เป้าหมาย' }
+      },
+      yaxis: { labels: { style: { fontSize: '11px' }, maxWidth: 250 } },
       fill: { opacity: 1 },
-      colors: ['#fbbf24', '#10b981'], // สีเหลือง, สีเขียว
-      title: { text: 'เปรียบเทียบ เป้าหมาย VS ผลงานรวม (แยกตามหมวดหมู่)', align: 'left' },
-      tooltip: { // ปรับ Tooltip เป็น 2 ตำแหน่ง
-        y: { formatter: function(val: any) { return Number(val).toFixed(2) + " คะแนน"; } }
+      colors: ['#10b981'],
+      title: { text: 'เปรียบเทียบ % ผลงาน/เป้าหมาย (แยกตามหมวดหมู่)', align: 'left' },
+      tooltip: {
+        custom: function({ series, seriesIndex, dataPointIndex, w }: any) {
+          const name = w.globals.labels[dataPointIndex];
+          const pct = series[seriesIndex][dataPointIndex];
+          return `<div style="padding:8px 12px"><b>${name}</b><br>ผลงาน: <b>${pct}%</b></div>`;
+        }
+      },
+      annotations: {
+        xaxis: [{ x: 80, borderColor: '#16a34a', strokeDashArray: 4, label: { text: 'เป้าหมาย 80%', style: { color: '#16a34a', fontSize: '11px' } } }]
       }
     };
 
@@ -285,7 +314,8 @@ export class ChartComponent implements OnInit {
         { name: "ผลงานรายเดือน", data: monthlyActuals },
         { name: "ค่าเฉลี่ยเป้าหมาย", data: targetLine }
       ],
-      chart: { type: "line", height: 350, fontFamily: 'Sarabun, sans-serif' },
+      chart: { type: "area", height: 400, fontFamily: 'Sarabun, sans-serif', toolbar: { show: true } },
+      fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stops: [0, 100] } },
       stroke: { width: [4, 2], curve: 'smooth', dashArray: [0, 5] },
       labels: monthLabels,
       colors: ['#10b981', '#fbbf24'],
@@ -319,21 +349,35 @@ export class ChartComponent implements OnInit {
     // 3. Pie Chart Config (สัดส่วนหน่วยงาน)
     this.pieChartOptions = {
       series: pieValues,
-      chart: { type: "pie", height: 350, fontFamily: 'Sarabun, sans-serif' },
+      chart: { type: "donut", height: 400, fontFamily: 'Sarabun, sans-serif' },
       labels: pieLabels,
       title: { text: 'สัดส่วนผลงานแยกตามหน่วยงาน', align: 'left' },
-      tooltip: { // ปรับ Tooltip เป็น 2 ตำแหน่ง
-        y: { formatter: function(val: any) { return Number(val).toFixed(2); } }
-      },
-      dataLabels: { // ปรับตัวเลขบนกราฟ Pie เป็น 2 ตำแหน่ง
-        formatter: function (val: any, opts: any) {
-            return val.toFixed(2) + "%";
+      plotOptions: {
+        pie: {
+          donut: {
+            size: '55%',
+            labels: {
+              show: true,
+              name: { show: true, fontSize: '14px', fontWeight: 'bold' },
+              value: { show: true, fontSize: '16px', formatter: (val: any) => Number(val).toFixed(2) },
+              total: { show: true, label: 'ผลงานรวม', fontSize: '13px', formatter: (w: any) => w.globals.seriesTotals.reduce((a: number, b: number) => a + b, 0).toFixed(2) }
+            }
+          }
         }
       },
+      legend: { position: 'bottom', fontSize: '12px' },
+      tooltip: {
+        y: { formatter: function(val: any) { return Number(val).toFixed(2); } }
+      },
+      dataLabels: {
+        enabled: true,
+        formatter: function (val: any) { return val.toFixed(1) + "%"; },
+        style: { fontSize: '11px' }
+      },
       responsive: [{
-        breakpoint: 480,
+        breakpoint: 640,
         options: {
-          chart: { width: 200 },
+          chart: { height: 350 },
           legend: { position: "bottom" }
         }
       }]

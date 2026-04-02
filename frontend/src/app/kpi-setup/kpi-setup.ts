@@ -320,4 +320,59 @@ export class KpiSetupComponent implements OnInit {
       })
     });
   }
+
+  bulkAddAllHospitals() {
+    if (!this.selectedYear) {
+      Swal.fire('แจ้งเตือน', 'กรุณาเลือกปีงบประมาณ', 'warning');
+      return;
+    }
+    const deptLabel = this.isSuperAdmin
+      ? 'ทุกหน่วยงาน'
+      : (this.departments.find(d => d.id?.toString() === this.selectedDept)?.dept_name || 'หน่วยงานของคุณ');
+    Swal.fire({
+      title: 'เพิ่ม KPI ทุกหน่วยบริการ',
+      html: `<p class="text-sm text-gray-600">เพิ่มตัวชี้วัดของ <b>${deptLabel}</b> ให้ <b>ทุกหน่วยบริการ</b> ในปี <b>${this.selectedYear}</b></p>
+             <p class="text-xs text-amber-600 mt-2"><i class="fas fa-info-circle mr-1"></i>เพิ่มเฉพาะที่ยังไม่มี ข้อมูลเดิมจะไม่ถูกแก้ไข</p>`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#4f46e5',
+      confirmButtonText: '<i class="fas fa-layer-group mr-1"></i> เพิ่มทั้งหมด',
+      cancelButtonText: 'ยกเลิก'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        Swal.fire({ title: 'กำลังเพิ่มข้อมูล...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        this.authService.bulkAddKpi(this.selectedYear, this.isSuperAdmin ? '' : this.selectedDept).subscribe({
+          next: (r: any) => {
+            Swal.fire({
+              icon: 'success',
+              title: 'เพิ่ม KPI สำเร็จ',
+              html: `<div class="text-left text-sm space-y-2">
+                <div class="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <p class="font-bold text-green-800 mb-1"><i class="fas fa-check-circle mr-1"></i>สรุปผลการเพิ่มข้อมูล</p>
+                  <table class="w-full text-xs">
+                    <tr><td class="py-1 text-gray-600">ปีงบประมาณ</td><td class="font-bold">${r.year_bh}</td></tr>
+                    <tr><td class="py-1 text-gray-600">ตัวชี้วัด</td><td class="font-bold">${r.indicatorCount} รายการ</td></tr>
+                    <tr><td class="py-1 text-gray-600">หน่วยบริการ</td><td class="font-bold">${r.hospitalCount} แห่ง</td></tr>
+                  </table>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div class="bg-blue-50 border border-blue-200 rounded-lg p-2 text-center">
+                    <p class="text-xl font-bold text-blue-700">${r.inserted}</p>
+                    <p class="text-[10px] text-blue-600">ชุดที่เพิ่มใหม่</p>
+                  </div>
+                  <div class="bg-gray-50 border border-gray-200 rounded-lg p-2 text-center">
+                    <p class="text-xl font-bold text-gray-500">${r.skipped}</p>
+                    <p class="text-[10px] text-gray-500">ชุดที่ข้าม (มีอยู่แล้ว)</p>
+                  </div>
+                </div>
+                <p class="text-xs text-gray-400"><i class="fas fa-database mr-1"></i>สร้างทั้งหมด ${r.totalRecords} records (12 เดือน × ${r.inserted} ชุด)</p>
+              </div>`,
+              confirmButtonColor: '#10b981'
+            });
+          },
+          error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถเพิ่มข้อมูลได้', 'error')
+        });
+      }
+    });
+  }
 }

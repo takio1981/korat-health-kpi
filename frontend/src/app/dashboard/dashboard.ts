@@ -31,12 +31,18 @@ export class DashboardComponent implements OnInit {
   selectedHospital: string = '';
   selectedDistrict: string = '';
 
+  showFilters: boolean = true;
   mainCategories: string[] = [];
   indicatorNames: string[] = [];
   deptNames: string[] = [];
   filterYears: string[] = [];
   hospitalNames: string[] = [];
   districtNames: string[] = [];
+
+  // Raw data for cascading filters
+  private _allHospitals: any[] = [];
+  private _allIndicators: any[] = [];
+  private _allDistricts: any[] = [];
   addKpiYears: string[] = [];
   addKpiSelectedYear: string = '';
   addKpiDistrictList: any[] = [];
@@ -52,6 +58,10 @@ export class DashboardComponent implements OnInit {
   isEditing: boolean = false;
   showAddModal: boolean = false;
   newKpiList: any[] = [];
+
+  // Review mode — เลือกรายการตรวจสอบ
+  isReviewMode: boolean = false;
+  reviewSelected = new Set<string>(); // key: indicator_id_year_bh_hospcode
 
   showTrendModal: boolean = false;
   selectedKpiName: string = '';
@@ -149,8 +159,13 @@ export class DashboardComponent implements OnInit {
 
     // ตั้งค่า filter เริ่มต้นตาม role เพื่อลดภาระโหลดข้อมูล
     this.setDefaultFilters();
+    this.setDefaultYear();
+    this.extractFilterLists();
 
-    this.loadKpiData();
+    // super_admin ไม่โหลดข้อมูลอัตโนมัติ — ให้เลือกตัวกรองก่อน
+    if (!this.isSuperAdmin) {
+      this.loadKpiData();
+    }
     this.loadAppealSettings();
     this.loadDataEntryLock();
     if (this.isAdmin || this.isLocalAdmin) this.loadTargetEditRequests();
@@ -193,7 +208,18 @@ export class DashboardComponent implements OnInit {
 
   loadKpiData() {
     this.isLoading = true;
-    this.authService.getKpiResults().subscribe({
+    if (!this.selectedYear) this.setDefaultYear();
+    // ส่ง filter ไปกรองที่ backend — ลดข้อมูลมหาศาล
+    const filters: any = { year: this.selectedYear };
+    if (this.selectedHospital) {
+      const hos = this.kpiData?.find((d: any) => d.hosname === this.selectedHospital);
+      if (hos?.hospcode) filters.hospcode = hos.hospcode;
+    }
+    if (this.selectedDept) filters.dept = this.selectedDept;
+    if (this.selectedDistrict) filters.district = this.selectedDistrict;
+    if (this.selectedIndicator) filters.indicator = this.selectedIndicator;
+    if (this.selectedMain) filters.main = this.selectedMain;
+    this.authService.getKpiResults(filters).subscribe({
       next: (res) => {
         this.isLoading = false;
         if (res && res.success) {
@@ -314,18 +340,105 @@ export class DashboardComponent implements OnInit {
     this.selectedYear = (year + 543).toString();
   }
 
+  private _filterListsLoaded = false;
+
   extractFilterLists() {
-    this.mainCategories = [...new Set(this.kpiData.map(item => item.main_indicator_name))];
-    this.indicatorNames = [...new Set(this.kpiData.map(item => item.kpi_indicators_name))];
-    this.deptNames = [...new Set(this.kpiData.map(item => item.dept_name))];
-    this.hospitalNames = [...new Set(this.kpiData.map(item => item.hosname).filter(Boolean))].sort();
-    this.districtNames = [...new Set(this.kpiData.map(item => item.distname).filter(Boolean))].sort();
-    this.filterYears = [...new Set(this.kpiData.map(item => item.year_bh))].sort().reverse();
+    const currentBhYear = new Date().getFullYear() + 543 + (new Date().getMonth() >= 9 ? 1 : 0);
+    this.filterYears = [currentBhYear + 1, currentBhYear, currentBhYear - 1, currentBhYear - 2].map(String);
+
+    if (!this._filterListsLoaded) {
+      this._filterListsLoaded = true;
+      this.authService.getDepartments().subscribe(res => {
+        if (res.success) { this.deptNames = res.data.map((d: any) => d.dept_name); this.cdr.detectChanges(); }
+      });
+      this.authService.getHospitals().subscribe(res => {
+        if (res.success) {
+          this._allHospitals = res.data;
+          this.hospitalNames = res.data.map((h: any) => h.hosname).filter(Boolean).sort();
+          this.cdr.detectChanges();
+        }
+      });
+      this.authService.getDistricts().subscribe(res => {
+        if (res.success) {
+          this._allDistricts = res.data;
+          this.districtNames = res.data.map((d: any) => d.distname).filter(Boolean).sort();
+          this.cdr.detectChanges();
+        }
+      });
+      this.authService.getIndicators().subscribe(res => {
+        if (res.success) {
+          this._allIndicators = res.data;
+          this.indicatorNames = Array.from(new Set<string>(res.data.map((i: any) => i.kpi_indicators_name)));
+          this.mainCategories = Array.from(new Set<string>(res.data.map((i: any) => i.main_indicator_name).filter(Boolean)));
+          this.cdr.detectChanges();
+        }
+      });
+    }
+  }
+
+  // === Cascading filter logic ===
+  onDistrictFilterChange() {
+    // เมื่อเลือกอำเภอ → กรองหน่วยบริการตามอำเภอ
+    if (this.selectedDistrict && this._allHospitals.length > 0) {
+      const dist = this._allDistricts.find((d: any) => d.distname === this.selectedDistrict);
+      if (dist) {
+        this.hospitalNames = this._allHospitals
+          .filter((h: any) => h.distid === dist.distid)
+          .map((h: any) => h.hosname).filter(Boolean).sort();
+      }
+    } else {
+      this.hospitalNames = this._allHospitals.map((h: any) => h.hosname).filter(Boolean).sort();
+    }
+    // reset hospital ถ้าไม่อยู่ใน list ใหม่
+    if (this.selectedHospital && !this.hospitalNames.includes(this.selectedHospital)) {
+      this.selectedHospital = '';
+    }
+    this.onFilterChange();
+  }
+
+  onHospitalFilterChange() {
+    // เมื่อเลือกหน่วยบริการ → กรองหมวดหมู่/ตัวชี้วัด ตามหน่วยงาน (dept) ของหน่วยบริการนั้น
+    if (this.selectedHospital && this._allIndicators.length > 0) {
+      // หา dept ของ hospital ที่เลือกจาก kpiData ที่โหลดมา
+      const matchItem = this.kpiData.find((d: any) => d.hosname === this.selectedHospital);
+      if (matchItem?.dept_name) {
+        const deptInds = this._allIndicators.filter((i: any) => i.dept_name === matchItem.dept_name);
+        this.indicatorNames = Array.from(new Set<string>(deptInds.map((i: any) => i.kpi_indicators_name)));
+        this.mainCategories = Array.from(new Set<string>(deptInds.map((i: any) => i.main_indicator_name).filter(Boolean)));
+      }
+    } else {
+      // reset กลับทั้งหมด
+      this.indicatorNames = Array.from(new Set<string>(this._allIndicators.map((i: any) => i.kpi_indicators_name)));
+      this.mainCategories = Array.from(new Set<string>(this._allIndicators.map((i: any) => i.main_indicator_name).filter(Boolean)));
+    }
+    // reset indicator/main ถ้าไม่อยู่ใน list ใหม่
+    if (this.selectedIndicator && !this.indicatorNames.includes(this.selectedIndicator)) this.selectedIndicator = '';
+    if (this.selectedMain && !this.mainCategories.includes(this.selectedMain)) this.selectedMain = '';
+    this.onFilterChange();
+  }
+
+  onDeptFilterChange() {
+    // เมื่อเลือกหน่วยงาน → กรองหมวดหมู่/ตัวชี้วัด ตามหน่วยงาน
+    if (this.selectedDept && this._allIndicators.length > 0) {
+      const deptInds = this._allIndicators.filter((i: any) => i.dept_name === this.selectedDept);
+      this.indicatorNames = Array.from(new Set<string>(deptInds.map((i: any) => i.kpi_indicators_name)));
+      this.mainCategories = Array.from(new Set<string>(deptInds.map((i: any) => i.main_indicator_name).filter(Boolean)));
+    } else {
+      this.indicatorNames = Array.from(new Set<string>(this._allIndicators.map((i: any) => i.kpi_indicators_name)));
+      this.mainCategories = Array.from(new Set<string>(this._allIndicators.map((i: any) => i.main_indicator_name).filter(Boolean)));
+    }
+    if (this.selectedIndicator && !this.indicatorNames.includes(this.selectedIndicator)) this.selectedIndicator = '';
+    if (this.selectedMain && !this.mainCategories.includes(this.selectedMain)) this.selectedMain = '';
+    this.onFilterChange();
   }
 
   onYearChange() {
-    this.applyFilters();
+    this.loadKpiData();
     this.loadDashboardStats();
+  }
+
+  onFilterChange() {
+    this.loadKpiData();
   }
 
   setDefaultFilters() {
@@ -333,15 +446,13 @@ export class DashboardComponent implements OnInit {
     const user = this.currentUser;
     if (!user) return;
 
-    // super_admin / admin_ssj → ไม่ตั้งค่าเริ่มต้น (เห็นทั้งหมด ให้เลือกเอง)
-    // admin_cup / user_cup → กรองตามอำเภอ
-    // admin_hos / admin_sso / user_hos / user_sso → กรองตามหน่วยบริการ
+    // ทุก role กรองตาม hospcode/อำเภอ ของตัวเองเป็นค่าเริ่มต้น
     if (['admin_hos', 'admin_sso', 'user_hos', 'user_sso'].includes(role)) {
-      // จะ set selectedHospital หลังจากโหลดข้อมูลเสร็จ (ใน loadKpiData callback)
       this._defaultHospcode = user.hospcode || '';
     } else if (['admin_cup', 'user_cup'].includes(role)) {
       this._defaultDistrictScope = true;
     }
+    // super_admin / admin_ssj → backend limit 500 + กรองตาม year เริ่มต้น (ไม่ lock filter)
   }
 
   private _defaultHospcode: string = '';
@@ -352,11 +463,11 @@ export class DashboardComponent implements OnInit {
     this.selectedMain = '';
     this.selectedIndicator = '';
     this.selectedDept = '';
-    this.selectedYear = '';
+    this.setDefaultYear();
     this.selectedStatus = '';
     this.selectedHospital = '';
     this.selectedDistrict = '';
-    this.applyFilters();
+    this.loadKpiData();
   }
 
   applyFilters() {
@@ -408,7 +519,8 @@ export class DashboardComponent implements OnInit {
         icon: 'info',
         title: 'เข้าสู่โหมดแก้ไข',
         text: 'คุณสามารถแก้ไขตัวเลขในตารางได้แล้ว',
-        timer: 1500,
+        timer: 5000,
+        timerProgressBar: true,
         showConfirmButton: false
       });
     } else {
@@ -704,10 +816,89 @@ export class DashboardComponent implements OnInit {
         this.authService.approveKpiResults(approvals).subscribe({
           next: (res) => {
             Swal.fire('สำเร็จ', 'อนุมัติข้อมูลเรียบร้อยแล้ว', 'success');
+            this.selectedStatus = '';
             this.loadKpiData();
             this.loadDashboardStats();
           },
           error: (err) => Swal.fire('เกิดข้อผิดพลาด', 'ไม่สามารถอนุมัติข้อมูลได้', 'error')
+        });
+      }
+    });
+  }
+
+  // === Review Mode — เลือกรายการแล้วอนุมัติ/ตีกลับ ===
+  toggleReviewMode() {
+    this.isReviewMode = !this.isReviewMode;
+    if (!this.isReviewMode) this.reviewSelected.clear();
+  }
+
+  reviewKey(item: any): string {
+    return `${item.indicator_id}_${item.year_bh}_${item.hospcode}`;
+  }
+
+  toggleReviewItem(item: any) {
+    const key = this.reviewKey(item);
+    this.reviewSelected.has(key) ? this.reviewSelected.delete(key) : this.reviewSelected.add(key);
+  }
+
+  toggleReviewAll() {
+    const pending = this.filteredData.filter(i => i.pending_count > 0);
+    if (this.reviewSelected.size === pending.length) {
+      this.reviewSelected.clear();
+    } else {
+      pending.forEach(i => this.reviewSelected.add(this.reviewKey(i)));
+    }
+  }
+
+  get reviewAllChecked(): boolean {
+    const pending = this.filteredData.filter(i => i.pending_count > 0);
+    return pending.length > 0 && this.reviewSelected.size === pending.length;
+  }
+
+  approveSelected() {
+    if (this.reviewSelected.size === 0) { Swal.fire('แจ้งเตือน', 'กรุณาเลือกรายการอย่างน้อย 1 รายการ', 'warning'); return; }
+    const items = this.filteredData.filter(i => this.reviewSelected.has(this.reviewKey(i)));
+    Swal.fire({
+      title: 'ยืนยันการตรวจสอบ',
+      html: `<p class="text-sm">อนุมัติ <b>${items.length}</b> รายการที่เลือก?</p>`,
+      icon: 'question', showCancelButton: true, confirmButtonColor: '#16a34a',
+      confirmButtonText: '<i class="fas fa-check-double mr-1"></i> อนุมัติที่เลือก', cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (r.isConfirmed) {
+        Swal.fire({ title: 'กำลังอนุมัติ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        const approvals = items.map(i => ({ indicator_id: i.indicator_id, year_bh: i.year_bh, hospcode: i.hospcode }));
+        this.authService.approveKpiResults(approvals).subscribe({
+          next: () => {
+            Swal.fire({ icon: 'success', title: 'อนุมัติสำเร็จ', text: `อนุมัติ ${items.length} รายการเรียบร้อย`, timer: 2000, showConfirmButton: false });
+            this.isReviewMode = false; this.reviewSelected.clear();
+            this.loadKpiData(); this.loadDashboardStats();
+          },
+          error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถอนุมัติได้', 'error')
+        });
+      }
+    });
+  }
+
+  rejectSelected() {
+    if (this.reviewSelected.size === 0) { Swal.fire('แจ้งเตือน', 'กรุณาเลือกรายการอย่างน้อย 1 รายการ', 'warning'); return; }
+    const items = this.filteredData.filter(i => this.reviewSelected.has(this.reviewKey(i)));
+    Swal.fire({
+      title: 'ตีกลับรายการที่เลือก',
+      html: `<p class="text-sm">ตีกลับ <b>${items.length}</b> รายการ?</p>`,
+      input: 'textarea', inputLabel: 'เหตุผล (ไม่บังคับ)', inputPlaceholder: 'ระบุเหตุผลในการตีกลับ...',
+      icon: 'warning', showCancelButton: true, confirmButtonColor: '#dc2626',
+      confirmButtonText: '<i class="fas fa-undo-alt mr-1"></i> ตีกลับที่เลือก', cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (r.isConfirmed) {
+        Swal.fire({ title: 'กำลังตีกลับ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        const rejections = items.map(i => ({ indicator_id: i.indicator_id, year_bh: i.year_bh, hospcode: i.hospcode, comment: r.value || '' }));
+        this.authService.rejectKpiResults(rejections).subscribe({
+          next: () => {
+            Swal.fire({ icon: 'success', title: 'ตีกลับสำเร็จ', text: `ตีกลับ ${items.length} รายการเรียบร้อย`, timer: 2000, showConfirmButton: false });
+            this.isReviewMode = false; this.reviewSelected.clear();
+            this.loadKpiData(); this.loadDashboardStats();
+          },
+          error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถตีกลับได้', 'error')
         });
       }
     });
@@ -732,6 +923,84 @@ export class DashboardComponent implements OnInit {
             }
           },
           error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถดำเนินการได้', 'error')
+        });
+      }
+    });
+  }
+
+  bulkAddAllKpi() {
+    this.calculateAddKpiYears();
+    // Step 1: เลือกปี
+    Swal.fire({
+      title: 'เพิ่ม KPI ทุกหน่วยบริการ',
+      html: '<p class="text-sm text-gray-600">เลือกปีงบประมาณ แล้วระบบจะตรวจสอบข้อมูลก่อน</p>',
+      input: 'select',
+      inputOptions: this.addKpiYears.reduce((acc: any, y: string) => { acc[y] = y; return acc; }, {}),
+      inputValue: this.selectedYear || this.addKpiYears[0],
+      showCancelButton: true, confirmButtonColor: '#4f46e5',
+      confirmButtonText: '<i class="fas fa-search mr-1"></i> ตรวจสอบ', cancelButtonText: 'ยกเลิก'
+    }).then(r1 => {
+      if (!r1.isConfirmed) return;
+      const year = r1.value;
+      // Step 2: Preview
+      Swal.fire({ title: 'กำลังตรวจสอบ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      this.authService.bulkAddKpiPreview(year).subscribe({
+        next: (p: any) => {
+          Swal.fire({
+            title: 'สรุปก่อนเพิ่ม KPI',
+            html: `<div class="text-left text-sm space-y-2">
+              <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <table class="w-full text-xs">
+                  <tr><td class="py-1 text-gray-600">ปีงบประมาณ</td><td class="font-bold">${p.year_bh}</td></tr>
+                  <tr><td class="py-1 text-gray-600">ตัวชี้วัด (active)</td><td class="font-bold">${p.indicatorCount} รายการ</td></tr>
+                  <tr><td class="py-1 text-gray-600">หน่วยบริการ (รพ./สสอ./รพ.สต.)</td><td class="font-bold">${p.hospitalCount} แห่ง</td></tr>
+                  <tr><td class="py-1 text-gray-600">ชุดที่เป็นไปได้ทั้งหมด</td><td class="font-bold">${p.totalPossible.toLocaleString()}</td></tr>
+                  <tr><td class="py-1 text-gray-600">มีอยู่แล้ว</td><td class="font-bold text-gray-500">${p.existingCount.toLocaleString()}</td></tr>
+                  <tr class="border-t"><td class="py-1 text-green-700 font-bold">ต้องเพิ่มใหม่</td><td class="font-bold text-green-700">${p.toAdd.toLocaleString()} ชุด (${(p.toAdd * 12).toLocaleString()} records)</td></tr>
+                </table>
+              </div>
+              ${p.toAdd === 0 ? '<p class="text-green-600 text-xs"><i class="fas fa-check-circle mr-1"></i>มีข้อมูลครบทุกชุดแล้ว ไม่ต้องเพิ่ม</p>' : '<p class="text-xs text-amber-600"><i class="fas fa-info-circle mr-1"></i>เพิ่มเฉพาะที่ยังไม่มี ข้อมูลเดิมจะไม่ถูกแก้ไข</p>'}
+            </div>`,
+            icon: p.toAdd > 0 ? 'question' : 'success',
+            showCancelButton: p.toAdd > 0, confirmButtonColor: p.toAdd > 0 ? '#4f46e5' : '#10b981',
+            confirmButtonText: p.toAdd > 0 ? `<i class="fas fa-layer-group mr-1"></i> เพิ่ม ${p.toAdd.toLocaleString()} ชุด` : 'ตกลง',
+            cancelButtonText: 'ยกเลิก'
+          }).then(r2 => {
+            if (r2.isConfirmed && p.toAdd > 0) {
+              Swal.fire({ title: 'กำลังเพิ่มข้อมูล...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+              this.authService.bulkAddKpi(year).subscribe({
+                next: (res: any) => {
+                  Swal.fire({ icon: 'success', title: 'เพิ่มสำเร็จ',
+                    html: `เพิ่มใหม่ <b>${res.inserted}</b> ชุด (${res.totalRecords} records)<br>ข้าม <b>${res.skipped}</b> ชุดที่มีอยู่แล้ว`,
+                    confirmButtonColor: '#10b981' });
+                  this.loadKpiData();
+                },
+                error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถเพิ่มได้', 'error')
+              });
+            }
+          });
+        },
+        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถตรวจสอบได้', 'error')
+      });
+    });
+  }
+
+  unlockAll() {
+    if (!this.selectedYear) this.setDefaultYear();
+    Swal.fire({
+      title: 'ปลดล็อคทั้งหมด',
+      html: `<p class="text-sm">ปลดล็อคข้อมูลทั้งหมดในปี <b>${this.selectedYear}</b> เพื่อให้หน่วยงานแก้ไขได้?</p>`,
+      icon: 'warning', showCancelButton: true, confirmButtonColor: '#f59e0b',
+      confirmButtonText: '<i class="fas fa-lock-open mr-1"></i> ปลดล็อคทั้งหมด', cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (r.isConfirmed) {
+        Swal.fire({ title: 'กำลังปลดล็อค...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        this.authService.unlockAllKpi(this.selectedYear).subscribe({
+          next: (res: any) => {
+            Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, confirmButtonColor: '#10b981' });
+            this.loadKpiData();
+          },
+          error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถปลดล็อคได้', 'error')
         });
       }
     });
@@ -1295,6 +1564,7 @@ export class DashboardComponent implements OnInit {
         this.authService.rejectKpi(rejections).subscribe({
           next: (res) => {
             Swal.fire('สำเร็จ', `ส่งคืนแก้ไขเรียบร้อยแล้ว ${pendingItems.length} รายการ`, 'success');
+            this.selectedStatus = '';
             this.loadKpiData();
             this.loadDashboardStats();
           },

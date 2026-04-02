@@ -8,14 +8,22 @@ const pool = mysql.createPool({
     database: process.env.DB_NAME,
     port: process.env.DB_PORT || 3306,
     waitForConnections: true,
-    connectionLimit: 50,          // รองรับ 500 users (1 connection : 10 users)
-    maxIdle: 20,                  // idle connections ที่เก็บไว้
-    idleTimeout: 60000,           // ปิด idle connection หลัง 60 วินาที
-    queueLimit: 200,              // queue สูงสุด 200 คำขอ (ป้องกัน memory leak)
+    connectionLimit: 50,
+    maxIdle: 10,
+    idleTimeout: 300000,          // 5 นาที (เพิ่มจาก 1 นาที)
+    queueLimit: 200,
     enableKeepAlive: true,
-    keepAliveInitialDelay: 10000, // keep alive ทุก 10 วินาที
-    connectTimeout: 10000,        // timeout connect 10 วินาที
+    keepAliveInitialDelay: 5000,  // keep alive ทุก 5 วินาที
+    connectTimeout: 15000,
     charset: 'utf8mb4'
+});
+
+// Handle connection errors — auto reconnect
+pool.on('error', (err) => {
+    console.error('[DB Pool] Connection error:', err.code);
+    if (err.code === 'PROTOCOL_CONNECTION_LOST' || err.code === 'ECONNRESET') {
+        console.log('[DB Pool] Connection lost — pool will auto-reconnect on next query');
+    }
 });
 
 module.exports = pool.promise();

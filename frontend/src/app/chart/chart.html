@@ -127,24 +127,25 @@
           [title]="barChartOptions.title"
         ></apx-chart>
       </div>
-      <div *ngIf="!isLoading" class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
-        <!-- Line Chart -->
+      <!-- Line Chart (Full Width) -->
+      <div *ngIf="!isLoading" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6 sm:mb-8">
+        <apx-chart
+          [series]="trendChartOptions.series"
+          [chart]="trendChartOptions.chart"
+          [xaxis]="trendChartOptions.xaxis"
+          [yaxis]="trendChartOptions.yaxis"
+          [dataLabels]="trendChartOptions.dataLabels"
+          [tooltip]="trendChartOptions.tooltip"
+          [stroke]="trendChartOptions.stroke"
+          [colors]="trendChartOptions.colors"
+          [labels]="trendChartOptions.labels"
+          [title]="trendChartOptions.title"
+        ></apx-chart>
+      </div>
+
+      <div *ngIf="!isLoading" class="grid grid-cols-1 gap-4 sm:gap-6 mb-6 sm:mb-8">
+        <!-- แผนที่ผลงาน KPI รายอำเภอ (Full Width) -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <apx-chart
-            [series]="trendChartOptions.series"
-            [chart]="trendChartOptions.chart"
-            [xaxis]="trendChartOptions.xaxis"
-            [yaxis]="trendChartOptions.yaxis"
-            [dataLabels]="trendChartOptions.dataLabels"
-            [tooltip]="trendChartOptions.tooltip"
-            [stroke]="trendChartOptions.stroke"
-            [colors]="trendChartOptions.colors"
-            [labels]="trendChartOptions.labels"
-            [title]="trendChartOptions.title"
-          ></apx-chart>
-        </div>
-        <!-- แผนที่ผลงาน KPI รายอำเภอ -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 col-span-1 md:col-span-2">
           <h3 class="text-lg font-bold text-gray-800 mb-1">
             <i class="fas fa-map-marked-alt text-green-600 mr-2"></i>แผนที่ผลงาน KPI รายอำเภอ — จ.นครราชสีมา
           </h3>
@@ -196,7 +197,7 @@
           </div>
         </div>
 
-        <!-- กราฟวงกลม -->
+        <!-- กราฟวงกลม (Full Width) -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <apx-chart *ngIf="pieChartOptions.series && pieChartOptions.series.length > 0"
             [series]="pieChartOptions.series"
@@ -204,6 +205,8 @@
             [labels]="pieChartOptions.labels"
             [dataLabels]="pieChartOptions.dataLabels"
             [tooltip]="pieChartOptions.tooltip"
+            [plotOptions]="pieChartOptions.plotOptions"
+            [legend]="pieChartOptions.legend"
             [responsive]="pieChartOptions.responsive"
             [title]="pieChartOptions.title"
           ></apx-chart>

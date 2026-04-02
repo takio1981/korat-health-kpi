@@ -201,19 +201,21 @@
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center"><i class="fas fa-th-large text-amber-600"></i></div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">4. หน้า Dashboard — ภาพรวมตัวชี้วัด</h2>
-            <p class="text-xs text-gray-400">หน้าหลักสำหรับบันทึกและตรวจสอบ KPI</p>
+            <h2 class="text-xl font-bold text-gray-800">4. บันทึกผลงานตัวชี้วัด</h2>
+            <p class="text-xs text-gray-400">หน้าหลักสำหรับบันทึกและตรวจสอบ KPI (เมนูแรกหลัง Login)</p>
           </div>
         </div>
 
         <!-- Toolbar buttons -->
         <h4 class="font-bold text-gray-700 text-sm mb-2"><i class="fas fa-tools mr-2 text-amber-500"></i>แถบปุ่มด้านบน</h4>
-        <div class="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
           <div class="bg-gray-50 rounded-lg p-3 border"><p class="text-xs font-bold text-gray-700"><i class="fas fa-sync-alt text-gray-500 mr-1"></i>ล้างตัวกรอง</p><p class="text-[10px] text-gray-400">ล้าง filter ทั้งหมด</p></div>
           <div class="bg-green-50 rounded-lg p-3 border border-green-200"><p class="text-xs font-bold text-green-700"><i class="fas fa-plus mr-1"></i>เพิ่ม</p><p class="text-[10px] text-gray-400">เพิ่มตัวชี้วัดใหม่</p></div>
-          <div class="bg-amber-50 rounded-lg p-3 border border-amber-200"><p class="text-xs font-bold text-amber-700"><i class="fas fa-edit mr-1"></i>แก้ไข</p><p class="text-[10px] text-gray-400">เปิดโหมดแก้ไขตาราง</p></div>
-          <div class="bg-blue-50 rounded-lg p-3 border border-blue-200"><p class="text-xs font-bold text-blue-700"><i class="fas fa-check-double mr-1"></i>อนุมัติทั้งหมด</p><p class="text-[10px] text-gray-400">admin_ssj + super_admin</p></div>
-          <div class="bg-red-50 rounded-lg p-3 border border-red-200"><p class="text-xs font-bold text-red-700"><i class="fas fa-undo-alt mr-1"></i>ตีกลับทั้งหมด</p><p class="text-[10px] text-gray-400">admin_ssj + super_admin</p></div>
+          <div class="bg-amber-50 rounded-lg p-3 border border-amber-200"><p class="text-xs font-bold text-amber-700"><i class="fas fa-edit mr-1"></i>แก้ไข</p><p class="text-[10px] text-gray-400">เปิดโหมดแก้ไข (5 วินาที)</p></div>
+          <div class="bg-amber-50 rounded-lg p-3 border border-amber-200"><p class="text-xs font-bold text-amber-700"><i class="fas fa-lock-open mr-1"></i>ปลดล็อคทั้งหมด</p><p class="text-[10px] text-gray-400">super_admin เท่านั้น</p></div>
+          <div class="bg-teal-50 rounded-lg p-3 border border-teal-200"><p class="text-xs font-bold text-teal-700"><i class="fas fa-clipboard-check mr-1"></i>ตรวจสอบ</p><p class="text-[10px] text-gray-400">เลือกรายการ → อนุมัติ/ตีกลับ</p></div>
+          <div class="bg-blue-50 rounded-lg p-3 border border-blue-200"><p class="text-xs font-bold text-blue-700"><i class="fas fa-check-double mr-1"></i>อนุมัติทั้งหมด</p><p class="text-[10px] text-gray-400">เมื่อกรอง status = รอตรวจสอบ</p></div>
+          <div class="bg-red-50 rounded-lg p-3 border border-red-200"><p class="text-xs font-bold text-red-700"><i class="fas fa-undo-alt mr-1"></i>ตีกลับทั้งหมด</p><p class="text-[10px] text-gray-400">เมื่อกรอง status = รอตรวจสอบ</p></div>
           <div class="bg-red-100 rounded-lg p-3 border border-red-300"><p class="text-xs font-bold text-red-700"><i class="fas fa-lock mr-1"></i>ระบบปิดการคีย์</p><p class="text-[10px] text-gray-400">แสดงเมื่อ user ถูกล็อค</p></div>
         </div>
 
@@ -236,10 +238,22 @@
         <div class="mt-4 bg-amber-50 border border-amber-200 rounded-xl p-4">
           <h4 class="font-bold text-amber-800 text-sm mb-2"><i class="fas fa-edit mr-2"></i>วิธีแก้ไขข้อมูล</h4>
           <ol class="list-decimal list-inside text-xs text-amber-700 space-y-1">
-            <li>กดปุ่ม <b>"แก้ไข"</b> — ตารางเปลี่ยนเป็น input fields</li>
+            <li>กดปุ่ม <b>"แก้ไข"</b> — แสดงข้อความ 5 วินาที แล้วตารางเปลี่ยนเป็น input fields</li>
             <li>แก้ไขค่าเป้าหมายหรือคะแนนรายเดือน (ตัวเลข/ข้อความ)</li>
             <li>ช่องที่แก้ไขจะ <b class="text-orange-600">เปลี่ยนสีส้ม</b> แสดงว่ามีการเปลี่ยนแปลง</li>
             <li>กด <b>"บันทึก"</b> → ยืนยัน → บันทึก | กด <b>"คืนค่า"</b> → กลับค่าเดิม | กด <b>"ยกเลิก"</b> → ออกจากโหมดแก้ไข</li>
+            <li><b>super_admin</b> สามารถแก้ไขข้อมูลที่ถูกล็อคได้ + กดปุ่ม <b>"ปลดล็อคทั้งหมด"</b> เพื่อปลดล็อคทุกรายการในปี</li>
+          </ol>
+        </div>
+
+        <!-- Review mode -->
+        <div class="mt-4 bg-teal-50 border border-teal-200 rounded-xl p-4">
+          <h4 class="font-bold text-teal-800 text-sm mb-2"><i class="fas fa-clipboard-check mr-2"></i>โหมดตรวจสอบ (Review Mode)</h4>
+          <ol class="list-decimal list-inside text-xs text-teal-700 space-y-1">
+            <li>กดปุ่ม <b>"ตรวจสอบ"</b> → เข้า Review Mode (สำหรับ admin_ssj / super_admin)</li>
+            <li>เลือกรายการด้วย <b>checkbox</b> ทีละตัว หรือกด <b>"เลือกทั้งหมดที่รอตรวจสอบ"</b></li>
+            <li>กดปุ่ม <b>"อนุมัติที่เลือก"</b> หรือ <b>"ตีกลับที่เลือก"</b> (ระบุเหตุผล)</li>
+            <li>หลังอนุมัติ/ตีกลับ → กลับหน้าเริ่มต้นอัตโนมัติ</li>
           </ol>
         </div>
 
@@ -252,11 +266,21 @@
               <tbody class="divide-y divide-green-100">
                 <tr><td class="px-3 py-1.5 font-bold">user_hos / user_sso / admin_hos / admin_sso</td><td class="px-3 py-1.5">กรองตาม <b>หน่วยบริการ</b> ของตัวเอง</td></tr>
                 <tr><td class="px-3 py-1.5 font-bold">user_cup / admin_cup</td><td class="px-3 py-1.5">กรองตาม <b>อำเภอ</b> ของตัวเอง</td></tr>
-                <tr><td class="px-3 py-1.5 font-bold">admin_ssj / super_admin</td><td class="px-3 py-1.5">ไม่กรอง (แสดงทั้งหมด) + แสดงคำแนะนำให้เลือก filter</td></tr>
+                <tr><td class="px-3 py-1.5 font-bold">admin_ssj</td><td class="px-3 py-1.5">โหลดข้อมูลอัตโนมัติ (กรองตาม dept)</td></tr>
+                <tr><td class="px-3 py-1.5 font-bold">super_admin</td><td class="px-3 py-1.5"><b>ไม่โหลดอัตโนมัติ</b> — ต้องเลือกตัวกรองก่อน หรือกดปุ่ม "โหลดข้อมูลทั้งหมด"</td></tr>
               </tbody>
             </table>
           </div>
           <p class="text-[10px] text-green-600 mt-2"><i class="fas fa-info-circle mr-1"></i>กดปุ่ม "ล้างตัวกรอง" เพื่อดูข้อมูลทั้งหมดได้ทุกเมื่อ</p>
+          <div class="mt-3 bg-white border border-green-200 rounded-lg p-3 text-xs text-green-700 space-y-1">
+            <p class="font-bold"><i class="fas fa-link mr-1"></i>ตัวกรองสอดคล้องกัน (Cascading Filters)</p>
+            <ul class="list-disc ml-4 space-y-0.5">
+              <li>เลือก <b>อำเภอ</b> → หน่วยบริการแสดงเฉพาะในอำเภอนั้น</li>
+              <li>เลือก <b>หน่วยบริการ</b> → หมวดหมู่ + ตัวชี้วัด แสดงเฉพาะหน่วยงานของหน่วยบริการนั้น</li>
+              <li>เลือก <b>หน่วยงาน</b> → หมวดหมู่ + ตัวชี้วัด แสดงเฉพาะหน่วยงานนั้น</li>
+              <li>กดปุ่ม <b>"ซ่อนตัวกรอง / แสดงตัวกรอง"</b> เพื่อเพิ่มพื้นที่ดูข้อมูล</li>
+            </ul>
+          </div>
         </div>
 
         <!-- Action buttons per KPI -->
@@ -282,11 +306,12 @@
             <p class="text-xs text-gray-400">รายงานภาพรวมแบบกราฟ</p>
           </div>
         </div>
+        <p class="text-xs text-gray-500 mb-3">ทุกกราฟแสดงความกว้าง 100% เต็มจอ</p>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-chart-bar text-blue-500 text-lg mr-2"></i><b class="text-sm">กราฟแท่ง</b><p class="text-xs text-gray-500 mt-1">เปรียบเทียบเป้าหมาย VS ผลงาน แยกตามหมวดหมู่</p></div>
-          <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-chart-line text-green-500 text-lg mr-2"></i><b class="text-sm">กราฟเส้น</b><p class="text-xs text-gray-500 mt-1">แนวโน้มผลงานรายเดือน + เส้นเป้าหมาย</p></div>
+          <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-chart-bar text-blue-500 text-lg mr-2"></i><b class="text-sm">กราฟแท่งนอน %ผลงาน</b><p class="text-xs text-gray-500 mt-1">แสดง %ผลงาน/เป้าหมาย แยกสี: <span class="text-green-600">เขียว ≥80%</span> / <span class="text-amber-600">เหลือง 50-79%</span> / <span class="text-red-600">แดง &lt;50%</span> + เส้นประเป้าหมาย 80%</p></div>
+          <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-chart-area text-green-500 text-lg mr-2"></i><b class="text-sm">กราฟ Area แนวโน้ม</b><p class="text-xs text-gray-500 mt-1">แนวโน้มผลงานรายเดือน (ต.ค.-ก.ย.) + เส้นเฉลี่ยเป้าหมาย พร้อม gradient fill</p></div>
           <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-map-marked-alt text-teal-500 text-lg mr-2"></i><b class="text-sm">แผนที่อำเภอ</b><p class="text-xs text-gray-500 mt-1">ผลงานรายอำเภอ สี 3 ระดับ: เขียว ≥80% / เหลือง 50-79% / แดง &lt;50%</p></div>
-          <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-chart-pie text-purple-500 text-lg mr-2"></i><b class="text-sm">กราฟวงกลม</b><p class="text-xs text-gray-500 mt-1">สัดส่วนผลงานแยกตามหน่วยงาน</p></div>
+          <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-circle-notch text-purple-500 text-lg mr-2"></i><b class="text-sm">Donut Chart สัดส่วน</b><p class="text-xs text-gray-500 mt-1">สัดส่วนผลงานแยกตามหน่วยงาน แสดงผลงานรวมตรงกลาง</p></div>
         </div>
 
         <!-- District map detail -->
@@ -830,7 +855,23 @@
           </div>
           <div class="bg-gray-50 rounded-xl p-4">
             <p class="text-sm font-bold text-gray-800">ถาม: "จัดการข้อมูล KPI" มี Tab อะไรบ้าง?</p>
-            <p class="text-xs text-gray-600 mt-1">ตอบ: 4 Tab — 1) DB Compare (เปรียบเทียบ structure) 2) สร้างแบบฟอร์ม (Form Builder) 3) Export ข้อมูล 4) Report Compare (เทียบ reports HDC กับ kpi_indicators)</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: 4 Tab — 1) DB Compare (เปรียบเทียบ structure + Sticky Action Panel) 2) สร้างแบบฟอร์ม (Form Builder) 3) Export ข้อมูล 4) Report Compare (เทียบ reports HDC กับ kpi_indicators)</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-bold text-gray-800">ถาม: ทำไม Login แล้วได้รับ Email แจ้งเตือน?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: ระบบส่ง Email แจ้งเตือนทุกครั้งที่ Login สำเร็จ (เวลา + IP) เพื่อความปลอดภัย หากไม่ใช่คุณ กรุณาเปลี่ยนรหัสผ่านทันที</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-bold text-gray-800">ถาม: super_admin เปิด Dashboard แล้วไม่เห็นข้อมูล?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: super_admin ไม่โหลดข้อมูลอัตโนมัติเพื่อลดภาระ กรุณาเลือกตัวกรอง (อำเภอ/หน่วยบริการ/หน่วยงาน) หรือกดปุ่ม "โหลดข้อมูลทั้งหมด"</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-bold text-gray-800">ถาม: admin_ssj ไม่เห็นปุ่มลบ?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: ปุ่มลบแสดงเฉพาะ super_admin เท่านั้น admin_ssj สามารถเพิ่ม/แก้ไข/เปิด-ปิดได้ แต่ไม่สามารถลบข้อมูลได้</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-bold text-gray-800">ถาม: dropdown หน่วยบริการเรียงลำดับอย่างไร?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: เรียงตามประเภทหน่วยบริการ (รพ. → สสอ. → รพ.สต. → ศูนย์สุขภาพ) แล้วตามชื่อ</p>
           </div>
         </div>
       </section>

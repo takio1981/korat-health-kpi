@@ -88,12 +88,17 @@ export class AuthService {
     }
   }
 
-  getKpiResults(): Observable<any> {
+  getKpiResults(filters?: { year?: string, hospcode?: string, dept?: string, district?: string, indicator?: string, main?: string }): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({
       'Authorization': `Bearer ${token}`
     });
-    return this.http.get(`${this.apiUrl}/kpi-results`, { headers });
+    const p = new URLSearchParams();
+    if (filters) {
+      Object.entries(filters).forEach(([k, v]) => { if (v) p.set(k, v); });
+    }
+    const qs = p.toString() ? `?${p.toString()}` : '';
+    return this.http.get(`${this.apiUrl}/kpi-results${qs}`, { headers });
   }
 
   // ฟังก์ชันดึงข้อมูลสถิติ Dashboard
@@ -234,6 +239,20 @@ export class AuthService {
     return this.http.put(`${this.apiUrl}/system/maintenance-mode`, { enabled, message }, { headers });
   }
 
+  bulkAddKpiPreview(year_bh: string, dept_id: string = ''): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const p = new URLSearchParams({ year: year_bh });
+    if (dept_id) p.set('dept_id', dept_id);
+    return this.http.get(`${this.apiUrl}/bulk-add-kpi/preview?${p.toString()}`, { headers });
+  }
+
+  bulkAddKpi(year_bh: string, dept_id: string = ''): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/bulk-add-kpi`, { year_bh, dept_id: dept_id || undefined }, { headers });
+  }
+
   getUserById(id: number): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
@@ -371,6 +390,12 @@ export class AuthService {
     return this.http.post(`${this.apiUrl}/unlock-kpi`, { indicator_id: indicatorId, year_bh: yearBh, hospcode }, { headers });
   }
 
+  unlockAllKpi(yearBh: string): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/unlock-kpi-all`, { year_bh: yearBh }, { headers });
+  }
+
   getPendingKpiCount(): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
@@ -493,6 +518,12 @@ export class AuthService {
   // --- Report Summary APIs ---
   // --- Rejection & Notification APIs ---
   rejectKpi(data: any): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/reject-kpi`, data, { headers });
+  }
+
+  rejectKpiResults(data: any[]): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.post(`${this.apiUrl}/reject-kpi`, data, { headers });
