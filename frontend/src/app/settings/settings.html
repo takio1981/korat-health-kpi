@@ -110,11 +110,27 @@
                 <span class="ms-3 text-sm font-bold text-gray-700">เปิดใช้งานสำรองข้อมูลอัตโนมัติก่อนล้าง Logs</span>
               </label>
             </div>
-            <div class="flex items-center mt-3">
-              <button type="button" (click)="backupDatabase()" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm transition-colors shadow-md">
-                <i class="fas fa-database mr-2"></i>สำรองฐานข้อมูลทั้งหมด (JSON)
+          </div>
+        </div>
+
+        <!-- สำรอง + ล้างข้อมูลผลงาน -->
+        <div class="mt-8 pt-6 border-t border-gray-100">
+          <h3 class="text-lg font-bold text-gray-800 mb-2"><i class="fas fa-eraser me-2 text-red-600"></i>สำรองและล้างข้อมูลผลงาน</h3>
+          <p class="text-xs text-gray-500 mb-4">สำรองข้อมูลผลงาน KPI + ข้อมูลแบบฟอร์มทั้งหมดเป็น JSON แล้วลบออกจากระบบ</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-green-50 border border-green-200 rounded-xl p-4">
+              <h4 class="font-bold text-green-800 text-sm mb-2"><i class="fas fa-download mr-2"></i>สำรองข้อมูลผลงาน</h4>
+              <p class="text-xs text-gray-600 mb-3">Download ข้อมูล kpi_results + ตาราง form_ ทั้งหมดเป็น JSON</p>
+              <button type="button" (click)="backupKpiData()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-sm transition-colors shadow-md">
+                <i class="fas fa-file-download mr-2"></i>สำรองข้อมูลผลงาน
               </button>
-              <p class="text-xs text-gray-500 ml-3">Download ข้อมูลทุกตารางเป็นไฟล์ JSON</p>
+            </div>
+            <div class="bg-red-50 border border-red-200 rounded-xl p-4">
+              <h4 class="font-bold text-red-800 text-sm mb-2"><i class="fas fa-trash-alt mr-2"></i>ล้างข้อมูลผลงานทั้งหมด</h4>
+              <p class="text-xs text-gray-600 mb-3">ลบข้อมูล kpi_results + ข้อมูลในตาราง form_ ทั้งหมด (โครงสร้างตารางยังอยู่)</p>
+              <button type="button" (click)="clearAllKpiData()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-sm transition-colors shadow-md">
+                <i class="fas fa-exclamation-triangle mr-2"></i>ล้างข้อมูลผลงานทั้งหมด
+              </button>
             </div>
           </div>
         </div>

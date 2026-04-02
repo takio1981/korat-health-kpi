@@ -358,6 +358,18 @@ export class AuthService {
     return this.http.get(`${this.apiUrl}/backup-database`, { headers, responseType: 'blob' });
   }
 
+  backupKpiData(): Observable<Blob> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/backup-kpi-data`, { headers, responseType: 'blob' });
+  }
+
+  clearAllKpiData(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/clear-kpi-data`, {}, { headers });
+  }
+
   backupLogs(): Observable<Blob> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({
@@ -616,6 +628,18 @@ export class AuthService {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.post(`${this.apiUrl}/export-kpi-tables`, { year_bh: yearBh, indicator_ids: indicatorIds }, { headers });
+  }
+
+  syncToHdcPreview(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/sync-to-hdc/preview`, {}, { headers });
+  }
+
+  syncToHdcExecute(tables: any[]): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/sync-to-hdc/execute`, { tables }, { headers });
   }
 
   checkKpiExport(yearBh: string, indicatorIds: number[] | 'all'): Observable<any> {

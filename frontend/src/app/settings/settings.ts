@@ -265,4 +265,55 @@ export class SettingsComponent implements OnInit {
       error: () => Swal.fire('ผิดพลาด', 'ไม่สามารถสำรองข้อมูลได้', 'error')
     });
   }
+
+  backupKpiData() {
+    Swal.fire({ title: 'กำลังสำรองข้อมูลผลงาน...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    this.authService.backupKpiData().subscribe({
+      next: (blob: Blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `kpi_data_backup_${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        Swal.fire({ icon: 'success', title: 'สำรองข้อมูลผลงานสำเร็จ', timer: 2000, showConfirmButton: false });
+      },
+      error: () => Swal.fire('ผิดพลาด', 'ไม่สามารถสำรองข้อมูลได้', 'error')
+    });
+  }
+
+  clearAllKpiData() {
+    Swal.fire({
+      title: 'ล้างข้อมูลผลงานทั้งหมด',
+      html: `<p class="text-sm text-red-600">คุณต้องการลบข้อมูลผลงานทั้งหมด ใช่หรือไม่?</p>
+             <ul class="text-xs text-gray-600 mt-2 text-left list-disc ml-5">
+               <li>kpi_results — ข้อมูลผลงานตัวชี้วัดทั้งหมด</li>
+               <li>ตาราง form_ — ข้อมูลที่กรอกในแบบฟอร์มทั้งหมด</li>
+             </ul>
+             <p class="text-xs text-red-500 mt-3 font-bold"><i class="fas fa-exclamation-triangle mr-1"></i>การดำเนินการนี้ไม่สามารถย้อนกลับได้ กรุณาสำรองข้อมูลก่อน!</p>`,
+      icon: 'warning',
+      input: 'text',
+      inputLabel: 'พิมพ์ "ยืนยันลบ" เพื่อดำเนินการ',
+      inputPlaceholder: 'ยืนยันลบ',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      confirmButtonText: '<i class="fas fa-trash-alt mr-1"></i> ล้างข้อมูลทั้งหมด',
+      cancelButtonText: 'ยกเลิก',
+      inputValidator: (value) => value !== 'ยืนยันลบ' ? 'กรุณาพิมพ์ "ยืนยันลบ" ให้ถูกต้อง' : null
+    }).then(result => {
+      if (result.isConfirmed) {
+        Swal.fire({ title: 'กำลังล้างข้อมูล...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        this.authService.clearAllKpiData().subscribe({
+          next: (res: any) => {
+            Swal.fire({
+              icon: 'success', title: 'ล้างข้อมูลสำเร็จ',
+              html: res.message || 'ลบข้อมูลผลงานทั้งหมดเรียบร้อยแล้ว',
+              confirmButtonColor: '#10b981'
+            });
+          },
+          error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถล้างข้อมูลได้', 'error')
+        });
+      }
+    });
+  }
 }

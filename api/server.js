@@ -3430,6 +3430,102 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
     }
 });
 
+// POST /sync-to-hdc/preview — ตรวจสอบข้อมูลก่อนส่ง HDC
+apiRouter.post('/sync-to-hdc/preview', authenticateToken, isSuperAdmin, async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
+    try {
+        // ดึงตาราง export ทั้งหมดจาก local (table_process ที่มีข้อมูล)
+        const [indicators] = await db.query(`
+            SELECT i.id, i.kpi_indicators_name, i.table_process
+            FROM kpi_indicators i
+            WHERE i.is_active = 1 AND i.table_process IS NOT NULL AND i.table_process != ''
+        `);
+        // deduplicate ตาม table_process
+        const tableMap = new Map();
+        for (const ind of indicators) {
+            const tp = ind.table_process.trim();
+            if (!tableMap.has(tp)) tableMap.set(tp, { table: tp, names: [], ids: [] });
+            tableMap.get(tp).names.push(ind.kpi_indicators_name);
+            tableMap.get(tp).ids.push(ind.id);
+        }
+        const tables = [];
+        for (const [tp, info] of tableMap) {
+            if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(tp)) continue;
+            const item = { table: tp, name: info.names.join(' | '), local_rows: 0, remote_rows: 0, local_columns: [], remote_columns: [], status: 'unknown' };
+            // ตรวจ local table
+            try {
+                const [localCount] = await db.query(`SELECT COUNT(*) AS cnt FROM \`${tp}\``);
+                item.local_rows = localCount[0].cnt;
+                const [localCols] = await db.query(`SHOW COLUMNS FROM \`${tp}\``);
+                item.local_columns = localCols.map(c => c.Field);
+            } catch (e) { item.status = 'no_local'; continue; }
+            // ตรวจ remote table
+            try {
+                const [remoteCount] = await remoteDb.query(`SELECT COUNT(*) AS cnt FROM \`${tp}\``);
+                item.remote_rows = remoteCount[0].cnt;
+                const [remoteCols] = await remoteDb.query(`SHOW COLUMNS FROM \`${tp}\``);
+                item.remote_columns = remoteCols.map(c => c.Field);
+            } catch (e) { item.status = 'no_remote'; }
+            if (item.status === 'unknown') {
+                item.status = item.local_rows > 0 ? 'ready' : 'empty';
+            }
+            // หา common columns
+            if (item.local_columns.length > 0 && item.remote_columns.length > 0) {
+                item.sync_columns = item.local_columns.filter(c => item.remote_columns.includes(c));
+            }
+            tables.push(item);
+        }
+        res.json({ success: true, tables });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// POST /sync-to-hdc/execute — ส่งข้อมูลจาก local export tables เข้า HDC
+apiRouter.post('/sync-to-hdc/execute', authenticateToken, isSuperAdmin, async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
+    const { tables } = req.body; // [{ table, sync_columns }]
+    if (!Array.isArray(tables) || tables.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตารางที่ต้องการ' });
+    try {
+        const results = [];
+        for (const t of tables) {
+            const tp = t.table;
+            if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(tp)) { results.push({ table: tp, status: 'skipped', reason: 'ชื่อตารางไม่ถูกต้อง' }); continue; }
+            const cols = t.sync_columns;
+            if (!cols || cols.length === 0) { results.push({ table: tp, status: 'skipped', reason: 'ไม่มีคอลัมน์ที่ตรงกัน' }); continue; }
+            try {
+                // ดึงข้อมูลจาก local
+                const colList = cols.map(c => `\`${c}\``).join(', ');
+                const [localRows] = await db.query(`SELECT ${colList} FROM \`${tp}\``);
+                if (localRows.length === 0) { results.push({ table: tp, status: 'skipped', reason: 'ไม่มีข้อมูลใน local', rows: 0 }); continue; }
+                // UPSERT: INSERT ... ON DUPLICATE KEY UPDATE (ไม่ลบข้อมูลเดิม)
+                const placeholders = cols.map(() => '?').join(', ');
+                const updateCols = cols.map(c => `\`${c}\` = VALUES(\`${c}\`)`).join(', ');
+                let upserted = 0;
+                for (const row of localRows) {
+                    const vals = cols.map(c => row[c] !== undefined ? row[c] : null);
+                    await remoteDb.query(`INSERT INTO \`${tp}\` (${colList}) VALUES (${placeholders}) ON DUPLICATE KEY UPDATE ${updateCols}`, vals);
+                    upserted++;
+                }
+                results.push({ table: tp, status: 'success', rows: upserted });
+            } catch (e) {
+                results.push({ table: tp, status: 'error', reason: e.message });
+            }
+        }
+        await db.query(
+            'INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?,?,?,?,?)',
+            [req.user.userId, 'SYNC_TO_HDC', 'multiple', JSON.stringify({ tables: results.length, success: results.filter(r => r.status === 'success').length }), req.ip]
+        );
+        const successCount = results.filter(r => r.status === 'success').length;
+        const totalRows = results.filter(r => r.status === 'success').reduce((s, r) => s + r.rows, 0);
+        res.json({ success: true, message: `ส่งข้อมูลสำเร็จ ${successCount}/${results.length} ตาราง (${totalRows} rows)`, results });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 // ========== Report Summary APIs ==========
 
 // รายงานสรุป: รายข้อตัวชี้วัด
@@ -4732,6 +4828,49 @@ apiRouter.get('/backup-database', authenticateToken, isSuperAdmin, async (req, r
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
+});
+
+// GET /backup-kpi-data — สำรองเฉพาะข้อมูลผลงาน (kpi_results + form_ tables)
+apiRouter.get('/backup-kpi-data', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const backup = {};
+        const [kpiRows] = await db.query('SELECT * FROM kpi_results');
+        backup['kpi_results'] = { count: kpiRows.length, data: kpiRows };
+        const [formTables] = await db.query("SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'form_%'");
+        for (const t of formTables) {
+            try {
+                const [rows] = await db.query(`SELECT * FROM \`${t.table_name}\``);
+                backup[t.table_name] = { count: rows.length, data: rows };
+            } catch (e) { backup[t.table_name] = { count: 0, data: [], error: e.message }; }
+        }
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename="kpi_data_backup_${timestamp}.json"`);
+        res.json({ backup_date: new Date().toISOString(), tables: backup });
+        try { await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?,?,?,?,?)',
+            [req.user.userId, 'BACKUP_KPI_DATA', 'kpi_results', JSON.stringify({ tables: Object.keys(backup).length }), req.ip]); } catch (_) {}
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// POST /clear-kpi-data — ล้างข้อมูลผลงานทั้งหมด (kpi_results + form_ data)
+apiRouter.post('/clear-kpi-data', authenticateToken, isSuperAdmin, async (req, res) => {
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        const [kpiResult] = await connection.query('DELETE FROM kpi_results');
+        const [formTables] = await connection.query("SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'form_%'");
+        let formCleared = 0;
+        for (const t of formTables) {
+            try { await connection.query(`DELETE FROM \`${t.table_name}\``); formCleared++; } catch (_) {}
+        }
+        await connection.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?,?,?,?,?)',
+            [req.user.userId, 'CLEAR_KPI_DATA', 'kpi_results', JSON.stringify({ kpi_results_deleted: kpiResult.affectedRows, form_tables_cleared: formCleared }), req.ip]);
+        await connection.commit();
+        res.json({ success: true, message: `ลบข้อมูลสำเร็จ — kpi_results: ${kpiResult.affectedRows} rows, form tables: ${formCleared} ตาราง` });
+    } catch (e) {
+        await connection.rollback();
+        res.status(500).json({ success: false, message: e.message });
+    } finally { connection.release(); }
 });
 
 // Mount Router ที่ path /khupskpi/api

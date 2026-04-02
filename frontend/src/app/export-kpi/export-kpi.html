@@ -256,6 +256,11 @@
             <i class="fas fa-file-export me-2"></i>ส่งออกข้อมูล ({{selectedIndicatorIds.size}})
           }
         </button>
+        <span class="mx-2 border-l border-gray-300 h-8 inline-block"></span>
+        <button (click)="openSyncToHdc()"
+                class="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-md transition-colors">
+          <i class="fas fa-cloud-upload-alt me-2"></i>ส่งข้อมูลเข้า HDC
+        </button>
       </div>
 
       <!-- ผลการส่งออก -->
@@ -298,3 +303,150 @@
     </div>
   </div>
 </div>
+
+<!-- Modal: Sync to HDC -->
+@if (showSyncModal) {
+<div class="fixed inset-0 z-50 flex items-start justify-center bg-black/60 overflow-y-auto py-4 px-2">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl my-auto">
+    <!-- Header -->
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-teal-700 to-teal-600 rounded-t-2xl">
+      <div>
+        <h3 class="text-lg font-bold text-white flex items-center gap-2">
+          <i class="fas fa-cloud-upload-alt"></i> ส่งข้อมูลเข้า HDC
+        </h3>
+        <p class="text-teal-200 text-sm mt-0.5">ตรวจสอบตารางที่จะส่งออกไปยัง HDC Remote Database</p>
+      </div>
+      <button (click)="showSyncModal = false" class="text-white/70 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+    </div>
+
+    <div class="p-6">
+      <!-- คำแนะนำขั้นตอน (ซ่อนได้) -->
+      <div class="mb-4">
+        <button (click)="showSyncGuide = !showSyncGuide" class="flex items-center gap-2 text-sm font-bold text-teal-700 hover:text-teal-900 transition-colors">
+          <i class="fas" [ngClass]="showSyncGuide ? 'fa-chevron-up' : 'fa-question-circle'"></i>
+          {{ showSyncGuide ? 'ซ่อนคำแนะนำ' : 'คำแนะนำขั้นตอน' }}
+        </button>
+        <div *ngIf="showSyncGuide" class="mt-3 bg-teal-50 border border-teal-200 rounded-xl p-4">
+          <h4 class="font-bold text-teal-800 text-sm mb-3"><i class="fas fa-list-ol mr-2"></i>ขั้นตอนการส่งข้อมูลเข้า HDC</h4>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+            <div class="flex items-start gap-3">
+              <span class="flex items-center justify-center w-7 h-7 rounded-full bg-teal-600 text-white text-xs font-bold shrink-0">1</span>
+              <div>
+                <p class="font-bold text-gray-800">ตรวจสอบตาราง</p>
+                <p class="text-xs text-gray-500">ระบบตรวจสอบตาราง export ใน Local เทียบกับ HDC อัตโนมัติ</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3">
+              <span class="flex items-center justify-center w-7 h-7 rounded-full bg-teal-600 text-white text-xs font-bold shrink-0">2</span>
+              <div>
+                <p class="font-bold text-gray-800">ตรวจสอบสถานะ</p>
+                <p class="text-xs text-gray-500"><b class="text-green-600">พร้อมส่ง</b> = มีข้อมูล + มีตารางใน HDC | <b class="text-amber-600">ไม่มีใน HDC</b> = ต้องสร้างตารางก่อน</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3">
+              <span class="flex items-center justify-center w-7 h-7 rounded-full bg-teal-600 text-white text-xs font-bold shrink-0">3</span>
+              <div>
+                <p class="font-bold text-gray-800">เลือกตารางที่ต้องการ</p>
+                <p class="text-xs text-gray-500">เลือก checkbox ทีละตาราง หรือกด "เลือกทั้งหมดที่พร้อมส่ง"</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3">
+              <span class="flex items-center justify-center w-7 h-7 rounded-full bg-teal-600 text-white text-xs font-bold shrink-0">4</span>
+              <div>
+                <p class="font-bold text-gray-800">กดส่งข้อมูล</p>
+                <p class="text-xs text-gray-500">ระบบ UPSERT ข้อมูล — อัปเดตเฉพาะ key ที่ตรงกัน ข้อมูลเดิมใน HDC ที่ไม่ซ้ำยังอยู่</p>
+              </div>
+            </div>
+          </div>
+          <div class="mt-3 bg-white border border-teal-200 rounded-lg p-3 text-xs text-teal-700">
+            <p><i class="fas fa-info-circle mr-1"></i><b>Sync columns</b> = คอลัมน์ที่มีทั้ง Local และ HDC — ระบบจะอัปเดตเฉพาะคอลัมน์เหล่านี้</p>
+            <p class="mt-1"><i class="fas fa-shield-alt mr-1"></i>ระบบใช้ <b>INSERT ... ON DUPLICATE KEY UPDATE</b> ไม่ลบข้อมูลเดิม</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading -->
+      @if (syncLoading && syncPreviewData.length === 0) {
+        <div class="flex items-center justify-center py-12">
+          <div class="text-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-4 border-teal-200 border-t-teal-600 mx-auto mb-3"></div>
+            <p class="text-gray-500">กำลังตรวจสอบตาราง...</p>
+          </div>
+        </div>
+      }
+
+      <!-- Preview Table -->
+      @if (syncPreviewData.length > 0) {
+        <div class="flex items-center justify-between mb-4">
+          <label class="flex items-center gap-2 text-sm font-bold text-teal-700 cursor-pointer">
+            <input type="checkbox" (change)="toggleSyncAll()" class="rounded text-teal-600 focus:ring-teal-400 h-4 w-4">
+            เลือกทั้งหมดที่พร้อมส่ง
+          </label>
+          <span class="text-sm text-gray-500">เลือก: <b>{{ syncSelectedTables.size }}</b> / {{ syncPreviewData.length }} ตาราง</span>
+        </div>
+
+        <div class="max-h-[50vh] overflow-y-auto border border-gray-200 rounded-xl" style="scrollbar-width: thin;">
+          <table class="w-full text-sm">
+            <thead class="bg-teal-700 text-white sticky top-0">
+              <tr>
+                <th class="px-4 py-3 w-10"></th>
+                <th class="px-4 py-3 text-left">ตาราง</th>
+                <th class="px-4 py-3 text-left">ชื่อตัวชี้วัด</th>
+                <th class="px-4 py-3 text-center">Local rows</th>
+                <th class="px-4 py-3 text-center">HDC rows</th>
+                <th class="px-4 py-3 text-center">Sync columns</th>
+                <th class="px-4 py-3 text-center">สถานะ</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              @for (t of syncPreviewData; track t.table) {
+                <tr class="hover:bg-teal-50/30" [class.bg-teal-50]="syncSelectedTables.has(t.table)">
+                  <td class="px-4 py-3 text-center">
+                    <input type="checkbox" [checked]="syncSelectedTables.has(t.table)"
+                           (change)="toggleSyncTable(t.table)" [disabled]="t.status !== 'ready'"
+                           class="rounded text-teal-600 focus:ring-teal-400 h-4 w-4">
+                  </td>
+                  <td class="px-4 py-3 font-mono font-bold text-gray-800">{{ t.table }}</td>
+                  <td class="px-4 py-3 text-gray-600 max-w-[250px] truncate" [title]="t.name">{{ t.name }}</td>
+                  <td class="px-4 py-3 text-center font-bold text-green-700">{{ t.local_rows }}</td>
+                  <td class="px-4 py-3 text-center font-bold text-blue-700">{{ t.remote_rows }}</td>
+                  <td class="px-4 py-3 text-center text-gray-500">{{ t.sync_columns?.length || 0 }}</td>
+                  <td class="px-4 py-3 text-center">
+                    @if (t.status === 'ready') {
+                      <span class="px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">พร้อมส่ง</span>
+                    } @else if (t.status === 'empty') {
+                      <span class="px-2.5 py-1 bg-gray-100 text-gray-500 rounded-full text-xs font-bold">ไม่มีข้อมูล</span>
+                    } @else if (t.status === 'no_remote') {
+                      <span class="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-bold">ไม่มีใน HDC</span>
+                    } @else {
+                      <span class="px-2.5 py-1 bg-red-100 text-red-600 rounded-full text-xs font-bold">{{ t.status }}</span>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </div>
+
+    <!-- Footer -->
+    <div class="px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-gray-50 rounded-b-2xl">
+      <p class="text-sm text-gray-500"><i class="fas fa-info-circle text-teal-500 mr-1"></i>อัปเดตเฉพาะข้อมูลที่ตรง key — ข้อมูลเดิมใน HDC ที่ไม่ซ้ำจะยังอยู่</p>
+      <div class="flex gap-2">
+        <button (click)="showSyncModal = false" class="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-bold transition-all">
+          ยกเลิก
+        </button>
+        <button (click)="executeSyncToHdc()" [disabled]="syncLoading || syncSelectedTables.size === 0"
+                class="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold shadow-md transition-all disabled:opacity-40">
+          @if (syncLoading) {
+            <i class="fas fa-spinner fa-spin mr-1"></i>กำลังส่ง...
+          } @else {
+            <i class="fas fa-cloud-upload-alt mr-1"></i>ส่งข้อมูล ({{ syncSelectedTables.size }})
+          }
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+}

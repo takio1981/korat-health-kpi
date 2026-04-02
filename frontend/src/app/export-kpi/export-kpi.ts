@@ -54,6 +54,13 @@ export class ExportKpiComponent implements OnInit {
   exportLoading: boolean = false;
   exportResult: any = null;
 
+  // Sync to HDC
+  showSyncGuide: boolean = true;
+  showSyncModal: boolean = false;
+  syncPreviewData: any[] = [];
+  syncLoading: boolean = false;
+  syncSelectedTables = new Set<string>();
+
   ngOnInit() {
     const role = this.authService.getUserRole();
     if (role !== 'super_admin') {
@@ -399,6 +406,95 @@ export class ExportKpiComponent implements OnInit {
             this.exportLoading = false;
             this.cdr.detectChanges();
             Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถส่งออกข้อมูลได้', 'error');
+          }
+        });
+      }
+    });
+  }
+
+  // === Sync to HDC ===
+  openSyncToHdc() {
+    this.syncLoading = true;
+    this.showSyncModal = true;
+    this.syncPreviewData = [];
+    this.syncSelectedTables.clear();
+    this.cdr.detectChanges();
+
+    this.authService.syncToHdcPreview().subscribe({
+      next: (res: any) => {
+        this.syncLoading = false;
+        if (res.success) {
+          this.syncPreviewData = res.tables;
+          res.tables.forEach((t: any) => { if (t.status === 'ready') this.syncSelectedTables.add(t.table); });
+        }
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.syncLoading = false;
+        this.showSyncModal = false;
+        Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถตรวจสอบได้', 'error');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  toggleSyncTable(table: string) {
+    this.syncSelectedTables.has(table) ? this.syncSelectedTables.delete(table) : this.syncSelectedTables.add(table);
+  }
+
+  toggleSyncAll() {
+    const ready = this.syncPreviewData.filter((t: any) => t.status === 'ready');
+    if (this.syncSelectedTables.size === ready.length) {
+      this.syncSelectedTables.clear();
+    } else {
+      ready.forEach((t: any) => this.syncSelectedTables.add(t.table));
+    }
+  }
+
+  executeSyncToHdc() {
+    if (this.syncSelectedTables.size === 0) { Swal.fire('แจ้งเตือน', 'กรุณาเลือกตารางอย่างน้อย 1 รายการ', 'warning'); return; }
+    const tables = this.syncPreviewData
+      .filter((t: any) => this.syncSelectedTables.has(t.table))
+      .map((t: any) => ({ table: t.table, sync_columns: t.sync_columns }));
+
+    Swal.fire({
+      title: 'ยืนยันส่งข้อมูลเข้า HDC',
+      html: `<p class="text-sm">ส่ง <b>${tables.length}</b> ตาราง เข้า HDC?</p>
+             <p class="text-xs text-teal-600 mt-2"><i class="fas fa-info-circle mr-1"></i>ระบบจะอัปเดตเฉพาะข้อมูลที่ตรง key — ข้อมูลเดิมใน HDC ที่ไม่ซ้ำจะยังคงอยู่</p>`,
+      icon: 'question', showCancelButton: true, confirmButtonColor: '#0d9488',
+      confirmButtonText: '<i class="fas fa-upload mr-1"></i> ส่งข้อมูล', cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (r.isConfirmed) {
+        this.syncLoading = true;
+        this.cdr.detectChanges();
+        Swal.fire({ title: 'กำลังส่งข้อมูล...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        this.authService.syncToHdcExecute(tables).subscribe({
+          next: (res: any) => {
+            this.syncLoading = false;
+            this.showSyncModal = false;
+            this.cdr.detectChanges();
+            const successCount = res.results?.filter((x: any) => x.status === 'success').length || 0;
+            const errorCount = res.results?.filter((x: any) => x.status === 'error').length || 0;
+            const totalRows = res.results?.filter((x: any) => x.status === 'success').reduce((s: number, x: any) => s + x.rows, 0) || 0;
+            Swal.fire({
+              icon: errorCount > 0 ? 'warning' : 'success',
+              title: 'ส่งข้อมูลเสร็จสิ้น',
+              html: `<div class="text-left text-sm space-y-2">
+                <div class="grid grid-cols-3 gap-2 text-center">
+                  <div class="bg-green-50 border border-green-200 rounded-lg p-2"><p class="text-xl font-bold text-green-700">${successCount}</p><p class="text-[10px]">สำเร็จ</p></div>
+                  <div class="bg-red-50 border border-red-200 rounded-lg p-2"><p class="text-xl font-bold text-red-600">${errorCount}</p><p class="text-[10px]">ผิดพลาด</p></div>
+                  <div class="bg-blue-50 border border-blue-200 rounded-lg p-2"><p class="text-xl font-bold text-blue-700">${totalRows}</p><p class="text-[10px]">rows ทั้งหมด</p></div>
+                </div>
+                ${errorCount > 0 ? '<div class="bg-red-50 border border-red-200 rounded-lg p-2 text-xs text-red-600 mt-2">' +
+                  res.results.filter((x: any) => x.status === 'error').map((x: any) => `<b>${x.table}</b>: ${x.reason}`).join('<br>') + '</div>' : ''}
+              </div>`,
+              confirmButtonColor: '#10b981'
+            });
+          },
+          error: (err: any) => {
+            this.syncLoading = false;
+            this.cdr.detectChanges();
+            Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถส่งข้อมูลได้', 'error');
           }
         });
       }
