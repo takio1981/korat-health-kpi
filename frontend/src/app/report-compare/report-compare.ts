@@ -14,6 +14,7 @@ export class ReportCompareComponent implements OnInit {
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
 
+  showGuide = true;
   isLoading = false;
   isSyncing = false;
   compareResult: any = null;

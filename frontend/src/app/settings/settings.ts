@@ -155,6 +155,12 @@ export class SettingsComponent implements OnInit {
   }
 
   saveSettings() {
+    // Auto-version: ปี พ.ศ..เดือน.วัน.ชม.นาที
+    const now = new Date();
+    const thaiYear = now.getFullYear() + 543;
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    this.systemVersion = `v${thaiYear}.${pad(now.getMonth() + 1)}.${pad(now.getDate())}.${pad(now.getHours())}${pad(now.getMinutes())}`;
+
     const settingsToSave = [
       { setting_key: 'idle_timeout_minutes', setting_value: this.idleTimeoutMinutes.toString() },
       { setting_key: 'idle_timeout_seconds', setting_value: this.idleTimeoutSeconds.toString() },

@@ -16,6 +16,7 @@ export class DbCompareComponent implements OnInit {
 
   @Output() createFormEvent = new EventEmitter<{ table: string, name: string, columns: any[] }>();
 
+  showGuide = true;
   isLoading = false;
   compareResult: any = null;
   selectedTables = new Set<string>();

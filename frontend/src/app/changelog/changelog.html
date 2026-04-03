@@ -1,0 +1,53 @@
+<div class="p-6 max-w-4xl mx-auto">
+  <!-- Header -->
+  <div class="flex items-center gap-3 mb-6">
+    <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg">
+      <i class="fas fa-history text-white text-xl"></i>
+    </div>
+    <div>
+      <h1 class="text-2xl font-bold text-gray-800">ประวัติการอัปเดตระบบ</h1>
+      <p class="text-sm text-gray-500">รายการเปลี่ยนแปลงและปรับปรุงในแต่ละเวอร์ชัน</p>
+    </div>
+  </div>
+
+  <!-- Timeline -->
+  <div class="space-y-6">
+    <div *ngFor="let release of changelog; let first = first"
+         class="bg-white rounded-2xl shadow-sm border overflow-hidden"
+         [ngClass]="first ? 'border-indigo-300 ring-2 ring-indigo-100' : 'border-gray-100'">
+
+      <!-- Version Header -->
+      <div class="px-6 py-4 border-b" [ngClass]="first ? 'bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200' : 'bg-gray-50 border-gray-100'">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <span class="px-3 py-1 rounded-full text-sm font-bold" [ngClass]="first ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'">
+              v{{ release.version }}
+            </span>
+            <span *ngIf="first" class="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-bold animate-pulse">ล่าสุด</span>
+          </div>
+          <span class="text-xs text-gray-400"><i class="fas fa-calendar-alt mr-1"></i>{{ release.date }}</span>
+        </div>
+      </div>
+
+      <!-- Changes List -->
+      <div class="px-6 py-4">
+        <div class="space-y-2">
+          <div *ngFor="let change of release.changes" class="flex items-start gap-3">
+            <i class="fas mt-0.5 text-sm" [ngClass]="getTypeInfo(change.type).icon"></i>
+            <div class="flex-1 min-w-0">
+              <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold mr-2" [ngClass]="getTypeInfo(change.type).bg">
+                {{ getTypeInfo(change.type).label }}
+              </span>
+              <span class="text-sm text-gray-700">{{ change.text }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="mt-6 text-center text-xs text-gray-400">
+    <p>ระบบบันทึกผลงาน KPI ด้านสุขภาพ — สำนักงานสาธารณสุขจังหวัดนครราชสีมา</p>
+  </div>
+</div>
