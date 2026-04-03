@@ -26,6 +26,7 @@ export class NotificationsComponent implements OnInit {
   rejectCount: number = 0;
   appealCount: number = 0;
   replyCount: number = 0;
+  infoCount: number = 0;
   unreadNotifCount: number = 0;
   isAdmin: boolean = false;
   appealSettings: any = { is_open: false };
@@ -102,6 +103,7 @@ export class NotificationsComponent implements OnInit {
     this.approveCount = this.notifications.filter(n => n.type === 'approve').length;
     this.rejectCount = this.notifications.filter(n => n.type === 'reject').length;
     this.appealCount = this.notifications.filter(n => n.type === 'appeal').length;
+    this.infoCount = this.notifications.filter(n => n.type === 'info').length;
     if (this.activeFilter === 'all') {
       this.filteredNotifications = this.notifications;
     } else if (this.activeFilter === 'unread') {
@@ -112,6 +114,8 @@ export class NotificationsComponent implements OnInit {
       this.filteredNotifications = this.notifications.filter(n => n.type === 'reject');
     } else if (this.activeFilter === 'appeal') {
       this.filteredNotifications = this.notifications.filter(n => n.type === 'appeal');
+    } else if (this.activeFilter === 'info') {
+      this.filteredNotifications = this.notifications.filter(n => n.type === 'info');
     } else if (this.activeFilter === 'reply') {
       this.filteredNotifications = [];
     }

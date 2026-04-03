@@ -52,6 +52,7 @@ export class LayoutComponent implements OnInit {
   get unreadNotifications(): any[] {
     return this.notifications.filter(n => !n.is_read);
   }
+  feedbackUnreadCount: number = 0;
   showProfileDropdown: boolean = false;
 
   ngOnInit() {
@@ -63,6 +64,7 @@ export class LayoutComponent implements OnInit {
     this.loadSettings();
     this.loadPendingCount();
     this.loadUnreadNotifCount();
+    this.loadFeedbackUnread();
     this.checkMaintenanceMode();
     this.checkLoginNotifications();
 
@@ -224,6 +226,12 @@ export class LayoutComponent implements OnInit {
 
   refreshDashboard(): void {
     window.location.reload();
+  }
+
+  loadFeedbackUnread() {
+    this.authService.getFeedbackUnreadCount().subscribe({
+      next: (res: any) => { if (res.success) { this.feedbackUnreadCount = res.count; this.cdr.detectChanges(); } }
+    });
   }
 
   // ========== Notification Methods ==========

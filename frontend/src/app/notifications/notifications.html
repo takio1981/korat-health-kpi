@@ -26,6 +26,10 @@
                   [ngClass]="activeFilter === 'reply' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'">
             <i class="fas fa-reply mr-1"></i>ตอบกลับ ({{ replyCount }})
           </button>
+          <button (click)="setFilter('info')" class="px-4 py-2 rounded-xl text-xs font-bold transition-all"
+                  [ngClass]="activeFilter === 'info' ? 'bg-teal-600 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'">
+            <i class="fas fa-comments mr-1"></i>ข้อเสนอแนะ ({{ infoCount }})
+          </button>
         </div>
         <button *ngIf="unreadNotifCount > 0" (click)="markAllAsRead()" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs font-bold transition-all shadow-md">
           <i class="fas fa-check-double mr-1"></i> อ่านทั้งหมด
@@ -55,9 +59,22 @@
             <div class="flex items-start gap-3">
               <!-- Icon -->
               <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
-                   [ngClass]="notif.type === 'approve' ? 'bg-green-100' : notif.type === 'reject' ? 'bg-red-100' : notif.type === 'appeal' ? 'bg-purple-100' : 'bg-blue-100'">
+                   [ngClass]="notif.type === 'approve' ? 'bg-green-100' :
+                              notif.type === 'reject' ? 'bg-red-100' :
+                              notif.type === 'appeal' ? 'bg-purple-100' :
+                              notif.title?.includes('กระทู้') ? 'bg-teal-100' :
+                              notif.title?.includes('ตอบกลับกระทู้') ? 'bg-teal-100' :
+                              notif.title?.includes('รอการอนุมัติ') ? 'bg-amber-100' :
+                              notif.title?.includes('Login') || notif.title?.includes('เข้าสู่ระบบ') ? 'bg-indigo-100' : 'bg-blue-100'">
                 <i class="fas text-lg"
-                   [ngClass]="notif.type === 'approve' ? 'fa-check-circle text-green-600' : notif.type === 'reject' ? 'fa-undo-alt text-red-500' : notif.type === 'appeal' ? 'fa-gavel text-purple-600' : 'fa-info-circle text-blue-500'"></i>
+                   [ngClass]="notif.type === 'approve' ? 'fa-check-circle text-green-600' :
+                              notif.type === 'reject' ? 'fa-times-circle text-red-500' :
+                              notif.type === 'appeal' ? 'fa-gavel text-purple-600' :
+                              notif.title?.includes('ตอบกลับกระทู้') ? 'fa-reply text-teal-600' :
+                              notif.title?.includes('กระทู้') ? 'fa-comments text-teal-600' :
+                              notif.title?.includes('รอการอนุมัติ') ? 'fa-user-clock text-amber-600' :
+                              notif.title?.includes('Login') || notif.title?.includes('เข้าสู่ระบบ') ? 'fa-sign-in-alt text-indigo-600' :
+                              'fa-bell text-blue-500'"></i>
               </div>
               <!-- Content -->
               <div class="flex-1 min-w-0">

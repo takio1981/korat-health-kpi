@@ -4550,6 +4550,20 @@ apiRouter.post('/report-compare/sync', authenticateToken, isSuperAdmin, async (r
 
 // ========== Feedback Board API ==========
 
+// GET /feedback/unread-count — นับกระทู้ที่มี reply ใหม่
+apiRouter.get('/feedback/unread-count', authenticateToken, async (req, res) => {
+    try {
+        // นับกระทู้ที่มี reply ใหม่กว่า 24 ชม. ที่ user ยังไม่ได้ตอบ
+        const [rows] = await db.query(`
+            SELECT COUNT(DISTINCT p.id) AS cnt FROM feedback_posts p
+            JOIN feedback_replies r ON r.post_id = p.id
+            WHERE r.created_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)
+            AND r.user_id != ?
+        `, [req.user.userId]);
+        res.json({ success: true, count: rows[0].cnt || 0 });
+    } catch (e) { res.json({ success: true, count: 0 }); }
+});
+
 // GET /feedback — ดึงกระทู้ทั้งหมด
 apiRouter.get('/feedback', authenticateToken, async (req, res) => {
     try {
@@ -4622,23 +4636,54 @@ apiRouter.get('/feedback/:id/replies', authenticateToken, async (req, res) => {
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-// POST /feedback/:id/replies — ตอบกลับกระทู้ + แจ้งเตือนเจ้าของกระทู้
+// POST /feedback/:id/replies — ตอบกลับกระทู้ + แจ้งเตือนทุกช่องทาง
 apiRouter.post('/feedback/:id/replies', authenticateToken, async (req, res) => {
     const { message } = req.body;
     if (!message) return res.status(400).json({ success: false, message: 'กรุณากรอกข้อความ' });
     try {
         await db.query('INSERT INTO feedback_replies (post_id, user_id, message) VALUES (?,?,?)', [req.params.id, req.user.userId, message]);
         await db.query('UPDATE feedback_posts SET updated_at = NOW() WHERE id = ?', [req.params.id]);
-        // แจ้งเจ้าของกระทู้
         const [post] = await db.query('SELECT user_id, title FROM feedback_posts WHERE id = ?', [req.params.id]);
+        const [replier] = await db.query('SELECT firstname, lastname, role FROM users WHERE id = ?', [req.user.userId]);
+        const replierName = replier[0] ? `${replier[0].firstname} ${replier[0].lastname}` : 'ผู้ใช้งาน';
+        const replierRole = replier[0]?.role || '';
+
+        // 1. แจ้ง Notification เจ้าของกระทู้ (ถ้าไม่ใช่ตัวเอง)
         if (post[0] && post[0].user_id !== req.user.userId) {
-            const [replier] = await db.query('SELECT firstname, lastname FROM users WHERE id = ?', [req.user.userId]);
-            const replierName = replier[0] ? `${replier[0].firstname} ${replier[0].lastname}` : 'ผู้ใช้งาน';
             await db.query(
                 "INSERT INTO notifications (user_id, type, title, message, created_by) VALUES (?, 'info', ?, ?, ?)",
                 [post[0].user_id, `มีคนตอบกระทู้ของคุณ`, `${replierName} ตอบกลับกระทู้ "${post[0].title}"`, req.user.userId]
             );
         }
+
+        // 2. แจ้ง super_admin ทุกคน (ถ้าคนตอบไม่ใช่ super_admin)
+        if (replierRole !== 'super_admin') {
+            const [superAdmins] = await db.query("SELECT id FROM users WHERE role = 'super_admin' AND is_approved = 1 AND id != ?", [req.user.userId]);
+            for (const sa of superAdmins) {
+                await db.query(
+                    "INSERT INTO notifications (user_id, type, title, message, created_by) VALUES (?, 'info', ?, ?, ?)",
+                    [sa.id, `ตอบกลับกระทู้: ${post[0]?.title}`, `${replierName}: ${message.substring(0, 100)}`, req.user.userId]
+                );
+            }
+        }
+
+        // 3. แจ้ง Telegram ทุกข้อความตอบกลับ
+        const title = post[0]?.title || '';
+        notifyAdmins(
+            `💬 ตอบกลับกระทู้: ${title}`,
+            `<div style="font-family:Sarabun,sans-serif;max-width:500px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
+                <div style="background:linear-gradient(135deg,#0d9488,#14b8a6);padding:16px;text-align:center;color:white">
+                    <h2 style="margin:0;font-size:16px">💬 ตอบกลับกระทู้</h2>
+                </div>
+                <div style="padding:16px">
+                    <p style="font-weight:bold;margin-bottom:4px">📌 ${title}</p>
+                    <p style="color:#6b7280;font-size:13px">👤 ${replierName}</p>
+                    <div style="margin-top:8px;padding:10px;background:#f3f4f6;border-radius:8px;font-size:13px">${message.substring(0, 300)}</div>
+                </div>
+            </div>`,
+            `💬 ตอบกลับกระทู้\n📌 ${title}\n👤 ${replierName}\n━━━━━━━━━━━━━━━\n${message.substring(0, 200)}`
+        );
+
         res.json({ success: true, message: 'ตอบกลับสำเร็จ' });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });

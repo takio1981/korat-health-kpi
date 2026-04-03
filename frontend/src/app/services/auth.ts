@@ -643,6 +643,11 @@ export class AuthService {
   }
 
   // === Feedback Board ===
+  getFeedbackUnreadCount(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/feedback/unread-count`, { headers });
+  }
   getFeedbackPosts(): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
