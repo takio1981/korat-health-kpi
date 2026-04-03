@@ -642,6 +642,38 @@ export class AuthService {
     return this.http.post(`${this.apiUrl}/sync-to-hdc/execute`, { tables }, { headers });
   }
 
+  // === Feedback Board ===
+  getFeedbackPosts(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/feedback`, { headers });
+  }
+  createFeedbackPost(data: any): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/feedback`, data, { headers });
+  }
+  getFeedbackReplies(postId: number): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/feedback/${postId}/replies`, { headers });
+  }
+  createFeedbackReply(postId: number, message: string): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/feedback/${postId}/replies`, { message }, { headers });
+  }
+  updateFeedbackStatus(postId: number, status: string): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/feedback/${postId}/status`, { status }, { headers });
+  }
+  deleteFeedbackPost(postId: number): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.delete(`${this.apiUrl}/feedback/${postId}`, { headers });
+  }
+
   checkKpiExport(yearBh: string, indicatorIds: number[] | 'all'): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

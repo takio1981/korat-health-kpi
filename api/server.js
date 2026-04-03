@@ -4004,6 +4004,34 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
             await db.query(`ALTER TABLE notifications MODIFY type ENUM('approve','reject','info','appeal','target_request') NOT NULL`);
         } catch (e) { /* may already be correct */ }
 
+        // ========== Feedback Board ==========
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS feedback_posts (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                category ENUM('suggestion','question','bug','other') DEFAULT 'suggestion',
+                title VARCHAR(255) NOT NULL,
+                message TEXT NOT NULL,
+                status ENUM('open','in_progress','resolved','closed') DEFAULT 'open',
+                reply_count INT DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_user (user_id),
+                INDEX idx_status (status)
+            )
+        `);
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS feedback_replies (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                post_id INT NOT NULL,
+                user_id INT NOT NULL,
+                message TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (post_id) REFERENCES feedback_posts(id) ON DELETE CASCADE,
+                INDEX idx_post (post_id)
+            )
+        `);
+
         // ========== Form Builder migration ==========
         await db.query(`
             CREATE TABLE IF NOT EXISTS kpi_form_schemas (
@@ -4518,6 +4546,118 @@ apiRouter.post('/report-compare/sync', authenticateToken, isSuperAdmin, async (r
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
+});
+
+// ========== Feedback Board API ==========
+
+// GET /feedback — ดึงกระทู้ทั้งหมด
+apiRouter.get('/feedback', authenticateToken, async (req, res) => {
+    try {
+        const [rows] = await db.query(`
+            SELECT p.*, u.firstname, u.lastname, u.username, u.role AS user_role,
+                   (SELECT COUNT(*) FROM feedback_replies r WHERE r.post_id = p.id) AS reply_count
+            FROM feedback_posts p
+            LEFT JOIN users u ON p.user_id = u.id
+            ORDER BY p.updated_at DESC
+        `);
+        res.json({ success: true, data: rows });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// POST /feedback — สร้างกระทู้ใหม่ + แจ้งเตือน
+apiRouter.post('/feedback', authenticateToken, async (req, res) => {
+    const { category, title, message } = req.body;
+    if (!title || !message) return res.status(400).json({ success: false, message: 'กรุณากรอกหัวข้อและข้อความ' });
+    try {
+        const [result] = await db.query(
+            'INSERT INTO feedback_posts (user_id, category, title, message) VALUES (?,?,?,?)',
+            [req.user.userId, category || 'suggestion', title, message]
+        );
+        // แจ้งเตือน super_admin ทุกคน
+        const [superAdmins] = await db.query("SELECT id FROM users WHERE role = 'super_admin' AND is_approved = 1");
+        const user = req.user;
+        const [userInfo] = await db.query('SELECT firstname, lastname FROM users WHERE id = ?', [user.userId]);
+        const authorName = userInfo[0] ? `${userInfo[0].firstname} ${userInfo[0].lastname}` : user.username;
+        for (const sa of superAdmins) {
+            await db.query(
+                "INSERT INTO notifications (user_id, type, title, message, created_by) VALUES (?, 'info', ?, ?, ?)",
+                [sa.id, `กระทู้ใหม่: ${title}`, `${authorName} — ${message.substring(0, 100)}`, user.userId]
+            );
+        }
+        // แจ้ง Telegram + Email
+        const catLabels = { suggestion: 'ข้อเสนอแนะ', question: 'คำถาม', bug: 'แจ้งปัญหา', other: 'อื่นๆ' };
+        const catLabel = catLabels[category] || category;
+        notifyAdmins(
+            `📝 กระทู้ใหม่: ${title} — ระบบ KPI สสจ.นครราชสีมา`,
+            `<div style="font-family:Sarabun,sans-serif;max-width:500px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
+                <div style="background:linear-gradient(135deg,#0d9488,#14b8a6);padding:20px;text-align:center;color:white">
+                    <h2 style="margin:0;font-size:18px">📝 กระทู้ใหม่</h2>
+                </div>
+                <div style="padding:20px">
+                    <table style="width:100%;font-size:14px;border-collapse:collapse">
+                        <tr><td style="padding:6px 0;color:#6b7280">หมวดหมู่</td><td style="font-weight:bold">${catLabel}</td></tr>
+                        <tr><td style="padding:6px 0;color:#6b7280">หัวข้อ</td><td style="font-weight:bold">${title}</td></tr>
+                        <tr><td style="padding:6px 0;color:#6b7280">ผู้สร้าง</td><td style="font-weight:bold">${authorName}</td></tr>
+                    </table>
+                    <div style="margin-top:12px;padding:12px;background:#f3f4f6;border-radius:8px;font-size:13px">${message.substring(0, 300)}</div>
+                </div>
+            </div>`,
+            `📝 กระทู้ใหม่\n━━━━━━━━━━━━━━━\n📋 ${catLabel}\n📌 ${title}\n👤 ${authorName}\n━━━━━━━━━━━━━━━\n${message.substring(0, 200)}`
+        );
+        res.json({ success: true, message: 'สร้างกระทู้สำเร็จ', id: result.insertId });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// GET /feedback/:id/replies — ดึง replies ของกระทู้
+apiRouter.get('/feedback/:id/replies', authenticateToken, async (req, res) => {
+    try {
+        const [rows] = await db.query(`
+            SELECT r.*, u.firstname, u.lastname, u.username, u.role AS user_role
+            FROM feedback_replies r
+            LEFT JOIN users u ON r.user_id = u.id
+            WHERE r.post_id = ?
+            ORDER BY r.created_at ASC
+        `, [req.params.id]);
+        res.json({ success: true, data: rows });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// POST /feedback/:id/replies — ตอบกลับกระทู้ + แจ้งเตือนเจ้าของกระทู้
+apiRouter.post('/feedback/:id/replies', authenticateToken, async (req, res) => {
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ success: false, message: 'กรุณากรอกข้อความ' });
+    try {
+        await db.query('INSERT INTO feedback_replies (post_id, user_id, message) VALUES (?,?,?)', [req.params.id, req.user.userId, message]);
+        await db.query('UPDATE feedback_posts SET updated_at = NOW() WHERE id = ?', [req.params.id]);
+        // แจ้งเจ้าของกระทู้
+        const [post] = await db.query('SELECT user_id, title FROM feedback_posts WHERE id = ?', [req.params.id]);
+        if (post[0] && post[0].user_id !== req.user.userId) {
+            const [replier] = await db.query('SELECT firstname, lastname FROM users WHERE id = ?', [req.user.userId]);
+            const replierName = replier[0] ? `${replier[0].firstname} ${replier[0].lastname}` : 'ผู้ใช้งาน';
+            await db.query(
+                "INSERT INTO notifications (user_id, type, title, message, created_by) VALUES (?, 'info', ?, ?, ?)",
+                [post[0].user_id, `มีคนตอบกระทู้ของคุณ`, `${replierName} ตอบกลับกระทู้ "${post[0].title}"`, req.user.userId]
+            );
+        }
+        res.json({ success: true, message: 'ตอบกลับสำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// PUT /feedback/:id/status — อัปเดตสถานะ (super_admin)
+apiRouter.put('/feedback/:id/status', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { status } = req.body;
+    try {
+        await db.query('UPDATE feedback_posts SET status = ? WHERE id = ?', [status, req.params.id]);
+        res.json({ success: true, message: 'อัปเดตสถานะสำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// DELETE /feedback/:id — ลบกระทู้ (super_admin)
+apiRouter.delete('/feedback/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        await db.query('DELETE FROM feedback_posts WHERE id = ?', [req.params.id]);
+        res.json({ success: true, message: 'ลบกระทู้สำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
 // GET /db-compare — เปรียบเทียบ structure ตาราง table_process ระหว่าง local กับ hdc

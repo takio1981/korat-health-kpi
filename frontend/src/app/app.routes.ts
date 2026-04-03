@@ -11,6 +11,7 @@ import { KpiManageComponent } from './kpi-manage/kpi-manage';
 import { ReportComponent } from './report/report';
 import { NotificationsComponent } from './notifications/notifications';
 import { HelpComponent } from './help/help';
+import { FeedbackComponent } from './feedback/feedback';
 import { KpiManagerComponent } from './kpi-manager/kpi-manager';
 import { authGuard } from './guards/auth-guard';
 import { adminGuard } from './guards/admin-guard';
@@ -37,6 +38,7 @@ export const routes: Routes = [
       { path: 'kpi-manage', component: KpiManageComponent, canActivate: [adminGuard], data: { title: 'จัดการตัวชี้วัด' } },
       { path: 'kpi-manager', component: KpiManagerComponent, canActivate: [superAdminGuard], data: { title: 'จัดการข้อมูล KPI' } },
       { path: 'settings', component: SettingsComponent, canActivate: [superAdminGuard], data: { title: 'ตั้งค่าระบบ' } },
+      { path: 'feedback', component: FeedbackComponent, data: { title: 'กระดานข้อเสนอแนะ' } },
       { path: 'help', component: HelpComponent, data: { title: 'คู่มือการใช้งาน' } },
     ]
   },
