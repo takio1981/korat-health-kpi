@@ -4550,17 +4550,35 @@ apiRouter.post('/report-compare/sync', authenticateToken, isSuperAdmin, async (r
 
 // ========== Feedback Board API ==========
 
-// GET /feedback/unread-count — นับกระทู้ที่มี reply ใหม่
+// POST /feedback/mark-read — เคลียร์ badge เมื่อเข้าหน้า feedback
+apiRouter.post('/feedback/mark-read', authenticateToken, async (req, res) => {
+    try {
+        await db.query(
+            "INSERT INTO system_settings (setting_key, setting_value) VALUES (?, NOW()) ON DUPLICATE KEY UPDATE setting_value = NOW()",
+            [`feedback_last_read_${req.user.userId}`]
+        );
+        res.json({ success: true });
+    } catch (e) { res.json({ success: true }); }
+});
+
+// GET /feedback/unread-count — นับกระทู้/reply ใหม่ตั้งแต่ครั้งล่าสุดที่เข้าดู
 apiRouter.get('/feedback/unread-count', authenticateToken, async (req, res) => {
     try {
-        // นับกระทู้ที่มี reply ใหม่กว่า 24 ชม. ที่ user ยังไม่ได้ตอบ
-        const [rows] = await db.query(`
-            SELECT COUNT(DISTINCT p.id) AS cnt FROM feedback_posts p
-            JOIN feedback_replies r ON r.post_id = p.id
-            WHERE r.created_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)
-            AND r.user_id != ?
-        `, [req.user.userId]);
-        res.json({ success: true, count: rows[0].cnt || 0 });
+        const [lastRead] = await db.query(
+            "SELECT setting_value FROM system_settings WHERE setting_key = ?",
+            [`feedback_last_read_${req.user.userId}`]
+        );
+        const since = lastRead[0]?.setting_value || '2000-01-01';
+        // นับกระทู้ + reply ที่สร้างหลังจาก last_read
+        const [posts] = await db.query(
+            'SELECT COUNT(*) AS cnt FROM feedback_posts WHERE created_at > ? AND user_id != ?',
+            [since, req.user.userId]
+        );
+        const [replies] = await db.query(
+            'SELECT COUNT(*) AS cnt FROM feedback_replies WHERE created_at > ? AND user_id != ?',
+            [since, req.user.userId]
+        );
+        res.json({ success: true, count: (posts[0].cnt || 0) + (replies[0].cnt || 0) });
     } catch (e) { res.json({ success: true, count: 0 }); }
 });
 

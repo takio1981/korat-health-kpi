@@ -181,6 +181,15 @@
   background: #64748b;
 }
 
+/* Bell glow animation */
+.bell-glow {
+  animation: bell-glow-pulse 2s ease-in-out infinite;
+}
+@keyframes bell-glow-pulse {
+  0%, 100% { filter: drop-shadow(0 0 0 transparent); }
+  50% { filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.8)); }
+}
+
 /* Print styles */
 @media print {
   .no-print {

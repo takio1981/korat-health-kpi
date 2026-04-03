@@ -50,7 +50,7 @@ export class LayoutComponent implements OnInit {
   showNotifDropdown: boolean = false;
 
   get unreadNotifications(): any[] {
-    return this.notifications.filter(n => !n.is_read);
+    return this.notifications.filter(n => !n.is_read && n.type !== 'info');
   }
   feedbackUnreadCount: number = 0;
   showProfileDropdown: boolean = false;

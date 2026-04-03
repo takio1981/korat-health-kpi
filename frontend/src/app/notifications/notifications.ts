@@ -26,7 +26,7 @@ export class NotificationsComponent implements OnInit {
   rejectCount: number = 0;
   appealCount: number = 0;
   replyCount: number = 0;
-  infoCount: number = 0;
+  mineCount: number = 0;
   unreadNotifCount: number = 0;
   isAdmin: boolean = false;
   appealSettings: any = { is_open: false };
@@ -100,22 +100,25 @@ export class NotificationsComponent implements OnInit {
   }
 
   applyFilter() {
-    this.approveCount = this.notifications.filter(n => n.type === 'approve').length;
-    this.rejectCount = this.notifications.filter(n => n.type === 'reject').length;
-    this.appealCount = this.notifications.filter(n => n.type === 'appeal').length;
-    this.infoCount = this.notifications.filter(n => n.type === 'info').length;
+    // แยก type=info (ข้อเสนอแนะ) ออก — แสดงเฉพาะ approve/reject/appeal
+    const mainNotifs = this.notifications.filter(n => n.type !== 'info');
+    this.approveCount = mainNotifs.filter(n => n.type === 'approve').length;
+    this.rejectCount = mainNotifs.filter(n => n.type === 'reject').length;
+    this.appealCount = mainNotifs.filter(n => n.type === 'appeal').length;
+    const currentUserId = this.authService.getUser()?.id;
+    this.mineCount = mainNotifs.filter(n => n.user_id === currentUserId).length;
     if (this.activeFilter === 'all') {
-      this.filteredNotifications = this.notifications;
+      this.filteredNotifications = mainNotifs;
     } else if (this.activeFilter === 'unread') {
-      this.filteredNotifications = this.notifications.filter(n => !n.is_read);
+      this.filteredNotifications = mainNotifs.filter(n => !n.is_read);
     } else if (this.activeFilter === 'approve') {
-      this.filteredNotifications = this.notifications.filter(n => n.type === 'approve');
+      this.filteredNotifications = mainNotifs.filter(n => n.type === 'approve');
     } else if (this.activeFilter === 'reject') {
-      this.filteredNotifications = this.notifications.filter(n => n.type === 'reject');
+      this.filteredNotifications = mainNotifs.filter(n => n.type === 'reject');
     } else if (this.activeFilter === 'appeal') {
-      this.filteredNotifications = this.notifications.filter(n => n.type === 'appeal');
-    } else if (this.activeFilter === 'info') {
-      this.filteredNotifications = this.notifications.filter(n => n.type === 'info');
+      this.filteredNotifications = mainNotifs.filter(n => n.type === 'appeal');
+    } else if (this.activeFilter === 'mine') {
+      this.filteredNotifications = mainNotifs.filter(n => n.user_id === currentUserId);
     } else if (this.activeFilter === 'reply') {
       this.filteredNotifications = [];
     }

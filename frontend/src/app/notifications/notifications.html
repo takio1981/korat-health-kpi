@@ -26,9 +26,9 @@
                   [ngClass]="activeFilter === 'reply' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'">
             <i class="fas fa-reply mr-1"></i>ตอบกลับ ({{ replyCount }})
           </button>
-          <button (click)="setFilter('info')" class="px-4 py-2 rounded-xl text-xs font-bold transition-all"
-                  [ngClass]="activeFilter === 'info' ? 'bg-teal-600 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'">
-            <i class="fas fa-comments mr-1"></i>ข้อเสนอแนะ ({{ infoCount }})
+          <button (click)="setFilter('mine')" class="px-4 py-2 rounded-xl text-xs font-bold transition-all"
+                  [ngClass]="activeFilter === 'mine' ? 'bg-cyan-600 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'">
+            <i class="fas fa-user mr-1"></i>เฉพาะของฉัน ({{ mineCount }})
           </button>
         </div>
         <button *ngIf="unreadNotifCount > 0" (click)="markAllAsRead()" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs font-bold transition-all shadow-md">

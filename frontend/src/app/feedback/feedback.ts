@@ -56,6 +56,8 @@ export class FeedbackComponent implements OnInit {
     this.isSuperAdmin = role === 'super_admin';
     this.isAdmin = ['admin_ssj', 'super_admin'].includes(role);
     this.loadPosts();
+    // เคลียร์ badge เมื่อเข้าหน้า feedback
+    this.authService.markFeedbackRead().subscribe();
   }
 
   loadPosts(): void {

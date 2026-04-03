@@ -133,10 +133,17 @@
         </div>
   
         <div class="flex items-center">
+          <!-- Feedback Icon -->
+          <a routerLink="/feedback" class="relative text-white hover:text-green-200 mr-4">
+            <i class="fas fa-comments text-xl"></i>
+            <span *ngIf="feedbackUnreadCount > 0" class="absolute -top-1 -right-2 flex h-4 min-w-[16px] px-0.5 items-center justify-center rounded-full bg-teal-500 text-[9px] font-bold text-white animate-pulse">
+              {{ feedbackUnreadCount > 9 ? '9+' : feedbackUnreadCount }}
+            </span>
+          </a>
           <!-- Bell Icon + Notification Dropdown -->
           <div class="relative mr-4">
             <button (click)="toggleNotifDropdown()" class="relative text-white hover:text-green-200 focus:outline-none">
-              <i class="fas fa-bell text-xl" [class.bell-shake]="unreadNotifCount > 0"></i>
+              <i class="fas fa-bell text-xl" [class.bell-shake]="unreadNotifCount > 0" [class.bell-glow]="unreadNotifCount > 0" [class.text-red-300]="unreadNotifCount > 0"></i>
               <span *ngIf="unreadNotifCount > 0" class="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-0.5 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white animate-pulse">
                 {{ unreadNotifCount > 99 ? '99+' : unreadNotifCount }}
               </span>
