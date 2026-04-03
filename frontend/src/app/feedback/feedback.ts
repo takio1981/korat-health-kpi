@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth';
@@ -10,7 +10,7 @@ import Swal from 'sweetalert2';
   imports: [CommonModule, FormsModule],
   templateUrl: './feedback.html'
 })
-export class FeedbackComponent implements OnInit {
+export class FeedbackComponent implements OnInit, OnDestroy {
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
 
@@ -55,8 +55,15 @@ export class FeedbackComponent implements OnInit {
     const role = this.authService.getUserRole();
     this.isSuperAdmin = role === 'super_admin';
     this.isAdmin = ['admin_ssj', 'super_admin'].includes(role);
+    this.markRead();
     this.loadPosts();
-    // เคลียร์ badge เมื่อเข้าหน้า feedback
+  }
+
+  ngOnDestroy(): void {
+    this.markRead();
+  }
+
+  private markRead(): void {
     this.authService.markFeedbackRead().subscribe();
   }
 
@@ -64,7 +71,12 @@ export class FeedbackComponent implements OnInit {
     this.isLoading = true;
     this.authService.getFeedbackPosts().subscribe({
       next: (res: any) => {
-        this.posts = res.data || res || [];
+        this.posts = (res.data || res || []).map((p: any) => ({
+          ...p,
+          author_name: p.firstname ? `${p.firstname} ${p.lastname}` : p.username || 'ไม่ระบุ',
+          author_username: p.username || '',
+          author_role: p.user_role || ''
+        }));
         this.applyFilters();
         this.isLoading = false;
         this.cdr.detectChanges();
@@ -133,7 +145,13 @@ export class FeedbackComponent implements OnInit {
   loadReplies(postId: number): void {
     this.authService.getFeedbackReplies(postId).subscribe({
       next: (res: any) => {
-        this.replies = res.data || res || [];
+        const adminRoles = ['super_admin', 'admin_ssj', 'admin_cup', 'admin_hos', 'admin_sso'];
+        this.replies = (res.data || res || []).map((r: any) => ({
+          ...r,
+          author_name: r.firstname ? `${r.firstname} ${r.lastname}` : r.username || 'ไม่ระบุ',
+          author_username: r.username || '',
+          is_admin: adminRoles.includes(r.user_role)
+        }));
         this.cdr.detectChanges();
       },
       error: () => {
@@ -210,5 +228,46 @@ export class FeedbackComponent implements OnInit {
 
   formatDate(d: string): string {
     return new Date(d).toLocaleString('th-TH');
+  }
+
+  // สีเฉพาะตัวต่อ username — super_admin = เขียวเข้ม (สงวนไว้), อื่นๆ = สีจาก palette
+  private _usernameColorMap = new Map<string, { bg: string; text: string; avatar: string; avatarText: string; border: string }>();
+  private _superAdminColor = { bg: 'bg-green-100', text: 'text-green-800', avatar: 'bg-green-600', avatarText: 'text-white', border: 'border-green-300' };
+  private _palette = [
+    { bg: 'bg-blue-50', text: 'text-blue-700', avatar: 'bg-blue-500', avatarText: 'text-white', border: 'border-blue-200' },
+    { bg: 'bg-purple-50', text: 'text-purple-700', avatar: 'bg-purple-500', avatarText: 'text-white', border: 'border-purple-200' },
+    { bg: 'bg-pink-50', text: 'text-pink-700', avatar: 'bg-pink-500', avatarText: 'text-white', border: 'border-pink-200' },
+    { bg: 'bg-amber-50', text: 'text-amber-700', avatar: 'bg-amber-500', avatarText: 'text-white', border: 'border-amber-200' },
+    { bg: 'bg-cyan-50', text: 'text-cyan-700', avatar: 'bg-cyan-500', avatarText: 'text-white', border: 'border-cyan-200' },
+    { bg: 'bg-rose-50', text: 'text-rose-700', avatar: 'bg-rose-500', avatarText: 'text-white', border: 'border-rose-200' },
+    { bg: 'bg-indigo-50', text: 'text-indigo-700', avatar: 'bg-indigo-500', avatarText: 'text-white', border: 'border-indigo-200' },
+    { bg: 'bg-lime-50', text: 'text-lime-700', avatar: 'bg-lime-600', avatarText: 'text-white', border: 'border-lime-200' },
+    { bg: 'bg-orange-50', text: 'text-orange-700', avatar: 'bg-orange-500', avatarText: 'text-white', border: 'border-orange-200' },
+    { bg: 'bg-sky-50', text: 'text-sky-700', avatar: 'bg-sky-500', avatarText: 'text-white', border: 'border-sky-200' },
+  ];
+  private _paletteIndex = 0;
+
+  getReplyColor(reply: any) {
+    const username = reply.author_username || reply.username || '';
+    // super_admin → สีเขียวเข้มเสมอ
+    if (reply.is_admin && reply.user_role === 'super_admin') {
+      return this._superAdminColor;
+    }
+    // ตรวจจาก username
+    if (!this._usernameColorMap.has(username)) {
+      this._usernameColorMap.set(username, this._palette[this._paletteIndex % this._palette.length]);
+      this._paletteIndex++;
+    }
+    return this._usernameColorMap.get(username)!;
+  }
+
+  getPostColor(post: any) {
+    const username = post.author_username || post.username || '';
+    if (post.author_role === 'super_admin') return this._superAdminColor;
+    if (!this._usernameColorMap.has(username)) {
+      this._usernameColorMap.set(username, this._palette[this._paletteIndex % this._palette.length]);
+      this._paletteIndex++;
+    }
+    return this._usernameColorMap.get(username)!;
   }
 }

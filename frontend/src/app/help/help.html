@@ -804,12 +804,82 @@
         </div>
       </section>
 
-      <!-- ==================== 12. FAQ ==================== -->
+      <!-- ==================== 12. กระดานข้อเสนอแนะ ==================== -->
+      <section id="section-feedback" class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div (click)="toggleCollapse('feedback')" class="flex items-center justify-between gap-3 p-6 cursor-pointer hover:bg-gray-50 transition-colors">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center"><i class="fas fa-comments text-teal-600"></i></div>
+            <div>
+              <h2 class="text-xl font-bold text-gray-800">12. กระดานข้อเสนอแนะ (Feedback Board)</h2>
+              <p class="text-xs text-gray-400">แลกเปลี่ยนความคิดเห็น แจ้งปัญหา เสนอแนะระบบ</p>
+            </div>
+          </div>
+          <i class="fas text-gray-400 transition-transform" [ngClass]="isCollapsed('feedback') ? 'fa-chevron-down' : 'fa-chevron-up'"></i>
+        </div>
+        <div [hidden]="isCollapsed('feedback')" class="px-6 pb-6 space-y-4">
+          <p class="text-sm text-gray-600">ทุก Role ใช้งานได้ — สร้างกระทู้ ตอบกลับ แลกเปลี่ยนกับผู้ดูแลระบบ</p>
+
+          <!-- วิธีใช้งาน -->
+          <div class="bg-teal-50 border border-teal-200 rounded-xl p-4">
+            <h4 class="font-bold text-teal-800 text-sm mb-3"><i class="fas fa-list-ol mr-2"></i>ขั้นตอนการใช้งาน</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+              <div class="flex items-start gap-3">
+                <span class="flex items-center justify-center w-7 h-7 rounded-full bg-teal-600 text-white text-xs font-bold shrink-0">1</span>
+                <div><p class="font-bold text-gray-800">สร้างกระทู้</p><p class="text-xs text-gray-500">เลือกหมวดหมู่ (ข้อเสนอแนะ/คำถาม/แจ้งปัญหา/อื่นๆ) + กรอกหัวข้อและรายละเอียด</p></div>
+              </div>
+              <div class="flex items-start gap-3">
+                <span class="flex items-center justify-center w-7 h-7 rounded-full bg-teal-600 text-white text-xs font-bold shrink-0">2</span>
+                <div><p class="font-bold text-gray-800">ตอบกลับ</p><p class="text-xs text-gray-500">กดที่กระทู้ → พิมพ์ข้อความตอบกลับ ทั้ง user และ admin ตอบได้</p></div>
+              </div>
+              <div class="flex items-start gap-3">
+                <span class="flex items-center justify-center w-7 h-7 rounded-full bg-teal-600 text-white text-xs font-bold shrink-0">3</span>
+                <div><p class="font-bold text-gray-800">ติดตามสถานะ</p><p class="text-xs text-gray-500">super_admin เปลี่ยนสถานะ: เปิด → กำลังดำเนินการ → แก้ไขแล้ว → ปิด</p></div>
+              </div>
+              <div class="flex items-start gap-3">
+                <span class="flex items-center justify-center w-7 h-7 rounded-full bg-teal-600 text-white text-xs font-bold shrink-0">4</span>
+                <div><p class="font-bold text-gray-800">รับแจ้งเตือน</p><p class="text-xs text-gray-500">ทุกข้อความตอบกลับ → แจ้ง Telegram + Email + Notification อัตโนมัติ</p></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ฟีเจอร์ -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="bg-gray-50 rounded-xl p-3 border">
+              <p class="text-sm font-bold text-gray-700"><i class="fas fa-palette text-teal-500 mr-2"></i>สีเฉพาะตัวต่อ username</p>
+              <p class="text-xs text-gray-500 mt-1">แต่ละ username มีสีเฉพาะตัว ไม่ซ้ำกัน — super_admin = สีเขียวเข้ม (สงวนไว้)</p>
+            </div>
+            <div class="bg-gray-50 rounded-xl p-3 border">
+              <p class="text-sm font-bold text-gray-700"><i class="fas fa-bell text-amber-500 mr-2"></i>Badge แจ้งเตือน</p>
+              <p class="text-xs text-gray-500 mt-1">Icon ข้อเสนอแนะ บน Header แสดงจำนวนข้อความใหม่ เคลียร์เมื่อเข้าอ่าน</p>
+            </div>
+            <div class="bg-gray-50 rounded-xl p-3 border">
+              <p class="text-sm font-bold text-gray-700"><i class="fas fa-filter text-blue-500 mr-2"></i>ค้นหา + กรอง</p>
+              <p class="text-xs text-gray-500 mt-1">ค้นหาตามชื่อ/เนื้อหา + กรองหมวดหมู่ + กรองสถานะ (ซ่อนตัวกรองได้)</p>
+            </div>
+            <div class="bg-gray-50 rounded-xl p-3 border">
+              <p class="text-sm font-bold text-gray-700"><i class="fas fa-trash-alt text-red-500 mr-2"></i>ลบกระทู้</p>
+              <p class="text-xs text-gray-500 mt-1">เฉพาะ super_admin เท่านั้น</p>
+            </div>
+          </div>
+
+          <!-- แจ้งเตือน -->
+          <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-700 space-y-1">
+            <p class="font-bold"><i class="fas fa-paper-plane mr-1"></i>การแจ้งเตือน</p>
+            <ul class="list-disc ml-4 space-y-0.5">
+              <li><b>สร้างกระทู้ใหม่</b> → Telegram + Email + Notification ถึง super_admin</li>
+              <li><b>ตอบกลับทุกข้อความ</b> → Telegram + Email + Notification ถึงเจ้าของกระทู้ + super_admin</li>
+              <li><b>Badge ข้อเสนอแนะ</b> บน sidebar — เคลียร์อัตโนมัติเมื่อเข้าหน้า feedback</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== 13. FAQ ==================== -->
       <section id="section-faq" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-pink-100 flex items-center justify-center"><i class="fas fa-question-circle text-pink-600"></i></div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">12. คำถามที่พบบ่อย (FAQ)</h2>
+            <h2 class="text-xl font-bold text-gray-800">13. คำถามที่พบบ่อย (FAQ)</h2>
           </div>
         </div>
         <div class="space-y-3">
@@ -896,6 +966,14 @@
           <div class="bg-gray-50 rounded-xl p-4">
             <p class="text-sm font-bold text-gray-800">ถาม: "ล้างข้อมูลผลงาน" ลบอะไรบ้าง?</p>
             <p class="text-xs text-gray-600 mt-1">ตอบ: ลบข้อมูลใน kpi_results + ข้อมูลในตาราง form_* ทั้งหมด (โครงสร้างตาราง/แบบฟอร์มยังอยู่) ต้องพิมพ์ "ยืนยันลบ" และควรสำรองข้อมูลก่อนทุกครั้ง</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-bold text-gray-800">ถาม: สีข้อความใน "ข้อเสนอแนะ" คืออะไร?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: แต่ละ username มีสีเฉพาะตัว เพื่อแยกว่าข้อความของใคร — super_admin = สีเขียวเข้มเสมอ (สงวนไว้) username อื่นจะได้สีจาก palette 10 สีอัตโนมัติ</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-bold text-gray-800">ถาม: ตัวเลขที่เมนูข้อเสนอแนะหมายถึงอะไร?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: จำนวนกระทู้ + ข้อความตอบกลับใหม่ที่ยังไม่ได้อ่าน เมื่อเข้าหน้าข้อเสนอแนะ ตัวเลขจะเคลียร์อัตโนมัติ</p>
           </div>
         </div>
       </section>

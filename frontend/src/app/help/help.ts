@@ -29,6 +29,7 @@ export class HelpComponent {
     { id: 'users', icon: 'fa-users-cog', label: 'จัดการผู้ใช้งาน' },
     { id: 'kpi-manager', icon: 'fa-layer-group', label: 'จัดการข้อมูล KPI' },
     { id: 'maintenance', icon: 'fa-tools', label: 'Maintenance Mode' },
+    { id: 'feedback', icon: 'fa-comments', label: 'กระดานข้อเสนอแนะ' },
     { id: 'settings', icon: 'fa-sliders-h', label: 'ตั้งค่าระบบ' },
     { id: 'roles', icon: 'fa-shield-alt', label: 'สิทธิ์การใช้งาน' },
     { id: 'faq', icon: 'fa-question-circle', label: 'คำถามที่พบบ่อย' }

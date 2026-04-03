@@ -100,13 +100,12 @@ export class NotificationsComponent implements OnInit {
   }
 
   applyFilter() {
-    // แยก type=info (ข้อเสนอแนะ) ออก — แสดงเฉพาะ approve/reject/appeal
-    const mainNotifs = this.notifications.filter(n => n.type !== 'info');
+    const mainNotifs = this.notifications;
     this.approveCount = mainNotifs.filter(n => n.type === 'approve').length;
     this.rejectCount = mainNotifs.filter(n => n.type === 'reject').length;
     this.appealCount = mainNotifs.filter(n => n.type === 'appeal').length;
-    const currentUserId = this.authService.getUser()?.id;
-    this.mineCount = mainNotifs.filter(n => n.user_id === currentUserId).length;
+    const myHospcode = this.authService.getUser()?.hospcode;
+    this.mineCount = mainNotifs.filter(n => n.hospcode && n.hospcode === myHospcode).length;
     if (this.activeFilter === 'all') {
       this.filteredNotifications = mainNotifs;
     } else if (this.activeFilter === 'unread') {
@@ -118,7 +117,7 @@ export class NotificationsComponent implements OnInit {
     } else if (this.activeFilter === 'appeal') {
       this.filteredNotifications = mainNotifs.filter(n => n.type === 'appeal');
     } else if (this.activeFilter === 'mine') {
-      this.filteredNotifications = mainNotifs.filter(n => n.user_id === currentUserId);
+      this.filteredNotifications = mainNotifs.filter(n => n.hospcode && n.hospcode === myHospcode);
     } else if (this.activeFilter === 'reply') {
       this.filteredNotifications = [];
     }

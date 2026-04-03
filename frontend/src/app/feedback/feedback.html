@@ -105,9 +105,15 @@
             </h3>
             <p class="text-sm text-gray-500 mt-1 line-clamp-2">{{ post.message }}</p>
             <div class="flex items-center gap-4 mt-3 text-xs text-gray-400">
-              <span class="flex items-center gap-1">
-                <i class="fa fa-user-circle"></i>
-                {{ post.author_name || 'ไม่ระบุ' }}
+              <span class="flex items-center gap-1.5">
+                <span class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
+                      [ngClass]="getPostColor(post).avatar + ' ' + getPostColor(post).avatarText">
+                  {{ (post.author_name || '?').charAt(0).toUpperCase() }}
+                </span>
+                <span class="font-medium" [ngClass]="getPostColor(post).text">{{ post.author_name }}</span>
+                <span class="text-gray-400">@{{ post.author_username }}</span>
+                <span *ngIf="post.author_role === 'super_admin'" class="px-1.5 py-0.5 bg-green-100 text-green-800 rounded-full text-[9px] font-bold">Super Admin</span>
+                <span *ngIf="post.author_role?.startsWith('admin') && post.author_role !== 'super_admin'" class="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded-full text-[9px] font-bold">Admin</span>
               </span>
               <span class="flex items-center gap-1">
                 <i class="fa fa-clock"></i>
@@ -213,9 +219,15 @@
     <div class="flex-1 overflow-y-auto p-6 space-y-6">
       <!-- Post Info -->
       <div class="flex items-center gap-4 text-sm text-gray-500">
-        <span class="flex items-center gap-1">
-          <i class="fa fa-user-circle"></i>
-          {{ selectedPost.author_name || 'ไม่ระบุ' }}
+        <span class="flex items-center gap-1.5">
+          <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
+                [ngClass]="getPostColor(selectedPost).avatar + ' ' + getPostColor(selectedPost).avatarText">
+            {{ (selectedPost.author_name || '?').charAt(0).toUpperCase() }}
+          </span>
+          <span class="font-medium" [ngClass]="getPostColor(selectedPost).text">{{ selectedPost.author_name }}</span>
+          <span class="text-gray-400 text-xs">@{{ selectedPost.author_username }}</span>
+          <span *ngIf="selectedPost.author_role === 'super_admin'" class="px-1.5 py-0.5 bg-green-100 text-green-800 rounded-full text-[9px] font-bold">Super Admin</span>
+          <span *ngIf="selectedPost.author_role?.startsWith('admin') && selectedPost.author_role !== 'super_admin'" class="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded-full text-[9px] font-bold">Admin</span>
         </span>
         <span class="flex items-center gap-1">
           <i class="fa fa-clock"></i>
@@ -255,17 +267,22 @@
         <!-- Replies List -->
         <div class="space-y-3">
           <div *ngFor="let reply of replies"
-            class="rounded-xl p-4 text-sm"
-            [ngClass]="reply.is_admin ? 'bg-teal-50 border border-teal-200' : 'bg-gray-50 border border-gray-100'">
+            class="rounded-xl p-4 text-sm border"
+            [ngClass]="getReplyColor(reply).bg + ' ' + getReplyColor(reply).border">
             <div class="flex items-center gap-2 mb-2">
-              <span class="font-medium" [ngClass]="reply.is_admin ? 'text-teal-700' : 'text-gray-700'">
-                {{ reply.author_name || 'ไม่ระบุ' }}
+              <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                    [ngClass]="getReplyColor(reply).avatar + ' ' + getReplyColor(reply).avatarText">
+                {{ (reply.author_name || '?').charAt(0).toUpperCase() }}
               </span>
+              <span class="font-medium" [ngClass]="getReplyColor(reply).text">
+                {{ reply.author_name }}
+              </span>
+              <span class="text-xs text-gray-400">@{{ reply.author_username }}</span>
               <span *ngIf="reply.is_admin"
-                class="text-xs px-1.5 py-0.5 bg-teal-100 text-teal-600 rounded-full font-medium">ผู้ดูแลระบบ</span>
+                class="text-[9px] px-1.5 py-0.5 bg-teal-100 text-teal-600 rounded-full font-bold">ผู้ดูแลระบบ</span>
               <span class="text-xs text-gray-400 ml-auto">{{ formatDate(reply.created_at) }}</span>
             </div>
-            <p class="text-gray-600 whitespace-pre-wrap">{{ reply.message }}</p>
+            <p class="whitespace-pre-wrap ml-9" [ngClass]="getReplyColor(reply).text" style="opacity:0.85">{{ reply.message }}</p>
           </div>
         </div>
       </div>
