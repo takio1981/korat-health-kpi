@@ -467,7 +467,10 @@ export class DashboardComponent implements OnInit {
     this.selectedStatus = '';
     this.selectedHospital = '';
     this.selectedDistrict = '';
-    this.loadKpiData();
+    // เคลียร์ข้อมูล → กลับหน้า "กรุณาเลือกตัวกรอง"
+    this.kpiData = [];
+    this.filteredData = [];
+    this.cdr.detectChanges();
   }
 
   applyFilters() {
@@ -492,10 +495,16 @@ export class DashboardComponent implements OnInit {
       const matchYear = this.selectedYear === '' || item.year_bh === this.selectedYear;
       const matchHospital = this.selectedHospital === '' || item.hosname === this.selectedHospital;
       const matchDistrict = this.selectedDistrict === '' || item.distname === this.selectedDistrict;
+      const tv = String(item.target_value ?? '').trim();
+      const la = String(item.last_actual ?? '').trim();
+      const hasTarget = tv !== '' && tv !== '0';
+      const hasActual = la !== '' && la !== '0';
       const matchStatus = this.selectedStatus === '' ||
-                          (this.selectedStatus === 'pass' && this.isTargetMet(item)) ||
-                          (this.selectedStatus === 'fail' && !this.isTargetMet(item)) ||
-                          (this.selectedStatus === 'pending' && item.pending_count > 0);
+                          (this.selectedStatus === 'pass' && hasTarget && this.isTargetMet(item)) ||
+                          (this.selectedStatus === 'fail' && hasTarget && !this.isTargetMet(item)) ||
+                          (this.selectedStatus === 'pending' && item.pending_count > 0) ||
+                          (this.selectedStatus === 'no_target' && !hasTarget) ||
+                          (this.selectedStatus === 'no_actual' && hasTarget && !hasActual);
       return matchSearch && matchMain && matchIndicator && matchdept && matchYear && matchStatus && matchHospital && matchDistrict;
     });
     this.filteredData.sort((a, b) => {

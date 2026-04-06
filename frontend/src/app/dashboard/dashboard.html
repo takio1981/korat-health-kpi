@@ -132,12 +132,14 @@
           </div>
           <div class="space-y-1">
             <label class="text-[10px] font-bold text-gray-500 uppercase ml-1">สถานะ</label>
-            <select [(ngModel)]="selectedStatus" (change)="applyFilters()"
+            <select [(ngModel)]="selectedStatus" (change)="kpiData.length === 0 ? loadKpiData() : applyFilters()"
                     class="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-xs bg-white hover:border-green-400 transition-all cursor-pointer">
               <option value="">ทั้งหมด</option>
               <option value="pass" class="text-green-600">ผ่านเป้าหมาย</option>
               <option value="fail" class="text-red-600">ไม่ผ่านเป้าหมาย</option>
               <option value="pending" class="text-amber-600">รอตรวจสอบ</option>
+              <option value="no_target" class="text-gray-500">ยังไม่มีเป้าหมาย</option>
+              <option value="no_actual" class="text-blue-600">มีเป้าหมาย/ยังไม่มีผลงาน</option>
             </select>
           </div>
         </div>
@@ -145,7 +147,7 @@
         <div class="px-6 py-2 flex items-center gap-4 bg-white border-b border-gray-100">
           <div class="relative flex-1">
             <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
-            <input type="text" [(ngModel)]="searchTerm" (input)="applyFilters()"
+            <input type="text" [(ngModel)]="searchTerm" (input)="kpiData.length === 0 ? loadKpiData() : applyFilters()"
                   placeholder="ค้นหาชื่อตัวชี้วัด หรือชื่อหน่วยงาน..."
                   class="w-full pl-9 pr-4 py-1.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-xs hover:border-green-400 transition-all">
           </div>
