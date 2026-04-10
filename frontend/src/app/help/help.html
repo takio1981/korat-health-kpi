@@ -279,7 +279,19 @@
               <li>เลือก <b>หน่วยบริการ</b> → หมวดหมู่ + ตัวชี้วัด แสดงเฉพาะหน่วยงานของหน่วยบริการนั้น</li>
               <li>เลือก <b>หน่วยงาน</b> → หมวดหมู่ + ตัวชี้วัด แสดงเฉพาะหน่วยงานนั้น</li>
               <li>กดปุ่ม <b>"ซ่อนตัวกรอง / แสดงตัวกรอง"</b> เพื่อเพิ่มพื้นที่ดูข้อมูล</li>
+              <li>กดปุ่ม <b>"ค้นหา"</b> เพื่อโหลดข้อมูลจาก server (เลือก filter ก่อนแล้วกดค้นหา)</li>
             </ul>
+          </div>
+          <div class="mt-3 bg-white border border-green-200 rounded-lg p-3 text-xs text-green-700">
+            <p class="font-bold mb-1"><i class="fas fa-tags mr-1"></i>ตัวกรองประเภทตัวชี้วัด</p>
+            <div class="flex flex-wrap gap-2">
+              <span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded font-bold">เขต 9</span>
+              <span class="px-2 py-0.5 bg-purple-100 text-purple-700 rounded font-bold">กระทรวง</span>
+              <span class="px-2 py-0.5 bg-green-100 text-green-700 rounded font-bold">สสจ.</span>
+              <span class="px-2 py-0.5 bg-amber-100 text-amber-700 rounded font-bold">ผู้ว่าฯ</span>
+              <span class="px-2 py-0.5 bg-gray-100 text-gray-600 rounded font-bold">อื่นๆ</span>
+            </div>
+            <p class="text-[10px] text-green-600 mt-1">กรองข้อมูลจาก kpi_indicators ฟิลด์ r9, moph, ssj, rmw, other</p>
           </div>
         </div>
 
@@ -438,6 +450,13 @@
           <div class="bg-orange-50 border border-orange-200 rounded-xl p-3"><p class="text-sm font-bold text-orange-800"><i class="fas fa-bullseye mr-2"></i>ล็อคแก้ไขเป้าหมาย</p><p class="text-xs text-gray-500">ควบคุมการแก้ไขค่าเป้าหมาย</p></div>
           <div class="bg-purple-50 border border-purple-200 rounded-xl p-3"><p class="text-sm font-bold text-purple-800"><i class="fas fa-gavel mr-2"></i>ระบบอุทธรณ์</p><p class="text-xs text-gray-500">เปิด/ปิด + กำหนดช่วงวันที่</p></div>
           <div class="bg-blue-50 border border-blue-200 rounded-xl p-3"><p class="text-sm font-bold text-blue-800"><i class="fas fa-history mr-2"></i>จัดการ Logs</p><p class="text-xs text-gray-500">ระยะเวลาเก็บ + สำรองอัตโนมัติ</p></div>
+        </div>
+
+        <!-- Summary + เร่งความเร็ว -->
+        <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-4">
+          <h4 class="font-bold text-indigo-800 text-sm mb-2"><i class="fas fa-sync-alt mr-2"></i>อัปเดต Summary (เร่งความเร็ว)</h4>
+          <p class="text-xs text-gray-600">กดปุ่ม <b>"อัปเดต Summary"</b> เพื่อสร้างตาราง kpi_summary สรุปข้อมูลไว้ล่วงหน้า → หน้า Chart + Report โหลดเร็วขึ้นมาก</p>
+          <p class="text-xs text-indigo-600 mt-1"><i class="fas fa-info-circle mr-1"></i>แสดง progress bar + นาฬิกานับเวลาระหว่างประมวลผล — ควรกดอัปเดตหลังจากมีการเปลี่ยนแปลงข้อมูลผลงาน</p>
         </div>
 
         <!-- สำรอง + ล้างข้อมูลผลงาน -->

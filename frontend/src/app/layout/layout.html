@@ -286,7 +286,7 @@
         ไม่มีการแจ้งเตือนใหม่
       </div>
       <div *ngFor="let notif of unreadNotifications"
-           (click)="markAsRead([notif.id])"
+           (click)="markAsRead([notif.id]); showNotifDropdown = false; navigateToNotification(notif)"
            class="px-4 py-3 border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors bg-blue-50/50">
         <div class="flex items-start gap-2">
           <i class="fas mt-0.5 text-sm" [ngClass]="notif.type === 'approve' ? 'fa-check-circle text-green-500' :
@@ -323,7 +323,7 @@
         ไม่มีการแจ้งเตือนใหม่
       </div>
       <div *ngFor="let notif of unreadNotifications"
-           (click)="markAsRead([notif.id])"
+           (click)="markAsRead([notif.id]); showNotifDropdown = false; navigateToNotification(notif)"
            class="px-4 py-3 border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors bg-blue-50/50">
         <div class="flex items-start gap-2">
           <i class="fas mt-0.5 text-sm" [ngClass]="notif.type === 'approve' ? 'fa-check-circle text-green-500' :

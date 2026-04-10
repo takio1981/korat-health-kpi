@@ -30,6 +30,7 @@ export class DashboardComponent implements OnInit {
   selectedStatus: string = '';
   selectedHospital: string = '';
   selectedDistrict: string = '';
+  selectedType: string = '';
 
   showFilters: boolean = true;
   mainCategories: string[] = [];
@@ -465,6 +466,7 @@ export class DashboardComponent implements OnInit {
     this.selectedStatus = '';
     this.selectedHospital = '';
     this.selectedDistrict = '';
+    this.selectedType = '';
     // เคลียร์ข้อมูล → กลับหน้า "กรุณาเลือกตัวกรอง"
     this.kpiData = [];
     this.filteredData = [];
@@ -503,7 +505,13 @@ export class DashboardComponent implements OnInit {
                           (this.selectedStatus === 'pending' && item.pending_count > 0) ||
                           (this.selectedStatus === 'no_target' && !hasTarget) ||
                           (this.selectedStatus === 'no_actual' && hasTarget && !hasActual);
-      return matchSearch && matchMain && matchIndicator && matchdept && matchYear && matchStatus && matchHospital && matchDistrict;
+      const matchType = this.selectedType === '' ||
+                        (this.selectedType === 'r9' && item.r9 === 1) ||
+                        (this.selectedType === 'moph' && item.moph === 1) ||
+                        (this.selectedType === 'ssj' && item.ssj === 1) ||
+                        (this.selectedType === 'rmw' && item.rmw === 1) ||
+                        (this.selectedType === 'other' && item.other === 1);
+      return matchSearch && matchMain && matchIndicator && matchdept && matchYear && matchStatus && matchHospital && matchDistrict && matchType;
     });
     this.filteredData.sort((a, b) => {
       if (b.year_bh !== a.year_bh) return b.year_bh.localeCompare(a.year_bh);
@@ -1166,7 +1174,7 @@ export class DashboardComponent implements OnInit {
             ...item,
             year_bh: this.addKpiSelectedYear,
             hospcode: targetHospcode,
-            target_value: '',
+            target_value: item.target_percentage != null ? String(item.target_percentage) : '',
             oct: '', nov: '', dece: '', jan: '', feb: '', mar: '',
             apr: '', may: '', jun: '', jul: '', aug: '', sep: '',
             total_actual: 0,

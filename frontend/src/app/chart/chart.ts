@@ -91,7 +91,7 @@ export class ChartComponent implements OnInit {
     this.isLoading = true;
     const source$ = this.isPublicView
       ? this.authService.getPublicKpiResults()
-      : this.authService.getKpiResults();
+      : this.authService.getKpiSummary({ year: this.selectedYear });
     source$.subscribe({
       next: (res) => {
         if (res && res.success) {

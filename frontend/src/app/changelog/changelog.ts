@@ -18,6 +18,21 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.04.10',
+      date: '10 เมษายน 2569',
+      changes: [
+        { type: 'feature', text: 'ตัวกรองประเภทตัวชี้วัด (เขต 9 / กระทรวง / สสจ. / ผู้ว่าฯ / อื่นๆ)' },
+        { type: 'feature', text: 'kpi_summary (Materialized View) — เร่งความเร็ว Chart + Report' },
+        { type: 'feature', text: 'Notification Detail Modal — กดดูรายละเอียด + auto mark-read' },
+        { type: 'feature', text: 'เป้าหมายอัตโนมัติจาก kpi_indicators.target_percentage' },
+        { type: 'improve', text: 'CONCAT(provcode,distcode) → chospital.distid + index (เร็วขึ้น)' },
+        { type: 'improve', text: 'Summary refresh: INSERT...SELECT ใน MySQL ตรงๆ + progress bar' },
+        { type: 'fix', text: 'FK kpi_indicators: dept_id + main_indicator_id เปลี่ยน VARCHAR→INT' },
+        { type: 'fix', text: 'ปุ่มลบ: แสดงเฉพาะ super_admin ทุก component (form-builder แก้แล้ว)' },
+        { type: 'fix', text: 'Port dev: 4500 (frontend) + 3700 (backend) — แก้ Windows excluded range' },
+      ]
+    },
+    {
       version: '2569.04.03',
       date: '3 เมษายน 2569',
       changes: [

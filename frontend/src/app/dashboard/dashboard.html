@@ -82,7 +82,7 @@
           </span>
         </div>
 
-        <div *ngIf="showFilters" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3 px-6 py-3 bg-gray-50/50 border-b border-gray-100">
+        <div *ngIf="showFilters" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-9 gap-3 px-6 py-3 bg-gray-50/50 border-b border-gray-100">
           <div class="space-y-1">
             <label class="text-[10px] font-bold text-gray-500 uppercase ml-1">อำเภอ</label>
             <select [(ngModel)]="selectedDistrict" (change)="onDistrictCascade()"
@@ -140,6 +140,18 @@
               <option value="pending" class="text-amber-600">รอตรวจสอบ</option>
               <option value="no_target" class="text-gray-500">ยังไม่มีเป้าหมาย</option>
               <option value="no_actual" class="text-blue-600">มีเป้าหมาย/ยังไม่มีผลงาน</option>
+            </select>
+          </div>
+          <div class="space-y-1">
+            <label class="text-[10px] font-bold text-gray-500 uppercase ml-1">ประเภทตัวชี้วัด</label>
+            <select [(ngModel)]="selectedType"
+                    class="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-xs bg-white hover:border-green-400 transition-all cursor-pointer">
+              <option value="">ทั้งหมด</option>
+              <option value="r9">เขต 9</option>
+              <option value="moph">กระทรวง</option>
+              <option value="ssj">สสจ.</option>
+              <option value="rmw">ผู้ว่าฯ</option>
+              <option value="other">อื่นๆ</option>
             </select>
           </div>
           <!-- ปุ่มค้นหา -->

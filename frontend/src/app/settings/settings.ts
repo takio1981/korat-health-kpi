@@ -322,4 +322,55 @@ export class SettingsComponent implements OnInit {
       }
     });
   }
+
+  refreshSummary() {
+    const startTime = Date.now();
+    let timerInterval: any;
+
+    Swal.fire({
+      title: 'กำลังอัปเดต Summary...',
+      html: `<div class="text-left text-sm space-y-2">
+        <div class="flex items-center gap-2"><i class="fas fa-spinner fa-spin text-indigo-500"></i> ประมวลผลข้อมูล ~600,000 rows</div>
+        <div class="flex items-center gap-2 text-gray-400"><i class="fas fa-clock"></i> เวลาที่ใช้: <b id="swal-timer">0</b> วินาที</div>
+        <div class="w-full bg-gray-200 rounded-full h-2 mt-2">
+          <div id="swal-progress" class="bg-indigo-500 h-2 rounded-full transition-all" style="width: 0%"></div>
+        </div>
+        <p class="text-xs text-gray-400 mt-1">ขั้นตอน: ล้างข้อมูลเก่า → GROUP BY → INSERT → คำนวณ last_actual</p>
+      </div>`,
+      allowOutsideClick: false,
+      showConfirmButton: false,
+      didOpen: () => {
+        let fakeProgress = 0;
+        timerInterval = setInterval(() => {
+          const elapsed = Math.floor((Date.now() - startTime) / 1000);
+          const timerEl = document.getElementById('swal-timer');
+          const progressEl = document.getElementById('swal-progress');
+          if (timerEl) timerEl.textContent = String(elapsed);
+          // fake progress bar (ช้าลงเมื่อเข้าใกล้ 90%)
+          if (fakeProgress < 90) fakeProgress += (90 - fakeProgress) * 0.05;
+          if (progressEl) progressEl.style.width = fakeProgress + '%';
+        }, 500);
+      }
+    });
+
+    this.authService.refreshKpiSummary().subscribe({
+      next: (res: any) => {
+        clearInterval(timerInterval);
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        Swal.fire({
+          icon: 'success',
+          title: 'อัปเดต Summary สำเร็จ',
+          html: `<div class="text-left text-sm space-y-1">
+            <p><i class="fas fa-database text-indigo-500 mr-2"></i>สร้าง <b>${res.inserted}</b> rows</p>
+            <p><i class="fas fa-clock text-green-500 mr-2"></i>ใช้เวลา <b>${elapsed}</b> วินาที</p>
+          </div>`,
+          confirmButtonColor: '#10b981'
+        });
+      },
+      error: (err: any) => {
+        clearInterval(timerInterval);
+        Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถอัปเดตได้', 'error');
+      }
+    });
+  }
 }

@@ -53,7 +53,7 @@
         <!-- Notification List -->
         <div *ngIf="!isLoading && filteredNotifications.length > 0" class="space-y-2">
           <div *ngFor="let notif of filteredNotifications"
-               (click)="markAsRead(notif)"
+               (click)="openNotifDetail(notif)"
                class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition-all cursor-pointer"
                [ngClass]="notif.is_read ? 'opacity-75' : 'border-l-4 border-l-blue-500'">
             <div class="flex items-start gap-3">
@@ -196,4 +196,94 @@
           </div>
         </div>
       </ng-container>
+
+<!-- ==================== Notification Detail Modal ==================== -->
+<div *ngIf="showDetailModal && selectedNotif" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+  <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" (click)="showDetailModal = false"></div>
+  <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+    <!-- Header -->
+    <div class="px-6 py-4 border-b"
+         [ngClass]="selectedNotif.type === 'approve' ? 'bg-gradient-to-r from-green-600 to-emerald-500' :
+                    selectedNotif.type === 'reject' ? 'bg-gradient-to-r from-red-500 to-rose-500' :
+                    selectedNotif.type === 'appeal' ? 'bg-gradient-to-r from-purple-600 to-indigo-500' :
+                    'bg-gradient-to-r from-blue-600 to-cyan-500'">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+            <i class="fas text-white text-lg"
+               [ngClass]="selectedNotif.type === 'approve' ? 'fa-check-circle' :
+                          selectedNotif.type === 'reject' ? 'fa-times-circle' :
+                          selectedNotif.type === 'appeal' ? 'fa-gavel' :
+                          selectedNotif.title?.includes('กระทู้') ? 'fa-comments' :
+                          selectedNotif.title?.includes('รอการอนุมัติ') ? 'fa-user-clock' :
+                          'fa-bell'"></i>
+          </div>
+          <div>
+            <p class="text-white/80 text-xs">
+              {{ selectedNotif.type === 'approve' ? 'อนุมัติ' :
+                 selectedNotif.type === 'reject' ? 'ตีกลับ' :
+                 selectedNotif.type === 'appeal' ? 'อุทธรณ์' : 'แจ้งเตือน' }}
+            </p>
+            <h3 class="text-white font-bold">{{ selectedNotif.title }}</h3>
+          </div>
+        </div>
+        <button (click)="showDetailModal = false" class="w-8 h-8 rounded-lg bg-white/20 text-white flex items-center justify-center hover:bg-white/30">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="p-6 space-y-4">
+      <!-- ข้อความ -->
+      <div class="bg-gray-50 rounded-xl p-4">
+        <p class="text-sm text-gray-700 whitespace-pre-wrap">{{ selectedNotif.message }}</p>
+      </div>
+
+      <!-- รายละเอียด -->
+      <div class="grid grid-cols-2 gap-3 text-sm">
+        <div *ngIf="selectedNotif.created_by_name" class="flex items-center gap-2 text-gray-600">
+          <i class="fas fa-user text-gray-400 w-4 text-center"></i>
+          <span>{{ selectedNotif.created_by_name }} {{ selectedNotif.created_by_lastname }}</span>
+        </div>
+        <div class="flex items-center gap-2 text-gray-600">
+          <i class="fas fa-clock text-gray-400 w-4 text-center"></i>
+          <span>{{ selectedNotif.created_at | date:'dd/MM/yyyy HH:mm' }}</span>
+        </div>
+        <div *ngIf="selectedNotif.hospcode" class="flex items-center gap-2 text-gray-600">
+          <i class="fas fa-hospital text-gray-400 w-4 text-center"></i>
+          <span>{{ selectedNotif.hospcode }}</span>
+        </div>
+        <div *ngIf="selectedNotif.indicator_id" class="flex items-center gap-2 text-gray-600">
+          <i class="fas fa-chart-bar text-gray-400 w-4 text-center"></i>
+          <span>ตัวชี้วัด ID: {{ selectedNotif.indicator_id }}</span>
+        </div>
+        <div *ngIf="selectedNotif.year_bh" class="flex items-center gap-2 text-gray-600">
+          <i class="fas fa-calendar text-gray-400 w-4 text-center"></i>
+          <span>ปีงบฯ {{ selectedNotif.year_bh }}</span>
+        </div>
+        <div class="flex items-center gap-2 text-gray-600">
+          <i class="fas fa-tag text-gray-400 w-4 text-center"></i>
+          <span>{{ getTimeAgo(selectedNotif.created_at) }}</span>
+        </div>
+      </div>
+
+      <!-- สถานะ -->
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-bold" [ngClass]="selectedNotif.is_read ? 'text-green-600' : 'text-blue-600'">
+          <i class="fas mr-1" [ngClass]="selectedNotif.is_read ? 'fa-check-double' : 'fa-envelope'"></i>
+          {{ selectedNotif.is_read ? 'อ่านแล้ว' : 'ยังไม่ได้อ่าน' }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="px-6 py-3 bg-gray-50 border-t border-gray-100 flex justify-end">
+      <button (click)="showDetailModal = false" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-bold transition-all">
+        ปิด
+      </button>
+    </div>
+  </div>
+</div>
+
 </div>

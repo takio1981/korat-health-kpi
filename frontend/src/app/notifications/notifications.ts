@@ -22,6 +22,8 @@ export class NotificationsComponent implements OnInit {
   filteredNotifications: any[] = [];
   activeFilter: string = 'all';
   isLoading: boolean = false;
+  showDetailModal: boolean = false;
+  selectedNotif: any = null;
   approveCount: number = 0;
   rejectCount: number = 0;
   appealCount: number = 0;
@@ -62,6 +64,12 @@ export class NotificationsComponent implements OnInit {
         if (res.success) {
           this.notifications = res.data;
           this.applyFilter();
+          // Auto-open modal ถ้ามา query param ?id=
+          const notifId = this.route.snapshot.queryParamMap.get('id');
+          if (notifId) {
+            const target = this.notifications.find(n => String(n.id) === notifId);
+            if (target) this.openNotifDetail(target);
+          }
         }
         this.cdr.detectChanges();
       },
@@ -141,6 +149,23 @@ export class NotificationsComponent implements OnInit {
         this.cdr.detectChanges();
       }
     });
+  }
+
+  openNotifDetail(notif: any, event?: Event) {
+    if (event) event.stopPropagation();
+    this.selectedNotif = notif;
+    this.showDetailModal = true;
+    // mark as read
+    if (!notif.is_read) {
+      this.authService.markNotificationsRead({ ids: [notif.id] }).subscribe({
+        next: () => {
+          notif.is_read = 1;
+          this.authService.refreshUnreadCount();
+          this.applyFilter();
+          this.cdr.detectChanges();
+        }
+      });
+    }
   }
 
   markAllAsRead() {

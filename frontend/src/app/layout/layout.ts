@@ -258,6 +258,10 @@ export class LayoutComponent implements OnInit {
     }
   }
 
+  navigateToNotification(notif: any) {
+    this.router.navigate(['/notifications'], { queryParams: { id: notif.id } });
+  }
+
   markAsRead(ids: number[]) {
     this.authService.markNotificationsRead({ ids }).subscribe({
       next: () => {

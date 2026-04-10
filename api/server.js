@@ -243,7 +243,7 @@ apiRouter.post('/login', loginLimiter, async (req, res) => {
             FROM users u
             LEFT JOIN departments d ON u.dept_id = d.id
             LEFT JOIN chospital h ON u.hospcode = h.hoscode
-            LEFT JOIN co_district dist ON dist.distid = CONCAT(h.provcode, h.distcode)
+            LEFT JOIN co_district dist ON dist.distid = h.distid
             WHERE u.username = ?
         `, [username]);
 
@@ -625,7 +625,7 @@ apiRouter.get('/public/kpi-results', async (req, res) => {
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
             LEFT JOIN departments d ON d.id = i.dept_id
             LEFT JOIN chospital h ON r.hospcode = h.hoscode
-            LEFT JOIN co_district dist ON dist.distid = CONCAT(h.provcode, h.distcode)
+            LEFT JOIN co_district dist ON dist.distid = h.distid
             GROUP BY mi.main_indicator_name, i.kpi_indicators_name, i.id, d.dept_name, r.year_bh, r.hospcode, h.hosname, dist.distname
             ORDER BY r.year_bh DESC, mi.main_indicator_name, i.kpi_indicators_name, i.id`;
         const [rows] = await db.query(sql);
@@ -683,7 +683,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
             // admin_cup / user_cup: ทุกตัวชี้วัด ทุก hospcode ในอำเภอ
             const distid = await getDistrictId(user.hospcode);
             if (distid) {
-                whereClause = 'WHERE CONCAT(h.provcode, h.distcode) = ?';
+                whereClause = 'WHERE h.distid = ?';
                 params.push(distid);
                 // user_cup เห็นเฉพาะ dept ตัวเอง, admin_cup เห็นทุก dept
                 if (user.role === 'user_cup' && user.deptId != null) {
@@ -744,6 +744,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 MAX(r.status) AS indicator_status,
                 MAX(CASE WHEN r.is_locked = 1 THEN 1 ELSE 0 END) AS is_locked,
                 i.table_process,
+                i.r9, i.moph, i.ssj, i.rmw, i.other,
                 r.hospcode,
                 h.hosname,
                 dist.distname
@@ -752,9 +753,9 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
             LEFT JOIN departments d ON d.id = i.dept_id
             LEFT JOIN chospital h ON r.hospcode = h.hoscode
-            LEFT JOIN co_district dist ON dist.distid = CONCAT(h.provcode, h.distcode)
+            LEFT JOIN co_district dist ON dist.distid = h.distid
             ${whereClause}${extraWhere}
-            GROUP BY i.id, r.year_bh, r.hospcode, mi.main_indicator_name, i.kpi_indicators_name, i.table_process, d.dept_name, h.hosname, dist.distname
+            GROUP BY i.id, r.year_bh, r.hospcode, mi.main_indicator_name, i.kpi_indicators_name, i.table_process, i.r9, i.moph, i.ssj, i.rmw, i.other, d.dept_name, h.hosname, dist.distname
             ORDER BY r.year_bh DESC, mi.main_indicator_name, i.kpi_indicators_name, r.hospcode
             LIMIT 500
         `;
@@ -821,7 +822,7 @@ apiRouter.post('/bulk-add-kpi', authenticateToken, isAdmin, async (req, res) => 
         const indParams = [];
         const filterDeptId = req.user.role === 'admin_ssj' ? req.user.deptId : (dept_id || null);
         if (filterDeptId) { indWhere += ' AND dept_id = ?'; indParams.push(filterDeptId); }
-        const [indicators] = await db.query(`SELECT id FROM kpi_indicators ${indWhere}`, indParams);
+        const [indicators] = await db.query(`SELECT id, target_percentage FROM kpi_indicators ${indWhere}`, indParams);
         // ดึงเฉพาะ รพ., สสอ., รพ.สต. (hostype 05,06,07,18)
         const [hospitals] = await db.query("SELECT hoscode FROM chospital WHERE hostype IN ('05','06','07','18')");
         if (indicators.length === 0) return res.json({ success: true, message: 'ไม่มีตัวชี้วัดที่ active', inserted: 0, skipped: 0 });
@@ -841,10 +842,11 @@ apiRouter.post('/bulk-add-kpi', authenticateToken, isAdmin, async (req, res) => 
                     if (existSet.has(key)) { skipped++; continue; }
                     // สร้าง 12 records (เดือน 10-9)
                     const months = [10,11,12,1,2,3,4,5,6,7,8,9];
+                    const targetVal = ind.target_percentage != null ? String(ind.target_percentage) : null;
                     for (const month of months) {
                         await connection.query(
-                            'INSERT INTO kpi_results (indicator_id, year_bh, hospcode, month_bh, target_value, actual_value, status, user_id) VALUES (?,?,?,?,NULL,NULL,?,?)',
-                            [ind.id, year_bh, hos.hoscode, month, 'Pending', req.user.userId]
+                            'INSERT INTO kpi_results (indicator_id, year_bh, hospcode, month_bh, target_value, actual_value, status, user_id) VALUES (?,?,?,?,?,NULL,?,?)',
+                            [ind.id, year_bh, hos.hoscode, month, targetVal, 'Pending', req.user.userId]
                         );
                     }
                     inserted++;
@@ -987,11 +989,8 @@ apiRouter.post('/update-kpi', async (req, res) => {
                 for (const m of months) {
                     const rawActual = row[m.col];
                     const actualValue = (rawActual !== undefined && rawActual !== null && rawActual !== '') ? String(rawActual).trim() : '';
-                    let targetValue = '';
-                    if (m.val === 10) {
-                        const rawTarget = row.target_value;
-                        targetValue = (rawTarget !== undefined && rawTarget !== null && rawTarget !== '') ? String(rawTarget).trim() : '';
-                    }
+                    const rawTarget = row.target_value;
+                    const targetValue = (rawTarget !== undefined && rawTarget !== null && rawTarget !== '') ? String(rawTarget).trim() : '';
                     insertValues.push('(?, ?, ?, ?, ?, ?, ?, ?, 0)');
                     insertParams.push(indicator_id, year_bh, m.val, actualValue, targetValue, user.userId, 'Pending', rowHospcode);
                 }
@@ -1042,11 +1041,8 @@ apiRouter.post('/update-kpi', async (req, res) => {
                 for (const m of months) {
                     const rawActual = row[m.col];
                     const actualValue = (rawActual !== undefined && rawActual !== null && rawActual !== '') ? String(rawActual).trim() : '';
-                    let targetValue = '';
-                    if (m.val === 10) {
-                        const rawTarget = row.target_value;
-                        targetValue = (rawTarget !== undefined && rawTarget !== null && rawTarget !== '') ? String(rawTarget).trim() : '';
-                    }
+                    const rawTarget = row.target_value;
+                    const targetValue = (rawTarget !== undefined && rawTarget !== null && rawTarget !== '') ? String(rawTarget).trim() : '';
                     insertValues.push('(?, ?, ?, ?, ?, ?, ?, ?, 0)');
                     insertParams.push(indicator_id, year_bh, m.val, actualValue, targetValue, user.userId, 'Pending', rowHospcode);
                 }
@@ -1093,18 +1089,15 @@ apiRouter.post('/update-kpi', async (req, res) => {
             const rowHospcode = (ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
             const rowStatus = row.preserve_status || 'Pending';
 
+            const rawTarget3 = row.target_value;
+            const targetValue3 = (rawTarget3 !== undefined && rawTarget3 !== null && rawTarget3 !== '') ? String(rawTarget3).trim() : '';
             for (const m of months) {
                 const rawActual = row[m.col];
                 const actualValue = (rawActual !== undefined && rawActual !== null && rawActual !== '') ? String(rawActual).trim() : null;
-                let targetValue = '';
-                if (m.val === 10) {
-                    const rawTarget = row.target_value;
-                    targetValue = (rawTarget !== undefined && rawTarget !== null && rawTarget !== '') ? String(rawTarget).trim() : '';
-                }
 
-                if ((actualValue && actualValue !== '0') || (targetValue && targetValue !== '0')) {
+                if ((actualValue && actualValue !== '0') || (targetValue3 && targetValue3 !== '0')) {
                     insertValues.push('(?, ?, ?, ?, ?, ?, ?, ?, 0)');
-                    insertParams.push(indicator_id, year_bh, m.val, actualValue, targetValue, user.userId, rowStatus, rowHospcode);
+                    insertParams.push(indicator_id, year_bh, m.val, actualValue, targetValue3, user.userId, rowStatus, rowHospcode);
                 }
             }
         }
@@ -1433,22 +1426,31 @@ apiRouter.delete('/dynamic-data/:table_name/:record_id', authenticateToken, asyn
 });
 
 // ===========================
-apiRouter.get('/kpi-template', async (req, res) => {
+apiRouter.get('/kpi-template', authenticateToken, async (req, res) => {
     try {
+        const user = req.user;
+        let deptFilter = '';
+        const params = [];
+        // กรองตาม dept ของ user (ยกเว้น super_admin เห็นทั้งหมด)
+        if (user.role !== 'super_admin' && user.deptId != null) {
+            deptFilter = 'AND i.dept_id = ?';
+            params.push(user.deptId);
+        }
         const sql = `
             SELECT
                 if (mi.main_indicator_name is NULL,"ยังไม่กำหนด",mi.main_indicator_name) main_indicator_name,
                 i.kpi_indicators_name,
                 i.id AS indicator_id,
                 i.dept_id,
+                i.target_percentage,
                 d.dept_name
             FROM kpi_indicators i
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
             LEFT JOIN departments d on d.id = i.dept_id
-            WHERE i.is_active = 1
+            WHERE i.is_active = 1 ${deptFilter}
             ORDER BY mi.main_indicator_name DESC, i.kpi_indicators_name DESC, d.dept_name DESC
         `;
-        const [rows] = await db.query(sql);
+        const [rows] = await db.query(sql, params);
         res.json({ success: true, data: rows });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Error fetching template' });
@@ -1513,7 +1515,7 @@ apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
         } else if (ROLE_SCOPE_DISTRICT.includes(user.role)) {
             const distid = await getDistrictId(user.hospcode);
             if (distid) {
-                whereClause = 'AND CONCAT(h.provcode, h.distcode) = ?'; filterParams.push(distid);
+                whereClause = 'AND h.distid = ?'; filterParams.push(distid);
                 if (user.role === 'user_cup' && user.deptId != null) { whereClause += ' AND i.dept_id = ?'; filterParams.push(user.deptId); }
             } else { whereClause = 'AND r.hospcode = ?'; filterParams.push(user.hospcode); }
         } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
@@ -1670,7 +1672,7 @@ apiRouter.get('/users', authenticateToken, isAnyAdmin, async (req, res) => {
             FROM users u
             LEFT JOIN departments d ON u.dept_id = d.id
             LEFT JOIN chospital h ON u.hospcode = h.hoscode
-            LEFT JOIN co_district dist ON dist.distid = CONCAT(h.provcode, h.distcode)
+            LEFT JOIN co_district dist ON dist.distid = h.distid
             LEFT JOIN users approver ON u.approved_by = approver.id`;
         let params = [];
 
@@ -1684,7 +1686,7 @@ apiRouter.get('/users', authenticateToken, isAnyAdmin, async (req, res) => {
             // admin_cup: ทุกคนในอำเภอเดียวกัน ยกเว้น super_admin
             const distid = await getDistrictId(user.hospcode);
             if (distid) {
-                sql += ` WHERE u.role != 'super_admin' AND CONCAT(h.provcode, h.distcode) = ?`;
+                sql += ` WHERE u.role != 'super_admin' AND h.distid = ?`;
                 params.push(distid);
             } else {
                 sql += ` WHERE u.role != 'super_admin' AND u.hospcode = ?`;
@@ -1893,7 +1895,7 @@ apiRouter.put('/users/:id', authenticateToken, isAnyAdmin, async (req, res) => {
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
             if (user.deptId != null && String(target[0].dept_id) !== String(user.deptId)) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์แก้ไขผู้ใช้งานต่างหน่วยงาน' });
         } else if (isDistrictAdmin) {
-            const [target] = await db.query(`SELECT CONCAT(h.provcode, h.distcode) AS distid FROM users u LEFT JOIN chospital h ON u.hospcode = h.hoscode WHERE u.id = ?`, [userId]);
+            const [target] = await db.query(`SELECT h.distid AS distid FROM users u LEFT JOIN chospital h ON u.hospcode = h.hoscode WHERE u.id = ?`, [userId]);
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
             const myDistid = await getDistrictId(user.hospcode);
             if (!myDistid || target[0].distid !== myDistid) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์แก้ไขผู้ใช้งานต่างอำเภอ' });
@@ -1948,7 +1950,7 @@ apiRouter.delete('/users/:id', authenticateToken, isAnyAdmin, async (req, res) =
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
             if (user.deptId != null && String(target[0].dept_id) !== String(user.deptId)) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์ลบผู้ใช้งานต่างหน่วยงาน' });
         } else if (user.role === 'admin_cup') {
-            const [target] = await db.query(`SELECT CONCAT(h.provcode, h.distcode) AS distid FROM users u LEFT JOIN chospital h ON u.hospcode = h.hoscode WHERE u.id = ?`, [userId]);
+            const [target] = await db.query(`SELECT h.distid AS distid FROM users u LEFT JOIN chospital h ON u.hospcode = h.hoscode WHERE u.id = ?`, [userId]);
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
             const myDistid = await getDistrictId(user.hospcode);
             if (!myDistid || target[0].distid !== myDistid) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์ลบผู้ใช้งานต่างอำเภอ' });
@@ -1981,7 +1983,7 @@ apiRouter.put('/users/:id/reset-password', authenticateToken, isAnyAdmin, async 
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
             if (user.deptId != null && String(target[0].dept_id) !== String(user.deptId)) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์รีเซ็ตรหัสผ่านผู้ใช้งานต่างหน่วยงาน' });
         } else if (user.role === 'admin_cup') {
-            const [target] = await db.query(`SELECT CONCAT(h.provcode, h.distcode) AS distid FROM users u LEFT JOIN chospital h ON u.hospcode = h.hoscode WHERE u.id = ?`, [userId]);
+            const [target] = await db.query(`SELECT h.distid AS distid FROM users u LEFT JOIN chospital h ON u.hospcode = h.hoscode WHERE u.id = ?`, [userId]);
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
             const myDistid = await getDistrictId(user.hospcode);
             if (!myDistid || target[0].distid !== myDistid) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์รีเซ็ตรหัสผ่านผู้ใช้งานต่างอำเภอ' });
@@ -2327,13 +2329,22 @@ apiRouter.delete('/main-indicators/:id', authenticateToken, isSuperAdmin, async 
 // --- CRUD KPI Indicators (ตัวชี้วัดย่อย) ---
 apiRouter.get('/indicators', authenticateToken, async (req, res) => {
     try {
+        const user = req.user;
+        let whereClause = '';
+        const params = [];
+        // กรองตาม dept ของ user (ยกเว้น super_admin เห็นทั้งหมด)
+        if (user.role !== 'super_admin' && user.deptId != null) {
+            whereClause = 'WHERE i.dept_id = ?';
+            params.push(user.deptId);
+        }
         const [rows] = await db.query(`
-            SELECT i.*, mi.main_indicator_name as main_indicator_name, d.dept_name 
+            SELECT i.*, mi.main_indicator_name as main_indicator_name, d.dept_name
             FROM kpi_indicators i
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
             LEFT JOIN departments d ON i.dept_id = d.id
+            ${whereClause}
             ORDER BY i.id DESC
-        `);
+        `, params);
         res.json({ success: true, data: rows });
     } catch (error) {
         console.error('Error fetching indicators:', error);
@@ -3526,6 +3537,113 @@ apiRouter.post('/sync-to-hdc/execute', authenticateToken, isSuperAdmin, async (r
     }
 });
 
+// ========== KPI Summary (Materialized View) ==========
+
+// POST /refresh-summary — อัปเดต kpi_summary จาก kpi_results (INSERT...SELECT ใน MySQL ตรงๆ)
+apiRouter.post('/refresh-summary', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const year = req.body.year_bh || '';
+        const yearFilter = year ? 'AND r.year_bh = ?' : '';
+        const yearParams = year ? [year] : [];
+
+        // ล้างข้อมูลเดิม
+        if (year) await db.query('DELETE FROM kpi_summary WHERE year_bh = ?', [year]);
+        else await db.query('TRUNCATE TABLE kpi_summary');
+
+        // INSERT...SELECT ทำงานใน MySQL ตรงๆ — เร็วกว่า SELECT → Node.js → INSERT ทีละ row
+        const [result] = await db.query(`
+            INSERT INTO kpi_summary (indicator_id, year_bh, hospcode, main_indicator_name, kpi_indicators_name,
+                dept_name, hosname, distname, table_process, target_value,
+                oct, nov, dece, jan, feb, mar, apr, may, jun, jul, aug, sep,
+                pending_count, indicator_status, is_locked, updated_at)
+            SELECT
+                i.id, r.year_bh, r.hospcode,
+                IFNULL(mi.main_indicator_name, 'ยังไม่กำหนด'),
+                i.kpi_indicators_name, d.dept_name, h.hosname, dist.distname, i.table_process,
+                MAX(r.target_value),
+                MAX(CASE WHEN r.month_bh=10 THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=11 THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=12 THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=1  THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=2  THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=3  THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=4  THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=5  THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=6  THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=7  THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=8  THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=9  THEN r.actual_value END),
+                SUM(CASE WHEN r.status='Pending' THEN 1 ELSE 0 END),
+                MAX(r.status),
+                MAX(CASE WHEN r.is_locked=1 THEN 1 ELSE 0 END),
+                NOW()
+            FROM kpi_results r
+            JOIN kpi_indicators i ON r.indicator_id = i.id
+            LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
+            LEFT JOIN departments d ON d.id = i.dept_id
+            LEFT JOIN chospital h ON r.hospcode = h.hoscode
+            LEFT JOIN co_district dist ON dist.distid = h.distid
+            WHERE 1=1 ${yearFilter}
+            GROUP BY i.id, r.year_bh, r.hospcode
+            HAVING MAX(r.target_value) IS NOT NULL
+                OR MAX(CASE WHEN r.actual_value IS NOT NULL AND r.actual_value != '' AND r.actual_value != '0' THEN 1 ELSE 0 END) = 1
+        `, yearParams);
+
+        const inserted = result.affectedRows || 0;
+
+        // อัปเดต last_actual (คำนวณใน MySQL)
+        await db.query(`
+            UPDATE kpi_summary SET last_actual = COALESCE(
+                NULLIF(sep,''), NULLIF(aug,''), NULLIF(jul,''), NULLIF(jun,''),
+                NULLIF(may,''), NULLIF(apr,''), NULLIF(mar,''), NULLIF(feb,''),
+                NULLIF(jan,''), NULLIF(dece,''), NULLIF(nov,''), NULLIF(oct,'')
+            )
+        `);
+
+        // อัปเดต has_form_schema
+        const [formSchemas] = await db.query('SELECT indicator_id FROM kpi_form_schemas WHERE is_active = 1');
+        if (formSchemas.length > 0) {
+            const ids = formSchemas.map(f => f.indicator_id);
+            await db.query('UPDATE kpi_summary SET has_form_schema = 1 WHERE indicator_id IN (' + ids.join(',') + ')');
+        }
+
+        res.json({ success: true, message: 'อัปเดต summary สำเร็จ: ' + inserted + ' rows', inserted });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// GET /kpi-summary — ดึงข้อมูลจาก summary table (เร็วมาก ไม่ต้อง JOIN)
+apiRouter.get('/kpi-summary', authenticateToken, async (req, res) => {
+    try {
+        const user = req.user;
+        const conditions = [];
+        const params = [];
+
+        if (req.query.year) { conditions.push('s.year_bh = ?'); params.push(req.query.year); }
+        if (req.query.hospcode) { conditions.push('s.hospcode = ?'); params.push(req.query.hospcode); }
+        if (req.query.dept) { conditions.push('s.dept_name = ?'); params.push(req.query.dept); }
+        if (req.query.district) { conditions.push('s.distname = ?'); params.push(req.query.district); }
+        if (req.query.indicator) { conditions.push('s.kpi_indicators_name = ?'); params.push(req.query.indicator); }
+        if (req.query.main) { conditions.push('s.main_indicator_name = ?'); params.push(req.query.main); }
+
+        // Role-based filter
+        if (user.role === 'admin_ssj' && user.deptId != null) {
+            conditions.push('s.dept_name = (SELECT dept_name FROM departments WHERE id = ?)');
+            params.push(user.deptId);
+        } else if (!['super_admin', 'admin_ssj'].includes(user.role) && user.hospcode) {
+            conditions.push('s.hospcode = ?');
+            params.push(user.hospcode);
+        }
+
+        const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+        const [rows] = await db.query(`SELECT * FROM kpi_summary s ${where} ORDER BY s.year_bh DESC, s.main_indicator_name, s.kpi_indicators_name LIMIT 500`, params);
+        res.json({ success: true, data: rows });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 // ========== Report Summary APIs ==========
 
 // รายงานสรุป: รายข้อตัวชี้วัด
@@ -3543,13 +3661,13 @@ apiRouter.get('/report/by-indicator', authenticateToken, async (req, res) => {
             if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
         } else if (user.role === 'admin_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
-            if (distid_auto) { whereClauses.push('CONCAT(h.provcode, h.distcode) = ?'); params.push(distid_auto); }
+            if (distid_auto) { whereClauses.push('h.distid = ?'); params.push(distid_auto); }
             else if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
         } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
             if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
         } else if (user.role === 'user_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
-            if (distid_auto) { whereClauses.push('CONCAT(h.provcode, h.distcode) = ?'); params.push(distid_auto); }
+            if (distid_auto) { whereClauses.push('h.distid = ?'); params.push(distid_auto); }
             if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
         } else {
             if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
@@ -3557,7 +3675,7 @@ apiRouter.get('/report/by-indicator', authenticateToken, async (req, res) => {
         }
         if (year_bh) { whereClauses.push('r.year_bh = ?'); params.push(year_bh); }
         if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
-        if (distid) { whereClauses.push("CONCAT(h.provcode, h.distcode) = ?"); params.push(distid); }
+        if (distid) { whereClauses.push("h.distid = ?"); params.push(distid); }
 
         const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
         const sql = `
@@ -3589,7 +3707,9 @@ apiRouter.get('/report/by-indicator', authenticateToken, async (req, res) => {
             LEFT JOIN chospital h ON r.hospcode = h.hoscode
             ${whereStr}
             GROUP BY i.id, i.kpi_indicators_name, mi.main_indicator_name, d.dept_name, r.year_bh
+            HAVING MAX(r.target_value) IS NOT NULL OR SUM(CASE WHEN r.actual_value IS NOT NULL AND r.actual_value != '' AND r.actual_value != '0' THEN 1 ELSE 0 END) > 0
             ORDER BY mi.main_indicator_name, i.kpi_indicators_name
+            LIMIT 500
         `;
         const [rows] = await db.query(sql, params);
         res.json({ success: true, data: rows });
@@ -3614,13 +3734,13 @@ apiRouter.get('/report/by-hospital', authenticateToken, async (req, res) => {
             if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
         } else if (user.role === 'admin_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
-            if (distid_auto) { whereClauses.push('CONCAT(h.provcode, h.distcode) = ?'); params.push(distid_auto); }
+            if (distid_auto) { whereClauses.push('h.distid = ?'); params.push(distid_auto); }
             else if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
         } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
             if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
         } else if (user.role === 'user_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
-            if (distid_auto) { whereClauses.push('CONCAT(h.provcode, h.distcode) = ?'); params.push(distid_auto); }
+            if (distid_auto) { whereClauses.push('h.distid = ?'); params.push(distid_auto); }
             if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
         } else {
             if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
@@ -3628,14 +3748,14 @@ apiRouter.get('/report/by-hospital', authenticateToken, async (req, res) => {
         }
         if (year_bh) { whereClauses.push('r.year_bh = ?'); params.push(year_bh); }
         if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
-        if (distid) { whereClauses.push("CONCAT(h.provcode, h.distcode) = ?"); params.push(distid); }
+        if (distid) { whereClauses.push("h.distid = ?"); params.push(distid); }
 
         const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
         const sql = `
             SELECT
                 r.hospcode,
                 h.hosname,
-                CONCAT(h.provcode, h.distcode) AS distid,
+                h.distid AS distid,
                 dist.distname,
                 r.year_bh,
                 COUNT(DISTINCT r.indicator_id) AS indicator_count,
@@ -3649,9 +3769,9 @@ apiRouter.get('/report/by-hospital', authenticateToken, async (req, res) => {
             FROM kpi_results r
             LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
             LEFT JOIN chospital h ON r.hospcode = h.hoscode
-            LEFT JOIN co_district dist ON dist.distid = CONCAT(h.provcode, h.distcode)
+            LEFT JOIN co_district dist ON dist.distid = h.distid
             ${whereStr}
-            GROUP BY r.hospcode, h.hosname, CONCAT(h.provcode, h.distcode), dist.distname, r.year_bh
+            GROUP BY r.hospcode, h.hosname, h.distid, dist.distname, r.year_bh
             ORDER BY dist.distname, h.hosname
         `;
         const [rows] = await db.query(sql, params);
@@ -3677,13 +3797,13 @@ apiRouter.get('/report/by-district', authenticateToken, async (req, res) => {
             if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
         } else if (user.role === 'admin_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
-            if (distid_auto) { whereClauses.push('CONCAT(h.provcode, h.distcode) = ?'); params.push(distid_auto); }
+            if (distid_auto) { whereClauses.push('h.distid = ?'); params.push(distid_auto); }
             else if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
         } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
             if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
         } else if (user.role === 'user_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
-            if (distid_auto) { whereClauses.push('CONCAT(h.provcode, h.distcode) = ?'); params.push(distid_auto); }
+            if (distid_auto) { whereClauses.push('h.distid = ?'); params.push(distid_auto); }
             if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
         } else {
             if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
@@ -3695,7 +3815,7 @@ apiRouter.get('/report/by-district', authenticateToken, async (req, res) => {
         const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
         const sql = `
             SELECT
-                CONCAT(h.provcode, h.distcode) AS distid,
+                h.distid AS distid,
                 dist.distname,
                 r.year_bh,
                 COUNT(DISTINCT r.hospcode) AS hospital_count,
@@ -3708,9 +3828,9 @@ apiRouter.get('/report/by-district', authenticateToken, async (req, res) => {
             FROM kpi_results r
             LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
             LEFT JOIN chospital h ON r.hospcode = h.hoscode
-            LEFT JOIN co_district dist ON dist.distid = CONCAT(h.provcode, h.distcode)
+            LEFT JOIN co_district dist ON dist.distid = h.distid
             ${whereStr}
-            GROUP BY CONCAT(h.provcode, h.distcode), dist.distname, r.year_bh
+            GROUP BY h.distid, dist.distname, r.year_bh
             ORDER BY dist.distname
         `;
         const [rows] = await db.query(sql, params);
@@ -3736,20 +3856,20 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
             if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
         } else if (user.role === 'admin_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
-            if (distid_auto) { whereClauses.push('CONCAT(h.provcode, h.distcode) = ?'); params.push(distid_auto); }
+            if (distid_auto) { whereClauses.push('h.distid = ?'); params.push(distid_auto); }
             else if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
         } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
             if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
         } else if (user.role === 'user_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
-            if (distid_auto) { whereClauses.push('CONCAT(h.provcode, h.distcode) = ?'); params.push(distid_auto); }
+            if (distid_auto) { whereClauses.push('h.distid = ?'); params.push(distid_auto); }
             if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
         } else {
             if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
             if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
         }
         if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
-        if (distid) { whereClauses.push("CONCAT(h.provcode, h.distcode) = ?"); params.push(distid); }
+        if (distid) { whereClauses.push("h.distid = ?"); params.push(distid); }
 
         const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
         const sql = `

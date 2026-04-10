@@ -30,6 +30,7 @@ export class FormBuilderComponent implements OnInit, OnChanges {
   @Input() hdcTableName: string = '';
   @Input() hdcTrigger: number = 0;
 
+  isSuperAdmin = false;
   private pendingAutoOpen = '';
 
   isLoading = false;
@@ -65,6 +66,7 @@ export class FormBuilderComponent implements OnInit, OnChanges {
   ];
 
   ngOnInit() {
+    this.isSuperAdmin = this.authService.getUserRole() === 'super_admin';
     this.loadIndicators();
   }
 

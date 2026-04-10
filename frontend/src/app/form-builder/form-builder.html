@@ -83,7 +83,7 @@
                         <i [class]="ind.schema_id ? 'fas fa-edit mr-1' : 'fas fa-plus mr-1'"></i>
                         {{ ind.schema_id ? 'แก้ไข' : 'สร้าง' }}
                       </button>
-                      @if (ind.schema_id) {
+                      @if (ind.schema_id && isSuperAdmin) {
                         <button (click)="deleteSchema(ind)"
                                 class="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg text-xs font-bold transition-all">
                           <i class="fas fa-trash"></i>

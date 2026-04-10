@@ -111,7 +111,7 @@ export class KpiSetupComponent implements OnInit {
     this.kpiTemplate = filtered.map((item: any) => ({
       ...item,
       year_bh: this.selectedYear,
-      target_value: 0,
+      target_value: item.target_percentage != null ? item.target_percentage : 0,
       oct: 0, nov: 0, dece: 0, jan: 0, feb: 0, mar: 0,
       apr: 0, may: 0, jun: 0, jul: 0, aug: 0, sep: 0,
       total_actual: 0

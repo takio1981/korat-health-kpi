@@ -642,6 +642,22 @@ export class AuthService {
     return this.http.post(`${this.apiUrl}/sync-to-hdc/execute`, { tables }, { headers });
   }
 
+  // === KPI Summary (fast) ===
+  getKpiSummary(filters?: any): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const p = new URLSearchParams();
+    if (filters) Object.entries(filters).forEach(([k, v]) => { if (v) p.set(k, v as string); });
+    const qs = p.toString();
+    return this.http.get(`${this.apiUrl}/kpi-summary${qs ? '?' + qs : ''}`, { headers });
+  }
+
+  refreshKpiSummary(year_bh?: string): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/refresh-summary`, { year_bh }, { headers });
+  }
+
   // === Feedback Board ===
   getFeedbackUnreadCount(): Observable<any> {
     const token = localStorage.getItem('kpi_token');
