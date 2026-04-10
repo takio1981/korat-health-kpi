@@ -1,4 +1,4 @@
-<div class="min-h-screen flex flex-col lg:flex-row font-sans bg-gray-50 dark:bg-[#1e1e2e]">
+<div class="h-screen flex flex-col lg:flex-row font-sans bg-gray-50 dark:bg-[#1e1e2e] overflow-hidden">
   <!-- Dark Mode toggle -->
   <div class="fixed top-4 right-4 z-50 flex items-center gap-2">
     <button (click)="themeService.toggle()" class="w-9 h-9 rounded-full bg-white/90 dark:bg-gray-700 shadow-md flex items-center justify-center hover:scale-110 transition-all" [title]="themeService.isDark ? 'Light Mode' : 'Dark Mode'">
@@ -29,8 +29,8 @@
   </div>
 
   <!-- Right Side: Register Form -->
-  <div class="flex-grow flex items-center justify-center p-6 lg:w-1/2">
-    <div class="w-full max-w-lg bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+  <div class="flex-grow flex items-center justify-center p-6 lg:w-1/2 overflow-hidden">
+    <div class="w-full max-w-lg bg-white rounded-2xl shadow-xl p-8 border border-gray-100 max-h-[90vh] overflow-y-auto">
 
       <!-- Mobile header -->
       <div class="text-center lg:hidden mb-6">

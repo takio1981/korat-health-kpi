@@ -4433,9 +4433,9 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
     try {
         // ดึง reports จาก HDC
         const [hdcRows] = await remoteDb.query(`
-            SELECT report_id, report_name, dept, main_yut, report_code, table_process, data_source, is_active, updated_at
+            SELECT *
             FROM reports
-            WHERE data_source = 'excel' AND is_active = 1
+            WHERE data_source = 'excel'
             AND LENGTH(report_code) = LENGTH(table_process)
             ORDER BY report_id
         `);
@@ -4518,15 +4518,17 @@ apiRouter.post('/report-compare/sync', authenticateToken, isSuperAdmin, async (r
             `SELECT report_id, report_name, dept, main_yut, report_code, table_process FROM reports WHERE report_id IN (?)`,
             [hdc_report_ids]
         );
-        let inserted = 0, updated = 0;
+        let inserted = 0, updated = 0, skipped = 0;
         for (const hdc of hdcRows) {
-            if (!hdc.table_process) continue;
+            if (!hdc.table_process) { skipped++; continue; }
             // ตรวจสอบว่ามีอยู่แล้วหรือไม่ (โดย table_process)
-            const [existing] = await db.query('SELECT id FROM kpi_indicators WHERE table_process = ?', [hdc.table_process]);
+            const [existing] = await db.query('SELECT id, kpi_indicators_name FROM kpi_indicators WHERE table_process = ?', [hdc.table_process]);
             if (existing.length > 0) {
-                // อัปเดตชื่อ
-                await db.query('UPDATE kpi_indicators SET kpi_indicators_name = ? WHERE table_process = ?',
-                    [hdc.report_name, hdc.table_process]);
+                // อัปเดตชื่อ + report_code
+                await db.query(
+                    'UPDATE kpi_indicators SET kpi_indicators_name = ?, kpi_indicators_code = ? WHERE table_process = ?',
+                    [hdc.report_name, hdc.report_code || null, hdc.table_process]
+                );
                 updated++;
             } else {
                 // สร้างใหม่
@@ -4540,9 +4542,9 @@ apiRouter.post('/report-compare/sync', authenticateToken, isSuperAdmin, async (r
         await db.query(
             'INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
             [req.user.userId, 'SYNC_REPORTS', 'kpi_indicators',
-             JSON.stringify({ hdc_ids: hdc_report_ids, inserted, updated }), req.ip]
+             JSON.stringify({ hdc_ids: hdc_report_ids, inserted, updated, skipped }), req.ip]
         );
-        res.json({ success: true, message: `Sync สำเร็จ — เพิ่มใหม่ ${inserted} รายการ, อัปเดต ${updated} รายการ` });
+        res.json({ success: true, message: `Sync สำเร็จ — เพิ่มใหม่ ${inserted} รายการ, อัปเดตชื่อ ${updated} รายการ${skipped > 0 ? ', ข้าม ' + skipped + ' รายการ' : ''}`, inserted, updated, skipped });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }

@@ -376,9 +376,8 @@ export class DashboardComponent implements OnInit {
     }
   }
 
-  // === Cascading filter logic ===
-  onDistrictFilterChange() {
-    // เมื่อเลือกอำเภอ → กรองหน่วยบริการตามอำเภอ
+  // === Cascading filter logic (เฉพาะอัปเดต dropdown ไม่โหลดข้อมูล) ===
+  onDistrictCascade() {
     if (this.selectedDistrict && this._allHospitals.length > 0) {
       const dist = this._allDistricts.find((d: any) => d.distname === this.selectedDistrict);
       if (dist) {
@@ -389,36 +388,30 @@ export class DashboardComponent implements OnInit {
     } else {
       this.hospitalNames = this._allHospitals.map((h: any) => h.hosname).filter(Boolean).sort();
     }
-    // reset hospital ถ้าไม่อยู่ใน list ใหม่
-    if (this.selectedHospital && !this.hospitalNames.includes(this.selectedHospital)) {
-      this.selectedHospital = '';
-    }
-    this.onFilterChange();
+    if (this.selectedHospital && !this.hospitalNames.includes(this.selectedHospital)) this.selectedHospital = '';
   }
 
-  onHospitalFilterChange() {
-    // เมื่อเลือกหน่วยบริการ → กรองหมวดหมู่/ตัวชี้วัด ตามหน่วยงาน (dept) ของหน่วยบริการนั้น
+  onHospitalCascade() {
     if (this.selectedHospital && this._allIndicators.length > 0) {
-      // หา dept ของ hospital ที่เลือกจาก kpiData ที่โหลดมา
-      const matchItem = this.kpiData.find((d: any) => d.hosname === this.selectedHospital);
-      if (matchItem?.dept_name) {
-        const deptInds = this._allIndicators.filter((i: any) => i.dept_name === matchItem.dept_name);
-        this.indicatorNames = Array.from(new Set<string>(deptInds.map((i: any) => i.kpi_indicators_name)));
-        this.mainCategories = Array.from(new Set<string>(deptInds.map((i: any) => i.main_indicator_name).filter(Boolean)));
+      const matchHos = this._allHospitals.find((h: any) => h.hosname === this.selectedHospital);
+      if (matchHos) {
+        // ถ้ามี dept match จาก kpiData
+        const matchItem = this.kpiData.find((d: any) => d.hosname === this.selectedHospital);
+        if (matchItem?.dept_name) {
+          const deptInds = this._allIndicators.filter((i: any) => i.dept_name === matchItem.dept_name);
+          this.indicatorNames = Array.from(new Set<string>(deptInds.map((i: any) => i.kpi_indicators_name)));
+          this.mainCategories = Array.from(new Set<string>(deptInds.map((i: any) => i.main_indicator_name).filter(Boolean)));
+        }
       }
     } else {
-      // reset กลับทั้งหมด
       this.indicatorNames = Array.from(new Set<string>(this._allIndicators.map((i: any) => i.kpi_indicators_name)));
       this.mainCategories = Array.from(new Set<string>(this._allIndicators.map((i: any) => i.main_indicator_name).filter(Boolean)));
     }
-    // reset indicator/main ถ้าไม่อยู่ใน list ใหม่
     if (this.selectedIndicator && !this.indicatorNames.includes(this.selectedIndicator)) this.selectedIndicator = '';
     if (this.selectedMain && !this.mainCategories.includes(this.selectedMain)) this.selectedMain = '';
-    this.onFilterChange();
   }
 
-  onDeptFilterChange() {
-    // เมื่อเลือกหน่วยงาน → กรองหมวดหมู่/ตัวชี้วัด ตามหน่วยงาน
+  onDeptCascade() {
     if (this.selectedDept && this._allIndicators.length > 0) {
       const deptInds = this._allIndicators.filter((i: any) => i.dept_name === this.selectedDept);
       this.indicatorNames = Array.from(new Set<string>(deptInds.map((i: any) => i.kpi_indicators_name)));
@@ -429,7 +422,12 @@ export class DashboardComponent implements OnInit {
     }
     if (this.selectedIndicator && !this.indicatorNames.includes(this.selectedIndicator)) this.selectedIndicator = '';
     if (this.selectedMain && !this.mainCategories.includes(this.selectedMain)) this.selectedMain = '';
-    this.onFilterChange();
+  }
+
+  // === กดปุ่ม "ค้นหา" → โหลดข้อมูลจาก server + กรอง client-side ===
+  doSearch() {
+    this.loadKpiData();
+    this.loadDashboardStats();
   }
 
   onYearChange() {

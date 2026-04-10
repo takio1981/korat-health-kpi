@@ -1,4 +1,4 @@
 export const environment = {
   production: false,
-  apiUrl: 'http://localhost:3000/khupskpi/api',
+  apiUrl: 'http://localhost:3500/khupskpi/api',
 };
