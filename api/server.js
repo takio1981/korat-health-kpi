@@ -4076,6 +4076,76 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         try { await db.query(`ALTER TABLE users ADD COLUMN temp_password VARCHAR(255) NULL`); } catch (e) {}
         try { await db.query(`ALTER TABLE users ADD COLUMN temp_password_expiry DATETIME NULL`); } catch (e) {}
         try { await db.query(`ALTER TABLE users ADD COLUMN must_change_password TINYINT(1) NOT NULL DEFAULT 0`); } catch (e) {}
+        // เพิ่ม distid column ใน chospital (performance: ลด CONCAT runtime)
+        try {
+            await db.query('ALTER TABLE chospital ADD COLUMN distid VARCHAR(10)');
+            console.log('[Migration] Added chospital.distid column');
+        } catch (e) { /* already exists */ }
+        try {
+            await db.query('UPDATE chospital SET distid = CONCAT(provcode, distcode) WHERE distid IS NULL');
+            await db.query('CREATE INDEX idx_chospital_distid ON chospital (distid)');
+        } catch (e) { /* already done */ }
+
+        // เพิ่ม kpi_summary table
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS kpi_summary (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    indicator_id INT NOT NULL,
+                    year_bh VARCHAR(10) NOT NULL,
+                    hospcode VARCHAR(20) NOT NULL,
+                    main_indicator_name VARCHAR(500),
+                    kpi_indicators_name TEXT,
+                    dept_name VARCHAR(255),
+                    hosname VARCHAR(255),
+                    distname VARCHAR(255),
+                    table_process VARCHAR(100),
+                    target_value VARCHAR(100),
+                    oct VARCHAR(100), nov VARCHAR(100), dece VARCHAR(100),
+                    jan VARCHAR(100), feb VARCHAR(100), mar VARCHAR(100),
+                    apr VARCHAR(100), may VARCHAR(100), jun VARCHAR(100),
+                    jul VARCHAR(100), aug VARCHAR(100), sep VARCHAR(100),
+                    last_actual VARCHAR(100),
+                    pending_count INT DEFAULT 0,
+                    indicator_status VARCHAR(20),
+                    is_locked TINYINT DEFAULT 0,
+                    has_form_schema TINYINT DEFAULT 0,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uk_ind_year_hos (indicator_id, year_bh, hospcode),
+                    INDEX idx_year (year_bh),
+                    INDEX idx_hospcode (hospcode),
+                    INDEX idx_dept (dept_name),
+                    INDEX idx_district (distname)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            `);
+        } catch (e) { /* already exists */ }
+
+        // แก้ kpi_indicators.dept_id + main_indicator_id จาก VARCHAR → INT (ถ้ายังเป็น VARCHAR)
+        try {
+            const [cols] = await db.query("SHOW COLUMNS FROM kpi_indicators WHERE Field = 'dept_id'");
+            if (cols[0] && cols[0].Type.includes('varchar')) {
+                await db.query("UPDATE kpi_indicators SET dept_id = NULL WHERE dept_id = '' OR dept_id = '0'");
+                await db.query("UPDATE kpi_indicators SET main_indicator_id = NULL WHERE main_indicator_id = '' OR main_indicator_id = '0'");
+                try { await db.query('ALTER TABLE kpi_indicators DROP INDEX dept_id'); } catch(e) {}
+                try { await db.query('ALTER TABLE kpi_indicators DROP INDEX main_indicator_id'); } catch(e) {}
+                try { await db.query('ALTER TABLE kpi_indicators DROP INDEX idx_kpi_indicators_dept'); } catch(e) {}
+                try { await db.query('ALTER TABLE kpi_indicators DROP INDEX idx_kpi_indicators_main'); } catch(e) {}
+                await db.query('ALTER TABLE kpi_indicators MODIFY dept_id INT NULL');
+                await db.query('ALTER TABLE kpi_indicators MODIFY main_indicator_id INT NULL');
+                try { await db.query('ALTER TABLE kpi_indicators ADD CONSTRAINT fk_indicators_dept FOREIGN KEY (dept_id) REFERENCES departments(id) ON DELETE SET NULL'); } catch(e) {}
+                try { await db.query('ALTER TABLE kpi_indicators ADD CONSTRAINT fk_indicators_main FOREIGN KEY (main_indicator_id) REFERENCES kpi_main_indicators(id) ON DELETE SET NULL'); } catch(e) {}
+                try { await db.query('ALTER TABLE kpi_indicators ADD INDEX idx_dept (dept_id)'); } catch(e) {}
+                try { await db.query('ALTER TABLE kpi_indicators ADD INDEX idx_main (main_indicator_id)'); } catch(e) {}
+                console.log('[Migration] Fixed kpi_indicators FK columns VARCHAR→INT');
+            }
+        } catch (e) { console.log('[Migration] kpi_indicators FK check:', e.message); }
+
+        // เพิ่ม performance indexes บน kpi_results
+        try { await db.query('CREATE INDEX idx_kpi_results_year ON kpi_results (year_bh)'); } catch (e) {}
+        try { await db.query('CREATE INDEX idx_kpi_results_indicator ON kpi_results (indicator_id)'); } catch (e) {}
+        try { await db.query('CREATE INDEX idx_kpi_results_hospcode ON kpi_results (hospcode)'); } catch (e) {}
+        try { await db.query('CREATE INDEX idx_kpi_results_composite ON kpi_results (indicator_id, year_bh, hospcode)'); } catch (e) {}
+
         // เพิ่ม approved_by column
         try { await db.query(`ALTER TABLE users ADD COLUMN approved_by INT NULL`); } catch (e) {}
         // เพิ่ม indexes สำหรับ kpi_results (เร่งความเร็ว dashboard)
