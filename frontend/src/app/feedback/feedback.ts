@@ -64,7 +64,9 @@ export class FeedbackComponent implements OnInit, OnDestroy {
   }
 
   private markRead(): void {
-    this.authService.markFeedbackRead().subscribe();
+    if (this.authService.isLoggedIn()) {
+      this.authService.markFeedbackRead().subscribe({ error: () => {} });
+    }
   }
 
   loadPosts(): void {

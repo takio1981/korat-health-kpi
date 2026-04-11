@@ -266,8 +266,8 @@
               <tbody class="divide-y divide-green-100">
                 <tr><td class="px-3 py-1.5 font-bold">user_hos / user_sso / admin_hos / admin_sso</td><td class="px-3 py-1.5">กรองตาม <b>หน่วยบริการ</b> ของตัวเอง</td></tr>
                 <tr><td class="px-3 py-1.5 font-bold">user_cup / admin_cup</td><td class="px-3 py-1.5">กรองตาม <b>อำเภอ</b> ของตัวเอง</td></tr>
-                <tr><td class="px-3 py-1.5 font-bold">admin_ssj</td><td class="px-3 py-1.5">โหลดข้อมูลอัตโนมัติ (กรองตาม dept)</td></tr>
-                <tr><td class="px-3 py-1.5 font-bold">super_admin</td><td class="px-3 py-1.5"><b>ไม่โหลดอัตโนมัติ</b> — ต้องเลือกตัวกรองก่อน หรือกดปุ่ม "โหลดข้อมูลทั้งหมด"</td></tr>
+                <tr><td class="px-3 py-1.5 font-bold">user_ssj / admin_ssj</td><td class="px-3 py-1.5"><b>ไม่โหลดอัตโนมัติ</b> — ล็อค dropdown หน่วยงานเฉพาะ dept ตัวเอง + ต้องเลือกตัวกรองแล้วกด "ค้นหา"</td></tr>
+                <tr><td class="px-3 py-1.5 font-bold">super_admin</td><td class="px-3 py-1.5"><b>ไม่โหลดอัตโนมัติ</b> — เห็นทุก dept + ต้องเลือกตัวกรองแล้วกด "ค้นหา" หรือ "โหลดข้อมูลทั้งหมด"</td></tr>
               </tbody>
             </table>
           </div>
@@ -314,8 +314,8 @@
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center"><i class="fas fa-chart-bar text-indigo-600"></i></div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">5. กราฟและสถิติ</h2>
-            <p class="text-xs text-gray-400">รายงานภาพรวมแบบกราฟ</p>
+            <h2 class="text-xl font-bold text-gray-800">5. รายงานสถิติ (กราฟ + รายงานสรุปผล)</h2>
+            <p class="text-xs text-gray-400">รวม 2 ส่วน — Tab "กราฟและสถิติ" + Tab "รายงานสรุปผล" ในหน้าเดียว</p>
           </div>
         </div>
         <p class="text-xs text-gray-500 mb-3">ทุกกราฟแสดงความกว้าง 100% เต็มจอ</p>
@@ -572,8 +572,8 @@
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-gray-800 flex items-center justify-center"><i class="fas fa-moon text-yellow-300"></i></div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">Dark Mode + สำรองข้อมูล</h2>
-            <p class="text-xs text-gray-400">ฟีเจอร์เสริมสำหรับทุก Role</p>
+            <h2 class="text-xl font-bold text-gray-800">Dark Mode + โปรไฟล์ + สำรองข้อมูล</h2>
+            <p class="text-xs text-gray-400">ฟีเจอร์เสริมสำหรับทุก Role — เข้าถึงผ่าน Header bar + Profile dropdown</p>
           </div>
         </div>
 
@@ -585,6 +585,16 @@
               <p>กดปุ่ม <b>🌙</b> ที่ Header → เปลี่ยนเป็นโหมดมืด</p>
               <p>กดปุ่ม <b>☀️</b> → กลับเป็นโหมดสว่าง</p>
               <p class="text-gray-400"><i class="fas fa-info-circle mr-1"></i>ระบบจำค่าไว้ ครอบคลุมทุกหน้า</p>
+            </div>
+          </div>
+
+          <!-- Profile Dropdown -->
+          <div class="border border-gray-200 rounded-xl p-4">
+            <h4 class="font-bold text-gray-800 text-sm mb-2"><i class="fas fa-user-circle text-green-500 mr-2"></i>Profile Dropdown</h4>
+            <div class="space-y-2 text-xs text-gray-600">
+              <p>กดที่ <b>Avatar</b> มุมขวาบน → แสดงข้อมูลโปรไฟล์</p>
+              <p>เมนูใน dropdown: <b>ข้อเสนอแนะ</b> / <b>คู่มือ</b> / <b>ประวัติอัปเดต</b> / เปลี่ยนรหัสผ่าน / ออกจากระบบ</p>
+              <p class="text-gray-400"><i class="fas fa-info-circle mr-1"></i>คลิกนอก dropdown → ปิดแบบ animation ยุบหายเข้า avatar</p>
             </div>
           </div>
 

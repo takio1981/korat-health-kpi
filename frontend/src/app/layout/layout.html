@@ -24,11 +24,6 @@
         <a *ngIf="isSuperAdmin" routerLink="/kpi-manager" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-layer-group mr-3 min-w-[20px]"></i>จัดการข้อมูล KPI</a>
         <a *ngIf="isSuperAdmin" routerLink="/settings" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-sliders-h mr-3 min-w-[20px]"></i>ตั้งค่าระบบ</a>
       </nav>
-      <div class="px-3 pb-3 pt-1 border-t border-green-500/30">
-        <a routerLink="/feedback" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-comments mr-3 min-w-[20px]"></i>ข้อเสนอแนะ <span *ngIf="feedbackUnreadCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 rounded-full text-[10px] font-bold">{{ feedbackUnreadCount }}</span></a>
-        <a routerLink="/help" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-book-open mr-3 min-w-[20px]"></i>คู่มือการใช้งาน</a>
-        <a routerLink="/changelog" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-history mr-3 min-w-[20px]"></i>ประวัติการอัปเดต</a>
-      </div>
     </div>
 
     <!-- Desktop: Side sidebar -->
@@ -100,23 +95,8 @@
         </a>
       </nav>
 
-      <div class="p-4 border-t border-green-500/30 space-y-1">
-        <a routerLink="/feedback" routerLinkActive="bg-white/10 text-white font-medium" class="flex items-center w-full px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-comments text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate flex justify-between items-center w-full">
-            ข้อเสนอแนะ
-            <span *ngIf="feedbackUnreadCount > 0" class="flex h-5 min-w-[20px] px-1 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white animate-pulse">{{ feedbackUnreadCount }}</span>
-          </span>
-        </a>
-        <a routerLink="/help" routerLinkActive="bg-white/10 text-white font-medium" class="flex items-center w-full px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-book-open text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate">คู่มือการใช้งาน</span>
-        </a>
-        <a routerLink="/changelog" routerLinkActive="bg-white/10 text-white font-medium" class="flex items-center w-full px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-history text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate">ประวัติการอัปเดต</span>
-        </a>
-        <div class="mt-4 text-center text-xs text-green-200/60 font-mono">
+      <div class="p-4 border-t border-green-500/30">
+        <div class="text-center text-xs text-green-200/60 font-mono">
           {{ systemVersion }}
         </div>
       </div>
@@ -156,7 +136,7 @@
           </button>
           <!-- Profile Avatar + Dropdown -->
           <div class="relative">
-            <button (click)="showProfileDropdown = !showProfileDropdown; showNotifDropdown = false" class="flex items-center gap-2 cursor-pointer">
+            <button (click)="showProfileDropdown ? closeProfileDropdown() : (showProfileDropdown = true); showNotifDropdown = false" class="flex items-center gap-2 cursor-pointer">
               <div class="text-right mr-1 hidden sm:block">
                 <p class="text-sm font-bold text-white">{{ currentUser?.firstname }} {{ currentUser?.lastname }}</p>
                 <p class="text-[10px] text-green-200">{{ currentUser?.role }}</p>
@@ -165,8 +145,11 @@
                 {{ currentUser?.username?.charAt(0).toUpperCase() }}
               </div>
             </button>
+            <!-- Profile Dropdown Backdrop (click outside to close) -->
+            <div *ngIf="showProfileDropdown" class="fixed inset-0 z-40" (click)="closeProfileDropdown()"></div>
             <!-- Profile Dropdown -->
-            <div *ngIf="showProfileDropdown" class="absolute right-0 top-12 w-72 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
+            <div *ngIf="showProfileDropdown" class="absolute right-0 top-12 w-72 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden"
+                 [ngClass]="profileClosing ? 'profile-dropdown-drain' : 'profile-dropdown-enter'">
               <!-- Profile info -->
               <div class="bg-gradient-to-r from-green-700 to-green-600 p-4 text-white">
                 <div class="flex items-center gap-3">
@@ -185,6 +168,19 @@
                 <div class="flex items-center gap-2"><i class="fas fa-hospital w-4 text-center text-teal-500"></i><span>{{ currentUser?.service_unit || '-' }}</span></div>
                 <div class="flex items-center gap-2"><i class="fas fa-envelope w-4 text-center text-amber-500"></i><span>{{ currentUser?.email || '-' }}</span></div>
                 <div class="flex items-center gap-2"><i class="fas fa-phone w-4 text-center text-purple-500"></i><span>{{ currentUser?.phone || '-' }}</span></div>
+              </div>
+              <!-- Quick Links -->
+              <div class="p-2 space-y-0.5 border-b border-gray-100">
+                <a routerLink="/feedback" (click)="closeProfileDropdown()" class="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
+                  <i class="fas fa-comments w-4 text-center text-teal-500"></i>ข้อเสนอแนะ
+                  <span *ngIf="feedbackUnreadCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[9px] font-bold">{{ feedbackUnreadCount }}</span>
+                </a>
+                <a routerLink="/help" (click)="closeProfileDropdown()" class="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
+                  <i class="fas fa-book-open w-4 text-center text-blue-500"></i>คู่มือการใช้งาน
+                </a>
+                <a routerLink="/changelog" (click)="closeProfileDropdown()" class="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
+                  <i class="fas fa-history w-4 text-center text-indigo-500"></i>ประวัติการอัปเดต
+                </a>
               </div>
               <!-- Actions -->
               <div class="p-2 space-y-0.5">

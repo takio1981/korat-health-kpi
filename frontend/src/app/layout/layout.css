@@ -1,3 +1,23 @@
+/* Profile dropdown drain animation — ยุบหายเข้า avatar */
+.profile-dropdown-enter {
+  animation: profileOpen 0.25s ease-out forwards;
+  transform-origin: top right;
+}
+.profile-dropdown-drain {
+  animation: profileDrain 0.35s ease-in forwards;
+  transform-origin: top right;
+}
+@keyframes profileOpen {
+  0% { opacity: 0; transform: scale(0.3) translateY(-10px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes profileDrain {
+  0% { opacity: 1; transform: scale(1) rotate(0deg); }
+  40% { opacity: 0.7; transform: scale(0.6) rotate(5deg); }
+  70% { opacity: 0.3; transform: scale(0.2) rotate(-10deg) translateY(-5px); }
+  100% { opacity: 0; transform: scale(0) rotate(15deg) translateY(-10px); }
+}
+
 /* Mobile menu slide down animation — smooth */
 @keyframes slideDown {
   0% { opacity: 0; transform: translateY(-100%); }

@@ -18,6 +18,19 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.04.11',
+      date: '11 เมษายน 2569',
+      changes: [
+        { type: 'feature', text: 'รวม Chart + Report เป็นหน้าเดียว (2 tabs)' },
+        { type: 'feature', text: 'Profile Dropdown: ย้ายข้อเสนอแนะ/คู่มือ/ประวัติอัปเดตเข้า dropdown' },
+        { type: 'feature', text: 'Profile Dropdown: drain animation (ยุบหายเข้า avatar) เมื่อปิด' },
+        { type: 'feature', text: 'admin_ssj/user_ssj: ล็อค dropdown หน่วยงานเฉพาะ dept ตัวเอง' },
+        { type: 'feature', text: 'admin_ssj: ไม่โหลดข้อมูล dashboard อัตโนมัติ เหมือน super_admin' },
+        { type: 'fix', text: 'Modal แก้ไขผู้ใช้: ซ่อน CID (เข้ารหัสแล้ว) ไม่ให้แก้ไข' },
+        { type: 'fix', text: 'feedback mark-read: ตรวจ isLoggedIn() ก่อนเรียก API (แก้ 403 ตอน logout)' },
+      ]
+    },
+    {
       version: '2569.04.10',
       date: '10 เมษายน 2569',
       changes: [

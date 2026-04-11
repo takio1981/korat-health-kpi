@@ -421,8 +421,8 @@
         </div>
       </div>
 
-      <!-- เลขบัตรประชาชน -->
-      <div>
+      <!-- เลขบัตรประชาชน — เพิ่มใหม่: กรอกได้ / แก้ไข: แสดงสถานะเท่านั้น -->
+      <div *ngIf="!isEditMode">
         <label class="block text-sm font-medium text-gray-700 mb-1">เลขบัตรประชาชน 13 หลัก <span class="text-red-500">*</span></label>
         <input type="text" [value]="formatNationalIdDisplay(currentUser.cid)" (input)="onNationalIdInput($event)"
                class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors font-mono"
@@ -437,6 +437,15 @@
         <p *ngIf="currentUser.cid && currentUser.cid.length === 13 && validateNationalId(currentUser.cid)" class="text-xs text-green-600 mt-1">
           <i class="fas fa-check-circle mr-1"></i>เลขบัตรประชาชนถูกต้อง
         </p>
+      </div>
+      <div *ngIf="isEditMode">
+        <label class="block text-sm font-medium text-gray-700 mb-1">เลขบัตรประชาชน</label>
+        <div class="flex items-center gap-2 px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg">
+          <i class="fas fa-shield-alt text-green-500"></i>
+          <span *ngIf="currentUser.cid" class="text-sm text-green-600 font-medium">เข้ารหัสแล้ว (SHA-256)</span>
+          <span *ngIf="!currentUser.cid" class="text-sm text-gray-400">ไม่มีข้อมูล</span>
+        </div>
+        <p class="text-xs text-gray-400 mt-1"><i class="fas fa-lock mr-1"></i>ไม่สามารถแก้ไขได้ เนื่องจากเข้ารหัสเรียบร้อยแล้ว</p>
       </div>
 
       <!-- Role (เฉพาะ Admin เท่านั้นที่เห็น) -->

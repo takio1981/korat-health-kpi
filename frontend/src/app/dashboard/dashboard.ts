@@ -163,8 +163,8 @@ export class DashboardComponent implements OnInit {
     this.setDefaultYear();
     this.extractFilterLists();
 
-    // super_admin ไม่โหลดข้อมูลอัตโนมัติ — ให้เลือกตัวกรองก่อน
-    if (!this.isSuperAdmin) {
+    // super_admin + admin_ssj ไม่โหลดข้อมูลอัตโนมัติ — ให้เลือกตัวกรองก่อน
+    if (!this.isSuperAdmin && !this.isAdmin) {
       this.loadKpiData();
     }
     this.loadAppealSettings();
@@ -350,7 +350,18 @@ export class DashboardComponent implements OnInit {
     if (!this._filterListsLoaded) {
       this._filterListsLoaded = true;
       this.authService.getDepartments().subscribe(res => {
-        if (res.success) { this.deptNames = res.data.map((d: any) => d.dept_name); this.cdr.detectChanges(); }
+        if (res.success) {
+          const role = this.authService.getUserRole();
+          const userDeptName = this.currentUser?.dept_name;
+          // admin_ssj / user_ssj → ล็อคเฉพาะ dept ตัวเอง
+          if (['admin_ssj', 'user_ssj'].includes(role) && userDeptName) {
+            this.deptNames = [userDeptName];
+            this.selectedDept = userDeptName;
+          } else {
+            this.deptNames = res.data.map((d: any) => d.dept_name);
+          }
+          this.cdr.detectChanges();
+        }
       });
       this.authService.getHospitals().subscribe(res => {
         if (res.success) {
@@ -369,6 +380,7 @@ export class DashboardComponent implements OnInit {
       this.authService.getIndicators().subscribe(res => {
         if (res.success) {
           this._allIndicators = res.data;
+          // admin_ssj / user_ssj → backend กรอง dept แล้ว → แสดงเฉพาะ dept ตัวเอง
           this.indicatorNames = Array.from(new Set<string>(res.data.map((i: any) => i.kpi_indicators_name)));
           this.mainCategories = Array.from(new Set<string>(res.data.map((i: any) => i.main_indicator_name).filter(Boolean)));
           this.cdr.detectChanges();
@@ -461,12 +473,18 @@ export class DashboardComponent implements OnInit {
     this.searchTerm = '';
     this.selectedMain = '';
     this.selectedIndicator = '';
-    this.selectedDept = '';
     this.setDefaultYear();
     this.selectedStatus = '';
     this.selectedHospital = '';
     this.selectedDistrict = '';
     this.selectedType = '';
+    // admin_ssj / user_ssj → ล็อค dept ไว้
+    const role = this.authService.getUserRole();
+    if (['admin_ssj', 'user_ssj'].includes(role) && this.currentUser?.dept_name) {
+      this.selectedDept = this.currentUser.dept_name;
+    } else {
+      this.selectedDept = '';
+    }
     // เคลียร์ข้อมูล → กลับหน้า "กรุณาเลือกตัวกรอง"
     this.kpiData = [];
     this.filteredData = [];

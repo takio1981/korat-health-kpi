@@ -54,6 +54,7 @@ export class LayoutComponent implements OnInit {
   }
   feedbackUnreadCount: number = 0;
   showProfileDropdown: boolean = false;
+  profileClosing: boolean = false;
 
   ngOnInit() {
     this.currentUser = this.authService.getUser();
@@ -226,6 +227,15 @@ export class LayoutComponent implements OnInit {
 
   refreshDashboard(): void {
     window.location.reload();
+  }
+
+  closeProfileDropdown() {
+    this.profileClosing = true;
+    setTimeout(() => {
+      this.showProfileDropdown = false;
+      this.profileClosing = false;
+      this.cdr.detectChanges();
+    }, 350); // match animation duration
   }
 
   loadFeedbackUnread() {

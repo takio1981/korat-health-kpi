@@ -33,6 +33,9 @@ frontend/src/app/
   feedback/          — กระดานข้อเสนอแนะ
   changelog/         — ประวัติการอัปเดต
   help/              — คู่มือการใช้งาน
+  
+  NOTE: chart + report รวมเป็นหน้าเดียว (2 tabs ใน chart component)
+  NOTE: feedback, help, changelog เข้าถึงผ่าน Profile Dropdown (ไม่อยู่ใน sidebar)
 ```
 
 ## 3. Backend Rules
@@ -191,7 +194,7 @@ users.dept_id → departments.id (FK)
 | Role | ขอบเขต | เห็นปุ่มลบ | เมนูพิเศษ |
 |------|--------|-----------|-----------|
 | super_admin | ทั้งหมด | ✅ | ทุกเมนู |
-| admin_ssj | dept ตัวเอง, ทุก hospcode | ❌ | จัดการตัวชี้วัด, kpi-setup |
+| admin_ssj | dept ตัวเอง, ทุก hospcode (ล็อค dept dropdown) | ❌ | จัดการตัวชี้วัด, kpi-setup |
 | admin_cup | อำเภอตัวเอง, ทุก dept | ❌ | kpi-setup |
 | admin_hos | hospcode ตัวเอง, ทุก dept | ❌ | - |
 | admin_sso | hospcode ตัวเอง, ทุก dept | ❌ | - |
@@ -204,6 +207,18 @@ users.dept_id → departments.id (FK)
 - **ปุ่มลบ**: `*ngIf="isSuperAdmin"` ทุก component
 - **admin_ssj สร้าง user**: ต้องรอ super_admin อนุมัติ
 - **super_admin**: ข้ามการตรวจสอบ lock ได้
+- **admin_ssj / user_ssj**: ล็อค dropdown หน่วยงาน เห็นเฉพาะ dept ตัวเอง
+- **admin_ssj / super_admin**: ไม่โหลดข้อมูล dashboard อัตโนมัติ ต้องกด "ค้นหา"
+
+### Profile Dropdown
+- อยู่ที่ avatar มุมขวาบน Header
+- มี: ข้อมูลโปรไฟล์ + ข้อเสนอแนะ + คู่มือ + ประวัติอัปเดต + เปลี่ยนรหัสผ่าน + ออกจากระบบ
+- คลิกนอก → ปิดแบบ drain animation (ยุบหายเข้า avatar)
+- ข้อเสนอแนะ/คู่มือ/ประวัติอัปเดต ไม่อยู่ใน sidebar แล้ว
+
+### Chart + Report
+- รวมเป็นหน้าเดียว (/charts) → 2 tabs: กราฟและสถิติ / รายงานสรุปผล
+- ใช้ `[hidden]` เก็บ state ทั้ง 2 view (ไม่ destroy component)
 
 ## 7. Naming Conventions
 
@@ -303,7 +318,10 @@ docker compose up -d
 - ❌ ใส่ escaped backtick `\`` ใน .js file — ใช้ backtick ตรงๆ
 - ❌ DELETE + INSERT สำหรับ sync — ใช้ UPSERT (INSERT...ON DUPLICATE KEY UPDATE)
 - ❌ ลืม dept_id filter ใน endpoint ที่ดึงตัวชี้วัด
-- ❌ ลืมเพิ่ม route ใน app.routes.ts + เมนูใน layout.html (ทั้ง mobile + desktop)
+- ❌ ลืมเพิ่ม route ใน app.routes.ts + เมนูใน layout.html (sidebar หรือ profile dropdown)
+- ❌ เพิ่มเมนูใน sidebar สำหรับ feedback/help/changelog (อยู่ใน profile dropdown แล้ว)
+- ❌ สร้าง route /reports แยก (รวมกับ /charts เป็น tab แล้ว)
+- ❌ เรียก API ใน ngOnDestroy โดยไม่ตรวจ isLoggedIn() ก่อน
 
 ## 12. Key Tables
 

@@ -284,7 +284,7 @@ export class UserManagementComponent implements OnInit {
         !this.currentUser.lastname ||
         !this.currentUser.phone ||
         !this.currentUser.hospcode ||
-        !this.currentUser.cid ||
+        (!this.isEditMode && !this.currentUser.cid) ||
         !this.currentUser.dept_id ||
         !this.currentUser.role) {
       Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลให้ครบถ้วนทุกช่อง (รวมเลขบัตรประชาชน, หน่วยบริการ, หน่วยงาน)', 'warning');
@@ -298,8 +298,8 @@ export class UserManagementComponent implements OnInit {
       return;
     }
 
-    // ตรวจสอบเลขบัตรประชาชน (Check Digit Modulus 11)
-    if (!this.validateNationalId(this.currentUser.cid)) {
+    // ตรวจสอบเลขบัตรประชาชน (เฉพาะเพิ่มใหม่)
+    if (!this.isEditMode && !this.validateNationalId(this.currentUser.cid)) {
       Swal.fire('แจ้งเตือน', 'เลขบัตรประชาชนไม่ถูกต้อง (ตรวจสอบ 13 หลักและ Check Digit แล้ว)', 'warning');
       return;
     }
