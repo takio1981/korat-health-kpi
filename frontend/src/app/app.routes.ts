@@ -30,8 +30,7 @@ export const routes: Routes = [
     canActivate: [authGuard],
     children: [
       { path: 'dashboard', component: DashboardComponent, data: { title: 'บันทึกผลงานตัวชี้วัด' } },
-      { path: 'charts', component: ChartComponent, data: { title: 'รายงานสถิติและกราฟ' } },
-      { path: 'reports', component: ReportComponent, data: { title: 'รายงานสรุปผล' } },
+      { path: 'charts', component: ChartComponent, data: { title: 'รายงานสถิติ' } },
       { path: 'notifications', component: NotificationsComponent, data: { title: 'การแจ้งเตือน' } },
       { path: 'users', component: UserManagementComponent, canActivate: [anyAdminGuard], data: { title: 'จัดการผู้ใช้งาน' } },
       { path: 'kpi-setup', component: KpiSetupComponent, canActivate: [adminGuard], data: { title: 'สร้าง KPI ปีงบประมาณใหม่' } },

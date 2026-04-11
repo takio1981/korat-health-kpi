@@ -4,12 +4,13 @@ import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { NgApexchartsModule, ApexOptions } from "ng-apexcharts";
 import { FormsModule } from '@angular/forms';
+import { ReportComponent } from '../report/report';
 import Swal from 'sweetalert2';
 
 @Component({
   selector: 'app-chart',
   standalone: true,
-  imports: [CommonModule, RouterModule, NgApexchartsModule, FormsModule],
+  imports: [CommonModule, RouterModule, NgApexchartsModule, FormsModule, ReportComponent],
   templateUrl: './chart.html'
 })
 export class ChartComponent implements OnInit {
@@ -31,6 +32,8 @@ export class ChartComponent implements OnInit {
   indicatorNames: string[] = [];
   deptNames: string[] = [];
   filterYears: string[] = [];
+
+  activeView: 'chart' | 'report' = 'chart';
 
   // ตัวแปร Config สำหรับ ApexCharts
   public barChartOptions: Partial<ApexOptions> | any = {

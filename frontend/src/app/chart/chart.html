@@ -21,6 +21,27 @@
 </header>
 
 <div class="p-6 relative" [ngClass]="isPublicView ? 'bg-gray-50 min-h-screen' : ''">
+
+      <!-- Tab Switcher (ไม่แสดงใน public view) -->
+      <div *ngIf="!isPublicView" class="flex gap-1 mb-5 bg-gray-100 p-1 rounded-xl max-w-md">
+        <button (click)="activeView = 'chart'" class="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all"
+                [ngClass]="activeView === 'chart' ? 'bg-white text-green-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+          <i class="fas fa-chart-bar"></i> กราฟและสถิติ
+        </button>
+        <button (click)="activeView = 'report'" class="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all"
+                [ngClass]="activeView === 'report' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+          <i class="fas fa-file-alt"></i> รายงานสรุปผล
+        </button>
+      </div>
+
+      <!-- ===== Report View ===== -->
+      <div [hidden]="activeView !== 'report'">
+        <app-report></app-report>
+      </div>
+
+      <!-- ===== Chart View ===== -->
+      <div [hidden]="activeView !== 'chart'">
+
       <!-- Loading Spinner Overlay -->
       <div *ngIf="isLoading" class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm transition-opacity duration-300">
         <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-green-600 mb-4"></div>
@@ -216,4 +237,6 @@
           </div>
         </div>
       </div>
+
+      </div><!-- end chart view -->
 </div>
