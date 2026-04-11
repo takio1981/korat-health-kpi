@@ -185,9 +185,12 @@ users.dept_id → departments.id (FK)
 - hostype: '05'=รพ., '06'=สสอ., '07'=รพ.สต., '18'=ศูนย์สุขภาพ
 
 ### Performance
-- ตาราง `kpi_summary` เป็น Materialized View สำหรับ Chart + Report
+- ตาราง `kpi_summary` เป็น Materialized View สำหรับ Chart + Report (ทั้ง 4 แถบ)
 - อัปเดตด้วย `POST /refresh-summary` (INSERT...SELECT ใน MySQL)
+- เก็บเฉพาะข้อมูลที่มีผลงานจริง (HAVING actual_value)
 - ใช้ composite index: `(indicator_id, year_bh, hospcode)`
+- มี `dept_id` + `distid` สำหรับ role-based filtering โดยไม่ต้อง JOIN ตารางอื่น
+- Report endpoints ทั้ง 4 (`/report/by-indicator`, `/report/by-hospital`, `/report/by-district`, `/report/by-year`) ดึงจาก `kpi_summary` ไม่ใช่ `kpi_results`
 
 ## 6. Role System (9 Roles)
 
@@ -322,6 +325,7 @@ docker compose up -d
 - ❌ เพิ่มเมนูใน sidebar สำหรับ feedback/help/changelog (อยู่ใน profile dropdown แล้ว)
 - ❌ สร้าง route /reports แยก (รวมกับ /charts เป็น tab แล้ว)
 - ❌ เรียก API ใน ngOnDestroy โดยไม่ตรวจ isLoggedIn() ก่อน
+- ❌ Report endpoint ดึงจาก `kpi_results` ตรง — ต้องใช้ `kpi_summary` เสมอ (เร็วกว่ามาก)
 
 ## 12. Key Tables
 
@@ -333,7 +337,7 @@ docker compose up -d
 | kpi_main_indicators | หมวดหมู่หลัก | id, main_indicator_name, yut_id |
 | main_yut | ยุทธศาสตร์ | id, yut_name |
 | kpi_results | ผลงาน KPI | id, indicator_id, year_bh, hospcode, month_bh, target_value, actual_value, status, is_locked |
-| kpi_summary | สรุป (Materialized View) | indicator_id, year_bh, hospcode, oct-sep, last_actual |
+| kpi_summary | สรุป (Materialized View) สำหรับ Chart + Report ทั้ง 4 แถบ | indicator_id, year_bh, hospcode, dept_id, distid, oct-sep, last_actual |
 | chospital | หน่วยบริการ | hoscode, hosname, hostype, distid, provcode, distcode |
 | co_district | อำเภอ | distid, distname |
 | notifications | แจ้งเตือน | id, user_id, type, title, message |

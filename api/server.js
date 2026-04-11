@@ -3553,13 +3553,13 @@ apiRouter.post('/refresh-summary', authenticateToken, isSuperAdmin, async (req, 
         // INSERT...SELECT ทำงานใน MySQL ตรงๆ — เร็วกว่า SELECT → Node.js → INSERT ทีละ row
         const [result] = await db.query(`
             INSERT INTO kpi_summary (indicator_id, year_bh, hospcode, main_indicator_name, kpi_indicators_name,
-                dept_name, hosname, distname, table_process, target_value,
+                dept_id, dept_name, hosname, distid, distname, table_process, target_value,
                 oct, nov, dece, jan, feb, mar, apr, may, jun, jul, aug, sep,
                 pending_count, indicator_status, is_locked, updated_at)
             SELECT
                 i.id, r.year_bh, r.hospcode,
                 IFNULL(mi.main_indicator_name, 'ยังไม่กำหนด'),
-                i.kpi_indicators_name, d.dept_name, h.hosname, dist.distname, i.table_process,
+                i.kpi_indicators_name, i.dept_id, d.dept_name, h.hosname, h.distid, dist.distname, i.table_process,
                 MAX(r.target_value),
                 MAX(CASE WHEN r.month_bh=10 THEN r.actual_value END),
                 MAX(CASE WHEN r.month_bh=11 THEN r.actual_value END),
@@ -3585,8 +3585,7 @@ apiRouter.post('/refresh-summary', authenticateToken, isSuperAdmin, async (req, 
             LEFT JOIN co_district dist ON dist.distid = h.distid
             WHERE 1=1 ${yearFilter}
             GROUP BY i.id, r.year_bh, r.hospcode
-            HAVING MAX(r.target_value) IS NOT NULL
-                OR MAX(CASE WHEN r.actual_value IS NOT NULL AND r.actual_value != '' AND r.actual_value != '0' THEN 1 ELSE 0 END) = 1
+            HAVING MAX(CASE WHEN r.actual_value IS NOT NULL AND r.actual_value != '' AND r.actual_value != '0' THEN 1 ELSE 0 END) = 1
         `, yearParams);
 
         const inserted = result.affectedRows || 0;
@@ -3620,7 +3619,7 @@ apiRouter.get('/kpi-summary', authenticateToken, async (req, res) => {
         const conditions = [];
         const params = [];
 
-        if (req.query.year) { conditions.push('s.year_bh = ?'); params.push(req.query.year); }
+        if (req.query.year && req.query.year !== '') { conditions.push('s.year_bh = ?'); params.push(req.query.year); }
         if (req.query.hospcode) { conditions.push('s.hospcode = ?'); params.push(req.query.hospcode); }
         if (req.query.dept) { conditions.push('s.dept_name = ?'); params.push(req.query.dept); }
         if (req.query.district) { conditions.push('s.distname = ?'); params.push(req.query.district); }
@@ -3654,61 +3653,56 @@ apiRouter.get('/report/by-indicator', authenticateToken, async (req, res) => {
         let whereClauses = [];
         let params = [];
 
-        // === Role-based report filtering ===
+        // === Role-based filtering (ใช้ kpi_summary) ===
         if (user.role === 'super_admin') {
             // เห็นทั้งหมด
         } else if (user.role === 'admin_ssj') {
-            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+            if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
         } else if (user.role === 'admin_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
-            if (distid_auto) { whereClauses.push('h.distid = ?'); params.push(distid_auto); }
-            else if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+            if (distid_auto) { whereClauses.push('s.distid = ?'); params.push(distid_auto); }
+            else if (user.hospcode) { whereClauses.push('s.hospcode = ?'); params.push(user.hospcode); }
         } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
-            if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+            if (user.hospcode) { whereClauses.push('s.hospcode = ?'); params.push(user.hospcode); }
         } else if (user.role === 'user_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
-            if (distid_auto) { whereClauses.push('h.distid = ?'); params.push(distid_auto); }
-            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+            if (distid_auto) { whereClauses.push('s.distid = ?'); params.push(distid_auto); }
+            if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
         } else {
-            if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
-            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+            if (user.hospcode) { whereClauses.push('s.hospcode = ?'); params.push(user.hospcode); }
+            if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
         }
-        if (year_bh) { whereClauses.push('r.year_bh = ?'); params.push(year_bh); }
-        if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
-        if (distid) { whereClauses.push("h.distid = ?"); params.push(distid); }
+        if (year_bh) { whereClauses.push('s.year_bh = ?'); params.push(year_bh); }
+        if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
+        if (distid) { whereClauses.push('s.distid = ?'); params.push(distid); }
 
         const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
         const sql = `
             SELECT
-                i.id AS indicator_id,
-                i.kpi_indicators_name,
-                IFNULL(mi.main_indicator_name, 'ยังไม่กำหนด') AS main_indicator_name,
-                d.dept_name,
-                r.year_bh,
-                MAX(CASE WHEN r.month_bh = 10 THEN r.target_value ELSE 0 END) AS target_value,
-                SUM(CASE WHEN r.month_bh = 10 THEN r.actual_value ELSE 0 END) AS oct,
-                SUM(CASE WHEN r.month_bh = 11 THEN r.actual_value ELSE 0 END) AS nov,
-                SUM(CASE WHEN r.month_bh = 12 THEN r.actual_value ELSE 0 END) AS dece,
-                SUM(CASE WHEN r.month_bh = 1 THEN r.actual_value ELSE 0 END) AS jan,
-                SUM(CASE WHEN r.month_bh = 2 THEN r.actual_value ELSE 0 END) AS feb,
-                SUM(CASE WHEN r.month_bh = 3 THEN r.actual_value ELSE 0 END) AS mar,
-                SUM(CASE WHEN r.month_bh = 4 THEN r.actual_value ELSE 0 END) AS apr,
-                SUM(CASE WHEN r.month_bh = 5 THEN r.actual_value ELSE 0 END) AS may_val,
-                SUM(CASE WHEN r.month_bh = 6 THEN r.actual_value ELSE 0 END) AS jun,
-                SUM(CASE WHEN r.month_bh = 7 THEN r.actual_value ELSE 0 END) AS jul,
-                SUM(CASE WHEN r.month_bh = 8 THEN r.actual_value ELSE 0 END) AS aug,
-                SUM(CASE WHEN r.month_bh = 9 THEN r.actual_value ELSE 0 END) AS sep,
-                SUM(r.actual_value) AS total_actual,
-                COUNT(DISTINCT r.hospcode) AS hospital_count
-            FROM kpi_results r
-            LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
-            LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
-            LEFT JOIN departments d ON i.dept_id = d.id
-            LEFT JOIN chospital h ON r.hospcode = h.hoscode
+                s.indicator_id,
+                MAX(s.kpi_indicators_name) AS kpi_indicators_name,
+                MAX(s.main_indicator_name) AS main_indicator_name,
+                MAX(s.dept_name) AS dept_name,
+                s.year_bh,
+                MAX(CAST(s.target_value AS DECIMAL(20,4))) AS target_value,
+                SUM(CAST(s.oct AS DECIMAL(20,4))) AS oct,
+                SUM(CAST(s.nov AS DECIMAL(20,4))) AS nov,
+                SUM(CAST(s.dece AS DECIMAL(20,4))) AS dece,
+                SUM(CAST(s.jan AS DECIMAL(20,4))) AS jan,
+                SUM(CAST(s.feb AS DECIMAL(20,4))) AS feb,
+                SUM(CAST(s.mar AS DECIMAL(20,4))) AS mar,
+                SUM(CAST(s.apr AS DECIMAL(20,4))) AS apr,
+                SUM(CAST(s.may AS DECIMAL(20,4))) AS may_val,
+                SUM(CAST(s.jun AS DECIMAL(20,4))) AS jun,
+                SUM(CAST(s.jul AS DECIMAL(20,4))) AS jul,
+                SUM(CAST(s.aug AS DECIMAL(20,4))) AS aug,
+                SUM(CAST(s.sep AS DECIMAL(20,4))) AS sep,
+                SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) AS total_actual,
+                COUNT(DISTINCT s.hospcode) AS hospital_count
+            FROM kpi_summary s
             ${whereStr}
-            GROUP BY i.id, i.kpi_indicators_name, mi.main_indicator_name, d.dept_name, r.year_bh
-            HAVING MAX(r.target_value) IS NOT NULL OR SUM(CASE WHEN r.actual_value IS NOT NULL AND r.actual_value != '' AND r.actual_value != '0' THEN 1 ELSE 0 END) > 0
-            ORDER BY mi.main_indicator_name, i.kpi_indicators_name
+            GROUP BY s.indicator_id, s.year_bh
+            ORDER BY MAX(s.main_indicator_name), MAX(s.kpi_indicators_name)
             LIMIT 500
         `;
         const [rows] = await db.query(sql, params);
@@ -3727,52 +3721,49 @@ apiRouter.get('/report/by-hospital', authenticateToken, async (req, res) => {
         let whereClauses = [];
         let params = [];
 
-        // === Role-based report filtering ===
+        // === Role-based filtering (ใช้ kpi_summary) ===
         if (user.role === 'super_admin') {
             // เห็นทั้งหมด
         } else if (user.role === 'admin_ssj') {
-            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+            if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
         } else if (user.role === 'admin_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
-            if (distid_auto) { whereClauses.push('h.distid = ?'); params.push(distid_auto); }
-            else if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+            if (distid_auto) { whereClauses.push('s.distid = ?'); params.push(distid_auto); }
+            else if (user.hospcode) { whereClauses.push('s.hospcode = ?'); params.push(user.hospcode); }
         } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
-            if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+            if (user.hospcode) { whereClauses.push('s.hospcode = ?'); params.push(user.hospcode); }
         } else if (user.role === 'user_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
-            if (distid_auto) { whereClauses.push('h.distid = ?'); params.push(distid_auto); }
-            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+            if (distid_auto) { whereClauses.push('s.distid = ?'); params.push(distid_auto); }
+            if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
         } else {
-            if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
-            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+            if (user.hospcode) { whereClauses.push('s.hospcode = ?'); params.push(user.hospcode); }
+            if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
         }
-        if (year_bh) { whereClauses.push('r.year_bh = ?'); params.push(year_bh); }
-        if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
-        if (distid) { whereClauses.push("h.distid = ?"); params.push(distid); }
+        if (year_bh) { whereClauses.push('s.year_bh = ?'); params.push(year_bh); }
+        if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
+        if (distid) { whereClauses.push('s.distid = ?'); params.push(distid); }
 
         const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
         const sql = `
             SELECT
-                r.hospcode,
-                h.hosname,
-                h.distid AS distid,
-                dist.distname,
-                r.year_bh,
-                COUNT(DISTINCT r.indicator_id) AS indicator_count,
-                SUM(CASE WHEN r.month_bh = 10 THEN r.target_value ELSE 0 END) AS total_target,
-                SUM(r.actual_value) AS total_actual,
-                CASE WHEN SUM(CASE WHEN r.month_bh = 10 THEN r.target_value ELSE 0 END) > 0
-                     THEN ROUND((SUM(r.actual_value) / SUM(CASE WHEN r.month_bh = 10 THEN r.target_value ELSE 0 END)) * 100, 2)
+                s.hospcode,
+                MAX(s.hosname) AS hosname,
+                MAX(s.distid) AS distid,
+                MAX(s.distname) AS distname,
+                s.year_bh,
+                COUNT(DISTINCT s.indicator_id) AS indicator_count,
+                SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4))) AS total_target,
+                SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) AS total_actual,
+                CASE WHEN SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4))) > 0
+                     THEN ROUND((SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) / SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4)))) * 100, 2)
                      ELSE 0 END AS achievement_pct,
-                SUM(CASE WHEN r.status = 'Approved' THEN 1 ELSE 0 END) AS approved_count,
-                SUM(CASE WHEN r.status = 'Pending' THEN 1 ELSE 0 END) AS pending_count
-            FROM kpi_results r
-            LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
-            LEFT JOIN chospital h ON r.hospcode = h.hoscode
-            LEFT JOIN co_district dist ON dist.distid = h.distid
+                SUM(CASE WHEN s.indicator_status = 'Approved' THEN 1 ELSE 0 END) AS approved_count,
+                SUM(s.pending_count) AS pending_count
+            FROM kpi_summary s
             ${whereStr}
-            GROUP BY r.hospcode, h.hosname, h.distid, dist.distname, r.year_bh
-            ORDER BY dist.distname, h.hosname
+            GROUP BY s.hospcode, s.year_bh
+            ORDER BY MAX(s.distname), MAX(s.hosname)
         `;
         const [rows] = await db.query(sql, params);
         res.json({ success: true, data: rows });
@@ -3790,48 +3781,45 @@ apiRouter.get('/report/by-district', authenticateToken, async (req, res) => {
         let whereClauses = [];
         let params = [];
 
-        // === Role-based report filtering ===
+        // === Role-based filtering (ใช้ kpi_summary) ===
         if (user.role === 'super_admin') {
             // เห็นทั้งหมด
         } else if (user.role === 'admin_ssj') {
-            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+            if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
         } else if (user.role === 'admin_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
-            if (distid_auto) { whereClauses.push('h.distid = ?'); params.push(distid_auto); }
-            else if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+            if (distid_auto) { whereClauses.push('s.distid = ?'); params.push(distid_auto); }
+            else if (user.hospcode) { whereClauses.push('s.hospcode = ?'); params.push(user.hospcode); }
         } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
-            if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+            if (user.hospcode) { whereClauses.push('s.hospcode = ?'); params.push(user.hospcode); }
         } else if (user.role === 'user_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
-            if (distid_auto) { whereClauses.push('h.distid = ?'); params.push(distid_auto); }
-            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+            if (distid_auto) { whereClauses.push('s.distid = ?'); params.push(distid_auto); }
+            if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
         } else {
-            if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
-            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+            if (user.hospcode) { whereClauses.push('s.hospcode = ?'); params.push(user.hospcode); }
+            if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
         }
-        if (year_bh) { whereClauses.push('r.year_bh = ?'); params.push(year_bh); }
-        if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
+        if (year_bh) { whereClauses.push('s.year_bh = ?'); params.push(year_bh); }
+        if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
 
         const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
         const sql = `
             SELECT
-                h.distid AS distid,
-                dist.distname,
-                r.year_bh,
-                COUNT(DISTINCT r.hospcode) AS hospital_count,
-                COUNT(DISTINCT r.indicator_id) AS indicator_count,
-                SUM(CASE WHEN r.month_bh = 10 THEN r.target_value ELSE 0 END) AS total_target,
-                SUM(r.actual_value) AS total_actual,
-                CASE WHEN SUM(CASE WHEN r.month_bh = 10 THEN r.target_value ELSE 0 END) > 0
-                     THEN ROUND((SUM(r.actual_value) / SUM(CASE WHEN r.month_bh = 10 THEN r.target_value ELSE 0 END)) * 100, 2)
+                s.distid,
+                MAX(s.distname) AS distname,
+                s.year_bh,
+                COUNT(DISTINCT s.hospcode) AS hospital_count,
+                COUNT(DISTINCT s.indicator_id) AS indicator_count,
+                SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4))) AS total_target,
+                SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) AS total_actual,
+                CASE WHEN SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4))) > 0
+                     THEN ROUND((SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) / SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4)))) * 100, 2)
                      ELSE 0 END AS achievement_pct
-            FROM kpi_results r
-            LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
-            LEFT JOIN chospital h ON r.hospcode = h.hoscode
-            LEFT JOIN co_district dist ON dist.distid = h.distid
+            FROM kpi_summary s
             ${whereStr}
-            GROUP BY h.distid, dist.distname, r.year_bh
-            ORDER BY dist.distname
+            GROUP BY s.distid, s.year_bh
+            ORDER BY MAX(s.distname)
         `;
         const [rows] = await db.query(sql, params);
         res.json({ success: true, data: rows });
@@ -3849,47 +3837,45 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         let whereClauses = [];
         let params = [];
 
-        // === Role-based report filtering ===
+        // === Role-based filtering (ใช้ kpi_summary) ===
         if (user.role === 'super_admin') {
             // เห็นทั้งหมด
         } else if (user.role === 'admin_ssj') {
-            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+            if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
         } else if (user.role === 'admin_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
-            if (distid_auto) { whereClauses.push('h.distid = ?'); params.push(distid_auto); }
-            else if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+            if (distid_auto) { whereClauses.push('s.distid = ?'); params.push(distid_auto); }
+            else if (user.hospcode) { whereClauses.push('s.hospcode = ?'); params.push(user.hospcode); }
         } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
-            if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+            if (user.hospcode) { whereClauses.push('s.hospcode = ?'); params.push(user.hospcode); }
         } else if (user.role === 'user_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
-            if (distid_auto) { whereClauses.push('h.distid = ?'); params.push(distid_auto); }
-            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+            if (distid_auto) { whereClauses.push('s.distid = ?'); params.push(distid_auto); }
+            if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
         } else {
-            if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
-            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+            if (user.hospcode) { whereClauses.push('s.hospcode = ?'); params.push(user.hospcode); }
+            if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
         }
-        if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
-        if (distid) { whereClauses.push("h.distid = ?"); params.push(distid); }
+        if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
+        if (distid) { whereClauses.push('s.distid = ?'); params.push(distid); }
 
         const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
         const sql = `
             SELECT
-                r.year_bh,
-                COUNT(DISTINCT r.indicator_id) AS indicator_count,
-                COUNT(DISTINCT r.hospcode) AS hospital_count,
-                SUM(CASE WHEN r.month_bh = 10 THEN r.target_value ELSE 0 END) AS total_target,
-                SUM(r.actual_value) AS total_actual,
-                CASE WHEN SUM(CASE WHEN r.month_bh = 10 THEN r.target_value ELSE 0 END) > 0
-                     THEN ROUND((SUM(r.actual_value) / SUM(CASE WHEN r.month_bh = 10 THEN r.target_value ELSE 0 END)) * 100, 2)
+                s.year_bh,
+                COUNT(DISTINCT s.indicator_id) AS indicator_count,
+                COUNT(DISTINCT s.hospcode) AS hospital_count,
+                SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4))) AS total_target,
+                SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) AS total_actual,
+                CASE WHEN SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4))) > 0
+                     THEN ROUND((SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) / SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4)))) * 100, 2)
                      ELSE 0 END AS achievement_pct,
-                SUM(CASE WHEN r.status = 'Approved' THEN 1 ELSE 0 END) AS approved_count,
-                SUM(CASE WHEN r.status = 'Pending' THEN 1 ELSE 0 END) AS pending_count
-            FROM kpi_results r
-            LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
-            LEFT JOIN chospital h ON r.hospcode = h.hoscode
+                SUM(CASE WHEN s.indicator_status = 'Approved' THEN 1 ELSE 0 END) AS approved_count,
+                SUM(s.pending_count) AS pending_count
+            FROM kpi_summary s
             ${whereStr}
-            GROUP BY r.year_bh
-            ORDER BY r.year_bh DESC
+            GROUP BY s.year_bh
+            ORDER BY s.year_bh DESC
         `;
         const [rows] = await db.query(sql, params);
         res.json({ success: true, data: rows });
@@ -4096,8 +4082,10 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
                     hospcode VARCHAR(20) NOT NULL,
                     main_indicator_name VARCHAR(500),
                     kpi_indicators_name TEXT,
+                    dept_id INT,
                     dept_name VARCHAR(255),
                     hosname VARCHAR(255),
+                    distid VARCHAR(20),
                     distname VARCHAR(255),
                     table_process VARCHAR(100),
                     target_value VARCHAR(100),
@@ -4115,10 +4103,21 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
                     INDEX idx_year (year_bh),
                     INDEX idx_hospcode (hospcode),
                     INDEX idx_dept (dept_name),
+                    INDEX idx_dept_id (dept_id),
+                    INDEX idx_distid (distid),
                     INDEX idx_district (distname)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             `);
         } catch (e) { /* already exists */ }
+
+        // แก้ collation ของ kpi_summary ให้ตรงกับตารางอื่น
+        try { await db.query('ALTER TABLE kpi_summary CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'); } catch(e) {}
+
+        // เพิ่ม dept_id, distid ใน kpi_summary สำหรับ role-based filtering
+        try { await db.query('ALTER TABLE kpi_summary ADD COLUMN dept_id INT AFTER kpi_indicators_name'); } catch(e) {}
+        try { await db.query('ALTER TABLE kpi_summary ADD COLUMN distid VARCHAR(20) AFTER hosname'); } catch(e) {}
+        try { await db.query('ALTER TABLE kpi_summary ADD INDEX idx_dept_id (dept_id)'); } catch(e) {}
+        try { await db.query('ALTER TABLE kpi_summary ADD INDEX idx_distid (distid)'); } catch(e) {}
 
         // แก้ kpi_indicators.dept_id + main_indicator_id จาก VARCHAR → INT (ถ้ายังเป็น VARCHAR)
         try {

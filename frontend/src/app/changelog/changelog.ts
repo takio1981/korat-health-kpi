@@ -18,6 +18,17 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.04.11-2',
+      date: '11 เมษายน 2569',
+      changes: [
+        { type: 'improve', text: 'รายงานสรุปผลทั้ง 4 แถบ ดึงจาก kpi_summary แทน kpi_results — โหลดเร็วขึ้นมาก' },
+        { type: 'improve', text: 'kpi_summary เพิ่ม dept_id + distid — รองรับ role-based filtering โดยไม่ต้อง JOIN ตารางอื่น' },
+        { type: 'improve', text: 'Summary เก็บเฉพาะข้อมูลที่มีผลงานจริง (HAVING actual_value) — รายงานแม่นยำขึ้น' },
+        { type: 'fix', text: 'แก้ collation mismatch kpi_summary (utf8mb4_general_ci → utf8mb4_unicode_ci)' },
+        { type: 'fix', text: 'Chart/Report ไม่ส่ง year ว่างเปล่าเป็น parameter (ป้องกัน query ผิดพลาด)' },
+      ]
+    },
+    {
       version: '2569.04.11',
       date: '11 เมษายน 2569',
       changes: [

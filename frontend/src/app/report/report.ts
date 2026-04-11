@@ -63,7 +63,7 @@ export class ReportComponent implements OnInit {
       next: (res) => { if (res.success) { this.districts = res.data; this.cdr.detectChanges(); } }
     });
     // Get available years from kpi_results
-    this.authService.getKpiSummary({ year: '' }).subscribe({
+    this.authService.getKpiSummary({}).subscribe({
       next: (res) => {
         if (res.success) {
           this.filterYears = [...new Set(res.data.map((item: any) => String(item.year_bh)))].sort().reverse() as string[];
