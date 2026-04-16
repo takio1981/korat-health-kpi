@@ -18,6 +18,14 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.04.11-10',
+      date: '11 เมษายน 2569',
+      changes: [
+        { type: 'fix', text: 'Export ข้อมูล: เปลี่ยนจาก timestamp-based เป็น content-based diff — แก้ปัญหา actual_value ไม่ส่งออก (เพราะ update_date เก่าของ export ใหม่กว่า kpi_results.created_at)' },
+        { type: 'improve', text: 'Export ข้อมูล: เปรียบเทียบค่าทีละคอลัมน์ (target, result, m10-m09, form fields) ด้วย numeric-aware compare' },
+      ]
+    },
+    {
       version: '2569.04.11-9',
       date: '11 เมษายน 2569',
       changes: [

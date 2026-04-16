@@ -3390,86 +3390,70 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
                 // แปลง '' → null (MySQL reject empty string ถ้า column เป็น DECIMAL/INT)
                 const emptyToNull = v => (v === '' || v === undefined) ? null : v;
 
-                // ดึง "วันที่แก้ไขล่าสุด" ต่อ hospcode จาก kpi_results (+ form ถ้ามี)
-                const lastChangeMap = new Map();
-                const [kpiTimes] = await conn.query(
-                    `SELECT hospcode, MAX(created_at) AS last_change FROM kpi_results WHERE indicator_id = ? AND year_bh = ? GROUP BY hospcode`,
-                    [indicator.id, year_bh]
-                );
-                for (const r of kpiTimes) {
-                    if (r.last_change) lastChangeMap.set(r.hospcode, new Date(r.last_change));
-                }
-                // รวมเวลาจาก dynamic form table (ถ้ามี)
-                if (dynamicTableName) {
-                    try {
-                        const [formTimes] = await conn.query(
-                            `SELECT hospcode, MAX(updated_at) AS last_change FROM \`${dynamicTableName}\` WHERE year_bh = ? AND indicator_id = ? GROUP BY hospcode`,
-                            [year_bh, indicator.id]
-                        );
-                        for (const r of formTimes) {
-                            if (!r.last_change) continue;
-                            const t = new Date(r.last_change);
-                            const prev = lastChangeMap.get(r.hospcode);
-                            if (!prev || t > prev) lastChangeMap.set(r.hospcode, t);
-                        }
-                    } catch (e) { /* ignore */ }
-                }
-
-                // ดึง update_date เดิมในตาราง export
-                const existingMap = new Map();
+                // ดึงข้อมูลเดิมจากตาราง export (เปรียบเทียบค่า ไม่ใช่เวลา) — content-based diff
+                const existingDataMap = new Map();
                 try {
+                    const selectCols = ['hospcode', 'target', 'result', ...months, ...dynFieldKeys.map(k => `\`${k}\``)].join(', ');
                     const [existingRows] = await conn.query(
-                        `SELECT hospcode, update_date FROM \`${tableName}\` WHERE byear = ?`,
+                        `SELECT ${selectCols} FROM \`${tableName}\` WHERE byear = ?`,
                         [year_bh]
                     );
-                    for (const r of existingRows) {
-                        existingMap.set(r.hospcode, r.update_date ? new Date(r.update_date) : null);
-                    }
-                } catch (e) { /* table เพิ่งสร้าง = ไม่มี rows */ }
+                    for (const r of existingRows) existingDataMap.set(r.hospcode, r);
+                } catch (e) { /* table เพิ่งสร้าง/ไม่มีคอลัมน์ครบ — ถือว่าไม่มี row เดิม */ }
 
                 // ข้าม hospcode ที่ไม่มีข้อมูลเลย — ส่งออกถ้ามี target_value หรือ actual_value (หรือ dynamic form)
                 const hasActualData = (d) => {
-                    // มี target_value → ส่งออก
                     if (d.target !== null && d.target !== undefined && d.target !== '' && d.target !== '0') return true;
-                    // มี actual_value ในเดือนใดเดือนหนึ่ง → ส่งออก
                     for (const m of months) {
                         const v = d[m];
                         if (v !== null && v !== undefined && v !== '' && v !== '0') return true;
                     }
-                    // มีข้อมูล dynamic form → ส่งออก
                     for (const k of dynFieldKeys) {
                         const v = d['_dyn_' + k];
                         if (v !== null && v !== undefined && v !== '') return true;
                     }
                     return false;
                 };
+
+                // เปรียบเทียบค่า 2 ตัว ยอมให้ null/'' ถือว่าเท่ากัน + ตัวเลขเทียบแบบ numeric
+                const sameValue = (a, b) => {
+                    const na = a === null || a === undefined || a === '' ? null : a;
+                    const nb = b === null || b === undefined || b === '' ? null : b;
+                    if (na === null && nb === null) return true;
+                    if (na === null || nb === null) return false;
+                    // ลอง numeric compare ก่อน (กัน "80" vs 80 vs "80.00")
+                    const fa = parseFloat(na), fb = parseFloat(nb);
+                    if (!isNaN(fa) && !isNaN(fb)) return fa === fb;
+                    return String(na) === String(nb);
+                };
+
                 let noDataCount = 0;
 
                 for (const [hc, d] of dataMap) {
-                    // ข้าม hospcode ที่มีเฉพาะ target (ไม่มีผลงาน)
                     if (!hasActualData(d)) { noDataCount++; continue; }
 
                     const target = emptyToNull(d.target);
                     const dynValues = dynFieldKeys.map(k => emptyToNull(d['_dyn_' + k]));
-
-                    const existingUpdate = existingMap.get(hc);
-                    const lastChange = lastChangeMap.get(hc);
-
-                    // ถ้ามี row เดิม และ kpi_results ไม่ใหม่กว่า → ข้าม (ไม่เปลี่ยนแปลง)
-                    if (existingUpdate && (!lastChange || lastChange <= existingUpdate)) {
-                        unchangedCount++;
-                        continue;
-                    }
-
-                    // ส่งออก: hospcode, byear, target, result, m10-m09 + form fields (ถ้ามี)
                     const monthValues = months.map(m => emptyToNull(d[m]));
                     const numericMonths = monthValues.map(v => parseFloat(v) || 0);
                     const result = numericMonths.reduce((a, b) => a + b, 0);
                     const resultVal = result > 0 ? result : null;
-                    upsertRows.push([hc, year_bh, target, resultVal, ...monthValues, ...dynValues]);
 
-                    if (existingUpdate) updatedCount++;
-                    else insertedCount++;
+                    // เปรียบเทียบค่าเดิม vs ใหม่ ทีละคอลัมน์
+                    const existing = existingDataMap.get(hc);
+                    if (existing) {
+                        const changed =
+                            !sameValue(existing.target, target) ||
+                            !sameValue(existing.result, resultVal) ||
+                            months.some((m, idx) => !sameValue(existing[m], monthValues[idx])) ||
+                            dynFieldKeys.some((k, idx) => !sameValue(existing[k], dynValues[idx]));
+                        if (!changed) { unchangedCount++; continue; }
+                        updatedCount++;
+                    } else {
+                        insertedCount++;
+                    }
+
+                    upsertRows.push([hc, year_bh, target, resultVal, ...monthValues, ...dynValues]);
                 }
 
                 // Batch UPSERT
