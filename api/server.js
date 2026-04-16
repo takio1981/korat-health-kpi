@@ -3356,14 +3356,61 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
                 const upsertRows = [];
                 let updatedCount = 0;
                 let insertedCount = 0;
+                let unchangedCount = 0;
                 const dynFieldKeys = formFields.map(f => f.field_name);
 
                 // แปลง '' → null (MySQL reject empty string ถ้า column เป็น DECIMAL/INT)
                 const emptyToNull = v => (v === '' || v === undefined) ? null : v;
 
+                // ดึง "วันที่แก้ไขล่าสุด" ต่อ hospcode จาก kpi_results (+ form ถ้ามี)
+                const lastChangeMap = new Map();
+                const [kpiTimes] = await conn.query(
+                    `SELECT hospcode, MAX(created_at) AS last_change FROM kpi_results WHERE indicator_id = ? AND year_bh = ? GROUP BY hospcode`,
+                    [indicator.id, year_bh]
+                );
+                for (const r of kpiTimes) {
+                    if (r.last_change) lastChangeMap.set(r.hospcode, new Date(r.last_change));
+                }
+                // รวมเวลาจาก dynamic form table (ถ้ามี)
+                if (dynamicTableName) {
+                    try {
+                        const [formTimes] = await conn.query(
+                            `SELECT hospcode, MAX(updated_at) AS last_change FROM \`${dynamicTableName}\` WHERE year_bh = ? AND indicator_id = ? GROUP BY hospcode`,
+                            [year_bh, indicator.id]
+                        );
+                        for (const r of formTimes) {
+                            if (!r.last_change) continue;
+                            const t = new Date(r.last_change);
+                            const prev = lastChangeMap.get(r.hospcode);
+                            if (!prev || t > prev) lastChangeMap.set(r.hospcode, t);
+                        }
+                    } catch (e) { /* ignore */ }
+                }
+
+                // ดึง update_date เดิมในตาราง export
+                const existingMap = new Map();
+                try {
+                    const [existingRows] = await conn.query(
+                        `SELECT hospcode, update_date FROM \`${tableName}\` WHERE byear = ?`,
+                        [year_bh]
+                    );
+                    for (const r of existingRows) {
+                        existingMap.set(r.hospcode, r.update_date ? new Date(r.update_date) : null);
+                    }
+                } catch (e) { /* table เพิ่งสร้าง = ไม่มี rows */ }
+
                 for (const [hc, d] of dataMap) {
                     const target = emptyToNull(d.target);
                     const dynValues = dynFieldKeys.map(k => emptyToNull(d['_dyn_' + k]));
+
+                    const existingUpdate = existingMap.get(hc);
+                    const lastChange = lastChangeMap.get(hc);
+
+                    // ถ้ามี row เดิม และ kpi_results ไม่ใหม่กว่า → ข้าม (ไม่เปลี่ยนแปลง)
+                    if (existingUpdate && (!lastChange || lastChange <= existingUpdate)) {
+                        unchangedCount++;
+                        continue;
+                    }
 
                     if (hasForm) {
                         // มี form → ส่งออกเฉพาะ hospcode, byear, target, result + dynamic fields (ไม่มีเดือน)
@@ -3376,7 +3423,9 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
                         const resultVal = result > 0 ? result : null;
                         upsertRows.push([hc, year_bh, target, resultVal, ...monthValues]);
                     }
-                    insertedCount++;
+
+                    if (existingUpdate) updatedCount++;
+                    else insertedCount++;
                 }
 
                 // Batch UPSERT
@@ -3408,7 +3457,7 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
                     total_hospcode: dataMap.size,
                     inserted: insertedCount,
                     updated: updatedCount,
-                    unchanged: dataMap.size - insertedCount - updatedCount
+                    unchanged: unchangedCount
                 });
             } catch (tableErr) {
                 await conn.rollback();

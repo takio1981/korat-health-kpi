@@ -18,6 +18,14 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.04.11-5',
+      date: '11 เมษายน 2569',
+      changes: [
+        { type: 'improve', text: 'Export ข้อมูล: Incremental update — ส่งออกเฉพาะ hospcode ที่มีข้อมูลใหม่/แก้ไข (เทียบ kpi_results.created_at กับ update_date)' },
+        { type: 'improve', text: 'Export ข้อมูล: นับ inserted/updated/unchanged ถูกต้อง (เดิมนับ insertedCount รวมหมดทุกแถว)' },
+      ]
+    },
+    {
       version: '2569.04.11-4',
       date: '11 เมษายน 2569',
       changes: [
