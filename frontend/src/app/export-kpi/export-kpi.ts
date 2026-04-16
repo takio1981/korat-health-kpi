@@ -188,17 +188,39 @@ export class ExportKpiComponent implements OnInit {
   }
 
   // อัปเดต liveCounters จาก checkStatusMap (เรียกทุกรอบ batch)
+  // นับตาม unique table_process (หลาย indicator ที่ใช้ table_process เดียวกันนับเป็น 1)
   private updateLiveCounters() {
-    let hasChanges = 0, dataChanges = 0, upToDate = 0, noData = 0;
-    for (const [, chk] of this.checkStatusMap) {
+    // Map indicator_id → table_process
+    const idToTp = new Map<number, string>();
+    for (const ind of this.exportIndicators) idToTp.set(ind.id, ind.table_process);
+
+    const changedTables = new Set<string>();
+    const upToDateTables = new Set<string>();
+    const noDataTables = new Set<string>();
+    // data_changes: นับจากแต่ละ table_process (หนึ่งครั้ง) เพราะ indicators ที่ share table มีค่าเดียวกัน
+    const dataChangesPerTable = new Map<string, number>();
+
+    for (const [id, chk] of this.checkStatusMap) {
+      const tp = idToTp.get(id);
+      if (!tp) continue;
       if (chk.status === 'has_changes') {
-        hasChanges++;
-        dataChanges += (chk.new_count || 0) + (chk.changed_count || 0);
-      } else if (chk.status === 'up_to_date') upToDate++;
-      else noData++;
+        changedTables.add(tp);
+        if (!dataChangesPerTable.has(tp)) {
+          dataChangesPerTable.set(tp, (chk.new_count || 0) + (chk.changed_count || 0));
+        }
+      } else if (chk.status === 'up_to_date') {
+        if (!changedTables.has(tp)) upToDateTables.add(tp);
+      } else {
+        if (!changedTables.has(tp) && !upToDateTables.has(tp)) noDataTables.add(tp);
+      }
     }
+
     const total = this.exportIndicators.length;
-    this.liveCounters = { total, has_changes: hasChanges, data_changes: dataChanges, up_to_date: upToDate, no_data: noData, unchecked: total - hasChanges - upToDate - noData };
+    const hasChanges = changedTables.size;
+    const dataChanges = Array.from(dataChangesPerTable.values()).reduce((s, n) => s + n, 0);
+    const upToDate = upToDateTables.size;
+    const noData = noDataTables.size;
+    this.liveCounters = { total, has_changes: hasChanges, data_changes: dataChanges, up_to_date: upToDate, no_data: noData, unchecked: total - this.checkStatusMap.size };
   }
 
   // Animated counter: นับจาก current ไปหา target
@@ -300,13 +322,28 @@ export class ExportKpiComponent implements OnInit {
         this.cdr.detectChanges();
       }
 
-      // สรุปผล
-      const totalChanges = allDetails.filter(r => r.status === 'has_changes').length;
-      const totalUpToDate = allDetails.filter(r => r.status === 'up_to_date').length;
-      const totalNoData = allDetails.filter(r => r.no_data).length;
-      const totalDataChanges = allDetails
-        .filter(r => r.status === 'has_changes')
-        .reduce((s, r) => s + (r.new_count || 0) + (r.changed_count || 0), 0);
+      // สรุปผล — dedupe ตาม table_process (หลาย indicator ใช้ table เดียวกันนับเป็น 1)
+      const idToTp = new Map<number, string>();
+      for (const ind of this.exportIndicators) idToTp.set(ind.id, ind.table_process);
+
+      const changedSet = new Set<string>(), upToDateSet = new Set<string>(), noDataSet = new Set<string>();
+      const dataChangesPerTp = new Map<string, number>();
+      for (const r of allDetails) {
+        const tp = idToTp.get(r.id);
+        if (!tp) continue;
+        if (r.status === 'has_changes') {
+          changedSet.add(tp);
+          if (!dataChangesPerTp.has(tp)) dataChangesPerTp.set(tp, (r.new_count || 0) + (r.changed_count || 0));
+        } else if (r.status === 'up_to_date') {
+          if (!changedSet.has(tp)) upToDateSet.add(tp);
+        } else {
+          if (!changedSet.has(tp) && !upToDateSet.has(tp)) noDataSet.add(tp);
+        }
+      }
+      const totalChanges = changedSet.size;
+      const totalUpToDate = upToDateSet.size;
+      const totalNoData = noDataSet.size;
+      const totalDataChanges = Array.from(dataChangesPerTp.values()).reduce((s, n) => s + n, 0);
 
       this.checkResult = {
         success: true,
@@ -327,7 +364,8 @@ export class ExportKpiComponent implements OnInit {
           <div style="margin-bottom:8px;">ปีงบประมาณ: <b>${this.exportYear}</b></div>
           <table style="width:100%; border-collapse:collapse;">
             <tr><td style="padding:4px 8px;">ตัวชี้วัดทั้งหมด</td><td style="padding:4px 8px; text-align:right; font-weight:bold;">${allDetails.length}</td></tr>
-            <tr style="color:#ea580c;"><td style="padding:4px 8px;">มีการเปลี่ยนแปลง</td><td style="padding:4px 8px; text-align:right; font-weight:bold;">${totalChanges}</td></tr>
+            <tr style="color:#ea580c;"><td style="padding:4px 8px;">ตัวชี้วัดที่เพิ่ม/แก้ไข</td><td style="padding:4px 8px; text-align:right; font-weight:bold;">${totalChanges}</td></tr>
+            <tr style="color:#e11d48;"><td style="padding:4px 8px;">จำนวนข้อมูลที่เปลี่ยนแปลง</td><td style="padding:4px 8px; text-align:right; font-weight:bold;">${totalDataChanges}</td></tr>
             <tr style="color:#16a34a;"><td style="padding:4px 8px;">ข้อมูลล่าสุดแล้ว</td><td style="padding:4px 8px; text-align:right; font-weight:bold;">${totalUpToDate}</td></tr>
             <tr style="color:#9ca3af;"><td style="padding:4px 8px;">ไม่มีข้อมูล</td><td style="padding:4px 8px; text-align:right; font-weight:bold;">${totalNoData}</td></tr>
           </table>
