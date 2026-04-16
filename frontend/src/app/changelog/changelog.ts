@@ -18,6 +18,14 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.04.11-8',
+      date: '11 เมษายน 2569',
+      changes: [
+        { type: 'fix', text: 'Export ข้อมูล: hospcode ที่มีเฉพาะ target_value (ไม่มี actual) ถูกข้าม → แก้ให้ export ถ้ามี target_value หรือ actual_value' },
+        { type: 'improve', text: 'Export ข้อมูล: card counters นับตาม unique table_process (หลาย indicator ใช้ table เดียวกันนับเป็น 1)' },
+      ]
+    },
+    {
       version: '2569.04.11-7',
       date: '11 เมษายน 2569',
       changes: [

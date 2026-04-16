@@ -3417,12 +3417,16 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
                     }
                 } catch (e) { /* table เพิ่งสร้าง = ไม่มี rows */ }
 
-                // ข้าม hospcode ที่ไม่มีผลงานจริง (เฉพาะ target) — ส่งออกเฉพาะที่มี actual_value / dynamic form
+                // ข้าม hospcode ที่ไม่มีข้อมูลเลย — ส่งออกถ้ามี target_value หรือ actual_value (หรือ dynamic form)
                 const hasActualData = (d) => {
+                    // มี target_value → ส่งออก
+                    if (d.target !== null && d.target !== undefined && d.target !== '' && d.target !== '0') return true;
+                    // มี actual_value ในเดือนใดเดือนหนึ่ง → ส่งออก
                     for (const m of months) {
                         const v = d[m];
                         if (v !== null && v !== undefined && v !== '' && v !== '0') return true;
                     }
+                    // มีข้อมูล dynamic form → ส่งออก
                     for (const k of dynFieldKeys) {
                         const v = d['_dyn_' + k];
                         if (v !== null && v !== undefined && v !== '') return true;
