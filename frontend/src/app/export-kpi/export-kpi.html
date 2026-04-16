@@ -272,10 +272,11 @@
           </div>
 
           @if (exportResult.success && exportResult.summary) {
-            <div class="flex gap-4 text-xs mb-3">
+            <div class="flex flex-wrap gap-4 text-xs mb-3">
               <span class="text-blue-600"><i class="fas fa-plus-circle me-1"></i>เพิ่มใหม่: {{exportResult.summary.inserted}}</span>
               <span class="text-orange-600"><i class="fas fa-sync-alt me-1"></i>อัปเดต: {{exportResult.summary.updated}}</span>
               <span class="text-gray-500"><i class="fas fa-check me-1"></i>ไม่เปลี่ยนแปลง: {{exportResult.summary.unchanged}}</span>
+              <span class="text-gray-400"><i class="fas fa-minus-circle me-1"></i>ไม่มีผลงาน (ข้าม): {{exportResult.summary.no_data || 0}}</span>
             </div>
           }
 
@@ -285,7 +286,7 @@
               @for (t of exportResult.created_tables; track t.table) {
                 <div class="text-xs text-green-600 py-0.5">
                   <i class="fas fa-table me-1"></i>{{t.table}}
-                  <span class="text-gray-400 ms-1">(hospcode: {{t.total_hospcode}} | +{{t.inserted}} / ~{{t.updated}} / ={{t.unchanged}})</span>
+                  <span class="text-gray-400 ms-1">(hospcode: {{t.total_hospcode}} | +{{t.inserted}} / ~{{t.updated}} / ={{t.unchanged}} / ✗{{t.no_data || 0}})</span>
                 </div>
               }
             </div>

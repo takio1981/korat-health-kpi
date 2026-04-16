@@ -18,6 +18,14 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.04.11-6',
+      date: '11 เมษายน 2569',
+      changes: [
+        { type: 'improve', text: 'Export ข้อมูล: ส่งออกเฉพาะ hospcode ที่มี actual_value จริง — hospcode ที่มีเฉพาะ target (ไม่คีย์ผลงาน) จะข้าม' },
+        { type: 'feature', text: 'Export ข้อมูล: แสดงช่อง "ไม่มีผลงาน (ข้าม)" ในสรุปผล' },
+      ]
+    },
+    {
       version: '2569.04.11-5',
       date: '11 เมษายน 2569',
       changes: [

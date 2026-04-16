@@ -3399,7 +3399,24 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
                     }
                 } catch (e) { /* table เพิ่งสร้าง = ไม่มี rows */ }
 
+                // ข้าม hospcode ที่ไม่มีผลงานจริง (เฉพาะ target) — ส่งออกเฉพาะที่มี actual_value / dynamic form
+                const hasActualData = (d) => {
+                    for (const m of months) {
+                        const v = d[m];
+                        if (v !== null && v !== undefined && v !== '' && v !== '0') return true;
+                    }
+                    for (const k of dynFieldKeys) {
+                        const v = d['_dyn_' + k];
+                        if (v !== null && v !== undefined && v !== '') return true;
+                    }
+                    return false;
+                };
+                let noDataCount = 0;
+
                 for (const [hc, d] of dataMap) {
+                    // ข้าม hospcode ที่มีเฉพาะ target (ไม่มีผลงาน)
+                    if (!hasActualData(d)) { noDataCount++; continue; }
+
                     const target = emptyToNull(d.target);
                     const dynValues = dynFieldKeys.map(k => emptyToNull(d['_dyn_' + k]));
 
@@ -3457,7 +3474,8 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
                     total_hospcode: dataMap.size,
                     inserted: insertedCount,
                     updated: updatedCount,
-                    unchanged: unchangedCount
+                    unchanged: unchangedCount,
+                    no_data: noDataCount
                 });
             } catch (tableErr) {
                 await conn.rollback();
@@ -3478,13 +3496,14 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
         const totalInserted = created.reduce((s, t) => s + t.inserted, 0);
         const totalUpdated = created.reduce((s, t) => s + t.updated, 0);
         const totalUnchanged = created.reduce((s, t) => s + t.unchanged, 0);
+        const totalNoData = created.reduce((s, t) => s + (t.no_data || 0), 0);
 
         res.json({
             success: true,
             message: `สร้าง/อัปเดตตารางสำเร็จ ${created.length} ตาราง`,
             created_tables: created,
             skipped,
-            summary: { inserted: totalInserted, updated: totalUpdated, unchanged: totalUnchanged }
+            summary: { inserted: totalInserted, updated: totalUpdated, unchanged: totalUnchanged, no_data: totalNoData }
         });
     } catch (err) {
         conn.release();

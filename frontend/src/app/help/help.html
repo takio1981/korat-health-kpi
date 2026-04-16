@@ -830,6 +830,9 @@
             <div class="mt-2 bg-blue-100 rounded-lg p-2 text-xs text-blue-700">
               <i class="fas fa-bolt mr-1"></i><b>Incremental export:</b> ระบบเทียบ <b>kpi_results.created_at</b> กับ <b>update_date</b> ในตาราง export — ถ้า kpi_results ไม่ใหม่กว่าจะข้าม (ไม่เปลี่ยนแปลง) → ส่งออกเร็วขึ้นมาก
             </div>
+            <div class="mt-2 bg-amber-100 rounded-lg p-2 text-xs text-amber-700">
+              <i class="fas fa-filter mr-1"></i><b>กรองผลงานจริง:</b> Export เฉพาะ hospcode ที่มี <b>actual_value</b> หรือข้อมูล dynamic form — hospcode ที่มีเฉพาะ target (ไม่มีผลงาน) จะข้ามอัตโนมัติ แสดงในช่อง "ไม่มีผลงาน (ข้าม)"
+            </div>
           </div>
           <!-- Tab 4 -->
           <div class="bg-teal-50 border border-teal-200 rounded-xl p-4">
