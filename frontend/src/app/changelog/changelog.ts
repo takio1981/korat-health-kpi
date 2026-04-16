@@ -18,6 +18,14 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.04.11-4',
+      date: '11 เมษายน 2569',
+      changes: [
+        { type: 'fix', text: 'Export ข้อมูล: แก้ error "Incorrect decimal value" — แปลง empty string → NULL ก่อน INSERT' },
+        { type: 'fix', text: 'Export ข้อมูล: ข้อมูลที่คีย์แก้ไขแล้วใน hospcode เดิมจะอัปเดตได้จริง (เดิม rollback เพราะ DECIMAL error)' },
+      ]
+    },
+    {
       version: '2569.04.11-3',
       date: '11 เมษายน 2569',
       changes: [

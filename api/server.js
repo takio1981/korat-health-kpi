@@ -3358,21 +3358,23 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
                 let insertedCount = 0;
                 const dynFieldKeys = formFields.map(f => f.field_name);
 
+                // แปลง '' → null (MySQL reject empty string ถ้า column เป็น DECIMAL/INT)
+                const emptyToNull = v => (v === '' || v === undefined) ? null : v;
+
                 for (const [hc, d] of dataMap) {
-                    const target = d.target || '';
-                    const dynValues = dynFieldKeys.map(k => d['_dyn_' + k] || '');
+                    const target = emptyToNull(d.target);
+                    const dynValues = dynFieldKeys.map(k => emptyToNull(d['_dyn_' + k]));
 
                     if (hasForm) {
                         // มี form → ส่งออกเฉพาะ hospcode, byear, target, result + dynamic fields (ไม่มีเดือน)
-                        const resultStr = dynValues.join('') ? '' : ''; // ไม่มี result สำหรับ form-based
-                        upsertRows.push([hc, year_bh, target, resultStr, ...dynValues]);
+                        upsertRows.push([hc, year_bh, target, null, ...dynValues]);
                     } else {
                         // ไม่มี form → ส่งออกแบบเดิม (hospcode, byear, target, result, m10-m09)
-                        const monthValues = months.map(m => d[m] || '');
+                        const monthValues = months.map(m => emptyToNull(d[m]));
                         const numericMonths = monthValues.map(v => parseFloat(v) || 0);
                         const result = numericMonths.reduce((a, b) => a + b, 0);
-                        const resultStr = result > 0 ? String(result) : '';
-                        upsertRows.push([hc, year_bh, target, resultStr, ...monthValues]);
+                        const resultVal = result > 0 ? result : null;
+                        upsertRows.push([hc, year_bh, target, resultVal, ...monthValues]);
                     }
                     insertedCount++;
                 }
