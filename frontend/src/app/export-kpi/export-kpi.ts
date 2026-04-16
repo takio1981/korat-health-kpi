@@ -107,7 +107,7 @@ export class ExportKpiComponent implements OnInit {
           this.updateSelectAll();
           // ตั้ง displayCounters เริ่มต้น
           const total = res.data.length;
-          this.displayCounters = { total, has_changes: 0, up_to_date: 0, no_data: 0, unchecked: total };
+          this.displayCounters = { total, has_changes: 0, data_changes: 0, up_to_date: 0, no_data: 0, unchecked: total };
           this.liveCounters = { ...this.displayCounters };
         }
         this.cdr.detectChanges();
