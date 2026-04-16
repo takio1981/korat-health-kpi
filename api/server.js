@@ -3248,10 +3248,28 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
             indicatorParams = indicator_ids;
         }
 
-        const [indicators] = await conn.query(indicatorQuery, indicatorParams);
+        const [allIndicators] = await conn.query(indicatorQuery, indicatorParams);
 
         const created = [];
         const skipped = [];
+
+        // Prefilter: เก็บเฉพาะตัวชี้วัดที่มีข้อมูลใน kpi_results (target_value หรือ actual_value)
+        let indicators = [];
+        if (allIndicators.length > 0) {
+            const indIds = allIndicators.map(i => i.id);
+            const [withData] = await conn.query(
+                `SELECT DISTINCT indicator_id FROM kpi_results
+                 WHERE indicator_id IN (${indIds.map(() => '?').join(',')})
+                 AND year_bh = ?
+                 AND ((target_value IS NOT NULL AND target_value != '') OR (actual_value IS NOT NULL AND actual_value != ''))`,
+                [...indIds, year_bh]
+            );
+            const validIds = new Set(withData.map(r => r.indicator_id));
+            for (const ind of allIndicators) {
+                if (validIds.has(ind.id)) indicators.push(ind);
+                else skipped.push({ id: ind.id, name: ind.kpi_indicators_name, table_process: ind.table_process, reason: 'ไม่มีข้อมูลใน kpi_results' });
+            }
+        }
 
         const baseColsWithMonths = 'hospcode VARCHAR(5) NOT NULL, byear VARCHAR(4) NOT NULL, target VARCHAR(100) DEFAULT NULL, result VARCHAR(100) DEFAULT NULL, m10 VARCHAR(100) DEFAULT NULL, m11 VARCHAR(100) DEFAULT NULL, m12 VARCHAR(100) DEFAULT NULL, m01 VARCHAR(100) DEFAULT NULL, m02 VARCHAR(100) DEFAULT NULL, m03 VARCHAR(100) DEFAULT NULL, m04 VARCHAR(100) DEFAULT NULL, m05 VARCHAR(100) DEFAULT NULL, m06 VARCHAR(100) DEFAULT NULL, m07 VARCHAR(100) DEFAULT NULL, m08 VARCHAR(100) DEFAULT NULL, m09 VARCHAR(100) DEFAULT NULL';
         const baseColsNoMonths = 'hospcode VARCHAR(5) NOT NULL, byear VARCHAR(4) NOT NULL, target VARCHAR(100) DEFAULT NULL, result VARCHAR(100) DEFAULT NULL';

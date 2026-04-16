@@ -95,7 +95,7 @@
       }
 
       <!-- สรุปจำนวน (เลขวิ่ง animated, คงค่าจากผลตรวจสอบ) -->
-      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
         <div class="bg-white rounded-xl p-4 border-2 text-center cursor-pointer hover:border-indigo-400 transition-all"
              [class.border-indigo-400]="!filterCheckStatus" [class.shadow-md]="!filterCheckStatus"
              (click)="filterCheckStatus = ''; applyFilters()">
@@ -106,7 +106,11 @@
              [class.border-orange-400]="filterCheckStatus === 'has_changes'" [class.shadow-md]="filterCheckStatus === 'has_changes'"
              (click)="filterCheckStatus = filterCheckStatus === 'has_changes' ? '' : 'has_changes'; applyFilters()">
           <div class="text-3xl font-bold text-orange-600 tabular-nums">{{displayCounters.has_changes}}</div>
-          <div class="text-xs text-orange-600 mt-1">มีการเปลี่ยนแปลง</div>
+          <div class="text-xs text-orange-600 mt-1">ตัวชี้วัดที่เพิ่ม/แก้ไข</div>
+        </div>
+        <div class="bg-white rounded-xl p-4 border-2 text-center">
+          <div class="text-3xl font-bold text-rose-600 tabular-nums">{{displayCounters.data_changes}}</div>
+          <div class="text-xs text-rose-600 mt-1">จำนวนข้อมูลที่เปลี่ยนแปลง</div>
         </div>
         <div class="bg-white rounded-xl p-4 border-2 text-center cursor-pointer hover:border-green-400 transition-all"
              [class.border-green-400]="filterCheckStatus === 'up_to_date'" [class.shadow-md]="filterCheckStatus === 'up_to_date'"

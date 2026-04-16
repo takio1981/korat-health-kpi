@@ -18,6 +18,15 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.04.11-7',
+      date: '11 เมษายน 2569',
+      changes: [
+        { type: 'improve', text: 'Export ข้อมูล: สร้างเฉพาะตารางของตัวชี้วัดที่มีข้อมูลใน kpi_results จริง (target_value หรือ actual_value)' },
+        { type: 'feature', text: 'Export ข้อมูล: เพิ่ม card "จำนวนข้อมูลที่เปลี่ยนแปลง" (รวมแถว new+changed)' },
+        { type: 'feature', text: 'Export ข้อมูล: rename "มีการเปลี่ยนแปลง" → "ตัวชี้วัดที่เพิ่ม/แก้ไข" (ชัดเจนขึ้น)' },
+      ]
+    },
+    {
       version: '2569.04.11-6',
       date: '11 เมษายน 2569',
       changes: [

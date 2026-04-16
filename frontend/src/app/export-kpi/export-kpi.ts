@@ -43,9 +43,10 @@ export class ExportKpiComponent implements OnInit {
   checkProgress = { total: 0, done: 0, percent: 0 };
 
   // Live counters (อัปเดตระหว่างตรวจสอบ)
-  liveCounters = { total: 0, has_changes: 0, up_to_date: 0, no_data: 0, unchecked: 0 };
-  // Display counters (เลขวิ่ง animated)
-  displayCounters = { total: 0, has_changes: 0, up_to_date: 0, no_data: 0, unchecked: 0 };
+  // has_changes = จำนวนตัวชี้วัดที่มีการเปลี่ยนแปลง
+  // data_changes = จำนวนแถวข้อมูลรวมที่เพิ่ม/แก้ไข (new_count + changed_count)
+  liveCounters = { total: 0, has_changes: 0, data_changes: 0, up_to_date: 0, no_data: 0, unchecked: 0 };
+  displayCounters = { total: 0, has_changes: 0, data_changes: 0, up_to_date: 0, no_data: 0, unchecked: 0 };
 
   // UI state
   showGuide: boolean = true;
@@ -188,18 +189,20 @@ export class ExportKpiComponent implements OnInit {
 
   // อัปเดต liveCounters จาก checkStatusMap (เรียกทุกรอบ batch)
   private updateLiveCounters() {
-    let hasChanges = 0, upToDate = 0, noData = 0;
+    let hasChanges = 0, dataChanges = 0, upToDate = 0, noData = 0;
     for (const [, chk] of this.checkStatusMap) {
-      if (chk.status === 'has_changes') hasChanges++;
-      else if (chk.status === 'up_to_date') upToDate++;
+      if (chk.status === 'has_changes') {
+        hasChanges++;
+        dataChanges += (chk.new_count || 0) + (chk.changed_count || 0);
+      } else if (chk.status === 'up_to_date') upToDate++;
       else noData++;
     }
     const total = this.exportIndicators.length;
-    this.liveCounters = { total, has_changes: hasChanges, up_to_date: upToDate, no_data: noData, unchecked: total - hasChanges - upToDate - noData };
+    this.liveCounters = { total, has_changes: hasChanges, data_changes: dataChanges, up_to_date: upToDate, no_data: noData, unchecked: total - hasChanges - upToDate - noData };
   }
 
   // Animated counter: นับจาก current ไปหา target
-  private animateCounters(target: { total: number; has_changes: number; up_to_date: number; no_data: number; unchecked: number }) {
+  private animateCounters(target: { total: number; has_changes: number; data_changes: number; up_to_date: number; no_data: number; unchecked: number }) {
     const duration = 600; // ms
     const steps = 30;
     const interval = duration / steps;
@@ -212,6 +215,7 @@ export class ExportKpiComponent implements OnInit {
       this.displayCounters = {
         total: Math.round(start.total + (target.total - start.total) * progress),
         has_changes: Math.round(start.has_changes + (target.has_changes - start.has_changes) * progress),
+        data_changes: Math.round(start.data_changes + (target.data_changes - start.data_changes) * progress),
         up_to_date: Math.round(start.up_to_date + (target.up_to_date - start.up_to_date) * progress),
         no_data: Math.round(start.no_data + (target.no_data - start.no_data) * progress),
         unchecked: Math.round(start.unchecked + (target.unchecked - start.unchecked) * progress)
@@ -250,7 +254,7 @@ export class ExportKpiComponent implements OnInit {
     this.selectedIndicatorIds = new Set(this.filteredExportIndicators.map((i: any) => i.id));
     this.selectAll = true;
     const total = this.exportIndicators.length;
-    this.liveCounters = { total, has_changes: 0, up_to_date: 0, no_data: 0, unchecked: total };
+    this.liveCounters = { total, has_changes: 0, data_changes: 0, up_to_date: 0, no_data: 0, unchecked: total };
     this.animateCounters(this.liveCounters);
   }
 
@@ -270,7 +274,7 @@ export class ExportKpiComponent implements OnInit {
 
     const total = allIds.length;
     this.checkProgress = { total, done: 0, percent: 0 };
-    this.liveCounters = { total, has_changes: 0, up_to_date: 0, no_data: 0, unchecked: total };
+    this.liveCounters = { total, has_changes: 0, data_changes: 0, up_to_date: 0, no_data: 0, unchecked: total };
     this.displayCounters = { ...this.liveCounters };
     this.cdr.detectChanges();
 
@@ -300,6 +304,9 @@ export class ExportKpiComponent implements OnInit {
       const totalChanges = allDetails.filter(r => r.status === 'has_changes').length;
       const totalUpToDate = allDetails.filter(r => r.status === 'up_to_date').length;
       const totalNoData = allDetails.filter(r => r.no_data).length;
+      const totalDataChanges = allDetails
+        .filter(r => r.status === 'has_changes')
+        .reduce((s, r) => s + (r.new_count || 0) + (r.changed_count || 0), 0);
 
       this.checkResult = {
         success: true,
@@ -330,7 +337,7 @@ export class ExportKpiComponent implements OnInit {
         confirmButtonColor: '#6366f1'
       }).then(() => {
         this.zone.run(() => {
-          const finalCounters = { total, has_changes: totalChanges, up_to_date: totalUpToDate, no_data: totalNoData, unchecked: 0 };
+          const finalCounters = { total, has_changes: totalChanges, data_changes: totalDataChanges, up_to_date: totalUpToDate, no_data: totalNoData, unchecked: 0 };
           this.animateCounters(finalCounters);
         });
       });
