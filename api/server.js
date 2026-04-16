@@ -3271,21 +3271,29 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
             }
         }
 
+        // ตารางมีคอลัมน์เดือน (m10-m09) เสมอ + เพิ่ม form fields ถ้ามี
         const baseColsWithMonths = 'hospcode VARCHAR(5) NOT NULL, byear VARCHAR(4) NOT NULL, target VARCHAR(100) DEFAULT NULL, result VARCHAR(100) DEFAULT NULL, m10 VARCHAR(100) DEFAULT NULL, m11 VARCHAR(100) DEFAULT NULL, m12 VARCHAR(100) DEFAULT NULL, m01 VARCHAR(100) DEFAULT NULL, m02 VARCHAR(100) DEFAULT NULL, m03 VARCHAR(100) DEFAULT NULL, m04 VARCHAR(100) DEFAULT NULL, m05 VARCHAR(100) DEFAULT NULL, m06 VARCHAR(100) DEFAULT NULL, m07 VARCHAR(100) DEFAULT NULL, m08 VARCHAR(100) DEFAULT NULL, m09 VARCHAR(100) DEFAULT NULL';
-        const baseColsNoMonths = 'hospcode VARCHAR(5) NOT NULL, byear VARCHAR(4) NOT NULL, target VARCHAR(100) DEFAULT NULL, result VARCHAR(100) DEFAULT NULL';
 
-        const tableDDL = (name, extraCols, hasForm) => {
-            let cols = hasForm ? baseColsNoMonths : baseColsWithMonths;
+        const tableDDL = (name, extraCols) => {
+            let cols = baseColsWithMonths;
             if (extraCols && extraCols.length > 0) {
                 cols += ', ' + extraCols.map(f => `\`${f.field_name}\` VARCHAR(500) DEFAULT NULL`).join(', ');
             }
             return `CREATE TABLE IF NOT EXISTS \`${name}\` (${cols}, create_date DATETIME DEFAULT CURRENT_TIMESTAMP, update_date DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (hospcode, byear)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`;
         };
 
-        // Helper: ALTER TABLE เพิ่มคอลัมน์ dynamic ที่ยังไม่มี
+        // Helper: ALTER TABLE เพิ่มคอลัมน์ dynamic (form fields) ที่ยังไม่มี
         const ensureDynamicCols = async (conn2, tableName2, extraCols) => {
             for (const f of extraCols) {
                 try { await conn2.query(`ALTER TABLE \`${tableName2}\` ADD COLUMN \`${f.field_name}\` VARCHAR(500) DEFAULT NULL`); } catch (e) { /* already exists */ }
+            }
+        };
+
+        // Helper: ALTER TABLE เพิ่มคอลัมน์เดือน (m10-m09, result) ที่ยังไม่มี — สำหรับตารางเก่าที่สร้างโดยไม่มีเดือน
+        const ensureMonthCols = async (conn2, tableName2) => {
+            const monthCols = ['m10','m11','m12','m01','m02','m03','m04','m05','m06','m07','m08','m09','result'];
+            for (const col of monthCols) {
+                try { await conn2.query(`ALTER TABLE \`${tableName2}\` ADD COLUMN \`${col}\` VARCHAR(100) DEFAULT NULL`); } catch (e) { /* already exists */ }
             }
         };
 
@@ -3327,8 +3335,10 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
                 }
 
                 const hasForm = formFields.length > 0;
-                // Create export table (ถ้ามี form → ไม่มีคอลัมน์เดือน, ใช้คอลัมน์จาก form แทน)
-                await conn.query(tableDDL(tableName, formFields, hasForm));
+                // Create export table: มีคอลัมน์เดือนเสมอ + เพิ่ม form fields ถ้ามี
+                await conn.query(tableDDL(tableName, formFields));
+                // ตารางเก่าที่ไม่มีคอลัมน์เดือน → ALTER เพิ่ม
+                await ensureMonthCols(conn, tableName);
                 if (hasForm) await ensureDynamicCols(conn, tableName, formFields);
 
                 // Fetch kpi_results for this indicator + year
@@ -3451,17 +3461,12 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
                         continue;
                     }
 
-                    if (hasForm) {
-                        // มี form → ส่งออกเฉพาะ hospcode, byear, target, result + dynamic fields (ไม่มีเดือน)
-                        upsertRows.push([hc, year_bh, target, null, ...dynValues]);
-                    } else {
-                        // ไม่มี form → ส่งออกแบบเดิม (hospcode, byear, target, result, m10-m09)
-                        const monthValues = months.map(m => emptyToNull(d[m]));
-                        const numericMonths = monthValues.map(v => parseFloat(v) || 0);
-                        const result = numericMonths.reduce((a, b) => a + b, 0);
-                        const resultVal = result > 0 ? result : null;
-                        upsertRows.push([hc, year_bh, target, resultVal, ...monthValues]);
-                    }
+                    // ส่งออก: hospcode, byear, target, result, m10-m09 + form fields (ถ้ามี)
+                    const monthValues = months.map(m => emptyToNull(d[m]));
+                    const numericMonths = monthValues.map(v => parseFloat(v) || 0);
+                    const result = numericMonths.reduce((a, b) => a + b, 0);
+                    const resultVal = result > 0 ? result : null;
+                    upsertRows.push([hc, year_bh, target, resultVal, ...monthValues, ...dynValues]);
 
                     if (existingUpdate) updatedCount++;
                     else insertedCount++;
@@ -3469,14 +3474,8 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
 
                 // Batch UPSERT
                 if (upsertRows.length > 0) {
-                    let colsList, onDupParts;
-                    if (hasForm) {
-                        colsList = ['hospcode', 'byear', 'target', 'result', ...dynFieldKeys.map(k => `\`${k}\``)];
-                        onDupParts = ['target=VALUES(target)', 'result=VALUES(result)', ...dynFieldKeys.map(k => `\`${k}\`=VALUES(\`${k}\`)`)];
-                    } else {
-                        colsList = ['hospcode', 'byear', 'target', 'result', ...months];
-                        onDupParts = ['target=VALUES(target)', 'result=VALUES(result)', ...months.map(m => `${m}=VALUES(${m})`)];
-                    }
+                    const colsList = ['hospcode', 'byear', 'target', 'result', ...months, ...dynFieldKeys.map(k => `\`${k}\``)];
+                    const onDupParts = ['target=VALUES(target)', 'result=VALUES(result)', ...months.map(m => `${m}=VALUES(${m})`), ...dynFieldKeys.map(k => `\`${k}\`=VALUES(\`${k}\`)`)];
                     const cols = colsList.join(', ');
                     const onDup = onDupParts.join(', ');
                     const singlePlaceholder = '(' + Array(colsList.length).fill('?').join(',') + ')';

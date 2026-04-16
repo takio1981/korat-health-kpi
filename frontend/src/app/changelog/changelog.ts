@@ -18,6 +18,14 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.04.11-9',
+      date: '11 เมษายน 2569',
+      changes: [
+        { type: 'fix', text: 'Export ข้อมูล: ตัวชี้วัดที่มี form schema → export actual_value รายเดือน (m10-m09) ได้ด้วย (เดิมส่งเฉพาะ form fields)' },
+        { type: 'improve', text: 'Export ข้อมูล: ตารางมีคอลัมน์เดือน (m10-m09) เสมอ + ALTER เพิ่มให้ตารางเก่าอัตโนมัติ' },
+      ]
+    },
+    {
       version: '2569.04.11-8',
       date: '11 เมษายน 2569',
       changes: [
