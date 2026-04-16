@@ -794,11 +794,13 @@
           <p class="text-sm text-gray-600">เมนูรวม 4 เครื่องมือสำหรับ <b>super_admin</b> บริหารจัดการข้อมูล KPI ทั้งหมด</p>
           <!-- Tab 1 -->
           <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
-            <h4 class="font-bold text-indigo-800 mb-2"><i class="fas fa-database mr-2"></i>Tab 1: DB Compare</h4>
+            <h4 class="font-bold text-indigo-800 mb-2"><i class="fas fa-database mr-2"></i>Tab 1: DB Compare (2 ทิศทาง)</h4>
             <ol class="list-decimal ml-5 text-sm text-gray-600 space-y-1">
               <li>กดปุ่ม <b>"เปรียบเทียบ Structure"</b> → ระบบเชื่อมต่อ HDC แล้วเปรียบเทียบโครงสร้างตาราง</li>
               <li>ดูสรุป: ตรงกัน / ต่างกัน / ไม่มีใน Local / ไม่มีใน HDC</li>
-              <li>เลือกตาราง → กด <b>"สร้าง/แก้ไข Local"</b> หรือ <b>"Sync ข้อมูลจาก HDC"</b></li>
+              <li>เลือกตาราง (หรือใช้ <b>"เลือก Missing Local"</b> / <b>"เลือก Missing HDC"</b> / <b>"เลือก Different"</b>)</li>
+              <li><b class="text-blue-600"><i class="fas fa-cloud-download-alt mr-1"></i>HDC → Local:</b> กด <b>"สร้าง Local"</b> / <b>"Sync จาก HDC"</b></li>
+              <li><b class="text-purple-600"><i class="fas fa-cloud-upload-alt mr-1"></i>Local → HDC:</b> กด <b>"สร้าง HDC"</b> / <b>"Sync → HDC"</b> <span class="text-[10px] text-red-500">(ต้องมีสิทธิ์ write ใน HDC)</span></li>
               <li>กดปุ่ม <b>"สร้างฟอร์มจาก HDC"</b> → ส่ง columns ไป Tab 2 เพื่อสร้างแบบฟอร์ม</li>
             </ol>
           </div>
@@ -1014,7 +1016,7 @@
           </div>
           <div class="bg-gray-50 rounded-xl p-4">
             <p class="text-sm font-bold text-gray-800">ถาม: "จัดการข้อมูล KPI" มี Tab อะไรบ้าง?</p>
-            <p class="text-xs text-gray-600 mt-1">ตอบ: 4 Tab — 1) DB Compare (เปรียบเทียบ structure + Sticky Action Panel) 2) สร้างแบบฟอร์ม (Form Builder) 3) Export ข้อมูล 4) Report Compare (เทียบ reports HDC กับ kpi_indicators)</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: 4 Tab — 1) DB Compare (เปรียบเทียบ structure + Sync 2 ทิศทาง HDC↔Local) 2) สร้างแบบฟอร์ม (Form Builder) 3) Export ข้อมูล 4) Report Compare (เทียบ reports HDC กับ kpi_indicators)</p>
           </div>
           <div class="bg-gray-50 rounded-xl p-4">
             <p class="text-sm font-bold text-gray-800">ถาม: ทำไม Login แล้วได้รับ Email แจ้งเตือน?</p>

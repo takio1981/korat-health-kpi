@@ -23,7 +23,7 @@
         </div>
         <div class="flex items-start gap-3">
           <span class="flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold shrink-0">4</span>
-          <div><p class="font-bold text-gray-800">ดำเนินการ</p><p class="text-xs text-gray-500">กด <b>"สร้าง/แก้ไข Local"</b> สร้างตารางใน Local ให้ตรงกับ HDC หรือ <b>"Sync ข้อมูลจาก HDC"</b> ดึงข้อมูลมาใส่</p></div>
+          <div><p class="font-bold text-gray-800">ดำเนินการ 2 ทิศทาง</p><p class="text-xs text-gray-500"><b class="text-blue-600">HDC → Local:</b> "สร้าง Local" / "Sync จาก HDC" | <b class="text-purple-600">Local → HDC:</b> "สร้าง HDC" / "Sync → HDC" (ต้องมีสิทธิ์ write ใน HDC)</p></div>
         </div>
         <div class="flex items-start gap-3">
           <span class="flex items-center justify-center w-7 h-7 rounded-full bg-purple-600 text-white text-xs font-bold shrink-0">5</span>
@@ -95,7 +95,8 @@
       <div class="flex gap-1">
         <button (click)="selectAll()" class="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-bold text-gray-600"><i class="fas fa-check-double mr-1"></i>เลือกทั้งหมด</button>
         <button (click)="selectNone()" class="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-bold text-gray-600"><i class="fas fa-times mr-1"></i>ยกเลิก</button>
-        <button (click)="selectByStatus('missing_local')" class="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 rounded-lg text-xs font-bold text-blue-700"><i class="fas fa-arrow-down mr-1"></i>เลือก Missing</button>
+        <button (click)="selectByStatus('missing_local')" class="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 rounded-lg text-xs font-bold text-blue-700"><i class="fas fa-arrow-down mr-1"></i>เลือก Missing Local</button>
+        <button (click)="selectByStatus('missing_remote')" class="px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 rounded-lg text-xs font-bold text-purple-700"><i class="fas fa-arrow-up mr-1"></i>เลือก Missing HDC</button>
         <button (click)="selectByStatus('different')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 rounded-lg text-xs font-bold text-amber-700"><i class="fas fa-exclamation-triangle mr-1"></i>เลือก Different</button>
       </div>
       <span class="text-xs text-gray-500 ml-auto">เลือก: <b>{{ selectedTables.size }}</b></span>
@@ -200,14 +201,26 @@
         <i class="fas fa-check-square mr-1"></i>เลือกแล้ว {{ selectedTables.size }} ตาราง
       </span>
       <div class="flex flex-wrap gap-2">
-        <button (click)="createLocal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-md transition-all">
-          <i class="fas fa-hammer mr-1"></i>สร้าง/แก้ไข Local ({{ selectedTables.size }})
-        </button>
-        <button (click)="syncData()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-xs shadow-md transition-all">
-          <i class="fas fa-sync mr-1"></i>Sync ข้อมูลจาก HDC ({{ selectedTables.size }})
-        </button>
+        <!-- Local actions (HDC → Local) -->
+        <div class="flex gap-1 pr-2 border-r border-gray-200">
+          <button (click)="createLocal()" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-md transition-all" title="สร้าง/แก้ไขตารางใน Local ให้ตรงกับ HDC">
+            <i class="fas fa-hammer mr-1"></i>สร้าง Local
+          </button>
+          <button (click)="syncData()" class="px-3 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-xs shadow-md transition-all" title="ดึงข้อมูลจาก HDC มาใส่ Local">
+            <i class="fas fa-cloud-download-alt mr-1"></i>Sync จาก HDC
+          </button>
+        </div>
+        <!-- HDC actions (Local → HDC) -->
+        <div class="flex gap-1 pr-2 border-r border-gray-200">
+          <button (click)="createRemote()" class="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs shadow-md transition-all" title="สร้าง/แก้ไขตารางใน HDC ให้ตรงกับ Local">
+            <i class="fas fa-hammer mr-1"></i>สร้าง HDC
+          </button>
+          <button (click)="syncToHDC()" class="px-3 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs shadow-md transition-all" title="ส่งข้อมูลจาก Local ไป HDC">
+            <i class="fas fa-cloud-upload-alt mr-1"></i>Sync → HDC
+          </button>
+        </div>
         <button (click)="selectNone()" class="px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-600 font-bold rounded-xl text-xs transition-all">
-          <i class="fas fa-times mr-1"></i>ยกเลิกเลือก
+          <i class="fas fa-times mr-1"></i>ยกเลิก
         </button>
       </div>
     </div>

@@ -234,6 +234,7 @@ users.dept_id → departments.id (FK)
 - GET/POST/PUT/DELETE + noun (เช่น `/kpi-results`, `/users/:id`, `/feedback`)
 - Nested: `/feedback/:id/replies`
 - Action: `/bulk-add-kpi`, `/unlock-kpi-all`, `/refresh-summary`
+- DB Compare (2 ทิศทาง): `/db-compare/create-local`, `/db-compare/sync-data` (HDC→Local), `/db-compare/create-remote`, `/db-compare/sync-to-hdc` (Local→HDC)
 
 ### Database
 - Table: `snake_case` (เช่น `kpi_results`, `kpi_main_indicators`)

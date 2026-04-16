@@ -18,6 +18,15 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.04.11-3',
+      date: '11 เมษายน 2569',
+      changes: [
+        { type: 'feature', text: 'DB Compare: เพิ่ม Sync 2 ทิศทาง — สร้างตารางใน HDC + Sync ข้อมูล Local → HDC' },
+        { type: 'feature', text: 'เพิ่ม shortcut "เลือก Missing HDC" ใน toolbar DB Compare' },
+        { type: 'improve', text: 'แยกปุ่มใน Sticky Action Panel เป็น 2 กลุ่ม: HDC → Local (เดิม) + Local → HDC (ใหม่)' },
+      ]
+    },
+    {
       version: '2569.04.11-2',
       date: '11 เมษายน 2569',
       changes: [

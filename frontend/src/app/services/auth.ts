@@ -328,6 +328,16 @@ export class AuthService {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.post(`${this.apiUrl}/db-compare/sync-data`, { tables }, { headers });
   }
+  dbCompareCreateRemote(tables: string[]): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/db-compare/create-remote`, { tables }, { headers });
+  }
+  dbCompareSyncToHDC(tables: string[]): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/db-compare/sync-to-hdc`, { tables }, { headers });
+  }
 
   reportCompare(): Observable<any> {
     const token = localStorage.getItem('kpi_token');

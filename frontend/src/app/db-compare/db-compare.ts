@@ -141,4 +141,49 @@ export class DbCompareComponent implements OnInit {
       });
     });
   }
+
+  createRemote() {
+    const tables = [...this.selectedTables];
+    if (tables.length === 0) { Swal.fire('แจ้งเตือน', 'กรุณาเลือกตารางอย่างน้อย 1 ตาราง', 'warning'); return; }
+    Swal.fire({
+      title: 'ยืนยันสร้าง/แก้ไขใน HDC',
+      html: `<p>สร้าง/แก้ไข <b>${tables.length}</b> ตารางใน HDC ให้ตรงกับ Local</p><p class="text-xs text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>ต้องมีสิทธิ์ write ใน HDC — ตรวจสอบให้ดีก่อนยืนยัน</p>`,
+      icon: 'warning', showCancelButton: true, confirmButtonColor: '#7c3aed',
+      confirmButtonText: '<i class="fas fa-hammer mr-1"></i> สร้างใน HDC', cancelButtonText: 'ยกเลิก'
+    }).then((r) => {
+      if (!r.isConfirmed) return;
+      Swal.fire({ title: 'กำลังสร้างใน HDC...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      this.authService.dbCompareCreateRemote(tables).subscribe({
+        next: (res: any) => {
+          const errDetail = res.errors?.length ? `<br><div class="text-xs mt-2 text-red-500">${res.errors.map((e: any) => `${e.table}: ${e.error}`).join('<br>')}</div>` : '';
+          Swal.fire({ icon: 'success', title: 'สำเร็จ', html: `${res.message}${errDetail}`, timer: 4000 });
+          this.runCompare();
+        },
+        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถสร้างใน HDC ได้', 'error')
+      });
+    });
+  }
+
+  syncToHDC() {
+    const tables = [...this.selectedTables];
+    if (tables.length === 0) { Swal.fire('แจ้งเตือน', 'กรุณาเลือกตารางอย่างน้อย 1 ตาราง', 'warning'); return; }
+    Swal.fire({
+      title: 'ยืนยัน Sync → HDC',
+      html: `<p>ส่งข้อมูลจาก Local ไปยัง HDC <b>${tables.length}</b> ตาราง</p><p class="text-xs text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>ข้อมูลใน HDC ที่ key ซ้ำจะถูกเขียนทับ — ต้องมีสิทธิ์ write ใน HDC</p>`,
+      icon: 'warning', showCancelButton: true, confirmButtonColor: '#dc2626',
+      confirmButtonText: '<i class="fas fa-cloud-upload-alt mr-1"></i> Sync → HDC', cancelButtonText: 'ยกเลิก'
+    }).then((r) => {
+      if (!r.isConfirmed) return;
+      Swal.fire({ title: 'กำลัง Sync ไป HDC...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      this.authService.dbCompareSyncToHDC(tables).subscribe({
+        next: (res: any) => {
+          const detail = res.synced?.map((s: any) => `${s.table}: ${s.rows} rows`).join('<br>') || '';
+          const errDetail = res.errors?.length ? `<br><div class="text-xs mt-2 text-red-500">${res.errors.map((e: any) => `${e.table}: ${e.error}`).join('<br>')}</div>` : '';
+          Swal.fire({ icon: 'success', title: 'Sync → HDC สำเร็จ', html: `${res.message}<br><div class="text-xs mt-2 text-gray-500">${detail}</div>${errDetail}` });
+          this.runCompare();
+        },
+        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถ Sync ไป HDC ได้', 'error')
+      });
+    });
+  }
 }

@@ -5098,6 +5098,108 @@ apiRouter.post('/db-compare/sync-data', authenticateToken, isSuperAdmin, async (
     res.json({ success: true, message: `Sync สำเร็จ ${synced.length} ตาราง`, synced, errors });
 });
 
+// POST /db-compare/create-remote — สร้าง/แก้ไขตารางใน HDC จาก DDL ของ Local (สำหรับ missing_remote)
+apiRouter.post('/db-compare/create-remote', authenticateToken, isSuperAdmin, async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (HDC)' });
+
+    const { tables } = req.body;
+    if (!Array.isArray(tables) || tables.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตาราง' });
+
+    const created = [], altered = [], errors = [];
+
+    for (const tableName of tables) {
+        if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(tableName)) { errors.push({ table: tableName, error: 'ชื่อไม่ถูกต้อง' }); continue; }
+        try {
+            // ดึง CREATE TABLE จาก local
+            const [ddlRows] = await db.query(`SHOW CREATE TABLE \`${tableName}\``);
+            if (ddlRows.length === 0) { errors.push({ table: tableName, error: 'ไม่พบตารางใน local' }); continue; }
+
+            const ddl = ddlRows[0]['Create Table'];
+
+            // ตรวจว่า remote มีตารางนี้หรือยัง
+            let remoteExists = false;
+            try { await remoteDb.query(`SELECT 1 FROM \`${tableName}\` LIMIT 0`); remoteExists = true; } catch (e) {}
+
+            if (!remoteExists) {
+                // สร้างใหม่ใน HDC
+                await remoteDb.query(ddl);
+                created.push(tableName);
+            } else {
+                // ALTER เพิ่มคอลัมน์ที่ขาดใน HDC
+                const [localCols] = await db.query(`SHOW COLUMNS FROM \`${tableName}\``);
+                const [remoteCols] = await remoteDb.query(`SHOW COLUMNS FROM \`${tableName}\``);
+                const remoteFieldSet = new Set(remoteCols.map(c => c.Field));
+                let alteredCount = 0;
+                for (const col of localCols) {
+                    if (!remoteFieldSet.has(col.Field)) {
+                        const nullable = col.Null === 'YES' ? 'NULL' : 'NOT NULL';
+                        const def = col.Default !== null ? `DEFAULT '${col.Default}'` : (col.Null === 'YES' ? 'DEFAULT NULL' : '');
+                        try {
+                            await remoteDb.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`${col.Field}\` ${col.Type} ${nullable} ${def}`);
+                            alteredCount++;
+                        } catch (e) { /* column อาจมีอยู่แล้ว */ }
+                    }
+                }
+                if (alteredCount > 0) altered.push({ table: tableName, added_columns: alteredCount });
+            }
+        } catch (e) { errors.push({ table: tableName, error: e.message }); }
+    }
+
+    await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+        [req.user.userId, 'DB_COMPARE_CREATE_REMOTE', 'MULTIPLE', JSON.stringify({ created, altered }), req.ip]).catch(() => {});
+
+    res.json({ success: true, message: `สร้าง ${created.length} ตาราง, แก้ไข ${altered.length} ตารางใน HDC`, created, altered, errors });
+});
+
+// POST /db-compare/sync-to-hdc — Sync ข้อมูลจาก Local → HDC (upsert batch 100 rows)
+apiRouter.post('/db-compare/sync-to-hdc', authenticateToken, isSuperAdmin, async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (HDC)' });
+
+    const { tables } = req.body;
+    if (!Array.isArray(tables) || tables.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตาราง' });
+
+    const synced = [], errors = [];
+
+    for (const tableName of tables) {
+        if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(tableName)) { errors.push({ table: tableName, error: 'ชื่อไม่ถูกต้อง' }); continue; }
+        try {
+            // ตรวจว่า remote มีตารางนี้
+            try { await remoteDb.query(`SELECT 1 FROM \`${tableName}\` LIMIT 0`); } catch (e) {
+                errors.push({ table: tableName, error: 'ตารางไม่มีใน HDC กรุณาสร้างก่อน' }); continue;
+            }
+
+            // ดึงข้อมูลจาก local
+            const [localRows] = await db.query(`SELECT * FROM \`${tableName}\``);
+            if (localRows.length === 0) { synced.push({ table: tableName, rows: 0, message: 'ไม่มีข้อมูลใน local' }); continue; }
+
+            // ดึง column names
+            const columns = Object.keys(localRows[0]);
+            const colList = columns.map(c => `\`${c}\``).join(', ');
+            const placeholders = columns.map(() => '?').join(', ');
+            const onDup = columns.map(c => `\`${c}\`=VALUES(\`${c}\`)`).join(', ');
+
+            // Batch upsert → HDC (100 rows per batch)
+            let totalInserted = 0;
+            for (let i = 0; i < localRows.length; i += 100) {
+                const batch = localRows.slice(i, i + 100);
+                const allPlaceholders = batch.map(() => `(${placeholders})`).join(', ');
+                const flatValues = batch.flatMap(row => columns.map(c => row[c]));
+                await remoteDb.query(`INSERT INTO \`${tableName}\` (${colList}) VALUES ${allPlaceholders} ON DUPLICATE KEY UPDATE ${onDup}`, flatValues);
+                totalInserted += batch.length;
+            }
+
+            synced.push({ table: tableName, rows: totalInserted });
+        } catch (e) { errors.push({ table: tableName, error: e.message }); }
+    }
+
+    await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+        [req.user.userId, 'DB_COMPARE_SYNC_TO_HDC', 'MULTIPLE', JSON.stringify({ synced: synced.length, total_rows: synced.reduce((s, t) => s + t.rows, 0) }), req.ip]).catch(() => {});
+
+    res.json({ success: true, message: `Sync → HDC สำเร็จ ${synced.length} ตาราง`, synced, errors });
+});
+
 // === Environment Config Management ===
 // GET /env-config — ดึง config ทั้งหมด (DB override + ENV fallback)
 apiRouter.get('/env-config', authenticateToken, isSuperAdmin, async (req, res) => {
