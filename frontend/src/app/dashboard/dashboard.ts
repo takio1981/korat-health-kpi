@@ -46,6 +46,7 @@ export class DashboardComponent implements OnInit {
   private _allHospitals: any[] = [];
   private _allIndicators: any[] = [];
   private _allDistricts: any[] = [];
+  private _allHosTypes: any[] = [];
   addKpiYears: string[] = [];
   addKpiSelectedYear: string = '';
   addKpiDistrictList: any[] = [];
@@ -390,6 +391,7 @@ export class DashboardComponent implements OnInit {
       });
       this.authService.getHosTypes().subscribe(res => {
         if (res.success) {
+          this._allHosTypes = res.data;
           this.hosTypeList = res.data;
           this.cdr.detectChanges();
         }
@@ -397,9 +399,9 @@ export class DashboardComponent implements OnInit {
     }
   }
 
-  // === Cascading filter logic (เฉพาะอัปเดต dropdown ไม่โหลดข้อมูล) ===
+  // === Cascading filter logic (bidirectional: district ↔ hostype ↔ hospital) ===
 
-  // กรองรายการหน่วยบริการ → ใช้ร่วมกับ district + hostype
+  // กรองรายชื่อหน่วยบริการตาม district + hostype
   private rebuildHospitalList() {
     let filtered = this._allHospitals;
     if (this.selectedDistrict) {
@@ -413,11 +415,40 @@ export class DashboardComponent implements OnInit {
     if (this.selectedHospital && !this.hospitalNames.includes(this.selectedHospital)) this.selectedHospital = '';
   }
 
+  // กรองประเภท รพ. ตาม district (แสดงเฉพาะ hostype ที่มีในอำเภอนั้น)
+  private rebuildHosTypeList() {
+    if (this.selectedDistrict) {
+      const dist = this._allDistricts.find((d: any) => d.distname === this.selectedDistrict);
+      if (dist) {
+        const typesInDist = new Set(this._allHospitals.filter((h: any) => h.distid === dist.distid).map((h: any) => h.hostype));
+        this.hosTypeList = this._allHosTypes.filter((ht: any) => typesInDist.has(ht.hostypecode));
+      } else {
+        this.hosTypeList = this._allHosTypes;
+      }
+    } else {
+      this.hosTypeList = this._allHosTypes;
+    }
+    if (this.selectedHosType && !this.hosTypeList.some((ht: any) => ht.hostypecode === this.selectedHosType)) this.selectedHosType = '';
+  }
+
+  // กรองอำเภอตาม hostype (แสดงเฉพาะอำเภอที่มี hostype นั้น)
+  private rebuildDistrictList() {
+    if (this.selectedHosType) {
+      const distsWithType = new Set(this._allHospitals.filter((h: any) => h.hostype === this.selectedHosType).map((h: any) => h.distid));
+      this.districtNames = this._allDistricts.filter((d: any) => distsWithType.has(d.distid)).map((d: any) => d.distname).filter(Boolean).sort();
+      if (this.selectedDistrict && !this.districtNames.includes(this.selectedDistrict)) this.selectedDistrict = '';
+    } else {
+      this.districtNames = this._allDistricts.map((d: any) => d.distname).filter(Boolean).sort();
+    }
+  }
+
   onDistrictCascade() {
+    this.rebuildHosTypeList();
     this.rebuildHospitalList();
   }
 
   onHosTypeCascade() {
+    this.rebuildDistrictList();
     this.rebuildHospitalList();
   }
 
