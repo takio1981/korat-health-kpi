@@ -83,115 +83,89 @@
           </span>
         </div>
 
-        <div *ngIf="showFilters" class="px-6 py-3 bg-gray-50/50 border-b border-gray-100 space-y-3">
-          <!-- กลุ่ม 1: สถานที่ -->
-          <div>
-            <div class="flex items-center gap-2 mb-1.5">
-              <span class="px-2 py-0.5 bg-teal-100 text-teal-700 rounded-md text-[10px] font-bold"><i class="fas fa-map-marker-alt mr-1"></i>สถานที่</span>
+        <div *ngIf="showFilters" class="px-5 py-2.5 bg-gray-50/50 border-b border-gray-100 space-y-2">
+          <!-- แถว 1: สถานที่ (teal) + เงื่อนไข (amber) -->
+          <div class="flex flex-wrap items-end gap-2">
+            <span class="px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded text-[9px] font-bold self-center"><i class="fas fa-map-marker-alt mr-0.5"></i>สถานที่</span>
+            <div class="min-w-[120px] flex-1 max-w-[180px]">
+              <select [(ngModel)]="selectedDistrict" (change)="onDistrictCascade()" title="อำเภอ"
+                      class="w-full px-2 py-1 border border-teal-200 rounded-lg focus:ring-1 focus:ring-teal-500 outline-none text-xs bg-white cursor-pointer">
+                <option value="">อำเภอ: ทั้งหมด</option>
+                <option *ngFor="let name of districtNames" [value]="name">{{ name }}</option>
+              </select>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div class="space-y-1">
-                <label class="text-[10px] font-bold text-gray-500 ml-1">อำเภอ</label>
-                <select [(ngModel)]="selectedDistrict" (change)="onDistrictCascade()"
-                        class="w-full px-3 py-1.5 border border-teal-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none text-xs bg-white hover:border-teal-400 transition-all cursor-pointer">
-                  <option value="">ทั้งหมด</option>
-                  <option *ngFor="let name of districtNames" [value]="name">{{ name }}</option>
-                </select>
-              </div>
-              <div class="space-y-1">
-                <label class="text-[10px] font-bold text-gray-500 ml-1">ประเภทหน่วยบริการ</label>
-                <select [(ngModel)]="selectedHosType" (change)="onHosTypeCascade()"
-                        class="w-full px-3 py-1.5 border border-teal-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none text-xs bg-white hover:border-teal-400 transition-all cursor-pointer">
-                  <option value="">ทั้งหมด</option>
-                  <option *ngFor="let ht of hosTypeList" [value]="ht.hostypecode">{{ ht.hostypename }} ({{ ht.hospital_count }})</option>
-                </select>
-              </div>
-              <div class="space-y-1">
-                <label class="text-[10px] font-bold text-gray-500 ml-1">หน่วยบริการ</label>
-                <select [(ngModel)]="selectedHospital" (change)="onHospitalCascade()"
-                        class="w-full px-3 py-1.5 border border-teal-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none text-xs bg-white hover:border-teal-400 transition-all cursor-pointer">
-                  <option value="">ทั้งหมด</option>
-                  <option *ngFor="let name of hospitalNames" [value]="name">{{ name }}</option>
-                </select>
-              </div>
+            <div class="min-w-[140px] flex-1 max-w-[220px]">
+              <select [(ngModel)]="selectedHosType" (change)="onHosTypeCascade()" title="ประเภทหน่วยบริการ"
+                      class="w-full px-2 py-1 border border-teal-200 rounded-lg focus:ring-1 focus:ring-teal-500 outline-none text-xs bg-white cursor-pointer">
+                <option value="">ประเภท: ทั้งหมด</option>
+                <option *ngFor="let ht of hosTypeList" [value]="ht.hostypecode">{{ ht.hostypename }} ({{ ht.hospital_count }})</option>
+              </select>
             </div>
-          </div>
-          <!-- กลุ่ม 2: ตัวชี้วัด -->
-          <div>
-            <div class="flex items-center gap-2 mb-1.5">
-              <span class="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-md text-[10px] font-bold"><i class="fas fa-bullseye mr-1"></i>ตัวชี้วัด</span>
+            <div class="min-w-[140px] flex-1 max-w-[220px]">
+              <select [(ngModel)]="selectedHospital" (change)="onHospitalCascade()" title="หน่วยบริการ"
+                      class="w-full px-2 py-1 border border-teal-200 rounded-lg focus:ring-1 focus:ring-teal-500 outline-none text-xs bg-white cursor-pointer">
+                <option value="">หน่วยบริการ: ทั้งหมด</option>
+                <option *ngFor="let name of hospitalNames" [value]="name">{{ name }}</option>
+              </select>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div class="space-y-1">
-                <label class="text-[10px] font-bold text-gray-500 ml-1">หน่วยงาน</label>
-                <select [(ngModel)]="selectedDept" (change)="onDeptCascade()"
-                        class="w-full px-3 py-1.5 border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-xs bg-white hover:border-indigo-400 transition-all cursor-pointer">
-                  <option value="">ทั้งหมด</option>
-                  <option *ngFor="let name of deptNames" [value]="name">{{ name }}</option>
-                </select>
-              </div>
-              <div class="space-y-1">
-                <label class="text-[10px] font-bold text-gray-500 ml-1">หมวดหมู่หลัก</label>
-                <select [(ngModel)]="selectedMain"
-                        class="w-full px-3 py-1.5 border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-xs bg-white hover:border-indigo-400 transition-all cursor-pointer">
-                  <option value="">ทั้งหมด</option>
-                  <option *ngFor="let cat of mainCategories" [value]="cat">{{ cat }}</option>
-                </select>
-              </div>
-              <div class="space-y-1">
-                <label class="text-[10px] font-bold text-gray-500 ml-1">ตัวชี้วัด</label>
-                <select [(ngModel)]="selectedIndicator"
-                        class="w-full px-3 py-1.5 border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-xs bg-white hover:border-indigo-400 transition-all cursor-pointer">
-                  <option value="">ทั้งหมด</option>
-                  <option *ngFor="let name of indicatorNames" [value]="name">{{ name }}</option>
-                </select>
-              </div>
-              <div class="space-y-1">
-                <label class="text-[10px] font-bold text-gray-500 ml-1">ประเภทตัวชี้วัด</label>
-                <select [(ngModel)]="selectedType"
-                        class="w-full px-3 py-1.5 border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-xs bg-white hover:border-indigo-400 transition-all cursor-pointer">
-                  <option value="">ทั้งหมด</option>
-                  <option value="r9">เขต 9</option>
-                  <option value="moph">กระทรวง</option>
-                  <option value="ssj">สสจ.</option>
-                  <option value="rmw">ผู้ว่าฯ</option>
-                  <option value="other">อื่นๆ</option>
-                </select>
-              </div>
+            <span class="border-l border-gray-300 h-5 mx-0.5"></span>
+            <span class="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[9px] font-bold self-center"><i class="fas fa-sliders-h mr-0.5"></i>เงื่อนไข</span>
+            <div class="w-[90px]">
+              <select [(ngModel)]="selectedYear" title="ปีงบประมาณ"
+                      class="w-full px-2 py-1 border border-amber-200 rounded-lg focus:ring-1 focus:ring-amber-500 outline-none text-xs bg-white cursor-pointer">
+                <option *ngFor="let name of filterYears" [value]="name">{{ name }}</option>
+              </select>
+            </div>
+            <div class="min-w-[120px] flex-1 max-w-[180px]">
+              <select [(ngModel)]="selectedStatus" title="สถานะ"
+                      class="w-full px-2 py-1 border border-amber-200 rounded-lg focus:ring-1 focus:ring-amber-500 outline-none text-xs bg-white cursor-pointer">
+                <option value="">สถานะ: ทั้งหมด</option>
+                <option value="pass">ผ่านเป้าหมาย</option>
+                <option value="fail">ไม่ผ่านเป้าหมาย</option>
+                <option value="pending">รอตรวจสอบ</option>
+                <option value="no_target">ยังไม่มีเป้าหมาย</option>
+                <option value="no_actual">มีเป้าหมาย/ยังไม่มีผลงาน</option>
+              </select>
             </div>
           </div>
-          <!-- กลุ่ม 3: เงื่อนไข + ค้นหา -->
-          <div>
-            <div class="flex items-center gap-2 mb-1.5">
-              <span class="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-md text-[10px] font-bold"><i class="fas fa-sliders-h mr-1"></i>เงื่อนไข</span>
+          <!-- แถว 2: ตัวชี้วัด (indigo) + ปุ่มค้นหา -->
+          <div class="flex flex-wrap items-end gap-2">
+            <span class="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[9px] font-bold self-center"><i class="fas fa-bullseye mr-0.5"></i>ตัวชี้วัด</span>
+            <div class="min-w-[120px] flex-1 max-w-[180px]">
+              <select [(ngModel)]="selectedDept" (change)="onDeptCascade()" title="หน่วยงาน"
+                      class="w-full px-2 py-1 border border-indigo-200 rounded-lg focus:ring-1 focus:ring-indigo-500 outline-none text-xs bg-white cursor-pointer">
+                <option value="">หน่วยงาน: ทั้งหมด</option>
+                <option *ngFor="let name of deptNames" [value]="name">{{ name }}</option>
+              </select>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div class="space-y-1">
-                <label class="text-[10px] font-bold text-gray-500 ml-1">ปีงบประมาณ</label>
-                <select [(ngModel)]="selectedYear"
-                        class="w-full px-3 py-1.5 border border-amber-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none text-xs bg-white hover:border-amber-400 transition-all cursor-pointer">
-                  <option *ngFor="let name of filterYears" [value]="name">{{ name }}</option>
-                </select>
-              </div>
-              <div class="space-y-1">
-                <label class="text-[10px] font-bold text-gray-500 ml-1">สถานะ</label>
-                <select [(ngModel)]="selectedStatus"
-                        class="w-full px-3 py-1.5 border border-amber-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none text-xs bg-white hover:border-amber-400 transition-all cursor-pointer">
-                  <option value="">ทั้งหมด</option>
-                  <option value="pass" class="text-green-600">ผ่านเป้าหมาย</option>
-                  <option value="fail" class="text-red-600">ไม่ผ่านเป้าหมาย</option>
-                  <option value="pending" class="text-amber-600">รอตรวจสอบ</option>
-                  <option value="no_target" class="text-gray-500">ยังไม่มีเป้าหมาย</option>
-                  <option value="no_actual" class="text-blue-600">มีเป้าหมาย/ยังไม่มีผลงาน</option>
-                </select>
-              </div>
-              <div class="space-y-1">
-                <label class="text-[10px] font-bold text-transparent ml-1">.</label>
-                <button (click)="doSearch()" class="w-full px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center justify-center gap-1.5">
-                  <i class="fas fa-search"></i> ค้นหา
-                </button>
-              </div>
+            <div class="min-w-[120px] flex-1 max-w-[200px]">
+              <select [(ngModel)]="selectedMain" title="หมวดหมู่หลัก"
+                      class="w-full px-2 py-1 border border-indigo-200 rounded-lg focus:ring-1 focus:ring-indigo-500 outline-none text-xs bg-white cursor-pointer">
+                <option value="">หมวดหมู่: ทั้งหมด</option>
+                <option *ngFor="let cat of mainCategories" [value]="cat">{{ cat }}</option>
+              </select>
             </div>
+            <div class="min-w-[140px] flex-1 max-w-[250px]">
+              <select [(ngModel)]="selectedIndicator" title="ตัวชี้วัด"
+                      class="w-full px-2 py-1 border border-indigo-200 rounded-lg focus:ring-1 focus:ring-indigo-500 outline-none text-xs bg-white cursor-pointer">
+                <option value="">ตัวชี้วัด: ทั้งหมด</option>
+                <option *ngFor="let name of indicatorNames" [value]="name">{{ name }}</option>
+              </select>
+            </div>
+            <div class="w-[110px]">
+              <select [(ngModel)]="selectedType" title="ประเภทตัวชี้วัด"
+                      class="w-full px-2 py-1 border border-indigo-200 rounded-lg focus:ring-1 focus:ring-indigo-500 outline-none text-xs bg-white cursor-pointer">
+                <option value="">ประเภท: ทั้งหมด</option>
+                <option value="r9">เขต 9</option>
+                <option value="moph">กระทรวง</option>
+                <option value="ssj">สสจ.</option>
+                <option value="rmw">ผู้ว่าฯ</option>
+                <option value="other">อื่นๆ</option>
+              </select>
+            </div>
+            <button (click)="doSearch()" class="px-4 py-1 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg text-xs shadow transition-all flex items-center gap-1">
+              <i class="fas fa-search"></i> ค้นหา
+            </button>
           </div>
         </div>
 
