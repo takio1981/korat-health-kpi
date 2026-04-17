@@ -172,6 +172,11 @@ export class AuthService {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.get(`${this.apiUrl}/districts`, { headers });
   }
+  getHosTypes(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/hostype`, { headers });
+  }
 
   createUser(userData: any): Observable<any> {
     const token = localStorage.getItem('kpi_token');

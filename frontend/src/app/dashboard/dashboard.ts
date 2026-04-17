@@ -31,6 +31,7 @@ export class DashboardComponent implements OnInit {
   selectedHospital: string = '';
   selectedDistrict: string = '';
   selectedType: string = '';
+  selectedHosType: string = '';
 
   showFilters: boolean = true;
   mainCategories: string[] = [];
@@ -39,6 +40,7 @@ export class DashboardComponent implements OnInit {
   filterYears: string[] = [];
   hospitalNames: string[] = [];
   districtNames: string[] = [];
+  hosTypeList: any[] = [];
 
   // Raw data for cascading filters
   private _allHospitals: any[] = [];
@@ -67,7 +69,7 @@ export class DashboardComponent implements OnInit {
   showTrendModal: boolean = false;
   selectedKpiName: string = '';
   kpiTrendOptions: any = {};
-  
+
   isLoading: boolean = false;
   private animationTimer: any;
   isAdmin: boolean = false;
@@ -220,6 +222,7 @@ export class DashboardComponent implements OnInit {
     if (this.selectedDistrict) filters.district = this.selectedDistrict;
     if (this.selectedIndicator) filters.indicator = this.selectedIndicator;
     if (this.selectedMain) filters.main = this.selectedMain;
+    if (this.selectedHosType) filters.hostype = this.selectedHosType;
     this.authService.getKpiResults(filters).subscribe({
       next: (res) => {
         this.isLoading = false;
@@ -284,7 +287,7 @@ export class DashboardComponent implements OnInit {
     const duration = 1500;
     const steps = 60;
     const interval = duration / steps;
-    const start = { 
+    const start = {
       successRate: Number(this.stats.successRate) || 0,
       recordedCount: Number(this.stats.recordedCount) || 0,
       totalDepts: Number(this.stats.totalDepts) || 0,
@@ -380,9 +383,14 @@ export class DashboardComponent implements OnInit {
       this.authService.getIndicators().subscribe(res => {
         if (res.success) {
           this._allIndicators = res.data;
-          // admin_ssj / user_ssj → backend กรอง dept แล้ว → แสดงเฉพาะ dept ตัวเอง
           this.indicatorNames = Array.from(new Set<string>(res.data.map((i: any) => i.kpi_indicators_name)));
           this.mainCategories = Array.from(new Set<string>(res.data.map((i: any) => i.main_indicator_name).filter(Boolean)));
+          this.cdr.detectChanges();
+        }
+      });
+      this.authService.getHosTypes().subscribe(res => {
+        if (res.success) {
+          this.hosTypeList = res.data;
           this.cdr.detectChanges();
         }
       });
@@ -390,18 +398,27 @@ export class DashboardComponent implements OnInit {
   }
 
   // === Cascading filter logic (เฉพาะอัปเดต dropdown ไม่โหลดข้อมูล) ===
-  onDistrictCascade() {
-    if (this.selectedDistrict && this._allHospitals.length > 0) {
+
+  // กรองรายการหน่วยบริการ → ใช้ร่วมกับ district + hostype
+  private rebuildHospitalList() {
+    let filtered = this._allHospitals;
+    if (this.selectedDistrict) {
       const dist = this._allDistricts.find((d: any) => d.distname === this.selectedDistrict);
-      if (dist) {
-        this.hospitalNames = this._allHospitals
-          .filter((h: any) => h.distid === dist.distid)
-          .map((h: any) => h.hosname).filter(Boolean).sort();
-      }
-    } else {
-      this.hospitalNames = this._allHospitals.map((h: any) => h.hosname).filter(Boolean).sort();
+      if (dist) filtered = filtered.filter((h: any) => h.distid === dist.distid);
     }
+    if (this.selectedHosType) {
+      filtered = filtered.filter((h: any) => h.hostype === this.selectedHosType);
+    }
+    this.hospitalNames = filtered.map((h: any) => h.hosname).filter(Boolean).sort();
     if (this.selectedHospital && !this.hospitalNames.includes(this.selectedHospital)) this.selectedHospital = '';
+  }
+
+  onDistrictCascade() {
+    this.rebuildHospitalList();
+  }
+
+  onHosTypeCascade() {
+    this.rebuildHospitalList();
   }
 
   onHospitalCascade() {
@@ -1135,7 +1152,7 @@ export class DashboardComponent implements OnInit {
   calculateAddKpiYears() {
     const today = new Date();
     let year = today.getFullYear();
-    if (today.getMonth() >= 9) { 
+    if (today.getMonth() >= 9) {
       year += 1;
     }
     const currentThaiYear = year + 543;
@@ -1490,6 +1507,29 @@ export class DashboardComponent implements OnInit {
     if (!isNaN(target) && !isNaN(actual)) return actual >= target;
     // เป็นข้อความ → ตรงกัน = ผ่าน
     return la === tv;
+  }
+
+  // ดึงประเภทตัวชี้วัด (R9, MOPH, SSJ, RMW, Other)
+  getIndicatorTypes(item: any): Array<{type: string, color: string, label: string}> {
+    const types: Array<{type: string, color: string, label: string}> = [];
+
+    if (item.r9 && String(item.r9).trim()) {
+      types.push({ type: 'r9', color: 'bg-blue-100 text-blue-700', label: 'R9' });
+    }
+    if (item.moph && String(item.moph).trim()) {
+      types.push({ type: 'moph', color: 'bg-red-100 text-red-700', label: 'MOPH' });
+    }
+    if (item.ssj && String(item.ssj).trim()) {
+      types.push({ type: 'ssj', color: 'bg-green-100 text-green-700', label: 'SSJ' });
+    }
+    if (item.rmw && String(item.rmw).trim()) {
+      types.push({ type: 'rmw', color: 'bg-yellow-100 text-yellow-700', label: 'RMW' });
+    }
+    if (item.other && String(item.other).trim()) {
+      types.push({ type: 'other', color: 'bg-gray-100 text-gray-700', label: 'อื่นๆ' });
+    }
+
+    return types;
   }
 
   isModified(item: any, month: string): boolean {

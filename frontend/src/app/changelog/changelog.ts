@@ -18,9 +18,10 @@ export class ChangelogComponent {
 
   changelog = [
     {
-      version: '2569.04.17-13',
+      version: '2569.04.17-14',
       date: '17 เมษายน 2569',
       changes: [
+        { type: 'feature', text: 'Dashboard: เพิ่มตัวกรอง "ประเภท รพ." (hostype) จากตาราง chostype — กรอง รพ./รพ.สต./สสอ./สสจ. + cascade กับอำเภอ' },
         { type: 'feature', text: 'Dashboard: เพิ่มสัญญลักษณ์ประเภทตัวชี้วัด (R9, MOPH, SSJ, RMW, อื่นๆ) แสดงไว้ด้านหน้าชื่อตัวชี้วัดในตาราง' },
         { type: 'improve', text: 'Dashboard: สัญญลักษณ์ประเภทตัวชี้วัดแสดงด้วยสีที่โดดเด่น (Blue, Red, Green, Yellow, Gray) ทั้งบน Desktop และ Mobile' },
         { type: 'fix', text: 'อัปเดต Summary: batch processing ทีละ 50 indicators — แก้ 504 Gateway Timeout (600K+ rows)' },

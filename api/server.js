@@ -711,6 +711,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         if (req.query.district) { extraConditions.push('dist.distname = ?'); params.push(req.query.district); }
         if (req.query.indicator) { extraConditions.push('i.kpi_indicators_name = ?'); params.push(req.query.indicator); }
         if (req.query.main) { extraConditions.push('mi.main_indicator_name = ?'); params.push(req.query.main); }
+        if (req.query.hostype) { extraConditions.push('h.hostype = ?'); params.push(req.query.hostype); }
         let extraWhere = '';
         if (extraConditions.length > 0) {
             extraWhere = (whereClause ? ' AND ' : 'WHERE ') + extraConditions.join(' AND ');
@@ -1725,6 +1726,22 @@ apiRouter.get('/hospitals', authenticateToken, async (req, res) => {
         res.json({ success: true, data: hospitals });
     } catch (error) {
         res.status(500).json({ success: false });
+    }
+});
+
+apiRouter.get('/hostype', authenticateToken, async (req, res) => {
+    try {
+        const [rows] = await db.query(`
+            SELECT t.hostypecode, t.hostypename, COUNT(h.hoscode) AS hospital_count
+            FROM chostype t
+            LEFT JOIN chospital h ON h.hostype = t.hostypecode
+            GROUP BY t.hostypecode, t.hostypename
+            HAVING hospital_count > 0
+            ORDER BY t.hostypecode
+        `);
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
@@ -4154,6 +4171,29 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         try { await db.query(`ALTER TABLE users ADD COLUMN temp_password VARCHAR(255) NULL`); } catch (e) {}
         try { await db.query(`ALTER TABLE users ADD COLUMN temp_password_expiry DATETIME NULL`); } catch (e) {}
         try { await db.query(`ALTER TABLE users ADD COLUMN must_change_password TINYINT(1) NOT NULL DEFAULT 0`); } catch (e) {}
+        // สร้างตาราง chostype (ประเภทสถานบริการ)
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS chostype (
+                    hostypecode CHAR(2) NOT NULL PRIMARY KEY,
+                    hostypename VARCHAR(255)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+            const [cnt] = await db.query('SELECT COUNT(*) AS c FROM chostype');
+            if (cnt[0].c === 0) {
+                await db.query(`INSERT INTO chostype (hostypecode, hostypename) VALUES
+                    ('01','สำนักงานสาธารณสุขจังหวัด'),('02','สำนักงานสาธารณสุขอำเภอ'),
+                    ('03','สถานีอนามัย'),('04','สถานบริการสาธารณสุขชุมชน'),
+                    ('05','โรงพยาบาลศูนย์'),('06','โรงพยาบาลทั่วไป'),
+                    ('07','โรงพยาบาลชุมชน'),('08','ศูนย์สุขภาพชุมชน ของ รพ.'),
+                    ('09','ศูนย์สุขภาพชุมชน สธ.'),('10','ศูนย์วิชาการ'),
+                    ('11','โรงพยาบาล นอก สป.สธ.'),('12','โรงพยาบาล นอก สธ.'),
+                    ('13','ศูนย์บริการสาธารณสุข'),('14','ศูนย์สุขภาพชุมชน นอก สธ.'),
+                    ('15','โรงพยาบาลเอกชน'),('16','คลินิกเอกชน'),
+                    ('17','โรงพยาบาล/ศูนย์บริการสาธารณสุข สาขา'),('18','โรงพยาบาลส่งเสริมสุขภาพตำบล')`);
+            }
+        } catch (e) {}
+
         // เพิ่ม distid column ใน chospital (performance: ลด CONCAT runtime)
         try {
             await db.query('ALTER TABLE chospital ADD COLUMN distid VARCHAR(10)');

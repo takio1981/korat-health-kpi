@@ -83,13 +83,21 @@
           </span>
         </div>
 
-        <div *ngIf="showFilters" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-9 gap-3 px-6 py-3 bg-gray-50/50 border-b border-gray-100">
+        <div *ngIf="showFilters" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-10 gap-3 px-6 py-3 bg-gray-50/50 border-b border-gray-100">
           <div class="space-y-1">
             <label class="text-[10px] font-bold text-gray-500 uppercase ml-1">อำเภอ</label>
             <select [(ngModel)]="selectedDistrict" (change)="onDistrictCascade()"
                     class="w-full px-3 py-1.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-xs bg-white hover:border-green-400 transition-all cursor-pointer">
               <option value="">ทั้งหมด</option>
               <option *ngFor="let name of districtNames" [value]="name">{{ name }}</option>
+            </select>
+          </div>
+          <div class="space-y-1">
+            <label class="text-[10px] font-bold text-teal-600 uppercase ml-1">ประเภท รพ.</label>
+            <select [(ngModel)]="selectedHosType" (change)="onHosTypeCascade()"
+                    class="w-full px-3 py-1.5 border border-teal-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none text-xs bg-white hover:border-teal-400 transition-all cursor-pointer">
+              <option value="">ทั้งหมด</option>
+              <option *ngFor="let ht of hosTypeList" [value]="ht.hostypecode">{{ ht.hostypename }} ({{ ht.hospital_count }})</option>
             </select>
           </div>
           <div class="space-y-1">
@@ -237,9 +245,16 @@
 
                 <div class="flex justify-between items-start">
                   <div class="flex-1">
-                    <div class="flex items-center mb-2">
-                      <span *ngIf="isTargetMet(item)" class="text-green-600 mr-2 text-sm">✓</span>
-                      <span *ngIf="!isTargetMet(item)" class="text-red-600 mr-2 text-sm">✗</span>
+                    <div class="flex items-center gap-1 mb-2 flex-wrap">
+                      <span *ngIf="isTargetMet(item)" class="text-green-600 text-sm">✓</span>
+                      <span *ngIf="!isTargetMet(item)" class="text-red-600 text-sm">✗</span>
+                      <!-- Type indicators (mobile) -->
+                      <span *ngFor="let typeItem of getIndicatorTypes(item)"
+                            class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap"
+                            [ngClass]="typeItem.color"
+                            [title]="typeItem.label">
+                        {{ typeItem.label }}
+                      </span>
                       <h3 class="font-semibold text-gray-900 text-sm">{{ item.kpi_indicators_name }}</h3>
                     </div>
                     <p class="text-xs text-gray-600 mb-1">{{ item.main_indicator_name }}</p>
@@ -445,9 +460,16 @@
                 <!-- Col 2: ชื่อตัวชี้วัด -->
                 <td class="px-3 py-2 frozen col-2 bg-white border-r border-gray-100">
                   <div class="flex items-center justify-between gap-2">
-                    <div class="flex items-start gap-1.5 min-w-0">
+                    <div class="flex items-start gap-1.5 min-w-0 flex-wrap">
                       <i *ngIf="isTargetMet(item)" class="fas fa-check-circle text-green-500 mt-0.5 shrink-0 text-xs"></i>
                       <i *ngIf="!isTargetMet(item)" class="fas fa-times-circle text-red-500 mt-0.5 shrink-0 text-xs"></i>
+                      <!-- Type indicators (desktop) -->
+                      <span *ngFor="let typeItem of getIndicatorTypes(item)"
+                            class="inline-block px-1 py-0.5 rounded text-[8px] font-bold whitespace-nowrap shrink-0 mt-0.5"
+                            [ngClass]="typeItem.color"
+                            [title]="typeItem.label">
+                        {{ typeItem.label }}
+                      </span>
                       <span class="font-medium text-gray-900 whitespace-normal break-words" [title]="item.kpi_indicators_name">{{ item.kpi_indicators_name }}</span>
                     </div>
                     <div class="flex gap-0.5 shrink-0">

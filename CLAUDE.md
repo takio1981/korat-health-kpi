@@ -182,7 +182,8 @@ users.dept_id → departments.id (FK)
 
 ### chospital Table
 - ใช้ `h.distid` (pre-computed) แทน `CONCAT(h.provcode, h.distcode)` เสมอ
-- hostype: '05'=รพ., '06'=สสอ., '07'=รพ.สต., '18'=ศูนย์สุขภาพ
+- hostype: '05'=รพ.ศูนย์, '06'=รพ.ทั่วไป, '07'=รพ.ชุมชน, '18'=รพ.สต. (ดูทั้งหมดในตาราง `chostype`)
+- ตาราง `chostype` (hostypecode, hostypename) — ประเภทสถานบริการ, auto-migrate + seed data
 
 ### Performance
 - ตาราง `kpi_summary` เป็น Materialized View สำหรับ Chart + Report (ทั้ง 4 แถบ)
@@ -353,6 +354,7 @@ docker compose up -d
 | kpi_summary | สรุป (Materialized View) สำหรับ Chart + Report ทั้ง 4 แถบ | indicator_id, year_bh, hospcode, dept_id, distid, oct-sep, last_actual |
 | chospital | หน่วยบริการ | hoscode, hosname, hostype, distid, provcode, distcode |
 | co_district | อำเภอ | distid, distname |
+| chostype | ประเภทสถานบริการ | hostypecode, hostypename |
 | notifications | แจ้งเตือน | id, user_id, type, title, message |
 | feedback_posts | กระทู้ | id, user_id, category, title, message, status |
 | feedback_replies | ตอบกลับกระทู้ | id, post_id, user_id, message |
