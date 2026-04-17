@@ -3435,9 +3435,10 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
                     const target = emptyToNull(d.target);
                     const dynValues = dynFieldKeys.map(k => emptyToNull(d['_dyn_' + k]));
                     const monthValues = months.map(m => emptyToNull(d[m]));
-                    const numericMonths = monthValues.map(v => parseFloat(v) || 0);
-                    const result = numericMonths.reduce((a, b) => a + b, 0);
-                    const resultVal = result > 0 ? result : null;
+                    // result = ค่าล่าสุดที่คีย์ (เดือนท้ายสุดตามปีงบ: ก.ย.→ต.ค.)
+                    const reverseMonths = [...monthValues].reverse();
+                    const lastActual = reverseMonths.find(v => v !== null && v !== undefined);
+                    const resultVal = lastActual !== undefined ? lastActual : null;
 
                     // เปรียบเทียบค่าเดิม vs ใหม่ ทีละคอลัมน์
                     const existing = existingDataMap.get(hc);
