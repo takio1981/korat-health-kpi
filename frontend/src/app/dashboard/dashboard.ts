@@ -415,19 +415,21 @@ export class DashboardComponent implements OnInit {
     if (this.selectedHospital && !this.hospitalNames.includes(this.selectedHospital)) this.selectedHospital = '';
   }
 
-  // กรองประเภท รพ. ตาม district (แสดงเฉพาะ hostype ที่มีในอำเภอนั้น)
+  // กรองประเภท รพ. ตาม district + นับจำนวนหน่วยบริการตามเงื่อนไข
   private rebuildHosTypeList() {
+    let hospitals = this._allHospitals;
     if (this.selectedDistrict) {
       const dist = this._allDistricts.find((d: any) => d.distname === this.selectedDistrict);
-      if (dist) {
-        const typesInDist = new Set(this._allHospitals.filter((h: any) => h.distid === dist.distid).map((h: any) => h.hostype));
-        this.hosTypeList = this._allHosTypes.filter((ht: any) => typesInDist.has(ht.hostypecode));
-      } else {
-        this.hosTypeList = this._allHosTypes;
-      }
-    } else {
-      this.hosTypeList = this._allHosTypes;
+      if (dist) hospitals = hospitals.filter((h: any) => h.distid === dist.distid);
     }
+    // นับ hospital_count ต่อ hostype จาก hospitals ที่กรองแล้ว
+    const countMap = new Map<string, number>();
+    for (const h of hospitals) {
+      if (h.hostype) countMap.set(h.hostype, (countMap.get(h.hostype) || 0) + 1);
+    }
+    this.hosTypeList = this._allHosTypes
+      .filter((ht: any) => countMap.has(ht.hostypecode))
+      .map((ht: any) => ({ ...ht, hospital_count: countMap.get(ht.hostypecode) || 0 }));
     if (this.selectedHosType && !this.hosTypeList.some((ht: any) => ht.hostypecode === this.selectedHosType)) this.selectedHosType = '';
   }
 
@@ -526,6 +528,7 @@ export class DashboardComponent implements OnInit {
     this.selectedHospital = '';
     this.selectedDistrict = '';
     this.selectedType = '';
+    this.selectedHosType = '';
     // admin_ssj / user_ssj → ล็อค dept ไว้
     const role = this.authService.getUserRole();
     if (['admin_ssj', 'user_ssj'].includes(role) && this.currentUser?.dept_name) {
@@ -533,6 +536,12 @@ export class DashboardComponent implements OnInit {
     } else {
       this.selectedDept = '';
     }
+    // reset cascade lists กลับเป็นทั้งหมด
+    this.districtNames = this._allDistricts.map((d: any) => d.distname).filter(Boolean).sort();
+    this.hospitalNames = this._allHospitals.map((h: any) => h.hosname).filter(Boolean).sort();
+    this.hosTypeList = this._allHosTypes;
+    this.indicatorNames = Array.from(new Set<string>(this._allIndicators.map((i: any) => i.kpi_indicators_name)));
+    this.mainCategories = Array.from(new Set<string>(this._allIndicators.map((i: any) => i.main_indicator_name).filter(Boolean)));
     // เคลียร์ข้อมูล → กลับหน้า "กรุณาเลือกตัวกรอง"
     this.kpiData = [];
     this.filteredData = [];
