@@ -186,7 +186,7 @@ users.dept_id → departments.id (FK)
 
 ### Performance
 - ตาราง `kpi_summary` เป็น Materialized View สำหรับ Chart + Report (ทั้ง 4 แถบ)
-- อัปเดตด้วย `POST /refresh-summary` (INSERT...SELECT ใน MySQL)
+- อัปเดตด้วย `POST /refresh-summary` — **batch by indicator_id** (ทีละ 50 indicators ป้องกัน timeout)
 - เก็บเฉพาะข้อมูลที่มีผลงานจริง (HAVING actual_value)
 - ใช้ composite index: `(indicator_id, year_bh, hospcode)`
 - มี `dept_id` + `distid` สำหรับ role-based filtering โดยไม่ต้อง JOIN ตารางอื่น

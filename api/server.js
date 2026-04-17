@@ -3615,7 +3615,7 @@ apiRouter.post('/sync-to-hdc/execute', authenticateToken, isSuperAdmin, async (r
 
 // ========== KPI Summary (Materialized View) ==========
 
-// POST /refresh-summary — อัปเดต kpi_summary จาก kpi_results (INSERT...SELECT ใน MySQL ตรงๆ)
+// POST /refresh-summary — อัปเดต kpi_summary จาก kpi_results (batch by indicator_id เพื่อป้องกัน timeout)
 apiRouter.post('/refresh-summary', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
         const year = req.body.year_bh || '';
@@ -3626,53 +3626,69 @@ apiRouter.post('/refresh-summary', authenticateToken, isSuperAdmin, async (req, 
         if (year) await db.query('DELETE FROM kpi_summary WHERE year_bh = ?', [year]);
         else await db.query('TRUNCATE TABLE kpi_summary');
 
-        // INSERT...SELECT ทำงานใน MySQL ตรงๆ — เร็วกว่า SELECT → Node.js → INSERT ทีละ row
-        const [result] = await db.query(`
-            INSERT INTO kpi_summary (indicator_id, year_bh, hospcode, main_indicator_name, kpi_indicators_name,
-                dept_id, dept_name, hosname, distid, distname, table_process, target_value,
-                oct, nov, dece, jan, feb, mar, apr, may, jun, jul, aug, sep,
-                pending_count, indicator_status, is_locked, updated_at)
-            SELECT
-                i.id, r.year_bh, r.hospcode,
-                IFNULL(mi.main_indicator_name, 'ยังไม่กำหนด'),
-                i.kpi_indicators_name, i.dept_id, d.dept_name, h.hosname, h.distid, dist.distname, i.table_process,
-                MAX(r.target_value),
-                MAX(CASE WHEN r.month_bh=10 THEN r.actual_value END),
-                MAX(CASE WHEN r.month_bh=11 THEN r.actual_value END),
-                MAX(CASE WHEN r.month_bh=12 THEN r.actual_value END),
-                MAX(CASE WHEN r.month_bh=1  THEN r.actual_value END),
-                MAX(CASE WHEN r.month_bh=2  THEN r.actual_value END),
-                MAX(CASE WHEN r.month_bh=3  THEN r.actual_value END),
-                MAX(CASE WHEN r.month_bh=4  THEN r.actual_value END),
-                MAX(CASE WHEN r.month_bh=5  THEN r.actual_value END),
-                MAX(CASE WHEN r.month_bh=6  THEN r.actual_value END),
-                MAX(CASE WHEN r.month_bh=7  THEN r.actual_value END),
-                MAX(CASE WHEN r.month_bh=8  THEN r.actual_value END),
-                MAX(CASE WHEN r.month_bh=9  THEN r.actual_value END),
-                SUM(CASE WHEN r.status='Pending' THEN 1 ELSE 0 END),
-                MAX(r.status),
-                MAX(CASE WHEN r.is_locked=1 THEN 1 ELSE 0 END),
-                NOW()
-            FROM kpi_results r
-            JOIN kpi_indicators i ON r.indicator_id = i.id
-            LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
-            LEFT JOIN departments d ON d.id = i.dept_id
-            LEFT JOIN chospital h ON r.hospcode = h.hoscode
-            LEFT JOIN co_district dist ON dist.distid = h.distid
-            WHERE 1=1 ${yearFilter}
-            GROUP BY i.id, r.year_bh, r.hospcode
-            HAVING MAX(CASE WHEN r.actual_value IS NOT NULL AND r.actual_value != '' AND r.actual_value != '0' THEN 1 ELSE 0 END) = 1
-        `, yearParams);
+        // ดึง indicator_ids ที่มีข้อมูล (แทนที่จะ query ทั้งหมดรวดเดียว)
+        const [indRows] = await db.query(
+            `SELECT DISTINCT indicator_id FROM kpi_results WHERE 1=1 ${yearFilter.replace(/r\./g, '')}`,
+            yearParams
+        );
+        const allIds = indRows.map(r => r.indicator_id);
 
-        const inserted = result.affectedRows || 0;
+        // แบ่ง batch ทีละ 50 indicators — แต่ละ batch ทำ INSERT...SELECT เร็วมาก
+        const BATCH_SIZE = 50;
+        let totalInserted = 0;
 
-        // อัปเดต last_actual (คำนวณใน MySQL)
+        for (let i = 0; i < allIds.length; i += BATCH_SIZE) {
+            const batchIds = allIds.slice(i, i + BATCH_SIZE);
+            const idPlaceholders = batchIds.map(() => '?').join(',');
+
+            const [result] = await db.query(`
+                INSERT INTO kpi_summary (indicator_id, year_bh, hospcode, main_indicator_name, kpi_indicators_name,
+                    dept_id, dept_name, hosname, distid, distname, table_process, target_value,
+                    oct, nov, dece, jan, feb, mar, apr, may, jun, jul, aug, sep,
+                    pending_count, indicator_status, is_locked, updated_at)
+                SELECT
+                    i.id, r.year_bh, r.hospcode,
+                    IFNULL(mi.main_indicator_name, 'ยังไม่กำหนด'),
+                    i.kpi_indicators_name, i.dept_id, d.dept_name, h.hosname, h.distid, dist.distname, i.table_process,
+                    MAX(r.target_value),
+                    MAX(CASE WHEN r.month_bh=10 THEN r.actual_value END),
+                    MAX(CASE WHEN r.month_bh=11 THEN r.actual_value END),
+                    MAX(CASE WHEN r.month_bh=12 THEN r.actual_value END),
+                    MAX(CASE WHEN r.month_bh=1  THEN r.actual_value END),
+                    MAX(CASE WHEN r.month_bh=2  THEN r.actual_value END),
+                    MAX(CASE WHEN r.month_bh=3  THEN r.actual_value END),
+                    MAX(CASE WHEN r.month_bh=4  THEN r.actual_value END),
+                    MAX(CASE WHEN r.month_bh=5  THEN r.actual_value END),
+                    MAX(CASE WHEN r.month_bh=6  THEN r.actual_value END),
+                    MAX(CASE WHEN r.month_bh=7  THEN r.actual_value END),
+                    MAX(CASE WHEN r.month_bh=8  THEN r.actual_value END),
+                    MAX(CASE WHEN r.month_bh=9  THEN r.actual_value END),
+                    SUM(CASE WHEN r.status='Pending' THEN 1 ELSE 0 END),
+                    MAX(r.status),
+                    MAX(CASE WHEN r.is_locked=1 THEN 1 ELSE 0 END),
+                    NOW()
+                FROM kpi_results r
+                JOIN kpi_indicators i ON r.indicator_id = i.id
+                LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
+                LEFT JOIN departments d ON d.id = i.dept_id
+                LEFT JOIN chospital h ON r.hospcode = h.hoscode
+                LEFT JOIN co_district dist ON dist.distid = h.distid
+                WHERE r.indicator_id IN (${idPlaceholders}) ${yearFilter}
+                GROUP BY i.id, r.year_bh, r.hospcode
+                HAVING MAX(CASE WHEN r.actual_value IS NOT NULL AND r.actual_value != '' AND r.actual_value != '0' THEN 1 ELSE 0 END) = 1
+            `, [...batchIds, ...yearParams]);
+
+            totalInserted += result.affectedRows || 0;
+        }
+
+        // อัปเดต last_actual (scope by year ถ้ามี)
+        const lastActualWhere = year ? `WHERE year_bh = '${year}'` : '';
         await db.query(`
             UPDATE kpi_summary SET last_actual = COALESCE(
                 NULLIF(sep,''), NULLIF(aug,''), NULLIF(jul,''), NULLIF(jun,''),
                 NULLIF(may,''), NULLIF(apr,''), NULLIF(mar,''), NULLIF(feb,''),
                 NULLIF(jan,''), NULLIF(dece,''), NULLIF(nov,''), NULLIF(oct,'')
-            )
+            ) ${lastActualWhere}
         `);
 
         // อัปเดต has_form_schema
@@ -3682,7 +3698,7 @@ apiRouter.post('/refresh-summary', authenticateToken, isSuperAdmin, async (req, 
             await db.query('UPDATE kpi_summary SET has_form_schema = 1 WHERE indicator_id IN (' + ids.join(',') + ')');
         }
 
-        res.json({ success: true, message: 'อัปเดต summary สำเร็จ: ' + inserted + ' rows', inserted });
+        res.json({ success: true, message: `อัปเดต summary สำเร็จ: ${totalInserted} rows (${allIds.length} indicators, ${Math.ceil(allIds.length / BATCH_SIZE)} batches)`, inserted: totalInserted });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
