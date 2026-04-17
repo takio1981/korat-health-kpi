@@ -223,7 +223,7 @@
         <h4 class="font-bold text-gray-700 text-sm mb-2"><i class="fas fa-table mr-2 text-green-500"></i>คอลัมน์ในตาราง</h4>
         <div class="bg-gray-50 rounded-xl p-4 text-xs text-gray-600 grid grid-cols-2 md:grid-cols-4 gap-2">
           <span><b>หมวดหมู่</b> — ชื่อหมวดหมู่หลัก</span>
-          <span><b>ตัวชี้วัด</b> — ชื่อ KPI + ปุ่มจัดการ</span>
+          <span><b>ตัวชี้วัด</b> — ชื่อ KPI + สัญญลักษณ์ประเภท (R9/MOPH/SSJ/RMW/อื่นๆ) + ปุ่มจัดการ</span>
           <span><b>หน่วยงาน</b> — ชื่อหน่วยงาน</span>
           <span><b>ปีงบฯ</b> — ปีงบประมาณ</span>
           <span><b>หน่วยบริการ</b> — ชื่อ รพ./รพ.สต.</span>
@@ -283,15 +283,15 @@
             </ul>
           </div>
           <div class="mt-3 bg-white border border-green-200 rounded-lg p-3 text-xs text-green-700">
-            <p class="font-bold mb-1"><i class="fas fa-tags mr-1"></i>ตัวกรองประเภทตัวชี้วัด</p>
+            <p class="font-bold mb-1"><i class="fas fa-tags mr-1"></i>สัญญลักษณ์ประเภทตัวชี้วัด</p>
             <div class="flex flex-wrap gap-2">
-              <span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded font-bold">เขต 9</span>
-              <span class="px-2 py-0.5 bg-purple-100 text-purple-700 rounded font-bold">กระทรวง</span>
-              <span class="px-2 py-0.5 bg-green-100 text-green-700 rounded font-bold">สสจ.</span>
-              <span class="px-2 py-0.5 bg-amber-100 text-amber-700 rounded font-bold">ผู้ว่าฯ</span>
+              <span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded font-bold">R9</span>
+              <span class="px-2 py-0.5 bg-red-100 text-red-700 rounded font-bold">MOPH</span>
+              <span class="px-2 py-0.5 bg-green-100 text-green-700 rounded font-bold">SSJ</span>
+              <span class="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded font-bold">RMW</span>
               <span class="px-2 py-0.5 bg-gray-100 text-gray-600 rounded font-bold">อื่นๆ</span>
             </div>
-            <p class="text-[10px] text-green-600 mt-1">กรองข้อมูลจาก kpi_indicators ฟิลด์ r9, moph, ssj, rmw, other</p>
+            <p class="text-[10px] text-green-600 mt-1">สัญญลักษณ์ประเภทตัวชี้วัด — แสดงไว้ด้านหน้าชื่อตัวชี้วัดในตารางทั้ง Desktop และ Mobile ข้อมูลจาก kpi_indicators ฟิลด์ r9, moph, ssj, rmw, other</p>
           </div>
         </div>
 
@@ -818,20 +818,23 @@
           <div class="bg-green-50 border border-green-200 rounded-xl p-4">
             <h4 class="font-bold text-green-800 mb-2"><i class="fas fa-file-export mr-2"></i>Tab 3: Export ข้อมูล KPI</h4>
             <ol class="list-decimal ml-5 text-sm text-gray-600 space-y-1">
-              <li>เลือกปีงบประมาณ → กดปุ่ม <b>"ตรวจสอบข้อมูล"</b> เพื่อเปรียบเทียบ</li>
+              <li>เลือกปีงบประมาณ → กดปุ่ม <b>"ตรวจสอบข้อมูล"</b> เพื่อเปรียบเทียบ (แสดง progress bar)</li>
+              <li>ดู 6 Card สรุป: ทั้งหมด | <b class="text-orange-600">ตัวชี้วัดที่เพิ่ม/แก้ไข</b> | <b class="text-rose-600">จำนวนข้อมูลที่เปลี่ยนแปลง</b> | ล่าสุดแล้ว | ไม่มีข้อมูล | ยังไม่ตรวจ</li>
               <li>กรองตามหมวดหมู่ / หน่วยงาน / สถานะ → เลือก checkbox ตัวชี้วัดที่ต้องการ</li>
-              <li>กดปุ่ม <b>"ส่งออกข้อมูล"</b> → สร้าง/อัปเดตตาราง MySQL ใน Local DB</li>
-              <li>กดปุ่ม <b>"ส่งข้อมูลเข้า HDC"</b> (สีเขียวเข้ม) → Modal ตรวจสอบตาราง</li>
-              <li>เลือกตารางที่พร้อมส่ง → กดยืนยัน → ระบบ UPSERT เข้า HDC (ไม่ลบข้อมูลเดิม)</li>
+              <li>กดปุ่ม <b>"ส่งออกข้อมูล"</b> → สร้าง/อัปเดตตาราง MySQL ใน Local DB (target + actual_value รายเดือน + form fields)</li>
+              <li>กดปุ่ม <b>"ส่งข้อมูลเข้า HDC"</b> (สีเขียวเข้ม) → Modal ตรวจสอบตาราง → เลือก → UPSERT เข้า HDC</li>
             </ol>
             <div class="mt-2 bg-green-100 rounded-lg p-2 text-xs text-green-700">
               <i class="fas fa-shield-alt mr-1"></i>ใช้ <b>INSERT ... ON DUPLICATE KEY UPDATE</b> — อัปเดตเฉพาะ key ที่ตรงกัน ข้อมูลเดิมใน HDC ที่ไม่ซ้ำยังคงอยู่
             </div>
             <div class="mt-2 bg-blue-100 rounded-lg p-2 text-xs text-blue-700">
-              <i class="fas fa-bolt mr-1"></i><b>Incremental export:</b> ระบบเทียบ <b>kpi_results.created_at</b> กับ <b>update_date</b> ในตาราง export — ถ้า kpi_results ไม่ใหม่กว่าจะข้าม (ไม่เปลี่ยนแปลง) → ส่งออกเร็วขึ้นมาก
+              <i class="fas fa-bolt mr-1"></i><b>Content-based diff:</b> ระบบเปรียบเทียบค่า target, result, m10-m09, form fields ทีละคอลัมน์ — ถ้าค่าเหมือนเดิมจะข้าม (ไม่เปลี่ยนแปลง)
             </div>
             <div class="mt-2 bg-amber-100 rounded-lg p-2 text-xs text-amber-700">
-              <i class="fas fa-filter mr-1"></i><b>กรองผลงานจริง:</b> Export เฉพาะ hospcode ที่มี <b>actual_value</b> หรือข้อมูล dynamic form — hospcode ที่มีเฉพาะ target (ไม่มีผลงาน) จะข้ามอัตโนมัติ แสดงในช่อง "ไม่มีผลงาน (ข้าม)"
+              <i class="fas fa-filter mr-1"></i><b>กรองผลงานจริง:</b> Export เฉพาะ hospcode ที่มี <b>target_value</b> หรือ <b>actual_value</b> — hospcode ที่ไม่มีข้อมูลจะข้ามอัตโนมัติ | <b>result</b> = ค่าเดือนล่าสุดที่คีย์ (ไม่รวม SUM)
+            </div>
+            <div class="mt-2 bg-purple-100 rounded-lg p-2 text-xs text-purple-700">
+              <i class="fas fa-layer-group mr-1"></i><b>Dedupe:</b> Card นับตาม unique <b>table_process</b> — หลายตัวชี้วัดที่ใช้ตารางเดียวกันนับเป็น 1
             </div>
           </div>
           <!-- Tab 4 -->

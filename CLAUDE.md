@@ -192,6 +192,15 @@ users.dept_id → departments.id (FK)
 - มี `dept_id` + `distid` สำหรับ role-based filtering โดยไม่ต้อง JOIN ตารางอื่น
 - Report endpoints ทั้ง 4 (`/report/by-indicator`, `/report/by-hospital`, `/report/by-district`, `/report/by-year`) ดึงจาก `kpi_summary` ไม่ใช่ `kpi_results`
 
+### Export KPI Tables
+- Endpoint: `POST /export-kpi-tables` — สร้าง/อัปเดตตาราง MySQL แยกรายตัวชี้วัด
+- Prefilter: สร้างเฉพาะ indicator ที่มีข้อมูลใน `kpi_results` (target_value หรือ actual_value)
+- Content-based diff: เปรียบเทียบค่าเดิมในตาราง export ทีละคอลัมน์ (ไม่ใช้ timestamp)
+- `result` = **ค่าเดือนล่าสุดที่คีย์** (ไม่ใช่ SUM) — เหมือน `kpi_summary.last_actual`
+- ตารางมีคอลัมน์เดือน (m10-m09) เสมอ + form fields ถ้ามี (ไม่แยก hasForm)
+- `emptyToNull()` แปลง `''` → `null` ก่อน INSERT (ป้องกัน DECIMAL error)
+- Card counters นับตาม unique `table_process` (dedupe)
+
 ## 6. Role System (9 Roles)
 
 | Role | ขอบเขต | เห็นปุ่มลบ | เมนูพิเศษ |
@@ -327,6 +336,9 @@ docker compose up -d
 - ❌ สร้าง route /reports แยก (รวมกับ /charts เป็น tab แล้ว)
 - ❌ เรียก API ใน ngOnDestroy โดยไม่ตรวจ isLoggedIn() ก่อน
 - ❌ Report endpoint ดึงจาก `kpi_results` ตรง — ต้องใช้ `kpi_summary` เสมอ (เร็วกว่ามาก)
+- ❌ Export `result` ใช้ SUM ของทุกเดือน — ต้องใช้ค่าเดือนล่าสุดที่คีย์ (last actual)
+- ❌ Export ใช้ timestamp-based diff (created_at vs update_date) — ต้องใช้ content-based diff
+- ❌ Export แยก hasForm path (ไม่ส่ง m10-m09) — ตารางต้องมีเดือนเสมอ + form fields เพิ่มเติม
 
 ## 12. Key Tables
 

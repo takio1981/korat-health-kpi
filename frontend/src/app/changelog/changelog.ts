@@ -18,6 +18,17 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.04.17-12',
+      date: '17 เมษายน 2569',
+      changes: [
+        { type: 'feature', text: 'Dashboard: เพิ่มสัญญลักษณ์ประเภทตัวชี้วัด (R9, MOPH, SSJ, RMW, อื่นๆ) แสดงไว้ด้านหน้าชื่อตัวชี้วัดในตาราง' },
+        { type: 'improve', text: 'Dashboard: สัญญลักษณ์ประเภทตัวชี้วัดแสดงด้วยสีที่โดดเด่น (Blue, Red, Green, Yellow, Gray) ทั้งบน Desktop และ Mobile' },
+        { type: 'fix', text: 'Export ข้อมูล: result ใช้ค่าเดือนล่าสุดที่คีย์ (ไม่รวม SUM) — เหมือน kpi_summary.last_actual' },
+        { type: 'fix', text: 'Export ข้อมูล: content-based diff แก้ actual_value ไม่ส่งออก (timestamp skipping)' },
+        { type: 'improve', text: 'Export ข้อมูล: ตารางมี m10-m09 เสมอ + form fields + prefilter indicators + dedupe card counters' },
+      ]
+    },
+    {
       version: '2569.04.11-10',
       date: '11 เมษายน 2569',
       changes: [
