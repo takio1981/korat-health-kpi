@@ -487,10 +487,99 @@ export class DashboardComponent implements OnInit {
     if (this.selectedMain && !this.mainCategories.includes(this.selectedMain)) this.selectedMain = '';
   }
 
-  // === กดปุ่ม "ค้นหา" → โหลดข้อมูลจาก server + กรอง client-side ===
+  // === กดปุ่ม "ค้นหา" → ตรวจว่าเลือกตัวกรองหรือยัง ===
   doSearch() {
+    const hasFilter = this.selectedDistrict || this.selectedHospital || this.selectedDept
+      || this.selectedHosType || this.selectedMain || this.selectedIndicator
+      || this.selectedType || this.selectedStatus;
+
+    if (!hasFilter) {
+      Swal.fire({
+        title: 'กรุณาเลือกตัวกรอง',
+        html: `<p class="text-sm text-gray-600">เลือกอย่างน้อย 1 เงื่อนไข เช่น อำเภอ, ประเภท รพ., หน่วยงาน หรือตัวชี้วัด<br>เพื่อจำกัดขอบเขตข้อมูล</p>`,
+        icon: 'info',
+        showCancelButton: true,
+        confirmButtonText: '<i class="fas fa-download mr-1"></i> โหลดข้อมูลทั้งหมด',
+        cancelButtonText: 'เลือกตัวกรอง',
+        confirmButtonColor: '#6366f1',
+        cancelButtonColor: '#9ca3af',
+      }).then((r) => {
+        if (r.isConfirmed) this.loadAllData();
+      });
+      return;
+    }
     this.loadKpiData();
     this.loadDashboardStats();
+  }
+
+  // === โหลดข้อมูลทั้งหมด (ทีละอำเภอ + progress จริง) ===
+  async loadAllData() {
+    const startTime = Date.now();
+    const districts = this._allDistricts.length > 0 ? this._allDistricts : [{ distname: '' }];
+    const total = districts.length;
+    let allData: any[] = [];
+
+    Swal.fire({
+      title: 'กำลังโหลดข้อมูลทั้งหมด...',
+      html: `<div class="text-left text-sm space-y-2">
+        <div class="flex items-center gap-2"><i class="fas fa-spinner fa-spin text-green-500"></i> <span id="load-step">เตรียมข้อมูล...</span></div>
+        <div class="flex items-center gap-2 text-gray-400"><i class="fas fa-clock"></i> เวลา: <b id="load-timer">0</b> วินาที</div>
+        <div class="w-full bg-gray-200 rounded-full h-3 mt-2">
+          <div id="load-progress" class="bg-green-500 h-3 rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+      </div>`,
+      allowOutsideClick: false,
+      showConfirmButton: false,
+      didOpen: () => {
+        const iv = setInterval(() => {
+          const el = document.getElementById('load-timer');
+          if (el) el.textContent = String(Math.floor((Date.now() - startTime) / 1000));
+          if (!Swal.isVisible()) clearInterval(iv);
+        }, 1000);
+      }
+    });
+
+    try {
+      if (!this.selectedYear) this.setDefaultYear();
+      for (let i = 0; i < districts.length; i++) {
+        const dist = districts[i];
+        const pct = Math.round(((i + 1) / total) * 100);
+        const stepEl = document.getElementById('load-step');
+        const progEl = document.getElementById('load-progress');
+        if (stepEl) stepEl.textContent = `อำเภอ ${i + 1}/${total}: ${dist.distname || 'ทั้งหมด'}`;
+        if (progEl) progEl.style.width = pct + '%';
+
+        const filters: any = { year: this.selectedYear };
+        if (dist.distname) filters.district = dist.distname;
+
+        const res: any = await this.authService.getKpiResults(filters).toPromise();
+        if (res?.success && res.data) {
+          res.data.forEach((item: any) => {
+            item.target_value = item.target_value != null ? String(item.target_value) : '';
+            item.last_actual = String(item.last_actual ?? '');
+            item.total_actual = parseFloat(item.last_actual) || 0;
+            item.pending_count = Number(item.pending_count) || 0;
+            ['oct','nov','dece','jan','feb','mar','apr','may','jun','jul','aug','sep'].forEach(m => item[m] = item[m] != null ? String(item[m]) : '');
+          });
+          allData = allData.concat(res.data);
+        }
+      }
+
+      this.kpiData = allData;
+      this.filteredData = allData;
+      this.applyClientFilters();
+      this.cdr.detectChanges();
+
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      Swal.fire({
+        icon: 'success',
+        title: 'โหลดข้อมูลสำเร็จ',
+        html: `<div class="text-sm"><b>${allData.length}</b> รายการ จาก <b>${total}</b> อำเภอ (${elapsed} วินาที)</div>`,
+        timer: 3000, showConfirmButton: false
+      });
+    } catch (err: any) {
+      Swal.fire('ผิดพลาด', err?.error?.message || 'ไม่สามารถโหลดข้อมูลได้', 'error');
+    }
   }
 
   onYearChange() {
