@@ -262,12 +262,47 @@ export class DashboardComponent implements OnInit {
           this.loadDashboardStats();
           this.loadDynamicFormMonths();
           this.cdr.detectChanges();
+
+          if (this.kpiData.length === 0) this.showNoDataAlert();
         }
       },
       error: (err) => {
         this.isLoading = false;
         console.error('Error loading KPI:', err);
       }
+    });
+  }
+
+  private showNoDataAlert() {
+    const role = this.authService.getUserRole();
+    const isAdmin = ['super_admin', 'admin_ssj', 'admin_cup', 'admin_hos', 'admin_sso'].includes(role);
+    const adminTip = isAdmin
+      ? `<div class="bg-green-50 border border-green-200 rounded-lg p-3 mt-3 text-left">
+          <p class="font-bold text-green-800 text-xs mb-1"><i class="fas fa-lightbulb mr-1"></i>คำแนะนำสำหรับ Admin</p>
+          <ol class="list-decimal ml-4 text-xs text-green-700 space-y-1">
+            <li>ไปที่เมนู <b>"จัดการตัวชี้วัด"</b> → ตรวจสอบว่ามีตัวชี้วัดที่เปิดใช้งาน</li>
+            <li>ไปที่ <b>"สร้าง KPI ปีงบใหม่"</b> → เพิ่มตัวชี้วัดให้แต่ละหน่วยบริการ (Bulk Add)</li>
+            <li>ตรวจสอบว่าหน่วยบริการมี <b>hospcode</b> ตรงกับตาราง chospital</li>
+            <li>ตรวจสอบ <b>ปีงบประมาณ</b> ที่เลือก — ข้อมูลอาจอยู่ปีอื่น</li>
+          </ol>
+        </div>` : '';
+
+    Swal.fire({
+      icon: 'info',
+      title: 'ไม่พบข้อมูล',
+      html: `<div class="text-sm text-gray-600">
+        <p>ไม่พบข้อมูลตัวชี้วัดตามเงื่อนไขที่เลือก</p>
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3 text-left">
+          <p class="font-bold text-blue-800 text-xs mb-1"><i class="fas fa-search mr-1"></i>ลองตรวจสอบ</p>
+          <ul class="list-disc ml-4 text-xs text-blue-700 space-y-1">
+            <li>เปลี่ยน <b>ปีงบประมาณ</b> (อาจยังไม่มีข้อมูลในปีที่เลือก)</li>
+            <li>ลองเลือก <b>อำเภอ</b> หรือ <b>ประเภท รพ.</b> ที่ต่างออกไป</li>
+            <li>ล้างตัวกรอง แล้วกด <b>"โหลดข้อมูลทั้งหมด"</b></li>
+          </ul>
+        </div>
+        ${adminTip}
+      </div>`,
+      confirmButtonColor: '#6366f1'
     });
   }
 
@@ -571,12 +606,16 @@ export class DashboardComponent implements OnInit {
       this.cdr.detectChanges();
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      Swal.fire({
-        icon: 'success',
-        title: 'โหลดข้อมูลสำเร็จ',
-        html: `<div class="text-sm"><b>${allData.length}</b> รายการ จาก <b>${total}</b> อำเภอ (${elapsed} วินาที)</div>`,
-        timer: 3000, showConfirmButton: false
-      });
+      if (allData.length === 0) {
+        this.showNoDataAlert();
+      } else {
+        Swal.fire({
+          icon: 'success',
+          title: 'โหลดข้อมูลสำเร็จ',
+          html: `<div class="text-sm"><b>${allData.length}</b> รายการ จาก <b>${total}</b> อำเภอ (${elapsed} วินาที)</div>`,
+          timer: 3000, showConfirmButton: false
+        });
+      }
     } catch (err: any) {
       Swal.fire('ผิดพลาด', err?.error?.message || 'ไม่สามารถโหลดข้อมูลได้', 'error');
     }
