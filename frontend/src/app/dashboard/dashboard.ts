@@ -524,7 +524,11 @@ export class DashboardComponent implements OnInit {
 
   // === กดปุ่ม "ค้นหา" → ตรวจว่าเลือกตัวกรองหรือยัง ===
   doSearch() {
-    const hasFilter = this.selectedDistrict || this.selectedHospital || this.selectedDept
+    // admin_ssj / user_ssj มี dept ล็อคอัตโนมัติ → ไม่นับเป็นตัวกรองที่ผู้ใช้เลือกเอง
+    const role = this.authService.getUserRole();
+    const isLockedDept = ['admin_ssj', 'user_ssj'].includes(role);
+    const hasFilter = this.selectedDistrict || this.selectedHospital
+      || (!isLockedDept && this.selectedDept)
       || this.selectedHosType || this.selectedMain || this.selectedIndicator
       || this.selectedType || this.selectedStatus;
 
