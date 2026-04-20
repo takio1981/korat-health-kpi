@@ -323,54 +323,83 @@ export class SettingsComponent implements OnInit {
     });
   }
 
-  refreshSummary() {
+  async refreshSummary() {
     const startTime = Date.now();
     let timerInterval: any;
+    const BATCH_SIZE = 30;
+
+    const updateSwal = (step: string, done: number, total: number) => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+      const timerEl = document.getElementById('swal-timer');
+      const progressEl = document.getElementById('swal-progress');
+      const stepEl = document.getElementById('swal-step');
+      const countEl = document.getElementById('swal-count');
+      if (timerEl) timerEl.textContent = String(elapsed);
+      if (progressEl) progressEl.style.width = pct + '%';
+      if (stepEl) stepEl.textContent = step;
+      if (countEl) countEl.textContent = `${done}/${total} ตัวชี้วัด`;
+    };
 
     Swal.fire({
       title: 'กำลังอัปเดต Summary...',
       html: `<div class="text-left text-sm space-y-2">
-        <div class="flex items-center gap-2"><i class="fas fa-spinner fa-spin text-indigo-500"></i> ประมวลผลข้อมูล ~600,000 rows</div>
+        <div class="flex items-center gap-2"><i class="fas fa-spinner fa-spin text-indigo-500"></i> <span id="swal-step">เตรียมข้อมูล...</span></div>
+        <div class="flex items-center gap-2 text-gray-500"><i class="fas fa-layer-group"></i> <span id="swal-count">0/0 ตัวชี้วัด</span></div>
         <div class="flex items-center gap-2 text-gray-400"><i class="fas fa-clock"></i> เวลาที่ใช้: <b id="swal-timer">0</b> วินาที</div>
-        <div class="w-full bg-gray-200 rounded-full h-2 mt-2">
-          <div id="swal-progress" class="bg-indigo-500 h-2 rounded-full transition-all" style="width: 0%"></div>
+        <div class="w-full bg-gray-200 rounded-full h-3 mt-2">
+          <div id="swal-progress" class="bg-indigo-500 h-3 rounded-full transition-all duration-300" style="width: 0%"></div>
         </div>
-        <p class="text-xs text-gray-400 mt-1">ขั้นตอน: ล้างข้อมูลเก่า → GROUP BY → INSERT → คำนวณ last_actual</p>
       </div>`,
       allowOutsideClick: false,
       showConfirmButton: false,
       didOpen: () => {
-        let fakeProgress = 0;
         timerInterval = setInterval(() => {
           const elapsed = Math.floor((Date.now() - startTime) / 1000);
           const timerEl = document.getElementById('swal-timer');
-          const progressEl = document.getElementById('swal-progress');
           if (timerEl) timerEl.textContent = String(elapsed);
-          // fake progress bar (ช้าลงเมื่อเข้าใกล้ 90%)
-          if (fakeProgress < 90) fakeProgress += (90 - fakeProgress) * 0.05;
-          if (progressEl) progressEl.style.width = fakeProgress + '%';
-        }, 500);
+        }, 1000);
       }
     });
 
-    this.authService.refreshKpiSummary().subscribe({
-      next: (res: any) => {
-        clearInterval(timerInterval);
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        Swal.fire({
-          icon: 'success',
-          title: 'อัปเดต Summary สำเร็จ',
-          html: `<div class="text-left text-sm space-y-1">
-            <p><i class="fas fa-database text-indigo-500 mr-2"></i>สร้าง <b>${res.inserted}</b> rows</p>
-            <p><i class="fas fa-clock text-green-500 mr-2"></i>ใช้เวลา <b>${elapsed}</b> วินาที</p>
-          </div>`,
-          confirmButtonColor: '#10b981'
-        });
-      },
-      error: (err: any) => {
-        clearInterval(timerInterval);
-        Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถอัปเดตได้', 'error');
+    try {
+      // Step 1: Prepare (ล้างข้อมูลเก่า + ดึง indicator_ids)
+      updateSwal('ล้างข้อมูลเก่า...', 0, 0);
+      const prepRes: any = await this.authService.refreshSummaryPrepare().toPromise();
+      if (!prepRes.success) throw new Error(prepRes.message);
+
+      const allIds: number[] = prepRes.indicator_ids;
+      const total = allIds.length;
+      let totalInserted = 0;
+
+      // Step 2: Batch INSERT (ทีละ BATCH_SIZE indicators)
+      for (let i = 0; i < allIds.length; i += BATCH_SIZE) {
+        const batchIds = allIds.slice(i, i + BATCH_SIZE);
+        updateSwal(`ประมวลผล batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(total / BATCH_SIZE)}`, Math.min(i + BATCH_SIZE, total), total);
+
+        const batchRes: any = await this.authService.refreshSummaryBatch(batchIds).toPromise();
+        if (batchRes.success) totalInserted += batchRes.inserted;
       }
-    });
+
+      // Step 3: Finalize (last_actual + has_form_schema)
+      updateSwal('คำนวณ last_actual...', total, total);
+      await this.authService.refreshSummaryFinalize().toPromise();
+
+      clearInterval(timerInterval);
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      Swal.fire({
+        icon: 'success',
+        title: 'อัปเดต Summary สำเร็จ',
+        html: `<div class="text-left text-sm space-y-1">
+          <p><i class="fas fa-database text-indigo-500 mr-2"></i>สร้าง <b>${totalInserted}</b> rows</p>
+          <p><i class="fas fa-layer-group text-purple-500 mr-2"></i>${total} ตัวชี้วัด (${Math.ceil(total / BATCH_SIZE)} batches)</p>
+          <p><i class="fas fa-clock text-green-500 mr-2"></i>ใช้เวลา <b>${elapsed}</b> วินาที</p>
+        </div>`,
+        confirmButtonColor: '#10b981'
+      });
+    } catch (err: any) {
+      clearInterval(timerInterval);
+      Swal.fire('ผิดพลาด', err?.error?.message || err?.message || 'ไม่สามารถอัปเดตได้', 'error');
+    }
   }
 }

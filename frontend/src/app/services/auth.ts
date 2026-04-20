@@ -667,10 +667,20 @@ export class AuthService {
     return this.http.get(`${this.apiUrl}/kpi-summary${qs ? '?' + qs : ''}`, { headers });
   }
 
-  refreshKpiSummary(year_bh?: string): Observable<any> {
+  refreshSummaryPrepare(year_bh?: string): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.post(`${this.apiUrl}/refresh-summary`, { year_bh }, { headers });
+    return this.http.post(`${this.apiUrl}/refresh-summary/prepare`, { year_bh }, { headers });
+  }
+  refreshSummaryBatch(indicator_ids: number[], year_bh?: string): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/refresh-summary/batch`, { indicator_ids, year_bh }, { headers });
+  }
+  refreshSummaryFinalize(year_bh?: string): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/refresh-summary/finalize`, { year_bh }, { headers });
   }
 
   // === Feedback Board ===
