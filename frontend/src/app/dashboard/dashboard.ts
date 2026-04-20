@@ -567,7 +567,7 @@ export class DashboardComponent implements OnInit {
 
       this.kpiData = allData;
       this.filteredData = allData;
-      this.applyClientFilters();
+      this.applyFilters();
       this.cdr.detectChanges();
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
