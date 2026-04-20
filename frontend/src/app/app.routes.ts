@@ -33,7 +33,7 @@ export const routes: Routes = [
       { path: 'charts', component: ChartComponent, data: { title: 'รายงานสถิติ' } },
       { path: 'notifications', component: NotificationsComponent, data: { title: 'การแจ้งเตือน' } },
       { path: 'users', component: UserManagementComponent, canActivate: [anyAdminGuard], data: { title: 'จัดการผู้ใช้งาน' } },
-      { path: 'kpi-setup', component: KpiSetupComponent, canActivate: [adminGuard], data: { title: 'สร้าง KPI ปีงบประมาณใหม่' } },
+      { path: 'kpi-setup', component: KpiSetupComponent, canActivate: [superAdminGuard], data: { title: 'สร้าง KPI ปีงบประมาณใหม่' } },
       { path: 'audit-logs', component: AuditLogComponent, canActivate: [superAdminGuard], data: { title: 'ประวัติการใช้งาน' } },
       { path: 'kpi-manage', component: KpiManageComponent, canActivate: [adminGuard], data: { title: 'จัดการตัวชี้วัด' } },
       { path: 'kpi-manager', component: KpiManagerComponent, canActivate: [superAdminGuard], data: { title: 'จัดการข้อมูล KPI' } },

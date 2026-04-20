@@ -1,6 +1,6 @@
 <!-- แถบคาดแดง "ทดสอบระบบ" — fixed เต็มจอบนสุด -->
 <div class="fixed inset-x-0 top-0 bg-red-600 text-white text-center py-0.5 text-xs font-bold tracking-widest z-30 leading-tight">
-  <i class="fas fa-flask mr-1"></i> ทดสอบระบบ <i class="fas fa-flask ml-1"></i>
+  <i class='fas fa-chart-line'></i> เริ่มใช้งานตั้งแต่วันที่ 1 เมษายน 2569 เป็นต้นไป เพื่อรวบรวมผลงาน ตรวจราชการรอบที่ 2 <i class='fas fa-chart-line'></i>
 </div>
 
 <div class="flex h-screen bg-gray-100 font-sans overflow-hidden pt-[20px]">
@@ -20,7 +20,7 @@
         <a *ngIf="isAnyAdmin" routerLink="/users" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-users-cog mr-3 min-w-[20px]"></i>จัดการผู้ใช้งาน</a>
         <a *ngIf="isAdmin" routerLink="/kpi-manage" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-tasks mr-3 min-w-[20px]"></i>จัดการตัวชี้วัด</a>
         <a *ngIf="isSuperAdmin" routerLink="/audit-logs" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-history mr-3 min-w-[20px]"></i>ประวัติการใช้งาน</a>
-        <a *ngIf="isAdmin" routerLink="/kpi-setup" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-plus-circle mr-3 min-w-[20px]"></i>+KPI ปีงบประมาณใหม่</a>
+        <a *ngIf="isSuperAdmin" routerLink="/kpi-setup" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-plus-circle mr-3 min-w-[20px]"></i>+KPI ปีงบประมาณใหม่</a>
         <a *ngIf="isSuperAdmin" routerLink="/kpi-manager" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-layer-group mr-3 min-w-[20px]"></i>จัดการข้อมูล KPI</a>
         <a *ngIf="isSuperAdmin" routerLink="/settings" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-sliders-h mr-3 min-w-[20px]"></i>ตั้งค่าระบบ</a>
       </nav>
@@ -33,7 +33,7 @@
         <i class="fas fa-heartbeat text-2xl mr-3 refresh-icon cursor-pointer" (click)="refreshDashboard()"></i>
         <span class="text-lg font-bold tracking-wide">Korat Health KPI</span>
       </div>
-  
+
       <nav class="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
         <a routerLink="/dashboard" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-th-large text-lg mr-3 min-w-[24px]"></i>
@@ -75,7 +75,7 @@
             ประวัติการใช้งาน
           </span>
         </a>
-        <a *ngIf="isAdmin" routerLink="/kpi-setup" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
+        <a *ngIf="isSuperAdmin" routerLink="/kpi-setup" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-plus-circle text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
             +KPI ปีงบประมาณใหม่
@@ -101,9 +101,9 @@
         </div>
       </div>
     </aside>
-  
+
     <div class="flex-1 flex flex-col overflow-hidden">
-      
+
       <header class="h-16 bg-gradient-to-r from-green-800 to-green-600 shadow-md flex items-center justify-between px-6 z-40 relative">
         <div class="flex items-center">
           <button (click)="toggleSidebar()" class="text-white hover:text-green-200 focus:outline-none mr-4">
@@ -111,7 +111,7 @@
           </button>
           <h2 class="text-lg sm:text-xl font-semibold text-white mr-0 sm:mr-6">{{ pageTitle }}</h2>
         </div>
-  
+
         <div class="flex items-center">
           <!-- Feedback Icon -->
           <a routerLink="/feedback" class="relative text-white hover:text-green-200 mr-4">
@@ -195,14 +195,14 @@
           </div>
         </div>
       </header>
-  
+
       <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50">
         <router-outlet></router-outlet>
       </main>
 
     </div>
   </div>
-  
+
   <!-- Modals -->
   <div *ngIf="showChangePasswordModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-4 sm:p-6 transform transition-all scale-100">
@@ -261,7 +261,7 @@
         </div>
     </div>
   </div>
-  
+
   <!-- Notification Dropdown — fixed position อยู่นอก overflow-hidden container ทั้งหมด -->
   <!-- Backdrop -->
   <div *ngIf="showNotifDropdown" class="fixed inset-0 z-[100]" (click)="showNotifDropdown = false"></div>
@@ -356,4 +356,3 @@
       </button>
     </div>
   </div>
-  
