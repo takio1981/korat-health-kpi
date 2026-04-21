@@ -2375,34 +2375,35 @@ apiRouter.get('/indicators', authenticateToken, async (req, res) => {
 });
 
 apiRouter.post('/indicators', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code, table_process } = req.body;
+    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other } = req.body;
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
         return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
     }
     try {
         await db.query(
-            'INSERT INTO kpi_indicators (kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code, table_process) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code, table_process || null]
+            `INSERT INTO kpi_indicators (kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0]
         );
         res.json({ success: true, message: 'Created successfully' });
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Error creating indicator' });
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
 apiRouter.put('/indicators/:id', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code, is_active, table_process } = req.body;
+    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, is_active, table_process, description, r9, moph, ssj, rmw, other } = req.body;
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
         return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
     }
     try {
         await db.query(
-            'UPDATE kpi_indicators SET kpi_indicators_name=?, main_indicator_id=?, dept_id=?, target_percentage=?, weight=?, kpi_indicators_code=?, is_active=?, table_process=? WHERE id=?',
-            [kpi_indicators_name, main_indicator_id, dept_id, target_percentage, weight, kpi_indicators_code, is_active, table_process || null, req.params.id]
+            `UPDATE kpi_indicators SET kpi_indicators_name=?, kpi_indicators_id=?, main_indicator_id=?, dept_id=?, target_percentage=?, target_condition=?, weight=?, kpi_indicators_code=?, is_active=?, table_process=?, description=?, r9=?, moph=?, ssj=?, rmw=?, other=? WHERE id=?`,
+            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, is_active ? 1 : 0, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, req.params.id]
         );
         res.json({ success: true, message: 'Updated successfully' });
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Error updating indicator' });
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
@@ -4540,6 +4541,15 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         try {
             await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS table_process VARCHAR(100) NULL`);
         } catch (e) { /* may already exist */ }
+        // เพิ่มฟิลด์ที่ขาดใน kpi_indicators
+        try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS kpi_indicators_id VARCHAR(50) NULL COMMENT 'รหัสอ้างอิง'`); } catch(e) {}
+        try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS target_condition VARCHAR(10) NULL COMMENT 'GTE/LTE/EQ'`); } catch(e) {}
+        try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS r9 TINYINT(1) DEFAULT 0`); } catch(e) {}
+        try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS moph TINYINT(1) DEFAULT 0`); } catch(e) {}
+        try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS ssj TINYINT(1) DEFAULT 0`); } catch(e) {}
+        try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS rmw TINYINT(1) DEFAULT 0`); } catch(e) {}
+        try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS other TINYINT(1) DEFAULT 0`); } catch(e) {}
+        try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS description TEXT NULL`); } catch(e) {}
         // เพิ่ม actual_value_field ใน kpi_form_schemas
         try {
             await db.query(`ALTER TABLE kpi_form_schemas ADD COLUMN IF NOT EXISTS actual_value_field VARCHAR(100) NULL COMMENT 'ชื่อฟิลด์ที่ใช้ sync ไปยัง kpi_results.actual_value'`);
