@@ -39,6 +39,10 @@ export class KpiManageComponent implements OnInit {
   isEditMode: boolean = false;
   currentItem: any = {};
 
+  // Cascade: selected yut → filter main_indicators
+  selectedYutInModal: number | null = null;
+  filteredMainForModal: any[] = [];
+
   // Sub-Indicator Modal
   showSubModal: boolean = false;
   subParentIndicator: any = null;
@@ -242,18 +246,44 @@ export class KpiManageComponent implements OnInit {
         src.ssj = Number(src.ssj) === 1;
         src.rmw = Number(src.rmw) === 1;
         src.other = Number(src.other) === 1;
+        // auto-set yut_id จาก main_indicator ที่เลือก
+        this.selectedYutInModal = src.yut_id ? Number(src.yut_id) : null;
       }
       this.currentItem = src;
     } else {
-      // default ค่าเริ่มต้นแยกตาม tab
       const baseDefaults = { is_active: 1, sort_order: 0 };
       if (this.activeTab === 'indicators') {
+        this.selectedYutInModal = null;
         this.currentItem = { ...baseDefaults, r9: false, moph: false, ssj: false, rmw: false, other: false, weight: 1, target_condition: 'GTE' };
       } else {
         this.currentItem = { ...baseDefaults };
       }
     }
+    this.rebuildMainForModal();
     this.showModal = true;
+  }
+
+  // เมื่อเลือกยุทธศาสตร์ → กรอง main_indicators dropdown
+  onYutChangeInModal() {
+    this.currentItem.main_indicator_id = null;
+    this.rebuildMainForModal();
+  }
+
+  private rebuildMainForModal() {
+    if (this.selectedYutInModal) {
+      this.filteredMainForModal = this.mainIndicators.filter((m: any) => Number(m.yut_id) === Number(this.selectedYutInModal));
+    } else {
+      this.filteredMainForModal = this.mainIndicators;
+    }
+  }
+
+  // เมื่อเลือก main_indicator → auto-set yut_id
+  onMainIndicatorChangeInModal() {
+    const mid = this.currentItem.main_indicator_id;
+    if (mid) {
+      const mi = this.mainIndicators.find((m: any) => Number(m.id) === Number(mid));
+      if (mi?.yut_id) this.selectedYutInModal = Number(mi.yut_id);
+    }
   }
 
   closeModal() {

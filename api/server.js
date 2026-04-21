@@ -2373,9 +2373,10 @@ apiRouter.get('/indicators', authenticateToken, async (req, res) => {
             params.push(user.deptId);
         }
         const [rows] = await db.query(`
-            SELECT i.*, mi.main_indicator_name as main_indicator_name, d.dept_name
+            SELECT i.*, mi.main_indicator_name, mi.yut_id, my.yut_name, d.dept_name
             FROM kpi_indicators i
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
+            LEFT JOIN main_yut my ON mi.yut_id = my.id
             LEFT JOIN departments d ON i.dept_id = d.id
             ${whereClause}
             ORDER BY i.id DESC

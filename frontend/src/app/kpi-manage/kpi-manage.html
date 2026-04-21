@@ -272,12 +272,19 @@
           <label class="block text-xs font-bold text-gray-600 mb-1">ชื่อตัวชี้วัด <span class="text-red-500">*</span></label>
           <textarea [(ngModel)]="currentItem.kpi_indicators_name" rows="2" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm"></textarea>
         </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-600 mb-1">ยุทธศาสตร์ <span class="text-gray-400 font-normal">(กรองหมวดหมู่หลัก)</span></label>
+          <select [(ngModel)]="selectedYutInModal" (change)="onYutChangeInModal()" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm">
+            <option [ngValue]="null">-- ไม่ระบุ --</option>
+            <option *ngFor="let s of strategies" [ngValue]="s.id">{{ s.yut_name }}</option>
+          </select>
+        </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label class="block text-xs font-bold text-gray-600 mb-1">หมวดหมู่หลัก</label>
-            <select [(ngModel)]="currentItem.main_indicator_id" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm">
+            <select [(ngModel)]="currentItem.main_indicator_id" (change)="onMainIndicatorChangeInModal()" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm">
               <option [ngValue]="null">-- ไม่ระบุ --</option>
-              <option *ngFor="let m of mainIndicators" [ngValue]="m.id">{{ m.main_indicator_name }}</option>
+              <option *ngFor="let m of filteredMainForModal" [ngValue]="m.id">{{ m.main_indicator_name }}</option>
             </select>
           </div>
           <div>
