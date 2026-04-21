@@ -193,6 +193,23 @@ users.dept_id → departments.id (FK)
 - มี `dept_id` + `distid` สำหรับ role-based filtering โดยไม่ต้อง JOIN ตารางอื่น
 - Report endpoints ทั้ง 4 (`/report/by-indicator`, `/report/by-hospital`, `/report/by-district`, `/report/by-year`) ดึงจาก `kpi_summary` ไม่ใช่ `kpi_results`
 
+### Sub-Indicators (ตัวชี้วัดย่อย)
+- `kpi_sub_indicators` — metadata ของตัวชี้วัดย่อย (FK → kpi_indicators.id, CASCADE delete)
+- `kpi_sub_results` — ผลงานย่อย per hospcode×month (UNIQUE: sub+year+hospcode+month)
+- CRUD endpoints: `/sub-indicators` (GET/POST/PUT/DELETE/toggle-active)
+- Result: `GET /sub-results` / `POST /sub-results/upsert` / `DELETE`
+- **Aggregate endpoint**: `GET /sub-results/summary` — **AVG** ต่อ indicator (หารด้วยจำนวน sub)
+  - Return: avg_target, m10-m09 (ต่อเดือน), sub_count
+- Dashboard main row: merge sub summary → override target_value + monthly + last_actual
+- Modal บันทึกผลย่อย: ตาราง 12 เดือน (ไม่ใช้ dropdown) + คอลัมน์ ผลงาน + %
+- `formatNum()` helper: จำนวนเต็มไม่มีทศนิยม (70), มีเศษ 2 ตำแหน่ง (70.50)
+
+### Users Data Sync (Local ↔ HDC)
+- `GET /users/sync-compare` — เทียบ 4 สถานะ (matched/different/local_only/hdc_only)
+- `POST /users/sync-to-hdc` — UPSERT batch 100 rows (สร้างตารางใน HDC อัตโนมัติถ้ายังไม่มี)
+- Log: `USERS_SYNC_TO_HDC` ใน system_logs
+- UI: ปุ่ม "Data Synchronization" ใน user-management (เฉพาะ super_admin) → modal เทียบ + เลือก + sync
+
 ### Export KPI Tables
 - Endpoint: `POST /export-kpi-tables` — สร้าง/อัปเดตตาราง MySQL แยกรายตัวชี้วัด
 - Prefilter: สร้างเฉพาะ indicator ที่มีข้อมูลใน `kpi_results` (target_value หรือ actual_value)

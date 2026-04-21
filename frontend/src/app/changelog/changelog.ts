@@ -18,6 +18,17 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.04.20-2',
+      date: '20 เมษายน 2569',
+      changes: [
+        { type: 'improve', text: 'Modal บันทึกผลงานย่อย: แสดงตาราง 12 เดือน (ต.ค.-ก.ย.) + คอลัมน์ ผลงาน + % (แทน dropdown เดือน)' },
+        { type: 'improve', text: 'Dashboard main row: แสดงค่า AVG ของ sub-indicators (เป้าหมาย, เดือน, ผลงานรวม) หารด้วยจำนวน sub' },
+        { type: 'improve', text: 'Format ตัวเลข: จำนวนเต็มไม่มีทศนิยม (70), มีเศษ 2 ตำแหน่ง (70.50)' },
+        { type: 'improve', text: 'kpi-manage modal: เพิ่มฟิลด์ครบทุก tab (indicators, main_yut, main_indicators, departments)' },
+        { type: 'improve', text: 'Modal indicators: เพิ่ม dropdown ยุทธศาสตร์ + cascade filter หมวดหมู่หลัก' },
+      ]
+    },
+    {
       version: '2569.04.20',
       date: '20 เมษายน 2569',
       changes: [
