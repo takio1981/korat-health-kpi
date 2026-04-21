@@ -2271,22 +2271,30 @@ apiRouter.get('/main-yut', authenticateToken, async (req, res) => {
 });
 
 apiRouter.post('/main-yut', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { yut_name } = req.body;
+    const { yut_name, yut_code, description, sort_order } = req.body;
+    if (!yut_name) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อยุทธศาสตร์' });
     try {
-        await db.query('INSERT INTO main_yut (yut_name) VALUES (?)', [yut_name]);
+        await db.query(
+            'INSERT INTO main_yut (yut_name, yut_code, description, sort_order) VALUES (?, ?, ?, ?)',
+            [yut_name, yut_code || null, description || null, sort_order || 0]
+        );
         res.json({ success: true, message: 'Created successfully' });
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Error creating strategy' });
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
 apiRouter.put('/main-yut/:id', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { yut_name } = req.body;
+    const { yut_name, yut_code, description, sort_order, is_active } = req.body;
+    if (!yut_name) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อยุทธศาสตร์' });
     try {
-        await db.query('UPDATE main_yut SET yut_name = ? WHERE id = ?', [yut_name, req.params.id]);
+        await db.query(
+            'UPDATE main_yut SET yut_name=?, yut_code=?, description=?, sort_order=?, is_active=? WHERE id=?',
+            [yut_name, yut_code || null, description || null, sort_order || 0, is_active ? 1 : 0, req.params.id]
+        );
         res.json({ success: true, message: 'Updated successfully' });
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Error updating strategy' });
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
@@ -2315,12 +2323,14 @@ apiRouter.get('/main-indicators', authenticateToken, async (req, res) => {
 });
 
 apiRouter.post('/main-indicators', authenticateToken, isSuperAdmin, async (req, res) => {
-    // รองรับทั้ง main_indicator_name (ตามคอลัมน์จริง) และ indicator_name (alias เก่า)
     const name = req.body.main_indicator_name || req.body.indicator_name;
-    const { yut_id } = req.body;
+    const { yut_id, main_indicator_code, description, sort_order } = req.body;
     if (!name) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อหมวดหมู่หลัก' });
     try {
-        await db.query('INSERT INTO kpi_main_indicators (main_indicator_name, yut_id) VALUES (?, ?)', [name, yut_id || null]);
+        await db.query(
+            'INSERT INTO kpi_main_indicators (main_indicator_name, yut_id, main_indicator_code, description, sort_order) VALUES (?, ?, ?, ?, ?)',
+            [name, yut_id || null, main_indicator_code || null, description || null, sort_order || 0]
+        );
         res.json({ success: true, message: 'Created successfully' });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -2329,10 +2339,13 @@ apiRouter.post('/main-indicators', authenticateToken, isSuperAdmin, async (req, 
 
 apiRouter.put('/main-indicators/:id', authenticateToken, isSuperAdmin, async (req, res) => {
     const name = req.body.main_indicator_name || req.body.indicator_name;
-    const { yut_id } = req.body;
+    const { yut_id, main_indicator_code, description, sort_order, is_active } = req.body;
     if (!name) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อหมวดหมู่หลัก' });
     try {
-        await db.query('UPDATE kpi_main_indicators SET main_indicator_name = ?, yut_id = ? WHERE id = ?', [name, yut_id || null, req.params.id]);
+        await db.query(
+            'UPDATE kpi_main_indicators SET main_indicator_name=?, yut_id=?, main_indicator_code=?, description=?, sort_order=?, is_active=? WHERE id=?',
+            [name, yut_id || null, main_indicator_code || null, description || null, sort_order || 0, is_active ? 1 : 0, req.params.id]
+        );
         res.json({ success: true, message: 'Updated successfully' });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -3183,22 +3196,30 @@ apiRouter.get('/notifications/pending-kpi', authenticateToken, isAdmin, async (r
     }
 });
 apiRouter.post('/departments', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { dept_code, dept_name } = req.body;
+    const { dept_code, dept_name, description, sort_order } = req.body;
+    if (!dept_name) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อหน่วยงาน' });
     try {
-        await db.query('INSERT INTO departments (dept_code, dept_name) VALUES (?, ?)', [dept_code, dept_name]);
+        await db.query(
+            'INSERT INTO departments (dept_code, dept_name, description, sort_order) VALUES (?, ?, ?, ?)',
+            [dept_code || null, dept_name, description || null, sort_order || 0]
+        );
         res.json({ success: true, message: 'Created successfully' });
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Error creating department' });
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
 apiRouter.put('/departments/:id', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { dept_code, dept_name } = req.body;
+    const { dept_code, dept_name, description, sort_order, is_active } = req.body;
+    if (!dept_name) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อหน่วยงาน' });
     try {
-        await db.query('UPDATE departments SET dept_code=?, dept_name=? WHERE id=?', [dept_code, dept_name, req.params.id]);
+        await db.query(
+            'UPDATE departments SET dept_code=?, dept_name=?, description=?, sort_order=?, is_active=? WHERE id=?',
+            [dept_code || null, dept_name, description || null, sort_order || 0, is_active ? 1 : 0, req.params.id]
+        );
         res.json({ success: true, message: 'Updated successfully' });
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Error updating department' });
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
@@ -4550,6 +4571,20 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS rmw TINYINT(1) DEFAULT 0`); } catch(e) {}
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS other TINYINT(1) DEFAULT 0`); } catch(e) {}
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS description TEXT NULL`); } catch(e) {}
+
+        // เพิ่มฟิลด์ใน main_yut (ยุทธศาสตร์)
+        try { await db.query(`ALTER TABLE main_yut ADD COLUMN IF NOT EXISTS yut_code VARCHAR(50) NULL COMMENT 'รหัสย่อยุทธศาสตร์'`); } catch(e) {}
+        try { await db.query(`ALTER TABLE main_yut ADD COLUMN IF NOT EXISTS description TEXT NULL`); } catch(e) {}
+        try { await db.query(`ALTER TABLE main_yut ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0`); } catch(e) {}
+
+        // เพิ่มฟิลด์ใน kpi_main_indicators (หมวดหมู่หลัก)
+        try { await db.query(`ALTER TABLE kpi_main_indicators ADD COLUMN IF NOT EXISTS main_indicator_code VARCHAR(50) NULL COMMENT 'รหัสย่อหมวดหมู่'`); } catch(e) {}
+        try { await db.query(`ALTER TABLE kpi_main_indicators ADD COLUMN IF NOT EXISTS description TEXT NULL`); } catch(e) {}
+        try { await db.query(`ALTER TABLE kpi_main_indicators ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0`); } catch(e) {}
+
+        // เพิ่มฟิลด์ใน departments
+        try { await db.query(`ALTER TABLE departments ADD COLUMN IF NOT EXISTS description TEXT NULL`); } catch(e) {}
+        try { await db.query(`ALTER TABLE departments ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0`); } catch(e) {}
         // เพิ่ม actual_value_field ใน kpi_form_schemas
         try {
             await db.query(`ALTER TABLE kpi_form_schemas ADD COLUMN IF NOT EXISTS actual_value_field VARCHAR(100) NULL COMMENT 'ชื่อฟิลด์ที่ใช้ sync ไปยัง kpi_results.actual_value'`);

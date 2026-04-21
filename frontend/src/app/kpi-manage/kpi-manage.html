@@ -347,23 +347,98 @@
 
       <!-- Fields for Main Indicators -->
       <ng-container *ngIf="activeTab === 'main-indicators'">
-        <div><label class="block text-sm font-medium text-gray-700 mb-1">ชื่อหมวดหมู่หลัก</label><input type="text" [(ngModel)]="currentItem.main_indicator_name" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 hover:border-green-400 transition-colors"></div>
-        <div><label class="block text-sm font-medium text-gray-700 mb-1">ยุทธศาสตร์</label>
-          <select [(ngModel)]="currentItem.yut_id" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 hover:border-green-400 transition-colors">
-            <option *ngFor="let s of strategies" [value]="s.id">{{ s.yut_name }}</option>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-gray-600 mb-1">รหัสย่อ</label>
+            <input type="text" [(ngModel)]="currentItem.main_indicator_code" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-600 mb-1">ลำดับ</label>
+            <input type="number" [(ngModel)]="currentItem.sort_order" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-600 mb-1">ใช้งาน</label>
+            <select [(ngModel)]="currentItem.is_active" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none">
+              <option [ngValue]="1">เปิด</option>
+              <option [ngValue]="0">ปิด</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-600 mb-1">ชื่อหมวดหมู่หลัก <span class="text-red-500">*</span></label>
+          <textarea [(ngModel)]="currentItem.main_indicator_name" rows="2" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none"></textarea>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-600 mb-1">ยุทธศาสตร์</label>
+          <select [(ngModel)]="currentItem.yut_id" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none">
+            <option [ngValue]="null">-- ไม่ระบุ --</option>
+            <option *ngFor="let s of strategies" [ngValue]="s.id">{{ s.yut_name }}</option>
           </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-600 mb-1">รายละเอียด</label>
+          <textarea [(ngModel)]="currentItem.description" rows="2" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none"></textarea>
         </div>
       </ng-container>
 
-      <!-- Fields for Strategies -->
+      <!-- Fields for Strategies (main_yut) -->
       <ng-container *ngIf="activeTab === 'strategies'">
-        <div><label class="block text-sm font-medium text-gray-700 mb-1">ชื่อยุทธศาสตร์</label><input type="text" [(ngModel)]="currentItem.yut_name" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 hover:border-green-400 transition-colors"></div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-gray-600 mb-1">รหัสย่อ <span class="text-gray-400 font-normal">(เช่น ยุทธ.1)</span></label>
+            <input type="text" [(ngModel)]="currentItem.yut_code" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-600 mb-1">ลำดับ</label>
+            <input type="number" [(ngModel)]="currentItem.sort_order" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-600 mb-1">ใช้งาน</label>
+            <select [(ngModel)]="currentItem.is_active" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none">
+              <option [ngValue]="1">เปิด</option>
+              <option [ngValue]="0">ปิด</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-600 mb-1">ชื่อยุทธศาสตร์ <span class="text-red-500">*</span></label>
+          <textarea [(ngModel)]="currentItem.yut_name" rows="2" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none"
+                    placeholder="เช่น ยุทธศาสตร์ที่ 1. ด้านส่งเสริมสุขภาพ..."></textarea>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-600 mb-1">รายละเอียด</label>
+          <textarea [(ngModel)]="currentItem.description" rows="3" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none"
+                    placeholder="คำอธิบายเพิ่มเติม..."></textarea>
+        </div>
       </ng-container>
 
       <!-- Fields for Departments -->
       <ng-container *ngIf="activeTab === 'departments'">
-        <div><label class="block text-sm font-medium text-gray-700 mb-1">รหัสหน่วยงาน</label><input type="text" [(ngModel)]="currentItem.dept_code" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 hover:border-green-400 transition-colors"></div>
-        <div><label class="block text-sm font-medium text-gray-700 mb-1">ชื่อหน่วยงาน</label><input type="text" [(ngModel)]="currentItem.dept_name" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 hover:border-green-400 transition-colors"></div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-gray-600 mb-1">รหัสหน่วยงาน</label>
+            <input type="text" [(ngModel)]="currentItem.dept_code" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-600 mb-1">ลำดับ</label>
+            <input type="number" [(ngModel)]="currentItem.sort_order" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-600 mb-1">ใช้งาน</label>
+            <select [(ngModel)]="currentItem.is_active" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none">
+              <option [ngValue]="1">เปิด</option>
+              <option [ngValue]="0">ปิด</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-600 mb-1">ชื่อหน่วยงาน <span class="text-red-500">*</span></label>
+          <input type="text" [(ngModel)]="currentItem.dept_name" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-600 mb-1">รายละเอียด</label>
+          <textarea [(ngModel)]="currentItem.description" rows="2" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none"></textarea>
+        </div>
       </ng-container>
     </div>
 

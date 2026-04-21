@@ -233,22 +233,25 @@ export class KpiManageComponent implements OnInit {
   openModal(item: any = null) {
     this.isEditMode = !!item;
     if (item) {
-      // แปลง flag TINYINT → boolean สำหรับ checkbox (indicators tab)
       const src = { ...item };
+      src.is_active = Number(src.is_active ?? 1);
+      src.sort_order = Number(src.sort_order ?? 0);
       if (this.activeTab === 'indicators') {
         src.r9 = Number(src.r9) === 1;
         src.moph = Number(src.moph) === 1;
         src.ssj = Number(src.ssj) === 1;
         src.rmw = Number(src.rmw) === 1;
         src.other = Number(src.other) === 1;
-        src.is_active = Number(src.is_active ?? 1);
       }
       this.currentItem = src;
     } else {
-      // default ค่าเริ่มต้นสำหรับ indicators tab
-      this.currentItem = this.activeTab === 'indicators'
-        ? { r9: false, moph: false, ssj: false, rmw: false, other: false, is_active: 1, weight: 1, target_condition: 'GTE' }
-        : {};
+      // default ค่าเริ่มต้นแยกตาม tab
+      const baseDefaults = { is_active: 1, sort_order: 0 };
+      if (this.activeTab === 'indicators') {
+        this.currentItem = { ...baseDefaults, r9: false, moph: false, ssj: false, rmw: false, other: false, weight: 1, target_condition: 'GTE' };
+      } else {
+        this.currentItem = { ...baseDefaults };
+      }
     }
     this.showModal = true;
   }
