@@ -2315,22 +2315,27 @@ apiRouter.get('/main-indicators', authenticateToken, async (req, res) => {
 });
 
 apiRouter.post('/main-indicators', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { indicator_name, yut_id } = req.body;
+    // รองรับทั้ง main_indicator_name (ตามคอลัมน์จริง) และ indicator_name (alias เก่า)
+    const name = req.body.main_indicator_name || req.body.indicator_name;
+    const { yut_id } = req.body;
+    if (!name) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อหมวดหมู่หลัก' });
     try {
-        await db.query('INSERT INTO kpi_main_indicators (indicator_name, yut_id) VALUES (?, ?)', [indicator_name, yut_id]);
+        await db.query('INSERT INTO kpi_main_indicators (main_indicator_name, yut_id) VALUES (?, ?)', [name, yut_id || null]);
         res.json({ success: true, message: 'Created successfully' });
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Error creating main indicator' });
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
 apiRouter.put('/main-indicators/:id', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { indicator_name, yut_id } = req.body;
+    const name = req.body.main_indicator_name || req.body.indicator_name;
+    const { yut_id } = req.body;
+    if (!name) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อหมวดหมู่หลัก' });
     try {
-        await db.query('UPDATE kpi_main_indicators SET indicator_name = ?, yut_id = ? WHERE id = ?', [indicator_name, yut_id, req.params.id]);
+        await db.query('UPDATE kpi_main_indicators SET main_indicator_name = ?, yut_id = ? WHERE id = ?', [name, yut_id || null, req.params.id]);
         res.json({ success: true, message: 'Updated successfully' });
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Error updating main indicator' });
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
