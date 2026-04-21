@@ -58,7 +58,23 @@ export class LoginComponent {
               icon: 'success', title: 'เข้าสู่ระบบสำเร็จ',
               text: `ยินดีต้อนรับ คุณ${response.user.firstname} ${response.user.lastname}`,
               timer: 1500, showConfirmButton: false
-            }).then(() => this.router.navigate(['/dashboard']));
+            }).then(() => {
+              // ประกาศระบบ (แสดงหลัง login เท่านั้น)
+              Swal.fire({
+                icon: 'info',
+                title: '<i class="fas fa-bullhorn text-red-500"></i> ประกาศระบบ',
+                html: `<div class="text-left space-y-2 text-sm">
+                  <p class="bg-red-50 border-l-4 border-red-500 p-3 rounded">
+                    <i class="fas fa-chart-line text-red-600 mr-1"></i>
+                    <b>เริ่มใช้งานตั้งแต่วันที่ 1 เมษายน 2569 เป็นต้นไป</b>
+                  </p>
+                  <p class="text-gray-600">📊 เพื่อรวบรวมผลงาน ตรวจราชการรอบที่ 2</p>
+                  <p class="text-gray-600">⏰ <b>ประมวลผลข้อมูล ทุกวันที่ 20 ของเดือน</b></p>
+                </div>`,
+                confirmButtonText: 'รับทราบ',
+                confirmButtonColor: '#16a34a'
+              }).then(() => this.router.navigate(['/dashboard']));
+            });
           }
         },
         error: (err) => {

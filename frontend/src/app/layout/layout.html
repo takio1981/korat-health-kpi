@@ -1,9 +1,4 @@
-<!-- แถบคาดแดง "ทดสอบระบบ" — fixed เต็มจอบนสุด -->
-<div class="fixed inset-x-0 top-0 bg-red-600 text-white text-center py-0.5 text-xs font-bold tracking-widest z-30 leading-tight">
-  <i class='fas fa-chart-line'></i> เริ่มใช้งานตั้งแต่วันที่ 1 เมษายน 2569 เป็นต้นไป เพื่อรวบรวมผลงาน ตรวจราชการรอบที่ 2 <i class='fas fa-chart-line'></i>
-</div>
-
-<div class="flex h-screen bg-gray-100 font-sans overflow-hidden pt-[20px]">
+<div class="flex h-screen bg-gray-100 font-sans overflow-hidden">
 
     <!-- Mobile Menu Overlay -->
     <div class="fixed inset-0 z-40 lg:hidden transition-all duration-500"
@@ -105,14 +100,23 @@
     <div class="flex-1 flex flex-col overflow-hidden">
 
       <header class="h-16 bg-gradient-to-r from-green-800 to-green-600 shadow-md flex items-center justify-between px-6 z-40 relative">
-        <div class="flex items-center">
+        <div class="flex items-center shrink-0">
           <button (click)="toggleSidebar()" class="text-white hover:text-green-200 focus:outline-none mr-4">
             <i class="fas fa-bars text-xl"></i>
           </button>
           <h2 class="text-lg sm:text-xl font-semibold text-white mr-0 sm:mr-6">{{ pageTitle }}</h2>
         </div>
 
-        <div class="flex items-center">
+        <!-- ประกาศระบบ — กึ่งกลางหน้าจอ (ซ่อนบนมือถือ) -->
+        <div class="hidden lg:flex flex-1 justify-center px-4">
+          <div class="bg-red-600/90 text-white text-center py-1 px-4 rounded-full text-[11px] font-bold tracking-wider leading-tight shadow-md">
+            <i class="fas fa-chart-line mr-1"></i>
+            เริ่มใช้งาน 1 เม.ย. 2569 — รวบรวมผลงานตรวจราชการรอบที่ 2 *** ประมวลผลทุกวันที่ 20 ของเดือน
+            <i class="fas fa-chart-line ml-1"></i>
+          </div>
+        </div>
+
+        <div class="flex items-center shrink-0">
           <!-- Feedback Icon -->
           <a routerLink="/feedback" class="relative text-white hover:text-green-200 mr-4">
             <i class="fas fa-comments text-xl"></i>
