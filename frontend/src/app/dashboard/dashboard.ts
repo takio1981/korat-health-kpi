@@ -278,6 +278,8 @@ export class DashboardComponent implements OnInit {
           this.applyFilters();
           this.loadDashboardStats();
           this.loadDynamicFormMonths();
+          // รีโหลด sub summary → จะ apply override หลังโหลดเสร็จ
+          this.loadSubResultSummary();
           this.cdr.detectChanges();
 
           if (this.kpiData.length === 0) this.showNoDataAlert();
@@ -624,6 +626,7 @@ export class DashboardComponent implements OnInit {
       this.kpiData = allData;
       this.filteredData = allData;
       this.applyFilters();
+      this.loadSubResultSummary();
       this.cdr.detectChanges();
 
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -1654,15 +1657,27 @@ export class DashboardComponent implements OnInit {
   // โหลด aggregate จาก kpi_sub_results สำหรับปี+hospcode ที่เห็น
   loadSubResultSummary() {
     const year = this.selectedYear;
-    // ถ้า role เป็น hos/user_hos → hospcode จำกัด, ถ้าเป็น admin_ssj/super_admin → ไม่ระบุ (โหลดทั้งหมด)
     const hc = this.currentUser?.hospcode && !this.isAdmin && !this.isSuperAdmin ? this.currentUser.hospcode : '';
     this.authService.getSubResultSummary(year, hc).subscribe((res: any) => {
       if (res.success) {
         this.subSummaryMap.clear();
         for (const r of res.data) {
+          // คำนวณ last_actual + avg_pct จาก monthly values (JS)
+          const months = ['m09','m08','m07','m06','m05','m04','m03','m02','m01','m12','m11','m10'];
+          let lastActual: any = null;
+          for (const m of months) {
+            const v = r[m];
+            if (v !== null && v !== undefined && String(v).trim() !== '' && parseFloat(v) !== 0) {
+              lastActual = v; break;
+            }
+          }
+          r.last_actual = lastActual;
+          r.avg_pct = (lastActual != null && r.total_target && parseFloat(r.total_target) > 0)
+            ? (parseFloat(lastActual) / parseFloat(r.total_target) * 100).toFixed(1) : null;
           const key = `${r.indicator_id}|${r.hospcode}|${r.year_bh}`;
           this.subSummaryMap.set(key, r);
         }
+        this.applySubSummaryToKpiData();
         this.cdr.detectChanges();
       }
     });
@@ -1670,6 +1685,37 @@ export class DashboardComponent implements OnInit {
 
   getSubSummary(item: any): any {
     return this.subSummaryMap.get(`${item.indicator_id}|${item.hospcode}|${item.year_bh}`);
+  }
+
+  // Merge sub aggregate → main indicator row (override target + monthly + last_actual)
+  applySubSummaryToKpiData() {
+    if (!this.kpiData || this.kpiData.length === 0) return;
+    for (const item of this.kpiData) {
+      const sum = this.getSubSummary(item);
+      if (!sum) continue;
+      // เก็บ original ไว้สำรองก่อน override (เผื่อ reset)
+      if (!item._mainOriginal) {
+        item._mainOriginal = {
+          target_value: item.target_value, last_actual: item.last_actual,
+          oct: item.oct, nov: item.nov, dece: item.dece, jan: item.jan, feb: item.feb,
+          mar: item.mar, apr: item.apr, may: item.may, jun: item.jun, jul: item.jul, aug: item.aug, sep: item.sep
+        };
+      }
+      // override ด้วยค่ารวมจาก sub
+      if (sum.total_target != null) item.target_value = String(sum.total_target);
+      const monthMap: any = { oct:'m10', nov:'m11', dece:'m12', jan:'m01', feb:'m02', mar:'m03', apr:'m04', may:'m05', jun:'m06', jul:'m07', aug:'m08', sep:'m09' };
+      for (const k of Object.keys(monthMap)) {
+        const v = sum[monthMap[k]];
+        if (v != null) item[k] = String(v);
+      }
+      if (sum.last_actual != null) {
+        item.last_actual = String(sum.last_actual);
+        item.total_actual = parseFloat(sum.last_actual) || 0;
+      }
+      item._fromSubSummary = true;
+    }
+    this.filteredData = [...this.kpiData];
+    this.applyFilters();
   }
 
   getSubCount(indicatorId: number): number {

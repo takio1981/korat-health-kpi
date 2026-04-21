@@ -2502,7 +2502,7 @@ apiRouter.get('/sub-results', authenticateToken, async (req, res) => {
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-// GET /sub-results/summary — aggregate ต่อ indicator + hospcode (ใช้เดือนล่าสุดที่คีย์ของแต่ละ sub)
+// GET /sub-results/summary — aggregate ต่อ indicator + hospcode (รวม monthly breakdown)
 apiRouter.get('/sub-results/summary', authenticateToken, async (req, res) => {
     try {
         const { year_bh, hospcode } = req.query;
@@ -2511,32 +2511,31 @@ apiRouter.get('/sub-results/summary', authenticateToken, async (req, res) => {
         if (hospcode) { conditions.push('sr.hospcode = ?'); params.push(hospcode); }
         const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
 
-        // หา "เดือนล่าสุด" ต่อ sub+year+hospcode ที่มี actual_value — แล้ว JOIN กลับ
+        // Aggregate ต่อ (indicator_id, hospcode, year_bh):
+        // - sub_count: จำนวน sub_indicator ที่เกี่ยวข้อง
+        // - total_target: SUM target ของแต่ละ sub (เอา max target per sub ก่อน SUM)
+        // - m10..m09: SUM actual_value ของ sub แต่ละเดือน
         const [rows] = await db.query(`
             SELECT
                 si.indicator_id,
                 sr.hospcode,
                 sr.year_bh,
                 COUNT(DISTINCT si.id) AS sub_count,
-                SUM(CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4))) AS total_actual,
-                AVG(CAST(NULLIF(sr.target_value,'') AS DECIMAL(20,4))) AS avg_target,
-                AVG(
-                    CASE WHEN CAST(NULLIF(sr.target_value,'') AS DECIMAL(20,4)) > 0
-                         THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4))
-                              / CAST(NULLIF(sr.target_value,'') AS DECIMAL(20,4)) * 100
-                    END
-                ) AS avg_pct
+                SUM(CASE WHEN sr.month_bh = 10 THEN CAST(NULLIF(sr.target_value,'') AS DECIMAL(20,4)) END) AS total_target,
+                SUM(CASE WHEN sr.month_bh = 10 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m10,
+                SUM(CASE WHEN sr.month_bh = 11 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m11,
+                SUM(CASE WHEN sr.month_bh = 12 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m12,
+                SUM(CASE WHEN sr.month_bh = 1  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m01,
+                SUM(CASE WHEN sr.month_bh = 2  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m02,
+                SUM(CASE WHEN sr.month_bh = 3  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m03,
+                SUM(CASE WHEN sr.month_bh = 4  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m04,
+                SUM(CASE WHEN sr.month_bh = 5  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m05,
+                SUM(CASE WHEN sr.month_bh = 6  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m06,
+                SUM(CASE WHEN sr.month_bh = 7  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m07,
+                SUM(CASE WHEN sr.month_bh = 8  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m08,
+                SUM(CASE WHEN sr.month_bh = 9  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m09
             FROM kpi_sub_results sr
             JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
-            JOIN (
-                SELECT sub_indicator_id, year_bh, hospcode, MAX(month_bh) AS latest_month
-                FROM kpi_sub_results
-                WHERE actual_value IS NOT NULL AND actual_value != ''
-                GROUP BY sub_indicator_id, year_bh, hospcode
-            ) latest ON sr.sub_indicator_id = latest.sub_indicator_id
-                    AND sr.year_bh = latest.year_bh
-                    AND sr.hospcode = latest.hospcode
-                    AND sr.month_bh = latest.latest_month
             ${where}
             GROUP BY si.indicator_id, sr.hospcode, sr.year_bh
         `, params);
