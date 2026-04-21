@@ -1658,8 +1658,7 @@ export class DashboardComponent implements OnInit {
       indicator_name: item.kpi_indicators_name,
       hospcode: item.hospcode,
       hosname: item.hosname,
-      year_bh: item.year_bh || this.selectedYear,
-      month_bh: 10
+      year_bh: item.year_bh || this.selectedYear
     };
     this.showSubResultModal = true;
     this.loadSubResultList();
@@ -1671,63 +1670,94 @@ export class DashboardComponent implements OnInit {
     this.subResultList = [];
   }
 
+  // ลำดับเดือนตามปีงบประมาณ ต.ค.→ก.ย.
+  subMonthColumns = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+  subMonthLabels: { [k: number]: string } = {
+    10: 'ต.ค.', 11: 'พ.ย.', 12: 'ธ.ค.', 1: 'ม.ค.', 2: 'ก.พ.', 3: 'มี.ค.',
+    4: 'เม.ย.', 5: 'พ.ค.', 6: 'มิ.ย.', 7: 'ก.ค.', 8: 'ส.ค.', 9: 'ก.ย.'
+  };
+
+  // สำหรับเก็บค่าเดิมตอนโหลด — ใช้ตรวจว่าเปลี่ยนไหมก่อนบันทึก
+  private _subOriginal: Map<string, { target: string; actual: string }> = new Map();
+
   loadSubResultList() {
     const ctx = this.subResultContext;
     if (!ctx) return;
-    // โหลด sub-indicators + ดึง result ที่มีอยู่แล้ว
+    this._subOriginal.clear();
     this.authService.getSubIndicators(ctx.indicator_id).subscribe((res: any) => {
-      if (res.success) {
-        const subs = res.data.filter((s: any) => Number(s.is_active) === 1);
-        this.authService.getSubResults({ indicator_id: ctx.indicator_id, year_bh: ctx.year_bh, hospcode: ctx.hospcode }).subscribe((r2: any) => {
-          const resultMap = new Map<string, any>();
-          if (r2.success) for (const r of r2.data) resultMap.set(`${r.sub_indicator_id}_${r.month_bh}`, r);
-          this.subResultList = subs.map((s: any) => {
-            const existing = resultMap.get(`${s.id}_${ctx.month_bh}`);
-            return {
-              ...s,
-              _target: existing?.target_value ?? s.target_percentage ?? '',
-              _actual: existing?.actual_value ?? ''
-            };
-          });
-          this.cdr.detectChanges();
+      if (!res.success) return;
+      const subs = res.data.filter((s: any) => Number(s.is_active) === 1);
+      this.authService.getSubResults({ indicator_id: ctx.indicator_id, year_bh: ctx.year_bh, hospcode: ctx.hospcode }).subscribe((r2: any) => {
+        // pivot: key = sub_id_month → { target_value, actual_value }
+        const resultMap = new Map<string, any>();
+        if (r2.success) for (const r of r2.data) resultMap.set(`${r.sub_indicator_id}_${r.month_bh}`, r);
+
+        this.subResultList = subs.map((s: any) => {
+          // target ระดับ sub (ใช้ร่วมทุกเดือน → ดึงจาก month 10 ก่อน แล้ว fallback ไป sub.target_percentage)
+          const m10Row = resultMap.get(`${s.id}_10`);
+          const _target = m10Row?.target_value ?? s.target_percentage ?? '';
+          // สร้าง map เดือน → actual_value
+          const monthActuals: { [k: number]: string } = {};
+          for (const m of this.subMonthColumns) {
+            const row = resultMap.get(`${s.id}_${m}`);
+            monthActuals[m] = row?.actual_value ?? '';
+            this._subOriginal.set(`${s.id}_${m}`, {
+              target: row?.target_value ?? '',
+              actual: row?.actual_value ?? ''
+            });
+          }
+          return { ...s, _target, _actuals: monthActuals };
         });
-      }
+        this.cdr.detectChanges();
+      });
     });
   }
 
-  onSubMonthChange() {
-    this.loadSubResultList();
-  }
-
-  saveSubResults() {
+  async saveSubResults() {
     const ctx = this.subResultContext;
     if (!ctx) return;
-    let count = 0, errors = 0;
-    const total = this.subResultList.length;
+    const calls: any[] = [];
+    // สำหรับแต่ละ sub × แต่ละเดือน → ตรวจว่าเปลี่ยนไหม, ถ้าเปลี่ยน → upsert
     for (const s of this.subResultList) {
-      this.authService.upsertSubResult({
-        sub_indicator_id: s.id,
-        year_bh: ctx.year_bh,
-        hospcode: ctx.hospcode,
-        month_bh: ctx.month_bh,
-        target_value: s._target || null,
-        actual_value: s._actual || null,
-        status: 'Pending'
-      }).subscribe({
-        next: (res: any) => {
-          if (res.success) count++; else errors++;
-          if (count + errors === total) {
-            Swal.fire({ icon: errors > 0 ? 'warning' : 'success', title: `บันทึก ${count}/${total} สำเร็จ`, timer: 2000, showConfirmButton: false });
-            if (errors === 0) this.closeSubResultModal();
-          }
-        },
-        error: () => {
-          errors++;
-          if (count + errors === total) {
-            Swal.fire('ผิดพลาด', `บันทึกสำเร็จ ${count}/${total}`, 'warning');
-          }
+      for (const m of this.subMonthColumns) {
+        const actualNew = (s._actuals[m] ?? '').toString().trim();
+        const orig = this._subOriginal.get(`${s.id}_${m}`) || { target: '', actual: '' };
+        const targetNew = (s._target ?? '').toString().trim();
+        // upsert ถ้า actual เปลี่ยน หรือ target เปลี่ยน หรือเป็น row ใหม่ (orig ว่างทั้งคู่)
+        const changed = actualNew !== orig.actual || targetNew !== orig.target;
+        const hasValue = actualNew !== '' || targetNew !== '';
+        if (changed && hasValue) {
+          calls.push(this.authService.upsertSubResult({
+            sub_indicator_id: s.id,
+            year_bh: ctx.year_bh,
+            hospcode: ctx.hospcode,
+            month_bh: m,
+            target_value: targetNew || null,
+            actual_value: actualNew || null,
+            status: 'Pending'
+          }).toPromise());
         }
+      }
+    }
+    if (calls.length === 0) {
+      Swal.fire({ icon: 'info', title: 'ไม่มีการเปลี่ยนแปลง', timer: 1500, showConfirmButton: false });
+      return;
+    }
+    Swal.fire({ title: `กำลังบันทึก ${calls.length} รายการ...`, allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+      const results = await Promise.allSettled(calls);
+      const ok = results.filter(r => r.status === 'fulfilled').length;
+      const fail = results.length - ok;
+      Swal.fire({
+        icon: fail > 0 ? 'warning' : 'success',
+        title: fail > 0 ? `บันทึก ${ok}/${results.length} รายการ` : 'บันทึกสำเร็จ',
+        html: `<p class="text-sm">บันทึก <b>${ok}</b> รายการ${fail > 0 ? `, ล้มเหลว <b class="text-red-500">${fail}</b>` : ''}</p>`,
+        timer: 2500, showConfirmButton: false
       });
+      if (fail === 0) this.closeSubResultModal();
+      else this.loadSubResultList();
+    } catch (e: any) {
+      Swal.fire('ผิดพลาด', e?.message || 'บันทึกไม่สำเร็จ', 'error');
     }
   }
 
