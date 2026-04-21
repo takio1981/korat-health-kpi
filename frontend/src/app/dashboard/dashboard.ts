@@ -1672,8 +1672,8 @@ export class DashboardComponent implements OnInit {
             }
           }
           r.last_actual = lastActual;
-          r.avg_pct = (lastActual != null && r.total_target && parseFloat(r.total_target) > 0)
-            ? (parseFloat(lastActual) / parseFloat(r.total_target) * 100).toFixed(1) : null;
+          r.avg_pct = (lastActual != null && r.avg_target && parseFloat(r.avg_target) > 0)
+            ? (parseFloat(lastActual) / parseFloat(r.avg_target) * 100).toFixed(1) : null;
           const key = `${r.indicator_id}|${r.hospcode}|${r.year_bh}`;
           this.subSummaryMap.set(key, r);
         }
@@ -1701,8 +1701,8 @@ export class DashboardComponent implements OnInit {
           mar: item.mar, apr: item.apr, may: item.may, jun: item.jun, jul: item.jul, aug: item.aug, sep: item.sep
         };
       }
-      // override ด้วยค่ารวมจาก sub
-      if (sum.total_target != null) item.target_value = String(sum.total_target);
+      // override ด้วยค่าเฉลี่ยจาก sub (หารด้วยจำนวน sub)
+      if (sum.avg_target != null) item.target_value = String(sum.avg_target);
       const monthMap: any = { oct:'m10', nov:'m11', dece:'m12', jan:'m01', feb:'m02', mar:'m03', apr:'m04', may:'m05', jun:'m06', jul:'m07', aug:'m08', sep:'m09' };
       for (const k of Object.keys(monthMap)) {
         const v = sum[monthMap[k]];

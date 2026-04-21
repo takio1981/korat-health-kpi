@@ -2513,27 +2513,27 @@ apiRouter.get('/sub-results/summary', authenticateToken, async (req, res) => {
 
         // Aggregate ต่อ (indicator_id, hospcode, year_bh):
         // - sub_count: จำนวน sub_indicator ที่เกี่ยวข้อง
-        // - total_target: SUM target ของแต่ละ sub (เอา max target per sub ก่อน SUM)
-        // - m10..m09: SUM actual_value ของ sub แต่ละเดือน
+        // - avg_target: AVG target ของแต่ละ sub (หารด้วยจำนวน sub ที่มีค่า)
+        // - m10..m09: AVG actual_value ของ sub แต่ละเดือน (หารด้วยจำนวน sub)
         const [rows] = await db.query(`
             SELECT
                 si.indicator_id,
                 sr.hospcode,
                 sr.year_bh,
                 COUNT(DISTINCT si.id) AS sub_count,
-                SUM(CASE WHEN sr.month_bh = 10 THEN CAST(NULLIF(sr.target_value,'') AS DECIMAL(20,4)) END) AS total_target,
-                SUM(CASE WHEN sr.month_bh = 10 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m10,
-                SUM(CASE WHEN sr.month_bh = 11 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m11,
-                SUM(CASE WHEN sr.month_bh = 12 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m12,
-                SUM(CASE WHEN sr.month_bh = 1  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m01,
-                SUM(CASE WHEN sr.month_bh = 2  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m02,
-                SUM(CASE WHEN sr.month_bh = 3  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m03,
-                SUM(CASE WHEN sr.month_bh = 4  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m04,
-                SUM(CASE WHEN sr.month_bh = 5  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m05,
-                SUM(CASE WHEN sr.month_bh = 6  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m06,
-                SUM(CASE WHEN sr.month_bh = 7  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m07,
-                SUM(CASE WHEN sr.month_bh = 8  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m08,
-                SUM(CASE WHEN sr.month_bh = 9  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m09
+                AVG(CASE WHEN sr.month_bh = 10 THEN CAST(NULLIF(sr.target_value,'') AS DECIMAL(20,4)) END) AS avg_target,
+                AVG(CASE WHEN sr.month_bh = 10 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m10,
+                AVG(CASE WHEN sr.month_bh = 11 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m11,
+                AVG(CASE WHEN sr.month_bh = 12 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m12,
+                AVG(CASE WHEN sr.month_bh = 1  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m01,
+                AVG(CASE WHEN sr.month_bh = 2  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m02,
+                AVG(CASE WHEN sr.month_bh = 3  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m03,
+                AVG(CASE WHEN sr.month_bh = 4  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m04,
+                AVG(CASE WHEN sr.month_bh = 5  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m05,
+                AVG(CASE WHEN sr.month_bh = 6  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m06,
+                AVG(CASE WHEN sr.month_bh = 7  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m07,
+                AVG(CASE WHEN sr.month_bh = 8  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m08,
+                AVG(CASE WHEN sr.month_bh = 9  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m09
             FROM kpi_sub_results sr
             JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
             ${where}
