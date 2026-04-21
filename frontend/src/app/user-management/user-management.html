@@ -18,6 +18,10 @@
                   class="px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs font-bold transition-colors shadow-sm">
             <i class="fas fa-toggle-off mr-1"></i> ปิดใช้งานทั้งหมด
           </button>
+          <button (click)="openUserSyncModal()"
+                  class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors shadow-sm">
+            <i class="fas fa-cloud-upload-alt mr-1"></i> Data Synchronization
+          </button>
         </div>
         <button (click)="openModal()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold">
           <i class="fas fa-user-plus mr-2"></i> เพิ่มผู้ใช้งาน
@@ -476,6 +480,105 @@
     <div class="mt-6 flex justify-end gap-3">
       <button (click)="closeModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-bold">ยกเลิก</button>
       <button (click)="saveUser()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold shadow-md">บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<!-- Data Sync Modal -->
+<div *ngIf="showSyncModal" class="fixed inset-0 z-50 flex items-start justify-center bg-black/60 overflow-y-auto py-4 px-2">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl my-auto">
+    <div class="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-blue-700 to-blue-600 rounded-t-2xl">
+      <div>
+        <h3 class="text-lg font-bold text-white"><i class="fas fa-cloud-upload-alt mr-2"></i>Data Synchronization — Users</h3>
+        <p class="text-blue-200 text-xs mt-0.5">เปรียบเทียบและ sync users Local ↔ HDC</p>
+      </div>
+      <button (click)="closeSyncModal()" class="text-white/70 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+    </div>
+    <div class="p-6">
+      <!-- Loading -->
+      <div *ngIf="syncLoading" class="flex items-center justify-center py-12">
+        <div class="text-center">
+          <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600 mx-auto mb-3"></div>
+          <p class="text-gray-500 text-sm">กำลังเปรียบเทียบข้อมูล...</p>
+        </div>
+      </div>
+
+      <!-- Summary Cards -->
+      <div *ngIf="!syncLoading && syncResult" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <div class="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
+          <p class="text-2xl font-bold text-green-600">{{ syncResult.summary.matched }}</p>
+          <p class="text-[10px] text-green-700 font-bold"><i class="fas fa-check-circle mr-1"></i>ตรงกัน</p>
+        </div>
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center cursor-pointer hover:shadow-md" (click)="toggleSyncFilter('different')" [class.ring-2]="syncFilter === 'different'">
+          <p class="text-2xl font-bold text-amber-600">{{ syncResult.summary.different }}</p>
+          <p class="text-[10px] text-amber-700 font-bold"><i class="fas fa-exclamation-triangle mr-1"></i>ต่างกัน</p>
+        </div>
+        <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center cursor-pointer hover:shadow-md" (click)="toggleSyncFilter('local_only')" [class.ring-2]="syncFilter === 'local_only'">
+          <p class="text-2xl font-bold text-blue-600">{{ syncResult.summary.local_only }}</p>
+          <p class="text-[10px] text-blue-700 font-bold"><i class="fas fa-arrow-up mr-1"></i>เฉพาะ Local</p>
+        </div>
+        <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 text-center cursor-pointer hover:shadow-md" (click)="toggleSyncFilter('hdc_only')" [class.ring-2]="syncFilter === 'hdc_only'">
+          <p class="text-2xl font-bold text-gray-500">{{ syncResult.summary.hdc_only }}</p>
+          <p class="text-[10px] text-gray-600 font-bold"><i class="fas fa-arrow-down mr-1"></i>เฉพาะ HDC</p>
+        </div>
+      </div>
+
+      <!-- Filter -->
+      <div *ngIf="!syncLoading && syncResult" class="flex flex-wrap items-center gap-2 mb-2 text-xs">
+        <span class="text-gray-500">แสดง:</span>
+        <button (click)="syncFilter = ''; buildSyncList()" class="px-2 py-1 rounded" [ngClass]="syncFilter === '' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'">ทั้งหมด</button>
+        <button (click)="toggleSyncFilter('different')" class="px-2 py-1 rounded" [ngClass]="syncFilter === 'different' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700'">ต่างกัน</button>
+        <button (click)="toggleSyncFilter('local_only')" class="px-2 py-1 rounded" [ngClass]="syncFilter === 'local_only' ? 'bg-blue-500 text-white' : 'bg-blue-50 text-blue-700'">เฉพาะ Local</button>
+        <span class="text-gray-400 ml-auto">เลือก: <b>{{ syncSelected.size }}</b> / {{ syncListFiltered.length }}</span>
+      </div>
+
+      <!-- List -->
+      <div *ngIf="!syncLoading && syncResult" class="border border-gray-200 rounded-xl max-h-[50vh] overflow-y-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-xs sticky top-0">
+            <tr>
+              <th class="px-3 py-2 text-center w-10">
+                <input type="checkbox" [checked]="isSyncAllSelected()" (change)="toggleSyncAll()">
+              </th>
+              <th class="px-3 py-2 text-left">Username</th>
+              <th class="px-3 py-2 text-left">ชื่อ-นามสกุล</th>
+              <th class="px-3 py-2 text-left">Role</th>
+              <th class="px-3 py-2 text-left">Hospcode</th>
+              <th class="px-3 py-2 text-center">สถานะ</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <tr *ngFor="let u of syncListFiltered" class="hover:bg-gray-50" [class.bg-blue-50]="syncSelected.has(u.username)">
+              <td class="px-3 py-2 text-center">
+                <input type="checkbox" [checked]="syncSelected.has(u.username)" (change)="toggleSyncUser(u.username)" [disabled]="u._syncStatus === 'hdc_only'">
+              </td>
+              <td class="px-3 py-2 font-mono font-bold text-gray-800">{{ u.username }}</td>
+              <td class="px-3 py-2 text-gray-600">{{ u.firstname }} {{ u.lastname }}</td>
+              <td class="px-3 py-2 text-gray-600 text-xs">{{ u.role }}</td>
+              <td class="px-3 py-2 text-gray-600 text-xs">{{ u.hospcode || '-' }}</td>
+              <td class="px-3 py-2 text-center">
+                <span *ngIf="u._syncStatus === 'matched'" class="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-bold">ตรงกัน</span>
+                <span *ngIf="u._syncStatus === 'different'" class="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-[10px] font-bold">ต่างกัน</span>
+                <span *ngIf="u._syncStatus === 'local_only'" class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-bold">เฉพาะ Local</span>
+                <span *ngIf="u._syncStatus === 'hdc_only'" class="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[10px] font-bold">เฉพาะ HDC</span>
+              </td>
+            </tr>
+            <tr *ngIf="syncListFiltered.length === 0">
+              <td colspan="6" class="px-3 py-10 text-center text-gray-400 text-sm">ไม่มีข้อมูล</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="px-6 py-4 border-t flex justify-between items-center bg-gray-50 rounded-b-2xl">
+      <p class="text-xs text-gray-500"><i class="fas fa-info-circle mr-1"></i>UPSERT: ข้อมูลซ้ำจะถูกอัปเดต, ที่ไม่ซ้ำใน HDC ยังอยู่</p>
+      <div class="flex gap-2">
+        <button (click)="closeSyncModal()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-bold">ยกเลิก</button>
+        <button (click)="executeSyncUsers()" [disabled]="syncSelected.size === 0 || syncExecuting"
+                class="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl text-sm font-bold shadow">
+          <i class="fas fa-cloud-upload-alt mr-1"></i>Sync → HDC ({{ syncSelected.size }})
+        </button>
+      </div>
     </div>
   </div>
 </div>

@@ -65,6 +65,9 @@
                 <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform"
                       [ngClass]="item.is_active === 1 || item.is_active === '1' || item.is_active === true ? 'translate-x-4' : 'translate-x-0.5'"></span>
               </button>
+              <button *ngIf="activeTab === 'indicators'" (click)="openSubModal(item)" class="text-indigo-600 text-sm" title="ตัวชี้วัดย่อย">
+                <i class="fas fa-list-ul"></i><span class="ms-0.5 text-[10px] font-bold">{{ getSubCount(item.id) }}</span>
+              </button>
               <button (click)="openModal(item)" class="text-yellow-500 text-sm"><i class="fas fa-edit"></i></button>
               <button *ngIf="isSuperAdmin" (click)="deleteItem(item.id)" class="text-red-500 text-sm"><i class="fas fa-trash"></i></button>
             </div>
@@ -126,8 +129,111 @@
               </td>
 
               <td class="px-4 py-3 text-right space-x-2">
+                <button *ngIf="activeTab === 'indicators'" (click)="openSubModal(item)" class="text-indigo-600 hover:text-indigo-800" title="ตัวชี้วัดย่อย">
+                  <i class="fas fa-list-ul"></i>
+                  <span class="inline-flex items-center justify-center min-w-[18px] h-[18px] ml-1 px-1 bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded-full">{{ getSubCount(item.id) }}</span>
+                </button>
                 <button (click)="openModal(item)" class="text-yellow-500 hover:text-yellow-600"><i class="fas fa-edit"></i></button>
                 <button *ngIf="isSuperAdmin" (click)="deleteItem(item.id)" class="text-red-500 hover:text-red-600"><i class="fas fa-trash"></i></button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Sub-Indicator Modal -->
+<div *ngIf="showSubModal" class="fixed inset-0 z-50 flex items-start justify-center bg-black/60 overflow-y-auto py-4 px-2">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl my-auto">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-indigo-700 to-indigo-600 rounded-t-2xl">
+      <div>
+        <h3 class="text-lg font-bold text-white"><i class="fas fa-list-ul mr-2"></i>ตัวชี้วัดย่อย</h3>
+        <p class="text-indigo-200 text-xs mt-0.5 truncate max-w-[600px]">{{ subParentIndicator?.kpi_indicators_name }}</p>
+      </div>
+      <button (click)="closeSubModal()" class="text-white/70 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+    </div>
+    <div class="p-6">
+      <!-- ปุ่มเพิ่ม -->
+      <div *ngIf="isSuperAdmin && !showSubForm" class="mb-4">
+        <button (click)="openSubForm()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow">
+          <i class="fas fa-plus mr-1"></i>เพิ่มตัวชี้วัดย่อย
+        </button>
+      </div>
+      <!-- ฟอร์มเพิ่ม/แก้ไข -->
+      <div *ngIf="showSubForm" class="mb-4 bg-indigo-50 border border-indigo-200 rounded-xl p-4 space-y-3">
+        <h4 class="font-bold text-indigo-800 text-sm">{{ isSubEdit ? 'แก้ไข' : 'เพิ่ม' }}ตัวชี้วัดย่อย</h4>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="sm:col-span-2">
+            <label class="text-xs font-bold text-gray-600">ชื่อตัวชี้วัดย่อย <span class="text-red-500">*</span></label>
+            <input type="text" [(ngModel)]="subCurrent.sub_indicator_name" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+          </div>
+          <div>
+            <label class="text-xs font-bold text-gray-600">รหัส</label>
+            <input type="text" [(ngModel)]="subCurrent.sub_indicator_code" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+          </div>
+          <div>
+            <label class="text-xs font-bold text-gray-600">ค่าเป้าหมาย (%)</label>
+            <input type="text" [(ngModel)]="subCurrent.target_percentage" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+          </div>
+          <div>
+            <label class="text-xs font-bold text-gray-600">น้ำหนัก</label>
+            <input type="number" step="0.01" [(ngModel)]="subCurrent.weight" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+          </div>
+          <div>
+            <label class="text-xs font-bold text-gray-600">ลำดับ</label>
+            <input type="number" [(ngModel)]="subCurrent.sort_order" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+          </div>
+          <div class="sm:col-span-2">
+            <label class="text-xs font-bold text-gray-600">รายละเอียด</label>
+            <textarea [(ngModel)]="subCurrent.description" rows="2" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
+          </div>
+        </div>
+        <div class="flex gap-2 justify-end">
+          <button (click)="showSubForm = false" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-bold">ยกเลิก</button>
+          <button (click)="saveSub()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow">
+            <i class="fas fa-save mr-1"></i>บันทึก
+          </button>
+        </div>
+      </div>
+      <!-- รายการ sub-indicators -->
+      <div class="border border-gray-200 rounded-xl overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-xs">
+            <tr>
+              <th class="px-3 py-2 text-left">#</th>
+              <th class="px-3 py-2 text-left">ชื่อตัวชี้วัดย่อย</th>
+              <th class="px-3 py-2 text-left">รหัส</th>
+              <th class="px-3 py-2 text-right">เป้าหมาย</th>
+              <th class="px-3 py-2 text-right">น้ำหนัก</th>
+              <th class="px-3 py-2 text-center">สถานะ</th>
+              <th class="px-3 py-2 text-right">จัดการ</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <tr *ngFor="let s of subList; let i = index" class="hover:bg-gray-50"
+                [ngClass]="{'opacity-50': s.is_active === 0 || s.is_active === '0'}">
+              <td class="px-3 py-2 text-gray-400 text-xs">{{ i + 1 }}</td>
+              <td class="px-3 py-2 font-medium text-gray-900">{{ s.sub_indicator_name }}</td>
+              <td class="px-3 py-2 text-gray-600 text-xs">{{ s.sub_indicator_code || '-' }}</td>
+              <td class="px-3 py-2 text-right text-gray-600">{{ s.target_percentage || '-' }}</td>
+              <td class="px-3 py-2 text-right text-gray-600">{{ s.weight }}</td>
+              <td class="px-3 py-2 text-center">
+                <button (click)="toggleSubActive(s)" class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
+                        [ngClass]="s.is_active === 1 || s.is_active === '1' ? 'bg-green-500' : 'bg-gray-300'">
+                  <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform"
+                        [ngClass]="s.is_active === 1 || s.is_active === '1' ? 'translate-x-4' : 'translate-x-0.5'"></span>
+                </button>
+              </td>
+              <td class="px-3 py-2 text-right space-x-2">
+                <button (click)="openSubForm(s)" class="text-yellow-500"><i class="fas fa-edit"></i></button>
+                <button *ngIf="isSuperAdmin" (click)="deleteSub(s.id)" class="text-red-500"><i class="fas fa-trash"></i></button>
+              </td>
+            </tr>
+            <tr *ngIf="subList.length === 0">
+              <td colspan="7" class="px-3 py-10 text-center text-gray-400 text-sm">
+                <i class="fas fa-inbox text-3xl mb-2 block"></i>ยังไม่มีตัวชี้วัดย่อย
               </td>
             </tr>
           </tbody>

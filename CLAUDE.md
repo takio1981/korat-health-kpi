@@ -351,6 +351,8 @@ docker compose up -d
 | kpi_main_indicators | หมวดหมู่หลัก | id, main_indicator_name, yut_id |
 | main_yut | ยุทธศาสตร์ | id, yut_name |
 | kpi_results | ผลงาน KPI | id, indicator_id, year_bh, hospcode, month_bh, target_value, actual_value, status, is_locked |
+| kpi_sub_indicators | ตัวชี้วัดย่อย | id, indicator_id, sub_indicator_name, sub_indicator_code, target_percentage, weight, sort_order, is_active |
+| kpi_sub_results | ผลงานย่อย | id, sub_indicator_id, year_bh, hospcode, month_bh, target_value, actual_value (UNIQUE: sub_indicator_id+year+hospcode+month) |
 | kpi_summary | สรุป (Materialized View) สำหรับ Chart + Report ทั้ง 4 แถบ | indicator_id, year_bh, hospcode, dept_id, distid, oct-sep, last_actual |
 | chospital | หน่วยบริการ | hoscode, hosname, hostype, distid, provcode, distcode |
 | co_district | อำเภอ | distid, distname |

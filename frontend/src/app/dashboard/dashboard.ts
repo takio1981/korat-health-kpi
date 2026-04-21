@@ -71,6 +71,19 @@ export class DashboardComponent implements OnInit {
   selectedKpiName: string = '';
   kpiTrendOptions: any = {};
 
+  // Sub-Indicator Result Modal (ใน dashboard สำหรับบันทึกผลงานย่อย)
+  showSubResultModal: boolean = false;
+  subResultContext: any = null; // { indicator_id, indicator_name, hospcode, hosname, year_bh, month_bh }
+  subResultList: any[] = []; // sub-indicators พร้อมผลงาน
+  subMonthOptions = [
+    { v: 10, name: 'ต.ค.' }, { v: 11, name: 'พ.ย.' }, { v: 12, name: 'ธ.ค.' },
+    { v: 1, name: 'ม.ค.' }, { v: 2, name: 'ก.พ.' }, { v: 3, name: 'มี.ค.' },
+    { v: 4, name: 'เม.ย.' }, { v: 5, name: 'พ.ค.' }, { v: 6, name: 'มิ.ย.' },
+    { v: 7, name: 'ก.ค.' }, { v: 8, name: 'ส.ค.' }, { v: 9, name: 'ก.ย.' }
+  ];
+  // map indicator_id → sub count (แสดงปุ่มบนแถว)
+  subIndicatorCountMap: Map<number, number> = new Map();
+
   isLoading: boolean = false;
   private animationTimer: any;
   isAdmin: boolean = false;
@@ -172,6 +185,7 @@ export class DashboardComponent implements OnInit {
     }
     this.loadAppealSettings();
     this.loadDataEntryLock();
+    this.loadSubIndicatorCounts();
     if (this.isAdmin || this.isLocalAdmin) this.loadTargetEditRequests();
   }
 
@@ -1615,6 +1629,106 @@ export class DashboardComponent implements OnInit {
 
   closeTrendModal() {
     this.showTrendModal = false;
+  }
+
+  // === Sub-Indicator Result Modal ===
+  loadSubIndicatorCounts() {
+    this.authService.getSubIndicators().subscribe({
+      next: (res: any) => {
+        if (res.success) {
+          this.subIndicatorCountMap.clear();
+          for (const s of res.data) {
+            if (Number(s.is_active) === 1) {
+              this.subIndicatorCountMap.set(s.indicator_id, (this.subIndicatorCountMap.get(s.indicator_id) || 0) + 1);
+            }
+          }
+          this.cdr.detectChanges();
+        }
+      }
+    });
+  }
+
+  getSubCount(indicatorId: number): number {
+    return this.subIndicatorCountMap.get(indicatorId) || 0;
+  }
+
+  openSubResultModal(item: any) {
+    this.subResultContext = {
+      indicator_id: item.indicator_id,
+      indicator_name: item.kpi_indicators_name,
+      hospcode: item.hospcode,
+      hosname: item.hosname,
+      year_bh: item.year_bh || this.selectedYear,
+      month_bh: 10
+    };
+    this.showSubResultModal = true;
+    this.loadSubResultList();
+  }
+
+  closeSubResultModal() {
+    this.showSubResultModal = false;
+    this.subResultContext = null;
+    this.subResultList = [];
+  }
+
+  loadSubResultList() {
+    const ctx = this.subResultContext;
+    if (!ctx) return;
+    // โหลด sub-indicators + ดึง result ที่มีอยู่แล้ว
+    this.authService.getSubIndicators(ctx.indicator_id).subscribe((res: any) => {
+      if (res.success) {
+        const subs = res.data.filter((s: any) => Number(s.is_active) === 1);
+        this.authService.getSubResults({ indicator_id: ctx.indicator_id, year_bh: ctx.year_bh, hospcode: ctx.hospcode }).subscribe((r2: any) => {
+          const resultMap = new Map<string, any>();
+          if (r2.success) for (const r of r2.data) resultMap.set(`${r.sub_indicator_id}_${r.month_bh}`, r);
+          this.subResultList = subs.map((s: any) => {
+            const existing = resultMap.get(`${s.id}_${ctx.month_bh}`);
+            return {
+              ...s,
+              _target: existing?.target_value ?? s.target_percentage ?? '',
+              _actual: existing?.actual_value ?? ''
+            };
+          });
+          this.cdr.detectChanges();
+        });
+      }
+    });
+  }
+
+  onSubMonthChange() {
+    this.loadSubResultList();
+  }
+
+  saveSubResults() {
+    const ctx = this.subResultContext;
+    if (!ctx) return;
+    let count = 0, errors = 0;
+    const total = this.subResultList.length;
+    for (const s of this.subResultList) {
+      this.authService.upsertSubResult({
+        sub_indicator_id: s.id,
+        year_bh: ctx.year_bh,
+        hospcode: ctx.hospcode,
+        month_bh: ctx.month_bh,
+        target_value: s._target || null,
+        actual_value: s._actual || null,
+        status: 'Pending'
+      }).subscribe({
+        next: (res: any) => {
+          if (res.success) count++; else errors++;
+          if (count + errors === total) {
+            Swal.fire({ icon: errors > 0 ? 'warning' : 'success', title: `บันทึก ${count}/${total} สำเร็จ`, timer: 2000, showConfirmButton: false });
+            if (errors === 0) this.closeSubResultModal();
+          }
+        },
+        error: () => {
+          errors++;
+          if (count + errors === total) {
+            Swal.fire('ผิดพลาด', `บันทึกสำเร็จ ${count}/${total}`, 'warning');
+          }
+        }
+      });
+    }
   }
 
   resetData(confirm: boolean = true) {

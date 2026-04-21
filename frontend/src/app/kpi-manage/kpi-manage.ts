@@ -39,6 +39,16 @@ export class KpiManageComponent implements OnInit {
   isEditMode: boolean = false;
   currentItem: any = {};
 
+  // Sub-Indicator Modal
+  showSubModal: boolean = false;
+  subParentIndicator: any = null;
+  subList: any[] = [];
+  subCurrent: any = {};
+  isSubEdit: boolean = false;
+  showSubForm: boolean = false;
+  // นับจำนวน sub-indicator ต่อ indicator_id (แสดงบาดจ์บนแถว)
+  subCountMap: Map<number, number> = new Map();
+
   ngOnInit() {
     const role = this.authService.getUserRole();
     this.isAdmin = role === 'admin_ssj' || role === 'super_admin';
@@ -82,6 +92,98 @@ export class KpiManageComponent implements OnInit {
         if (this.activeTab === 'departments') this.applyFilter();
       }
       this.cdr.detectChanges();
+    });
+    // โหลด sub-indicator count ทั้งหมด
+    this.authService.getSubIndicators().subscribe(res => {
+      if (res.success) {
+        this.subCountMap.clear();
+        for (const s of res.data) {
+          this.subCountMap.set(s.indicator_id, (this.subCountMap.get(s.indicator_id) || 0) + 1);
+        }
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  getSubCount(indicatorId: number): number {
+    return this.subCountMap.get(indicatorId) || 0;
+  }
+
+  // === Sub-Indicator Modal ===
+  openSubModal(indicator: any) {
+    this.subParentIndicator = indicator;
+    this.showSubModal = true;
+    this.showSubForm = false;
+    this.subCurrent = {};
+    this.isSubEdit = false;
+    this.loadSubList(indicator.id);
+  }
+
+  closeSubModal() {
+    this.showSubModal = false;
+    this.subParentIndicator = null;
+    this.subList = [];
+  }
+
+  loadSubList(indicatorId: number) {
+    this.authService.getSubIndicators(indicatorId).subscribe(res => {
+      if (res.success) {
+        this.subList = res.data;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  openSubForm(item: any = null) {
+    this.isSubEdit = !!item;
+    this.subCurrent = item ? { ...item } : { indicator_id: this.subParentIndicator.id, weight: 1 };
+    this.showSubForm = true;
+  }
+
+  saveSub() {
+    if (!this.subCurrent.sub_indicator_name) {
+      Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกชื่อตัวชี้วัดย่อย', 'warning');
+      return;
+    }
+    const obs = this.isSubEdit
+      ? this.authService.updateSubIndicator(this.subCurrent.id, this.subCurrent)
+      : this.authService.createSubIndicator(this.subCurrent);
+    obs.subscribe({
+      next: (res: any) => {
+        if (res.success) {
+          Swal.fire({ icon: 'success', title: 'สำเร็จ', timer: 1500, showConfirmButton: false });
+          this.showSubForm = false;
+          this.loadSubList(this.subParentIndicator.id);
+          this.loadAllData();
+        }
+      },
+      error: (e: any) => Swal.fire('ผิดพลาด', e.error?.message || 'ไม่สามารถบันทึกได้', 'error')
+    });
+  }
+
+  deleteSub(id: number) {
+    Swal.fire({
+      title: 'ยืนยันลบตัวชี้วัดย่อย', icon: 'warning',
+      showCancelButton: true, confirmButtonColor: '#d33',
+      confirmButtonText: 'ลบ', cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (r.isConfirmed) {
+        this.authService.deleteSubIndicator(id).subscribe({
+          next: (res: any) => {
+            if (res.success) {
+              this.loadSubList(this.subParentIndicator.id);
+              this.loadAllData();
+            }
+          }
+        });
+      }
+    });
+  }
+
+  toggleSubActive(item: any) {
+    const newStatus = !item.is_active || item.is_active === 0;
+    this.authService.toggleSubIndicatorActive(item.id, newStatus).subscribe({
+      next: (res: any) => { if (res.success) { item.is_active = newStatus ? 1 : 0; this.cdr.detectChanges(); } }
     });
   }
 

@@ -18,6 +18,16 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.04.20',
+      date: '20 เมษายน 2569',
+      changes: [
+        { type: 'feature', text: 'ตัวชี้วัดย่อย (Sub-Indicators): เพิ่มตาราง kpi_sub_indicators + kpi_sub_results — บันทึกผลงานย่อย per hospcode รายเดือน' },
+        { type: 'feature', text: 'kpi-manage: ปุ่ม "ตัวชี้วัดย่อย (N)" แต่ละแถว indicator → modal CRUD (super_admin)' },
+        { type: 'feature', text: 'Dashboard: ปุ่มตัวชี้วัดย่อย → modal บันทึกผลงาน target+actual รายเดือน' },
+        { type: 'feature', text: 'Data Synchronization (Users): ปุ่มในหน้า user-management → modal เปรียบเทียบ Local vs HDC → Sync → HDC' },
+      ]
+    },
+    {
       version: '2569.04.17-14',
       date: '17 เมษายน 2569',
       changes: [

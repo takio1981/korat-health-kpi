@@ -691,4 +691,110 @@ export class UserManagementComponent implements OnInit {
       }
     });
   }
+
+  // === Data Synchronization — Users ↔ HDC ===
+  showSyncModal: boolean = false;
+  syncLoading: boolean = false;
+  syncExecuting: boolean = false;
+  syncResult: any = null;
+  syncListFiltered: any[] = [];
+  syncFilter: string = '';
+  syncSelected: Set<string> = new Set<string>();
+  private _syncAllList: any[] = [];
+
+  openUserSyncModal() {
+    this.showSyncModal = true;
+    this.syncLoading = true;
+    this.syncResult = null;
+    this.syncSelected.clear();
+    this.authService.usersSyncCompare().subscribe({
+      next: (res: any) => {
+        this.syncLoading = false;
+        if (res.success) {
+          this.syncResult = res;
+          // รวม list พร้อม status
+          this._syncAllList = [
+            ...(res.matched || []).map((u: any) => ({ ...u, _syncStatus: 'matched' })),
+            ...(res.different || []).map((u: any) => ({ ...u, _syncStatus: 'different' })),
+            ...(res.local_only || []).map((u: any) => ({ ...u, _syncStatus: 'local_only' })),
+            ...(res.hdc_only || []).map((u: any) => ({ ...u, _syncStatus: 'hdc_only' }))
+          ];
+          // default เลือก different + local_only
+          for (const u of this._syncAllList) {
+            if (u._syncStatus === 'different' || u._syncStatus === 'local_only') this.syncSelected.add(u.username);
+          }
+          this.buildSyncList();
+        }
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.syncLoading = false;
+        Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถเปรียบเทียบได้', 'error');
+      }
+    });
+  }
+
+  closeSyncModal() {
+    this.showSyncModal = false;
+    this.syncResult = null;
+    this.syncSelected.clear();
+  }
+
+  toggleSyncFilter(filter: string) {
+    this.syncFilter = this.syncFilter === filter ? '' : filter;
+    this.buildSyncList();
+  }
+
+  buildSyncList() {
+    this.syncListFiltered = this.syncFilter
+      ? this._syncAllList.filter(u => u._syncStatus === this.syncFilter)
+      : this._syncAllList;
+    this.cdr.detectChanges();
+  }
+
+  toggleSyncUser(username: string) {
+    if (this.syncSelected.has(username)) this.syncSelected.delete(username);
+    else this.syncSelected.add(username);
+  }
+
+  isSyncAllSelected(): boolean {
+    const syncable = this.syncListFiltered.filter(u => u._syncStatus !== 'hdc_only');
+    return syncable.length > 0 && syncable.every(u => this.syncSelected.has(u.username));
+  }
+
+  toggleSyncAll() {
+    const syncable = this.syncListFiltered.filter(u => u._syncStatus !== 'hdc_only');
+    if (this.isSyncAllSelected()) syncable.forEach(u => this.syncSelected.delete(u.username));
+    else syncable.forEach(u => this.syncSelected.add(u.username));
+  }
+
+  executeSyncUsers() {
+    const usernames = [...this.syncSelected];
+    if (usernames.length === 0) return;
+    Swal.fire({
+      title: 'ยืนยัน Sync → HDC',
+      html: `<p>ส่งข้อมูล users <b>${usernames.length}</b> คนไปยัง HDC</p>
+             <p class="text-xs text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>ส่งทุกคอลัมน์รวม password_hash, cid</p>`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#2563eb',
+      confirmButtonText: '<i class="fas fa-cloud-upload-alt mr-1"></i> Sync → HDC',
+      cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      this.syncExecuting = true;
+      Swal.fire({ title: 'กำลัง Sync...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      this.authService.usersSyncToHDC(usernames).subscribe({
+        next: (res: any) => {
+          this.syncExecuting = false;
+          Swal.fire({ icon: 'success', title: 'Sync สำเร็จ', html: `<p>${res.message}</p>`, timer: 3000 });
+          this.closeSyncModal();
+        },
+        error: (err) => {
+          this.syncExecuting = false;
+          Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถ sync ได้', 'error');
+        }
+      });
+    });
+  }
 }

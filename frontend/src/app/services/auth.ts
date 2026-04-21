@@ -496,6 +496,58 @@ export class AuthService {
     return this.http.delete(`${this.apiUrl}/indicators/${id}`, { headers });
   }
 
+  // Sub-Indicators CRUD
+  getSubIndicators(indicator_id?: number): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const url = indicator_id ? `${this.apiUrl}/sub-indicators?indicator_id=${indicator_id}` : `${this.apiUrl}/sub-indicators`;
+    return this.http.get(url, { headers });
+  }
+  createSubIndicator(data: any): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/sub-indicators`, data, { headers });
+  }
+  updateSubIndicator(id: number, data: any): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/sub-indicators/${id}`, data, { headers });
+  }
+  deleteSubIndicator(id: number): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.delete(`${this.apiUrl}/sub-indicators/${id}`, { headers });
+  }
+  toggleSubIndicatorActive(id: number, isActive: boolean): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/sub-indicators/${id}/toggle-active`, { is_active: isActive }, { headers });
+  }
+  // Sub-Results (บันทึกผลงาน)
+  getSubResults(filters: any): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const qs = new URLSearchParams(filters).toString();
+    return this.http.get(`${this.apiUrl}/sub-results?${qs}`, { headers });
+  }
+  upsertSubResult(data: any): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/sub-results/upsert`, data, { headers });
+  }
+
+  // Users Data Sync (Local ↔ HDC)
+  usersSyncCompare(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/users/sync-compare`, { headers });
+  }
+  usersSyncToHDC(usernames?: string[]): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/users/sync-to-hdc`, { usernames }, { headers });
+  }
+
   // Departments (CRUD)
   createDepartment(data: any): Observable<any> {
     const token = localStorage.getItem('kpi_token');

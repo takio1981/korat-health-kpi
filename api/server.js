@@ -2410,6 +2410,101 @@ apiRouter.delete('/indicators/:id', authenticateToken, isSuperAdmin, async (req,
     }
 });
 
+// ========== KPI Sub-Indicators CRUD ==========
+apiRouter.get('/sub-indicators', authenticateToken, async (req, res) => {
+    try {
+        const { indicator_id } = req.query;
+        let sql = `SELECT si.*, i.kpi_indicators_name FROM kpi_sub_indicators si
+                   LEFT JOIN kpi_indicators i ON si.indicator_id = i.id`;
+        const params = [];
+        if (indicator_id) { sql += ' WHERE si.indicator_id = ?'; params.push(indicator_id); }
+        sql += ' ORDER BY si.indicator_id, si.sort_order, si.id';
+        const [rows] = await db.query(sql, params);
+        res.json({ success: true, data: rows });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.post('/sub-indicators', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const { indicator_id, sub_indicator_name, sub_indicator_code, target_percentage, weight, description, sort_order } = req.body;
+        if (!indicator_id || !sub_indicator_name) return res.status(400).json({ success: false, message: 'indicator_id + sub_indicator_name required' });
+        const [r] = await db.query(
+            `INSERT INTO kpi_sub_indicators (indicator_id, sub_indicator_name, sub_indicator_code, target_percentage, weight, description, sort_order) VALUES (?,?,?,?,?,?,?)`,
+            [indicator_id, sub_indicator_name, sub_indicator_code || null, target_percentage || null, weight || 1, description || null, sort_order || 0]
+        );
+        res.json({ success: true, id: r.insertId, message: 'เพิ่มตัวชี้วัดย่อยสำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.put('/sub-indicators/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const { sub_indicator_name, sub_indicator_code, target_percentage, weight, description, sort_order, is_active } = req.body;
+        await db.query(
+            `UPDATE kpi_sub_indicators SET sub_indicator_name=?, sub_indicator_code=?, target_percentage=?, weight=?, description=?, sort_order=?, is_active=? WHERE id=?`,
+            [sub_indicator_name, sub_indicator_code || null, target_percentage || null, weight || 1, description || null, sort_order || 0, is_active ? 1 : 0, req.params.id]
+        );
+        res.json({ success: true, message: 'แก้ไขสำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.delete('/sub-indicators/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        await db.query('DELETE FROM kpi_sub_indicators WHERE id = ?', [req.params.id]);
+        res.json({ success: true, message: 'ลบสำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.put('/sub-indicators/:id/toggle-active', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const { is_active } = req.body;
+        await db.query('UPDATE kpi_sub_indicators SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, req.params.id]);
+        res.json({ success: true, message: is_active ? 'เปิดใช้งานแล้ว' : 'ปิดใช้งานแล้ว' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// ========== KPI Sub-Results (บันทึกผลงานย่อย) ==========
+apiRouter.get('/sub-results', authenticateToken, async (req, res) => {
+    try {
+        const { sub_indicator_id, year_bh, hospcode, indicator_id } = req.query;
+        const conditions = []; const params = [];
+        if (sub_indicator_id) { conditions.push('sr.sub_indicator_id = ?'); params.push(sub_indicator_id); }
+        if (indicator_id) { conditions.push('si.indicator_id = ?'); params.push(indicator_id); }
+        if (year_bh) { conditions.push('sr.year_bh = ?'); params.push(year_bh); }
+        if (hospcode) { conditions.push('sr.hospcode = ?'); params.push(hospcode); }
+        const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+        const [rows] = await db.query(
+            `SELECT sr.*, si.sub_indicator_name, si.indicator_id FROM kpi_sub_results sr
+             JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
+             ${where} ORDER BY sr.sub_indicator_id, sr.hospcode, sr.month_bh`,
+            params
+        );
+        res.json({ success: true, data: rows });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.post('/sub-results/upsert', authenticateToken, async (req, res) => {
+    try {
+        const { sub_indicator_id, year_bh, hospcode, month_bh, target_value, actual_value, status } = req.body;
+        if (!sub_indicator_id || !year_bh || !hospcode || !month_bh) {
+            return res.status(400).json({ success: false, message: 'sub_indicator_id, year_bh, hospcode, month_bh required' });
+        }
+        await db.query(
+            `INSERT INTO kpi_sub_results (sub_indicator_id, year_bh, hospcode, month_bh, target_value, actual_value, status, user_id)
+             VALUES (?,?,?,?,?,?,?,?)
+             ON DUPLICATE KEY UPDATE target_value=VALUES(target_value), actual_value=VALUES(actual_value), status=VALUES(status), user_id=VALUES(user_id)`,
+            [sub_indicator_id, year_bh, hospcode, month_bh, target_value || null, actual_value || null, status || 'Pending', req.user.userId]
+        );
+        res.json({ success: true, message: 'บันทึกสำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.delete('/sub-results/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        await db.query('DELETE FROM kpi_sub_results WHERE id = ?', [req.params.id]);
+        res.json({ success: true, message: 'ลบสำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
 // --- Toggle is_active สำหรับ Master Data ทั้ง 4 ตาราง ---
 apiRouter.put('/indicators/:id/toggle-active', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
@@ -4263,6 +4358,50 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         try { await db.query('ALTER TABLE kpi_summary ADD INDEX idx_dept_id (dept_id)'); } catch(e) {}
         try { await db.query('ALTER TABLE kpi_summary ADD INDEX idx_distid (distid)'); } catch(e) {}
 
+        // ========== kpi_sub_indicators + kpi_sub_results ==========
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS kpi_sub_indicators (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    indicator_id INT NOT NULL,
+                    sub_indicator_name VARCHAR(500) NOT NULL,
+                    sub_indicator_code VARCHAR(100),
+                    target_percentage VARCHAR(100),
+                    weight DECIMAL(5,2) DEFAULT 1.00,
+                    description TEXT,
+                    sort_order INT DEFAULT 0,
+                    is_active TINYINT(1) DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX idx_indicator (indicator_id),
+                    INDEX idx_active (is_active)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+            try { await db.query('ALTER TABLE kpi_sub_indicators ADD CONSTRAINT fk_sub_indicator FOREIGN KEY (indicator_id) REFERENCES kpi_indicators(id) ON DELETE CASCADE'); } catch(e) {}
+        } catch (e) {}
+
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS kpi_sub_results (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    sub_indicator_id INT NOT NULL,
+                    year_bh VARCHAR(10) NOT NULL,
+                    hospcode VARCHAR(20) NOT NULL,
+                    month_bh INT NOT NULL,
+                    target_value VARCHAR(100),
+                    actual_value VARCHAR(100),
+                    status VARCHAR(20) DEFAULT 'Pending',
+                    user_id INT,
+                    is_locked TINYINT(1) DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uk_sub_year_hos_month (sub_indicator_id, year_bh, hospcode, month_bh),
+                    INDEX idx_sub (sub_indicator_id),
+                    INDEX idx_year_hos (year_bh, hospcode)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+            try { await db.query('ALTER TABLE kpi_sub_results ADD CONSTRAINT fk_sub_result FOREIGN KEY (sub_indicator_id) REFERENCES kpi_sub_indicators(id) ON DELETE CASCADE'); } catch(e) {}
+        } catch (e) {}
+
         // แก้ kpi_indicators.dept_id + main_indicator_id จาก VARCHAR → INT (ถ้ายังเป็น VARCHAR)
         try {
             const [cols] = await db.query("SHOW COLUMNS FROM kpi_indicators WHERE Field = 'dept_id'");
@@ -5342,6 +5481,112 @@ apiRouter.post('/db-compare/sync-to-hdc', authenticateToken, isSuperAdmin, async
         [req.user.userId, 'DB_COMPARE_SYNC_TO_HDC', 'MULTIPLE', JSON.stringify({ synced: synced.length, total_rows: synced.reduce((s, t) => s + t.rows, 0) }), req.ip]).catch(() => {});
 
     res.json({ success: true, message: `Sync → HDC สำเร็จ ${synced.length} ตาราง`, synced, errors });
+});
+
+// ========== Users Data Sync (Local ↔ HDC) ==========
+// GET /users/sync-compare — เปรียบเทียบ users ระหว่าง Local กับ HDC
+apiRouter.get('/users/sync-compare', authenticateToken, isSuperAdmin, async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (HDC)' });
+    try {
+        // ดึง local users (ทุกคอลัมน์)
+        const [localUsers] = await db.query('SELECT * FROM users ORDER BY username');
+
+        // ดึง remote users — ถ้าตารางไม่มี → ถือว่าว่าง
+        let remoteUsers = [];
+        try {
+            const [rows] = await remoteDb.query('SELECT * FROM users ORDER BY username');
+            remoteUsers = rows;
+        } catch (e) { /* ตาราง users ไม่มีใน HDC */ }
+
+        const remoteMap = new Map(remoteUsers.map(u => [u.username, u]));
+        const localMap = new Map(localUsers.map(u => [u.username, u]));
+
+        const matched = [], different = [], local_only = [], hdc_only = [];
+
+        for (const lu of localUsers) {
+            const ru = remoteMap.get(lu.username);
+            if (!ru) { local_only.push(lu); continue; }
+            // เทียบค่าทีละ field (ข้าม id + timestamps)
+            const skip = ['id', 'created_at', 'updated_at'];
+            let isDiff = false;
+            for (const k of Object.keys(lu)) {
+                if (skip.includes(k)) continue;
+                const lv = lu[k] == null ? '' : String(lu[k]);
+                const rv = ru[k] == null ? '' : String(ru[k]);
+                if (lv !== rv) { isDiff = true; break; }
+            }
+            (isDiff ? different : matched).push(lu);
+        }
+        for (const ru of remoteUsers) {
+            if (!localMap.has(ru.username)) hdc_only.push(ru);
+        }
+
+        res.json({
+            success: true,
+            summary: { matched: matched.length, different: different.length, local_only: local_only.length, hdc_only: hdc_only.length, total_local: localUsers.length, total_hdc: remoteUsers.length },
+            matched, different, local_only, hdc_only
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// POST /users/sync-to-hdc — ส่ง users จาก Local → HDC (UPSERT)
+apiRouter.post('/users/sync-to-hdc', authenticateToken, isSuperAdmin, async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (HDC)' });
+    const { usernames } = req.body; // optional: ถ้าไม่ส่ง = sync ทั้งหมด
+
+    try {
+        // สร้างตาราง users ใน HDC ถ้ายังไม่มี (ใช้ DDL จาก Local)
+        try {
+            await remoteDb.query('SELECT 1 FROM users LIMIT 0');
+        } catch (e) {
+            const [ddlRows] = await db.query('SHOW CREATE TABLE users');
+            if (ddlRows.length > 0) await remoteDb.query(ddlRows[0]['Create Table']);
+        }
+
+        // ดึง users ที่ต้องการ sync
+        let query = 'SELECT * FROM users';
+        const params = [];
+        if (Array.isArray(usernames) && usernames.length > 0) {
+            query += ` WHERE username IN (${usernames.map(() => '?').join(',')})`;
+            params.push(...usernames);
+        }
+        const [localUsers] = await db.query(query, params);
+        if (localUsers.length === 0) return res.json({ success: true, synced: 0, message: 'ไม่มีข้อมูลที่จะ sync' });
+
+        // UPSERT batch 100 rows
+        const columns = Object.keys(localUsers[0]);
+        const colList = columns.map(c => `\`${c}\``).join(', ');
+        const placeholders = columns.map(() => '?').join(', ');
+        const onDup = columns.filter(c => c !== 'id').map(c => `\`${c}\`=VALUES(\`${c}\`)`).join(', ');
+
+        let totalSynced = 0;
+        const errors = [];
+        for (let i = 0; i < localUsers.length; i += 100) {
+            const batch = localUsers.slice(i, i + 100);
+            const allPlaceholders = batch.map(() => `(${placeholders})`).join(', ');
+            const flatValues = batch.flatMap(row => columns.map(c => row[c]));
+            try {
+                await remoteDb.query(
+                    `INSERT INTO \`users\` (${colList}) VALUES ${allPlaceholders} ON DUPLICATE KEY UPDATE ${onDup}`,
+                    flatValues
+                );
+                totalSynced += batch.length;
+            } catch (e) {
+                errors.push({ batch_start: i, error: e.message });
+            }
+        }
+
+        await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+            [req.user.userId, 'USERS_SYNC_TO_HDC', 'users', JSON.stringify({ synced: totalSynced, total: localUsers.length }), req.ip]).catch(() => {});
+
+        res.json({ success: true, message: `Sync users → HDC สำเร็จ ${totalSynced} คน`, synced: totalSynced, errors });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
 });
 
 // === Environment Config Management ===
