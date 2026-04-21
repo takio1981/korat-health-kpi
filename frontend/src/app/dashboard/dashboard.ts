@@ -83,6 +83,8 @@ export class DashboardComponent implements OnInit {
   ];
   // map indicator_id → sub count (แสดงปุ่มบนแถว)
   subIndicatorCountMap: Map<number, number> = new Map();
+  // map "indicator_id|hospcode|year" → { sub_count, total_actual, avg_pct }
+  subSummaryMap: Map<string, any> = new Map();
 
   isLoading: boolean = false;
   private animationTimer: any;
@@ -186,6 +188,7 @@ export class DashboardComponent implements OnInit {
     this.loadAppealSettings();
     this.loadDataEntryLock();
     this.loadSubIndicatorCounts();
+    this.loadSubResultSummary();
     if (this.isAdmin || this.isLocalAdmin) this.loadTargetEditRequests();
   }
 
@@ -1648,6 +1651,27 @@ export class DashboardComponent implements OnInit {
     });
   }
 
+  // โหลด aggregate จาก kpi_sub_results สำหรับปี+hospcode ที่เห็น
+  loadSubResultSummary() {
+    const year = this.selectedYear;
+    // ถ้า role เป็น hos/user_hos → hospcode จำกัด, ถ้าเป็น admin_ssj/super_admin → ไม่ระบุ (โหลดทั้งหมด)
+    const hc = this.currentUser?.hospcode && !this.isAdmin && !this.isSuperAdmin ? this.currentUser.hospcode : '';
+    this.authService.getSubResultSummary(year, hc).subscribe((res: any) => {
+      if (res.success) {
+        this.subSummaryMap.clear();
+        for (const r of res.data) {
+          const key = `${r.indicator_id}|${r.hospcode}|${r.year_bh}`;
+          this.subSummaryMap.set(key, r);
+        }
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  getSubSummary(item: any): any {
+    return this.subSummaryMap.get(`${item.indicator_id}|${item.hospcode}|${item.year_bh}`);
+  }
+
   getSubCount(indicatorId: number): number {
     return this.subIndicatorCountMap.get(indicatorId) || 0;
   }
@@ -1676,6 +1700,25 @@ export class DashboardComponent implements OnInit {
     10: 'ต.ค.', 11: 'พ.ย.', 12: 'ธ.ค.', 1: 'ม.ค.', 2: 'ก.พ.', 3: 'มี.ค.',
     4: 'เม.ย.', 5: 'พ.ค.', 6: 'มิ.ย.', 7: 'ก.ค.', 8: 'ส.ค.', 9: 'ก.ย.'
   };
+
+  // ค่าเดือนล่าสุดที่มีผลงาน (ลำดับย้อนกลับ ก.ย.→ต.ค.)
+  getSubLastActual(sub: any): string {
+    if (!sub?._actuals) return '';
+    const rev = [...this.subMonthColumns].reverse();
+    for (const m of rev) {
+      const v = sub._actuals[m];
+      if (v !== null && v !== undefined && String(v).trim() !== '') return String(v);
+    }
+    return '';
+  }
+
+  // % เทียบเป้าหมาย
+  getSubPct(sub: any): string {
+    const actual = parseFloat(this.getSubLastActual(sub));
+    const target = parseFloat(sub?._target);
+    if (!isFinite(actual) || !isFinite(target) || target === 0) return '';
+    return ((actual / target) * 100).toFixed(1);
+  }
 
   // สำหรับเก็บค่าเดิมตอนโหลด — ใช้ตรวจว่าเปลี่ยนไหมก่อนบันทึก
   private _subOriginal: Map<string, { target: string; actual: string }> = new Map();
@@ -1754,6 +1797,7 @@ export class DashboardComponent implements OnInit {
         html: `<p class="text-sm">บันทึก <b>${ok}</b> รายการ${fail > 0 ? `, ล้มเหลว <b class="text-red-500">${fail}</b>` : ''}</p>`,
         timer: 2500, showConfirmButton: false
       });
+      this.loadSubResultSummary();
       if (fail === 0) this.closeSubResultModal();
       else this.loadSubResultList();
     } catch (e: any) {

@@ -530,6 +530,15 @@ export class AuthService {
     const qs = new URLSearchParams(filters).toString();
     return this.http.get(`${this.apiUrl}/sub-results?${qs}`, { headers });
   }
+  getSubResultSummary(year_bh?: string, hospcode?: string): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const params: any = {};
+    if (year_bh) params.year_bh = year_bh;
+    if (hospcode) params.hospcode = hospcode;
+    const qs = new URLSearchParams(params).toString();
+    return this.http.get(`${this.apiUrl}/sub-results/summary?${qs}`, { headers });
+  }
   upsertSubResult(data: any): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

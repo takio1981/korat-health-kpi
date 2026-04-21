@@ -2502,6 +2502,49 @@ apiRouter.get('/sub-results', authenticateToken, async (req, res) => {
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
+// GET /sub-results/summary — aggregate ต่อ indicator + hospcode (ใช้เดือนล่าสุดที่คีย์ของแต่ละ sub)
+apiRouter.get('/sub-results/summary', authenticateToken, async (req, res) => {
+    try {
+        const { year_bh, hospcode } = req.query;
+        const conditions = [], params = [];
+        if (year_bh) { conditions.push('sr.year_bh = ?'); params.push(year_bh); }
+        if (hospcode) { conditions.push('sr.hospcode = ?'); params.push(hospcode); }
+        const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+
+        // หา "เดือนล่าสุด" ต่อ sub+year+hospcode ที่มี actual_value — แล้ว JOIN กลับ
+        const [rows] = await db.query(`
+            SELECT
+                si.indicator_id,
+                sr.hospcode,
+                sr.year_bh,
+                COUNT(DISTINCT si.id) AS sub_count,
+                SUM(CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4))) AS total_actual,
+                AVG(CAST(NULLIF(sr.target_value,'') AS DECIMAL(20,4))) AS avg_target,
+                AVG(
+                    CASE WHEN CAST(NULLIF(sr.target_value,'') AS DECIMAL(20,4)) > 0
+                         THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4))
+                              / CAST(NULLIF(sr.target_value,'') AS DECIMAL(20,4)) * 100
+                    END
+                ) AS avg_pct
+            FROM kpi_sub_results sr
+            JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
+            JOIN (
+                SELECT sub_indicator_id, year_bh, hospcode, MAX(month_bh) AS latest_month
+                FROM kpi_sub_results
+                WHERE actual_value IS NOT NULL AND actual_value != ''
+                GROUP BY sub_indicator_id, year_bh, hospcode
+            ) latest ON sr.sub_indicator_id = latest.sub_indicator_id
+                    AND sr.year_bh = latest.year_bh
+                    AND sr.hospcode = latest.hospcode
+                    AND sr.month_bh = latest.latest_month
+            ${where}
+            GROUP BY si.indicator_id, sr.hospcode, sr.year_bh
+        `, params);
+
+        res.json({ success: true, data: rows });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
 apiRouter.post('/sub-results/upsert', authenticateToken, async (req, res) => {
     try {
         const { sub_indicator_id, year_bh, hospcode, month_bh, target_value, actual_value, status } = req.body;
