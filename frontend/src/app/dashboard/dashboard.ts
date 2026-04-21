@@ -1673,7 +1673,7 @@ export class DashboardComponent implements OnInit {
           }
           r.last_actual = lastActual;
           r.avg_pct = (lastActual != null && r.avg_target && parseFloat(r.avg_target) > 0)
-            ? (parseFloat(lastActual) / parseFloat(r.avg_target) * 100).toFixed(1) : null;
+            ? this.formatNum(parseFloat(lastActual) / parseFloat(r.avg_target) * 100) : null;
           const key = `${r.indicator_id}|${r.hospcode}|${r.year_bh}`;
           this.subSummaryMap.set(key, r);
         }
@@ -1701,15 +1701,15 @@ export class DashboardComponent implements OnInit {
           mar: item.mar, apr: item.apr, may: item.may, jun: item.jun, jul: item.jul, aug: item.aug, sep: item.sep
         };
       }
-      // override ด้วยค่าเฉลี่ยจาก sub (หารด้วยจำนวน sub)
-      if (sum.avg_target != null) item.target_value = String(sum.avg_target);
+      // override ด้วยค่าเฉลี่ยจาก sub (หารด้วยจำนวน sub) — format จำนวนเต็ม/2 ทศนิยม
+      if (sum.avg_target != null) item.target_value = this.formatNum(sum.avg_target);
       const monthMap: any = { oct:'m10', nov:'m11', dece:'m12', jan:'m01', feb:'m02', mar:'m03', apr:'m04', may:'m05', jun:'m06', jul:'m07', aug:'m08', sep:'m09' };
       for (const k of Object.keys(monthMap)) {
         const v = sum[monthMap[k]];
-        if (v != null) item[k] = String(v);
+        if (v != null) item[k] = this.formatNum(v);
       }
       if (sum.last_actual != null) {
-        item.last_actual = String(sum.last_actual);
+        item.last_actual = this.formatNum(sum.last_actual);
         item.total_actual = parseFloat(sum.last_actual) || 0;
       }
       item._fromSubSummary = true;
@@ -1747,23 +1747,40 @@ export class DashboardComponent implements OnInit {
     4: 'เม.ย.', 5: 'พ.ค.', 6: 'มิ.ย.', 7: 'ก.ค.', 8: 'ส.ค.', 9: 'ก.ย.'
   };
 
-  // ค่าเดือนล่าสุดที่มีผลงาน (ลำดับย้อนกลับ ก.ย.→ต.ค.)
+  // Format: จำนวนเต็มแสดงไม่มีทศนิยม, มีเศษแสดง 2 ตำแหน่ง
+  formatNum(v: any): string {
+    if (v === null || v === undefined || v === '') return '';
+    const n = parseFloat(String(v));
+    if (!isFinite(n)) return String(v);
+    return Number.isInteger(n) ? String(n) : n.toFixed(2);
+  }
+
+  // ค่าเดือนล่าสุดที่มีผลงาน (ลำดับย้อนกลับ ก.ย.→ต.ค.) — format จำนวนเต็ม/2 ตำแหน่ง
   getSubLastActual(sub: any): string {
     if (!sub?._actuals) return '';
     const rev = [...this.subMonthColumns].reverse();
     for (const m of rev) {
       const v = sub._actuals[m];
-      if (v !== null && v !== undefined && String(v).trim() !== '') return String(v);
+      if (v !== null && v !== undefined && String(v).trim() !== '') return this.formatNum(v);
     }
     return '';
   }
 
-  // % เทียบเป้าหมาย
+  // % เทียบเป้าหมาย — int ถ้าเต็ม, 2 ทศนิยมถ้ามีเศษ
   getSubPct(sub: any): string {
-    const actual = parseFloat(this.getSubLastActual(sub));
+    const actualRaw = (() => {
+      if (!sub?._actuals) return null;
+      const rev = [...this.subMonthColumns].reverse();
+      for (const m of rev) {
+        const v = sub._actuals[m];
+        if (v !== null && v !== undefined && String(v).trim() !== '') return v;
+      }
+      return null;
+    })();
+    const actual = parseFloat(actualRaw as any);
     const target = parseFloat(sub?._target);
     if (!isFinite(actual) || !isFinite(target) || target === 0) return '';
-    return ((actual / target) * 100).toFixed(1);
+    return this.formatNum((actual / target) * 100);
   }
 
   // สำหรับเก็บค่าเดิมตอนโหลด — ใช้ตรวจว่าเปลี่ยนไหมก่อนบันทึก
