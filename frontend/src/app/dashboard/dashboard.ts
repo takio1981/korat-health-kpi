@@ -49,6 +49,20 @@ export class DashboardComponent implements OnInit {
   set selectedHosType(v: string) { this.selectedHosTypes = v ? [v] : []; }
   // UI: dropdown ไหนกำลังเปิด
   openFilterDropdown: string = '';
+  showManageMenu: boolean = false;
+
+  // จำนวนรายการ pending (รอตรวจสอบ)
+  get pendingCount(): number {
+    return this.filteredData.filter(i => Number(i.pending_count) > 0).length;
+  }
+  // จำนวนรายการ locked
+  get lockedCount(): number {
+    return this.filteredData.filter(i => Number(i.is_locked) === 1).length;
+  }
+  // จำนวนรายการตรวจสอบแล้ว (pending_count = 0 + มีผลงาน)
+  get reviewedCount(): number {
+    return this.filteredData.filter(i => Number(i.pending_count) === 0 && String(i.last_actual ?? '').trim() !== '').length;
+  }
 
   // === Multi-select helpers ===
   toggleFilterItem(arr: string[], value: string): string[] {
@@ -795,6 +809,7 @@ export class DashboardComponent implements OnInit {
         (s === 'pass' && hasTarget && this.isTargetMet(item)) ||
         (s === 'fail' && hasTarget && !this.isTargetMet(item)) ||
         (s === 'pending' && item.pending_count > 0) ||
+        (s === 'reviewed' && Number(item.pending_count) === 0 && hasActual) ||
         (s === 'no_target' && !hasTarget) ||
         (s === 'no_actual' && hasTarget && !hasActual);
       const matchStatus = this.selectedStatuses.length === 0 || this.selectedStatuses.some(statusMatches);

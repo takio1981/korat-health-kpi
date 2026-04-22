@@ -19,14 +19,38 @@
                     class="flex-1 md:flex-none px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2">
               <i class="fas fa-sync-alt"></i> ล้างตัวกรอง
             </button>
-            <button *ngIf="!isEditing && !isEntryLocked" (click)="openAddModal()" class="flex-1 md:flex-none px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-md transition-all text-xs font-bold flex items-center justify-center gap-2">
+            <!-- กลุ่ม "จัดการข้อมูลตัวชี้วัด" (เฉพาะ admin_ssj + super_admin) -->
+            <div *ngIf="isAdmin && !isEditing && !isReviewMode && !isDeleteMode" class="relative">
+              <button (click)="showManageMenu = !showManageMenu"
+                      class="w-full md:w-auto px-4 py-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white rounded-xl shadow-md transition-all text-xs font-bold flex items-center justify-center gap-2">
+                <i class="fas fa-tools"></i> จัดการข้อมูลตัวชี้วัด
+                <i class="fas fa-chevron-down text-[10px]" [class.rotate-180]="showManageMenu"></i>
+              </button>
+              <div *ngIf="showManageMenu" class="absolute z-30 right-0 mt-1 w-48 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
+                <button *ngIf="!isEntryLocked" (click)="openAddModal(); showManageMenu = false"
+                        class="w-full px-4 py-2.5 text-left hover:bg-green-50 text-xs font-bold text-green-700 flex items-center gap-2 border-b border-gray-100">
+                  <i class="fas fa-plus w-4 text-center"></i> เพิ่มตัวชี้วัด
+                </button>
+                <button *ngIf="!isEntryLocked" (click)="toggleEditMode(); showManageMenu = false"
+                        class="w-full px-4 py-2.5 text-left hover:bg-amber-50 text-xs font-bold text-amber-700 flex items-center gap-2 border-b border-gray-100">
+                  <i class="fas fa-edit w-4 text-center"></i> แก้ไขผลงาน
+                </button>
+                <button (click)="toggleDeleteMode(); showManageMenu = false"
+                        class="w-full px-4 py-2.5 text-left hover:bg-red-50 text-xs font-bold text-red-700 flex items-center gap-2">
+                  <i class="fas fa-trash w-4 text-center"></i> โหมดลบตัวชี้วัด
+                </button>
+              </div>
+            </div>
+            <!-- ปุ่มเพิ่ม/แก้ไข แยก (สำหรับ user ทั่วไป ที่ไม่ใช่ admin) -->
+            <button *ngIf="!isAdmin && !isEditing && !isEntryLocked" (click)="openAddModal()" class="flex-1 md:flex-none px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-md transition-all text-xs font-bold flex items-center justify-center gap-2">
               <i class="fas fa-plus"></i> เพิ่ม
+            </button>
+            <button *ngIf="!isAdmin && !isEditing && !isEntryLocked" (click)="toggleEditMode()" class="flex-1 md:flex-none px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-md transition-all text-xs font-bold flex items-center justify-center gap-2">
+              <i class="fas fa-edit"></i> แก้ไข
             </button>
             <button *ngIf="isSuperAdmin && !isEditing" (click)="unlockAll()" class="flex-1 md:flex-none px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-md transition-all text-xs font-bold flex items-center justify-center gap-2">
               <i class="fas fa-lock-open"></i> ปลดล็อคทั้งหมด
-            </button>
-            <button *ngIf="!isEditing && !isEntryLocked" (click)="toggleEditMode()" class="flex-1 md:flex-none px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-md transition-all text-xs font-bold flex items-center justify-center gap-2">
-              <i class="fas fa-edit"></i> แก้ไข
+              <span *ngIf="lockedCount > 0" class="px-1.5 py-0.5 bg-white/30 rounded-full text-[10px]">{{ lockedCount }}</span>
             </button>
             <span *ngIf="isEntryLocked && !isEditing" class="flex-1 md:flex-none px-4 py-2 bg-red-100 text-red-700 rounded-xl text-xs font-bold flex items-center justify-center gap-2 border border-red-200">
               <i class="fas fa-lock"></i> {{dataEntryLock.lock_reason || 'ระบบปิดการคีย์ข้อมูลชั่วคราว'}}
@@ -51,13 +75,10 @@
               <i class="fas fa-undo-alt"></i> ตีกลับทั้งหมด ({{ filteredData.length }})
             </button>
 
-            <!-- ปุ่มตรวจสอบ (Review Mode) -->
+            <!-- ปุ่มตรวจสอบ (Review Mode) + count pending -->
             <button *ngIf="isAdmin && !isEditing && !isReviewMode && !isDeleteMode" (click)="toggleReviewMode()" class="w-full md:w-auto px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2">
               <i class="fas fa-clipboard-check"></i> ตรวจสอบ
-            </button>
-            <!-- ปุ่มโหมดลบ (Delete Mode) — super_admin เท่านั้น -->
-            <button *ngIf="isSuperAdmin && !isEditing && !isReviewMode && !isDeleteMode" (click)="toggleDeleteMode()" class="w-full md:w-auto px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2">
-              <i class="fas fa-trash"></i> โหมดลบตัวชี้วัด
+              <span *ngIf="pendingCount > 0" class="px-1.5 py-0.5 bg-white/30 rounded-full text-[10px]">{{ pendingCount }}</span>
             </button>
             <!-- Review Mode Actions -->
             <div *ngIf="isReviewMode" class="flex flex-wrap gap-2 w-full md:w-auto">
@@ -192,6 +213,8 @@
                   <input type="checkbox" [checked]="isFilterSelected(selectedStatuses, 'fail')" (change)="toggleFilterItem(selectedStatuses, 'fail')" class="rounded text-red-600"><span class="text-red-600">ไม่ผ่านเป้าหมาย</span></label>
                 <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
                   <input type="checkbox" [checked]="isFilterSelected(selectedStatuses, 'pending')" (change)="toggleFilterItem(selectedStatuses, 'pending')" class="rounded text-amber-600"><span class="text-amber-600">รอตรวจสอบ</span></label>
+                <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
+                  <input type="checkbox" [checked]="isFilterSelected(selectedStatuses, 'reviewed')" (change)="toggleFilterItem(selectedStatuses, 'reviewed')" class="rounded text-teal-600"><span class="text-teal-600">ตรวจสอบแล้ว</span></label>
                 <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
                   <input type="checkbox" [checked]="isFilterSelected(selectedStatuses, 'no_target')" (change)="toggleFilterItem(selectedStatuses, 'no_target')" class="rounded text-gray-500"><span class="text-gray-500">ยังไม่มีเป้าหมาย</span></label>
                 <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
