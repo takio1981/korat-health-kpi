@@ -536,7 +536,7 @@
                 </div>
 
                 <div class="grid grid-cols-4 gap-2 text-xs" *ngIf="!isEditing">
-                  <div *ngFor="let month of [{key: 'oct', name: 'ต.ค.'}, {key: 'nov', name: 'พ.ย.'}, {key: 'dece', name: 'ธ.ค.'}, {key: 'jan', name: 'ม.ค.'}]"
+                  <div *ngFor="let month of getRecentMonths(item, 4)"
                        class="text-center p-1 rounded"
                        [ngClass]="(item[month.key] && item[month.key] !== '0') ? 'bg-green-100 font-bold text-gray-900' : 'text-gray-400 bg-white'">
                     <div class="text-gray-600 mb-1">{{ month.name }}</div>

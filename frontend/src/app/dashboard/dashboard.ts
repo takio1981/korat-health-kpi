@@ -2019,6 +2019,28 @@ export class DashboardComponent implements OnInit {
     return Number.isInteger(n) ? String(n) : n.toFixed(2);
   }
 
+  // 12 เดือนตามลำดับปีงบประมาณ (ต.ค. → ก.ย.)
+  private readonly FISCAL_MONTHS: { key: string; name: string }[] = [
+    { key: 'oct', name: 'ต.ค.' }, { key: 'nov', name: 'พ.ย.' }, { key: 'dece', name: 'ธ.ค.' },
+    { key: 'jan', name: 'ม.ค.' }, { key: 'feb', name: 'ก.พ.' }, { key: 'mar', name: 'มี.ค.' },
+    { key: 'apr', name: 'เม.ย.' }, { key: 'may', name: 'พ.ค.' }, { key: 'jun', name: 'มิ.ย.' },
+    { key: 'jul', name: 'ก.ค.' }, { key: 'aug', name: 'ส.ค.' }, { key: 'sep', name: 'ก.ย.' },
+  ];
+
+  // ดึง N เดือนล่าสุดที่มีข้อมูล (ตามลำดับปีงบประมาณ) สำหรับแสดงบน mobile/tablet
+  // ถ้ามีน้อยกว่า count เดือน จะ pad ด้วยเดือนล่าสุดตามลำดับเพื่อให้ครบจำนวนช่อง
+  getRecentMonths(item: any, count: number = 4): { key: string; name: string }[] {
+    const hasData = (v: any) => {
+      const s = String(v ?? '').trim();
+      return s !== '' && s !== '0' && s !== 'null';
+    };
+    const withData = this.FISCAL_MONTHS.filter(m => hasData(item[m.key]));
+    if (withData.length >= count) return withData.slice(-count);
+    if (withData.length === 0) return this.FISCAL_MONTHS.slice(0, count);
+    // เติมด้วย fiscal tail เดือนที่ล่าสุด (ไม่ว่า empty ก็ตาม)
+    return this.FISCAL_MONTHS.slice(-count);
+  }
+
   // ค่าเดือนล่าสุดที่มีผลงาน (ลำดับย้อนกลับ ก.ย.→ต.ค.) — format จำนวนเต็ม/2 ตำแหน่ง
   getSubLastActual(sub: any): string {
     if (!sub?._actuals) return '';
