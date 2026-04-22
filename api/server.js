@@ -728,6 +728,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 params.push(...list);
             }
         }
+        console.log('[kpi-results] filters:', JSON.stringify(req.query));
         let extraWhere = '';
         if (extraConditions.length > 0) {
             extraWhere = (whereClause ? ' AND ' : 'WHERE ') + extraConditions.join(' AND ');

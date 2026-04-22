@@ -313,41 +313,19 @@ export class DashboardComponent implements OnInit {
     // ส่ง filter ไปกรองที่ backend — multi-select ใช้ comma-separated
     const filters: any = { year: this.selectedYear };
 
-    // Expand hostype → hoscodes (fix: backend LEFT JOIN ไม่เชื่อถือได้ ถ้า chospital กับ kpi_results ไม่ match)
-    // รวมกับ hospcodes ที่เลือกโดยตรง — ถ้าเลือกทั้งสอง intersect
-    // Normalize: ใช้ String() + trim + padStart(2,'0') เทียบกันเพื่อกัน data format ต่างกัน
-    const normHT = (v: any) => {
-      const s = String(v ?? '').trim();
-      return /^\d{1,2}$/.test(s) ? s.padStart(2, '0') : s;
-    };
-    const selectedHTSet = new Set(this.selectedHosTypes.map(normHT));
-    const hostypeCodes = this.selectedHosTypes.length > 0
-      ? this._allHospitals.filter((h: any) => selectedHTSet.has(normHT(h.hostype))).map((h: any) => String(h.hoscode).trim())
-      : null;
-    const selectedHospCodes = this.selectedHospitals.length > 0
-      ? this.selectedHospitals.map(n => this._allHospitals.find((h: any) => h.hosname === n)?.hoscode)
-          .filter(Boolean).map((c: any) => String(c).trim())
-      : null;
-
-    let finalHospCodes: string[] | null = null;
-    if (hostypeCodes && selectedHospCodes) {
-      finalHospCodes = selectedHospCodes.filter(c => hostypeCodes.includes(c));
-    } else if (hostypeCodes) {
-      finalHospCodes = hostypeCodes;
-    } else if (selectedHospCodes) {
-      finalHospCodes = selectedHospCodes;
+    if (this.selectedHospitals.length > 0) {
+      const codes = this.selectedHospitals
+        .map(n => this._allHospitals.find((h: any) => h.hosname === n)?.hoscode)
+        .filter(Boolean);
+      if (codes.length > 0) filters.hospcode = codes.join(',');
     }
-    if (finalHospCodes && finalHospCodes.length > 0) {
-      filters.hospcode = finalHospCodes.join(',');
-    } else if (hostypeCodes && hostypeCodes.length === 0) {
-      // เลือก hostype แต่ไม่มี hospital ตรง — force empty result
-      filters.hospcode = '__none__';
-    }
-
     if (this.selectedDepts.length > 0) filters.dept = this.selectedDepts.join(',');
     if (this.selectedDistricts.length > 0) filters.district = this.selectedDistricts.join(',');
     if (this.selectedIndicator) filters.indicator = this.selectedIndicator;
     if (this.selectedMain) filters.main = this.selectedMain;
+    // ส่ง hostype → backend ใช้ subquery ผ่าน chospital.hostype
+    if (this.selectedHosTypes.length > 0) filters.hostype = this.selectedHosTypes.join(',');
+    console.log('[KPI] loadKpiData filters:', JSON.stringify(filters));
     this.authService.getKpiResults(filters).subscribe({
       next: (res) => {
         this.isLoading = false;
