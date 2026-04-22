@@ -18,9 +18,14 @@ export class ChangelogComponent {
 
   changelog = [
     {
-      version: '2569.04.22',
+      version: '2569.04.22-schedule',
       date: '22 เมษายน 2569',
       changes: [
+        { type: 'feature', text: 'Export KPI: ระบบตารางเวลา Export อัตโนมัติ — ตั้งวัน จ.-อา. + เวลา HH:MM → scheduler backend รันทุก 1 นาที' },
+        { type: 'feature', text: 'Schedule: ขอบเขตตัวชี้วัด 3 โหมด — changes_only (แนะนำ, เฉพาะที่เพิ่ม/แก้ไข) / all / selected' },
+        { type: 'feature', text: 'Schedule: เลือกเปิด "ส่งข้อมูลเข้า HDC อัตโนมัติ" หลัง export เสร็จ (UPSERT)' },
+        { type: 'feature', text: 'Schedule: ส่งรายงานสรุป (Email/Telegram) — recipients ดึงจากหน้าตั้งค่าระบบ (admin_emails, telegram_chat_id, telegram_bot_token)' },
+        { type: 'feature', text: 'Schedule: ปุ่มใน kpi-manager → Modal ตั้งค่า + ปุ่มรันทันที + ประวัติการรัน (logs)' },
         { type: 'feature', text: 'ประกาศระบบ (System Announcements): เพิ่มตาราง + CRUD — จัดการประกาศได้ จาก super_admin' },
         { type: 'feature', text: 'Rich text editor: B/I/U, ขนาด, สี, ไฮไลต์, emoji, ไอคอน, รูปภาพ URL + character limit 200' },
         { type: 'feature', text: 'Dashboard header pill: โหลดแบบไดนามิก + กระพริบช้าๆ (ตามค่า blink_enabled)' },

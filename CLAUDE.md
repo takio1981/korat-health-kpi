@@ -212,12 +212,33 @@ users.dept_id → departments.id (FK)
 
 ### Export KPI Tables
 - Endpoint: `POST /export-kpi-tables` — สร้าง/อัปเดตตาราง MySQL แยกรายตัวชี้วัด
+- Core function: `performKpiExport(year_bh, indicator_ids, userId)` — ใช้ร่วมกับ scheduler
 - Prefilter: สร้างเฉพาะ indicator ที่มีข้อมูลใน `kpi_results` (target_value หรือ actual_value)
 - Content-based diff: เปรียบเทียบค่าเดิมในตาราง export ทีละคอลัมน์ (ไม่ใช้ timestamp)
 - `result` = **ค่าเดือนล่าสุดที่คีย์** (ไม่ใช่ SUM) — เหมือน `kpi_summary.last_actual`
 - ตารางมีคอลัมน์เดือน (m10-m09) เสมอ + form fields ถ้ามี (ไม่แยก hasForm)
 - `emptyToNull()` แปลง `''` → `null` ก่อน INSERT (ป้องกัน DECIMAL error)
 - Card counters นับตาม unique `table_process` (dedupe)
+
+### Sync to HDC
+- Core function: `performSyncToHdc(tables, userId)` — UPSERT local export tables → HDC
+- ถ้า `sync_columns` ไม่ส่งมา → auto-detect common columns ระหว่าง local กับ remote
+- HTTP: `POST /sync-to-hdc/preview` + `/sync-to-hdc/execute`
+- ใช้ `INSERT ... ON DUPLICATE KEY UPDATE` (ไม่ลบข้อมูลเดิม)
+- Log: `SYNC_TO_HDC` ใน system_logs
+
+### Export Scheduler (ตารางเวลา Export อัตโนมัติ)
+- ตาราง `export_schedules` — metadata schedule (name, days_of_week, time_of_day, indicator_scope, auto_sync_hdc, notify_email/telegram)
+- ตาราง `export_schedule_logs` — บันทึกการรันแต่ละครั้ง (status, inserted, updated_count, unchanged, duration_ms, error_msg)
+- `startExportScheduler()` — setInterval(60000) เช็คทุก 1 นาที ถ้า HH:MM + day-of-week ตรง → `runScheduledExport()` (dedup 90s)
+- `indicator_scope` (3 โหมด):
+  - `'changes_only'` (default/แนะนำ) — เรียก `checkKpiChanges()` ก่อน → export เฉพาะ `status === 'has_changes'`
+  - `'all'` — export ทุกตัวชี้วัด
+  - `'selected'` — ใช้ `indicator_ids` ที่เก็บไว้ (JSON array)
+- `auto_sync_hdc` — ถ้า `=1` → หลัง export สำเร็จเรียก `performSyncToHdc()` ต่อทันที → รวมผลใน notification
+- Notification recipients: ดึงจาก `system_settings` (keys: `admin_emails`, `telegram_chat_id`, `telegram_bot_token`) ผ่าน `getNotifSettings()` helper
+- CRUD: `GET/POST/PUT/DELETE /export-schedules` + `/run-now` + `/logs` (super_admin)
+- UI: ปุ่ม gradient ม่วง-คราม "ตารางเวลา Export อัตโนมัติ" ใน export-kpi → modal รายการ + modal เพิ่ม/แก้
 
 ## 6. Role System (9 Roles)
 
@@ -379,3 +400,5 @@ docker compose up -d
 | feedback_replies | ตอบกลับกระทู้ | id, post_id, user_id, message |
 | system_settings | ตั้งค่าระบบ | setting_key, setting_value |
 | system_announcements | ประกาศระบบ | id, title, content_html, bg_color, text_color, blink_enabled, show_on_header, show_on_login, is_active |
+| export_schedules | ตารางเวลา Export อัตโนมัติ | id, name, is_enabled, days_of_week, time_of_day, year_bh, indicator_scope, indicator_ids, auto_sync_hdc, notify_email, notify_telegram, last_run_at, last_status |
+| export_schedule_logs | ประวัติการรัน schedule | id, schedule_id, run_at, status, inserted, updated_count, unchanged, tables_count, duration_ms, notified_email, notified_telegram, error_msg |

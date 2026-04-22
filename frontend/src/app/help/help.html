@@ -896,6 +896,7 @@
               <li>กรองตามหมวดหมู่ / หน่วยงาน / สถานะ → เลือก checkbox ตัวชี้วัดที่ต้องการ</li>
               <li>กดปุ่ม <b>"ส่งออกข้อมูล"</b> → สร้าง/อัปเดตตาราง MySQL ใน Local DB (target + actual_value รายเดือน + form fields)</li>
               <li>กดปุ่ม <b>"ส่งข้อมูลเข้า HDC"</b> (สีเขียวเข้ม) → Modal ตรวจสอบตาราง → เลือก → UPSERT เข้า HDC</li>
+              <li>กดปุ่ม <b>"ตารางเวลา Export อัตโนมัติ"</b> (ไล่สีม่วง-คราม) → Modal ตั้งค่า schedule อัตโนมัติ</li>
             </ol>
             <div class="mt-2 bg-green-100 rounded-lg p-2 text-xs text-green-700">
               <i class="fas fa-shield-alt mr-1"></i>ใช้ <b>INSERT ... ON DUPLICATE KEY UPDATE</b> — อัปเดตเฉพาะ key ที่ตรงกัน ข้อมูลเดิมใน HDC ที่ไม่ซ้ำยังคงอยู่
@@ -908,6 +909,32 @@
             </div>
             <div class="mt-2 bg-purple-100 rounded-lg p-2 text-xs text-purple-700">
               <i class="fas fa-layer-group mr-1"></i><b>Dedupe:</b> Card นับตาม unique <b>table_process</b> — หลายตัวชี้วัดที่ใช้ตารางเดียวกันนับเป็น 1
+            </div>
+          </div>
+          <!-- Tab 3.1: Schedule -->
+          <div class="bg-gradient-to-r from-purple-50 to-indigo-50 border border-indigo-200 rounded-xl p-4">
+            <h4 class="font-bold text-indigo-800 mb-2"><i class="fas fa-clock mr-2"></i>Tab 3.1: ตารางเวลา Export อัตโนมัติ</h4>
+            <p class="text-xs text-gray-600 mb-2">ตั้งค่าให้ระบบ export + sync HDC อัตโนมัติตามวัน-เวลาที่กำหนด พร้อมส่งรายงานสรุป</p>
+            <ol class="list-decimal ml-5 text-sm text-gray-600 space-y-1">
+              <li>กดปุ่ม <b>"ตารางเวลา Export อัตโนมัติ"</b> → Modal แสดงรายการ schedule + ปุ่ม "+ เพิ่ม Schedule"</li>
+              <li>กรอก: ชื่อ, เปิดใช้งาน, เวลา (HH:MM), ปีงบฯ, เลือกวัน จ.-อา.</li>
+              <li>เลือก <b>ขอบเขตตัวชี้วัด</b> (3 แบบ):
+                <ul class="list-disc ml-5 mt-1 space-y-0.5">
+                  <li><b class="text-indigo-700">ตรวจสอบก่อน</b> (แนะนำ) — export เฉพาะตัวชี้วัดที่มีการเพิ่ม/แก้ไข</li>
+                  <li><b>ทุกตัวชี้วัด</b> — export ทุกตัวเสมอ</li>
+                  <li><b>เฉพาะที่เลือก</b> — ใช้รายการ checkbox จากตารางด้านบน</li>
+                </ul>
+              </li>
+              <li>(ตัวเลือก) เปิด <b class="text-teal-700">"ส่งข้อมูลเข้า HDC อัตโนมัติ"</b> → หลัง export เสร็จจะ UPSERT เข้า HDC ทันที (ไม่ต้องรออนุมัติ)</li>
+              <li>เลือกช่องแจ้งเตือน: <b>ส่ง Email</b> / <b>ส่ง Telegram</b> (recipients ดึงจากหน้าตั้งค่าระบบ)</li>
+              <li>กด <b>บันทึก</b> → schedule รันที่ backend ทุกๆ 1 นาที — ถ้าตรงวัน+เวลาจะเริ่ม export</li>
+              <li>ปุ่มในแต่ละแถว: <b class="text-teal-700">▶ รันตอนนี้</b> | <b class="text-gray-700">⏱ ประวัติ</b> | <b class="text-amber-700">✎ แก้ไข</b> | <b class="text-red-700">🗑 ลบ</b></li>
+            </ol>
+            <div class="mt-2 bg-amber-100 rounded-lg p-2 text-xs text-amber-700">
+              <i class="fas fa-exclamation-triangle mr-1"></i><b>คำเตือน:</b> เปิด "Auto Sync HDC" = ข้อมูลถูกส่งโดยไม่ผ่านการตรวจสอบ — ใช้เมื่อมั่นใจในคุณภาพข้อมูลเท่านั้น
+            </div>
+            <div class="mt-2 bg-blue-100 rounded-lg p-2 text-xs text-blue-700">
+              <i class="fas fa-envelope mr-1"></i><b>Email/Telegram:</b> ดึง recipients จาก <b>หน้าตั้งค่าระบบ</b> (keys: <code>admin_emails</code>, <code>telegram_chat_id</code>, <code>telegram_bot_token</code>) — schedule เลือกแค่เปิด/ปิดส่ง
             </div>
           </div>
           <!-- Tab 4 -->
