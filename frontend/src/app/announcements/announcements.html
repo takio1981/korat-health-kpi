@@ -36,6 +36,9 @@
             <button *ngIf="!a.is_active" (click)="activate(a)" class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold" title="เปิดใช้งาน">
               <i class="fas fa-check"></i> Activate
             </button>
+            <button (click)="openEmailModal(a)" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold" title="ส่งเข้าอีเมล">
+              <i class="fas fa-paper-plane"></i> ส่งอีเมล
+            </button>
             <button (click)="openEdit(a)" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold">
               <i class="fas fa-edit"></i>
             </button>
@@ -180,6 +183,127 @@
       <button (click)="closeModal()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-bold">ยกเลิก</button>
       <button (click)="save()" class="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold shadow">
         <i class="fas fa-save mr-1"></i>บันทึก
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Email Modal -->
+<div *ngIf="showEmailModal" class="fixed inset-0 z-50 flex items-start justify-center bg-black/60 overflow-y-auto py-4 px-2">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl my-auto">
+    <div class="flex justify-between items-center px-6 py-4 bg-gradient-to-r from-blue-700 to-blue-600 rounded-t-2xl">
+      <div>
+        <h3 class="text-lg font-bold text-white"><i class="fas fa-paper-plane mr-2"></i>ส่งประกาศเข้าอีเมล</h3>
+        <p class="text-blue-200 text-xs mt-0.5 truncate max-w-[500px]">{{ emailAnnouncement?.title }}</p>
+      </div>
+      <button (click)="closeEmailModal()" class="text-white/70 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+    </div>
+    <div class="p-5 space-y-3">
+      <!-- Scope Selector -->
+      <div>
+        <label class="block text-xs font-bold text-gray-600 mb-2">เลือกผู้รับ</label>
+        <div class="grid grid-cols-3 gap-2">
+          <label class="flex items-center gap-2 p-3 border-2 rounded-xl cursor-pointer transition-all"
+                 [ngClass]="emailScope === 'all' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'">
+            <input type="radio" name="scope" [(ngModel)]="emailScope" value="all" class="text-blue-600">
+            <div class="flex-1">
+              <p class="font-bold text-sm"><i class="fas fa-users text-blue-500 mr-1"></i>ทั้งหมด</p>
+              <p class="text-[10px] text-gray-500">users ทุกคนที่มี email</p>
+            </div>
+          </label>
+          <label class="flex items-center gap-2 p-3 border-2 rounded-xl cursor-pointer transition-all"
+                 [ngClass]="emailScope === 'dept' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'">
+            <input type="radio" name="scope" [(ngModel)]="emailScope" value="dept" class="text-blue-600">
+            <div class="flex-1">
+              <p class="font-bold text-sm"><i class="fas fa-building text-green-500 mr-1"></i>หน่วยงาน</p>
+              <p class="text-[10px] text-gray-500">เลือกหน่วยงาน</p>
+            </div>
+          </label>
+          <label class="flex items-center gap-2 p-3 border-2 rounded-xl cursor-pointer transition-all"
+                 [ngClass]="emailScope === 'users' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'">
+            <input type="radio" name="scope" [(ngModel)]="emailScope" value="users" class="text-blue-600">
+            <div class="flex-1">
+              <p class="font-bold text-sm"><i class="fas fa-user-check text-purple-500 mr-1"></i>เลือกเอง</p>
+              <p class="text-[10px] text-gray-500">ติ๊ก user ทีละคน</p>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Dept selector -->
+      <div *ngIf="emailScope === 'dept'" class="border rounded-xl p-3 max-h-[250px] overflow-y-auto">
+        <p class="text-xs font-bold text-gray-600 mb-2">เลือกหน่วยงาน ({{ emailDeptIds.size }} / {{ allDepartments.length }})</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <label *ngFor="let d of allDepartments" class="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer text-xs">
+            <input type="checkbox" [checked]="emailDeptIds.has(d.id)" (change)="toggleDept(d.id)" class="rounded text-green-600">
+            <span>{{ d.dept_name }}</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- User selector -->
+      <div *ngIf="emailScope === 'users'" class="border rounded-xl p-3">
+        <div class="flex items-center gap-2 mb-2">
+          <input type="text" [(ngModel)]="emailUserSearch" placeholder="ค้นหา username / ชื่อ / email..."
+                 class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-500 outline-none">
+          <button (click)="selectAllUsers()" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold">
+            <i class="fas fa-check-double mr-1"></i>เลือกทั้งหมดที่แสดง
+          </button>
+        </div>
+        <p class="text-xs text-gray-500 mb-2">เลือก: <b>{{ emailUserIds.size }}</b> / {{ filteredUsers().length }} คน (แสดง)</p>
+        <div class="max-h-[280px] overflow-y-auto border border-gray-200 rounded-lg">
+          <table class="w-full text-xs">
+            <thead class="bg-gray-50 sticky top-0">
+              <tr>
+                <th class="px-2 py-2 w-10"></th>
+                <th class="px-2 py-2 text-left">Username</th>
+                <th class="px-2 py-2 text-left">ชื่อ-นามสกุล</th>
+                <th class="px-2 py-2 text-left">หน่วยงาน</th>
+                <th class="px-2 py-2 text-left">Email</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr *ngFor="let u of filteredUsers()" class="hover:bg-blue-50/50"
+                  [class.bg-blue-50]="emailUserIds.has(u.id)">
+                <td class="px-2 py-1.5 text-center">
+                  <input type="checkbox" [checked]="emailUserIds.has(u.id)" (change)="toggleUser(u.id)" class="rounded text-blue-600">
+                </td>
+                <td class="px-2 py-1.5 font-mono">{{ u.username }}</td>
+                <td class="px-2 py-1.5">{{ u.firstname }} {{ u.lastname }}</td>
+                <td class="px-2 py-1.5 text-gray-500">{{ u.dept_name || '-' }}</td>
+                <td class="px-2 py-1.5 text-blue-600 text-[11px]">{{ u.email }}</td>
+              </tr>
+              <tr *ngIf="filteredUsers().length === 0">
+                <td colspan="5" class="px-3 py-8 text-center text-gray-400">ไม่พบผู้ใช้งาน</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Preview -->
+      <div class="bg-gray-100 rounded-lg p-3">
+        <p class="text-[10px] text-gray-500 mb-1">ตัวอย่างเนื้อหาที่จะส่ง:</p>
+        <div class="bg-white rounded-lg p-3">
+          <p class="font-bold text-sm mb-2">📢 {{ emailAnnouncement?.title }}</p>
+          <div class="inline-block py-1 px-3 rounded-full text-xs font-bold"
+               [style.background-color]="emailAnnouncement?.bg_color"
+               [style.color]="emailAnnouncement?.text_color"
+               [innerHTML]="emailAnnouncement?.content_html"></div>
+        </div>
+      </div>
+
+      <!-- Recipient count -->
+      <div class="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between">
+        <span class="text-sm text-green-700"><i class="fas fa-envelope mr-1"></i>ผู้รับที่จะส่ง:</span>
+        <span class="font-bold text-green-700 text-lg">{{ getRecipientCount() }} คน</span>
+      </div>
+    </div>
+    <div class="px-5 py-3 border-t flex justify-end gap-2 bg-gray-50 rounded-b-2xl">
+      <button (click)="closeEmailModal()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-bold">ยกเลิก</button>
+      <button (click)="sendEmail()" [disabled]="emailSending || getRecipientCount() === 0"
+              class="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl text-sm font-bold shadow">
+        <i class="fas fa-paper-plane mr-1"></i>ส่งอีเมล ({{ getRecipientCount() }})
       </button>
     </div>
   </div>

@@ -576,6 +576,11 @@ export class AuthService {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.put(`${this.apiUrl}/announcements/${id}/activate`, {}, { headers });
   }
+  sendAnnouncementEmail(id: number, data: { scope: string; dept_ids?: number[]; user_ids?: number[] }): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/announcements/${id}/send-email`, data, { headers });
+  }
 
   // Users Data Sync (Local ↔ HDC)
   usersSyncCompare(): Observable<any> {
