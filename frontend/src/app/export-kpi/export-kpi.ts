@@ -74,13 +74,10 @@ export class ExportKpiComponent implements OnInit {
     days: [1, 2, 3, 4, 5],
     time_of_day: '02:00',
     year_bh: '',
-    indicator_scope: 'all',
+    indicator_scope: 'changes_only',
     indicator_ids: [] as number[],
     notify_email: true,
-    email_recipients: '',
-    notify_telegram: false,
-    telegram_chat_ids: '',
-    telegram_bot_token: ''
+    notify_telegram: false
   };
   dayLabels = [
     { v: 1, label: 'จ.' },
@@ -619,32 +616,28 @@ export class ExportKpiComponent implements OnInit {
       days: [1, 2, 3, 4, 5],
       time_of_day: '02:00',
       year_bh: this.exportYear,
-      indicator_scope: 'all',
+      indicator_scope: 'changes_only',
       indicator_ids: [],
       notify_email: true,
-      email_recipients: '',
-      notify_telegram: false,
-      telegram_chat_ids: '',
-      telegram_bot_token: ''
+      notify_telegram: false
     };
     this.showScheduleModal = true;
   }
 
   openEditSchedule(s: any) {
     this.editingSchedule = s;
+    const scope = s.indicator_scope
+      || (s.indicator_ids_arr && s.indicator_ids_arr.length > 0 ? 'selected' : 'all');
     this.scheduleForm = {
       name: s.name,
       is_enabled: !!s.is_enabled,
       days: [...(s.days_arr || [])],
       time_of_day: s.time_of_day || '02:00',
       year_bh: s.year_bh || '',
-      indicator_scope: s.indicator_ids_arr && s.indicator_ids_arr.length > 0 ? 'selected' : 'all',
+      indicator_scope: scope,
       indicator_ids: [...(s.indicator_ids_arr || [])],
       notify_email: !!s.notify_email,
-      email_recipients: s.email_recipients || '',
-      notify_telegram: !!s.notify_telegram,
-      telegram_chat_ids: s.telegram_chat_ids || '',
-      telegram_bot_token: s.telegram_bot_token || ''
+      notify_telegram: !!s.notify_telegram
     };
     this.showScheduleModal = true;
   }
@@ -671,12 +664,10 @@ export class ExportKpiComponent implements OnInit {
       days_of_week: f.days.sort((a: number, b: number) => a - b).join(','),
       time_of_day: f.time_of_day,
       year_bh: f.year_bh || null,
+      indicator_scope: f.indicator_scope,
       indicator_ids: f.indicator_scope === 'selected' ? (f.indicator_ids || []) : null,
       notify_email: f.notify_email,
-      email_recipients: f.notify_email ? (f.email_recipients || '') : '',
-      notify_telegram: f.notify_telegram,
-      telegram_chat_ids: f.notify_telegram ? (f.telegram_chat_ids || '') : '',
-      telegram_bot_token: f.notify_telegram ? (f.telegram_bot_token || '') : ''
+      notify_telegram: f.notify_telegram
     };
 
     const obs = this.editingSchedule
@@ -753,5 +744,11 @@ export class ExportKpiComponent implements OnInit {
 
   copySelectedIntoSchedule() {
     this.scheduleForm.indicator_ids = Array.from(this.selectedIndicatorIds);
+  }
+
+  goToSettings() {
+    this.showScheduleModal = false;
+    this.showSettingsModal = false;
+    this.router.navigate(['/settings']);
   }
 }

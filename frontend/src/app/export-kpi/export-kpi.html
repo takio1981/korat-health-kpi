@@ -530,10 +530,13 @@
             <tr *ngFor="let s of schedules" class="border-b border-gray-100 hover:bg-gray-50">
               <td class="px-3 py-2">
                 <div class="font-semibold text-gray-800">{{ s.name }}</div>
-                <div class="text-xs text-gray-500" *ngIf="s.indicator_ids_arr?.length">
-                  <i class="fas fa-check-square mr-1"></i>เลือก {{ s.indicator_ids_arr.length }} ตัวชี้วัด
+                <div class="text-xs text-indigo-600" *ngIf="s.indicator_scope === 'changes_only'">
+                  <i class="fas fa-magic mr-1"></i>เฉพาะที่มีการเพิ่ม/แก้ไข
                 </div>
-                <div class="text-xs text-gray-500" *ngIf="!s.indicator_ids_arr?.length">
+                <div class="text-xs text-gray-500" *ngIf="s.indicator_scope === 'selected'">
+                  <i class="fas fa-check-square mr-1"></i>เลือก {{ s.indicator_ids_arr?.length || 0 }} ตัวชี้วัด
+                </div>
+                <div class="text-xs text-gray-500" *ngIf="!s.indicator_scope || s.indicator_scope === 'all'">
                   <i class="fas fa-globe mr-1"></i>ทุกตัวชี้วัด
                 </div>
               </td>
@@ -655,54 +658,67 @@
       </div>
 
       <div>
-        <label class="block text-sm font-bold text-gray-700 mb-1">ขอบเขตตัวชี้วัด</label>
-        <div class="flex items-center gap-4">
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input type="radio" name="scope" [(ngModel)]="scheduleForm.indicator_scope" value="all" class="w-4 h-4 text-indigo-600">
-            <span class="text-sm">ทุกตัวชี้วัด</span>
+        <label class="block text-sm font-bold text-gray-700 mb-2">ขอบเขตตัวชี้วัด</label>
+        <div class="space-y-2">
+          <label class="flex items-start gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all"
+                 [ngClass]="scheduleForm.indicator_scope === 'changes_only' ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'">
+            <input type="radio" name="scope" [(ngModel)]="scheduleForm.indicator_scope" value="changes_only" class="w-4 h-4 text-indigo-600 mt-0.5">
+            <div class="text-sm">
+              <div class="font-bold text-indigo-700">
+                <i class="fas fa-magic mr-1"></i>ตรวจสอบก่อน — export เฉพาะตัวชี้วัดที่เพิ่ม/แก้ไข <span class="ml-1 px-2 py-0.5 bg-indigo-200 text-indigo-800 text-xs rounded-full">แนะนำ</span>
+              </div>
+              <div class="text-xs text-gray-600 mt-1">
+                ระบบจะตรวจสอบข้อมูลผลงานของตัวชี้วัดทุกตัวก่อน แล้วส่งออกเฉพาะตัวที่มีการเปลี่ยนแปลงเท่านั้น (ชื่อตารางตรงกับ HDC)
+              </div>
+            </div>
           </label>
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input type="radio" name="scope" [(ngModel)]="scheduleForm.indicator_scope" value="selected" class="w-4 h-4 text-indigo-600">
-            <span class="text-sm">เฉพาะที่เลือก (ใช้รายการที่ถูก check ด้านบน = {{ selectedIndicatorIds.size }} ตัว)</span>
+
+          <label class="flex items-start gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all"
+                 [ngClass]="scheduleForm.indicator_scope === 'all' ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'">
+            <input type="radio" name="scope" [(ngModel)]="scheduleForm.indicator_scope" value="all" class="w-4 h-4 text-indigo-600 mt-0.5">
+            <div class="text-sm">
+              <div class="font-bold text-gray-700"><i class="fas fa-globe mr-1"></i>ทุกตัวชี้วัด</div>
+              <div class="text-xs text-gray-500 mt-1">ส่งออกทุกตัวชี้วัดเสมอ (ไม่เช็คว่ามีการเปลี่ยนแปลงหรือไม่)</div>
+            </div>
+          </label>
+
+          <label class="flex items-start gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all"
+                 [ngClass]="scheduleForm.indicator_scope === 'selected' ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:border-gray-300'">
+            <input type="radio" name="scope" [(ngModel)]="scheduleForm.indicator_scope" value="selected" class="w-4 h-4 text-indigo-600 mt-0.5">
+            <div class="text-sm flex-1">
+              <div class="font-bold text-gray-700"><i class="fas fa-check-square mr-1"></i>เฉพาะที่เลือก</div>
+              <div class="text-xs text-gray-500 mt-1">ใช้รายการที่ถูก check ในตารางด้านบน (ปัจจุบัน {{ selectedIndicatorIds.size }} ตัว)</div>
+              <div *ngIf="scheduleForm.indicator_scope === 'selected'" class="mt-2 flex items-center gap-2">
+                <button type="button" (click)="copySelectedIntoSchedule()"
+                        class="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold">
+                  <i class="fas fa-sync-alt mr-1"></i>ใช้รายการที่เลือกปัจจุบัน ({{ selectedIndicatorIds.size }})
+                </button>
+                <span class="text-xs text-gray-500">เก็บไว้ {{ scheduleForm.indicator_ids.length }} ตัวชี้วัด</span>
+              </div>
+            </div>
           </label>
         </div>
-        <button *ngIf="scheduleForm.indicator_scope === 'selected'"
-                type="button"
-                (click)="copySelectedIntoSchedule()"
-                class="mt-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold">
-          <i class="fas fa-sync-alt mr-1"></i>ใช้รายการที่เลือกปัจจุบัน ({{ selectedIndicatorIds.size }})
-        </button>
-        <p *ngIf="scheduleForm.indicator_scope === 'selected'" class="text-xs text-gray-500 mt-1">
-          เก็บไว้ {{ scheduleForm.indicator_ids.length }} ตัวชี้วัด
-        </p>
       </div>
 
-      <!-- Email -->
+      <!-- แจ้งเตือน — ใช้ recipients จากหน้าตั้งค่าระบบ -->
       <div class="border-t pt-3">
-        <label class="flex items-center gap-2 cursor-pointer mb-2">
-          <input type="checkbox" [(ngModel)]="scheduleForm.notify_email" class="w-4 h-4 text-indigo-600 rounded">
-          <span class="text-sm font-bold text-gray-700"><i class="fas fa-envelope text-blue-500 mr-1"></i>ส่งรายงานทาง Email</span>
-        </label>
-        <textarea *ngIf="scheduleForm.notify_email" [(ngModel)]="scheduleForm.email_recipients"
-                  rows="2" placeholder="email1@example.com, email2@example.com (คั่นด้วยจุลภาค)"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm"></textarea>
-      </div>
-
-      <!-- Telegram -->
-      <div class="border-t pt-3">
-        <label class="flex items-center gap-2 cursor-pointer mb-2">
-          <input type="checkbox" [(ngModel)]="scheduleForm.notify_telegram" class="w-4 h-4 text-indigo-600 rounded">
-          <span class="text-sm font-bold text-gray-700"><i class="fab fa-telegram text-sky-500 mr-1"></i>ส่งรายงานทาง Telegram</span>
-        </label>
-        <div *ngIf="scheduleForm.notify_telegram" class="space-y-2">
-          <input type="text" [(ngModel)]="scheduleForm.telegram_bot_token" placeholder="Bot Token (เช่น 123456789:ABC-...)"
-                 class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm font-mono">
-          <input type="text" [(ngModel)]="scheduleForm.telegram_chat_ids" placeholder="Chat IDs (คั่นด้วยจุลภาค เช่น -1001234,12345)"
-                 class="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm font-mono">
-          <p class="text-xs text-gray-500">
-            <i class="fas fa-info-circle mr-1"></i>สร้าง bot ได้จาก
-            <a href="https://t.me/BotFather" target="_blank" class="text-sky-600 underline">&#64;BotFather</a>
-          </p>
+        <div class="text-sm font-bold text-gray-700 mb-2">
+          <i class="fas fa-bell text-amber-500 mr-1"></i>ส่งรายงานสรุป
+        </div>
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3 text-xs text-amber-800">
+          <i class="fas fa-info-circle mr-1"></i>
+          ระบบจะส่งรายงานตาม Email / Telegram ที่ตั้งไว้ใน <button type="button" (click)="goToSettings()" class="underline font-bold hover:text-amber-900">หน้าตั้งค่าระบบ</button>
+          (admin_emails, telegram_chat_id, telegram_bot_token) — เลือกเฉพาะว่าจะเปิดส่งหรือไม่
+        </div>
+        <div class="space-y-2">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" [(ngModel)]="scheduleForm.notify_email" class="w-4 h-4 text-indigo-600 rounded">
+            <span class="text-sm text-gray-700"><i class="fas fa-envelope text-blue-500 mr-1"></i>ส่ง Email รายงานสรุป</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" [(ngModel)]="scheduleForm.notify_telegram" class="w-4 h-4 text-indigo-600 rounded">
+            <span class="text-sm text-gray-700"><i class="fab fa-telegram text-sky-500 mr-1"></i>ส่ง Telegram รายงานสรุป</span>
+          </label>
         </div>
       </div>
     </div>

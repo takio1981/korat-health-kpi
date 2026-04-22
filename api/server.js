@@ -3494,16 +3494,12 @@ apiRouter.get('/exportable-indicators', authenticateToken, isSuperAdmin, async (
     }
 });
 
-// ตรวจสอบเปรียบเทียบข้อมูล KPI ก่อน export (dry-run)
-apiRouter.post('/check-kpi-export', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { year_bh, indicator_ids } = req.body;
-
+// Core: ตรวจสอบเปรียบเทียบข้อมูล KPI — ใช้ทั้ง HTTP endpoint และ scheduler
+async function checkKpiChanges(year_bh, indicator_ids) {
     if (!year_bh || !/^\d{4}$/.test(year_bh)) {
-        return res.status(400).json({ success: false, message: 'กรุณาระบุปีงบประมาณ (year_bh) เป็นตัวเลข 4 หลัก' });
+        return { success: false, message: 'กรุณาระบุปีงบประมาณ (year_bh) เป็นตัวเลข 4 หลัก' };
     }
-
     try {
-        // Get indicators
         let indicatorQuery = `SELECT id, table_process, kpi_indicators_name FROM kpi_indicators
             WHERE table_process IS NOT NULL AND table_process != ''`;
         let indicatorParams = [];
@@ -3591,16 +3587,23 @@ apiRouter.post('/check-kpi-export', authenticateToken, isSuperAdmin, async (req,
         const totalUpToDate = results.filter(r => r.status === 'up_to_date').length;
         const totalNoData = results.filter(r => r.no_data).length;
 
-        res.json({
+        return {
             success: true,
             check_date: new Date().toISOString(),
             year_bh,
             summary: { total: results.length, with_data: totalWithData, has_changes: totalChanges, up_to_date: totalUpToDate, no_data: totalNoData },
             details: results
-        });
+        };
     } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        return { success: false, message: err.message };
     }
+}
+
+// HTTP wrapper
+apiRouter.post('/check-kpi-export', authenticateToken, isSuperAdmin, async (req, res) => {
+    const result = await checkKpiChanges(req.body.year_bh, req.body.indicator_ids);
+    if (!result.success) return res.status(result.message?.includes('กรุณา') ? 400 : 500).json(result);
+    res.json(result);
 });
 
 // สร้างตาราง MySQL แยกรายตัวชี้วัด พร้อมข้อมูลคะแนนทุก hospcode
@@ -3943,29 +3946,29 @@ async function sendExportNotification(schedule, result, durationMs) {
       </div>
     </div>`;
 
+    // ดึง recipients จาก system_settings (ไม่ใช่จาก schedule)
+    const ns = await getNotifSettings();
     let sentEmail = false, sentTelegram = false;
-    if (Number(schedule.notify_email) === 1 && schedule.email_recipients) {
-        const recipients = schedule.email_recipients.split(',').map(e => e.trim()).filter(Boolean);
+
+    if (Number(schedule.notify_email) === 1 && ns.adminEmails) {
+        const recipients = ns.adminEmails.split(',').map(e => e.trim()).filter(Boolean);
         for (const email of recipients) {
             try { await sendMail(email, subject, html); sentEmail = true; } catch (e) {}
         }
     }
-    if (Number(schedule.notify_telegram) === 1 && schedule.telegram_chat_ids) {
-        const chatIds = schedule.telegram_chat_ids.split(',').map(c => c.trim()).filter(Boolean);
-        const botToken = schedule.telegram_bot_token || process.env.TELEGRAM_BOT_TOKEN;
-        if (botToken) {
-            const tgMsg = `📊 *รายงาน Export KPI — ${schedule.name}*\n\n` +
-                `สถานะ: ${result.success ? '✅ สำเร็จ' : '❌ ผิดพลาด'}\n` +
-                `⏱ เวลา: ${(durationMs/1000).toFixed(1)} วินาที\n\n` +
-                `📋 สรุปผล:\n` +
-                `• เพิ่มใหม่: *${summary.inserted}*\n` +
-                `• อัปเดต: *${summary.updated}*\n` +
-                `• ไม่เปลี่ยน: *${summary.unchanged}*\n` +
-                `• ตารางทั้งหมด: *${tablesCount}*\n\n` +
-                `⚠️ กรุณาตรวจสอบก่อนส่ง HDC`;
-            for (const chatId of chatIds) {
-                try { await sendTelegramDirect(botToken, chatId, tgMsg); sentTelegram = true; } catch (e) {}
-            }
+    if (Number(schedule.notify_telegram) === 1 && ns.tgToken && ns.tgChatId) {
+        const chatIds = ns.tgChatId.split(',').map(c => c.trim()).filter(Boolean);
+        const tgMsg = `📊 *รายงาน Export KPI — ${schedule.name}*\n\n` +
+            `สถานะ: ${result.success ? '✅ สำเร็จ' : '❌ ผิดพลาด'}\n` +
+            `⏱ เวลา: ${(durationMs/1000).toFixed(1)} วินาที\n\n` +
+            `📋 สรุปผล:\n` +
+            `• เพิ่มใหม่: *${summary.inserted}*\n` +
+            `• อัปเดต: *${summary.updated}*\n` +
+            `• ไม่เปลี่ยน: *${summary.unchanged}*\n` +
+            `• ตารางทั้งหมด: *${tablesCount}*\n\n` +
+            `⚠️ กรุณาตรวจสอบก่อนส่ง HDC`;
+        for (const chatId of chatIds) {
+            try { await sendTelegramDirect(ns.tgToken, chatId, tgMsg); sentTelegram = true; } catch (e) {}
         }
     }
     return { sentEmail, sentTelegram };
@@ -3976,11 +3979,32 @@ async function runScheduledExport(schedule) {
     const startTime = Date.now();
     let result, status = 'success', errorMsg = null;
     try {
-        const indicator_ids = schedule.indicator_ids
-            ? JSON.parse(schedule.indicator_ids)
-            : 'all';
-        result = await performKpiExport(schedule.year_bh || String(new Date().getFullYear() + 543), indicator_ids, schedule.created_by);
-        if (!result.success) { status = 'failed'; errorMsg = result.message; }
+        const year_bh = schedule.year_bh || String(new Date().getFullYear() + 543);
+        const scope = schedule.indicator_scope || 'all';
+        let indicator_ids = 'all';
+
+        if (scope === 'changes_only') {
+            // ตรวจสอบก่อน — export เฉพาะตัวชี้วัดที่มีข้อมูลเพิ่ม/แก้ไข
+            const check = await checkKpiChanges(year_bh, 'all');
+            if (!check.success) {
+                result = { success: false, message: check.message, summary: { inserted: 0, updated: 0, unchanged: 0, no_data: 0 }, created_tables: [], skipped: [] };
+                status = 'failed'; errorMsg = check.message;
+            } else {
+                const changedIds = (check.details || []).filter(d => d.status === 'has_changes').map(d => d.id);
+                if (changedIds.length === 0) {
+                    result = { success: true, message: 'ไม่มีตัวชี้วัดที่มีการเปลี่ยนแปลง — ข้าม export', summary: { inserted: 0, updated: 0, unchanged: 0, no_data: 0 }, created_tables: [], skipped: [] };
+                } else {
+                    indicator_ids = changedIds;
+                }
+            }
+        } else if (scope === 'selected') {
+            indicator_ids = schedule.indicator_ids ? JSON.parse(schedule.indicator_ids) : 'all';
+        }
+
+        if (!result) {
+            result = await performKpiExport(year_bh, indicator_ids, schedule.created_by);
+            if (!result.success) { status = 'failed'; errorMsg = result.message; }
+        }
     } catch (e) {
         result = { success: false, message: e.message };
         status = 'failed'; errorMsg = e.message;
@@ -4040,14 +4064,16 @@ apiRouter.get('/export-schedules', authenticateToken, isSuperAdmin, async (req, 
 
 apiRouter.post('/export-schedules', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
-        const { name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, notify_email, email_recipients, notify_telegram, telegram_chat_ids, telegram_bot_token } = req.body;
+        const { name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, notify_email, notify_telegram } = req.body;
         if (!name || !days_of_week || !time_of_day) return res.status(400).json({ success: false, message: 'ข้อมูลไม่ครบ' });
+        const scope = ['all', 'selected', 'changes_only'].includes(indicator_scope) ? indicator_scope : 'all';
         const [r] = await db.query(
-            `INSERT INTO export_schedules (name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, notify_email, email_recipients, notify_telegram, telegram_chat_ids, telegram_bot_token, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO export_schedules (name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, notify_email, notify_telegram, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [name, is_enabled ? 1 : 0, days_of_week, time_of_day, year_bh || null,
-             Array.isArray(indicator_ids) ? JSON.stringify(indicator_ids) : null,
-             notify_email ? 1 : 0, email_recipients || null, notify_telegram ? 1 : 0, telegram_chat_ids || null, telegram_bot_token || null, req.user.id]
+             scope === 'selected' && Array.isArray(indicator_ids) ? JSON.stringify(indicator_ids) : null,
+             scope,
+             notify_email ? 1 : 0, notify_telegram ? 1 : 0, req.user.id]
         );
         res.json({ success: true, id: r.insertId, message: 'สร้าง schedule สำเร็จ' });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -4055,12 +4081,14 @@ apiRouter.post('/export-schedules', authenticateToken, isSuperAdmin, async (req,
 
 apiRouter.put('/export-schedules/:id', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
-        const { name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, notify_email, email_recipients, notify_telegram, telegram_chat_ids, telegram_bot_token } = req.body;
+        const { name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, notify_email, notify_telegram } = req.body;
+        const scope = ['all', 'selected', 'changes_only'].includes(indicator_scope) ? indicator_scope : 'all';
         await db.query(
-            `UPDATE export_schedules SET name=?, is_enabled=?, days_of_week=?, time_of_day=?, year_bh=?, indicator_ids=?, notify_email=?, email_recipients=?, notify_telegram=?, telegram_chat_ids=?, telegram_bot_token=? WHERE id=?`,
+            `UPDATE export_schedules SET name=?, is_enabled=?, days_of_week=?, time_of_day=?, year_bh=?, indicator_ids=?, indicator_scope=?, notify_email=?, notify_telegram=? WHERE id=?`,
             [name, is_enabled ? 1 : 0, days_of_week, time_of_day, year_bh || null,
-             Array.isArray(indicator_ids) ? JSON.stringify(indicator_ids) : null,
-             notify_email ? 1 : 0, email_recipients || null, notify_telegram ? 1 : 0, telegram_chat_ids || null, telegram_bot_token || null, req.params.id]
+             scope === 'selected' && Array.isArray(indicator_ids) ? JSON.stringify(indicator_ids) : null,
+             scope,
+             notify_email ? 1 : 0, notify_telegram ? 1 : 0, req.params.id]
         );
         res.json({ success: true, message: 'แก้ไข schedule สำเร็จ' });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -5044,6 +5072,7 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
                     notify_telegram TINYINT(1) DEFAULT 0,
                     telegram_chat_ids TEXT,
                     telegram_bot_token VARCHAR(255),
+                    indicator_scope VARCHAR(20) DEFAULT 'all',
                     last_run_at DATETIME,
                     last_status VARCHAR(20),
                     next_run_at DATETIME,
@@ -5052,6 +5081,7 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             `);
+            try { await db.query(`ALTER TABLE export_schedules ADD COLUMN indicator_scope VARCHAR(20) DEFAULT 'all'`); } catch (_) {}
         } catch (e) {}
         try {
             await db.query(`
