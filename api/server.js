@@ -3918,6 +3918,22 @@ async function sendExportNotification(schedule, result, durationMs) {
          <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center">=${t.unchanged}</td></tr>`
     ).join('');
 
+    // Sync-to-HDC summary (ถ้ามี)
+    const sync = result.sync;
+    const syncHtml = sync ? `
+        <div style="margin-top:16px;padding:14px;border-radius:10px;background:${sync.success ? '#ecfdf5' : '#fef2f2'};border-left:4px solid ${sync.success ? '#10b981' : '#ef4444'}">
+          <h3 style="margin:0 0 8px;color:${sync.success ? '#065f46' : '#991b1b'};font-size:14px">
+            ${sync.success ? '☁️ Sync ไปยัง HDC สำเร็จ' : '⚠️ Sync ไปยัง HDC ผิดพลาดบางส่วน'}
+          </h3>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0">
+            <div style="background:white;padding:8px;border-radius:6px;text-align:center"><div style="font-size:16px;font-weight:bold;color:#065f46">${sync.summary.success}</div><div style="font-size:10px;color:#065f46">สำเร็จ</div></div>
+            <div style="background:white;padding:8px;border-radius:6px;text-align:center"><div style="font-size:16px;font-weight:bold;color:#991b1b">${sync.summary.error}</div><div style="font-size:10px;color:#991b1b">ผิดพลาด</div></div>
+            <div style="background:white;padding:8px;border-radius:6px;text-align:center"><div style="font-size:16px;font-weight:bold;color:#6b7280">${sync.summary.skipped}</div><div style="font-size:10px;color:#6b7280">ข้าม</div></div>
+            <div style="background:white;padding:8px;border-radius:6px;text-align:center"><div style="font-size:16px;font-weight:bold;color:#1e40af">${sync.summary.rows}</div><div style="font-size:10px;color:#1e40af">rows</div></div>
+          </div>
+          ${(sync.results || []).filter(r => r.status === 'error').slice(0, 10).map(r => `<div style="font-size:11px;color:#991b1b;margin-top:4px">✗ <b>${r.table}</b>: ${r.reason}</div>`).join('')}
+        </div>` : '';
+
     const html = `
     <div style="font-family:'Sarabun',Arial,sans-serif;max-width:700px;margin:0 auto">
       <div style="background:linear-gradient(135deg,#065f46,#16a34a);color:white;padding:20px;border-radius:12px 12px 0 0">
@@ -3940,8 +3956,13 @@ async function sendExportNotification(schedule, result, durationMs) {
           <th style="padding:6px 8px;text-align:center">อัปเดต</th>
           <th style="padding:6px 8px;text-align:center">เดิม</th>
         </tr></thead><tbody>${tablesHtml}</tbody></table>` : ''}
+        ${syncHtml}
         <div style="background:#fef9c3;border-left:4px solid #eab308;padding:12px;margin-top:16px;border-radius:4px">
-          <p style="margin:0;color:#713f12;font-size:13px">⚠️ <b>กรุณาตรวจสอบผลก่อนส่งไปยัง HDC</b> โดยเข้าระบบที่ <a href="https://apikorat.moph.go.th/khupskpi/">Korat Health KPI</a> → จัดการข้อมูล KPI → Tab "Export ข้อมูล"</p>
+          <p style="margin:0;color:#713f12;font-size:13px">
+            ${sync
+              ? `📬 ระบบส่งข้อมูลเข้า HDC เรียบร้อยแล้ว — กรุณาตรวจสอบที่ <a href="https://apikorat.moph.go.th/khupskpi/">Korat Health KPI</a>`
+              : `⚠️ <b>กรุณาตรวจสอบผลก่อนส่งไปยัง HDC</b> โดยเข้าระบบที่ <a href="https://apikorat.moph.go.th/khupskpi/">Korat Health KPI</a> → จัดการข้อมูล KPI → Tab "Export ข้อมูล"`}
+          </p>
         </div>
       </div>
     </div>`;
@@ -3958,6 +3979,13 @@ async function sendExportNotification(schedule, result, durationMs) {
     }
     if (Number(schedule.notify_telegram) === 1 && ns.tgToken && ns.tgChatId) {
         const chatIds = ns.tgChatId.split(',').map(c => c.trim()).filter(Boolean);
+        const syncBlock = sync
+          ? `\n☁️ *Sync ไปยัง HDC:*\n` +
+            `• ${sync.success ? 'สำเร็จ' : 'มีข้อผิดพลาด'}: *${sync.summary.success}/${sync.summary.total}* ตาราง\n` +
+            `• Rows: *${sync.summary.rows}*\n` +
+            (sync.summary.error > 0 ? `• ผิดพลาด: *${sync.summary.error}*\n` : '')
+          : '';
+        const footer = sync ? '📬 ข้อมูลถูกส่งเข้า HDC แล้ว' : '⚠️ กรุณาตรวจสอบก่อนส่ง HDC';
         const tgMsg = `📊 *รายงาน Export KPI — ${schedule.name}*\n\n` +
             `สถานะ: ${result.success ? '✅ สำเร็จ' : '❌ ผิดพลาด'}\n` +
             `⏱ เวลา: ${(durationMs/1000).toFixed(1)} วินาที\n\n` +
@@ -3965,8 +3993,9 @@ async function sendExportNotification(schedule, result, durationMs) {
             `• เพิ่มใหม่: *${summary.inserted}*\n` +
             `• อัปเดต: *${summary.updated}*\n` +
             `• ไม่เปลี่ยน: *${summary.unchanged}*\n` +
-            `• ตารางทั้งหมด: *${tablesCount}*\n\n` +
-            `⚠️ กรุณาตรวจสอบก่อนส่ง HDC`;
+            `• ตารางทั้งหมด: *${tablesCount}*\n` +
+            syncBlock + '\n' +
+            footer;
         for (const chatId of chatIds) {
             try { await sendTelegramDirect(ns.tgToken, chatId, tgMsg); sentTelegram = true; } catch (e) {}
         }
@@ -4004,6 +4033,19 @@ async function runScheduledExport(schedule) {
         if (!result) {
             result = await performKpiExport(year_bh, indicator_ids, schedule.created_by);
             if (!result.success) { status = 'failed'; errorMsg = result.message; }
+        }
+
+        // Auto-sync to HDC ถ้า export สำเร็จและมีตารางและเปิด auto_sync_hdc
+        if (Number(schedule.auto_sync_hdc) === 1 && result.success && (result.created_tables || []).length > 0) {
+            try {
+                const syncTables = result.created_tables.map(t => ({ table: t.table, sync_columns: null }));
+                const syncOut = await performSyncToHdc(syncTables, schedule.created_by);
+                result.sync = syncOut;
+                if (!syncOut.success) { status = 'partial'; errorMsg = 'Export สำเร็จแต่ sync HDC มีข้อผิดพลาด'; }
+            } catch (e) {
+                result.sync = { success: false, message: e.message, summary: { total: 0, success: 0, error: 0, skipped: 0, rows: 0 }, results: [] };
+                status = 'partial'; errorMsg = `Sync HDC failed: ${e.message}`;
+            }
         }
     } catch (e) {
         result = { success: false, message: e.message };
@@ -4064,15 +4106,15 @@ apiRouter.get('/export-schedules', authenticateToken, isSuperAdmin, async (req, 
 
 apiRouter.post('/export-schedules', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
-        const { name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, notify_email, notify_telegram } = req.body;
+        const { name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, auto_sync_hdc, notify_email, notify_telegram } = req.body;
         if (!name || !days_of_week || !time_of_day) return res.status(400).json({ success: false, message: 'ข้อมูลไม่ครบ' });
         const scope = ['all', 'selected', 'changes_only'].includes(indicator_scope) ? indicator_scope : 'all';
         const [r] = await db.query(
-            `INSERT INTO export_schedules (name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, notify_email, notify_telegram, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO export_schedules (name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, auto_sync_hdc, notify_email, notify_telegram, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [name, is_enabled ? 1 : 0, days_of_week, time_of_day, year_bh || null,
              scope === 'selected' && Array.isArray(indicator_ids) ? JSON.stringify(indicator_ids) : null,
-             scope,
+             scope, auto_sync_hdc ? 1 : 0,
              notify_email ? 1 : 0, notify_telegram ? 1 : 0, req.user.id]
         );
         res.json({ success: true, id: r.insertId, message: 'สร้าง schedule สำเร็จ' });
@@ -4081,13 +4123,13 @@ apiRouter.post('/export-schedules', authenticateToken, isSuperAdmin, async (req,
 
 apiRouter.put('/export-schedules/:id', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
-        const { name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, notify_email, notify_telegram } = req.body;
+        const { name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, auto_sync_hdc, notify_email, notify_telegram } = req.body;
         const scope = ['all', 'selected', 'changes_only'].includes(indicator_scope) ? indicator_scope : 'all';
         await db.query(
-            `UPDATE export_schedules SET name=?, is_enabled=?, days_of_week=?, time_of_day=?, year_bh=?, indicator_ids=?, indicator_scope=?, notify_email=?, notify_telegram=? WHERE id=?`,
+            `UPDATE export_schedules SET name=?, is_enabled=?, days_of_week=?, time_of_day=?, year_bh=?, indicator_ids=?, indicator_scope=?, auto_sync_hdc=?, notify_email=?, notify_telegram=? WHERE id=?`,
             [name, is_enabled ? 1 : 0, days_of_week, time_of_day, year_bh || null,
              scope === 'selected' && Array.isArray(indicator_ids) ? JSON.stringify(indicator_ids) : null,
-             scope,
+             scope, auto_sync_hdc ? 1 : 0,
              notify_email ? 1 : 0, notify_telegram ? 1 : 0, req.params.id]
         );
         res.json({ success: true, message: 'แก้ไข schedule สำเร็จ' });
@@ -4172,48 +4214,68 @@ apiRouter.post('/sync-to-hdc/preview', authenticateToken, isSuperAdmin, async (r
     }
 });
 
-// POST /sync-to-hdc/execute — ส่งข้อมูลจาก local export tables เข้า HDC
-apiRouter.post('/sync-to-hdc/execute', authenticateToken, isSuperAdmin, async (req, res) => {
+// Core: sync export tables to HDC — ใช้ร่วมกัน (HTTP + scheduler auto_sync_hdc)
+async function performSyncToHdc(tables, userId) {
     const remoteDb = getRemotePool();
-    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
-    const { tables } = req.body; // [{ table, sync_columns }]
-    if (!Array.isArray(tables) || tables.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตารางที่ต้องการ' });
-    try {
-        const results = [];
-        for (const t of tables) {
-            const tp = t.table;
-            if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(tp)) { results.push({ table: tp, status: 'skipped', reason: 'ชื่อตารางไม่ถูกต้อง' }); continue; }
-            const cols = t.sync_columns;
-            if (!cols || cols.length === 0) { results.push({ table: tp, status: 'skipped', reason: 'ไม่มีคอลัมน์ที่ตรงกัน' }); continue; }
+    if (!remoteDb) return { success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)', results: [] };
+    if (!Array.isArray(tables) || tables.length === 0) return { success: false, message: 'ไม่มีตารางที่จะ sync', results: [] };
+    const results = [];
+    for (const t of tables) {
+        const tp = t.table;
+        if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(tp)) { results.push({ table: tp, status: 'skipped', reason: 'ชื่อตารางไม่ถูกต้อง' }); continue; }
+        let cols = t.sync_columns;
+        if (!cols || cols.length === 0) {
+            // auto-detect common columns ถ้าไม่ส่งมา (scheduler)
             try {
-                // ดึงข้อมูลจาก local
-                const colList = cols.map(c => `\`${c}\``).join(', ');
-                const [localRows] = await db.query(`SELECT ${colList} FROM \`${tp}\``);
-                if (localRows.length === 0) { results.push({ table: tp, status: 'skipped', reason: 'ไม่มีข้อมูลใน local', rows: 0 }); continue; }
-                // UPSERT: INSERT ... ON DUPLICATE KEY UPDATE (ไม่ลบข้อมูลเดิม)
-                const placeholders = cols.map(() => '?').join(', ');
-                const updateCols = cols.map(c => `\`${c}\` = VALUES(\`${c}\`)`).join(', ');
-                let upserted = 0;
-                for (const row of localRows) {
-                    const vals = cols.map(c => row[c] !== undefined ? row[c] : null);
-                    await remoteDb.query(`INSERT INTO \`${tp}\` (${colList}) VALUES (${placeholders}) ON DUPLICATE KEY UPDATE ${updateCols}`, vals);
-                    upserted++;
-                }
-                results.push({ table: tp, status: 'success', rows: upserted });
-            } catch (e) {
-                results.push({ table: tp, status: 'error', reason: e.message });
-            }
+                const [localCols] = await db.query(`SHOW COLUMNS FROM \`${tp}\``);
+                const [remoteCols] = await remoteDb.query(`SHOW COLUMNS FROM \`${tp}\``);
+                const local = localCols.map(c => c.Field);
+                const remote = remoteCols.map(c => c.Field);
+                cols = local.filter(c => remote.includes(c));
+            } catch (e) { results.push({ table: tp, status: 'skipped', reason: 'ตาราง HDC ยังไม่มี' }); continue; }
+            if (cols.length === 0) { results.push({ table: tp, status: 'skipped', reason: 'ไม่มีคอลัมน์ที่ตรงกัน' }); continue; }
         }
+        try {
+            const colList = cols.map(c => `\`${c}\``).join(', ');
+            const [localRows] = await db.query(`SELECT ${colList} FROM \`${tp}\``);
+            if (localRows.length === 0) { results.push({ table: tp, status: 'skipped', reason: 'ไม่มีข้อมูลใน local', rows: 0 }); continue; }
+            const placeholders = cols.map(() => '?').join(', ');
+            const updateCols = cols.map(c => `\`${c}\` = VALUES(\`${c}\`)`).join(', ');
+            let upserted = 0;
+            for (const row of localRows) {
+                const vals = cols.map(c => row[c] !== undefined ? row[c] : null);
+                await remoteDb.query(`INSERT INTO \`${tp}\` (${colList}) VALUES (${placeholders}) ON DUPLICATE KEY UPDATE ${updateCols}`, vals);
+                upserted++;
+            }
+            results.push({ table: tp, status: 'success', rows: upserted });
+        } catch (e) {
+            results.push({ table: tp, status: 'error', reason: e.message });
+        }
+    }
+    try {
         await db.query(
             'INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?,?,?,?,?)',
-            [req.user.userId, 'SYNC_TO_HDC', 'multiple', JSON.stringify({ tables: results.length, success: results.filter(r => r.status === 'success').length }), req.ip]
+            [userId || null, 'SYNC_TO_HDC', 'multiple', JSON.stringify({ tables: results.length, success: results.filter(r => r.status === 'success').length }), null]
         );
-        const successCount = results.filter(r => r.status === 'success').length;
-        const totalRows = results.filter(r => r.status === 'success').reduce((s, r) => s + r.rows, 0);
-        res.json({ success: true, message: `ส่งข้อมูลสำเร็จ ${successCount}/${results.length} ตาราง (${totalRows} rows)`, results });
-    } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
-    }
+    } catch (_) {}
+    const successCount = results.filter(r => r.status === 'success').length;
+    const errorCount = results.filter(r => r.status === 'error').length;
+    const totalRows = results.filter(r => r.status === 'success').reduce((s, r) => s + r.rows, 0);
+    return {
+        success: errorCount === 0,
+        message: `ส่งข้อมูลสำเร็จ ${successCount}/${results.length} ตาราง (${totalRows} rows)`,
+        results,
+        summary: { total: results.length, success: successCount, error: errorCount, skipped: results.length - successCount - errorCount, rows: totalRows }
+    };
+}
+
+// POST /sync-to-hdc/execute — ส่งข้อมูลจาก local export tables เข้า HDC
+apiRouter.post('/sync-to-hdc/execute', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { tables } = req.body;
+    if (!Array.isArray(tables) || tables.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตารางที่ต้องการ' });
+    const out = await performSyncToHdc(tables, req.user.userId);
+    if (!out.success && out.results.length === 0) return res.status(400).json(out);
+    res.json(out);
 });
 
 // ========== KPI Summary (Materialized View) ==========
@@ -5073,6 +5135,7 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
                     telegram_chat_ids TEXT,
                     telegram_bot_token VARCHAR(255),
                     indicator_scope VARCHAR(20) DEFAULT 'all',
+                    auto_sync_hdc TINYINT(1) DEFAULT 0,
                     last_run_at DATETIME,
                     last_status VARCHAR(20),
                     next_run_at DATETIME,
@@ -5082,6 +5145,7 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             `);
             try { await db.query(`ALTER TABLE export_schedules ADD COLUMN indicator_scope VARCHAR(20) DEFAULT 'all'`); } catch (_) {}
+            try { await db.query(`ALTER TABLE export_schedules ADD COLUMN auto_sync_hdc TINYINT(1) DEFAULT 0`); } catch (_) {}
         } catch (e) {}
         try {
             await db.query(`

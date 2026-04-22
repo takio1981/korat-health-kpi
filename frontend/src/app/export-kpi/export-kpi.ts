@@ -76,6 +76,7 @@ export class ExportKpiComponent implements OnInit {
     year_bh: '',
     indicator_scope: 'changes_only',
     indicator_ids: [] as number[],
+    auto_sync_hdc: false,
     notify_email: true,
     notify_telegram: false
   };
@@ -636,6 +637,7 @@ export class ExportKpiComponent implements OnInit {
       year_bh: s.year_bh || '',
       indicator_scope: scope,
       indicator_ids: [...(s.indicator_ids_arr || [])],
+      auto_sync_hdc: !!s.auto_sync_hdc,
       notify_email: !!s.notify_email,
       notify_telegram: !!s.notify_telegram
     };
@@ -666,6 +668,7 @@ export class ExportKpiComponent implements OnInit {
       year_bh: f.year_bh || null,
       indicator_scope: f.indicator_scope,
       indicator_ids: f.indicator_scope === 'selected' ? (f.indicator_ids || []) : null,
+      auto_sync_hdc: f.auto_sync_hdc,
       notify_email: f.notify_email,
       notify_telegram: f.notify_telegram
     };
@@ -710,6 +713,12 @@ export class ExportKpiComponent implements OnInit {
           next: (res: any) => {
             const r = res.result || {};
             const sm = r.summary || {};
+            const syncBlock = r.sync
+              ? `<hr class="my-2"/>
+                 <p class="font-bold text-teal-700"><i class="fas fa-cloud-upload-alt mr-1"></i>Sync ไปยัง HDC</p>
+                 <p>สำเร็จ: ${r.sync.summary.success}/${r.sync.summary.total} ตาราง (${r.sync.summary.rows} rows)</p>
+                 ${r.sync.summary.error > 0 ? `<p class="text-red-600">ผิดพลาด: ${r.sync.summary.error}</p>` : ''}`
+              : '';
             Swal.fire({
               icon: 'success', title: 'รันสำเร็จ',
               html: `<div class="text-left text-sm space-y-1">
@@ -717,6 +726,7 @@ export class ExportKpiComponent implements OnInit {
                 <p><b>อัปเดต (Updated):</b> ${sm.updated || 0} แถว</p>
                 <p><b>ไม่เปลี่ยน (Unchanged):</b> ${sm.unchanged || 0} แถว</p>
                 <p><b>ไม่มีข้อมูล (No data):</b> ${sm.no_data || 0} แถว</p>
+                ${syncBlock}
               </div>`
             });
             this.loadSchedules();
