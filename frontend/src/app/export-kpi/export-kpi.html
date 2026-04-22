@@ -16,32 +16,109 @@
         </div>
       </div>
 
-      <!-- คำแนะนำขั้นตอน (ซ่อนได้) -->
+      <!-- คำแนะนำขั้นตอน (ซ่อนได้) — ครอบคลุมฟีเจอร์ทั้งหมด -->
       @if (showGuide) {
-        <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs text-blue-700">
-            <div class="flex gap-2">
-              <span class="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white font-bold shrink-0">1</span>
-              <div><b>เลือกปีงบประมาณ</b>และใช้ตัวกรองจำกัดขอบเขต KPI (หมวดหมู่ / หน่วยงาน / สถานะ)</div>
-            </div>
-            <div class="flex gap-2">
-              <span class="flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white font-bold shrink-0">2</span>
-              <div><b>กดปุ่ม "ตรวจสอบข้อมูล"</b> เปรียบเทียบ kpi_results กับตารางที่ export ไว้ แสดงสถานะแต่ละ KPI</div>
-            </div>
-            <div class="flex gap-2">
-              <span class="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-600 text-white font-bold shrink-0">3</span>
-              <div><b>เลือก KPI ที่ต้องการส่งออก</b> ติ๊กในรายการ หรือกด "เลือกเฉพาะที่มีการเปลี่ยนแปลง"</div>
-            </div>
-            <div class="flex gap-2">
-              <span class="flex items-center justify-center w-5 h-5 rounded-full bg-green-600 text-white font-bold shrink-0">4</span>
-              <div><b>กดปุ่ม "ส่งออกข้อมูล"</b> สร้าง/อัปเดตตาราง MySQL ตามชื่อ table_process ของแต่ละ KPI</div>
+        <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-4">
+
+          <!-- Section A: ขั้นตอนพื้นฐาน -->
+          <div>
+            <h5 class="font-bold text-blue-800 text-sm mb-2"><i class="fas fa-list-ol mr-1"></i>A. ขั้นตอนการ Export (พื้นฐาน)</h5>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs text-blue-700">
+              <div class="flex gap-2 p-2 bg-white rounded-lg">
+                <span class="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white font-bold shrink-0">1</span>
+                <div><b>เลือกปีงบประมาณ</b> + ตัวกรอง (หมวดหมู่ / หน่วยงาน / สถานะ)</div>
+              </div>
+              <div class="flex gap-2 p-2 bg-white rounded-lg">
+                <span class="flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white font-bold shrink-0">2</span>
+                <div>กดปุ่ม <b class="text-amber-600">"ตรวจสอบข้อมูล"</b> — เทียบ kpi_results กับตาราง export (progress bar)</div>
+              </div>
+              <div class="flex gap-2 p-2 bg-white rounded-lg">
+                <span class="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-600 text-white font-bold shrink-0">3</span>
+                <div>เลือก KPI ติ๊ก checkbox หรือคลิก card สรุปเพื่อกรองสถานะ</div>
+              </div>
+              <div class="flex gap-2 p-2 bg-white rounded-lg">
+                <span class="flex items-center justify-center w-5 h-5 rounded-full bg-green-600 text-white font-bold shrink-0">4</span>
+                <div>กด <b class="text-indigo-700">"ส่งออกข้อมูล"</b> — สร้าง/อัปเดตตาราง MySQL (local)</div>
+              </div>
             </div>
           </div>
-          <div class="mt-3 pt-3 border-t border-blue-200 text-xs text-blue-600 grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <div><i class="fas fa-search-plus text-amber-500 me-1"></i><b>ตรวจสอบข้อมูล</b> — เปรียบเทียบคะแนนปัจจุบันกับตารางที่ export ไว้</div>
-            <div><i class="fas fa-undo text-gray-500 me-1"></i><b>Reset</b> — ล้างตัวกรอง ผลตรวจสอบ ผลการส่งออก คืนค่าทั้งหมด</div>
-            <div><i class="fas fa-file-export text-indigo-600 me-1"></i><b>ส่งออกข้อมูล</b> — สร้าง/อัปเดตตาราง MySQL เฉพาะค่าที่เปลี่ยน</div>
-            <div><i class="fas fa-mouse-pointer text-blue-600 me-1"></i><b>ช่องสรุปตัวเลข</b> — คลิกเพื่อกรองแสดงเฉพาะสถานะนั้น คลิกซ้ำเพื่อยกเลิก</div>
+
+          <!-- Section B: ส่งเข้า HDC -->
+          <div class="border-t border-blue-200 pt-3">
+            <h5 class="font-bold text-teal-800 text-sm mb-2"><i class="fas fa-cloud-upload-alt mr-1"></i>B. ส่งข้อมูลเข้า HDC (Manual)</h5>
+            <ol class="list-decimal ml-5 text-xs text-gray-700 space-y-1">
+              <li>หลัง export เสร็จ → กดปุ่ม <b class="text-teal-700">"ส่งข้อมูลเข้า HDC"</b> (teal)</li>
+              <li>Modal แสดงรายการตาราง + จำนวน rows local/remote + สถานะ (<span class="text-green-600">ready</span> / <span class="text-gray-500">empty</span> / <span class="text-red-600">no_remote</span>)</li>
+              <li>เลือกตารางที่ต้องการ → กด "ส่งข้อมูล" — ใช้ <b>UPSERT</b> (INSERT ... ON DUPLICATE KEY UPDATE) ข้อมูลเดิมใน HDC ที่ไม่ซ้ำยังคงอยู่</li>
+            </ol>
+          </div>
+
+          <!-- Section C: Schedule อัตโนมัติ -->
+          <div class="border-t border-blue-200 pt-3">
+            <h5 class="font-bold text-indigo-800 text-sm mb-2"><i class="fas fa-clock mr-1"></i>C. ตารางเวลา Export อัตโนมัติ (Schedule)</h5>
+            <p class="text-xs text-gray-700 mb-2">ตั้งให้ระบบ export (และส่ง HDC) อัตโนมัติตามวัน-เวลาที่กำหนด พร้อมส่งรายงานสรุป</p>
+            <ol class="list-decimal ml-5 text-xs text-gray-700 space-y-1">
+              <li>กดปุ่ม <b class="text-purple-700">"ตารางเวลา Export อัตโนมัติ"</b> (gradient ม่วง-คราม) → Modal รายการ schedule</li>
+              <li>กด <b>"+ เพิ่ม Schedule"</b> → ตั้งค่า:
+                <ul class="list-disc ml-5 mt-1 space-y-0.5">
+                  <li>ชื่อ, เปิดใช้งาน (toggle), เวลา (HH:MM), ปีงบฯ, เลือกวัน จ.-อา.</li>
+                  <li><b>ขอบเขตตัวชี้วัด</b> (3 โหมด) — เลือกวิธีคัดกรอง KPI</li>
+                  <li><b>Auto Sync HDC</b> (optional) — หลัง export เสร็จจะ sync ทันที</li>
+                  <li><b>Email/Telegram</b> — toggle ส่งรายงาน (recipients จากหน้าตั้งค่าระบบ)</li>
+                </ul>
+              </li>
+              <li>กด <b>บันทึก</b> → scheduler backend ตรวจทุก 1 นาที — ถ้าตรง HH:MM + วัน → รัน export</li>
+            </ol>
+            <div class="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+              <div class="bg-indigo-100 rounded-lg p-2 text-indigo-700">
+                <b><i class="fas fa-magic mr-1"></i>changes_only</b> (แนะนำ) — ตรวจสอบก่อน export เฉพาะตัวชี้วัดที่มีการเพิ่ม/แก้ไข
+              </div>
+              <div class="bg-gray-100 rounded-lg p-2 text-gray-700">
+                <b><i class="fas fa-globe mr-1"></i>all</b> — export ทุกตัวชี้วัดเสมอ (ไม่เช็คความเปลี่ยนแปลง)
+              </div>
+              <div class="bg-gray-100 rounded-lg p-2 text-gray-700">
+                <b><i class="fas fa-check-square mr-1"></i>selected</b> — ใช้รายการที่ติ๊กใน checkbox ด้านบน
+              </div>
+            </div>
+            <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div class="bg-teal-100 rounded-lg p-2 text-teal-800">
+                <b><i class="fas fa-play mr-1"></i>รันตอนนี้</b> — ทดลองรัน schedule ทันที (ใช้การตั้งค่าปัจจุบัน)
+              </div>
+              <div class="bg-gray-200 rounded-lg p-2 text-gray-700">
+                <b><i class="fas fa-history mr-1"></i>ประวัติ (logs)</b> — ดูผลการรัน 50 ครั้งล่าสุด (inserted, updated, errors)
+              </div>
+              <div class="bg-amber-100 rounded-lg p-2 text-amber-800">
+                <b><i class="fas fa-edit mr-1"></i>แก้ไข</b> — ปรับการตั้งค่า schedule
+              </div>
+              <div class="bg-red-100 rounded-lg p-2 text-red-700">
+                <b><i class="fas fa-trash mr-1"></i>ลบ</b> — ลบ schedule (ไม่กระทบข้อมูลที่ export ไปแล้ว)
+              </div>
+            </div>
+          </div>
+
+          <!-- Section D: Tips & Warnings -->
+          <div class="border-t border-blue-200 pt-3">
+            <h5 class="font-bold text-gray-800 text-sm mb-2"><i class="fas fa-lightbulb mr-1 text-yellow-500"></i>D. เคล็ดลับ + คำเตือน</h5>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div class="bg-green-50 border border-green-200 rounded-lg p-2 text-green-800">
+                <i class="fas fa-shield-alt mr-1"></i><b>Content-based diff</b> — ระบบเทียบค่า target, result, m10-m09, form fields ทีละคอลัมน์ → ข้ามถ้าเหมือนเดิม
+              </div>
+              <div class="bg-blue-50 border border-blue-200 rounded-lg p-2 text-blue-800">
+                <i class="fas fa-bolt mr-1"></i><b>result = ค่าเดือนล่าสุดที่คีย์</b> (ไม่ใช่ SUM) — เหมือน last_actual
+              </div>
+              <div class="bg-amber-50 border border-amber-200 rounded-lg p-2 text-amber-800">
+                <i class="fas fa-mouse-pointer mr-1"></i><b>คลิก Card สรุป</b> เพื่อกรองเฉพาะสถานะนั้น — คลิกซ้ำเพื่อยกเลิก
+              </div>
+              <div class="bg-red-50 border border-red-200 rounded-lg p-2 text-red-800">
+                <i class="fas fa-exclamation-triangle mr-1"></i><b>Auto Sync HDC</b> — ข้อมูลจะเข้า HDC โดยไม่ผ่านการตรวจสอบ — เปิดเมื่อมั่นใจในคุณภาพข้อมูล
+              </div>
+              <div class="bg-purple-50 border border-purple-200 rounded-lg p-2 text-purple-800">
+                <i class="fas fa-envelope mr-1"></i><b>Email/Telegram recipients</b> ตั้งในหน้า <b>ตั้งค่าระบบ</b> (keys: admin_emails, telegram_chat_id, telegram_bot_token)
+              </div>
+              <div class="bg-gray-100 border border-gray-300 rounded-lg p-2 text-gray-700">
+                <i class="fas fa-layer-group mr-1"></i><b>Dedupe:</b> หลายตัวชี้วัดที่ใช้ table_process เดียวกันนับเป็น 1 ตารางเสมอ
+              </div>
+            </div>
           </div>
         </div>
       }
