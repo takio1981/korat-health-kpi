@@ -15,10 +15,6 @@
             <p class="text-xs text-gray-500">จัดการและตรวจสอบผลการดำเนินงานรายตัวชี้วัด</p>
           </div>
           <div class="flex flex-wrap gap-2 w-full md:w-auto">
-            <button (click)="clearFilters()"
-                    class="flex-1 md:flex-none px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs transition-all flex items-center justify-center gap-2">
-              <i class="fas fa-sync-alt"></i> ล้างตัวกรอง
-            </button>
             <!-- กลุ่ม "จัดการข้อมูลตัวชี้วัด" (เฉพาะ admin_ssj + super_admin) -->
             <div *ngIf="isAdmin && !isEditing && !isReviewMode && !isDeleteMode" class="relative">
               <button (click)="showManageMenu = !showManageMenu"
@@ -289,6 +285,10 @@
             </div>
             <button (click)="doSearch()" class="px-4 py-1 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg text-xs shadow transition-all flex items-center gap-1">
               <i class="fas fa-search"></i> ค้นหา
+            </button>
+            <button (click)="clearFilters()"
+                    class="px-4 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-lg text-xs transition-all flex items-center gap-1">
+              <i class="fas fa-sync-alt"></i> ล้างตัวกรอง
             </button>
           </div>
         </div>
