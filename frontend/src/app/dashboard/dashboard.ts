@@ -34,6 +34,7 @@ export class DashboardComponent implements OnInit {
   selectedDistricts: string[] = [];
   selectedTypes: string[] = [];
   selectedHosTypes: string[] = [];
+  selectedIndicatorOffTypes: string[] = [];
   // Backward-compat getters (ใช้ในส่วนอื่นของโค้ดที่ยังไม่ได้แก้)
   get selectedDept(): string { return this.selectedDepts[0] || ''; }
   set selectedDept(v: string) { this.selectedDepts = v ? [v] : []; }
@@ -95,6 +96,17 @@ export class DashboardComponent implements OnInit {
     return `เลือก ${this.selectedHosTypes.length} รายการ`;
   }
 
+  // แสดงชื่อ "ตัวชี้วัดของ" (map code → name)
+  indicatorOffTypeLabel(placeholder: string = 'ตัวชี้วัดของ: ทั้งหมด'): string {
+    if (this.selectedIndicatorOffTypes.length === 0) return placeholder;
+    if (this.selectedIndicatorOffTypes.length === 1) {
+      const code = this.selectedIndicatorOffTypes[0];
+      const found = (this._allHosTypes || []).find((ht: any) => ht.hostypecode === code);
+      return found?.hostypename || code;
+    }
+    return `เลือก ${this.selectedIndicatorOffTypes.length} รายการ`;
+  }
+
   toggleDropdown(name: string) {
     this.openFilterDropdown = this.openFilterDropdown === name ? '' : name;
   }
@@ -117,7 +129,7 @@ export class DashboardComponent implements OnInit {
   private _allHospitals: any[] = [];
   private _allIndicators: any[] = [];
   private _allDistricts: any[] = [];
-  private _allHosTypes: any[] = [];
+  _allHosTypes: any[] = [];
   addKpiYears: string[] = [];
   addKpiSelectedYear: string = '';
   addKpiDistrictList: any[] = [];
@@ -325,6 +337,8 @@ export class DashboardComponent implements OnInit {
     if (this.selectedMain) filters.main = this.selectedMain;
     // ส่ง hostype → backend ใช้ subquery ผ่าน chospital.hostype
     if (this.selectedHosTypes.length > 0) filters.hostype = this.selectedHosTypes.join(',');
+    // ส่ง indicator_off_type → backend filter kpi_indicators.required_off_types
+    if (this.selectedIndicatorOffTypes.length > 0) filters.indicator_off_type = this.selectedIndicatorOffTypes.join(',');
     console.log('[KPI] loadKpiData filters:', JSON.stringify(filters));
     this.authService.getKpiResults(filters).subscribe({
       next: (res) => {
@@ -641,7 +655,8 @@ export class DashboardComponent implements OnInit {
     const isLockedDept = ['admin_ssj', 'user_ssj'].includes(role);
     const hasFilter = this.selectedDistricts.length > 0 || this.selectedHospitals.length > 0
       || (!isLockedDept && this.selectedDepts.length > 0)
-      || this.selectedHosTypes.length > 0 || this.selectedMain || this.selectedIndicator
+      || this.selectedHosTypes.length > 0 || this.selectedIndicatorOffTypes.length > 0
+      || this.selectedMain || this.selectedIndicator
       || this.selectedTypes.length > 0 || this.selectedStatuses.length > 0;
 
     if (!hasFilter) {
@@ -774,6 +789,7 @@ export class DashboardComponent implements OnInit {
     this.selectedDistricts = [];
     this.selectedTypes = [];
     this.selectedHosTypes = [];
+    this.selectedIndicatorOffTypes = [];
     // admin_ssj / user_ssj → ล็อค dept ไว้
     const role = this.authService.getUserRole();
     if (['admin_ssj', 'user_ssj'].includes(role) && this.currentUser?.dept_name) {

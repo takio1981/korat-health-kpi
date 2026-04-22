@@ -357,6 +357,29 @@
                 <option *ngFor="let name of indicatorNames" [value]="name">{{ name }}</option>
               </select>
             </div>
+            <!-- ตัวชี้วัดของ (multi) — filter kpi_indicators.required_off_types -->
+            <div class="relative min-w-[150px] flex-1 max-w-[200px]">
+              <button type="button" (click)="toggleDropdown('indOffType')"
+                      class="w-full flex items-center justify-between px-2 py-1 border border-cyan-200 rounded-lg bg-white text-xs hover:border-cyan-400 focus:ring-1 focus:ring-cyan-500 outline-none">
+                <span class="truncate" [class.text-gray-400]="selectedIndicatorOffTypes.length === 0">{{ indicatorOffTypeLabel() }}</span>
+                <i class="fas fa-chevron-down ml-1 text-gray-400"></i>
+              </button>
+              <div *ngIf="openFilterDropdown === 'indOffType'" class="absolute z-50 top-full left-0 mt-1 w-[min(20rem,calc(100vw-2rem))] bg-white border border-gray-200 rounded-lg shadow-xl max-h-80 overflow-hidden flex flex-col">
+                <div class="p-2 border-b bg-cyan-50 flex items-center justify-between text-[10px]">
+                  <button type="button" (click)="clearFilterArr(selectedIndicatorOffTypes)" class="px-2 py-0.5 bg-gray-200 hover:bg-gray-300 rounded font-bold">ล้าง</button>
+                  <span class="text-cyan-700 font-bold">เลือก: {{ selectedIndicatorOffTypes.length }}</span>
+                  <button type="button" (click)="openFilterDropdown = ''" class="px-2 py-0.5 bg-cyan-500 text-white rounded font-bold">ตกลง</button>
+                </div>
+                <div class="overflow-y-auto flex-1">
+                  <label *ngFor="let ht of _allHosTypes" class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
+                    <input type="checkbox" [checked]="isFilterSelected(selectedIndicatorOffTypes, ht.hostypecode)"
+                           (change)="toggleFilterItem(selectedIndicatorOffTypes, ht.hostypecode)" class="rounded text-cyan-600">
+                    <span class="font-mono text-gray-500 text-[10px]">{{ ht.hostypecode }}</span>
+                    <span>{{ ht.hostypename }}</span>
+                  </label>
+                </div>
+              </div>
+            </div>
             <!-- ประเภทตัวชี้วัด (multi) -->
             <div class="relative min-w-[130px] flex-1 max-w-[180px]">
               <button type="button" (click)="toggleDropdown('type')"

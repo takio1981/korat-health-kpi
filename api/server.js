@@ -721,6 +721,16 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         if (req.query.main) { extraConditions.push('mi.main_indicator_name = ?'); params.push(req.query.main); }
         // Hostype filter: filter h.hostype โดยตรง (LEFT JOIN chospital จาก main query)
         addMultiFilter('h.hostype', req.query.hostype);
+        // Indicator off-type filter: กรองตัวชี้วัดตาม required_off_types (JSON array)
+        // all_required = ใช้ทุกประเภท จึงแสดงเสมอ
+        if (req.query.indicator_off_type) {
+            const list = String(req.query.indicator_off_type).split(',').map(v => v.trim()).filter(Boolean);
+            if (list.length > 0) {
+                const likeConds = list.map(() => 'i.required_off_types LIKE ?').join(' OR ');
+                extraConditions.push(`(i.evaluation_mode = 'all_required' OR ${likeConds})`);
+                for (const code of list) params.push(`%"${code}"%`);
+            }
+        }
         console.log('[kpi-results] filters:', JSON.stringify(req.query));
         let extraWhere = '';
         if (extraConditions.length > 0) {

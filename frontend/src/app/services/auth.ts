@@ -88,7 +88,7 @@ export class AuthService {
     }
   }
 
-  getKpiResults(filters?: { year?: string, hospcode?: string, dept?: string, district?: string, indicator?: string, main?: string, hostype?: string }): Observable<any> {
+  getKpiResults(filters?: { year?: string, hospcode?: string, dept?: string, district?: string, indicator?: string, main?: string, hostype?: string, indicator_off_type?: string }): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({
       'Authorization': `Bearer ${token}`
