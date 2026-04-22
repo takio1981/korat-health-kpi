@@ -101,16 +101,114 @@
         </div>
 
         <!-- ปุ่มซ่อน/แสดงตัวกรอง + คำแนะนำ -->
-        <div class="px-6 py-2 border-b border-gray-100 flex items-center justify-between">
-          <button (click)="showFilters = !showFilters" class="flex items-center gap-2 text-xs font-bold text-gray-500 hover:text-green-600 transition-colors">
-            <i class="fas" [ngClass]="showFilters ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
-            {{ showFilters ? 'ซ่อนตัวกรอง' : 'แสดงตัวกรอง' }}
-          </button>
+        <div class="px-6 py-2 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+          <div class="flex items-center gap-4">
+            <button (click)="showFilters = !showFilters" class="flex items-center gap-2 text-xs font-bold text-gray-500 hover:text-green-600 transition-colors">
+              <i class="fas" [ngClass]="showFilters ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+              {{ showFilters ? 'ซ่อนตัวกรอง' : 'แสดงตัวกรอง' }}
+            </button>
+            <button (click)="showGuide = !showGuide" class="flex items-center gap-2 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors">
+              <i class="fas" [ngClass]="showGuide ? 'fa-chevron-up' : 'fa-question-circle'"></i>
+              {{ showGuide ? 'ซ่อนคำแนะนำ' : 'คำแนะนำ' }}
+            </button>
+          </div>
           <span *ngIf="(isAdmin || isSuperAdmin) && !selectedDept && !selectedHospital && !selectedIndicator && !selectedDistrict"
                 class="text-xs text-amber-600 flex items-center gap-1">
             <i class="fas fa-exclamation-triangle animate-pulse"></i>
             <span>กรุณาเลือกตัวกรอง แล้วกดปุ่ม <b>"ค้นหา"</b> เพื่อโหลดข้อมูล</span>
           </span>
+        </div>
+
+        <!-- กรอบคำแนะนำการใช้งาน (ซ่อนได้) -->
+        <div *ngIf="showGuide" class="mx-5 mt-3 mb-2 p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-4">
+
+          <!-- Section A: ตัวกรอง -->
+          <div>
+            <h5 class="font-bold text-blue-800 text-sm mb-2"><i class="fas fa-filter mr-1"></i>A. ตัวกรองข้อมูล (Multi-select)</h5>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+              <div class="bg-white rounded-lg p-2 border border-teal-200"><b class="text-teal-700"><i class="fas fa-map-marker-alt mr-1"></i>สถานที่:</b> อำเภอ / ประเภท รพ. / หน่วยบริการ (cascade กัน)</div>
+              <div class="bg-white rounded-lg p-2 border border-amber-200"><b class="text-amber-700"><i class="fas fa-chart-pie mr-1"></i>ตัวชี้วัด:</b> หน่วยงาน / หมวดหมู่หลัก / ตัวชี้วัด</div>
+              <div class="bg-white rounded-lg p-2 border border-gray-200"><b class="text-gray-700"><i class="fas fa-tag mr-1"></i>สถานะ:</b> รอตรวจสอบ / ตรวจสอบแล้ว / ไม่พบข้อมูล (เลือกได้หลายค่า)</div>
+              <div class="bg-white rounded-lg p-2 border border-blue-200"><b class="text-blue-700"><i class="fas fa-search mr-1"></i>ค้นหาข้อความ:</b> พิมพ์คำ → กรองตามชื่อตัวชี้วัด</div>
+            </div>
+            <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div class="bg-green-100 rounded-lg p-2 text-green-800"><b><i class="fas fa-search mr-1"></i>ปุ่มค้นหา</b> — โหลดข้อมูลตามตัวกรอง (admin_ssj/super_admin ต้องกดเสมอ)</div>
+              <div class="bg-gray-100 rounded-lg p-2 text-gray-700"><b><i class="fas fa-undo mr-1"></i>ล้างตัวกรอง</b> — ล้างทุก filter ในคลิกเดียว (อยู่ต่อจากปุ่มค้นหา)</div>
+            </div>
+          </div>
+
+          <!-- Section B: ปุ่มการทำงาน -->
+          <div class="border-t border-blue-200 pt-3">
+            <h5 class="font-bold text-indigo-800 text-sm mb-2"><i class="fas fa-tools mr-1"></i>B. ปุ่มการทำงาน (ด้านบน)</h5>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+              <div class="bg-gradient-to-r from-emerald-50 to-green-50 rounded-lg p-2 border border-green-200">
+                <b class="text-green-700"><i class="fas fa-tools mr-1"></i>จัดการข้อมูลตัวชี้วัด</b> (admin_ssj+)
+                <div class="text-[11px] text-green-600 mt-1">dropdown รวม: + เพิ่ม / แก้ไข / โหมดลบ</div>
+              </div>
+              <div class="bg-teal-50 rounded-lg p-2 border border-teal-200">
+                <b class="text-teal-700"><i class="fas fa-clipboard-check mr-1"></i>ตรวจสอบ (N)</b>
+                <div class="text-[11px] text-teal-600 mt-1">N = จำนวนรายการรอตรวจสอบ → เข้า Review Mode</div>
+              </div>
+              <div class="bg-amber-50 rounded-lg p-2 border border-amber-200">
+                <b class="text-amber-700"><i class="fas fa-lock-open mr-1"></i>ปลดล็อค (N)</b>
+                <div class="text-[11px] text-amber-600 mt-1">N = จำนวนรายการที่ถูกล็อค (super_admin)</div>
+              </div>
+              <div class="bg-red-50 rounded-lg p-2 border border-red-200">
+                <b class="text-red-700"><i class="fas fa-trash mr-1"></i>โหมดลบ</b>
+                <div class="text-[11px] text-red-600 mt-1">ติ๊กรายการ → ลบ kpi_results + kpi_sub_results (super_admin)</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section C: การแก้ไข -->
+          <div class="border-t border-blue-200 pt-3">
+            <h5 class="font-bold text-amber-800 text-sm mb-2"><i class="fas fa-edit mr-1"></i>C. วิธีแก้ไขผลงาน</h5>
+            <ol class="list-decimal ml-5 text-xs text-gray-700 space-y-1">
+              <li>กด <b>จัดการข้อมูลตัวชี้วัด → แก้ไขผลงาน</b> → ตารางเปลี่ยนเป็น input fields</li>
+              <li>แก้ค่าเป้าหมาย/เดือน → ช่องที่แก้จะ<b class="text-orange-600">เปลี่ยนสีส้ม</b></li>
+              <li>กด <b class="text-green-700">บันทึก</b> → แสดง <b>ตารางสรุปการเปลี่ยนแปลง</b>:
+                <div class="mt-1 bg-white rounded border border-amber-200 p-2 text-[11px]">
+                  <table class="w-full">
+                    <thead class="text-amber-800">
+                      <tr><th class="text-left">รายการ</th><th>เดือน</th><th>ค่าเดิม</th><th>ค่าใหม่</th><th>สถานะ</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr><td>KPI A</td><td>ม.ค.</td><td>60</td><td>80</td><td class="text-green-700 font-bold">↑ เพิ่มขึ้น</td></tr>
+                      <tr><td>KPI B</td><td>ก.พ.</td><td>70</td><td>50</td><td class="text-red-600 font-bold">↓ ลดลง</td></tr>
+                      <tr><td>KPI C</td><td>มี.ค.</td><td>40</td><td>—</td><td class="text-gray-600 font-bold">− ลบ</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </li>
+              <li>ยืนยัน → บันทึก | กด <b>คืนค่า</b> → กลับค่าเดิม | กด <b>ยกเลิก</b> → ออกโหมดแก้ไข</li>
+            </ol>
+          </div>
+
+          <!-- Section D: ปุ่มต่อแถว -->
+          <div class="border-t border-blue-200 pt-3">
+            <h5 class="font-bold text-purple-800 text-sm mb-2"><i class="fas fa-mouse-pointer mr-1"></i>D. ปุ่มในแต่ละแถว KPI</h5>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+              <div class="bg-green-50 rounded-lg p-2 border border-green-200"><i class="fas fa-check-circle text-green-600 mr-1"></i>อนุมัติ</div>
+              <div class="bg-red-50 rounded-lg p-2 border border-red-200"><i class="fas fa-undo-alt text-red-500 mr-1"></i>ตีกลับ (เหตุผล)</div>
+              <div class="bg-purple-50 rounded-lg p-2 border border-purple-200"><i class="fas fa-gavel text-purple-600 mr-1"></i>ยื่นอุทธรณ์</div>
+              <div class="bg-blue-50 rounded-lg p-2 border border-blue-200"><i class="fas fa-chart-line text-blue-500 mr-1"></i>ดูกราฟแนวโน้ม</div>
+              <div class="bg-indigo-50 rounded-lg p-2 border border-indigo-200"><i class="fas fa-list-ul text-indigo-600 mr-1"></i>ตัวชี้วัดย่อย</div>
+              <div class="bg-purple-50 rounded-lg p-2 border border-purple-200"><i class="fas fa-clipboard-list text-purple-500 mr-1"></i>กรอกแบบฟอร์ม</div>
+              <div class="bg-amber-50 rounded-lg p-2 border border-amber-200"><i class="fas fa-lock-open text-amber-500 mr-1"></i>ปลดล็อค (super_admin)</div>
+              <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-reply text-gray-600 mr-1"></i>ตอบกลับ (ตีกลับ)</div>
+            </div>
+          </div>
+
+          <!-- Section E: Tips -->
+          <div class="border-t border-blue-200 pt-3">
+            <h5 class="font-bold text-gray-800 text-sm mb-2"><i class="fas fa-lightbulb mr-1 text-yellow-500"></i>E. เคล็ดลับ</h5>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+              <div class="bg-white rounded-lg p-2 border border-gray-200"><i class="fas fa-tags text-indigo-500 mr-1"></i><b>ป้ายประเภท</b> หน้าชื่อตัวชี้วัด — <span class="px-1 bg-blue-100 text-blue-700 font-bold">R9</span> / <span class="px-1 bg-red-100 text-red-700 font-bold">MOPH</span> / <span class="px-1 bg-green-100 text-green-700 font-bold">SSJ</span> / <span class="px-1 bg-yellow-100 text-yellow-700 font-bold">RMW</span></div>
+              <div class="bg-white rounded-lg p-2 border border-gray-200"><i class="fas fa-link text-teal-500 mr-1"></i><b>Cascade filter:</b> อำเภอ → หน่วยบริการ → หมวดหมู่ + ตัวชี้วัด แสดงเฉพาะที่เกี่ยวข้อง</div>
+              <div class="bg-white rounded-lg p-2 border border-gray-200"><i class="fas fa-layer-group text-purple-500 mr-1"></i><b>Sub-indicators:</b> ตัวชี้วัดที่มีย่อย → main row แสดงค่า AVG ของ sub ทั้งหมด</div>
+              <div class="bg-white rounded-lg p-2 border border-gray-200"><i class="fas fa-save text-green-500 mr-1"></i><b>ตรวจสอบแล้ว:</b> รายการที่มีผลงาน + ไม่มีค้างตรวจสอบ (สีพื้น teal)</div>
+            </div>
+          </div>
         </div>
 
         <div *ngIf="showFilters" class="px-5 py-2.5 bg-gray-50/50 border-b border-gray-100 space-y-2">

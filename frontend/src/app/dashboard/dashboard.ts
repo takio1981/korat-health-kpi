@@ -92,6 +92,7 @@ export class DashboardComponent implements OnInit {
   }
 
   showFilters: boolean = true;
+  showGuide: boolean = false;
   mainCategories: string[] = [];
   indicatorNames: string[] = [];
   deptNames: string[] = [];
