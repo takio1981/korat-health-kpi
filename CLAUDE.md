@@ -193,6 +193,15 @@ users.dept_id → departments.id (FK)
 - มี `dept_id` + `distid` สำหรับ role-based filtering โดยไม่ต้อง JOIN ตารางอื่น
 - Report endpoints ทั้ง 4 (`/report/by-indicator`, `/report/by-hospital`, `/report/by-district`, `/report/by-year`) ดึงจาก `kpi_summary` ไม่ใช่ `kpi_results`
 
+### Evaluation Mode & Required Off Types (ขอบเขตหน่วยบริการของตัวชี้วัด)
+- 2 คอลัมน์ใน `kpi_indicators`:
+  - `evaluation_mode` VARCHAR(20) — `'any_one'` (เฉพาะบางประเภท) | `'all_required'` (ทุกประเภทบังคับ)
+  - `required_off_types` TEXT — JSON array ของ hostypecode เช่น `["05","06","07"]`
+- CRUD `/indicators` POST/PUT รับ 2 ฟิวล์ + helper `normalizeOffTypes()` / `normalizeEvalMode()` sanitize
+- UI: `kpi-manage` modal section "เกณฑ์การประเมิน" — radio โหมด + multi-select hostype
+- Dashboard filter `indicator_off_type`: SQL `(i.evaluation_mode='all_required' OR i.required_off_types LIKE '%"CODE"%')`
+- Dashboard badge: `evaluation_mode='all_required'` → "ทุกประเภท" (purple) | `'any_one'` + codes → ชื่อประเภท (cyan)
+
 ### Sub-Indicators (ตัวชี้วัดย่อย)
 - `kpi_sub_indicators` — metadata ของตัวชี้วัดย่อย (FK → kpi_indicators.id, CASCADE delete)
 - `kpi_sub_results` — ผลงานย่อย per hospcode×month (UNIQUE: sub+year+hospcode+month)
@@ -385,7 +394,7 @@ docker compose up -d
 |-------|---------|-------------|
 | users | ผู้ใช้งาน | id, username, role, dept_id, hospcode, is_approved, approved_by |
 | departments | หน่วยงาน | id, dept_name, dept_code |
-| kpi_indicators | ตัวชี้วัด | id, kpi_indicators_name, main_indicator_id, dept_id, table_process, target_percentage, r9, moph, ssj, rmw, other |
+| kpi_indicators | ตัวชี้วัด | id, kpi_indicators_name, main_indicator_id, dept_id, table_process, target_percentage, r9, moph, ssj, rmw, other, evaluation_mode ('any_one'\|'all_required'), required_off_types (JSON array ของ hostypecode) |
 | kpi_main_indicators | หมวดหมู่หลัก | id, main_indicator_name, yut_id |
 | main_yut | ยุทธศาสตร์ | id, yut_name |
 | kpi_results | ผลงาน KPI | id, indicator_id, year_bh, hospcode, month_bh, target_value, actual_value, status, is_locked |

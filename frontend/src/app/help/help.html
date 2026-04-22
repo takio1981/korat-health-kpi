@@ -227,6 +227,7 @@
           <span><b>หน่วยงาน</b> — ชื่อหน่วยงาน</span>
           <span><b>ปีงบฯ</b> — ปีงบประมาณ</span>
           <span><b>หน่วยบริการ</b> — ชื่อ รพ./รพ.สต.</span>
+          <span><b>ประเภท</b> — ประเภทหน่วยบริการจาก chospital.hostype (cyan badge)</span>
           <span><b>อำเภอ</b> — ชื่ออำเภอ</span>
           <span><b>เป้าหมาย</b> — ตัวเลข/ข้อความ</span>
           <span><b>ผลงานรวม</b> — ค่าล่าสุด</span>
@@ -253,8 +254,9 @@
           <h4 class="font-bold text-blue-800 text-sm mb-2"><i class="fas fa-filter mr-2"></i>ตัวกรองแบบ Multi-select (เลือกได้หลายค่า)</h4>
           <p class="text-xs text-blue-700 mb-2">แต่ละตัวกรองเป็นปุ่ม dropdown → เปิดแล้วติ๊ก checkbox ได้มากกว่า 1 รายการ</p>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-            <div class="bg-white rounded-lg p-2 border border-teal-200"><b class="text-teal-700">อำเภอ / ประเภท รพ. / หน่วยบริการ</b> — กรองตามสถานที่ (cascade กัน)</div>
+            <div class="bg-white rounded-lg p-2 border border-teal-200"><b class="text-teal-700">อำเภอ / ประเภท รพ. / หน่วยบริการ</b> — กรองตามสถานที่ (cascade กัน) | <b>ประเภท รพ.</b> กรองหน่วยบริการตาม chospital.hostype</div>
             <div class="bg-white rounded-lg p-2 border border-amber-200"><b class="text-amber-700">หน่วยงาน / หมวดหมู่หลัก / ตัวชี้วัด</b> — กรองตามโครงสร้าง KPI</div>
+            <div class="bg-white rounded-lg p-2 border border-cyan-200"><b class="text-cyan-700">ตัวชี้วัดของ</b> — กรองตัวชี้วัดตาม <b>required_off_types</b> (ประเภทที่รับผิดชอบ) + all_required (ครอบคลุมทุกประเภท)</div>
             <div class="bg-white rounded-lg p-2 border border-gray-200"><b class="text-gray-700">สถานะ</b> — เช่น รอตรวจสอบ / ตรวจสอบแล้ว / ไม่พบข้อมูล</div>
             <div class="bg-white rounded-lg p-2 border border-green-200"><b class="text-green-700">ปุ่ม "ค้นหา"</b> — โหลดข้อมูลตามตัวกรอง (admin_ssj/super_admin ต้องกดเสมอ)</div>
           </div>
@@ -328,6 +330,22 @@
               <span class="px-2 py-0.5 bg-gray-100 text-gray-600 rounded font-bold">อื่นๆ</span>
             </div>
             <p class="text-[10px] text-green-600 mt-1">สัญญลักษณ์ประเภทตัวชี้วัด — แสดงไว้ด้านหน้าชื่อตัวชี้วัดในตารางทั้ง Desktop และ Mobile ข้อมูลจาก kpi_indicators ฟิลด์ r9, moph, ssj, rmw, other</p>
+          </div>
+
+          <!-- ตัวชี้วัดของ (evaluation_mode + required_off_types) -->
+          <div class="mt-3 bg-white border border-cyan-200 rounded-lg p-3 text-xs">
+            <p class="font-bold mb-1 text-cyan-800"><i class="fas fa-hospital mr-1"></i>ป้าย "ตัวชี้วัดของ" (ขอบเขตหน่วยบริการ)</p>
+            <div class="flex flex-wrap gap-2 mb-2">
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-700 border border-purple-200 rounded font-bold"><i class="fas fa-hospital text-[9px]"></i> ทุกประเภท</span>
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-cyan-100 text-cyan-700 border border-cyan-200 rounded font-bold"><i class="fas fa-hospital text-[9px]"></i> รพ.ศ., รพ.ท.</span>
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-cyan-100 text-cyan-700 border border-cyan-200 rounded font-bold"><i class="fas fa-hospital text-[9px]"></i> 3 ประเภท</span>
+            </div>
+            <ul class="list-disc ml-4 text-gray-600 space-y-0.5">
+              <li><b class="text-purple-700">ทุกประเภท</b> — evaluation_mode='all_required' → ครอบคลุมหน่วยบริการทุกประเภทในขอบเขต</li>
+              <li><b class="text-cyan-700">ชื่อประเภท (≤2)</b> — any_one + required_off_types มี 1-2 ประเภท (เช่น "รพ.ศ., รพ.ท.")</li>
+              <li><b class="text-cyan-700">N ประเภท</b> — any_one + ≥3 ประเภท (tooltip โชว์ชื่อครบ)</li>
+              <li><i class="fas fa-info-circle text-cyan-500"></i> ตั้งค่าใน <b>จัดการตัวชี้วัด → แก้ไขตัวชี้วัด → เกณฑ์การประเมิน</b></li>
+            </ul>
           </div>
         </div>
 
@@ -840,6 +858,32 @@
           <div>
             <h2 class="text-xl font-bold text-gray-800">9.5 ตัวชี้วัดย่อย (Sub-Indicators)</h2>
             <p class="text-xs text-gray-400">ตัวชี้วัด 1 ตัว สามารถมีย่อยได้หลายตัว + บันทึกผลงานรายเดือนต่อ hospcode</p>
+          </div>
+        </div>
+
+        <!-- เกณฑ์การประเมินตัวชี้วัด (evaluation_mode + required_off_types) -->
+        <div class="bg-cyan-50 border border-cyan-200 rounded-xl p-4 mb-4">
+          <h4 class="font-bold text-cyan-800 text-sm mb-2"><i class="fas fa-hospital mr-2"></i>เกณฑ์การประเมิน — ประเภทหน่วยบริการที่รับผิดชอบ</h4>
+          <p class="text-xs text-gray-600 mb-2">กำหนดว่าตัวชี้วัดใช้กับหน่วยบริการประเภทไหน (รพ. / รพ.สต. / สสอ. / สสจ.) ส่งผลต่อการกรอง "ตัวชี้วัดของ" ในหน้า dashboard</p>
+          <ol class="list-decimal ml-5 text-xs text-gray-600 space-y-1">
+            <li>เข้าหน้า <b>"จัดการตัวชี้วัด"</b> → Tab "ตัวชี้วัด" → กดแก้ไข/เพิ่ม</li>
+            <li>ในกรอบ <b class="text-cyan-700">"เกณฑ์การประเมิน"</b> (teal) เลือกโหมด:
+              <ul class="list-disc ml-4 mt-1 space-y-0.5">
+                <li><b>any_one (เฉพาะบางประเภท)</b> — ตัวชี้วัดใช้เฉพาะประเภทที่ติ๊กใน checkbox → เก็บใน <code>required_off_types</code> เป็น JSON array</li>
+                <li><b>all_required (ทุกประเภทบังคับ)</b> — ตัวชี้วัดครอบคลุมทุกหน่วยบริการในขอบเขต → <code>required_off_types = NULL</code></li>
+              </ul>
+            </li>
+            <li>กรณี any_one → ติ๊กประเภท (05=รพ.ศ., 06=รพ.ท., 07=รพ.ชุมชน, 10=ศูนย์ฯ, 18=รพ.สต., 02=สสอ., 01=สสจ., ...)</li>
+            <li>กด <b>"บันทึก"</b> → ระบบเก็บเป็น JSON เช่น <code>["05","06","07"]</code></li>
+          </ol>
+          <div class="mt-2 bg-white border border-cyan-200 rounded-lg p-2 text-[11px] text-gray-700">
+            <b><i class="fas fa-lightbulb text-amber-500"></i> ตัวอย่าง:</b>
+            <ul class="list-disc ml-4 mt-1 space-y-0.5">
+              <li>ตัวชี้วัดโรงพยาบาล: any_one + ["05","06","07"]</li>
+              <li>ตัวชี้วัด รพ.สต.: any_one + ["18"]</li>
+              <li>ตัวชี้วัดระดับอำเภอ (สสอ.): any_one + ["02"]</li>
+              <li>ตัวชี้วัดที่ทุกหน่วยต้องรายงาน: all_required</li>
+            </ul>
           </div>
         </div>
 

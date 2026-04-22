@@ -18,6 +18,22 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.04.23',
+      date: '23 เมษายน 2569',
+      changes: [
+        { type: 'feature', text: 'kpi_indicators: เพิ่มฟิวล์ evaluation_mode (any_one/all_required) + required_off_types (JSON array) — กำหนดประเภทหน่วยบริการที่ตัวชี้วัดรับผิดชอบ' },
+        { type: 'feature', text: 'kpi-manage: Modal เพิ่ม section "เกณฑ์การประเมิน" — radio โหมด + multi-select hostype (05, 06, 07, 18, ...)' },
+        { type: 'feature', text: 'Dashboard: ตัวกรอง "ตัวชี้วัดของ" (cyan) — กรองตัวชี้วัดตาม required_off_types + all_required' },
+        { type: 'feature', text: 'Dashboard: Badge "ตัวชี้วัดของ" ในคอลัมน์ชื่อตัวชี้วัด — "ทุกประเภท" (purple) / ชื่อประเภท / "N ประเภท"' },
+        { type: 'feature', text: 'Dashboard: เพิ่มคอลัมน์ "ประเภท" (cyan badge) ระหว่าง หน่วยบริการ กับ อำเภอ' },
+        { type: 'fix', text: 'Dashboard filter "ประเภท รพ.": JOIN chostype + filter h.hostype ตรงๆ (แก้ LEFT JOIN ไม่เจอข้อมูล)' },
+        { type: 'fix', text: 'Dashboard filter dropdown: z-50 + ลบ overflow-hidden ของ card นอก — แก้ dropdown ถูกหัวตารางทับ' },
+        { type: 'improve', text: 'Dashboard: mobile/tablet การ์ด KPI แสดง 4 เดือนล่าสุดที่มีข้อมูล (getRecentMonths)' },
+        { type: 'improve', text: 'Dashboard: SweetAlert ยืนยันบันทึก → ตารางสรุปการเปลี่ยนแปลง (รายการ / เดือน / ค่าเดิม / ค่าใหม่ / สถานะ ↑↓−)' },
+        { type: 'improve', text: 'Responsive: Dashboard + Export KPI + Announcements ปรับให้เข้ากับ mobile/tablet' },
+      ]
+    },
+    {
       version: '2569.04.22-schedule',
       date: '22 เมษายน 2569',
       changes: [
