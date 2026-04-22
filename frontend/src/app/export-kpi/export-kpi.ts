@@ -63,7 +63,7 @@ export class ExportKpiComponent implements OnInit {
   syncSelectedTables = new Set<string>();
 
   // === Export Schedule (ตารางเวลา export อัตโนมัติ) ===
-  showScheduleSection: boolean = false;
+  showSettingsModal: boolean = false;
   schedules: any[] = [];
   schedulesLoading: boolean = false;
   showScheduleModal: boolean = false;
@@ -582,9 +582,9 @@ export class ExportKpiComponent implements OnInit {
   }
 
   // ========== Schedule management ==========
-  toggleScheduleSection() {
-    this.showScheduleSection = !this.showScheduleSection;
-    if (this.showScheduleSection && this.schedules.length === 0) this.loadSchedules();
+  openSettingsModal() {
+    this.showSettingsModal = true;
+    this.loadSchedules();
   }
 
   loadSchedules() {
