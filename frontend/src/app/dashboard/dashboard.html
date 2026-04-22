@@ -512,6 +512,12 @@
                             [title]="typeItem.label">
                         {{ typeItem.label }}
                       </span>
+                      <ng-container *ngIf="getIndicatorOffTypeBadge(item) as offBadge">
+                        <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap"
+                              [ngClass]="offBadge.color" [title]="offBadge.title">
+                          <i class="fas fa-hospital text-[8px]"></i>{{ offBadge.label }}
+                        </span>
+                      </ng-container>
                       <h3 class="font-semibold text-gray-900 text-sm">{{ item.kpi_indicators_name }}</h3>
                     </div>
                     <p class="text-xs text-gray-600 mb-1">{{ item.main_indicator_name }}</p>
@@ -749,6 +755,13 @@
                             [title]="typeItem.label">
                         {{ typeItem.label }}
                       </span>
+                      <!-- ตัวชี้วัดของ (required_off_types / evaluation_mode) -->
+                      <ng-container *ngIf="getIndicatorOffTypeBadge(item) as offBadge">
+                        <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] font-bold whitespace-nowrap shrink-0 mt-0.5"
+                              [ngClass]="offBadge.color" [title]="offBadge.title">
+                          <i class="fas fa-hospital text-[7px]"></i>{{ offBadge.label }}
+                        </span>
+                      </ng-container>
                       <span class="font-medium text-gray-900 whitespace-normal break-words" [title]="item.kpi_indicators_name">{{ item.kpi_indicators_name }}</span>
                     </div>
                     <div class="flex gap-0.5 shrink-0">

@@ -2248,6 +2248,31 @@ export class DashboardComponent implements OnInit {
     return la === tv;
   }
 
+  // ดึง badge "ตัวชี้วัดของ" — แสดงขอบเขตหน่วยบริการที่ตัวชี้วัดใช้
+  // evaluation_mode='all_required' → ทุกประเภท
+  // evaluation_mode='any_one' + required_off_types=["05","06","07"] → รายชื่อประเภท
+  getIndicatorOffTypeBadge(item: any): { label: string; title: string; color: string } | null {
+    const mode = item?.evaluation_mode;
+    if (mode === 'all_required') {
+      return { label: 'ทุกประเภท', title: 'ตัวชี้วัดของ: ทุกประเภทหน่วยบริการ', color: 'bg-purple-100 text-purple-700 border border-purple-200' };
+    }
+    if (mode !== 'any_one') return null;
+    let codes: string[] = [];
+    try {
+      const raw = item?.required_off_types;
+      if (Array.isArray(raw)) codes = raw.map((x: any) => String(x));
+      else if (raw) { const p = JSON.parse(String(raw)); if (Array.isArray(p)) codes = p.map((x: any) => String(x)); }
+    } catch { codes = []; }
+    if (codes.length === 0) return null;
+    const names = codes.map(c => {
+      const ht = (this._allHosTypes || []).find((x: any) => x.hostypecode === c);
+      return ht?.hostypename || c;
+    });
+    const label = codes.length <= 2 ? names.join(', ') : `${codes.length} ประเภท`;
+    const title = `ตัวชี้วัดของ: ${names.join(', ')}`;
+    return { label, title, color: 'bg-cyan-100 text-cyan-700 border border-cyan-200' };
+  }
+
   // ดึงประเภทตัวชี้วัด (R9, MOPH, SSJ, RMW, Other)
   getIndicatorTypes(item: any): Array<{type: string, color: string, label: string}> {
     const types: Array<{type: string, color: string, label: string}> = [];

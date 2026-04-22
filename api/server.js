@@ -766,6 +766,8 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 MAX(CASE WHEN r.is_locked = 1 THEN 1 ELSE 0 END) AS is_locked,
                 i.table_process,
                 i.r9, i.moph, i.ssj, i.rmw, i.other,
+                i.evaluation_mode,
+                i.required_off_types,
                 r.hospcode,
                 h.hosname,
                 h.hostype,
@@ -779,7 +781,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
             LEFT JOIN chostype ht ON h.hostype = ht.hostypecode
             LEFT JOIN co_district dist ON dist.distid = h.distid
             ${whereClause}${extraWhere}
-            GROUP BY i.id, r.year_bh, r.hospcode, mi.main_indicator_name, i.kpi_indicators_name, i.table_process, i.r9, i.moph, i.ssj, i.rmw, i.other, d.dept_name, h.hosname, h.hostype, ht.hostypename, dist.distname
+            GROUP BY i.id, r.year_bh, r.hospcode, mi.main_indicator_name, i.kpi_indicators_name, i.table_process, i.r9, i.moph, i.ssj, i.rmw, i.other, i.evaluation_mode, i.required_off_types, d.dept_name, h.hosname, h.hostype, ht.hostypename, dist.distname
             ORDER BY r.year_bh DESC, mi.main_indicator_name, i.kpi_indicators_name, r.hospcode
             LIMIT 500
         `;
