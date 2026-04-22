@@ -881,22 +881,76 @@ export class DashboardComponent implements OnInit {
     }
     // ถ้ามีค่าน้อยกว่าเดิม → แจ้งเตือนยืนยัน/ยกเลิก ก่อน
     const proceedToSave = () => {
-      // สร้างสรุปรายละเอียดการแก้ไข
-      const changeDetails: string[] = [];
-      for (const item of changedItems) {
-        const changes: string[] = [];
-        if (String(item.target_value ?? '') !== String(item._original.target_value ?? '')) {
-          changes.push(`เป้าหมาย: ${item._original.target_value} → ${item.target_value}`);
+      // Helper: สร้าง badge สถานะ (เพิ่ม/ลด/ลบ/ใหม่/แก้ไข)
+      const statusBadge = (oldRaw: any, newRaw: any) => {
+        const oldStr = String(oldRaw ?? '').trim();
+        const newStr = String(newRaw ?? '').trim();
+        const oldEmpty = oldStr === '' || oldStr === '0' || oldStr === 'null';
+        const newEmpty = newStr === '' || newStr === 'null';
+        if (newEmpty && !oldEmpty) {
+          return `<span style="color:#6b7280;font-weight:700"><i class="fas fa-minus"></i> ลบ</span>`;
         }
+        if (oldEmpty && !newEmpty) {
+          return `<span style="color:#16a34a;font-weight:700"><i class="fas fa-plus-circle"></i> เพิ่ม</span>`;
+        }
+        const oldNum = parseFloat(oldStr);
+        const newNum = parseFloat(newStr);
+        if (!isNaN(oldNum) && !isNaN(newNum)) {
+          if (newNum > oldNum) return `<span style="color:#16a34a;font-weight:700"><i class="fas fa-arrow-up"></i> เพิ่มขึ้น</span>`;
+          if (newNum < oldNum) return `<span style="color:#dc2626;font-weight:700"><i class="fas fa-arrow-down"></i> ลดลง</span>`;
+          return `<span style="color:#6b7280"><i class="fas fa-equals"></i></span>`;
+        }
+        return `<span style="color:#d97706;font-weight:700"><i class="fas fa-pen"></i> แก้ไข</span>`;
+      };
+      const fmt = (v: any) => {
+        const s = String(v ?? '').trim();
+        if (s === '' || s === 'null') return '<span style="color:#9ca3af">—</span>';
+        return s;
+      };
+
+      // สร้างแถวตารางสรุปการแก้ไข
+      const rows: string[] = [];
+      for (const item of changedItems) {
+        const kpiName = item.kpi_indicators_name || '';
+        // target_value
+        if (String(item.target_value ?? '') !== String(item._original.target_value ?? '')) {
+          rows.push(`<tr>
+            <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">${kpiName}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center;color:#4f46e5;font-weight:700">เป้าหมาย</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${fmt(item._original.target_value)}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:700">${fmt(item.target_value)}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${statusBadge(item._original.target_value, item.target_value)}</td>
+          </tr>`);
+        }
+        // monthly values
         for (const m of months) {
           if (String(item[m] ?? '') !== String(item._original[m] ?? '')) {
-            changes.push(`${monthNames[m]}: ${item._original[m]} → ${item[m]}`);
+            rows.push(`<tr>
+              <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">${kpiName}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${monthNames[m]}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${fmt(item._original[m])}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:700">${fmt(item[m])}</td>
+              <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${statusBadge(item._original[m], item[m])}</td>
+            </tr>`);
           }
         }
-        if (changes.length > 0) {
-          changeDetails.push(`<b>${item.kpi_indicators_name}</b><br><span class="text-gray-500 text-xs">${changes.join(', ')}</span>`);
-        }
       }
+
+      const summaryTable = `
+        <div style="max-height:280px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:10px">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;background:white">
+            <thead style="position:sticky;top:0;background:#f3f4f6;z-index:1">
+              <tr>
+                <th style="padding:8px;text-align:left;border-bottom:2px solid #d1d5db">รายการ</th>
+                <th style="padding:8px;text-align:center;border-bottom:2px solid #d1d5db">เดือน</th>
+                <th style="padding:8px;text-align:center;border-bottom:2px solid #d1d5db">ค่าเดิม</th>
+                <th style="padding:8px;text-align:center;border-bottom:2px solid #d1d5db">ค่าใหม่</th>
+                <th style="padding:8px;text-align:center;border-bottom:2px solid #d1d5db">สถานะ</th>
+              </tr>
+            </thead>
+            <tbody>${rows.join('')}</tbody>
+          </table>
+        </div>`;
 
       // Clean data - ส่งเฉพาะ fields ที่ backend ต้องการ ไม่ส่ง _original
       const cleanData = changedItems.map(item => ({
@@ -934,20 +988,20 @@ export class DashboardComponent implements OnInit {
 
       Swal.fire({
         title: 'ยืนยันการบันทึก',
-        html: `<div class="text-left text-sm">
-                <p class="mb-2 font-bold text-gray-700">พบข้อมูลที่เปลี่ยนแปลง ${cleanData.length} รายการ:</p>
-                <div class="max-h-48 overflow-y-auto border rounded-lg p-3 bg-gray-50 space-y-2">
-                  ${changeDetails.join('<hr class="my-2 border-gray-200">')}
-                </div>
+        html: `<div style="text-align:left;font-size:13px">
+                <p style="margin-bottom:8px;font-weight:700;color:#374151">
+                  พบการเปลี่ยนแปลง <span style="color:#4f46e5">${rows.length}</span> รายการ จาก ${cleanData.length} ตัวชี้วัด
+                </p>
+                ${summaryTable}
                 ${replySection}
-                <p class="mt-3 text-gray-600">ต้องการบันทึกใช่หรือไม่?</p>
+                <p style="margin-top:12px;color:#6b7280">ต้องการบันทึกใช่หรือไม่?</p>
                </div>`,
         icon: 'question',
         showCancelButton: true,
         confirmButtonColor: '#10b981',
         confirmButtonText: 'บันทึก',
         cancelButtonText: 'ยกเลิก',
-        width: 600,
+        width: 780,
         didOpen: () => {
           const checkbox = document.getElementById('swal-reply-check') as HTMLInputElement;
           const replyArea = document.getElementById('swal-reply-area');
