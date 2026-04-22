@@ -101,6 +101,13 @@ export class AuthService {
     return this.http.get(`${this.apiUrl}/kpi-results${qs}`, { headers });
   }
 
+  // ลบ kpi_results + kpi_sub_results ตามรายการ (super_admin)
+  bulkDeleteKpiResults(items: { indicator_id: number; year_bh: string; hospcode: string }[]): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/kpi-results/bulk-delete`, { items }, { headers });
+  }
+
   // ฟังก์ชันดึงข้อมูลสถิติ Dashboard
   getDashboardStats(year: string): Observable<any> {
     const token = localStorage.getItem('kpi_token');

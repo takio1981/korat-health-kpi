@@ -875,6 +875,55 @@ apiRouter.post('/bulk-add-kpi', authenticateToken, isAdmin, async (req, res) => 
     }
 });
 
+// POST /kpi-results/bulk-delete — ลบ kpi_results + kpi_sub_results ตาม triplet
+// body: { items: [{ indicator_id, year_bh, hospcode }, ...] }
+apiRouter.post('/kpi-results/bulk-delete', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ success: false, message: 'ไม่มีรายการที่จะลบ' });
+    }
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        let deletedKpi = 0, deletedSub = 0;
+        for (const it of items) {
+            const { indicator_id, year_bh, hospcode } = it;
+            if (!indicator_id || !year_bh || !hospcode) continue;
+            // ลบ kpi_sub_results ที่ sub_indicator อยู่ใน kpi_indicators นี้
+            const [subRes] = await connection.query(
+                `DELETE sr FROM kpi_sub_results sr
+                 JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
+                 WHERE si.indicator_id = ? AND sr.year_bh = ? AND sr.hospcode = ?`,
+                [indicator_id, year_bh, hospcode]
+            );
+            deletedSub += subRes.affectedRows || 0;
+            // ลบ kpi_results
+            const [kpiRes] = await connection.query(
+                'DELETE FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?',
+                [indicator_id, year_bh, hospcode]
+            );
+            deletedKpi += kpiRes.affectedRows || 0;
+            // ลบ kpi_summary ด้วย (ถ้ามี)
+            try {
+                await connection.query(
+                    'DELETE FROM kpi_summary WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?',
+                    [indicator_id, year_bh, hospcode]
+                );
+            } catch (_) {}
+        }
+        await connection.commit();
+        // log
+        await db.query(
+            'INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+            [req.user.userId, 'BULK_DELETE_KPI', 'kpi_results,kpi_sub_results', JSON.stringify({ count: items.length, deletedKpi, deletedSub }), req.ip]
+        ).catch(() => {});
+        res.json({ success: true, message: `ลบสำเร็จ — kpi_results ${deletedKpi}, kpi_sub_results ${deletedSub}`, deletedKpi, deletedSub });
+    } catch (e) {
+        await connection.rollback();
+        res.status(500).json({ success: false, message: e.message });
+    } finally { connection.release(); }
+});
+
 apiRouter.post('/update-kpi', async (req, res) => {
     let updates = req.body;
     if (req.body && req.body.updates && Array.isArray(req.body.updates)) {

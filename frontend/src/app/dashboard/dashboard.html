@@ -52,8 +52,12 @@
             </button>
 
             <!-- ปุ่มตรวจสอบ (Review Mode) -->
-            <button *ngIf="isAdmin && !isEditing && !isReviewMode" (click)="toggleReviewMode()" class="w-full md:w-auto px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2">
+            <button *ngIf="isAdmin && !isEditing && !isReviewMode && !isDeleteMode" (click)="toggleReviewMode()" class="w-full md:w-auto px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2">
               <i class="fas fa-clipboard-check"></i> ตรวจสอบ
+            </button>
+            <!-- ปุ่มโหมดลบ (Delete Mode) — super_admin เท่านั้น -->
+            <button *ngIf="isSuperAdmin && !isEditing && !isReviewMode && !isDeleteMode" (click)="toggleDeleteMode()" class="w-full md:w-auto px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2">
+              <i class="fas fa-trash"></i> โหมดลบตัวชี้วัด
             </button>
             <!-- Review Mode Actions -->
             <div *ngIf="isReviewMode" class="flex flex-wrap gap-2 w-full md:w-auto">
@@ -64,6 +68,15 @@
                 <i class="fas fa-undo-alt"></i> ตีกลับที่เลือก ({{ reviewSelected.size }})
               </button>
               <button (click)="toggleReviewMode()" class="flex-1 md:flex-none px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2">
+                <i class="fas fa-times"></i> ยกเลิก
+              </button>
+            </div>
+            <!-- Delete Mode Actions -->
+            <div *ngIf="isDeleteMode" class="flex flex-wrap gap-2 w-full md:w-auto">
+              <button (click)="confirmBulkDelete()" [disabled]="deleteSelected.size === 0" class="flex-1 md:flex-none px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2">
+                <i class="fas fa-trash-alt"></i> ลบที่เลือก ({{ deleteSelected.size }})
+              </button>
+              <button (click)="toggleDeleteMode()" class="flex-1 md:flex-none px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2">
                 <i class="fas fa-times"></i> ยกเลิก
               </button>
             </div>
@@ -190,6 +203,16 @@
           <span class="text-teal-600">เลือกแล้ว <b>{{ reviewSelected.size }}</b> รายการ</span>
         </div>
 
+        <!-- Delete Mode Toolbar -->
+        <div *ngIf="isDeleteMode" class="px-6 py-2 bg-red-50 border-b border-red-200 flex items-center gap-3 text-xs">
+          <label class="flex items-center gap-2 cursor-pointer text-red-700 font-bold">
+            <input type="checkbox" [checked]="deleteAllChecked" (change)="toggleDeleteAll()" class="rounded text-red-600 focus:ring-red-400">
+            เลือกทั้งหมด
+          </label>
+          <span class="text-red-600">เลือกแล้ว <b>{{ deleteSelected.size }}</b> / {{ filteredData.length }} รายการ</span>
+          <span class="ml-auto text-red-600 font-bold"><i class="fas fa-exclamation-triangle mr-1"></i>โหมดลบ — จะลบ kpi_results + kpi_sub_results</span>
+        </div>
+
         <!-- super_admin: เลือกตัวกรองก่อน -->
         <div *ngIf="(isSuperAdmin || isAdmin) && kpiData.length === 0 && !isLoading" class="px-6 py-16 text-center">
           <div class="inline-flex items-center justify-center w-20 h-20 bg-indigo-100 rounded-2xl mb-4">
@@ -210,6 +233,11 @@
                 <div *ngIf="isReviewMode" class="absolute top-4 left-4">
                   <input type="checkbox" [checked]="reviewSelected.has(reviewKey(item))" (change)="toggleReviewItem(item)"
                          class="rounded text-teal-600 focus:ring-teal-400 h-5 w-5" [disabled]="item.pending_count === 0">
+                </div>
+                <!-- Delete checkbox (Mobile) -->
+                <div *ngIf="isDeleteMode" class="absolute top-4 left-4">
+                  <input type="checkbox" [checked]="isDeleteSelected(item)" (change)="toggleDeleteItem(item)"
+                         class="rounded text-red-600 focus:ring-red-400 h-5 w-5">
                 </div>
                 <!-- สถานะการรับรอง (Mobile) -->
                 <div class="absolute top-4 right-12 flex gap-1">
@@ -427,6 +455,9 @@
                 <th *ngIf="isReviewMode" class="px-2 py-3 bg-green-800 text-center w-8">
                   <input type="checkbox" [checked]="reviewAllChecked" (change)="toggleReviewAll()" class="rounded text-teal-400 focus:ring-teal-400">
                 </th>
+                <th *ngIf="isDeleteMode" class="px-2 py-3 bg-red-700 text-center w-8" title="เลือกทั้งหมด">
+                  <input type="checkbox" [checked]="deleteAllChecked" (change)="toggleDeleteAll()" class="rounded text-red-400 focus:ring-red-400">
+                </th>
                 <th class="px-3 py-3 frozen col-1 bg-green-700">หมวดหมู่หลัก</th>
                 <th class="px-3 py-3 frozen col-2 bg-green-700 border-r border-green-600">ชื่อตัวชี้วัด</th>
                 <th class="px-3 py-3 frozen col-3 bg-green-700 text-center border-r border-green-600 relative">สถานะ</th>
@@ -452,6 +483,11 @@
                   <input type="checkbox" [checked]="reviewSelected.has(reviewKey(item))" (change)="toggleReviewItem(item)"
                          class="rounded text-teal-600 focus:ring-teal-400" [disabled]="item.pending_count === 0"
                          [title]="item.pending_count > 0 ? 'เลือกเพื่อตรวจสอบ' : 'ไม่มีรายการรอตรวจสอบ'">
+                </td>
+                <!-- Delete checkbox -->
+                <td *ngIf="isDeleteMode" class="px-2 py-2 text-center bg-red-50">
+                  <input type="checkbox" [checked]="isDeleteSelected(item)" (change)="toggleDeleteItem(item)"
+                         class="rounded text-red-600 focus:ring-red-400" title="เลือกเพื่อลบ">
                 </td>
 
                 <!-- Col 1: หมวดหมู่หลัก (with rowSpan) -->
@@ -847,9 +883,9 @@
         </div>
       </ng-container>
     </div>
-    <!-- สรุปจำนวน: ทั้งหมด / มีอยู่แล้ว / ยังไม่มี + ปุ่ม Reset -->
-    <div *ngIf="addKpiTotalTemplateCount > 0" class="flex items-center justify-between mb-3 px-1">
-      <div class="flex items-center gap-3 text-xs">
+    <!-- สรุปจำนวน + ตัวกรอง + ปุ่ม Reset -->
+    <div *ngIf="addKpiTotalTemplateCount > 0" class="flex flex-wrap items-center justify-between gap-2 mb-3 px-1">
+      <div class="flex flex-wrap items-center gap-2 text-xs">
         <span class="px-2.5 py-1 bg-gray-100 text-gray-600 rounded-lg font-bold">
           <i class="fas fa-list mr-1"></i>ทั้งหมด: {{ addKpiTotalTemplateCount }}
         </span>
@@ -859,15 +895,27 @@
         <span class="px-2.5 py-1 bg-green-100 text-green-700 rounded-lg font-bold">
           <i class="fas fa-plus-circle mr-1"></i>ยังไม่มี: {{ newKpiList.length }}
         </span>
+        <span class="px-2.5 py-1 bg-purple-100 text-purple-700 rounded-lg font-bold">
+          <i class="fas fa-check-square mr-1"></i>เลือก: {{ addKpiSelectedIds.size }} / {{ filteredNewKpiList.length }}
+        </span>
       </div>
-      <button *ngIf="newKpiList.length > 0" (click)="resetAddKpi()" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold transition-all shadow-sm">
-        <i class="fas fa-undo mr-1"></i>คืนค่าเริ่มต้น
-      </button>
+      <div class="flex flex-wrap items-center gap-2">
+        <select [(ngModel)]="addKpiSelectedMain" class="px-3 py-1.5 border border-purple-300 rounded-lg text-xs focus:ring-2 focus:ring-purple-500 outline-none">
+          <option value="">หมวดหมู่หลัก: ทั้งหมด</option>
+          <option *ngFor="let m of addKpiMainList" [value]="m">{{ m }}</option>
+        </select>
+        <button *ngIf="newKpiList.length > 0" (click)="resetAddKpi()" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold transition-all shadow-sm">
+          <i class="fas fa-undo mr-1"></i>คืนค่าเริ่มต้น
+        </button>
+      </div>
     </div>
     <div class="overflow-x-auto">
       <table class="w-full text-left border-collapse text-xs">
         <thead class="bg-gradient-to-r from-green-700 to-green-600 text-white">
           <tr>
+            <th class="px-2 py-2 text-center w-8">
+              <input type="checkbox" [checked]="isAllAddKpiSelected()" (change)="toggleAllAddKpi()" class="rounded text-purple-600 focus:ring-purple-400" title="เลือกทั้งหมด">
+            </th>
             <th class="px-3 py-2 font-bold">หมวดหมู่หลัก</th>
             <th class="px-3 py-2 font-bold">ชื่อตัวชี้วัด</th>
             <th class="px-3 py-2 font-bold">หน่วยงาน</th>
@@ -878,7 +926,11 @@
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
-          <tr *ngFor="let item of newKpiList" class="hover:bg-gray-50">
+          <tr *ngFor="let item of filteredNewKpiList" class="hover:bg-gray-50"
+              [class.bg-purple-50]="isAddKpiSelected(item)">
+            <td class="px-2 py-2 text-center">
+              <input type="checkbox" [checked]="isAddKpiSelected(item)" (change)="toggleAddKpi(item)" class="rounded text-purple-600 focus:ring-purple-400">
+            </td>
             <td class="px-3 py-2 text-gray-600">{{ item.main_indicator_name }}</td>
             <td class="px-3 py-2 font-medium text-gray-900">{{ item.kpi_indicators_name }}</td>
             <td class="px-3 py-2 text-gray-600">{{ item.dept_name }}</td>
@@ -900,10 +952,11 @@
               </button>
             </td>
           </tr>
-          <tr *ngIf="newKpiList.length === 0">
-            <td colspan="18" class="px-6 py-8 text-center text-gray-400">
+          <tr *ngIf="filteredNewKpiList.length === 0">
+            <td colspan="19" class="px-6 py-8 text-center text-gray-400">
               <ng-container *ngIf="isAdmin && !addKpiSelectedHospcode">กรุณาเลือกหน่วยบริการเพื่อแสดงตัวชี้วัด</ng-container>
-              <ng-container *ngIf="!isAdmin || addKpiSelectedHospcode">ไม่มีตัวชี้วัดที่สามารถเพิ่มได้สำหรับปีงบประมาณนี้ (มีครบทุกตัวชี้วัดแล้ว)</ng-container>
+              <ng-container *ngIf="(!isAdmin || addKpiSelectedHospcode) && newKpiList.length === 0">ไม่มีตัวชี้วัดที่สามารถเพิ่มได้สำหรับปีงบประมาณนี้ (มีครบทุกตัวชี้วัดแล้ว)</ng-container>
+              <ng-container *ngIf="newKpiList.length > 0 && filteredNewKpiList.length === 0">ไม่พบรายการในหมวดหมู่ที่เลือก — ลองเปลี่ยนตัวกรอง</ng-container>
             </td>
           </tr>
         </tbody>
@@ -911,8 +964,8 @@
     </div>
     <div class="mt-4 flex justify-end gap-3">
       <button (click)="closeAddModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-bold text-sm">ยกเลิก</button>
-      <button (click)="saveNewKpis()" [disabled]="newKpiList.length === 0" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-sm shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
-        <i class="fas fa-save mr-1"></i>บันทึก
+      <button (click)="saveNewKpis()" [disabled]="addKpiSelectedIds.size === 0" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold text-sm shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
+        <i class="fas fa-save mr-1"></i>บันทึก ({{ addKpiSelectedIds.size }})
       </button>
     </div>
   </div>

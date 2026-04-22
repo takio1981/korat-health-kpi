@@ -62,10 +62,18 @@ export class DashboardComponent implements OnInit {
   isEditing: boolean = false;
   showAddModal: boolean = false;
   newKpiList: any[] = [];
+  // Add KPI: filter หมวดหมู่หลัก + selection
+  addKpiMainList: string[] = [];
+  addKpiSelectedMain: string = '';
+  addKpiSelectedIds = new Set<number>();
 
   // Review mode — เลือกรายการตรวจสอบ
   isReviewMode: boolean = false;
   reviewSelected = new Set<string>(); // key: indicator_id_year_bh_hospcode
+
+  // Delete mode — เลือกรายการเพื่อลบออก
+  isDeleteMode: boolean = false;
+  deleteSelected = new Set<string>(); // key: indicator_id_year_bh_hospcode
 
   showTrendModal: boolean = false;
   selectedKpiName: string = '';
@@ -1072,10 +1080,96 @@ export class DashboardComponent implements OnInit {
   toggleReviewMode() {
     this.isReviewMode = !this.isReviewMode;
     if (!this.isReviewMode) this.reviewSelected.clear();
+    if (this.isReviewMode) { this.isDeleteMode = false; this.deleteSelected.clear(); }
   }
 
   reviewKey(item: any): string {
     return `${item.indicator_id}_${item.year_bh}_${item.hospcode}`;
+  }
+
+  // === Delete Mode ===
+  toggleDeleteMode() {
+    this.isDeleteMode = !this.isDeleteMode;
+    if (!this.isDeleteMode) this.deleteSelected.clear();
+    if (this.isDeleteMode) { this.isReviewMode = false; this.reviewSelected.clear(); }
+  }
+
+  toggleDeleteItem(item: any) {
+    const key = this.reviewKey(item);
+    this.deleteSelected.has(key) ? this.deleteSelected.delete(key) : this.deleteSelected.add(key);
+  }
+
+  toggleDeleteAll() {
+    if (this.deleteSelected.size === this.filteredData.length) this.deleteSelected.clear();
+    else this.filteredData.forEach(i => this.deleteSelected.add(this.reviewKey(i)));
+  }
+
+  get deleteAllChecked(): boolean {
+    return this.filteredData.length > 0 && this.deleteSelected.size === this.filteredData.length;
+  }
+
+  isDeleteSelected(item: any): boolean {
+    return this.deleteSelected.has(this.reviewKey(item));
+  }
+
+  confirmBulkDelete() {
+    const items = this.filteredData.filter(i => this.deleteSelected.has(this.reviewKey(i)));
+    if (items.length === 0) {
+      Swal.fire('แจ้งเตือน', 'กรุณาเลือกรายการที่จะลบ', 'warning');
+      return;
+    }
+    // สรุปรายการที่จะลบ
+    const summaryHtml = items.slice(0, 20).map(i =>
+      `<li class="text-xs text-gray-600"><b>${i.kpi_indicators_name}</b> — ${i.hosname || i.hospcode} (ปี ${i.year_bh})</li>`
+    ).join('');
+    const moreText = items.length > 20 ? `<p class="text-xs text-gray-400 mt-1">... และอีก ${items.length - 20} รายการ</p>` : '';
+
+    Swal.fire({
+      title: 'ยืนยันการลบข้อมูล',
+      html: `<div class="text-left">
+        <div class="bg-red-50 border-l-4 border-red-500 p-3 mb-3 rounded">
+          <p class="text-sm text-red-700 font-bold"><i class="fas fa-exclamation-triangle mr-1"></i>คำเตือน</p>
+          <ul class="text-xs text-red-600 mt-1 list-disc ml-5 space-y-0.5">
+            <li>ข้อมูลใน <b>kpi_results</b> ของรายการที่เลือกจะถูกลบ (ผลงานรายเดือน + เป้าหมาย)</li>
+            <li>ข้อมูลใน <b>kpi_sub_results</b> ที่เกี่ยวข้องจะถูกลบด้วย</li>
+            <li>ข้อมูลใน <b>kpi_summary</b> ของ cell นั้นจะถูกลบ</li>
+            <li class="font-bold">การลบนี้ไม่สามารถกู้คืนได้</li>
+          </ul>
+        </div>
+        <p class="text-sm font-bold text-gray-700 mb-1">รายการที่จะลบ (${items.length} รายการ):</p>
+        <ul class="max-h-48 overflow-y-auto border border-gray-200 rounded p-2 bg-gray-50 list-disc ml-5 space-y-0.5">
+          ${summaryHtml}
+        </ul>
+        ${moreText}
+      </div>`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      confirmButtonText: `<i class="fas fa-trash mr-1"></i> ยืนยันลบ ${items.length} รายการ`,
+      cancelButtonText: 'ยกเลิก',
+      width: '600px'
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      Swal.fire({ title: 'กำลังลบ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      const payload = items.map(i => ({
+        indicator_id: Number(i.indicator_id),
+        year_bh: String(i.year_bh),
+        hospcode: String(i.hospcode)
+      }));
+      this.authService.bulkDeleteKpiResults(payload).subscribe({
+        next: (res: any) => {
+          Swal.fire({
+            icon: 'success', title: 'ลบสำเร็จ',
+            html: `<p class="text-sm">${res.message}</p>`,
+            timer: 3000
+          });
+          this.isDeleteMode = false;
+          this.deleteSelected.clear();
+          this.loadKpiData();
+        },
+        error: (e: any) => Swal.fire('ผิดพลาด', e.error?.message || 'ลบไม่สำเร็จ', 'error')
+      });
+    });
   }
 
   toggleReviewItem(item: any) {
@@ -1408,6 +1502,10 @@ export class DashboardComponent implements OnInit {
             last_actual: '',
             _original: { target_value: '', oct: '', nov: '', dece: '', jan: '', feb: '', mar: '', apr: '', may: '', jun: '', jul: '', aug: '', sep: '' }
           }));
+          // สร้างรายการหมวดหมู่หลักสำหรับ filter + default เลือกทุกรายการ
+          this.addKpiMainList = Array.from(new Set<string>(this.newKpiList.map((i: any) => i.main_indicator_name).filter(Boolean))).sort();
+          this.addKpiSelectedIds = new Set(this.newKpiList.map((i: any) => Number(i.indicator_id)));
+          this.addKpiSelectedMain = '';
           Swal.close();
           if (!this.showAddModal) {
             setTimeout(() => {
@@ -1433,6 +1531,33 @@ export class DashboardComponent implements OnInit {
     this.cdr.detectChanges();
   }
 
+  // === Add-KPI filter + selection helpers ===
+  get filteredNewKpiList(): any[] {
+    if (!this.addKpiSelectedMain) return this.newKpiList;
+    return this.newKpiList.filter((i: any) => i.main_indicator_name === this.addKpiSelectedMain);
+  }
+
+  isAddKpiSelected(item: any): boolean {
+    return this.addKpiSelectedIds.has(Number(item.indicator_id));
+  }
+
+  toggleAddKpi(item: any) {
+    const id = Number(item.indicator_id);
+    if (this.addKpiSelectedIds.has(id)) this.addKpiSelectedIds.delete(id);
+    else this.addKpiSelectedIds.add(id);
+  }
+
+  isAllAddKpiSelected(): boolean {
+    const visible = this.filteredNewKpiList;
+    return visible.length > 0 && visible.every((i: any) => this.addKpiSelectedIds.has(Number(i.indicator_id)));
+  }
+
+  toggleAllAddKpi() {
+    const visible = this.filteredNewKpiList;
+    if (this.isAllAddKpiSelected()) visible.forEach((i: any) => this.addKpiSelectedIds.delete(Number(i.indicator_id)));
+    else visible.forEach((i: any) => this.addKpiSelectedIds.add(Number(i.indicator_id)));
+  }
+
   saveNewKpis() {
     const targetHospcode = (this.isAdmin || this.isLocalAdmin)
       ? this.addKpiSelectedHospcode
@@ -1441,14 +1566,15 @@ export class DashboardComponent implements OnInit {
       Swal.fire('แจ้งเตือน', 'กรุณาเลือกหน่วยบริการก่อนบันทึก', 'warning');
       return;
     }
-    if (this.newKpiList.length === 0) {
-      Swal.fire('แจ้งเตือน', 'ไม่มีรายการตัวชี้วัดที่จะบันทึก', 'warning');
+    // กรองเฉพาะที่ติ๊ก
+    const selected = this.newKpiList.filter((i: any) => this.addKpiSelectedIds.has(Number(i.indicator_id)));
+    if (selected.length === 0) {
+      Swal.fire('แจ้งเตือน', 'กรุณาเลือกตัวชี้วัดที่จะเพิ่มอย่างน้อย 1 รายการ', 'warning');
       return;
     }
 
-    // นับจำนวนที่มีข้อมูล (เพื่อแสดงสรุป)
     const months = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
-    const itemsWithData = this.newKpiList.filter((item: any) => {
+    const itemsWithData = selected.filter((item: any) => {
       const tv = String(item.target_value ?? '').trim();
       if (tv && tv !== '0') return true;
       return months.some(m => { const v = String(item[m] ?? '').trim(); return v && v !== '0'; });
@@ -1457,7 +1583,7 @@ export class DashboardComponent implements OnInit {
     Swal.fire({
       title: 'ยืนยันการบันทึก',
       html: `<div class="text-left text-sm">
-        <p class="text-gray-600">บันทึกตัวชี้วัดทั้งหมด <b>${this.newKpiList.length}</b> รายการ (มีข้อมูล <b>${itemsWithData.length}</b> รายการ)</p>
+        <p class="text-gray-600">บันทึกตัวชี้วัดที่เลือก <b>${selected.length}</b> รายการ (มีข้อมูล <b>${itemsWithData.length}</b> รายการ)</p>
         <p class="text-gray-500 text-xs mt-2">ปีงบประมาณ: <b>${this.addKpiSelectedYear}</b></p>
         <p class="mt-2 text-gray-600">ต้องการบันทึกใช่หรือไม่?</p>
       </div>`,
@@ -1468,7 +1594,11 @@ export class DashboardComponent implements OnInit {
       cancelButtonText: 'ยกเลิก'
     }).then((result) => {
       if (result.isConfirmed) {
+        // เก็บต้นฉบับไว้แล้วแทนที่ด้วย selected เพื่อให้ executeAddKpiSave ทำงานกับที่เลือก
+        const original = this.newKpiList;
+        this.newKpiList = selected;
         this.executeAddKpiSave(targetHospcode);
+        this.newKpiList = original;
       }
     });
   }
