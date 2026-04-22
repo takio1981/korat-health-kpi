@@ -62,6 +62,41 @@ export class ExportKpiComponent implements OnInit {
   syncLoading: boolean = false;
   syncSelectedTables = new Set<string>();
 
+  // === Export Schedule (ตารางเวลา export อัตโนมัติ) ===
+  showScheduleSection: boolean = false;
+  schedules: any[] = [];
+  schedulesLoading: boolean = false;
+  showScheduleModal: boolean = false;
+  editingSchedule: any = null;
+  scheduleForm: any = {
+    name: '',
+    is_enabled: true,
+    days: [1, 2, 3, 4, 5],
+    time_of_day: '02:00',
+    year_bh: '',
+    indicator_scope: 'all',
+    indicator_ids: [] as number[],
+    notify_email: true,
+    email_recipients: '',
+    notify_telegram: false,
+    telegram_chat_ids: '',
+    telegram_bot_token: ''
+  };
+  dayLabels = [
+    { v: 1, label: 'จ.' },
+    { v: 2, label: 'อ.' },
+    { v: 3, label: 'พ.' },
+    { v: 4, label: 'พฤ.' },
+    { v: 5, label: 'ศ.' },
+    { v: 6, label: 'ส.' },
+    { v: 7, label: 'อา.' }
+  ];
+
+  // Logs modal
+  showLogsModal: boolean = false;
+  logsData: any[] = [];
+  logsScheduleName: string = '';
+
   ngOnInit() {
     const role = this.authService.getUserRole();
     if (role !== 'super_admin') {
@@ -544,5 +579,178 @@ export class ExportKpiComponent implements OnInit {
         });
       }
     });
+  }
+
+  // ========== Schedule management ==========
+  toggleScheduleSection() {
+    this.showScheduleSection = !this.showScheduleSection;
+    if (this.showScheduleSection && this.schedules.length === 0) this.loadSchedules();
+  }
+
+  loadSchedules() {
+    this.schedulesLoading = true;
+    this.authService.getExportSchedules().subscribe({
+      next: (res: any) => {
+        this.schedules = (res.data || []).map((s: any) => ({
+          ...s,
+          days_arr: (s.days_of_week || '').split(',').map((d: string) => parseInt(d.trim())).filter((d: number) => !isNaN(d)),
+          indicator_ids_arr: s.indicator_ids ? (() => { try { return JSON.parse(s.indicator_ids); } catch { return []; } })() : []
+        }));
+        this.schedulesLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: () => { this.schedulesLoading = false; this.cdr.detectChanges(); }
+    });
+  }
+
+  dayShortLabel(days: number[]): string {
+    if (!days || days.length === 0) return '-';
+    if (days.length === 7) return 'ทุกวัน';
+    if (days.length === 5 && [1,2,3,4,5].every(d => days.includes(d))) return 'จ.-ศ.';
+    return days.sort((a,b) => a-b).map(d => this.dayLabels.find(x => x.v === d)?.label || d).join(',');
+  }
+
+  openCreateSchedule() {
+    this.editingSchedule = null;
+    this.scheduleForm = {
+      name: '',
+      is_enabled: true,
+      days: [1, 2, 3, 4, 5],
+      time_of_day: '02:00',
+      year_bh: this.exportYear,
+      indicator_scope: 'all',
+      indicator_ids: [],
+      notify_email: true,
+      email_recipients: '',
+      notify_telegram: false,
+      telegram_chat_ids: '',
+      telegram_bot_token: ''
+    };
+    this.showScheduleModal = true;
+  }
+
+  openEditSchedule(s: any) {
+    this.editingSchedule = s;
+    this.scheduleForm = {
+      name: s.name,
+      is_enabled: !!s.is_enabled,
+      days: [...(s.days_arr || [])],
+      time_of_day: s.time_of_day || '02:00',
+      year_bh: s.year_bh || '',
+      indicator_scope: s.indicator_ids_arr && s.indicator_ids_arr.length > 0 ? 'selected' : 'all',
+      indicator_ids: [...(s.indicator_ids_arr || [])],
+      notify_email: !!s.notify_email,
+      email_recipients: s.email_recipients || '',
+      notify_telegram: !!s.notify_telegram,
+      telegram_chat_ids: s.telegram_chat_ids || '',
+      telegram_bot_token: s.telegram_bot_token || ''
+    };
+    this.showScheduleModal = true;
+  }
+
+  toggleScheduleDay(d: number) {
+    const idx = this.scheduleForm.days.indexOf(d);
+    if (idx >= 0) this.scheduleForm.days.splice(idx, 1);
+    else this.scheduleForm.days.push(d);
+  }
+
+  isScheduleDay(d: number): boolean {
+    return this.scheduleForm.days.includes(d);
+  }
+
+  saveSchedule() {
+    const f = this.scheduleForm;
+    if (!f.name || !f.name.trim()) { Swal.fire('แจ้งเตือน', 'กรุณาตั้งชื่อ schedule', 'warning'); return; }
+    if (!f.days || f.days.length === 0) { Swal.fire('แจ้งเตือน', 'กรุณาเลือกวันอย่างน้อย 1 วัน', 'warning'); return; }
+    if (!f.time_of_day || !/^\d{2}:\d{2}$/.test(f.time_of_day)) { Swal.fire('แจ้งเตือน', 'กรุณาระบุเวลา (HH:MM)', 'warning'); return; }
+
+    const payload = {
+      name: f.name.trim(),
+      is_enabled: f.is_enabled,
+      days_of_week: f.days.sort((a: number, b: number) => a - b).join(','),
+      time_of_day: f.time_of_day,
+      year_bh: f.year_bh || null,
+      indicator_ids: f.indicator_scope === 'selected' ? (f.indicator_ids || []) : null,
+      notify_email: f.notify_email,
+      email_recipients: f.notify_email ? (f.email_recipients || '') : '',
+      notify_telegram: f.notify_telegram,
+      telegram_chat_ids: f.notify_telegram ? (f.telegram_chat_ids || '') : '',
+      telegram_bot_token: f.notify_telegram ? (f.telegram_bot_token || '') : ''
+    };
+
+    const obs = this.editingSchedule
+      ? this.authService.updateExportSchedule(this.editingSchedule.id, payload)
+      : this.authService.createExportSchedule(payload);
+
+    Swal.fire({ title: 'กำลังบันทึก...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    obs.subscribe({
+      next: () => {
+        Swal.fire({ icon: 'success', title: 'สำเร็จ', timer: 1500, showConfirmButton: false });
+        this.showScheduleModal = false;
+        this.loadSchedules();
+      },
+      error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'บันทึกไม่สำเร็จ', 'error')
+    });
+  }
+
+  deleteSchedule(s: any) {
+    Swal.fire({
+      title: 'ยืนยันการลบ', text: `ลบ schedule "${s.name}"?`, icon: 'warning',
+      showCancelButton: true, confirmButtonColor: '#dc2626', confirmButtonText: 'ลบ', cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (r.isConfirmed) {
+        this.authService.deleteExportSchedule(s.id).subscribe({
+          next: () => { Swal.fire({ icon: 'success', title: 'ลบแล้ว', timer: 1500, showConfirmButton: false }); this.loadSchedules(); },
+          error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ลบไม่สำเร็จ', 'error')
+        });
+      }
+    });
+  }
+
+  runScheduleNow(s: any) {
+    Swal.fire({
+      title: 'รันตอนนี้?', text: `รัน "${s.name}" ทันที และส่งแจ้งเตือนตามการตั้งค่า?`, icon: 'question',
+      showCancelButton: true, confirmButtonColor: '#0d9488', confirmButtonText: 'รัน', cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (r.isConfirmed) {
+        Swal.fire({ title: 'กำลังรัน... (อาจใช้เวลาสักครู่)', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        this.authService.runExportScheduleNow(s.id).subscribe({
+          next: (res: any) => {
+            const r = res.result || {};
+            const sm = r.summary || {};
+            Swal.fire({
+              icon: 'success', title: 'รันสำเร็จ',
+              html: `<div class="text-left text-sm space-y-1">
+                <p><b>เพิ่มใหม่ (Inserted):</b> ${sm.inserted || 0} แถว</p>
+                <p><b>อัปเดต (Updated):</b> ${sm.updated || 0} แถว</p>
+                <p><b>ไม่เปลี่ยน (Unchanged):</b> ${sm.unchanged || 0} แถว</p>
+                <p><b>ไม่มีข้อมูล (No data):</b> ${sm.no_data || 0} แถว</p>
+              </div>`
+            });
+            this.loadSchedules();
+          },
+          error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'รันไม่สำเร็จ', 'error')
+        });
+      }
+    });
+  }
+
+  openLogs(s: any) {
+    this.logsScheduleName = s.name;
+    this.showLogsModal = true;
+    this.logsData = [];
+    this.authService.getExportScheduleLogs(s.id).subscribe({
+      next: (res: any) => { this.logsData = res.data || []; this.cdr.detectChanges(); },
+      error: () => { this.logsData = []; this.cdr.detectChanges(); }
+    });
+  }
+
+  formatDateTime(d: string): string {
+    if (!d) return '-';
+    try { return new Date(d).toLocaleString('th-TH'); } catch { return d; }
+  }
+
+  copySelectedIntoSchedule() {
+    this.scheduleForm.indicator_ids = Array.from(this.selectedIndicatorIds);
   }
 }

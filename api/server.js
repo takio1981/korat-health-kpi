@@ -3604,19 +3604,14 @@ apiRouter.post('/check-kpi-export', authenticateToken, isSuperAdmin, async (req,
 });
 
 // สร้างตาราง MySQL แยกรายตัวชี้วัด พร้อมข้อมูลคะแนนทุก hospcode
-apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { year_bh, indicator_ids } = req.body;
-
-    // Validate year_bh
+// Core function: ใช้ทั้งจาก HTTP endpoint และ scheduler
+async function performKpiExport(year_bh, indicator_ids, userId) {
     if (!year_bh || !/^\d{4}$/.test(year_bh)) {
-        return res.status(400).json({ success: false, message: 'กรุณาระบุปีงบประมาณ (year_bh) เป็นตัวเลข 4 หลัก' });
+        return { success: false, message: 'กรุณาระบุปีงบประมาณ (year_bh) เป็นตัวเลข 4 หลัก' };
     }
-
-    // Validate indicator_ids
     if (!indicator_ids || (indicator_ids !== 'all' && !Array.isArray(indicator_ids))) {
-        return res.status(400).json({ success: false, message: 'กรุณาระบุ indicator_ids เป็น array หรือ "all"' });
+        return { success: false, message: 'กรุณาระบุ indicator_ids เป็น array หรือ "all"' };
     }
-
     const conn = await db.getConnection();
     try {
         // 1. Get indicators with valid table_process
@@ -3876,7 +3871,7 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
         try {
             await db.query(
                 'INSERT INTO system_logs (user_id, action, details, ip_address) VALUES (?, ?, ?, ?)',
-                [req.user.id, 'export_kpi_tables', `Export ${created.length} tables for year ${year_bh}`, req.ip]
+                [userId || null, 'export_kpi_tables', `Export ${created.length} tables for year ${year_bh}`, 'scheduler']
             );
         } catch (_) {}
 
@@ -3885,17 +3880,216 @@ apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req
         const totalUnchanged = created.reduce((s, t) => s + t.unchanged, 0);
         const totalNoData = created.reduce((s, t) => s + (t.no_data || 0), 0);
 
-        res.json({
+        return {
             success: true,
             message: `สร้าง/อัปเดตตารางสำเร็จ ${created.length} ตาราง`,
             created_tables: created,
             skipped,
             summary: { inserted: totalInserted, updated: totalUpdated, unchanged: totalUnchanged, no_data: totalNoData }
-        });
+        };
     } catch (err) {
-        conn.release();
-        res.status(500).json({ success: false, message: err.message });
+        try { conn.release(); } catch(_) {}
+        return { success: false, message: err.message };
     }
+}
+
+// HTTP endpoint เรียก core function
+apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req, res) => {
+    const result = await performKpiExport(req.body.year_bh, req.body.indicator_ids, req.user.id);
+    if (!result.success) return res.status(result.message?.includes('กรุณา') ? 400 : 500).json(result);
+    res.json(result);
+});
+
+// ========== Export Scheduler (run automatically) ==========
+
+// ส่ง notification (email + telegram) หลัง export เสร็จ
+async function sendExportNotification(schedule, result, durationMs) {
+    const summary = result.summary || { inserted: 0, updated: 0, unchanged: 0, no_data: 0 };
+    const tablesCount = (result.created_tables || []).length;
+    const subject = `[Korat Health KPI] รายงาน Export อัตโนมัติ — ${schedule.name}`;
+
+    const tablesHtml = (result.created_tables || []).slice(0, 30).map(t =>
+        `<tr><td style="padding:4px 8px;border-bottom:1px solid #eee">${t.table}</td>
+         <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center">+${t.inserted}</td>
+         <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center">~${t.updated}</td>
+         <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center">=${t.unchanged}</td></tr>`
+    ).join('');
+
+    const html = `
+    <div style="font-family:'Sarabun',Arial,sans-serif;max-width:700px;margin:0 auto">
+      <div style="background:linear-gradient(135deg,#065f46,#16a34a);color:white;padding:20px;border-radius:12px 12px 0 0">
+        <h2 style="margin:0">📊 รายงาน Export KPI อัตโนมัติ</h2>
+        <p style="margin:4px 0 0;opacity:.85;font-size:13px">${schedule.name} — ${new Date().toLocaleString('th-TH')}</p>
+      </div>
+      <div style="background:white;padding:20px;border:1px solid #e5e7eb;border-top:0;border-radius:0 0 12px 12px">
+        <p style="margin:0 0 12px"><b>สถานะ:</b> ${result.success ? '<span style="color:#16a34a">✓ สำเร็จ</span>' : '<span style="color:#dc2626">✗ ผิดพลาด</span>'}</p>
+        <p style="margin:0 0 12px"><b>ใช้เวลา:</b> ${(durationMs/1000).toFixed(1)} วินาที</p>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0">
+          <div style="background:#dbeafe;padding:12px;border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:bold;color:#1e40af">${summary.inserted}</div><div style="font-size:11px;color:#1e40af">เพิ่มใหม่</div></div>
+          <div style="background:#fed7aa;padding:12px;border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:bold;color:#c2410c">${summary.updated}</div><div style="font-size:11px;color:#c2410c">อัปเดต</div></div>
+          <div style="background:#f3f4f6;padding:12px;border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:bold;color:#4b5563">${summary.unchanged}</div><div style="font-size:11px;color:#4b5563">ไม่เปลี่ยน</div></div>
+          <div style="background:#fef3c7;padding:12px;border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:bold;color:#a16207">${tablesCount}</div><div style="font-size:11px;color:#a16207">ตาราง</div></div>
+        </div>
+        ${tablesHtml ? `<h3 style="margin:16px 0 8px;color:#374151;font-size:14px">ตารางที่ประมวลผล (${tablesCount}):</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:#f9fafb">
+          <th style="padding:6px 8px;text-align:left">ตาราง</th>
+          <th style="padding:6px 8px;text-align:center">เพิ่ม</th>
+          <th style="padding:6px 8px;text-align:center">อัปเดต</th>
+          <th style="padding:6px 8px;text-align:center">เดิม</th>
+        </tr></thead><tbody>${tablesHtml}</tbody></table>` : ''}
+        <div style="background:#fef9c3;border-left:4px solid #eab308;padding:12px;margin-top:16px;border-radius:4px">
+          <p style="margin:0;color:#713f12;font-size:13px">⚠️ <b>กรุณาตรวจสอบผลก่อนส่งไปยัง HDC</b> โดยเข้าระบบที่ <a href="https://apikorat.moph.go.th/khupskpi/">Korat Health KPI</a> → จัดการข้อมูล KPI → Tab "Export ข้อมูล"</p>
+        </div>
+      </div>
+    </div>`;
+
+    let sentEmail = false, sentTelegram = false;
+    if (Number(schedule.notify_email) === 1 && schedule.email_recipients) {
+        const recipients = schedule.email_recipients.split(',').map(e => e.trim()).filter(Boolean);
+        for (const email of recipients) {
+            try { await sendMail(email, subject, html); sentEmail = true; } catch (e) {}
+        }
+    }
+    if (Number(schedule.notify_telegram) === 1 && schedule.telegram_chat_ids) {
+        const chatIds = schedule.telegram_chat_ids.split(',').map(c => c.trim()).filter(Boolean);
+        const botToken = schedule.telegram_bot_token || process.env.TELEGRAM_BOT_TOKEN;
+        if (botToken) {
+            const tgMsg = `📊 *รายงาน Export KPI — ${schedule.name}*\n\n` +
+                `สถานะ: ${result.success ? '✅ สำเร็จ' : '❌ ผิดพลาด'}\n` +
+                `⏱ เวลา: ${(durationMs/1000).toFixed(1)} วินาที\n\n` +
+                `📋 สรุปผล:\n` +
+                `• เพิ่มใหม่: *${summary.inserted}*\n` +
+                `• อัปเดต: *${summary.updated}*\n` +
+                `• ไม่เปลี่ยน: *${summary.unchanged}*\n` +
+                `• ตารางทั้งหมด: *${tablesCount}*\n\n` +
+                `⚠️ กรุณาตรวจสอบก่อนส่ง HDC`;
+            for (const chatId of chatIds) {
+                try { await sendTelegramDirect(botToken, chatId, tgMsg); sentTelegram = true; } catch (e) {}
+            }
+        }
+    }
+    return { sentEmail, sentTelegram };
+}
+
+// รันตาม schedule
+async function runScheduledExport(schedule) {
+    const startTime = Date.now();
+    let result, status = 'success', errorMsg = null;
+    try {
+        const indicator_ids = schedule.indicator_ids
+            ? JSON.parse(schedule.indicator_ids)
+            : 'all';
+        result = await performKpiExport(schedule.year_bh || String(new Date().getFullYear() + 543), indicator_ids, schedule.created_by);
+        if (!result.success) { status = 'failed'; errorMsg = result.message; }
+    } catch (e) {
+        result = { success: false, message: e.message };
+        status = 'failed'; errorMsg = e.message;
+    }
+    const duration = Date.now() - startTime;
+
+    // ส่ง notification
+    let notif = { sentEmail: false, sentTelegram: false };
+    try { notif = await sendExportNotification(schedule, result, duration); } catch (_) {}
+
+    // อัปเดต last_run + log
+    await db.query('UPDATE export_schedules SET last_run_at=NOW(), last_status=? WHERE id=?', [status, schedule.id]);
+    const summary = result.summary || { inserted: 0, updated: 0, unchanged: 0, no_data: 0 };
+    await db.query(
+        `INSERT INTO export_schedule_logs (schedule_id, status, inserted, updated_count, unchanged, no_data, tables_count, skipped_count, duration_ms, notified_email, notified_telegram, error_msg)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [schedule.id, status, summary.inserted, summary.updated, summary.unchanged, summary.no_data,
+         (result.created_tables || []).length, (result.skipped || []).length, duration,
+         notif.sentEmail ? 1 : 0, notif.sentTelegram ? 1 : 0, errorMsg]
+    );
+    return result;
+}
+
+// Scheduler loop: ตรวจทุก 60 วินาที
+function startExportScheduler() {
+    const check = async () => {
+        try {
+            const now = new Date();
+            const hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+            const dow = now.getDay() === 0 ? 7 : now.getDay(); // 1=จ., 7=อา.
+            // ดึง schedules ที่ตรงเวลาและยังไม่ได้รันในนาทีนี้
+            const [schedules] = await db.query(
+                `SELECT * FROM export_schedules WHERE is_enabled=1 AND time_of_day=?
+                 AND (last_run_at IS NULL OR TIMESTAMPDIFF(SECOND, last_run_at, NOW()) > 90)`,
+                [hhmm]
+            );
+            for (const s of schedules) {
+                const days = (s.days_of_week || '').split(',').map(d => parseInt(d.trim()));
+                if (days.includes(dow)) {
+                    console.log(`[Scheduler] Running export: ${s.name} (${hhmm})`);
+                    runScheduledExport(s).catch(e => console.error('[Scheduler] Error:', e.message));
+                }
+            }
+        } catch (e) { /* ignore */ }
+    };
+    setInterval(check, 60000); // ทุก 1 นาที
+    console.log('[Scheduler] Export scheduler started');
+}
+
+// ========== Export Schedules CRUD ==========
+apiRouter.get('/export-schedules', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query(`SELECT s.*, u.firstname, u.lastname FROM export_schedules s LEFT JOIN users u ON s.created_by = u.id ORDER BY s.id DESC`);
+        res.json({ success: true, data: rows });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.post('/export-schedules', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const { name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, notify_email, email_recipients, notify_telegram, telegram_chat_ids, telegram_bot_token } = req.body;
+        if (!name || !days_of_week || !time_of_day) return res.status(400).json({ success: false, message: 'ข้อมูลไม่ครบ' });
+        const [r] = await db.query(
+            `INSERT INTO export_schedules (name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, notify_email, email_recipients, notify_telegram, telegram_chat_ids, telegram_bot_token, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [name, is_enabled ? 1 : 0, days_of_week, time_of_day, year_bh || null,
+             Array.isArray(indicator_ids) ? JSON.stringify(indicator_ids) : null,
+             notify_email ? 1 : 0, email_recipients || null, notify_telegram ? 1 : 0, telegram_chat_ids || null, telegram_bot_token || null, req.user.id]
+        );
+        res.json({ success: true, id: r.insertId, message: 'สร้าง schedule สำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.put('/export-schedules/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const { name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, notify_email, email_recipients, notify_telegram, telegram_chat_ids, telegram_bot_token } = req.body;
+        await db.query(
+            `UPDATE export_schedules SET name=?, is_enabled=?, days_of_week=?, time_of_day=?, year_bh=?, indicator_ids=?, notify_email=?, email_recipients=?, notify_telegram=?, telegram_chat_ids=?, telegram_bot_token=? WHERE id=?`,
+            [name, is_enabled ? 1 : 0, days_of_week, time_of_day, year_bh || null,
+             Array.isArray(indicator_ids) ? JSON.stringify(indicator_ids) : null,
+             notify_email ? 1 : 0, email_recipients || null, notify_telegram ? 1 : 0, telegram_chat_ids || null, telegram_bot_token || null, req.params.id]
+        );
+        res.json({ success: true, message: 'แก้ไข schedule สำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.delete('/export-schedules/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        await db.query('DELETE FROM export_schedules WHERE id=?', [req.params.id]);
+        res.json({ success: true, message: 'ลบสำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.post('/export-schedules/:id/run-now', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM export_schedules WHERE id=?', [req.params.id]);
+        if (rows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบ schedule' });
+        const result = await runScheduledExport(rows[0]);
+        res.json({ success: true, message: 'รัน schedule สำเร็จ', result });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.get('/export-schedules/:id/logs', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            'SELECT * FROM export_schedule_logs WHERE schedule_id=? ORDER BY run_at DESC LIMIT 50',
+            [req.params.id]
+        );
+        res.json({ success: true, data: rows });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
 // POST /sync-to-hdc/preview — ตรวจสอบข้อมูลก่อนส่ง HDC
@@ -4833,6 +5027,54 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         // เพิ่มฟิลด์ใน departments
         try { await db.query(`ALTER TABLE departments ADD COLUMN IF NOT EXISTS description TEXT NULL`); } catch(e) {}
         try { await db.query(`ALTER TABLE departments ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0`); } catch(e) {}
+
+        // ตาราง export_schedules + logs — จัดตารางเวลา export อัตโนมัติ
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS export_schedules (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    is_enabled TINYINT(1) DEFAULT 1,
+                    days_of_week VARCHAR(20) DEFAULT '1,2,3,4,5',
+                    time_of_day VARCHAR(5) DEFAULT '02:00',
+                    year_bh VARCHAR(10),
+                    indicator_ids TEXT,
+                    notify_email TINYINT(1) DEFAULT 1,
+                    email_recipients TEXT,
+                    notify_telegram TINYINT(1) DEFAULT 0,
+                    telegram_chat_ids TEXT,
+                    telegram_bot_token VARCHAR(255),
+                    last_run_at DATETIME,
+                    last_status VARCHAR(20),
+                    next_run_at DATETIME,
+                    created_by INT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+        } catch (e) {}
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS export_schedule_logs (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    schedule_id INT NOT NULL,
+                    run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    status VARCHAR(20),
+                    inserted INT DEFAULT 0,
+                    updated_count INT DEFAULT 0,
+                    unchanged INT DEFAULT 0,
+                    no_data INT DEFAULT 0,
+                    tables_count INT DEFAULT 0,
+                    skipped_count INT DEFAULT 0,
+                    duration_ms INT DEFAULT 0,
+                    notified_email TINYINT(1) DEFAULT 0,
+                    notified_telegram TINYINT(1) DEFAULT 0,
+                    error_msg TEXT,
+                    INDEX idx_schedule (schedule_id),
+                    INDEX idx_run_at (run_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+        } catch (e) {}
 
         // ตาราง system_announcements — ประกาศระบบ
         try {
@@ -6090,4 +6332,7 @@ apiRouter.post('/clear-kpi-data', authenticateToken, isSuperAdmin, async (req, r
 // Mount Router ที่ path /khupskpi/api
 app.use('/khupskpi/api', apiRouter);
 
-app.listen(port, () => console.log(`🚀 API Server เปิดทำงานแล้วที่พอร์ต ${port} (Path: /khupskpi/api)`));
+app.listen(port, () => {
+    console.log(`🚀 API Server เปิดทำงานแล้วที่พอร์ต ${port} (Path: /khupskpi/api)`);
+    try { startExportScheduler(); } catch (e) { console.error('[Scheduler] start failed:', e.message); }
+});

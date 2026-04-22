@@ -750,6 +750,38 @@ export class AuthService {
     return this.http.post(`${this.apiUrl}/export-kpi-tables`, { year_bh: yearBh, indicator_ids: indicatorIds }, { headers });
   }
 
+  // === Export Schedules (ตารางเวลา export อัตโนมัติ) ===
+  getExportSchedules(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/export-schedules`, { headers });
+  }
+  createExportSchedule(data: any): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/export-schedules`, data, { headers });
+  }
+  updateExportSchedule(id: number, data: any): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/export-schedules/${id}`, data, { headers });
+  }
+  deleteExportSchedule(id: number): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.delete(`${this.apiUrl}/export-schedules/${id}`, { headers });
+  }
+  runExportScheduleNow(id: number): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/export-schedules/${id}/run-now`, {}, { headers });
+  }
+  getExportScheduleLogs(id: number): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/export-schedules/${id}/logs`, { headers });
+  }
+
   syncToHdcPreview(): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
