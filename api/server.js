@@ -719,7 +719,15 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         addMultiFilter('dist.distname', req.query.district);
         if (req.query.indicator) { extraConditions.push('i.kpi_indicators_name = ?'); params.push(req.query.indicator); }
         if (req.query.main) { extraConditions.push('mi.main_indicator_name = ?'); params.push(req.query.main); }
-        addMultiFilter('h.hostype', req.query.hostype);
+        // Hostype filter ใช้ subquery กัน LEFT JOIN chospital fail (data mismatch)
+        if (req.query.hostype) {
+            const list = String(req.query.hostype).split(',').map(v => v.trim()).filter(Boolean);
+            if (list.length > 0) {
+                const ph = list.map(() => '?').join(',');
+                extraConditions.push(`r.hospcode IN (SELECT hoscode FROM chospital WHERE hostype IN (${ph}))`);
+                params.push(...list);
+            }
+        }
         let extraWhere = '';
         if (extraConditions.length > 0) {
             extraWhere = (whereClause ? ' AND ' : 'WHERE ') + extraConditions.join(' AND ');

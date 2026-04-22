@@ -315,11 +315,18 @@ export class DashboardComponent implements OnInit {
 
     // Expand hostype → hoscodes (fix: backend LEFT JOIN ไม่เชื่อถือได้ ถ้า chospital กับ kpi_results ไม่ match)
     // รวมกับ hospcodes ที่เลือกโดยตรง — ถ้าเลือกทั้งสอง intersect
+    // Normalize: ใช้ String() + trim + padStart(2,'0') เทียบกันเพื่อกัน data format ต่างกัน
+    const normHT = (v: any) => {
+      const s = String(v ?? '').trim();
+      return /^\d{1,2}$/.test(s) ? s.padStart(2, '0') : s;
+    };
+    const selectedHTSet = new Set(this.selectedHosTypes.map(normHT));
     const hostypeCodes = this.selectedHosTypes.length > 0
-      ? this._allHospitals.filter((h: any) => this.selectedHosTypes.includes(h.hostype)).map((h: any) => h.hoscode)
+      ? this._allHospitals.filter((h: any) => selectedHTSet.has(normHT(h.hostype))).map((h: any) => String(h.hoscode).trim())
       : null;
     const selectedHospCodes = this.selectedHospitals.length > 0
-      ? this.selectedHospitals.map(n => this._allHospitals.find((h: any) => h.hosname === n)?.hoscode).filter(Boolean)
+      ? this.selectedHospitals.map(n => this._allHospitals.find((h: any) => h.hosname === n)?.hoscode)
+          .filter(Boolean).map((c: any) => String(c).trim())
       : null;
 
     let finalHospCodes: string[] | null = null;
