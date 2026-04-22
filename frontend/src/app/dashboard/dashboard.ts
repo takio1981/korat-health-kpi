@@ -23,15 +23,59 @@ export class DashboardComponent implements OnInit {
   kpiData: any[] = [];
   filteredData: any[] = [];
   searchTerm: string = '';
+  // main/indicator เป็น string (ค่าเดียว) — ยังคงเดิม
   selectedMain: string = '';
   selectedIndicator: string = '';
-  selectedDept: string = '';
   selectedYear: string = '';
-  selectedStatus: string = '';
-  selectedHospital: string = '';
-  selectedDistrict: string = '';
-  selectedType: string = '';
-  selectedHosType: string = '';
+  // ตัวกรอง multi-select (array)
+  selectedDepts: string[] = [];
+  selectedStatuses: string[] = [];
+  selectedHospitals: string[] = [];
+  selectedDistricts: string[] = [];
+  selectedTypes: string[] = [];
+  selectedHosTypes: string[] = [];
+  // Backward-compat getters (ใช้ในส่วนอื่นของโค้ดที่ยังไม่ได้แก้)
+  get selectedDept(): string { return this.selectedDepts[0] || ''; }
+  set selectedDept(v: string) { this.selectedDepts = v ? [v] : []; }
+  get selectedStatus(): string { return this.selectedStatuses[0] || ''; }
+  set selectedStatus(v: string) { this.selectedStatuses = v ? [v] : []; }
+  get selectedHospital(): string { return this.selectedHospitals[0] || ''; }
+  set selectedHospital(v: string) { this.selectedHospitals = v ? [v] : []; }
+  get selectedDistrict(): string { return this.selectedDistricts[0] || ''; }
+  set selectedDistrict(v: string) { this.selectedDistricts = v ? [v] : []; }
+  get selectedType(): string { return this.selectedTypes[0] || ''; }
+  set selectedType(v: string) { this.selectedTypes = v ? [v] : []; }
+  get selectedHosType(): string { return this.selectedHosTypes[0] || ''; }
+  set selectedHosType(v: string) { this.selectedHosTypes = v ? [v] : []; }
+  // UI: dropdown ไหนกำลังเปิด
+  openFilterDropdown: string = '';
+
+  // === Multi-select helpers ===
+  toggleFilterItem(arr: string[], value: string): string[] {
+    const idx = arr.indexOf(value);
+    if (idx >= 0) arr.splice(idx, 1);
+    else arr.push(value);
+    return arr;
+  }
+
+  isFilterSelected(arr: string[], value: string): boolean {
+    return arr.includes(value);
+  }
+
+  // แสดงชื่อที่เลือก — 1 ตัว="ชื่อ", >1 ตัว="N รายการ", ว่าง="ทั้งหมด"
+  filterLabel(arr: string[], placeholder: string = 'ทั้งหมด'): string {
+    if (arr.length === 0) return placeholder;
+    if (arr.length === 1) return arr[0];
+    return `เลือก ${arr.length} รายการ`;
+  }
+
+  toggleDropdown(name: string) {
+    this.openFilterDropdown = this.openFilterDropdown === name ? '' : name;
+  }
+
+  clearFilterArr(arr: string[]) {
+    arr.splice(0, arr.length);
+  }
 
   showFilters: boolean = true;
   mainCategories: string[] = [];
@@ -239,17 +283,20 @@ export class DashboardComponent implements OnInit {
   loadKpiData() {
     this.isLoading = true;
     if (!this.selectedYear) this.setDefaultYear();
-    // ส่ง filter ไปกรองที่ backend — ลดข้อมูลมหาศาล
+    // ส่ง filter ไปกรองที่ backend — multi-select ใช้ comma-separated
     const filters: any = { year: this.selectedYear };
-    if (this.selectedHospital) {
-      const hos = this.kpiData?.find((d: any) => d.hosname === this.selectedHospital);
-      if (hos?.hospcode) filters.hospcode = hos.hospcode;
+    if (this.selectedHospitals.length > 0) {
+      // map hosname → hospcode
+      const codes = this.selectedHospitals
+        .map(n => this._allHospitals.find((h: any) => h.hosname === n)?.hoscode)
+        .filter(Boolean);
+      if (codes.length > 0) filters.hospcode = codes.join(',');
     }
-    if (this.selectedDept) filters.dept = this.selectedDept;
-    if (this.selectedDistrict) filters.district = this.selectedDistrict;
+    if (this.selectedDepts.length > 0) filters.dept = this.selectedDepts.join(',');
+    if (this.selectedDistricts.length > 0) filters.district = this.selectedDistricts.join(',');
     if (this.selectedIndicator) filters.indicator = this.selectedIndicator;
     if (this.selectedMain) filters.main = this.selectedMain;
-    if (this.selectedHosType) filters.hostype = this.selectedHosType;
+    if (this.selectedHosTypes.length > 0) filters.hostype = this.selectedHosTypes.join(',');
     this.authService.getKpiResults(filters).subscribe({
       next: (res) => {
         this.isLoading = false;
@@ -464,28 +511,32 @@ export class DashboardComponent implements OnInit {
 
   // === Cascading filter logic (bidirectional: district ↔ hostype ↔ hospital) ===
 
-  // กรองรายชื่อหน่วยบริการตาม district + hostype
+  // กรองรายชื่อหน่วยบริการตาม districts[] + hosTypes[] (multi)
   private rebuildHospitalList() {
     let filtered = this._allHospitals;
-    if (this.selectedDistrict) {
-      const dist = this._allDistricts.find((d: any) => d.distname === this.selectedDistrict);
-      if (dist) filtered = filtered.filter((h: any) => h.distid === dist.distid);
+    if (this.selectedDistricts.length > 0) {
+      const distIds = this._allDistricts
+        .filter((d: any) => this.selectedDistricts.includes(d.distname))
+        .map((d: any) => d.distid);
+      filtered = filtered.filter((h: any) => distIds.includes(h.distid));
     }
-    if (this.selectedHosType) {
-      filtered = filtered.filter((h: any) => h.hostype === this.selectedHosType);
+    if (this.selectedHosTypes.length > 0) {
+      filtered = filtered.filter((h: any) => this.selectedHosTypes.includes(h.hostype));
     }
     this.hospitalNames = filtered.map((h: any) => h.hosname).filter(Boolean).sort();
-    if (this.selectedHospital && !this.hospitalNames.includes(this.selectedHospital)) this.selectedHospital = '';
+    // ลบรายการที่เลือกไว้แต่ไม่อยู่ในรายการใหม่
+    this.selectedHospitals = this.selectedHospitals.filter(n => this.hospitalNames.includes(n));
   }
 
-  // กรองประเภท รพ. ตาม district + นับจำนวนหน่วยบริการตามเงื่อนไข
+  // กรองประเภท รพ. ตาม districts[] — นับจำนวนหน่วยบริการ
   private rebuildHosTypeList() {
     let hospitals = this._allHospitals;
-    if (this.selectedDistrict) {
-      const dist = this._allDistricts.find((d: any) => d.distname === this.selectedDistrict);
-      if (dist) hospitals = hospitals.filter((h: any) => h.distid === dist.distid);
+    if (this.selectedDistricts.length > 0) {
+      const distIds = this._allDistricts
+        .filter((d: any) => this.selectedDistricts.includes(d.distname))
+        .map((d: any) => d.distid);
+      hospitals = hospitals.filter((h: any) => distIds.includes(h.distid));
     }
-    // นับ hospital_count ต่อ hostype จาก hospitals ที่กรองแล้ว
     const countMap = new Map<string, number>();
     for (const h of hospitals) {
       if (h.hostype) countMap.set(h.hostype, (countMap.get(h.hostype) || 0) + 1);
@@ -493,15 +544,19 @@ export class DashboardComponent implements OnInit {
     this.hosTypeList = this._allHosTypes
       .filter((ht: any) => countMap.has(ht.hostypecode))
       .map((ht: any) => ({ ...ht, hospital_count: countMap.get(ht.hostypecode) || 0 }));
-    if (this.selectedHosType && !this.hosTypeList.some((ht: any) => ht.hostypecode === this.selectedHosType)) this.selectedHosType = '';
+    this.selectedHosTypes = this.selectedHosTypes.filter(c => this.hosTypeList.some((ht: any) => ht.hostypecode === c));
   }
 
-  // กรองอำเภอตาม hostype (แสดงเฉพาะอำเภอที่มี hostype นั้น)
+  // กรองอำเภอตาม hosTypes[] — แสดงเฉพาะอำเภอที่มี hostype นั้น
   private rebuildDistrictList() {
-    if (this.selectedHosType) {
-      const distsWithType = new Set(this._allHospitals.filter((h: any) => h.hostype === this.selectedHosType).map((h: any) => h.distid));
-      this.districtNames = this._allDistricts.filter((d: any) => distsWithType.has(d.distid)).map((d: any) => d.distname).filter(Boolean).sort();
-      if (this.selectedDistrict && !this.districtNames.includes(this.selectedDistrict)) this.selectedDistrict = '';
+    if (this.selectedHosTypes.length > 0) {
+      const distsWithType = new Set(
+        this._allHospitals.filter((h: any) => this.selectedHosTypes.includes(h.hostype)).map((h: any) => h.distid)
+      );
+      this.districtNames = this._allDistricts
+        .filter((d: any) => distsWithType.has(d.distid))
+        .map((d: any) => d.distname).filter(Boolean).sort();
+      this.selectedDistricts = this.selectedDistricts.filter(n => this.districtNames.includes(n));
     } else {
       this.districtNames = this._allDistricts.map((d: any) => d.distname).filter(Boolean).sort();
     }
@@ -555,10 +610,10 @@ export class DashboardComponent implements OnInit {
     // admin_ssj / user_ssj มี dept ล็อคอัตโนมัติ → ไม่นับเป็นตัวกรองที่ผู้ใช้เลือกเอง
     const role = this.authService.getUserRole();
     const isLockedDept = ['admin_ssj', 'user_ssj'].includes(role);
-    const hasFilter = this.selectedDistrict || this.selectedHospital
-      || (!isLockedDept && this.selectedDept)
-      || this.selectedHosType || this.selectedMain || this.selectedIndicator
-      || this.selectedType || this.selectedStatus;
+    const hasFilter = this.selectedDistricts.length > 0 || this.selectedHospitals.length > 0
+      || (!isLockedDept && this.selectedDepts.length > 0)
+      || this.selectedHosTypes.length > 0 || this.selectedMain || this.selectedIndicator
+      || this.selectedTypes.length > 0 || this.selectedStatuses.length > 0;
 
     if (!hasFilter) {
       Swal.fire({
@@ -685,17 +740,17 @@ export class DashboardComponent implements OnInit {
     this.selectedMain = '';
     this.selectedIndicator = '';
     this.setDefaultYear();
-    this.selectedStatus = '';
-    this.selectedHospital = '';
-    this.selectedDistrict = '';
-    this.selectedType = '';
-    this.selectedHosType = '';
+    this.selectedStatuses = [];
+    this.selectedHospitals = [];
+    this.selectedDistricts = [];
+    this.selectedTypes = [];
+    this.selectedHosTypes = [];
     // admin_ssj / user_ssj → ล็อค dept ไว้
     const role = this.authService.getUserRole();
     if (['admin_ssj', 'user_ssj'].includes(role) && this.currentUser?.dept_name) {
-      this.selectedDept = this.currentUser.dept_name;
+      this.selectedDepts = [this.currentUser.dept_name];
     } else {
-      this.selectedDept = '';
+      this.selectedDepts = [];
     }
     // reset cascade lists กลับเป็นทั้งหมด
     this.districtNames = this._allDistricts.map((d: any) => d.distname).filter(Boolean).sort();
@@ -727,27 +782,28 @@ export class DashboardComponent implements OnInit {
                         distname.toLowerCase().includes(search);
       const matchMain = this.selectedMain === '' || item.main_indicator_name === this.selectedMain;
       const matchIndicator = this.selectedIndicator === '' || item.kpi_indicators_name === this.selectedIndicator;
-      const matchdept = this.selectedDept === '' || item.dept_name === this.selectedDept;
+      const matchdept = this.selectedDepts.length === 0 || this.selectedDepts.includes(item.dept_name);
       const matchYear = this.selectedYear === '' || item.year_bh === this.selectedYear;
-      const matchHospital = this.selectedHospital === '' || item.hosname === this.selectedHospital;
-      const matchDistrict = this.selectedDistrict === '' || item.distname === this.selectedDistrict;
+      const matchHospital = this.selectedHospitals.length === 0 || this.selectedHospitals.includes(item.hosname);
+      const matchDistrict = this.selectedDistricts.length === 0 || this.selectedDistricts.includes(item.distname);
+      const matchHosType = this.selectedHosTypes.length === 0 || this.selectedHosTypes.includes(item.hostype);
       const tv = String(item.target_value ?? '').trim();
       const la = String(item.last_actual ?? '').trim();
       const hasTarget = tv !== '' && tv !== '0';
       const hasActual = la !== '' && la !== '0';
-      const matchStatus = this.selectedStatus === '' ||
-                          (this.selectedStatus === 'pass' && hasTarget && this.isTargetMet(item)) ||
-                          (this.selectedStatus === 'fail' && hasTarget && !this.isTargetMet(item)) ||
-                          (this.selectedStatus === 'pending' && item.pending_count > 0) ||
-                          (this.selectedStatus === 'no_target' && !hasTarget) ||
-                          (this.selectedStatus === 'no_actual' && hasTarget && !hasActual);
-      const matchType = this.selectedType === '' ||
-                        (this.selectedType === 'r9' && item.r9 === 1) ||
-                        (this.selectedType === 'moph' && item.moph === 1) ||
-                        (this.selectedType === 'ssj' && item.ssj === 1) ||
-                        (this.selectedType === 'rmw' && item.rmw === 1) ||
-                        (this.selectedType === 'other' && item.other === 1);
-      return matchSearch && matchMain && matchIndicator && matchdept && matchYear && matchStatus && matchHospital && matchDistrict && matchType;
+      const statusMatches = (s: string) =>
+        (s === 'pass' && hasTarget && this.isTargetMet(item)) ||
+        (s === 'fail' && hasTarget && !this.isTargetMet(item)) ||
+        (s === 'pending' && item.pending_count > 0) ||
+        (s === 'no_target' && !hasTarget) ||
+        (s === 'no_actual' && hasTarget && !hasActual);
+      const matchStatus = this.selectedStatuses.length === 0 || this.selectedStatuses.some(statusMatches);
+      const typeMatches = (t: string) =>
+        (t === 'r9' && item.r9 === 1) || (t === 'moph' && item.moph === 1) ||
+        (t === 'ssj' && item.ssj === 1) || (t === 'rmw' && item.rmw === 1) ||
+        (t === 'other' && item.other === 1);
+      const matchType = this.selectedTypes.length === 0 || this.selectedTypes.some(typeMatches);
+      return matchSearch && matchMain && matchIndicator && matchdept && matchYear && matchStatus && matchHospital && matchDistrict && matchHosType && matchType;
     });
     this.filteredData.sort((a, b) => {
       if (b.year_bh !== a.year_bh) return b.year_bh.localeCompare(a.year_bh);

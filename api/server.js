@@ -704,14 +704,22 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         }
 
         // === กรอง year + ตัวกรองเพิ่มเติมจาก query params ===
+        // รองรับ comma-separated (multi) ใช้ IN (...)
         const extraConditions = [];
+        const addMultiFilter = (column, value) => {
+            if (!value) return;
+            const list = String(value).split(',').map(v => v.trim()).filter(Boolean);
+            if (list.length === 0) return;
+            if (list.length === 1) { extraConditions.push(`${column} = ?`); params.push(list[0]); }
+            else { extraConditions.push(`${column} IN (${list.map(() => '?').join(',')})`); params.push(...list); }
+        };
         if (req.query.year) { extraConditions.push('r.year_bh = ?'); params.push(req.query.year); }
-        if (req.query.hospcode) { extraConditions.push('r.hospcode = ?'); params.push(req.query.hospcode); }
-        if (req.query.dept) { extraConditions.push('d.dept_name = ?'); params.push(req.query.dept); }
-        if (req.query.district) { extraConditions.push('dist.distname = ?'); params.push(req.query.district); }
+        addMultiFilter('r.hospcode', req.query.hospcode);
+        addMultiFilter('d.dept_name', req.query.dept);
+        addMultiFilter('dist.distname', req.query.district);
         if (req.query.indicator) { extraConditions.push('i.kpi_indicators_name = ?'); params.push(req.query.indicator); }
         if (req.query.main) { extraConditions.push('mi.main_indicator_name = ?'); params.push(req.query.main); }
-        if (req.query.hostype) { extraConditions.push('h.hostype = ?'); params.push(req.query.hostype); }
+        addMultiFilter('h.hostype', req.query.hostype);
         let extraWhere = '';
         if (extraConditions.length > 0) {
             extraWhere = (whereClause ? ' AND ' : 'WHERE ') + extraConditions.join(' AND ');
