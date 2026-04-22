@@ -719,15 +719,8 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         addMultiFilter('dist.distname', req.query.district);
         if (req.query.indicator) { extraConditions.push('i.kpi_indicators_name = ?'); params.push(req.query.indicator); }
         if (req.query.main) { extraConditions.push('mi.main_indicator_name = ?'); params.push(req.query.main); }
-        // Hostype filter ใช้ subquery กัน LEFT JOIN chospital fail (data mismatch)
-        if (req.query.hostype) {
-            const list = String(req.query.hostype).split(',').map(v => v.trim()).filter(Boolean);
-            if (list.length > 0) {
-                const ph = list.map(() => '?').join(',');
-                extraConditions.push(`r.hospcode IN (SELECT hoscode FROM chospital WHERE hostype IN (${ph}))`);
-                params.push(...list);
-            }
-        }
+        // Hostype filter: filter h.hostype โดยตรง (LEFT JOIN chospital จาก main query)
+        addMultiFilter('h.hostype', req.query.hostype);
         console.log('[kpi-results] filters:', JSON.stringify(req.query));
         let extraWhere = '';
         if (extraConditions.length > 0) {
@@ -765,15 +758,18 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 i.r9, i.moph, i.ssj, i.rmw, i.other,
                 r.hospcode,
                 h.hosname,
+                h.hostype,
+                ht.hostypename,
                 dist.distname
             FROM kpi_results r
             JOIN kpi_indicators i ON r.indicator_id = i.id
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
             LEFT JOIN departments d ON d.id = i.dept_id
             LEFT JOIN chospital h ON r.hospcode = h.hoscode
+            LEFT JOIN chostype ht ON h.hostype = ht.hostypecode
             LEFT JOIN co_district dist ON dist.distid = h.distid
             ${whereClause}${extraWhere}
-            GROUP BY i.id, r.year_bh, r.hospcode, mi.main_indicator_name, i.kpi_indicators_name, i.table_process, i.r9, i.moph, i.ssj, i.rmw, i.other, d.dept_name, h.hosname, dist.distname
+            GROUP BY i.id, r.year_bh, r.hospcode, mi.main_indicator_name, i.kpi_indicators_name, i.table_process, i.r9, i.moph, i.ssj, i.rmw, i.other, d.dept_name, h.hosname, h.hostype, ht.hostypename, dist.distname
             ORDER BY r.year_bh DESC, mi.main_indicator_name, i.kpi_indicators_name, r.hospcode
             LIMIT 500
         `;

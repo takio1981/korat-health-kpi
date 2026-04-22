@@ -493,7 +493,11 @@
                     </div>
                     <p class="text-xs text-gray-600 mb-1">{{ item.main_indicator_name }}</p>
                     <p class="text-xs text-gray-500">{{ item.dept_name }} | {{ item.year_bh }}</p>
-                    <p *ngIf="item.hosname" class="text-xs text-blue-500">{{ item.hosname }} <span *ngIf="item.distname" class="text-gray-400">| {{ item.distname }}</span></p>
+                    <p *ngIf="item.hosname" class="text-xs text-blue-500">
+                      {{ item.hosname }}
+                      <span *ngIf="item.hostypename" class="ml-1 px-1.5 py-0.5 bg-cyan-50 text-cyan-700 rounded-full text-[9px] font-semibold">{{ item.hostypename }}</span>
+                      <span *ngIf="item.distname" class="text-gray-400">| {{ item.distname }}</span>
+                    </p>
                   </div>
                   <div class="flex flex-col gap-1 items-end">
                     <button (click)="openTrendModal(item)" class="text-blue-500 hover:text-blue-700 p-1" title="ดูแนวโน้ม">
@@ -673,6 +677,7 @@
                 <th class="px-2 py-3 bg-green-700 text-center border-r border-green-600">ปีงบฯ</th>
                 <th class="px-3 py-3 bg-green-700 border-r border-green-600">หน่วยงาน</th>
                 <th class="px-3 py-3 bg-green-700 border-r border-green-600">หน่วยบริการ</th>
+                <th class="px-3 py-3 bg-green-700 border-r border-green-600">ประเภท</th>
                 <th class="px-3 py-3 bg-green-700 border-r border-green-600">อำเภอ</th>
                 <th class="px-3 py-3 bg-green-800 text-right">เป้าหมาย</th>
                 <th class="px-3 py-3 bg-green-800 text-right">ผลงานรวม</th>
@@ -905,7 +910,13 @@
                 <!-- Col 6: หน่วยบริการ -->
                 <td class="px-3 py-2 bg-white border-r border-gray-100 text-gray-600 text-xs whitespace-nowrap">{{ item.hosname || '-' }}</td>
 
-                <!-- Col 7: อำเภอ -->
+                <!-- Col 7: ประเภท -->
+                <td class="px-3 py-2 bg-white border-r border-gray-100 text-gray-600 text-xs whitespace-nowrap">
+                  <span *ngIf="item.hostypename" class="px-2 py-0.5 bg-cyan-50 text-cyan-700 rounded-full text-[10px] font-semibold">{{ item.hostypename }}</span>
+                  <span *ngIf="!item.hostypename" class="text-gray-400">-</span>
+                </td>
+
+                <!-- Col 8: อำเภอ -->
                 <td class="px-3 py-2 bg-white border-r border-gray-100 text-gray-600 text-xs whitespace-nowrap">{{ item.distname || '-' }}</td>
 
                 <!-- Col 8: เป้าหมาย -->
