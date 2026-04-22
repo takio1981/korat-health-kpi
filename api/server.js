@@ -4021,13 +4021,13 @@ apiRouter.post('/refresh-summary/batch', authenticateToken, isSuperAdmin, async 
 
         const [result] = await db.query(`
             INSERT INTO kpi_summary (indicator_id, year_bh, hospcode, main_indicator_name, kpi_indicators_name,
-                dept_id, dept_name, hosname, distid, distname, table_process, target_value,
+                dept_id, dept_name, hosname, distid, hostype, distname, table_process, target_value,
                 oct, nov, dece, jan, feb, mar, apr, may, jun, jul, aug, sep,
                 pending_count, indicator_status, is_locked, updated_at)
             SELECT
                 i.id, r.year_bh, r.hospcode,
                 IFNULL(mi.main_indicator_name, 'ยังไม่กำหนด'),
-                i.kpi_indicators_name, i.dept_id, d.dept_name, h.hosname, h.distid, dist.distname, i.table_process,
+                i.kpi_indicators_name, i.dept_id, d.dept_name, h.hosname, h.distid, h.hostype, dist.distname, i.table_process,
                 MAX(r.target_value),
                 MAX(CASE WHEN r.month_bh=10 THEN r.actual_value END),
                 MAX(CASE WHEN r.month_bh=11 THEN r.actual_value END),
@@ -4126,7 +4126,7 @@ apiRouter.get('/kpi-summary', authenticateToken, async (req, res) => {
 apiRouter.get('/report/by-indicator', authenticateToken, async (req, res) => {
     try {
         const user = req.user;
-        const { year_bh, dept_id, distid } = req.query;
+        const { year_bh, dept_id, distid, hostype } = req.query;
         let whereClauses = [];
         let params = [];
 
@@ -4152,6 +4152,7 @@ apiRouter.get('/report/by-indicator', authenticateToken, async (req, res) => {
         if (year_bh) { whereClauses.push('s.year_bh = ?'); params.push(year_bh); }
         if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
         if (distid) { whereClauses.push('s.distid = ?'); params.push(distid); }
+        if (hostype) { whereClauses.push('s.hostype = ?'); params.push(hostype); }
 
         const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
         const sql = `
@@ -4194,7 +4195,7 @@ apiRouter.get('/report/by-indicator', authenticateToken, async (req, res) => {
 apiRouter.get('/report/by-hospital', authenticateToken, async (req, res) => {
     try {
         const user = req.user;
-        const { year_bh, dept_id, distid } = req.query;
+        const { year_bh, dept_id, distid, hostype } = req.query;
         let whereClauses = [];
         let params = [];
 
@@ -4220,6 +4221,7 @@ apiRouter.get('/report/by-hospital', authenticateToken, async (req, res) => {
         if (year_bh) { whereClauses.push('s.year_bh = ?'); params.push(year_bh); }
         if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
         if (distid) { whereClauses.push('s.distid = ?'); params.push(distid); }
+        if (hostype) { whereClauses.push('s.hostype = ?'); params.push(hostype); }
 
         const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
         const sql = `
@@ -4254,7 +4256,7 @@ apiRouter.get('/report/by-hospital', authenticateToken, async (req, res) => {
 apiRouter.get('/report/by-district', authenticateToken, async (req, res) => {
     try {
         const user = req.user;
-        const { year_bh, dept_id } = req.query;
+        const { year_bh, dept_id, hostype } = req.query;
         let whereClauses = [];
         let params = [];
 
@@ -4279,6 +4281,7 @@ apiRouter.get('/report/by-district', authenticateToken, async (req, res) => {
         }
         if (year_bh) { whereClauses.push('s.year_bh = ?'); params.push(year_bh); }
         if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
+        if (hostype) { whereClauses.push('s.hostype = ?'); params.push(hostype); }
 
         const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
         const sql = `
@@ -4310,7 +4313,7 @@ apiRouter.get('/report/by-district', authenticateToken, async (req, res) => {
 apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
     try {
         const user = req.user;
-        const { dept_id, distid } = req.query;
+        const { dept_id, distid, hostype } = req.query;
         let whereClauses = [];
         let params = [];
 
@@ -4335,6 +4338,7 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         }
         if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
         if (distid) { whereClauses.push('s.distid = ?'); params.push(distid); }
+        if (hostype) { whereClauses.push('s.hostype = ?'); params.push(hostype); }
 
         const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
         const sql = `
@@ -4616,6 +4620,8 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         // เพิ่ม dept_id, distid ใน kpi_summary สำหรับ role-based filtering
         try { await db.query('ALTER TABLE kpi_summary ADD COLUMN dept_id INT AFTER kpi_indicators_name'); } catch(e) {}
         try { await db.query('ALTER TABLE kpi_summary ADD COLUMN distid VARCHAR(20) AFTER hosname'); } catch(e) {}
+        try { await db.query('ALTER TABLE kpi_summary ADD COLUMN hostype VARCHAR(5) AFTER distid'); } catch(e) {}
+        try { await db.query('ALTER TABLE kpi_summary ADD INDEX idx_hostype (hostype)'); } catch(e) {}
         try { await db.query('ALTER TABLE kpi_summary ADD INDEX idx_dept_id (dept_id)'); } catch(e) {}
         try { await db.query('ALTER TABLE kpi_summary ADD INDEX idx_distid (distid)'); } catch(e) {}
 

@@ -843,13 +843,20 @@
           <option *ngFor="let y of addKpiYears" [value]="y">{{ y }}</option>
         </select>
       </div>
-      <!-- Admin/Admin CUP: เลือกอำเภอ/หน่วยบริการ -->
+      <!-- Admin/Admin CUP: เลือกอำเภอ/ประเภท/หน่วยบริการ/หน่วยงาน/หมวดหมู่ -->
       <ng-container *ngIf="isAdmin || isLocalAdmin">
         <div class="space-y-1">
           <label class="text-xs font-bold text-gray-500">อำเภอ</label>
           <select [(ngModel)]="addKpiSelectedDistrict" (change)="onAddKpiDistrictChange()" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-sm">
             <option value="">-- เลือกอำเภอ --</option>
             <option *ngFor="let d of addKpiDistrictList" [value]="d.distid">{{ d.distname }}</option>
+          </select>
+        </div>
+        <div class="space-y-1">
+          <label class="text-xs font-bold text-teal-600">ประเภทหน่วยบริการ</label>
+          <select [(ngModel)]="addKpiSelectedHosType" (change)="onAddKpiHosTypeChange()" class="px-4 py-2 border border-teal-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none text-sm">
+            <option value="">-- ทุกประเภท --</option>
+            <option *ngFor="let ht of hosTypeList" [value]="ht.hostypecode">{{ ht.hostypename }}</option>
           </select>
         </div>
         <div class="space-y-1">
@@ -864,6 +871,13 @@
           <select [(ngModel)]="addKpiSelectedDept" (change)="loadAddKpiList()" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-sm">
             <option value="">-- ทุกหน่วยงาน --</option>
             <option *ngFor="let dept of addKpiDeptList" [value]="dept.id">{{ dept.dept_name }}</option>
+          </select>
+        </div>
+        <div class="space-y-1">
+          <label class="text-xs font-bold text-purple-600">หมวดหมู่หลัก</label>
+          <select [(ngModel)]="addKpiSelectedMain" class="px-4 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-sm">
+            <option value="">-- ทั้งหมด --</option>
+            <option *ngFor="let m of addKpiMainList" [value]="m">{{ m }}</option>
           </select>
         </div>
       </ng-container>
@@ -899,15 +913,9 @@
           <i class="fas fa-check-square mr-1"></i>เลือก: {{ addKpiSelectedIds.size }} / {{ filteredNewKpiList.length }}
         </span>
       </div>
-      <div class="flex flex-wrap items-center gap-2">
-        <select [(ngModel)]="addKpiSelectedMain" class="px-3 py-1.5 border border-purple-300 rounded-lg text-xs focus:ring-2 focus:ring-purple-500 outline-none">
-          <option value="">หมวดหมู่หลัก: ทั้งหมด</option>
-          <option *ngFor="let m of addKpiMainList" [value]="m">{{ m }}</option>
-        </select>
-        <button *ngIf="newKpiList.length > 0" (click)="resetAddKpi()" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold transition-all shadow-sm">
-          <i class="fas fa-undo mr-1"></i>คืนค่าเริ่มต้น
-        </button>
-      </div>
+      <button *ngIf="newKpiList.length > 0" (click)="resetAddKpi()" class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold transition-all shadow-sm">
+        <i class="fas fa-undo mr-1"></i>คืนค่าเริ่มต้น
+      </button>
     </div>
     <div class="overflow-x-auto">
       <table class="w-full text-left border-collapse text-xs">

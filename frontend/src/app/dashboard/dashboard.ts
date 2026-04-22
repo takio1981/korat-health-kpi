@@ -54,6 +54,7 @@ export class DashboardComponent implements OnInit {
   addKpiFilteredHospitals: any[] = [];
   addKpiSelectedDistrict: string = '';
   addKpiSelectedHospcode: string = '';
+  addKpiSelectedHosType: string = '';
   addKpiDeptList: any[] = [];
   addKpiSelectedDept: string = '';
   addKpiExistingCount: number = 0;
@@ -1416,15 +1417,22 @@ export class DashboardComponent implements OnInit {
   }
 
   onAddKpiDistrictChange() {
-    if (this.addKpiSelectedDistrict) {
-      this.addKpiFilteredHospitals = this.addKpiHospitalList.filter(
-        (h: any) => h.distid === this.addKpiSelectedDistrict
-      );
-    } else {
-      this.addKpiFilteredHospitals = this.addKpiHospitalList;
-    }
+    this.rebuildAddKpiHospitals();
     this.addKpiSelectedHospcode = '';
     this.newKpiList = [];
+  }
+
+  onAddKpiHosTypeChange() {
+    this.rebuildAddKpiHospitals();
+    this.addKpiSelectedHospcode = '';
+    this.newKpiList = [];
+  }
+
+  private rebuildAddKpiHospitals() {
+    let filtered = this.addKpiHospitalList;
+    if (this.addKpiSelectedDistrict) filtered = filtered.filter((h: any) => h.distid === this.addKpiSelectedDistrict);
+    if (this.addKpiSelectedHosType) filtered = filtered.filter((h: any) => h.hostype === this.addKpiSelectedHosType);
+    this.addKpiFilteredHospitals = filtered;
   }
 
   onAddKpiHospitalChange() {

@@ -53,6 +53,13 @@
               <option *ngFor="let dist of districts" [value]="dist.distid">{{ dist.distname }}</option>
             </select>
           </div>
+          <div *ngIf="activeTab !== 'by-year'">
+            <label class="block text-xs font-bold text-teal-600 mb-1.5 uppercase">ประเภทหน่วยบริการ</label>
+            <select [(ngModel)]="selectedHosType" (change)="onFilterChange()" class="w-full px-3 py-2.5 border border-teal-200 rounded-xl focus:ring-2 focus:ring-teal-500 outline-none text-sm hover:border-teal-400 transition-colors">
+              <option value="">ทั้งหมด</option>
+              <option *ngFor="let ht of hosTypes" [value]="ht.hostypecode">{{ ht.hostypename }}</option>
+            </select>
+          </div>
           <div class="flex gap-2 items-end">
             <button (click)="clearFilters()" class="px-4 py-2.5 border border-gray-300 text-gray-600 hover:bg-gray-100 rounded-xl text-sm font-bold transition-colors">
               <i class="fas fa-times mr-1"></i> ล้าง

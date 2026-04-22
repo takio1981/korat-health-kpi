@@ -27,9 +27,11 @@ export class ReportComponent implements OnInit {
   selectedYear: string = '';
   selectedDeptId: string = '';
   selectedDistId: string = '';
+  selectedHosType: string = '';
   filterYears: string[] = [];
   departments: any[] = [];
   districts: any[] = [];
+  hosTypes: any[] = [];
 
   // Report Data
   reportData: any[] = [];
@@ -61,6 +63,9 @@ export class ReportComponent implements OnInit {
     });
     this.authService.getDistricts().subscribe({
       next: (res) => { if (res.success) { this.districts = res.data; this.cdr.detectChanges(); } }
+    });
+    this.authService.getHosTypes().subscribe({
+      next: (res: any) => { if (res.success) { this.hosTypes = res.data; this.cdr.detectChanges(); } }
     });
     // Get available years from kpi_results
     this.authService.getKpiSummary({}).subscribe({
@@ -97,6 +102,7 @@ export class ReportComponent implements OnInit {
   clearFilters() {
     this.selectedYear = this.filterYears.length > 0 ? this.filterYears[0] : '';
     this.selectedDeptId = '';
+    this.selectedHosType = '';
     this.selectedDistId = '';
     this.loadReport();
   }
@@ -107,6 +113,7 @@ export class ReportComponent implements OnInit {
     if (this.selectedYear) params.year_bh = this.selectedYear;
     if (this.selectedDeptId) params.dept_id = this.selectedDeptId;
     if (this.selectedDistId) params.distid = this.selectedDistId;
+    if (this.selectedHosType) params.hostype = this.selectedHosType;
 
     let observable;
     switch (this.activeTab) {
