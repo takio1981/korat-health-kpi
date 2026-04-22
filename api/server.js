@@ -3266,6 +3266,75 @@ apiRouter.put('/departments/:id', authenticateToken, isSuperAdmin, async (req, r
     }
 });
 
+// ========== System Announcements (ประกาศระบบ) ==========
+apiRouter.get('/announcement/active', authenticateToken, async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM system_announcements WHERE is_active = 1 ORDER BY updated_at DESC LIMIT 1');
+        res.json({ success: true, data: rows[0] || null });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.get('/announcements', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query(`
+            SELECT a.*, u.firstname, u.lastname
+            FROM system_announcements a
+            LEFT JOIN users u ON a.created_by = u.id
+            ORDER BY a.is_active DESC, a.updated_at DESC
+        `);
+        res.json({ success: true, data: rows });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.post('/announcements', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const { title, content_html, content_text, bg_color, text_color, blink_enabled, show_on_header, show_on_login, is_active } = req.body;
+        if (!content_html) return res.status(400).json({ success: false, message: 'กรุณากรอกข้อความ' });
+        // Limit content_text ≤ 500 chars
+        const textTruncated = (content_text || '').substring(0, 500);
+        // ถ้า is_active=1 → ปิด active อื่นๆ ทั้งหมด
+        if (is_active) await db.query('UPDATE system_announcements SET is_active = 0');
+        const [r] = await db.query(
+            `INSERT INTO system_announcements (title, content_html, content_text, bg_color, text_color, blink_enabled, show_on_header, show_on_login, is_active, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [title || 'ประกาศระบบ', content_html, textTruncated, bg_color || '#dc2626', text_color || '#ffffff',
+             blink_enabled ? 1 : 0, show_on_header ? 1 : 0, show_on_login ? 1 : 0, is_active ? 1 : 0, req.user.userId]
+        );
+        res.json({ success: true, id: r.insertId, message: 'สร้างประกาศสำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.put('/announcements/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const { title, content_html, content_text, bg_color, text_color, blink_enabled, show_on_header, show_on_login, is_active } = req.body;
+        if (!content_html) return res.status(400).json({ success: false, message: 'กรุณากรอกข้อความ' });
+        const textTruncated = (content_text || '').substring(0, 500);
+        if (is_active) await db.query('UPDATE system_announcements SET is_active = 0 WHERE id != ?', [req.params.id]);
+        await db.query(
+            `UPDATE system_announcements SET title=?, content_html=?, content_text=?, bg_color=?, text_color=?,
+             blink_enabled=?, show_on_header=?, show_on_login=?, is_active=? WHERE id=?`,
+            [title || 'ประกาศระบบ', content_html, textTruncated, bg_color || '#dc2626', text_color || '#ffffff',
+             blink_enabled ? 1 : 0, show_on_header ? 1 : 0, show_on_login ? 1 : 0, is_active ? 1 : 0, req.params.id]
+        );
+        res.json({ success: true, message: 'แก้ไขประกาศสำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.delete('/announcements/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        await db.query('DELETE FROM system_announcements WHERE id = ?', [req.params.id]);
+        res.json({ success: true, message: 'ลบประกาศสำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.put('/announcements/:id/activate', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        await db.query('UPDATE system_announcements SET is_active = 0');
+        await db.query('UPDATE system_announcements SET is_active = 1 WHERE id = ?', [req.params.id]);
+        res.json({ success: true, message: 'เปิดใช้งานประกาศสำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
 apiRouter.delete('/departments/:id', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
         await db.query('DELETE FROM departments WHERE id = ?', [req.params.id]);
@@ -4628,6 +4697,37 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         // เพิ่มฟิลด์ใน departments
         try { await db.query(`ALTER TABLE departments ADD COLUMN IF NOT EXISTS description TEXT NULL`); } catch(e) {}
         try { await db.query(`ALTER TABLE departments ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0`); } catch(e) {}
+
+        // ตาราง system_announcements — ประกาศระบบ
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS system_announcements (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    title VARCHAR(255) DEFAULT '',
+                    content_html TEXT NOT NULL,
+                    content_text VARCHAR(500),
+                    bg_color VARCHAR(20) DEFAULT '#dc2626',
+                    text_color VARCHAR(20) DEFAULT '#ffffff',
+                    blink_enabled TINYINT(1) DEFAULT 1,
+                    show_on_header TINYINT(1) DEFAULT 1,
+                    show_on_login TINYINT(1) DEFAULT 1,
+                    is_active TINYINT(1) DEFAULT 0,
+                    created_by INT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX idx_active (is_active)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+            // seed ข้อความเริ่มต้น ถ้ายังไม่มีเลย
+            const [existing] = await db.query('SELECT COUNT(*) AS c FROM system_announcements');
+            if (existing[0].c === 0) {
+                await db.query(`INSERT INTO system_announcements (title, content_html, content_text, is_active) VALUES (?, ?, ?, 1)`, [
+                    'ประกาศระบบ',
+                    '<i class="fas fa-chart-line"></i> <b>เริ่มใช้งาน 1 เม.ย. 2569</b> — รวบรวมผลงานตรวจราชการรอบที่ 2 *** ประมวลผลทุกวันที่ 20 ของเดือน <i class="fas fa-chart-line"></i>',
+                    'เริ่มใช้งาน 1 เม.ย. 2569 — รวบรวมผลงานตรวจราชการรอบที่ 2 *** ประมวลผลทุกวันที่ 20 ของเดือน'
+                ]);
+            }
+        } catch (e) {}
         // เพิ่ม actual_value_field ใน kpi_form_schemas
         try {
             await db.query(`ALTER TABLE kpi_form_schemas ADD COLUMN IF NOT EXISTS actual_value_field VARCHAR(100) NULL COMMENT 'ชื่อฟิลด์ที่ใช้ sync ไปยัง kpi_results.actual_value'`);

@@ -18,6 +18,16 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.04.22',
+      date: '22 เมษายน 2569',
+      changes: [
+        { type: 'feature', text: 'ประกาศระบบ (System Announcements): เพิ่มตาราง + CRUD — จัดการประกาศได้ จาก super_admin' },
+        { type: 'feature', text: 'Rich text editor: B/I/U, ขนาด, สี, ไฮไลต์, emoji, ไอคอน, รูปภาพ URL + character limit 200' },
+        { type: 'feature', text: 'Dashboard header pill: โหลดแบบไดนามิก + กระพริบช้าๆ (ตามค่า blink_enabled)' },
+        { type: 'feature', text: 'SweetAlert ตอน login: ดึงประกาศ active ที่ show_on_login = 1' },
+      ]
+    },
+    {
       version: '2569.04.20-2',
       date: '20 เมษายน 2569',
       changes: [

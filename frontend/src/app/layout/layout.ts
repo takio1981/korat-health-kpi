@@ -25,6 +25,7 @@ export class LayoutComponent implements OnInit {
   themeService = inject(ThemeService);
 
   pageTitle: string = '';
+  announcement: any = null;
 
   isSidebarOpen: boolean = window.innerWidth >= 1024; // desktop เปิด, mobile ซ่อน
   isLoading: boolean = false;
@@ -66,6 +67,7 @@ export class LayoutComponent implements OnInit {
     this.loadPendingCount();
     this.loadUnreadNotifCount();
     this.loadFeedbackUnread();
+    this.loadAnnouncement();
     this.checkMaintenanceMode();
     this.checkLoginNotifications();
 
@@ -236,6 +238,19 @@ export class LayoutComponent implements OnInit {
       this.profileClosing = false;
       this.cdr.detectChanges();
     }, 350); // match animation duration
+  }
+
+  loadAnnouncement() {
+    this.authService.getActiveAnnouncement().subscribe({
+      next: (res: any) => {
+        if (res.success && res.data && Number(res.data.show_on_header) === 1) {
+          this.announcement = res.data;
+          this.cdr.detectChanges();
+        } else {
+          this.announcement = null;
+        }
+      }
+    });
   }
 
   loadFeedbackUnread() {

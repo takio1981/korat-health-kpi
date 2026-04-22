@@ -378,3 +378,4 @@ docker compose up -d
 | feedback_posts | กระทู้ | id, user_id, category, title, message, status |
 | feedback_replies | ตอบกลับกระทู้ | id, post_id, user_id, message |
 | system_settings | ตั้งค่าระบบ | setting_key, setting_value |
+| system_announcements | ประกาศระบบ | id, title, content_html, bg_color, text_color, blink_enabled, show_on_header, show_on_login, is_active |

@@ -59,21 +59,23 @@ export class LoginComponent {
               text: `ยินดีต้อนรับ คุณ${response.user.firstname} ${response.user.lastname}`,
               timer: 1500, showConfirmButton: false
             }).then(() => {
-              // ประกาศระบบ (แสดงหลัง login เท่านั้น)
-              Swal.fire({
-                icon: 'info',
-                title: '<i class="fas fa-bullhorn text-red-500"></i> ประกาศระบบ',
-                html: `<div class="text-left space-y-2 text-sm">
-                  <p class="bg-red-50 border-l-4 border-red-500 p-3 rounded">
-                    <i class="fas fa-chart-line text-red-600 mr-1"></i>
-                    <b>เริ่มใช้งานตั้งแต่วันที่ 1 เมษายน 2569 เป็นต้นไป</b>
-                  </p>
-                  <p class="text-gray-600">📊 เพื่อรวบรวมผลงาน ตรวจราชการรอบที่ 2</p>
-                  <p class="text-gray-600">⏰ <b>ประมวลผลข้อมูล ทุกวันที่ 20 ของเดือน</b></p>
-                </div>`,
-                confirmButtonText: 'รับทราบ',
-                confirmButtonColor: '#16a34a'
-              }).then(() => this.router.navigate(['/dashboard']));
+              // ดึงประกาศไดนามิกจาก DB
+              this.authService.getActiveAnnouncement().subscribe({
+                next: (res: any) => {
+                  if (res.success && res.data && Number(res.data.show_on_login) === 1) {
+                    const a = res.data;
+                    Swal.fire({
+                      title: `<i class="fas fa-bullhorn text-red-500"></i> ${a.title || 'ประกาศระบบ'}`,
+                      html: `<div class="rounded-lg p-4" style="background:${a.bg_color};color:${a.text_color}">${a.content_html}</div>`,
+                      confirmButtonText: 'รับทราบ',
+                      confirmButtonColor: '#16a34a'
+                    }).then(() => this.router.navigate(['/dashboard']));
+                  } else {
+                    this.router.navigate(['/dashboard']);
+                  }
+                },
+                error: () => this.router.navigate(['/dashboard'])
+              });
             });
           }
         },

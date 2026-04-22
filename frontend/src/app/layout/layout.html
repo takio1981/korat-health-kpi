@@ -17,6 +17,7 @@
         <a *ngIf="isSuperAdmin" routerLink="/audit-logs" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-history mr-3 min-w-[20px]"></i>ประวัติการใช้งาน</a>
         <a *ngIf="isSuperAdmin" routerLink="/kpi-setup" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-plus-circle mr-3 min-w-[20px]"></i>+KPI ปีงบประมาณใหม่</a>
         <a *ngIf="isSuperAdmin" routerLink="/kpi-manager" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-layer-group mr-3 min-w-[20px]"></i>จัดการข้อมูล KPI</a>
+        <a *ngIf="isSuperAdmin" routerLink="/announcements" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-bullhorn mr-3 min-w-[20px]"></i>ประกาศระบบ</a>
         <a *ngIf="isSuperAdmin" routerLink="/settings" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 rounded-xl"><i class="fas fa-sliders-h mr-3 min-w-[20px]"></i>ตั้งค่าระบบ</a>
       </nav>
     </div>
@@ -82,6 +83,10 @@
             จัดการข้อมูล KPI
           </span>
         </a>
+        <a *ngIf="isSuperAdmin" routerLink="/announcements" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
+          <i class="fas fa-bullhorn text-lg mr-3 min-w-[24px]"></i>
+          <span class="truncate flex justify-between items-center w-full">ประกาศระบบ</span>
+        </a>
         <a *ngIf="isSuperAdmin" routerLink="/settings" routerLinkActive="bg-white/10 text-white font-medium" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-100 hover:bg-white/10 hover:text-white rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-sliders-h text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">
@@ -107,13 +112,13 @@
           <h2 class="text-lg sm:text-xl font-semibold text-white mr-0 sm:mr-6">{{ pageTitle }}</h2>
         </div>
 
-        <!-- ประกาศระบบ — กึ่งกลางหน้าจอ (ซ่อนบนมือถือ) -->
-        <div class="hidden lg:flex flex-1 justify-center px-4">
-          <div class="bg-red-600/90 text-white text-center py-1 px-4 rounded-full text-[11px] font-bold tracking-wider leading-tight shadow-md">
-            <i class="fas fa-chart-line mr-1"></i>
-            เริ่มใช้งาน 1 เม.ย. 2569 — รวบรวมผลงานตรวจราชการรอบที่ 2 *** ประมวลผลทุกวันที่ 20 ของเดือน
-            <i class="fas fa-chart-line ml-1"></i>
-          </div>
+        <!-- ประกาศระบบ — dynamic จาก system_announcements -->
+        <div *ngIf="announcement" class="hidden lg:flex flex-1 justify-center px-4 overflow-hidden">
+          <div class="text-center py-1 px-4 rounded-full text-[11px] font-bold tracking-wider leading-tight shadow-md max-w-[600px] line-clamp-2"
+               [class.announcement-blink]="announcement.blink_enabled"
+               [style.background-color]="announcement.bg_color"
+               [style.color]="announcement.text_color"
+               [innerHTML]="announcement.content_html"></div>
         </div>
 
         <div class="flex items-center shrink-0">

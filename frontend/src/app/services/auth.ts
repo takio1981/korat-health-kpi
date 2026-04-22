@@ -545,6 +545,38 @@ export class AuthService {
     return this.http.post(`${this.apiUrl}/sub-results/upsert`, data, { headers });
   }
 
+  // System Announcements
+  getActiveAnnouncement(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/announcement/active`, { headers });
+  }
+  getAnnouncements(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/announcements`, { headers });
+  }
+  createAnnouncement(data: any): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/announcements`, data, { headers });
+  }
+  updateAnnouncement(id: number, data: any): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/announcements/${id}`, data, { headers });
+  }
+  deleteAnnouncement(id: number): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.delete(`${this.apiUrl}/announcements/${id}`, { headers });
+  }
+  activateAnnouncement(id: number): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/announcements/${id}/activate`, {}, { headers });
+  }
+
   // Users Data Sync (Local ↔ HDC)
   usersSyncCompare(): Observable<any> {
     const token = localStorage.getItem('kpi_token');
