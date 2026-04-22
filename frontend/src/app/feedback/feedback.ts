@@ -35,6 +35,7 @@ export class FeedbackComponent implements OnInit, OnDestroy {
     message: ''
   };
   newReply: string = '';
+  expandedPosts: Set<number> = new Set();
 
   categories = [
     { value: 'suggestion', label: 'ข้อเสนอแนะ', icon: 'fa-lightbulb', color: 'text-amber-500' },
@@ -142,6 +143,33 @@ export class FeedbackComponent implements OnInit, OnDestroy {
     this.selectedPost = post;
     this.showDetailModal = true;
     this.loadReplies(post.id);
+  }
+
+  // Toggle expand/collapse ข้อความในรายการ (inline)
+  toggleExpand(postId: number, event?: Event): void {
+    if (event) event.stopPropagation();
+    if (this.expandedPosts.has(postId)) this.expandedPosts.delete(postId);
+    else this.expandedPosts.add(postId);
+  }
+
+  isExpanded(postId: number): boolean {
+    return this.expandedPosts.has(postId);
+  }
+
+  // เปิด modal รายละเอียด + เลื่อนไปที่ช่องตอบกลับ
+  openReply(post: any, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.openDetail(post);
+    // focus ช่องตอบกลับหลัง modal เปิด
+    setTimeout(() => {
+      const el = document.querySelector('.feedback-detail-modal textarea') as HTMLTextAreaElement;
+      if (el) { el.focus(); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    }, 300);
+  }
+
+  // ตรวจว่าข้อความยาวพอให้ต้อง "อ่านเพิ่มเติม" หรือไม่ (> ~150 ตัวอักษร)
+  isLongMessage(msg: string): boolean {
+    return (msg || '').length > 150;
   }
 
   loadReplies(postId: number): void {

@@ -100,11 +100,20 @@
               </span>
             </div>
             <h3 (click)="openDetail(post)"
-              class="text-base font-semibold text-gray-800 hover:text-teal-600 cursor-pointer transition truncate">
+              class="text-base font-semibold text-gray-800 hover:text-teal-600 cursor-pointer transition break-words">
               {{ post.title }}
             </h3>
-            <p class="text-sm text-gray-500 mt-1 line-clamp-2">{{ post.message }}</p>
-            <div class="flex items-center gap-4 mt-3 text-xs text-gray-400">
+            <!-- ข้อความ: ถ้ายาวและยังไม่ expand → clamp 3 บรรทัด -->
+            <p class="text-sm text-gray-600 mt-1 whitespace-pre-wrap break-words"
+               [ngClass]="{'line-clamp-3': isLongMessage(post.message) && !isExpanded(post.id)}">
+              {{ post.message }}
+            </p>
+            <button *ngIf="isLongMessage(post.message)" (click)="toggleExpand(post.id, $event)"
+                    class="text-xs text-teal-600 hover:text-teal-700 font-bold mt-1 transition">
+              <i class="fas" [ngClass]="isExpanded(post.id) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+              {{ isExpanded(post.id) ? 'ย่อ' : 'อ่านเพิ่มเติม' }}
+            </button>
+            <div class="flex flex-wrap items-center gap-3 mt-3 text-xs text-gray-400">
               <span class="flex items-center gap-1.5">
                 <span class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
                       [ngClass]="getPostColor(post).avatar + ' ' + getPostColor(post).avatarText">
@@ -123,6 +132,17 @@
                 <i class="fa fa-reply"></i>
                 {{ post.reply_count || 0 }} ตอบกลับ
               </span>
+              <!-- Action buttons -->
+              <div class="flex items-center gap-2 ml-auto">
+                <button (click)="openDetail(post); $event.stopPropagation()"
+                        class="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-medium transition">
+                  <i class="fa fa-eye mr-1"></i>รายละเอียด
+                </button>
+                <button (click)="openReply(post, $event)"
+                        class="px-3 py-1 bg-gradient-to-r from-teal-500 to-green-500 hover:from-teal-600 hover:to-green-600 text-white rounded-lg text-xs font-bold shadow-sm transition">
+                  <i class="fa fa-reply mr-1"></i>ตอบกลับ
+                </button>
+              </div>
             </div>
           </div>
 
@@ -195,7 +215,7 @@
 <!-- ==================== Detail Modal ==================== -->
 <div *ngIf="showDetailModal && selectedPost" class="fixed inset-0 z-50 flex items-center justify-center p-4">
   <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" (click)="showDetailModal = false"></div>
-  <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in">
+  <div class="feedback-detail-modal relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in">
     <!-- Header -->
     <div class="bg-gradient-to-r from-teal-500 to-green-500 px-6 py-4 flex-shrink-0">
       <div class="flex items-center justify-between">
