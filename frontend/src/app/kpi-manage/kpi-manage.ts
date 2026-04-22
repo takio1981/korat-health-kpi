@@ -53,6 +53,11 @@ export class KpiManageComponent implements OnInit {
   // นับจำนวน sub-indicator ต่อ indicator_id (แสดงบาดจ์บนแถว)
   subCountMap: Map<number, number> = new Map();
 
+  // รายการประเภทหน่วยบริการ (จาก chostype)
+  hosTypes: any[] = [];
+  // เก็บ required_off_types ใน modal เป็น array ของ code (ตอนเปิด modal แปลงจาก JSON string)
+  selectedOffTypes: string[] = [];
+
   ngOnInit() {
     const role = this.authService.getUserRole();
     this.isAdmin = role === 'admin_ssj' || role === 'super_admin';
@@ -107,6 +112,30 @@ export class KpiManageComponent implements OnInit {
         this.cdr.detectChanges();
       }
     });
+    // โหลดประเภทหน่วยบริการ (chostype)
+    this.authService.getHosTypes().subscribe(res => {
+      if (res.success) { this.hosTypes = res.data; this.cdr.detectChanges(); }
+    });
+  }
+
+  // Parse required_off_types JSON → string[] ของ hostypecode
+  parseOffTypes(v: any): string[] {
+    if (!v) return [];
+    if (Array.isArray(v)) return v.map(x => String(x));
+    try {
+      const p = JSON.parse(String(v));
+      return Array.isArray(p) ? p.map(x => String(x)) : [];
+    } catch { return []; }
+  }
+
+  toggleOffType(code: string) {
+    const i = this.selectedOffTypes.indexOf(code);
+    if (i >= 0) this.selectedOffTypes.splice(i, 1);
+    else this.selectedOffTypes.push(code);
+  }
+
+  isOffTypeSelected(code: string): boolean {
+    return this.selectedOffTypes.includes(code);
   }
 
   getSubCount(indicatorId: number): number {
@@ -246,6 +275,8 @@ export class KpiManageComponent implements OnInit {
         src.ssj = Number(src.ssj) === 1;
         src.rmw = Number(src.rmw) === 1;
         src.other = Number(src.other) === 1;
+        src.evaluation_mode = src.evaluation_mode || 'any_one';
+        this.selectedOffTypes = this.parseOffTypes(src.required_off_types);
         // auto-set yut_id จาก main_indicator ที่เลือก
         this.selectedYutInModal = src.yut_id ? Number(src.yut_id) : null;
       }
@@ -254,7 +285,8 @@ export class KpiManageComponent implements OnInit {
       const baseDefaults = { is_active: 1, sort_order: 0 };
       if (this.activeTab === 'indicators') {
         this.selectedYutInModal = null;
-        this.currentItem = { ...baseDefaults, r9: false, moph: false, ssj: false, rmw: false, other: false, weight: 1, target_condition: 'GTE' };
+        this.selectedOffTypes = [];
+        this.currentItem = { ...baseDefaults, r9: false, moph: false, ssj: false, rmw: false, other: false, weight: 1, target_condition: 'GTE', evaluation_mode: 'any_one' };
       } else {
         this.currentItem = { ...baseDefaults };
       }
@@ -296,7 +328,12 @@ export class KpiManageComponent implements OnInit {
     const id = this.currentItem.id;
 
     if (this.activeTab === 'indicators') {
-      observable = this.isEditMode ? this.authService.updateIndicator(id, this.currentItem) : this.authService.createIndicator(this.currentItem);
+      // Serialize evaluation_mode + required_off_types (เฉพาะ any_one)
+      const payload = { ...this.currentItem };
+      payload.required_off_types = payload.evaluation_mode === 'any_one' && this.selectedOffTypes.length > 0
+        ? this.selectedOffTypes
+        : null;
+      observable = this.isEditMode ? this.authService.updateIndicator(id, payload) : this.authService.createIndicator(payload);
     } else if (this.activeTab === 'main-indicators') {
       observable = this.isEditMode ? this.authService.updateMainIndicator(id, this.currentItem) : this.authService.createMainIndicator(this.currentItem);
     } else if (this.activeTab === 'strategies') {

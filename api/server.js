@@ -2450,16 +2450,30 @@ apiRouter.get('/indicators', authenticateToken, async (req, res) => {
     }
 });
 
+// Helper: normalize required_off_types → JSON string หรือ null
+const normalizeOffTypes = (v) => {
+    if (v == null) return null;
+    if (Array.isArray(v)) return v.length > 0 ? JSON.stringify(v.map(x => String(x))) : null;
+    if (typeof v === 'string') {
+        const trimmed = v.trim();
+        if (!trimmed) return null;
+        try { const parsed = JSON.parse(trimmed); return Array.isArray(parsed) && parsed.length > 0 ? JSON.stringify(parsed.map(x => String(x))) : null; }
+        catch { return null; }
+    }
+    return null;
+};
+const normalizeEvalMode = (v) => (v === 'any_one' || v === 'all_required') ? v : null;
+
 apiRouter.post('/indicators', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other } = req.body;
+    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types } = req.body;
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
         return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
     }
     try {
         await db.query(
-            `INSERT INTO kpi_indicators (kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0]
+            `INSERT INTO kpi_indicators (kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types)]
         );
         res.json({ success: true, message: 'Created successfully' });
     } catch (error) {
@@ -2468,14 +2482,14 @@ apiRouter.post('/indicators', authenticateToken, isSuperAdmin, async (req, res) 
 });
 
 apiRouter.put('/indicators/:id', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, is_active, table_process, description, r9, moph, ssj, rmw, other } = req.body;
+    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, is_active, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types } = req.body;
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
         return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
     }
     try {
         await db.query(
-            `UPDATE kpi_indicators SET kpi_indicators_name=?, kpi_indicators_id=?, main_indicator_id=?, dept_id=?, target_percentage=?, target_condition=?, weight=?, kpi_indicators_code=?, is_active=?, table_process=?, description=?, r9=?, moph=?, ssj=?, rmw=?, other=? WHERE id=?`,
-            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, is_active ? 1 : 0, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, req.params.id]
+            `UPDATE kpi_indicators SET kpi_indicators_name=?, kpi_indicators_id=?, main_indicator_id=?, dept_id=?, target_percentage=?, target_condition=?, weight=?, kpi_indicators_code=?, is_active=?, table_process=?, description=?, r9=?, moph=?, ssj=?, rmw=?, other=?, evaluation_mode=?, required_off_types=? WHERE id=?`,
+            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, is_active ? 1 : 0, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), req.params.id]
         );
         res.json({ success: true, message: 'Updated successfully' });
     } catch (error) {
@@ -5108,6 +5122,8 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS rmw TINYINT(1) DEFAULT 0`); } catch(e) {}
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS other TINYINT(1) DEFAULT 0`); } catch(e) {}
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS description TEXT NULL`); } catch(e) {}
+        try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS evaluation_mode VARCHAR(20) NULL COMMENT 'any_one | all_required'`); } catch(e) {}
+        try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS required_off_types TEXT NULL COMMENT 'JSON array of hostypecode เช่น ["05","06","07"]'`); } catch(e) {}
 
         // เพิ่มฟิลด์ใน main_yut (ยุทธศาสตร์)
         try { await db.query(`ALTER TABLE main_yut ADD COLUMN IF NOT EXISTS yut_code VARCHAR(50) NULL COMMENT 'รหัสย่อยุทธศาสตร์'`); } catch(e) {}
