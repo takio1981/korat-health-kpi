@@ -241,7 +241,7 @@
             <div class="relative min-w-[160px] flex-1 max-w-[240px]">
               <button type="button" (click)="toggleDropdown('hostype')"
                       class="w-full flex items-center justify-between px-2 py-1 border border-teal-200 rounded-lg bg-white text-xs hover:border-teal-400 focus:ring-1 focus:ring-teal-500 outline-none">
-                <span class="truncate" [class.text-gray-400]="selectedHosTypes.length === 0">{{ filterLabel(selectedHosTypes, 'ประเภท รพ.: ทั้งหมด') }}</span>
+                <span class="truncate" [class.text-gray-400]="selectedHosTypes.length === 0">{{ hosTypeLabel() }}</span>
                 <i class="fas fa-chevron-down ml-1 text-gray-400"></i>
               </button>
               <div *ngIf="openFilterDropdown === 'hostype'" class="absolute z-50 top-full left-0 mt-1 w-[min(20rem,calc(100vw-2rem))] bg-white border border-gray-200 rounded-lg shadow-xl max-h-80 overflow-hidden flex flex-col">

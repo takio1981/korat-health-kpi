@@ -83,6 +83,18 @@ export class DashboardComponent implements OnInit {
     return `เลือก ${arr.length} รายการ`;
   }
 
+  // แสดงชื่อประเภท รพ. — 1 ตัว="ชื่อประเภท", >1 ตัว="N รายการ" (map code → name จาก hosTypeList)
+  hosTypeLabel(placeholder: string = 'ประเภท รพ.: ทั้งหมด'): string {
+    if (this.selectedHosTypes.length === 0) return placeholder;
+    if (this.selectedHosTypes.length === 1) {
+      const code = this.selectedHosTypes[0];
+      const found = (this.hosTypeList || []).find((ht: any) => ht.hostypecode === code)
+        || (this._allHosTypes || []).find((ht: any) => ht.hostypecode === code);
+      return found?.hostypename || code;
+    }
+    return `เลือก ${this.selectedHosTypes.length} รายการ`;
+  }
+
   toggleDropdown(name: string) {
     this.openFilterDropdown = this.openFilterDropdown === name ? '' : name;
   }
