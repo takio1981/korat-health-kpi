@@ -552,29 +552,29 @@
 <!-- ========== Settings Modal (ตารางเวลา Export อัตโนมัติ) ========== -->
 <div *ngIf="showSettingsModal" class="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4 overflow-y-auto">
   <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl my-8">
-    <div class="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-t-2xl">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-md">
+    <div class="flex items-start gap-2 p-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-t-2xl">
+      <div class="flex items-center gap-3 flex-1 min-w-0">
+        <div class="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-md">
           <i class="fas fa-clock text-white"></i>
         </div>
-        <div>
-          <h3 class="text-base font-bold text-gray-800">ตั้งค่าตารางเวลา Export อัตโนมัติ</h3>
-          <p class="text-xs text-gray-500">กำหนดวัน-เวลาให้ระบบ export อัตโนมัติ พร้อมส่งรายงานทาง Email/Telegram</p>
+        <div class="min-w-0">
+          <h3 class="text-sm sm:text-base font-bold text-gray-800">ตั้งค่าตารางเวลา Export อัตโนมัติ</h3>
+          <p class="text-[11px] sm:text-xs text-gray-500">กำหนดวัน-เวลาให้ระบบ export อัตโนมัติ พร้อมส่งรายงานทาง Email/Telegram</p>
         </div>
       </div>
-      <button (click)="showSettingsModal = false" class="text-gray-400 hover:text-gray-600">
+      <button (click)="showSettingsModal = false" class="text-gray-400 hover:text-gray-600 shrink-0">
         <i class="fas fa-times text-xl"></i>
       </button>
     </div>
 
     <div class="p-4">
-      <div class="flex items-center justify-between mb-3">
-        <div class="text-sm text-gray-600">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+        <div class="text-xs sm:text-sm text-gray-600">
           <i class="fas fa-info-circle text-indigo-500 mr-1"></i>
           Schedule รันที่ backend ทุกๆ 1 นาที — ถ้าตรงวันและเวลา จะสั่ง export อัตโนมัติ และส่งรายงานให้ตรวจสอบก่อน sync เข้า HDC
         </div>
         <button (click)="openCreateSchedule()"
-                class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-md transition-all">
+                class="shrink-0 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-md transition-all">
           <i class="fas fa-plus mr-1"></i>เพิ่ม Schedule
         </button>
       </div>
@@ -589,8 +589,8 @@
         <p class="text-sm">ยังไม่มี schedule — กด "เพิ่ม Schedule" เพื่อเริ่มต้น</p>
       </div>
 
-      <div *ngIf="!schedulesLoading && schedules.length > 0" class="overflow-x-auto max-h-[60vh] border border-gray-200 rounded-xl">
-        <table class="w-full text-sm">
+      <div *ngIf="!schedulesLoading && schedules.length > 0" class="overflow-auto max-h-[60vh] border border-gray-200 rounded-xl">
+        <table class="min-w-[900px] w-full text-sm">
           <thead class="sticky top-0 bg-gray-50 z-10">
             <tr class="border-b border-gray-200">
               <th class="px-3 py-2 text-left font-bold text-gray-700">ชื่อ</th>
@@ -709,7 +709,7 @@
         </label>
       </div>
 
-      <div class="grid grid-cols-2 gap-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label class="block text-sm font-bold text-gray-700 mb-1">เวลา (HH:MM) <span class="text-red-500">*</span></label>
           <input type="time" [(ngModel)]="scheduleForm.time_of_day"
@@ -846,13 +846,13 @@
       </button>
     </div>
 
-    <div class="p-4 max-h-[60vh] overflow-y-auto">
+    <div class="p-4 max-h-[60vh] overflow-auto">
       <div *ngIf="logsData.length === 0" class="text-center py-8 text-gray-400">
         <i class="fas fa-inbox text-3xl mb-2"></i>
         <p class="text-sm">ยังไม่มีประวัติการรัน</p>
       </div>
 
-      <table *ngIf="logsData.length > 0" class="w-full text-sm">
+      <table *ngIf="logsData.length > 0" class="min-w-[800px] w-full text-sm">
         <thead>
           <tr class="bg-gray-50 border-b border-gray-200">
             <th class="px-3 py-2 text-left font-bold text-gray-700">เวลา</th>

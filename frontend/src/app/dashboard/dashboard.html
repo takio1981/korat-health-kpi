@@ -16,7 +16,7 @@
           </div>
           <div class="flex flex-wrap gap-2 w-full md:w-auto">
             <!-- กลุ่ม "จัดการข้อมูลตัวชี้วัด" (เฉพาะ admin_ssj + super_admin) -->
-            <div *ngIf="isAdmin && !isEditing && !isReviewMode && !isDeleteMode" class="relative">
+            <div *ngIf="isAdmin && !isEditing && !isReviewMode && !isDeleteMode" class="relative w-full md:w-auto">
               <button (click)="showManageMenu = !showManageMenu"
                       class="w-full md:w-auto px-4 py-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white rounded-xl shadow-md transition-all text-xs font-bold flex items-center justify-center gap-2">
                 <i class="fas fa-tools"></i> จัดการข้อมูลตัวชี้วัด
@@ -167,15 +167,15 @@
               <li>กด <b>จัดการข้อมูลตัวชี้วัด → แก้ไขผลงาน</b> → ตารางเปลี่ยนเป็น input fields</li>
               <li>แก้ค่าเป้าหมาย/เดือน → ช่องที่แก้จะ<b class="text-orange-600">เปลี่ยนสีส้ม</b></li>
               <li>กด <b class="text-green-700">บันทึก</b> → แสดง <b>ตารางสรุปการเปลี่ยนแปลง</b>:
-                <div class="mt-1 bg-white rounded border border-amber-200 p-2 text-[11px]">
-                  <table class="w-full">
+                <div class="mt-1 bg-white rounded border border-amber-200 p-2 overflow-x-auto">
+                  <table class="min-w-[420px] w-full text-[11px]">
                     <thead class="text-amber-800">
                       <tr><th class="text-left">รายการ</th><th>เดือน</th><th>ค่าเดิม</th><th>ค่าใหม่</th><th>สถานะ</th></tr>
                     </thead>
                     <tbody>
-                      <tr><td>KPI A</td><td>ม.ค.</td><td>60</td><td>80</td><td class="text-green-700 font-bold">↑ เพิ่มขึ้น</td></tr>
-                      <tr><td>KPI B</td><td>ก.พ.</td><td>70</td><td>50</td><td class="text-red-600 font-bold">↓ ลดลง</td></tr>
-                      <tr><td>KPI C</td><td>มี.ค.</td><td>40</td><td>—</td><td class="text-gray-600 font-bold">− ลบ</td></tr>
+                      <tr><td>KPI A</td><td class="text-center">ม.ค.</td><td class="text-center">60</td><td class="text-center">80</td><td class="text-green-700 font-bold text-center">↑ เพิ่มขึ้น</td></tr>
+                      <tr><td>KPI B</td><td class="text-center">ก.พ.</td><td class="text-center">70</td><td class="text-center">50</td><td class="text-red-600 font-bold text-center">↓ ลดลง</td></tr>
+                      <tr><td>KPI C</td><td class="text-center">มี.ค.</td><td class="text-center">40</td><td class="text-center">—</td><td class="text-gray-600 font-bold text-center">− ลบ</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -222,7 +222,7 @@
                 <span class="truncate" [class.text-gray-400]="selectedDistricts.length === 0">{{ filterLabel(selectedDistricts, 'อำเภอ: ทั้งหมด') }}</span>
                 <i class="fas fa-chevron-down ml-1 text-gray-400"></i>
               </button>
-              <div *ngIf="openFilterDropdown === 'district'" class="absolute z-50 top-full left-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-xl max-h-80 overflow-hidden flex flex-col">
+              <div *ngIf="openFilterDropdown === 'district'" class="absolute z-50 top-full left-0 mt-1 w-[min(18rem,calc(100vw-2rem))] bg-white border border-gray-200 rounded-lg shadow-xl max-h-80 overflow-hidden flex flex-col">
                 <div class="p-2 border-b bg-teal-50 flex items-center justify-between text-[10px]">
                   <button type="button" (click)="clearFilterArr(selectedDistricts); onDistrictCascade()" class="px-2 py-0.5 bg-gray-200 hover:bg-gray-300 rounded font-bold">ล้าง</button>
                   <span class="text-teal-700 font-bold">เลือก: {{ selectedDistricts.length }}</span>
@@ -244,7 +244,7 @@
                 <span class="truncate" [class.text-gray-400]="selectedHosTypes.length === 0">{{ filterLabel(selectedHosTypes, 'ประเภท รพ.: ทั้งหมด') }}</span>
                 <i class="fas fa-chevron-down ml-1 text-gray-400"></i>
               </button>
-              <div *ngIf="openFilterDropdown === 'hostype'" class="absolute z-50 top-full left-0 mt-1 w-80 bg-white border border-gray-200 rounded-lg shadow-xl max-h-80 overflow-hidden flex flex-col">
+              <div *ngIf="openFilterDropdown === 'hostype'" class="absolute z-50 top-full left-0 mt-1 w-[min(20rem,calc(100vw-2rem))] bg-white border border-gray-200 rounded-lg shadow-xl max-h-80 overflow-hidden flex flex-col">
                 <div class="p-2 border-b bg-teal-50 flex items-center justify-between text-[10px]">
                   <button type="button" (click)="clearFilterArr(selectedHosTypes); onHosTypeCascade()" class="px-2 py-0.5 bg-gray-200 hover:bg-gray-300 rounded font-bold">ล้าง</button>
                   <span class="text-teal-700 font-bold">เลือก: {{ selectedHosTypes.length }}</span>
@@ -266,7 +266,7 @@
                 <span class="truncate" [class.text-gray-400]="selectedHospitals.length === 0">{{ filterLabel(selectedHospitals, 'หน่วยบริการ: ทั้งหมด') }}</span>
                 <i class="fas fa-chevron-down ml-1 text-gray-400"></i>
               </button>
-              <div *ngIf="openFilterDropdown === 'hospital'" class="absolute z-50 top-full left-0 mt-1 w-96 bg-white border border-gray-200 rounded-lg shadow-xl max-h-96 overflow-hidden flex flex-col">
+              <div *ngIf="openFilterDropdown === 'hospital'" class="absolute z-50 top-full left-0 mt-1 w-[min(24rem,calc(100vw-2rem))] bg-white border border-gray-200 rounded-lg shadow-xl max-h-96 overflow-hidden flex flex-col">
                 <div class="p-2 border-b bg-teal-50 flex items-center justify-between text-[10px]">
                   <button type="button" (click)="clearFilterArr(selectedHospitals)" class="px-2 py-0.5 bg-gray-200 hover:bg-gray-300 rounded font-bold">ล้าง</button>
                   <span class="text-teal-700 font-bold">เลือก: {{ selectedHospitals.length }} / {{ hospitalNames.length }}</span>
@@ -296,7 +296,7 @@
                 <span class="truncate" [class.text-gray-400]="selectedStatuses.length === 0">{{ filterLabel(selectedStatuses, 'สถานะ: ทั้งหมด') }}</span>
                 <i class="fas fa-chevron-down ml-1 text-gray-400"></i>
               </button>
-              <div *ngIf="openFilterDropdown === 'status'" class="absolute z-50 top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden">
+              <div *ngIf="openFilterDropdown === 'status'" class="absolute z-50 top-full left-0 mt-1 w-[min(16rem,calc(100vw-2rem))] bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden">
                 <div class="p-2 border-b bg-amber-50 flex items-center justify-between text-[10px]">
                   <button type="button" (click)="clearFilterArr(selectedStatuses)" class="px-2 py-0.5 bg-gray-200 hover:bg-gray-300 rounded font-bold">ล้าง</button>
                   <button type="button" (click)="openFilterDropdown = ''" class="px-2 py-0.5 bg-amber-500 text-white rounded font-bold">ตกลง</button>
@@ -326,7 +326,7 @@
                 <span class="truncate" [class.text-gray-400]="selectedDepts.length === 0">{{ filterLabel(selectedDepts, 'หน่วยงาน: ทั้งหมด') }}</span>
                 <i class="fas fa-chevron-down ml-1 text-gray-400"></i>
               </button>
-              <div *ngIf="openFilterDropdown === 'dept'" class="absolute z-50 top-full left-0 mt-1 w-80 bg-white border border-gray-200 rounded-lg shadow-xl max-h-80 overflow-hidden flex flex-col">
+              <div *ngIf="openFilterDropdown === 'dept'" class="absolute z-50 top-full left-0 mt-1 w-[min(20rem,calc(100vw-2rem))] bg-white border border-gray-200 rounded-lg shadow-xl max-h-80 overflow-hidden flex flex-col">
                 <div class="p-2 border-b bg-indigo-50 flex items-center justify-between text-[10px]">
                   <button type="button" (click)="clearFilterArr(selectedDepts); onDeptCascade()" class="px-2 py-0.5 bg-gray-200 hover:bg-gray-300 rounded font-bold">ล้าง</button>
                   <span class="text-indigo-700 font-bold">เลือก: {{ selectedDepts.length }}</span>
@@ -364,7 +364,7 @@
                 <span class="truncate" [class.text-gray-400]="selectedTypes.length === 0">{{ filterLabel(selectedTypes, 'ประเภท: ทั้งหมด') }}</span>
                 <i class="fas fa-chevron-down ml-1 text-gray-400"></i>
               </button>
-              <div *ngIf="openFilterDropdown === 'type'" class="absolute z-50 top-full right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden">
+              <div *ngIf="openFilterDropdown === 'type'" class="absolute z-50 top-full right-0 mt-1 w-[min(12rem,calc(100vw-2rem))] bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden">
                 <div class="p-2 border-b bg-indigo-50 flex items-center justify-between text-[10px]">
                   <button type="button" (click)="clearFilterArr(selectedTypes)" class="px-2 py-0.5 bg-gray-200 hover:bg-gray-300 rounded font-bold">ล้าง</button>
                   <button type="button" (click)="openFilterDropdown = ''" class="px-2 py-0.5 bg-indigo-500 text-white rounded font-bold">ตกลง</button>
