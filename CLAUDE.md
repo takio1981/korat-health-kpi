@@ -232,6 +232,12 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - **Aggregate endpoint**: `GET /sub-results/summary` — **AVG** ต่อ indicator (หารด้วยจำนวน sub)
   - Return: avg_target, m10-m09 (ต่อเดือน), sub_count
 - Dashboard main row: merge sub summary → override target_value + monthly + last_actual
+  - `_mainOriginal` เก็บ raw values ก่อน override
+  - `_fromSubSummary` flag = true เมื่อถูก override
+  - **Edit mode ต้องคืน raw values** ก่อน snapshot `_original` — ไม่งั้น save จะเจอ "no changes"
+    เพราะ `applySubSummaryToKpiData` override ค่า user's edit กลับเป็น AVG
+  - `applySubSummaryToKpiData()` early-return ถ้า `isEditing === true`
+  - ออกจากโหมด edit + save success → call `applySubSummaryToKpiData()` ใหม่เพื่อแสดง AVG
 - Modal บันทึกผลย่อย: ตาราง 12 เดือน (ไม่ใช้ dropdown) + คอลัมน์ ผลงาน + %
 - `formatNum()` helper: จำนวนเต็มไม่มีทศนิยม (70), มีเศษ 2 ตำแหน่ง (70.50)
 

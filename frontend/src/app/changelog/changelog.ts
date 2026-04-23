@@ -18,6 +18,16 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.04.23-4',
+      date: '23 เมษายน 2569',
+      changes: [
+        { type: 'fix', text: 'Dashboard: แก้ไขผลงาน → Save แจ้ง "ไม่มีการเปลี่ยนแปลง" (ทุก role ยกเว้น super_admin) — ชน sub-summary override' },
+        { type: 'fix', text: 'applySubSummaryToKpiData() early-return ถ้า isEditing — กัน re-override ระหว่างแก้ไข' },
+        { type: 'fix', text: 'toggleEditMode (เข้าโหมด): คืน raw values จาก _mainOriginal ก่อน snapshot _original → user แก้ raw values จริง ไม่ใช่ AVG' },
+        { type: 'fix', text: 'toggleEditMode (ออกโหมด) + Save success: re-apply sub summary AVG + setFocusMode(false) sync sidebar' },
+      ]
+    },
+    {
       version: '2569.04.23-3',
       date: '23 เมษายน 2569',
       changes: [
