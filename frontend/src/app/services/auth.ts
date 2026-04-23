@@ -20,6 +20,12 @@ export class AuthService {
   private _pendingStats$ = new BehaviorSubject<any>({ deptCount: 0, hosCount: 0, indicatorCount: 0 });
   pendingStats$ = this._pendingStats$.asObservable();
 
+  // Focus mode — เมื่อผู้ใช้อยู่ในโหมดที่ต้องการพื้นที่เต็ม (edit/delete KPI)
+  // Layout จะปิด sidebar ซ่อนจนกว่าจะออกจากโหมด
+  private _focusMode$ = new BehaviorSubject<boolean>(false);
+  focusMode$ = this._focusMode$.asObservable();
+  setFocusMode(v: boolean) { this._focusMode$.next(!!v); }
+
   constructor() { }
 
   // ฟังก์ชันยิง API ไปที่ Backend เพื่อ Login

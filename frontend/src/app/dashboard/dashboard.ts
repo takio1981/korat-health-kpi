@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, ChangeDetectorRef, NgZone } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, ChangeDetectorRef, NgZone } from '@angular/core';
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { NgApexchartsModule } from 'ng-apexcharts';
@@ -14,7 +14,7 @@ import { HttpErrorResponse } from '@angular/common/http';
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css'
 })
-export class DashboardComponent implements OnInit {
+export class DashboardComponent implements OnInit, OnDestroy {
   private authService = inject(AuthService);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
@@ -246,6 +246,11 @@ export class DashboardComponent implements OnInit {
     rank: 0,
     totalHospitals: 0
   };
+
+  ngOnDestroy() {
+    // คืนค่า sidebar เมื่อออกจากหน้า dashboard (กันล็อค)
+    this.authService.setFocusMode(false);
+  }
 
   ngOnInit() {
     this.currentUser = this.authService.getUser();
@@ -840,6 +845,7 @@ export class DashboardComponent implements OnInit {
         (s === 'fail' && hasTarget && !this.isTargetMet(item)) ||
         (s === 'pending' && item.pending_count > 0) ||
         (s === 'reviewed' && Number(item.pending_count) === 0 && hasActual) ||
+        (s === 'has_target_actual' && hasTarget && hasActual) ||
         (s === 'no_target' && !hasTarget) ||
         (s === 'no_actual' && hasTarget && !hasActual);
       const matchStatus = this.selectedStatuses.length === 0 || this.selectedStatuses.some(statusMatches);
@@ -867,6 +873,7 @@ export class DashboardComponent implements OnInit {
         item._original = { ...item };
       });
       this.isEditing = true;
+      this.authService.setFocusMode(true);
       Swal.fire({
         icon: 'info',
         title: 'เข้าสู่โหมดแก้ไข',
@@ -878,6 +885,7 @@ export class DashboardComponent implements OnInit {
     } else {
       this.resetData(false);
       this.isEditing = false;
+      this.authService.setFocusMode(this.isDeleteMode);
     }
   }
 
@@ -1248,6 +1256,7 @@ export class DashboardComponent implements OnInit {
     this.isDeleteMode = !this.isDeleteMode;
     if (!this.isDeleteMode) this.deleteSelected.clear();
     if (this.isDeleteMode) { this.isReviewMode = false; this.reviewSelected.clear(); }
+    this.authService.setFocusMode(this.isDeleteMode || this.isEditing);
   }
 
   toggleDeleteItem(item: any) {

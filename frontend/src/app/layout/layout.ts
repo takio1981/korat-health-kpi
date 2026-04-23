@@ -28,6 +28,8 @@ export class LayoutComponent implements OnInit {
   announcement: any = null;
 
   isSidebarOpen: boolean = window.innerWidth >= 1024; // desktop เปิด, mobile ซ่อน
+  private _prevSidebarOpen: boolean = true; // เก็บค่าเดิมก่อนเข้า focus mode
+  isFocusMode: boolean = false;
   isLoading: boolean = false;
   isAdmin: boolean = false;       // admin_ssj + super_admin (ส่วนกลาง)
   isAnyAdmin: boolean = false;    // admin_cup + admin_ssj + super_admin (ทุกระดับ admin)
@@ -81,6 +83,18 @@ export class LayoutComponent implements OnInit {
     this.authService.pendingStats$.subscribe(stats => {
       this.pendingStats = stats;
       this.pendingKpiCount = stats.indicatorCount || 0;
+      this.cdr.detectChanges();
+    });
+
+    // Subscribe focus mode → ปิด sidebar อัตโนมัติเมื่อผู้ใช้ต้องการพื้นที่เต็ม (edit/delete KPI)
+    this.authService.focusMode$.subscribe(focus => {
+      if (focus && !this.isFocusMode) {
+        this._prevSidebarOpen = this.isSidebarOpen;
+        this.isSidebarOpen = false;
+      } else if (!focus && this.isFocusMode) {
+        this.isSidebarOpen = this._prevSidebarOpen;
+      }
+      this.isFocusMode = focus;
       this.cdr.detectChanges();
     });
 

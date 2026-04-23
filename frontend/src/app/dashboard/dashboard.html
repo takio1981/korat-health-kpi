@@ -310,6 +310,8 @@
                 <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
                   <input type="checkbox" [checked]="isFilterSelected(selectedStatuses, 'reviewed')" (change)="toggleFilterItem(selectedStatuses, 'reviewed')" class="rounded text-teal-600"><span class="text-teal-600">ตรวจสอบแล้ว</span></label>
                 <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
+                  <input type="checkbox" [checked]="isFilterSelected(selectedStatuses, 'has_target_actual')" (change)="toggleFilterItem(selectedStatuses, 'has_target_actual')" class="rounded text-emerald-600"><span class="text-emerald-600">มีเป้า/มีผลงาน</span></label>
+                <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
                   <input type="checkbox" [checked]="isFilterSelected(selectedStatuses, 'no_target')" (change)="toggleFilterItem(selectedStatuses, 'no_target')" class="rounded text-gray-500"><span class="text-gray-500">ยังไม่มีเป้าหมาย</span></label>
                 <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
                   <input type="checkbox" [checked]="isFilterSelected(selectedStatuses, 'no_actual')" (change)="toggleFilterItem(selectedStatuses, 'no_actual')" class="rounded text-blue-600"><span class="text-blue-600">มีเป้า/ไม่มีผลงาน</span></label>
@@ -702,7 +704,8 @@
                 </th>
                 <th class="px-3 py-3 frozen col-1 bg-green-700">หมวดหมู่หลัก</th>
                 <th class="px-3 py-3 frozen col-2 bg-green-700 border-r border-green-600">ชื่อตัวชี้วัด</th>
-                <th class="px-3 py-3 frozen col-3 bg-green-700 border-r border-green-600">หน่วยบริการ</th>
+                <th class="px-2 py-3 frozen col-3 bg-green-700 text-center border-r border-green-600">จัดการ</th>
+                <th class="px-3 py-3 frozen col-4 bg-green-700 border-r border-green-600">หน่วยบริการ</th>
                 <th class="px-3 py-3 bg-green-700 border-r border-green-600">หน่วยงาน</th>
                 <th class="px-3 py-3 bg-green-700 border-r border-green-600">อำเภอ</th>
                 <th class="px-3 py-3 bg-green-800 text-right">เป้าหมาย</th>
@@ -741,8 +744,7 @@
 
                 <!-- Col 2: ชื่อตัวชี้วัด -->
                 <td class="px-3 py-2 frozen col-2 bg-white border-r border-gray-100">
-                  <div class="flex items-center justify-between gap-2">
-                    <div class="flex items-start gap-1.5 min-w-0 flex-wrap">
+                  <div class="flex items-start gap-1.5 min-w-0 flex-wrap">
                       <i *ngIf="isTargetMet(item)" class="fas fa-check-circle text-green-500 mt-0.5 shrink-0 text-xs"></i>
                       <i *ngIf="!isTargetMet(item)" class="fas fa-times-circle text-red-500 mt-0.5 shrink-0 text-xs"></i>
                       <!-- สถานะ (merged เข้า col ชื่อตัวชี้วัด) -->
@@ -791,8 +793,12 @@
                       <button (click)="openTrendModal(item)" class="text-blue-500 hover:text-blue-700 p-0.5 focus:outline-none shrink-0" title="ดูแนวโน้ม">
                         <i class="fas fa-chart-line text-xs"></i>
                       </button>
-                    </div>
-                    <div class="flex gap-0.5 shrink-0">
+                  </div>
+                </td>
+
+                <!-- Col 3: จัดการ (action icons — แนวตั้ง) — frozen -->
+                <td class="px-1 py-2 frozen col-3 bg-white border-r border-gray-100">
+                  <div class="flex flex-col items-center gap-0.5">
                       <button *ngIf="(isAdmin || isSuperAdmin) && (item.indicator_status === 'pending' || item.indicator_status === 'Pending')"
                               (click)="approveKpi(item)"
                               class="text-green-600 hover:text-green-800 p-0.5 transition-colors"
@@ -929,12 +935,11 @@
                           {{ sum.avg_pct }}%
                         </span>
                       </button>
-                    </div>
                   </div>
                 </td>
 
-                <!-- Col 3: หน่วยบริการ (+ ประเภทย่อ เช่น รพช.) — frozen -->
-                <td class="px-3 py-2 frozen col-3 bg-white border-r border-gray-100 text-gray-600 text-xs">
+                <!-- Col 4: หน่วยบริการ (+ ประเภทย่อ เช่น รพช.) — frozen -->
+                <td class="px-3 py-2 frozen col-4 bg-white border-r border-gray-100 text-gray-600 text-xs">
                   <div class="flex items-center gap-1 flex-wrap">
                     <span class="break-words">{{ item.hosname || '-' }}</span>
                     <span *ngIf="item.hostype" class="px-1.5 py-0.5 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded text-[10px] font-bold whitespace-nowrap shrink-0"
