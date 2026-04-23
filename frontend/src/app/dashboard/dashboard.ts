@@ -339,7 +339,6 @@ export class DashboardComponent implements OnInit {
     if (this.selectedHosTypes.length > 0) filters.hostype = this.selectedHosTypes.join(',');
     // ส่ง indicator_off_type → backend filter kpi_indicators.required_off_types
     if (this.selectedIndicatorOffTypes.length > 0) filters.indicator_off_type = this.selectedIndicatorOffTypes.join(',');
-    console.log('[KPI] loadKpiData filters:', JSON.stringify(filters));
     this.authService.getKpiResults(filters).subscribe({
       next: (res) => {
         this.isLoading = false;
