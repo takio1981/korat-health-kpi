@@ -570,12 +570,18 @@
                   </div>
                 </div>
 
-                <div class="grid grid-cols-4 gap-2 text-xs" *ngIf="!isEditing">
-                  <div *ngFor="let month of getRecentMonths(item, 4)"
-                       class="text-center p-1 rounded"
-                       [ngClass]="(item[month.key] && item[month.key] !== '0') ? 'bg-green-100 font-bold text-gray-900' : 'text-gray-400 bg-white'">
-                    <div class="text-gray-600 mb-1">{{ month.name }}</div>
-                    <div>{{ (item[month.key] && item[month.key] !== '0') ? item[month.key] : '-' }}</div>
+                <!-- 12 เดือน — scroll แนวนอน เริ่มที่ 6 เดือนล่าสุดที่มีข้อมูล -->
+                <div *ngIf="!isEditing"
+                     class="overflow-x-auto pb-1 -mx-1"
+                     [initScrollLeft]="getMobileMonthScroll(item, 6, 62, 8)"
+                     style="scrollbar-width: thin;">
+                  <div class="flex gap-2 text-xs px-1" style="width: max-content;">
+                    <div *ngFor="let month of FISCAL_MONTHS"
+                         class="w-[62px] shrink-0 text-center p-1 rounded"
+                         [ngClass]="(item[month.key] && item[month.key] !== '0') ? 'bg-green-100 font-bold text-gray-900' : 'text-gray-400 bg-white border border-gray-100'">
+                      <div class="text-gray-600 mb-1">{{ month.name }}</div>
+                      <div>{{ (item[month.key] && item[month.key] !== '0') ? item[month.key] : '-' }}</div>
+                    </div>
                   </div>
                 </div>
                   <div class="flex gap-2">

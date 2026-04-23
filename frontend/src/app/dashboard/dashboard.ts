@@ -6,11 +6,12 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import Swal from 'sweetalert2';
 import { HttpErrorResponse } from '@angular/common/http';
+import { InitScrollLeftDirective } from './init-scroll-left.directive';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, NgApexchartsModule],
+  imports: [CommonModule, FormsModule, RouterModule, NgApexchartsModule, InitScrollLeftDirective],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css'
 })
@@ -2070,26 +2071,40 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return Number.isInteger(n) ? String(n) : n.toFixed(2);
   }
 
-  // 12 เดือนตามลำดับปีงบประมาณ (ต.ค. → ก.ย.)
-  private readonly FISCAL_MONTHS: { key: string; name: string }[] = [
+  // 12 เดือนตามลำดับปีงบประมาณ (ต.ค. → ก.ย.) — public เพื่อใช้ใน template
+  readonly FISCAL_MONTHS: { key: string; name: string }[] = [
     { key: 'oct', name: 'ต.ค.' }, { key: 'nov', name: 'พ.ย.' }, { key: 'dece', name: 'ธ.ค.' },
     { key: 'jan', name: 'ม.ค.' }, { key: 'feb', name: 'ก.พ.' }, { key: 'mar', name: 'มี.ค.' },
     { key: 'apr', name: 'เม.ย.' }, { key: 'may', name: 'พ.ค.' }, { key: 'jun', name: 'มิ.ย.' },
     { key: 'jul', name: 'ก.ค.' }, { key: 'aug', name: 'ส.ค.' }, { key: 'sep', name: 'ก.ย.' },
   ];
 
+  private hasMonthData(v: any): boolean {
+    const s = String(v ?? '').trim();
+    return s !== '' && s !== '0' && s !== 'null';
+  }
+
   // ดึง N เดือนล่าสุดที่มีข้อมูล (ตามลำดับปีงบประมาณ) สำหรับแสดงบน mobile/tablet
   // ถ้ามีน้อยกว่า count เดือน จะ pad ด้วยเดือนล่าสุดตามลำดับเพื่อให้ครบจำนวนช่อง
   getRecentMonths(item: any, count: number = 4): { key: string; name: string }[] {
-    const hasData = (v: any) => {
-      const s = String(v ?? '').trim();
-      return s !== '' && s !== '0' && s !== 'null';
-    };
-    const withData = this.FISCAL_MONTHS.filter(m => hasData(item[m.key]));
+    const withData = this.FISCAL_MONTHS.filter(m => this.hasMonthData(item[m.key]));
     if (withData.length >= count) return withData.slice(-count);
     if (withData.length === 0) return this.FISCAL_MONTHS.slice(0, count);
     // เติมด้วย fiscal tail เดือนที่ล่าสุด (ไม่ว่า empty ก็ตาม)
     return this.FISCAL_MONTHS.slice(-count);
+  }
+
+  // คำนวณ scrollLeft (px) ให้ mobile card เลื่อนไปยัง "6 เดือนล่าสุดที่มีข้อมูล"
+  // cellWidth: ความกว้างแต่ละช่องเดือน (รวม gap)
+  getMobileMonthScroll(item: any, visibleCount: number = 6, cellWidth: number = 70, gap: number = 8): number {
+    let lastIdx = -1;
+    for (let i = 0; i < this.FISCAL_MONTHS.length; i++) {
+      if (this.hasMonthData(item[this.FISCAL_MONTHS[i].key])) lastIdx = i;
+    }
+    if (lastIdx < 0) return 0; // ไม่มีข้อมูลเลย → เริ่มจาก ต.ค.
+    // ให้ช่องที่ `lastIdx` อยู่ขวาสุดของ viewport (แสดง visibleCount ช่องก่อนหน้า)
+    const startIdx = Math.max(0, lastIdx - (visibleCount - 1));
+    return startIdx * (cellWidth + gap);
   }
 
   // ค่าเดือนล่าสุดที่มีผลงาน (ลำดับย้อนกลับ ก.ย.→ต.ค.) — format จำนวนเต็ม/2 ตำแหน่ง
