@@ -869,7 +869,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   toggleEditMode() {
     if (!this.isEditing) {
+      // ถ้า item ถูก override ด้วย sub-summary AVG → คืนค่า raw ก่อนให้แก้ไข
+      // (ไม่งั้น edit กับ save ไม่ตรงกัน เพราะ save ส่งค่าไปบันทึกเป็น kpi_results จริงของ main indicator)
       this.filteredData.forEach(item => {
+        if (item._fromSubSummary && item._mainOriginal) {
+          Object.assign(item, item._mainOriginal);
+          item._fromSubSummary = false;
+        }
         item._original = { ...item };
       });
       this.isEditing = true;
@@ -886,6 +892,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.resetData(false);
       this.isEditing = false;
       this.authService.setFocusMode(this.isDeleteMode);
+      // ออกจากโหมดแก้ไข → re-apply sub summary AVG กลับขึ้นจอ
+      this.applySubSummaryToKpiData();
     }
   }
 
@@ -1126,6 +1134,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         if (replyObservables.length === 0) {
           Swal.fire('สำเร็จ', 'บันทึกข้อมูลเรียบร้อยแล้ว', 'success');
           this.isEditing = false;
+          this.authService.setFocusMode(this.isDeleteMode);
           this.loadKpiData();
           this.loadDashboardStats();
           return;
@@ -1141,6 +1150,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
               if (completed === replyObservables.length && !hasError) {
                 Swal.fire('สำเร็จ', `บันทึกข้อมูลและตอบกลับเรียบร้อยแล้ว (${resubmitItems.length} รายการ)`, 'success');
                 this.isEditing = false;
+                this.authService.setFocusMode(this.isDeleteMode);
                 this.loadKpiData();
                 this.loadDashboardStats();
               }
@@ -1173,6 +1183,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       next: (res) => {
         Swal.fire('สำเร็จ', isNew ? 'เพิ่มตัวชี้วัดเรียบร้อยแล้ว' : 'บันทึกผล KPI เรียบร้อยแล้ว', 'success');
         this.isEditing = false;
+        this.authService.setFocusMode(this.isDeleteMode);
         this.showAddModal = false;
         this.loadKpiData();
         this.loadDashboardStats();
@@ -1992,6 +2003,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // Merge sub aggregate → main indicator row (override target + monthly + last_actual)
   applySubSummaryToKpiData() {
     if (!this.kpiData || this.kpiData.length === 0) return;
+    // ห้าม override ระหว่างโหมดแก้ไข — ไม่งั้น user's edit จะถูกล้างกลับเป็น AVG
+    if (this.isEditing) return;
     for (const item of this.kpiData) {
       const sum = this.getSubSummary(item);
       if (!sum) continue;
