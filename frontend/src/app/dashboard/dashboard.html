@@ -788,6 +788,9 @@
                         </span>
                       </ng-container>
                       <span class="font-medium text-gray-900 whitespace-normal break-words" [title]="item.kpi_indicators_name">{{ item.kpi_indicators_name }}</span>
+                      <button (click)="openTrendModal(item)" class="text-blue-500 hover:text-blue-700 p-0.5 focus:outline-none shrink-0" title="ดูแนวโน้ม">
+                        <i class="fas fa-chart-line text-xs"></i>
+                      </button>
                     </div>
                     <div class="flex gap-0.5 shrink-0">
                       <button *ngIf="(isAdmin || isSuperAdmin) && (item.indicator_status === 'pending' || item.indicator_status === 'Pending')"
@@ -916,9 +919,6 @@
                               class="text-purple-500 hover:text-purple-700 p-0.5 transition-colors"
                               title="กรอกข้อมูลแบบฟอร์ม">
                         <i class="fas fa-clipboard-list text-xs"></i>
-                      </button>
-                      <button (click)="openTrendModal(item)" class="text-blue-500 hover:text-blue-700 p-0.5 focus:outline-none" title="ดูแนวโน้ม">
-                        <i class="fas fa-chart-line text-xs"></i>
                       </button>
                       <button *ngIf="getSubCount(item.indicator_id) > 0" (click)="openSubResultModal(item)"
                               class="text-indigo-600 hover:text-indigo-800 p-0.5 focus:outline-none flex items-center gap-0.5"
