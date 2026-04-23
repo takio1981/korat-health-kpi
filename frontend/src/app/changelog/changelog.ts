@@ -18,6 +18,15 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.04.23-3',
+      date: '23 เมษายน 2569',
+      changes: [
+        { type: 'improve', text: 'Dashboard: ย้าย อำเภอ → cell "หน่วยบริการ" (บรรทัดที่ 2, icon 📍) — ลบคอลัมน์ "อำเภอ" แยก' },
+        { type: 'improve', text: 'Dashboard: ย้าย หน่วยงาน → cell "ชื่อตัวชี้วัด" (badge slate + icon 🏢 ก่อน chart icon) — ลบคอลัมน์ "หน่วยงาน" แยก' },
+        { type: 'improve', text: 'Dashboard: ตารางกระชับขึ้น พื้นที่ scrollable มากขึ้น สำหรับคอลัมน์เดือน 12 ช่อง' },
+      ]
+    },
+    {
       version: '2569.04.23-2',
       date: '23 เมษายน 2569',
       changes: [
