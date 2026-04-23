@@ -706,8 +706,6 @@
                 <th class="px-3 py-3 frozen col-2 bg-green-700 border-r border-green-600">ชื่อตัวชี้วัด</th>
                 <th class="px-2 py-3 frozen col-3 bg-green-700 text-center border-r border-green-600">จัดการ</th>
                 <th class="px-3 py-3 frozen col-4 bg-green-700 border-r border-green-600">หน่วยบริการ</th>
-                <th class="px-3 py-3 bg-green-700 border-r border-green-600">หน่วยงาน</th>
-                <th class="px-3 py-3 bg-green-700 border-r border-green-600">อำเภอ</th>
                 <th class="px-3 py-3 bg-green-800 text-right">เป้าหมาย</th>
                 <th class="px-3 py-3 bg-green-800 text-right">ผลงานรวม</th>
                 <th class="px-2 py-3 bg-green-800 text-center border-r border-green-600">%</th>
@@ -790,6 +788,9 @@
                         </span>
                       </ng-container>
                       <span class="font-medium text-gray-900 whitespace-normal break-words" [title]="item.kpi_indicators_name">{{ item.kpi_indicators_name }}</span>
+                      <span *ngIf="item.dept_name" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded text-[10px] font-semibold whitespace-nowrap shrink-0" [title]="'หน่วยงาน: ' + item.dept_name">
+                        <i class="fas fa-building text-[8px]"></i>{{ item.dept_name }}
+                      </span>
                       <button (click)="openTrendModal(item)" class="text-blue-500 hover:text-blue-700 p-0.5 focus:outline-none shrink-0" title="ดูแนวโน้ม">
                         <i class="fas fa-chart-line text-xs"></i>
                       </button>
@@ -938,20 +939,18 @@
                   </div>
                 </td>
 
-                <!-- Col 4: หน่วยบริการ (+ ประเภทย่อ เช่น รพช.) — frozen -->
+                <!-- Col 4: หน่วยบริการ (+ ประเภทย่อ + อำเภอบรรทัด 2) — frozen -->
                 <td class="px-3 py-2 frozen col-4 bg-white border-r border-gray-100 text-gray-600 text-xs">
                   <div class="flex items-center gap-1 flex-wrap">
                     <span class="break-words">{{ item.hosname || '-' }}</span>
                     <span *ngIf="item.hostype" class="px-1.5 py-0.5 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded text-[10px] font-bold whitespace-nowrap shrink-0"
                           [title]="item.hostypename">{{ getHosTypeAbbr(item.hostype) }}</span>
                   </div>
+                  <div *ngIf="item.distname" class="text-[10px] text-gray-500 mt-0.5 flex items-center gap-1">
+                    <i class="fas fa-map-marker-alt text-gray-400 text-[9px]"></i>{{ item.distname }}
+                  </div>
                 </td>
 
-                <!-- Col 4: หน่วยงาน -->
-                <td class="px-3 py-2 bg-white border-r border-gray-100 font-medium text-gray-700">{{ item.dept_name }}</td>
-
-                <!-- Col 5: อำเภอ -->
-                <td class="px-3 py-2 bg-white border-r border-gray-100 text-gray-600 text-xs whitespace-nowrap">{{ item.distname || '-' }}</td>
 
                 <!-- Col 8: เป้าหมาย -->
                 <td class="px-1 py-2 bg-amber-50/30 font-bold text-gray-800 text-right whitespace-nowrap">
