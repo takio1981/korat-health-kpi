@@ -568,11 +568,16 @@
 
                 <div class="grid grid-cols-3 gap-2 text-xs" *ngIf="isEditing">
                   <div *ngFor="let month of [{key: 'oct', name: 'ต.ค.'}, {key: 'nov', name: 'พ.ย.'}, {key: 'dece', name: 'ธ.ค.'}, {key: 'jan', name: 'ม.ค.'}, {key: 'feb', name: 'ก.พ.'}, {key: 'mar', name: 'มี.ค.'}, {key: 'apr', name: 'เม.ย.'}, {key: 'may', name: 'พ.ค.'}, {key: 'jun', name: 'มิ.ย.'}, {key: 'jul', name: 'ก.ค.'}, {key: 'aug', name: 'ส.ค.'}, {key: 'sep', name: 'ก.ย.'}]"
-                       class="text-center p-1 rounded"
-                       [ngClass]="(item[month.key] && item[month.key] !== '0') ? 'bg-green-100' : 'bg-gray-50'">
-                    <div class="text-gray-600 mb-1">{{ month.name }}</div>
-                    <input *ngIf="isEditing" type="text" [(ngModel)]="item[month.key]" (ngModelChange)="onValueChange(item, month.key)" class="w-full border border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:border-green-500 hover:border-green-400 transition-colors" [ngClass]="isModified(item, month.key) ? 'bg-orange-200 font-bold text-red-600 ring-2 ring-orange-400' : 'bg-white'">
-                    <span *ngIf="!isEditing">{{ (item[month.key] && item[month.key] !== '0') ? item[month.key] : '-' }}</span>
+                       class="text-center p-1 rounded relative"
+                       [ngClass]="item.is_locked ? 'bg-gray-100 border border-gray-200' : ((item[month.key] && item[month.key] !== '0') ? 'bg-green-100' : 'bg-gray-50')">
+                    <div class="text-gray-600 mb-1 flex items-center justify-center gap-1">
+                      {{ month.name }}
+                      <i *ngIf="item.is_locked" class="fas fa-lock text-amber-500 text-[9px]" title="ล็อค — แก้ไขไม่ได้"></i>
+                    </div>
+                    <input *ngIf="!item.is_locked" type="text" [(ngModel)]="item[month.key]" (ngModelChange)="onValueChange(item, month.key)"
+                           class="w-full border border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:border-green-500 hover:border-green-400 transition-colors"
+                           [ngClass]="isModified(item, month.key) ? 'bg-orange-200 font-bold text-red-600 ring-2 ring-orange-400' : 'bg-white'">
+                    <span *ngIf="item.is_locked" class="block font-bold text-gray-600">{{ (item[month.key] && item[month.key] !== '0') ? item[month.key] : '-' }}</span>
                   </div>
                 </div>
 
