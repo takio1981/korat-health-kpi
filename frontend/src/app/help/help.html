@@ -223,11 +223,11 @@
         <h4 class="font-bold text-gray-700 text-sm mb-2"><i class="fas fa-table mr-2 text-green-500"></i>คอลัมน์ในตาราง</h4>
         <div class="bg-gray-50 rounded-xl p-4 text-xs text-gray-600 grid grid-cols-2 md:grid-cols-4 gap-2">
           <span><b>หมวดหมู่</b> — ชื่อหมวดหมู่หลัก</span>
-          <span><b>ตัวชี้วัด</b> — ชื่อ KPI + สัญญลักษณ์ประเภท (R9/MOPH/SSJ/RMW/อื่นๆ) + ปุ่มจัดการ</span>
+          <span><b>ตัวชี้วัด</b> — [สถานะ] [ปีงบฯ] [R9/MOPH/SSJ/RMW] [ตัวชี้วัดของ] ชื่อ KPI + 📈 ดูแนวโน้ม inline</span>
           <span><b>หน่วยงาน</b> — ชื่อหน่วยงาน</span>
           <span><b>ปีงบฯ</b> — ปีงบประมาณ</span>
-          <span><b>หน่วยบริการ</b> — ชื่อ รพ./รพ.สต.</span>
-          <span><b>ประเภท</b> — ประเภทหน่วยบริการจาก chospital.hostype (cyan badge)</span>
+          <span><b>จัดการ</b> — ไอคอนแนวตั้ง (อนุมัติ/ตีกลับ/ปลดล็อค/ฟอร์ม/ย่อย)</span>
+          <span><b>หน่วยบริการ</b> — ชื่อ รพ./รพ.สต. + ตัวย่อประเภท (รพศ./รพท./รพช./รพ.สต./สสอ.)</span>
           <span><b>อำเภอ</b> — ชื่ออำเภอ</span>
           <span><b>เป้าหมาย</b> — ตัวเลข/ข้อความ</span>
           <span><b>ผลงานรวม</b> — ค่าล่าสุด</span>
@@ -246,6 +246,7 @@
             <li>สถานะใน popup: <span class="text-green-700"><i class="fas fa-arrow-up"></i> เพิ่มขึ้น</span> / <span class="text-red-600"><i class="fas fa-arrow-down"></i> ลดลง</span> / <span class="text-gray-600"><i class="fas fa-minus"></i> ลบ</span> / <span class="text-green-700"><i class="fas fa-plus-circle"></i> เพิ่ม</span> / <span class="text-amber-700"><i class="fas fa-pen"></i> แก้ไข</span></li>
             <li>กด <b>"คืนค่า"</b> → กลับค่าเดิม | กด <b>"ยกเลิก"</b> → ออกจากโหมดแก้ไข</li>
             <li><b>super_admin</b> สามารถแก้ไขข้อมูลที่ถูกล็อคได้ + กดปุ่ม <b>"ปลดล็อคทั้งหมด"</b> เพื่อปลดล็อคทุกรายการในปี</li>
+            <li class="text-green-700"><i class="fas fa-expand-arrows-alt mr-1"></i><b>Focus Mode:</b> เมื่อเข้าโหมด "แก้ไขผลงาน" หรือ "โหมดลบตัวชี้วัด" ระบบจะ <b>ซ่อน sidebar อัตโนมัติ</b> เพื่อขยายพื้นที่คีย์ข้อมูล — ออกจากโหมดแล้ว sidebar จะกลับมาแสดง</li>
           </ol>
         </div>
 
@@ -257,7 +258,7 @@
             <div class="bg-white rounded-lg p-2 border border-teal-200"><b class="text-teal-700">อำเภอ / ประเภท รพ. / หน่วยบริการ</b> — กรองตามสถานที่ (cascade กัน) | <b>ประเภท รพ.</b> กรองหน่วยบริการตาม chospital.hostype</div>
             <div class="bg-white rounded-lg p-2 border border-amber-200"><b class="text-amber-700">หน่วยงาน / หมวดหมู่หลัก / ตัวชี้วัด</b> — กรองตามโครงสร้าง KPI</div>
             <div class="bg-white rounded-lg p-2 border border-cyan-200"><b class="text-cyan-700">ตัวชี้วัดของ</b> — กรองตัวชี้วัดตาม <b>required_off_types</b> (ประเภทที่รับผิดชอบ) + all_required (ครอบคลุมทุกประเภท)</div>
-            <div class="bg-white rounded-lg p-2 border border-gray-200"><b class="text-gray-700">สถานะ</b> — เช่น รอตรวจสอบ / ตรวจสอบแล้ว / ไม่พบข้อมูล</div>
+            <div class="bg-white rounded-lg p-2 border border-gray-200"><b class="text-gray-700">สถานะ</b> — ผ่านเป้า / ไม่ผ่านเป้า / รอตรวจสอบ / ตรวจสอบแล้ว / <b class="text-emerald-700">มีเป้า+มีผลงาน</b> / ยังไม่มีเป้า / มีเป้าแต่ไม่มีผลงาน</div>
             <div class="bg-white rounded-lg p-2 border border-green-200"><b class="text-green-700">ปุ่ม "ค้นหา"</b> — โหลดข้อมูลตามตัวกรอง (admin_ssj/super_admin ต้องกดเสมอ)</div>
           </div>
           <p class="text-[11px] text-blue-600 mt-2"><i class="fas fa-lightbulb mr-1"></i>ปุ่ม "ล้างตัวกรอง" อยู่ต่อจากปุ่ม "ค้นหา" — ล้าง filter ทั้งหมดในคลิกเดียว</p>

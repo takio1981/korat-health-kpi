@@ -18,6 +18,19 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.04.23-2',
+      date: '23 เมษายน 2569',
+      changes: [
+        { type: 'feature', text: 'Dashboard: ตัวกรอง status เพิ่ม "มีเป้า/มีผลงาน" (emerald) — กรองรายการที่มีทั้ง target_value และ last_actual' },
+        { type: 'feature', text: 'Dashboard: Focus Mode — เข้าโหมดแก้ไข/ลบ → ซ่อน sidebar อัตโนมัติ + จำค่าเดิม (ออกโหมดแล้วเปิดกลับ)' },
+        { type: 'feature', text: 'AuthService: เพิ่ม focusMode$ BehaviorSubject + setFocusMode() — Layout subscribe เพื่อปรับ sidebar' },
+        { type: 'improve', text: 'Dashboard: คอลัมน์ใหม่ "จัดการ" (frozen col-3, 64px) — ไอคอนแนวตั้ง แยกออกจาก "ชื่อตัวชี้วัด"' },
+        { type: 'improve', text: 'Dashboard: หน่วยบริการ ขยับเป็น col-4 (200-240px) — shadow separator ตามไป' },
+        { type: 'improve', text: 'Dashboard: ย้ายไอคอน chart-line (ดูแนวโน้ม) ไปอยู่ inline ต่อท้ายชื่อตัวชี้วัด' },
+        { type: 'improve', text: 'Dashboard: ล็อค (freeze) 4 คอลัมน์ซ้าย — หมวดหมู่ / ชื่อตัวชี้วัด / จัดการ / หน่วยบริการ' },
+      ]
+    },
+    {
       version: '2569.04.23',
       date: '23 เมษายน 2569',
       changes: [

@@ -193,6 +193,23 @@ users.dept_id → departments.id (FK)
 - มี `dept_id` + `distid` สำหรับ role-based filtering โดยไม่ต้อง JOIN ตารางอื่น
 - Report endpoints ทั้ง 4 (`/report/by-indicator`, `/report/by-hospital`, `/report/by-district`, `/report/by-year`) ดึงจาก `kpi_summary` ไม่ใช่ `kpi_results`
 
+### Shared State (AuthService BehaviorSubjects)
+Layout + Dashboard สื่อสารผ่าน `AuthService` BehaviorSubjects:
+- `unreadCount$` — นับแจ้งเตือนที่ยังไม่อ่าน
+- `pendingStats$` — นับ KPI ที่รอตรวจสอบ (deptCount, hosCount, indicatorCount)
+- `focusMode$` — โหมดเต็มพื้นที่ (true = ซ่อน sidebar อัตโนมัติ)
+  - Setter: `authService.setFocusMode(true|false)`
+  - Dashboard call ตอนเข้า `toggleEditMode()` / `toggleDeleteMode()` + reset ใน `ngOnDestroy`
+  - Layout subscribe → ปิด sidebar + จำค่าเดิมใน `_prevSidebarOpen` → คืนเมื่อออก focus mode
+
+### Dashboard Table Frozen Columns
+4 คอลัมน์ซ้ายติด sticky (frozen):
+- `.col-1` — หมวดหมู่หลัก (180px, left:0)
+- `.col-2` — ชื่อตัวชี้วัด (280px, left:180) + [สถานะ][ปีงบฯ][type badges][ตัวชี้วัดของ][ชื่อ][📈ดูแนวโน้ม inline]
+- `.col-3` — จัดการ (64px, left:460) — action icons แนวตั้ง (approve/reject/unlock/form/sub-indicator)
+- `.col-4` — หน่วยบริการ (220px, left:524) + ตัวย่อประเภท (รพศ./รพท./รพช./รพ.สต./สสอ.) — มี shadow separator ขอบขวา
+CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหรับ td frozen, `z-index: 40` สำหรับ th frozen
+
 ### Evaluation Mode & Required Off Types (ขอบเขตหน่วยบริการของตัวชี้วัด)
 - 2 คอลัมน์ใน `kpi_indicators`:
   - `evaluation_mode` VARCHAR(20) — `'any_one'` (เฉพาะบางประเภท) | `'all_required'` (ทุกประเภทบังคับ)
