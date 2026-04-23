@@ -702,11 +702,8 @@
                 </th>
                 <th class="px-3 py-3 frozen col-1 bg-green-700">หมวดหมู่หลัก</th>
                 <th class="px-3 py-3 frozen col-2 bg-green-700 border-r border-green-600">ชื่อตัวชี้วัด</th>
-                <th class="px-3 py-3 frozen col-3 bg-green-700 text-center border-r border-green-600 relative">สถานะ</th>
-                <th class="px-2 py-3 bg-green-700 text-center border-r border-green-600">ปีงบฯ</th>
-                <th class="px-3 py-3 bg-green-700 border-r border-green-600">หน่วยงาน</th>
                 <th class="px-3 py-3 bg-green-700 border-r border-green-600">หน่วยบริการ</th>
-                <th class="px-3 py-3 bg-green-700 border-r border-green-600">ประเภท</th>
+                <th class="px-3 py-3 bg-green-700 border-r border-green-600">หน่วยงาน</th>
                 <th class="px-3 py-3 bg-green-700 border-r border-green-600">อำเภอ</th>
                 <th class="px-3 py-3 bg-green-800 text-right">เป้าหมาย</th>
                 <th class="px-3 py-3 bg-green-800 text-right">ผลงานรวม</th>
@@ -748,6 +745,34 @@
                     <div class="flex items-start gap-1.5 min-w-0 flex-wrap">
                       <i *ngIf="isTargetMet(item)" class="fas fa-check-circle text-green-500 mt-0.5 shrink-0 text-xs"></i>
                       <i *ngIf="!isTargetMet(item)" class="fas fa-times-circle text-red-500 mt-0.5 shrink-0 text-xs"></i>
+                      <!-- สถานะ (merged เข้า col ชื่อตัวชี้วัด) -->
+                      <span *ngIf="item.indicator_status === 'approved' || item.indicator_status === 'Approved'" class="status-badge status-approved shrink-0 mt-0.5">
+                        <i class="fas fa-check-circle"></i> ตรวจสอบแล้ว
+                      </span>
+                      <span *ngIf="item.indicator_status === 'pending' || item.indicator_status === 'Pending'" class="status-badge status-pending animate-pulse shrink-0 mt-0.5">
+                        <i class="fas fa-clock"></i> รอตรวจสอบ
+                      </span>
+                      <span *ngIf="item.indicator_status === 'rejected' || item.indicator_status === 'Rejected'" class="status-badge status-rejected cursor-pointer shrink-0 mt-0.5" (click)="viewRejectionHistory(item)" title="คลิกดูเหตุผล">
+                        <i class="fas fa-undo-alt"></i> ถูกตีกลับ
+                      </span>
+                      <span *ngIf="item.indicator_status === 'resubmit' || item.indicator_status === 'Resubmit'" class="status-badge status-resubmit cursor-pointer shrink-0 mt-0.5" (click)="viewRejectionHistory(item)" title="คลิกดูเหตุผล">
+                        <i class="fas fa-reply"></i> รอตอบกลับ
+                      </span>
+                      <span *ngIf="item.indicator_status === 'appeal' || item.indicator_status === 'Appeal'" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 cursor-pointer shrink-0 mt-0.5" (click)="viewRejectionHistory(item)" title="คลิกดูรายละเอียด">
+                        <i class="fas fa-gavel"></i> ยื่นอุทธรณ์
+                      </span>
+                      <span *ngIf="item.is_locked" class="status-badge status-locked shrink-0 mt-0.5">
+                        <i class="fas fa-lock"></i> ล็อค
+                      </span>
+                      <!-- ปีงบประมาณ -->
+                      <span class="inline-flex items-center px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] font-bold shrink-0 mt-0.5" title="ปีงบประมาณ">
+                        <i class="fas fa-calendar-alt text-[8px] mr-0.5"></i>{{ item.year_bh }}
+                      </span>
+                      <button *ngIf="!isAdmin && (item.indicator_status === 'resubmit' || item.indicator_status === 'Resubmit')"
+                              (click)="openReplyModal(item)"
+                              class="px-1.5 py-0.5 bg-blue-500 hover:bg-blue-600 text-white rounded text-[9px] font-bold transition-all shrink-0 mt-0.5">
+                        <i class="fas fa-paper-plane mr-0.5"></i>ตอบกลับ
+                      </button>
                       <!-- Type indicators (desktop) -->
                       <span *ngFor="let typeItem of getIndicatorTypes(item)"
                             class="inline-block px-1 py-0.5 rounded text-[8px] font-bold whitespace-nowrap shrink-0 mt-0.5"
@@ -908,51 +933,17 @@
                   </div>
                 </td>
 
-                <!-- Col 3: สถานะ -->
-                <td class="px-2 py-2 frozen col-3 bg-white border-r border-gray-100 text-center align-middle relative">
-                  <div class="flex flex-col gap-1 items-center">
-                    <span *ngIf="item.indicator_status === 'approved' || item.indicator_status === 'Approved'" class="status-badge status-approved">
-                      <i class="fas fa-check-circle"></i> ตรวจสอบแล้ว
-                    </span>
-                    <span *ngIf="item.indicator_status === 'pending' || item.indicator_status === 'Pending'" class="status-badge status-pending animate-pulse">
-                      <i class="fas fa-clock"></i> รอตรวจสอบ
-                    </span>
-                    <span *ngIf="item.indicator_status === 'rejected' || item.indicator_status === 'Rejected'" class="status-badge status-rejected cursor-pointer" (click)="viewRejectionHistory(item)" title="คลิกดูเหตุผล">
-                      <i class="fas fa-undo-alt"></i> ถูกตีกลับ
-                    </span>
-                    <span *ngIf="item.indicator_status === 'resubmit' || item.indicator_status === 'Resubmit'" class="status-badge status-resubmit cursor-pointer" (click)="viewRejectionHistory(item)" title="คลิกดูเหตุผล">
-                      <i class="fas fa-reply"></i> รอตอบกลับ
-                    </span>
-                    <span *ngIf="item.indicator_status === 'appeal' || item.indicator_status === 'Appeal'" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 cursor-pointer" (click)="viewRejectionHistory(item)" title="คลิกดูรายละเอียด">
-                      <i class="fas fa-gavel"></i> ยื่นอุทธรณ์
-                    </span>
-                    <button *ngIf="!isAdmin && (item.indicator_status === 'resubmit' || item.indicator_status === 'Resubmit')"
-                            (click)="openReplyModal(item)"
-                            class="mt-1 px-2 py-0.5 bg-blue-500 hover:bg-blue-600 text-white rounded-full text-[9px] font-bold transition-all">
-                      <i class="fas fa-paper-plane mr-0.5"></i>ตอบกลับ
-                    </button>
-                    <span *ngIf="item.is_locked" class="status-badge status-locked">
-                      <i class="fas fa-lock"></i> ล็อค
-                    </span>
-                  </div>
+                <!-- Col 3: หน่วยบริการ (+ ประเภทย่อ เช่น รพช.) -->
+                <td class="px-3 py-2 bg-white border-r border-gray-100 text-gray-600 text-xs whitespace-nowrap">
+                  <span>{{ item.hosname || '-' }}</span>
+                  <span *ngIf="item.hostype" class="ml-1 px-1.5 py-0.5 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded text-[10px] font-bold"
+                        [title]="item.hostypename">{{ getHosTypeAbbr(item.hostype) }}</span>
                 </td>
 
-                <!-- Col 4: ปีงบฯ -->
-                <td class="px-2 py-2 bg-white border-r border-gray-100 text-center font-medium text-gray-500 whitespace-nowrap">{{ item.year_bh }}</td>
-
-                <!-- Col 5: หน่วยงาน -->
+                <!-- Col 4: หน่วยงาน -->
                 <td class="px-3 py-2 bg-white border-r border-gray-100 font-medium text-gray-700">{{ item.dept_name }}</td>
 
-                <!-- Col 6: หน่วยบริการ -->
-                <td class="px-3 py-2 bg-white border-r border-gray-100 text-gray-600 text-xs whitespace-nowrap">{{ item.hosname || '-' }}</td>
-
-                <!-- Col 7: ประเภท -->
-                <td class="px-3 py-2 bg-white border-r border-gray-100 text-gray-600 text-xs whitespace-nowrap">
-                  <span *ngIf="item.hostypename" class="px-2 py-0.5 bg-cyan-50 text-cyan-700 rounded-full text-[10px] font-semibold">{{ item.hostypename }}</span>
-                  <span *ngIf="!item.hostypename" class="text-gray-400">-</span>
-                </td>
-
-                <!-- Col 8: อำเภอ -->
+                <!-- Col 5: อำเภอ -->
                 <td class="px-3 py-2 bg-white border-r border-gray-100 text-gray-600 text-xs whitespace-nowrap">{{ item.distname || '-' }}</td>
 
                 <!-- Col 8: เป้าหมาย -->

@@ -2247,6 +2247,20 @@ export class DashboardComponent implements OnInit {
     return la === tv;
   }
 
+  // แปลง hostypecode → ตัวย่อสั้น (เช่น '07' → 'รพช.')
+  private readonly HOS_TYPE_ABBR: { [k: string]: string } = {
+    '01': 'สสจ.', '02': 'สสอ.', '03': 'สอ.', '04': 'สบช.',
+    '05': 'รพศ.', '06': 'รพท.', '07': 'รพช.',
+    '08': 'ศสช.', '09': 'ศสช.', '10': 'ศว.',
+    '11': 'รพ.นอกสป.', '12': 'รพ.นอกสธ.', '13': 'ศบส.',
+    '14': 'ศสช.', '15': 'รพ.เอกชน', '16': 'คลินิก',
+    '17': 'รพ.สาขา', '18': 'รพ.สต.',
+  };
+  getHosTypeAbbr(code: any): string {
+    const c = String(code ?? '').trim();
+    return this.HOS_TYPE_ABBR[c] || c;
+  }
+
   // ดึง badge "ตัวชี้วัดของ" — แสดงขอบเขตหน่วยบริการที่ตัวชี้วัดใช้
   // evaluation_mode='all_required' → ทุกประเภท
   // evaluation_mode='any_one' + required_off_types=["05","06","07"] → รายชื่อประเภท
