@@ -74,12 +74,12 @@
   width: 280px;
 }
 
-/* Column 3 - สถานะ (last frozen - with shadow separator) */
+/* Column 3 - หน่วยบริการ (last frozen - with shadow separator) */
 .col-3 {
   left: 460px;
-  min-width: 110px;
-  max-width: 110px;
-  width: 110px;
+  min-width: 220px;
+  max-width: 260px;
+  width: 240px;
 }
 
 /* Shadow separator on last frozen column */

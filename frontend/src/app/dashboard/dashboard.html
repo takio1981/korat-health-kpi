@@ -702,7 +702,7 @@
                 </th>
                 <th class="px-3 py-3 frozen col-1 bg-green-700">หมวดหมู่หลัก</th>
                 <th class="px-3 py-3 frozen col-2 bg-green-700 border-r border-green-600">ชื่อตัวชี้วัด</th>
-                <th class="px-3 py-3 bg-green-700 border-r border-green-600">หน่วยบริการ</th>
+                <th class="px-3 py-3 frozen col-3 bg-green-700 border-r border-green-600">หน่วยบริการ</th>
                 <th class="px-3 py-3 bg-green-700 border-r border-green-600">หน่วยงาน</th>
                 <th class="px-3 py-3 bg-green-700 border-r border-green-600">อำเภอ</th>
                 <th class="px-3 py-3 bg-green-800 text-right">เป้าหมาย</th>
@@ -933,11 +933,13 @@
                   </div>
                 </td>
 
-                <!-- Col 3: หน่วยบริการ (+ ประเภทย่อ เช่น รพช.) -->
-                <td class="px-3 py-2 bg-white border-r border-gray-100 text-gray-600 text-xs whitespace-nowrap">
-                  <span>{{ item.hosname || '-' }}</span>
-                  <span *ngIf="item.hostype" class="ml-1 px-1.5 py-0.5 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded text-[10px] font-bold"
-                        [title]="item.hostypename">{{ getHosTypeAbbr(item.hostype) }}</span>
+                <!-- Col 3: หน่วยบริการ (+ ประเภทย่อ เช่น รพช.) — frozen -->
+                <td class="px-3 py-2 frozen col-3 bg-white border-r border-gray-100 text-gray-600 text-xs">
+                  <div class="flex items-center gap-1 flex-wrap">
+                    <span class="break-words">{{ item.hosname || '-' }}</span>
+                    <span *ngIf="item.hostype" class="px-1.5 py-0.5 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded text-[10px] font-bold whitespace-nowrap shrink-0"
+                          [title]="item.hostypename">{{ getHosTypeAbbr(item.hostype) }}</span>
+                  </div>
                 </td>
 
                 <!-- Col 4: หน่วยงาน -->
