@@ -4179,30 +4179,50 @@ async function runScheduledExport(schedule) {
     return result;
 }
 
-// Scheduler loop: ตรวจทุก 60 วินาที
+// Scheduler loop: ตรวจทุก 30 วินาที + match 2 นาทีย้อนหลัง กันพลาด (dedup ด้วย last_run_at>120s)
 function startExportScheduler() {
+    const pad2 = (n) => String(n).padStart(2, '0');
     const check = async () => {
         try {
             const now = new Date();
-            const hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+            const hhmmNow = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+            const prev = new Date(now.getTime() - 60 * 1000);
+            const hhmmPrev = `${pad2(prev.getHours())}:${pad2(prev.getMinutes())}`;
             const dow = now.getDay() === 0 ? 7 : now.getDay(); // 1=จ., 7=อา.
-            // ดึง schedules ที่ตรงเวลาและยังไม่ได้รันในนาทีนี้
+
+            // ดึง schedules ที่ตรงเวลา (current หรือนาทีก่อน) และยังไม่ได้รันในช่วง 120s
             const [schedules] = await db.query(
-                `SELECT * FROM export_schedules WHERE is_enabled=1 AND time_of_day=?
-                 AND (last_run_at IS NULL OR TIMESTAMPDIFF(SECOND, last_run_at, NOW()) > 90)`,
-                [hhmm]
+                `SELECT * FROM export_schedules WHERE is_enabled=1
+                 AND time_of_day IN (?, ?)
+                 AND (last_run_at IS NULL OR TIMESTAMPDIFF(SECOND, last_run_at, NOW()) > 120)`,
+                [hhmmNow, hhmmPrev]
             );
+            if (schedules.length === 0) return;
+
             for (const s of schedules) {
-                const days = (s.days_of_week || '').split(',').map(d => parseInt(d.trim()));
-                if (days.includes(dow)) {
-                    console.log(`[Scheduler] Running export: ${s.name} (${hhmm})`);
-                    runScheduledExport(s).catch(e => console.error('[Scheduler] Error:', e.message));
+                const days = (s.days_of_week || '').split(',').map(d => parseInt(d.trim(), 10)).filter(n => !isNaN(n));
+                if (!days.includes(dow)) {
+                    console.log(`[Scheduler] Skip "${s.name}" — วันนี้ (${dow}) ไม่อยู่ใน days [${days.join(',')}]`);
+                    continue;
                 }
+                console.log(`[Scheduler] 🚀 Running "${s.name}" (time=${s.time_of_day}, now=${hhmmNow}, dow=${dow})`);
+                // Lock ทันทีโดย update last_run_at ก่อน execute กัน double-run จาก overlapping ticks
+                try {
+                    await db.query('UPDATE export_schedules SET last_run_at=NOW() WHERE id=?', [s.id]);
+                } catch (e) {}
+                runScheduledExport(s).catch(e => console.error(`[Scheduler] "${s.name}" Error:`, e.message));
             }
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+            console.error('[Scheduler] check() failed:', e.message);
+        }
     };
-    setInterval(check, 60000); // ทุก 1 นาที
-    console.log('[Scheduler] Export scheduler started');
+
+    // รันครั้งแรกทันที (กันกรณี server start ตอนใกล้เวลา schedule)
+    check().catch(e => console.error('[Scheduler] initial check failed:', e.message));
+    // ตรวจทุก 30 วินาที (1 นาที จะได้ตรวจ 2 ครั้ง → ลดโอกาสพลาด)
+    setInterval(check, 30000);
+    const tzOffset = -new Date().getTimezoneOffset() / 60;
+    console.log(`[Scheduler] Export scheduler started — timezone UTC${tzOffset >= 0 ? '+' : ''}${tzOffset}, check every 30s`);
 }
 
 // ========== Export Schedules CRUD ==========
