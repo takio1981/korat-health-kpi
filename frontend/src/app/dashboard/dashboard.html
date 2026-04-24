@@ -1,10 +1,5 @@
 <ng-container>
-      <!-- Loading Spinner Overlay -->
-      <div *ngIf="isLoading" class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm transition-opacity duration-300">
-        <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-green-600 mb-4"></div>
-        <p class="text-green-800 font-bold text-lg animate-pulse">กำลังโหลดข้อมูล...</p>
-      </div>
-
+      <!-- Loading overlay ถูก replace ด้วย Search Status SweetAlert -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col">
         <!-- Sticky top wrapper (mobile/tablet): ตรึงส่วนบน header + filter + search ให้คงที่ ขณะที่ตัวชี้วัด scroll -->
         <div class="sticky top-0 z-30 bg-white lg:static lg:z-auto">

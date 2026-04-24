@@ -388,9 +388,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     `;
   }
 
+  private _searchTitleEl: HTMLElement | null = null;
+
   private openSearchStatusSwal() {
     Swal.fire({
-      title: '<i class="fas fa-search text-blue-500"></i> กำลังค้นหาข้อมูล',
+      title: '<i class="fas fa-search text-blue-500"></i> กำลังค้นหาข้อมูล...',
       html: this.buildSearchStatusHtml(),
       allowOutsideClick: false,
       allowEscapeKey: false,
@@ -401,27 +403,36 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private updateSearchStatusSwal() {
     if (!Swal.isVisible()) return;
-    // ใช้ container ตรงๆ เพื่อเลี่ยง Swal.update ที่อาจ re-render ช้า
+    // update html body via DOM — เร็วกว่า Swal.update
     const container = Swal.getHtmlContainer();
     if (container) container.innerHTML = this.buildSearchStatusHtml();
   }
 
-  private closeSearchStatusSwal(final?: { success: boolean; message: string }) {
-    // ปิด modal ปัจจุบัน (ถ้ามี) แล้วเปิดอันใหม่พร้อม icon result
-    if (Swal.isVisible()) Swal.close();
-    if (!final) return;
+  // จบการค้นหา: update modal เดิม (ไม่ปิด-เปิดใหม่) + auto-close 5 วินาที + ปุ่มปิด
+  private finishSearchStatusSwal(final: { success: boolean; message: string }) {
+    if (!Swal.isVisible()) return;
     const hasData = this.kpiData.length > 0;
-    Swal.fire({
-      icon: final.success ? (hasData ? 'success' : 'warning') : 'error',
-      title: final.message,
-      html: this.buildSearchStatusHtml(),
-      width: 560,
+    const color = hasData ? '#10b981' : (final.success ? '#f59e0b' : '#ef4444');
+    // ไอคอน + title (no spinner)
+    const iconSvg = final.success
+      ? (hasData
+          ? `<i class="fas fa-check-circle" style="color:#10b981"></i>`
+          : `<i class="fas fa-exclamation-triangle" style="color:#f59e0b"></i>`)
+      : `<i class="fas fa-times-circle" style="color:#ef4444"></i>`;
+    // Update title ผ่าน DOM element
+    const titleEl = Swal.getTitle();
+    if (titleEl) titleEl.innerHTML = `${iconSvg} ${this.escHtml(final.message)}`;
+    // Update content
+    this.updateSearchStatusSwal();
+    // Show confirm button ("ปิด") + เปิด allowOutsideClick
+    Swal.update({
       showConfirmButton: true,
-      confirmButtonText: 'ตกลง',
-      confirmButtonColor: hasData ? '#10b981' : (final.success ? '#f59e0b' : '#ef4444'),
-      timer: 2500,
-      timerProgressBar: true,
+      confirmButtonText: 'ปิด',
+      confirmButtonColor: color,
       allowOutsideClick: true,
+      allowEscapeKey: true,
+      timer: 5000,
+      timerProgressBar: true,
     });
   }
 
@@ -541,7 +552,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
             : 'ไม่พบข้อมูล';
           this.searchStage = msg;
           this.cdr.detectChanges();
-          this.closeSearchStatusSwal({ success: true, message: msg });
+          this.finishSearchStatusSwal({ success: true, message: msg });
 
           if (this.kpiData.length === 0) this.showNoDataAlert();
         }
@@ -552,7 +563,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.searchProgress = 0;
         this.searchDurationMs = Date.now() - this.searchStartedAt;
         this.cdr.detectChanges();
-        this.closeSearchStatusSwal({ success: false, message: 'เกิดข้อผิดพลาดในการโหลดข้อมูล' });
+        this.finishSearchStatusSwal({ success: false, message: 'เกิดข้อผิดพลาดในการโหลดข้อมูล' });
         console.error('Error loading KPI:', err);
       }
     });
