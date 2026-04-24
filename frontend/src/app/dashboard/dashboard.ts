@@ -180,6 +180,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
   subSummaryMap: Map<string, any> = new Map();
 
   isLoading: boolean = false;
+  // Search status / progress
+  searchStage: string = '';
+  searchProgress: number = 0;
+  searchStartedAt: number = 0;
+  searchDurationMs: number = 0;
+  appliedFilters: { label: string; value: string; color: string }[] = [];
+  showSearchStatus: boolean = false;
+  private _progressTimer: any = null;
   private animationTimer: any;
   isAdmin: boolean = false;
   isSuperAdmin: boolean = false;
@@ -325,8 +333,55 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  closeSearchStatus() {
+    this.showSearchStatus = false;
+  }
+
+  // คำนวณตัวกรองที่ใช้งาน → แสดงใน search status panel
+  private computeAppliedFilters(): { label: string; value: string; color: string }[] {
+    const out: { label: string; value: string; color: string }[] = [];
+    if (this.selectedYear) out.push({ label: 'ปีงบฯ', value: this.selectedYear, color: 'bg-green-100 text-green-700' });
+    if (this.selectedDistricts.length > 0) out.push({ label: 'อำเภอ', value: this.selectedDistricts.join(', '), color: 'bg-teal-100 text-teal-700' });
+    if (this.selectedHosTypes.length > 0) out.push({ label: 'ประเภท รพ.', value: this.hosTypeLabel(), color: 'bg-cyan-100 text-cyan-700' });
+    if (this.selectedHospitals.length > 0) out.push({ label: 'หน่วยบริการ', value: this.selectedHospitals.length === 1 ? this.selectedHospitals[0] : `${this.selectedHospitals.length} รพ.`, color: 'bg-blue-100 text-blue-700' });
+    if (this.selectedDepts.length > 0) out.push({ label: 'หน่วยงาน', value: this.selectedDepts.length === 1 ? this.selectedDepts[0] : `${this.selectedDepts.length} หน่วยงาน`, color: 'bg-amber-100 text-amber-700' });
+    if (this.selectedMain) out.push({ label: 'หมวดหมู่', value: this.selectedMain, color: 'bg-indigo-100 text-indigo-700' });
+    if (this.selectedIndicator) out.push({ label: 'ตัวชี้วัด', value: this.selectedIndicator, color: 'bg-indigo-100 text-indigo-700' });
+    if (this.selectedIndicatorOffTypes.length > 0) out.push({ label: 'ตัวชี้วัดของ', value: this.indicatorOffTypeLabel(), color: 'bg-cyan-100 text-cyan-700' });
+    if (this.selectedTypes.length > 0) out.push({ label: 'ประเภท KPI', value: this.selectedTypes.join('/').toUpperCase(), color: 'bg-gray-100 text-gray-700' });
+    if (this.selectedStatuses.length > 0) out.push({ label: 'สถานะ', value: `${this.selectedStatuses.length} สถานะ`, color: 'bg-rose-100 text-rose-700' });
+    if (this.searchTerm?.trim()) out.push({ label: 'ค้นหา', value: this.searchTerm.trim(), color: 'bg-gray-100 text-gray-700' });
+    return out;
+  }
+
+  private animateProgress(to: number, durationMs: number = 600) {
+    if (this._progressTimer) clearInterval(this._progressTimer);
+    const start = this.searchProgress;
+    const diff = to - start;
+    const steps = 20;
+    const stepMs = durationMs / steps;
+    let i = 0;
+    this._progressTimer = setInterval(() => {
+      i++;
+      this.searchProgress = Math.min(to, Math.round(start + (diff * i / steps)));
+      this.cdr.detectChanges();
+      if (i >= steps) {
+        clearInterval(this._progressTimer);
+        this._progressTimer = null;
+      }
+    }, stepMs);
+  }
+
   loadKpiData() {
     this.isLoading = true;
+    // เปิด search status panel + reset progress
+    this.showSearchStatus = true;
+    this.searchStage = 'กำลังค้นหาข้อมูล...';
+    this.searchProgress = 0;
+    this.searchStartedAt = Date.now();
+    this.searchDurationMs = 0;
+    this.appliedFilters = this.computeAppliedFilters();
+    this.animateProgress(30, 400);
     if (!this.selectedYear) this.setDefaultYear();
     // ส่ง filter ไปกรองที่ backend — multi-select ใช้ comma-separated
     const filters: any = { year: this.selectedYear };
@@ -348,6 +403,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.authService.getKpiResults(filters).subscribe({
       next: (res) => {
         this.isLoading = false;
+        this.searchStage = 'กำลังประมวลผลข้อมูล...';
+        this.animateProgress(70, 300);
         if (res && res.success) {
           this.kpiData = res.data;
           this.kpiData.forEach(item => {
@@ -384,6 +441,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
           this.loadDynamicFormMonths();
           // รีโหลด sub summary → จะ apply override หลังโหลดเสร็จ
           this.loadSubResultSummary();
+          // Finalize progress panel
+          this.searchDurationMs = Date.now() - this.searchStartedAt;
+          this.searchStage = this.kpiData.length > 0
+            ? `พบข้อมูล ${this.kpiData.length} รายการ`
+            : 'ไม่พบข้อมูล';
+          this.animateProgress(100, 300);
           this.cdr.detectChanges();
 
           if (this.kpiData.length === 0) this.showNoDataAlert();
@@ -391,6 +454,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.isLoading = false;
+        this.searchStage = 'เกิดข้อผิดพลาดในการโหลดข้อมูล';
+        this.searchProgress = 0;
+        this.searchDurationMs = Date.now() - this.searchStartedAt;
+        this.cdr.detectChanges();
         console.error('Error loading KPI:', err);
       }
     });

@@ -432,6 +432,59 @@
           </div>
         </div>
 
+        <!-- Search status panel (หลังกดปุ่มค้นหา แสดงรายละเอียด + progress) -->
+        <div *ngIf="showSearchStatus" class="mx-4 sm:mx-6 my-2 rounded-xl border overflow-hidden"
+             [ngClass]="searchProgress === 100 ? (kpiData.length > 0 ? 'border-green-200 bg-green-50/50' : 'border-amber-200 bg-amber-50/50') : 'border-blue-200 bg-blue-50/50'">
+          <div class="p-3 sm:p-4 space-y-2.5">
+            <!-- Header: สถานะ + ปุ่มปิด -->
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex items-center gap-2 min-w-0 flex-1">
+                <i *ngIf="searchProgress < 100" class="fas fa-spinner fa-spin text-blue-500"></i>
+                <i *ngIf="searchProgress === 100 && kpiData.length > 0" class="fas fa-check-circle text-green-500"></i>
+                <i *ngIf="searchProgress === 100 && kpiData.length === 0" class="fas fa-exclamation-circle text-amber-500"></i>
+                <span class="text-xs sm:text-sm font-bold" [ngClass]="searchProgress === 100 ? (kpiData.length > 0 ? 'text-green-700' : 'text-amber-700') : 'text-blue-700'">
+                  {{ searchStage }}
+                </span>
+                <span *ngIf="searchProgress === 100" class="text-[10px] text-gray-500">
+                  ({{ (searchDurationMs / 1000).toFixed(2) }} วินาที)
+                </span>
+              </div>
+              <button *ngIf="searchProgress === 100" (click)="closeSearchStatus()"
+                      class="text-gray-400 hover:text-gray-600 shrink-0" title="ปิด">
+                <i class="fas fa-times text-xs"></i>
+              </button>
+            </div>
+
+            <!-- Progress bar -->
+            <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+              <div class="h-2 rounded-full transition-all duration-300"
+                   [ngClass]="searchProgress === 100 ? (kpiData.length > 0 ? 'bg-green-500' : 'bg-amber-500') : 'bg-blue-500'"
+                   [style.width.%]="searchProgress"></div>
+            </div>
+            <div class="flex justify-between text-[10px] text-gray-500">
+              <span>{{ searchProgress }}%</span>
+              <span *ngIf="searchProgress === 100 && kpiData.length > 0">
+                ข้อมูลพร้อมใช้งาน {{ filteredData.length }} / {{ kpiData.length }} รายการ
+              </span>
+            </div>
+
+            <!-- ตัวกรองที่ใช้งาน -->
+            <div *ngIf="appliedFilters.length > 0" class="pt-2 border-t border-gray-200/60">
+              <div class="text-[10px] font-bold text-gray-500 mb-1.5">
+                <i class="fas fa-filter mr-1"></i>ตัวกรองที่ใช้ ({{ appliedFilters.length }}):
+              </div>
+              <div class="flex flex-wrap gap-1.5">
+                <span *ngFor="let f of appliedFilters"
+                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                      [ngClass]="f.color">
+                  <span class="opacity-70">{{ f.label }}:</span>
+                  <span class="font-bold truncate max-w-[180px]" [title]="f.value">{{ f.value }}</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Review Mode Toolbar -->
         <div *ngIf="isReviewMode" class="px-6 py-2 bg-teal-50 border-b border-teal-200 flex items-center gap-3 text-xs">
           <label class="flex items-center gap-2 cursor-pointer text-teal-700 font-bold">
