@@ -2531,9 +2531,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
         html: `<p class="text-sm">บันทึก <b>${ok}</b> รายการ${fail > 0 ? `, ล้มเหลว <b class="text-red-500">${fail}</b>` : ''}</p>`,
         timer: 2500, showConfirmButton: false
       });
+      // คำนวณ AVG ใหม่ทันที — main row ใน dashboard จะ sync ข้อมูลล่าสุดไว้รอ
+      // (ยังไม่ปิด modal — ผู้ใช้กด "ปิด" เอง, ตอนนั้น closeSubResultModal จะ refresh อีกครั้งเพื่อความมั่นใจ)
       this.loadSubResultSummary();
-      if (fail === 0) this.closeSubResultModal();
-      else this.loadSubResultList();
+      // Reload รายการใน modal → inputs แสดงค่าล่าสุดจาก server + reset _subOriginal snapshot
+      this.loadSubResultList();
+      // ออกจากโหมดแก้ไข → กลับเป็น read-only จนกว่าผู้ใช้กด "แก้ไขผลงาน" อีกครั้ง
+      this.subEditMode = false;
     } catch (e: any) {
       Swal.fire('ผิดพลาด', e?.message || 'บันทึกไม่สำเร็จ', 'error');
     }
