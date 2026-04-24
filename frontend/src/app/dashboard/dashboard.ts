@@ -166,6 +166,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // Sub-Indicator Result Modal (ใน dashboard สำหรับบันทึกผลงานย่อย)
   showSubResultModal: boolean = false;
+  // Modal-local state (ไม่กระทบ dashboard main)
+  subEditMode: boolean = false;
+  subDeleteMode: boolean = false;
+  subDeleteSelected: Set<number> = new Set();
   subResultContext: any = null; // { indicator_id, indicator_name, hospcode, hosname, year_bh, month_bh }
   subResultList: any[] = []; // sub-indicators พร้อมผลงาน
   subMonthOptions = [
@@ -2272,6 +2276,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
       hosname: item.hosname,
       year_bh: item.year_bh || this.selectedYear
     };
+    // Reset modal-local state ทุกครั้งที่เปิด modal ใหม่
+    this.subEditMode = false;
+    this.subDeleteMode = false;
+    this.subDeleteSelected.clear();
     this.showSubResultModal = true;
     this.loadSubResultList();
   }
@@ -2280,6 +2288,87 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.showSubResultModal = false;
     this.subResultContext = null;
     this.subResultList = [];
+    this.subEditMode = false;
+    this.subDeleteMode = false;
+    this.subDeleteSelected.clear();
+  }
+
+  // Toggle modal-local edit mode (ไม่กระทบ dashboard main)
+  toggleSubEditMode() {
+    this.subEditMode = !this.subEditMode;
+    if (this.subEditMode) this.subDeleteMode = false;
+  }
+
+  // Toggle modal-local delete mode
+  toggleSubDeleteMode() {
+    this.subDeleteMode = !this.subDeleteMode;
+    if (this.subDeleteMode) this.subEditMode = false;
+    if (!this.subDeleteMode) this.subDeleteSelected.clear();
+  }
+
+  toggleSubDeleteItem(subId: number) {
+    if (this.subDeleteSelected.has(subId)) this.subDeleteSelected.delete(subId);
+    else this.subDeleteSelected.add(subId);
+  }
+
+  isSubDeleteSelected(subId: number): boolean {
+    return this.subDeleteSelected.has(subId);
+  }
+
+  toggleSubDeleteAll() {
+    if (this.subDeleteSelected.size === this.subResultList.length) {
+      this.subDeleteSelected.clear();
+    } else {
+      this.subResultList.forEach(s => this.subDeleteSelected.add(s.id));
+    }
+  }
+
+  get subDeleteAllChecked(): boolean {
+    return this.subResultList.length > 0 && this.subDeleteSelected.size === this.subResultList.length;
+  }
+
+  // ยืนยันและลบตัวชี้วัดย่อยที่เลือก (super_admin only)
+  confirmDeleteSubIndicators() {
+    if (this.subDeleteSelected.size === 0) {
+      Swal.fire('แจ้งเตือน', 'กรุณาเลือกตัวชี้วัดย่อยอย่างน้อย 1 รายการ', 'warning');
+      return;
+    }
+    const selectedSubs = this.subResultList.filter(s => this.subDeleteSelected.has(s.id));
+    const listHtml = selectedSubs.map(s => `<li>${this.escHtml(s.sub_indicator_name)}</li>`).join('');
+    Swal.fire({
+      title: 'ยืนยันการลบตัวชี้วัดย่อย',
+      html: `<div class="text-left text-sm">
+        <p class="text-red-600 font-bold mb-2">จะลบตัวชี้วัดย่อย ${selectedSubs.length} รายการ:</p>
+        <ul class="list-disc ml-5 text-xs text-gray-700 max-h-40 overflow-y-auto">${listHtml}</ul>
+        <p class="mt-3 text-amber-700 text-xs"><i class="fas fa-exclamation-triangle mr-1"></i>การลบจะลบผลงานย่อย (kpi_sub_results) ด้วย — <b>ไม่สามารถกู้คืนได้</b></p>
+      </div>`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: '<i class="fas fa-trash mr-1"></i> ลบ',
+      cancelButtonText: 'ยกเลิก',
+      confirmButtonColor: '#dc2626',
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      Swal.fire({ title: 'กำลังลบ...', allowOutsideClick: false, didOpen: () => Swal.showLoading(null) });
+      const requests = Array.from(this.subDeleteSelected).map(id =>
+        this.authService.deleteSubIndicator(id).toPromise().catch((e: any) => ({ error: e, id }))
+      );
+      Promise.all(requests).then(results => {
+        const errors = results.filter((x: any) => x && x.error);
+        const ok = results.length - errors.length;
+        Swal.fire({
+          icon: errors.length > 0 ? 'warning' : 'success',
+          title: errors.length > 0 ? `ลบสำเร็จ ${ok}/${results.length} รายการ` : 'ลบเรียบร้อย',
+          text: errors.length > 0 ? 'บางรายการลบไม่สำเร็จ' : `ลบตัวชี้วัดย่อย ${ok} รายการสำเร็จ`,
+          timer: 2000, showConfirmButton: false
+        });
+        // โหลด sub-indicators ใหม่ + reset modal state
+        this.subDeleteMode = false;
+        this.subDeleteSelected.clear();
+        this.loadSubResultList();
+        this.loadSubIndicatorCounts();
+      });
+    });
   }
 
   // ลำดับเดือนตามปีงบประมาณ ต.ค.→ก.ย.

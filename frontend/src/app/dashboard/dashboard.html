@@ -1469,83 +1469,87 @@
         </div>
       </div>
 
-      <!-- Mode Toolbar: ปุ่มแก้ไข + โหมดลบ -->
+      <!-- Mode Toolbar: ปุ่มแก้ไข + โหมดลบ (local ใน modal นี้เท่านั้น) -->
       <div class="flex flex-wrap items-center gap-2 mb-3">
         <!-- แก้ไขผลงาน -->
-        <button *ngIf="!isEditing && !isDeleteMode && !isEntryLocked"
-                (click)="toggleEditMode()"
+        <button *ngIf="!subEditMode && !subDeleteMode && !isEntryLocked"
+                (click)="toggleSubEditMode()"
                 class="flex-1 sm:flex-none px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-1.5">
           <i class="fas fa-edit"></i>แก้ไขผลงาน
         </button>
-        <button *ngIf="isEditing"
-                (click)="toggleEditMode()"
+        <button *ngIf="subEditMode"
+                (click)="toggleSubEditMode()"
                 class="flex-1 sm:flex-none px-4 py-1.5 bg-gray-500 hover:bg-gray-600 text-white rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-1.5">
           <i class="fas fa-times"></i>ยกเลิกแก้ไข
         </button>
 
-        <!-- โหมดลบตัวชี้วัด (admin เท่านั้น) -->
-        <button *ngIf="isAdmin && !isEditing && !isDeleteMode"
-                (click)="toggleDeleteMode()"
+        <!-- โหมดลบตัวชี้วัดย่อย (super_admin เท่านั้น) -->
+        <button *ngIf="isSuperAdmin && !subEditMode && !subDeleteMode"
+                (click)="toggleSubDeleteMode()"
                 class="flex-1 sm:flex-none px-4 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-1.5">
           <i class="fas fa-trash"></i>โหมดลบตัวชี้วัด
         </button>
-        <button *ngIf="isDeleteMode"
-                (click)="toggleDeleteMode()"
+        <button *ngIf="subDeleteMode"
+                (click)="toggleSubDeleteMode()"
                 class="flex-1 sm:flex-none px-4 py-1.5 bg-gray-500 hover:bg-gray-600 text-white rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-1.5">
           <i class="fas fa-times"></i>ออกจากโหมดลบ
         </button>
 
         <!-- locked state hint -->
-        <span *ngIf="isEntryLocked && !isEditing && !isDeleteMode"
+        <span *ngIf="isEntryLocked && !subEditMode && !subDeleteMode"
               class="flex-1 sm:flex-none px-4 py-1.5 bg-red-100 text-red-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border border-red-200">
           <i class="fas fa-lock"></i>{{ dataEntryLock.lock_reason || 'ระบบปิดการคีย์ข้อมูลชั่วคราว' }}
         </span>
       </div>
 
-      <!-- Read-only banner เมื่อยังไม่กด "แก้ไขผลงาน" / "โหมดลบตัวชี้วัด" -->
-      <div *ngIf="!(isEditing || isDeleteMode)" class="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-xs flex items-center gap-2">
+      <!-- Read-only banner -->
+      <div *ngIf="!subEditMode && !subDeleteMode" class="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-xs flex items-center gap-2">
         <i class="fas fa-lock text-amber-600"></i>
         <span class="text-amber-800">
-          <b>โหมดดูอย่างเดียว</b> — กดปุ่ม <b class="text-amber-900">"แก้ไขผลงาน"</b> หรือ <b class="text-amber-900">"โหมดลบตัวชี้วัด"</b> ด้านบน เพื่อเริ่มแก้ไข
+          <b>โหมดดูอย่างเดียว</b> — กดปุ่ม <b class="text-amber-900">"แก้ไขผลงาน"</b> หรือ <b class="text-amber-900">"โหมดลบตัวชี้วัด"</b> ด้านบน เพื่อเริ่มทำงาน
         </span>
       </div>
-      <div *ngIf="isEditing || isDeleteMode" class="mb-3 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs flex items-center gap-2">
+      <div *ngIf="subEditMode" class="mb-3 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs flex items-center gap-2">
         <i class="fas fa-unlock text-emerald-600"></i>
-        <span class="text-emerald-800">
-          <b>โหมด{{ isDeleteMode ? 'ลบ' : 'แก้ไขผลงาน' }}</b> — คุณสามารถแก้ไขค่าเป้าหมายและผลงานรายเดือนได้
-        </span>
+        <span class="text-emerald-800"><b>โหมดแก้ไขผลงาน</b> — คุณสามารถแก้ไขค่าเป้าหมายและผลงานรายเดือนได้</span>
       </div>
-      <!-- ตาราง 12 เดือน + ผลงานรวม + % -->
+      <div *ngIf="subDeleteMode" class="mb-3 px-3 py-2 bg-red-50 border border-red-200 rounded-xl text-xs flex items-center gap-2">
+        <i class="fas fa-trash text-red-600"></i>
+        <span class="text-red-800"><b>โหมดลบตัวชี้วัดย่อย</b> — ติ๊ก checkbox ตัวชี้วัดย่อยที่ต้องการลบ แล้วกด "ลบที่เลือก" (ลบถาวร ไม่สามารถกู้คืนได้)</span>
+      </div>
+      <!-- ตาราง: ตัวชี้วัดย่อย | เป้าหมาย | ผลงาน | % | 12 เดือน -->
       <div class="border border-gray-200 rounded-xl overflow-auto max-h-[60vh]">
         <table class="w-full text-xs">
           <thead class="bg-indigo-700 text-white sticky top-0 z-10">
             <tr>
-              <th class="px-2 py-2 text-left sticky left-0 bg-indigo-700 z-20 min-w-[200px]">ตัวชี้วัดย่อย</th>
+              <!-- Checkbox column เมื่อ subDeleteMode -->
+              <th *ngIf="subDeleteMode" class="px-2 py-2 text-center sticky left-0 bg-red-700 z-20 w-10">
+                <input type="checkbox" [checked]="subDeleteAllChecked" (change)="toggleSubDeleteAll()" class="rounded text-red-400 focus:ring-red-400" title="เลือกทั้งหมด">
+              </th>
+              <th class="px-2 py-2 text-left sticky bg-indigo-700 z-20 min-w-[200px]"
+                  [style.left]="subDeleteMode ? '40px' : '0'">ตัวชี้วัดย่อย</th>
               <th class="px-1 py-2 text-center w-20 bg-amber-600">เป้าหมาย</th>
-              <th *ngFor="let m of subMonthColumns" class="px-1 py-2 text-center w-16">{{ subMonthLabels[m] }}</th>
               <th class="px-2 py-2 text-center w-20 bg-emerald-600">ผลงาน</th>
               <th class="px-2 py-2 text-center w-16 bg-blue-600">%</th>
+              <th *ngFor="let m of subMonthColumns" class="px-1 py-2 text-center w-16">{{ subMonthLabels[m] }}</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
-            <tr *ngFor="let s of subResultList; let i = index" class="hover:bg-gray-50">
-              <td class="px-2 py-1.5 sticky left-0 bg-white z-10 border-r border-gray-200">
+            <tr *ngFor="let s of subResultList; let i = index" class="hover:bg-gray-50"
+                [class.bg-red-50]="subDeleteMode && isSubDeleteSelected(s.id)">
+              <td *ngIf="subDeleteMode" class="px-2 py-1.5 text-center sticky left-0 bg-white z-10">
+                <input type="checkbox" [checked]="isSubDeleteSelected(s.id)" (change)="toggleSubDeleteItem(s.id)" class="rounded text-red-600 focus:ring-red-400">
+              </td>
+              <td class="px-2 py-1.5 sticky bg-white z-10 border-r border-gray-200"
+                  [style.left]="subDeleteMode ? '40px' : '0'">
                 <p class="font-medium text-gray-900 text-xs leading-tight">{{ s.sub_indicator_name }}</p>
                 <p class="text-[10px] text-gray-400">{{ s.sub_indicator_code || '-' }}</p>
               </td>
               <td class="px-0.5 py-1">
                 <input type="text" [(ngModel)]="s._target"
-                       [readonly]="!(isEditing || isDeleteMode)"
+                       [readonly]="!subEditMode"
                        class="w-full px-1 py-0.5 border rounded text-center text-xs"
-                       [ngClass]="(isEditing || isDeleteMode) ? 'border-amber-200 bg-amber-50 focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-400' : 'border-gray-100 bg-gray-50 text-gray-600 cursor-not-allowed'">
-              </td>
-              <td *ngFor="let m of subMonthColumns" class="px-0.5 py-1">
-                <input type="text" [(ngModel)]="s._actuals[m]"
-                       [readonly]="!(isEditing || isDeleteMode)"
-                       class="w-full px-1 py-0.5 border rounded text-center text-xs"
-                       [ngClass]="(isEditing || isDeleteMode)
-                          ? 'border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-400 ' + (s._actuals[m] ? 'bg-indigo-50' : '')
-                          : 'border-gray-100 bg-gray-50 text-gray-600 cursor-not-allowed'">
+                       [ngClass]="subEditMode ? 'border-amber-200 bg-amber-50 focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-400' : 'border-gray-100 bg-gray-50 text-gray-600 cursor-not-allowed'">
               </td>
               <td class="px-2 py-1 text-center font-bold text-emerald-700 bg-emerald-50">{{ getSubLastActual(s) || '-' }}</td>
               <td class="px-2 py-1 text-center font-bold bg-blue-50"
@@ -1557,9 +1561,17 @@
                   }">
                 {{ getSubPct(s) ? getSubPct(s) + '%' : '-' }}
               </td>
+              <td *ngFor="let m of subMonthColumns" class="px-0.5 py-1">
+                <input type="text" [(ngModel)]="s._actuals[m]"
+                       [readonly]="!subEditMode"
+                       class="w-full px-1 py-0.5 border rounded text-center text-xs"
+                       [ngClass]="subEditMode
+                          ? 'border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-400 ' + (s._actuals[m] ? 'bg-indigo-50' : '')
+                          : 'border-gray-100 bg-gray-50 text-gray-600 cursor-not-allowed'">
+              </td>
             </tr>
             <tr *ngIf="subResultList.length === 0">
-              <td [attr.colspan]="subMonthColumns.length + 4" class="px-3 py-10 text-center text-gray-400 text-sm">
+              <td [attr.colspan]="subMonthColumns.length + 4 + (subDeleteMode ? 1 : 0)" class="px-3 py-10 text-center text-gray-400 text-sm">
                 <i class="fas fa-inbox text-3xl mb-2 block"></i>ไม่มีตัวชี้วัดย่อย
               </td>
             </tr>
@@ -1568,16 +1580,33 @@
       </div>
       <p class="text-[11px] text-gray-400 mt-2"><i class="fas fa-info-circle mr-1"></i>กรอกเป้าหมายและผลงานรายเดือน → กด "บันทึกทั้งหมด" (ระบบจะส่งเฉพาะเซลล์ที่เปลี่ยนแปลง)</p>
     </div>
-    <div class="px-6 py-4 border-t flex justify-between items-center bg-gray-50 rounded-b-2xl">
-      <span class="text-xs text-gray-500">{{ subResultList.length }} ตัวชี้วัดย่อย × 12 เดือน</span>
-      <div class="flex gap-2">
-        <button (click)="closeSubResultModal()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-bold">ยกเลิก</button>
-        <button *ngIf="subResultList.length > 0 && (isEditing || isDeleteMode)"
+    <div class="px-6 py-4 border-t flex flex-wrap justify-between items-center gap-2 bg-gray-50 rounded-b-2xl">
+      <span class="text-xs text-gray-500">
+        {{ subResultList.length }} ตัวชี้วัดย่อย × 12 เดือน
+        <span *ngIf="subDeleteMode && subDeleteSelected.size > 0" class="ml-2 text-red-600 font-bold">
+          (เลือกลบ {{ subDeleteSelected.size }} รายการ)
+        </span>
+      </span>
+      <div class="flex flex-wrap gap-2">
+        <button (click)="closeSubResultModal()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-bold">ปิด</button>
+
+        <!-- Edit mode → Save button -->
+        <button *ngIf="subResultList.length > 0 && subEditMode"
                 (click)="saveSubResults()"
-                class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow">
-          <i class="fas fa-save mr-1"></i>บันทึกทั้งหมด
+                class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow flex items-center gap-1.5">
+          <i class="fas fa-save"></i>บันทึกทั้งหมด
         </button>
-        <span *ngIf="subResultList.length > 0 && !(isEditing || isDeleteMode)"
+
+        <!-- Delete mode → Delete Selected button -->
+        <button *ngIf="subResultList.length > 0 && subDeleteMode"
+                (click)="confirmDeleteSubIndicators()"
+                [disabled]="subDeleteSelected.size === 0"
+                class="px-6 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-300 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold shadow flex items-center gap-1.5">
+          <i class="fas fa-trash-alt"></i>ลบที่เลือก ({{ subDeleteSelected.size }})
+        </button>
+
+        <!-- Read-only badge -->
+        <span *ngIf="subResultList.length > 0 && !subEditMode && !subDeleteMode"
               class="px-4 py-2 bg-gray-100 text-gray-400 rounded-xl text-xs font-semibold inline-flex items-center gap-1" title="โหมดดูอย่างเดียว">
           <i class="fas fa-lock"></i>โหมดดูอย่างเดียว
         </span>
