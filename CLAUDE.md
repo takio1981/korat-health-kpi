@@ -256,6 +256,17 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - ตารางมีคอลัมน์เดือน (m10-m09) เสมอ + form fields ถ้ามี (ไม่แยก hasForm)
 - `emptyToNull()` แปลง `''` → `null` ก่อน INSERT (ป้องกัน DECIMAL error)
 - Card counters นับตาม unique `table_process` (dedupe)
+- **`hasActualData`**: hospcode ต้องมีเดือนใด ๆ ที่ `actual_value` ไม่ว่าง/≠0 (หรือ dynamic form data) — target อย่างเดียวไม่พอ
+- **`checkKpiChanges` ใช้ logic ตรงกับ `performKpiExport`** — `sameValue()` numeric-aware + result=last actual + hasActualResult filter
+  - กรณีที่เคยพลาด: check ใช้ SUM → compare กับ export (last actual) → รายงาน "changed" เสมอ
+
+### Online Users Tracking (Realtime)
+- ตาราง `users` เพิ่ม 3 คอลัมน์: `last_seen_at` DATETIME + `last_seen_ip` VARCHAR(64) + `last_seen_ua` VARCHAR(255) + index `idx_last_seen_at`
+- `authenticateToken` middleware: อัปเดต `last_seen_at = NOW()` + ip + ua ทุก request
+  - **Throttle 1 ครั้ง/นาที/user** ผ่าน `_lastSeenCache` Map (กัน DB overload)
+- Endpoint `GET /online-users?window=N` (super_admin) — filter `last_seen_at >= NOW() - INTERVAL N MINUTE` (1-1440 นาที)
+- UI `/online-users` — auto-refresh 5-60s, filter role + time window, สถานะ dot สีตาม idle_seconds (<60/<300/<900/>900)
+- Parse user-agent ฝั่ง frontend (Windows/Android/iOS/macOS/Linux × Edge/Chrome/Firefox/Safari)
 
 ### Sync to HDC
 - Core function: `performSyncToHdc(tables, userId)` — UPSERT local export tables → HDC
@@ -267,7 +278,10 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 ### Export Scheduler (ตารางเวลา Export อัตโนมัติ)
 - ตาราง `export_schedules` — metadata schedule (name, days_of_week, time_of_day, indicator_scope, auto_sync_hdc, notify_email/telegram)
 - ตาราง `export_schedule_logs` — บันทึกการรันแต่ละครั้ง (status, inserted, updated_count, unchanged, duration_ms, error_msg)
-- `startExportScheduler()` — setInterval(60000) เช็คทุก 1 นาที ถ้า HH:MM + day-of-week ตรง → `runScheduledExport()` (dedup 90s)
+- `startExportScheduler()` — ยิง `check()` immediate ตอน startup + `setInterval(30000)` ทุก 30 วินาที
+  - **Match 2-minute window** — `time_of_day IN (hhmm_now, hhmm_prev_minute)` กัน drift จาก timing ของ setInterval
+  - Dedup: `last_run_at + 120s` + UPDATE `last_run_at` ทันทีก่อน execute (atomic lock กัน overlapping ticks)
+  - Log ชัด: `🚀 Running` / `Skip (day mismatch)` / `check() failed` + timezone offset ตอน start
 - `indicator_scope` (3 โหมด):
   - `'changes_only'` (default/แนะนำ) — เรียก `checkKpiChanges()` ก่อน → export เฉพาะ `status === 'has_changes'`
   - `'all'` — export ทุกตัวชี้วัด
@@ -420,7 +434,7 @@ docker compose up -d
 
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
-| users | ผู้ใช้งาน | id, username, role, dept_id, hospcode, is_approved, approved_by |
+| users | ผู้ใช้งาน | id, username, role, dept_id, hospcode, is_approved, approved_by, last_seen_at, last_seen_ip, last_seen_ua |
 | departments | หน่วยงาน | id, dept_name, dept_code |
 | kpi_indicators | ตัวชี้วัด | id, kpi_indicators_name, main_indicator_id, dept_id, table_process, target_percentage, r9, moph, ssj, rmw, other, evaluation_mode ('any_one'\|'all_required'), required_off_types (JSON array ของ hostypecode) |
 | kpi_main_indicators | หมวดหมู่หลัก | id, main_indicator_name, yut_id |

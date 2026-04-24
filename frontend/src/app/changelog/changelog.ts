@@ -18,6 +18,27 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.04.24',
+      date: '24 เมษายน 2569',
+      changes: [
+        { type: 'feature', text: 'หน้าใหม่ "ผู้ใช้งานออนไลน์" (super_admin) — ดูผู้ใช้ online realtime พร้อม auto-refresh 15s (เลือกได้ 5-60s)' },
+        { type: 'feature', text: 'Track last_seen_at ใน authenticateToken (throttle 1 นาที/user กัน DB overload)' },
+        { type: 'feature', text: 'Online users: 4 stats cards / filter role + ช่วงเวลา 2-240 นาที / แสดง IP + OS + Browser + idle time' },
+        { type: 'fix', text: 'Export "ตรวจสอบข้อมูล": ใช้ logic ตรงกับ performKpiExport (result = last actual, ไม่ใช่ SUM) + sameValue numeric-aware' },
+        { type: 'fix', text: 'Export ข้อมูล: ส่งออกเฉพาะ hospcode ที่มีผลงาน (actual_value) — ไม่ส่ง row ที่มีแต่ target' },
+        { type: 'fix', text: 'Scheduler Export: ยิง check() immediate on startup + interval 30s + match 2-minute window + log ชัดเจน' },
+        { type: 'fix', text: 'Dashboard mobile/tablet: ล็อคช่องเดือน ต.ค.-ก.ย. เมื่อ is_locked=1 (รับรองแล้ว)' },
+        { type: 'improve', text: 'Dashboard mobile card: แสดง 12 เดือน scroll แนวนอน (เริ่มที่ 6 เดือนล่าสุดที่มีข้อมูล)' },
+        { type: 'improve', text: 'Dashboard mobile/tablet: ปุ่ม จัดการตัวชี้วัด + ตรวจสอบ แบ่งครึ่งแถวเดียวกัน' },
+        { type: 'improve', text: 'Dashboard mobile/tablet: ตรึง (sticky) header + filter + search เมื่อ scroll' },
+        { type: 'improve', text: 'Dashboard: ย้าย อำเภอ → cell "หน่วยบริการ" (บรรทัด 2, 📍) + ย้าย หน่วยงาน → cell "ชื่อตัวชี้วัด" (🏢 badge)' },
+        { type: 'improve', text: 'Dashboard: คอลัมน์ "จัดการ" frozen ไอคอนแนวตั้ง + chart-line inline ต่อชื่อตัวชี้วัด' },
+        { type: 'improve', text: 'Dashboard: SweetAlert สรุปการแก้ไขเป็นตาราง (ค่าเดิม / ค่าใหม่ / ลูกศร ↑↓−)' },
+        { type: 'improve', text: 'Focus Mode: ซ่อน sidebar อัตโนมัติเมื่อเข้าโหมด edit/delete + คืนเมื่อออก' },
+        { type: 'improve', text: 'ปิด console.log ใน production (เก็บ warn/error)' },
+      ]
+    },
+    {
       version: '2569.04.23-4',
       date: '23 เมษายน 2569',
       changes: [
