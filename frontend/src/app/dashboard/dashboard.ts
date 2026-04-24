@@ -527,11 +527,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }, stepMs);
   }
 
-  loadKpiData() {
+  loadKpiData(silent: boolean = false) {
     this.isLoading = true;
-    // เปิด search status panel (SweetAlert modal) + reset progress
+    // เปิด search status panel (SweetAlert modal) + reset progress — ข้ามถ้า silent
     this.clearSearchTimers();
-    this.showSearchStatus = true;
+    this.showSearchStatus = !silent;
     this.searchFinished = false;
     this.searchStage = 'กำลังค้นหาข้อมูล...';
     this.searchProgress = 0;
@@ -539,8 +539,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.searchDurationMs = 0;
     this.searchCountdown = 0;
     this.appliedFilters = this.computeAppliedFilters();
-    this.openSearchStatusSwal();
-    this.animateProgress(30, 400);
+    if (!silent) this.openSearchStatusSwal();
+    if (!silent) this.animateProgress(30, 400);
     if (!this.selectedYear) this.setDefaultYear();
     // ส่ง filter ไปกรองที่ backend — multi-select ใช้ comma-separated
     const filters: any = { year: this.selectedYear };
@@ -563,8 +563,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       next: (res) => {
         this.isLoading = false;
         this.searchStage = 'กำลังประมวลผลข้อมูล...';
-        this.animateProgress(70, 300);
-        this.updateSearchStatusSwal();
+        if (!silent) this.animateProgress(70, 300);
+        if (!silent) this.updateSearchStatusSwal();
         if (res && res.success) {
           this.kpiData = res.data;
           this.kpiData.forEach(item => {
@@ -609,9 +609,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
             : 'ไม่พบข้อมูล';
           this.searchStage = msg;
           this.cdr.detectChanges();
-          this.finishSearchStatusSwal({ success: true, message: msg });
+          if (!silent) this.finishSearchStatusSwal({ success: true, message: msg });
 
-          if (this.kpiData.length === 0) this.showNoDataAlert();
+          if (!silent && this.kpiData.length === 0) this.showNoDataAlert();
         }
       },
       error: (err) => {
@@ -620,7 +620,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.searchProgress = 0;
         this.searchDurationMs = Date.now() - this.searchStartedAt;
         this.cdr.detectChanges();
-        this.finishSearchStatusSwal({ success: false, message: 'เกิดข้อผิดพลาดในการโหลดข้อมูล' });
+        if (!silent) this.finishSearchStatusSwal({ success: false, message: 'เกิดข้อผิดพลาดในการโหลดข้อมูล' });
         console.error('Error loading KPI:', err);
       }
     });
@@ -2291,10 +2291,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.subEditMode = false;
     this.subDeleteMode = false;
     this.subDeleteSelected.clear();
-    // Refresh ข้อมูลในตาราง dashboard ทันที เพื่อให้ main row สะท้อนค่าที่อัปเดต
-    // (เป้า/ผลงาน/% เฉลี่ยจาก sub + จำนวน sub ในปุ่มแถว)
-    this.loadSubResultSummary();
+    // Full silent refresh — โหลด kpiData ใหม่ + sub summary + sub counts
+    // (silent=true → ไม่โชว์ SweetAlert search status modal)
     this.loadSubIndicatorCounts();
+    this.loadSubResultSummary();
+    this.loadKpiData(true);
   }
 
   // Toggle modal-local edit mode (ไม่กระทบ dashboard main)
