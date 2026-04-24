@@ -185,6 +185,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   searchProgress: number = 0;
   searchStartedAt: number = 0;
   searchDurationMs: number = 0;
+  searchFinished: boolean = false;
+  searchCountdown: number = 0;
   appliedFilters: { label: string; value: string; color: string }[] = [];
   showSearchStatus: boolean = false;
   private _progressTimer: any = null;
@@ -347,9 +349,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // สร้าง HTML ของ search status panel (ใช้ใน SweetAlert)
   private buildSearchStatusHtml(): string {
-    const barColor = this.searchProgress === 100
-      ? (this.kpiData.length > 0 ? '#10b981' : '#f59e0b')
-      : '#3b82f6';
     const filtersHtml = this.appliedFilters.map(f => {
       const label = this.escHtml(f.label);
       const value = this.escHtml(f.value);
@@ -358,25 +357,46 @@ export class DashboardComponent implements OnInit, OnDestroy {
         <span style="font-weight:700;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${value}">${value}</span>
       </span>`;
     }).join(' ');
-    const durationHtml = this.searchProgress === 100
-      ? `<span style="color:#6b7280;font-size:11px">ใช้เวลา ${(this.searchDurationMs / 1000).toFixed(2)} วินาที</span>`
-      : '';
-    const rightText = this.searchProgress === 100 && this.kpiData.length > 0
-      ? `ข้อมูลพร้อมใช้งาน ${this.filteredData.length} / ${this.kpiData.length} รายการ`
-      : '';
-    return `
-      <div style="text-align:left">
+
+    // ส่วนบน: progress bar (ระหว่างโหลด) หรือ สรุป+นับถอยหลัง (เสร็จแล้ว)
+    let topSection = '';
+    if (!this.searchFinished) {
+      // กำลังโหลด: progress bar
+      topSection = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
           <span style="font-size:12px;color:#6b7280">${this.escHtml(this.searchStage)}</span>
-          ${durationHtml}
+          <span style="font-size:11px;color:#6b7280;font-weight:700">${this.searchProgress}%</span>
         </div>
-        <div style="width:100%;background:#e5e7eb;border-radius:9999px;height:10px;overflow:hidden;margin-bottom:6px">
-          <div style="height:10px;border-radius:9999px;background:${barColor};width:${this.searchProgress}%;transition:width .3s"></div>
+        <div style="width:100%;background:#e5e7eb;border-radius:9999px;height:10px;overflow:hidden;margin-bottom:12px">
+          <div style="height:10px;border-radius:9999px;background:#3b82f6;width:${this.searchProgress}%;transition:width .3s"></div>
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:10px;color:#6b7280;margin-bottom:12px">
-          <span style="font-weight:700">${this.searchProgress}%</span>
-          <span>${this.escHtml(rightText)}</span>
+      `;
+    } else {
+      // เสร็จแล้ว: สรุปเวลา + นับถอยหลัง (ไม่มี progress bar)
+      const hasData = this.kpiData.length > 0;
+      const accent = hasData ? '#10b981' : '#f59e0b';
+      const summaryLine = hasData
+        ? `ข้อมูลพร้อมใช้งาน <b>${this.filteredData.length}</b> / ${this.kpiData.length} รายการ`
+        : 'ไม่พบข้อมูลตามตัวกรอง';
+      topSection = `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          <span style="font-size:12px;color:#374151">${summaryLine}</span>
+          <span style="font-size:11px;color:#6b7280">
+            <i class="fas fa-clock" style="margin-right:3px"></i>ใช้เวลา ${(this.searchDurationMs / 1000).toFixed(2)} วินาที
+          </span>
         </div>
+        <div style="display:flex;align-items:center;gap:6px;padding:8px 12px;background:#f9fafb;border:1px dashed ${accent};border-radius:10px;margin-bottom:12px">
+          <i class="fas fa-hourglass-half" style="color:${accent}"></i>
+          <span style="font-size:12px;color:#374151">ปิดอัตโนมัติใน</span>
+          <span style="font-size:16px;font-weight:700;color:${accent};min-width:20px;text-align:center">${this.searchCountdown}</span>
+          <span style="font-size:12px;color:#374151">วินาที</span>
+        </div>
+      `;
+    }
+
+    return `
+      <div style="text-align:left">
+        ${topSection}
         ${this.appliedFilters.length > 0 ? `
         <div style="padding-top:8px;border-top:1px solid #e5e7eb">
           <div style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:6px">
@@ -389,6 +409,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private _searchAutoCloseTimer: any = null;
+  private _searchCountdownInterval: any = null;
 
   private openSearchStatusSwal() {
     // เปิด modal ครั้งเดียว — update title+html+button ด้วย DOM (ไม่ใช้ Swal.update)
@@ -416,7 +437,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (container) container.innerHTML = this.buildSearchStatusHtml();
   }
 
-  // จบการค้นหา: update title + html + แสดงปุ่มปิด + timer 5s — modal เดียวตลอด
+  // จบการค้นหา: update title + html + แสดงปุ่มปิด + นับถอยหลัง 5 วินาที — modal เดียวตลอด
   private finishSearchStatusSwal(final: { success: boolean; message: string }) {
     if (!Swal.isVisible()) return;
     const hasData = this.kpiData.length > 0;
@@ -427,11 +448,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
           : `<i class="fas fa-exclamation-triangle" style="color:#f59e0b"></i>`)
       : `<i class="fas fa-times-circle" style="color:#ef4444"></i>`;
 
+    // mark finished → buildSearchStatusHtml จะ render summary+countdown (ไม่มี progress bar)
+    this.searchFinished = true;
+    this.searchCountdown = 5;
+
     // 1) Update title ผ่าน DOM
     const titleEl = Swal.getTitle();
     if (titleEl) titleEl.innerHTML = `${iconHtml} ${this.escHtml(final.message)}`;
 
-    // 2) Update body content
+    // 2) Update body content (mode: finished → summary + countdown)
     this.updateSearchStatusSwal();
 
     // 3) แสดงปุ่มปิด (ที่ซ่อนไว้) + เปลี่ยนสี
@@ -443,12 +468,22 @@ export class DashboardComponent implements OnInit, OnDestroy {
       btn.style.backgroundColor = color;
     }
 
-    // 4) Timer auto-close 5 วินาที (ใช้ setTimeout แทน Swal timer — กัน re-render)
-    if (this._searchAutoCloseTimer) clearTimeout(this._searchAutoCloseTimer);
-    this._searchAutoCloseTimer = setTimeout(() => {
-      if (Swal.isVisible()) Swal.close();
-      this._searchAutoCloseTimer = null;
-    }, 5000);
+    // 4) Countdown tick ทุก 1 วินาที — update DOM แล้วปิดเมื่อถึง 0
+    this.clearSearchTimers();
+    this._searchCountdownInterval = setInterval(() => {
+      this.searchCountdown--;
+      if (this.searchCountdown <= 0) {
+        this.clearSearchTimers();
+        if (Swal.isVisible()) Swal.close();
+      } else {
+        this.updateSearchStatusSwal();
+      }
+    }, 1000);
+  }
+
+  private clearSearchTimers() {
+    if (this._searchCountdownInterval) { clearInterval(this._searchCountdownInterval); this._searchCountdownInterval = null; }
+    if (this._searchAutoCloseTimer) { clearTimeout(this._searchAutoCloseTimer); this._searchAutoCloseTimer = null; }
   }
 
   // คำนวณตัวกรองที่ใช้งาน → แสดงใน search status panel
@@ -491,11 +526,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
   loadKpiData() {
     this.isLoading = true;
     // เปิด search status panel (SweetAlert modal) + reset progress
+    this.clearSearchTimers();
     this.showSearchStatus = true;
+    this.searchFinished = false;
     this.searchStage = 'กำลังค้นหาข้อมูล...';
     this.searchProgress = 0;
     this.searchStartedAt = Date.now();
     this.searchDurationMs = 0;
+    this.searchCountdown = 0;
     this.appliedFilters = this.computeAppliedFilters();
     this.openSearchStatusSwal();
     this.animateProgress(30, 400);
