@@ -127,6 +127,13 @@ export class AuthService {
   // mode: 'setup_overwrite' = KPI-Setup เพิ่มทั้งหมด (เขียนทับ)
   //        'setup_insert_new' = KPI-Setup เพิ่มเฉพาะที่ยังไม่มี
   //        undefined = Dashboard ปกติ
+  // === Online Users (realtime monitoring — super_admin) ===
+  getOnlineUsers(windowMin: number = 5): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/online-users?window=${windowMin}`, { headers });
+  }
+
   updateKpiResults(data: any[], targetHospcode: string = '', mode: string = ''): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({

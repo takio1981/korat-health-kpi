@@ -1,0 +1,158 @@
+<div class="p-3 sm:p-6">
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100">
+    <!-- Header -->
+    <div class="p-4 sm:p-6 border-b border-gray-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+      <div class="min-w-0">
+        <h3 class="text-base sm:text-lg font-bold text-gray-800">
+          <i class="fas fa-satellite-dish mr-2 text-green-500 animate-pulse"></i>ผู้ใช้งานออนไลน์ (Realtime)
+        </h3>
+        <p class="text-[11px] sm:text-xs text-gray-400 mt-1">
+          ตรวจสอบผู้ใช้ที่กำลังใช้งานระบบ — อัปเดตอัตโนมัติทุก {{ refreshIntervalSec }} วินาที
+        </p>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="hidden sm:inline text-[10px] text-gray-400">อัปเดตล่าสุด: {{ lastUpdated | date:'HH:mm:ss' }}</span>
+        <button (click)="load()" [disabled]="isLoading"
+                class="px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-bold shadow-md transition-all disabled:opacity-50">
+          <i class="fas" [ngClass]="isLoading ? 'fa-spinner fa-spin' : 'fa-sync-alt'"></i>
+          <span class="hidden sm:inline ml-1">Refresh</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Stats cards -->
+    <div class="p-3 sm:p-5 border-b border-gray-100 bg-gradient-to-r from-green-50 to-emerald-50">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="bg-white rounded-xl p-3 border-2 border-green-200 shadow-sm">
+          <div class="text-[10px] text-gray-500 font-bold">
+            <i class="fas fa-users text-green-500 mr-1"></i>ออนไลน์ตอนนี้
+          </div>
+          <div class="text-2xl font-bold text-green-700 mt-1">{{ stats.total }}</div>
+          <div class="text-[10px] text-gray-400">ภายใน {{ stats.window_min }} นาที</div>
+        </div>
+        <div class="bg-white rounded-xl p-3 border-2 border-blue-200 shadow-sm">
+          <div class="text-[10px] text-gray-500 font-bold">
+            <i class="fas fa-user-shield text-blue-500 mr-1"></i>Admin
+          </div>
+          <div class="text-2xl font-bold text-blue-700 mt-1">
+            {{ (stats.by_role.super_admin||0) + (stats.by_role.admin_ssj||0) + (stats.by_role.admin_cup||0) + (stats.by_role.admin_hos||0) + (stats.by_role.admin_sso||0) }}
+          </div>
+          <div class="text-[10px] text-gray-400">ทุกระดับ</div>
+        </div>
+        <div class="bg-white rounded-xl p-3 border-2 border-amber-200 shadow-sm">
+          <div class="text-[10px] text-gray-500 font-bold">
+            <i class="fas fa-user text-amber-500 mr-1"></i>User
+          </div>
+          <div class="text-2xl font-bold text-amber-700 mt-1">
+            {{ (stats.by_role.user_cup||0) + (stats.by_role.user_hos||0) + (stats.by_role.user_sso||0) + (stats.by_role.user_ssj||0) }}
+          </div>
+          <div class="text-[10px] text-gray-400">ทุกระดับ</div>
+        </div>
+        <div class="bg-white rounded-xl p-3 border-2 border-gray-200 shadow-sm flex items-center gap-2">
+          <label class="flex items-center gap-2 cursor-pointer text-xs text-gray-700 flex-1">
+            <input type="checkbox" [(ngModel)]="autoRefresh" (change)="toggleAutoRefresh()" class="rounded text-green-600">
+            <span class="font-bold">Auto Refresh</span>
+          </label>
+          <i class="fas" [ngClass]="autoRefresh ? 'fa-circle text-green-500 animate-pulse' : 'fa-circle text-gray-300'"></i>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="p-3 sm:p-4 border-b border-gray-100 flex flex-col md:flex-row gap-2 md:items-center">
+      <div class="relative flex-1">
+        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+        <input type="text" [(ngModel)]="searchTerm" placeholder="ค้นหา username, ชื่อ, หน่วยงาน, หน่วยบริการ..."
+               class="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-xs">
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="text-[11px] text-gray-500 shrink-0">Role:</label>
+        <select [(ngModel)]="selectedRole" class="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-green-500 outline-none">
+          <option value="">ทุกระดับ</option>
+          <option *ngFor="let r of objectKeys(roleLabels)" [value]="r">{{ roleLabels[r] }}</option>
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="text-[11px] text-gray-500 shrink-0">ช่วงเวลา:</label>
+        <select [(ngModel)]="windowMin" (change)="onWindowChange()" class="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-green-500 outline-none">
+          <option *ngFor="let w of windowOptions" [value]="w.v">{{ w.label }}</option>
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="text-[11px] text-gray-500 shrink-0">รีเฟรชทุก:</label>
+        <select [(ngModel)]="refreshIntervalSec" (change)="onRefreshIntervalChange()" class="px-3 py-2 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-green-500 outline-none">
+          <option [ngValue]="5">5 วินาที</option>
+          <option [ngValue]="10">10 วินาที</option>
+          <option [ngValue]="15">15 วินาที (แนะนำ)</option>
+          <option [ngValue]="30">30 วินาที</option>
+          <option [ngValue]="60">1 นาที</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Users list -->
+    <div class="p-3 sm:p-4">
+      <div *ngIf="filteredUsers.length === 0" class="text-center py-12 text-gray-400">
+        <i class="fas fa-user-slash text-4xl mb-3"></i>
+        <p class="text-sm">ไม่มีผู้ใช้งานออนไลน์ในช่วงเวลาที่เลือก</p>
+      </div>
+
+      <div *ngIf="filteredUsers.length > 0" class="overflow-x-auto border border-gray-200 rounded-xl">
+        <table class="min-w-[900px] w-full text-xs">
+          <thead class="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th class="px-3 py-2 text-center w-10"></th>
+              <th class="px-3 py-2 text-left">Username</th>
+              <th class="px-3 py-2 text-left">ชื่อ-นามสกุล</th>
+              <th class="px-3 py-2 text-center">Role</th>
+              <th class="px-3 py-2 text-left">หน่วยงาน</th>
+              <th class="px-3 py-2 text-left">หน่วยบริการ / อำเภอ</th>
+              <th class="px-3 py-2 text-left">IP / อุปกรณ์</th>
+              <th class="px-3 py-2 text-center">Active ล่าสุด</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <tr *ngFor="let u of filteredUsers" class="hover:bg-green-50/30">
+              <td class="px-3 py-2 text-center">
+                <span class="inline-block w-2.5 h-2.5 rounded-full"
+                      [ngClass]="u.idle_seconds < 60 ? 'bg-green-500 animate-pulse' : (u.idle_seconds < 300 ? 'bg-blue-500' : (u.idle_seconds < 900 ? 'bg-amber-500' : 'bg-gray-400'))"></span>
+              </td>
+              <td class="px-3 py-2 font-mono font-bold text-gray-800">{{ u.username }}</td>
+              <td class="px-3 py-2 whitespace-nowrap">{{ u.firstname }} {{ u.lastname }}</td>
+              <td class="px-3 py-2 text-center">
+                <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold" [ngClass]="roleColor(u.role)">
+                  {{ roleLabel(u.role) }}
+                </span>
+              </td>
+              <td class="px-3 py-2 text-gray-600">{{ u.dept_name || '-' }}</td>
+              <td class="px-3 py-2 text-gray-600">
+                <div *ngIf="u.hosname" class="text-gray-800">{{ u.hosname }}</div>
+                <div *ngIf="u.distname" class="text-[10px] text-gray-400">
+                  <i class="fas fa-map-marker-alt mr-0.5"></i>{{ u.distname }}
+                </div>
+                <div *ngIf="!u.hosname && !u.distname" class="text-gray-300">-</div>
+              </td>
+              <td class="px-3 py-2 text-gray-500 text-[11px]">
+                <div class="font-mono">{{ u.last_seen_ip || '-' }}</div>
+                <div class="text-[10px] text-gray-400">
+                  <ng-container *ngIf="parseUA(u.last_seen_ua) as ua">
+                    <i class="fas fa-desktop mr-0.5"></i>{{ ua.os }} / {{ ua.browser }}
+                  </ng-container>
+                </div>
+              </td>
+              <td class="px-3 py-2 text-center whitespace-nowrap">
+                <span class="font-bold" [ngClass]="idleColor(u.idle_seconds)">{{ formatIdle(u.idle_seconds) }}</span>
+                <div class="text-[10px] text-gray-400">{{ formatDateTime(u.last_seen_at) }}</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="text-[10px] text-gray-400 mt-3 text-center">
+        <i class="fas fa-info-circle mr-1"></i>
+        แสดง {{ filteredUsers.length }} / {{ users.length }} คน — last_seen_at อัปเดตสูงสุด 1 ครั้ง/นาที/user (throttled)
+      </p>
+    </div>
+  </div>
+</div>

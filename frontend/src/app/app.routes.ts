@@ -15,6 +15,7 @@ import { FeedbackComponent } from './feedback/feedback';
 import { ChangelogComponent } from './changelog/changelog';
 import { KpiManagerComponent } from './kpi-manager/kpi-manager';
 import { AnnouncementsComponent } from './announcements/announcements';
+import { OnlineUsersComponent } from './online-users/online-users';
 import { authGuard } from './guards/auth-guard';
 import { adminGuard } from './guards/admin-guard';
 import { anyAdminGuard } from './guards/any-admin-guard';
@@ -40,6 +41,7 @@ export const routes: Routes = [
       { path: 'kpi-manager', component: KpiManagerComponent, canActivate: [superAdminGuard], data: { title: 'จัดการข้อมูล KPI' } },
       { path: 'settings', component: SettingsComponent, canActivate: [superAdminGuard], data: { title: 'ตั้งค่าระบบ' } },
       { path: 'announcements', component: AnnouncementsComponent, canActivate: [superAdminGuard], data: { title: 'ประกาศระบบ' } },
+      { path: 'online-users', component: OnlineUsersComponent, canActivate: [superAdminGuard], data: { title: 'ผู้ใช้งานออนไลน์' } },
       { path: 'feedback', component: FeedbackComponent, data: { title: 'กระดานข้อเสนอแนะ' } },
       { path: 'changelog', component: ChangelogComponent, data: { title: 'ประวัติการอัปเดต' } },
       { path: 'help', component: HelpComponent, data: { title: 'คู่มือการใช้งาน' } },

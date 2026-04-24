@@ -151,6 +151,10 @@ if (!SECRET_KEY) {
 }
 
 // Middleware ตรวจสอบ JWT Token
+// Throttle cache สำหรับ update last_seen — userId → timestamp ของ update ล่าสุด
+const _lastSeenCache = new Map();
+const LAST_SEEN_THROTTLE_MS = 60 * 1000; // update DB ไม่เกิน 1 ครั้ง/นาที/user
+
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -160,6 +164,20 @@ const authenticateToken = (req, res, next) => {
     jwt.verify(token, SECRET_KEY, (err, user) => {
         if (err) return res.status(403).json({ success: false, message: 'Token ไม่ถูกต้องหรือหมดอายุ' });
         req.user = user;
+
+        // Track last_seen — throttled (max 1/min/user) กันเขียน DB ถี่เกิน
+        const uid = user.userId;
+        if (uid) {
+            const now = Date.now();
+            const last = _lastSeenCache.get(uid) || 0;
+            if (now - last > LAST_SEEN_THROTTLE_MS) {
+                _lastSeenCache.set(uid, now);
+                const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim().slice(0, 64);
+                const ua = (req.headers['user-agent'] || '').toString().slice(0, 255);
+                db.query('UPDATE users SET last_seen_at = NOW(), last_seen_ip = ?, last_seen_ua = ? WHERE id = ?', [ip, ua, uid])
+                  .catch(() => {});
+            }
+        }
         next();
     });
 };
@@ -1781,6 +1799,40 @@ apiRouter.get('/users', authenticateToken, isAnyAdmin, async (req, res) => {
         res.json({ success: true, data: users });
     } catch (error) {
         res.status(500).json({ success: false });
+    }
+});
+
+// GET /online-users — รายชื่อ user ที่ online (activity ล่าสุดภายใน windowMin นาที)
+apiRouter.get('/online-users', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const windowMin = Math.max(1, Math.min(1440, parseInt(req.query.window || '5', 10))); // 1 นาที - 24 ชม
+        const [rows] = await db.query(
+            `SELECT u.id, u.username, u.role, u.firstname, u.lastname, u.hospcode,
+                    u.last_seen_at, u.last_seen_ip, u.last_seen_ua,
+                    d.dept_name, h.hosname, dist.distname,
+                    TIMESTAMPDIFF(SECOND, u.last_seen_at, NOW()) AS idle_seconds
+             FROM users u
+             LEFT JOIN departments d ON u.dept_id = d.id
+             LEFT JOIN chospital h ON u.hospcode = h.hoscode
+             LEFT JOIN co_district dist ON dist.distid = h.distid
+             WHERE u.last_seen_at IS NOT NULL
+               AND u.last_seen_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)
+             ORDER BY u.last_seen_at DESC`,
+            [windowMin]
+        );
+        // สถิติสรุปแยก role
+        const stats = {
+            total: rows.length,
+            by_role: {},
+            window_min: windowMin,
+            server_time: new Date().toISOString(),
+        };
+        for (const r of rows) {
+            stats.by_role[r.role] = (stats.by_role[r.role] || 0) + 1;
+        }
+        res.json({ success: true, data: rows, stats });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
     }
 });
 
@@ -4865,6 +4917,10 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         try { await db.query(`ALTER TABLE users ADD COLUMN temp_password VARCHAR(255) NULL`); } catch (e) {}
         try { await db.query(`ALTER TABLE users ADD COLUMN temp_password_expiry DATETIME NULL`); } catch (e) {}
         try { await db.query(`ALTER TABLE users ADD COLUMN must_change_password TINYINT(1) NOT NULL DEFAULT 0`); } catch (e) {}
+        try { await db.query(`ALTER TABLE users ADD COLUMN last_seen_at DATETIME NULL`); } catch (e) {}
+        try { await db.query(`ALTER TABLE users ADD COLUMN last_seen_ip VARCHAR(64) NULL`); } catch (e) {}
+        try { await db.query(`ALTER TABLE users ADD COLUMN last_seen_ua VARCHAR(255) NULL`); } catch (e) {}
+        try { await db.query(`CREATE INDEX idx_last_seen_at ON users(last_seen_at)`); } catch (e) {}
         // สร้างตาราง chostype (ประเภทสถานบริการ)
         try {
             await db.query(`
