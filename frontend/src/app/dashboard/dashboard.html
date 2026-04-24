@@ -1469,11 +1469,44 @@
         </div>
       </div>
 
+      <!-- Mode Toolbar: ปุ่มแก้ไข + โหมดลบ -->
+      <div class="flex flex-wrap items-center gap-2 mb-3">
+        <!-- แก้ไขผลงาน -->
+        <button *ngIf="!isEditing && !isDeleteMode && !isEntryLocked"
+                (click)="toggleEditMode()"
+                class="flex-1 sm:flex-none px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-1.5">
+          <i class="fas fa-edit"></i>แก้ไขผลงาน
+        </button>
+        <button *ngIf="isEditing"
+                (click)="toggleEditMode()"
+                class="flex-1 sm:flex-none px-4 py-1.5 bg-gray-500 hover:bg-gray-600 text-white rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-1.5">
+          <i class="fas fa-times"></i>ยกเลิกแก้ไข
+        </button>
+
+        <!-- โหมดลบตัวชี้วัด (admin เท่านั้น) -->
+        <button *ngIf="isAdmin && !isEditing && !isDeleteMode"
+                (click)="toggleDeleteMode()"
+                class="flex-1 sm:flex-none px-4 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-1.5">
+          <i class="fas fa-trash"></i>โหมดลบตัวชี้วัด
+        </button>
+        <button *ngIf="isDeleteMode"
+                (click)="toggleDeleteMode()"
+                class="flex-1 sm:flex-none px-4 py-1.5 bg-gray-500 hover:bg-gray-600 text-white rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-1.5">
+          <i class="fas fa-times"></i>ออกจากโหมดลบ
+        </button>
+
+        <!-- locked state hint -->
+        <span *ngIf="isEntryLocked && !isEditing && !isDeleteMode"
+              class="flex-1 sm:flex-none px-4 py-1.5 bg-red-100 text-red-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border border-red-200">
+          <i class="fas fa-lock"></i>{{ dataEntryLock.lock_reason || 'ระบบปิดการคีย์ข้อมูลชั่วคราว' }}
+        </span>
+      </div>
+
       <!-- Read-only banner เมื่อยังไม่กด "แก้ไขผลงาน" / "โหมดลบตัวชี้วัด" -->
       <div *ngIf="!(isEditing || isDeleteMode)" class="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-xs flex items-center gap-2">
         <i class="fas fa-lock text-amber-600"></i>
         <span class="text-amber-800">
-          <b>โหมดดูอย่างเดียว</b> — หากต้องการแก้ไขผลงาน กรุณากดปุ่ม <b class="text-amber-900">"จัดการตัวชี้วัด → แก้ไขผลงาน"</b> หรือ <b class="text-amber-900">"โหมดลบตัวชี้วัด"</b> ก่อน
+          <b>โหมดดูอย่างเดียว</b> — กดปุ่ม <b class="text-amber-900">"แก้ไขผลงาน"</b> หรือ <b class="text-amber-900">"โหมดลบตัวชี้วัด"</b> ด้านบน เพื่อเริ่มแก้ไข
         </span>
       </div>
       <div *ngIf="isEditing || isDeleteMode" class="mb-3 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs flex items-center gap-2">
