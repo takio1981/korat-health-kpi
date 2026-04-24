@@ -138,6 +138,7 @@ export class LayoutComponent implements OnInit {
           const versionSetting = res.data.find((s: any) => s.setting_key === 'system_version');
           if (versionSetting) {
             this.systemVersion = versionSetting.setting_value;
+            this.cdr.detectChanges();
           }
         }
       }
