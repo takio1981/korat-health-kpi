@@ -390,39 +390,39 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   private openSearchStatusSwal() {
     Swal.fire({
-      title: 'กำลังค้นหาข้อมูล',
+      title: '<i class="fas fa-search text-blue-500"></i> กำลังค้นหาข้อมูล',
       html: this.buildSearchStatusHtml(),
       allowOutsideClick: false,
       allowEscapeKey: false,
       showConfirmButton: false,
       width: 560,
-      didOpen: () => Swal.showLoading(null),
     });
   }
 
   private updateSearchStatusSwal() {
     if (!Swal.isVisible()) return;
-    Swal.update({ html: this.buildSearchStatusHtml() });
+    // ใช้ container ตรงๆ เพื่อเลี่ยง Swal.update ที่อาจ re-render ช้า
+    const container = Swal.getHtmlContainer();
+    if (container) container.innerHTML = this.buildSearchStatusHtml();
   }
 
   private closeSearchStatusSwal(final?: { success: boolean; message: string }) {
-    if (!Swal.isVisible()) return;
-    if (final) {
-      // Swap เป็น icon + auto-close + show ปุ่มปิด
-      Swal.hideLoading();
-      Swal.update({
-        title: final.message,
-        html: this.buildSearchStatusHtml(),
-        icon: final.success ? (this.kpiData.length > 0 ? 'success' : 'warning') : 'error',
-        showConfirmButton: true,
-        confirmButtonText: 'ตกลง',
-        confirmButtonColor: this.kpiData.length > 0 ? '#10b981' : '#f59e0b',
-        timer: 2500,
-        timerProgressBar: true,
-      });
-    } else {
-      Swal.close();
-    }
+    // ปิด modal ปัจจุบัน (ถ้ามี) แล้วเปิดอันใหม่พร้อม icon result
+    if (Swal.isVisible()) Swal.close();
+    if (!final) return;
+    const hasData = this.kpiData.length > 0;
+    Swal.fire({
+      icon: final.success ? (hasData ? 'success' : 'warning') : 'error',
+      title: final.message,
+      html: this.buildSearchStatusHtml(),
+      width: 560,
+      showConfirmButton: true,
+      confirmButtonText: 'ตกลง',
+      confirmButtonColor: hasData ? '#10b981' : (final.success ? '#f59e0b' : '#ef4444'),
+      timer: 2500,
+      timerProgressBar: true,
+      allowOutsideClick: true,
+    });
   }
 
   // คำนวณตัวกรองที่ใช้งาน → แสดงใน search status panel
