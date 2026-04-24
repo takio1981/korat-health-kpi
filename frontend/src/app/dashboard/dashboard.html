@@ -1468,6 +1468,20 @@
           <p class="font-bold text-indigo-800">{{ subResultList.length }} รายการ × 12 เดือน</p>
         </div>
       </div>
+
+      <!-- Read-only banner เมื่อยังไม่กด "แก้ไขผลงาน" / "โหมดลบตัวชี้วัด" -->
+      <div *ngIf="!(isEditing || isDeleteMode)" class="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-xs flex items-center gap-2">
+        <i class="fas fa-lock text-amber-600"></i>
+        <span class="text-amber-800">
+          <b>โหมดดูอย่างเดียว</b> — หากต้องการแก้ไขผลงาน กรุณากดปุ่ม <b class="text-amber-900">"จัดการตัวชี้วัด → แก้ไขผลงาน"</b> หรือ <b class="text-amber-900">"โหมดลบตัวชี้วัด"</b> ก่อน
+        </span>
+      </div>
+      <div *ngIf="isEditing || isDeleteMode" class="mb-3 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs flex items-center gap-2">
+        <i class="fas fa-unlock text-emerald-600"></i>
+        <span class="text-emerald-800">
+          <b>โหมด{{ isDeleteMode ? 'ลบ' : 'แก้ไขผลงาน' }}</b> — คุณสามารถแก้ไขค่าเป้าหมายและผลงานรายเดือนได้
+        </span>
+      </div>
       <!-- ตาราง 12 เดือน + ผลงานรวม + % -->
       <div class="border border-gray-200 rounded-xl overflow-auto max-h-[60vh]">
         <table class="w-full text-xs">
@@ -1488,12 +1502,17 @@
               </td>
               <td class="px-0.5 py-1">
                 <input type="text" [(ngModel)]="s._target"
-                       class="w-full px-1 py-0.5 border border-amber-200 rounded text-center text-xs bg-amber-50 focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-400">
+                       [readonly]="!(isEditing || isDeleteMode)"
+                       class="w-full px-1 py-0.5 border rounded text-center text-xs"
+                       [ngClass]="(isEditing || isDeleteMode) ? 'border-amber-200 bg-amber-50 focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-400' : 'border-gray-100 bg-gray-50 text-gray-600 cursor-not-allowed'">
               </td>
               <td *ngFor="let m of subMonthColumns" class="px-0.5 py-1">
                 <input type="text" [(ngModel)]="s._actuals[m]"
-                       class="w-full px-1 py-0.5 border border-gray-200 rounded text-center text-xs focus:border-indigo-500 focus:ring-1 focus:ring-indigo-400"
-                       [class.bg-indigo-50]="s._actuals[m]">
+                       [readonly]="!(isEditing || isDeleteMode)"
+                       class="w-full px-1 py-0.5 border rounded text-center text-xs"
+                       [ngClass]="(isEditing || isDeleteMode)
+                          ? 'border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-400 ' + (s._actuals[m] ? 'bg-indigo-50' : '')
+                          : 'border-gray-100 bg-gray-50 text-gray-600 cursor-not-allowed'">
               </td>
               <td class="px-2 py-1 text-center font-bold text-emerald-700 bg-emerald-50">{{ getSubLastActual(s) || '-' }}</td>
               <td class="px-2 py-1 text-center font-bold bg-blue-50"
@@ -1520,9 +1539,15 @@
       <span class="text-xs text-gray-500">{{ subResultList.length }} ตัวชี้วัดย่อย × 12 เดือน</span>
       <div class="flex gap-2">
         <button (click)="closeSubResultModal()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-bold">ยกเลิก</button>
-        <button *ngIf="subResultList.length > 0" (click)="saveSubResults()" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow">
+        <button *ngIf="subResultList.length > 0 && (isEditing || isDeleteMode)"
+                (click)="saveSubResults()"
+                class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow">
           <i class="fas fa-save mr-1"></i>บันทึกทั้งหมด
         </button>
+        <span *ngIf="subResultList.length > 0 && !(isEditing || isDeleteMode)"
+              class="px-4 py-2 bg-gray-100 text-gray-400 rounded-xl text-xs font-semibold inline-flex items-center gap-1" title="โหมดดูอย่างเดียว">
+          <i class="fas fa-lock"></i>โหมดดูอย่างเดียว
+        </span>
       </div>
     </div>
   </div>
