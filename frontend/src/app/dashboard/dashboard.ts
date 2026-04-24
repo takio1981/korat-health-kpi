@@ -2522,35 +2522,116 @@ export class DashboardComponent implements OnInit, OnDestroy {
   async saveSubResults() {
     const ctx = this.subResultContext;
     if (!ctx) return;
-    const calls: any[] = [];
-    // สำหรับแต่ละ sub × แต่ละเดือน → ตรวจว่าเปลี่ยนไหม, ถ้าเปลี่ยน → upsert
+
+    // รวบรวมการเปลี่ยนแปลง: sub_id + field + old + new
+    type Change = { subName: string; field: string; oldVal: string; newVal: string; payload: any };
+    const changes: Change[] = [];
+
     for (const s of this.subResultList) {
       for (const m of this.subMonthColumns) {
         const actualNew = (s._actuals[m] ?? '').toString().trim();
         const orig = this._subOriginal.get(`${s.id}_${m}`) || { target: '', actual: '' };
         const targetNew = (s._target ?? '').toString().trim();
-        // upsert ถ้า actual เปลี่ยน หรือ target เปลี่ยน หรือเป็น row ใหม่ (orig ว่างทั้งคู่)
-        const changed = actualNew !== orig.actual || targetNew !== orig.target;
+        const actualChanged = actualNew !== orig.actual;
+        const targetChanged = targetNew !== orig.target;
         const hasValue = actualNew !== '' || targetNew !== '';
-        if (changed && hasValue) {
-          calls.push(this.authService.upsertSubResult({
-            sub_indicator_id: s.id,
-            year_bh: ctx.year_bh,
-            hospcode: ctx.hospcode,
-            month_bh: m,
-            target_value: targetNew || null,
-            actual_value: actualNew || null,
-            status: 'Pending'
-          }).toPromise());
+        if ((actualChanged || targetChanged) && hasValue) {
+          // แยกรายการ target (เก็บครั้งเดียวต่อ sub) และแต่ละเดือนที่เปลี่ยน
+          if (actualChanged) {
+            changes.push({
+              subName: s.sub_indicator_name,
+              field: this.subMonthLabels[m] || 'เดือน ' + m,
+              oldVal: orig.actual,
+              newVal: actualNew,
+              payload: { sub_indicator_id: s.id, year_bh: ctx.year_bh, hospcode: ctx.hospcode, month_bh: m, target_value: targetNew || null, actual_value: actualNew || null, status: 'Pending' }
+            });
+          } else if (targetChanged) {
+            // target เปลี่ยนอย่างเดียว — ยังต้อง upsert ของ month นี้ (เก็บ target)
+            changes.push({
+              subName: s.sub_indicator_name,
+              field: 'เป้าหมาย',
+              oldVal: orig.target,
+              newVal: targetNew,
+              payload: { sub_indicator_id: s.id, year_bh: ctx.year_bh, hospcode: ctx.hospcode, month_bh: m, target_value: targetNew || null, actual_value: actualNew || null, status: 'Pending' }
+            });
+          }
         }
       }
     }
-    if (calls.length === 0) {
+
+    if (changes.length === 0) {
       Swal.fire({ icon: 'info', title: 'ไม่มีการเปลี่ยนแปลง', timer: 1500, showConfirmButton: false });
       return;
     }
-    Swal.fire({ title: `กำลังบันทึก ${calls.length} รายการ...`, allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+    // Helper: status badge (ใช้แบบเดียวกับหน้า dashboard หลัก)
+    const statusBadge = (oldRaw: any, newRaw: any) => {
+      const oldStr = String(oldRaw ?? '').trim();
+      const newStr = String(newRaw ?? '').trim();
+      const oldEmpty = oldStr === '' || oldStr === '0';
+      const newEmpty = newStr === '' || newStr === '0';
+      if (newEmpty && !oldEmpty) return `<span style="color:#6b7280;font-weight:700"><i class="fas fa-minus"></i> ลบ</span>`;
+      if (oldEmpty && !newEmpty) return `<span style="color:#16a34a;font-weight:700"><i class="fas fa-plus-circle"></i> เพิ่ม</span>`;
+      const oldNum = parseFloat(oldStr);
+      const newNum = parseFloat(newStr);
+      if (!isNaN(oldNum) && !isNaN(newNum)) {
+        if (newNum > oldNum) return `<span style="color:#16a34a;font-weight:700"><i class="fas fa-arrow-up"></i> เพิ่มขึ้น</span>`;
+        if (newNum < oldNum) return `<span style="color:#dc2626;font-weight:700"><i class="fas fa-arrow-down"></i> ลดลง</span>`;
+        return `<span style="color:#6b7280"><i class="fas fa-equals"></i></span>`;
+      }
+      return `<span style="color:#d97706;font-weight:700"><i class="fas fa-pen"></i> แก้ไข</span>`;
+    };
+    const fmt = (v: any) => {
+      const s = String(v ?? '').trim();
+      return (s === '' || s === 'null') ? '<span style="color:#9ca3af">—</span>' : this.escHtml(s);
+    };
+
+    const rows = changes.map(c => `<tr>
+      <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">${this.escHtml(c.subName)}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center;color:#4f46e5;font-weight:700">${this.escHtml(c.field)}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${fmt(c.oldVal)}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:700">${fmt(c.newVal)}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${statusBadge(c.oldVal, c.newVal)}</td>
+    </tr>`).join('');
+
+    const summaryTable = `
+      <div style="max-height:280px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:10px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;background:white">
+          <thead style="position:sticky;top:0;background:#f3f4f6;z-index:1">
+            <tr>
+              <th style="padding:8px;text-align:left;border-bottom:2px solid #d1d5db">ตัวชี้วัดย่อย</th>
+              <th style="padding:8px;text-align:center;border-bottom:2px solid #d1d5db">เดือน</th>
+              <th style="padding:8px;text-align:center;border-bottom:2px solid #d1d5db">ค่าเดิม</th>
+              <th style="padding:8px;text-align:center;border-bottom:2px solid #d1d5db">ค่าใหม่</th>
+              <th style="padding:8px;text-align:center;border-bottom:2px solid #d1d5db">สถานะ</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+
+    const confirmResult = await Swal.fire({
+      title: 'ยืนยันการบันทึก',
+      html: `<div style="text-align:left;font-size:13px">
+              <p style="margin-bottom:8px;font-weight:700;color:#374151">
+                พบการเปลี่ยนแปลง <span style="color:#4f46e5">${changes.length}</span> รายการ
+              </p>
+              ${summaryTable}
+              <p style="margin-top:12px;color:#6b7280">ต้องการบันทึกใช่หรือไม่?</p>
+             </div>`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#10b981',
+      confirmButtonText: 'บันทึก',
+      cancelButtonText: 'ยกเลิก',
+      width: 780,
+    });
+
+    if (!confirmResult.isConfirmed) return;
+
+    Swal.fire({ title: `กำลังบันทึก ${changes.length} รายการ...`, allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     try {
+      const calls = changes.map(c => this.authService.upsertSubResult(c.payload).toPromise());
       const results = await Promise.allSettled(calls);
       const ok = results.filter(r => r.status === 'fulfilled').length;
       const fail = results.length - ok;
@@ -2560,13 +2641,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
         html: `<p class="text-sm">บันทึก <b>${ok}</b> รายการ${fail > 0 ? `, ล้มเหลว <b class="text-red-500">${fail}</b>` : ''}</p>`,
         timer: 2500, showConfirmButton: false
       });
-      // คำนวณ AVG ใหม่ทันที — main row ใน dashboard จะ sync ข้อมูลล่าสุดไว้รอ
-      // (ยังไม่ปิด modal — ผู้ใช้กด "ปิด" เอง, ตอนนั้น closeSubResultModal จะ refresh อีกครั้งเพื่อความมั่นใจ)
+      // คำนวณ AVG ใหม่ทั้ง modal + dashboard
       this.loadSubResultSummary();
-      // Reload รายการใน modal → inputs แสดงค่าล่าสุดจาก server + reset _subOriginal snapshot
-      this.loadSubResultList();
-      // ออกจากโหมดแก้ไข → กลับเป็น read-only จนกว่าผู้ใช้กด "แก้ไขผลงาน" อีกครั้ง
-      this.subEditMode = false;
+      this.loadSubResultList(); // reload inputs + reset _subOriginal
+      this.loadKpiData(true);   // silent reload → main row sync
+      this.subEditMode = false; // กลับ read-only
     } catch (e: any) {
       Swal.fire('ผิดพลาด', e?.message || 'บันทึกไม่สำเร็จ', 'error');
     }
