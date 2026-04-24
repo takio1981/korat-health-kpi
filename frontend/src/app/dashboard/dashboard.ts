@@ -335,6 +335,94 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   closeSearchStatus() {
     this.showSearchStatus = false;
+    try { Swal.close(); } catch { }
+  }
+
+  // Escape HTML เพื่อกัน XSS ใน SweetAlert content
+  private escHtml(s: string): string {
+    return String(s || '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // สร้าง HTML ของ search status panel (ใช้ใน SweetAlert)
+  private buildSearchStatusHtml(): string {
+    const barColor = this.searchProgress === 100
+      ? (this.kpiData.length > 0 ? '#10b981' : '#f59e0b')
+      : '#3b82f6';
+    const filtersHtml = this.appliedFilters.map(f => {
+      const label = this.escHtml(f.label);
+      const value = this.escHtml(f.value);
+      return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${f.color}">
+        <span style="opacity:.7">${label}:</span>
+        <span style="font-weight:700;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${value}">${value}</span>
+      </span>`;
+    }).join(' ');
+    const durationHtml = this.searchProgress === 100
+      ? `<span style="color:#6b7280;font-size:11px">ใช้เวลา ${(this.searchDurationMs / 1000).toFixed(2)} วินาที</span>`
+      : '';
+    const rightText = this.searchProgress === 100 && this.kpiData.length > 0
+      ? `ข้อมูลพร้อมใช้งาน ${this.filteredData.length} / ${this.kpiData.length} รายการ`
+      : '';
+    return `
+      <div style="text-align:left">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-size:12px;color:#6b7280">${this.escHtml(this.searchStage)}</span>
+          ${durationHtml}
+        </div>
+        <div style="width:100%;background:#e5e7eb;border-radius:9999px;height:10px;overflow:hidden;margin-bottom:6px">
+          <div style="height:10px;border-radius:9999px;background:${barColor};width:${this.searchProgress}%;transition:width .3s"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:#6b7280;margin-bottom:12px">
+          <span style="font-weight:700">${this.searchProgress}%</span>
+          <span>${this.escHtml(rightText)}</span>
+        </div>
+        ${this.appliedFilters.length > 0 ? `
+        <div style="padding-top:8px;border-top:1px solid #e5e7eb">
+          <div style="font-size:10px;font-weight:700;color:#6b7280;margin-bottom:6px">
+            <i class="fas fa-filter" style="margin-right:4px"></i>ตัวกรองที่ใช้ (${this.appliedFilters.length}):
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">${filtersHtml}</div>
+        </div>` : ''}
+      </div>
+    `;
+  }
+
+  private openSearchStatusSwal() {
+    Swal.fire({
+      title: 'กำลังค้นหาข้อมูล',
+      html: this.buildSearchStatusHtml(),
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      width: 560,
+      didOpen: () => Swal.showLoading(null),
+    });
+  }
+
+  private updateSearchStatusSwal() {
+    if (!Swal.isVisible()) return;
+    Swal.update({ html: this.buildSearchStatusHtml() });
+  }
+
+  private closeSearchStatusSwal(final?: { success: boolean; message: string }) {
+    if (!Swal.isVisible()) return;
+    if (final) {
+      // Swap เป็น icon + auto-close + show ปุ่มปิด
+      Swal.hideLoading();
+      Swal.update({
+        title: final.message,
+        html: this.buildSearchStatusHtml(),
+        icon: final.success ? (this.kpiData.length > 0 ? 'success' : 'warning') : 'error',
+        showConfirmButton: true,
+        confirmButtonText: 'ตกลง',
+        confirmButtonColor: this.kpiData.length > 0 ? '#10b981' : '#f59e0b',
+        timer: 2500,
+        timerProgressBar: true,
+      });
+    } else {
+      Swal.close();
+    }
   }
 
   // คำนวณตัวกรองที่ใช้งาน → แสดงใน search status panel
@@ -365,6 +453,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       i++;
       this.searchProgress = Math.min(to, Math.round(start + (diff * i / steps)));
       this.cdr.detectChanges();
+      // อัปเดต SweetAlert content ให้ progress bar สมูท
+      if (Swal.isVisible()) this.updateSearchStatusSwal();
       if (i >= steps) {
         clearInterval(this._progressTimer);
         this._progressTimer = null;
@@ -374,13 +464,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   loadKpiData() {
     this.isLoading = true;
-    // เปิด search status panel + reset progress
+    // เปิด search status panel (SweetAlert modal) + reset progress
     this.showSearchStatus = true;
     this.searchStage = 'กำลังค้นหาข้อมูล...';
     this.searchProgress = 0;
     this.searchStartedAt = Date.now();
     this.searchDurationMs = 0;
     this.appliedFilters = this.computeAppliedFilters();
+    this.openSearchStatusSwal();
     this.animateProgress(30, 400);
     if (!this.selectedYear) this.setDefaultYear();
     // ส่ง filter ไปกรองที่ backend — multi-select ใช้ comma-separated
@@ -405,6 +496,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.isLoading = false;
         this.searchStage = 'กำลังประมวลผลข้อมูล...';
         this.animateProgress(70, 300);
+        this.updateSearchStatusSwal();
         if (res && res.success) {
           this.kpiData = res.data;
           this.kpiData.forEach(item => {
@@ -443,11 +535,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
           this.loadSubResultSummary();
           // Finalize progress panel
           this.searchDurationMs = Date.now() - this.searchStartedAt;
-          this.searchStage = this.kpiData.length > 0
+          this.searchProgress = 100;
+          const msg = this.kpiData.length > 0
             ? `พบข้อมูล ${this.kpiData.length} รายการ`
             : 'ไม่พบข้อมูล';
-          this.animateProgress(100, 300);
+          this.searchStage = msg;
           this.cdr.detectChanges();
+          this.closeSearchStatusSwal({ success: true, message: msg });
 
           if (this.kpiData.length === 0) this.showNoDataAlert();
         }
@@ -458,6 +552,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.searchProgress = 0;
         this.searchDurationMs = Date.now() - this.searchStartedAt;
         this.cdr.detectChanges();
+        this.closeSearchStatusSwal({ success: false, message: 'เกิดข้อผิดพลาดในการโหลดข้อมูล' });
         console.error('Error loading KPI:', err);
       }
     });
