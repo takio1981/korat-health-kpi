@@ -2291,6 +2291,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.subEditMode = false;
     this.subDeleteMode = false;
     this.subDeleteSelected.clear();
+    // Refresh ข้อมูลในตาราง dashboard ทันที เพื่อให้ main row สะท้อนค่าที่อัปเดต
+    // (เป้า/ผลงาน/% เฉลี่ยจาก sub + จำนวน sub ในปุ่มแถว)
+    this.loadSubResultSummary();
+    this.loadSubIndicatorCounts();
   }
 
   // Toggle modal-local edit mode (ไม่กระทบ dashboard main)
