@@ -3612,14 +3612,16 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                 continue;
             }
 
-            // Pivot kpi_results
+            // Pivot kpi_results — เก็บค่าเป็น string (ไม่แปลงเป็นเลขทันที กัน "" → 0)
             const dataMap = new Map();
             for (const row of kpiRows) {
                 if (!dataMap.has(row.hospcode)) dataMap.set(row.hospcode, {});
                 const entry = dataMap.get(row.hospcode);
                 const mKey = 'm' + String(row.month_bh).padStart(2, '0');
-                entry[mKey] = Number(row.actual_value) || 0;
-                if (String(row.month_bh) === '10') entry.target = Number(row.target_value) || 0;
+                entry[mKey] = row.actual_value != null ? String(row.actual_value) : null;
+                if (String(row.month_bh) === '10') {
+                    entry.target = row.target_value != null ? String(row.target_value) : null;
+                }
             }
 
             // ตรวจสอบตาราง export มีอยู่หรือไม่
@@ -3634,19 +3636,44 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                 // ตารางยังไม่มี — ทุก row เป็น new
             }
 
+            // Helper เทียบค่า — ใช้เหมือนใน performKpiExport (numeric-aware)
+            const emptyToNull = v => (v === '' || v === undefined) ? null : v;
+            const sameValue = (a, b) => {
+                const na = a === null || a === undefined || a === '' ? null : a;
+                const nb = b === null || b === undefined || b === '' ? null : b;
+                if (na === null && nb === null) return true;
+                if (na === null || nb === null) return false;
+                const fa = parseFloat(na), fb = parseFloat(nb);
+                if (!isNaN(fa) && !isNaN(fb)) return fa === fb;
+                return String(na) === String(nb);
+            };
+            // ข้าม hospcode ที่ไม่มี "ผลงาน" จริง (ต้องมีเดือนใดเดือนหนึ่งที่ actual_value ไม่ว่าง/≠0)
+            const hasActualResult = (d) => {
+                for (const m of months) {
+                    const v = d[m];
+                    if (v !== null && v !== undefined && v !== '' && v !== '0') return true;
+                }
+                return false;
+            };
+
             let newCount = 0, changedCount = 0, unchangedCount = 0;
             for (const [hc, d] of dataMap) {
-                const target = d.target || 0;
-                const monthValues = months.map(m => d[m] || 0);
-                const result = monthValues.reduce((a, b) => a + b, 0);
+                if (!hasActualResult(d)) continue; // ไม่มีผลงาน → ไม่นับ (matches export behavior)
+                const target = emptyToNull(d.target);
+                const monthValues = months.map(m => emptyToNull(d[m]));
+                // result = ค่าเดือนล่าสุดที่คีย์ (ก.ย.→ต.ค.) — เหมือน performKpiExport
+                const reverseMonths = [...monthValues].reverse();
+                const lastActual = reverseMonths.find(v => v !== null && v !== undefined);
+                const resultVal = lastActual !== undefined ? lastActual : null;
 
                 const existing = existingMap.get(hc);
                 if (!existing) {
                     newCount++;
                 } else {
-                    const changed = Number(existing.target) !== target ||
-                        Number(existing.result) !== result ||
-                        months.some((m, idx) => Number(existing[m]) !== monthValues[idx]);
+                    const changed =
+                        !sameValue(existing.target, target) ||
+                        !sameValue(existing.result, resultVal) ||
+                        months.some((m, idx) => !sameValue(existing[m], monthValues[idx]));
                     if (changed) changedCount++;
                     else unchangedCount++;
                 }
@@ -3862,9 +3889,9 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                     for (const r of existingRows) existingDataMap.set(r.hospcode, r);
                 } catch (e) { /* table เพิ่งสร้าง/ไม่มีคอลัมน์ครบ — ถือว่าไม่มี row เดิม */ }
 
-                // ข้าม hospcode ที่ไม่มีข้อมูลเลย — ส่งออกถ้ามี target_value หรือ actual_value (หรือ dynamic form)
+                // ข้าม hospcode ที่ไม่มี "ผลงาน" จริง — ต้องมีเดือนใดเดือนหนึ่งที่ actual_value ไม่ว่าง/≠0
+                // หรือมี dynamic form data (กรณีตัวชี้วัดใช้ฟอร์ม) — target อย่างเดียวไม่พอ
                 const hasActualData = (d) => {
-                    if (d.target !== null && d.target !== undefined && d.target !== '' && d.target !== '0') return true;
                     for (const m of months) {
                         const v = d[m];
                         if (v !== null && v !== undefined && v !== '' && v !== '0') return true;
