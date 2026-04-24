@@ -388,52 +388,67 @@ export class DashboardComponent implements OnInit, OnDestroy {
     `;
   }
 
-  private _searchTitleEl: HTMLElement | null = null;
+  private _searchAutoCloseTimer: any = null;
 
   private openSearchStatusSwal() {
+    // เปิด modal ครั้งเดียว — update title+html+button ด้วย DOM (ไม่ใช้ Swal.update)
     Swal.fire({
-      title: '<i class="fas fa-search text-blue-500"></i> กำลังค้นหาข้อมูล...',
+      title: '<i class="fas fa-search" style="color:#3b82f6"></i> กำลังค้นหาข้อมูล...',
       html: this.buildSearchStatusHtml(),
+      width: 560,
+      // กันปิดก่อนโหลดเสร็จ
       allowOutsideClick: false,
       allowEscapeKey: false,
-      showConfirmButton: false,
-      width: 560,
+      // แสดงปุ่ม "ปิด" ตั้งแต่ต้น แต่ซ่อนผ่าน CSS — โชว์เมื่อโหลดเสร็จ (ไม่ต้อง Swal.update)
+      showConfirmButton: true,
+      confirmButtonText: 'ปิด',
+      confirmButtonColor: '#3b82f6',
+      didOpen: () => {
+        const actions = Swal.getActions();
+        if (actions) (actions as HTMLElement).style.display = 'none';
+      },
     });
   }
 
   private updateSearchStatusSwal() {
     if (!Swal.isVisible()) return;
-    // update html body via DOM — เร็วกว่า Swal.update
     const container = Swal.getHtmlContainer();
     if (container) container.innerHTML = this.buildSearchStatusHtml();
   }
 
-  // จบการค้นหา: update modal เดิม (ไม่ปิด-เปิดใหม่) + auto-close 5 วินาที + ปุ่มปิด
+  // จบการค้นหา: update title + html + แสดงปุ่มปิด + timer 5s — modal เดียวตลอด
   private finishSearchStatusSwal(final: { success: boolean; message: string }) {
     if (!Swal.isVisible()) return;
     const hasData = this.kpiData.length > 0;
     const color = hasData ? '#10b981' : (final.success ? '#f59e0b' : '#ef4444');
-    // ไอคอน + title (no spinner)
-    const iconSvg = final.success
+    const iconHtml = final.success
       ? (hasData
           ? `<i class="fas fa-check-circle" style="color:#10b981"></i>`
           : `<i class="fas fa-exclamation-triangle" style="color:#f59e0b"></i>`)
       : `<i class="fas fa-times-circle" style="color:#ef4444"></i>`;
-    // Update title ผ่าน DOM element
+
+    // 1) Update title ผ่าน DOM
     const titleEl = Swal.getTitle();
-    if (titleEl) titleEl.innerHTML = `${iconSvg} ${this.escHtml(final.message)}`;
-    // Update content
+    if (titleEl) titleEl.innerHTML = `${iconHtml} ${this.escHtml(final.message)}`;
+
+    // 2) Update body content
     this.updateSearchStatusSwal();
-    // Show confirm button ("ปิด") + เปิด allowOutsideClick
-    Swal.update({
-      showConfirmButton: true,
-      confirmButtonText: 'ปิด',
-      confirmButtonColor: color,
-      allowOutsideClick: true,
-      allowEscapeKey: true,
-      timer: 5000,
-      timerProgressBar: true,
-    });
+
+    // 3) แสดงปุ่มปิด (ที่ซ่อนไว้) + เปลี่ยนสี
+    const actions = Swal.getActions();
+    if (actions) (actions as HTMLElement).style.display = '';
+    const btn = Swal.getConfirmButton() as HTMLButtonElement | null;
+    if (btn) {
+      btn.textContent = 'ปิด';
+      btn.style.backgroundColor = color;
+    }
+
+    // 4) Timer auto-close 5 วินาที (ใช้ setTimeout แทน Swal timer — กัน re-render)
+    if (this._searchAutoCloseTimer) clearTimeout(this._searchAutoCloseTimer);
+    this._searchAutoCloseTimer = setTimeout(() => {
+      if (Swal.isVisible()) Swal.close();
+      this._searchAutoCloseTimer = null;
+    }, 5000);
   }
 
   // คำนวณตัวกรองที่ใช้งาน → แสดงใน search status panel
