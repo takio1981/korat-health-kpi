@@ -2375,6 +2375,34 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  // คำนวณเฉลี่ย (AVG) ของ sub-results ใน modal ปัจจุบัน — คำนวณ local ทันที
+  // ใช้สำหรับแสดง "ผลงานรวม" + "%" ใน modal ให้ update ทันทีหลังบันทึก (ไม่ต้องรอ server)
+  getSubModalAverage(): { avgTarget: string; avgActual: string; avgPct: string; count: number; metPct: number } {
+    if (!this.subResultList || this.subResultList.length === 0) {
+      return { avgTarget: '-', avgActual: '-', avgPct: '-', count: 0, metPct: 0 };
+    }
+    const targets: number[] = [];
+    const actuals: number[] = [];
+    for (const s of this.subResultList) {
+      const t = parseFloat(String(s._target ?? ''));
+      if (isFinite(t) && t !== 0) targets.push(t);
+      const actStr = this.getSubLastActual(s);
+      const a = parseFloat(actStr);
+      if (isFinite(a)) actuals.push(a);
+    }
+    const avg = (arr: number[]) => arr.length ? arr.reduce((x, y) => x + y, 0) / arr.length : NaN;
+    const at = avg(targets);
+    const aa = avg(actuals);
+    const pct = (isFinite(at) && at > 0 && isFinite(aa)) ? (aa / at) * 100 : NaN;
+    return {
+      avgTarget: isFinite(at) ? this.formatNum(at) : '-',
+      avgActual: isFinite(aa) ? this.formatNum(aa) : '-',
+      avgPct: isFinite(pct) ? this.formatNum(pct) : '-',
+      count: this.subResultList.length,
+      metPct: isFinite(pct) ? pct : 0,
+    };
+  }
+
   // ลำดับเดือนตามปีงบประมาณ ต.ค.→ก.ย.
   subMonthColumns = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9];
   subMonthLabels: { [k: number]: string } = {
