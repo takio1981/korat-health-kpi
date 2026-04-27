@@ -3,7 +3,8 @@
 /* Table container with both scrollbars */
 .kpi-table-wrapper {
   overflow: auto;
-  max-height: calc(100vh - 400px);
+  /* ขยายความสูงตารางให้พอดีกับ sidebar — เผื่อ header (~64px) + filter bar (~140px) + footer/padding (~40px) */
+  max-height: calc(100vh - 240px);
   position: relative;
   scrollbar-gutter: stable;
 }
