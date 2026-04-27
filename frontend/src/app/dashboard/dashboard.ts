@@ -1078,7 +1078,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
         (s === 'reviewed' && Number(item.pending_count) === 0 && hasActual) ||
         (s === 'has_target_actual' && hasTarget && hasActual) ||
         (s === 'no_target' && !hasTarget) ||
-        (s === 'no_actual' && hasTarget && !hasActual);
+        (s === 'no_actual' && hasTarget && !hasActual) ||
+        (s === 'no_target_no_actual' && !hasTarget && !hasActual);
       const matchStatus = this.selectedStatuses.length === 0 || this.selectedStatuses.some(statusMatches);
       const typeMatches = (t: string) =>
         (t === 'r9' && item.r9 === 1) || (t === 'moph' && item.moph === 1) ||

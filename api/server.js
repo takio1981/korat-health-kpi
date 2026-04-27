@@ -4020,12 +4020,19 @@ async function sendExportNotification(schedule, result, durationMs) {
     const tablesCount = (result.created_tables || []).length;
     const subject = `[Korat Health KPI] รายงาน Export อัตโนมัติ — ${schedule.name}`;
 
-    const tablesHtml = (result.created_tables || []).slice(0, 30).map(t =>
-        `<tr><td style="padding:4px 8px;border-bottom:1px solid #eee">${t.table}</td>
-         <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center">+${t.inserted}</td>
-         <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center">~${t.updated}</td>
-         <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center">=${t.unchanged}</td></tr>`
-    ).join('');
+    const allTables = result.created_tables || [];
+    const tablesHtml = allTables.slice(0, 100).map(t => {
+        const isUpdated = (t.inserted || 0) > 0 || (t.updated || 0) > 0;
+        const statusIcon = isUpdated
+            ? '<span style="color:#16a34a">✓ อัปเดต</span>'
+            : '<span style="color:#6b7280">= ไม่เปลี่ยน</span>';
+        return `<tr><td style="padding:4px 8px;border-bottom:1px solid #eee;font-family:monospace;font-size:11px">${t.table}</td>
+         <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center;font-size:11px">${statusIcon}</td>
+         <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center">+${t.inserted || 0}</td>
+         <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center">~${t.updated || 0}</td>
+         <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:center">=${t.unchanged || 0}</td></tr>`;
+    }).join('');
+    const tablesMore = allTables.length > 100 ? `<p style="color:#6b7280;font-size:11px;margin-top:4px">... และอีก ${allTables.length - 100} ตาราง</p>` : '';
 
     // Sync-to-HDC summary (ถ้ามี)
     const sync = result.sync;
@@ -4058,13 +4065,14 @@ async function sendExportNotification(schedule, result, durationMs) {
           <div style="background:#f3f4f6;padding:12px;border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:bold;color:#4b5563">${summary.unchanged}</div><div style="font-size:11px;color:#4b5563">ไม่เปลี่ยน</div></div>
           <div style="background:#fef3c7;padding:12px;border-radius:8px;text-align:center"><div style="font-size:20px;font-weight:bold;color:#a16207">${tablesCount}</div><div style="font-size:11px;color:#a16207">ตาราง</div></div>
         </div>
-        ${tablesHtml ? `<h3 style="margin:16px 0 8px;color:#374151;font-size:14px">ตารางที่ประมวลผล (${tablesCount}):</h3>
+        ${tablesHtml ? `<h3 style="margin:16px 0 8px;color:#374151;font-size:14px">📋 รายการตารางที่ส่งออก (${tablesCount}):</h3>
         <table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="background:#f9fafb">
           <th style="padding:6px 8px;text-align:left">ตาราง</th>
+          <th style="padding:6px 8px;text-align:center">สถานะ</th>
           <th style="padding:6px 8px;text-align:center">เพิ่ม</th>
           <th style="padding:6px 8px;text-align:center">อัปเดต</th>
           <th style="padding:6px 8px;text-align:center">เดิม</th>
-        </tr></thead><tbody>${tablesHtml}</tbody></table>` : ''}
+        </tr></thead><tbody>${tablesHtml}</tbody></table>${tablesMore}` : ''}
         ${syncHtml}
         <div style="background:#fef9c3;border-left:4px solid #eab308;padding:12px;margin-top:16px;border-radius:4px">
           <p style="margin:0;color:#713f12;font-size:13px">
@@ -4094,7 +4102,16 @@ async function sendExportNotification(schedule, result, durationMs) {
             `• Rows: *${sync.summary.rows}*\n` +
             (sync.summary.error > 0 ? `• ผิดพลาด: *${sync.summary.error}*\n` : '')
           : '';
-        const footer = sync ? '📬 ข้อมูลถูกส่งเข้า HDC แล้ว' : '⚠️ กรุณาตรวจสอบก่อนส่ง HDC';
+        // รายการตาราง (top 20 — กัน Telegram message limit 4096 char)
+        const topTables = allTables.slice(0, 20);
+        const tablesBlock = topTables.length > 0
+          ? `\n📋 *รายการตารางที่ส่งออก:*\n` + topTables.map(t => {
+              const isUpdated = (t.inserted || 0) > 0 || (t.updated || 0) > 0;
+              const icon = isUpdated ? '✓' : '=';
+              return `${icon} \`${t.table}\` (+${t.inserted || 0}/~${t.updated || 0}/=${t.unchanged || 0})`;
+            }).join('\n') + (allTables.length > 20 ? `\n... และอีก ${allTables.length - 20} ตาราง` : '')
+          : '';
+        const footer = sync ? '\n\n📬 ข้อมูลถูกส่งเข้า HDC แล้ว' : '\n\n⚠️ กรุณาตรวจสอบก่อนส่ง HDC';
         const tgMsg = `📊 *รายงาน Export KPI — ${schedule.name}*\n\n` +
             `สถานะ: ${result.success ? '✅ สำเร็จ' : '❌ ผิดพลาด'}\n` +
             `⏱ เวลา: ${(durationMs/1000).toFixed(1)} วินาที\n\n` +
@@ -4103,12 +4120,16 @@ async function sendExportNotification(schedule, result, durationMs) {
             `• อัปเดต: *${summary.updated}*\n` +
             `• ไม่เปลี่ยน: *${summary.unchanged}*\n` +
             `• ตารางทั้งหมด: *${tablesCount}*\n` +
-            syncBlock + '\n' +
+            syncBlock +
+            tablesBlock +
             footer;
         for (const chatId of chatIds) {
             try { await sendTelegramDirect(ns.tgToken, chatId, tgMsg); sentTelegram = true; } catch (e) {}
         }
     }
+
+    // Append "สถานะการส่งรายงาน" footer ใน HTML — แต่ส่งหลังจาก email/telegram เสร็จแล้ว
+    // (ไม่ส่ง email อีกครั้งเพื่อแจ้ง — เก็บใน return value แทน)
     return { sentEmail, sentTelegram };
 }
 

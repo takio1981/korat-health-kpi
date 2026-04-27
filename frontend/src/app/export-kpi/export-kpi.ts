@@ -468,13 +468,61 @@ export class ExportKpiComponent implements OnInit {
               this.applyFilters();
               this.cdr.detectChanges();
 
+              // Build table list HTML — ชื่อตาราง + สถานะ + counts
+              const escHtml = (s: any) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+              const tablesRows = (res.created_tables || []).map((t: any) => {
+                const total = (t.inserted || 0) + (t.updated || 0) + (t.unchanged || 0);
+                const statusIcon = t.inserted > 0 || t.updated > 0
+                  ? '<i class="fas fa-check-circle" style="color:#16a34a"></i>'
+                  : '<i class="fas fa-equals" style="color:#6b7280"></i>';
+                const statusText = t.inserted > 0 || t.updated > 0 ? 'อัปเดต' : 'ไม่เปลี่ยน';
+                return `<tr>
+                  <td style="padding:5px 8px;border-bottom:1px solid #eee;font-family:monospace;font-size:11px">${escHtml(t.table)}</td>
+                  <td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center">${statusIcon} <span style="font-size:10px;color:#6b7280">${statusText}</span></td>
+                  <td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;color:#1e40af;font-weight:700">+${t.inserted || 0}</td>
+                  <td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;color:#c2410c;font-weight:700">~${t.updated || 0}</td>
+                  <td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;color:#6b7280">=${t.unchanged || 0}</td>
+                  <td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;font-weight:700">${total}</td>
+                </tr>`;
+              }).join('');
+              const skippedRows = (res.skipped || []).map((s: any) =>
+                `<tr><td colspan="2" style="padding:4px 8px;border-bottom:1px solid #eee;font-family:monospace;font-size:11px;color:#9ca3af">${escHtml(s.table_process || s.name || '?')}</td>
+                <td colspan="4" style="padding:4px 8px;border-bottom:1px solid #eee;font-size:11px;color:#9ca3af">⏭ ${escHtml(s.reason || 'ข้าม')}</td></tr>`
+              ).join('');
+
               Swal.fire({
-                title: 'สำเร็จ',
-                html: `ดำเนินการสำเร็จ <b>${res.created_tables.length}</b> ตาราง` +
-                  (res.skipped.length > 0 ? `<br>ข้าม <b>${res.skipped.length}</b> รายการ` : '') +
-                  `<br>เพิ่มใหม่: <b>${res.summary.inserted}</b> | อัปเดต: <b>${res.summary.updated}</b> | ไม่เปลี่ยนแปลง: <b>${res.summary.unchanged}</b>`,
+                title: '✓ ส่งออกสำเร็จ',
+                html: `<div style="text-align:left;font-size:13px">
+                  <!-- Summary cards -->
+                  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px">
+                    <div style="background:#dbeafe;padding:10px;border-radius:8px;text-align:center"><div style="font-size:18px;font-weight:bold;color:#1e40af">${res.summary.inserted}</div><div style="font-size:10px;color:#1e40af">เพิ่มใหม่</div></div>
+                    <div style="background:#fed7aa;padding:10px;border-radius:8px;text-align:center"><div style="font-size:18px;font-weight:bold;color:#c2410c">${res.summary.updated}</div><div style="font-size:10px;color:#c2410c">อัปเดต</div></div>
+                    <div style="background:#f3f4f6;padding:10px;border-radius:8px;text-align:center"><div style="font-size:18px;font-weight:bold;color:#4b5563">${res.summary.unchanged}</div><div style="font-size:10px;color:#4b5563">ไม่เปลี่ยน</div></div>
+                    <div style="background:#fef3c7;padding:10px;border-radius:8px;text-align:center"><div style="font-size:18px;font-weight:bold;color:#a16207">${res.created_tables.length}</div><div style="font-size:10px;color:#a16207">ตาราง</div></div>
+                  </div>
+
+                  ${tablesRows ? `
+                  <p style="font-weight:700;color:#374151;margin:8px 0 4px;font-size:12px">📋 รายการตารางที่ส่งออก (${res.created_tables.length}):</p>
+                  <div style="max-height:260px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:8px">
+                    <table style="width:100%;border-collapse:collapse;font-size:11px;background:white">
+                      <thead style="position:sticky;top:0;background:#f3f4f6"><tr>
+                        <th style="padding:6px 8px;text-align:left">ตาราง</th>
+                        <th style="padding:6px 8px;text-align:center">สถานะ</th>
+                        <th style="padding:6px 8px;text-align:center">เพิ่ม</th>
+                        <th style="padding:6px 8px;text-align:center">อัปเดต</th>
+                        <th style="padding:6px 8px;text-align:center">เดิม</th>
+                        <th style="padding:6px 8px;text-align:center">รวม</th>
+                      </tr></thead>
+                      <tbody>${tablesRows}${skippedRows}</tbody>
+                    </table>
+                  </div>` : ''}
+
+                  ${res.skipped.length > 0 && !tablesRows ? `<p style="color:#6b7280;font-size:11px;margin-top:8px"><i class="fas fa-forward"></i> ข้าม ${res.skipped.length} รายการ (ไม่มีข้อมูล)</p>` : ''}
+                </div>`,
                 icon: 'success',
-                confirmButtonColor: '#28a745'
+                width: 720,
+                confirmButtonColor: '#16a34a',
+                confirmButtonText: 'ตกลง'
               });
             } else {
               this.cdr.detectChanges();

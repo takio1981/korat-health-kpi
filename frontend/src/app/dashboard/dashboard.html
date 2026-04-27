@@ -314,6 +314,8 @@
                   <input type="checkbox" [checked]="isFilterSelected(selectedStatuses, 'no_target')" (change)="toggleFilterItem(selectedStatuses, 'no_target')" class="rounded text-gray-500"><span class="text-gray-500">ยังไม่มีเป้าหมาย</span></label>
                 <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
                   <input type="checkbox" [checked]="isFilterSelected(selectedStatuses, 'no_actual')" (change)="toggleFilterItem(selectedStatuses, 'no_actual')" class="rounded text-blue-600"><span class="text-blue-600">มีเป้า/ไม่มีผลงาน</span></label>
+                <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
+                  <input type="checkbox" [checked]="isFilterSelected(selectedStatuses, 'no_target_no_actual')" (change)="toggleFilterItem(selectedStatuses, 'no_target_no_actual')" class="rounded text-rose-600"><span class="text-rose-600">ไม่มีเป้า/ไม่มีผลงาน</span></label>
               </div>
             </div>
           </div>
