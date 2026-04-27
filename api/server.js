@@ -139,7 +139,7 @@ const loginLimiter = rateLimit({
 
 const apiLimiter = rateLimit({
     windowMs: 1 * 60 * 1000, // 1 นาที per IP
-    max: 300, // เรียก API ทั่วไปได้ 300 ครั้งต่อนาที (ปรับตามความเหมาะสม)
+    max: 1000, // เรียก API ทั่วไปได้ 1000 ครั้งต่อนาที (เผื่อ user หลายคน share IP สำนักงาน + dashboard ที่มีหลายแถว)
     standardHeaders: true,
     legacyHeaders: false,
 });
@@ -1434,6 +1434,67 @@ apiRouter.get('/dynamic-data-months/:table_name', authenticateToken, async (req,
         const [rows] = await db.query(`SELECT DISTINCT month_bh FROM \`${formTable}\` ${where} AND month_bh IS NOT NULL ORDER BY month_bh`, params);
         res.json({ success: true, data: rows.map(r => r.month_bh) });
     } catch (e) { res.json({ success: true, data: [] }); }
+});
+
+// POST /dynamic-data-months/batch — batch ดึงเดือนจากหลาย table+hospcode พร้อมกัน (ลด N requests → M)
+// Body: { year_bh, items: [{ table_process, hospcode }, ...] }
+// Response: { success: true, data: { "table|hospcode": [10, 11, ...], ... } }
+apiRouter.post('/dynamic-data-months/batch', authenticateToken, async (req, res) => {
+    try {
+        const { year_bh, items } = req.body || {};
+        if (!Array.isArray(items) || items.length === 0) {
+            return res.json({ success: true, data: {} });
+        }
+        // Group hospcodes by table_process
+        const grouped = new Map(); // table_process → Set<hospcode>
+        for (const it of items) {
+            const tp = it && it.table_process;
+            const hos = it && it.hospcode;
+            if (!tp || !hos || !isValidIdentifier(tp)) continue;
+            if (!grouped.has(tp)) grouped.set(tp, new Set());
+            grouped.get(tp).add(String(hos));
+        }
+        if (grouped.size === 0) return res.json({ success: true, data: {} });
+
+        // Pre-check ตารางไหนที่ form_* มีอยู่จริง (1 query)
+        const tableNames = Array.from(grouped.keys()).map(t => 'form_' + t);
+        const [existRows] = await db.query(
+            `SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN (?)`,
+            [tableNames]
+        );
+        const existSet = new Set(existRows.map(r => r.table_name || r.TABLE_NAME));
+
+        const result = {};
+        // Query แต่ละตารางครั้งเดียว (IN hospcodes)
+        for (const [tp, hosSet] of grouped.entries()) {
+            const formTable = 'form_' + tp;
+            if (!existSet.has(formTable)) {
+                for (const h of hosSet) result[`${tp}|${h}`] = [];
+                continue;
+            }
+            const hosList = Array.from(hosSet);
+            const params = [hosList];
+            let where = 'WHERE hospcode IN (?) AND month_bh IS NOT NULL';
+            if (year_bh) { where += ' AND year_bh = ?'; params.push(year_bh); }
+            try {
+                const [rows] = await db.query(
+                    `SELECT DISTINCT hospcode, month_bh FROM \`${formTable}\` ${where}`, params
+                );
+                // init keys (รวมที่ไม่มีข้อมูล)
+                for (const h of hosSet) result[`${tp}|${h}`] = [];
+                for (const r of rows) {
+                    const k = `${tp}|${r.hospcode}`;
+                    if (!result[k]) result[k] = [];
+                    result[k].push(r.month_bh);
+                }
+            } catch (_) {
+                for (const h of hosSet) result[`${tp}|${h}`] = [];
+            }
+        }
+        res.json({ success: true, data: result });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
 });
 
 // POST /dynamic-data/:table_name — บันทึกข้อมูลลงตาราง dynamic (form_ prefix) + sync kpi_results

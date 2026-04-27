@@ -1003,6 +1003,13 @@ export class AuthService {
     return this.http.get(`${this.apiUrl}/dynamic-data-months/${tableName}${queryStr ? '?' + queryStr : ''}`, { headers });
   }
 
+  // batch: { year_bh, items: [{table_process, hospcode}, ...] } → { "table|hospcode": [months] }
+  getDynamicDataMonthsBatch(year_bh: string, items: { table_process: string; hospcode: string }[]): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/dynamic-data-months/batch`, { year_bh, items }, { headers });
+  }
+
   deleteDynamicData(tableName: string, recordId: number): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

@@ -3402,20 +3402,37 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   loadDynamicFormMonths() {
     const items = this.kpiData.filter(i => i.table_process && i.has_form_schema);
+    if (!items.length) return;
+
+    // Reset _formMonths ทุกแถวก่อน
+    for (const item of items) item._formMonths = {};
+
+    // group by year_bh เพื่อยิง batch ต่อปี (ปกติ filter เลือกปีเดียว = 1 batch)
+    const byYear = new Map<string, any[]>();
     for (const item of items) {
-      item._formMonths = {}; // { oct: true, jan: true, ... }
-      this.authService.getDynamicDataMonths(item.table_process, {
-        hospcode: item.hospcode,
-        year_bh: item.year_bh
-      }).subscribe({
+      const y = String(item.year_bh || '');
+      if (!byYear.has(y)) byYear.set(y, []);
+      byYear.get(y)!.push(item);
+    }
+
+    for (const [year, group] of byYear.entries()) {
+      const payload = group.map(it => ({
+        table_process: it.table_process,
+        hospcode: String(it.hospcode || '')
+      }));
+      this.authService.getDynamicDataMonthsBatch(year, payload).subscribe({
         next: (res) => {
-          if (res.success && res.data) {
-            for (const mb of res.data) {
+          if (!res?.success || !res.data) return;
+          const map = res.data as Record<string, number[]>;
+          for (const item of group) {
+            const k = `${item.table_process}|${item.hospcode}`;
+            const months = map[k] || [];
+            for (const mb of months) {
               const key = this.monthBhToKey[Number(mb)];
               if (key) item._formMonths[key] = true;
             }
-            this.cdr.detectChanges();
           }
+          this.cdr.detectChanges();
         }
       });
     }
