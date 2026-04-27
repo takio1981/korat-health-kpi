@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>KHUPS KPI — WFH Roadmap พ.ค.-ต.ค. 2569</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800&family=Kanit:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --c-may:    #3b82f6;  /* Foundation - blue */
+    --c-jun:    #a855f7;  /* Mobile - purple */
+    --c-jul:    #10b981;  /* Analytics - green */
+    --c-aug:    #f59e0b;  /* Integration - amber */
+    --c-sep:    #f97316;  /* Workflow - orange */
+    --c-oct:    #ef4444;  /* Polish - red */
+    --bg:       #f8fafc;
+    --ink:      #1e293b;
+    --muted:    #64748b;
+  }
+  body {
+    font-family: 'Sarabun', sans-serif;
+    background: linear-gradient(135deg, #f0f9ff 0%, #faf5ff 50%, #fef3c7 100%);
+    color: var(--ink);
+    line-height: 1.55;
+    padding: 24px 16px;
+    min-height: 100vh;
+  }
+  .page {
+    max-width: 1100px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 24px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.08);
+    overflow: hidden;
+  }
+
+  /* === Hero === */
+  .hero {
+    background: linear-gradient(135deg, #065f46 0%, #047857 30%, #0891b2 100%);
+    color: white;
+    padding: 40px 48px 36px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::after {
+    content: '';
+    position: absolute;
+    top: -50%; right: -10%;
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, rgba(255,255,255,.15) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-tag {
+    display: inline-block;
+    background: rgba(255,255,255,.2);
+    padding: 4px 14px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    backdrop-filter: blur(10px);
+  }
+  .hero h1 {
+    font-family: 'Kanit', sans-serif;
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: -.5px;
+    margin-bottom: 8px;
+  }
+  .hero p { opacity: .95; font-size: 14px; max-width: 720px; }
+
+  .hero-meta {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-top: 28px;
+    position: relative;
+  }
+  .meta-card {
+    background: rgba(255,255,255,.13);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,.2);
+    padding: 14px 16px;
+    border-radius: 14px;
+  }
+  .meta-card .icon { font-size: 22px; margin-bottom: 4px; opacity: .9; }
+  .meta-card .label { font-size: 10px; opacity: .8; text-transform: uppercase; letter-spacing: 1px; }
+  .meta-card .value { font-size: 16px; font-weight: 700; margin-top: 2px; }
+
+  /* === Overview === */
+  .overview {
+    padding: 32px 48px 8px;
+  }
+  .section-head {
+    font-family: 'Kanit', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-head::before {
+    content: '';
+    width: 4px;
+    height: 24px;
+    background: linear-gradient(180deg, var(--c-may), var(--c-oct));
+    border-radius: 2px;
+  }
+
+  .progress-track {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+    margin-bottom: 36px;
+  }
+  .progress-item {
+    text-align: center;
+    padding: 14px 8px;
+    border-radius: 12px;
+    color: white;
+    font-weight: 700;
+    position: relative;
+    box-shadow: 0 4px 14px rgba(0,0,0,.1);
+  }
+  .progress-item .month { font-size: 16px; font-family: 'Kanit', sans-serif; }
+  .progress-item .pct { font-size: 11px; opacity: .9; margin-top: 2px; }
+  .progress-item .theme {
+    display: block;
+    font-size: 10px;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255,255,255,.3);
+    font-weight: 500;
+    opacity: .95;
+  }
+
+  .pi-may { background: linear-gradient(135deg, #60a5fa, var(--c-may)); }
+  .pi-jun { background: linear-gradient(135deg, #c084fc, var(--c-jun)); }
+  .pi-jul { background: linear-gradient(135deg, #34d399, var(--c-jul)); }
+  .pi-aug { background: linear-gradient(135deg, #fbbf24, var(--c-aug)); }
+  .pi-sep { background: linear-gradient(135deg, #fb923c, var(--c-sep)); }
+  .pi-oct { background: linear-gradient(135deg, #f87171, var(--c-oct)); }
+
+  /* === Month Cards === */
+  .months {
+    padding: 0 48px 32px;
+  }
+  .month-card {
+    background: white;
+    border-radius: 18px;
+    padding: 24px 28px;
+    margin-bottom: 22px;
+    border-left: 6px solid var(--accent);
+    box-shadow: 0 4px 18px rgba(0,0,0,.05);
+    position: relative;
+    page-break-inside: avoid;
+  }
+  .month-card.may { --accent: var(--c-may); }
+  .month-card.jun { --accent: var(--c-jun); }
+  .month-card.jul { --accent: var(--c-jul); }
+  .month-card.aug { --accent: var(--c-aug); }
+  .month-card.sep { --accent: var(--c-sep); }
+  .month-card.oct { --accent: var(--c-oct); }
+
+  .month-head {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px dashed #e2e8f0;
+  }
+  .month-icon {
+    width: 56px; height: 56px;
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    color: white;
+    font-size: 26px;
+    background: var(--accent);
+    box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  .month-title {
+    flex: 1;
+  }
+  .month-title h2 {
+    font-family: 'Kanit', sans-serif;
+    font-size: 22px;
+    color: var(--ink);
+  }
+  .month-title .sub {
+    color: var(--muted);
+    font-size: 13px;
+    margin-top: 2px;
+  }
+  .month-badge {
+    background: color-mix(in srgb, var(--accent) 12%, white);
+    color: var(--accent);
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .tasks {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .task {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, white), white);
+    border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+    padding: 14px 16px;
+    border-radius: 12px;
+    transition: transform .2s, box-shadow .2s;
+  }
+  .task:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,.08); }
+  .task .week {
+    display: inline-block;
+    background: var(--accent);
+    color: white;
+    padding: 2px 10px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .task .name {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--ink);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .task .desc {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .task .out {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .task .out i { margin-right: 4px; }
+
+  .kpi-block {
+    background: color-mix(in srgb, var(--accent) 8%, white);
+    border: 1px dashed color-mix(in srgb, var(--accent) 35%, transparent);
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 12px;
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .kpi-block .kpi-icon {
+    font-size: 20px;
+    color: var(--accent);
+  }
+  .kpi-block strong { color: var(--accent); }
+
+  /* === Schedule Panel === */
+  .schedule {
+    margin: 0 48px 36px;
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    color: white;
+    padding: 28px 32px;
+    border-radius: 18px;
+  }
+  .schedule h3 {
+    font-family: 'Kanit', sans-serif;
+    font-size: 18px;
+    margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .sched-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+  }
+  .sched-day {
+    background: rgba(255,255,255,.08);
+    border-radius: 12px;
+    padding: 14px 16px;
+    border-left: 3px solid #38bdf8;
+  }
+  .sched-day.wfh { border-left-color: #34d399; }
+  .sched-day.office { border-left-color: #f59e0b; }
+  .sched-day .day-label {
+    font-size: 11px;
+    opacity: .8;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+  .sched-day .day-name {
+    font-family: 'Kanit', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .sched-day ul { list-style: none; font-size: 12px; line-height: 1.7; opacity: .92; }
+  .sched-day ul li::before {
+    content: '▸';
+    color: #38bdf8;
+    margin-right: 6px;
+  }
+  .sched-day.wfh ul li::before { color: #34d399; }
+  .sched-day.office ul li::before { color: #f59e0b; }
+
+  /* === Footer === */
+  .footer {
+    background: #f1f5f9;
+    padding: 20px 48px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .footer .tag {
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .footer .signature {
+    font-size: 12px;
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .legend {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    font-size: 11px;
+  }
+  .legend .dot {
+    display: inline-block;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+
+  /* === Print === */
+  @media print {
+    body { background: white; padding: 0; }
+    .page { box-shadow: none; border-radius: 0; }
+    .month-card { break-inside: avoid; }
+    .hero, .schedule { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .progress-item, .month-icon, .task .week { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+  @page { size: A4; margin: 12mm; }
+
+  /* === Mobile === */
+  @media (max-width: 768px) {
+    body { padding: 12px 6px; }
+    .hero, .overview, .months, .footer { padding-left: 20px; padding-right: 20px; }
+    .schedule { margin-left: 20px; margin-right: 20px; padding: 20px; }
+    .hero h1 { font-size: 24px; }
+    .hero-meta { grid-template-columns: repeat(2, 1fr); }
+    .progress-track { grid-template-columns: repeat(3, 1fr); }
+    .tasks { grid-template-columns: 1fr; }
+    .sched-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- === Hero === -->
+  <header class="hero">
+    <span class="hero-tag"><i class="fas fa-route"></i> Roadmap · 6 เดือน</span>
+    <h1>KHUPS KPI — แผนพัฒนา WFH</h1>
+    <p>ปูแผนพัฒนาระบบบันทึกผลงานตัวชี้วัดด้านสุขภาพ สำนักงานสาธารณสุขจังหวัดนครราชสีมา ในช่วง <b>พ.ค.–ต.ค. 2569</b> รูปแบบ Work From Home 2 วัน/สัปดาห์ — แบ่งงานเป็นธีมรายเดือน เพื่อพัฒนาระบบเดิมให้ครบถ้วนและพร้อมใช้งานสำหรับปีงบประมาณใหม่</p>
+
+    <div class="hero-meta">
+      <div class="meta-card">
+        <div class="icon"><i class="fas fa-calendar-days"></i></div>
+        <div class="label">ระยะเวลา</div>
+        <div class="value">6 เดือน</div>
+      </div>
+      <div class="meta-card">
+        <div class="icon"><i class="fas fa-house-laptop"></i></div>
+        <div class="label">รูปแบบ</div>
+        <div class="value">WFH 2 วัน/สัปดาห์</div>
+      </div>
+      <div class="meta-card">
+        <div class="icon"><i class="fas fa-clock"></i></div>
+        <div class="label">เวลาทำงาน</div>
+        <div class="value">~8 วัน/เดือน · 64 ชม.</div>
+      </div>
+      <div class="meta-card">
+        <div class="icon"><i class="fas fa-code"></i></div>
+        <div class="label">Stack</div>
+        <div class="value">Angular 21 · Express 5 · MySQL</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- === Overview === -->
+  <section class="overview">
+    <h2 class="section-head">📊 ภาพรวม 6 เดือน</h2>
+    <div class="progress-track">
+      <div class="progress-item pi-may">
+        <div class="month">พ.ค.</div>
+        <div class="pct">16%</div>
+        <span class="theme">Foundation</span>
+      </div>
+      <div class="progress-item pi-jun">
+        <div class="month">มิ.ย.</div>
+        <div class="pct">33%</div>
+        <span class="theme">Mobile</span>
+      </div>
+      <div class="progress-item pi-jul">
+        <div class="month">ก.ค.</div>
+        <div class="pct">50%</div>
+        <span class="theme">Analytics</span>
+      </div>
+      <div class="progress-item pi-aug">
+        <div class="month">ส.ค.</div>
+        <div class="pct">66%</div>
+        <span class="theme">Integration</span>
+      </div>
+      <div class="progress-item pi-sep">
+        <div class="month">ก.ย.</div>
+        <div class="pct">83%</div>
+        <span class="theme">Workflow</span>
+      </div>
+      <div class="progress-item pi-oct">
+        <div class="month">ต.ค.</div>
+        <div class="pct">100%</div>
+        <span class="theme">Polish</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- === Schedule === -->
+  <section class="schedule">
+    <h3><i class="fas fa-calendar-week"></i> ตารางการทำงานต่อสัปดาห์</h3>
+    <div class="sched-grid">
+      <div class="sched-day wfh">
+        <div class="day-label">WFH</div>
+        <div class="day-name"><i class="fas fa-house"></i> จันทร์</div>
+        <ul>
+          <li>09:00 Daily check-in</li>
+          <li>10:00–12:00 Heads-down dev</li>
+          <li>13:00–15:00 Feature impl.</li>
+          <li>15:00–17:00 Test + log progress</li>
+        </ul>
+      </div>
+      <div class="sched-day wfh">
+        <div class="day-label">WFH</div>
+        <div class="day-name"><i class="fas fa-house"></i> อังคาร</div>
+        <ul>
+          <li>09:00 Standup recap</li>
+          <li>10:00–12:00 Pair / Debug</li>
+          <li>13:00–15:00 Tests + Polish</li>
+          <li>15:00–17:00 Demo + Commit</li>
+        </ul>
+      </div>
+      <div class="sched-day office">
+        <div class="day-label">Office</div>
+        <div class="day-name"><i class="fas fa-building"></i> พุธ–ศุกร์</div>
+        <ul>
+          <li>Code review บน prod</li>
+          <li>ตอบ feedback ผู้ใช้งาน</li>
+          <li>เขียนเอกสารสิ่งที่ทำ</li>
+          <li>Deploy staging environment</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- === Months === -->
+  <section class="months">
+
+    <!-- พ.ค. -->
+    <article class="month-card may">
+      <div class="month-head">
+        <div class="month-icon"><i class="fas fa-cubes-stacked"></i></div>
+        <div class="month-title">
+          <h2>พ.ค. 2569 — Foundation & Performance</h2>
+          <div class="sub">ปูฐานคุณภาพระบบให้แข็งแรงก่อนต่อยอดฟีเจอร์ใหม่</div>
+        </div>
+        <div class="month-badge">Sprint 1</div>
+      </div>
+
+      <div class="tasks">
+        <div class="task">
+          <div class="week">สัปดาห์ 1–2</div>
+          <div class="name"><i class="fas fa-database"></i> Database Index Audit</div>
+          <div class="desc">เพิ่ม composite index ที่ <code>kpi_results(indicator_id, year_bh, hospcode)</code>, <code>kpi_summary</code>, <code>kpi_sub_results</code></div>
+          <div class="out"><i class="fas fa-arrow-up"></i> Query ↓ 30–50%</div>
+        </div>
+        <div class="task">
+          <div class="week">สัปดาห์ 1–2</div>
+          <div class="name"><i class="fas fa-book"></i> Swagger / OpenAPI Docs</div>
+          <div class="desc">สร้าง <code>/khupskpi/api/docs</code> รวบรวม endpoint ทั้งหมด ~150 endpoints</div>
+          <div class="out"><i class="fas fa-check"></i> เอกสาร API พร้อมใช้</div>
+        </div>
+        <div class="task">
+          <div class="week">สัปดาห์ 3–4</div>
+          <div class="name"><i class="fas fa-vial"></i> Unit Test Setup</div>
+          <div class="desc">Jest backend + Karma frontend, เขียน test core: auth, role guard, performKpiExport, checkKpiChanges</div>
+          <div class="out"><i class="fas fa-percentage"></i> Coverage ≥ 30%</div>
+        </div>
+        <div class="task">
+          <div class="week">สัปดาห์ 3–4</div>
+          <div class="name"><i class="fas fa-broom"></i> ESLint + Prettier + Husky</div>
+          <div class="desc">Pre-commit hook กัน code messy, format อัตโนมัติทุก commit</div>
+          <div class="out"><i class="fas fa-shield-halved"></i> Standard เดียว</div>
+        </div>
+      </div>
+
+      <div class="kpi-block">
+        <i class="fas fa-bullseye kpi-icon"></i>
+        <span><strong>KPI:</strong> Query latency ↓ 30% · Swagger UI พร้อม · Test coverage ≥ 30% · CI lint ผ่าน 100%</span>
+      </div>
+    </article>
+
+    <!-- มิ.ย. -->
+    <article class="month-card jun">
+      <div class="month-head">
+        <div class="month-icon"><i class="fas fa-mobile-screen-button"></i></div>
+        <div class="month-title">
+          <h2>มิ.ย. 2569 — Mobile-First Experience</h2>
+          <div class="sub">ผู้ใช้ในพื้นที่ใช้มือถือเป็นหลัก → ทำให้ UX เทียบเท่า Desktop</div>
+        </div>
+        <div class="month-badge">Sprint 2</div>
+      </div>
+
+      <div class="tasks">
+        <div class="task">
+          <div class="week">สัปดาห์ 1–2</div>
+          <div class="name"><i class="fas fa-download"></i> PWA Installable</div>
+          <div class="desc">Service worker + manifest + icon set — กดติดตั้งบน home screen ได้</div>
+          <div class="out"><i class="fas fa-mobile"></i> ติดตั้งบนมือถือได้</div>
+        </div>
+        <div class="task">
+          <div class="week">สัปดาห์ 1–2</div>
+          <div class="name"><i class="fas fa-plug-circle-xmark"></i> Offline Mode</div>
+          <div class="desc">Cache GET responses + queue POST/PUT บันทึกไว้ส่งเมื่อ online</div>
+          <div class="out"><i class="fas fa-clock-rotate-left"></i> คีย์ข้อมูลรอ sync</div>
+        </div>
+        <div class="task">
+          <div class="week">สัปดาห์ 3–4</div>
+          <div class="name"><i class="fas fa-bell"></i> Web Push Notifications</div>
+          <div class="desc">VAPID key + service worker + ส่งแจ้งเตือนการอนุมัติ/ตีกลับ</div>
+          <div class="out"><i class="fas fa-bolt"></i> &lt; 2 วินาที</div>
+        </div>
+        <div class="task">
+          <div class="week">สัปดาห์ 3–4</div>
+          <div class="name"><i class="fas fa-hand-pointer"></i> Touch Gestures</div>
+          <div class="desc">Swipe ลบ/แก้ไข, pull-to-refresh ใน dashboard mobile</div>
+          <div class="out"><i class="fas fa-thumbs-up"></i> UX เป็นธรรมชาติ</div>
+        </div>
+      </div>
+
+      <div class="kpi-block">
+        <i class="fas fa-bullseye kpi-icon"></i>
+        <span><strong>KPI:</strong> ติดตั้ง PWA ได้ 100% browsers · Push notification ส่ง &lt; 2 วินาที · Offline cache hit ≥ 70%</span>
+      </div>
+    </article>
+
+    <!-- ก.ค. -->
+    <article class="month-card jul">
+      <div class="month-head">
+        <div class="month-icon"><i class="fas fa-chart-line"></i></div>
+        <div class="month-title">
+          <h2>ก.ค. 2569 — Reports & Analytics</h2>
+          <div class="sub">ผู้บริหารต้องเห็นภาพรวม → กราฟ + รายงานหลากหลาย + Export ได้ทุกฟอร์แมต</div>
+        </div>
+        <div class="month-badge">Sprint 3</div>
+      </div>
+
+      <div class="tasks">
+        <div class="task">
+          <div class="week">สัปดาห์ 1–2</div>
+          <div class="name"><i class="fas fa-th-large"></i> Custom Dashboard Widgets</div>
+          <div class="desc">Drag & drop layout, save per-user preference (เก็บใน localStorage + DB)</div>
+          <div class="out"><i class="fas fa-magic-wand-sparkles"></i> ผู้ใช้สร้าง view เอง</div>
+        </div>
+        <div class="task">
+          <div class="week">สัปดาห์ 1–2</div>
+          <div class="name"><i class="fas fa-file-export"></i> Export Excel / PDF</div>
+          <div class="desc">เพิ่มปุ่ม "ส่งออก" ที่ chart, report, dashboard — ใช้ ExcelJS + jsPDF</div>
+          <div class="out"><i class="fas fa-file-excel"></i> นำไปทำรายงานต่อได้</div>
+        </div>
+        <div class="task">
+          <div class="week">สัปดาห์ 3–4</div>
+          <div class="name"><i class="fas fa-arrow-trend-up"></i> Trend Forecast</div>
+          <div class="desc">Linear regression แนวโน้ม 3 เดือนข้างหน้าจาก kpi_summary historical data</div>
+          <div class="out"><i class="fas fa-chart-pie"></i> คาดการณ์ผลงานล่วงหน้า</div>
+        </div>
+        <div class="task">
+          <div class="week">สัปดาห์ 3–4</div>
+          <div class="name"><i class="fas fa-scale-balanced"></i> Year-over-Year Compare</div>
+          <div class="desc">เทียบปีงบฯ ปัจจุบัน vs ปีที่ผ่านมา ในรายงานสรุปผล</div>
+          <div class="out"><i class="fas fa-chart-bar"></i> เห็นพัฒนาการเป็นภาพ</div>
+        </div>
+      </div>
+
+      <div class="kpi-block">
+        <i class="fas fa-bullseye kpi-icon"></i>
+        <span><strong>KPI:</strong> ผู้ใช้สร้าง dashboard custom ≥ 50% · Export Excel ใช้ได้ 100% · Forecast accuracy ≥ 80%</span>
+      </div>
+    </article>
+
+    <!-- ส.ค. -->
+    <article class="month-card aug">
+      <div class="month-head">
+        <div class="month-icon"><i class="fas fa-link"></i></div>
+        <div class="month-title">
+          <h2>ส.ค. 2569 — Integration & Notifications</h2>
+          <div class="sub">เชื่อมต่อระบบนอก + แจ้งเตือนหลายช่อง — ลดงานซ้ำ</div>
+        </div>
+        <div class="month-badge">Sprint 4</div>
+      </div>
+
+      <div class="tasks">
+        <div class="task">
+          <div class="week">สัปดาห์ 1–2</div>
+          <div class="name"><i class="fa-brands fa-line"></i> LINE Notify / OA Integration</div>
+          <div class="desc">ผูก user กับ LINE ID, ส่งแจ้งเตือนผ่าน LINE — เสริม Email/Telegram เดิม</div>
+          <div class="out"><i class="fas fa-paper-plane"></i> 3 ช่องการแจ้งเตือน</div>
+        </div>
+        <div class="task">
+          <div class="week">สัปดาห์ 1–2</div>
+          <div class="name"><i class="fas fa-envelope-open-text"></i> Email Template Builder</div>
+          <div class="desc">UI ออกแบบ email body ใช้ใน announcements + export reports — drag-drop blocks</div>
+          <div class="out"><i class="fas fa-paint-brush"></i> Admin แก้ template เอง</div>
+        </div>
+        <div class="task">
+          <div class="week">สัปดาห์ 3–4</div>
+          <div class="name"><i class="fas fa-anchor"></i> Webhook System</div>
+          <div class="desc">ปลายทางภายนอก subscribe events: kpi_approved, export_done, announcement_published</div>
+          <div class="out"><i class="fas fa-bolt"></i> 99% reliability</div>
+        </div>
+        <div class="task">
+          <div class="week">สัปดาห์ 3–4</div>
+          <div class="name"><i class="fas fa-calendar-plus"></i> Calendar Sync (iCal)</div>
+          <div class="desc">Schedule export → export.ics → import เข้า Google/Outlook calendar</div>
+          <div class="out"><i class="fas fa-clock"></i> เห็นกำหนดการในปฏิทิน</div>
+        </div>
+      </div>
+
+      <div class="kpi-block">
+        <i class="fas fa-bullseye kpi-icon"></i>
+        <span><strong>KPI:</strong> LINE bot ส่งแจ้งเตือนได้ · Webhook receive 99% reliability · 3 channels notification</span>
+      </div>
+    </article>
+
+    <!-- ก.ย. -->
+    <article class="month-card sep">
+      <div class="month-head">
+        <div class="month-icon"><i class="fas fa-rocket"></i></div>
+        <div class="month-title">
+          <h2>ก.ย. 2569 — Advanced Features</h2>
+          <div class="sub">ฟีเจอร์ขั้นสูงเพื่อ workflow จริง — เพิ่มประสิทธิภาพการทำงาน</div>
+        </div>
+        <div class="month-badge">Sprint 5</div>
+      </div>
+
+      <div class="tasks">
+        <div class="task">
+          <div class="week">สัปดาห์ 1–2</div>
+          <div class="name"><i class="fas fa-arrows-turn-right"></i> Multi-Step Approval Workflow</div>
+          <div class="desc">admin_hos → admin_cup → admin_ssj พร้อมเหตุผลและประวัติแต่ละชั้น</div>
+          <div class="out"><i class="fas fa-list-check"></i> ติดตามขั้นตอนชัด</div>
+        </div>
+        <div class="task">
+          <div class="week">สัปดาห์ 1–2</div>
+          <div class="name"><i class="fas fa-comments"></i> Comments / Discussion</div>
+          <div class="desc">Chat thread ใต้แต่ละ indicator+hospcode — อภิปรายข้อมูลในระบบ</div>
+          <div class="out"><i class="fas fa-message"></i> สนทนาในระบบ</div>
+        </div>
+        <div class="task">
+          <div class="week">สัปดาห์ 3–4</div>
+          <div class="name"><i class="fas fa-paperclip"></i> File Attachments</div>
+          <div class="desc">แนบเอกสารหลักฐานต่อรายการ KPI (S3/local storage + virus scan)</div>
+          <div class="out"><i class="fas fa-folder-open"></i> หลักฐานพร้อมข้อมูล</div>
+        </div>
+        <div class="task">
+          <div class="week">สัปดาห์ 3–4</div>
+          <div class="name"><i class="fas fa-file-import"></i> Bulk Excel Import</div>
+          <div class="desc">Drop ไฟล์ → preview diff → confirm import (target+actual ทีละ batch)</div>
+          <div class="out"><i class="fas fa-gauge-high"></i> 1000+ rows/min</div>
+        </div>
+      </div>
+
+      <div class="kpi-block">
+        <i class="fas fa-bullseye kpi-icon"></i>
+        <span><strong>KPI:</strong> Workflow ผ่าน 3 ชั้น approval · Import Excel 1000+ rows/min · Comment system 100% functional</span>
+      </div>
+    </article>
+
+    <!-- ต.ค. -->
+    <article class="month-card oct">
+      <div class="month-head">
+        <div class="month-icon"><i class="fas fa-wand-sparkles"></i></div>
+        <div class="month-title">
+          <h2>ต.ค. 2569 — Polish & Production-Ready</h2>
+          <div class="sub">ขัดเงาก่อนปีงบฯ ใหม่ + เอกสารครบ + ทดสอบเต็มระบบ</div>
+        </div>
+        <div class="month-badge">Sprint 6</div>
+      </div>
+
+      <div class="tasks">
+        <div class="task">
+          <div class="week">สัปดาห์ 1–2</div>
+          <div class="name"><i class="fas fa-universal-access"></i> Accessibility (WCAG 2.1 AA)</div>
+          <div class="desc">Alt text, keyboard navigation, screen reader, color contrast — ผ่านมาตรฐาน a11y</div>
+          <div class="out"><i class="fas fa-check-double"></i> WCAG 2.1 AA</div>
+        </div>
+        <div class="task">
+          <div class="week">สัปดาห์ 1–2</div>
+          <div class="name"><i class="fas fa-vial-circle-check"></i> E2E Tests (Cypress)</div>
+          <div class="desc">Flow: login → ค้นหา → แก้ไข → save → ตรวจสอบ — บั๊กตรวจจับก่อน deploy</div>
+          <div class="out"><i class="fas fa-bug-slash"></i> Coverage 80%</div>
+        </div>
+        <div class="task">
+          <div class="week">สัปดาห์ 3–4</div>
+          <div class="name"><i class="fas fa-book-open"></i> User Manual + Video Tutorial</div>
+          <div class="desc">คู่มือ PDF + คลิป YouTube 5–10 นาที × 8 หัวข้อ (login, dashboard, edit, export, ...)</div>
+          <div class="out"><i class="fas fa-circle-down"></i> Support ticket ↓ 50%</div>
+        </div>
+        <div class="task">
+          <div class="week">สัปดาห์ 3–4</div>
+          <div class="name"><i class="fas fa-bolt-lightning"></i> Performance Final Tuning</div>
+          <div class="desc">Lighthouse audit ≥ 90, bundle size ↓ 20%, lazy load chart libraries</div>
+          <div class="out"><i class="fas fa-medal"></i> Lighthouse ≥ 90</div>
+        </div>
+      </div>
+
+      <div class="kpi-block">
+        <i class="fas fa-bullseye kpi-icon"></i>
+        <span><strong>KPI:</strong> Lighthouse ≥ 90 · E2E coverage 80% · มีคู่มือ + วิดีโอครบ 8 หัวข้อ · Bundle ↓ 20%</span>
+      </div>
+    </article>
+
+  </section>
+
+  <!-- === Footer === -->
+  <footer class="footer">
+    <div class="signature">
+      <i class="fas fa-stethoscope"></i> KHUPS KPI · สสจ.นครราชสีมา · WFH Roadmap
+    </div>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--c-may)"></span>Foundation</span>
+      <span><span class="dot" style="background:var(--c-jun)"></span>Mobile</span>
+      <span><span class="dot" style="background:var(--c-jul)"></span>Analytics</span>
+      <span><span class="dot" style="background:var(--c-aug)"></span>Integration</span>
+      <span><span class="dot" style="background:var(--c-sep)"></span>Workflow</span>
+      <span><span class="dot" style="background:var(--c-oct)"></span>Polish</span>
+    </div>
+    <div class="tag">© 2569 · พ.ค.–ต.ค.</div>
+  </footer>
+
+</div>
+</body>
+</html>
