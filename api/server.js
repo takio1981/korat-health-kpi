@@ -758,13 +758,15 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         const [formSchemas] = await db.query('SELECT indicator_id FROM kpi_form_schemas WHERE is_active = 1');
         const formSchemaSet = new Set(formSchemas.map((f) => f.indicator_id));
 
+        // ใช้ MIN()/MAX() wrap คอลัมน์ที่ functionally dependent เพื่อให้ GROUP BY มีแค่ 3 cols
+        // (i.id, r.year_bh, r.hospcode) — เร็วกว่า GROUP BY 18 cols เดิมมาก
         const sql = `
             SELECT
-                IFNULL(mi.main_indicator_name, 'ยังไม่กำหนด') AS main_indicator_name,
-                i.kpi_indicators_name,
+                IFNULL(MIN(mi.main_indicator_name), 'ยังไม่กำหนด') AS main_indicator_name,
+                MIN(i.kpi_indicators_name) AS kpi_indicators_name,
                 r.year_bh,
                 i.id AS indicator_id,
-                d.dept_name,
+                MIN(d.dept_name) AS dept_name,
                 MAX(r.target_value) AS target_value,
                 MAX(CASE WHEN r.month_bh = 10 THEN r.actual_value END) AS oct,
                 MAX(CASE WHEN r.month_bh = 11 THEN r.actual_value END) AS nov,
@@ -781,15 +783,15 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 SUM(CASE WHEN r.status = 'Pending' THEN 1 ELSE 0 END) AS pending_count,
                 MAX(r.status) AS indicator_status,
                 MAX(CASE WHEN r.is_locked = 1 THEN 1 ELSE 0 END) AS is_locked,
-                i.table_process,
-                i.r9, i.moph, i.ssj, i.rmw, i.other,
-                i.evaluation_mode,
-                i.required_off_types,
+                MIN(i.table_process) AS table_process,
+                MAX(i.r9) AS r9, MAX(i.moph) AS moph, MAX(i.ssj) AS ssj, MAX(i.rmw) AS rmw, MAX(i.other) AS other,
+                MIN(i.evaluation_mode) AS evaluation_mode,
+                MIN(i.required_off_types) AS required_off_types,
                 r.hospcode,
-                h.hosname,
-                h.hostype,
-                ht.hostypename,
-                dist.distname
+                MIN(h.hosname) AS hosname,
+                MIN(h.hostype) AS hostype,
+                MIN(ht.hostypename) AS hostypename,
+                MIN(dist.distname) AS distname
             FROM kpi_results r
             JOIN kpi_indicators i ON r.indicator_id = i.id
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
@@ -798,8 +800,8 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
             LEFT JOIN chostype ht ON h.hostype = ht.hostypecode
             LEFT JOIN co_district dist ON dist.distid = h.distid
             ${whereClause}${extraWhere}
-            GROUP BY i.id, r.year_bh, r.hospcode, mi.main_indicator_name, i.kpi_indicators_name, i.table_process, i.r9, i.moph, i.ssj, i.rmw, i.other, i.evaluation_mode, i.required_off_types, d.dept_name, h.hosname, h.hostype, ht.hostypename, dist.distname
-            ORDER BY r.year_bh DESC, mi.main_indicator_name, i.kpi_indicators_name, r.hospcode
+            GROUP BY i.id, r.year_bh, r.hospcode
+            ORDER BY r.year_bh DESC, MIN(mi.main_indicator_name), MIN(i.kpi_indicators_name), r.hospcode
             LIMIT 500
         `;
         const [rows] = await db.query(sql, params);

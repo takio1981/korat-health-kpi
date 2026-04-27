@@ -616,11 +616,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.isLoading = false;
-        this.searchStage = 'เกิดข้อผิดพลาดในการโหลดข้อมูล';
+        // ระบุประเภท error: timeout/504 vs อื่น
+        const isTimeout = err?.name === 'TimeoutError' || err?.status === 504 || err?.status === 408;
+        const errMsg = isTimeout
+          ? 'การค้นหาใช้เวลานานเกินไป (Timeout) — กรุณาเลือกตัวกรองให้ละเอียดขึ้น (เช่น เลือกอำเภอ หน่วยงาน หรือตัวชี้วัด)'
+          : 'เกิดข้อผิดพลาดในการโหลดข้อมูล';
+        this.searchStage = errMsg;
         this.searchProgress = 0;
         this.searchDurationMs = Date.now() - this.searchStartedAt;
         this.cdr.detectChanges();
-        if (!silent) this.finishSearchStatusSwal({ success: false, message: 'เกิดข้อผิดพลาดในการโหลดข้อมูล' });
+        if (!silent) this.finishSearchStatusSwal({ success: false, message: errMsg });
         console.error('Error loading KPI:', err);
       }
     });

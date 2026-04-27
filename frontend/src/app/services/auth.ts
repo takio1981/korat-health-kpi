@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable, BehaviorSubject } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { tap, timeout } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 
 @Injectable({
@@ -104,7 +104,9 @@ export class AuthService {
       Object.entries(filters).forEach(([k, v]) => { if (v) p.set(k, v); });
     }
     const qs = p.toString() ? `?${p.toString()}` : '';
-    return this.http.get(`${this.apiUrl}/kpi-results${qs}`, { headers });
+    // 90s timeout — กัน hanging UI ตอน production query ช้า/504
+    return this.http.get(`${this.apiUrl}/kpi-results${qs}`, { headers })
+      .pipe(timeout(90000));
   }
 
   // ลบ kpi_results + kpi_sub_results ตามรายการ (super_admin)
