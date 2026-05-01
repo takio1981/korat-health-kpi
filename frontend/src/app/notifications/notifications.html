@@ -51,7 +51,7 @@
         </div>
 
         <!-- Notification List -->
-        <div *ngIf="!isLoading && filteredNotifications.length > 0" class="space-y-2">
+        <div *ngIf="!isLoading && filteredNotifications.length > 0" class="space-y-2 overflow-y-auto card-scroll pr-1" style="max-height: calc(100vh - 230px);">
           <div *ngFor="let notif of filteredNotifications"
                (click)="openNotifDetail(notif)"
                class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition-all cursor-pointer"
@@ -152,7 +152,7 @@
         </div>
 
         <!-- Reply List -->
-        <div *ngIf="!isLoadingReplies && replies.length > 0" class="space-y-3">
+        <div *ngIf="!isLoadingReplies && replies.length > 0" class="space-y-3 overflow-y-auto card-scroll pr-1" style="max-height: calc(100vh - 230px);">
           <div *ngFor="let r of replies"
                class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition-all">
             <div class="flex items-start gap-3">

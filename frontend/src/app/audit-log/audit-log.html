@@ -30,7 +30,7 @@
     </div>
 
     <!-- === Mobile Card View === -->
-    <div class="md:hidden space-y-2 p-3">
+    <div class="md:hidden space-y-2 p-3 overflow-y-auto card-scroll" style="max-height: calc(100vh - 340px);">
       <div *ngFor="let log of pagedLogs" class="bg-white rounded-xl border border-gray-200 p-3 shadow-sm space-y-1.5">
         <div class="flex items-center justify-between">
           <span class="text-xs text-gray-400"><i class="fas fa-clock mr-1"></i>{{ log.created_at | date:'dd/MM/yy HH:mm' }}</span>
@@ -58,9 +58,9 @@
     </div>
 
     <!-- === Desktop Table View === -->
-    <div class="overflow-x-auto hidden md:block">
+    <div class="overflow-auto hidden md:block card-scroll" style="max-height: calc(100vh - 320px);">
       <table class="w-full text-left border-collapse">
-        <thead class="bg-gradient-to-r from-green-700 to-green-600 text-white">
+        <thead class="bg-gradient-to-r from-green-700 to-green-600 text-white sticky top-0 z-20 shadow-md">
           <tr>
             <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider rounded-tl-xl">วัน-เวลา</th>
             <th class="px-6 py-3 text-sm font-bold uppercase tracking-wider">ผู้ใช้งาน</th>

@@ -109,7 +109,7 @@
     </div>
 
     <!-- === Mobile Card View === -->
-    <div class="md:hidden space-y-3 p-4">
+    <div class="md:hidden space-y-3 p-4 overflow-y-auto card-scroll" style="max-height: calc(100vh - 320px);">
       <div *ngFor="let user of pagedUsers"
            class="bg-white rounded-xl border shadow-sm p-4 space-y-2"
            [ngClass]="user.is_approved === 0 ? 'border-yellow-300 bg-yellow-50/50' : user.is_approved === -1 ? 'border-red-300 bg-red-50/50' : 'border-gray-200'">
