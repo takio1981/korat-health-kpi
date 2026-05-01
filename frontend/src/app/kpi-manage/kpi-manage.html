@@ -41,7 +41,7 @@
       </div>
 
       <!-- === Mobile Card View === -->
-      <div class="md:hidden space-y-2 p-3">
+      <div class="md:hidden space-y-2 p-3 overflow-y-auto card-scroll" style="max-height: calc(100vh - 320px);">
         <div *ngFor="let item of (activeTab === 'indicators' ? filteredIndicators : (activeTab === 'main-indicators' ? filteredMainIndicators : (activeTab === 'strategies' ? filteredStrategies : filteredDepartments)))"
              class="bg-white rounded-xl border border-gray-200 p-3 shadow-sm"
              [ngClass]="{'opacity-50': item.is_active === 0 || item.is_active === '0'}">
@@ -79,9 +79,9 @@
       </div>
 
       <!-- === Desktop Table View === -->
-      <div class="overflow-x-auto hidden md:block">
+      <div class="overflow-auto hidden md:block card-scroll relative" style="max-height: calc(100vh - 280px);">
         <table class="w-full text-left border-collapse">
-          <thead class="bg-gradient-to-r from-green-700 to-green-600 text-white">
+          <thead class="bg-gradient-to-r from-green-700 to-green-600 text-white sticky top-0 z-20 shadow-md">
             <tr>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider rounded-tl-xl w-14">ID</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'indicators'">ชื่อตัวชี้วัด</th>
