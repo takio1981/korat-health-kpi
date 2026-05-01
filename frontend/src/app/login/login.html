@@ -1,5 +1,4 @@
-<div class="min-h-screen flex flex-col lg:flex-row font-sans bg-gray-50 dark:bg-[#1e1e2e] relative bg-cover bg-center bg-no-repeat"
-     style="background-image: url('background.png');">
+<div class="min-h-screen flex flex-col lg:flex-row font-sans bg-gray-50 dark:bg-[#1e1e2e] relative">
 
   <!-- Maintenance Mode Banner -->
   <div *ngIf="maintenanceMode"
@@ -21,7 +20,7 @@
     </button>
   </div>
 
-  <div class="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-green-700/85 via-green-600/80 to-green-500/75 text-white flex-col justify-center items-center p-12 relative overflow-hidden backdrop-blur-sm">
+  <div class="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-green-700 via-green-600 to-green-500 text-white flex-col justify-center items-center p-12 relative overflow-hidden">
     <div class="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
       <div class="absolute top-[-10%] left-[-10%] w-96 h-96 bg-white rounded-full mix-blend-overlay blur-3xl"></div>
       <div class="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-white rounded-full mix-blend-overlay blur-3xl"></div>
@@ -129,14 +128,14 @@
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <button type="button" (click)="loginWithThaID()"
-                class="group relative py-2.5 px-3 bg-white hover:bg-blue-50 dark:bg-gray-700 dark:hover:bg-gray-600 border-2 border-blue-700 hover:border-blue-800 rounded-xl text-blue-800 dark:text-blue-200 text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-md">
-          <img src="thaid.jpg" alt="ThaID" class="h-6 w-6 object-contain rounded">
+                class="group relative py-3 px-4 bg-white hover:bg-blue-50 dark:bg-gray-700 dark:hover:bg-gray-600 border-2 border-blue-700 hover:border-blue-800 rounded-xl text-blue-800 dark:text-blue-200 text-base font-bold transition-all flex items-center justify-center gap-3 shadow-sm hover:shadow-md min-h-[60px]">
+          <img src="thaid.jpg" alt="ThaID" class="h-10 w-10 object-contain rounded-lg">
           <span>ThaID</span>
           <span class="absolute -top-2 -right-2 px-1.5 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-[9px] font-bold shadow-sm">รอเปิดใช้</span>
         </button>
         <button type="button" (click)="loginWithProviderID()"
-                class="group relative py-2.5 px-3 bg-white hover:bg-cyan-50 dark:bg-gray-700 dark:hover:bg-gray-600 border-2 border-cyan-600 hover:border-cyan-700 rounded-xl text-cyan-700 dark:text-cyan-200 text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-md">
-          <img src="provider-id.png" alt="ProviderID" class="h-6 w-6 object-contain">
+                class="group relative py-3 px-4 bg-white hover:bg-cyan-50 dark:bg-gray-700 dark:hover:bg-gray-600 border-2 border-cyan-600 hover:border-cyan-700 rounded-xl text-cyan-700 dark:text-cyan-200 text-base font-bold transition-all flex items-center justify-center gap-3 shadow-sm hover:shadow-md min-h-[60px]">
+          <img src="provider-id.png" alt="ProviderID" class="h-10 w-10 object-contain">
           <span>ProviderID</span>
           <span class="absolute -top-2 -right-2 px-1.5 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-[9px] font-bold shadow-sm">รอเปิดใช้</span>
         </button>
