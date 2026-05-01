@@ -1,11 +1,11 @@
 <ng-container>
-  @if (isLoading) {
+  @if (isLoading && !embedded) {
     <div class="flex justify-center items-center py-20">
       <div class="animate-spin rounded-full h-12 w-12 border-t-4 border-green-600"></div>
     </div>
   }
 
-  @if (!isLoading) {
+  @if (!isLoading && !embedded) {
     <div class="space-y-6">
       <!-- Header -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">

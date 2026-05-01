@@ -68,6 +68,9 @@
               <button *ngIf="activeTab === 'indicators'" (click)="openSubModal(item)" class="text-indigo-600 text-sm" title="ตัวชี้วัดย่อย">
                 <i class="fas fa-list-ul"></i><span class="ms-0.5 text-[10px] font-bold">{{ getSubCount(item.id) }}</span>
               </button>
+              <button *ngIf="activeTab === 'indicators' && isSuperAdmin" (click)="openFormBuilder(item)" class="text-purple-600 text-sm" title="สร้าง/แก้ไขแบบฟอร์ม">
+                <i class="fas fa-wpforms"></i>
+              </button>
               <button (click)="openModal(item)" class="text-yellow-500 text-sm"><i class="fas fa-edit"></i></button>
               <button *ngIf="isSuperAdmin" (click)="deleteItem(item.id)" class="text-red-500 text-sm"><i class="fas fa-trash"></i></button>
             </div>
@@ -132,6 +135,9 @@
                 <button *ngIf="activeTab === 'indicators'" (click)="openSubModal(item)" class="text-indigo-600 hover:text-indigo-800" title="ตัวชี้วัดย่อย">
                   <i class="fas fa-list-ul"></i>
                   <span class="inline-flex items-center justify-center min-w-[18px] h-[18px] ml-1 px-1 bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded-full">{{ getSubCount(item.id) }}</span>
+                </button>
+                <button *ngIf="activeTab === 'indicators' && isSuperAdmin" (click)="openFormBuilder(item)" class="text-purple-600 hover:text-purple-800" title="สร้าง/แก้ไขแบบฟอร์ม">
+                  <i class="fas fa-wpforms"></i>
                 </button>
                 <button (click)="openModal(item)" class="text-yellow-500 hover:text-yellow-600"><i class="fas fa-edit"></i></button>
                 <button *ngIf="isSuperAdmin" (click)="deleteItem(item.id)" class="text-red-500 hover:text-red-600"><i class="fas fa-trash"></i></button>
@@ -504,3 +510,6 @@
     </div>
   </div>
 </div>
+
+<!-- Form Builder (embedded — แสดงเฉพาะ modal เมื่อกดปุ่ม fa-wpforms ในแถวตัวชี้วัด) -->
+<app-form-builder #formBuilder [embedded]="true"></app-form-builder>

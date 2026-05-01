@@ -29,6 +29,8 @@ export class FormBuilderComponent implements OnInit, OnChanges {
   @Input() hdcColumns: any[] = [];
   @Input() hdcTableName: string = '';
   @Input() hdcTrigger: number = 0;
+  // เมื่อ embedded=true จะซ่อน UI หลัก (header + ตารางตัวชี้วัด + tips) แสดงเฉพาะ modal เพื่อใช้ในหน้า kpi-manage
+  @Input() embedded: boolean = false;
 
   isSuperAdmin = false;
   private pendingAutoOpen = '';
@@ -332,5 +334,32 @@ export class FormBuilderComponent implements OnInit, OnChanges {
     this.showBuilderModal = false;
     this.selectedIndicator = null;
     this.fields = [];
+  }
+
+  // เรียกจาก parent (kpi-manage) เพื่อเปิด modal สำหรับ indicator ที่ส่งเข้ามา
+  // — enrich item ด้วย schema_id (ถ้ามี) แล้วเปิด openCreateForm
+  public openForIndicator(item: any) {
+    if (!item || !item.id) return;
+    const enriched = this.allIndicators.find(i => i.id === item.id);
+    if (enriched) {
+      this.openCreateForm(enriched);
+      return;
+    }
+    // ยังไม่ได้โหลด schema map → reload แล้วค่อยเปิด
+    this.authService.getAllIndicatorsWithSchema().subscribe({
+      next: (res) => {
+        if (res.success) {
+          this.allIndicators = res.data;
+          this.applyFilter();
+        }
+        const found = this.allIndicators.find(i => i.id === item.id);
+        this.openCreateForm(found || { ...item, schema_id: null });
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.openCreateForm({ ...item, schema_id: null });
+        this.cdr.detectChanges();
+      }
+    });
   }
 }

@@ -20,9 +20,9 @@ export class KpiManagerComponent implements OnInit {
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
 
-  activeTab: 'db-compare' | 'form-builder' | 'export' | 'report-compare' = 'db-compare';
+  activeTab: 'db-compare' | 'export' | 'report-compare' = 'db-compare';
 
-  // สำหรับส่ง columns จาก DB Compare → Form Builder
+  // สำหรับส่ง columns จาก DB Compare → Form Builder (embedded)
   hdcColumnsForForm: any[] = [];
   hdcTableName: string = '';
   hdcIndicatorName: string = '';
@@ -37,13 +37,12 @@ export class KpiManagerComponent implements OnInit {
   // trigger counter เพื่อให้ ngOnChanges ทำงานทุกครั้ง แม้เลือกตารางเดิมซ้ำ
   hdcTrigger: number = 0;
 
-  // เรียกจาก DB Compare → เลือก columns → ส่งไป Form Builder
+  // เรียกจาก DB Compare → เลือก columns → form-builder embedded จะ auto-open modal
   onCreateFormFromHDC(data: { table: string, name: string, columns: any[] }) {
     this.hdcTableName = data.table;
     this.hdcIndicatorName = data.name;
     this.hdcColumnsForForm = data.columns;
     this.hdcTrigger++;
-    this.activeTab = 'form-builder';
     this.cdr.detectChanges();
   }
 

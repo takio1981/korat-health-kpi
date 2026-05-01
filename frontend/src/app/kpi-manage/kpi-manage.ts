@@ -1,17 +1,19 @@
-import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
+import { FormBuilderComponent } from '../form-builder/form-builder';
 import Swal from 'sweetalert2';
 
 @Component({
   selector: 'app-kpi-manage',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, FormBuilderComponent],
   templateUrl: './kpi-manage.html'
 })
 export class KpiManageComponent implements OnInit {
+  @ViewChild('formBuilder') formBuilder?: FormBuilderComponent;
   private authService = inject(AuthService);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
@@ -156,6 +158,20 @@ export class KpiManageComponent implements OnInit {
     this.showSubModal = false;
     this.subParentIndicator = null;
     this.subList = [];
+  }
+
+  // เปิด Form Builder modal สำหรับตัวชี้วัดที่เลือก (ใช้กับปุ่ม icon ในคอลัมน์ จัดการ)
+  openFormBuilder(item: any) {
+    if (!item?.table_process) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'ยังไม่ได้กำหนดชื่อตาราง',
+        text: 'กรุณากำหนด "ชื่อตาราง (table_process)" ในการแก้ไขตัวชี้วัดก่อน จึงจะสร้างแบบฟอร์มได้',
+        confirmButtonText: 'ตกลง'
+      });
+      return;
+    }
+    this.formBuilder?.openForIndicator(item);
   }
 
   loadSubList(indicatorId: number) {
