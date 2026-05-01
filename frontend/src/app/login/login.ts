@@ -25,6 +25,29 @@ export class LoginComponent {
   maintenanceMode: boolean = false;
   maintenanceMessage: string = '';
 
+  // === SSO providers (รอการเปิดใช้งานจากหน่วยงาน) ===
+  loginWithThaID() {
+    this.showSsoUnavailable('ThaID', 'fa-id-card', '#1e40af');
+  }
+
+  loginWithProviderID() {
+    this.showSsoUnavailable('ProviderID (กระทรวงสาธารณสุข)', 'fa-user-md', '#0284c7');
+  }
+
+  private showSsoUnavailable(providerName: string, icon: string, color: string) {
+    Swal.fire({
+      iconHtml: `<i class="fas ${icon}" style="color:${color}"></i>`,
+      title: 'ฟีเจอร์รอการเปิดใช้งาน',
+      html: `<div style="text-align:left;font-size:13px;line-height:1.7">
+        <p>การเข้าสู่ระบบด้วย <b style="color:${color}">${providerName}</b> ขณะนี้อยู่ระหว่างขั้นตอนขอใช้บริการกับหน่วยงานเจ้าของระบบ</p>
+        <p class="text-gray-500" style="margin-top:8px"><i class="fas fa-info-circle mr-1"></i>กรุณาเข้าสู่ระบบด้วย Username/Password ตามปกติไปก่อน</p>
+        <p class="text-gray-400 text-xs" style="margin-top:8px">หากต้องการสอบถามเพิ่มเติม กรุณาติดต่อผู้ดูแลระบบ</p>
+      </div>`,
+      confirmButtonText: 'รับทราบ',
+      confirmButtonColor: '#10b981'
+    });
+  }
+
   ngOnInit() {
     this.authService.getMaintenanceStatus().subscribe({
       next: (res: any) => {

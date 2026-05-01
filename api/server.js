@@ -364,6 +364,20 @@ apiRouter.post('/login', loginLimiter, async (req, res) => {
     }
 });
 
+// === SSO Stubs (ThaID / ProviderID) — รอการเปิดใช้งานจริงเมื่อได้ credentials จากหน่วยงาน ===
+// เมื่อได้ client_id/secret จาก DGA/MOPH แล้ว แทนที่ stub ด้วย OAuth2 authorization code flow:
+//   1. /auth/<provider>/initiate → redirect ไปยัง provider /authorize พร้อม state + PKCE
+//   2. /auth/<provider>/callback → แลก code → access_token → ดึง userinfo → แมปกับ users → JWT
+const SSO_NOT_READY_RESPONSE = {
+    success: false,
+    code: 'SSO_NOT_CONFIGURED',
+    message: 'ฟีเจอร์รอการเปิดใช้งาน — ระบบยังไม่ได้รับ credentials จากหน่วยงานเจ้าของบริการ'
+};
+apiRouter.post('/auth/thaid/initiate', (req, res) => res.status(501).json(SSO_NOT_READY_RESPONSE));
+apiRouter.post('/auth/providerid/initiate', (req, res) => res.status(501).json(SSO_NOT_READY_RESPONSE));
+apiRouter.get('/auth/thaid/callback', (req, res) => res.status(501).json(SSO_NOT_READY_RESPONSE));
+apiRouter.get('/auth/providerid/callback', (req, res) => res.status(501).json(SSO_NOT_READY_RESPONSE));
+
 // === ลืมรหัสผ่าน: ส่งรหัสชั่วคราว 6 หลักทาง Email ===
 apiRouter.post('/forgot-password', loginLimiter, async (req, res) => {
     const { username } = req.body;
