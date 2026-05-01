@@ -1,6 +1,37 @@
-<div class="flex h-screen bg-gray-100 font-sans overflow-hidden">
+<div class="flex h-screen font-sans overflow-hidden relative dark:bg-[#1e1e2e]"
+     style="background: linear-gradient(135deg, #eaf6ee 0%, #c8ecd9 22%, #a8e6c8 45%, #b8e8d2 68%, #f0e0ea 100%);">
 
-    <!-- Mobile Menu Overlay -->
+  <!-- Decorative wave layers (SVG) -->
+  <svg class="absolute inset-0 w-full h-full pointer-events-none opacity-70 dark:opacity-20" preserveAspectRatio="none" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M0,520 C240,460 380,640 720,540 C1060,440 1280,620 1600,500 L1600,900 L0,900 Z" fill="#a8e6c8" fill-opacity="0.45"/>
+    <path d="M0,640 C260,560 460,760 800,660 C1140,560 1340,720 1600,620 L1600,900 L0,900 Z" fill="#7dd3a8" fill-opacity="0.30"/>
+    <path d="M0,760 C300,680 540,840 880,760 C1200,680 1380,820 1600,740 L1600,900 L0,900 Z" fill="#5cc28d" fill-opacity="0.22"/>
+  </svg>
+  <!-- subtle sparkle dots -->
+  <div class="absolute inset-0 pointer-events-none opacity-40">
+    <span class="absolute w-1 h-1 bg-white rounded-full" style="top:18%; left:8%"></span>
+    <span class="absolute w-1.5 h-1.5 bg-white rounded-full" style="top:32%; left:22%"></span>
+    <span class="absolute w-1 h-1 bg-white rounded-full" style="top:55%; left:14%"></span>
+    <span class="absolute w-1 h-1 bg-white rounded-full" style="top:72%; left:30%"></span>
+    <span class="absolute w-1 h-1 bg-white rounded-full" style="top:25%; right:18%"></span>
+    <span class="absolute w-1.5 h-1.5 bg-white rounded-full" style="top:65%; right:8%"></span>
+    <span class="absolute w-1 h-1 bg-white rounded-full" style="top:80%; right:25%"></span>
+  </div>
+
+  <!-- Maintenance Mode Banner -->
+  <div *ngIf="maintenanceMode"
+       class="fixed inset-x-0 top-0 z-[100] bg-red-600 text-white py-3 px-6 shadow-lg">
+    <div class="max-w-3xl mx-auto flex items-center justify-center gap-3 text-center">
+      <i class="fas fa-exclamation-triangle text-xl animate-pulse"></i>
+      <div>
+        <p class="font-bold text-sm">{{ maintenanceMessage }}</p>
+        <p class="text-red-200 text-xs mt-0.5">กรุณาเข้าใช้งานอีกครั้งในภายหลัง</p>
+      </div>
+      <i class="fas fa-exclamation-triangle text-xl animate-pulse"></i>
+    </div>
+  </div>
+
+  <div class="flex h-screen z-10 relative">
     <div class="fixed inset-0 z-40 lg:hidden transition-all duration-500"
          [ngClass]="isSidebarOpen ? 'bg-black/50 pointer-events-auto' : 'bg-transparent pointer-events-none'"
          (click)="closeSidebar()"></div>
@@ -213,8 +244,12 @@
         </div>
       </header>
 
-      <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50">
-        <router-outlet></router-outlet>
+      <main class="flex-1 overflow-x-hidden overflow-y-auto bg-transparent py-6">
+        <div class="mx-auto h-full max-w-[1440px] px-4 sm:px-6 lg:px-8">
+          <div class="min-h-[calc(100vh-96px)] bg-white/75 backdrop-blur-xl border border-white/60 shadow-2xl rounded-3xl p-6 overflow-y-auto card-scroll">
+            <router-outlet></router-outlet>
+          </div>
+        </div>
       </main>
 
     </div>
