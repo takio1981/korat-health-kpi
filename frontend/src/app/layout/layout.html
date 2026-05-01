@@ -1,5 +1,4 @@
-<div class="flex h-screen font-sans overflow-hidden relative dark:bg-[#1e1e2e]"
-     style="background: linear-gradient(135deg, #eaf6ee 0%, #c8ecd9 22%, #a8e6c8 45%, #b8e8d2 68%, #f0e0ea 100%);">
+<div class="flex h-screen font-sans overflow-hidden relative layout-bg-gradient">
 
   <!-- Decorative wave layers (SVG) -->
   <svg class="absolute inset-0 w-full h-full pointer-events-none opacity-70 dark:opacity-20" preserveAspectRatio="none" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -143,12 +142,12 @@
 
     <div class="flex-1 flex flex-col overflow-hidden">
 
-      <header class="h-16 bg-white/65 backdrop-blur-xl shadow-md flex items-center justify-between px-6 z-40 relative border-b border-white/60">
-        <div class="flex items-center shrink-0">
-          <button (click)="toggleSidebar()" class="text-green-800 hover:text-green-600 focus:outline-none mr-4">
+      <header class="h-16 bg-white/65 backdrop-blur-xl shadow-md flex items-center justify-between px-3 sm:px-6 z-40 relative border-b border-white/60">
+        <div class="flex items-center shrink-0 min-w-0">
+          <button (click)="toggleSidebar()" class="text-green-800 hover:text-green-600 focus:outline-none mr-2 sm:mr-4 shrink-0">
             <i class="fas fa-bars text-xl"></i>
           </button>
-          <h2 class="text-lg sm:text-xl font-semibold text-green-900 mr-0 sm:mr-6">{{ pageTitle }}</h2>
+          <h2 class="text-sm sm:text-lg lg:text-xl font-semibold text-green-900 truncate">{{ pageTitle }}</h2>
         </div>
 
         <!-- ประกาศระบบ — dynamic จาก system_announcements -->
@@ -160,26 +159,26 @@
                [innerHTML]="announcement.content_html"></div>
         </div>
 
-        <div class="flex items-center shrink-0">
+        <div class="flex items-center shrink-0 gap-3 sm:gap-4">
           <!-- Feedback Icon -->
-          <a routerLink="/feedback" class="relative text-green-800 hover:text-green-600 mr-4">
-            <i class="fas fa-comments text-xl"></i>
+          <a routerLink="/feedback" class="relative text-green-800 hover:text-green-600">
+            <i class="fas fa-comments text-lg sm:text-xl"></i>
             <span *ngIf="feedbackUnreadCount > 0" class="absolute -top-1 -right-2 flex h-4 min-w-[16px] px-0.5 items-center justify-center rounded-full bg-teal-500 text-[9px] font-bold text-white animate-pulse">
               {{ feedbackUnreadCount > 9 ? '9+' : feedbackUnreadCount }}
             </span>
           </a>
           <!-- Bell Icon + Notification Dropdown -->
-          <div class="relative mr-4">
+          <div class="relative">
             <button (click)="toggleNotifDropdown()" class="relative text-green-800 hover:text-green-600 focus:outline-none">
-              <i class="fas fa-bell text-xl" [class.bell-shake]="unreadNotifCount > 0" [class.bell-glow]="unreadNotifCount > 0"></i>
+              <i class="fas fa-bell text-lg sm:text-xl" [class.bell-shake]="unreadNotifCount > 0" [class.bell-glow]="unreadNotifCount > 0"></i>
               <span *ngIf="unreadNotifCount > 0" class="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-0.5 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white animate-pulse">
                 {{ unreadNotifCount > 99 ? '99+' : unreadNotifCount }}
               </span>
             </button>
             <!-- Notification Dropdown ถูกย้ายออกไปนอก overflow-hidden container ด้านล่าง -->
           </div>
-          <!-- Dark Mode + Language toggles (Header) -->
-          <button (click)="themeService.toggle()" class="text-green-700 hover:text-green-900 mr-3 transition-all" [title]="themeService.isDark ? 'Light Mode' : 'Dark Mode'">
+          <!-- Dark Mode toggle (Header) -->
+          <button (click)="themeService.toggle()" class="text-green-700 hover:text-green-900 transition-all" [title]="themeService.isDark ? 'Light Mode' : 'Dark Mode'">
             <i class="fas text-lg" [ngClass]="themeService.isDark ? 'fa-sun text-yellow-500' : 'fa-moon'"></i>
           </button>
           <!-- Profile Avatar + Dropdown -->
