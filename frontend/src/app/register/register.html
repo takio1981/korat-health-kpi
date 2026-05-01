@@ -1,4 +1,5 @@
-<div class="h-screen flex flex-col lg:flex-row font-sans bg-gray-50 dark:bg-[#1e1e2e] overflow-hidden">
+<div class="h-screen flex flex-col lg:flex-row font-sans bg-gray-50 dark:bg-[#1e1e2e] overflow-hidden bg-cover bg-center bg-no-repeat"
+     style="background-image: url('background.png');">
   <!-- Dark Mode toggle -->
   <div class="fixed top-4 right-4 z-50 flex items-center gap-2">
     <button (click)="themeService.toggle()" class="w-9 h-9 rounded-full bg-white/90 dark:bg-gray-700 shadow-md flex items-center justify-center hover:scale-110 transition-all" [title]="themeService.isDark ? 'Light Mode' : 'Dark Mode'">
@@ -7,7 +8,7 @@
   </div>
 
   <!-- Left Side: Green branding panel (same as login) -->
-  <div class="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-green-700 via-green-600 to-green-500 text-white flex-col justify-center items-center p-12 relative overflow-hidden">
+  <div class="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-green-700/85 via-green-600/80 to-green-500/75 text-white flex-col justify-center items-center p-12 relative overflow-hidden backdrop-blur-sm">
     <div class="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
       <div class="absolute top-[-10%] left-[-10%] w-96 h-96 bg-white rounded-full mix-blend-overlay blur-3xl"></div>
       <div class="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-white rounded-full mix-blend-overlay blur-3xl"></div>
@@ -61,8 +62,8 @@
         <button type="button" (click)="registerWithThaID()"
                 class="group relative w-full p-4 bg-white hover:bg-blue-50 border-2 border-blue-700 hover:border-blue-800 rounded-xl text-left transition-all shadow-sm hover:shadow-md">
           <div class="flex items-center gap-4">
-            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-700 to-blue-900 text-white flex items-center justify-center shadow-md shrink-0">
-              <i class="fas fa-id-card text-2xl"></i>
+            <div class="w-12 h-12 rounded-xl bg-white border border-blue-200 flex items-center justify-center shadow-sm shrink-0 overflow-hidden p-1">
+              <img src="thaid.jpg" alt="ThaID" class="h-full w-full object-contain rounded">
             </div>
             <div class="flex-1 min-w-0">
               <p class="font-bold text-blue-800 text-sm">ลงทะเบียนด้วย ThaID</p>
@@ -77,8 +78,8 @@
         <button type="button" (click)="registerWithProviderID()"
                 class="group relative w-full p-4 bg-white hover:bg-cyan-50 border-2 border-cyan-600 hover:border-cyan-700 rounded-xl text-left transition-all shadow-sm hover:shadow-md">
           <div class="flex items-center gap-4">
-            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-700 text-white flex items-center justify-center shadow-md shrink-0">
-              <i class="fas fa-user-md text-2xl"></i>
+            <div class="w-12 h-12 rounded-xl bg-white border border-cyan-200 flex items-center justify-center shadow-sm shrink-0 overflow-hidden p-1">
+              <img src="provider-id.png" alt="ProviderID" class="h-full w-full object-contain">
             </div>
             <div class="flex-1 min-w-0">
               <p class="font-bold text-cyan-700 text-sm">ลงทะเบียนด้วย ProviderID</p>
