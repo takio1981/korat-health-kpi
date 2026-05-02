@@ -71,7 +71,16 @@ export class AuthService {
   }
 
   // 2. ฟังก์ชันลบ Token เมื่อออกจากระบบ
+  // เรียก backend POST /logout เพื่อเคลียร์ active_session_id (fire-and-forget)
   logout() {
+    const token = localStorage.getItem('kpi_token');
+    if (token) {
+      const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+      this.http.post(`${this.apiUrl}/logout`, {}, { headers }).subscribe({
+        next: () => {},
+        error: () => {}  // ignore error — clear local state ไม่ว่ายังไง
+      });
+    }
     localStorage.removeItem('kpi_token');
     localStorage.removeItem('kpi_user');
   }

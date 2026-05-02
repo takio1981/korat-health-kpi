@@ -155,31 +155,63 @@ if (!SECRET_KEY) {
 const _lastSeenCache = new Map();
 const LAST_SEEN_THROTTLE_MS = 60 * 1000; // update DB ไม่เกิน 1 ครั้ง/นาที/user
 
-const authenticateToken = (req, res, next) => {
+// Cache active_session_id per user (TTL 30s) เพื่อลด query DB ในทุก request
+// userId → { sessionId, expiry }
+const _sessionCache = new Map();
+const SESSION_CACHE_TTL = 30 * 1000; // 30 วินาที
+
+const authenticateToken = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
     if (!token) return res.status(401).json({ success: false, message: 'กรุณาเข้าสู่ระบบ' });
 
-    jwt.verify(token, SECRET_KEY, (err, user) => {
-        if (err) return res.status(403).json({ success: false, message: 'Token ไม่ถูกต้องหรือหมดอายุ' });
-        req.user = user;
+    let user;
+    try {
+        user = jwt.verify(token, SECRET_KEY);
+    } catch (err) {
+        return res.status(403).json({ success: false, message: 'Token ไม่ถูกต้องหรือหมดอายุ' });
+    }
+    req.user = user;
 
-        // Track last_seen — throttled (max 1/min/user) กันเขียน DB ถี่เกิน
-        const uid = user.userId;
-        if (uid) {
-            const now = Date.now();
-            const last = _lastSeenCache.get(uid) || 0;
-            if (now - last > LAST_SEEN_THROTTLE_MS) {
-                _lastSeenCache.set(uid, now);
-                const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim().slice(0, 64);
-                const ua = (req.headers['user-agent'] || '').toString().slice(0, 255);
-                db.query('UPDATE users SET last_seen_at = NOW(), last_seen_ip = ?, last_seen_ua = ? WHERE id = ?', [ip, ua, uid])
-                  .catch(() => {});
+    const uid = user.userId;
+    if (!uid) return next();
+
+    // === ตรวจสอบ session match (Single Session Enforcement) ===
+    // skip ถ้า JWT เก่าไม่มี sessionId (backward compat — token ที่สร้างก่อน feature นี้)
+    if (user.sessionId) {
+        const now = Date.now();
+        let cached = _sessionCache.get(uid);
+        if (!cached || cached.expiry < now) {
+            try {
+                const [rows] = await db.query('SELECT active_session_id FROM users WHERE id = ?', [uid]);
+                cached = { sessionId: rows[0]?.active_session_id || null, expiry: now + SESSION_CACHE_TTL };
+                _sessionCache.set(uid, cached);
+            } catch (e) {
+                // DB error — ปล่อยผ่านเพื่อไม่ให้ระบบล่มทั้งระบบ
+                cached = { sessionId: user.sessionId, expiry: now + SESSION_CACHE_TTL };
             }
         }
-        next();
-    });
+        if (cached.sessionId && cached.sessionId !== user.sessionId) {
+            return res.status(401).json({
+                success: false,
+                code: 'SESSION_INVALIDATED',
+                message: 'บัญชีของคุณถูกใช้งานจากอุปกรณ์อื่น — ระบบทำการ logout อัตโนมัติ'
+            });
+        }
+    }
+
+    // Track last_seen — throttled (max 1/min/user) กันเขียน DB ถี่เกิน
+    const now = Date.now();
+    const last = _lastSeenCache.get(uid) || 0;
+    if (now - last > LAST_SEEN_THROTTLE_MS) {
+        _lastSeenCache.set(uid, now);
+        const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim().slice(0, 64);
+        const ua = (req.headers['user-agent'] || '').toString().slice(0, 255);
+        db.query('UPDATE users SET last_seen_at = NOW(), last_seen_ip = ?, last_seen_ua = ? WHERE id = ?', [ip, ua, uid])
+          .catch(() => {});
+    }
+    next();
 };
 
 // === Role Groups ===
@@ -294,6 +326,24 @@ apiRouter.post('/login', loginLimiter, async (req, res) => {
                     await saveLog(username, 'login_failed', 'บัญชีถูกปิดใช้งาน', ip);
                     return res.status(403).json({ success: false, message: 'บัญชีนี้ถูกปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ' });
                 }
+
+                // === ตรวจสอบ login ซ้อน (Single Session Enforcement) ===
+                // ถ้ามี active_session_id อยู่ + last_seen ภายใน 5 นาทีล่าสุด → ถือว่ายังใช้งานอยู่ ห้าม login ซ้อน
+                if (user.active_session_id) {
+                    const lastSeen = user.last_seen_at ? new Date(user.last_seen_at).getTime() : 0;
+                    const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+                    if (lastSeen > fiveMinAgo) {
+                        await saveLog(username, 'login_blocked', 'login ซ้อน — บัญชีกำลังใช้งานที่อื่น', ip);
+                        return res.status(409).json({
+                            success: false,
+                            code: 'CONCURRENT_LOGIN',
+                            message: 'บัญชีนี้กำลังใช้งานอยู่ที่อุปกรณ์อื่น กรุณาออกจากระบบก่อน หรือรอประมาณ 5 นาที',
+                            last_seen_ip: user.last_seen_ip || '-',
+                            last_seen_at: user.last_seen_at
+                        });
+                    }
+                }
+
                 const serviceUnitDisplay = user.hosname ? `${user.hosname} ${user.distname ? 'อ.' + user.distname : ''}` : user.service_unit;
 
                 // ถ้าใช้รหัสชั่วคราว → ยังไม่ล้าง (จะล้างตอน change-password สำเร็จ)
@@ -326,8 +376,18 @@ apiRouter.post('/login', loginLimiter, async (req, res) => {
                     );
                 }
 
+                // สร้าง sessionId ใหม่ + บันทึกลง DB (overwrite session เดิมถ้า stale > 5 นาที)
+                const sessionId = crypto.randomBytes(24).toString('hex');
+                try {
+                    await db.query(
+                        'UPDATE users SET active_session_id = ?, session_started_at = NOW(), last_seen_at = NOW(), last_seen_ip = ? WHERE id = ?',
+                        [sessionId, ip.toString().split(',')[0].trim().slice(0, 64), user.id]
+                    );
+                    _sessionCache.delete(user.id);  // เคลียร์ cache เพื่อให้ middleware อ่านค่าใหม่
+                } catch (e) { console.error('Failed to save session:', e.message); }
+
                 const token = jwt.sign(
-                    { userId: user.id, username: user.username, deptId: user.dept_id, role: user.role, hospcode: user.hospcode },
+                    { userId: user.id, username: user.username, deptId: user.dept_id, role: user.role, hospcode: user.hospcode, sessionId },
                     SECRET_KEY,
                     { expiresIn: '8h' }
                 );
@@ -361,6 +421,36 @@ apiRouter.post('/login', loginLimiter, async (req, res) => {
         console.error(error);
         await saveLog(username, 'system_error', error.message, ip);
         res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดที่ Server' });
+    }
+});
+
+// === Logout — เคลียร์ active_session_id ของ user ปัจจุบัน ===
+apiRouter.post('/logout', authenticateToken, async (req, res) => {
+    const uid = req.user.userId;
+    try {
+        await db.query('UPDATE users SET active_session_id = NULL, session_started_at = NULL WHERE id = ?', [uid]);
+        _sessionCache.delete(uid);
+        await saveLog(req.user.username, 'logout', 'ออกจากระบบ', req.headers['x-forwarded-for'] || req.ip);
+        res.json({ success: true, message: 'ออกจากระบบเรียบร้อย' });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// === Force-logout user (super_admin only) — บังคับ logout user คนใดก็ตาม ===
+apiRouter.post('/admin/force-logout-user/:userId', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'super_admin') {
+        return res.status(403).json({ success: false, message: 'super_admin เท่านั้น' });
+    }
+    const uid = parseInt(req.params.userId);
+    if (!uid) return res.status(400).json({ success: false, message: 'userId ไม่ถูกต้อง' });
+    try {
+        await db.query('UPDATE users SET active_session_id = NULL, session_started_at = NULL WHERE id = ?', [uid]);
+        _sessionCache.delete(uid);
+        await saveLog(req.user.username, 'admin_force_logout', `บังคับ logout user id=${uid}`, req.headers['x-forwarded-for'] || req.ip);
+        res.json({ success: true, message: 'บังคับ logout user สำเร็จ' });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
     }
 });
 
@@ -5065,6 +5155,10 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         try { await db.query(`ALTER TABLE users ADD COLUMN last_seen_at DATETIME NULL`); } catch (e) {}
         try { await db.query(`ALTER TABLE users ADD COLUMN last_seen_ip VARCHAR(64) NULL`); } catch (e) {}
         try { await db.query(`ALTER TABLE users ADD COLUMN last_seen_ua VARCHAR(255) NULL`); } catch (e) {}
+        // Single-session enforcement (กัน login ซ้อนจากหลายเครื่อง)
+        try { await db.query(`ALTER TABLE users ADD COLUMN active_session_id VARCHAR(64) NULL`); } catch (e) {}
+        try { await db.query(`ALTER TABLE users ADD COLUMN session_started_at DATETIME NULL`); } catch (e) {}
+        try { await db.query(`ALTER TABLE users ADD INDEX idx_active_session (active_session_id)`); } catch (e) {}
         try { await db.query(`CREATE INDEX idx_last_seen_at ON users(last_seen_at)`); } catch (e) {}
         // สร้างตาราง chostype (ประเภทสถานบริการ)
         try {

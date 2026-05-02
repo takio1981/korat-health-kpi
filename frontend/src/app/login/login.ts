@@ -103,6 +103,18 @@ export class LoginComponent {
           }
         },
         error: (err) => {
+          // 409 CONCURRENT_LOGIN — บัญชีมี session active ที่อื่นอยู่
+          if (err.status === 409 && err.error?.code === 'CONCURRENT_LOGIN') {
+            const lastIp = err.error?.last_seen_ip ? `<br><small class="text-gray-500">IP ล่าสุด: ${err.error.last_seen_ip}</small>` : '';
+            Swal.fire({
+              icon: 'warning',
+              title: 'บัญชีกำลังใช้งานอยู่',
+              html: `<div style="text-align:center">${err.error?.message || 'บัญชีนี้กำลังใช้งานที่อุปกรณ์อื่น'}${lastIp}</div>`,
+              confirmButtonText: 'รับทราบ',
+              confirmButtonColor: '#f59e0b'
+            });
+            return;
+          }
           Swal.fire({ icon: 'error', title: 'เข้าสู่ระบบไม่สำเร็จ', text: err.error?.message || 'เกิดข้อผิดพลาด' });
         }
       });
