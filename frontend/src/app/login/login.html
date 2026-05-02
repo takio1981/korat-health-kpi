@@ -150,21 +150,15 @@
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <button type="button" (click)="loginWithThaID()"
-                    class="group relative py-2.5 pl-2.5 pr-4 bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 hover:from-blue-700 hover:via-blue-800 hover:to-blue-950 rounded-2xl text-white text-base font-bold transition-all flex items-center justify-center gap-3 shadow-md hover:shadow-lg min-h-[64px]">
-              <span class="bg-white rounded-xl p-1 shadow-inner shrink-0">
-                <img src="thaid.jpg" alt="ThaID" class="h-11 w-11 object-contain rounded-lg block">
-              </span>
-              <span class="drop-shadow-sm">ThaID</span>
-              <span class="absolute -top-2 -right-2 px-1.5 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-[9px] font-bold shadow-sm">รอเปิดใช้</span>
+            <button type="button" (click)="loginWithThaID()" title="เข้าสู่ระบบด้วย ThaID"
+                    class="group relative bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 hover:from-blue-700 hover:via-blue-800 hover:to-blue-950 rounded-2xl overflow-hidden transition-all flex items-center justify-center shadow-md hover:shadow-lg h-[64px]">
+              <img src="thaid.jpg" alt="ThaID" class="h-full w-full object-cover">
+              <span class="absolute -top-2 -right-2 px-1.5 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-[9px] font-bold shadow-sm z-10">รอเปิดใช้</span>
             </button>
-            <button type="button" (click)="loginWithProviderID()"
-                    class="group relative py-2.5 pl-2.5 pr-4 bg-gradient-to-br from-cyan-500 via-teal-500 to-cyan-700 hover:from-cyan-600 hover:via-teal-600 hover:to-cyan-800 rounded-2xl text-white text-base font-bold transition-all flex items-center justify-center gap-3 shadow-md hover:shadow-lg min-h-[64px]">
-              <span class="bg-white rounded-xl p-1 shadow-inner shrink-0">
-                <img src="provider-id.png" alt="ProviderID" class="h-11 w-11 object-contain block">
-              </span>
-              <span class="drop-shadow-sm">ProviderID</span>
-              <span class="absolute -top-2 -right-2 px-1.5 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-[9px] font-bold shadow-sm">รอเปิดใช้</span>
+            <button type="button" (click)="loginWithProviderID()" title="เข้าสู่ระบบด้วย ProviderID"
+                    class="group relative bg-gradient-to-br from-cyan-500 via-teal-500 to-cyan-700 hover:from-cyan-600 hover:via-teal-600 hover:to-cyan-800 rounded-2xl overflow-hidden transition-all flex items-center justify-center shadow-md hover:shadow-lg h-[64px]">
+              <img src="provider-id.png" alt="ProviderID" class="h-full w-full object-contain p-2">
+              <span class="absolute -top-2 -right-2 px-1.5 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-[9px] font-bold shadow-sm z-10">รอเปิดใช้</span>
             </button>
           </div>
 
