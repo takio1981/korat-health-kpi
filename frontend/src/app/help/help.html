@@ -173,6 +173,35 @@
           <p class="text-xs text-blue-700 mt-1">ระบบจะออกจากระบบอัตโนมัติเมื่อไม่มีการใช้งานเกินเวลาที่กำหนด โดยจะแสดง popup นับถอยหลังก่อนออก กด "ยกเลิก" เพื่อใช้งานต่อ</p>
         </div>
 
+        <!-- Single Session Enforcement -->
+        <div class="mt-4 bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <h4 class="font-bold text-amber-800 text-sm"><i class="fas fa-user-shield mr-2"></i>กัน login ซ้อนจากหลายเครื่อง (Single Session)</h4>
+          <p class="text-xs text-amber-700 mt-1">ระบบอนุญาตให้ใช้ <b>1 บัญชี = 1 อุปกรณ์</b> ในเวลาเดียวกันเท่านั้น</p>
+          <ul class="list-disc ml-5 mt-2 text-xs text-amber-700 space-y-0.5">
+            <li>ถ้ามีคน login บัญชีเดิมจากเครื่องอื่นอยู่ + ใช้งานล่าสุด ≤ 5 นาที → <b>ถูก block</b> (HTTP 409)</li>
+            <li>ถ้าเจ้าของไม่ได้ใช้งานเกิน 5 นาที → login ใหม่ได้ (session เก่าจะถูก invalidate)</li>
+            <li>ถ้ามีคน login บัญชีเดิมจากเครื่องใหม่ → <b>เครื่องเดิมจะ logout อัตโนมัติ</b>ภายใน ~30 วินาที</li>
+            <li>กรณีฉุกเฉิน super_admin บังคับ logout user ได้ผ่านหน้า "จัดการผู้ใช้งาน"</li>
+          </ul>
+        </div>
+
+        <!-- ThaID / ProviderID -->
+        <div class="mt-4 bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200 rounded-xl p-4">
+          <h4 class="font-bold text-blue-800 text-sm mb-2"><i class="fas fa-id-card mr-2"></i>เข้าสู่ระบบด้วย ThaID / ProviderID (รอเปิดใช้งาน)</h4>
+          <p class="text-xs text-gray-600 mb-2">หน้า login มีปุ่มเข้าสู่ระบบทางเลือกอีก 2 ช่องทาง:</p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+            <div class="bg-white/70 rounded-lg p-2.5 border border-blue-100">
+              <p class="font-bold text-blue-700"><i class="fas fa-id-card mr-1"></i>ThaID (DGA)</p>
+              <p class="text-gray-600 mt-0.5">บัญชี Thai Digital ID — ลงทะเบียนอัตโนมัติด้วยข้อมูลจากบัตรประชาชน</p>
+            </div>
+            <div class="bg-white/70 rounded-lg p-2.5 border border-cyan-100">
+              <p class="font-bold text-cyan-700"><i class="fas fa-user-md mr-1"></i>ProviderID (สธ.)</p>
+              <p class="text-gray-600 mt-0.5">บัญชี Provider ID ของกระทรวงสาธารณสุข สำหรับบุคลากรในระบบ HDC/MOPH</p>
+            </div>
+          </div>
+          <p class="text-[10px] text-amber-600 mt-2"><i class="fas fa-info-circle mr-1"></i>ขณะนี้อยู่ระหว่างขอใช้บริการกับหน่วยงานเจ้าของ — กดปุ่มแล้วจะแจ้ง "รอเปิดใช้งาน" ให้ใช้ Username/Password ปกติไปก่อน</p>
+        </div>
+
         <!-- ลืมรหัสผ่าน -->
         <div class="mt-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4">
           <h4 class="font-bold text-blue-800 text-sm mb-3"><i class="fas fa-key mr-2"></i>ลืมรหัสผ่าน?</h4>
@@ -945,7 +974,28 @@
           <i class="fas text-gray-400 transition-transform" [ngClass]="isCollapsed('kpi-manager') ? 'fa-chevron-down' : 'fa-chevron-up'"></i>
         </div>
         <div [hidden]="isCollapsed('kpi-manager')" class="px-6 pb-6 space-y-4">
-          <p class="text-sm text-gray-600">เมนูรวม 4 เครื่องมือสำหรับ <b>super_admin</b> บริหารจัดการข้อมูล KPI ทั้งหมด</p>
+          <p class="text-sm text-gray-600">เมนูสำหรับ <b>super_admin</b> — รวม 3 เครื่องมือเป็น <b>Wizard 3 ขั้นตอน</b> (กดข้ามไปขั้นใดก็ได้)</p>
+
+          <!-- Wizard Overview -->
+          <div class="bg-gradient-to-r from-teal-50 via-indigo-50 to-green-50 border border-indigo-200 rounded-xl p-4">
+            <h4 class="font-bold text-indigo-800 text-sm mb-2"><i class="fas fa-route mr-2"></i>Workflow 3 ขั้นตอน</h4>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+              <div class="bg-white/70 rounded-lg p-2 border border-teal-200">
+                <p class="font-bold text-teal-700"><span class="inline-flex items-center justify-center w-5 h-5 bg-teal-600 text-white rounded-full text-[10px] mr-1">1</span> เทียบชื่อตัวชี้วัด</p>
+                <p class="text-gray-600 mt-0.5">HDC reports → Local kpi_indicators (sync ชื่อ)</p>
+              </div>
+              <div class="bg-white/70 rounded-lg p-2 border border-indigo-200">
+                <p class="font-bold text-indigo-700"><span class="inline-flex items-center justify-center w-5 h-5 bg-indigo-600 text-white rounded-full text-[10px] mr-1">2</span> เทียบโครงสร้าง</p>
+                <p class="text-gray-600 mt-0.5">Local ↔ HDC tables (สร้าง/sync schema)</p>
+              </div>
+              <div class="bg-white/70 rounded-lg p-2 border border-green-200">
+                <p class="font-bold text-green-700"><span class="inline-flex items-center justify-center w-5 h-5 bg-green-600 text-white rounded-full text-[10px] mr-1">3</span> Export &amp; Sync ข้อมูล</p>
+                <p class="text-gray-600 mt-0.5">kpi_results → ตารางแยก → ส่ง HDC</p>
+              </div>
+            </div>
+            <p class="text-[10px] text-gray-500 mt-2"><i class="fas fa-info-circle mr-1"></i>แนะนำลำดับ 1 → 2 → 3 ในครั้งแรก หลังจากนั้นข้ามไปขั้น 3 ได้เลย — กด Stepper ด้านบน</p>
+          </div>
+
           <!-- Tab 1 -->
           <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
             <h4 class="font-bold text-indigo-800 mb-2"><i class="fas fa-database mr-2"></i>Tab 1: DB Compare (2 ทิศทาง)</h4>

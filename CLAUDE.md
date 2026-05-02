@@ -268,6 +268,18 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - UI `/online-users` — auto-refresh 5-60s, filter role + time window, สถานะ dot สีตาม idle_seconds (<60/<300/<900/>900)
 - Parse user-agent ฝั่ง frontend (Windows/Android/iOS/macOS/Linux × Edge/Chrome/Firefox/Safari)
 
+### Single Session Enforcement (กัน login ซ้อน)
+- ตาราง `users` เพิ่ม 2 คอลัมน์: `active_session_id` VARCHAR(64) + `session_started_at` DATETIME + index `idx_active_session`
+- หลักการ: 1 user = 1 active session — login ใหม่ขณะมี session ที่อื่นอยู่จะถูก block (ถ้า last_seen ≤ 5 นาที)
+- `POST /login`: ถ้า `active_session_id` + `last_seen_at > NOW() - 5 MIN` → **409 CONCURRENT_LOGIN** + `last_seen_ip` กลับไปแจ้งผู้ใช้
+  - ถ้าผ่าน — สร้าง `sessionId = crypto.randomBytes(24).toString('hex')` → บันทึก DB + ใส่ใน JWT payload
+- `authenticateToken`: เช็ค JWT.sessionId vs DB.active_session_id (cached 30s ผ่าน `_sessionCache`)
+  - ไม่ตรง → **401 SESSION_INVALIDATED** → frontend interceptor force logout + redirect /login
+  - JWT เก่าที่ไม่มี sessionId (backward compat) → ปล่อยผ่าน
+- `POST /logout`: clear `active_session_id` + delete `_sessionCache.delete(uid)` + log
+- `POST /admin/force-logout-user/:userId` (super_admin): บังคับ logout user ใดก็ได้ (กรณีฉุกเฉิน)
+- Frontend interceptor: `frontend/src/app/interceptors/session-invalidated.interceptor.ts` — ดักจับ 401 + code SESSION_INVALIDATED → ล้าง localStorage + Swal + redirect
+
 ### Sync to HDC
 - Core function: `performSyncToHdc(tables, userId)` — UPSERT local export tables → HDC
 - ถ้า `sync_columns` ไม่ส่งมา → auto-detect common columns ระหว่าง local กับ remote
@@ -321,6 +333,59 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 ### Chart + Report
 - รวมเป็นหน้าเดียว (/charts) → 2 tabs: กราฟและสถิติ / รายงานสรุปผล
 - ใช้ `[hidden]` เก็บ state ทั้ง 2 view (ไม่ destroy component)
+
+### kpi-manager (Wizard 3 ขั้นตอน)
+- รวม Report Compare / DB Compare / Export ในหน้าเดียว — wizard UI 3 ขั้น (free navigation)
+- `currentStep: 1 | 2 | 3` + step completion auto-detect จาก ViewChild `compareResult` / `exportResult`
+- Sub-components ใช้ `[hidden]="currentStep !== N"` (ไม่ destroy เพื่อ keep state)
+- ปิด `showGuide` ภายใน sub-components ผ่าน `AfterViewInit` — ใช้ unified guide ที่ kpi-manager
+- Form Builder embed (รับ `createFormEvent` จาก DB Compare) — modal เปิดเมื่อกด "สร้างฟอร์มจาก HDC"
+
+### Form Builder (kpi-manage)
+- ปุ่ม `fa-clipboard-list` (สีม่วง) ในคอลัมน์ "จัดการ" ของแต่ละ indicator (super_admin)
+- กดแล้วเปิด `<app-form-builder #formBuilder [embedded]="true">` modal
+- `embedded` flag ซ่อน UI หลักของ form-builder (header + ตาราง + tips) เหลือเฉพาะ modal
+- Public method `openForIndicator(item)` — enrich item ด้วย `schema_id` แล้วเปิด `openCreateForm()`
+
+### Layout (Glassmorphism)
+- Outer: `.layout-bg-gradient` class — gradient mint→teal→pink (light) / slate→teal→dark (dark)
+- 3-layer SVG waves + sparkle dots (decorative, opacity 70%/22%)
+- Sidebar: `bg-white/65 backdrop-blur-xl` + `border-white/60` — text-green-800/900
+- Header: เหมือน sidebar — รวม theme toggle + bell + profile + feedback icon
+- Main: `flex-1 overflow-hidden min-w-0` → `<div h-full w-full overflow-y-auto overflow-x-hidden card-scroll>`
+- **`min-w-0` บน flex chain** สำคัญ — กัน table `min-w-[1600px]` ดันหน้ากว้างเกินจอ
+- Mobile menu: `bg-white/85 backdrop-blur-xl` ตรงกลางจอ (top-[84px])
+- Dark mode: ใช้ `.dark` overrides ใน styles.css สำหรับ `bg-white/{60,65,70,80,85}` + `bg-green-100/70` + text-green-{700,800,900}
+
+### Page Sizing Pattern (ทุกหน้าต้อง fit จอ + ไม่ scroll body)
+- Outer: `<div class="p-6">` (ไม่ใช่ `<ng-container>` ตรงๆ — กัน card ติดขอบ)
+- Card: `<div class="bg-white rounded-2xl shadow-sm border border-gray-100">`
+- Scrollable area inside: `style="max-height: calc(100vh - Npx)"` + `overflow-auto card-scroll`
+  - dashboard: `100vh - 240px` (kpi-table-wrapper) | sticky thead z-20
+  - users: `100vh - 320px` mobile / `65vh` desktop | sticky thead
+  - audit-logs: `100vh - 320px` table / `100vh - 340px` cards | sticky thead
+  - kpi-setup: `100vh - 320px` overflow-auto (sticky thead มีอยู่แล้ว)
+  - notifications: `100vh - 230px`
+  - online-users: `100vh - 280px` | sticky thead
+  - kpi-manage: `100vh - 280px` desktop / `100vh - 320px` mobile
+  - announcements: `100vh - 250px`
+  - settings: `100vh - 100px`
+  - charts: `100vh - 200px` (chart + report views)
+- Sticky thead pattern: `<thead class="... sticky top-0 z-20 shadow-md">`
+
+### Background Tone (Mint Theme)
+- `styles.css` global override `.bg-white` → `rgba(232, 245, 238, 0.92)` (mint อ่อน #e8f5ee)
+- รวมไปถึง `bg-white/65 /70 /80 /85` — ใช้ mint base กับ opacity ต่างกัน
+- ทำให้ทุกการ์ด/ตาราง/modal มีโทนเดียวกับ sidebar (ไม่ต้องแก้ component)
+
+### Login / Register UI
+- Background: `layout-bg-gradient` mint→teal→pink + 3-layer SVG waves + sparkle dots
+- Logo: `bg-white rounded-full p-1` (กรอบบาง ~1mm) + shadow 2 ชั้น (เขียวเรืองรอง + เงาดำ)
+- Glassmorphism login card: `bg-white/65 backdrop-blur-xl rounded-3xl border-white/60`
+- ปุ่ม ThaID: bg-white + border + img object-contain (h-full w-auto)
+- ปุ่ม ProviderID: bg-white + border + img object-contain (h-full w-auto p-2)
+- Badge "รอเปิดใช้": ห่อปุ่มด้วย `<div class="relative">` แล้ววาง badge เป็น sibling (ไม่ถูก `overflow-hidden` clip)
+- Register: `registerMode: 'choose' | 'manual'` — modal เลือก 3 วิธีก่อนเข้าฟอร์ม
 
 ## 7. Naming Conventions
 
@@ -434,7 +499,7 @@ docker compose up -d
 
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
-| users | ผู้ใช้งาน | id, username, role, dept_id, hospcode, is_approved, approved_by, last_seen_at, last_seen_ip, last_seen_ua |
+| users | ผู้ใช้งาน | id, username, role, dept_id, hospcode, is_approved, approved_by, last_seen_at, last_seen_ip, last_seen_ua, **active_session_id**, **session_started_at** |
 | departments | หน่วยงาน | id, dept_name, dept_code |
 | kpi_indicators | ตัวชี้วัด | id, kpi_indicators_name, main_indicator_id, dept_id, table_process, target_percentage, r9, moph, ssj, rmw, other, evaluation_mode ('any_one'\|'all_required'), required_off_types (JSON array ของ hostypecode) |
 | kpi_main_indicators | หมวดหมู่หลัก | id, main_indicator_name, yut_id |

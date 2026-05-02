@@ -18,6 +18,31 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.05.01',
+      date: '1 พฤษภาคม 2569',
+      changes: [
+        { type: 'feature', text: 'Single Session Enforcement — กัน login ซ้อนจากหลายเครื่อง: 1 user = 1 active session (block ถ้า last_seen ≤ 5 นาที)' },
+        { type: 'feature', text: 'POST /logout endpoint + HTTP interceptor ดักจับ 401 SESSION_INVALIDATED → auto logout' },
+        { type: 'feature', text: 'super_admin บังคับ logout user ผ่าน POST /admin/force-logout-user/:id (กรณีฉุกเฉิน)' },
+        { type: 'feature', text: 'Login + Register: เพิ่มปุ่ม ThaID / ProviderID (รอเปิดใช้งาน) — UI scaffolding รอ DGA/MOPH credentials' },
+        { type: 'feature', text: 'Register: แสดง modal เลือก 3 วิธี (ThaID / ProviderID / ลงทะเบียนด้วยตัวเอง) ก่อนเข้าฟอร์ม' },
+        { type: 'feature', text: 'kpi-manager: รวม Report Compare / DB Compare / Export เป็น Wizard 3 ขั้น (free navigation)' },
+        { type: 'feature', text: 'kpi-manage: ปุ่ม fa-clipboard-list สร้าง/แก้แบบฟอร์ม inline modal — ย้ายจาก kpi-manager แทบ "สร้างแบบฟอร์ม"' },
+        { type: 'feature', text: 'Dynamic-data-months batch endpoint — ลด N HTTP requests (1/แถว) → 1 request ต่อปีงบฯ' },
+        { type: 'improve', text: 'Layout redesign: glassmorphism (sidebar/header bg-white/65 + backdrop-blur) ตามโทน login page' },
+        { type: 'improve', text: 'พื้นหลังทุกหน้าเปลี่ยนเป็น mint อ่อน (#e8f5ee) — global override .bg-white กลมกลืนกับ sidebar' },
+        { type: 'improve', text: 'Dashboard + Login: layout-bg-gradient class (mint→teal→pink) + 3-layer SVG waves + sparkle dots' },
+        { type: 'improve', text: 'Dark mode: รองรับ glassmorphism + sidebar/header — เปลี่ยน gradient + bg/text variants ตาม .dark' },
+        { type: 'improve', text: 'Responsive: ทุกหน้า max-h calc(100vh - Npx) + sticky thead + overflow-auto — modal/SweetAlert ขึ้นกลางจอเสมอ' },
+        { type: 'improve', text: 'SweetAlert: z-index 99999 + max-width calc(100vw-2rem) + responsive padding ที่ ≤640px' },
+        { type: 'fix', text: 'Layout: เพิ่ม min-w-0 + overflow-hidden บน flex chain — กัน table min-w-[1600px] ดันหน้ากว้างเกินจอ' },
+        { type: 'fix', text: 'Dashboard 504 timeout: simplified GROUP BY 18→3 cols + MIN/MAX wrapping → query เร็วขึ้นมาก' },
+        { type: 'fix', text: 'Frontend timeout(90s) + 429 batch endpoint — ลด rate-limit hit + แสดง error ชัดเมื่อ timeout' },
+        { type: 'fix', text: 'icon "สร้าง/แก้ไขแบบฟอร์ม": fa-wpforms (brands) → fa-clipboard-list (solid)' },
+        { type: 'fix', text: 'ลบปุ่ม Light/Dark mode ที่ลอยมุมขวาบนทับ profile — เหลือเฉพาะปุ่มใน header ข้าง bell' },
+      ]
+    },
+    {
       version: '2569.04.24',
       date: '24 เมษายน 2569',
       changes: [
