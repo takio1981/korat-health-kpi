@@ -21,6 +21,7 @@ export class ChangelogComponent {
       version: '2569.05.01',
       date: '1 พฤษภาคม 2569',
       changes: [
+        { type: 'feature', text: 'user-management: ปุ่ม "บังคับ logout user" (fa-sign-out-alt สีม่วง) — super_admin เห็นเฉพาะ user ที่ online — แสดง IP + เวลาใช้งานล่าสุดก่อนยืนยัน' },
         { type: 'feature', text: 'Single Session Enforcement — กัน login ซ้อนจากหลายเครื่อง: 1 user = 1 active session (block ถ้า last_seen ≤ 5 นาที)' },
         { type: 'feature', text: 'POST /logout endpoint + HTTP interceptor ดักจับ 401 SESSION_INVALIDATED → auto logout' },
         { type: 'feature', text: 'super_admin บังคับ logout user ผ่าน POST /admin/force-logout-user/:id (กรณีฉุกเฉิน)' },

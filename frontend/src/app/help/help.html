@@ -563,6 +563,18 @@
           </ul>
         </div>
 
+        <!-- บังคับ logout user (super_admin) -->
+        <div class="bg-purple-50 border border-purple-200 rounded-xl p-3 mb-4 text-xs text-purple-700">
+          <p class="font-bold mb-1"><i class="fas fa-sign-out-alt mr-1"></i>บังคับ Logout User (เฉพาะ super_admin)</p>
+          <p class="text-[11px] mb-1">ปุ่ม <i class="fas fa-sign-out-alt text-purple-600"></i> สีม่วงในคอลัมน์ "จัดการ" — แสดงเฉพาะผู้ใช้ที่<b>กำลัง online อยู่</b></p>
+          <ul class="list-disc ml-4 space-y-0.5">
+            <li>กดปุ่ม → ยืนยันแล้วผู้ใช้จะถูก logout อัตโนมัติภายใน <b>~30 วินาที</b></li>
+            <li>ใช้กรณีฉุกเฉิน เช่น ลืม logout ในเครื่องอื่น / ต้องการตัดการใช้งาน</li>
+            <li>ระบบบันทึก log ไว้ใน system_logs (action: <code class="bg-purple-100 px-1 rounded">admin_force_logout</code>)</li>
+            <li>หลัง logout — ผู้ใช้ยังเข้ามาใหม่ได้ (ไม่กระทบบัญชี)</li>
+          </ul>
+        </div>
+
         <h4 class="font-bold text-gray-700 text-sm mb-2">ขอบเขตการจัดการ user ตาม Role</h4>
         <div class="overflow-x-auto">
           <table class="w-full text-xs border-collapse">

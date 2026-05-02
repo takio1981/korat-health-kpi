@@ -279,6 +279,11 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - `POST /logout`: clear `active_session_id` + delete `_sessionCache.delete(uid)` + log
 - `POST /admin/force-logout-user/:userId` (super_admin): บังคับ logout user ใดก็ได้ (กรณีฉุกเฉิน)
 - Frontend interceptor: `frontend/src/app/interceptors/session-invalidated.interceptor.ts` — ดักจับ 401 + code SESSION_INVALIDATED → ล้าง localStorage + Swal + redirect
+- UI ปุ่ม "บังคับ logout" ใน user-management:
+  - `GET /users` SELECT รวม `active_session_id, session_started_at, last_seen_at, last_seen_ip` (ใช้ตัดสินว่าใคร online อยู่)
+  - ปุ่ม fa-sign-out-alt สีม่วง (mobile + desktop) — `*ngIf="isSuperAdmin && user.active_session_id"`
+  - กดแล้ว confirm dialog แสดง IP + เวลา + เตือน "logout ภายใน ~30 วินาที"
+  - log: `admin_force_logout` ใน system_logs
 
 ### Sync to HDC
 - Core function: `performSyncToHdc(tables, userId)` — UPSERT local export tables → HDC
