@@ -80,38 +80,42 @@
       <!-- ===== Mode: เลือกวิธีลงทะเบียน (3 การ์ด) ===== -->
       <div *ngIf="registerMode === 'choose'" class="space-y-3">
         <!-- Card 1: ThaID -->
-        <button type="button" (click)="registerWithThaID()" title="ลงทะเบียนด้วย ThaID"
-                class="group relative w-full bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 hover:from-blue-700 hover:via-blue-800 hover:to-blue-950 rounded-xl text-left transition-all shadow-md hover:shadow-lg overflow-hidden">
-          <div class="flex items-stretch h-20">
-            <div class="w-20 h-full shrink-0 overflow-hidden">
-              <img src="thaid.jpg" alt="ThaID" class="h-full w-full object-cover">
+        <div class="relative">
+          <button type="button" (click)="registerWithThaID()" title="ลงทะเบียนด้วย ThaID"
+                  class="group w-full bg-white hover:bg-gray-50 border border-gray-200 hover:border-blue-300 rounded-xl text-left transition-all shadow-md hover:shadow-lg overflow-hidden">
+            <div class="flex items-stretch h-20">
+              <div class="w-20 h-full shrink-0 overflow-hidden flex items-center justify-center">
+                <img src="thaid.jpg" alt="ThaID" class="h-full w-full object-contain">
+              </div>
+              <div class="flex-1 min-w-0 flex items-center px-4">
+                <p class="text-xs text-gray-600 leading-snug">ใช้บัญชี Thai Digital ID (DGA) ลงทะเบียนอัตโนมัติด้วยข้อมูลจากบัตรประชาชน</p>
+              </div>
+              <div class="flex items-center justify-center pr-4 shrink-0">
+                <i class="fas fa-chevron-right text-blue-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all"></i>
+              </div>
             </div>
-            <div class="flex-1 min-w-0 flex items-center px-4">
-              <p class="text-xs text-blue-100 leading-snug">ใช้บัญชี Thai Digital ID (DGA) ลงทะเบียนอัตโนมัติด้วยข้อมูลจากบัตรประชาชน</p>
-            </div>
-            <div class="flex flex-col items-center justify-center pr-3 gap-1 shrink-0">
-              <span class="px-2 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-[10px] font-bold">รอเปิดใช้</span>
-              <i class="fas fa-chevron-right text-blue-200 group-hover:text-white group-hover:translate-x-1 transition-all"></i>
-            </div>
-          </div>
-        </button>
+          </button>
+          <span class="absolute -top-2 -right-2 px-2 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-[10px] font-bold shadow-sm z-10 pointer-events-none">รอเปิดใช้</span>
+        </div>
 
         <!-- Card 2: ProviderID -->
-        <button type="button" (click)="registerWithProviderID()" title="ลงทะเบียนด้วย ProviderID"
-                class="group relative w-full bg-gradient-to-br from-cyan-500 via-teal-500 to-cyan-700 hover:from-cyan-600 hover:via-teal-600 hover:to-cyan-800 rounded-xl text-left transition-all shadow-md hover:shadow-lg overflow-hidden">
-          <div class="flex items-stretch h-20">
-            <div class="w-20 h-full shrink-0 bg-white flex items-center justify-center p-1.5">
-              <img src="provider-id.png" alt="ProviderID" class="h-full w-full object-contain">
+        <div class="relative">
+          <button type="button" (click)="registerWithProviderID()" title="ลงทะเบียนด้วย ProviderID"
+                  class="group w-full bg-white hover:bg-gray-50 border border-gray-200 hover:border-cyan-300 rounded-xl text-left transition-all shadow-md hover:shadow-lg overflow-hidden">
+            <div class="flex items-stretch h-20">
+              <div class="w-20 h-full shrink-0 flex items-center justify-center p-2">
+                <img src="provider-id.png" alt="ProviderID" class="h-full w-full object-contain">
+              </div>
+              <div class="flex-1 min-w-0 flex items-center px-4">
+                <p class="text-xs text-gray-600 leading-snug">ใช้บัญชี Provider ID ของกระทรวงสาธารณสุข สำหรับบุคลากรในระบบ HDC/MOPH</p>
+              </div>
+              <div class="flex items-center justify-center pr-4 shrink-0">
+                <i class="fas fa-chevron-right text-cyan-400 group-hover:text-cyan-600 group-hover:translate-x-1 transition-all"></i>
+              </div>
             </div>
-            <div class="flex-1 min-w-0 flex items-center px-4">
-              <p class="text-xs text-cyan-100 leading-snug">ใช้บัญชี Provider ID ของกระทรวงสาธารณสุข สำหรับบุคลากรในระบบ HDC/MOPH</p>
-            </div>
-            <div class="flex flex-col items-center justify-center pr-3 gap-1 shrink-0">
-              <span class="px-2 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-[10px] font-bold">รอเปิดใช้</span>
-              <i class="fas fa-chevron-right text-cyan-100 group-hover:text-white group-hover:translate-x-1 transition-all"></i>
-            </div>
-          </div>
-        </button>
+          </button>
+          <span class="absolute -top-2 -right-2 px-2 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-[10px] font-bold shadow-sm z-10 pointer-events-none">รอเปิดใช้</span>
+        </div>
 
         <!-- Card 3: Manual -->
         <button type="button" (click)="selectManualRegister()"
