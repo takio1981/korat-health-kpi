@@ -233,6 +233,13 @@ export class AuthService {
     return this.http.delete(`${this.apiUrl}/users/${id}`, { headers });
   }
 
+  // บังคับ logout user (super_admin) — เคลียร์ active_session_id
+  forceLogoutUser(userId: number): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/admin/force-logout-user/${userId}`, {}, { headers });
+  }
+
   resetPassword(id: number): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({

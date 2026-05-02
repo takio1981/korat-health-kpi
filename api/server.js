@@ -1926,6 +1926,7 @@ apiRouter.get('/users', authenticateToken, isAnyAdmin, async (req, res) => {
         let sql = `
             SELECT u.id, u.username, u.role, u.dept_id, u.firstname, u.lastname, u.phone, u.hospcode,
                    u.email, u.cid, u.is_approved, u.is_active, u.approved_by,
+                   u.active_session_id, u.session_started_at, u.last_seen_at, u.last_seen_ip,
                    d.dept_name, h.hosname, dist.distname,
                    approver.firstname AS approved_by_name, approver.lastname AS approved_by_lastname
             FROM users u

@@ -157,6 +157,7 @@
           <button *ngIf="isAdmin && user.is_approved === -1" (click)="allowReRegister(user)" class="px-2.5 py-1 bg-blue-500 text-white rounded-lg text-[10px] font-bold"><i class="fas fa-user-plus mr-1"></i>สมัครใหม่</button>
           <button (click)="openModal(user)" class="px-2.5 py-1 bg-yellow-500 text-white rounded-lg text-[10px] font-bold"><i class="fas fa-edit mr-1"></i>แก้ไข</button>
           <button (click)="resetPassword(user)" class="px-2.5 py-1 bg-orange-500 text-white rounded-lg text-[10px] font-bold"><i class="fas fa-key mr-1"></i>รีเซ็ต</button>
+          <button *ngIf="isSuperAdmin && user.active_session_id" (click)="forceLogoutUser(user)" class="px-2.5 py-1 bg-purple-600 text-white rounded-lg text-[10px] font-bold" title="บังคับ logout"><i class="fas fa-sign-out-alt mr-1"></i>Logout</button>
           <button *ngIf="isSuperAdmin" (click)="deleteUser(user.id)" class="px-2.5 py-1 bg-red-500 text-white rounded-lg text-[10px] font-bold"><i class="fas fa-trash mr-1"></i>ลบ</button>
         </div>
       </div>
@@ -279,6 +280,7 @@
               <!-- ปุ่มจัดการปกติ -->
               <button (click)="resetPassword(user)" class="text-orange-500 hover:text-orange-600 mx-1" title="รีเซ็ตรหัสผ่าน"><i class="fas fa-key"></i></button>
               <button (click)="openModal(user)" class="text-yellow-500 hover:text-yellow-600 mx-1" title="แก้ไข"><i class="fas fa-edit"></i></button>
+              <button *ngIf="isSuperAdmin && user.active_session_id" (click)="forceLogoutUser(user)" class="text-purple-600 hover:text-purple-800 mx-1" title="บังคับ logout (กำลัง online)"><i class="fas fa-sign-out-alt"></i></button>
               <button *ngIf="isSuperAdmin" (click)="deleteUser(user.id)" class="text-red-500 hover:text-red-600 mx-1" title="ลบ"><i class="fas fa-trash"></i></button>
             </td>
           </tr>

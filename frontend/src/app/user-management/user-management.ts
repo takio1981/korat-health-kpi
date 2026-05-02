@@ -668,6 +668,34 @@ export class UserManagementComponent implements OnInit {
     });
   }
 
+  // บังคับ logout user (super_admin) — เคลียร์ active_session_id ใน DB
+  forceLogoutUser(user: any) {
+    const sessionInfo = user.active_session_id
+      ? `<div class="text-xs text-gray-500 mt-1">IP ล่าสุด: ${user.last_seen_ip || '-'} | ใช้งานล่าสุด: ${user.last_seen_at ? new Date(user.last_seen_at).toLocaleString('th-TH') : '-'}</div>`
+      : '<div class="text-xs text-gray-400 mt-1">ผู้ใช้นี้ไม่ได้ login อยู่</div>';
+    Swal.fire({
+      title: 'บังคับออกจากระบบ',
+      html: `<p>ต้องการบังคับ logout <b>${user.username}</b> ใช่หรือไม่?</p>${sessionInfo}<p class="text-xs text-amber-600 mt-2"><i class="fas fa-info-circle mr-1"></i>ผู้ใช้จะถูก logout อัตโนมัติภายใน ~30 วินาที</p>`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: '<i class="fas fa-sign-out-alt mr-1"></i>บังคับ Logout',
+      cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      this.authService.forceLogoutUser(user.id).subscribe({
+        next: (res: any) => {
+          if (res.success) {
+            Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2000, showConfirmButton: false });
+            this.loadUsers();
+          }
+        },
+        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถบังคับ logout ได้', 'error')
+      });
+    });
+  }
+
   resetPassword(user: any) {
     Swal.fire({
       title: 'รีเซ็ตรหัสผ่าน',
