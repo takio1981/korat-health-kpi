@@ -188,7 +188,9 @@ const authenticateToken = async (req, res, next) => {
                 cached = { sessionId: rows[0]?.active_session_id || null, expiry: now + SESSION_CACHE_TTL };
                 _sessionCache.set(uid, cached);
             } catch (e) {
-                // DB error — ปล่อยผ่านเพื่อไม่ให้ระบบล่มทั้งระบบ
+                // DB error — log + ปล่อยผ่านเพื่อไม่ให้ระบบล่มทั้งระบบ (แต่ enforcement ถูก bypass)
+                console.error(`❌ [Single Session] SELECT active_session_id ล้มเหลว user_id=${uid} —`, e.message);
+                console.error('   👉 ตรวจสอบว่ามีคอลัมน์ active_session_id ใน users table หรือไม่');
                 cached = { sessionId: user.sessionId, expiry: now + SESSION_CACHE_TTL };
             }
         }
@@ -379,12 +381,18 @@ apiRouter.post('/login', loginLimiter, async (req, res) => {
                 // สร้าง sessionId ใหม่ + บันทึกลง DB (overwrite session เดิมถ้า stale > 5 นาที)
                 const sessionId = crypto.randomBytes(24).toString('hex');
                 try {
-                    await db.query(
+                    const [updateResult] = await db.query(
                         'UPDATE users SET active_session_id = ?, session_started_at = NOW(), last_seen_at = NOW(), last_seen_ip = ? WHERE id = ?',
                         [sessionId, ip.toString().split(',')[0].trim().slice(0, 64), user.id]
                     );
+                    if (!updateResult || updateResult.affectedRows === 0) {
+                        console.error(`⚠️ [Single Session] UPDATE active_session_id ไม่ได้แก้ไขแถวใดสำหรับ user_id=${user.id}`);
+                    }
                     _sessionCache.delete(user.id);  // เคลียร์ cache เพื่อให้ middleware อ่านค่าใหม่
-                } catch (e) { console.error('Failed to save session:', e.message); }
+                } catch (e) {
+                    console.error(`❌ [Single Session] UPDATE active_session_id ล้มเหลว user_id=${user.id} —`, e.message);
+                    console.error('   👉 ตรวจสอบว่าได้ ALTER TABLE users ADD COLUMN active_session_id แล้วหรือยัง');
+                }
 
                 const token = jwt.sign(
                     { userId: user.id, username: user.username, deptId: user.dept_id, role: user.role, hospcode: user.hospcode, sessionId },
@@ -434,6 +442,66 @@ apiRouter.post('/logout', authenticateToken, async (req, res) => {
         res.json({ success: true, message: 'ออกจากระบบเรียบร้อย' });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// === Session status diagnostic (super_admin) — ตรวจว่า Single Session ทำงานหรือไม่ ===
+apiRouter.get('/admin/session-status', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'super_admin') {
+        return res.status(403).json({ success: false, message: 'super_admin เท่านั้น' });
+    }
+    try {
+        // 1. ตรวจว่ามีคอลัมน์ active_session_id หรือไม่
+        const [cols] = await db.query(`
+            SELECT COLUMN_NAME FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'
+              AND COLUMN_NAME IN ('active_session_id','session_started_at','last_seen_at')
+        `);
+        const colNames = cols.map(c => c.COLUMN_NAME || c.column_name);
+        const hasSessionId = colNames.includes('active_session_id');
+
+        const status = {
+            success: true,
+            schema_ok: hasSessionId,
+            columns_present: colNames,
+            session_cache_size: _sessionCache.size,
+            current_jwt_has_session_id: !!req.user.sessionId,
+            db_now: null,
+            server_now: new Date().toISOString(),
+            active_sessions_count: 0,
+            recent_active_users: []
+        };
+
+        if (hasSessionId) {
+            // 2. นับจำนวน user ที่มี active session
+            const [countRow] = await db.query(`
+                SELECT COUNT(*) AS cnt FROM users
+                WHERE active_session_id IS NOT NULL
+                  AND last_seen_at > DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+            `);
+            status.active_sessions_count = countRow[0]?.cnt || 0;
+
+            // 3. ดึงตัวอย่าง 10 user ที่ active ล่าสุด
+            const [recent] = await db.query(`
+                SELECT id, username, role, last_seen_at, last_seen_ip, session_started_at,
+                       SUBSTRING(active_session_id, 1, 8) AS session_prefix
+                FROM users
+                WHERE active_session_id IS NOT NULL
+                ORDER BY last_seen_at DESC
+                LIMIT 10
+            `);
+            status.recent_active_users = recent;
+
+            // 4. NOW() จาก DB เพื่อเทียบ timezone
+            const [now] = await db.query('SELECT NOW() AS db_now, @@global.time_zone AS tz, @@session.time_zone AS sess_tz');
+            status.db_now = now[0]?.db_now;
+            status.db_timezone = now[0]?.tz;
+            status.db_session_timezone = now[0]?.sess_tz;
+        }
+
+        res.json(status);
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message, error: e.stack });
     }
 });
 
@@ -5156,10 +5224,41 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         try { await db.query(`ALTER TABLE users ADD COLUMN last_seen_at DATETIME NULL`); } catch (e) {}
         try { await db.query(`ALTER TABLE users ADD COLUMN last_seen_ip VARCHAR(64) NULL`); } catch (e) {}
         try { await db.query(`ALTER TABLE users ADD COLUMN last_seen_ua VARCHAR(255) NULL`); } catch (e) {}
-        // Single-session enforcement (กัน login ซ้อนจากหลายเครื่อง)
-        try { await db.query(`ALTER TABLE users ADD COLUMN active_session_id VARCHAR(64) NULL`); } catch (e) {}
-        try { await db.query(`ALTER TABLE users ADD COLUMN session_started_at DATETIME NULL`); } catch (e) {}
-        try { await db.query(`ALTER TABLE users ADD INDEX idx_active_session (active_session_id)`); } catch (e) {}
+
+        // === Single-session enforcement (กัน login ซ้อนจากหลายเครื่อง) ===
+        // ตรวจสอบก่อนว่ามีคอลัมน์อยู่หรือยัง — ถ้าไม่มี ค่อย ALTER (พร้อม log ชัดเจน)
+        try {
+            const [colCheck] = await db.query(`
+                SELECT COLUMN_NAME FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'
+                  AND COLUMN_NAME IN ('active_session_id','session_started_at')
+            `);
+            const cols = colCheck.map(c => c.COLUMN_NAME || c.column_name);
+            const hasSessionId = cols.includes('active_session_id');
+            const hasSessionStarted = cols.includes('session_started_at');
+            if (!hasSessionId) {
+                try {
+                    await db.query(`ALTER TABLE users ADD COLUMN active_session_id VARCHAR(64) NULL`);
+                    console.log('✅ [Single Session] เพิ่มคอลัมน์ active_session_id สำเร็จ');
+                } catch (e) {
+                    console.error('❌ [Single Session] ไม่สามารถเพิ่มคอลัมน์ active_session_id —', e.message);
+                    console.error('   👉 กรุณา run manual SQL บน DB:');
+                    console.error('      ALTER TABLE users ADD COLUMN active_session_id VARCHAR(64) NULL;');
+                    console.error('      ALTER TABLE users ADD COLUMN session_started_at DATETIME NULL;');
+                    console.error('      ALTER TABLE users ADD INDEX idx_active_session (active_session_id);');
+                }
+            } else {
+                console.log('✓ [Single Session] คอลัมน์ active_session_id พร้อมใช้งาน');
+            }
+            if (!hasSessionStarted) {
+                try { await db.query(`ALTER TABLE users ADD COLUMN session_started_at DATETIME NULL`); } catch (e) {
+                    console.error('❌ [Single Session] ไม่สามารถเพิ่ม session_started_at —', e.message);
+                }
+            }
+            try { await db.query(`ALTER TABLE users ADD INDEX idx_active_session (active_session_id)`); } catch (e) {}
+        } catch (e) {
+            console.error('❌ [Single Session] ตรวจสอบ schema ล้มเหลว —', e.message);
+        }
         try { await db.query(`CREATE INDEX idx_last_seen_at ON users(last_seen_at)`); } catch (e) {}
         // สร้างตาราง chostype (ประเภทสถานบริการ)
         try {
