@@ -30,7 +30,7 @@
     </div>
   </div>
 
-  <div class="flex h-screen z-10 relative">
+  <div class="flex h-screen w-full z-10 relative min-w-0 overflow-hidden">
     <div class="fixed inset-0 z-40 lg:hidden transition-all duration-500"
          [ngClass]="isSidebarOpen ? 'bg-black/50 pointer-events-auto' : 'bg-transparent pointer-events-none'"
          (click)="closeSidebar()"></div>
