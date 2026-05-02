@@ -1,45 +1,67 @@
-<div class="h-screen flex flex-col lg:flex-row font-sans bg-gray-50 dark:bg-[#1e1e2e] overflow-hidden">
-  <!-- Dark Mode toggle -->
+<!-- Outer: soft mint-teal-pink gradient background + flowing wave decoration -->
+<div class="min-h-screen relative font-sans overflow-hidden dark:bg-[#1e1e2e]"
+     style="background: linear-gradient(135deg, #eaf6ee 0%, #c8ecd9 22%, #a8e6c8 45%, #b8e8d2 68%, #f0e0ea 100%);">
+
+  <!-- Decorative wave layers (SVG) -->
+  <svg class="absolute inset-0 w-full h-full pointer-events-none opacity-70 dark:opacity-20" preserveAspectRatio="none" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M0,520 C240,460 380,640 720,540 C1060,440 1280,620 1600,500 L1600,900 L0,900 Z" fill="#a8e6c8" fill-opacity="0.45"/>
+    <path d="M0,640 C260,560 460,760 800,660 C1140,560 1340,720 1600,620 L1600,900 L0,900 Z" fill="#7dd3a8" fill-opacity="0.30"/>
+    <path d="M0,760 C300,680 540,840 880,760 C1200,680 1380,820 1600,740 L1600,900 L0,900 Z" fill="#5cc28d" fill-opacity="0.22"/>
+  </svg>
+  <!-- subtle sparkle dots -->
+  <div class="absolute inset-0 pointer-events-none opacity-40">
+    <span class="absolute w-1 h-1 bg-white rounded-full" style="top:18%; left:8%"></span>
+    <span class="absolute w-1.5 h-1.5 bg-white rounded-full" style="top:32%; left:22%"></span>
+    <span class="absolute w-1 h-1 bg-white rounded-full" style="top:55%; left:14%"></span>
+    <span class="absolute w-1 h-1 bg-white rounded-full" style="top:72%; left:30%"></span>
+    <span class="absolute w-1 h-1 bg-white rounded-full" style="top:25%; right:18%"></span>
+    <span class="absolute w-1.5 h-1.5 bg-white rounded-full" style="top:65%; right:8%"></span>
+    <span class="absolute w-1 h-1 bg-white rounded-full" style="top:80%; right:25%"></span>
+  </div>
+
+  <!-- Maintenance Mode Banner -->
+  <div *ngIf="maintenanceMode"
+       class="fixed inset-x-0 top-0 z-[100] bg-red-600 text-white py-3 px-6 shadow-lg">
+    <div class="max-w-3xl mx-auto flex items-center justify-center gap-3 text-center">
+      <i class="fas fa-exclamation-triangle text-xl animate-pulse"></i>
+      <div>
+        <p class="font-bold text-sm">{{ maintenanceMessage }}</p>
+        <p class="text-red-200 text-xs mt-0.5">กรุณาเข้าใช้งานอีกครั้งในภายหลัง</p>
+      </div>
+      <i class="fas fa-exclamation-triangle text-xl animate-pulse"></i>
+    </div>
+  </div>
+
+  <!-- Dark Mode toggle (ลอยมุมขวาบน) -->
   <div class="fixed top-4 right-4 z-50 flex items-center gap-2">
     <button (click)="themeService.toggle()" class="w-9 h-9 rounded-full bg-white/90 dark:bg-gray-700 shadow-md flex items-center justify-center hover:scale-110 transition-all" [title]="themeService.isDark ? 'Light Mode' : 'Dark Mode'">
       <i class="fas text-base" [ngClass]="themeService.isDark ? 'fa-sun text-yellow-400' : 'fa-moon text-gray-600'"></i>
     </button>
   </div>
 
-  <!-- Left Side: Green branding panel (same as login) -->
-  <div class="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-green-700 via-green-600 to-green-500 text-white flex-col justify-center items-center p-12 relative overflow-hidden">
-    <div class="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
-      <div class="absolute top-[-10%] left-[-10%] w-96 h-96 bg-white rounded-full mix-blend-overlay blur-3xl"></div>
-      <div class="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-white rounded-full mix-blend-overlay blur-3xl"></div>
-    </div>
+  <!-- Back to home (top-left) -->
+  <a href="https://apikorat.moph.go.th/kpikorat/" class="fixed top-4 left-4 z-50 hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/70 hover:bg-white text-green-800 hover:text-green-900 backdrop-blur-sm border border-white/60 rounded-full text-xs font-bold transition-all shadow-sm">
+    <i class="fas fa-arrow-left"></i>กลับหน้าหลัก
+  </a>
 
-    <div class="relative z-10 text-center flex flex-col items-center">
-      <div class="bg-white rounded-full shadow-lg mb-8">
-        <img alt="ตรากระทรวงสาธารณสุข" src="//upload.wikimedia.org/wikipedia/commons/f/f9/%E0%B8%95%E0%B8%A3%E0%B8%B2%E0%B8%81%E0%B8%A3%E0%B8%B0%E0%B8%97%E0%B8%A3%E0%B8%A7%E0%B8%87%E0%B8%AA%E0%B8%B2%E0%B8%98%E0%B8%B2%E0%B8%A3%E0%B8%93%E0%B8%AA%E0%B8%B8%E0%B8%82%E0%B9%83%E0%B8%AB%E0%B8%A1%E0%B9%88.png"
-        decoding="async" width="180" height="80">
-      </div>
+  <!-- Centered Content -->
+  <div class="relative z-10 w-full h-screen flex flex-col lg:items-center lg:justify-center px-4 sm:px-6 py-8 lg:px-12 overflow-y-auto lg:overflow-hidden">
+    <div class="w-full max-w-2xl">
 
-      <h1 class="text-4xl font-bold mb-3 drop-shadow-md">ระบบบันทึกผลงาน KPI ด้านสุขภาพ</h1>
-      <h2 class="text-2xl font-semibold mb-6 drop-shadow-md text-green-100">สำนักงานสาธารณสุขจังหวัดนครราชสีมา</h2>
-
-      <div class="w-24 h-1 bg-green-400 rounded-full mb-6"></div>
-
-      <p class="text-green-50 text-lg">เชื่อมโยงข้อมูล ยกระดับบริการ เพื่อสุขภาพที่ดีของชาวโคราช</p>
-    </div>
-  </div>
-
-  <!-- Right Side: Register Form -->
-  <div class="flex-grow flex items-center justify-center p-6 lg:w-1/2 overflow-hidden">
-    <div class="w-full max-w-lg bg-white rounded-2xl shadow-xl p-8 border border-gray-100 max-h-[90vh] overflow-y-auto">
+      <!-- Glassmorphism Card -->
+      <div class="bg-white/65 backdrop-blur-xl rounded-3xl shadow-2xl p-7 sm:p-9 border border-white/60 dark:bg-[#24243a]/80 dark:border-gray-700 max-h-[90vh] overflow-y-scroll card-scroll" style="scrollbar-width: thin; scrollbar-color: rgba(16, 185, 129, 0.5) rgba(229, 231, 235, 0.3);">
 
       <!-- Mobile header -->
-      <div class="text-center lg:hidden mb-6">
-        <div class="bg-green-50 inline-block p-3 rounded-full mb-3">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-          </svg>
+      <div class="lg:hidden">
+        <div class="bg-white/70 backdrop-blur-xl rounded-2xl p-5 text-center shadow-lg border border-white/60 mb-6">
+          <div class="bg-white rounded-full w-20 h-20 mx-auto mb-3 flex items-center justify-center shadow-md p-2">
+            <img alt="ตรากระทรวงสาธารณสุข" src="logo_ssj_nma.png" decoding="async" class="w-full h-full object-contain">
+          </div>
+          <h1 class="text-lg font-bold leading-tight text-green-900">ระบบบันทึกผลงาน KPI ด้านสุขภาพ</h1>
+          <p class="text-green-700 text-sm mt-1">สำนักงานสาธารณสุขจังหวัดนครราชสีมา</p>
+          <div class="w-12 h-0.5 bg-green-500 rounded-full mx-auto mt-3 mb-2"></div>
+          <p class="text-green-800/80 text-xs">เชื่อมโยงข้อมูล ยกระดับบริการ เพื่อสุขภาพที่ดีของชาวโคราช</p>
         </div>
-        <h2 class="text-2xl font-bold text-green-800">สสจ.นครราชสีมา</h2>
       </div>
 
       <!-- Desktop header -->
@@ -59,33 +81,33 @@
       <div *ngIf="registerMode === 'choose'" class="space-y-3">
         <!-- Card 1: ThaID -->
         <button type="button" (click)="registerWithThaID()"
-                class="group relative w-full p-4 bg-white hover:bg-blue-50 border-2 border-blue-700 hover:border-blue-800 rounded-xl text-left transition-all shadow-sm hover:shadow-md">
+                class="group relative w-full p-4 bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 hover:from-blue-700 hover:via-blue-800 hover:to-blue-950 rounded-xl text-left transition-all shadow-md hover:shadow-lg">
           <div class="flex items-center gap-4">
-            <div class="w-16 h-16 rounded-xl bg-white border border-blue-200 flex items-center justify-center shadow-sm shrink-0 overflow-hidden">
+            <div class="w-16 h-16 rounded-xl bg-white p-1 flex items-center justify-center shadow-inner shrink-0 overflow-hidden">
               <img src="thaid.jpg" alt="ThaID" class="h-full w-full object-contain rounded-lg">
             </div>
             <div class="flex-1 min-w-0">
-              <p class="font-bold text-blue-800 text-sm">ลงทะเบียนด้วย ThaID</p>
-              <p class="text-xs text-gray-500 mt-0.5">ใช้บัญชี Thai Digital ID (DGA) ลงทะเบียนอัตโนมัติด้วยข้อมูลจากบัตรประชาชน</p>
+              <p class="font-bold text-white text-sm drop-shadow-sm">ลงทะเบียนด้วย ThaID</p>
+              <p class="text-xs text-blue-100 mt-0.5">ใช้บัญชี Thai Digital ID (DGA) ลงทะเบียนอัตโนมัติด้วยข้อมูลจากบัตรประชาชน</p>
             </div>
             <span class="px-2 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-[10px] font-bold shrink-0">รอเปิดใช้</span>
-            <i class="fas fa-chevron-right text-blue-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all"></i>
+            <i class="fas fa-chevron-right text-blue-200 group-hover:text-white group-hover:translate-x-1 transition-all"></i>
           </div>
         </button>
 
         <!-- Card 2: ProviderID -->
         <button type="button" (click)="registerWithProviderID()"
-                class="group relative w-full p-4 bg-white hover:bg-cyan-50 border-2 border-cyan-600 hover:border-cyan-700 rounded-xl text-left transition-all shadow-sm hover:shadow-md">
+                class="group relative w-full p-4 bg-gradient-to-br from-cyan-500 via-teal-500 to-cyan-700 hover:from-cyan-600 hover:via-teal-600 hover:to-cyan-800 rounded-xl text-left transition-all shadow-md hover:shadow-lg">
           <div class="flex items-center gap-4">
-            <div class="w-16 h-16 rounded-xl bg-white border border-cyan-200 flex items-center justify-center shadow-sm shrink-0 overflow-hidden">
+            <div class="w-16 h-16 rounded-xl bg-white p-1 flex items-center justify-center shadow-inner shrink-0 overflow-hidden">
               <img src="provider-id.png" alt="ProviderID" class="h-full w-full object-contain">
             </div>
             <div class="flex-1 min-w-0">
-              <p class="font-bold text-cyan-700 text-sm">ลงทะเบียนด้วย ProviderID</p>
-              <p class="text-xs text-gray-500 mt-0.5">ใช้บัญชี Provider ID ของกระทรวงสาธารณสุข สำหรับบุคลากรในระบบ HDC/MOPH</p>
+              <p class="font-bold text-white text-sm drop-shadow-sm">ลงทะเบียนด้วย ProviderID</p>
+              <p class="text-xs text-cyan-100 mt-0.5">ใช้บัญชี Provider ID ของกระทรวงสาธารณสุข สำหรับบุคลากรในระบบ HDC/MOPH</p>
             </div>
             <span class="px-2 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-[10px] font-bold shrink-0">รอเปิดใช้</span>
-            <i class="fas fa-chevron-right text-cyan-400 group-hover:text-cyan-600 group-hover:translate-x-1 transition-all"></i>
+            <i class="fas fa-chevron-right text-cyan-100 group-hover:text-white group-hover:translate-x-1 transition-all"></i>
           </div>
         </button>
 
@@ -338,6 +360,7 @@
           </a>
         </div>
       </div>
-    </div>
-  </div>
-</div>
+      </div>  <!-- ปิด glassmorphism card -->
+    </div>    <!-- ปิด max-w-2xl -->
+  </div>      <!-- ปิด relative z-10 centered content -->
+</div>        <!-- ปิด outer gradient background -->
