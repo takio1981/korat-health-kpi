@@ -224,23 +224,24 @@
 }
 
 @layer utilities {
+  /* === โทนสี mint อ่อนเหมือน sidebar — ใช้แทนพื้นขาวทุกหน้า === */
   .bg-gray-50 {
-    background-color: rgba(255,255,255,0.75) !important;
+    background-color: rgba(232, 246, 238, 0.85) !important;
   }
   .bg-gray-100 {
-    background-color: rgba(255,255,255,0.6) !important;
+    background-color: rgba(216, 240, 226, 0.75) !important;
   }
   .bg-gray-50\/50 {
-    background-color: rgba(255,255,255,0.5) !important;
+    background-color: rgba(232, 246, 238, 0.55) !important;
   }
   .border-gray-200 {
-    border-color: rgba(255,255,255,0.55) !important;
+    border-color: rgba(220, 240, 228, 0.7) !important;
   }
   .border-gray-100 {
-    border-color: rgba(255,255,255,0.45) !important;
+    border-color: rgba(220, 240, 228, 0.5) !important;
   }
   .border-gray-300 {
-    border-color: rgba(229,231,235,0.6) !important;
+    border-color: rgba(196, 226, 207, 0.7) !important;
   }
   .text-gray-700 {
     color: #1f2937 !important;
@@ -254,11 +255,21 @@
   .text-gray-400 {
     color: #6b7280 !important;
   }
+  /* พื้นการ์ดหลัก — mint อ่อนเหมือนภาพ #e8f5ee */
   .bg-white {
-    background-color: rgba(255,255,255,0.92) !important;
+    background-color: rgba(232, 245, 238, 0.92) !important;
   }
   .bg-white\/70 {
-    background-color: rgba(255,255,255,0.7) !important;
+    background-color: rgba(232, 245, 238, 0.7) !important;
+  }
+  .bg-white\/65 {
+    background-color: rgba(232, 245, 238, 0.65) !important;
+  }
+  .bg-white\/80 {
+    background-color: rgba(232, 245, 238, 0.8) !important;
+  }
+  .bg-white\/85 {
+    background-color: rgba(232, 245, 238, 0.85) !important;
   }
 }
 
