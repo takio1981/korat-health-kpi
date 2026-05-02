@@ -671,7 +671,7 @@ export class UserManagementComponent implements OnInit {
   // บังคับ logout user (super_admin) — เคลียร์ active_session_id ใน DB
   forceLogoutUser(user: any) {
     const sessionInfo = user.active_session_id
-      ? `<div class="text-xs text-gray-500 mt-1">IP ล่าสุด: ${user.last_seen_ip || '-'} | ใช้งานล่าสุด: ${user.last_seen_at ? new Date(user.last_seen_at).toLocaleString('th-TH') : '-'}</div>`
+      ? `<div class="text-xs text-gray-500 mt-1">ใช้งานล่าสุด: ${user.last_seen_at ? new Date(user.last_seen_at).toLocaleString('th-TH') : '-'}</div>`
       : '<div class="text-xs text-gray-400 mt-1">ผู้ใช้นี้ไม่ได้ login อยู่</div>';
     Swal.fire({
       title: 'บังคับออกจากระบบ',
