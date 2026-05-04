@@ -3837,18 +3837,13 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                 continue;
             }
 
-            // ตรวจสอบว่ามีข้อมูลใน kpi_results หรือไม่
+            // ตรวจสอบว่ามีข้อมูลใน kpi_results หรือ kpi_sub_results
             const [kpiRows] = await db.query(
                 'SELECT hospcode, month_bh, target_value, actual_value FROM kpi_results WHERE indicator_id = ? AND year_bh = ?',
                 [indicator.id, year_bh]
             );
 
-            if (kpiRows.length === 0) {
-                results.push({ id: indicator.id, status: 'no_data', has_data: false, new_count: 0, changed_count: 0, unchanged_count: 0, no_data: true });
-                continue;
-            }
-
-            // Pivot kpi_results — เก็บค่าเป็น string (ไม่แปลงเป็นเลขทันที กัน "" → 0)
+            // Pivot kpi_results
             const dataMap = new Map();
             for (const row of kpiRows) {
                 if (!dataMap.has(row.hospcode)) dataMap.set(row.hospcode, {});
@@ -3858,6 +3853,49 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                 if (String(row.month_bh) === '10') {
                     entry.target = row.target_value != null ? String(row.target_value) : null;
                 }
+            }
+
+            // เติมค่า AVG จาก kpi_sub_results (เฉพาะ slot ที่ kpi_results ยังไม่มีข้อมูล)
+            try {
+                const [subAgg] = await db.query(`
+                    SELECT sr.hospcode,
+                        AVG(CASE WHEN sr.month_bh = 10 THEN CAST(NULLIF(sr.target_value,'') AS DECIMAL(20,4)) END) AS avg_target,
+                        AVG(CASE WHEN sr.month_bh = 10 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m10,
+                        AVG(CASE WHEN sr.month_bh = 11 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m11,
+                        AVG(CASE WHEN sr.month_bh = 12 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m12,
+                        AVG(CASE WHEN sr.month_bh = 1  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m01,
+                        AVG(CASE WHEN sr.month_bh = 2  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m02,
+                        AVG(CASE WHEN sr.month_bh = 3  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m03,
+                        AVG(CASE WHEN sr.month_bh = 4  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m04,
+                        AVG(CASE WHEN sr.month_bh = 5  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m05,
+                        AVG(CASE WHEN sr.month_bh = 6  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m06,
+                        AVG(CASE WHEN sr.month_bh = 7  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m07,
+                        AVG(CASE WHEN sr.month_bh = 8  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m08,
+                        AVG(CASE WHEN sr.month_bh = 9  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m09
+                    FROM kpi_sub_results sr
+                    JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
+                    WHERE si.indicator_id = ? AND sr.year_bh = ?
+                    GROUP BY sr.hospcode
+                `, [indicator.id, year_bh]);
+                const fmt = (v) => {
+                    if (v === null || v === undefined) return null;
+                    const n = parseFloat(v);
+                    if (isNaN(n)) return null;
+                    return Number.isInteger(n) ? String(n) : n.toFixed(2);
+                };
+                for (const subRow of subAgg) {
+                    if (!dataMap.has(subRow.hospcode)) dataMap.set(subRow.hospcode, {});
+                    const entry = dataMap.get(subRow.hospcode);
+                    for (const m of months) {
+                        if ((entry[m] === undefined || entry[m] === null) && subRow[m] !== null) entry[m] = fmt(subRow[m]);
+                    }
+                    if ((entry.target === undefined || entry.target === null) && subRow.avg_target !== null) entry.target = fmt(subRow.avg_target);
+                }
+            } catch (_) {}
+
+            if (dataMap.size === 0) {
+                results.push({ id: indicator.id, status: 'no_data', has_data: false, new_count: 0, changed_count: 0, unchanged_count: 0, no_data: true });
+                continue;
             }
 
             // ตรวจสอบตาราง export มีอยู่หรือไม่
@@ -3977,10 +4015,11 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
         const created = [];
         const skipped = [];
 
-        // Prefilter: เก็บเฉพาะตัวชี้วัดที่มีข้อมูลใน kpi_results (target_value หรือ actual_value)
+        // Prefilter: เก็บเฉพาะตัวชี้วัดที่มีข้อมูลใน kpi_results (target/actual) **หรือ** kpi_sub_results (ผ่าน sub-indicators)
         let indicators = [];
         if (allIndicators.length > 0) {
             const indIds = allIndicators.map(i => i.id);
+            // 1) ตัวชี้วัดที่มีข้อมูลใน kpi_results
             const [withData] = await conn.query(
                 `SELECT DISTINCT indicator_id FROM kpi_results
                  WHERE indicator_id IN (${indIds.map(() => '?').join(',')})
@@ -3989,9 +4028,21 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                 [...indIds, year_bh]
             );
             const validIds = new Set(withData.map(r => r.indicator_id));
+            // 2) ตัวชี้วัดที่มีข้อมูลใน kpi_sub_results (ผ่าน kpi_sub_indicators)
+            const [withSubData] = await conn.query(
+                `SELECT DISTINCT si.indicator_id
+                 FROM kpi_sub_results sr
+                 JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
+                 WHERE si.indicator_id IN (${indIds.map(() => '?').join(',')})
+                 AND sr.year_bh = ?
+                 AND ((sr.target_value IS NOT NULL AND sr.target_value != '') OR (sr.actual_value IS NOT NULL AND sr.actual_value != ''))`,
+                [...indIds, year_bh]
+            );
+            for (const r of withSubData) validIds.add(r.indicator_id);
+
             for (const ind of allIndicators) {
                 if (validIds.has(ind.id)) indicators.push(ind);
-                else skipped.push({ id: ind.id, name: ind.kpi_indicators_name, table_process: ind.table_process, reason: 'ไม่มีข้อมูลใน kpi_results' });
+                else skipped.push({ id: ind.id, name: ind.kpi_indicators_name, table_process: ind.table_process, reason: 'ไม่มีข้อมูลใน kpi_results / kpi_sub_results' });
             }
         }
 
@@ -4081,6 +4132,58 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                     if (String(row.month_bh) === '10') {
                         entry.target = row.target_value != null ? String(row.target_value) : null;
                     }
+                }
+
+                // === เพิ่ม: ดึงค่า AVG จาก kpi_sub_results มาเติม (กรณีที่ตัวชี้วัดมีตัวชี้วัดย่อย) ===
+                // หลักการเดียวกับ /sub-results/summary — AVG actual_value ของ sub แต่ละเดือน + AVG target ของเดือน 10
+                // ถ้า kpi_results มีค่าอยู่แล้ว → ไม่ override (kpi_results มี priority สูงกว่า)
+                try {
+                    const [subAgg] = await conn.query(`
+                        SELECT
+                            sr.hospcode,
+                            AVG(CASE WHEN sr.month_bh = 10 THEN CAST(NULLIF(sr.target_value,'') AS DECIMAL(20,4)) END) AS avg_target,
+                            AVG(CASE WHEN sr.month_bh = 10 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m10,
+                            AVG(CASE WHEN sr.month_bh = 11 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m11,
+                            AVG(CASE WHEN sr.month_bh = 12 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m12,
+                            AVG(CASE WHEN sr.month_bh = 1  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m01,
+                            AVG(CASE WHEN sr.month_bh = 2  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m02,
+                            AVG(CASE WHEN sr.month_bh = 3  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m03,
+                            AVG(CASE WHEN sr.month_bh = 4  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m04,
+                            AVG(CASE WHEN sr.month_bh = 5  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m05,
+                            AVG(CASE WHEN sr.month_bh = 6  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m06,
+                            AVG(CASE WHEN sr.month_bh = 7  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m07,
+                            AVG(CASE WHEN sr.month_bh = 8  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m08,
+                            AVG(CASE WHEN sr.month_bh = 9  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m09
+                        FROM kpi_sub_results sr
+                        JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
+                        WHERE si.indicator_id = ? AND sr.year_bh = ?
+                        GROUP BY sr.hospcode
+                    `, [indicator.id, year_bh]);
+
+                    const fmtNum = (v) => {
+                        if (v === null || v === undefined) return null;
+                        const n = parseFloat(v);
+                        if (isNaN(n)) return null;
+                        // จำนวนเต็มไม่มีทศนิยม / มีเศษ 2 ตำแหน่ง — ตรงกับ formatNum() ที่ frontend ใช้
+                        return Number.isInteger(n) ? String(n) : n.toFixed(2);
+                    };
+
+                    for (const subRow of subAgg) {
+                        if (!dataMap.has(subRow.hospcode)) dataMap.set(subRow.hospcode, {});
+                        const entry = dataMap.get(subRow.hospcode);
+                        // เติม monthly values เฉพาะที่ kpi_results ยังไม่มีข้อมูล
+                        for (const m of ['m10','m11','m12','m01','m02','m03','m04','m05','m06','m07','m08','m09']) {
+                            if ((entry[m] === undefined || entry[m] === null) && subRow[m] !== null) {
+                                entry[m] = fmtNum(subRow[m]);
+                            }
+                        }
+                        // เติม target ถ้ายังไม่มี
+                        if ((entry.target === undefined || entry.target === null) && subRow.avg_target !== null) {
+                            entry.target = fmtNum(subRow.avg_target);
+                        }
+                    }
+                } catch (e) {
+                    console.error(`⚠️ [Export] อ่าน kpi_sub_results ของ indicator_id=${indicator.id} ล้มเหลว:`, e.message);
                 }
 
                 // ดึง dynamic form data (ถ้ามี) → merge เข้า dataMap
