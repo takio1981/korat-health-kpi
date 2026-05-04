@@ -12,6 +12,7 @@ export class HelpComponent {
   private authService = inject(AuthService);
   activeSection: string = 'overview';
   currentRole: string = '';
+  showMobileTopics: boolean = false;
 
   ngOnInit() {
     this.currentRole = this.authService.getUserRole();

@@ -1,4 +1,4 @@
-<div class="min-h-screen bg-gray-50">
+<div class="h-screen overflow-y-auto bg-gray-50">
 
   <!-- Hero Header -->
   <div class="bg-gradient-to-br from-green-700 via-green-600 to-teal-500 text-white px-6 py-10 rounded-b-3xl shadow-lg">
@@ -16,9 +16,9 @@
 
   <div class="max-w-6xl mx-auto px-4 py-6 flex gap-6">
 
-    <!-- Sidebar Nav -->
+    <!-- Sidebar Nav (Desktop) -->
     <nav class="hidden lg:block w-60 shrink-0 sticky top-4 self-start">
-      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 space-y-1">
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 space-y-1 max-h-[calc(100vh-80px)] overflow-y-auto card-scroll">
         <p class="text-xs font-bold text-gray-400 uppercase px-3 mb-2">หัวข้อ</p>
         <button *ngFor="let s of sections" (click)="scrollTo(s.id)"
                 class="w-full text-left px-3 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2"
@@ -30,7 +30,29 @@
     </nav>
 
     <!-- Main Content -->
-    <div class="flex-1 space-y-8">
+    <div class="flex-1 space-y-8 min-w-0">
+
+      <!-- Mobile/Tablet Topic Menu (collapsible) -->
+      <div class="lg:hidden bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden sticky top-2 z-30">
+        <button (click)="showMobileTopics = !showMobileTopics"
+                class="w-full px-4 py-3 flex items-center justify-between text-left bg-gradient-to-r from-green-50 to-teal-50">
+          <span class="flex items-center gap-2 font-bold text-gray-700 text-sm">
+            <i class="fas fa-list-ul text-green-600"></i>
+            <span>หัวข้อ</span>
+            <span class="text-xs text-gray-400 font-normal">({{ sections?.length || 0 }})</span>
+          </span>
+          <i class="fas text-gray-400 transition-transform" [ngClass]="showMobileTopics ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+        </button>
+        <div *ngIf="showMobileTopics" class="p-2 max-h-[60vh] overflow-y-auto card-scroll border-t border-gray-100">
+          <button *ngFor="let s of sections" (click)="scrollTo(s.id); showMobileTopics = false"
+                  class="w-full text-left px-3 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2"
+                  [ngClass]="activeSection === s.id ? 'bg-green-100 text-green-800 font-bold' : 'text-gray-600 hover:bg-gray-50'">
+            <i class="fas {{ s.icon }} w-5 text-center" [ngClass]="activeSection === s.id ? 'text-green-600' : 'text-gray-400'"></i>
+            {{ s.label }}
+          </button>
+        </div>
+      </div>
+
 
       <!-- ==================== 1. ภาพรวมระบบ ==================== -->
       <section id="section-overview" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
