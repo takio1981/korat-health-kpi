@@ -40,8 +40,8 @@
   </div>
 
   <!-- Back to home (top-left) -->
-  <a href="https://apikorat.moph.go.th/kpikorat/" class="fixed top-4 left-4 z-50 hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/70 hover:bg-white text-green-800 hover:text-green-900 backdrop-blur-sm border border-white/60 rounded-full text-xs font-bold transition-all shadow-sm">
-    <i class="fas fa-arrow-left"></i>กลับหน้าหลัก
+  <a href="https://apikorat.moph.go.th/kpikorat/" class="fixed top-4 left-4 z-50 inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/70 hover:bg-white text-green-800 hover:text-green-900 backdrop-blur-sm border border-white/60 rounded-full text-xs font-bold transition-all shadow-sm">
+    <i class="fas fa-arrow-left"></i><span class="hidden sm:inline">กลับหน้าหลัก</span>
   </a>
 
   <!-- Centered Content -->
@@ -80,7 +80,13 @@
             <h1 class="text-lg font-bold leading-tight text-green-900">ระบบบันทึกผลงาน KPI ด้านสุขภาพ</h1>
             <p class="text-green-700 text-sm mt-1">สำนักงานสาธารณสุขจังหวัดนครราชสีมา</p>
             <div class="w-12 h-0.5 bg-green-500 rounded-full mx-auto mt-3 mb-2"></div>
-            <p class="text-green-800/80 text-xs">เชื่อมโยงข้อมูล ยกระดับบริการ เพื่อสุขภาพที่ดีของชาวโคราช</p>
+            <p class="text-green-800/80 text-xs mb-3">เชื่อมโยงข้อมูล ยกระดับบริการ เพื่อสุขภาพที่ดีของชาวโคราช</p>
+            <button (click)="showAbout = !showAbout"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/80 hover:bg-white text-green-800 hover:text-green-900 rounded-lg text-xs font-bold transition-all border border-white/70 shadow-sm">
+              <i class="fas fa-info-circle"></i>
+              เกี่ยวกับระบบและวัตถุประสงค์
+              <i class="fas fa-chevron-down text-[10px] transition-transform" [class.rotate-180]="showAbout"></i>
+            </button>
           </div>
         </div>
 
@@ -149,18 +155,18 @@
             <div class="flex-1 h-px bg-gray-300/60 dark:bg-gray-600"></div>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="grid grid-cols-2 gap-2 sm:gap-3">
             <div class="relative">
               <button type="button" (click)="loginWithThaID()" title="เข้าสู่ระบบด้วย ThaID"
-                      class="group w-full bg-white hover:bg-gray-50 border border-gray-200 hover:border-blue-300 rounded-2xl overflow-hidden transition-all flex items-center justify-center shadow-md hover:shadow-lg h-[64px]">
-                <img src="thaid.jpg" alt="ThaID" class="h-full w-auto object-contain">
+                      class="group w-full bg-white hover:bg-gray-50 border border-gray-200 hover:border-blue-300 rounded-2xl overflow-hidden transition-all flex items-center justify-center shadow-md hover:shadow-lg h-[52px] sm:h-[64px]">
+                <img src="thaid.png" alt="ThaID" class="h-full w-auto object-contain">
               </button>
               <span class="absolute -top-2 -right-2 px-1.5 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-[9px] font-bold shadow-sm z-10 pointer-events-none">รอเปิดใช้</span>
             </div>
             <div class="relative">
               <button type="button" (click)="loginWithProviderID()" title="เข้าสู่ระบบด้วย ProviderID"
-                      class="group w-full bg-white hover:bg-gray-50 border border-gray-200 hover:border-cyan-300 rounded-2xl overflow-hidden transition-all flex items-center justify-center shadow-md hover:shadow-lg h-[64px]">
-                <img src="provider-id.png" alt="ProviderID" class="h-full w-auto object-contain p-2">
+                      class="group w-full bg-white hover:bg-gray-50 border border-gray-200 hover:border-cyan-300 rounded-2xl overflow-hidden transition-all flex items-center justify-center shadow-md hover:shadow-lg h-[52px] sm:h-[64px]">
+                <img src="provider-id.png" alt="ProviderID" class="h-full w-auto object-contain p-1.5 sm:p-2">
               </button>
               <span class="absolute -top-2 -right-2 px-1.5 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-[9px] font-bold shadow-sm z-10 pointer-events-none">รอเปิดใช้</span>
             </div>
