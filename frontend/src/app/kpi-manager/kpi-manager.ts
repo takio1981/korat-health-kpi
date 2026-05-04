@@ -9,7 +9,7 @@ import { ExportKpiComponent } from '../export-kpi/export-kpi';
 import { ReportCompareComponent } from '../report-compare/report-compare';
 import Swal from 'sweetalert2';
 
-type WizardStep = 1 | 2 | 3;
+type WizardStep = 1 | 2;
 
 @Component({
   selector: 'app-kpi-manager',
@@ -26,7 +26,7 @@ export class KpiManagerComponent implements OnInit, AfterViewInit {
   @ViewChild(DbCompareComponent) dbCmp?: DbCompareComponent;
   @ViewChild(ExportKpiComponent) exportCmp?: ExportKpiComponent;
 
-  // === Wizard state — user สามารถกระโดดไปขั้นไหนก็ได้ ===
+  // === Wizard state — 2 ขั้น (รวม DB Compare + Export เข้าเป็น "ส่งออกข้อมูล KPI ↔ HDC") ===
   currentStep: WizardStep = 1;
   showWorkflowGuide: boolean = true;
 
@@ -58,8 +58,8 @@ export class KpiManagerComponent implements OnInit, AfterViewInit {
 
   // === Step status (auto-detect จาก state ของ sub-components) ===
   get step1Done(): boolean { return !!this.reportCmp?.compareResult; }
-  get step2Done(): boolean { return !!this.dbCmp?.compareResult; }
-  get step3Done(): boolean { return !!this.exportCmp?.exportResult; }
+  // step 2 done = ทำ phase A (DB compare) **หรือ** phase B (export) ก็ถือว่าเริ่มแล้ว
+  get step2Done(): boolean { return !!this.dbCmp?.compareResult || !!this.exportCmp?.exportResult; }
 
   get step1Summary(): string {
     const r = this.reportCmp?.compareResult?.summary;
@@ -67,14 +67,12 @@ export class KpiManagerComponent implements OnInit, AfterViewInit {
     return `ตรงกัน ${r.match} | ต่างกัน ${r.different} | ไม่มีใน Local ${r.missing_local}`;
   }
   get step2Summary(): string {
-    const r = this.dbCmp?.compareResult?.summary;
-    if (!r) return 'ยังไม่ได้เปรียบเทียบ';
-    return `ตรงกัน ${r.match} | ต่างกัน ${r.different} | ไม่มีใน Local ${r.missing_local} | ไม่มีใน HDC ${r.missing_remote}`;
-  }
-  get step3Summary(): string {
-    const r = this.exportCmp?.exportResult?.summary;
-    if (!r) return 'ยังไม่ได้ส่งออก';
-    return `เพิ่ม ${r.inserted} | อัปเดต ${r.updated} | ไม่เปลี่ยน ${r.unchanged}`;
+    const dbR = this.dbCmp?.compareResult?.summary;
+    const expR = this.exportCmp?.exportResult?.summary;
+    const parts: string[] = [];
+    if (dbR) parts.push(`Schema: ตรง ${dbR.match} | ต่าง ${dbR.different}`);
+    if (expR) parts.push(`Export: เพิ่ม ${expR.inserted} | อัปเดต ${expR.updated}`);
+    return parts.length === 0 ? 'ยังไม่ได้ดำเนินการ' : parts.join(' • ');
   }
 
   // === Navigation ===
@@ -89,7 +87,7 @@ export class KpiManagerComponent implements OnInit, AfterViewInit {
   }
 
   nextStep() {
-    if (this.currentStep < 3) this.goStep((this.currentStep + 1) as WizardStep);
+    if (this.currentStep < 2) this.goStep((this.currentStep + 1) as WizardStep);
   }
 
   prevStep() {
