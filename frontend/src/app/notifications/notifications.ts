@@ -47,12 +47,8 @@ export class NotificationsComponent implements OnInit {
       }
     });
     this.loadNotifications();
+    this.loadReplies();             // โหลดล่วงหน้าเพื่อให้ replyCount แสดงถูกต้องตั้งแต่เริ่ม
     this.loadAppealSettings();
-    // Subscribe shared unread count
-    this.authService.unreadCount$.subscribe(count => {
-      this.unreadNotifCount = count;
-      this.cdr.detectChanges();
-    });
     this.authService.refreshUnreadCount();
   }
 
@@ -109,9 +105,11 @@ export class NotificationsComponent implements OnInit {
 
   applyFilter() {
     const mainNotifs = this.notifications;
-    this.approveCount = mainNotifs.filter(n => n.type === 'approve').length;
-    this.rejectCount = mainNotifs.filter(n => n.type === 'reject').length;
-    this.appealCount = mainNotifs.filter(n => n.type === 'appeal').length;
+    const typeOf = (n: any) => (n.type || '').toString().trim().toLowerCase();
+    this.unreadNotifCount = mainNotifs.filter(n => !n.is_read).length;
+    this.approveCount = mainNotifs.filter(n => typeOf(n) === 'approve').length;
+    this.rejectCount = mainNotifs.filter(n => typeOf(n) === 'reject').length;
+    this.appealCount = mainNotifs.filter(n => typeOf(n) === 'appeal').length;
     const myHospcode = this.authService.getUser()?.hospcode;
     this.mineCount = mainNotifs.filter(n => n.hospcode && n.hospcode === myHospcode).length;
     if (this.activeFilter === 'all') {
@@ -119,11 +117,11 @@ export class NotificationsComponent implements OnInit {
     } else if (this.activeFilter === 'unread') {
       this.filteredNotifications = mainNotifs.filter(n => !n.is_read);
     } else if (this.activeFilter === 'approve') {
-      this.filteredNotifications = mainNotifs.filter(n => n.type === 'approve');
+      this.filteredNotifications = mainNotifs.filter(n => typeOf(n) === 'approve');
     } else if (this.activeFilter === 'reject') {
-      this.filteredNotifications = mainNotifs.filter(n => n.type === 'reject');
+      this.filteredNotifications = mainNotifs.filter(n => typeOf(n) === 'reject');
     } else if (this.activeFilter === 'appeal') {
-      this.filteredNotifications = mainNotifs.filter(n => n.type === 'appeal');
+      this.filteredNotifications = mainNotifs.filter(n => typeOf(n) === 'appeal');
     } else if (this.activeFilter === 'mine') {
       this.filteredNotifications = mainNotifs.filter(n => n.hospcode && n.hospcode === myHospcode);
     } else if (this.activeFilter === 'reply') {
