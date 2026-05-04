@@ -6106,9 +6106,10 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
             AND LENGTH(report_code) = LENGTH(table_process)
             ORDER BY report_id
         `);
-        // ดึง kpi_indicators จาก Local
+        // ดึง kpi_indicators จาก Local (เพิ่ม dept_id, main_indicator_id เพื่อใช้กับตัวกรอง frontend)
         const [localRows] = await db.query(`
             SELECT i.id, i.kpi_indicators_name, i.table_process, i.kpi_indicators_code, i.is_active,
+                   i.dept_id, i.main_indicator_id,
                    d.dept_name, mi.main_indicator_name
             FROM kpi_indicators i
             LEFT JOIN departments d ON i.dept_id = d.id
@@ -6133,7 +6134,8 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                     status: 'missing_local',
                     hdc_report_id: hdc.report_id, hdc_name: hdc.report_name, hdc_dept: hdc.dept, hdc_main_yut: hdc.main_yut,
                     report_code: hdc.report_code, table_process: tp, hdc_is_active: hdc.is_active,
-                    local_id: null, local_name: null
+                    local_id: null, local_name: null,
+                    local_dept_id: null, local_main_indicator_id: null, local_is_active: null
                 });
                 missing_local++;
             } else {
@@ -6145,7 +6147,8 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                     status,
                     hdc_report_id: hdc.report_id, hdc_name: hdc.report_name, hdc_dept: hdc.dept, hdc_main_yut: hdc.main_yut,
                     report_code: hdc.report_code, table_process: tp, hdc_is_active: hdc.is_active,
-                    local_id: local.id, local_name: local.kpi_indicators_name, local_dept: local.dept_name
+                    local_id: local.id, local_name: local.kpi_indicators_name, local_dept: local.dept_name,
+                    local_dept_id: local.dept_id, local_main_indicator_id: local.main_indicator_id, local_is_active: local.is_active
                 });
             }
         }
@@ -6156,7 +6159,8 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                     status: 'missing_remote',
                     hdc_report_id: null, hdc_name: null, hdc_dept: null, hdc_main_yut: null,
                     report_code: null, table_process: local.table_process, hdc_is_active: null,
-                    local_id: local.id, local_name: local.kpi_indicators_name, local_dept: local.dept_name
+                    local_id: local.id, local_name: local.kpi_indicators_name, local_dept: local.dept_name,
+                    local_dept_id: local.dept_id, local_main_indicator_id: local.main_indicator_id, local_is_active: local.is_active
                 });
                 missing_remote++;
             }
@@ -6399,19 +6403,23 @@ apiRouter.get('/db-compare', authenticateToken, isSuperAdmin, async (req, res) =
 
     try {
         // 1. ดึง table_process ทั้งหมดจาก kpi_indicators (deduplicate ตาม table_process)
-        const [allIndicators] = await db.query("SELECT id, kpi_indicators_name, table_process FROM kpi_indicators WHERE table_process IS NOT NULL AND table_process != ''");
-        // รวมชื่อตัวชี้วัดที่ใช้ table_process เดียวกัน
+        const [allIndicators] = await db.query("SELECT id, kpi_indicators_name, table_process, dept_id, main_indicator_id, is_active FROM kpi_indicators WHERE table_process IS NOT NULL AND table_process != ''");
+        // รวมชื่อตัวชี้วัดที่ใช้ table_process เดียวกัน + เก็บ dept_id/main_indicator_id ของตัวแรก (สำหรับตัวกรอง)
         const tableMap = new Map();
         for (const ind of allIndicators) {
             const tp = ind.table_process.trim().replace(/-/g, '_');
             if (!tableMap.has(tp)) {
-                tableMap.set(tp, { id: ind.id, table_process: tp, names: [] });
+                tableMap.set(tp, {
+                    id: ind.id, table_process: tp, names: [],
+                    dept_id: ind.dept_id, main_indicator_id: ind.main_indicator_id, is_active: ind.is_active
+                });
             }
             tableMap.get(tp).names.push(ind.kpi_indicators_name);
         }
         const indicators = Array.from(tableMap.values()).map(v => ({
             id: v.id, table_process: v.table_process,
-            kpi_indicators_name: v.names.length === 1 ? v.names[0] : v.names.join(' | ')
+            kpi_indicators_name: v.names.length === 1 ? v.names[0] : v.names.join(' | '),
+            dept_id: v.dept_id, main_indicator_id: v.main_indicator_id, is_active: v.is_active
         }));
 
         const results = [];
@@ -6422,7 +6430,11 @@ apiRouter.get('/db-compare', authenticateToken, isSuperAdmin, async (req, res) =
             const tableName = ind.table_process.trim().replace(/-/g, '_');
             if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(tableName)) continue;
 
-            const item = { id: ind.id, name: ind.kpi_indicators_name, table: tableName, local: null, remote: null, status: 'unknown', diff: [] };
+            const item = {
+                id: ind.id, name: ind.kpi_indicators_name, table: tableName,
+                dept_id: ind.dept_id, main_indicator_id: ind.main_indicator_id, is_active: ind.is_active,
+                local: null, remote: null, status: 'unknown', diff: []
+            };
 
             // Local structure
             try {

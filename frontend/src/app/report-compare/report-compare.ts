@@ -22,7 +22,33 @@ export class ReportCompareComponent implements OnInit {
   filterStatus = '';
   searchTerm = '';
 
-  ngOnInit() {}
+  // === ตัวกรองรายการ (เหมือน Phase B) ===
+  filterMainIndicator: string = '';
+  filterDept: string = '';
+  filterActive: string = '';     // '' | 'active' | 'inactive'
+  mainIndicators: any[] = [];
+  departments: any[] = [];
+
+  ngOnInit() {
+    this.loadFilterOptions();
+  }
+
+  loadFilterOptions() {
+    this.authService.getMainIndicators().subscribe({
+      next: (res: any) => { if (res.success) this.mainIndicators = res.data; this.cdr.detectChanges(); }
+    });
+    this.authService.getDepartments().subscribe({
+      next: (res: any) => { if (res.success) this.departments = res.data; this.cdr.detectChanges(); }
+    });
+  }
+
+  clearFilters() {
+    this.filterStatus = '';
+    this.searchTerm = '';
+    this.filterMainIndicator = '';
+    this.filterDept = '';
+    this.filterActive = '';
+  }
 
   runCompare() {
     this.isLoading = true;
@@ -50,7 +76,12 @@ export class ReportCompareComponent implements OnInit {
         (item.local_name || '').toLowerCase().includes(this.searchTerm.toLowerCase()) ||
         (item.table_process || '').toLowerCase().includes(this.searchTerm.toLowerCase()) ||
         (item.report_code || '').toLowerCase().includes(this.searchTerm.toLowerCase());
-      return matchStatus && matchSearch;
+      const matchMain = !this.filterMainIndicator || String(item.local_main_indicator_id) === this.filterMainIndicator;
+      const matchDept = !this.filterDept || String(item.local_dept_id) === this.filterDept;
+      const matchActive = !this.filterActive
+        || (this.filterActive === 'active' && (item.local_is_active === 1 || item.local_is_active === true))
+        || (this.filterActive === 'inactive' && (item.local_is_active === 0 || item.local_is_active === false));
+      return matchStatus && matchSearch && matchMain && matchDept && matchActive;
     });
   }
 

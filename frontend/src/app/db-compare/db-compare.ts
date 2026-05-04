@@ -24,8 +24,33 @@ export class DbCompareComponent implements OnInit {
   searchTerm = '';
   expandedTable = '';
 
+  // === ตัวกรองรายการ (เหมือน Phase B) ===
+  filterMainIndicator: string = '';
+  filterDept: string = '';
+  filterActive: string = '';     // '' | 'active' | 'inactive'
+  mainIndicators: any[] = [];
+  departments: any[] = [];
+
   ngOnInit() {
     // access control อยู่ที่ kpi-manager parent component
+    this.loadFilterOptions();
+  }
+
+  loadFilterOptions() {
+    this.authService.getMainIndicators().subscribe({
+      next: (res: any) => { if (res.success) this.mainIndicators = res.data; this.cdr.detectChanges(); }
+    });
+    this.authService.getDepartments().subscribe({
+      next: (res: any) => { if (res.success) this.departments = res.data; this.cdr.detectChanges(); }
+    });
+  }
+
+  clearFilters() {
+    this.filterStatus = '';
+    this.searchTerm = '';
+    this.filterMainIndicator = '';
+    this.filterDept = '';
+    this.filterActive = '';
   }
 
   runCompare() {
@@ -52,7 +77,12 @@ export class DbCompareComponent implements OnInit {
       const matchSearch = !this.searchTerm ||
         t.table.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
         t.name.toLowerCase().includes(this.searchTerm.toLowerCase());
-      return matchStatus && matchSearch;
+      const matchMain = !this.filterMainIndicator || String(t.main_indicator_id) === this.filterMainIndicator;
+      const matchDept = !this.filterDept || String(t.dept_id) === this.filterDept;
+      const matchActive = !this.filterActive
+        || (this.filterActive === 'active' && (t.is_active === 1 || t.is_active === true))
+        || (this.filterActive === 'inactive' && (t.is_active === 0 || t.is_active === false));
+      return matchStatus && matchSearch && matchMain && matchDept && matchActive;
     });
   }
 
