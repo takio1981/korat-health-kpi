@@ -1,21 +1,26 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth';
 
 @Component({
   selector: 'app-help',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RouterModule],
   templateUrl: './help.html'
 })
 export class HelpComponent {
   private authService = inject(AuthService);
+  private router = inject(Router);
   activeSection: string = 'overview';
   currentRole: string = '';
   showMobileTopics: boolean = false;
+  isPublicView: boolean = false;
 
   ngOnInit() {
     this.currentRole = this.authService.getUserRole();
+    // ตรวจว่าเปิดผ่าน /help-public (ไม่ login)
+    this.isPublicView = this.router.url.includes('/help-public') || !this.authService.isLoggedIn();
   }
 
   collapsedSections: { [key: string]: boolean } = {};

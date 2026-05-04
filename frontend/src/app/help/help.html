@@ -1,4 +1,11 @@
-<div class="h-screen overflow-y-auto bg-gray-50">
+<div class="h-screen overflow-y-auto bg-gray-50 relative">
+
+  <!-- Back to Login (เฉพาะ public view) -->
+  <a *ngIf="isPublicView" routerLink="/login"
+     class="fixed top-4 left-4 z-50 inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/90 hover:bg-white text-green-700 hover:text-green-900 backdrop-blur-sm border border-green-200 rounded-full text-xs font-bold transition-all shadow-md">
+    <i class="fas fa-arrow-left"></i>
+    <span>กลับหน้า Login</span>
+  </a>
 
   <!-- Hero Header -->
   <div class="bg-gradient-to-br from-green-700 via-green-600 to-teal-500 text-white px-6 py-10 rounded-b-3xl shadow-lg">
@@ -8,7 +15,7 @@
       </div>
       <h1 class="text-3xl font-bold mb-2">คู่มือการใช้งานระบบ</h1>
       <p class="text-green-100 text-lg">ระบบบันทึกผลงาน KPI ด้านสุขภาพ — สสจ.นครราชสีมา</p>
-      <p class="text-green-200 text-sm mt-2">สิทธิ์ปัจจุบันของคุณ:
+      <p *ngIf="!isPublicView" class="text-green-200 text-sm mt-2">สิทธิ์ปัจจุบันของคุณ:
         <span class="bg-white/20 px-3 py-0.5 rounded-full font-bold text-white ml-1">{{ currentRole || 'ไม่ได้ระบุ' }}</span>
       </p>
     </div>
