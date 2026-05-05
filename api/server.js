@@ -505,6 +505,103 @@ apiRouter.get('/admin/session-status', authenticateToken, async (req, res) => {
     }
 });
 
+// === Export Debug — ตรวจว่าตัวชี้วัด+hospcode+ปี มีข้อมูลใน source ไหนบ้าง ===
+// GET /admin/export-debug?year_bh=2569&indicator_id=123&hospcode=10888 (super_admin)
+apiRouter.get('/admin/export-debug', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'super_admin') return res.status(403).json({ success: false, message: 'super_admin เท่านั้น' });
+    const { year_bh, indicator_id, hospcode } = req.query;
+    if (!year_bh || !indicator_id) return res.status(400).json({ success: false, message: 'year_bh + indicator_id required' });
+    try {
+        // Indicator info
+        const [indRows] = await db.query(
+            'SELECT id, kpi_indicators_name, table_process, dept_id, main_indicator_id, is_active FROM kpi_indicators WHERE id = ?',
+            [indicator_id]
+        );
+        if (indRows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบ indicator_id นี้' });
+        const ind = indRows[0];
+        const tp = ind.table_process ? ind.table_process.trim().replace(/-/g, '_') : null;
+        const dynTable = tp ? 'form_' + tp : null;
+
+        // 1. kpi_results
+        const kpiSql = hospcode
+            ? 'SELECT month_bh, target_value, actual_value, status FROM kpi_results WHERE indicator_id=? AND year_bh=? AND hospcode=? ORDER BY month_bh'
+            : 'SELECT hospcode, month_bh, target_value, actual_value, status FROM kpi_results WHERE indicator_id=? AND year_bh=? ORDER BY hospcode, month_bh';
+        const kpiParams = hospcode ? [indicator_id, year_bh, hospcode] : [indicator_id, year_bh];
+        const [kpiResults] = await db.query(kpiSql, kpiParams);
+
+        // 2. kpi_sub_results (via sub_indicators)
+        const subSql = hospcode
+            ? `SELECT si.sub_indicator_name, sr.month_bh, sr.target_value, sr.actual_value FROM kpi_sub_results sr
+               JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
+               WHERE si.indicator_id=? AND sr.year_bh=? AND sr.hospcode=? ORDER BY si.id, sr.month_bh`
+            : `SELECT sr.hospcode, si.sub_indicator_name, sr.month_bh, sr.target_value, sr.actual_value FROM kpi_sub_results sr
+               JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
+               WHERE si.indicator_id=? AND sr.year_bh=? ORDER BY sr.hospcode, si.id, sr.month_bh`;
+        const subParams = hospcode ? [indicator_id, year_bh, hospcode] : [indicator_id, year_bh];
+        const [subResults] = await db.query(subSql, subParams);
+
+        // 3. form_<table_process>
+        let formData = null;
+        if (dynTable) {
+            try {
+                const [colInfo] = await db.query(
+                    "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION",
+                    [dynTable]
+                );
+                if (colInfo.length > 0) {
+                    const colNames = colInfo.map(c => c.COLUMN_NAME || c.column_name);
+                    const allCols = colNames.map(n => `\`${n}\``).join(', ');
+                    const hasIndId = colNames.includes('indicator_id');
+                    let where = 'WHERE year_bh=?';
+                    const params = [year_bh];
+                    if (hasIndId) { where += ' AND (indicator_id=? OR indicator_id IS NULL)'; params.push(indicator_id); }
+                    if (hospcode) { where += ' AND hospcode=?'; params.push(hospcode); }
+                    const [rows] = await db.query(`SELECT ${allCols} FROM \`${dynTable}\` ${where} LIMIT 100`, params);
+                    formData = { table: dynTable, columns: colNames, rows };
+                } else {
+                    formData = { table: dynTable, columns: [], rows: [], note: 'ตารางไม่มีอยู่ในฐานข้อมูล' };
+                }
+            } catch (e) { formData = { table: dynTable, error: e.message }; }
+        }
+
+        // 4. Schema info
+        const [schemas] = await db.query(
+            'SELECT id, form_title, actual_value_field, is_active FROM kpi_form_schemas WHERE indicator_id = ? ORDER BY is_active DESC, id DESC',
+            [indicator_id]
+        );
+        let schemaFields = [];
+        if (schemas.length > 0) {
+            const [f] = await db.query('SELECT field_name, field_label, field_type FROM kpi_form_fields WHERE schema_id = ? ORDER BY sort_order', [schemas[0].id]);
+            schemaFields = f;
+        }
+
+        // 5. Export table existing row
+        let exportData = null;
+        if (tp && /^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(tp)) {
+            try {
+                const exportWhere = hospcode ? 'WHERE byear=? AND hospcode=?' : 'WHERE byear=?';
+                const exportParams = hospcode ? [year_bh, hospcode] : [year_bh];
+                const [rows] = await db.query(`SELECT * FROM \`${tp}\` ${exportWhere} LIMIT 50`, exportParams);
+                exportData = { table: tp, rows };
+            } catch (e) { exportData = { table: tp, error: e.message }; }
+        }
+
+        res.json({
+            success: true,
+            indicator: ind,
+            year_bh,
+            hospcode: hospcode || '(all)',
+            kpi_results: { count: kpiResults.length, rows: kpiResults },
+            kpi_sub_results: { count: subResults.length, rows: subResults },
+            form_table: formData,
+            schemas: { count: schemas.length, list: schemas, active_fields: schemaFields },
+            export_table: exportData
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 // === Force-logout user (super_admin only) — บังคับ logout user คนใดก็ตาม ===
 apiRouter.post('/admin/force-logout-user/:userId', authenticateToken, async (req, res) => {
     if (req.user.role !== 'super_admin') {
@@ -4102,7 +4199,7 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
 
             // 3) ตัวชี้วัดที่มีข้อมูลใน dynamic form table (form_<table_process>)
             //    — กรณี form schema ไม่มี actual_value_field → ข้อมูลไม่ sync เข้า kpi_results
-            //    — ใช้ schema ที่ active เพื่อหา indicator_id ที่มีตาราง form_*
+            //    — รับ indicator_id IS NULL ด้วย (กรณี dynamic-data save ไม่ส่ง indicator_id)
             for (const ind of allIndicators) {
                 if (validIds.has(ind.id)) continue;
                 if (!ind.table_process) continue;
@@ -4111,16 +4208,18 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                 const dynTable = 'form_' + tp;
                 try {
                     const [chk] = await conn.query(
-                        "SELECT COUNT(*) AS cnt FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?",
+                        "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME IN ('year_bh','indicator_id')",
                         [dynTable]
                     );
-                    if (chk[0]?.cnt) {
-                        const [dynRows] = await conn.query(
-                            `SELECT 1 FROM \`${dynTable}\` WHERE year_bh = ? AND indicator_id = ? LIMIT 1`,
-                            [year_bh, ind.id]
-                        );
-                        if (dynRows.length > 0) validIds.add(ind.id);
-                    }
+                    if (chk.length === 0) continue;  // ตารางไม่มี → ข้าม
+                    const hasIndId = chk.some(c => (c.COLUMN_NAME || c.column_name) === 'indicator_id');
+                    const indFilter = hasIndId ? 'AND (indicator_id = ? OR indicator_id IS NULL)' : '';
+                    const params = hasIndId ? [year_bh, ind.id] : [year_bh];
+                    const [dynRows] = await conn.query(
+                        `SELECT 1 FROM \`${dynTable}\` WHERE year_bh = ? ${indFilter} LIMIT 1`,
+                        params
+                    );
+                    if (dynRows.length > 0) validIds.add(ind.id);
                 } catch (_) { /* skip table check error */ }
             }
 
@@ -4290,21 +4389,32 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                 if (dynamicTableName && formFields.length > 0) {
                     const dynFieldNames = formFields.map(f => `\`${f.field_name}\``).join(', ');
                     try {
-                        // ตรวจว่ามีคอลัมน์ month_bh ไหม (ตารางเก่าอาจไม่มี)
+                        // ตรวจว่ามีคอลัมน์ month_bh + indicator_id ไหม
                         const [colCheck] = await conn.query(
-                            "SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'month_bh'",
+                            "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME IN ('month_bh','indicator_id')",
                             [dynamicTableName]
                         );
-                        const hasMonth = (colCheck[0]?.cnt || 0) > 0;
+                        const presentCols = colCheck.map(c => c.COLUMN_NAME || c.column_name);
+                        const hasMonth = presentCols.includes('month_bh');
+                        const hasIndId = presentCols.includes('indicator_id');
                         const orderClause = hasMonth ? 'ORDER BY hospcode, month_bh ASC' : '';
                         const monthSelect = hasMonth ? ', month_bh' : '';
-                        const [dynRows] = await conn.query(
-                            `SELECT hospcode${monthSelect}, ${dynFieldNames} FROM \`${dynamicTableName}\` WHERE year_bh = ? AND indicator_id = ? ${orderClause}`,
-                            [year_bh, indicator.id]
-                        );
+                        // indicator_id filter — รับ NULL ด้วย (กรณี dynamic-data save ไม่ส่ง indicator_id)
+                        // ถ้าตารางไม่มี indicator_id column ก็ไม่ filter เลย (ถือว่าเป็นข้อมูลของ indicator นี้ทั้งหมด)
+                        const indFilter = hasIndId ? 'AND (indicator_id = ? OR indicator_id IS NULL)' : '';
+                        const params = hasIndId ? [year_bh, indicator.id] : [year_bh];
+                        const sql = `SELECT hospcode${monthSelect}, ${dynFieldNames} FROM \`${dynamicTableName}\` WHERE year_bh = ? ${indFilter} ${orderClause}`;
+                        const [dynRows] = await conn.query(sql, params);
+                        if (dynRows.length === 0) {
+                            console.log(`ℹ️ [Export] ${dynamicTableName} year_bh=${year_bh} indicator_id=${indicator.id} → 0 rows (ตรวจว่าข้อมูลถูกบันทึกใน table นี้หรือไม่)`);
+                        } else {
+                            console.log(`✓ [Export] ${dynamicTableName} year_bh=${year_bh} indicator_id=${indicator.id} → ${dynRows.length} rows`);
+                        }
                         for (const row of dynRows) {
-                            if (!dataMap.has(row.hospcode)) dataMap.set(row.hospcode, {});
-                            const entry = dataMap.get(row.hospcode);
+                            const hc = row.hospcode != null ? String(row.hospcode).trim() : '';
+                            if (!hc) continue;
+                            if (!dataMap.has(hc)) dataMap.set(hc, {});
+                            const entry = dataMap.get(hc);
                             for (const f of formFields) {
                                 // ค่าล่าสุดต่อ hospcode (เดือนใหญ่สุด overwrite เพราะ ORDER BY ASC)
                                 if (row[f.field_name] !== undefined && row[f.field_name] !== null && row[f.field_name] !== '') {
