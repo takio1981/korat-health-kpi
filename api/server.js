@@ -4169,28 +4169,43 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
             await conn.beginTransaction();
             try {
                 // ดึง form schema + fields สำหรับ indicator นี้
+                // Priority: active schema ก่อน → ถ้าไม่มีลอง inactive schema → ถ้าไม่มี schema เลย → infer จาก columns
                 const [schemaRows] = await conn.query(
-                    `SELECT fs.id, fs.actual_value_field FROM kpi_form_schemas fs WHERE fs.indicator_id = ? AND fs.is_active = 1 LIMIT 1`,
+                    `SELECT fs.id, fs.actual_value_field FROM kpi_form_schemas fs WHERE fs.indicator_id = ? ORDER BY fs.is_active DESC, fs.id DESC LIMIT 1`,
                     [indicator.id]
                 );
                 let formFields = [];
                 let dynamicTableName = null;
+                const dynTableCandidate = 'form_' + tableName;
+
                 if (schemaRows.length > 0) {
                     const [fields] = await conn.query(
                         'SELECT field_name, field_label, field_type FROM kpi_form_fields WHERE schema_id = ? ORDER BY sort_order',
                         [schemaRows[0].id]
                     );
                     formFields = fields.filter(f => isValidIdentifier(f.field_name));
-                    // ดึงชื่อ dynamic table จาก kpi_indicators.table_process (ใช้ตัวเดียวกับ export)
-                    // dynamic data table ใช้ prefix form_ + table_process
-                    const [dynTbl] = await conn.query('SELECT table_process FROM kpi_indicators WHERE id = ?', [indicator.id]);
-                    if (dynTbl.length > 0 && dynTbl[0].table_process) {
-                        const dynName = 'form_' + dynTbl[0].table_process;
-                        try {
-                            await conn.query(`SELECT 1 FROM \`${dynName}\` LIMIT 0`);
-                            dynamicTableName = dynName;
-                        } catch (e) { /* table ไม่มี = ไม่มี dynamic data */ }
-                    }
+                }
+
+                // ตรวจว่า dynamic table มีอยู่จริง
+                try {
+                    await conn.query(`SELECT 1 FROM \`${dynTableCandidate}\` LIMIT 0`);
+                    dynamicTableName = dynTableCandidate;
+                } catch (e) { /* table ไม่มี — ไม่มี dynamic data */ }
+
+                // Fallback: ถ้าไม่มี schema แต่ตาราง form_* มีอยู่ → infer fields จาก columns ของตาราง
+                // (กรณี schema ถูกลบหรือไม่ได้สร้างผ่าน Form Builder แต่มี form table ค้างอยู่)
+                if (dynamicTableName && formFields.length === 0) {
+                    try {
+                        const [cols] = await conn.query(`SHOW COLUMNS FROM \`${dynamicTableName}\``);
+                        const standardCols = new Set(['id', 'hospcode', 'year_bh', 'month_bh', 'indicator_id', 'created_by', 'created_at', 'updated_at']);
+                        formFields = cols
+                            .map(c => c.Field || c.field)
+                            .filter(name => name && !standardCols.has(name) && isValidIdentifier(name))
+                            .map(name => ({ field_name: name, field_label: name, field_type: 'text' }));
+                        if (formFields.length > 0) {
+                            console.log(`ℹ️ [Export] indicator_id=${indicator.id} (${dynamicTableName}) — ไม่มี schema → infer ${formFields.length} fields จาก columns`);
+                        }
+                    } catch (e) { /* infer ล้มเหลว — ไม่ส่งออก dynamic data */ }
                 }
 
                 const hasForm = formFields.length > 0;
