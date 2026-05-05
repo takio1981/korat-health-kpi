@@ -250,15 +250,34 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 ### Export KPI Tables
 - Endpoint: `POST /export-kpi-tables` — สร้าง/อัปเดตตาราง MySQL แยกรายตัวชี้วัด
 - Core function: `performKpiExport(year_bh, indicator_ids, userId)` — ใช้ร่วมกับ scheduler
-- Prefilter: สร้างเฉพาะ indicator ที่มีข้อมูลใน `kpi_results` (target_value หรือ actual_value)
+- **Prefilter (3 sources):** สร้างเฉพาะ indicator ที่มีข้อมูลใน source ใดsource หนึ่ง:
+  1. `kpi_results` (target_value หรือ actual_value)
+  2. `kpi_sub_results` (ผ่าน `kpi_sub_indicators.indicator_id` JOIN)
+  3. `form_<table_process>` (year_bh ตรง + indicator_id ตรง OR NULL)
 - Content-based diff: เปรียบเทียบค่าเดิมในตาราง export ทีละคอลัมน์ (ไม่ใช้ timestamp)
 - `result` = **ค่าเดือนล่าสุดที่คีย์** (ไม่ใช่ SUM) — เหมือน `kpi_summary.last_actual`
 - ตารางมีคอลัมน์เดือน (m10-m09) เสมอ + form fields ถ้ามี (ไม่แยก hasForm)
 - `emptyToNull()` แปลง `''` → `null` ก่อน INSERT (ป้องกัน DECIMAL error)
+- **Build dataMap จาก kpi_results — แปลง '' → null ทันที** กัน block merge sub_results (string `''` ไม่ใช่ null/undefined)
+- **Merge sub_results AVG เข้า dataMap** — เฉพาะ slot ที่ kpi_results ยังไม่มีค่า (รวมกรณี `''`):
+  ```js
+  if ((cur === undefined || cur === null || cur === '') && subRow[m] !== null) entry[m] = fmtNum(subRow[m]);
+  ```
+- **Form schema lookup** — `ORDER BY is_active DESC, id DESC LIMIT 1` (รับ inactive schema ด้วย)
+- **Fallback infer fields:** ถ้าไม่มี schema เลย แต่ตาราง form_* มีอยู่ → SHOW COLUMNS แล้ว infer fields (ตัด standard columns)
+- **Dynamic data fetch:** `WHERE year_bh = ? AND (indicator_id = ? OR indicator_id IS NULL)` + `ORDER BY hospcode, month_bh ASC` (latest wins)
+- Hospcode normalize: `String(hc).trim()` ทุกจุด (กัน whitespace/type mismatch)
 - Card counters นับตาม unique `table_process` (dedupe)
-- **`hasActualData`**: hospcode ต้องมีเดือนใด ๆ ที่ `actual_value` ไม่ว่าง/≠0 (หรือ dynamic form data) — target อย่างเดียวไม่พอ
+- **`hasActualData`**: hospcode ต้องมีเดือนใด ๆ ที่ `actual_value` ไม่ว่าง (รวม `'0'` ถือว่าใช่) หรือมี dynamic form data — target อย่างเดียวไม่พอ
 - **`checkKpiChanges` ใช้ logic ตรงกับ `performKpiExport`** — `sameValue()` numeric-aware + result=last actual + hasActualResult filter
-  - กรณีที่เคยพลาด: check ใช้ SUM → compare กับ export (last actual) → รายงาน "changed" เสมอ
+  - แก้แล้ว: รวม sub_results AVG, รับ '' → null, รับ '0' valid
+
+### Export Diagnostics
+- `GET /admin/export-debug?year_bh=&indicator_id=&hospcode=` (super_admin) — ดู source ทั้งหมด:
+  - indicator info, sub_indicators list, orphan_sub_indicators (indicator_id IS NULL)
+  - kpi_sub_results_summary group by sub_indicator_id (เห็น belongs_to_table — ตัวชี้วัดที่ sub link)
+  - kpi_results rows, kpi_sub_results rows, form_table rows + columns, schemas + active_fields, export_table existing rows
+- รับ `?table_process=` แทน indicator_id ได้ (ค้นหา id จาก table_process)
 
 ### Online Users Tracking (Realtime)
 - ตาราง `users` เพิ่ม 3 คอลัมน์: `last_seen_at` DATETIME + `last_seen_ip` VARCHAR(64) + `last_seen_ua` VARCHAR(255) + index `idx_last_seen_at`

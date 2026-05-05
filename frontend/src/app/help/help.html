@@ -1077,7 +1077,22 @@
               <i class="fas fa-bolt mr-1"></i><b>Content-based diff:</b> ระบบเปรียบเทียบค่า target, result, m10-m09, form fields ทีละคอลัมน์ — ถ้าค่าเหมือนเดิมจะข้าม (ไม่เปลี่ยนแปลง)
             </div>
             <div class="mt-2 bg-amber-100 rounded-lg p-2 text-xs text-amber-700">
-              <i class="fas fa-filter mr-1"></i><b>กรองผลงานจริง:</b> Export เฉพาะ hospcode ที่มี <b>actual_value</b> (ผลงาน) — hospcode ที่มีแต่ target ยังไม่มีผลงาน จะข้ามอัตโนมัติ | <b>result</b> = ค่าเดือนล่าสุดที่คีย์ (ไม่ใช่ SUM)
+              <i class="fas fa-filter mr-1"></i><b>กรองผลงานจริง:</b> Export เฉพาะ hospcode ที่มี <b>actual_value</b> (ผลงาน) — hospcode ที่มีแต่ target ยังไม่มีผลงาน จะข้ามอัตโนมัติ | <b>result</b> = ค่าเดือนล่าสุดที่คีย์ (ไม่ใช่ SUM) | <b>ค่า "0" ถือว่าเป็นผลงาน</b> (เช่น KPI ผลข้างเคียง)
+            </div>
+            <div class="mt-2 bg-teal-100 rounded-lg p-2 text-xs text-teal-700">
+              <i class="fas fa-database mr-1"></i><b>Source ข้อมูล (3 ที่):</b>
+              ระบบจะรวมข้อมูลจาก 3 แหล่งเข้าตาราง export ตามลำดับ priority:
+              <ol class="list-decimal ml-5 mt-1 space-y-0.5">
+                <li><b>kpi_results</b> — ผลงานที่คีย์ตรงๆ ในหน้า dashboard</li>
+                <li><b>kpi_sub_results</b> (AVG) — สำหรับตัวชี้วัดที่มี <b>ตัวชี้วัดย่อย</b> ระบบหารด้วยจำนวน sub แล้วเก็บค่าเฉลี่ยต่อเดือน</li>
+                <li><b>form_&lt;table_process&gt;</b> — ผลงานจาก dynamic form (กรณี schema ไม่มี actual_value_field) → เก็บใน column <code>_dyn_*</code></li>
+              </ol>
+              ลำดับ: kpi_results > sub_results AVG (เติมเฉพาะ slot ที่ kpi_results ยังว่าง) > form data
+            </div>
+            <div class="mt-2 bg-orange-100 rounded-lg p-2 text-xs text-orange-700">
+              <i class="fas fa-stethoscope mr-1"></i><b>Diagnose Tool (super_admin):</b> ถ้าข้อมูลส่งออกไม่ครบ ใช้ endpoint
+              <code class="bg-orange-200 px-1 rounded">/khupskpi/api/admin/export-debug?year_bh=&amp;table_process=&amp;hospcode=</code>
+              เพื่อตรวจว่าข้อมูลอยู่ source ไหน — ดูทุกตาราง (kpi_results, sub_results, form_*, schemas, export_table) พร้อม sub_indicators relationship
             </div>
             <div class="mt-2 bg-rose-100 rounded-lg p-2 text-xs text-rose-700">
               <i class="fas fa-shield-alt mr-1"></i><b>Check-logic = Export-logic:</b> "ตรวจสอบข้อมูล" ใช้ sameValue (numeric-aware, null/'' = equal) + result=last actual เหมือนกับ export → ตรวจซ้ำโดยไม่แก้อะไร จะได้ "up_to_date" ทุกครั้ง

@@ -4376,8 +4376,6 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                     'SELECT hospcode, month_bh, target_value, actual_value FROM kpi_results WHERE indicator_id = ? AND year_bh = ?',
                     [indicator.id, year_bh]
                 );
-                console.log(`📊 [Export] indicator_id=${indicator.id} (${tableName}) kpi_results → ${results.length} rows (year_bh=${year_bh})`);
-
                 // Build hospcode -> month data map
                 // ⚠️ แปลง '' → null ทันที — ป้องกันบล็อก merge sub_results ภายหลัง (string '' ไม่ใช่ null/undefined)
                 const dataMap = new Map();
@@ -4420,11 +4418,6 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                         WHERE si.indicator_id = ? AND sr.year_bh = ?
                         GROUP BY sr.hospcode
                     `, [indicator.id, year_bh]);
-                    console.log(`📊 [Export] indicator_id=${indicator.id} (${tableName}) sub_results AVG → ${subAgg.length} hospcodes (year_bh=${year_bh})`);
-                    if (subAgg.length > 0) {
-                        const sampleHcs = subAgg.slice(0, 10).map(r => r.hospcode).join(', ');
-                        console.log(`   sample hospcodes: ${sampleHcs}${subAgg.length > 10 ? ` ... +${subAgg.length-10}` : ''}`);
-                    }
 
                     const fmtNum = (v) => {
                         if (v === null || v === undefined) return null;
@@ -4477,11 +4470,6 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                         const params = hasIndId ? [year_bh, indicator.id] : [year_bh];
                         const sql = `SELECT hospcode${monthSelect}, ${dynFieldNames} FROM \`${dynamicTableName}\` WHERE year_bh = ? ${indFilter} ${orderClause}`;
                         const [dynRows] = await conn.query(sql, params);
-                        if (dynRows.length === 0) {
-                            console.log(`ℹ️ [Export] ${dynamicTableName} year_bh=${year_bh} indicator_id=${indicator.id} → 0 rows (ตรวจว่าข้อมูลถูกบันทึกใน table นี้หรือไม่)`);
-                        } else {
-                            console.log(`✓ [Export] ${dynamicTableName} year_bh=${year_bh} indicator_id=${indicator.id} → ${dynRows.length} rows`);
-                        }
                         for (const row of dynRows) {
                             const hc = row.hospcode != null ? String(row.hospcode).trim() : '';
                             if (!hc) continue;
@@ -4575,28 +4563,6 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                     }
 
                     upsertRows.push([hc, year_bh, target, resultVal, ...monthValues, ...dynValues]);
-                }
-
-                console.log(`📋 [Export] indicator_id=${indicator.id} (${tableName}) → dataMap=${dataMap.size} hospcodes / no_actual=${noDataCount} / upsert=${upsertRows.length} (insert=${insertedCount}, update=${updatedCount}, unchanged=${unchangedCount})`);
-                if (dataMap.size > 0) {
-                    // log dataMap details (first 20 hospcodes)
-                    const sample = [...dataMap.entries()].slice(0, 20).map(([hc, d]) => {
-                        const monthVals = months.filter(m => d[m] !== undefined && d[m] !== null && d[m] !== '').map(m => `${m}=${d[m]}`).join(',');
-                        const dynVals = dynFieldKeys.filter(k => d['_dyn_' + k] !== undefined && d['_dyn_' + k] !== null && d['_dyn_' + k] !== '').map(k => `${k}=${d['_dyn_' + k]}`).join(',');
-                        const target = d.target !== undefined && d.target !== null && d.target !== '' ? d.target : '-';
-                        return `${hc}: target=${target} ${monthVals || '(no months)'} ${dynVals ? '| ' + dynVals : ''}`;
-                    });
-                    console.log(`   sample dataMap entries:`);
-                    sample.forEach(s => console.log(`     ${s}`));
-                }
-                if (dataMap.size > 0 && upsertRows.length === 0) {
-                    const skippedHcs = [];
-                    for (const [hc, d] of dataMap) {
-                        if (!hasActualData(d)) skippedHcs.push(hc);
-                    }
-                    if (skippedHcs.length > 0) {
-                        console.log(`   ⚠️ skipped (no actual): ${skippedHcs.slice(0, 20).join(', ')}${skippedHcs.length > 20 ? ` ... +${skippedHcs.length-20}` : ''}`);
-                    }
                 }
 
                 // Batch UPSERT

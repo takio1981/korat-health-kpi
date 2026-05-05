@@ -18,6 +18,23 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.05.05',
+      date: '5 พฤษภาคม 2569',
+      changes: [
+        { type: 'fix', text: 'Export KPI: ส่งออกข้อมูลครบขึ้น — รวม sub_results AVG / form table data / รับ indicator_id IS NULL / รองรับค่า "0" / รับ schema inactive + infer fields จาก SHOW COLUMNS' },
+        { type: 'fix', text: 'Export merge sub_results: empty string ใน kpi_results.actual_value บล็อก override → fix โดยแปลง "" → null + เพิ่ม cur === "" ใน merge condition' },
+        { type: 'fix', text: 'Chart cards (4 cards): สูตรคำนวณใหม่ — ใช้ kpi_summary.last_actual + count-based achievement (ไม่ใช่ SUM ratio)' },
+        { type: 'fix', text: 'Report endpoints (by-indicator/hospital/district/year): achievement_pct = passed/with_target × 100 แทน SUM(actual)/SUM(target)' },
+        { type: 'fix', text: 'kpi-manager step2Summary: NG0100 ExpressionChangedAfterCheckedError — เปลี่ยน getter → property + setInterval poll 1s' },
+        { type: 'fix', text: 'Notifications tab counts: คำนวณ unread + reply + type-based counts จาก array ตรง ๆ + typeOf() trim+lowercase robust' },
+        { type: 'feature', text: 'Endpoint /admin/export-debug ?year_bh=&table_process=&hospcode= (super_admin) — diagnose ข้อมูลในแต่ละ source: kpi_results, sub_results, form_*, schemas, export_table' },
+        { type: 'feature', text: 'kpi-manager: รวม DB Compare + Export → Wizard 2 ขั้น (Phase A schema / Phase B data) — ลดความสับสน' },
+        { type: 'feature', text: 'Step 1 (Report Compare) + Phase A (DB Compare): เพิ่มตัวกรองรายการ (หมวดหมู่หลัก/หน่วยงาน/สถานะ/ล้างตัวกรอง) ให้เหมือน Phase B' },
+        { type: 'improve', text: 'help-public: เพิ่มปุ่ม "กลับหน้า Login" + เมนูหัวข้อ collapsible สำหรับ mobile/tablet + ซ่อน sidebar nav ใน mobile' },
+        { type: 'improve', text: 'Login page redesign: gradient mint→teal→pink + glassmorphism + ThaID/ProviderID buttons (รอ DGA/MOPH credentials)' },
+      ]
+    },
+    {
       version: '2569.05.01',
       date: '1 พฤษภาคม 2569',
       changes: [
