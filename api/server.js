@@ -1856,57 +1856,116 @@ apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
         const queryParams = [year, ...filterParams];
         const hosJoin = needsHosJoin ? 'LEFT JOIN chospital h ON r.hospcode = h.hoscode' : '';
 
-        const kpiSql = `
-            SELECT r.indicator_id, SUM(r.target_value) as total_target, SUM(r.actual_value) as total_actual
-            FROM kpi_results r
-            LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
-            ${hosJoin}
-            WHERE r.year_bh = ? ${whereClause}
-            GROUP BY r.indicator_id
-        `;
-        const [kpiRows] = await db.query(kpiSql, queryParams);
+        // === Card 1: ร้อยละความสำเร็จ KPI ===
+        // ใช้ kpi_summary (มี last_actual = ค่าเดือนล่าสุดที่คีย์) — ไม่ใช่ SUM ทั้งปี
+        // นับ % ของ (indicator × hospcode) ที่ "ผ่านเกณฑ์" คือ last_actual >= target_value (target > 0)
+        // role-based filter — ใช้ s.* (kpi_summary มี dept_id, distid อยู่แล้ว)
+        const summaryWhereClauses = ['s.year_bh = ?'];
+        const summaryParams = [year];
+        if (user.role === 'super_admin') {
+            // เห็นทั้งหมด
+        } else if (user.role === 'admin_ssj') {
+            if (user.deptId != null) { summaryWhereClauses.push('s.dept_id = ?'); summaryParams.push(user.deptId); }
+        } else if (ROLE_SCOPE_DISTRICT.includes(user.role)) {
+            const distid = await getDistrictId(user.hospcode);
+            if (distid) {
+                summaryWhereClauses.push('s.distid = ?'); summaryParams.push(distid);
+                if (user.role === 'user_cup' && user.deptId != null) { summaryWhereClauses.push('s.dept_id = ?'); summaryParams.push(user.deptId); }
+            } else if (user.hospcode) { summaryWhereClauses.push('s.hospcode = ?'); summaryParams.push(user.hospcode); }
+        } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
+            if (user.hospcode) { summaryWhereClauses.push('s.hospcode = ?'); summaryParams.push(user.hospcode); }
+        } else {
+            if (user.hospcode) { summaryWhereClauses.push('s.hospcode = ?'); summaryParams.push(user.hospcode); }
+            if (user.deptId != null) { summaryWhereClauses.push('s.dept_id = ?'); summaryParams.push(user.deptId); }
+        }
+        const summaryWhere = summaryWhereClauses.join(' AND ');
 
-        let passedCount = 0;
-        kpiRows.forEach(row => {
-            if (Number(row.total_target) > 0 && Number(row.total_actual) >= Number(row.total_target)) passedCount++;
-        });
+        const [successRows] = await db.query(`
+            SELECT
+                SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0 THEN 1 ELSE 0 END) AS total_with_target,
+                SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0
+                          AND CAST(NULLIF(s.last_actual,'') AS DECIMAL(20,4)) >= CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4))
+                         THEN 1 ELSE 0 END) AS passed
+            FROM kpi_summary s
+            WHERE ${summaryWhere}
+        `, summaryParams);
+        const totalWithTarget = Number(successRows[0]?.total_with_target || 0);
+        const passedCount = Number(successRows[0]?.passed || 0);
+        const successRate = totalWithTarget > 0 ? ((passedCount / totalWithTarget) * 100).toFixed(1) : 0;
 
-        const successRate = kpiRows.length > 0 ? ((passedCount / kpiRows.length) * 100).toFixed(1) : 0;
-
+        // === Card 2: กลุ่มงานที่บันทึกแล้ว ===
+        // นับ dept_id ที่มีผลงานจริง (actual_value ไม่ว่าง) ใน kpi_results หรือ kpi_sub_results
+        // เทียบกับ dept ทั้งหมดที่มี indicator active ในปีนี้ (ไม่ใช่ count(*) ทั้งตาราง departments)
         const recordedSql = `
             SELECT COUNT(DISTINCT i.dept_id) as recorded_count
             FROM kpi_results r
             JOIN kpi_indicators i ON r.indicator_id = i.id
             ${hosJoin}
-            WHERE r.year_bh = ? ${whereClause}
+            WHERE r.year_bh = ?
+              AND r.actual_value IS NOT NULL AND r.actual_value != ''
+              AND i.dept_id IS NOT NULL
+              ${whereClause}
         `;
         const [recordedRows] = await db.query(recordedSql, queryParams);
+        // นับ dept ที่มาจาก sub-results ด้วย (กรณีตัวชี้วัดที่บันทึกใน kpi_sub_results)
+        const subRecordedSql = `
+            SELECT COUNT(DISTINCT i.dept_id) AS recorded_sub
+            FROM kpi_sub_results sr
+            JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
+            JOIN kpi_indicators i ON si.indicator_id = i.id
+            ${needsHosJoin ? 'LEFT JOIN chospital h ON sr.hospcode = h.hoscode' : ''}
+            WHERE sr.year_bh = ?
+              AND sr.actual_value IS NOT NULL AND sr.actual_value != ''
+              AND i.dept_id IS NOT NULL
+              ${whereClause.replace(/r\.hospcode/g, 'sr.hospcode')}
+        `;
+        const [subRecRows] = await db.query(subRecordedSql, queryParams).catch(() => [[{ recorded_sub: 0 }]]);
+        // รวม dept_id จากทั้ง 2 source — ใช้ Math.max ป้องกันนับซ้ำ (อาจมี dept ที่มีทั้งใน results และ sub_results)
+        const recordedCount = Math.max(Number(recordedRows[0]?.recorded_count || 0), Number(subRecRows[0]?.recorded_sub || 0));
 
-        const [totalDeptRows] = await db.query('SELECT COUNT(*) as total FROM departments');
+        // totalDepts: นับ dept ที่มี active indicator ในปีนี้ (consistent กับ scope)
+        const [totalDeptRows] = await db.query(`
+            SELECT COUNT(DISTINCT i.dept_id) AS total
+            FROM kpi_indicators i
+            WHERE i.is_active = 1 AND i.dept_id IS NOT NULL
+        `);
 
+        // === Card 3: รอการตรวจสอบ ===
+        // นับ distinct (indicator, hospcode) ที่มี Pending row พร้อม actual_value (มีผลงานจริงรอ approve)
         const pendingSql = `
-            SELECT COUNT(*) as pending_count FROM kpi_results r
+            SELECT COUNT(DISTINCT CONCAT(r.indicator_id, '|', r.hospcode)) AS pending_count
+            FROM kpi_results r
             LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
             ${hosJoin}
-            WHERE r.status = 'Pending' AND r.year_bh = ? ${whereClause}
+            WHERE r.status = 'Pending' AND r.year_bh = ?
+              AND r.actual_value IS NOT NULL AND r.actual_value != ''
+              ${whereClause}
         `;
         const [pendingRows] = await db.query(pendingSql, queryParams);
 
-        // === คำนวณอันดับหน่วยบริการ ===
+        // === Card 4: อันดับผลงานระดับจังหวัด ===
+        // ใช้ kpi_summary.last_actual (ค่าเดือนล่าสุด) — ไม่ใช่ raw actual_value ของแต่ละเดือน
         let rank = 0;
         let totalHospitals = 0;
         if (user.hospcode) {
-            // คำนวณ % ผลงานรวมของทุกหน่วยบริการในปีนี้
             const [allHosRows] = await db.query(`
-                SELECT r.hospcode,
-                       CASE WHEN SUM(CASE WHEN r.target_value > 0 THEN 1 ELSE 0 END) = 0 THEN 0
-                            ELSE ROUND(SUM(CASE WHEN r.target_value > 0 AND r.actual_value >= r.target_value THEN 1 ELSE 0 END)
-                                 / SUM(CASE WHEN r.target_value > 0 THEN 1 ELSE 0 END) * 100, 2)
-                       END AS success_pct
-                FROM kpi_results r
-                WHERE r.year_bh = ?
-                GROUP BY r.hospcode
-                ORDER BY success_pct DESC
+                SELECT s.hospcode,
+                    SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0 THEN 1 ELSE 0 END) AS total_with_target,
+                    SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0
+                              AND CAST(NULLIF(s.last_actual,'') AS DECIMAL(20,4)) >= CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4))
+                             THEN 1 ELSE 0 END) AS passed,
+                    CASE WHEN SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0 THEN 1 ELSE 0 END) = 0 THEN 0
+                         ELSE ROUND(
+                            SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0
+                                      AND CAST(NULLIF(s.last_actual,'') AS DECIMAL(20,4)) >= CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4))
+                                     THEN 1 ELSE 0 END)
+                            / SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0 THEN 1 ELSE 0 END) * 100, 2)
+                    END AS success_pct
+                FROM kpi_summary s
+                WHERE s.year_bh = ?
+                GROUP BY s.hospcode
+                HAVING total_with_target > 0
+                ORDER BY success_pct DESC, total_with_target DESC
             `, [year]);
             totalHospitals = allHosRows.length;
             const idx = allHosRows.findIndex(r => r.hospcode === user.hospcode);
@@ -4957,7 +5016,21 @@ apiRouter.get('/report/by-indicator', authenticateToken, async (req, res) => {
                 SUM(CAST(s.aug AS DECIMAL(20,4))) AS aug,
                 SUM(CAST(s.sep AS DECIMAL(20,4))) AS sep,
                 SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) AS total_actual,
-                COUNT(DISTINCT s.hospcode) AS hospital_count
+                COUNT(DISTINCT s.hospcode) AS hospital_count,
+                -- จำนวน hospcode ที่มี target — ใช้เทียบความสำเร็จ
+                SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0 THEN 1 ELSE 0 END) AS hospitals_with_target,
+                -- จำนวน hospcode ที่ผ่านเกณฑ์ (last_actual >= target_value)
+                SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0
+                          AND CAST(NULLIF(s.last_actual,'') AS DECIMAL(20,4)) >= CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4))
+                         THEN 1 ELSE 0 END) AS hospitals_passed,
+                -- % สำเร็จ = passed / with_target × 100
+                CASE WHEN SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0 THEN 1 ELSE 0 END) = 0 THEN 0
+                     ELSE ROUND(
+                        SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0
+                                  AND CAST(NULLIF(s.last_actual,'') AS DECIMAL(20,4)) >= CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4))
+                                 THEN 1 ELSE 0 END)
+                        / SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0 THEN 1 ELSE 0 END) * 100, 2)
+                END AS achievement_pct
             FROM kpi_summary s
             ${whereStr}
             GROUP BY s.indicator_id, s.year_bh
@@ -5015,9 +5088,20 @@ apiRouter.get('/report/by-hospital', authenticateToken, async (req, res) => {
                 COUNT(DISTINCT s.indicator_id) AS indicator_count,
                 SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4))) AS total_target,
                 SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) AS total_actual,
-                CASE WHEN SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4))) > 0
-                     THEN ROUND((SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) / SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4)))) * 100, 2)
-                     ELSE 0 END AS achievement_pct,
+                -- จำนวนตัวชี้วัดที่มี target (ใช้เป็นตัวหารของ % สำเร็จ)
+                SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0 THEN 1 ELSE 0 END) AS indicators_with_target,
+                -- จำนวนตัวชี้วัดที่ผ่านเกณฑ์ (last_actual >= target_value)
+                SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0
+                          AND CAST(NULLIF(s.last_actual,'') AS DECIMAL(20,4)) >= CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4))
+                         THEN 1 ELSE 0 END) AS indicators_passed,
+                -- % สำเร็จ = passed / with_target × 100 (ไม่ใช่ SUM(actual)/SUM(target))
+                CASE WHEN SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0 THEN 1 ELSE 0 END) = 0 THEN 0
+                     ELSE ROUND(
+                        SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0
+                                  AND CAST(NULLIF(s.last_actual,'') AS DECIMAL(20,4)) >= CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4))
+                                 THEN 1 ELSE 0 END)
+                        / SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0 THEN 1 ELSE 0 END) * 100, 2)
+                END AS achievement_pct,
                 SUM(CASE WHEN s.indicator_status = 'Approved' THEN 1 ELSE 0 END) AS approved_count,
                 SUM(s.pending_count) AS pending_count
             FROM kpi_summary s
@@ -5074,9 +5158,18 @@ apiRouter.get('/report/by-district', authenticateToken, async (req, res) => {
                 COUNT(DISTINCT s.indicator_id) AS indicator_count,
                 SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4))) AS total_target,
                 SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) AS total_actual,
-                CASE WHEN SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4))) > 0
-                     THEN ROUND((SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) / SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4)))) * 100, 2)
-                     ELSE 0 END AS achievement_pct
+                -- count-based achievement (ไม่ใช่ SUM ratio)
+                SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0 THEN 1 ELSE 0 END) AS pairs_with_target,
+                SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0
+                          AND CAST(NULLIF(s.last_actual,'') AS DECIMAL(20,4)) >= CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4))
+                         THEN 1 ELSE 0 END) AS pairs_passed,
+                CASE WHEN SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0 THEN 1 ELSE 0 END) = 0 THEN 0
+                     ELSE ROUND(
+                        SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0
+                                  AND CAST(NULLIF(s.last_actual,'') AS DECIMAL(20,4)) >= CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4))
+                                 THEN 1 ELSE 0 END)
+                        / SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0 THEN 1 ELSE 0 END) * 100, 2)
+                END AS achievement_pct
             FROM kpi_summary s
             ${whereStr}
             GROUP BY s.distid, s.year_bh
@@ -5129,9 +5222,18 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
                 COUNT(DISTINCT s.hospcode) AS hospital_count,
                 SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4))) AS total_target,
                 SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) AS total_actual,
-                CASE WHEN SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4))) > 0
-                     THEN ROUND((SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) / SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4)))) * 100, 2)
-                     ELSE 0 END AS achievement_pct,
+                -- count-based achievement (ไม่ใช่ SUM ratio)
+                SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0 THEN 1 ELSE 0 END) AS pairs_with_target,
+                SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0
+                          AND CAST(NULLIF(s.last_actual,'') AS DECIMAL(20,4)) >= CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4))
+                         THEN 1 ELSE 0 END) AS pairs_passed,
+                CASE WHEN SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0 THEN 1 ELSE 0 END) = 0 THEN 0
+                     ELSE ROUND(
+                        SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0
+                                  AND CAST(NULLIF(s.last_actual,'') AS DECIMAL(20,4)) >= CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4))
+                                 THEN 1 ELSE 0 END)
+                        / SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0 THEN 1 ELSE 0 END) * 100, 2)
+                END AS achievement_pct,
                 SUM(CASE WHEN s.indicator_status = 'Approved' THEN 1 ELSE 0 END) AS approved_count,
                 SUM(s.pending_count) AS pending_count
             FROM kpi_summary s
