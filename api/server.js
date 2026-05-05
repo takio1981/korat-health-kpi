@@ -3980,11 +3980,12 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                 if (!isNaN(fa) && !isNaN(fb)) return fa === fb;
                 return String(na) === String(nb);
             };
-            // ข้าม hospcode ที่ไม่มี "ผลงาน" จริง (ต้องมีเดือนใดเดือนหนึ่งที่ actual_value ไม่ว่าง/≠0)
+            // ข้าม hospcode ที่ไม่มี "ผลงาน" จริง (ต้องมีเดือนใดเดือนหนึ่งที่ actual_value ไม่ว่าง)
+            // ยอมรับ "0" เป็นค่าที่ถูกต้อง (เช่น "0 ราย" ใน KPI ผลข้างเคียง)
             const hasActualResult = (d) => {
                 for (const m of months) {
                     const v = d[m];
-                    if (v !== null && v !== undefined && v !== '' && v !== '0') return true;
+                    if (v !== null && v !== undefined && v !== '') return true;
                 }
                 return false;
             };
@@ -4099,9 +4100,33 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
             );
             for (const r of withSubData) validIds.add(r.indicator_id);
 
+            // 3) ตัวชี้วัดที่มีข้อมูลใน dynamic form table (form_<table_process>)
+            //    — กรณี form schema ไม่มี actual_value_field → ข้อมูลไม่ sync เข้า kpi_results
+            //    — ใช้ schema ที่ active เพื่อหา indicator_id ที่มีตาราง form_*
+            for (const ind of allIndicators) {
+                if (validIds.has(ind.id)) continue;
+                if (!ind.table_process) continue;
+                const tp = ind.table_process.trim().replace(/-/g, '_');
+                if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(tp)) continue;
+                const dynTable = 'form_' + tp;
+                try {
+                    const [chk] = await conn.query(
+                        "SELECT COUNT(*) AS cnt FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?",
+                        [dynTable]
+                    );
+                    if (chk[0]?.cnt) {
+                        const [dynRows] = await conn.query(
+                            `SELECT 1 FROM \`${dynTable}\` WHERE year_bh = ? AND indicator_id = ? LIMIT 1`,
+                            [year_bh, ind.id]
+                        );
+                        if (dynRows.length > 0) validIds.add(ind.id);
+                    }
+                } catch (_) { /* skip table check error */ }
+            }
+
             for (const ind of allIndicators) {
                 if (validIds.has(ind.id)) indicators.push(ind);
-                else skipped.push({ id: ind.id, name: ind.kpi_indicators_name, table_process: ind.table_process, reason: 'ไม่มีข้อมูลใน kpi_results / kpi_sub_results' });
+                else skipped.push({ id: ind.id, name: ind.kpi_indicators_name, table_process: ind.table_process, reason: 'ไม่มีข้อมูลใน kpi_results / kpi_sub_results / form_*' });
             }
         }
 
@@ -4246,24 +4271,35 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                 }
 
                 // ดึง dynamic form data (ถ้ามี) → merge เข้า dataMap
+                // ORDER BY month_bh ASC → ค่าจากเดือนล่าสุดจะ overwrite ค่าก่อนหน้า (latest wins)
                 if (dynamicTableName && formFields.length > 0) {
                     const dynFieldNames = formFields.map(f => `\`${f.field_name}\``).join(', ');
                     try {
+                        // ตรวจว่ามีคอลัมน์ month_bh ไหม (ตารางเก่าอาจไม่มี)
+                        const [colCheck] = await conn.query(
+                            "SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'month_bh'",
+                            [dynamicTableName]
+                        );
+                        const hasMonth = (colCheck[0]?.cnt || 0) > 0;
+                        const orderClause = hasMonth ? 'ORDER BY hospcode, month_bh ASC' : '';
+                        const monthSelect = hasMonth ? ', month_bh' : '';
                         const [dynRows] = await conn.query(
-                            `SELECT hospcode, ${dynFieldNames} FROM \`${dynamicTableName}\` WHERE year_bh = ? AND indicator_id = ?`,
+                            `SELECT hospcode${monthSelect}, ${dynFieldNames} FROM \`${dynamicTableName}\` WHERE year_bh = ? AND indicator_id = ? ${orderClause}`,
                             [year_bh, indicator.id]
                         );
                         for (const row of dynRows) {
                             if (!dataMap.has(row.hospcode)) dataMap.set(row.hospcode, {});
                             const entry = dataMap.get(row.hospcode);
                             for (const f of formFields) {
-                                // ถ้ามีหลาย record ต่อ hospcode → ใช้ค่าล่าสุด (อาจ overwrite)
-                                if (row[f.field_name] !== undefined && row[f.field_name] !== null) {
+                                // ค่าล่าสุดต่อ hospcode (เดือนใหญ่สุด overwrite เพราะ ORDER BY ASC)
+                                if (row[f.field_name] !== undefined && row[f.field_name] !== null && row[f.field_name] !== '') {
                                     entry['_dyn_' + f.field_name] = String(row[f.field_name]);
                                 }
                             }
                         }
-                    } catch (e) { /* dynamic table query failed - skip */ }
+                    } catch (e) {
+                        console.error(`⚠️ [Export] ดึง dynamic data ของ ${dynamicTableName} ล้มเหลว:`, e.message);
+                    }
                 }
 
                 // Build upsert rows
@@ -4287,12 +4323,13 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                     for (const r of existingRows) existingDataMap.set(r.hospcode, r);
                 } catch (e) { /* table เพิ่งสร้าง/ไม่มีคอลัมน์ครบ — ถือว่าไม่มี row เดิม */ }
 
-                // ข้าม hospcode ที่ไม่มี "ผลงาน" จริง — ต้องมีเดือนใดเดือนหนึ่งที่ actual_value ไม่ว่าง/≠0
+                // ข้าม hospcode ที่ไม่มี "ผลงาน" จริง — ต้องมีเดือนใดเดือนหนึ่งที่ actual_value ไม่ว่าง
+                // (ยอมรับ "0" เป็นค่าที่ถูกต้อง — เช่น "0 ราย" ในตัวชี้วัดผลข้างเคียง)
                 // หรือมี dynamic form data (กรณีตัวชี้วัดใช้ฟอร์ม) — target อย่างเดียวไม่พอ
                 const hasActualData = (d) => {
                     for (const m of months) {
                         const v = d[m];
-                        if (v !== null && v !== undefined && v !== '' && v !== '0') return true;
+                        if (v !== null && v !== undefined && v !== '') return true;
                     }
                     for (const k of dynFieldKeys) {
                         const v = d['_dyn_' + k];
