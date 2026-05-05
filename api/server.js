@@ -4046,15 +4046,17 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                 [indicator.id, year_bh]
             );
 
-            // Pivot kpi_results
+            // Pivot kpi_results — แปลง '' → null ทันที (กัน block merge sub_results)
             const dataMap = new Map();
             for (const row of kpiRows) {
                 if (!dataMap.has(row.hospcode)) dataMap.set(row.hospcode, {});
                 const entry = dataMap.get(row.hospcode);
                 const mKey = 'm' + String(row.month_bh).padStart(2, '0');
-                entry[mKey] = row.actual_value != null ? String(row.actual_value) : null;
+                const actualVal = row.actual_value;
+                entry[mKey] = (actualVal != null && actualVal !== '') ? String(actualVal) : null;
                 if (String(row.month_bh) === '10') {
-                    entry.target = row.target_value != null ? String(row.target_value) : null;
+                    const targetVal = row.target_value;
+                    entry.target = (targetVal != null && targetVal !== '') ? String(targetVal) : null;
                 }
             }
 
@@ -4087,12 +4089,20 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                     return Number.isInteger(n) ? String(n) : n.toFixed(2);
                 };
                 for (const subRow of subAgg) {
-                    if (!dataMap.has(subRow.hospcode)) dataMap.set(subRow.hospcode, {});
-                    const entry = dataMap.get(subRow.hospcode);
+                    const hc = subRow.hospcode != null ? String(subRow.hospcode).trim() : '';
+                    if (!hc) continue;
+                    if (!dataMap.has(hc)) dataMap.set(hc, {});
+                    const entry = dataMap.get(hc);
                     for (const m of months) {
-                        if ((entry[m] === undefined || entry[m] === null) && subRow[m] !== null) entry[m] = fmt(subRow[m]);
+                        const cur = entry[m];
+                        if ((cur === undefined || cur === null || cur === '') && subRow[m] !== null && subRow[m] !== undefined) {
+                            entry[m] = fmt(subRow[m]);
+                        }
                     }
-                    if ((entry.target === undefined || entry.target === null) && subRow.avg_target !== null) entry.target = fmt(subRow.avg_target);
+                    const curTgt = entry.target;
+                    if ((curTgt === undefined || curTgt === null || curTgt === '') && subRow.avg_target !== null && subRow.avg_target !== undefined) {
+                        entry.target = fmt(subRow.avg_target);
+                    }
                 }
             } catch (_) {}
 
@@ -4369,6 +4379,7 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                 console.log(`📊 [Export] indicator_id=${indicator.id} (${tableName}) kpi_results → ${results.length} rows (year_bh=${year_bh})`);
 
                 // Build hospcode -> month data map
+                // ⚠️ แปลง '' → null ทันที — ป้องกันบล็อก merge sub_results ภายหลัง (string '' ไม่ใช่ null/undefined)
                 const dataMap = new Map();
                 for (const row of results) {
                     const hc = row.hospcode != null ? String(row.hospcode).trim() : '';
@@ -4376,9 +4387,11 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                     if (!dataMap.has(hc)) dataMap.set(hc, {});
                     const entry = dataMap.get(hc);
                     const mKey = 'm' + String(row.month_bh).padStart(2, '0');
-                    entry[mKey] = row.actual_value != null ? String(row.actual_value) : null;
+                    const actualVal = row.actual_value;
+                    entry[mKey] = (actualVal != null && actualVal !== '') ? String(actualVal) : null;
                     if (String(row.month_bh) === '10') {
-                        entry.target = row.target_value != null ? String(row.target_value) : null;
+                        const targetVal = row.target_value;
+                        entry.target = (targetVal != null && targetVal !== '') ? String(targetVal) : null;
                     }
                 }
 
@@ -4426,14 +4439,16 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                         if (!hc) continue;
                         if (!dataMap.has(hc)) dataMap.set(hc, {});
                         const entry = dataMap.get(hc);
-                        // เติม monthly values เฉพาะที่ kpi_results ยังไม่มีข้อมูล
+                        // เติม monthly values เฉพาะที่ kpi_results ยังไม่มีข้อมูล (รวมกรณี '' ด้วย)
                         for (const m of ['m10','m11','m12','m01','m02','m03','m04','m05','m06','m07','m08','m09']) {
-                            if ((entry[m] === undefined || entry[m] === null) && subRow[m] !== null) {
+                            const cur = entry[m];
+                            if ((cur === undefined || cur === null || cur === '') && subRow[m] !== null && subRow[m] !== undefined) {
                                 entry[m] = fmtNum(subRow[m]);
                             }
                         }
-                        // เติม target ถ้ายังไม่มี
-                        if ((entry.target === undefined || entry.target === null) && subRow.avg_target !== null) {
+                        // เติม target ถ้ายังไม่มี (รวมกรณี '' ด้วย)
+                        const curTgt = entry.target;
+                        if ((curTgt === undefined || curTgt === null || curTgt === '') && subRow.avg_target !== null && subRow.avg_target !== undefined) {
                             entry.target = fmtNum(subRow.avg_target);
                         }
                     }
