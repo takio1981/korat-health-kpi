@@ -507,11 +507,27 @@ apiRouter.get('/admin/session-status', authenticateToken, async (req, res) => {
 
 // === Export Debug — ตรวจว่าตัวชี้วัด+hospcode+ปี มีข้อมูลใน source ไหนบ้าง ===
 // GET /admin/export-debug?year_bh=2569&indicator_id=123&hospcode=10888 (super_admin)
+// หรือ ?table_process=excellence_indicator_4_54&hospcode=10888 (หา indicator_id จาก table_process)
 apiRouter.get('/admin/export-debug', authenticateToken, async (req, res) => {
     if (req.user.role !== 'super_admin') return res.status(403).json({ success: false, message: 'super_admin เท่านั้น' });
-    const { year_bh, indicator_id, hospcode } = req.query;
-    if (!year_bh || !indicator_id) return res.status(400).json({ success: false, message: 'year_bh + indicator_id required' });
+    const { year_bh, hospcode, table_process } = req.query;
+    let indicator_id = req.query.indicator_id;
+    if (!year_bh) return res.status(400).json({ success: false, message: 'year_bh required' });
+    if (!indicator_id && !table_process) return res.status(400).json({ success: false, message: 'indicator_id หรือ table_process required' });
     try {
+        // ถ้าใช้ table_process → ค้นหา indicator_id (อาจมีหลายตัว)
+        let indicatorsByTable = [];
+        if (table_process && !indicator_id) {
+            const tp = String(table_process).trim().replace(/-/g, '_');
+            const [rows] = await db.query(
+                'SELECT id, kpi_indicators_name, table_process, dept_id, main_indicator_id, is_active FROM kpi_indicators WHERE table_process = ? OR table_process = ?',
+                [table_process, tp]
+            );
+            indicatorsByTable = rows;
+            if (rows.length === 0) return res.status(404).json({ success: false, message: `ไม่พบ kpi_indicators ที่ table_process = '${table_process}'` });
+            indicator_id = rows[0].id;  // ใช้ตัวแรกเป็น primary
+        }
+
         // Indicator info
         const [indRows] = await db.query(
             'SELECT id, kpi_indicators_name, table_process, dept_id, main_indicator_id, is_active FROM kpi_indicators WHERE id = ?',
@@ -519,6 +535,31 @@ apiRouter.get('/admin/export-debug', authenticateToken, async (req, res) => {
         );
         if (indRows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบ indicator_id นี้' });
         const ind = indRows[0];
+
+        // Sub-indicators ที่ link กับ indicator นี้
+        const [subInds] = await db.query(
+            'SELECT id, sub_indicator_name, sub_indicator_code, is_active FROM kpi_sub_indicators WHERE indicator_id = ? ORDER BY sort_order, id',
+            [indicator_id]
+        );
+        // Sub-indicators ที่ไม่ได้ link (indicator_id = NULL) — เป็น orphan
+        const [orphanSubs] = await db.query(
+            'SELECT id, sub_indicator_name, indicator_id FROM kpi_sub_indicators WHERE indicator_id IS NULL LIMIT 20'
+        );
+        // หา sub_indicator_id ที่มีข้อมูลใน kpi_sub_results สำหรับ hospcode + year นี้
+        const subSummarySql = `
+            SELECT sr.sub_indicator_id, si.sub_indicator_name, si.indicator_id AS sub_indicator_belongs_to,
+                   ki.kpi_indicators_name AS belongs_to_name, ki.table_process AS belongs_to_table,
+                   COUNT(*) AS row_count, MIN(sr.month_bh) AS min_month, MAX(sr.month_bh) AS max_month
+            FROM kpi_sub_results sr
+            LEFT JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
+            LEFT JOIN kpi_indicators ki ON si.indicator_id = ki.id
+            WHERE sr.year_bh = ? ${hospcode ? 'AND sr.hospcode = ?' : ''}
+              AND sr.actual_value IS NOT NULL AND sr.actual_value != ''
+            GROUP BY sr.sub_indicator_id, si.sub_indicator_name, si.indicator_id, ki.kpi_indicators_name, ki.table_process
+            ORDER BY row_count DESC
+        `;
+        const subSummaryParams = hospcode ? [year_bh, hospcode] : [year_bh];
+        const [subSummary] = await db.query(subSummarySql, subSummaryParams);
         const tp = ind.table_process ? ind.table_process.trim().replace(/-/g, '_') : null;
         const dynTable = tp ? 'form_' + tp : null;
 
@@ -588,9 +629,15 @@ apiRouter.get('/admin/export-debug', authenticateToken, async (req, res) => {
 
         res.json({
             success: true,
+            query: { indicator_id, table_process: table_process || ind.table_process, year_bh, hospcode: hospcode || '(all)' },
             indicator: ind,
-            year_bh,
-            hospcode: hospcode || '(all)',
+            indicators_with_same_table_process: indicatorsByTable.length > 1 ? indicatorsByTable : undefined,
+            sub_indicators: { count: subInds.length, list: subInds },
+            kpi_sub_results_summary: {
+                hint: 'แต่ละ sub_indicator_id แสดงว่า belong กับ indicator ไหน (ดู belongs_to_name) — ถ้าไม่ตรงกับ indicator ที่ query → ข้อมูลนั้นไม่ใช่ของ indicator นี้',
+                rows: subSummary
+            },
+            orphan_sub_indicators: { count: orphanSubs.length, list: orphanSubs, hint: 'sub_indicator ที่ indicator_id IS NULL → ไม่ link กับ indicator ใด → export จะไม่เห็น' },
             kpi_results: { count: kpiResults.length, rows: kpiResults },
             kpi_sub_results: { count: subResults.length, rows: subResults },
             form_table: formData,
@@ -4319,12 +4366,15 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                     'SELECT hospcode, month_bh, target_value, actual_value FROM kpi_results WHERE indicator_id = ? AND year_bh = ?',
                     [indicator.id, year_bh]
                 );
+                console.log(`📊 [Export] indicator_id=${indicator.id} (${tableName}) kpi_results → ${results.length} rows (year_bh=${year_bh})`);
 
                 // Build hospcode -> month data map
                 const dataMap = new Map();
                 for (const row of results) {
-                    if (!dataMap.has(row.hospcode)) dataMap.set(row.hospcode, {});
-                    const entry = dataMap.get(row.hospcode);
+                    const hc = row.hospcode != null ? String(row.hospcode).trim() : '';
+                    if (!hc) continue;
+                    if (!dataMap.has(hc)) dataMap.set(hc, {});
+                    const entry = dataMap.get(hc);
                     const mKey = 'm' + String(row.month_bh).padStart(2, '0');
                     entry[mKey] = row.actual_value != null ? String(row.actual_value) : null;
                     if (String(row.month_bh) === '10') {
@@ -4357,6 +4407,11 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                         WHERE si.indicator_id = ? AND sr.year_bh = ?
                         GROUP BY sr.hospcode
                     `, [indicator.id, year_bh]);
+                    console.log(`📊 [Export] indicator_id=${indicator.id} (${tableName}) sub_results AVG → ${subAgg.length} hospcodes (year_bh=${year_bh})`);
+                    if (subAgg.length > 0) {
+                        const sampleHcs = subAgg.slice(0, 10).map(r => r.hospcode).join(', ');
+                        console.log(`   sample hospcodes: ${sampleHcs}${subAgg.length > 10 ? ` ... +${subAgg.length-10}` : ''}`);
+                    }
 
                     const fmtNum = (v) => {
                         if (v === null || v === undefined) return null;
@@ -4367,8 +4422,10 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                     };
 
                     for (const subRow of subAgg) {
-                        if (!dataMap.has(subRow.hospcode)) dataMap.set(subRow.hospcode, {});
-                        const entry = dataMap.get(subRow.hospcode);
+                        const hc = subRow.hospcode != null ? String(subRow.hospcode).trim() : '';
+                        if (!hc) continue;
+                        if (!dataMap.has(hc)) dataMap.set(hc, {});
+                        const entry = dataMap.get(hc);
                         // เติม monthly values เฉพาะที่ kpi_results ยังไม่มีข้อมูล
                         for (const m of ['m10','m11','m12','m01','m02','m03','m04','m05','m06','m07','m08','m09']) {
                             if ((entry[m] === undefined || entry[m] === null) && subRow[m] !== null) {
@@ -4503,6 +4560,17 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                     }
 
                     upsertRows.push([hc, year_bh, target, resultVal, ...monthValues, ...dynValues]);
+                }
+
+                console.log(`📋 [Export] indicator_id=${indicator.id} (${tableName}) → dataMap=${dataMap.size} hospcodes / no_actual=${noDataCount} / upsert=${upsertRows.length} (insert=${insertedCount}, update=${updatedCount}, unchanged=${unchangedCount})`);
+                if (dataMap.size > 0 && upsertRows.length === 0) {
+                    const skippedHcs = [];
+                    for (const [hc, d] of dataMap) {
+                        if (!hasActualData(d)) skippedHcs.push(hc);
+                    }
+                    if (skippedHcs.length > 0) {
+                        console.log(`   ⚠️ skipped (no actual): ${skippedHcs.slice(0, 20).join(', ')}${skippedHcs.length > 20 ? ` ... +${skippedHcs.length-20}` : ''}`);
+                    }
                 }
 
                 // Batch UPSERT
