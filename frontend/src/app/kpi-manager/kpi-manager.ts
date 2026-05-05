@@ -1,4 +1,4 @@
-import { Component, OnInit, AfterViewInit, inject, ChangeDetectorRef, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, inject, ChangeDetectorRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -17,7 +17,7 @@ type WizardStep = 1 | 2;
   imports: [CommonModule, FormsModule, DbCompareComponent, FormBuilderComponent, ExportKpiComponent, ReportCompareComponent],
   templateUrl: './kpi-manager.html'
 })
-export class KpiManagerComponent implements OnInit, AfterViewInit {
+export class KpiManagerComponent implements OnInit, AfterViewInit, OnDestroy {
   private authService = inject(AuthService);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
@@ -54,25 +54,47 @@ export class KpiManagerComponent implements OnInit, AfterViewInit {
       }
       this.cdr.detectChanges();
     }, 0);
+    // เริ่ม polling เพื่อ refresh step summary จาก sub-components
+    this.startSummaryPolling();
   }
 
-  // === Step status (auto-detect จาก state ของ sub-components) ===
-  get step1Done(): boolean { return !!this.reportCmp?.compareResult; }
-  // step 2 done = ทำ phase A (DB compare) **หรือ** phase B (export) ก็ถือว่าเริ่มแล้ว
-  get step2Done(): boolean { return !!this.dbCmp?.compareResult || !!this.exportCmp?.exportResult; }
+  // === Step status — เก็บใน property แทน getter เพื่อกัน NG0100 (ExpressionChanged...AfterChecked) ===
+  step1Done: boolean = false;
+  step2Done: boolean = false;
+  step1Summary: string = 'ยังไม่ได้เปรียบเทียบ';
+  step2Summary: string = 'ยังไม่ได้ดำเนินการ';
 
-  get step1Summary(): string {
+  private summaryPollHandle: any = null;
+  private startSummaryPolling() {
+    // Poll ทุก 1 วินาที — refresh status จาก sub-components
+    if (this.summaryPollHandle) return;
+    this.summaryPollHandle = setInterval(() => this.refreshStepStatus(), 1000);
+  }
+  private refreshStepStatus() {
     const r = this.reportCmp?.compareResult?.summary;
-    if (!r) return 'ยังไม่ได้เปรียบเทียบ';
-    return `ตรงกัน ${r.match} | ต่างกัน ${r.different} | ไม่มีใน Local ${r.missing_local}`;
-  }
-  get step2Summary(): string {
+    const newStep1Done = !!this.reportCmp?.compareResult;
+    const newStep1Summary = r ? `ตรงกัน ${r.match} | ต่างกัน ${r.different} | ไม่มีใน Local ${r.missing_local}` : 'ยังไม่ได้เปรียบเทียบ';
+
     const dbR = this.dbCmp?.compareResult?.summary;
     const expR = this.exportCmp?.exportResult?.summary;
+    const newStep2Done = !!this.dbCmp?.compareResult || !!this.exportCmp?.exportResult;
     const parts: string[] = [];
     if (dbR) parts.push(`Schema: ตรง ${dbR.match} | ต่าง ${dbR.different}`);
     if (expR) parts.push(`Export: เพิ่ม ${expR.inserted} | อัปเดต ${expR.updated}`);
-    return parts.length === 0 ? 'ยังไม่ได้ดำเนินการ' : parts.join(' • ');
+    const newStep2Summary = parts.length === 0 ? 'ยังไม่ได้ดำเนินการ' : parts.join(' • ');
+
+    if (newStep1Done !== this.step1Done || newStep1Summary !== this.step1Summary
+      || newStep2Done !== this.step2Done || newStep2Summary !== this.step2Summary) {
+      this.step1Done = newStep1Done;
+      this.step1Summary = newStep1Summary;
+      this.step2Done = newStep2Done;
+      this.step2Summary = newStep2Summary;
+      this.cdr.detectChanges();
+    }
+  }
+
+  ngOnDestroy() {
+    if (this.summaryPollHandle) clearInterval(this.summaryPollHandle);
   }
 
   // === Navigation ===

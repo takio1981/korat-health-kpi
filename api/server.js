@@ -4563,6 +4563,17 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                 }
 
                 console.log(`📋 [Export] indicator_id=${indicator.id} (${tableName}) → dataMap=${dataMap.size} hospcodes / no_actual=${noDataCount} / upsert=${upsertRows.length} (insert=${insertedCount}, update=${updatedCount}, unchanged=${unchangedCount})`);
+                if (dataMap.size > 0) {
+                    // log dataMap details (first 20 hospcodes)
+                    const sample = [...dataMap.entries()].slice(0, 20).map(([hc, d]) => {
+                        const monthVals = months.filter(m => d[m] !== undefined && d[m] !== null && d[m] !== '').map(m => `${m}=${d[m]}`).join(',');
+                        const dynVals = dynFieldKeys.filter(k => d['_dyn_' + k] !== undefined && d['_dyn_' + k] !== null && d['_dyn_' + k] !== '').map(k => `${k}=${d['_dyn_' + k]}`).join(',');
+                        const target = d.target !== undefined && d.target !== null && d.target !== '' ? d.target : '-';
+                        return `${hc}: target=${target} ${monthVals || '(no months)'} ${dynVals ? '| ' + dynVals : ''}`;
+                    });
+                    console.log(`   sample dataMap entries:`);
+                    sample.forEach(s => console.log(`     ${s}`));
+                }
                 if (dataMap.size > 0 && upsertRows.length === 0) {
                     const skippedHcs = [];
                     for (const [hc, d] of dataMap) {
