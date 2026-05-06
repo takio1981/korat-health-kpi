@@ -37,6 +37,9 @@ export class AuditLogComponent implements OnInit {
   isAdmin: boolean = false;
   isSuperAdmin: boolean = false;
 
+  // === Dashboard summary (collapsible) ===
+  showDashboard: boolean = true;
+
   ngOnInit() {
     const role = this.authService.getUserRole();
     this.isAdmin = role === 'admin_ssj' || role === 'super_admin';
@@ -197,5 +200,56 @@ export class AuditLogComponent implements OnInit {
       REPLY: 'ตอบกลับ'
     };
     return labels[type] || type;
+  }
+
+  // === Dashboard summary getters ===
+  // ใช้ this.logs (ทั้งหมด) ไม่ใช่ filteredLogs — สถิติคงเดิมไม่ขึ้นกับตัวกรอง
+  get totalLogs(): number {
+    return this.logs.length;
+  }
+
+  get todayLogs(): number {
+    const today = new Date().toISOString().slice(0, 10);
+    return this.logs.filter(l => l.created_at && String(l.created_at).slice(0, 10) === today).length;
+  }
+
+  get last7DaysLogs(): number {
+    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    return this.logs.filter(l => l.created_at && String(l.created_at).slice(0, 10) >= cutoff).length;
+  }
+
+  get countByAction(): { [key: string]: number } {
+    const counts: { [key: string]: number } = { INSERT: 0, UPDATE: 0, DELETE: 0, APPROVE: 0, REJECT: 0, REPLY: 0 };
+    for (const l of this.logs) {
+      const a = l.action_type;
+      if (a && counts[a] !== undefined) counts[a]++;
+    }
+    return counts;
+  }
+
+  get topUsers(): { username: string; count: number }[] {
+    const userCounts: { [key: string]: number } = {};
+    for (const l of this.logs) {
+      const u = l.username || '(ไม่ระบุ)';
+      userCounts[u] = (userCounts[u] || 0) + 1;
+    }
+    return Object.entries(userCounts)
+      .map(([username, count]) => ({ username, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }
+
+  get distinctUserCount(): number {
+    const set = new Set<string>();
+    for (const l of this.logs) {
+      if (l.username) set.add(l.username);
+    }
+    return set.size;
+  }
+
+  // คลิกการ์ดเพื่อ filter ตาม action
+  filterByAction(action: string) {
+    this.selectedAction = this.selectedAction === action ? '' : action;
+    this.applyFilters();
   }
 }

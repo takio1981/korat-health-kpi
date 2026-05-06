@@ -1,4 +1,147 @@
 <div class="p-6">
+  <!-- ========== Dashboard Summary (collapsible) ========== -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-4 overflow-hidden">
+    <button (click)="showDashboard = !showDashboard"
+            class="w-full px-5 py-3 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-purple-50 hover:from-indigo-100 hover:to-purple-100 transition-colors">
+      <span class="flex items-center gap-2 font-bold text-gray-700 text-sm">
+        <i class="fas fa-chart-pie text-indigo-600"></i>
+        สรุปประวัติการใช้งาน (Dashboard)
+        <span class="ml-2 text-xs text-gray-400 font-normal">รวม {{ totalLogs }} รายการ จาก {{ distinctUserCount }} ผู้ใช้</span>
+      </span>
+      <i class="fas text-gray-400 transition-transform" [ngClass]="showDashboard ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+    </button>
+
+    <div *ngIf="showDashboard" class="p-4 sm:p-5 space-y-4">
+      <!-- Row 1: Time-based stats (4 cards) -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <button (click)="selectedAction=''; searchTerm=''; applyFilters()"
+                class="bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl shadow-md p-3 text-left text-white hover:shadow-lg transition-all">
+          <div class="flex items-center gap-2 mb-1"><i class="fas fa-database text-lg"></i><span class="text-[10px] uppercase font-bold opacity-90">ทั้งหมด</span></div>
+          <p class="text-2xl font-bold">{{ totalLogs }}</p>
+          <p class="text-[10px] opacity-80">รายการ</p>
+        </button>
+
+        <div class="bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-xl shadow-md p-3 text-white">
+          <div class="flex items-center gap-2 mb-1"><i class="fas fa-clock text-lg"></i><span class="text-[10px] uppercase font-bold opacity-90">วันนี้</span></div>
+          <p class="text-2xl font-bold">{{ todayLogs }}</p>
+          <p class="text-[10px] opacity-80">รายการ</p>
+        </div>
+
+        <div class="bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl shadow-md p-3 text-white">
+          <div class="flex items-center gap-2 mb-1"><i class="fas fa-calendar-week text-lg"></i><span class="text-[10px] uppercase font-bold opacity-90">7 วันล่าสุด</span></div>
+          <p class="text-2xl font-bold">{{ last7DaysLogs }}</p>
+          <p class="text-[10px] opacity-80">รายการ</p>
+        </div>
+
+        <div class="bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl shadow-md p-3 text-white">
+          <div class="flex items-center gap-2 mb-1"><i class="fas fa-users text-lg"></i><span class="text-[10px] uppercase font-bold opacity-90">ผู้ใช้</span></div>
+          <p class="text-2xl font-bold">{{ distinctUserCount }}</p>
+          <p class="text-[10px] opacity-80">คน (ที่มีกิจกรรม)</p>
+        </div>
+      </div>
+
+      <!-- Row 2: Action breakdown (6 cards, click to filter) -->
+      <div>
+        <p class="text-xs font-bold text-gray-500 uppercase mb-2"><i class="fas fa-filter mr-1"></i>แยกตามประเภทการกระทำ (คลิกเพื่อกรอง)</p>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+          <button (click)="filterByAction('INSERT')"
+                  class="rounded-xl border-2 p-3 text-left transition-all"
+                  [ngClass]="selectedAction === 'INSERT' ? 'border-green-500 bg-green-50 ring-2 ring-green-200' : 'border-gray-200 bg-white hover:border-green-300 hover:bg-green-50/50'">
+            <div class="flex items-center justify-between mb-1">
+              <i class="fas fa-plus-circle text-green-600"></i>
+              <span class="text-[10px] text-gray-400 uppercase font-bold">เพิ่ม</span>
+            </div>
+            <p class="text-xl font-bold text-green-700">{{ countByAction['INSERT'] || 0 }}</p>
+          </button>
+
+          <button (click)="filterByAction('UPDATE')"
+                  class="rounded-xl border-2 p-3 text-left transition-all"
+                  [ngClass]="selectedAction === 'UPDATE' ? 'border-yellow-500 bg-yellow-50 ring-2 ring-yellow-200' : 'border-gray-200 bg-white hover:border-yellow-300 hover:bg-yellow-50/50'">
+            <div class="flex items-center justify-between mb-1">
+              <i class="fas fa-edit text-yellow-600"></i>
+              <span class="text-[10px] text-gray-400 uppercase font-bold">แก้ไข</span>
+            </div>
+            <p class="text-xl font-bold text-yellow-700">{{ countByAction['UPDATE'] || 0 }}</p>
+          </button>
+
+          <button (click)="filterByAction('DELETE')"
+                  class="rounded-xl border-2 p-3 text-left transition-all"
+                  [ngClass]="selectedAction === 'DELETE' ? 'border-red-500 bg-red-50 ring-2 ring-red-200' : 'border-gray-200 bg-white hover:border-red-300 hover:bg-red-50/50'">
+            <div class="flex items-center justify-between mb-1">
+              <i class="fas fa-trash-alt text-red-600"></i>
+              <span class="text-[10px] text-gray-400 uppercase font-bold">ลบ</span>
+            </div>
+            <p class="text-xl font-bold text-red-700">{{ countByAction['DELETE'] || 0 }}</p>
+          </button>
+
+          <button (click)="filterByAction('APPROVE')"
+                  class="rounded-xl border-2 p-3 text-left transition-all"
+                  [ngClass]="selectedAction === 'APPROVE' ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-200' : 'border-gray-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/50'">
+            <div class="flex items-center justify-between mb-1">
+              <i class="fas fa-check-circle text-emerald-600"></i>
+              <span class="text-[10px] text-gray-400 uppercase font-bold">อนุมัติ</span>
+            </div>
+            <p class="text-xl font-bold text-emerald-700">{{ countByAction['APPROVE'] || 0 }}</p>
+          </button>
+
+          <button (click)="filterByAction('REJECT')"
+                  class="rounded-xl border-2 p-3 text-left transition-all"
+                  [ngClass]="selectedAction === 'REJECT' ? 'border-rose-500 bg-rose-50 ring-2 ring-rose-200' : 'border-gray-200 bg-white hover:border-rose-300 hover:bg-rose-50/50'">
+            <div class="flex items-center justify-between mb-1">
+              <i class="fas fa-undo-alt text-rose-600"></i>
+              <span class="text-[10px] text-gray-400 uppercase font-bold">ตีกลับ</span>
+            </div>
+            <p class="text-xl font-bold text-rose-700">{{ countByAction['REJECT'] || 0 }}</p>
+          </button>
+
+          <button (click)="filterByAction('REPLY')"
+                  class="rounded-xl border-2 p-3 text-left transition-all"
+                  [ngClass]="selectedAction === 'REPLY' ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-200' : 'border-gray-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/50'">
+            <div class="flex items-center justify-between mb-1">
+              <i class="fas fa-reply text-indigo-600"></i>
+              <span class="text-[10px] text-gray-400 uppercase font-bold">ตอบกลับ</span>
+            </div>
+            <p class="text-xl font-bold text-indigo-700">{{ countByAction['REPLY'] || 0 }}</p>
+          </button>
+        </div>
+      </div>
+
+      <!-- Row 3: Top users -->
+      <div *ngIf="topUsers.length > 0">
+        <p class="text-xs font-bold text-gray-500 uppercase mb-2"><i class="fas fa-trophy text-amber-500 mr-1"></i>Top 5 ผู้ใช้ที่มีกิจกรรมมากที่สุด</p>
+        <div class="grid grid-cols-1 sm:grid-cols-5 gap-2">
+          <button *ngFor="let u of topUsers; let i = index" (click)="searchTerm = u.username; applyFilters()"
+                  class="rounded-xl border border-gray-200 hover:border-indigo-400 bg-white hover:bg-indigo-50/50 p-3 text-left transition-all">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="w-5 h-5 rounded-full text-white text-[10px] font-bold flex items-center justify-center"
+                    [ngClass]="i === 0 ? 'bg-amber-500' : i === 1 ? 'bg-gray-400' : i === 2 ? 'bg-orange-400' : 'bg-gray-300'">
+                {{ i + 1 }}
+              </span>
+              <p class="text-xs font-bold text-gray-700 truncate" [title]="u.username">{{ u.username }}</p>
+            </div>
+            <p class="text-lg font-bold text-indigo-600">{{ u.count }}</p>
+            <p class="text-[10px] text-gray-400">รายการ</p>
+          </button>
+        </div>
+      </div>
+
+      <!-- Active filter indicator -->
+      <div *ngIf="selectedAction || searchTerm" class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-700 flex items-center justify-between">
+        <span>
+          <i class="fas fa-filter mr-1"></i>
+          กำลังกรอง:
+          <b *ngIf="selectedAction" class="ml-1">{{ getActionLabel(selectedAction) }}</b>
+          <b *ngIf="searchTerm" class="ml-1">"{{ searchTerm }}"</b>
+          — แสดง {{ filteredLogs.length }} จาก {{ totalLogs }} รายการ
+        </span>
+        <button (click)="selectedAction=''; searchTerm=''; applyFilters()"
+                class="px-2 py-1 bg-white hover:bg-blue-100 border border-blue-200 rounded-lg font-bold">
+          <i class="fas fa-times mr-1"></i>ล้างตัวกรอง
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
 
     <!-- Search + Filter -->
