@@ -130,13 +130,20 @@ export class ReportComponent implements OnInit {
         if (res.success) {
           this.reportData = res.data;
           // แปลงค่าให้ปลอดภัย (รองรับข้อความ)
+          // _display field: int → ไม่มีทศนิยม / float → ปัด 2 ตำแหน่ง (กันค่ายาว เช่น 77.77777778)
+          const formatDisplay = (v: any): string => {
+            if (v === null || v === undefined || v === '') return '';
+            const n = parseFloat(v);
+            if (isNaN(n)) return String(v);
+            return Number.isInteger(n) ? String(n) : n.toFixed(2);
+          };
           const numMonths = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may_val', 'jun', 'jul', 'aug', 'sep'];
           this.reportData.forEach((item: any) => {
-            item._target_display = item.target_value != null ? String(item.target_value) : '';
+            item._target_display = formatDisplay(item.target_value);
             item.target_value = parseFloat(item.target_value) || 0;
             item.total_actual = parseFloat(item.total_actual) || parseFloat(item.last_actual) || 0;
             numMonths.forEach(m => {
-              item['_' + m + '_display'] = item[m] != null ? String(item[m]) : '';
+              item['_' + m + '_display'] = formatDisplay(item[m]);
               item[m] = parseFloat(item[m]) || 0;
             });
           });
