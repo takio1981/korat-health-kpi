@@ -3723,10 +3723,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  // Cache: raw string → parsed array (เพื่อ stable reference กัน NG0103 infinite CD)
+  private _parsedOptionsCache = new Map<string, any[]>();
   parseFieldOptions(raw: any): any[] {
     if (Array.isArray(raw)) return raw;
     if (!raw) return [];
-    try { return JSON.parse(raw); } catch { return []; }
+    const key = String(raw);
+    const cached = this._parsedOptionsCache.get(key);
+    if (cached) return cached;
+    let result: any[] = [];
+    try { result = JSON.parse(key); if (!Array.isArray(result)) result = []; } catch { result = []; }
+    this._parsedOptionsCache.set(key, result);
+    return result;
   }
 
   closeDynamicForm() {
