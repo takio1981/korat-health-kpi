@@ -6028,13 +6028,17 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
                 schema_id INT NOT NULL,
                 field_name VARCHAR(100) NOT NULL,
                 field_label VARCHAR(200) NOT NULL,
-                field_type ENUM('text','number','textarea','select','date','checkbox') DEFAULT 'text',
+                field_type ENUM('text','number','textarea','select','date','checkbox','score_option') DEFAULT 'text',
                 field_options TEXT NULL,
                 is_required TINYINT(1) DEFAULT 0,
                 sort_order INT DEFAULT 0,
                 FOREIGN KEY (schema_id) REFERENCES kpi_form_schemas(id) ON DELETE CASCADE
             )
         `);
+        // ขยาย ENUM field_type ให้รองรับ score_option (สำหรับ table เก่า)
+        try {
+            await db.query(`ALTER TABLE kpi_form_fields MODIFY COLUMN field_type ENUM('text','number','textarea','select','date','checkbox','score_option') DEFAULT 'text'`);
+        } catch (e) { /* may already match */ }
         // เพิ่ม table_process ใน kpi_indicators ถ้ายังไม่มี
         try {
             await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS table_process VARCHAR(100) NULL`);
