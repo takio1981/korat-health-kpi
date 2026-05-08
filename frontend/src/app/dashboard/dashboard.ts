@@ -253,6 +253,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
   dynamicDataList: any[] = [];
   availableYears: string[] = [];
 
+  // 12-month table state (form tab)
+  dynamicMonthlyRows: { [month: number]: any } = {};   // month_bh → row data
+  dynamicMonthlyOriginal: { [month: number]: any } = {}; // snapshot ก่อน edit
+  dynamicEditMode: boolean = false;
+  dynamicBatchProgress: number = 0;
+  dynamicBatchTotal: number = 0;
+
   stats: any = {
     successRate: 0,
     recordedCount: 0,
@@ -3459,6 +3466,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.dynamicDataList = [];
     this.dynamicFormSchema = null;
     this.dynamicFormUsedMonths = [];
+    this.dynamicMonthlyRows = {};
+    this.dynamicMonthlyOriginal = {};
+    this.dynamicEditMode = false;
     // สร้าง availableYears (ปีงบฯ ± 2 ปีปัจจุบัน)
     const currentYear = new Date().getFullYear() + 543;
     this.availableYears = [
@@ -3474,7 +3484,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
         if (res.success && res.data) {
           this.dynamicFormSchema = res.data;
           this.showDynamicFormModal = true;
-          // โหลดเดือนที่คีย์ไปแล้ว
+          // โหลดข้อมูลรายเดือนทั้ง 12 เดือน + เดือนที่คีย์ไปแล้ว
+          this.loadDynamicMonthlyRows();
           this.loadDynamicFormUsedMonths();
           this.cdr.detectChanges();
         } else {
@@ -3483,6 +3494,87 @@ export class DashboardComponent implements OnInit, OnDestroy {
       },
       error: () => Swal.fire('ผิดพลาด', 'ไม่สามารถโหลดแบบฟอร์มได้', 'error')
     });
+  }
+
+  // โหลดข้อมูล 12 เดือน (year+hospcode+indicator) → map by month_bh
+  loadDynamicMonthlyRows() {
+    if (!this.dynamicFormSchema?.table_process) return;
+    this.isDynamicDataLoading = true;
+    const params: any = {
+      hospcode: this.dynamicFormData.hospcode || this.dynamicFormItem.hospcode,
+      year_bh: this.dynamicFormData.year_bh,
+      indicator_id: this.dynamicFormItem.indicator_id
+    };
+    this.authService.getDynamicData(this.dynamicFormSchema.table_process, params).subscribe({
+      next: (res) => {
+        this.isDynamicDataLoading = false;
+        const rowsByMonth: { [m: number]: any } = {};
+        if (res.success && Array.isArray(res.data)) {
+          for (const row of res.data) {
+            const m = Number(row.month_bh);
+            if (m >= 1 && m <= 12) rowsByMonth[m] = { ...row };
+          }
+          this.dynamicDataList = res.data;
+        }
+        // เติม placeholder เปล่าให้ครบทุกเดือน
+        for (const m of this.subMonthColumns) {
+          if (!rowsByMonth[m]) rowsByMonth[m] = {};
+        }
+        this.dynamicMonthlyRows = rowsByMonth;
+        this.cdr.detectChanges();
+      },
+      error: () => { this.isDynamicDataLoading = false; this.cdr.detectChanges(); }
+    });
+  }
+
+  toggleDynamicEditMode() {
+    if (this.dynamicEditMode) {
+      // กำลังออกจาก edit → discard changes (ถ้าไม่ได้ save)
+      this.dynamicMonthlyRows = JSON.parse(JSON.stringify(this.dynamicMonthlyOriginal));
+      this.dynamicEditMode = false;
+    } else {
+      // เข้า edit mode → snapshot
+      this.dynamicMonthlyOriginal = JSON.parse(JSON.stringify(this.dynamicMonthlyRows));
+      this.dynamicEditMode = true;
+    }
+    this.cdr.detectChanges();
+  }
+
+  // ตรวจว่าแถวเดือน m มีการกรอกค่าใด ๆ
+  hasMonthlyRowData(m: number): boolean {
+    const row = this.dynamicMonthlyRows[m] || {};
+    return (this.dynamicFormSchema?.fields || []).some((f: any) => {
+      const v = row[f.field_name];
+      return v !== undefined && v !== null && String(v).trim() !== '';
+    });
+  }
+
+  // เปรียบเทียบกับ snapshot — แถวนี้มีการเปลี่ยนแปลงไหม?
+  isMonthlyRowChanged(m: number): boolean {
+    const cur = this.dynamicMonthlyRows[m] || {};
+    const old = (this.dynamicMonthlyOriginal[m] || {}) as any;
+    return (this.dynamicFormSchema?.fields || []).some((f: any) => {
+      const a = cur[f.field_name] ?? '';
+      const b = old[f.field_name] ?? '';
+      return String(a) !== String(b);
+    });
+  }
+
+  // คำนวณ % สำหรับ score_option field — แสดงในตาราง
+  getScoreOptionPct(field: any, value: any): number | null {
+    if (!value) return null;
+    const opts = this.parseFieldOptions(field.field_options);
+    const match = opts.find((o: any) => (typeof o === 'object' ? String(o.label) : String(o)) === String(value));
+    if (match && typeof match === 'object' && match.percentage != null) {
+      const n = Number(match.percentage);
+      return isNaN(n) ? null : n;
+    }
+    return null;
+  }
+
+  // option labels เฉพาะ score_option → array of {label, percentage}
+  getScoreOptions(field: any): any[] {
+    return this.parseFieldOptions(field.field_options);
   }
 
   switchDynamicFormTab(tab: 'form' | 'list') {
@@ -3524,37 +3616,71 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  saveDynamicFormData() {
+  // Batch save: ส่งเฉพาะแถวที่มีการเปลี่ยนแปลง — ทีละเดือน
+  async saveDynamicFormData() {
     if (!this.dynamicFormSchema?.table_process) return;
-    // ตรวจสอบฟิลด์บังคับ
-    const missingFields = (this.dynamicFormSchema.fields || [])
-      .filter((f: any) => f.is_required && !this.dynamicFormData[f.field_name]);
-    if (missingFields.length > 0) {
-      Swal.fire('ข้อมูลไม่ครบ', `กรุณากรอก: ${missingFields.map((f: any) => f.field_label).join(', ')}`, 'warning');
+    const fields = this.dynamicFormSchema.fields || [];
+    const changedMonths = this.subMonthColumns.filter(m => this.isMonthlyRowChanged(m));
+    if (changedMonths.length === 0) {
+      Swal.fire({ icon: 'info', title: 'ไม่มีการเปลี่ยนแปลง', timer: 1500, showConfirmButton: false });
       return;
     }
-    this.isDynamicFormSaving = true;
-    const payload = { ...this.dynamicFormData };
-    this.authService.saveDynamicData(this.dynamicFormSchema.table_process, payload).subscribe({
-      next: (res) => {
-        this.isDynamicFormSaving = false;
-        if (res.success) {
-          Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', timer: 1500, showConfirmButton: false });
-          this.resetDynamicForm();
-          this.loadDynamicFormUsedMonths(); // อัปเดตเดือนที่คีย์แล้ว
-          this.loadDynamicDataList();        // โหลดรายการเสมอ (ให้พร้อมเมื่อ user สลับไป tab "ดูรายการ")
-          this.loadKpiData(true);            // silent reload dashboard data to reflect synced values
-        } else {
-          Swal.fire('ผิดพลาด', res.message, 'error');
-        }
-        this.cdr.detectChanges();
-      },
-      error: (e: HttpErrorResponse) => {
-        this.isDynamicFormSaving = false;
-        Swal.fire('ผิดพลาด', e.error?.message || 'เกิดข้อผิดพลาด', 'error');
-        this.cdr.detectChanges();
+    // ตรวจ required สำหรับแถวที่กรอกข้อมูล
+    for (const m of changedMonths) {
+      const row = this.dynamicMonthlyRows[m] || {};
+      const hasAny = fields.some((f: any) => {
+        const v = row[f.field_name];
+        return v !== undefined && v !== null && String(v).trim() !== '';
+      });
+      if (!hasAny) continue;
+      const missing = fields.filter((f: any) => f.is_required && (row[f.field_name] === undefined || row[f.field_name] === null || String(row[f.field_name]).trim() === ''));
+      if (missing.length > 0) {
+        Swal.fire('ข้อมูลไม่ครบ', `เดือน ${this.subMonthLabels[m]}: กรุณากรอก ${missing.map((f: any) => f.field_label).join(', ')}`, 'warning');
+        return;
       }
-    });
+    }
+
+    this.isDynamicFormSaving = true;
+    this.dynamicBatchTotal = changedMonths.length;
+    this.dynamicBatchProgress = 0;
+    const errors: string[] = [];
+
+    for (const m of changedMonths) {
+      const row = this.dynamicMonthlyRows[m] || {};
+      const payload: any = {
+        ...row,
+        year_bh: this.dynamicFormData.year_bh,
+        hospcode: this.dynamicFormData.hospcode,
+        indicator_id: this.dynamicFormData.indicator_id,
+        month_bh: m
+      };
+      try {
+        const res: any = await this.authService.saveDynamicData(this.dynamicFormSchema.table_process, payload).toPromise();
+        if (res?.success) {
+          this.dynamicBatchProgress++;
+          if (res.id && !payload.id) {
+            this.dynamicMonthlyRows[m].id = res.id;
+          }
+        } else {
+          errors.push(`${this.subMonthLabels[m]}: ${res?.message || 'ไม่ทราบสาเหตุ'}`);
+        }
+      } catch (e: any) {
+        errors.push(`${this.subMonthLabels[m]}: ${e?.error?.message || e?.message || 'เกิดข้อผิดพลาด'}`);
+      }
+      this.cdr.detectChanges();
+    }
+
+    this.isDynamicFormSaving = false;
+    if (errors.length === 0) {
+      Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', text: `บันทึก ${changedMonths.length} เดือน`, timer: 2000, showConfirmButton: false });
+      this.dynamicEditMode = false;
+      this.dynamicMonthlyOriginal = JSON.parse(JSON.stringify(this.dynamicMonthlyRows));
+      this.loadDynamicFormUsedMonths();
+      this.loadKpiData(true);
+    } else {
+      Swal.fire('บันทึกไม่ครบ', `สำเร็จ ${this.dynamicBatchProgress}/${changedMonths.length} เดือน\n\n${errors.join('\n')}`, 'warning');
+    }
+    this.cdr.detectChanges();
   }
 
   resetDynamicForm() {
@@ -3565,8 +3691,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   editDynamicRow(row: any) {
-    this.dynamicFormData = { ...row };
+    // กลับไปแท็บ form (ตาราง 12 เดือน) — ข้อมูลของ row จะอยู่ที่ dynamicMonthlyRows[row.month_bh] อยู่แล้ว
     this.dynamicFormTab = 'form';
+    if (!this.dynamicEditMode) this.toggleDynamicEditMode();
     this.cdr.detectChanges();
   }
 
@@ -3587,6 +3714,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
             if (res.success) {
               Swal.fire({ icon: 'success', title: 'ลบเรียบร้อย', timer: 1200, showConfirmButton: false });
               this.loadDynamicDataList();
+              this.loadDynamicMonthlyRows();
+              this.loadDynamicFormUsedMonths();
             }
           }
         });
@@ -3594,7 +3723,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  parseFieldOptions(raw: any): string[] {
+  parseFieldOptions(raw: any): any[] {
     if (Array.isArray(raw)) return raw;
     if (!raw) return [];
     try { return JSON.parse(raw); } catch { return []; }
@@ -3606,5 +3735,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.dynamicFormSchema = null;
     this.dynamicFormData = {};
     this.dynamicDataList = [];
+    this.dynamicMonthlyRows = {};
+    this.dynamicMonthlyOriginal = {};
+    this.dynamicEditMode = false;
+  }
+
+  // เมื่อเปลี่ยนปีงบฯ → reload ข้อมูลรายเดือน
+  onDynamicYearChange() {
+    if (this.dynamicEditMode) {
+      Swal.fire({ icon: 'warning', title: 'อยู่ในโหมดแก้ไข', text: 'กรุณาบันทึกหรือยกเลิกแก้ไขก่อนเปลี่ยนปีงบฯ', timer: 2500, showConfirmButton: false });
+      return;
+    }
+    this.loadDynamicMonthlyRows();
+    this.loadDynamicFormUsedMonths();
   }
 }

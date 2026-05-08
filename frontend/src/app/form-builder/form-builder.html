@@ -286,7 +286,7 @@
                     </div>
                     <div>
                       <label class="block text-xs font-bold text-gray-600 mb-1">ประเภทข้อมูล</label>
-                      <select [(ngModel)]="field.field_type"
+                      <select [(ngModel)]="field.field_type" (ngModelChange)="onFieldTypeChange(field)"
                               class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-green-400 bg-white">
                         @for (t of fieldTypeOptions; track t.value) {
                           <option [value]="t.value">{{ t.label }}</option>
@@ -308,6 +308,33 @@
                       <textarea [(ngModel)]="field._optionsText" (ngModelChange)="onOptionsTextChange(field)"
                                 rows="3" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-green-400 resize-none"
                                 placeholder="ตัวเลือก 1&#10;ตัวเลือก 2&#10;ตัวเลือก 3"></textarea>
+                    </div>
+                  }
+
+                  @if (field.field_type === 'score_option') {
+                    <div class="mt-3">
+                      <label class="block text-xs font-bold text-gray-600 mb-1">
+                        ตัวเลือกพร้อม % <small class="font-normal text-gray-400">(รูปแบบ: <code class="bg-gray-100 px-1 rounded">ป้าย = ค่า %</code> ต่อบรรทัด)</small>
+                      </label>
+                      <textarea [(ngModel)]="field._optionsText" (ngModelChange)="onOptionsTextChange(field)"
+                                rows="4" class="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400 resize-none font-mono"
+                                placeholder="ดีมาก = 100&#10;ดี = 80&#10;พอใช้ = 60&#10;ปรับปรุง = 40"></textarea>
+                      <div class="mt-1 text-[10px] text-purple-600">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        ระบบจะบันทึกทั้งป้าย (label) และค่า % ลงคอลัมน์ <code>{{ field.field_name || 'fieldName' }}</code> + <code>{{ field.field_name || 'fieldName' }}_pct</code>
+                      </div>
+                      @if (field.field_options && field.field_options.length > 0) {
+                        <div class="mt-2 flex flex-wrap gap-1">
+                          @for (opt of field.field_options; track $index) {
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-purple-50 text-purple-700 border border-purple-200">
+                              {{ opt.label || opt }}
+                              @if (opt.percentage != null) {
+                                <span class="font-bold">{{ opt.percentage }}%</span>
+                              }
+                            </span>
+                          }
+                        </div>
+                      }
                     </div>
                   }
                 </div>

@@ -1650,10 +1650,17 @@ apiRouter.post('/form-schemas', authenticateToken, isSuperAdmin, async (req, res
         const formTableName = 'form_' + tableProcess;
         const reservedFields = withDefaults ? ['id','hospcode','year_bh','month_bh','created_by','created_at','updated_at'] : ['id','created_at','updated_at'];
         const customCols = fields.filter(f => !reservedFields.includes(f.field_name));
-        let colDefs = customCols.map(f => {
-            const sqlType = f.field_type === 'number' ? 'DECIMAL(15,4) NULL' : 'TEXT NULL';
-            return `\`${f.field_name}\` ${sqlType}`;
-        }).join(', ');
+        // map field_type → SQL type
+        const sqlTypeOf = (ft) => ft === 'number' ? 'DECIMAL(15,4) NULL'
+                                : ft === 'score_option' ? 'VARCHAR(255) NULL'
+                                : 'TEXT NULL';
+        let colDefs = customCols.map(f => `\`${f.field_name}\` ${sqlTypeOf(f.field_type)}`).join(', ');
+        // เพิ่มคอลัมน์ <field>_pct สำหรับ field_type='score_option' (เก็บ % คะแนนของตัวเลือกที่ผู้ใช้เลือก)
+        const pctCols = customCols.filter(f => f.field_type === 'score_option');
+        if (pctCols.length > 0) {
+            const pctDefs = pctCols.map(f => `\`${f.field_name}_pct\` DECIMAL(10,2) NULL`).join(', ');
+            colDefs = colDefs ? `${colDefs}, ${pctDefs}` : pctDefs;
+        }
         if (colDefs) colDefs = ', ' + colDefs;
 
         if (withDefaults) {
@@ -1685,9 +1692,14 @@ apiRouter.post('/form-schemas', authenticateToken, isSuperAdmin, async (req, res
         // เพิ่มคอลัมน์ใหม่ที่ยังไม่มี (ALTER TABLE ADD COLUMN IF NOT EXISTS)
         for (const f of customCols) {
             try {
-                const sqlType = f.field_type === 'number' ? 'DECIMAL(15,4) NULL' : 'TEXT NULL';
-                await connection.query(`ALTER TABLE \`${formTableName}\` ADD COLUMN IF NOT EXISTS \`${f.field_name}\` ${sqlType}`);
+                await connection.query(`ALTER TABLE \`${formTableName}\` ADD COLUMN IF NOT EXISTS \`${f.field_name}\` ${sqlTypeOf(f.field_type)}`);
             } catch (e) { /* ignore */ }
+            // ALTER เพิ่ม <field>_pct สำหรับ score_option
+            if (f.field_type === 'score_option') {
+                try {
+                    await connection.query(`ALTER TABLE \`${formTableName}\` ADD COLUMN IF NOT EXISTS \`${f.field_name}_pct\` DECIMAL(10,2) NULL`);
+                } catch (e) { /* ignore */ }
+            }
         }
         await connection.query(
             'INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
@@ -1862,6 +1874,34 @@ apiRouter.post('/dynamic-data/:table_name', authenticateToken, async (req, res) 
             return res.status(404).json({ success: false, message: `ไม่พบตาราง ${formTable} — กรุณาสร้างแบบฟอร์มก่อน` });
         }
         const tableCols = new Map(colInfo.map(c => [(c.COLUMN_NAME || c.column_name), (c.DATA_TYPE || c.data_type || '').toLowerCase()]));
+
+        // === Auto-compute <field>_pct สำหรับ score_option ===
+        // อ่าน schema fields ของ indicator เพื่อหาว่า field ไหนเป็น score_option
+        if (data.indicator_id) {
+            const [scOptionFields] = await connection.query(
+                `SELECT ff.field_name, ff.field_options
+                 FROM kpi_form_fields ff
+                 JOIN kpi_form_schemas fs ON ff.schema_id = fs.id
+                 WHERE fs.indicator_id = ? AND ff.field_type = 'score_option'
+                 ORDER BY fs.is_active DESC, fs.id DESC`,
+                [data.indicator_id]
+            );
+            for (const f of scOptionFields) {
+                const fname = f.field_name;
+                const pctCol = fname + '_pct';
+                if (!tableCols.has(pctCol)) continue;  // ตารางยังไม่มีคอลัมน์ _pct → ข้าม
+                const selectedLabel = data[fname];
+                if (selectedLabel == null || selectedLabel === '') continue;
+                let opts = [];
+                try { opts = JSON.parse(f.field_options || '[]'); } catch (_) { opts = []; }
+                // หา option ที่ตรงกับ label ที่ผู้ใช้เลือก → set _pct
+                const match = opts.find(o => (o.label != null ? String(o.label) : String(o)) === String(selectedLabel));
+                if (match) {
+                    const pct = match.percentage != null ? Number(match.percentage) : null;
+                    if (pct !== null && !isNaN(pct)) data[pctCol] = pct;
+                }
+            }
+        }
 
         // กรอง: เฉพาะ key ที่ valid + เป็นคอลัมน์จริงในตาราง + ไม่ใช่ id (auto-increment)
         const cols = Object.keys(data).filter(k => isValidIdentifier(k) && tableCols.has(k) && k !== 'id');

@@ -224,6 +224,24 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - Dashboard filter `indicator_off_type`: SQL `(i.evaluation_mode='all_required' OR i.required_off_types LIKE '%"CODE"%')`
 - Dashboard badge: `evaluation_mode='all_required'` → "ทุกประเภท" (purple) | `'any_one'` + codes → ชื่อประเภท (cyan)
 
+### Form Builder Field Types
+- 7 ประเภท: text / number / textarea / select / score_option / date / checkbox
+- **score_option** (ตัวเลือกพร้อม %) — กำหนดป้าย + ค่า% per option:
+  - Editor format: `ป้าย = % per บรรทัด` (เช่น `ดีมาก = 100\nดี = 80\nพอใช้ = 60`)
+  - Storage: `field_options` JSON `[{label: "ดีมาก", percentage: 100}, ...]`
+  - Backend `saveFormSchema`: สร้าง column `<field>_pct DECIMAL(10,2)` เพิ่ม + ALTER TABLE เมื่อแก้ schema
+  - Backend `POST /dynamic-data`: อ่าน schema → match selected label → auto-set `<field>_pct` ก่อน INSERT/UPDATE
+- **select** (legacy) — string array, ไม่มี % column
+
+### Dashboard Dynamic Form Modal (12-month table)
+- Modal เปิดจากปุ่ม `fa-clipboard-list` ใน dashboard row → ตาราง **12 เดือน × N ฟิลด์**
+- Layout เหมือน sub-result modal: sticky thead + col เดือนซ้าย + cells เป็น input ตาม field_type
+- โหมดดูอย่างเดียว ↔ แก้ไข (ปุ่ม "แก้ไขข้อมูลรายเดือน")
+- Batch save: ส่ง POST /dynamic-data เฉพาะเดือนที่เปลี่ยน (snapshot vs current) + แสดง progress N/12
+- score_option cell: dropdown แสดง "label (X%)" + แสดง `= X%` ใต้ dropdown หลังเลือก
+- แถวที่มีข้อมูลแล้ว: เดือนสีม่วง + check icon เขียว
+- Tab "ข้อมูลที่บันทึก" (list view) ยังอยู่เป็น history fallback
+
 ### Sub-Indicators (ตัวชี้วัดย่อย)
 - `kpi_sub_indicators` — metadata ของตัวชี้วัดย่อย (FK → kpi_indicators.id, CASCADE delete)
 - `kpi_sub_results` — ผลงานย่อย per hospcode×month (UNIQUE: sub+year+hospcode+month)

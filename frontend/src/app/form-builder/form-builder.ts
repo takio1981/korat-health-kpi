@@ -9,8 +9,9 @@ interface FormField {
   id?: number;
   field_name: string;
   field_label: string;
-  field_type: 'text' | 'number' | 'textarea' | 'select' | 'date' | 'checkbox';
-  field_options: string[];
+  field_type: 'text' | 'number' | 'textarea' | 'select' | 'date' | 'checkbox' | 'score_option';
+  // field_options: select → string[] | score_option → {label, percentage}[]
+  field_options: any[];
   is_required: boolean;
   sort_order: number;
   _optionsText?: string;
@@ -60,9 +61,10 @@ export class FormBuilderComponent implements OnInit, OnChanges {
 
   fieldTypeOptions = [
     { value: 'text', label: 'ข้อความสั้น' },
-    { value: 'number', label: 'ตัวเลข' },
+    { value: 'number', label: 'ตัวเลข (คะแนน)' },
     { value: 'textarea', label: 'ข้อความยาว' },
     { value: 'select', label: 'รายการเลือก (Dropdown)' },
+    { value: 'score_option', label: 'ตัวเลือกพร้อม % (เช่น ดีมาก=100)' },
     { value: 'date', label: 'วันที่' },
     { value: 'checkbox', label: 'ช่องเลือก (Checkbox)' },
   ];
@@ -138,11 +140,14 @@ export class FormBuilderComponent implements OnInit, OnChanges {
             this.formTitle = res.data.form_title;
             this.formDescription = res.data.form_description || '';
             this.actualValueField = res.data.actual_value_field || '';
-            this.fields = (res.data.fields || []).map((f: any) => ({
-              ...f,
-              field_options: f.field_options ? this.parseOptions(f.field_options) : [],
-              _optionsText: f.field_options ? this.parseOptions(f.field_options).join('\n') : ''
-            }));
+            this.fields = (res.data.fields || []).map((f: any) => {
+              const opts = f.field_options ? this.parseOptions(f.field_options) : [];
+              return {
+                ...f,
+                field_options: opts,
+                _optionsText: this.optionsToText(opts, f.field_type)
+              };
+            });
           }
           this.showBuilderModal = true;
           this.cdr.detectChanges();
@@ -155,11 +160,28 @@ export class FormBuilderComponent implements OnInit, OnChanges {
     }
   }
 
-  parseOptions(raw: string): string[] {
+  parseOptions(raw: string): any[] {
     try {
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed) ? parsed : [];
     } catch { return []; }
+  }
+
+  // แปลง field_options → text (สำหรับแสดงใน textarea)
+  // - select: "label1\nlabel2\n..."
+  // - score_option: "ดีมาก = 100\nดี = 80\n..."
+  optionsToText(opts: any[], fieldType: string): string {
+    if (!opts || opts.length === 0) return '';
+    if (fieldType === 'score_option') {
+      return opts.map(o => {
+        if (typeof o === 'object' && o !== null) {
+          return `${o.label || ''} = ${o.percentage != null ? o.percentage : ''}`;
+        }
+        return String(o);
+      }).join('\n');
+    }
+    // select / อื่นๆ: ถ้า object → แสดง label, ถ้า string → as-is
+    return opts.map(o => (typeof o === 'object' && o !== null) ? (o.label || '') : String(o)).join('\n');
   }
 
   addField() {
@@ -185,7 +207,30 @@ export class FormBuilderComponent implements OnInit, OnChanges {
   }
 
   onOptionsTextChange(field: FormField) {
-    field.field_options = (field._optionsText || '').split('\n').map(s => s.trim()).filter(Boolean);
+    const lines = (field._optionsText || '').split('\n').map(s => s.trim()).filter(Boolean);
+    if (field.field_type === 'score_option') {
+      field.field_options = lines.map(line => {
+        const m = line.match(/^(.+?)\s*=\s*(.+)$/);
+        if (m) {
+          const label = m[1].trim();
+          const pct = parseFloat(m[2].trim());
+          return { label, percentage: isNaN(pct) ? null : pct };
+        }
+        return { label: line, percentage: null };
+      });
+    } else {
+      field.field_options = lines;
+    }
+  }
+
+  onFieldTypeChange(field: FormField) {
+    // เมื่อสลับ type ระหว่าง select <-> score_option ให้แปลง options เดิมให้สอดคล้อง
+    if (field._optionsText) {
+      this.onOptionsTextChange(field);
+    } else if (Array.isArray(field.field_options) && field.field_options.length > 0) {
+      field._optionsText = this.optionsToText(field.field_options, field.field_type);
+      this.onOptionsTextChange(field);
+    }
   }
 
   autoFieldName(field: FormField) {

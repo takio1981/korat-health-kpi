@@ -18,6 +18,16 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.05.08',
+      date: '8 พฤษภาคม 2569',
+      changes: [
+        { type: 'feature', text: 'Form Builder: เพิ่ม field type "ตัวเลือกพร้อม %" (score_option) — กำหนดป้าย+ค่า% เช่น "ดีมาก = 100" → backend สร้างคอลัมน์ <field>_pct DECIMAL อัตโนมัติ + auto-compute เมื่อบันทึก' },
+        { type: 'feature', text: 'Dashboard Dynamic Form Modal redesign — ตาราง 12 เดือน × N ฟิลด์ (เหมือนหน้าตัวชี้วัดย่อย) แทนกรอกทีละเดือน + batch save (ส่งเฉพาะเดือนที่เปลี่ยน)' },
+        { type: 'improve', text: 'Form Builder: parse "label = percentage" จาก textarea → JSON array {label, percentage} อัตโนมัติ + แสดง preview chips' },
+        { type: 'improve', text: 'Dashboard form modal: โหมดดูอย่างเดียว/แก้ไข + sticky thead + แถวเหลืองเมื่อมีการเปลี่ยนแปลง + check icon เดือนที่มีข้อมูลแล้ว' },
+      ]
+    },
+    {
       version: '2569.05.05',
       date: '5 พฤษภาคม 2569',
       changes: [
