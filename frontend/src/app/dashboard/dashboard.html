@@ -1373,70 +1373,86 @@
         <div class="animate-spin rounded-full h-8 w-8 border-t-4 border-purple-600"></div>
       </div>
 
-      <!-- ตาราง 12 เดือน × N ฟิลด์ -->
+      <!-- ตาราง 12 เดือน × N ฟิลด์ — single-row layout เดือนละ 1 บรรทัด -->
       <div *ngIf="!isDynamicDataLoading" class="border border-gray-200 rounded-xl overflow-auto max-h-[60vh]">
-        <table class="w-full text-xs">
+        <table class="w-full text-sm">
           <thead class="bg-purple-700 text-white sticky top-0 z-10">
             <tr>
-              <th class="px-3 py-2 text-center sticky left-0 bg-purple-800 z-20 w-20">เดือน</th>
-              <th *ngFor="let field of dynamicFormSchema?.fields || []" class="px-2 py-2 text-left min-w-[140px]">
+              <th class="px-3 py-2.5 text-center sticky left-0 bg-purple-800 z-20 w-24">เดือน</th>
+              <th class="px-3 py-2.5 text-center w-12">สถานะ</th>
+              <th *ngFor="let field of dynamicFormSchema?.fields || []" class="px-3 py-2.5 text-left min-w-[200px]">
                 {{ field.field_label }}
                 <span *ngIf="field.is_required" class="text-red-300 ml-0.5">*</span>
-                <span *ngIf="field.field_type === 'score_option'" class="ml-1 text-[9px] bg-white/20 px-1 rounded">+%</span>
+                <span *ngIf="field.field_type === 'score_option'" class="ml-1 text-[10px] bg-white/20 px-1.5 py-0.5 rounded">+%</span>
               </th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
-            <tr *ngFor="let m of subMonthColumns" class="hover:bg-purple-50/30"
-                [class.bg-yellow-50]="dynamicEditMode && isMonthlyRowChanged(m)">
-              <td class="px-3 py-1.5 text-center sticky left-0 bg-white z-10 border-r border-gray-200 font-bold"
-                  [ngClass]="hasMonthlyRowData(m) ? 'text-purple-700' : 'text-gray-400'">
-                {{ subMonthLabels[m] }}
-                <i *ngIf="hasMonthlyRowData(m)" class="fas fa-check-circle text-emerald-500 text-[10px] ml-1" title="มีข้อมูล"></i>
+            <tr *ngFor="let m of subMonthColumns" class="hover:bg-purple-50/30 transition-colors"
+                [class.bg-yellow-50]="dynamicEditMode && isMonthlyRowChanged(m)"
+                [class.bg-emerald-50/40]="!dynamicEditMode && hasMonthlyRowData(m)">
+              <!-- เดือน (sticky left) -->
+              <td class="px-3 py-2 text-center sticky left-0 z-10 border-r border-gray-200 font-bold whitespace-nowrap"
+                  [ngClass]="dynamicEditMode && isMonthlyRowChanged(m) ? 'bg-yellow-50' : (hasMonthlyRowData(m) && !dynamicEditMode ? 'bg-emerald-50/60' : 'bg-white')">
+                <span [ngClass]="hasMonthlyRowData(m) ? 'text-purple-700' : 'text-gray-400'">
+                  {{ subMonthLabels[m] }}
+                </span>
               </td>
-              <td *ngFor="let field of dynamicFormSchema?.fields || []" class="px-1 py-1">
-                <!-- text / number / date -->
+              <!-- สถานะ -->
+              <td class="px-2 py-2 text-center">
+                <i *ngIf="hasMonthlyRowData(m)" class="fas fa-check-circle text-emerald-500 text-base" title="มีข้อมูลแล้ว"></i>
+                <i *ngIf="!hasMonthlyRowData(m)" class="far fa-circle text-gray-300 text-base" title="ยังไม่มีข้อมูล"></i>
+              </td>
+              <!-- ฟิลด์ทั้งหมด — แต่ละช่องอยู่ในบรรทัดเดียว -->
+              <td *ngFor="let field of dynamicFormSchema?.fields || []" class="px-2 py-1.5 align-middle">
+                <!-- text / number / date — single-line input -->
                 <input *ngIf="['text','number','date'].includes(field.field_type)"
                        [type]="field.field_type" [(ngModel)]="dynamicMonthlyRows[m][field.field_name]"
                        [readonly]="!dynamicEditMode"
-                       class="w-full px-2 py-1 border rounded text-xs"
-                       [ngClass]="dynamicEditMode ? 'border-purple-200 focus:border-purple-500 focus:ring-1 focus:ring-purple-400' : 'border-gray-100 bg-gray-50 text-gray-700 cursor-not-allowed'">
-                <!-- textarea -->
+                       [placeholder]="dynamicEditMode ? ('กรอก ' + field.field_label) : ''"
+                       class="w-full px-3 py-1.5 border rounded-lg text-sm transition-all"
+                       [ngClass]="dynamicEditMode ? 'border-purple-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-300 bg-white' : 'border-gray-100 bg-gray-50 text-gray-700 cursor-not-allowed'">
+                <!-- textarea — auto height แต่ rows=1 default -->
                 <textarea *ngIf="field.field_type === 'textarea'"
-                          [(ngModel)]="dynamicMonthlyRows[m][field.field_name]" rows="2"
+                          [(ngModel)]="dynamicMonthlyRows[m][field.field_name]" rows="1"
                           [readonly]="!dynamicEditMode"
-                          class="w-full px-2 py-1 border rounded text-xs resize-none"
-                          [ngClass]="dynamicEditMode ? 'border-purple-200 focus:border-purple-500' : 'border-gray-100 bg-gray-50 text-gray-700 cursor-not-allowed'"></textarea>
+                          [placeholder]="dynamicEditMode ? ('กรอก ' + field.field_label) : ''"
+                          class="w-full px-3 py-1.5 border rounded-lg text-sm resize-y min-h-[34px]"
+                          [ngClass]="dynamicEditMode ? 'border-purple-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-300 bg-white' : 'border-gray-100 bg-gray-50 text-gray-700 cursor-not-allowed'"></textarea>
                 <!-- select (legacy) -->
                 <select *ngIf="field.field_type === 'select'"
                         [(ngModel)]="dynamicMonthlyRows[m][field.field_name]"
                         [disabled]="!dynamicEditMode"
-                        class="w-full px-2 py-1 border rounded text-xs bg-white"
-                        [ngClass]="dynamicEditMode ? 'border-purple-200 focus:border-purple-500' : 'border-gray-100 bg-gray-50 text-gray-700 cursor-not-allowed'">
+                        class="w-full px-3 py-1.5 border rounded-lg text-sm bg-white"
+                        [ngClass]="dynamicEditMode ? 'border-purple-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-300' : 'border-gray-100 bg-gray-50 text-gray-700 cursor-not-allowed'">
                   <option value="">-- เลือก --</option>
                   <option *ngFor="let opt of parseFieldOptions(field.field_options)" [value]="opt">{{ opt }}</option>
                 </select>
-                <!-- score_option: dropdown + show % -->
-                <div *ngIf="field.field_type === 'score_option'" class="flex flex-col gap-0.5">
+                <!-- score_option: dropdown + % inline (one row) -->
+                <div *ngIf="field.field_type === 'score_option'" class="flex items-center gap-2">
                   <select [(ngModel)]="dynamicMonthlyRows[m][field.field_name]"
                           [disabled]="!dynamicEditMode"
-                          class="w-full px-2 py-1 border rounded text-xs bg-white"
-                          [ngClass]="dynamicEditMode ? 'border-purple-200 focus:border-purple-500' : 'border-gray-100 bg-gray-50 text-gray-700 cursor-not-allowed'">
+                          class="flex-1 px-3 py-1.5 border rounded-lg text-sm bg-white"
+                          [ngClass]="dynamicEditMode ? 'border-purple-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-300' : 'border-gray-100 bg-gray-50 text-gray-700 cursor-not-allowed'">
                     <option value="">-- เลือก --</option>
                     <option *ngFor="let opt of getScoreOptions(field)" [value]="opt.label || opt">
                       {{ opt.label || opt }}<span *ngIf="opt.percentage != null"> ({{ opt.percentage }}%)</span>
                     </option>
                   </select>
-                  <span *ngIf="dynamicMonthlyRows[m][field.field_name] && getScoreOptionPct(field, dynamicMonthlyRows[m][field.field_name]) != null"
-                        class="text-[10px] text-purple-600 font-bold text-center">
-                    = {{ getScoreOptionPct(field, dynamicMonthlyRows[m][field.field_name]) }}%
+                  <span class="inline-flex items-center justify-center min-w-[56px] px-2 py-1 rounded-lg text-xs font-bold whitespace-nowrap"
+                        [ngClass]="dynamicMonthlyRows[m][field.field_name] && getScoreOptionPct(field, dynamicMonthlyRows[m][field.field_name]) != null
+                                    ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                                    : 'bg-gray-100 text-gray-400 border border-gray-200'">
+                    {{ dynamicMonthlyRows[m][field.field_name] && getScoreOptionPct(field, dynamicMonthlyRows[m][field.field_name]) != null
+                        ? getScoreOptionPct(field, dynamicMonthlyRows[m][field.field_name]) + '%'
+                        : '—' }}
                   </span>
                 </div>
                 <!-- checkbox -->
-                <div *ngIf="field.field_type === 'checkbox'" class="flex items-center justify-center">
+                <div *ngIf="field.field_type === 'checkbox'" class="flex items-center justify-center h-[34px]">
                   <input type="checkbox" [(ngModel)]="dynamicMonthlyRows[m][field.field_name]"
                          [disabled]="!dynamicEditMode"
-                         class="rounded text-purple-600 focus:ring-purple-400">
+                         class="w-5 h-5 rounded text-purple-600 focus:ring-purple-400">
                 </div>
               </td>
             </tr>
