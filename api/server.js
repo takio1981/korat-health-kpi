@@ -1830,9 +1830,34 @@ apiRouter.post('/dynamic-data/:table_name', authenticateToken, async (req, res) 
     try {
         await connection.beginTransaction();
 
-        const cols = Object.keys(data).filter(k => isValidIdentifier(k));
-        const vals = cols.map(k => data[k]);
+        // === Validate: ดึง columns จริงของตาราง form แล้วกรองเฉพาะ field ที่มีอยู่ ===
+        // กัน "Unknown column" error เมื่อ frontend ส่ง field ที่ schema เพิ่งเพิ่มแต่ตารางยังไม่ ALTER
+        const [colInfo] = await connection.query(
+            "SELECT COLUMN_NAME, DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?",
+            [formTable]
+        );
+        if (colInfo.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({ success: false, message: `ไม่พบตาราง ${formTable} — กรุณาสร้างแบบฟอร์มก่อน` });
+        }
+        const tableCols = new Map(colInfo.map(c => [(c.COLUMN_NAME || c.column_name), (c.DATA_TYPE || c.data_type || '').toLowerCase()]));
+
+        // กรอง: เฉพาะ key ที่ valid + เป็นคอลัมน์จริงในตาราง + ไม่ใช่ id (auto-increment)
+        const cols = Object.keys(data).filter(k => isValidIdentifier(k) && tableCols.has(k) && k !== 'id');
+        // แปลง '' → null สำหรับคอลัมน์ตัวเลข (DECIMAL/INT/FLOAT/DOUBLE) กัน MySQL error
+        const numericTypes = new Set(['decimal', 'int', 'integer', 'bigint', 'smallint', 'tinyint', 'mediumint', 'float', 'double']);
+        const vals = cols.map(k => {
+            const v = data[k];
+            const dt = tableCols.get(k);
+            if ((v === '' || v === undefined) && numericTypes.has(dt)) return null;
+            return v === undefined ? null : v;
+        });
         let insertedId = rowId;
+
+        if (cols.length === 0) {
+            await connection.rollback();
+            return res.status(400).json({ success: false, message: 'ไม่มีข้อมูลที่บันทึกได้ (ฟิลด์ที่ส่งมาไม่ตรงกับโครงสร้างตาราง)' });
+        }
 
         if (isUpdate) {
             const setClauses = cols.map(c => `\`${c}\` = ?`).join(', ');
@@ -1881,7 +1906,14 @@ apiRouter.post('/dynamic-data/:table_name', authenticateToken, async (req, res) 
         res.json({ success: true, message: isUpdate ? 'อัปเดตข้อมูลเรียบร้อยแล้ว' : 'บันทึกข้อมูลเรียบร้อยแล้ว', id: insertedId });
     } catch (e) {
         await connection.rollback();
-        res.status(500).json({ success: false, message: e.message });
+        console.error(`❌ [dynamic-data] ${formTable} POST error:`, e.code || '', e.message);
+        // map MySQL error → ข้อความเข้าใจง่าย
+        let userMsg = e.message;
+        if (e.code === 'ER_BAD_FIELD_ERROR') userMsg = 'มีฟิลด์ที่ไม่ตรงกับโครงสร้างตาราง — กรุณาแจ้ง admin ให้ปรับแบบฟอร์ม';
+        else if (e.code === 'ER_TRUNCATED_WRONG_VALUE' || e.code === 'ER_DATA_TOO_LONG') userMsg = 'ข้อมูลที่กรอกไม่ถูกต้องหรือยาวเกินกำหนด — กรุณาตรวจสอบ';
+        else if (e.code === 'ER_BAD_NULL_ERROR') userMsg = 'มีฟิลด์ที่จำเป็นต้องกรอก — กรุณาตรวจสอบ';
+        else if (e.code === 'ER_NO_SUCH_TABLE') userMsg = 'ไม่พบตารางในฐานข้อมูล — กรุณาสร้างแบบฟอร์มก่อน';
+        res.status(500).json({ success: false, message: userMsg, code: e.code });
     } finally { connection.release(); }
 });
 
