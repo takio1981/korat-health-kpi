@@ -1715,20 +1715,41 @@ apiRouter.get('/dynamic-data/:table_name', authenticateToken, async (req, res) =
     if (!isValidIdentifier(table_name)) return res.status(400).json({ success: false, message: 'ชื่อตารางไม่ถูกต้อง' });
     const formTable = 'form_' + table_name;
     try {
-        // ตรวจสอบว่าตารางมีอยู่จริง
-        const [tableCheck] = await db.query("SELECT COUNT(*) AS cnt FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?", [formTable]);
-        if (!tableCheck[0]?.cnt) {
-            return res.json({ success: true, data: [] });
+        // ตรวจสอบ columns ที่มีจริงในตาราง form (กัน ER_BAD_FIELD_ERROR ถ้าตารางไม่มี hospcode/year_bh)
+        const [colInfo] = await db.query(
+            "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?",
+            [formTable]
+        );
+        if (colInfo.length === 0) {
+            return res.json({ success: true, data: [], reason: 'ตาราง form ยังไม่ถูกสร้าง' });
         }
-        const { hospcode, year_bh, month_bh } = req.query;
+        const tableCols = new Set(colInfo.map(c => c.COLUMN_NAME || c.column_name));
+
+        const { hospcode, year_bh, month_bh, indicator_id } = req.query;
         let where = 'WHERE 1=1';
         const params = [];
-        if (hospcode) { where += ' AND t.hospcode = ?'; params.push(hospcode); }
-        if (year_bh) { where += ' AND t.year_bh = ?'; params.push(year_bh); }
-        if (month_bh) { where += ' AND t.month_bh = ?'; params.push(month_bh); }
-        const [rows] = await db.query(`SELECT t.*, u.username AS created_by_name FROM \`${formTable}\` t LEFT JOIN users u ON t.created_by = u.id ${where} ORDER BY t.year_bh DESC, t.month_bh DESC, t.created_at DESC`, params);
+        // filter เฉพาะ column ที่มีอยู่จริง
+        if (hospcode && tableCols.has('hospcode')) { where += ' AND t.hospcode = ?'; params.push(hospcode); }
+        if (year_bh && tableCols.has('year_bh')) { where += ' AND t.year_bh = ?'; params.push(year_bh); }
+        if (month_bh && tableCols.has('month_bh')) { where += ' AND t.month_bh = ?'; params.push(month_bh); }
+        if (indicator_id && tableCols.has('indicator_id')) {
+            where += ' AND (t.indicator_id = ? OR t.indicator_id IS NULL)';
+            params.push(indicator_id);
+        }
+
+        // ORDER BY: ใช้ฟิลด์ที่มี (year_bh + month_bh + created_at)
+        const orderParts = [];
+        if (tableCols.has('year_bh')) orderParts.push('t.year_bh DESC');
+        if (tableCols.has('month_bh')) orderParts.push('t.month_bh DESC');
+        orderParts.push('t.created_at DESC');
+        const orderClause = 'ORDER BY ' + orderParts.join(', ');
+
+        const [rows] = await db.query(`SELECT t.*, u.username AS created_by_name FROM \`${formTable}\` t LEFT JOIN users u ON t.created_by = u.id ${where} ${orderClause}`, params);
         res.json({ success: true, data: rows });
-    } catch (e) { res.json({ success: true, data: [] }); }
+    } catch (e) {
+        console.error(`❌ [dynamic-data GET] ${formTable}:`, e.code || '', e.message);
+        res.json({ success: true, data: [], error: e.message });
+    }
 });
 
 // GET /dynamic-data-months/:table_name — ดึงเดือนที่มีข้อมูลจาก dynamic table (สำหรับแสดงไอคอนใน dashboard)

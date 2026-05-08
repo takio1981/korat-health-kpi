@@ -3508,8 +3508,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (!this.dynamicFormSchema?.table_process) return;
     this.isDynamicDataLoading = true;
     const params: any = {
-      hospcode: this.dynamicFormItem.hospcode,
-      year_bh: this.dynamicFormData.year_bh
+      // ใช้ hospcode จาก dynamicFormData (ค่าที่ใช้บันทึก) ไม่ใช่ item.hospcode
+      // — กรณี user ไม่ใช่ admin: backend forces user.hospcode → list ต้อง match ค่าที่ save จริง
+      hospcode: this.dynamicFormData.hospcode || this.dynamicFormItem.hospcode,
+      year_bh: this.dynamicFormData.year_bh,
+      indicator_id: this.dynamicFormItem.indicator_id  // กรองเฉพาะของตัวชี้วัดนี้ (รับ NULL ด้วยใน backend)
     };
     this.authService.getDynamicData(this.dynamicFormSchema.table_process, params).subscribe({
       next: (res) => {
@@ -3539,8 +3542,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
           Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', timer: 1500, showConfirmButton: false });
           this.resetDynamicForm();
           this.loadDynamicFormUsedMonths(); // อัปเดตเดือนที่คีย์แล้ว
-          if (this.dynamicFormTab === 'list') this.loadDynamicDataList();
-          this.loadKpiData(); // reload dashboard data to reflect synced values
+          this.loadDynamicDataList();        // โหลดรายการเสมอ (ให้พร้อมเมื่อ user สลับไป tab "ดูรายการ")
+          this.loadKpiData(true);            // silent reload dashboard data to reflect synced values
         } else {
           Swal.fire('ผิดพลาด', res.message, 'error');
         }
