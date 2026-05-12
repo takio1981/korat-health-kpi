@@ -1077,6 +1077,7 @@
                 <li><b>text</b> / <b>number</b> / <b>textarea</b> / <b>date</b> / <b>checkbox</b> — ฟิลด์มาตรฐาน</li>
                 <li><b>select</b> (Dropdown) — รายการเลือก string array</li>
                 <li><b>score_option</b> ⭐ (ตัวเลือกพร้อม %) — กำหนดป้าย + ค่า%, รูปแบบ <code>ป้าย = % ต่อบรรทัด</code> เช่น <code>ดีมาก = 100</code> | ระบบสร้างคอลัมน์ <code>&lt;field&gt;_pct</code> DECIMAL เพิ่มและ auto-compute % เมื่อบันทึก</li>
+                <li class="ml-4 text-[11px]">💡 ถ้าตั้ง <b>"ฟิลด์แสดงผลใน Dashboard"</b> เป็นฟิลด์ score_option → ระบบจะ sync <b>ค่า %</b> เข้า kpi_results.actual_value (ไม่ใช่ label) → dashboard / chart / report คำนวณได้ตรง</li>
               </ul>
             </div>
           </div>

@@ -21,6 +21,7 @@ export class ChangelogComponent {
       version: '2569.05.12',
       date: '12 พฤษภาคม 2569',
       changes: [
+        { type: 'feature', text: 'score_option sync เป็น % เข้า kpi_results.actual_value — เลือก "ดีมาก = 100" → ระบบ sync ค่า 100 (ไม่ใช่ label) → dashboard/chart/report คำนวณได้ตรง' },
         { type: 'improve', text: 'Dashboard Dynamic Form Modal — เปลี่ยนเป็น Grid 6 คอลัมน์ × 2 แถว (เห็น 12 เดือนพร้อมกัน) แทนตารางแนวยาว' },
         { type: 'improve', text: 'Modal grid responsive: lg=6cols / md=4cols / sm=3cols / mobile=2cols — card สีเขียวเมื่อมีข้อมูล / เหลืองเมื่อ edit เปลี่ยน' },
         { type: 'fix', text: 'NG0103 Infinite Change Detection: parseFieldOptions JSON.parse new array → cache _parsedOptionsCache Map<string, any[]> ใน dashboard' },

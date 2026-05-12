@@ -1937,12 +1937,23 @@ apiRouter.post('/dynamic-data/:table_name', authenticateToken, async (req, res) 
 
         if (indicatorId && yearBh && monthBh) {
             const [schemaRows] = await connection.query(
-                'SELECT actual_value_field FROM kpi_form_schemas WHERE indicator_id = ? AND is_active = 1 LIMIT 1',
+                `SELECT fs.actual_value_field, ff.field_type
+                   FROM kpi_form_schemas fs
+                   LEFT JOIN kpi_form_fields ff ON ff.schema_id = fs.id AND ff.field_name = fs.actual_value_field
+                  WHERE fs.indicator_id = ? AND fs.is_active = 1 LIMIT 1`,
                 [indicatorId]
             );
             if (schemaRows.length > 0 && schemaRows[0].actual_value_field) {
                 const avField = schemaRows[0].actual_value_field;
-                const actualValue = data[avField] !== undefined ? String(data[avField]) : null;
+                const avType = schemaRows[0].field_type || null;
+                // ถ้า field เป็น score_option → sync เป็นค่า % (จาก <field>_pct) แทน label เพื่อให้ kpi_results เก็บเป็นเปอร์เซ็นต์
+                let actualValue;
+                if (avType === 'score_option') {
+                    const pctVal = data[avField + '_pct'];
+                    actualValue = (pctVal !== undefined && pctVal !== null && pctVal !== '') ? String(pctVal) : null;
+                } else {
+                    actualValue = data[avField] !== undefined && data[avField] !== null && data[avField] !== '' ? String(data[avField]) : null;
+                }
                 if (actualValue !== null) {
                     // ดึง target_value เดิมก่อน DELETE (เก็บจากเดือน 10 แต่ใช้ร่วมทุกเดือน)
                     const [tRows] = await connection.query(

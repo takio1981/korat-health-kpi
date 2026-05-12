@@ -231,6 +231,9 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   - Storage: `field_options` JSON `[{label: "ดีมาก", percentage: 100}, ...]`
   - Backend `saveFormSchema`: สร้าง column `<field>_pct DECIMAL(10,2)` เพิ่ม + ALTER TABLE เมื่อแก้ schema
   - Backend `POST /dynamic-data`: อ่าน schema → match selected label → auto-set `<field>_pct` ก่อน INSERT/UPDATE
+  - **Sync เข้า kpi_results.actual_value:** ถ้า `actual_value_field` เป็น score_option → sync **%** (จาก `<field>_pct`) ไม่ใช่ label
+    - JOIN `kpi_form_fields` ใน sync query เพื่อรู้ field_type
+    - dashboard/chart/report ทั้งระบบใช้ตัวเลข % คำนวณได้ตรง
 - **select** (legacy) — string array, ไม่มี % column
 
 ### Dashboard Dynamic Form Modal (Grid 6×2 — 12 เดือน)
