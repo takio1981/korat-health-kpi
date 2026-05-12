@@ -233,14 +233,17 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   - Backend `POST /dynamic-data`: อ่าน schema → match selected label → auto-set `<field>_pct` ก่อน INSERT/UPDATE
 - **select** (legacy) — string array, ไม่มี % column
 
-### Dashboard Dynamic Form Modal (12-month table)
-- Modal เปิดจากปุ่ม `fa-clipboard-list` ใน dashboard row → ตาราง **12 เดือน × N ฟิลด์**
-- Layout เหมือน sub-result modal: sticky thead + col เดือนซ้าย + cells เป็น input ตาม field_type
+### Dashboard Dynamic Form Modal (Grid 6×2 — 12 เดือน)
+- Modal เปิดจากปุ่ม `fa-clipboard-list` ใน dashboard row → **Grid 6 คอลัมน์ × 2 แถว** เดือนละ 1 card (responsive: lg=6 / md=4 / sm=3 / mobile=2)
+- Card header: ชื่อเดือน + check icon (สถานะมีข้อมูล) + fields ภายในใช้ space-y-2
 - โหมดดูอย่างเดียว ↔ แก้ไข (ปุ่ม "แก้ไขข้อมูลรายเดือน")
 - Batch save: ส่ง POST /dynamic-data เฉพาะเดือนที่เปลี่ยน (snapshot vs current) + แสดง progress N/12
-- score_option cell: dropdown แสดง "label (X%)" + แสดง `= X%` ใต้ dropdown หลังเลือก
-- แถวที่มีข้อมูลแล้ว: เดือนสีม่วง + check icon เขียว
+- score_option cell: dropdown แสดง "label (X%)" + badge สีม่วงด้านขวาแสดง `= X%`
+- card สีเขียวอ่อน = มีข้อมูล / สีเหลือง+shadow = edit แล้วเปลี่ยน / hover = ขอบม่วง
+- modal max-w-5xl (รองรับ 6 cols ใน lg) — ทุกเดือนเห็นพร้อมกันโดยไม่ต้อง scroll
+- `parseFieldOptions()` ใช้ `_parsedOptionsCache Map<string, any[]>` กัน NG0103 infinite CD
 - Tab "ข้อมูลที่บันทึก" (list view) ยังอยู่เป็น history fallback
+- `kpi_form_fields.field_type` ENUM ต้องรวม `'score_option'` (auto ALTER MODIFY COLUMN ใน server startup)
 
 ### Sub-Indicators (ตัวชี้วัดย่อย)
 - `kpi_sub_indicators` — metadata ของตัวชี้วัดย่อย (FK → kpi_indicators.id, CASCADE delete)

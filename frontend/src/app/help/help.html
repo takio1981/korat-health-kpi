@@ -420,6 +420,19 @@
           <div class="flex items-center gap-2 bg-green-50 rounded-lg p-2"><i class="fas fa-check text-green-600"></i><span>อนุมัติอุทธรณ์</span></div>
           <div class="flex items-center gap-2 bg-red-50 rounded-lg p-2"><i class="fas fa-times text-red-500"></i><span>ปฏิเสธอุทธรณ์</span></div>
         </div>
+
+        <!-- Dynamic form modal — 12 month grid -->
+        <div class="mt-4 bg-purple-50 border border-purple-200 rounded-xl p-4">
+          <h4 class="font-bold text-purple-800 text-sm mb-2"><i class="fas fa-th-large mr-2"></i>Modal กรอกแบบฟอร์ม — Grid 12 เดือน</h4>
+          <ul class="text-xs text-gray-600 space-y-1 ml-4 list-disc">
+            <li>กดปุ่ม <i class="fas fa-clipboard-list text-purple-500"></i> ในแถวตัวชี้วัด → modal เปิด <b>Grid 6 คอลัมน์ × 2 แถว</b> (lg) แสดงครบ 12 เดือนพร้อมกัน</li>
+            <li>โหมดเริ่มต้น = <b>ดูอย่างเดียว</b> → กด <b>"แก้ไขข้อมูลรายเดือน"</b> เพื่อกรอก</li>
+            <li>card สีเขียวอ่อน = เดือนที่มีข้อมูล / สีเหลือง+shadow = เดือนที่กำลังแก้ไข</li>
+            <li>กด <b>"บันทึกทั้งหมด"</b> → ระบบส่งเฉพาะเดือนที่เปลี่ยน (batch upsert) + progress N/12</li>
+            <li>ฟิลด์ <b>score_option</b> = dropdown แสดง "ป้าย (X%)" + badge สีม่วงด้านขวาแสดง %ที่เลือก</li>
+            <li>Tab <b>"ข้อมูลที่บันทึก"</b> = list view ของข้อมูลที่บันทึกแล้ว (history)</li>
+          </ul>
+        </div>
       </section>
 
       <!-- ==================== 5. กราฟและสถิติ ==================== -->
@@ -1058,6 +1071,14 @@
               <li>สลับ toggle <b>"ฟิลด์เริ่มต้น"</b> ตามต้องการ (id, hospcode, year_bh, ...)</li>
               <li>กำหนดชื่อ, ประเภท, บังคับกรอก → เลือกฟิลด์แสดงใน Dashboard → กด <b>"บันทึกและสร้างตาราง"</b></li>
             </ol>
+            <div class="mt-3 bg-purple-100 rounded-lg p-2 text-xs text-purple-700">
+              <p class="font-bold mb-1"><i class="fas fa-list-check mr-1"></i>ประเภทฟิลด์ที่รองรับ (7 ประเภท)</p>
+              <ul class="ml-4 space-y-0.5 list-disc">
+                <li><b>text</b> / <b>number</b> / <b>textarea</b> / <b>date</b> / <b>checkbox</b> — ฟิลด์มาตรฐาน</li>
+                <li><b>select</b> (Dropdown) — รายการเลือก string array</li>
+                <li><b>score_option</b> ⭐ (ตัวเลือกพร้อม %) — กำหนดป้าย + ค่า%, รูปแบบ <code>ป้าย = % ต่อบรรทัด</code> เช่น <code>ดีมาก = 100</code> | ระบบสร้างคอลัมน์ <code>&lt;field&gt;_pct</code> DECIMAL เพิ่มและ auto-compute % เมื่อบันทึก</li>
+              </ul>
+            </div>
           </div>
           <!-- Tab 3 -->
           <div class="bg-green-50 border border-green-200 rounded-xl p-4">

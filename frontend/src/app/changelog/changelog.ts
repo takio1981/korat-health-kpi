@@ -18,6 +18,17 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.05.12',
+      date: '12 พฤษภาคม 2569',
+      changes: [
+        { type: 'improve', text: 'Dashboard Dynamic Form Modal — เปลี่ยนเป็น Grid 6 คอลัมน์ × 2 แถว (เห็น 12 เดือนพร้อมกัน) แทนตารางแนวยาว' },
+        { type: 'improve', text: 'Modal grid responsive: lg=6cols / md=4cols / sm=3cols / mobile=2cols — card สีเขียวเมื่อมีข้อมูล / เหลืองเมื่อ edit เปลี่ยน' },
+        { type: 'fix', text: 'NG0103 Infinite Change Detection: parseFieldOptions JSON.parse new array → cache _parsedOptionsCache Map<string, any[]> ใน dashboard' },
+        { type: 'fix', text: 'kpi_form_fields.field_type ENUM ขาด score_option → Data truncated error → เพิ่ม ALTER TABLE MODIFY COLUMN ใน auto-migration' },
+        { type: 'fix', text: 'Sticky thead form modal z-index ต่ำเกิน → row ทับ header เวลา scroll → ปรับ z-30/z-40 + bg-purple-700 ทุก th cells' },
+      ]
+    },
+    {
       version: '2569.05.08',
       date: '8 พฤษภาคม 2569',
       changes: [
