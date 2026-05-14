@@ -1,9 +1,10 @@
 import { Component, inject, OnDestroy, ChangeDetectorRef, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormGroup, FormControl, Validators } from '@angular/forms';
-import { Router, RouterModule } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { ThemeService } from '../services/theme.service';
+import { environment } from '../../environments/environment';
 import { firstValueFrom } from 'rxjs';
 import Swal from 'sweetalert2';
 
@@ -15,6 +16,7 @@ import Swal from 'sweetalert2';
 })
 export class LoginComponent implements OnDestroy {
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
   private ngZone = inject(NgZone);
@@ -32,25 +34,17 @@ export class LoginComponent implements OnDestroy {
   isProviderIdEnabled: boolean = false;
 
   loginWithThaID() {
-    this.showSsoUnavailable('ThaID', 'fa-id-card', '#1e40af');
+    this.startSsoLogin('thaid');
   }
 
   loginWithProviderID() {
-    this.showSsoUnavailable('ProviderID (กระทรวงสาธารณสุข)', 'fa-user-md', '#0284c7');
+    this.startSsoLogin('providerid');
   }
 
-  private showSsoUnavailable(providerName: string, icon: string, color: string) {
-    Swal.fire({
-      iconHtml: `<i class="fas ${icon}" style="color:${color}"></i>`,
-      title: 'ฟีเจอร์รอการเปิดใช้งาน',
-      html: `<div style="text-align:left;font-size:13px;line-height:1.7">
-        <p>การเข้าสู่ระบบด้วย <b style="color:${color}">${providerName}</b> ขณะนี้อยู่ระหว่างขั้นตอนขอใช้บริการกับหน่วยงานเจ้าของระบบ</p>
-        <p class="text-gray-500" style="margin-top:8px"><i class="fas fa-info-circle mr-1"></i>กรุณาเข้าสู่ระบบด้วย Username/Password ตามปกติไปก่อน</p>
-        <p class="text-gray-400 text-xs" style="margin-top:8px">หากต้องการสอบถามเพิ่มเติม กรุณาติดต่อผู้ดูแลระบบ</p>
-      </div>`,
-      confirmButtonText: 'รับทราบ',
-      confirmButtonColor: '#10b981'
-    });
+  // Navigate ผู้ใช้ไปยัง backend OAuth start endpoint → backend redirect ต่อไปที่ MOPH/DGA
+  private startSsoLogin(provider: 'thaid' | 'providerid') {
+    const base = environment.apiUrl.replace(/\/+$/, '');
+    window.location.href = `${base}/auth/${provider}/start`;
   }
 
   private statusPollTimer: any = null;
@@ -60,14 +54,45 @@ export class LoginComponent implements OnDestroy {
 
   ngOnInit() {
     this.refreshSsoStatus();
+    this.handleSsoCallback();
     // Poll ทุก 3 วินาที + force CD ทุกครั้งให้ UI update ทันทีโดยไม่ต้อง interact
-    // ใช้ ngZone.runOutsideAngular กัน setInterval ทำให้ Angular tick ทุก 3s โดยไม่จำเป็น
     this.ngZone.runOutsideAngular(() => {
       this.statusPollTimer = setInterval(() => {
         this.ngZone.run(() => this.refreshSsoStatus());
       }, 3000);
     });
     document.addEventListener('visibilitychange', this.onVisibilityChange);
+  }
+
+  // อ่าน sso_token / sso_user / sso_error จาก query string หลัง redirect กลับจาก backend OAuth callback
+  private handleSsoCallback() {
+    const qp = this.route.snapshot.queryParamMap;
+    const ssoError = qp.get('sso_error');
+    const ssoToken = qp.get('sso_token');
+    const ssoUser = qp.get('sso_user');
+    const ssoProvider = qp.get('sso_provider');
+    if (ssoError) {
+      const providerLabel = ssoProvider === 'thaid' ? 'ThaID' : (ssoProvider === 'providerid' ? 'ProviderID' : 'SSO');
+      Swal.fire({ icon: 'error', title: `เข้าสู่ระบบด้วย ${providerLabel} ไม่สำเร็จ`, text: ssoError, confirmButtonColor: '#dc2626' });
+      this.router.navigate(['/login'], { replaceUrl: true });
+      return;
+    }
+    if (ssoToken && ssoUser) {
+      try {
+        const userObj = JSON.parse(atob(ssoUser));
+        this.authService.saveToken(ssoToken);
+        this.authService.saveUser(userObj);
+        const providerLabel = ssoProvider === 'thaid' ? 'ThaID' : 'ProviderID';
+        Swal.fire({
+          icon: 'success', title: `เข้าสู่ระบบด้วย ${providerLabel} สำเร็จ`,
+          text: `ยินดีต้อนรับ คุณ${userObj.firstname || ''} ${userObj.lastname || ''}`,
+          timer: 1500, showConfirmButton: false
+        }).then(() => this.router.navigate(['/dashboard'], { replaceUrl: true }));
+      } catch (e: any) {
+        Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: 'ไม่สามารถถอดรหัสข้อมูล SSO ได้: ' + e.message });
+        this.router.navigate(['/login'], { replaceUrl: true });
+      }
+    }
   }
 
   ngOnDestroy() {

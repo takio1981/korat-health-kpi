@@ -60,6 +60,25 @@ export class SettingsComponent implements OnInit {
   thaidEnabled: boolean = false;
   providerIdEnabled: boolean = false;
 
+  // SSO OAuth config — ProviderID (MOPH)
+  providerIdClientId: string = '';
+  providerIdClientSecret: string = '';
+  providerIdAuthUrl: string = '';
+  providerIdTokenUrl: string = '';
+  providerIdUserinfoUrl: string = '';
+  providerIdRedirectUri: string = '';
+  providerIdScope: string = 'openid profile';
+  // SSO OAuth config — ThaID (DGA)
+  thaidClientId: string = '';
+  thaidClientSecret: string = '';
+  thaidAuthUrl: string = '';
+  thaidTokenUrl: string = '';
+  thaidUserinfoUrl: string = '';
+  thaidRedirectUri: string = '';
+  thaidScope: string = 'openid profile';
+  showProviderIdSecret: boolean = false;
+  showThaIdSecret: boolean = false;
+
   ngOnInit() {
     const role = this.authService.getUserRole();
     this.isAdmin = role === 'admin_ssj' || role === 'super_admin';
@@ -158,6 +177,23 @@ export class SettingsComponent implements OnInit {
           const providerSetting = this.settings.find(s => s.setting_key === 'providerid_enabled');
           if (thaidSetting) this.thaidEnabled = thaidSetting.setting_value === 'true';
           if (providerSetting) this.providerIdEnabled = providerSetting.setting_value === 'true';
+
+          // SSO OAuth config — load
+          const grab = (k: string) => (this.settings.find(s => s.setting_key === k)?.setting_value) || '';
+          this.providerIdClientId = grab('providerid_client_id');
+          this.providerIdClientSecret = grab('providerid_client_secret');
+          this.providerIdAuthUrl = grab('providerid_auth_url');
+          this.providerIdTokenUrl = grab('providerid_token_url');
+          this.providerIdUserinfoUrl = grab('providerid_userinfo_url');
+          this.providerIdRedirectUri = grab('providerid_redirect_uri');
+          this.providerIdScope = grab('providerid_scope') || 'openid profile';
+          this.thaidClientId = grab('thaid_client_id');
+          this.thaidClientSecret = grab('thaid_client_secret');
+          this.thaidAuthUrl = grab('thaid_auth_url');
+          this.thaidTokenUrl = grab('thaid_token_url');
+          this.thaidUserinfoUrl = grab('thaid_userinfo_url');
+          this.thaidRedirectUri = grab('thaid_redirect_uri');
+          this.thaidScope = grab('thaid_scope') || 'openid profile';
         }
         this.cdr.detectChanges();
       }
@@ -198,7 +234,23 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'appeal_end_date', setting_value: this.appealEndDate },
       { setting_key: 'appeal_days_after_approve', setting_value: this.appealDaysAfterApprove.toString() },
       { setting_key: 'thaid_enabled', setting_value: this.thaidEnabled.toString() },
-      { setting_key: 'providerid_enabled', setting_value: this.providerIdEnabled.toString() }
+      { setting_key: 'providerid_enabled', setting_value: this.providerIdEnabled.toString() },
+      // ProviderID OAuth config
+      { setting_key: 'providerid_client_id', setting_value: this.providerIdClientId },
+      { setting_key: 'providerid_client_secret', setting_value: this.providerIdClientSecret },
+      { setting_key: 'providerid_auth_url', setting_value: this.providerIdAuthUrl },
+      { setting_key: 'providerid_token_url', setting_value: this.providerIdTokenUrl },
+      { setting_key: 'providerid_userinfo_url', setting_value: this.providerIdUserinfoUrl },
+      { setting_key: 'providerid_redirect_uri', setting_value: this.providerIdRedirectUri },
+      { setting_key: 'providerid_scope', setting_value: this.providerIdScope },
+      // ThaID OAuth config
+      { setting_key: 'thaid_client_id', setting_value: this.thaidClientId },
+      { setting_key: 'thaid_client_secret', setting_value: this.thaidClientSecret },
+      { setting_key: 'thaid_auth_url', setting_value: this.thaidAuthUrl },
+      { setting_key: 'thaid_token_url', setting_value: this.thaidTokenUrl },
+      { setting_key: 'thaid_userinfo_url', setting_value: this.thaidUserinfoUrl },
+      { setting_key: 'thaid_redirect_uri', setting_value: this.thaidRedirectUri },
+      { setting_key: 'thaid_scope', setting_value: this.thaidScope }
     ];
 
     this.authService.updateSettings(settingsToSave).subscribe({

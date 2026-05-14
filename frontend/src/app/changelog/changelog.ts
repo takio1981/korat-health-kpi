@@ -21,7 +21,9 @@ export class ChangelogComponent {
       version: '2569.05.12',
       date: '12 พฤษภาคม 2569',
       changes: [
-        { type: 'feature', text: 'Settings: หัวข้อ "ตั้งค่าการเข้าสู่ระบบด้วย SSO" — เปิด/ปิดปุ่ม ThaID + ProviderID ในหน้า Login/Register (super_admin เท่านั้น) → flag เก็บใน system_settings + serve ผ่าน /system/maintenance-status (public)' },
+        { type: 'feature', text: 'SSO Login (ProviderID MOPH + ThaID DGA) — OAuth 2.0 Authorization Code flow + form กรอก config OAuth ใน Settings (client_id, secret, auth/token/userinfo URLs, redirect_uri, scope) | match user ด้วย cid SHA-256 | ปฏิเสธ user ใหม่ ต้องลงทะเบียนก่อน' },
+        { type: 'fix', text: 'Sync to HDC modal: checkbox "เลือกทั้งหมด" state สลับกัน — เพิ่ม [checked]+[indeterminate] binding จาก getter' },
+        { type: 'improve', text: 'Login/Register poll SSO toggle ทุก 3s + force CD ผ่าน NgZone+detectChanges → ตอบสนอง toggle ทันทีโดยไม่ต้องคลิก/refresh' },
         { type: 'feature', text: 'score_option sync เป็น % เข้า kpi_results.actual_value — เลือก "ดีมาก = 100" → ระบบ sync ค่า 100 (ไม่ใช่ label) → dashboard/chart/report คำนวณได้ตรง' },
         { type: 'improve', text: 'Dashboard Dynamic Form Modal — เปลี่ยนเป็น Grid 6 คอลัมน์ × 2 แถว (เห็น 12 เดือนพร้อมกัน) แทนตารางแนวยาว' },
         { type: 'improve', text: 'Modal grid responsive: lg=6cols / md=4cols / sm=3cols / mobile=2cols — card สีเขียวเมื่อมีข้อมูล / เหลืองเมื่อ edit เปลี่ยน' },

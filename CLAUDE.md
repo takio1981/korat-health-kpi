@@ -224,6 +224,21 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - Dashboard filter `indicator_off_type`: SQL `(i.evaluation_mode='all_required' OR i.required_off_types LIKE '%"CODE"%')`
 - Dashboard badge: `evaluation_mode='all_required'` → "ทุกประเภท" (purple) | `'any_one'` + codes → ชื่อประเภท (cyan)
 
+### SSO Login (ProviderID MOPH + ThaID DGA)
+- Settings (super_admin): toggle เปิด/ปิด + กรอก OAuth config (client_id, secret, auth_url, token_url, userinfo_url, redirect_uri, scope)
+- เก็บใน `system_settings` keys: `<provider>_{enabled,client_id,client_secret,auth_url,token_url,userinfo_url,redirect_uri,scope}`
+- Backend endpoints (public, GET): `/auth/{providerid|thaid}/{start|callback}` — OAuth 2.0 Authorization Code flow
+  - state CSRF stored in in-memory Map (`_ssoStateMap`, 10 min TTL, cleanup every 60s)
+  - `start`: redirect → MOPH/DGA auth URL with state
+  - `callback`: exchange code → access_token → userinfo → extract `cid|citizen_id|national_id|pid|sub` → SHA-256 hash → match `users.cid`
+  - **ปฏิเสธ user ใหม่**: ถ้าไม่พบ cid hash → redirect กลับ `/login?sso_error=...` ให้ลงทะเบียนก่อน
+  - สำเร็จ → issue JWT + active_session_id + log `login_logs` (status: `success_sso_<provider>`) → redirect `/login?sso_token=<jwt>&sso_user=<base64>&sso_provider=<p>`
+- Frontend login.ts:
+  - `loginWithProviderID()` / `loginWithThaID()` → `window.location.href = ${apiUrl}/auth/<p>/start`
+  - `ngOnInit` → `handleSsoCallback()` อ่าน query → save token+user → redirect dashboard | แสดง error
+- Frontend Settings: OAuth config form (input type=password สำหรับ client_secret พร้อมปุ่ม show/hide)
+- maintenance-status endpoint (public) คืน `thaid_enabled` + `providerid_enabled` — login/register poll ทุก 3s
+
 ### Form Builder Field Types
 - 7 ประเภท: text / number / textarea / select / score_option / date / checkbox
 - **score_option** (ตัวเลือกพร้อม %) — กำหนดป้าย + ค่า% per option:

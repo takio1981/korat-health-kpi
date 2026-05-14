@@ -149,26 +149,25 @@
           </form>
 
           <!-- SSO divider + buttons (ThaID / ProviderID) -->
-          <div class="mt-6 mb-4 flex items-center gap-3">
+          <div *ngIf="isThaIdEnabled || isProviderIdEnabled" class="mt-6 mb-4 flex items-center gap-3">
             <div class="flex-1 h-px bg-gray-300/60 dark:bg-gray-600"></div>
             <span class="text-xs text-gray-500 dark:text-gray-500 font-bold uppercase tracking-wider">หรือเข้าสู่ระบบด้วย</span>
             <div class="flex-1 h-px bg-gray-300/60 dark:bg-gray-600"></div>
           </div>
 
-          <div class="grid grid-cols-2 gap-2 sm:gap-3">
-            <div class="relative">
+          <div *ngIf="isThaIdEnabled || isProviderIdEnabled" class="grid gap-2 sm:gap-3"
+               [ngClass]="isThaIdEnabled && isProviderIdEnabled ? 'grid-cols-2' : 'grid-cols-1'">
+            <div *ngIf="isThaIdEnabled" class="relative">
               <button type="button" (click)="loginWithThaID()" title="เข้าสู่ระบบด้วย ThaID"
                       class="group w-full bg-white hover:bg-gray-50 border border-gray-200 hover:border-blue-300 rounded-2xl overflow-hidden transition-all flex items-center justify-center shadow-md hover:shadow-lg h-[52px] sm:h-[64px]">
                 <img src="thaid.png" alt="ThaID" class="h-full w-auto object-contain">
               </button>
-              <span class="absolute -top-2 -right-2 px-1.5 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-[9px] font-bold shadow-sm z-10 pointer-events-none">รอเปิดใช้</span>
             </div>
-            <div class="relative">
+            <div *ngIf="isProviderIdEnabled" class="relative">
               <button type="button" (click)="loginWithProviderID()" title="เข้าสู่ระบบด้วย ProviderID"
                       class="group w-full bg-white hover:bg-gray-50 border border-gray-200 hover:border-cyan-300 rounded-2xl overflow-hidden transition-all flex items-center justify-center shadow-md hover:shadow-lg h-[52px] sm:h-[64px]">
                 <img src="provider-id.png" alt="ProviderID" class="h-full w-auto object-contain p-1.5 sm:p-2">
               </button>
-              <span class="absolute -top-2 -right-2 px-1.5 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-[9px] font-bold shadow-sm z-10 pointer-events-none">รอเปิดใช้</span>
             </div>
           </div>
 
@@ -181,10 +180,6 @@
 
           <!-- Links ด้านล่าง -->
           <div class="flex items-center justify-center gap-4 mt-4 text-xs text-gray-500">
-            <button (click)="showAbout = !showAbout" class="hover:text-green-700 transition-colors">
-              <i class="fas fa-info-circle mr-1"></i>เกี่ยวกับระบบ
-            </button>
-            <span class="text-gray-300">|</span>
             <a routerLink="/help-public" class="hover:text-green-700 transition-colors">
               <i class="fas fa-book-open mr-1"></i>คู่มือการใช้งาน
             </a>

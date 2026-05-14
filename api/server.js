@@ -2544,6 +2544,159 @@ apiRouter.put('/system/maintenance-mode', authenticateToken, isSuperAdmin, async
     }
 });
 
+// ============================================================
+// === SSO Login: ProviderID (MOPH) + ThaID (DGA) ===
+// OAuth 2.0 Authorization Code Flow — match user by cid SHA-256, ปฏิเสธ user ใหม่
+// ============================================================
+const _ssoStateMap = new Map(); // state → { provider, createdAt }
+const SSO_STATE_TTL = 10 * 60 * 1000;
+setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of _ssoStateMap.entries()) {
+        if (now - v.createdAt > SSO_STATE_TTL) _ssoStateMap.delete(k);
+    }
+}, 60_000);
+
+async function getSsoConfig(provider) {
+    const keys = ['enabled', 'client_id', 'client_secret', 'auth_url', 'token_url', 'userinfo_url', 'redirect_uri', 'scope']
+        .map(k => `${provider}_${k}`);
+    const [rows] = await db.query(
+        `SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN (${keys.map(() => '?').join(',')})`,
+        keys
+    );
+    const cfg = {};
+    rows.forEach(r => cfg[r.setting_key.replace(`${provider}_`, '')] = r.setting_value);
+    return cfg;
+}
+
+function buildLoginRedirect(reqOrigin, query) {
+    const base = (process.env.APP_URL || '').replace(/\/+$/, '');
+    const qs = new URLSearchParams(query).toString();
+    return base ? `${base}/khupskpi/login?${qs}` : `/khupskpi/login?${qs}`;
+}
+
+async function handleSsoStart(provider, req, res) {
+    try {
+        const cfg = await getSsoConfig(provider);
+        if (cfg.enabled !== 'true') return res.redirect(buildLoginRedirect(req, { sso_error: `${provider.toUpperCase()} ถูกปิดอยู่` }));
+        if (!cfg.client_id || !cfg.auth_url || !cfg.redirect_uri) {
+            return res.redirect(buildLoginRedirect(req, { sso_error: `${provider.toUpperCase()} ยังไม่ได้ตั้งค่าครบ — กรุณาตรวจสอบหน้า Settings` }));
+        }
+        const state = crypto.randomBytes(16).toString('hex');
+        _ssoStateMap.set(state, { provider, createdAt: Date.now() });
+        const url = new URL(cfg.auth_url);
+        url.searchParams.set('client_id', cfg.client_id);
+        url.searchParams.set('redirect_uri', cfg.redirect_uri);
+        url.searchParams.set('response_type', 'code');
+        url.searchParams.set('scope', cfg.scope || 'openid profile');
+        url.searchParams.set('state', state);
+        res.redirect(url.toString());
+    } catch (e) {
+        res.redirect(buildLoginRedirect(req, { sso_error: e.message }));
+    }
+}
+
+async function handleSsoCallback(provider, req, res) {
+    try {
+        const { code, state, error } = req.query;
+        if (error) return res.redirect(buildLoginRedirect(req, { sso_error: String(error) }));
+        if (!code || !state) return res.redirect(buildLoginRedirect(req, { sso_error: 'ขาดพารามิเตอร์ code/state' }));
+        const stateData = _ssoStateMap.get(state);
+        if (!stateData || stateData.provider !== provider) {
+            return res.redirect(buildLoginRedirect(req, { sso_error: 'state ไม่ถูกต้องหรือหมดอายุ' }));
+        }
+        _ssoStateMap.delete(state);
+
+        const cfg = await getSsoConfig(provider);
+        // Exchange code → access_token
+        const tokenRes = await fetch(cfg.token_url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+            body: new URLSearchParams({
+                grant_type: 'authorization_code',
+                code: String(code),
+                redirect_uri: cfg.redirect_uri,
+                client_id: cfg.client_id,
+                client_secret: cfg.client_secret
+            }).toString()
+        });
+        if (!tokenRes.ok) {
+            const errBody = await tokenRes.text().catch(() => '');
+            return res.redirect(buildLoginRedirect(req, { sso_error: `Token exchange failed: ${tokenRes.status} ${errBody.slice(0, 200)}` }));
+        }
+        const tokenData = await tokenRes.json();
+        const accessToken = tokenData.access_token;
+        if (!accessToken) return res.redirect(buildLoginRedirect(req, { sso_error: 'ไม่ได้รับ access_token' }));
+
+        // Fetch user info
+        const userRes = await fetch(cfg.userinfo_url, {
+            headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' }
+        });
+        if (!userRes.ok) {
+            const errBody = await userRes.text().catch(() => '');
+            return res.redirect(buildLoginRedirect(req, { sso_error: `UserInfo failed: ${userRes.status} ${errBody.slice(0, 200)}` }));
+        }
+        const userInfo = await userRes.json();
+
+        // Extract CID — ลองหลาย field ตาม spec ของ ProviderID / ThaID
+        const cid = userInfo.cid || userInfo.citizen_id || userInfo.national_id || userInfo.pid || userInfo.sub_cid || (userInfo.sub && /^[0-9]{13}$/.test(userInfo.sub) ? userInfo.sub : null);
+        if (!cid) return res.redirect(buildLoginRedirect(req, { sso_error: 'ไม่พบเลขบัตรประชาชนใน response — โปรดตรวจ scope/userinfo URL' }));
+        const cidHash = crypto.createHash('sha256').update(String(cid).trim()).digest('hex');
+
+        // Match user
+        const [users] = await db.query('SELECT * FROM users WHERE cid = ? LIMIT 1', [cidHash]);
+        if (users.length === 0) {
+            return res.redirect(buildLoginRedirect(req, { sso_error: 'ไม่พบบัญชีของท่านในระบบ — กรุณาลงทะเบียนก่อนใช้งาน SSO', sso_provider: provider }));
+        }
+        const user = users[0];
+        if (user.is_approved !== 1 && user.is_approved !== true) {
+            return res.redirect(buildLoginRedirect(req, { sso_error: 'บัญชียังไม่ได้รับการอนุมัติจากผู้ดูแลระบบ' }));
+        }
+        if (user.is_active === 0) {
+            return res.redirect(buildLoginRedirect(req, { sso_error: 'บัญชีถูกระงับการใช้งาน' }));
+        }
+
+        // Issue JWT + create session (เหมือนปกติ)
+        const sessionId = crypto.randomBytes(24).toString('hex');
+        const ip = (req.ip || '').toString().split(',')[0].trim().slice(0, 64);
+        try {
+            await db.query(
+                'UPDATE users SET active_session_id = ?, session_started_at = NOW(), last_seen_at = NOW(), last_seen_ip = ? WHERE id = ?',
+                [sessionId, ip, user.id]
+            );
+            _sessionCache.delete(user.id);
+        } catch (e) { console.error('[SSO Login] update session failed:', e.message); }
+
+        const jwtToken = jwt.sign(
+            { userId: user.id, username: user.username, deptId: user.dept_id, role: user.role, hospcode: user.hospcode, sessionId },
+            SECRET_KEY,
+            { expiresIn: '8h' }
+        );
+        // Log
+        try {
+            await db.query(
+                'INSERT INTO login_logs (user_id, username, role, ip_address, user_agent, status) VALUES (?, ?, ?, ?, ?, ?)',
+                [user.id, user.username, user.role, ip, (req.headers['user-agent'] || '').slice(0, 255), 'success_sso_' + provider]
+            );
+        } catch (e) { /* ignore */ }
+
+        // Redirect ไปหน้า login พร้อม token + user info (frontend handle ต่อ)
+        const userPayload = Buffer.from(JSON.stringify({
+            id: user.id, username: user.username, firstname: user.firstname, lastname: user.lastname,
+            role: user.role, dept_id: user.dept_id, hospcode: user.hospcode
+        })).toString('base64');
+        res.redirect(buildLoginRedirect(req, { sso_token: jwtToken, sso_user: userPayload, sso_provider: provider }));
+    } catch (e) {
+        console.error(`[SSO ${provider}] callback error:`, e);
+        res.redirect(buildLoginRedirect(req, { sso_error: e.message }));
+    }
+}
+
+apiRouter.get('/auth/providerid/start', (req, res) => handleSsoStart('providerid', req, res));
+apiRouter.get('/auth/providerid/callback', (req, res) => handleSsoCallback('providerid', req, res));
+apiRouter.get('/auth/thaid/start', (req, res) => handleSsoStart('thaid', req, res));
+apiRouter.get('/auth/thaid/callback', (req, res) => handleSsoCallback('thaid', req, res));
+
 // เปิด/ปิดใช้งานทั้งหมด ยกเว้น super_admin (super_admin เท่านั้น)
 apiRouter.put('/users/bulk-toggle-active', authenticateToken, isSuperAdmin, async (req, res) => {
     const { is_active } = req.body;
