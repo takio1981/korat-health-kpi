@@ -477,7 +477,10 @@
       @if (syncPreviewData.length > 0) {
         <div class="flex items-center justify-between mb-4">
           <label class="flex items-center gap-2 text-sm font-bold text-teal-700 cursor-pointer">
-            <input type="checkbox" (change)="toggleSyncAll()" class="rounded text-teal-600 focus:ring-teal-400 h-4 w-4">
+            <input type="checkbox" [checked]="isAllSyncSelected"
+                   [indeterminate]="isPartialSyncSelected"
+                   (change)="toggleSyncAll()"
+                   class="rounded text-teal-600 focus:ring-teal-400 h-4 w-4">
             เลือกทั้งหมดที่พร้อมส่ง
           </label>
           <span class="text-sm text-gray-500">เลือก: <b>{{ syncSelectedTables.size }}</b> / {{ syncPreviewData.length }} ตาราง</span>

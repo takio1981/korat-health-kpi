@@ -571,11 +571,24 @@ export class ExportKpiComponent implements OnInit {
 
   toggleSyncAll() {
     const ready = this.syncPreviewData.filter((t: any) => t.status === 'ready');
+    if (ready.length === 0) return;
     if (this.syncSelectedTables.size === ready.length) {
       this.syncSelectedTables.clear();
     } else {
       ready.forEach((t: any) => this.syncSelectedTables.add(t.table));
     }
+  }
+
+  // คำนวณสถานะ checkbox "เลือกทั้งหมด" — true เมื่อทุก ready ถูกเลือก
+  get isAllSyncSelected(): boolean {
+    const ready = this.syncPreviewData.filter((t: any) => t.status === 'ready');
+    return ready.length > 0 && this.syncSelectedTables.size === ready.length;
+  }
+
+  // partial selection (มีเลือกบางส่วน แต่ไม่ครบ) — สำหรับ indeterminate state
+  get isPartialSyncSelected(): boolean {
+    const ready = this.syncPreviewData.filter((t: any) => t.status === 'ready');
+    return this.syncSelectedTables.size > 0 && this.syncSelectedTables.size < ready.length;
   }
 
   executeSyncToHdc() {
