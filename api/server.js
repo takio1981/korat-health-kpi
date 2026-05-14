@@ -2501,19 +2501,21 @@ apiRouter.put('/users/change-password', async (req, res) => {
     }
 });
 
-// ตรวจสอบสถานะ maintenance mode (public — ไม่ต้อง login)
+// ตรวจสอบสถานะ maintenance mode + SSO toggles (public — ไม่ต้อง login)
 apiRouter.get('/system/maintenance-status', async (req, res) => {
     try {
-        const [rows] = await db.query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message')");
+        const [rows] = await db.query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message','thaid_enabled','providerid_enabled')");
         const settings = {};
         rows.forEach(r => settings[r.setting_key] = r.setting_value);
         res.json({
             success: true,
             maintenance: settings['maintenance_mode'] === 'true',
-            message: settings['maintenance_message'] || 'ระบบปิดให้บริการชั่วคราวเพื่อประมวลผลงาน'
+            message: settings['maintenance_message'] || 'ระบบปิดให้บริการชั่วคราวเพื่อประมวลผลงาน',
+            thaid_enabled: settings['thaid_enabled'] === 'true',
+            providerid_enabled: settings['providerid_enabled'] === 'true'
         });
     } catch (error) {
-        res.json({ success: true, maintenance: false, message: '' });
+        res.json({ success: true, maintenance: false, message: '', thaid_enabled: false, providerid_enabled: false });
     }
 });
 

@@ -47,6 +47,14 @@ export class RegisterComponent implements OnInit {
   showConfirmPassword: boolean = false;
   isSubmitting: boolean = false;
 
+  // === Maintenance Mode ===
+  maintenanceMode: boolean = false;
+  maintenanceMessage: string = '';
+
+  // === SSO providers (toggle จาก settings page โดย super_admin) ===
+  isThaIdEnabled: boolean = false;
+  isProviderIdEnabled: boolean = false;
+
   // === Registration method selection (modal เลือก 3 วิธี) ===
   // 'choose' = แสดง modal เลือกวิธี | 'manual' = แสดง form กรอกเอง
   registerMode: 'choose' | 'manual' = 'choose';
@@ -83,6 +91,16 @@ export class RegisterComponent implements OnInit {
   selectedDistrictId: string = '';
 
   ngOnInit() {
+    // โหลด maintenance status + SSO toggles
+    this.authService.getMaintenanceStatus().subscribe({
+      next: (res: any) => {
+        this.maintenanceMode = res.maintenance;
+        this.maintenanceMessage = res.message;
+        this.isThaIdEnabled = !!res.thaid_enabled;
+        this.isProviderIdEnabled = !!res.providerid_enabled;
+      }
+    });
+
     this.loadDepartments();
     this.loadHospitals();
     this.loadDistricts();

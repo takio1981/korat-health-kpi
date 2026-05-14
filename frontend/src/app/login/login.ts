@@ -25,7 +25,10 @@ export class LoginComponent {
   maintenanceMode: boolean = false;
   maintenanceMessage: string = '';
 
-  // === SSO providers (รอการเปิดใช้งานจากหน่วยงาน) ===
+  // === SSO providers (toggle จาก settings page โดย super_admin) ===
+  isThaIdEnabled: boolean = false;
+  isProviderIdEnabled: boolean = false;
+
   loginWithThaID() {
     this.showSsoUnavailable('ThaID', 'fa-id-card', '#1e40af');
   }
@@ -53,6 +56,8 @@ export class LoginComponent {
       next: (res: any) => {
         this.maintenanceMode = res.maintenance;
         this.maintenanceMessage = res.message;
+        this.isThaIdEnabled = !!res.thaid_enabled;
+        this.isProviderIdEnabled = !!res.providerid_enabled;
       }
     });
   }

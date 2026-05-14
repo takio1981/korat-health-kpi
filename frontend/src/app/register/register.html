@@ -80,12 +80,12 @@
       <!-- ===== Mode: เลือกวิธีลงทะเบียน (3 การ์ด) ===== -->
       <div *ngIf="registerMode === 'choose'" class="space-y-3">
         <!-- Card 1: ThaID -->
-        <div class="relative">
+        <div *ngIf="isThaIdEnabled" class="relative">
           <button type="button" (click)="registerWithThaID()" title="ลงทะเบียนด้วย ThaID"
                   class="group w-full bg-white hover:bg-gray-50 border border-gray-200 hover:border-blue-300 rounded-xl text-left transition-all shadow-md hover:shadow-lg overflow-hidden">
             <div class="flex items-stretch h-20">
               <div class="w-20 h-full shrink-0 overflow-hidden flex items-center justify-center">
-                <img src="thaid.jpg" alt="ThaID" class="h-full w-full object-contain">
+                <img src="thaid.png" alt="ThaID" class="h-full w-full object-contain">
               </div>
               <div class="flex-1 min-w-0 flex items-center px-4">
                 <p class="text-xs text-gray-600 leading-snug">ใช้บัญชี Thai Digital ID (DGA) ลงทะเบียนอัตโนมัติด้วยข้อมูลจากบัตรประชาชน</p>
@@ -99,7 +99,7 @@
         </div>
 
         <!-- Card 2: ProviderID -->
-        <div class="relative">
+        <div *ngIf="isProviderIdEnabled" class="relative">
           <button type="button" (click)="registerWithProviderID()" title="ลงทะเบียนด้วย ProviderID"
                   class="group w-full bg-white hover:bg-gray-50 border border-gray-200 hover:border-cyan-300 rounded-xl text-left transition-all shadow-md hover:shadow-lg overflow-hidden">
             <div class="flex items-stretch h-20">
@@ -133,7 +133,7 @@
         </button>
 
         <!-- Note -->
-        <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-700 mt-4">
+        <div *ngIf="isThaIdEnabled || isProviderIdEnabled" class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-700 mt-4">
           <p><i class="fas fa-info-circle mr-1"></i><b>หมายเหตุ:</b> ขณะนี้ ThaID และ ProviderID อยู่ระหว่างขั้นตอนขอใช้บริการ — กรุณาลงทะเบียนด้วยตัวเองไปก่อน</p>
         </div>
 

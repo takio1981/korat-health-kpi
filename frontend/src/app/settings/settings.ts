@@ -56,6 +56,10 @@ export class SettingsComponent implements OnInit {
   appealEndDate: string = '';
   appealDaysAfterApprove: number = 0;
 
+  // SSO toggles (ThaID + ProviderID)
+  thaidEnabled: boolean = false;
+  providerIdEnabled: boolean = false;
+
   ngOnInit() {
     const role = this.authService.getUserRole();
     this.isAdmin = role === 'admin_ssj' || role === 'super_admin';
@@ -148,6 +152,12 @@ export class SettingsComponent implements OnInit {
           if (appealStart) this.appealStartDate = appealStart.setting_value || '';
           if (appealEnd) this.appealEndDate = appealEnd.setting_value || '';
           if (appealDays) this.appealDaysAfterApprove = parseInt(appealDays.setting_value, 10) || 0;
+
+          // SSO toggles
+          const thaidSetting = this.settings.find(s => s.setting_key === 'thaid_enabled');
+          const providerSetting = this.settings.find(s => s.setting_key === 'providerid_enabled');
+          if (thaidSetting) this.thaidEnabled = thaidSetting.setting_value === 'true';
+          if (providerSetting) this.providerIdEnabled = providerSetting.setting_value === 'true';
         }
         this.cdr.detectChanges();
       }
@@ -186,7 +196,9 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'appeal_enabled', setting_value: this.appealEnabled.toString() },
       { setting_key: 'appeal_start_date', setting_value: this.appealStartDate },
       { setting_key: 'appeal_end_date', setting_value: this.appealEndDate },
-      { setting_key: 'appeal_days_after_approve', setting_value: this.appealDaysAfterApprove.toString() }
+      { setting_key: 'appeal_days_after_approve', setting_value: this.appealDaysAfterApprove.toString() },
+      { setting_key: 'thaid_enabled', setting_value: this.thaidEnabled.toString() },
+      { setting_key: 'providerid_enabled', setting_value: this.providerIdEnabled.toString() }
     ];
 
     this.authService.updateSettings(settingsToSave).subscribe({
