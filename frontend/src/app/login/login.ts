@@ -1,4 +1,4 @@
-import { Component, inject, OnDestroy } from '@angular/core';
+import { Component, inject, OnDestroy, ChangeDetectorRef, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormGroup, FormControl, Validators } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
@@ -16,6 +16,8 @@ import Swal from 'sweetalert2';
 export class LoginComponent implements OnDestroy {
   private router = inject(Router);
   private authService = inject(AuthService);
+  private cdr = inject(ChangeDetectorRef);
+  private ngZone = inject(NgZone);
   themeService = inject(ThemeService);
 
   showPassword: boolean = false;
@@ -58,9 +60,13 @@ export class LoginComponent implements OnDestroy {
 
   ngOnInit() {
     this.refreshSsoStatus();
-    // Poll ทุก 10 วินาที เพื่อให้ toggle SSO มีผลทันทีบนหน้า login ที่เปิดอยู่
-    this.statusPollTimer = setInterval(() => this.refreshSsoStatus(), 10000);
-    // Refresh ทันทีเมื่อ tab กลับมา active
+    // Poll ทุก 3 วินาที + force CD ทุกครั้งให้ UI update ทันทีโดยไม่ต้อง interact
+    // ใช้ ngZone.runOutsideAngular กัน setInterval ทำให้ Angular tick ทุก 3s โดยไม่จำเป็น
+    this.ngZone.runOutsideAngular(() => {
+      this.statusPollTimer = setInterval(() => {
+        this.ngZone.run(() => this.refreshSsoStatus());
+      }, 3000);
+    });
     document.addEventListener('visibilitychange', this.onVisibilityChange);
   }
 
@@ -72,10 +78,16 @@ export class LoginComponent implements OnDestroy {
   private refreshSsoStatus() {
     this.authService.getMaintenanceStatus().subscribe({
       next: (res: any) => {
-        this.maintenanceMode = res.maintenance;
-        this.maintenanceMessage = res.message;
+        const changed =
+          this.maintenanceMode !== !!res.maintenance ||
+          this.maintenanceMessage !== (res.message || '') ||
+          this.isThaIdEnabled !== !!res.thaid_enabled ||
+          this.isProviderIdEnabled !== !!res.providerid_enabled;
+        this.maintenanceMode = !!res.maintenance;
+        this.maintenanceMessage = res.message || '';
         this.isThaIdEnabled = !!res.thaid_enabled;
         this.isProviderIdEnabled = !!res.providerid_enabled;
+        if (changed) this.cdr.detectChanges();
       }
     });
   }

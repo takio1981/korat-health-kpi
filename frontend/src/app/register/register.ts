@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, ChangeDetectorRef, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
@@ -16,6 +16,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
   private authService = inject(AuthService);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
+  private ngZone = inject(NgZone);
   themeService = inject(ThemeService);
 
   formData: any = {
@@ -96,9 +97,13 @@ export class RegisterComponent implements OnInit, OnDestroy {
   };
 
   ngOnInit() {
-    // โหลด maintenance status + SSO toggles + poll ทุก 10s ให้ตอบสนอง toggle ทันที
+    // โหลด maintenance status + SSO toggles + poll ทุก 3s ให้ตอบสนอง toggle ทันที (ใช้ ngZone กัน CD spam)
     this.refreshSsoStatus();
-    this.statusPollTimer = setInterval(() => this.refreshSsoStatus(), 10000);
+    this.ngZone.runOutsideAngular(() => {
+      this.statusPollTimer = setInterval(() => {
+        this.ngZone.run(() => this.refreshSsoStatus());
+      }, 3000);
+    });
     document.addEventListener('visibilitychange', this.onVisibilityChange);
 
     this.loadDepartments();
@@ -114,10 +119,16 @@ export class RegisterComponent implements OnInit, OnDestroy {
   private refreshSsoStatus() {
     this.authService.getMaintenanceStatus().subscribe({
       next: (res: any) => {
-        this.maintenanceMode = res.maintenance;
-        this.maintenanceMessage = res.message;
+        const changed =
+          this.maintenanceMode !== !!res.maintenance ||
+          this.maintenanceMessage !== (res.message || '') ||
+          this.isThaIdEnabled !== !!res.thaid_enabled ||
+          this.isProviderIdEnabled !== !!res.providerid_enabled;
+        this.maintenanceMode = !!res.maintenance;
+        this.maintenanceMessage = res.message || '';
         this.isThaIdEnabled = !!res.thaid_enabled;
         this.isProviderIdEnabled = !!res.providerid_enabled;
+        if (changed) this.cdr.detectChanges();
       }
     });
   }
