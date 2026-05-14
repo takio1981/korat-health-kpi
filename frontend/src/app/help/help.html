@@ -214,21 +214,30 @@
           </ul>
         </div>
 
-        <!-- ThaID / ProviderID -->
+        <!-- ThaID / ProviderID SSO (OAuth 2.0) -->
         <div class="mt-4 bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200 rounded-xl p-4">
-          <h4 class="font-bold text-blue-800 text-sm mb-2"><i class="fas fa-id-card mr-2"></i>เข้าสู่ระบบด้วย ThaID / ProviderID (รอเปิดใช้งาน)</h4>
-          <p class="text-xs text-gray-600 mb-2">หน้า login มีปุ่มเข้าสู่ระบบทางเลือกอีก 2 ช่องทาง:</p>
+          <h4 class="font-bold text-blue-800 text-sm mb-2"><i class="fas fa-id-card mr-2"></i>SSO Login — ThaID (DGA) / ProviderID (MOPH)</h4>
+          <p class="text-xs text-gray-600 mb-2">หน้า login รองรับ OAuth 2.0 จาก 2 ผู้ให้บริการ (super_admin ต้องตั้งค่าใน Settings ก่อน):</p>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
             <div class="bg-white/70 rounded-lg p-2.5 border border-blue-100">
               <p class="font-bold text-blue-700"><i class="fas fa-id-card mr-1"></i>ThaID (DGA)</p>
-              <p class="text-gray-600 mt-0.5">บัญชี Thai Digital ID — ลงทะเบียนอัตโนมัติด้วยข้อมูลจากบัตรประชาชน</p>
+              <p class="text-gray-600 mt-0.5">บัญชี Thai Digital ID — ยืนยันตัวตนด้วยบัตรประชาชน</p>
             </div>
             <div class="bg-white/70 rounded-lg p-2.5 border border-cyan-100">
-              <p class="font-bold text-cyan-700"><i class="fas fa-user-md mr-1"></i>ProviderID (สธ.)</p>
-              <p class="text-gray-600 mt-0.5">บัญชี Provider ID ของกระทรวงสาธารณสุข สำหรับบุคลากรในระบบ HDC/MOPH</p>
+              <p class="font-bold text-cyan-700"><i class="fas fa-user-md mr-1"></i>ProviderID (MOPH)</p>
+              <p class="text-gray-600 mt-0.5">บัญชี Provider ID ของกระทรวงสาธารณสุข</p>
             </div>
           </div>
-          <p class="text-[10px] text-amber-600 mt-2"><i class="fas fa-info-circle mr-1"></i>ขณะนี้อยู่ระหว่างขอใช้บริการกับหน่วยงานเจ้าของ — กดปุ่มแล้วจะแจ้ง "รอเปิดใช้งาน" ให้ใช้ Username/Password ปกติไปก่อน</p>
+          <div class="mt-2 bg-white border border-blue-200 rounded-lg p-3 text-[11px] text-gray-700">
+            <p class="font-bold text-blue-700 mb-1"><i class="fas fa-cogs mr-1"></i>Flow การทำงาน (OAuth 2.0 Authorization Code)</p>
+            <ol class="list-decimal ml-4 space-y-0.5">
+              <li>กดปุ่ม ThaID/ProviderID → redirect ไปยังหน้า login ของ DGA/MOPH</li>
+              <li>หลังยืนยันตัวตน → ระบบดึง <b>cid</b> (เลขบัตรประชาชน) → SHA-256 hash → match กับ <code>users.cid</code></li>
+              <li>ถ้า <b>พบบัญชี</b> + อนุมัติแล้ว → ออก JWT + สร้าง session → เข้าระบบทันที</li>
+              <li>ถ้า <b>ไม่พบ</b> → ปฏิเสธ + แจ้ง "กรุณาลงทะเบียนก่อน"</li>
+            </ol>
+          </div>
+          <p class="text-[10px] text-amber-600 mt-2"><i class="fas fa-info-circle mr-1"></i>super_admin ต้องเปิด toggle + กรอก Client ID/Secret + Auth/Token/UserInfo URLs ในหน้า <b>ตั้งค่าระบบ → ตั้งค่าการเข้าสู่ระบบด้วย SSO</b> | ปุ่มจะปรากฏใน login/register ภายใน ≤3 วินาที (poll auto)</p>
         </div>
 
         <!-- ลืมรหัสผ่าน -->
@@ -670,6 +679,25 @@
           <p class="text-xs text-red-600 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>การล้างข้อมูลไม่สามารถย้อนกลับได้ กรุณาสำรองข้อมูลก่อนทุกครั้ง</p>
         </div>
 
+        <!-- SSO Config (ProviderID + ThaID) -->
+        <div class="bg-cyan-50 border border-cyan-200 rounded-xl p-4 mb-4">
+          <h4 class="font-bold text-cyan-800 text-sm mb-2"><i class="fas fa-id-card mr-2"></i>ตั้งค่าการเข้าสู่ระบบด้วย SSO (ProviderID + ThaID)</h4>
+          <p class="text-xs text-gray-600 mb-2">เปิด/ปิด + กรอก config OAuth สำหรับ login ผ่านบริการกลาง:</p>
+          <ol class="list-decimal ml-5 text-xs text-gray-600 space-y-1">
+            <li>เปิด <b>toggle ProviderID</b> หรือ <b>ThaID</b> ที่ต้องการใช้</li>
+            <li>กรอก config OAuth (ขอจาก MOPH/DGA):
+              <ul class="list-disc ml-4 mt-1 space-y-0.5">
+                <li><b>Client ID</b> + <b>Client Secret</b> (มี toggle ซ่อน/แสดง)</li>
+                <li><b>Authorization URL</b> / <b>Token URL</b> / <b>UserInfo URL</b></li>
+                <li><b>Redirect URI</b> — ลงทะเบียนกับ MOPH/DGA: <code>https://yourdomain/khupskpi/api/auth/{providerid|thaid}/callback</code></li>
+                <li><b>Scope</b> — เช่น <code>openid profile</code></li>
+              </ul>
+            </li>
+            <li>กดบันทึก → ปุ่ม SSO ในหน้า Login/Register ปรากฏภายใน ≤3 วินาที (poll auto)</li>
+          </ol>
+          <p class="text-[11px] text-cyan-700 mt-2"><i class="fas fa-shield-alt mr-1"></i>ระบบ match user ด้วย <b>เลขบัตรประชาชน (SHA-256 hash)</b> — ปฏิเสธ user ใหม่ ต้องลงทะเบียนก่อน</p>
+        </div>
+
         <!-- แจ้งเตือนผู้สมัครใหม่ -->
         <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
           <h4 class="font-bold text-blue-800 text-sm mb-2"><i class="fas fa-bell mr-2"></i>แจ้งเตือนผู้สมัครใหม่ — สวิทช์เปิด/ปิดแต่ละช่องทาง</h4>
@@ -969,6 +997,20 @@
               <li>ตัวชี้วัดที่ทุกหน่วยต้องรายงาน: all_required</li>
             </ul>
           </div>
+        </div>
+
+        <!-- ส่วน: จัดการหน่วยบริการ (chospital) -->
+        <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4">
+          <h4 class="font-bold text-emerald-800 text-sm mb-2"><i class="fas fa-hospital mr-2"></i>จัดการหน่วยบริการ (Tab ที่ 5 ใน kpi-manage)</h4>
+          <p class="text-xs text-gray-600 mb-2">จัดการตาราง <code>chospital</code> — เพิ่ม/แก้ไข/ลบ หน่วยบริการในจังหวัด</p>
+          <ol class="list-decimal ml-5 text-xs text-gray-600 space-y-1">
+            <li>เข้าหน้า <b>"จัดการตัวชี้วัด"</b> → Tab <b>"หน่วยบริการ"</b></li>
+            <li>มี filter 3 ตัว: ค้นหา (ชื่อ/hoscode), Dropdown <b>อำเภอ</b>, Dropdown <b>ประเภท</b> (รพ.ศ./รพ.ท./รพช./รพ.สต./สสอ./...) + count badge</li>
+            <li>กด <b>"+ เพิ่มข้อมูล"</b> → modal: hoscode (PK ต้อง unique), ชื่อหน่วยบริการ, ประเภท (จาก chostype), อำเภอ (จาก co_district) → provcode + distcode จะ auto-fill จาก distid</li>
+            <li>แก้ไข: ปุ่ม <i class="fas fa-edit text-yellow-500"></i> — hoscode จะ disabled (เป็น PK ห้ามแก้)</li>
+            <li>ลบ: ปุ่ม <i class="fas fa-trash text-red-500"></i> — Backend block ถ้ามี users หรือ kpi_results อ้างอิงอยู่ (แสดง error count)</li>
+          </ol>
+          <p class="text-[11px] text-emerald-700 mt-2"><i class="fas fa-shield-alt mr-1"></i>CRUD เฉพาะ super_admin | log เข้า system_logs: HOSPITAL_CREATE/UPDATE/DELETE</p>
         </div>
 
         <!-- ส่วนที่ 1: สร้าง/แก้ไข sub-indicators -->
