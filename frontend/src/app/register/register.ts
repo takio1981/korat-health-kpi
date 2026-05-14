@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
@@ -12,7 +12,7 @@ import Swal from 'sweetalert2';
   imports: [CommonModule, FormsModule, RouterModule],
   templateUrl: './register.html'
 })
-export class RegisterComponent implements OnInit {
+export class RegisterComponent implements OnInit, OnDestroy {
   private authService = inject(AuthService);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
@@ -90,8 +90,28 @@ export class RegisterComponent implements OnInit {
   filteredHospitals: any[] = [];
   selectedDistrictId: string = '';
 
+  private statusPollTimer: any = null;
+  private onVisibilityChange = () => {
+    if (document.visibilityState === 'visible') this.refreshSsoStatus();
+  };
+
   ngOnInit() {
-    // โหลด maintenance status + SSO toggles
+    // โหลด maintenance status + SSO toggles + poll ทุก 10s ให้ตอบสนอง toggle ทันที
+    this.refreshSsoStatus();
+    this.statusPollTimer = setInterval(() => this.refreshSsoStatus(), 10000);
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
+
+    this.loadDepartments();
+    this.loadHospitals();
+    this.loadDistricts();
+  }
+
+  ngOnDestroy() {
+    if (this.statusPollTimer) { clearInterval(this.statusPollTimer); this.statusPollTimer = null; }
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
+  }
+
+  private refreshSsoStatus() {
     this.authService.getMaintenanceStatus().subscribe({
       next: (res: any) => {
         this.maintenanceMode = res.maintenance;
@@ -100,10 +120,6 @@ export class RegisterComponent implements OnInit {
         this.isProviderIdEnabled = !!res.providerid_enabled;
       }
     });
-
-    this.loadDepartments();
-    this.loadHospitals();
-    this.loadDistricts();
   }
 
   loadDepartments() {

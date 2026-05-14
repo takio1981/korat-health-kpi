@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormGroup, FormControl, Validators } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
@@ -13,7 +13,7 @@ import Swal from 'sweetalert2';
   imports: [CommonModule, ReactiveFormsModule, RouterModule],
   templateUrl: './login.html'
 })
-export class LoginComponent {
+export class LoginComponent implements OnDestroy {
   private router = inject(Router);
   private authService = inject(AuthService);
   themeService = inject(ThemeService);
@@ -51,7 +51,25 @@ export class LoginComponent {
     });
   }
 
+  private statusPollTimer: any = null;
+  private onVisibilityChange = () => {
+    if (document.visibilityState === 'visible') this.refreshSsoStatus();
+  };
+
   ngOnInit() {
+    this.refreshSsoStatus();
+    // Poll ทุก 10 วินาที เพื่อให้ toggle SSO มีผลทันทีบนหน้า login ที่เปิดอยู่
+    this.statusPollTimer = setInterval(() => this.refreshSsoStatus(), 10000);
+    // Refresh ทันทีเมื่อ tab กลับมา active
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
+  }
+
+  ngOnDestroy() {
+    if (this.statusPollTimer) { clearInterval(this.statusPollTimer); this.statusPollTimer = null; }
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
+  }
+
+  private refreshSsoStatus() {
     this.authService.getMaintenanceStatus().subscribe({
       next: (res: any) => {
         this.maintenanceMode = res.maintenance;
