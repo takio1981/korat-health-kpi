@@ -197,6 +197,18 @@ export class AuthService {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.get(`${this.apiUrl}/hospitals`, { headers });
   }
+  createHospital(data: any): Observable<any> {
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${localStorage.getItem('kpi_token')}` });
+    return this.http.post(`${this.apiUrl}/hospitals`, data, { headers });
+  }
+  updateHospital(hoscode: string, data: any): Observable<any> {
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${localStorage.getItem('kpi_token')}` });
+    return this.http.put(`${this.apiUrl}/hospitals/${encodeURIComponent(hoscode)}`, data, { headers });
+  }
+  deleteHospital(hoscode: string): Observable<any> {
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${localStorage.getItem('kpi_token')}` });
+    return this.http.delete(`${this.apiUrl}/hospitals/${encodeURIComponent(hoscode)}`, { headers });
+  }
 
   getDistricts(): Observable<any> {
     const token = localStorage.getItem('kpi_token');

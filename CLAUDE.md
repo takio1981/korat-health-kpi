@@ -224,6 +224,14 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - Dashboard filter `indicator_off_type`: SQL `(i.evaluation_mode='all_required' OR i.required_off_types LIKE '%"CODE"%')`
 - Dashboard badge: `evaluation_mode='all_required'` → "ทุกประเภท" (purple) | `'any_one'` + codes → ชื่อประเภท (cyan)
 
+### kpi-manage Hospitals tab
+- 5 tabs: ตัวชี้วัด / หมวดหมู่หลัก / ยุทธศาสตร์ / หน่วยงาน / **หน่วยบริการ**
+- CRUD endpoints `/hospitals` (super_admin): GET/POST/PUT/DELETE
+- DELETE ตรวจ users + kpi_results อ้างอิงก่อน — block ถ้ามี
+- Modal fields: hoscode (PK, disabled เมื่อ edit) / hosname / hostype (จาก chostype) / distid (จาก co_district, auto-fill provcode+distcode)
+- Filter row: อำเภอ + ประเภท (เพิ่มเติมจาก search + count badge)
+- chospital ไม่มี is_active → ซ่อน toggle column สำหรับแท็บนี้
+
 ### SSO Login (ProviderID MOPH + ThaID DGA)
 - Settings (super_admin): toggle เปิด/ปิด + กรอก OAuth config (client_id, secret, auth_url, token_url, userinfo_url, redirect_uri, scope)
 - เก็บใน `system_settings` keys: `<provider>_{enabled,client_id,client_secret,auth_url,token_url,userinfo_url,redirect_uri,scope}`

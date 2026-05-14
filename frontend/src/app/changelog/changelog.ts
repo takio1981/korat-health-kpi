@@ -21,6 +21,7 @@ export class ChangelogComponent {
       version: '2569.05.12',
       date: '12 พฤษภาคม 2569',
       changes: [
+        { type: 'feature', text: 'kpi-manage: เพิ่มแถบเมนู "หน่วยบริการ" (5th tab) — CRUD chospital (super_admin) | filter อำเภอ+ประเภท | endpoint POST/PUT/DELETE /hospitals ตรวจ user/results อ้างอิง ก่อนลบ' },
         { type: 'feature', text: 'SSO Login (ProviderID MOPH + ThaID DGA) — OAuth 2.0 Authorization Code flow + form กรอก config OAuth ใน Settings (client_id, secret, auth/token/userinfo URLs, redirect_uri, scope) | match user ด้วย cid SHA-256 | ปฏิเสธ user ใหม่ ต้องลงทะเบียนก่อน' },
         { type: 'fix', text: 'Sync to HDC modal: checkbox "เลือกทั้งหมด" state สลับกัน — เพิ่ม [checked]+[indeterminate] binding จาก getter' },
         { type: 'improve', text: 'Login/Register poll SSO toggle ทุก 3s + force CD ผ่าน NgZone+detectChanges → ตอบสนอง toggle ทันทีโดยไม่ต้องคลิก/refresh' },

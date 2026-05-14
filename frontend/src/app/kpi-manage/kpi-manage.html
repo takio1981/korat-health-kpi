@@ -6,6 +6,7 @@
       <button (click)="switchTab('main-indicators')" [class]="activeTab === 'main-indicators' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="flex-1 py-4 px-6 text-center border-b-2 font-medium text-sm focus:outline-none">หมวดหมู่หลัก</button>
       <button (click)="switchTab('strategies')" [class]="activeTab === 'strategies' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="flex-1 py-4 px-6 text-center border-b-2 font-medium text-sm focus:outline-none">ยุทธศาสตร์</button>
       <button (click)="switchTab('departments')" [class]="activeTab === 'departments' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="flex-1 py-4 px-6 text-center border-b-2 font-medium text-sm focus:outline-none">หน่วยงาน</button>
+      <button (click)="switchTab('hospitals')" [class]="activeTab === 'hospitals' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="flex-1 py-4 px-6 text-center border-b-2 font-medium text-sm focus:outline-none">หน่วยบริการ</button>
     </div>
 
     <div class="p-6">
@@ -15,11 +16,11 @@
           <div class="relative w-full md:w-64">
             <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">ค้นหา</label>
             <input type="text" [(ngModel)]="searchTerm" (input)="applyFilter()"
-                   [placeholder]="activeTab === 'indicators' ? 'ชื่อ / รหัสตัวชี้วัด...' : activeTab === 'main-indicators' ? 'ชื่อหมวดหมู่หลัก...' : activeTab === 'strategies' ? 'ชื่อยุทธศาสตร์...' : 'ชื่อ / รหัสหน่วยงาน...'"
+                   [placeholder]="activeTab === 'indicators' ? 'ชื่อ / รหัสตัวชี้วัด...' : activeTab === 'main-indicators' ? 'ชื่อหมวดหมู่หลัก...' : activeTab === 'strategies' ? 'ชื่อยุทธศาสตร์...' : activeTab === 'hospitals' ? 'ชื่อ / hoscode หน่วยบริการ...' : 'ชื่อ / รหัสหน่วยงาน...'"
                    class="w-full pl-4 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-sm hover:border-green-400 transition-colors">
           </div>
-          <!-- Status Filter -->
-          <div class="flex gap-1">
+          <!-- Status Filter — ซ่อนสำหรับ hospitals (ไม่มี is_active) -->
+          <div *ngIf="activeTab !== 'hospitals'" class="flex gap-1">
             <button (click)="filterActive = ''; applyFilter()"
                     [ngClass]="filterActive === '' ? 'bg-gray-700 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
                     class="px-3 py-2 rounded-lg text-xs font-bold transition-all">
@@ -36,31 +37,57 @@
               <i class="fas fa-times-circle mr-1"></i>ปิด ({{ getInactiveCount() }})
             </button>
           </div>
+          <!-- Hospital filter row: อำเภอ + ประเภท -->
+          <ng-container *ngIf="activeTab === 'hospitals'">
+            <div class="relative">
+              <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">อำเภอ</label>
+              <select [(ngModel)]="hospFilterDistid" (change)="applyFilter()"
+                      class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none">
+                <option value="">ทุกอำเภอ</option>
+                <option *ngFor="let d of districts" [value]="d.distid">{{ d.distname }}</option>
+              </select>
+            </div>
+            <div class="relative">
+              <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">ประเภท</label>
+              <select [(ngModel)]="hospFilterHostype" (change)="applyFilter()"
+                      class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none">
+                <option value="">ทุกประเภท</option>
+                <option *ngFor="let t of hosTypes" [value]="t.hostypecode">{{ t.hostypename }}</option>
+              </select>
+            </div>
+            <span class="px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold">
+              <i class="fas fa-hospital mr-1"></i>{{ filteredHospitals.length }} / {{ hospitals.length }} แห่ง
+            </span>
+          </ng-container>
         </div>
         <button (click)="openModal()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold whitespace-nowrap"><i class="fas fa-plus mr-2"></i> เพิ่มข้อมูล</button>
       </div>
 
       <!-- === Mobile Card View === -->
       <div class="md:hidden space-y-2 p-3 overflow-y-auto card-scroll" style="max-height: calc(100vh - 320px);">
-        <div *ngFor="let item of (activeTab === 'indicators' ? filteredIndicators : (activeTab === 'main-indicators' ? filteredMainIndicators : (activeTab === 'strategies' ? filteredStrategies : filteredDepartments)))"
+        <div *ngFor="let item of (activeTab === 'indicators' ? filteredIndicators : (activeTab === 'main-indicators' ? filteredMainIndicators : (activeTab === 'strategies' ? filteredStrategies : (activeTab === 'departments' ? filteredDepartments : filteredHospitals))))"
              class="bg-white rounded-xl border border-gray-200 p-3 shadow-sm"
-             [ngClass]="{'opacity-50': item.is_active === 0 || item.is_active === '0'}">
+             [ngClass]="{'opacity-50': activeTab !== 'hospitals' && (item.is_active === 0 || item.is_active === '0')}">
           <div class="flex items-start justify-between gap-2">
             <div class="flex-1 min-w-0">
               <p class="font-bold text-gray-900 text-sm whitespace-normal break-words" *ngIf="activeTab === 'indicators'">{{ item.kpi_indicators_name }}</p>
               <p class="font-bold text-gray-900 text-sm whitespace-normal break-words" *ngIf="activeTab === 'main-indicators'">{{ item.main_indicator_name }}</p>
               <p class="font-bold text-gray-900 text-sm whitespace-normal break-words" *ngIf="activeTab === 'strategies'">{{ item.yut_name }}</p>
               <p class="font-bold text-gray-900 text-sm whitespace-normal break-words" *ngIf="activeTab === 'departments'">{{ item.dept_name }}</p>
+              <p class="font-bold text-gray-900 text-sm whitespace-normal break-words" *ngIf="activeTab === 'hospitals'">{{ item.hosname }}</p>
               <div class="flex flex-wrap gap-1 mt-1 text-[10px] text-gray-500">
-                <span class="bg-gray-100 px-1.5 py-0.5 rounded">ID: {{ item.id }}</span>
+                <span *ngIf="activeTab !== 'hospitals'" class="bg-gray-100 px-1.5 py-0.5 rounded">ID: {{ item.id }}</span>
+                <span *ngIf="activeTab === 'hospitals'" class="bg-gray-100 px-1.5 py-0.5 rounded font-mono">{{ item.hoscode }}</span>
                 <span *ngIf="activeTab === 'indicators' && item.main_indicator_name" class="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">{{ item.main_indicator_name }}</span>
                 <span *ngIf="activeTab === 'indicators' && item.dept_name" class="bg-green-50 text-green-600 px-1.5 py-0.5 rounded">{{ item.dept_name }}</span>
                 <span *ngIf="activeTab === 'main-indicators' && item.yut_name" class="bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded">{{ item.yut_name }}</span>
                 <span *ngIf="activeTab === 'departments' && item.dept_code" class="bg-gray-100 px-1.5 py-0.5 rounded">{{ item.dept_code }}</span>
+                <span *ngIf="activeTab === 'hospitals' && item.hostypename" class="bg-cyan-50 text-cyan-700 px-1.5 py-0.5 rounded">{{ item.hostypename }}</span>
+                <span *ngIf="activeTab === 'hospitals' && item.distname" class="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded"><i class="fas fa-map-marker-alt"></i> {{ item.distname }}</span>
               </div>
             </div>
             <div class="flex items-center gap-2 shrink-0">
-              <button (click)="toggleActive(item)" class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
+              <button *ngIf="activeTab !== 'hospitals'" (click)="toggleActive(item)" class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
                       [ngClass]="item.is_active === 1 || item.is_active === '1' || item.is_active === true ? 'bg-green-500' : 'bg-gray-300'">
                 <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform"
                       [ngClass]="item.is_active === 1 || item.is_active === '1' || item.is_active === true ? 'translate-x-4' : 'translate-x-0.5'"></span>
@@ -72,7 +99,7 @@
                 <i class="fas fa-clipboard-list"></i>
               </button>
               <button (click)="openModal(item)" class="text-yellow-500 text-sm"><i class="fas fa-edit"></i></button>
-              <button *ngIf="isSuperAdmin" (click)="deleteItem(item.id)" class="text-red-500 text-sm"><i class="fas fa-trash"></i></button>
+              <button *ngIf="isSuperAdmin" (click)="deleteItem(activeTab === 'hospitals' ? item.hoscode : item.id)" class="text-red-500 text-sm"><i class="fas fa-trash"></i></button>
             </div>
           </div>
         </div>
@@ -92,15 +119,19 @@
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'strategies'">ชื่อยุทธศาสตร์</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'departments'">รหัส</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'departments'">ชื่อหน่วยงาน</th>
-              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-24">สถานะ</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'hospitals'">hoscode</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'hospitals'">ชื่อหน่วยบริการ</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'hospitals'">ประเภท</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'hospitals'">อำเภอ</th>
+              <th *ngIf="activeTab !== 'hospitals'" class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-24">สถานะ</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-right rounded-tr-xl w-24">จัดการ</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
-            <tr *ngFor="let item of (activeTab === 'indicators' ? filteredIndicators : (activeTab === 'main-indicators' ? filteredMainIndicators : (activeTab === 'strategies' ? filteredStrategies : filteredDepartments)))"
+            <tr *ngFor="let item of (activeTab === 'indicators' ? filteredIndicators : (activeTab === 'main-indicators' ? filteredMainIndicators : (activeTab === 'strategies' ? filteredStrategies : (activeTab === 'departments' ? filteredDepartments : filteredHospitals))))"
                 class="hover:bg-gray-50 text-sm"
-                [ngClass]="{'opacity-50 bg-gray-50': item.is_active === 0 || item.is_active === '0'}">
-              <td class="px-4 py-3 text-gray-500 text-xs">{{ item.id }}</td>
+                [ngClass]="{'opacity-50 bg-gray-50': activeTab !== 'hospitals' && (item.is_active === 0 || item.is_active === '0')}">
+              <td class="px-4 py-3 text-gray-500 text-xs">{{ activeTab === 'hospitals' ? '' : item.id }}</td>
 
               <ng-container *ngIf="activeTab === 'indicators'">
                 <td class="px-4 py-3 font-medium text-gray-900">{{ item.kpi_indicators_name }}</td>
@@ -122,8 +153,15 @@
                 <td class="px-4 py-3 font-medium text-gray-900">{{ item.dept_name }}</td>
               </ng-container>
 
-              <!-- Toggle Switch -->
-              <td class="px-4 py-3 text-center">
+              <ng-container *ngIf="activeTab === 'hospitals'">
+                <td class="px-4 py-3 text-gray-600 font-mono text-xs">{{ item.hoscode }}</td>
+                <td class="px-4 py-3 font-medium text-gray-900">{{ item.hosname }}</td>
+                <td class="px-4 py-3 text-cyan-700 text-xs">{{ item.hostypename || item.hostype || '-' }}</td>
+                <td class="px-4 py-3 text-amber-700 text-xs"><i *ngIf="item.distname" class="fas fa-map-marker-alt mr-1"></i>{{ item.distname || '-' }}</td>
+              </ng-container>
+
+              <!-- Toggle Switch (hidden สำหรับ hospitals) -->
+              <td *ngIf="activeTab !== 'hospitals'" class="px-4 py-3 text-center">
                 <button (click)="toggleActive(item)" class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none"
                         [ngClass]="item.is_active === 1 || item.is_active === '1' || item.is_active === true ? 'bg-green-500' : 'bg-gray-300'">
                   <span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm"
@@ -140,7 +178,7 @@
                   <i class="fas fa-clipboard-list"></i>
                 </button>
                 <button (click)="openModal(item)" class="text-yellow-500 hover:text-yellow-600"><i class="fas fa-edit"></i></button>
-                <button *ngIf="isSuperAdmin" (click)="deleteItem(item.id)" class="text-red-500 hover:text-red-600"><i class="fas fa-trash"></i></button>
+                <button *ngIf="isSuperAdmin" (click)="deleteItem(activeTab === 'hospitals' ? item.hoscode : item.id)" class="text-red-500 hover:text-red-600"><i class="fas fa-trash"></i></button>
               </td>
             </tr>
           </tbody>
@@ -500,6 +538,42 @@
         <div>
           <label class="block text-xs font-bold text-gray-600 mb-1">รายละเอียด</label>
           <textarea [(ngModel)]="currentItem.description" rows="2" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none"></textarea>
+        </div>
+      </ng-container>
+
+      <!-- Fields for Hospitals -->
+      <ng-container *ngIf="activeTab === 'hospitals'">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-gray-600 mb-1">hoscode <span class="text-red-500">*</span></label>
+            <input type="text" [(ngModel)]="currentItem.hoscode" [disabled]="isEditMode" maxlength="20"
+                   placeholder="เช่น 10888"
+                   class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none font-mono disabled:bg-gray-100 disabled:cursor-not-allowed">
+            <p *ngIf="isEditMode" class="text-[10px] text-gray-400 mt-0.5">hoscode เป็น primary key ไม่สามารถแก้ไขได้</p>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-600 mb-1">ชื่อหน่วยบริการ <span class="text-red-500">*</span></label>
+            <input type="text" [(ngModel)]="currentItem.hosname"
+                   class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-600 mb-1">ประเภทหน่วยบริการ</label>
+            <select [(ngModel)]="currentItem.hostype"
+                    class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none bg-white">
+              <option value="">-- เลือกประเภท --</option>
+              <option *ngFor="let t of hosTypes" [value]="t.hostypecode">{{ t.hostypename }} ({{ t.hostypecode }})</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-600 mb-1">อำเภอ</label>
+            <select [(ngModel)]="currentItem.distid"
+                    (ngModelChange)="currentItem.provcode = currentItem.distid ? currentItem.distid.toString().substring(0,2) : null; currentItem.distcode = currentItem.distid ? currentItem.distid.toString().substring(2) : null"
+                    class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none bg-white">
+              <option value="">-- เลือกอำเภอ --</option>
+              <option *ngFor="let d of districts" [value]="d.distid">{{ d.distname }} ({{ d.distid }})</option>
+            </select>
+            <p class="text-[10px] text-gray-400 mt-0.5">provcode + distcode จะถูก auto-fill จาก distid</p>
+          </div>
         </div>
       </ng-container>
     </div>

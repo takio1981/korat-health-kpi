@@ -2390,11 +2390,73 @@ apiRouter.get('/departments', authenticateToken, async (req, res) => {
 
 apiRouter.get('/hospitals', authenticateToken, async (req, res) => {
     try {
-        const [hospitals] = await db.query("SELECT hoscode, hosname, hostype, CONCAT(provcode, distcode) as distid FROM chospital ORDER BY FIELD(hostype,'05','06','07','18'), hosname");
+        const [hospitals] = await db.query(`
+            SELECT h.hoscode, h.hosname, h.hostype, h.provcode, h.distcode, h.distid,
+                   t.hostypename, d.distname
+              FROM chospital h
+         LEFT JOIN chostype t ON t.hostypecode = h.hostype
+         LEFT JOIN co_district d ON d.distid = h.distid
+          ORDER BY FIELD(h.hostype,'05','06','07','18'), h.hosname
+        `);
         res.json({ success: true, data: hospitals });
     } catch (error) {
-        res.status(500).json({ success: false });
+        res.status(500).json({ success: false, message: error.message });
     }
+});
+
+// === Hospitals CRUD (super_admin) ===
+// POST /hospitals — create
+apiRouter.post('/hospitals', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { hoscode, hosname, hostype, provcode, distcode } = req.body;
+    if (!hoscode || !hosname) return res.status(400).json({ success: false, message: 'กรุณากรอก hoscode + hosname' });
+    if (!/^[0-9A-Za-z_-]{1,20}$/.test(String(hoscode))) return res.status(400).json({ success: false, message: 'hoscode ไม่ถูกต้อง (สูงสุด 20 ตัวอักษร a-z, 0-9, _, -)' });
+    try {
+        const [exists] = await db.query('SELECT hoscode FROM chospital WHERE hoscode = ?', [hoscode]);
+        if (exists.length > 0) return res.status(400).json({ success: false, message: 'hoscode นี้มีอยู่แล้ว' });
+        const distid = (provcode && distcode) ? String(provcode) + String(distcode) : null;
+        await db.query(
+            'INSERT INTO chospital (hoscode, hosname, hostype, provcode, distcode, distid) VALUES (?, ?, ?, ?, ?, ?)',
+            [hoscode, hosname, hostype || null, provcode || null, distcode || null, distid]
+        );
+        await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+            [req.user.userId, 'HOSPITAL_CREATE', 'chospital', JSON.stringify(req.body), req.ip]);
+        res.json({ success: true, message: 'เพิ่มหน่วยบริการเรียบร้อย' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// PUT /hospitals/:hoscode — update
+apiRouter.put('/hospitals/:hoscode', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { hoscode } = req.params;
+    const { hosname, hostype, provcode, distcode } = req.body;
+    if (!hosname) return res.status(400).json({ success: false, message: 'กรุณากรอก hosname' });
+    try {
+        const distid = (provcode && distcode) ? String(provcode) + String(distcode) : null;
+        const [r] = await db.query(
+            'UPDATE chospital SET hosname=?, hostype=?, provcode=?, distcode=?, distid=? WHERE hoscode = ?',
+            [hosname, hostype || null, provcode || null, distcode || null, distid, hoscode]
+        );
+        if (r.affectedRows === 0) return res.status(404).json({ success: false, message: 'ไม่พบหน่วยบริการนี้' });
+        await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+            [req.user.userId, 'HOSPITAL_UPDATE', 'chospital', JSON.stringify({ hoscode, ...req.body }), req.ip]);
+        res.json({ success: true, message: 'อัปเดตเรียบร้อย' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// DELETE /hospitals/:hoscode — delete (ตรวจสอบว่ามี user/kpi_results อ้างอิงอยู่หรือไม่)
+apiRouter.delete('/hospitals/:hoscode', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { hoscode } = req.params;
+    try {
+        const [users] = await db.query('SELECT COUNT(*) AS cnt FROM users WHERE hospcode = ?', [hoscode]);
+        const [results] = await db.query('SELECT COUNT(*) AS cnt FROM kpi_results WHERE hospcode = ? LIMIT 1', [hoscode]);
+        if (users[0].cnt > 0 || results[0].cnt > 0) {
+            return res.status(400).json({ success: false, message: `ไม่สามารถลบได้: มี user (${users[0].cnt}) หรือ ผลงาน KPI (${results[0].cnt}) อ้างอิงอยู่` });
+        }
+        const [r] = await db.query('DELETE FROM chospital WHERE hoscode = ?', [hoscode]);
+        if (r.affectedRows === 0) return res.status(404).json({ success: false, message: 'ไม่พบหน่วยบริการนี้' });
+        await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+            [req.user.userId, 'HOSPITAL_DELETE', 'chospital', JSON.stringify({ hoscode }), req.ip]);
+        res.json({ success: true, message: 'ลบเรียบร้อย' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
 apiRouter.get('/hostype', authenticateToken, async (req, res) => {

@@ -27,12 +27,18 @@ export class KpiManageComponent implements OnInit {
   mainIndicators: any[] = [];
   strategies: any[] = [];
   departments: any[] = [];
+  hospitals: any[] = [];
+  districts: any[] = [];
 
   // Filtered Lists
   filteredIndicators: any[] = [];
   filteredMainIndicators: any[] = [];
   filteredStrategies: any[] = [];
   filteredDepartments: any[] = [];
+  filteredHospitals: any[] = [];
+  // Extra hospital filter — distid + hostype
+  hospFilterDistid: string = '';
+  hospFilterHostype: string = '';
   searchTerm: string = '';
   filterActive: string = ''; // '' = ทั้งหมด, '1' = เปิดใช้งาน, '0' = ปิดใช้งาน
 
@@ -117,6 +123,19 @@ export class KpiManageComponent implements OnInit {
     // โหลดประเภทหน่วยบริการ (chostype)
     this.authService.getHosTypes().subscribe(res => {
       if (res.success) { this.hosTypes = res.data; this.cdr.detectChanges(); }
+    });
+    // โหลด hospitals
+    this.authService.getHospitals().subscribe(res => {
+      if (res.success) {
+        this.hospitals = res.data;
+        this.filteredHospitals = [...this.hospitals];
+        if (this.activeTab === 'hospitals') this.applyFilter();
+        this.cdr.detectChanges();
+      }
+    });
+    // โหลด districts (สำหรับ dropdown ใน modal + filter)
+    this.authService.getDistricts().subscribe(res => {
+      if (res.success) { this.districts = res.data; this.cdr.detectChanges(); }
     });
   }
 
@@ -268,6 +287,14 @@ export class KpiManageComponent implements OnInit {
           (d.dept_code && d.dept_code.toLowerCase().includes(search))
         )
       );
+    } else if (this.activeTab === 'hospitals') {
+      this.filteredHospitals = this.hospitals.filter(h => {
+        if (this.hospFilterDistid && String(h.distid) !== this.hospFilterDistid) return false;
+        if (this.hospFilterHostype && String(h.hostype) !== this.hospFilterHostype) return false;
+        if (!search) return true;
+        return (h.hosname && h.hosname.toLowerCase().includes(search)) ||
+               (h.hoscode && String(h.hoscode).toLowerCase().includes(search));
+      });
     }
     this.cdr.detectChanges();
   }
@@ -276,6 +303,8 @@ export class KpiManageComponent implements OnInit {
     this.activeTab = tab;
     this.searchTerm = '';
     this.filterActive = '';
+    this.hospFilterDistid = '';
+    this.hospFilterHostype = '';
     this.applyFilter();
   }
 
@@ -356,6 +385,18 @@ export class KpiManageComponent implements OnInit {
       observable = this.isEditMode ? this.authService.updateMainYut(id, this.currentItem) : this.authService.createMainYut(this.currentItem);
     } else if (this.activeTab === 'departments') {
       observable = this.isEditMode ? this.authService.updateDepartment(id, this.currentItem) : this.authService.createDepartment(this.currentItem);
+    } else if (this.activeTab === 'hospitals') {
+      // hoscode = primary key (string)
+      const payload: any = {
+        hoscode: this.currentItem.hoscode,
+        hosname: this.currentItem.hosname,
+        hostype: this.currentItem.hostype,
+        provcode: this.currentItem.provcode,
+        distcode: this.currentItem.distcode
+      };
+      observable = this.isEditMode
+        ? this.authService.updateHospital(this.currentItem.hoscode, payload)
+        : this.authService.createHospital(payload);
     }
 
     if (observable) {
@@ -389,6 +430,7 @@ export class KpiManageComponent implements OnInit {
         else if (this.activeTab === 'main-indicators') observable = this.authService.deleteMainIndicator(id);
         else if (this.activeTab === 'strategies') observable = this.authService.deleteMainYut(id);
         else if (this.activeTab === 'departments') observable = this.authService.deleteDepartment(id);
+        else if (this.activeTab === 'hospitals') observable = this.authService.deleteHospital(String(id));
 
         if (observable) {
           observable.subscribe({
@@ -438,6 +480,7 @@ export class KpiManageComponent implements OnInit {
     if (this.activeTab === 'main-indicators') return this.mainIndicators.filter(i => Number(i.is_active) === 1).length;
     if (this.activeTab === 'strategies') return this.strategies.filter(i => Number(i.is_active) === 1).length;
     if (this.activeTab === 'departments') return this.departments.filter(i => Number(i.is_active) === 1).length;
+    if (this.activeTab === 'hospitals') return this.hospitals.length;
     return 0;
   }
 
