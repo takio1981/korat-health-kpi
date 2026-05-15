@@ -28,7 +28,7 @@ export class KpiManagerComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // === Wizard state — 2 ขั้น (รวม DB Compare + Export เข้าเป็น "ส่งออกข้อมูล KPI ↔ HDC") ===
   currentStep: WizardStep = 1;
-  showWorkflowGuide: boolean = true;
+  showWorkflowGuide: boolean = false;
 
   // ข้อมูล HDC สำหรับส่งจาก DB Compare → Form Builder (embedded)
   hdcColumnsForForm: any[] = [];
