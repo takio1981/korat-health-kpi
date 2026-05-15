@@ -475,15 +475,58 @@
 
       <!-- Preview Table -->
       @if (syncPreviewData.length > 0) {
-        <div class="flex items-center justify-between mb-4">
+        <!-- Filter + Search -->
+        <div class="flex flex-col sm:flex-row gap-2 mb-3 items-stretch sm:items-end">
+          <div class="relative flex-1">
+            <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 z-10">ค้นหา</label>
+            <input type="text" [(ngModel)]="syncSearch"
+                   placeholder="ชื่อตาราง / ชื่อตัวชี้วัด..."
+                   class="w-full pl-4 pr-9 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none text-sm hover:border-teal-400 transition-colors">
+            <button *ngIf="syncSearch" (click)="syncSearch = ''"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 p-1" title="ล้างค้นหา">
+              <i class="fas fa-times-circle"></i>
+            </button>
+          </div>
+          <div class="flex gap-1 flex-wrap">
+            <button (click)="syncStatusFilter = ''"
+                    [ngClass]="syncStatusFilter === '' ? 'bg-gray-700 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
+                    class="px-3 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap">
+              ทั้งหมด ({{ syncPreviewData.length }})
+            </button>
+            <button (click)="syncStatusFilter = 'ready'"
+                    [ngClass]="syncStatusFilter === 'ready' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
+                    class="px-3 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap">
+              <i class="fas fa-check-circle mr-1"></i>พร้อมส่ง ({{ getSyncCount('ready') }})
+            </button>
+            <button (click)="syncStatusFilter = 'no_remote'"
+                    [ngClass]="syncStatusFilter === 'no_remote' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
+                    class="px-3 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap">
+              <i class="fas fa-exclamation-circle mr-1"></i>ไม่มีใน HDC ({{ getSyncCount('no_remote') }})
+            </button>
+            <button (click)="syncStatusFilter = 'empty'"
+                    [ngClass]="syncStatusFilter === 'empty' ? 'bg-gray-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
+                    class="px-3 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap">
+              <i class="fas fa-inbox mr-1"></i>ไม่มีข้อมูล ({{ getSyncCount('empty') }})
+            </button>
+            <button *ngIf="syncSearch || syncStatusFilter" (click)="clearSyncFilters()"
+                    class="px-3 py-2 bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 rounded-lg text-xs font-bold transition-all whitespace-nowrap" title="ล้างตัวกรองทั้งหมด">
+              <i class="fas fa-times mr-1"></i>ล้างตัวกรอง
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between mb-2">
           <label class="flex items-center gap-2 text-sm font-bold text-teal-700 cursor-pointer">
             <input type="checkbox" [checked]="isAllSyncSelected"
                    [indeterminate]="isPartialSyncSelected"
                    (change)="toggleSyncAll()"
                    class="rounded text-teal-600 focus:ring-teal-400 h-4 w-4">
-            เลือกทั้งหมดที่พร้อมส่ง
+            เลือกทั้งหมดที่พร้อมส่ง (ในรายการที่กรอง)
           </label>
-          <span class="text-sm text-gray-500">เลือก: <b>{{ syncSelectedTables.size }}</b> / {{ syncPreviewData.length }} ตาราง</span>
+          <span class="text-sm text-gray-500">
+            แสดง: <b class="text-teal-700">{{ filteredSyncPreview.length }}</b> / {{ syncPreviewData.length }} ตาราง
+            | เลือก: <b class="text-emerald-700">{{ syncSelectedTables.size }}</b>
+          </span>
         </div>
 
         <div class="max-h-[50vh] overflow-y-auto border border-gray-200 rounded-xl" style="scrollbar-width: thin;">
@@ -500,7 +543,12 @@
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
-              @for (t of syncPreviewData; track t.table) {
+              @if (filteredSyncPreview.length === 0) {
+                <tr><td colspan="7" class="px-4 py-8 text-center text-gray-400 text-sm">
+                  <i class="fas fa-filter text-2xl mb-2 block"></i>ไม่พบรายการที่ตรงกับตัวกรอง
+                </td></tr>
+              }
+              @for (t of filteredSyncPreview; track t.table) {
                 <tr class="hover:bg-teal-50/30" [class.bg-teal-50]="syncSelectedTables.has(t.table)">
                   <td class="px-4 py-3 text-center">
                     <input type="checkbox" [checked]="syncSelectedTables.has(t.table)"

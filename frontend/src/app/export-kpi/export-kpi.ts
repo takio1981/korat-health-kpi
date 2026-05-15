@@ -61,6 +61,9 @@ export class ExportKpiComponent implements OnInit {
   syncPreviewData: any[] = [];
   syncLoading: boolean = false;
   syncSelectedTables = new Set<string>();
+  // Filter + search สำหรับ modal sync
+  syncSearch: string = '';
+  syncStatusFilter: string = ''; // '' = ทั้งหมด | 'ready' | 'empty' | 'no_remote'
 
   // === Export Schedule (ตารางเวลา export อัตโนมัติ) ===
   showSettingsModal: boolean = false;
@@ -545,6 +548,8 @@ export class ExportKpiComponent implements OnInit {
     this.showSyncModal = true;
     this.syncPreviewData = [];
     this.syncSelectedTables.clear();
+    this.syncSearch = '';
+    this.syncStatusFilter = '';
     this.cdr.detectChanges();
 
     this.authService.syncToHdcPreview().subscribe({
@@ -569,26 +574,49 @@ export class ExportKpiComponent implements OnInit {
     this.syncSelectedTables.has(table) ? this.syncSelectedTables.delete(table) : this.syncSelectedTables.add(table);
   }
 
+  // เลือกทั้งหมดในรายการที่ filter อยู่ (เฉพาะ ready)
   toggleSyncAll() {
-    const ready = this.syncPreviewData.filter((t: any) => t.status === 'ready');
-    if (ready.length === 0) return;
-    if (this.syncSelectedTables.size === ready.length) {
-      this.syncSelectedTables.clear();
+    const visibleReady = this.filteredSyncPreview.filter((t: any) => t.status === 'ready');
+    if (visibleReady.length === 0) return;
+    const allVisibleSelected = visibleReady.every((t: any) => this.syncSelectedTables.has(t.table));
+    if (allVisibleSelected) {
+      visibleReady.forEach((t: any) => this.syncSelectedTables.delete(t.table));
     } else {
-      ready.forEach((t: any) => this.syncSelectedTables.add(t.table));
+      visibleReady.forEach((t: any) => this.syncSelectedTables.add(t.table));
     }
   }
 
-  // คำนวณสถานะ checkbox "เลือกทั้งหมด" — true เมื่อทุก ready ถูกเลือก
+  // คำนวณสถานะ checkbox "เลือกทั้งหมด" — true เมื่อทุก ready ที่มองเห็น ถูกเลือก
   get isAllSyncSelected(): boolean {
-    const ready = this.syncPreviewData.filter((t: any) => t.status === 'ready');
-    return ready.length > 0 && this.syncSelectedTables.size === ready.length;
+    const visibleReady = this.filteredSyncPreview.filter((t: any) => t.status === 'ready');
+    return visibleReady.length > 0 && visibleReady.every((t: any) => this.syncSelectedTables.has(t.table));
   }
 
-  // partial selection (มีเลือกบางส่วน แต่ไม่ครบ) — สำหรับ indeterminate state
+  // partial selection — เลือกบางส่วนใน list ที่มองเห็น
   get isPartialSyncSelected(): boolean {
-    const ready = this.syncPreviewData.filter((t: any) => t.status === 'ready');
-    return this.syncSelectedTables.size > 0 && this.syncSelectedTables.size < ready.length;
+    const visibleReady = this.filteredSyncPreview.filter((t: any) => t.status === 'ready');
+    const selectedVisible = visibleReady.filter((t: any) => this.syncSelectedTables.has(t.table)).length;
+    return selectedVisible > 0 && selectedVisible < visibleReady.length;
+  }
+
+  // กรองตาม search (table/name) + status
+  get filteredSyncPreview(): any[] {
+    const q = (this.syncSearch || '').trim().toLowerCase();
+    return this.syncPreviewData.filter((t: any) => {
+      if (this.syncStatusFilter && t.status !== this.syncStatusFilter) return false;
+      if (!q) return true;
+      return (t.table && String(t.table).toLowerCase().includes(q)) ||
+             (t.name && String(t.name).toLowerCase().includes(q));
+    });
+  }
+
+  getSyncCount(status: string): number {
+    return this.syncPreviewData.filter((t: any) => t.status === status).length;
+  }
+
+  clearSyncFilters() {
+    this.syncSearch = '';
+    this.syncStatusFilter = '';
   }
 
   executeSyncToHdc() {
