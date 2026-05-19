@@ -18,6 +18,27 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.05.19',
+      date: '19 พฤษภาคม 2569',
+      changes: [
+        { type: 'feature', text: 'Backup Manager (Phase 1): ระบบสำรอง/กู้คืน MySQL/MariaDB แบบครบวงจร — Connection Manager (multi-DB), Manual Backup (mysqldump + gzip streaming + SHA-256 checksum), Files list/download/restore/delete, Restore 2 modes (new_db/replace + auto-backup ก่อน + confirm "RESTORE")' },
+        { type: 'feature', text: 'Backup Manager (Phase 2): Schedule อัตโนมัติ — เลือกวัน+เวลา+retention+compress, Notification Email/Telegram (success/failure แยกได้), Run Now + View Logs + Test Notification, atomic lock กัน double-run' },
+        { type: 'feature', text: 'Backup Manager (Phase 3): Cloud Upload (Google Drive OAuth 2.0 ใช้พื้นที่ Gmail 15GB ฟรี) + Monitor Dashboard (DB size, pool status, top tables, slow queries, disk usage, schedules summary, recent errors, auto-refresh 10s)' },
+        { type: 'feature', text: 'Backup Logs: เขียน .backup_log.txt + .restore_log.txt ทุกครั้ง — มีรายการตารางครบ + INSERTs count + verification COUNT(*) หลัง restore (เทียบ source vs target)' },
+        { type: 'feature', text: 'Privilege Check: ปุ่ม fa-shield-halved ในหน้า Connections — ตรวจ SHOW GRANTS + ทดสอบ SELECT จากตารางจริง ก่อน backup กัน schema-only dump' },
+        { type: 'feature', text: 'แจ้งเตือนการบันทึก KPI (Daily Digest): ระบบบันทึก audit ทุกครั้งที่ user save (3 ช่องทาง — update-kpi/dynamic-data/sub-results) → ส่งสรุปประจำวันถึง super_admin (Email+Telegram) เพื่อแจ้งให้อัพเดทตาราง Export' },
+        { type: 'feature', text: 'KPI Audit Digest UI: settings (เวลาส่ง/ขั้นต่ำ/channels), stats cards (วันนี้/ยังไม่แจ้ง/ทั้งหมด/ผู้ใช้), Last Digest panel, ตารางรายการบันทึก 300 records (filter เฉพาะที่ยังไม่ได้แจ้ง), ปุ่ม "ส่ง Digest ทันที" (test)' },
+        { type: 'fix', text: 'Timezone Asia/Bangkok (UTC+7): scheduler ทั้งหมด (Export + Backup + KPI Audit Digest) ใช้ Intl.DateTimeFormat กับ timeZone:"Asia/Bangkok" — ไม่ขึ้นกับ process timezone (เดิม schedule ตั้ง 02:00 รันที่ 09:00 ไทยใน Docker UTC)' },
+        { type: 'fix', text: 'Backup/Restore timestamps: เปลี่ยน new Date().toISOString() → bangkokTimestamp() helper — ชื่อไฟล์, ชื่อ DB target, log timestamps ใช้เวลาไทย UTC+7 จริง' },
+        { type: 'fix', text: 'Restore table count: นับซ้ำ (CREATE TABLE + comment "Table structure" = 2x) → ใช้ Set dedupe + verify จาก INFORMATION_SCHEMA.TABLES ของ target DB จริง' },
+        { type: 'fix', text: 'Backup mysqldump options: ลบ --column-statistics (MySQL 8 only) + --events (privilege) → MariaDB compatible — เดิมไฟล์ backup ว่างเปล่า exit 0 ผ่าน' },
+        { type: 'fix', text: 'Backup log encoding: เปลี่ยน [✓]/[V]/[!]/[✗] → ASCII [OK]/[VW]/[!!]/[XX] — เปิดด้วย Windows Notepad/Editor ไม่เป็น "â"' },
+        { type: 'improve', text: 'Backup file naming: เพิ่ม Bangkok timestamp + sanitize — รูปแบบ "<db>_<connName>_2026-05-19T14-09-30.sql.gz"' },
+        { type: 'improve', text: 'Realtime progress: backup + restore แสดง progress card (bytes dumped + table count + current table + % bar) — poll ทุก 1 วินาทีจน job เสร็จ' },
+        { type: 'improve', text: 'Docker: เพิ่ม mariadb-client + gzip + tzdata + /backups volume mount + TZ=Asia/Bangkok ใน docker-compose + Dockerfile' },
+      ]
+    },
+    {
       version: '2569.05.12',
       date: '12 พฤษภาคม 2569',
       changes: [

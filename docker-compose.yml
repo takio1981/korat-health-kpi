@@ -31,6 +31,10 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
+      BACKUP_DIR: /backups
+      TZ: Asia/Bangkok
+    volumes:
+      - ./backups:/backups
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -64,6 +68,8 @@ services:
     restart: always
     ports:
       - "8881:8881"
+    environment:
+      TZ: Asia/Bangkok
     depends_on:
       backend:
         condition: service_healthy

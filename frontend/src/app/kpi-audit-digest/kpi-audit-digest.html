@@ -1,0 +1,194 @@
+<div class="p-6">
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-4">
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <div>
+        <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+          <i class="fas fa-bullhorn text-amber-500"></i>
+          แจ้งเตือนการบันทึกข้อมูล KPI (Daily Digest)
+        </h1>
+        <p class="text-sm text-gray-500 mt-1">รวบรวมการบันทึกข้อมูลของผู้ใช้งานทั้งหมด → ส่งสรุปไปยัง Email + Telegram ของ super_admin วันละครั้ง</p>
+      </div>
+    </div>
+
+    <div class="flex gap-2 mt-4 border-b border-gray-200">
+      <button (click)="setTab('settings')" class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
+              [ngClass]="activeTab === 'settings' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-gray-500 hover:text-gray-700'">
+        <i class="fas fa-cog mr-1"></i> ตั้งค่า
+      </button>
+      <button (click)="setTab('records')" class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
+              [ngClass]="activeTab === 'records' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-gray-500 hover:text-gray-700'">
+        <i class="fas fa-list-check mr-1"></i> รายการบันทึก ({{ stats.total }})
+      </button>
+    </div>
+  </div>
+
+  <!-- TAB: SETTINGS -->
+  <div *ngIf="activeTab === 'settings'" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <!-- LEFT: Form -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-4">
+      <h2 class="font-semibold text-gray-700 text-sm"><i class="fas fa-cog mr-2 text-emerald-600"></i>ตั้งค่าการแจ้งเตือน</h2>
+
+      <label class="flex items-center gap-2 text-sm p-3 border rounded-xl bg-emerald-50">
+        <input type="checkbox" [(ngModel)]="settings.enabled" class="w-4 h-4 accent-emerald-600">
+        <span class="font-medium">เปิดบันทึก Audit (log การบันทึกข้อมูลของ user)</span>
+      </label>
+
+      <label class="flex items-center gap-2 text-sm p-3 border rounded-xl">
+        <input type="checkbox" [(ngModel)]="settings.digestEnabled" class="w-4 h-4 accent-emerald-600">
+        <span>เปิดส่ง Digest สรุปประจำวัน</span>
+      </label>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">เวลาส่ง Digest (HH:MM)</label>
+          <input type="time" [(ngModel)]="settings.digestTime" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">ขั้นต่ำ (records)</label>
+          <input type="number" [(ngModel)]="settings.minRecords" min="1" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          <p class="text-[10px] text-gray-500 mt-1">ส่งเฉพาะเมื่อมี ≥ N รายการ</p>
+        </div>
+      </div>
+
+      <div class="border-t pt-4">
+        <h4 class="font-medium text-sm text-gray-700 mb-2">ช่องทาง</h4>
+        <label class="flex items-center gap-2 text-sm p-2.5 border rounded-lg mb-2">
+          <input type="checkbox" [(ngModel)]="settings.digestEmail" class="w-4 h-4 accent-emerald-600">
+          <i class="fas fa-envelope text-blue-600"></i>
+          <span>ส่งทาง Email <span class="text-xs text-gray-500">(ตามรายชื่อใน System Settings: admin_emails)</span></span>
+        </label>
+        <label class="flex items-center gap-2 text-sm p-2.5 border rounded-lg">
+          <input type="checkbox" [(ngModel)]="settings.digestTelegram" class="w-4 h-4 accent-emerald-600">
+          <i class="fab fa-telegram text-cyan-600"></i>
+          <span>ส่งทาง Telegram <span class="text-xs text-gray-500">(ตาม Bot Token + Chat ID ใน System Settings)</span></span>
+        </label>
+      </div>
+
+      <div class="flex gap-2 pt-3 border-t">
+        <button (click)="saveSettings()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm shadow-md">
+          <i class="fas fa-save mr-1"></i> บันทึก Settings
+        </button>
+        <button (click)="runDigestNow()" class="flex-1 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl text-sm shadow-md">
+          <i class="fas fa-paper-plane mr-1"></i> ส่ง Digest ทันที (test)
+        </button>
+      </div>
+    </div>
+
+    <!-- RIGHT: Stats + Last Digest -->
+    <div class="space-y-4">
+      <!-- Stats cards -->
+      <div class="grid grid-cols-2 gap-3">
+        <div class="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-4 rounded-2xl shadow">
+          <div class="text-xs opacity-90">บันทึกวันนี้</div>
+          <div class="text-3xl font-bold">{{ stats.today }}</div>
+          <div class="text-xs opacity-80 mt-1">รายการ</div>
+        </div>
+        <div class="bg-gradient-to-br from-amber-500 to-amber-600 text-white p-4 rounded-2xl shadow">
+          <div class="text-xs opacity-90">ยังไม่แจ้ง</div>
+          <div class="text-3xl font-bold">{{ stats.unnotified }}</div>
+          <div class="text-xs opacity-80 mt-1">รอ Digest</div>
+        </div>
+        <div class="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white p-4 rounded-2xl shadow">
+          <div class="text-xs opacity-90">ทั้งหมด</div>
+          <div class="text-3xl font-bold">{{ stats.total }}</div>
+          <div class="text-xs opacity-80 mt-1">รายการ</div>
+        </div>
+        <div class="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-4 rounded-2xl shadow">
+          <div class="text-xs opacity-90">ผู้ใช้ที่บันทึก</div>
+          <div class="text-3xl font-bold">{{ stats.unique_users }}</div>
+          <div class="text-xs opacity-80 mt-1">unique users</div>
+        </div>
+      </div>
+
+      <!-- Last digest -->
+      <div *ngIf="parseLastDigest() as last" class="bg-white rounded-2xl shadow-sm border border-emerald-200 p-4">
+        <h3 class="font-semibold text-emerald-700 text-sm mb-3"><i class="fas fa-history mr-2"></i>Digest ล่าสุด</h3>
+        <div class="space-y-1 text-sm">
+          <div class="flex justify-between"><span class="text-gray-600">วันที่:</span><b>{{ last.date }}</b></div>
+          <div class="flex justify-between"><span class="text-gray-600">เวลา:</span>{{ formatDate(last.ran_at) }}</div>
+          <div class="flex justify-between"><span class="text-gray-600">ผู้ใช้:</span><b>{{ last.total_users }}</b> คน</div>
+          <div class="flex justify-between"><span class="text-gray-600">รายการ:</span><b>{{ last.total_saves?.toLocaleString() }}</b></div>
+          <div class="flex justify-between"><span class="text-gray-600">Email:</span>
+            <span [ngClass]="last.sent_email ? 'text-emerald-600' : 'text-gray-400'">{{ last.sent_email ? '✓ ส่งแล้ว' : '— ไม่ส่ง' }}</span>
+          </div>
+          <div class="flex justify-between"><span class="text-gray-600">Telegram:</span>
+            <span [ngClass]="last.sent_telegram ? 'text-emerald-600' : 'text-gray-400'">{{ last.sent_telegram ? '✓ ส่งแล้ว' : '— ไม่ส่ง' }}</span>
+          </div>
+          <div *ngIf="last.manual" class="text-xs text-amber-600 mt-2"><i class="fas fa-flask"></i> ส่งแบบ manual (test)</div>
+        </div>
+      </div>
+
+      <!-- Info note -->
+      <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-900">
+        <p class="font-semibold mb-1"><i class="fas fa-info-circle mr-1"></i>วิธีทำงาน</p>
+        <ul class="ml-4 space-y-1 list-disc">
+          <li>ทุกครั้งที่ user บันทึกข้อมูล KPI (ทั้ง 3 ช่องทาง) → ระบบ log ไว้ในตาราง <code>kpi_save_audit</code></li>
+          <li>ตามเวลาที่ตั้ง (default 17:00) ระบบรวบสรุปทั้งหมด → ส่ง Email + Telegram</li>
+          <li>หลังส่ง records จะถูก mark notified → ไม่ส่งซ้ำ</li>
+          <li>คุณสามารถกด "ส่งทันที (test)" เพื่อทดสอบหรือดูสรุปก่อนเวลา</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: RECORDS -->
+  <div *ngIf="activeTab === 'records'" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <h2 class="font-semibold text-gray-700">รายการการบันทึก ({{ records.length }})</h2>
+      <div class="flex items-center gap-3">
+        <label class="flex items-center gap-2 text-xs cursor-pointer">
+          <input type="checkbox" [(ngModel)]="filterUnnotified" (change)="loadRecords()" class="w-4 h-4 accent-amber-600">
+          <span>เฉพาะที่ยังไม่ได้แจ้ง</span>
+        </label>
+        <button (click)="loadRecords()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs">
+          <i class="fas fa-sync" [ngClass]="{'fa-spin': isLoading}"></i> Refresh
+        </button>
+      </div>
+    </div>
+
+    <div class="overflow-auto" style="max-height: calc(100vh - 330px)">
+      <table class="w-full text-xs">
+        <thead class="bg-gray-50 sticky top-0 z-10 shadow-sm">
+          <tr class="text-left text-gray-600 uppercase">
+            <th class="px-2 py-2">เวลา</th>
+            <th class="px-2 py-2">ผู้ใช้</th>
+            <th class="px-2 py-2">หน่วยบริการ</th>
+            <th class="px-2 py-2">ประเภท</th>
+            <th class="px-2 py-2">ตัวชี้วัด</th>
+            <th class="px-2 py-2 text-center">ปี/เดือน</th>
+            <th class="px-2 py-2 text-right">Rows</th>
+            <th class="px-2 py-2 text-center">แจ้งแล้ว</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let r of records" class="border-b hover:bg-amber-50/30">
+            <td class="px-2 py-2 whitespace-nowrap text-gray-500">{{ formatDate(r.created_at) }}</td>
+            <td class="px-2 py-2">
+              <b>{{ r.full_name || r.username }}</b>
+              <div class="text-[10px] text-gray-500">{{ r.dept_name || '-' }}</div>
+            </td>
+            <td class="px-2 py-2 text-gray-600">{{ r.hospname || r.hospcode || '-' }}</td>
+            <td class="px-2 py-2 text-center">
+              <span class="px-2 py-0.5 rounded-full text-[10px]" [ngClass]="actionColor(r.action_type)">
+                {{ actionLabel(r.action_type) }}
+              </span>
+            </td>
+            <td class="px-2 py-2 text-gray-700 max-w-xs truncate" [title]="r.indicator_name">{{ r.indicator_name || '-' }}</td>
+            <td class="px-2 py-2 text-center text-[10px]">
+              {{ r.year_bh || '-' }}<br>
+              <span class="text-gray-400">{{ r.month_bh || '-' }}</span>
+            </td>
+            <td class="px-2 py-2 text-right font-mono">{{ r.row_count }}</td>
+            <td class="px-2 py-2 text-center">
+              <span *ngIf="r.notified_at" class="text-emerald-600 text-xs" [title]="formatDate(r.notified_at)"><i class="fas fa-check-circle"></i></span>
+              <span *ngIf="!r.notified_at" class="text-amber-500 text-xs"><i class="fas fa-clock"></i></span>
+            </td>
+          </tr>
+          <tr *ngIf="records.length === 0">
+            <td colspan="8" class="text-center py-8 text-gray-400">ยังไม่มีรายการบันทึก</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

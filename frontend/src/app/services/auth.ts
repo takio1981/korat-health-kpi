@@ -1043,4 +1043,154 @@ export class AuthService {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.delete(`${this.apiUrl}/dynamic-data/${tableName}/${recordId}`, { headers });
   }
+
+  // ========== Backup & Restore (Phase 1) ==========
+  private bkHeaders() {
+    const token = localStorage.getItem('kpi_token');
+    return new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+  }
+
+  // Connections
+  getBackupConnections(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/backup/connections`, { headers: this.bkHeaders() });
+  }
+  createBackupConnection(data: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}/backup/connections`, data, { headers: this.bkHeaders() });
+  }
+  updateBackupConnection(id: number, data: any): Observable<any> {
+    return this.http.put(`${this.apiUrl}/backup/connections/${id}`, data, { headers: this.bkHeaders() });
+  }
+  deleteBackupConnection(id: number): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/backup/connections/${id}`, { headers: this.bkHeaders() });
+  }
+  testBackupConnection(id: number): Observable<any> {
+    return this.http.post(`${this.apiUrl}/backup/connections/${id}/test`, {}, { headers: this.bkHeaders() });
+  }
+  verifyBackupPrivileges(id: number): Observable<any> {
+    return this.http.post(`${this.apiUrl}/backup/connections/${id}/verify-privileges`, {}, { headers: this.bkHeaders() });
+  }
+
+  // Run backup (returns job_id immediately — poll getBackupJob to check progress)
+  runBackup(connectionId: number, compress = true, skipPrivilegeCheck = false): Observable<any> {
+    return this.http.post(`${this.apiUrl}/backup/run`,
+      { connection_id: connectionId, compress, trigger_type: 'manual', skip_privilege_check: skipPrivilegeCheck },
+      { headers: this.bkHeaders() });
+  }
+  getBackupJob(id: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}/backup/jobs/${id}`, { headers: this.bkHeaders() });
+  }
+
+  // Files
+  getBackupFiles(connectionId?: number, limit = 100): Observable<any> {
+    let url = `${this.apiUrl}/backup/files?limit=${limit}`;
+    if (connectionId) url += `&connection_id=${connectionId}`;
+    return this.http.get(url, { headers: this.bkHeaders() });
+  }
+  getBackupJobs(limit = 50): Observable<any> {
+    return this.http.get(`${this.apiUrl}/backup/jobs?limit=${limit}`, { headers: this.bkHeaders() });
+  }
+  deleteBackupFile(id: number): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/backup/files/${id}`, { headers: this.bkHeaders() });
+  }
+  // Download via window.open with token in URL (or use blob via http) — use blob approach
+  downloadBackupFile(id: number): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/backup/files/${id}/download`,
+      { headers: this.bkHeaders(), responseType: 'blob' });
+  }
+
+  // Restore
+  restoreBackup(fileId: number, mode: 'new_db'|'replace', targetDb?: string, autoBackupFirst = true): Observable<any> {
+    return this.http.post(`${this.apiUrl}/backup/restore`,
+      { file_id: fileId, mode, target_db: targetDb, auto_backup_first: autoBackupFirst },
+      { headers: this.bkHeaders() });
+  }
+  getRestoreJob(id: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}/backup/restore-jobs/${id}`, { headers: this.bkHeaders() });
+  }
+
+  // Logs
+  getBackupLog(fileId: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}/backup/files/${fileId}/log`, { headers: this.bkHeaders() });
+  }
+  getRestoreLog(jobId: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}/backup/restore-jobs/${jobId}/log`, { headers: this.bkHeaders() });
+  }
+  downloadBackupLog(fileId: number): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/backup/files/${fileId}/log?download=1`,
+      { headers: this.bkHeaders(), responseType: 'blob' });
+  }
+  downloadRestoreLog(jobId: number): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/backup/restore-jobs/${jobId}/log?download=1`,
+      { headers: this.bkHeaders(), responseType: 'blob' });
+  }
+
+  // ===== Backup Schedules (Phase 2) =====
+  getBackupSchedules(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/backup/schedules`, { headers: this.bkHeaders() });
+  }
+  createBackupSchedule(data: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}/backup/schedules`, data, { headers: this.bkHeaders() });
+  }
+  updateBackupSchedule(id: number, data: any): Observable<any> {
+    return this.http.put(`${this.apiUrl}/backup/schedules/${id}`, data, { headers: this.bkHeaders() });
+  }
+  deleteBackupSchedule(id: number): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/backup/schedules/${id}`, { headers: this.bkHeaders() });
+  }
+  runBackupScheduleNow(id: number): Observable<any> {
+    return this.http.post(`${this.apiUrl}/backup/schedules/${id}/run-now`, {}, { headers: this.bkHeaders() });
+  }
+  getBackupScheduleLogs(id: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}/backup/schedules/${id}/logs`, { headers: this.bkHeaders() });
+  }
+  testBackupNotification(email: boolean, telegram: boolean): Observable<any> {
+    return this.http.post(`${this.apiUrl}/backup/schedules/test-notification`,
+      { email, telegram }, { headers: this.bkHeaders() });
+  }
+
+  // ===== Cloud (Phase 3 - Google Drive) =====
+  getCloudSettings(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/backup/cloud/settings`, { headers: this.bkHeaders() });
+  }
+  saveCloudSettings(data: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}/backup/cloud/settings`, data, { headers: this.bkHeaders() });
+  }
+  testCloudConnection(): Observable<any> {
+    return this.http.post(`${this.apiUrl}/backup/cloud/test`, {}, { headers: this.bkHeaders() });
+  }
+  getCloudOAuthUrl(): Observable<any> {
+    return this.http.post(`${this.apiUrl}/backup/cloud/oauth/auth-url`, {}, { headers: this.bkHeaders() });
+  }
+  disconnectCloud(): Observable<any> {
+    return this.http.post(`${this.apiUrl}/backup/cloud/disconnect`, {}, { headers: this.bkHeaders() });
+  }
+  uploadFileToCloud(id: number): Observable<any> {
+    return this.http.post(`${this.apiUrl}/backup/files/${id}/upload-cloud`, {}, { headers: this.bkHeaders() });
+  }
+  deleteFileFromCloud(id: number): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/backup/files/${id}/cloud`, { headers: this.bkHeaders() });
+  }
+  deleteBackupFileWithCloud(id: number, deleteCloud = false): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/backup/files/${id}?delete_cloud=${deleteCloud ? 1 : 0}`, { headers: this.bkHeaders() });
+  }
+
+  // ===== Monitor Dashboard =====
+  getBackupMonitor(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/backup/monitor`, { headers: this.bkHeaders() });
+  }
+
+  // ===== KPI Save Audit + Digest =====
+  getKpiAuditSettings(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/kpi-audit/settings`, { headers: this.bkHeaders() });
+  }
+  saveKpiAuditSettings(data: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}/kpi-audit/settings`, data, { headers: this.bkHeaders() });
+  }
+  getKpiAuditRecords(limit = 200, onlyUnnotified = false): Observable<any> {
+    return this.http.get(`${this.apiUrl}/kpi-audit/records?limit=${limit}${onlyUnnotified ? '&only_unnotified=1' : ''}`,
+      { headers: this.bkHeaders() });
+  }
+  runKpiAuditDigestNow(): Observable<any> {
+    return this.http.post(`${this.apiUrl}/kpi-audit/run-digest-now`, {}, { headers: this.bkHeaders() });
+  }
 }

@@ -1,3 +1,7 @@
+// === Timezone: บังคับ Asia/Bangkok (ICT, UTC+7) ก่อน Date object ใดๆ ถูกสร้าง ===
+// สำคัญ: ต้องตั้งก่อน require ทุกอย่าง เพราะ V8 อาจ cache TZ ไว้ตอน Date.now() ครั้งแรก
+if (!process.env.TZ) process.env.TZ = 'Asia/Bangkok';
+
 // Dev: load .env.dev | Production (Docker): env vars injected via docker-compose
 // MUST be first — before any require('./db') that creates the MySQL pool
 if (process.env.NODE_ENV !== 'production') {
@@ -7,7 +11,21 @@ if (process.env.NODE_ENV !== 'production') {
     } else {
         console.log('[dotenv] Loaded .env.dev — DB_HOST:', process.env.DB_HOST, '| PORT:', process.env.PORT);
     }
+    // override อีกครั้งหลัง dotenv (เผื่อ .env.dev มี TZ override)
+    if (process.env.TZ) console.log('[Timezone] process.env.TZ =', process.env.TZ);
 }
+
+// แสดงเวลาปัจจุบันชัดเจน ตรวจ TZ ตอน startup
+(() => {
+    const _now = new Date();
+    const tzOffset = -_now.getTimezoneOffset() / 60;
+    console.log(`[Timezone] Now: ${_now.toString()}`);
+    console.log(`[Timezone] Local: ${_now.toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })} (Asia/Bangkok)`);
+    console.log(`[Timezone] process.env.TZ='${process.env.TZ || '(unset)'}', getTimezoneOffset()=${_now.getTimezoneOffset()}min → UTC${tzOffset>=0?'+':''}${tzOffset}`);
+    if (tzOffset !== 7) {
+        console.warn(`[Timezone] ⚠️  WARNING: timezone ไม่ใช่ UTC+7 — ตรวจ env TZ (Docker: TZ=Asia/Bangkok + apk add tzdata, Windows: ตั้ง Region เป็น Bangkok)`);
+    }
+})();
 
 const express = require('express');
 const cors = require('cors');
@@ -1526,6 +1544,43 @@ apiRouter.post('/update-kpi', async (req, res) => {
         );
 
         await connection.commit();
+
+        // === KPI Save Audit (fire-and-forget) ===
+        (async () => {
+            try {
+                const userInfo = await getUserAuditInfo(user.userId);
+                // Group by indicator_id เพื่อเก็บ row_count ต่อ indicator
+                const byInd = new Map();
+                for (const u of updates) {
+                    const k = u.indicator_id;
+                    if (!byInd.has(k)) byInd.set(k, { count: 0, year_bh: u.year_bh, months: new Set() });
+                    byInd.get(k).count++;
+                    if (u.month_bh) byInd.get(k).months.add(u.month_bh);
+                }
+                // ดึง indicator names ทีเดียว
+                const indIds = [...byInd.keys()].filter(Boolean);
+                let indNames = {};
+                if (indIds.length > 0) {
+                    const [rs] = await db.query(`SELECT id, kpi_indicators_name FROM kpi_indicators WHERE id IN (${indIds.map(() => '?').join(',')})`, indIds);
+                    indNames = Object.fromEntries(rs.map(r => [r.id, r.kpi_indicators_name]));
+                }
+                for (const [indId, info] of byInd) {
+                    await logKpiSaveAudit({
+                        ...(userInfo || { user_id: user.userId, username: user.username }),
+                        hospcode: hospcodeToSave || userInfo?.hospcode,
+                        action_type: 'kpi_results',
+                        indicator_id: indId,
+                        indicator_name: indNames[indId] || null,
+                        year_bh: info.year_bh,
+                        month_bh: info.months.size ? Array.from(info.months).join(',') : null,
+                        row_count: info.count,
+                        summary: `${info.count} เดือน`,
+                        ip_address: (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim().slice(0, 64)
+                    });
+                }
+            } catch (e) { console.warn('[KPI Audit] update-kpi log error:', e.message); }
+        })();
+
         res.json({ success: true, message: 'บันทึกข้อมูลเรียบร้อยแล้ว' });
     } catch (error) {
         await connection.rollback();
@@ -1975,6 +2030,32 @@ apiRouter.post('/dynamic-data/:table_name', authenticateToken, async (req, res) 
         }
 
         await connection.commit();
+
+        // === KPI Save Audit (fire-and-forget) ===
+        (async () => {
+            try {
+                const userInfo = await getUserAuditInfo(req.user.userId);
+                let indName = null;
+                if (data.indicator_id) {
+                    const [rs] = await db.query('SELECT kpi_indicators_name FROM kpi_indicators WHERE id = ?', [data.indicator_id]);
+                    indName = rs[0]?.kpi_indicators_name || null;
+                }
+                await logKpiSaveAudit({
+                    ...(userInfo || { user_id: req.user.userId, username: req.user.username }),
+                    hospcode: data.hospcode || userInfo?.hospcode,
+                    action_type: 'dynamic_form',
+                    indicator_id: data.indicator_id || null,
+                    indicator_name: indName,
+                    year_bh: data.year_bh || null,
+                    month_bh: data.month_bh || null,
+                    table_name: formTable,
+                    row_count: 1,
+                    summary: isUpdate ? 'อัปเดต record' : 'เพิ่ม record',
+                    ip_address: (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim().slice(0, 64)
+                });
+            } catch (e) { console.warn('[KPI Audit] dynamic-data log error:', e.message); }
+        })();
+
         res.json({ success: true, message: isUpdate ? 'อัปเดตข้อมูลเรียบร้อยแล้ว' : 'บันทึกข้อมูลเรียบร้อยแล้ว', id: insertedId });
     } catch (e) {
         await connection.rollback();
@@ -3455,6 +3536,34 @@ apiRouter.post('/sub-results/upsert', authenticateToken, async (req, res) => {
              ON DUPLICATE KEY UPDATE target_value=VALUES(target_value), actual_value=VALUES(actual_value), status=VALUES(status), user_id=VALUES(user_id)`,
             [sub_indicator_id, year_bh, hospcode, month_bh, target_value || null, actual_value || null, status || 'Pending', req.user.userId]
         );
+
+        // === KPI Save Audit (fire-and-forget) ===
+        (async () => {
+            try {
+                const userInfo = await getUserAuditInfo(req.user.userId);
+                // ดึง parent indicator
+                const [siRows] = await db.query(`
+                    SELECT si.indicator_id, si.sub_indicator_name, i.kpi_indicators_name
+                    FROM kpi_sub_indicators si
+                    LEFT JOIN kpi_indicators i ON si.indicator_id = i.id
+                    WHERE si.id = ?
+                `, [sub_indicator_id]);
+                const parentIndName = siRows[0]?.kpi_indicators_name || null;
+                const subName = siRows[0]?.sub_indicator_name || null;
+                await logKpiSaveAudit({
+                    ...(userInfo || { user_id: req.user.userId, username: req.user.username }),
+                    hospcode,
+                    action_type: 'sub_results',
+                    indicator_id: siRows[0]?.indicator_id || null,
+                    indicator_name: parentIndName ? `${parentIndName} / ${subName}` : subName,
+                    year_bh, month_bh,
+                    row_count: 1,
+                    summary: `sub: ${subName || sub_indicator_id}`,
+                    ip_address: (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim().slice(0, 64)
+                });
+            } catch (e) { console.warn('[KPI Audit] sub-results log error:', e.message); }
+        })();
+
         res.json({ success: true, message: 'บันทึกสำเร็จ' });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
@@ -4995,7 +5104,7 @@ async function sendExportNotification(schedule, result, durationMs) {
     <div style="font-family:'Sarabun',Arial,sans-serif;max-width:700px;margin:0 auto">
       <div style="background:linear-gradient(135deg,#065f46,#16a34a);color:white;padding:20px;border-radius:12px 12px 0 0">
         <h2 style="margin:0">📊 รายงาน Export KPI อัตโนมัติ</h2>
-        <p style="margin:4px 0 0;opacity:.85;font-size:13px">${schedule.name} — ${new Date().toLocaleString('th-TH')}</p>
+        <p style="margin:4px 0 0;opacity:.85;font-size:13px">${schedule.name} — ${new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}</p>
       </div>
       <div style="background:white;padding:20px;border:1px solid #e5e7eb;border-top:0;border-radius:0 0 12px 12px">
         <p style="margin:0 0 12px"><b>สถานะ:</b> ${result.success ? '<span style="color:#16a34a">✓ สำเร็จ</span>' : '<span style="color:#dc2626">✗ ผิดพลาด</span>'}</p>
@@ -5144,13 +5253,26 @@ async function runScheduledExport(schedule) {
 // Scheduler loop: ตรวจทุก 30 วินาที + match 2 นาทีย้อนหลัง กันพลาด (dedup ด้วย last_run_at>120s)
 function startExportScheduler() {
     const pad2 = (n) => String(n).padStart(2, '0');
+    // ใช้ Intl.DateTimeFormat บังคับเวลา Bangkok ไม่ขึ้นกับ process.env.TZ (กันบาง env ที่ V8 cache TZ ผิด)
+    const bkkFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Bangkok',
+        hour: '2-digit', minute: '2-digit', hour12: false, weekday: 'short'
+    });
+    const getBkk = (date) => {
+        const parts = bkkFormatter.formatToParts(date);
+        const get = (t) => parts.find(p => p.type === t)?.value || '';
+        const hour = get('hour') === '24' ? '00' : get('hour');
+        const wdMap = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
+        return { hhmm: `${hour}:${get('minute')}`, dow: wdMap[get('weekday')] || 1 };
+    };
     const check = async () => {
         try {
             const now = new Date();
-            const hhmmNow = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+            const bkkNow = getBkk(now);
+            const hhmmNow = bkkNow.hhmm;
             const prev = new Date(now.getTime() - 60 * 1000);
-            const hhmmPrev = `${pad2(prev.getHours())}:${pad2(prev.getMinutes())}`;
-            const dow = now.getDay() === 0 ? 7 : now.getDay(); // 1=จ., 7=อา.
+            const hhmmPrev = getBkk(prev).hhmm;
+            const dow = bkkNow.dow; // 1=จ., 7=อา.
 
             // ดึง schedules ที่ตรงเวลา (current หรือนาทีก่อน) และยังไม่ได้รันในช่วง 120s
             const [schedules] = await db.query(
@@ -5183,8 +5305,8 @@ function startExportScheduler() {
     check().catch(e => console.error('[Scheduler] initial check failed:', e.message));
     // ตรวจทุก 30 วินาที (1 นาที จะได้ตรวจ 2 ครั้ง → ลดโอกาสพลาด)
     setInterval(check, 30000);
-    const tzOffset = -new Date().getTimezoneOffset() / 60;
-    console.log(`[Scheduler] Export scheduler started — timezone UTC${tzOffset >= 0 ? '+' : ''}${tzOffset}, check every 30s`);
+    const initBkk = getBkk(new Date());
+    console.log(`[Scheduler] Export scheduler started — Bangkok time: ${initBkk.hhmm} (dow=${initBkk.dow}), check every 30s`);
 }
 
 // ========== Export Schedules CRUD ==========
@@ -7614,10 +7736,2560 @@ apiRouter.post('/clear-kpi-data', authenticateToken, isSuperAdmin, async (req, r
     } finally { connection.release(); }
 });
 
+// ========================================================================
+// ========== Database Backup & Restore Module (Phase 1) =================
+// ========================================================================
+// รองรับ: Manual backup/restore, Multi-DB Connection Manager, mysqldump streaming + gzip
+// ผ่าน super_admin เท่านั้น
+// ========================================================================
+const { spawn } = require('child_process');
+const fs = require('fs');
+const fsp = require('fs/promises');
+const path = require('path');
+const zlib = require('zlib');
+
+const BACKUP_DIR = process.env.BACKUP_DIR || (process.platform === 'win32' ? path.join(process.cwd(), 'backups') : '/backups');
+// Configurable binary paths (Windows dev: ชี้ไป C:\xampp\mysql\bin\mysqldump.exe)
+const MYSQL_BIN = process.env.MYSQL_BIN || 'mysql';
+const MYSQLDUMP_BIN = process.env.MYSQLDUMP_BIN || 'mysqldump';
+console.log(`[Backup] MYSQL_BIN='${MYSQL_BIN}' exists=${fs.existsSync(MYSQL_BIN)}`);
+console.log(`[Backup] MYSQLDUMP_BIN='${MYSQLDUMP_BIN}' exists=${fs.existsSync(MYSQLDUMP_BIN)}`);
+// Ensure directory exists (sync at startup is fine)
+try { fs.mkdirSync(BACKUP_DIR, { recursive: true }); } catch (e) { /* may already exist */ }
+// Probe binary availability (non-fatal — log warning if missing)
+(() => {
+    try {
+        const probe = spawn(MYSQLDUMP_BIN, ['--version']);
+        probe.on('error', (e) => {
+            console.warn(`[Backup] ⚠️  mysqldump binary not found ('${MYSQLDUMP_BIN}') — set MYSQLDUMP_BIN env var to absolute path. Error: ${e.message}`);
+        });
+        probe.stdout.on('data', () => {}); // drain
+        probe.stderr.on('data', () => {});
+    } catch (e) { /* ignore */ }
+})();
+
+// === AES-256-GCM Encryption Helpers (for storing DB passwords) ===
+const _bkEncKey = crypto.createHash('sha256').update(String(SECRET_KEY || 'khups-default')).digest(); // 32 bytes
+const bkEncrypt = (plaintext) => {
+    if (plaintext == null || plaintext === '') return '';
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', _bkEncKey, iv);
+    const enc = Buffer.concat([cipher.update(String(plaintext), 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    // Format: <iv-hex>:<tag-hex>:<ciphertext-hex>
+    return iv.toString('hex') + ':' + tag.toString('hex') + ':' + enc.toString('hex');
+};
+const bkDecrypt = (ciphertext) => {
+    if (!ciphertext) return '';
+    try {
+        const parts = String(ciphertext).split(':');
+        if (parts.length !== 3) return '';
+        const iv = Buffer.from(parts[0], 'hex');
+        const tag = Buffer.from(parts[1], 'hex');
+        const enc = Buffer.from(parts[2], 'hex');
+        const decipher = crypto.createDecipheriv('aes-256-gcm', _bkEncKey, iv);
+        decipher.setAuthTag(tag);
+        const dec = Buffer.concat([decipher.update(enc), decipher.final()]);
+        return dec.toString('utf8');
+    } catch (e) {
+        console.error('[Backup] decrypt error:', e.message);
+        return '';
+    }
+};
+
+// === Auto-migration: backup tables ===
+(async () => {
+    try {
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS backup_connections (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                host VARCHAR(255) NOT NULL,
+                port INT NOT NULL DEFAULT 3306,
+                db_user VARCHAR(100) NOT NULL,
+                db_password_enc TEXT NULL,
+                db_name VARCHAR(100) NOT NULL,
+                description VARCHAR(255) NULL,
+                is_default TINYINT(1) DEFAULT 0,
+                created_by INT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS backup_jobs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                connection_id INT NULL,
+                connection_name VARCHAR(100) NULL,
+                db_name VARCHAR(100) NULL,
+                status ENUM('pending','running','success','failed','cancelled') DEFAULT 'pending',
+                trigger_type ENUM('manual','scheduled','auto_before_restore') DEFAULT 'manual',
+                file_id INT NULL,
+                started_at DATETIME NULL,
+                finished_at DATETIME NULL,
+                duration_ms INT NULL,
+                size_bytes BIGINT NULL,
+                error_msg TEXT NULL,
+                created_by INT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_status (status),
+                INDEX idx_created (created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS backup_files (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                connection_id INT NULL,
+                connection_name VARCHAR(100) NULL,
+                db_name VARCHAR(100) NULL,
+                file_path VARCHAR(500) NOT NULL,
+                file_name VARCHAR(255) NOT NULL,
+                size_bytes BIGINT NOT NULL DEFAULT 0,
+                compressed TINYINT(1) DEFAULT 1,
+                checksum_sha256 VARCHAR(64) NULL,
+                trigger_type ENUM('manual','scheduled','auto_before_restore') DEFAULT 'manual',
+                created_by INT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_conn (connection_id),
+                INDEX idx_created (created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS restore_jobs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                file_id INT NULL,
+                source_file_name VARCHAR(255) NULL,
+                connection_id INT NULL,
+                target_db VARCHAR(100) NULL,
+                mode ENUM('new_db','replace') NOT NULL,
+                status ENUM('pending','running','success','failed') DEFAULT 'pending',
+                progress_bytes BIGINT DEFAULT 0,
+                total_bytes BIGINT DEFAULT 0,
+                tables_count INT DEFAULT 0,
+                current_table VARCHAR(255) NULL,
+                phase VARCHAR(50) NULL,
+                pre_backup_file_id INT NULL,
+                started_at DATETIME NULL,
+                finished_at DATETIME NULL,
+                duration_ms INT NULL,
+                error_msg TEXT NULL,
+                created_by INT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_status (status),
+                INDEX idx_created (created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+        // เพิ่มคอลัมน์ log_path สำหรับเก็บ path ของ log file (idempotent)
+        try { await db.query('ALTER TABLE backup_files ADD COLUMN log_path VARCHAR(500) NULL'); } catch (e) { /* already exists */ }
+        try { await db.query('ALTER TABLE restore_jobs ADD COLUMN log_path VARCHAR(500) NULL'); } catch (e) { /* already exists */ }
+
+        // Phase 3: cloud upload columns
+        try { await db.query('ALTER TABLE backup_files ADD COLUMN cloud_provider VARCHAR(20) NULL'); } catch (e) {}
+        try { await db.query('ALTER TABLE backup_files ADD COLUMN cloud_file_id VARCHAR(255) NULL'); } catch (e) {}
+        try { await db.query('ALTER TABLE backup_files ADD COLUMN cloud_url VARCHAR(500) NULL'); } catch (e) {}
+        try { await db.query('ALTER TABLE backup_files ADD COLUMN cloud_uploaded_at DATETIME NULL'); } catch (e) {}
+        try { await db.query('ALTER TABLE backup_files ADD COLUMN cloud_size_bytes BIGINT NULL'); } catch (e) {}
+        try { await db.query('ALTER TABLE backup_schedules ADD COLUMN auto_upload_cloud TINYINT(1) DEFAULT 0'); } catch (e) {}
+        try { await db.query('ALTER TABLE backup_schedule_logs ADD COLUMN cloud_uploaded TINYINT(1) DEFAULT 0'); } catch (e) {}
+        try { await db.query('ALTER TABLE backup_schedule_logs ADD COLUMN cloud_url VARCHAR(500) NULL'); } catch (e) {}
+
+        // Default settings — Google Drive cloud config (OAuth 2.0 user account, 15GB free Gmail)
+        const cloudDefaults = [
+            ['gdrive_enabled', 'false', 'เปิดใช้ Google Drive cloud backup (OAuth user account)'],
+            ['gdrive_client_id', '', 'OAuth 2.0 Client ID จาก Google Cloud Console'],
+            ['gdrive_client_secret_enc', '', 'OAuth 2.0 Client Secret (AES-256-GCM encrypted)'],
+            ['gdrive_refresh_token_enc', '', 'OAuth refresh token จาก user consent (AES-256-GCM encrypted)'],
+            ['gdrive_redirect_uri', '', 'Authorized redirect URI ใน Google Cloud Console'],
+            ['gdrive_user_email', '', 'Email ของ Google account ที่ authorize'],
+            ['gdrive_folder_id', '', 'Google Drive folder ID ที่จะเก็บ backup'],
+            ['gdrive_folder_name', '', 'ชื่อ folder (แสดงผล)']
+        ];
+        for (const [key, val, desc] of cloudDefaults) {
+            try { await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)', [key, val, desc]); } catch (e) {}
+        }
+        // ลบ key เก่าของ service account (ถ้ามี)
+        try { await db.query("DELETE FROM system_settings WHERE setting_key = 'gdrive_service_account_json'"); } catch (e) {}
+
+        // ============= KPI Save Audit (notification ผู้ใช้บันทึกข้อมูล) =============
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS kpi_save_audit (
+                id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NULL,
+                username VARCHAR(100) NULL,
+                full_name VARCHAR(255) NULL,
+                dept_id INT NULL,
+                dept_name VARCHAR(255) NULL,
+                hospcode VARCHAR(20) NULL,
+                hospname VARCHAR(255) NULL,
+                action_type ENUM('kpi_results','dynamic_form','sub_results') NOT NULL,
+                indicator_id INT NULL,
+                indicator_name VARCHAR(500) NULL,
+                year_bh VARCHAR(10) NULL,
+                month_bh VARCHAR(10) NULL,
+                table_name VARCHAR(100) NULL,
+                row_count INT DEFAULT 1,
+                summary VARCHAR(500) NULL,
+                ip_address VARCHAR(64) NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                notified_at DATETIME NULL,
+                INDEX idx_created (created_at),
+                INDEX idx_notified (notified_at),
+                INDEX idx_user_date (user_id, created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+
+        // Default settings for digest
+        const auditDefaults = [
+            ['kpi_audit_enabled', 'true', 'เปิด/ปิด ระบบบันทึกการ save ข้อมูล'],
+            ['kpi_audit_digest_enabled', 'true', 'เปิด/ปิด การส่ง digest สรุปประจำวัน'],
+            ['kpi_audit_digest_time', '17:00', 'เวลาส่ง digest ประจำวัน (HH:MM Bangkok)'],
+            ['kpi_audit_digest_email', 'true', 'ส่ง digest ทาง Email'],
+            ['kpi_audit_digest_telegram', 'true', 'ส่ง digest ทาง Telegram'],
+            ['kpi_audit_digest_min_records', '1', 'ส่ง digest เฉพาะเมื่อมีอย่างน้อย N รายการ'],
+            ['kpi_audit_last_digest_at', '', 'เวลาที่ส่ง digest ล่าสุด'],
+            ['kpi_audit_last_digest_result', '', 'ผลลัพธ์ digest ล่าสุด (JSON)']
+        ];
+        for (const [k, v, d] of auditDefaults) {
+            try { await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?,?,?)', [k, v, d]); } catch (e) {}
+        }
+
+        // Phase 2: backup schedules
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS backup_schedules (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(150) NOT NULL,
+                is_enabled TINYINT(1) DEFAULT 1,
+                connection_id INT NOT NULL,
+                days_of_week VARCHAR(20) NOT NULL,
+                time_of_day VARCHAR(5) NOT NULL,
+                compress TINYINT(1) DEFAULT 1,
+                retention_days INT DEFAULT 30,
+                notify_email TINYINT(1) DEFAULT 0,
+                notify_email_on_success TINYINT(1) DEFAULT 1,
+                notify_email_on_failure TINYINT(1) DEFAULT 1,
+                notify_telegram TINYINT(1) DEFAULT 0,
+                notify_telegram_on_success TINYINT(1) DEFAULT 1,
+                notify_telegram_on_failure TINYINT(1) DEFAULT 1,
+                last_run_at DATETIME NULL,
+                last_status VARCHAR(30) NULL,
+                created_by INT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_enabled (is_enabled, time_of_day),
+                INDEX idx_conn (connection_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS backup_schedule_logs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                schedule_id INT NOT NULL,
+                schedule_name VARCHAR(150) NULL,
+                run_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                status ENUM('success','failed','skipped') NOT NULL,
+                job_id INT NULL,
+                file_id INT NULL,
+                file_name VARCHAR(255) NULL,
+                size_bytes BIGINT NULL,
+                total_inserts INT NULL,
+                tables_count INT NULL,
+                duration_ms INT NULL,
+                cleaned_up_files INT DEFAULT 0,
+                cleaned_up_bytes BIGINT DEFAULT 0,
+                notified_email TINYINT(1) DEFAULT 0,
+                notified_telegram TINYINT(1) DEFAULT 0,
+                warnings TEXT NULL,
+                error_msg TEXT NULL,
+                INDEX idx_schedule (schedule_id),
+                INDEX idx_run (run_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+
+        // เพิ่ม default connection (Local) ถ้ายังไม่มี
+        const [defRows] = await db.query('SELECT COUNT(*) AS c FROM backup_connections');
+        if (defRows[0].c === 0) {
+            const localPwEnc = bkEncrypt(process.env.DB_PASSWORD || '');
+            await db.query(
+                `INSERT INTO backup_connections (name, host, port, db_user, db_password_enc, db_name, description, is_default, created_by)
+                 VALUES (?,?,?,?,?,?,?,?,?)`,
+                [
+                    'Local KPI DB',
+                    process.env.DB_HOST || 'host.docker.internal',
+                    Number(process.env.DB_PORT) || 3306,
+                    process.env.DB_USER || 'root',
+                    localPwEnc,
+                    process.env.DB_NAME || 'khups_kpi_db',
+                    'Connection หลักของระบบ (auto-seeded)',
+                    1,
+                    null
+                ]
+            );
+            console.log('[Backup] Seeded default Local connection');
+        }
+        console.log('[Backup] Tables ready, BACKUP_DIR:', BACKUP_DIR);
+    } catch (e) {
+        console.error('[Backup] Auto-migration failed:', e.message);
+    }
+})();
+
+// Helper: ดึง connection พร้อม decrypt password
+const getBackupConnection = async (id) => {
+    const [rows] = await db.query('SELECT * FROM backup_connections WHERE id = ?', [id]);
+    if (rows.length === 0) return null;
+    const c = rows[0];
+    c.db_password = bkDecrypt(c.db_password_enc);
+    return c;
+};
+
+// Helper: sanitize filename
+const sanitizeFilename = (s) => String(s || 'backup').replace(/[^a-zA-Z0-9_\-\.]/g, '_').slice(0, 100);
+
+// Helper: SHA-256 checksum stream
+const sha256File = (filePath) => new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+    stream.on('error', reject);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex')));
+});
+
+// Helper: validate identifier (db name, etc.) — กัน injection
+const isValidIdent = (s) => typeof s === 'string' && /^[a-zA-Z0-9_]{1,64}$/.test(s);
+
+// Helper: query table list + size + rows via spawn mysql client (รองรับทุก connection)
+async function listDbTables(conn, dbName) {
+    const sql = `SELECT table_name, table_type, IFNULL(table_rows, 0), IFNULL(data_length, 0), IFNULL(index_length, 0) ` +
+                `FROM INFORMATION_SCHEMA.TABLES WHERE table_schema = '${dbName.replace(/'/g, "''")}' ORDER BY table_name`;
+    const args = [`-h${conn.host}`, `-P${conn.port}`, `-u${conn.db_user}`, '-N', '-B', '-e', sql];
+    const env = { ...process.env };
+    if (conn.db_password) env.MYSQL_PWD = conn.db_password;
+    return new Promise((resolve, reject) => {
+        const p = spawn(MYSQL_BIN, args, { env });
+        let out = '', err = '';
+        p.stdout.on('data', d => out += d.toString());
+        p.stderr.on('data', d => err += d.toString());
+        p.on('error', reject);
+        p.on('close', code => {
+            if (code !== 0) return reject(new Error(err || `mysql exit ${code}`));
+            const tables = out.split('\n').filter(Boolean).map(line => {
+                const parts = line.split('\t');
+                return {
+                    name: parts[0],
+                    type: parts[1] || 'BASE TABLE',
+                    rows: parseInt(parts[2]) || 0,
+                    size_bytes: (parseInt(parts[3]) || 0) + (parseInt(parts[4]) || 0)
+                };
+            });
+            resolve(tables);
+        });
+    });
+}
+
+// Helper: ตรวจสอบ privilege ของ user — ทดสอบ SELECT จากตารางจริง + อ่าน SHOW GRANTS
+async function verifyBackupPrivileges(conn) {
+    const env = { ...process.env };
+    if (conn.db_password) env.MYSQL_PWD = conn.db_password;
+
+    // 1. ลิสต์ตาราง — ถ้า list ไม่ได้แสดงว่าไม่มีสิทธิ์ INFORMATION_SCHEMA หรือ DB ไม่มีจริง
+    let tables;
+    try {
+        tables = await listDbTables(conn, conn.db_name);
+    } catch (e) {
+        return { ok: false, error: `อ่าน INFORMATION_SCHEMA ไม่ได้: ${e.message}` };
+    }
+    if (tables.length === 0) {
+        return { ok: false, error: `Database "${conn.db_name}" ว่างเปล่าหรือไม่มีสิทธิ์เห็นตาราง` };
+    }
+    const baseTables = tables.filter(t => t.type === 'BASE TABLE');
+    if (baseTables.length === 0) {
+        return { ok: true, warning: 'DB มีแต่ VIEW ไม่มี BASE TABLE — backup จะได้ schema views', tables_count: tables.length };
+    }
+
+    // 2. ทดสอบ SELECT จากตารางที่มี row > 0 (ถ้าไม่มี ใช้ตารางแรก) — ยืนยันสิทธิ์ SELECT
+    const sample = baseTables.find(t => t.rows > 0) || baseTables[0];
+    const selectSql = `SELECT 1 FROM \`${conn.db_name}\`.\`${sample.name}\` LIMIT 1`;
+    const selectResult = await new Promise((resolve) => {
+        const args = [`-h${conn.host}`, `-P${conn.port}`, `-u${conn.db_user}`, '-N', '-B', '-e', selectSql];
+        const p = spawn(MYSQL_BIN, args, { env });
+        let err = '';
+        p.stderr.on('data', d => err += d.toString());
+        p.on('error', () => resolve({ ok: false, error: 'spawn mysql ล้มเหลว' }));
+        p.on('close', code => {
+            if (code === 0) resolve({ ok: true });
+            else resolve({ ok: false, error: `SELECT จากตาราง ${sample.name} ล้มเหลว: ${err.trim().slice(0, 300)}` });
+        });
+    });
+    if (!selectResult.ok) {
+        return { ok: false, error: `User '${conn.db_user}' ไม่มีสิทธิ์ SELECT — ${selectResult.error}`, sample_table: sample.name };
+    }
+
+    // 3. อ่าน SHOW GRANTS เพื่อดู privilege แบบ raw
+    const grants = await new Promise((resolve) => {
+        const args = [`-h${conn.host}`, `-P${conn.port}`, `-u${conn.db_user}`, '-N', '-B', '-e', 'SHOW GRANTS FOR CURRENT_USER()'];
+        const p = spawn(MYSQL_BIN, args, { env });
+        let out = '', err = '';
+        p.stdout.on('data', d => out += d.toString());
+        p.stderr.on('data', d => err += d.toString());
+        p.on('error', () => resolve([]));
+        p.on('close', code => code === 0 ? resolve(out.trim().split('\n').filter(Boolean)) : resolve([]));
+    });
+
+    // หา grant ที่ระบุ DB นี้
+    const dbName = conn.db_name;
+    const grantOnDb = grants.find(g =>
+        g.includes(`\`${dbName}\``) || g.includes(` *.*`) || g.match(/ALL PRIVILEGES ON/i)
+    );
+
+    return {
+        ok: true,
+        tables_count: tables.length,
+        base_tables: baseTables.length,
+        rows_in_sample: sample.rows,
+        sample_table: sample.name,
+        grants,
+        grant_on_db: grantOnDb || null,
+        has_full_access: grants.some(g => /ALL PRIVILEGES ON \*\.\*/i.test(g) || new RegExp(`ALL PRIVILEGES ON \`${dbName}\``, 'i').test(g))
+    };
+}
+
+// Helper: count rows accurately (สำหรับ restore verification)
+async function countTableRows(conn, dbName, tableName) {
+    if (!isValidIdent(tableName)) return -1;
+    const sql = `SELECT COUNT(*) FROM \\\`${dbName}\\\`.\\\`${tableName}\\\``;
+    const args = [`-h${conn.host}`, `-P${conn.port}`, `-u${conn.db_user}`, '-N', '-B', '-e', sql];
+    const env = { ...process.env };
+    if (conn.db_password) env.MYSQL_PWD = conn.db_password;
+    return new Promise((resolve) => {
+        const p = spawn(MYSQL_BIN, args, { env });
+        let out = '';
+        p.stdout.on('data', d => out += d.toString());
+        p.on('error', () => resolve(-1));
+        p.on('close', () => resolve(parseInt(out.trim()) || 0));
+    });
+}
+
+// Helper: format log file content
+function buildBackupLog(meta, tables) {
+    const totalRows = tables.reduce((s, t) => s + t.rows, 0);
+    const totalSize = tables.reduce((s, t) => s + t.size_bytes, 0);
+    const fmtBytes = (b) => {
+        if (!b) return '0 B';
+        const k = 1024, units = ['B','KB','MB','GB','TB'];
+        const i = Math.floor(Math.log(b)/Math.log(k));
+        return (b/Math.pow(k,i)).toFixed(2) + ' ' + units[i];
+    };
+    const lines = [];
+    lines.push('='.repeat(80));
+    lines.push(`  KPI DATABASE BACKUP LOG`);
+    lines.push('='.repeat(80));
+    lines.push(`File         : ${meta.file_name}`);
+    lines.push(`Database     : ${meta.db_name}`);
+    lines.push(`Connection   : ${meta.conn_name} (${meta.conn_host}:${meta.conn_port})`);
+    lines.push(`Started      : ${meta.started_at}`);
+    lines.push(`Finished     : ${meta.finished_at}`);
+    lines.push(`Duration     : ${(meta.duration_ms/1000).toFixed(2)} seconds`);
+    lines.push(`Output Size  : ${fmtBytes(meta.output_size)}  (compressed: ${meta.compressed ? 'yes (gzip)' : 'no'})`);
+    lines.push(`Checksum     : ${meta.checksum || '-'}`);
+    lines.push(`Status       : ${meta.status}`);
+    lines.push(`Trigger      : ${meta.trigger_type}`);
+    lines.push(`By User ID   : ${meta.user_id || '-'}`);
+    lines.push('');
+    lines.push('TABLES IN SOURCE DATABASE (snapshot at backup time):');
+    lines.push('-'.repeat(95));
+    lines.push('  #   Status   Name                                  Type            Rows         Size   INSERTs');
+    lines.push('-'.repeat(95));
+    const sorted = [...tables].sort((a,b) => a.name.localeCompare(b.name));
+    sorted.forEach((t, i) => {
+        const idx = String(i+1).padStart(3, ' ');
+        const status = t.type === 'BASE TABLE' ? '  [OK]  ' : '  [VW]  ';
+        const name = (t.name || '').padEnd(38, ' ').slice(0, 38);
+        const type = (t.type || '').padEnd(15, ' ').slice(0, 15);
+        const rows = String(t.rows.toLocaleString('en-US')).padStart(12, ' ');
+        const size = fmtBytes(t.size_bytes).padStart(12, ' ');
+        // INSERT count (ถ้ามี — มากับ meta.insertsByTable)
+        let insertStr = '';
+        if (meta.insertsByTable) {
+            const ic = meta.insertsByTable[t.name] || 0;
+            if (t.type !== 'BASE TABLE') insertStr = '       -';
+            else if (ic === 0 && t.rows > 0) insertStr = `   0 [!]`; // ตารางมีข้อมูลแต่ไม่เจอ INSERT — น่าสงสัย
+            else insertStr = String(ic).padStart(8, ' ');
+        }
+        lines.push(` ${idx}  ${status} ${name} ${type} ${rows}  ${size} ${insertStr}`);
+    });
+    lines.push('-'.repeat(95));
+    const baseTables = sorted.filter(t => t.type === 'BASE TABLE').length;
+    const views = sorted.length - baseTables;
+    lines.push(`Total: ${sorted.length} objects (${baseTables} tables, ${views} views), ${totalRows.toLocaleString('en-US')} rows, ${fmtBytes(totalSize)}`);
+    if (meta.totalInserts !== undefined) {
+        lines.push(`Total INSERT statements in dump: ${meta.totalInserts.toLocaleString('en-US')}`);
+    }
+    if (meta.warnings && meta.warnings.length) {
+        lines.push('');
+        lines.push('!!! WARNINGS !!!');
+        meta.warnings.forEach(w => lines.push('  - ' + w));
+    }
+    lines.push('='.repeat(95));
+    lines.push('Legend: [OK] = BASE TABLE   [VW] = VIEW   [!] = ตารางมีข้อมูลในต้นทาง แต่ไม่พบ INSERT ในไฟล์');
+    return lines.join('\n');
+}
+
+function buildRestoreLog(meta, sourceTables, targetTables) {
+    const fmtBytes = (b) => {
+        if (!b) return '0 B';
+        const k = 1024, units = ['B','KB','MB','GB','TB'];
+        const i = Math.floor(Math.log(b)/Math.log(k));
+        return (b/Math.pow(k,i)).toFixed(2) + ' ' + units[i];
+    };
+    const lines = [];
+    lines.push('='.repeat(80));
+    lines.push(`  KPI DATABASE RESTORE LOG`);
+    lines.push('='.repeat(80));
+    lines.push(`Source File   : ${meta.source_file}`);
+    lines.push(`Source DB     : ${meta.source_db}`);
+    lines.push(`Target DB     : ${meta.target_db}`);
+    lines.push(`Mode          : ${meta.mode}`);
+    lines.push(`Started       : ${meta.started_at}`);
+    lines.push(`Finished      : ${meta.finished_at}`);
+    lines.push(`Duration      : ${(meta.duration_ms/1000).toFixed(2)} seconds`);
+    lines.push(`Status        : ${meta.status}`);
+    lines.push(`Pre-Backup ID : ${meta.pre_backup_file_id || '-'}`);
+    lines.push(`By User ID    : ${meta.user_id || '-'}`);
+    lines.push('');
+    lines.push('VERIFICATION (target DB after restore, actual COUNT(*) per table):');
+    lines.push('-'.repeat(95));
+    lines.push('  #   Status   Name                                  Type            Rows  Match');
+    lines.push('-'.repeat(95));
+
+    // Map source tables by name สำหรับ compare row counts
+    const srcMap = new Map();
+    (sourceTables || []).forEach(t => srcMap.set(t.name, t));
+
+    // ใช้ targetTables เป็นหลัก (รวม source tables ที่หายไปด้วย)
+    const allNames = new Set();
+    (targetTables || []).forEach(t => allNames.add(t.name));
+    (sourceTables || []).forEach(t => allNames.add(t.name));
+    const allList = [...allNames].sort();
+
+    let okCount = 0, missingCount = 0, mismatchCount = 0;
+    const tgtMap = new Map();
+    (targetTables || []).forEach(t => tgtMap.set(t.name, t));
+
+    allList.forEach((name, i) => {
+        const src = srcMap.get(name);
+        const tgt = tgtMap.get(name);
+        const idx = String(i+1).padStart(3, ' ');
+        let status, matchStr;
+        if (!tgt) {
+            status = '  [XX]  ';
+            matchStr = 'MISSING';
+            missingCount++;
+        } else {
+            const srcRows = src ? src.rows : -1;
+            const tgtRows = tgt.actual_rows !== undefined ? tgt.actual_rows : tgt.rows;
+            if (src && srcRows !== tgtRows && Math.abs(srcRows - tgtRows) > Math.max(srcRows * 0.05, 1)) {
+                status = '  [!!]  ';
+                matchStr = `SOURCE:${srcRows.toLocaleString('en-US')}`;
+                mismatchCount++;
+            } else {
+                status = '  [OK]  ';
+                matchStr = 'OK';
+                okCount++;
+            }
+        }
+        const nameStr = name.padEnd(38, ' ').slice(0, 38);
+        const type = (tgt?.type || src?.type || '-').padEnd(15, ' ').slice(0, 15);
+        const rows = String(((tgt?.actual_rows !== undefined ? tgt.actual_rows : tgt?.rows) ?? 0).toLocaleString('en-US')).padStart(12, ' ');
+        lines.push(` ${idx}  ${status} ${nameStr} ${type} ${rows}  ${matchStr}`);
+    });
+    lines.push('-'.repeat(95));
+    lines.push(`Summary: ${okCount} OK, ${mismatchCount} row-count mismatch, ${missingCount} missing -- total ${allList.length} tables`);
+    lines.push('='.repeat(95));
+    lines.push('Legend: [OK] match   [!!] row count differs > 5%   [XX] missing from target');
+    return lines.join('\n');
+}
+
+// Debug: ตรวจสอบ env + binary + timezone
+apiRouter.get('/backup/system-info', authenticateToken, isSuperAdmin, async (req, res) => {
+    const _now = new Date();
+    const _bkkFmt = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Bangkok', year:'numeric', month:'2-digit', day:'2-digit',
+        hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: false
+    });
+    const bkkParts = _bkkFmt.formatToParts(_now);
+    const bkkTime = bkkParts.map(p => p.type === 'literal' ? p.value : p.value).join('');
+    res.json({
+        success: true,
+        platform: process.platform,
+        node_version: process.version,
+        cwd: process.cwd(),
+        backup_dir: BACKUP_DIR,
+        backup_dir_exists: fs.existsSync(BACKUP_DIR),
+        mysql_bin: MYSQL_BIN,
+        mysql_bin_exists: fs.existsSync(MYSQL_BIN),
+        mysqldump_bin: MYSQLDUMP_BIN,
+        mysqldump_bin_exists: fs.existsSync(MYSQLDUMP_BIN),
+        env_NODE_ENV: process.env.NODE_ENV || '(unset)',
+        // === Timezone diagnostics ===
+        timezone: {
+            env_TZ: process.env.TZ || '(unset)',
+            getTimezoneOffset_min: _now.getTimezoneOffset(),
+            utc_offset_hours: -_now.getTimezoneOffset() / 60,
+            local_time: _now.toString(),
+            local_iso: _now.toISOString(),
+            bangkok_time: bkkTime,
+            using_bangkok_explicit: true,
+            note: 'Scheduler ใช้ Intl.DateTimeFormat กับ Asia/Bangkok เสมอ — ไม่ขึ้นกับ process timezone'
+        }
+    });
+});
+
+// ========== Connection Manager ==========
+apiRouter.get('/backup/connections', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            `SELECT id, name, host, port, db_user, db_name, description, is_default, created_at, updated_at
+             FROM backup_connections ORDER BY is_default DESC, id ASC`
+        );
+        res.json({ success: true, data: rows });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.post('/backup/connections', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const { name, host, port, db_user, db_password, db_name, description, is_default } = req.body || {};
+        if (!name || !host || !db_user || !db_name) {
+            return res.status(400).json({ success: false, message: 'ข้อมูลไม่ครบ (name/host/db_user/db_name)' });
+        }
+        const pwEnc = bkEncrypt(db_password || '');
+        if (is_default) await db.query('UPDATE backup_connections SET is_default = 0');
+        const [r] = await db.query(
+            `INSERT INTO backup_connections (name, host, port, db_user, db_password_enc, db_name, description, is_default, created_by)
+             VALUES (?,?,?,?,?,?,?,?,?)`,
+            [name, host, Number(port) || 3306, db_user, pwEnc, db_name, description || null, is_default ? 1 : 0, req.user.userId]
+        );
+        res.json({ success: true, id: r.insertId, message: 'เพิ่ม connection สำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.put('/backup/connections/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const { name, host, port, db_user, db_password, db_name, description, is_default } = req.body || {};
+        const cur = await getBackupConnection(id);
+        if (!cur) return res.status(404).json({ success: false, message: 'ไม่พบ connection' });
+        // ถ้าไม่ส่ง password มาให้คงของเดิม
+        const pwEnc = (db_password !== undefined && db_password !== null && db_password !== '')
+            ? bkEncrypt(db_password) : cur.db_password_enc;
+        if (is_default) await db.query('UPDATE backup_connections SET is_default = 0');
+        await db.query(
+            `UPDATE backup_connections SET name=?, host=?, port=?, db_user=?, db_password_enc=?, db_name=?, description=?, is_default=? WHERE id=?`,
+            [name || cur.name, host || cur.host, Number(port) || cur.port, db_user || cur.db_user, pwEnc,
+             db_name || cur.db_name, description ?? cur.description, is_default ? 1 : 0, id]
+        );
+        res.json({ success: true, message: 'แก้ไข connection สำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.delete('/backup/connections/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const [files] = await db.query('SELECT COUNT(*) AS c FROM backup_files WHERE connection_id = ?', [id]);
+        if (files[0].c > 0) {
+            return res.status(400).json({ success: false, message: `ลบไม่ได้ — มี backup files ${files[0].c} ไฟล์ผูกอยู่` });
+        }
+        await db.query('DELETE FROM backup_connections WHERE id = ? AND is_default = 0', [id]);
+        res.json({ success: true, message: 'ลบ connection สำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// POST /backup/connections/:id/test — ทดสอบเชื่อมต่อ (ใช้ mysql client)
+apiRouter.post('/backup/connections/:id/test', authenticateToken, isSuperAdmin, async (req, res) => {
+    let responded = false;
+    const safeJson = (status, body) => { if (responded) return; responded = true; res.status(status).json(body); };
+    try {
+        const id = Number(req.params.id);
+        const conn = await getBackupConnection(id);
+        if (!conn) return safeJson(404, { success: false, message: 'ไม่พบ connection' });
+        const args = [
+            `-h${conn.host}`,
+            `-P${conn.port}`,
+            `-u${conn.db_user}`,
+            `-e`,
+            `SELECT 1 AS ok, VERSION() AS version, NOW() AS server_time`,
+            conn.db_name,
+            '--connect-timeout=8',
+            '--silent'
+        ];
+        const env = { ...process.env };
+        if (conn.db_password) env.MYSQL_PWD = conn.db_password;
+        let proc;
+        try {
+            proc = spawn(MYSQL_BIN, args, { env });
+        } catch (e) {
+            return safeJson(500, { success: false, message: `ไม่สามารถเรียก mysql client ('${MYSQL_BIN}') — ตั้งค่า ENV MYSQL_BIN เป็น path เต็ม (เช่น C:\\xampp\\mysql\\bin\\mysql.exe)`, error: e.message });
+        }
+        let out = '', err = '';
+        proc.stdout.on('data', (d) => out += d.toString());
+        proc.stderr.on('data', (d) => err += d.toString());
+        const timeout = setTimeout(() => { try { proc.kill('SIGKILL'); } catch (_) {} safeJson(408, { success: false, message: 'timeout' }); }, 12000);
+        proc.on('close', (code) => {
+            clearTimeout(timeout);
+            if (code === 0) safeJson(200, { success: true, message: 'เชื่อมต่อสำเร็จ', output: out.trim() });
+            else safeJson(400, { success: false, message: 'เชื่อมต่อล้มเหลว', error: (err || '').trim(), exit_code: code });
+        });
+        proc.on('error', (e) => {
+            clearTimeout(timeout);
+            safeJson(500, { success: false, message: `ไม่สามารถเรียก mysql client ('${MYSQL_BIN}') — ตั้งค่า ENV MYSQL_BIN เป็น path เต็ม (Windows dev: เช่น C:\\xampp\\mysql\\bin\\mysql.exe)`, error: e.message });
+        });
+    } catch (e) { safeJson(500, { success: false, message: e.message }); }
+});
+
+// POST /backup/connections/:id/verify-privileges — ตรวจสอบสิทธิ์ user ก่อน backup
+apiRouter.post('/backup/connections/:id/verify-privileges', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const conn = await getBackupConnection(Number(req.params.id));
+        if (!conn) return res.status(404).json({ success: false, message: 'ไม่พบ connection' });
+        const result = await verifyBackupPrivileges(conn);
+        res.json({ success: true, ...result });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// ========== Manual Backup ==========
+// POST /backup/run  body: { connection_id, compress?:true, skip_privilege_check?:false }
+// Response (immediate): { success, job_id }  — frontend polls GET /backup/jobs/:id
+apiRouter.post('/backup/run', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const { connection_id, compress = true, trigger_type = 'manual', skip_privilege_check = false } = req.body || {};
+        const conn = await getBackupConnection(Number(connection_id));
+        if (!conn) return res.status(404).json({ success: false, message: 'ไม่พบ connection' });
+
+        // === ตรวจ privilege ก่อน — ถ้า user ขาดสิทธิ์ขัด backup ตั้งแต่ต้น ===
+        if (!skip_privilege_check) {
+            const priv = await verifyBackupPrivileges(conn);
+            if (!priv.ok) {
+                return res.status(400).json({
+                    success: false,
+                    code: 'PRIVILEGE_CHECK_FAILED',
+                    message: priv.error,
+                    hint: 'แก้ไข Connection ให้ใช้ user ที่มีสิทธิ์ SELECT บน DB นี้ (เช่น root) หรือกด "ข้ามการตรวจ" เพื่อ backup เลย'
+                });
+            }
+        }
+
+        // สร้าง job record
+        const [r] = await db.query(
+            `INSERT INTO backup_jobs (connection_id, connection_name, db_name, status, trigger_type, started_at, created_by)
+             VALUES (?,?,?, 'running', ?, NOW(), ?)`,
+            [conn.id, conn.name, conn.db_name, trigger_type, req.user.userId]
+        );
+        const jobId = r.insertId;
+        const userId = req.user.userId;
+        const reqIp = req.ip;
+
+        // ตอบ jobId กลับทันที — work ทำใน background
+        res.json({ success: true, job_id: jobId, message: 'เริ่ม backup แล้ว — poll /backup/jobs/:id เพื่อดู progress' });
+
+        // === Background work ===
+        runBackupJob(jobId, conn, compress, trigger_type, userId, reqIp).catch((e) => {
+            console.error(`[Backup] job ${jobId} failed:`, e.message);
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// แยกตัว worker เพื่อให้ reuse ได้ (ใช้กับ scheduler ใน Phase 2 ด้วย)
+async function runBackupJob(jobId, conn, compress, trigger_type, userId, reqIp) {
+    const startedAt = Date.now();
+    try {
+
+        // ตั้งชื่อไฟล์ (Bangkok timezone)
+        const ts = bangkokTimestamp(new Date(), 'filename');
+        const ext = compress ? '.sql.gz' : '.sql';
+        const fileName = `${sanitizeFilename(conn.db_name)}_${sanitizeFilename(conn.name)}_${ts}${ext}`;
+        const filePath = path.join(BACKUP_DIR, fileName);
+
+        // spawn mysqldump → pipe (gzip optional) → file
+        // หลีกเลี่ยง option ที่ไม่ universal: --column-statistics (MySQL 8 only), --events (อาจ permission issue)
+        const dumpArgs = [
+            `-h${conn.host}`,
+            `-P${conn.port}`,
+            `-u${conn.db_user}`,
+            '--single-transaction',
+            '--quick',
+            '--routines',
+            '--triggers',
+            '--default-character-set=utf8mb4',
+            '--no-tablespaces',
+            '--skip-add-locks',
+            '--add-drop-table',
+            conn.db_name
+        ];
+        const env = { ...process.env };
+        if (conn.db_password) env.MYSQL_PWD = conn.db_password;
+
+        // ตัวนับ progress — update backup_jobs.size_bytes ทุก 1 วินาที (frontend polling)
+        let bytesWritten = 0;
+        let lastProgressUpdate = 0;
+        const updateProgress = async () => {
+            const now = Date.now();
+            if (now - lastProgressUpdate < 1000) return;
+            lastProgressUpdate = now;
+            try { await db.query('UPDATE backup_jobs SET size_bytes = ? WHERE id = ?', [bytesWritten, jobId]); } catch (_) {}
+        };
+
+        // ตัวนับ INSERT statements per-table (สแกนจาก stdout stream)
+        const insertsByTable = {};
+        let totalInserts = 0;
+        let scanLeftover = '';
+        const insertRegex = /^\s*INSERT INTO\s+[`"]?([a-zA-Z0-9_]+)[`"]?/gm;
+
+        const { Transform } = require('stream');
+        const insertScanner = new Transform({
+            transform(chunk, enc, cb) {
+                const text = scanLeftover + chunk.toString('utf8');
+                let m;
+                while ((m = insertRegex.exec(text)) !== null) {
+                    const tbl = m[1];
+                    insertsByTable[tbl] = (insertsByTable[tbl] || 0) + 1;
+                    totalInserts++;
+                }
+                insertRegex.lastIndex = 0;
+                scanLeftover = text.length > 500 ? text.slice(-500) : text;
+                this.push(chunk);
+                cb();
+            }
+        });
+
+        const stderrFull = await new Promise((resolve, reject) => {
+            let settled = false;
+            const done = (err) => { if (settled) return; settled = true; err ? reject(err) : resolve(stderr); };
+            let dump;
+            try {
+                dump = spawn(MYSQLDUMP_BIN, dumpArgs, { env });
+            } catch (e) {
+                return done(new Error(`spawn mysqldump ('${MYSQLDUMP_BIN}') failed: ${e.message}`));
+            }
+            const writeStream = fs.createWriteStream(filePath);
+            let stderr = '';
+            dump.stderr.on('data', (d) => stderr += d.toString());
+
+            // ตามนับ bytes ที่เขียนจริงจาก dump.stdout (ก่อน gzip)
+            dump.stdout.on('data', (chunk) => {
+                bytesWritten += chunk.length;
+                updateProgress();
+            });
+
+            let dumpClosed = false, dumpExitCode = null, streamFinished = false;
+            const tryComplete = () => {
+                if (!dumpClosed || !streamFinished) return;
+                if (dumpExitCode === 0) {
+                    if (bytesWritten === 0) {
+                        done(new Error(`mysqldump เสร็จแล้ว แต่ไม่มีข้อมูลออกมา — stderr: ${stderr.trim().slice(0, 500) || '(empty)'}`));
+                    } else { done(); }
+                } else {
+                    done(new Error(`mysqldump exit ${dumpExitCode}: ${stderr.trim().slice(0, 500) || '(no stderr)'}`));
+                }
+            };
+
+            // pipe: dump.stdout → insertScanner → [gzip] → writeStream
+            if (compress) {
+                const gz = zlib.createGzip({ level: 6 });
+                dump.stdout.pipe(insertScanner).pipe(gz).pipe(writeStream);
+                gz.on('error', done);
+            } else {
+                dump.stdout.pipe(insertScanner).pipe(writeStream);
+            }
+            insertScanner.on('error', done);
+            writeStream.on('error', done);
+            writeStream.on('finish', () => { streamFinished = true; tryComplete(); });
+            dump.on('close', (code) => { dumpClosed = true; dumpExitCode = code; tryComplete(); });
+            dump.on('error', (e) => done(new Error(`spawn mysqldump ('${MYSQLDUMP_BIN}') failed: ${e.message}`)));
+        });
+
+        const stat = await fsp.stat(filePath);
+        const checksum = await sha256File(filePath);
+        const duration = Date.now() - startedAt;
+
+        // === สร้าง backup log file (snapshot ตารางจาก source DB) ===
+        let logPath = null;
+        let sourceTables = [];
+        let backupStatus = 'SUCCESS';
+        const warnings = [];
+        try {
+            sourceTables = await listDbTables(conn, conn.db_name);
+            // === Sanity check: ตารางมี data แต่ไม่มี INSERT ใน dump ===
+            const tablesWithData = sourceTables.filter(t => t.type === 'BASE TABLE' && t.rows > 0);
+            const missingInserts = tablesWithData.filter(t => !insertsByTable[t.name] || insertsByTable[t.name] === 0);
+            if (tablesWithData.length > 0 && totalInserts === 0) {
+                backupStatus = 'WARNING: SCHEMA ONLY';
+                warnings.push(`Backup ไม่พบ INSERT statement เลย แต่ DB ต้นทางมีตาราง ${tablesWithData.length} ตารางที่มีข้อมูล — backup อาจเป็น schema-only (ตรวจสอบ privilege ของ user)`);
+            } else if (missingInserts.length > 0) {
+                backupStatus = 'WARNING: PARTIAL DATA';
+                warnings.push(`มี ${missingInserts.length} ตารางที่มีข้อมูลแต่ไม่พบ INSERT statements: ${missingInserts.slice(0, 5).map(t => t.name).join(', ')}${missingInserts.length > 5 ? ' ...' : ''}`);
+            }
+            const logContent = buildBackupLog({
+                file_name: fileName,
+                db_name: conn.db_name,
+                conn_name: conn.name,
+                conn_host: conn.host,
+                conn_port: conn.port,
+                started_at: bangkokTimestamp(new Date(startedAt), 'log'),
+                finished_at: bangkokTimestamp(new Date(), 'log'),
+                duration_ms: duration,
+                output_size: stat.size,
+                compressed: !!compress,
+                checksum,
+                status: backupStatus,
+                trigger_type,
+                user_id: userId,
+                totalInserts,
+                insertsByTable,
+                warnings
+            }, sourceTables);
+            logPath = filePath.replace(/\.sql(\.gz)?$/i, '') + '.backup_log.txt';
+            await fsp.writeFile(logPath, logContent, 'utf8');
+            console.log(`[Backup] job ${jobId} log written: ${logPath} (${totalInserts} INSERTs, status: ${backupStatus})`);
+            if (warnings.length > 0) console.warn(`[Backup] job ${jobId} WARNINGS:`, warnings);
+        } catch (e) {
+            console.warn(`[Backup] job ${jobId} log generation failed:`, e.message);
+        }
+
+        // บันทึก backup_files (รวม log_path)
+        const [fr] = await db.query(
+            `INSERT INTO backup_files (connection_id, connection_name, db_name, file_path, file_name, size_bytes, compressed, checksum_sha256, trigger_type, created_by, log_path)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+            [conn.id, conn.name, conn.db_name, filePath, fileName, stat.size, compress ? 1 : 0, checksum, trigger_type, userId, logPath]
+        );
+
+        await db.query(
+            `UPDATE backup_jobs SET status='success', finished_at=NOW(), duration_ms=?, size_bytes=?, file_id=? WHERE id=?`,
+            [duration, stat.size, fr.insertId, jobId]
+        );
+
+        // ถ้า warning อย่างน้อย 1 — เก็บใน error_msg ของ job (ให้ UI เห็น) แม้ status='success'
+        if (warnings.length > 0) {
+            try { await db.query('UPDATE backup_jobs SET error_msg = ? WHERE id = ?',
+                ['WARNING: ' + warnings.join(' | '), jobId]); } catch (_) {}
+        }
+
+        try { await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?,?,?,?,?)',
+            [userId, 'BACKUP_RUN', 'backup_files', JSON.stringify({ file_name: fileName, size: stat.size, conn: conn.name, tables: sourceTables.length, total_inserts: totalInserts, warnings: warnings.length }), reqIp]); } catch (_) {}
+
+        console.log(`[Backup] job ${jobId} ${backupStatus} — ${fileName} (${stat.size} bytes, ${duration}ms, ${sourceTables.length} tables, ${totalInserts} INSERTs)`);
+        return { file_id: fr.insertId, file_name: fileName, size: stat.size, duration, tables: sourceTables.length, total_inserts: totalInserts, warnings };
+    } catch (e) {
+        const duration = Date.now() - startedAt;
+        try { await db.query(`UPDATE backup_jobs SET status='failed', finished_at=NOW(), duration_ms=?, error_msg=? WHERE id=?`,
+            [duration, e.message.slice(0, 2000), jobId]); } catch (_) {}
+        console.error(`[Backup] job ${jobId} failed:`, e.message);
+        throw e;
+    }
+}
+
+// ========== Files ==========
+apiRouter.get('/backup/files', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const { connection_id, limit = 100 } = req.query;
+        const params = [];
+        let where = 'WHERE 1=1';
+        if (connection_id) { where += ' AND connection_id = ?'; params.push(Number(connection_id)); }
+        params.push(Math.min(Number(limit) || 100, 500));
+        const [rows] = await db.query(
+            `SELECT id, connection_id, connection_name, db_name, file_name, size_bytes, compressed, checksum_sha256,
+                    trigger_type, created_by, created_at,
+                    (log_path IS NOT NULL) AS has_log,
+                    cloud_provider, cloud_url, cloud_uploaded_at, cloud_size_bytes
+             FROM backup_files ${where} ORDER BY created_at DESC LIMIT ?`,
+            params
+        );
+        // ตรวจ disk usage
+        let diskInfo = null;
+        try {
+            const stats = await fsp.statfs(BACKUP_DIR);
+            diskInfo = {
+                total_bytes: stats.blocks * stats.bsize,
+                free_bytes: stats.bfree * stats.bsize,
+                available_bytes: stats.bavail * stats.bsize
+            };
+        } catch (e) { /* statfs not available on all platforms */ }
+        res.json({ success: true, data: rows, backup_dir: BACKUP_DIR, disk: diskInfo });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// GET /backup/jobs/:id — สำหรับ frontend polling progress
+apiRouter.get('/backup/jobs/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM backup_jobs WHERE id = ?', [Number(req.params.id)]);
+        if (rows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบ job' });
+        const j = rows[0];
+        let elapsed_ms = null;
+        if (j.started_at) {
+            elapsed_ms = (j.finished_at ? new Date(j.finished_at) : new Date()).getTime() - new Date(j.started_at).getTime();
+        }
+        res.json({ success: true, data: { ...j, elapsed_ms } });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.get('/backup/jobs', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const { limit = 50 } = req.query;
+        const [rows] = await db.query(
+            `SELECT id, connection_id, connection_name, db_name, status, trigger_type, file_id,
+                    started_at, finished_at, duration_ms, size_bytes, error_msg, created_by, created_at
+             FROM backup_jobs ORDER BY id DESC LIMIT ?`,
+            [Math.min(Number(limit) || 50, 200)]
+        );
+        res.json({ success: true, data: rows });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// Download backup file (stream)
+apiRouter.get('/backup/files/:id/download', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const [rows] = await db.query('SELECT * FROM backup_files WHERE id = ?', [id]);
+        if (rows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบไฟล์' });
+        const f = rows[0];
+        if (!fs.existsSync(f.file_path)) return res.status(404).json({ success: false, message: 'ไฟล์หายไปจากดิสก์' });
+        res.setHeader('Content-Type', f.compressed ? 'application/gzip' : 'application/sql');
+        res.setHeader('Content-Disposition', `attachment; filename="${f.file_name}"`);
+        res.setHeader('Content-Length', f.size_bytes);
+        fs.createReadStream(f.file_path).pipe(res);
+        try { await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?,?,?,?,?)',
+            [req.user.userId, 'BACKUP_DOWNLOAD', 'backup_files', JSON.stringify({ id, file_name: f.file_name }), req.ip]); } catch (_) {}
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// GET log content for backup file (text)
+apiRouter.get('/backup/files/:id/log', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT log_path, file_name FROM backup_files WHERE id = ?', [Number(req.params.id)]);
+        if (rows.length === 0 || !rows[0].log_path) return res.status(404).json({ success: false, message: 'ไม่มี log file' });
+        if (!fs.existsSync(rows[0].log_path)) return res.status(404).json({ success: false, message: 'log file หายจากดิสก์' });
+        const content = await fsp.readFile(rows[0].log_path, 'utf8');
+        const wantDownload = req.query.download === '1';
+        if (wantDownload) {
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="${path.basename(rows[0].log_path)}"`);
+            return res.send(content);
+        }
+        res.json({ success: true, file_name: rows[0].file_name, log_content: content });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// GET log content for restore job (text)
+apiRouter.get('/backup/restore-jobs/:id/log', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT log_path, target_db FROM restore_jobs WHERE id = ?', [Number(req.params.id)]);
+        if (rows.length === 0 || !rows[0].log_path) return res.status(404).json({ success: false, message: 'ไม่มี log file' });
+        if (!fs.existsSync(rows[0].log_path)) return res.status(404).json({ success: false, message: 'log file หายจากดิสก์' });
+        const content = await fsp.readFile(rows[0].log_path, 'utf8');
+        const wantDownload = req.query.download === '1';
+        if (wantDownload) {
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="${path.basename(rows[0].log_path)}"`);
+            return res.send(content);
+        }
+        res.json({ success: true, target_db: rows[0].target_db, log_content: content });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.delete('/backup/files/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const deleteCloud = req.query.delete_cloud === '1' || req.query.delete_cloud === 'true';
+        const [rows] = await db.query('SELECT * FROM backup_files WHERE id = ?', [id]);
+        if (rows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบไฟล์' });
+        const f = rows[0];
+        try { if (fs.existsSync(f.file_path)) await fsp.unlink(f.file_path); } catch (e) { /* ignore */ }
+        try { if (f.log_path && fs.existsSync(f.log_path)) await fsp.unlink(f.log_path); } catch (e) { /* ignore */ }
+        if (deleteCloud && f.cloud_file_id) {
+            try { await deleteFileFromDrive(f.cloud_file_id); } catch (e) {
+                console.warn('[Cloud] delete from drive during file delete failed:', e.message);
+            }
+        }
+        await db.query('DELETE FROM backup_files WHERE id = ?', [id]);
+        try { await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?,?,?,?,?)',
+            [req.user.userId, 'BACKUP_DELETE', 'backup_files', JSON.stringify({ id, file_name: f.file_name }), req.ip]); } catch (_) {}
+        res.json({ success: true, message: 'ลบไฟล์สำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// ========== Restore Jobs Polling ==========
+apiRouter.get('/backup/restore-jobs/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM restore_jobs WHERE id = ?', [Number(req.params.id)]);
+        if (rows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบ job' });
+        const j = rows[0];
+        let elapsed_ms = null;
+        if (j.started_at) {
+            elapsed_ms = (j.finished_at ? new Date(j.finished_at) : new Date()).getTime() - new Date(j.started_at).getTime();
+        }
+        const percent = j.total_bytes > 0 ? Math.min(100, Math.round((j.progress_bytes / j.total_bytes) * 100)) : 0;
+        res.json({ success: true, data: { ...j, elapsed_ms, percent } });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// ========== Restore ==========
+// POST /backup/restore  body: { file_id, mode, target_db?, auto_backup_first?:true }
+// Response: { success, restore_job_id } — poll GET /backup/restore-jobs/:id
+apiRouter.post('/backup/restore', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const { file_id, mode, target_db, auto_backup_first = true } = req.body || {};
+        if (!['new_db', 'replace'].includes(mode)) {
+            return res.status(400).json({ success: false, message: 'mode ต้องเป็น new_db หรือ replace' });
+        }
+        const [rows] = await db.query('SELECT * FROM backup_files WHERE id = ?', [Number(file_id)]);
+        if (rows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบไฟล์' });
+        const f = rows[0];
+        if (!fs.existsSync(f.file_path)) return res.status(404).json({ success: false, message: 'ไฟล์หายจากดิสก์' });
+
+        const conn = await getBackupConnection(f.connection_id);
+        if (!conn) return res.status(404).json({ success: false, message: 'ไม่พบ connection เดิม' });
+
+        // กำหนด target DB
+        let dbTarget;
+        if (mode === 'new_db') {
+            const ts = bangkokTimestamp(new Date(), 'compact'); // 14-digit Bangkok time
+            dbTarget = target_db && isValidIdent(target_db) ? target_db : `${conn.db_name}_restore_${ts}`;
+            if (!isValidIdent(dbTarget)) {
+                return res.status(400).json({ success: false, message: 'target_db ไม่ถูกต้อง (a-z, 0-9, _ เท่านั้น)' });
+            }
+        } else {
+            dbTarget = conn.db_name;
+        }
+
+        // === สร้าง restore_jobs record + return ทันที ===
+        const [rj] = await db.query(
+            `INSERT INTO restore_jobs (file_id, source_file_name, connection_id, target_db, mode, status, total_bytes, started_at, phase, created_by)
+             VALUES (?,?,?,?,?, 'running', ?, NOW(), ?, ?)`,
+            [f.id, f.file_name, f.connection_id, dbTarget, mode, f.size_bytes, 'starting', req.user.userId]
+        );
+        const restoreJobId = rj.insertId;
+        const userId = req.user.userId;
+        const reqIp = req.ip;
+
+        res.json({ success: true, restore_job_id: restoreJobId, target_db: dbTarget, message: 'เริ่ม Restore แล้ว — poll /backup/restore-jobs/:id' });
+
+        // === Background work ===
+        runRestoreJob(restoreJobId, f, conn, mode, dbTarget, auto_backup_first, userId, reqIp).catch((e) => {
+            console.error(`[Restore] job ${restoreJobId} failed:`, e.message);
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+async function runRestoreJob(restoreJobId, f, conn, mode, dbTarget, auto_backup_first, userId, reqIp) {
+    const { Transform } = require('stream');
+    const startedAt = Date.now();
+    try {
+        // === replace mode: auto-backup ก่อนเสมอ (ถ้า flag เปิด) ===
+        let preBackupFileId = null;
+        if (mode === 'replace' && auto_backup_first) {
+            await db.query("UPDATE restore_jobs SET phase = 'pre_backup' WHERE id = ?", [restoreJobId]);
+            try {
+                const ts2 = bangkokTimestamp(new Date(), 'filename');
+                const preFileName = `${sanitizeFilename(conn.db_name)}_${sanitizeFilename(conn.name)}_PRE_RESTORE_${ts2}.sql.gz`;
+                const preFilePath = path.join(BACKUP_DIR, preFileName);
+                const dumpArgs = [`-h${conn.host}`, `-P${conn.port}`, `-u${conn.db_user}`,
+                    '--single-transaction', '--quick', '--routines', '--triggers',
+                    '--default-character-set=utf8mb4', '--no-tablespaces',
+                    '--skip-add-locks', '--add-drop-table',
+                    conn.db_name];
+                const env = { ...process.env };
+                if (conn.db_password) env.MYSQL_PWD = conn.db_password;
+                await new Promise((resolve, reject) => {
+                    let settled = false;
+                    const done = (err) => { if (settled) return; settled = true; err ? reject(err) : resolve(); };
+                    let dump;
+                    try { dump = spawn(MYSQLDUMP_BIN, dumpArgs, { env }); }
+                    catch (e) { return done(new Error(`spawn mysqldump failed: ${e.message}`)); }
+                    const ws = fs.createWriteStream(preFilePath);
+                    const gz = zlib.createGzip({ level: 6 });
+                    let stderr = '';
+                    dump.stderr.on('data', d => stderr += d.toString());
+                    dump.stdout.pipe(gz).pipe(ws);
+                    ws.on('finish', () => dump.on('close', (code) =>
+                        code === 0 ? done() : done(new Error(`pre-backup mysqldump exited ${code}: ${stderr.slice(0,300)}`))));
+                    ws.on('error', done);
+                    gz.on('error', done);
+                    dump.on('error', done);
+                });
+                const st = await fsp.stat(preFilePath);
+                const ck = await sha256File(preFilePath);
+                const [pfr] = await db.query(
+                    `INSERT INTO backup_files (connection_id, connection_name, db_name, file_path, file_name, size_bytes, compressed, checksum_sha256, trigger_type, created_by)
+                     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+                    [conn.id, conn.name, conn.db_name, preFilePath, preFileName, st.size, 1, ck, 'auto_before_restore', userId]
+                );
+                preBackupFileId = pfr.insertId;
+                await db.query('UPDATE restore_jobs SET pre_backup_file_id = ? WHERE id = ?', [preBackupFileId, restoreJobId]);
+            } catch (e) {
+                throw new Error('auto-backup ก่อน restore ล้มเหลว: ' + e.message);
+            }
+        }
+
+        // === สร้าง / drop+create DB ปลายทาง ===
+        await db.query("UPDATE restore_jobs SET phase = 'preparing_db' WHERE id = ?", [restoreJobId]);
+        const adminArgs = [`-h${conn.host}`, `-P${conn.port}`, `-u${conn.db_user}`, '-e'];
+        const env = { ...process.env };
+        if (conn.db_password) env.MYSQL_PWD = conn.db_password;
+        const runMysql = (sql) => new Promise((resolve, reject) => {
+            let settled = false;
+            const done = (err) => { if (settled) return; settled = true; err ? reject(err) : resolve(); };
+            let p;
+            try { p = spawn(MYSQL_BIN, [...adminArgs, sql], { env }); }
+            catch (e) { return done(new Error(`spawn mysql failed: ${e.message}`)); }
+            let err = '';
+            p.stderr.on('data', d => err += d.toString());
+            p.on('close', code => code === 0 ? done() : done(new Error(`mysql exit ${code}: ${err.slice(0,300)}`)));
+            p.on('error', done);
+        });
+
+        if (mode === 'new_db') {
+            await runMysql(`CREATE DATABASE IF NOT EXISTS \`${dbTarget}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+        } else {
+            await runMysql(`DROP DATABASE IF EXISTS \`${dbTarget}\`; CREATE DATABASE \`${dbTarget}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+        }
+
+        // === Restore: ส่ง SQL ผ่าน Transform stream เพื่อนับ bytes + จับชื่อตาราง ===
+        await db.query("UPDATE restore_jobs SET phase = 'restoring' WHERE id = ?", [restoreJobId]);
+        let bytesRead = 0;
+        let lastUpdate = 0;
+        let currentTable = null;
+        let leftover = '';
+        const tableSet = new Set(); // dedup ชื่อตาราง (mysqldump เขียน "-- Table structure" + "CREATE TABLE" สำหรับตารางเดียวกัน)
+        // จับเฉพาะ CREATE TABLE statement หลัก (ไม่จับ comment) — แม่นกว่า
+        const tableRegex = /^\s*CREATE TABLE\s+(?:IF NOT EXISTS\s+)?[`"]?([a-zA-Z0-9_]+)[`"]?/gm;
+
+        // Transform: monitor SQL stream
+        const progressMonitor = new Transform({
+            transform(chunk, enc, cb) {
+                bytesRead += chunk.length;
+                const text = leftover + chunk.toString('utf8');
+                let m;
+                while ((m = tableRegex.exec(text)) !== null) {
+                    if (!tableSet.has(m[1])) {
+                        tableSet.add(m[1]);
+                        currentTable = m[1];
+                    }
+                }
+                tableRegex.lastIndex = 0;
+                // เก็บ tail ไว้กันคำถูกตัดกลาง chunk
+                leftover = text.length > 500 ? text.slice(-500) : text;
+                const now = Date.now();
+                if (now - lastUpdate > 1000) {
+                    lastUpdate = now;
+                    db.query(
+                        'UPDATE restore_jobs SET progress_bytes = ?, tables_count = ?, current_table = ? WHERE id = ?',
+                        [bytesRead, tableSet.size, currentTable, restoreJobId]
+                    ).catch(() => {});
+                }
+                this.push(chunk);
+                cb();
+            }
+        });
+
+        await new Promise((resolve, reject) => {
+            let settled = false;
+            const doneP = (err) => { if (settled) return; settled = true; err ? reject(err) : resolve(); };
+            let mysqlProc;
+            try { mysqlProc = spawn(MYSQL_BIN, [`-h${conn.host}`, `-P${conn.port}`, `-u${conn.db_user}`, dbTarget], { env }); }
+            catch (e) { return doneP(new Error(`spawn mysql failed: ${e.message}`)); }
+            let mysqlErr = '';
+            mysqlProc.stderr.on('data', d => mysqlErr += d.toString());
+            const fileStream = fs.createReadStream(f.file_path);
+            if (f.compressed) {
+                const gunzip = zlib.createGunzip();
+                fileStream.pipe(gunzip).pipe(progressMonitor).pipe(mysqlProc.stdin);
+                gunzip.on('error', doneP);
+            } else {
+                fileStream.pipe(progressMonitor).pipe(mysqlProc.stdin);
+            }
+            fileStream.on('error', doneP);
+            progressMonitor.on('error', doneP);
+            mysqlProc.on('close', code => code === 0 ? doneP() : doneP(new Error(`mysql restore exit ${code}: ${mysqlErr.slice(0,500)}`)));
+            mysqlProc.on('error', doneP);
+        });
+
+        const duration = Date.now() - startedAt;
+        const restoredTableCount = tableSet.size;
+
+        // === Verification: query target DB จริงเพื่อยืนยันว่ามีตารางอะไรบ้าง + นับ row จริง ===
+        await db.query("UPDATE restore_jobs SET phase = 'verifying' WHERE id = ?", [restoreJobId]);
+        let targetTables = [];
+        let sourceTables = [];
+        try {
+            targetTables = await listDbTables(conn, dbTarget);
+            // นับ row จริง (COUNT(*)) ของแต่ละ BASE TABLE ใน target — แม่นกว่า table_rows ของ InnoDB
+            for (const t of targetTables) {
+                if (t.type === 'BASE TABLE') {
+                    t.actual_rows = await countTableRows(conn, dbTarget, t.name);
+                } else {
+                    t.actual_rows = 0;
+                }
+            }
+            // ถ้า source DB ยังอยู่ใน connection เดียวกัน — เทียบได้
+            try { sourceTables = await listDbTables(conn, f.db_name); } catch (_) { sourceTables = []; }
+        } catch (e) {
+            console.warn(`[Restore] job ${restoreJobId} verification failed:`, e.message);
+        }
+
+        // === เขียน restore log file ===
+        let logPath = null;
+        try {
+            const logContent = buildRestoreLog({
+                source_file: f.file_name,
+                source_db: f.db_name,
+                target_db: dbTarget,
+                mode,
+                started_at: bangkokTimestamp(new Date(startedAt), 'log'),
+                finished_at: bangkokTimestamp(new Date(), 'log'),
+                duration_ms: duration,
+                status: 'SUCCESS',
+                pre_backup_file_id: preBackupFileId,
+                user_id: userId
+            }, sourceTables, targetTables);
+            logPath = path.join(BACKUP_DIR, `restore_${restoreJobId}_${dbTarget}.restore_log.txt`);
+            await fsp.writeFile(logPath, logContent, 'utf8');
+            console.log(`[Restore] job ${restoreJobId} log written: ${logPath}`);
+        } catch (e) {
+            console.warn(`[Restore] job ${restoreJobId} log write failed:`, e.message);
+        }
+
+        const verifiedCount = targetTables.filter(t => t.type === 'BASE TABLE').length;
+        await db.query(
+            `UPDATE restore_jobs SET status='success', finished_at=NOW(), duration_ms=?, progress_bytes=?, tables_count=?, current_table=?, phase='done', log_path=? WHERE id=?`,
+            [duration, bytesRead, verifiedCount || restoredTableCount, currentTable, logPath, restoreJobId]
+        );
+        try { await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?,?,?,?,?)',
+            [userId, 'BACKUP_RESTORE', 'backup_files',
+             JSON.stringify({ file_id: f.id, file_name: f.file_name, mode, target_db: dbTarget, pre_backup_file_id: preBackupFileId, tables: verifiedCount, duration_ms: duration }),
+             reqIp]); } catch (_) {}
+        console.log(`[Restore] job ${restoreJobId} success — parsed:${restoredTableCount} verified:${verifiedCount} tables, ${duration}ms`);
+    } catch (e) {
+        const duration = Date.now() - startedAt;
+        try { await db.query(`UPDATE restore_jobs SET status='failed', finished_at=NOW(), duration_ms=?, error_msg=? WHERE id=?`,
+            [duration, e.message.slice(0, 2000), restoreJobId]); } catch (_) {}
+        console.error(`[Restore] job ${restoreJobId} failed:`, e.message);
+        throw e;
+    }
+}
+
+// ========================================================================
+// ============== Phase 2: Backup Scheduler + Notifications ===============
+// ========================================================================
+
+// === Notification helper สำหรับ backup scheduler ===
+async function notifyBackupResult(schedule, result) {
+    const ns = await getNotifSettings();
+    const wantEmail = schedule.notify_email && (
+        (result.status === 'success' && schedule.notify_email_on_success) ||
+        (result.status === 'failed' && schedule.notify_email_on_failure)
+    );
+    const wantTg = schedule.notify_telegram && (
+        (result.status === 'success' && schedule.notify_telegram_on_success) ||
+        (result.status === 'failed' && schedule.notify_telegram_on_failure)
+    );
+    if (!wantEmail && !wantTg) return { sent_email: false, sent_telegram: false };
+
+    const fmtBytes = (b) => {
+        if (!b) return '0 B';
+        const k = 1024, units = ['B','KB','MB','GB','TB'];
+        const i = Math.floor(Math.log(b)/Math.log(k));
+        return (b/Math.pow(k,i)).toFixed(2) + ' ' + units[i];
+    };
+    const icon = result.status === 'success' ? '✅' : '❌';
+    const subject = `${icon} Backup ${result.status === 'success' ? 'สำเร็จ' : 'ล้มเหลว'} — ${schedule.name}`;
+
+    // HTML email body
+    let html = `<h3>${icon} Backup ${result.status === 'success' ? 'สำเร็จ' : 'ล้มเหลว'}</h3>`;
+    html += `<table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px">`;
+    html += `<tr><td style="padding:4px 12px 4px 0;color:#666">Schedule:</td><td><b>${schedule.name}</b></td></tr>`;
+    html += `<tr><td style="padding:4px 12px 4px 0;color:#666">Connection:</td><td>${result.connection_name || '-'}</td></tr>`;
+    html += `<tr><td style="padding:4px 12px 4px 0;color:#666">Database:</td><td><code>${result.db_name || '-'}</code></td></tr>`;
+    html += `<tr><td style="padding:4px 12px 4px 0;color:#666">เวลา:</td><td>${new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}</td></tr>`;
+    if (result.status === 'success') {
+        html += `<tr><td style="padding:4px 12px 4px 0;color:#666">ไฟล์:</td><td><code>${result.file_name}</code></td></tr>`;
+        html += `<tr><td style="padding:4px 12px 4px 0;color:#666">ขนาด:</td><td><b>${fmtBytes(result.size_bytes)}</b></td></tr>`;
+        html += `<tr><td style="padding:4px 12px 4px 0;color:#666">ตาราง:</td><td>${result.tables_count || 0} ตาราง</td></tr>`;
+        html += `<tr><td style="padding:4px 12px 4px 0;color:#666">INSERTs:</td><td>${(result.total_inserts || 0).toLocaleString('en-US')}</td></tr>`;
+        html += `<tr><td style="padding:4px 12px 4px 0;color:#666">ใช้เวลา:</td><td>${((result.duration_ms || 0)/1000).toFixed(1)} วินาที</td></tr>`;
+        if (result.cleaned_up_files > 0) {
+            html += `<tr><td style="padding:4px 12px 4px 0;color:#666">ลบเก่า:</td><td>${result.cleaned_up_files} ไฟล์ (${fmtBytes(result.cleaned_up_bytes)})</td></tr>`;
+        }
+        if (result.warnings && result.warnings.length > 0) {
+            html += `<tr><td colspan="2" style="padding:8px 0;color:#f59e0b"><b>⚠️ คำเตือน:</b><br>${result.warnings.map(w => `• ${w}`).join('<br>')}</td></tr>`;
+        }
+    } else {
+        html += `<tr><td style="padding:4px 12px 4px 0;color:#666">Error:</td><td style="color:#dc2626"><code>${(result.error_msg || '').slice(0, 500)}</code></td></tr>`;
+    }
+    html += `</table>`;
+
+    // Telegram message (plain text)
+    let tg = `${icon} <b>Backup ${result.status === 'success' ? 'สำเร็จ' : 'ล้มเหลว'}</b>\n`;
+    tg += `📋 ${schedule.name}\n`;
+    tg += `🔗 ${result.connection_name || '-'} → <code>${result.db_name || '-'}</code>\n`;
+    tg += `🕐 ${new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}\n`;
+    if (result.status === 'success') {
+        tg += `📦 ${result.file_name}\n`;
+        tg += `💾 ${fmtBytes(result.size_bytes)} (${result.tables_count || 0} ตาราง, ${(result.total_inserts || 0).toLocaleString('en-US')} INSERTs)\n`;
+        tg += `⏱ ${((result.duration_ms || 0)/1000).toFixed(1)}s`;
+        if (result.cleaned_up_files > 0) tg += `\n🗑 ลบเก่า ${result.cleaned_up_files} ไฟล์`;
+        if (result.warnings && result.warnings.length > 0) {
+            tg += `\n⚠️ ${result.warnings[0]}`;
+        }
+    } else {
+        tg += `❌ ${(result.error_msg || '').slice(0, 300)}`;
+    }
+
+    let sent_email = false, sent_telegram = false;
+    if (wantEmail && ns.adminEmails) {
+        const emails = ns.adminEmails.split(',').map(e => e.trim()).filter(Boolean);
+        for (const email of emails) {
+            try { await sendMail(email, subject, html); sent_email = true; } catch (e) {}
+        }
+    }
+    if (wantTg && ns.tgToken && ns.tgChatId) {
+        try { sent_telegram = await sendTelegramDirect(ns.tgToken, ns.tgChatId, tg); } catch (e) {}
+    }
+    return { sent_email, sent_telegram };
+}
+
+// === Retention cleanup — ลบ backup เก่ากว่า retention_days ของ schedule ===
+async function cleanupOldBackups(connectionId, retentionDays) {
+    if (!retentionDays || retentionDays <= 0) return { files: 0, bytes: 0 };
+    try {
+        const [rows] = await db.query(
+            `SELECT id, file_path, log_path, size_bytes FROM backup_files
+             WHERE connection_id = ? AND trigger_type = 'scheduled'
+             AND created_at < NOW() - INTERVAL ? DAY`,
+            [connectionId, retentionDays]
+        );
+        let deletedFiles = 0;
+        let deletedBytes = 0;
+        for (const f of rows) {
+            try { if (f.file_path && fs.existsSync(f.file_path)) await fsp.unlink(f.file_path); } catch (_) {}
+            try { if (f.log_path && fs.existsSync(f.log_path)) await fsp.unlink(f.log_path); } catch (_) {}
+            await db.query('DELETE FROM backup_files WHERE id = ?', [f.id]);
+            deletedFiles++;
+            deletedBytes += f.size_bytes || 0;
+        }
+        return { files: deletedFiles, bytes: deletedBytes };
+    } catch (e) {
+        console.error('[Scheduler] cleanup failed:', e.message);
+        return { files: 0, bytes: 0, error: e.message };
+    }
+}
+
+// === รัน backup ตาม schedule (เรียกจาก scheduler + manual run-now) ===
+async function runScheduledBackup(schedule) {
+    const startedAt = Date.now();
+    const result = {
+        schedule_id: schedule.id,
+        schedule_name: schedule.name,
+        status: 'failed',
+        connection_name: null,
+        db_name: null,
+        job_id: null,
+        file_id: null,
+        file_name: null,
+        size_bytes: 0,
+        total_inserts: 0,
+        tables_count: 0,
+        duration_ms: 0,
+        cleaned_up_files: 0,
+        cleaned_up_bytes: 0,
+        warnings: [],
+        error_msg: null
+    };
+    try {
+        const conn = await getBackupConnection(schedule.connection_id);
+        if (!conn) throw new Error(`ไม่พบ connection #${schedule.connection_id}`);
+        result.connection_name = conn.name;
+        result.db_name = conn.db_name;
+
+        // สร้าง backup_jobs record + รัน worker
+        const [r] = await db.query(
+            `INSERT INTO backup_jobs (connection_id, connection_name, db_name, status, trigger_type, started_at, created_by)
+             VALUES (?,?,?, 'running', 'scheduled', NOW(), ?)`,
+            [conn.id, conn.name, conn.db_name, schedule.created_by || null]
+        );
+        const jobId = r.insertId;
+        result.job_id = jobId;
+
+        const r2 = await runBackupJob(jobId, conn, !!schedule.compress, 'scheduled', schedule.created_by || null, '127.0.0.1');
+        result.file_id = r2.file_id;
+        result.file_name = r2.file_name;
+        result.size_bytes = r2.size;
+        result.total_inserts = r2.total_inserts;
+        result.tables_count = r2.tables;
+        result.warnings = r2.warnings || [];
+
+        // Retention cleanup หลัง backup สำเร็จ
+        const cleanup = await cleanupOldBackups(conn.id, schedule.retention_days);
+        result.cleaned_up_files = cleanup.files;
+        result.cleaned_up_bytes = cleanup.bytes;
+
+        // Auto upload to cloud (ถ้าเปิด)
+        if (schedule.auto_upload_cloud) {
+            try {
+                const [bfRows] = await db.query('SELECT file_path, file_name FROM backup_files WHERE id = ?', [r2.file_id]);
+                if (bfRows.length > 0) {
+                    const cloudResult = await uploadFileToDrive(bfRows[0].file_path, bfRows[0].file_name);
+                    await db.query(
+                        'UPDATE backup_files SET cloud_provider=?, cloud_file_id=?, cloud_url=?, cloud_uploaded_at=NOW(), cloud_size_bytes=? WHERE id=?',
+                        ['gdrive', cloudResult.file_id, cloudResult.web_url, cloudResult.size, r2.file_id]
+                    );
+                    result.cloud_url = cloudResult.web_url;
+                    result.cloud_uploaded = true;
+                    console.log(`[Scheduler] uploaded "${r2.file_name}" to Drive: ${cloudResult.web_url}`);
+                }
+            } catch (e) {
+                console.error('[Scheduler] cloud upload failed:', e.message);
+                result.warnings.push('Cloud upload failed: ' + e.message);
+            }
+        }
+
+        result.status = 'success';
+    } catch (e) {
+        result.status = 'failed';
+        result.error_msg = e.message;
+        console.error(`[Scheduler] backup schedule "${schedule.name}" failed:`, e.message);
+    }
+    result.duration_ms = Date.now() - startedAt;
+
+    // ส่ง notification
+    const notif = await notifyBackupResult(schedule, result);
+
+    // บันทึก schedule log
+    try {
+        await db.query(
+            `INSERT INTO backup_schedule_logs
+             (schedule_id, schedule_name, status, job_id, file_id, file_name, size_bytes, total_inserts, tables_count,
+              duration_ms, cleaned_up_files, cleaned_up_bytes, notified_email, notified_telegram, cloud_uploaded, cloud_url, warnings, error_msg)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            [schedule.id, schedule.name, result.status, result.job_id, result.file_id, result.file_name,
+             result.size_bytes, result.total_inserts, result.tables_count, result.duration_ms,
+             result.cleaned_up_files, result.cleaned_up_bytes,
+             notif.sent_email ? 1 : 0, notif.sent_telegram ? 1 : 0,
+             result.cloud_uploaded ? 1 : 0, result.cloud_url || null,
+             result.warnings.length ? JSON.stringify(result.warnings) : null,
+             result.error_msg ? result.error_msg.slice(0, 2000) : null]
+        );
+        await db.query('UPDATE backup_schedules SET last_status = ? WHERE id = ?', [result.status, schedule.id]);
+    } catch (e) {
+        console.error('[Scheduler] log insert failed:', e.message);
+    }
+
+    return result;
+}
+
+// === Scheduler check loop (setInterval 30s) ===
+// === Timezone-safe helpers (always Asia/Bangkok ไม่ว่า process.env.TZ จะถูกตั้งหรือไม่) ===
+const BANGKOK_TZ = 'Asia/Bangkok';
+const _bkkFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: BANGKOK_TZ,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false, weekday: 'short'
+});
+function getBangkokTime(date = new Date()) {
+    const parts = _bkkFormatter.formatToParts(date);
+    const get = (t) => parts.find(p => p.type === t)?.value || '';
+    const hour = get('hour') === '24' ? '00' : get('hour'); // Intl บางเวอร์ชันคืน 24
+    const wdMap = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
+    return {
+        hhmm: `${hour}:${get('minute')}`,
+        dow: wdMap[get('weekday')] || 1,
+        date: `${get('year')}-${get('month')}-${get('day')}`,
+        full: `${get('year')}-${get('month')}-${get('day')} ${hour}:${get('minute')}:${get('second')}`
+    };
+}
+
+// Bangkok timestamp ในรูปแบบต่างๆ — ใช้แทน new Date().toISOString() ทั้งระบบ backup
+//  'compact'  → 20260519140555         (14 หลัก, ใช้ในชื่อ DB target)
+//  'filename' → 2026-05-19T14-05-55    (19 chars, safe สำหรับชื่อไฟล์)
+//  'log'      → 2026-05-19 14:05:55    (19 chars, สำหรับ log content)
+function bangkokTimestamp(date = new Date(), format = 'filename') {
+    const f = new Intl.DateTimeFormat('en-CA', {
+        timeZone: BANGKOK_TZ,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+    });
+    const parts = f.formatToParts(date);
+    const g = (t) => parts.find(p => p.type === t)?.value || '';
+    const h = g('hour') === '24' ? '00' : g('hour');
+    const y = g('year'), mo = g('month'), d = g('day'), mi = g('minute'), s = g('second');
+    if (format === 'compact')  return `${y}${mo}${d}${h}${mi}${s}`;
+    if (format === 'log')      return `${y}-${mo}-${d} ${h}:${mi}:${s}`;
+    return `${y}-${mo}-${d}T${h}-${mi}-${s}`; // 'filename' (default)
+}
+
+function startBackupScheduler() {
+    const pad2 = (n) => String(n).padStart(2, '0');
+    const check = async () => {
+        try {
+            const now = new Date();
+            const bkk = getBangkokTime(now);
+            const hhmmNow = bkk.hhmm;
+            const prev = new Date(now.getTime() - 60 * 1000);
+            const hhmmPrev = getBangkokTime(prev).hhmm;
+            const dow = bkk.dow;
+
+            const [schedules] = await db.query(
+                `SELECT * FROM backup_schedules WHERE is_enabled=1
+                 AND time_of_day IN (?, ?)
+                 AND (last_run_at IS NULL OR TIMESTAMPDIFF(SECOND, last_run_at, NOW()) > 120)`,
+                [hhmmNow, hhmmPrev]
+            );
+            if (schedules.length === 0) return;
+
+            for (const s of schedules) {
+                const days = (s.days_of_week || '').split(',').map(d => parseInt(d.trim(), 10)).filter(n => !isNaN(n));
+                if (!days.includes(dow)) {
+                    console.log(`[BackupScheduler] Skip "${s.name}" — วันนี้ (${dow}) ไม่อยู่ใน days [${days.join(',')}]`);
+                    continue;
+                }
+                console.log(`[BackupScheduler] 🚀 Running "${s.name}" (time=${s.time_of_day}, now=${hhmmNow}, dow=${dow})`);
+                // Lock ทันทีกัน double-run
+                try { await db.query('UPDATE backup_schedules SET last_run_at=NOW() WHERE id=?', [s.id]); } catch (e) {}
+                runScheduledBackup(s).catch(e => console.error(`[BackupScheduler] "${s.name}" Error:`, e.message));
+            }
+        } catch (e) {
+            console.error('[BackupScheduler] check() failed:', e.message);
+        }
+    };
+    check().catch(e => console.error('[BackupScheduler] initial check failed:', e.message));
+    setInterval(check, 30000);
+    const bkk = getBangkokTime();
+    console.log(`[BackupScheduler] started — Bangkok time: ${bkk.full} (dow=${bkk.dow}), check every 30s`);
+}
+
+// ========== Backup Schedules CRUD ==========
+apiRouter.get('/backup/schedules', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query(`
+            SELECT s.*, c.name AS connection_name, c.db_name, c.host AS conn_host
+            FROM backup_schedules s
+            LEFT JOIN backup_connections c ON s.connection_id = c.id
+            ORDER BY s.id DESC
+        `);
+        res.json({ success: true, data: rows });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.post('/backup/schedules', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const b = req.body || {};
+        if (!b.name || !b.connection_id || !b.days_of_week || !b.time_of_day) {
+            return res.status(400).json({ success: false, message: 'ข้อมูลไม่ครบ (name/connection_id/days_of_week/time_of_day)' });
+        }
+        const [r] = await db.query(
+            `INSERT INTO backup_schedules
+             (name, is_enabled, connection_id, days_of_week, time_of_day, compress, retention_days,
+              notify_email, notify_email_on_success, notify_email_on_failure,
+              notify_telegram, notify_telegram_on_success, notify_telegram_on_failure, auto_upload_cloud, created_by)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            [b.name, b.is_enabled ? 1 : 0, Number(b.connection_id), b.days_of_week, b.time_of_day,
+             b.compress !== false ? 1 : 0, Number(b.retention_days) || 30,
+             b.notify_email ? 1 : 0, b.notify_email_on_success !== false ? 1 : 0, b.notify_email_on_failure !== false ? 1 : 0,
+             b.notify_telegram ? 1 : 0, b.notify_telegram_on_success !== false ? 1 : 0, b.notify_telegram_on_failure !== false ? 1 : 0,
+             b.auto_upload_cloud ? 1 : 0,
+             req.user.userId]
+        );
+        res.json({ success: true, id: r.insertId, message: 'สร้าง schedule สำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.put('/backup/schedules/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const b = req.body || {};
+        await db.query(
+            `UPDATE backup_schedules SET name=?, is_enabled=?, connection_id=?, days_of_week=?, time_of_day=?, compress=?, retention_days=?,
+             notify_email=?, notify_email_on_success=?, notify_email_on_failure=?,
+             notify_telegram=?, notify_telegram_on_success=?, notify_telegram_on_failure=?, auto_upload_cloud=?
+             WHERE id=?`,
+            [b.name, b.is_enabled ? 1 : 0, Number(b.connection_id), b.days_of_week, b.time_of_day,
+             b.compress !== false ? 1 : 0, Number(b.retention_days) || 30,
+             b.notify_email ? 1 : 0, b.notify_email_on_success !== false ? 1 : 0, b.notify_email_on_failure !== false ? 1 : 0,
+             b.notify_telegram ? 1 : 0, b.notify_telegram_on_success !== false ? 1 : 0, b.notify_telegram_on_failure !== false ? 1 : 0,
+             b.auto_upload_cloud ? 1 : 0,
+             Number(req.params.id)]
+        );
+        res.json({ success: true, message: 'แก้ไข schedule สำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.delete('/backup/schedules/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        await db.query('DELETE FROM backup_schedules WHERE id=?', [Number(req.params.id)]);
+        res.json({ success: true, message: 'ลบสำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.post('/backup/schedules/:id/run-now', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM backup_schedules WHERE id=?', [Number(req.params.id)]);
+        if (rows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบ schedule' });
+        // Lock + รันแบบ async ใน background
+        await db.query('UPDATE backup_schedules SET last_run_at=NOW() WHERE id=?', [rows[0].id]);
+        runScheduledBackup(rows[0]).catch(e => console.error('[Scheduler] manual run-now error:', e.message));
+        res.json({ success: true, message: 'เริ่ม backup แล้ว — ดู Files tab + Logs ภายในไม่กี่นาที' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.get('/backup/schedules/:id/logs', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            'SELECT * FROM backup_schedule_logs WHERE schedule_id=? ORDER BY id DESC LIMIT 100',
+            [Number(req.params.id)]
+        );
+        res.json({ success: true, data: rows });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// POST /backup/schedules/test-notification — ทดสอบการส่ง notification
+apiRouter.post('/backup/schedules/test-notification', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const testResult = {
+            status: 'success',
+            connection_name: 'Test Connection',
+            db_name: 'test_db',
+            file_name: 'test_backup_' + Date.now() + '.sql.gz',
+            size_bytes: 1024 * 1024,
+            total_inserts: 12345,
+            tables_count: 39,
+            duration_ms: 2500,
+            cleaned_up_files: 0,
+            cleaned_up_bytes: 0,
+            warnings: []
+        };
+        const testSchedule = {
+            name: 'TEST NOTIFICATION',
+            notify_email: req.body.email !== false,
+            notify_email_on_success: true,
+            notify_email_on_failure: true,
+            notify_telegram: req.body.telegram !== false,
+            notify_telegram_on_success: true,
+            notify_telegram_on_failure: true
+        };
+        const notif = await notifyBackupResult(testSchedule, testResult);
+        res.json({ success: true, ...notif, message: 'ส่งทดสอบแล้ว' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// ========================================================================
+// =========== Phase 3: Cloud Upload (Google Drive) + Monitor =============
+// ========================================================================
+const { google } = require('googleapis');
+
+// === Helper: ดึง Google Drive settings ===
+async function getDriveSettings() {
+    try {
+        const [rows] = await db.query(
+            "SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'gdrive_%'"
+        );
+        const s = {};
+        for (const r of rows) s[r.setting_key] = r.setting_value;
+        return {
+            enabled: s.gdrive_enabled === 'true',
+            clientId: s.gdrive_client_id || '',
+            clientSecret: bkDecrypt(s.gdrive_client_secret_enc || ''),
+            refreshToken: bkDecrypt(s.gdrive_refresh_token_enc || ''),
+            redirectUri: s.gdrive_redirect_uri || '',
+            userEmail: s.gdrive_user_email || '',
+            folderId: s.gdrive_folder_id || '',
+            folderName: s.gdrive_folder_name || ''
+        };
+    } catch (e) { return { enabled: false }; }
+}
+
+// === Helper: สร้าง OAuth2 client + Drive client จาก refresh_token ===
+let _driveClientCache = null;
+let _driveClientKey = null;
+async function getDriveClient() {
+    const cfg = await getDriveSettings();
+    if (!cfg.enabled) throw new Error('Google Drive ยังไม่เปิดใช้งาน');
+    if (!cfg.clientId || !cfg.clientSecret) throw new Error('ยังไม่ได้ตั้ง Client ID/Secret');
+    if (!cfg.refreshToken) throw new Error('ยังไม่ได้ Connect Google Drive (ไม่มี refresh token)');
+    if (!cfg.folderId) throw new Error('ยังไม่ได้ตั้ง Folder ID');
+
+    const cacheKey = crypto.createHash('sha256').update(cfg.refreshToken + cfg.folderId).digest('hex');
+    if (_driveClientCache && _driveClientKey === cacheKey) {
+        return { drive: _driveClientCache, folderId: cfg.folderId, folderName: cfg.folderName, userEmail: cfg.userEmail };
+    }
+
+    const oauth2 = new google.auth.OAuth2(cfg.clientId, cfg.clientSecret, cfg.redirectUri);
+    oauth2.setCredentials({ refresh_token: cfg.refreshToken });
+    const drive = google.drive({ version: 'v3', auth: oauth2 });
+    _driveClientCache = drive;
+    _driveClientKey = cacheKey;
+    return { drive, folderId: cfg.folderId, folderName: cfg.folderName, userEmail: cfg.userEmail };
+}
+
+// === OAuth State Map (CSRF protection) — 10 นาที TTL ===
+const _gdriveStateMap = new Map();
+const GDRIVE_STATE_TTL = 10 * 60 * 1000;
+setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of _gdriveStateMap.entries()) {
+        if (v.expiry < now) _gdriveStateMap.delete(k);
+    }
+}, 60 * 1000);
+
+// === Upload file to Google Drive ===
+async function uploadFileToDrive(filePath, fileName) {
+    const { drive, folderId } = await getDriveClient();
+    const stats = await fsp.stat(filePath);
+    const fileMetadata = { name: fileName, parents: [folderId] };
+    const media = { mimeType: 'application/octet-stream', body: fs.createReadStream(filePath) };
+    const r = await drive.files.create({
+        requestBody: fileMetadata,
+        media,
+        fields: 'id, name, size, webViewLink, createdTime'
+    });
+    return {
+        file_id: r.data.id,
+        web_url: r.data.webViewLink || `https://drive.google.com/file/d/${r.data.id}/view`,
+        size: Number(r.data.size) || stats.size,
+        name: r.data.name
+    };
+}
+
+// === Delete file from Drive ===
+async function deleteFileFromDrive(fileId) {
+    const { drive } = await getDriveClient();
+    await drive.files.delete({ fileId });
+}
+
+// === Test Drive connection (list a few files in target folder) ===
+async function testDriveConnection() {
+    const { drive, folderId, folderName, userEmail } = await getDriveClient();
+    const r = await drive.files.list({
+        q: `'${folderId}' in parents and trashed = false`,
+        pageSize: 5,
+        fields: 'files(id, name, size, createdTime)'
+    });
+    return {
+        ok: true,
+        user_email: userEmail,
+        folder_id: folderId,
+        folder_name: folderName,
+        sample_files: (r.data.files || []).map(f => ({ id: f.id, name: f.name, size: f.size, created: f.createdTime }))
+    };
+}
+
+// === Cloud Settings endpoints ===
+apiRouter.get('/backup/cloud/settings', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const cfg = await getDriveSettings();
+        res.json({
+            success: true,
+            enabled: cfg.enabled,
+            client_id: cfg.clientId,
+            has_client_secret: !!cfg.clientSecret,
+            has_refresh_token: !!cfg.refreshToken,
+            user_email: cfg.userEmail,
+            redirect_uri: cfg.redirectUri,
+            folder_id: cfg.folderId,
+            folder_name: cfg.folderName,
+            // hint สำหรับ frontend: ต้อง config อะไรบ้าง
+            needs_credentials: !cfg.clientId || !cfg.clientSecret,
+            needs_authorization: !cfg.refreshToken
+        });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.post('/backup/cloud/settings', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const { enabled, client_id, client_secret, redirect_uri, folder_id, folder_name } = req.body || {};
+        const updates = [
+            ['gdrive_enabled', enabled ? 'true' : 'false'],
+            ['gdrive_client_id', client_id || ''],
+            ['gdrive_redirect_uri', redirect_uri || ''],
+            ['gdrive_folder_id', folder_id || ''],
+            ['gdrive_folder_name', folder_name || '']
+        ];
+        // client_secret: ถ้าส่งมา → encrypt + save; ถ้าไม่ส่ง คงค่าเดิม
+        if (client_secret !== undefined && client_secret !== null && client_secret !== '') {
+            updates.push(['gdrive_client_secret_enc', bkEncrypt(client_secret)]);
+        }
+        for (const [k, v] of updates) {
+            await db.query('INSERT INTO system_settings (setting_key, setting_value) VALUES (?,?) ON DUPLICATE KEY UPDATE setting_value=?', [k, v, v]);
+        }
+        _driveClientCache = null; _driveClientKey = null;
+        res.json({ success: true, message: 'บันทึก settings สำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// === OAuth 2.0 Flow ===
+// POST /backup/cloud/oauth/auth-url — สร้าง Google consent URL (authenticated)
+apiRouter.post('/backup/cloud/oauth/auth-url', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const cfg = await getDriveSettings();
+        if (!cfg.clientId || !cfg.clientSecret) {
+            return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้ง Client ID/Secret' });
+        }
+        if (!cfg.redirectUri) {
+            return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้ง Redirect URI (ต้องตรงกับใน Google Cloud Console)' });
+        }
+        // state CSRF — random + เก็บ userId เพื่อตรวจสอบ
+        const state = crypto.randomBytes(24).toString('hex');
+        _gdriveStateMap.set(state, { userId: req.user.userId, expiry: Date.now() + GDRIVE_STATE_TTL });
+
+        const oauth2 = new google.auth.OAuth2(cfg.clientId, cfg.clientSecret, cfg.redirectUri);
+        const authUrl = oauth2.generateAuthUrl({
+            access_type: 'offline',           // ขอ refresh_token
+            prompt: 'consent',                // บังคับ consent ทุกครั้ง (กัน Google ไม่ส่ง refresh_token รอบ 2)
+            scope: [
+                'https://www.googleapis.com/auth/drive.file',     // เข้าถึงไฟล์ที่แอปสร้าง/เปิด
+                'https://www.googleapis.com/auth/userinfo.email'  // ดึง email user
+            ],
+            state
+        });
+        res.json({ success: true, auth_url: authUrl, state });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// GET /backup/cloud/oauth/callback — Google redirect กลับมาที่นี่ (public, ไม่ต้อง auth)
+apiRouter.get('/backup/cloud/oauth/callback', async (req, res) => {
+    const { code, state, error } = req.query;
+    const buildHtml = (status, msg, detail = '') => `
+<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><title>Google Drive — ${status}</title>
+<style>body{font-family:sans-serif;text-align:center;padding:60px 20px;background:#f5f5f5}
+.card{background:#fff;max-width:520px;margin:auto;padding:40px;border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,0.1)}
+.ok{color:#10b981}.err{color:#dc2626}h1{margin:10px 0}p{color:#555;font-size:14px}
+.close-hint{margin-top:24px;padding:12px;background:#f0fdf4;border-radius:8px;font-size:13px;color:#15803d}</style></head><body>
+<div class="card">
+<div style="font-size:48px" class="${status==='success'?'ok':'err'}">${status==='success'?'✓':'✗'}</div>
+<h1>${msg}</h1><p>${detail}</p>
+<div class="close-hint">คุณสามารถปิดหน้านี้แล้วกลับไปยังแอป — สถานะจะ refresh อัตโนมัติ</div>
+</div></body></html>`;
+    try {
+        if (error) return res.send(buildHtml('error', 'การ authorize ถูกยกเลิก', String(error)));
+        if (!code || !state) return res.send(buildHtml('error', 'พารามิเตอร์ไม่ครบ', 'missing code or state'));
+        const stateInfo = _gdriveStateMap.get(state);
+        if (!stateInfo || stateInfo.expiry < Date.now()) {
+            return res.send(buildHtml('error', 'State ไม่ถูกต้องหรือหมดอายุ', 'ลอง Connect ใหม่อีกครั้ง'));
+        }
+        _gdriveStateMap.delete(state);
+
+        const cfg = await getDriveSettings();
+        const oauth2 = new google.auth.OAuth2(cfg.clientId, cfg.clientSecret, cfg.redirectUri);
+        const { tokens } = await oauth2.getToken(code);
+        if (!tokens.refresh_token) {
+            return res.send(buildHtml('error', 'Google ไม่ส่ง refresh_token กลับมา',
+                'ลองไป <a href="https://myaccount.google.com/permissions">https://myaccount.google.com/permissions</a> ลบสิทธิ์เก่าออก แล้วลองใหม่'));
+        }
+        // ดึง email ของ user
+        oauth2.setCredentials(tokens);
+        let userEmail = '';
+        try {
+            const peopleRes = await google.oauth2({ version: 'v2', auth: oauth2 }).userinfo.get();
+            userEmail = peopleRes.data.email || '';
+        } catch (e) { /* ignore */ }
+
+        // เก็บ refresh_token (encrypted) + email
+        await db.query('INSERT INTO system_settings (setting_key, setting_value) VALUES (?,?) ON DUPLICATE KEY UPDATE setting_value=?',
+            ['gdrive_refresh_token_enc', bkEncrypt(tokens.refresh_token), bkEncrypt(tokens.refresh_token)]);
+        await db.query('INSERT INTO system_settings (setting_key, setting_value) VALUES (?,?) ON DUPLICATE KEY UPDATE setting_value=?',
+            ['gdrive_user_email', userEmail, userEmail]);
+        // auto-enable
+        await db.query("UPDATE system_settings SET setting_value='true' WHERE setting_key='gdrive_enabled'");
+
+        _driveClientCache = null; _driveClientKey = null;
+
+        try { await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?,?,?,?,?)',
+            [stateInfo.userId, 'GDRIVE_OAUTH_CONNECT', 'system_settings', JSON.stringify({ email: userEmail }), req.ip]); } catch (_) {}
+
+        res.send(buildHtml('success', 'เชื่อมต่อ Google Drive สำเร็จ', `Account: <b>${userEmail || '(ไม่ทราบ)'}</b>`));
+    } catch (e) {
+        console.error('[OAuth] callback error:', e.message);
+        res.send(buildHtml('error', 'OAuth ล้มเหลว', e.message));
+    }
+});
+
+// POST /backup/cloud/disconnect — revoke refresh_token + clear
+apiRouter.post('/backup/cloud/disconnect', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const cfg = await getDriveSettings();
+        if (cfg.refreshToken) {
+            // พยายาม revoke ที่ Google (best effort)
+            try {
+                const oauth2 = new google.auth.OAuth2(cfg.clientId, cfg.clientSecret, cfg.redirectUri);
+                await oauth2.revokeToken(cfg.refreshToken);
+            } catch (e) { console.warn('[OAuth] revoke failed (continuing):', e.message); }
+        }
+        await db.query("UPDATE system_settings SET setting_value='' WHERE setting_key IN ('gdrive_refresh_token_enc','gdrive_user_email')");
+        await db.query("UPDATE system_settings SET setting_value='false' WHERE setting_key='gdrive_enabled'");
+        _driveClientCache = null; _driveClientKey = null;
+        try { await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?,?,?,?,?)',
+            [req.user.userId, 'GDRIVE_OAUTH_DISCONNECT', 'system_settings', '{}', req.ip]); } catch (_) {}
+        res.json({ success: true, message: 'Disconnect สำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.post('/backup/cloud/test', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const result = await testDriveConnection();
+        res.json({ success: true, ...result });
+    } catch (e) {
+        res.status(400).json({ success: false, message: e.message });
+    }
+});
+
+// === Manual upload to cloud ===
+apiRouter.post('/backup/files/:id/upload-cloud', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const [rows] = await db.query('SELECT * FROM backup_files WHERE id = ?', [id]);
+        if (rows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบไฟล์' });
+        const f = rows[0];
+        if (!fs.existsSync(f.file_path)) return res.status(404).json({ success: false, message: 'ไฟล์หายจากดิสก์' });
+        if (f.cloud_file_id) return res.status(400).json({ success: false, message: 'ไฟล์นี้อัพโหลดไป cloud แล้ว' });
+
+        const result = await uploadFileToDrive(f.file_path, f.file_name);
+        await db.query(
+            'UPDATE backup_files SET cloud_provider=?, cloud_file_id=?, cloud_url=?, cloud_uploaded_at=NOW(), cloud_size_bytes=? WHERE id=?',
+            ['gdrive', result.file_id, result.web_url, result.size, id]
+        );
+        try { await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?,?,?,?,?)',
+            [req.user.userId, 'BACKUP_CLOUD_UPLOAD', 'backup_files', JSON.stringify({ id, file_name: f.file_name, cloud_file_id: result.file_id }), req.ip]); } catch (_) {}
+        res.json({ success: true, ...result });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+apiRouter.delete('/backup/files/:id/cloud', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const [rows] = await db.query('SELECT * FROM backup_files WHERE id = ?', [id]);
+        if (rows.length === 0 || !rows[0].cloud_file_id) return res.status(404).json({ success: false, message: 'ไม่มี cloud file' });
+        try { await deleteFileFromDrive(rows[0].cloud_file_id); } catch (e) {
+            console.warn('[Cloud] delete from drive failed (continuing):', e.message);
+        }
+        await db.query('UPDATE backup_files SET cloud_provider=NULL, cloud_file_id=NULL, cloud_url=NULL, cloud_uploaded_at=NULL, cloud_size_bytes=NULL WHERE id=?', [id]);
+        res.json({ success: true, message: 'ลบจาก cloud สำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// ========================================================================
+// ============== Monitor Dashboard endpoint ==============================
+// ========================================================================
+apiRouter.get('/backup/monitor', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const result = {
+            timestamp: new Date().toISOString(),
+            bangkok_time: bangkokTimestamp(new Date(), 'log')
+        };
+
+        // === 1. DB info ===
+        try {
+            const [versionRows] = await db.query("SELECT VERSION() AS version, @@hostname AS hostname, @@port AS port, DATABASE() AS current_db");
+            const [uptimeRows] = await db.query("SHOW STATUS LIKE 'Uptime'");
+            const [varsRows] = await db.query("SHOW VARIABLES WHERE Variable_name IN ('max_connections','wait_timeout','long_query_time')");
+            const vars = {};
+            for (const v of varsRows) vars[v.Variable_name] = v.Value;
+            result.db = {
+                version: versionRows[0].version,
+                hostname: versionRows[0].hostname,
+                port: versionRows[0].port,
+                database: versionRows[0].current_db,
+                uptime_seconds: Number(uptimeRows[0]?.Value) || 0,
+                max_connections: Number(vars.max_connections) || 0,
+                wait_timeout: Number(vars.wait_timeout) || 0,
+                long_query_time: Number(vars.long_query_time) || 0
+            };
+        } catch (e) { result.db = { error: e.message }; }
+
+        // === 2. Tables (size + rows) ===
+        try {
+            const [tables] = await db.query(`
+                SELECT table_name, table_type, IFNULL(table_rows, 0) AS rows_approx,
+                       IFNULL(data_length, 0) AS data_bytes, IFNULL(index_length, 0) AS index_bytes,
+                       IFNULL(data_free, 0) AS free_bytes, update_time
+                FROM INFORMATION_SCHEMA.TABLES
+                WHERE table_schema = DATABASE()
+                ORDER BY (IFNULL(data_length,0) + IFNULL(index_length,0)) DESC
+            `);
+            const totalData = tables.reduce((s, t) => s + Number(t.data_bytes || 0), 0);
+            const totalIndex = tables.reduce((s, t) => s + Number(t.index_bytes || 0), 0);
+            const totalRows = tables.reduce((s, t) => s + Number(t.rows_approx || 0), 0);
+            result.tables = {
+                count: tables.length,
+                total_data_bytes: totalData,
+                total_index_bytes: totalIndex,
+                total_size_bytes: totalData + totalIndex,
+                total_rows_approx: totalRows,
+                list: tables.map(t => ({
+                    name: t.table_name,
+                    type: t.table_type,
+                    rows: Number(t.rows_approx),
+                    data_bytes: Number(t.data_bytes),
+                    index_bytes: Number(t.index_bytes),
+                    total_bytes: Number(t.data_bytes) + Number(t.index_bytes),
+                    update_time: t.update_time
+                }))
+            };
+        } catch (e) { result.tables = { error: e.message }; }
+
+        // === 3. Pool status ===
+        try {
+            // mysql2 promise pool — เข้าถึง underlying pool ผ่าน .pool
+            const underlying = db.pool || db;
+            result.pool = {
+                connection_limit: underlying.config?.connectionLimit || 0,
+                queue_limit: underlying.config?.queueLimit || 0,
+                total_connections: underlying._allConnections?.length ?? null,
+                free_connections: underlying._freeConnections?.length ?? null,
+                queued_requests: underlying._connectionQueue?.length ?? null,
+                acquiring_connections: underlying._acquiringConnections?.length ?? null
+            };
+        } catch (e) { result.pool = { error: e.message }; }
+
+        // === 4. Running processes / slow queries ===
+        try {
+            const [processes] = await db.query("SHOW FULL PROCESSLIST");
+            const longQueryTime = result.db?.long_query_time || 1;
+            const slow = processes
+                .filter(p => p.Time >= Math.max(longQueryTime, 5) && p.Command !== 'Sleep')
+                .slice(0, 10)
+                .map(p => ({
+                    id: p.Id, user: p.User, host: p.Host, db: p.db, command: p.Command,
+                    time_seconds: p.Time, state: p.State, info: (p.Info || '').slice(0, 300)
+                }));
+            result.processes = {
+                total: processes.length,
+                active: processes.filter(p => p.Command !== 'Sleep').length,
+                sleeping: processes.filter(p => p.Command === 'Sleep').length,
+                slow_queries: slow
+            };
+        } catch (e) { result.processes = { error: e.message }; }
+
+        // === 5. Disk usage (backup dir) ===
+        try {
+            const dirFiles = await fsp.readdir(BACKUP_DIR);
+            let totalBackupBytes = 0;
+            let backupFileCount = 0;
+            let oldestFileTime = null, newestFileTime = null;
+            for (const fname of dirFiles) {
+                try {
+                    const fpath = path.join(BACKUP_DIR, fname);
+                    const st = await fsp.stat(fpath);
+                    if (!st.isFile()) continue;
+                    totalBackupBytes += st.size;
+                    backupFileCount++;
+                    if (!oldestFileTime || st.mtimeMs < oldestFileTime) oldestFileTime = st.mtimeMs;
+                    if (!newestFileTime || st.mtimeMs > newestFileTime) newestFileTime = st.mtimeMs;
+                } catch (_) {}
+            }
+            let diskStats = null;
+            try {
+                const sf = await fsp.statfs(BACKUP_DIR);
+                diskStats = {
+                    total_bytes: sf.blocks * sf.bsize,
+                    free_bytes: sf.bfree * sf.bsize,
+                    available_bytes: sf.bavail * sf.bsize,
+                    used_bytes: (sf.blocks - sf.bfree) * sf.bsize
+                };
+            } catch (_) { /* statfs not available */ }
+            result.disk = {
+                backup_dir: BACKUP_DIR,
+                file_count: backupFileCount,
+                total_size_bytes: totalBackupBytes,
+                oldest_file: oldestFileTime ? new Date(oldestFileTime).toISOString() : null,
+                newest_file: newestFileTime ? new Date(newestFileTime).toISOString() : null,
+                filesystem: diskStats
+            };
+        } catch (e) { result.disk = { error: e.message }; }
+
+        // === 6. Backup summary (จากตาราง backup_files) ===
+        try {
+            const [summary] = await db.query(`
+                SELECT
+                    COUNT(*) AS total_files,
+                    IFNULL(SUM(size_bytes), 0) AS total_size,
+                    COUNT(CASE WHEN trigger_type='manual' THEN 1 END) AS manual_count,
+                    COUNT(CASE WHEN trigger_type='scheduled' THEN 1 END) AS scheduled_count,
+                    COUNT(CASE WHEN trigger_type='auto_before_restore' THEN 1 END) AS auto_count,
+                    COUNT(CASE WHEN cloud_file_id IS NOT NULL THEN 1 END) AS cloud_uploaded
+                FROM backup_files
+            `);
+            const [latest] = await db.query('SELECT id, file_name, size_bytes, created_at FROM backup_files ORDER BY id DESC LIMIT 1');
+            result.backups = {
+                ...summary[0],
+                total_size: Number(summary[0].total_size),
+                latest: latest[0] || null
+            };
+        } catch (e) { result.backups = { error: e.message }; }
+
+        // === 7. Recent errors (จาก backup_jobs + restore_jobs) ===
+        try {
+            const [failedBackups] = await db.query(
+                "SELECT id, connection_name, db_name, error_msg, created_at FROM backup_jobs WHERE status='failed' ORDER BY id DESC LIMIT 5"
+            );
+            const [failedRestores] = await db.query(
+                "SELECT id, source_file_name, target_db, error_msg, created_at FROM restore_jobs WHERE status='failed' ORDER BY id DESC LIMIT 5"
+            );
+            result.recent_errors = {
+                failed_backups: failedBackups,
+                failed_restores: failedRestores
+            };
+        } catch (e) { result.recent_errors = { error: e.message }; }
+
+        // === 8. Schedule status ===
+        try {
+            const [schedules] = await db.query(`
+                SELECT s.id, s.name, s.is_enabled, s.last_run_at, s.last_status, s.time_of_day,
+                       c.name AS connection_name
+                FROM backup_schedules s
+                LEFT JOIN backup_connections c ON s.connection_id = c.id
+                ORDER BY s.id DESC
+            `);
+            result.schedules = {
+                total: schedules.length,
+                enabled: schedules.filter(s => s.is_enabled).length,
+                list: schedules
+            };
+        } catch (e) { result.schedules = { error: e.message }; }
+
+        res.json({ success: true, data: result });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// ========================================================================
+// ====== KPI Save Audit + Daily Digest Notification (Phase 4 add-on) ======
+// ========================================================================
+
+// Cache audit settings (refresh ทุก 60 วินาที กัน query DB ทุก save)
+let _auditSettingsCache = null;
+let _auditSettingsExpiry = 0;
+async function getAuditSettings() {
+    const now = Date.now();
+    if (_auditSettingsCache && _auditSettingsExpiry > now) return _auditSettingsCache;
+    try {
+        const [rows] = await db.query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'kpi_audit_%'");
+        const s = {};
+        for (const r of rows) s[r.setting_key] = r.setting_value;
+        _auditSettingsCache = {
+            enabled: s.kpi_audit_enabled !== 'false',
+            digestEnabled: s.kpi_audit_digest_enabled !== 'false',
+            digestTime: s.kpi_audit_digest_time || '17:00',
+            digestEmail: s.kpi_audit_digest_email !== 'false',
+            digestTelegram: s.kpi_audit_digest_telegram !== 'false',
+            minRecords: parseInt(s.kpi_audit_digest_min_records) || 1,
+            lastDigestAt: s.kpi_audit_last_digest_at || '',
+            lastDigestResult: s.kpi_audit_last_digest_result || ''
+        };
+        _auditSettingsExpiry = now + 60 * 1000;
+        return _auditSettingsCache;
+    } catch (e) {
+        return { enabled: false, digestEnabled: false };
+    }
+}
+
+// Fire-and-forget audit logger (ไม่ throw, ไม่ block save endpoint)
+async function logKpiSaveAudit(meta) {
+    try {
+        const cfg = await getAuditSettings();
+        if (!cfg.enabled) return;
+        await db.query(
+            `INSERT INTO kpi_save_audit
+             (user_id, username, full_name, dept_id, dept_name, hospcode, hospname,
+              action_type, indicator_id, indicator_name, year_bh, month_bh, table_name, row_count, summary, ip_address)
+             VALUES (?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?,?)`,
+            [meta.user_id || null, meta.username || null, meta.full_name || null,
+             meta.dept_id || null, meta.dept_name || null, meta.hospcode || null, meta.hospname || null,
+             meta.action_type, meta.indicator_id || null, meta.indicator_name || null,
+             meta.year_bh || null, meta.month_bh || null, meta.table_name || null,
+             meta.row_count || 1, meta.summary || null, meta.ip_address || null]
+        );
+    } catch (e) {
+        // ไม่ throw — audit log ห้ามทำ save endpoint พัง
+        console.warn('[KPI Audit] log failed (continuing):', e.message);
+    }
+}
+
+// Helper: ดึงข้อมูล user แบบเต็ม (full_name, dept_name, hospname) จาก userId
+async function getUserAuditInfo(userId) {
+    try {
+        const [rows] = await db.query(`
+            SELECT u.id, u.username, u.firstname, u.lastname, u.dept_id, u.hospcode,
+                   d.dept_name, h.hosname
+            FROM users u
+            LEFT JOIN departments d ON u.dept_id = d.id
+            LEFT JOIN chospital h ON u.hospcode = h.hoscode
+            WHERE u.id = ?
+        `, [userId]);
+        if (rows.length === 0) return null;
+        const u = rows[0];
+        return {
+            user_id: u.id,
+            username: u.username,
+            full_name: [u.firstname, u.lastname].filter(Boolean).join(' ') || u.username,
+            dept_id: u.dept_id,
+            dept_name: u.dept_name,
+            hospcode: u.hospcode,
+            hospname: u.hosname
+        };
+    } catch (e) { return null; }
+}
+
+// ===== Daily digest function =====
+async function runKpiAuditDigest(manual = false) {
+    const cfg = await getAuditSettings();
+    if (!manual && !cfg.digestEnabled) return { skipped: true, reason: 'digest_disabled' };
+
+    // ดึงรายการที่ยัง notified_at IS NULL
+    const [records] = await db.query(`
+        SELECT * FROM kpi_save_audit
+        WHERE notified_at IS NULL
+        ORDER BY created_at ASC
+    `);
+    if (records.length < cfg.minRecords) {
+        return { skipped: true, reason: 'below_minimum', records_count: records.length, min: cfg.minRecords };
+    }
+
+    // Group by user
+    const byUser = new Map();
+    for (const r of records) {
+        const key = r.user_id || 'unknown';
+        if (!byUser.has(key)) {
+            byUser.set(key, {
+                user_id: r.user_id,
+                full_name: r.full_name || r.username || 'Unknown',
+                dept_name: r.dept_name || '-',
+                hospname: r.hospname || '-',
+                kpi_count: 0, sub_count: 0, dynamic_count: 0,
+                indicators: new Map(),
+                first_at: r.created_at, last_at: r.created_at
+            });
+        }
+        const u = byUser.get(key);
+        if (r.action_type === 'kpi_results') u.kpi_count += r.row_count || 1;
+        else if (r.action_type === 'sub_results') u.sub_count += r.row_count || 1;
+        else if (r.action_type === 'dynamic_form') u.dynamic_count += r.row_count || 1;
+        if (r.indicator_name) {
+            const k = r.indicator_name;
+            u.indicators.set(k, (u.indicators.get(k) || 0) + (r.row_count || 1));
+        }
+        if (new Date(r.created_at) > new Date(u.last_at)) u.last_at = r.created_at;
+        if (new Date(r.created_at) < new Date(u.first_at)) u.first_at = r.created_at;
+    }
+
+    const usersList = Array.from(byUser.values()).sort((a, b) =>
+        (b.kpi_count + b.sub_count + b.dynamic_count) - (a.kpi_count + a.sub_count + a.dynamic_count)
+    );
+    const totalSaves = records.length;
+    const totalUsers = usersList.length;
+
+    // Build messages
+    const dateStr = bangkokTimestamp(new Date(), 'log').split(' ')[0];
+    const subject = `📊 สรุปการบันทึกข้อมูล KPI ประจำวัน (${dateStr})`;
+
+    // HTML email
+    let html = `<h2>📊 สรุปการบันทึกข้อมูล KPI ประจำวัน</h2>`;
+    html += `<p><b>วันที่:</b> ${dateStr}</p>`;
+    html += `<p><b>ผู้ใช้งานที่บันทึก:</b> ${totalUsers} คน · <b>รายการบันทึกทั้งหมด:</b> ${totalSaves.toLocaleString()} รายการ</p>`;
+    html += `<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:13px">`;
+    html += `<thead style="background:#10b981;color:#fff"><tr>
+        <th>#</th><th>ผู้ใช้</th><th>หน่วยงาน</th><th>หน่วยบริการ</th>
+        <th>KPI หลัก</th><th>Sub</th><th>Dynamic Form</th><th>รวม</th>
+    </tr></thead><tbody>`;
+    usersList.forEach((u, i) => {
+        const total = u.kpi_count + u.sub_count + u.dynamic_count;
+        html += `<tr>
+            <td>${i+1}</td>
+            <td><b>${u.full_name}</b></td>
+            <td>${u.dept_name}</td>
+            <td>${u.hospname}</td>
+            <td align="right">${u.kpi_count.toLocaleString()}</td>
+            <td align="right">${u.sub_count.toLocaleString()}</td>
+            <td align="right">${u.dynamic_count.toLocaleString()}</td>
+            <td align="right"><b>${total.toLocaleString()}</b></td>
+        </tr>`;
+    });
+    html += `</tbody></table>`;
+    // Top indicators
+    const allIndicators = new Map();
+    for (const u of usersList) {
+        for (const [ind, cnt] of u.indicators) {
+            allIndicators.set(ind, (allIndicators.get(ind) || 0) + cnt);
+        }
+    }
+    const topInd = Array.from(allIndicators.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    if (topInd.length > 0) {
+        html += `<h3 style="margin-top:20px">🔝 ตัวชี้วัดที่ถูกบันทึกมากสุด (10 อันดับ)</h3>`;
+        html += `<ol style="font-size:13px">`;
+        for (const [ind, cnt] of topInd) html += `<li>${ind} — <b>${cnt.toLocaleString()}</b> ครั้ง</li>`;
+        html += `</ol>`;
+    }
+    html += `<div style="margin-top:24px;padding:14px;background:#fef3c7;border-left:4px solid #f59e0b;color:#92400e;font-size:13px">
+        💡 <b>แนะนำสำหรับ super_admin:</b> มีการบันทึกข้อมูลใหม่ ควรอัพเดทตาราง Export
+        (เข้าหน้า "จัดการข้อมูล KPI" → Export Tables → กด "เริ่มสร้าง/อัพเดต")
+    </div>`;
+
+    // Telegram text
+    let tg = `📊 <b>สรุปการบันทึก KPI ประจำวัน</b>\n📅 ${dateStr}\n\n`;
+    tg += `👥 ผู้บันทึก: <b>${totalUsers}</b> คน\n📝 รายการ: <b>${totalSaves.toLocaleString()}</b> รายการ\n\n`;
+    tg += `<b>Top ผู้บันทึก:</b>\n`;
+    usersList.slice(0, 10).forEach((u, i) => {
+        const total = u.kpi_count + u.sub_count + u.dynamic_count;
+        tg += `${i+1}. ${u.full_name} (${u.hospname}) — <b>${total}</b>`;
+        const parts = [];
+        if (u.kpi_count) parts.push(`KPI:${u.kpi_count}`);
+        if (u.sub_count) parts.push(`Sub:${u.sub_count}`);
+        if (u.dynamic_count) parts.push(`Form:${u.dynamic_count}`);
+        if (parts.length) tg += ` (${parts.join(', ')})`;
+        tg += `\n`;
+    });
+    if (usersList.length > 10) tg += `... และอีก ${usersList.length - 10} คน\n`;
+    if (topInd.length > 0) {
+        tg += `\n<b>🔝 KPI ที่บันทึกมากสุด:</b>\n`;
+        topInd.slice(0, 5).forEach(([ind, cnt], i) => { tg += `${i+1}. ${ind} (${cnt})\n`; });
+    }
+    tg += `\n💡 แนะนำ: อัพเดทตาราง Export`;
+
+    // Send
+    const ns = await getNotifSettings();
+    let sentEmail = false, sentTelegram = false;
+    if (cfg.digestEmail && ns.adminEmails) {
+        const emails = ns.adminEmails.split(',').map(e => e.trim()).filter(Boolean);
+        for (const email of emails) {
+            try { await sendMail(email, subject, html); sentEmail = true; } catch (e) {}
+        }
+    }
+    if (cfg.digestTelegram && ns.tgToken && ns.tgChatId) {
+        try { sentTelegram = await sendTelegramDirect(ns.tgToken, ns.tgChatId, tg); } catch (e) {}
+    }
+
+    // Mark records as notified
+    const recordIds = records.map(r => r.id);
+    if (recordIds.length > 0) {
+        await db.query(`UPDATE kpi_save_audit SET notified_at = NOW() WHERE id IN (${recordIds.map(() => '?').join(',')})`, recordIds);
+    }
+
+    const summary = {
+        total_users: totalUsers, total_saves: totalSaves,
+        sent_email: sentEmail, sent_telegram: sentTelegram,
+        date: dateStr, ran_at: new Date().toISOString(), manual
+    };
+    // บันทึก last digest
+    await db.query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('kpi_audit_last_digest_at', ?) ON DUPLICATE KEY UPDATE setting_value=?",
+        [new Date().toISOString(), new Date().toISOString()]);
+    await db.query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('kpi_audit_last_digest_result', ?) ON DUPLICATE KEY UPDATE setting_value=?",
+        [JSON.stringify(summary), JSON.stringify(summary)]);
+    _auditSettingsExpiry = 0; // invalidate cache
+
+    console.log(`[KPI Audit] digest sent — ${totalSaves} records / ${totalUsers} users (email:${sentEmail} tg:${sentTelegram})`);
+    return summary;
+}
+
+// Scheduler — ตรวจทุก 30 วินาทีเหมือน backup scheduler
+function startKpiAuditScheduler() {
+    const pad2 = (n) => String(n).padStart(2, '0');
+    const bkkFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', hour12: false
+    });
+    const getHHMM = (date) => {
+        const p = bkkFormatter.formatToParts(date);
+        const h = p.find(x => x.type === 'hour')?.value;
+        const m = p.find(x => x.type === 'minute')?.value;
+        return `${h === '24' ? '00' : h}:${m}`;
+    };
+    let _lastDigestDateKey = null;
+    const check = async () => {
+        try {
+            const cfg = await getAuditSettings();
+            if (!cfg.digestEnabled) return;
+            const now = new Date();
+            const hhmm = getHHMM(now);
+            const prev = getHHMM(new Date(now.getTime() - 60 * 1000));
+            const todayKey = bangkokTimestamp(now, 'log').split(' ')[0];
+            // match 2-min window
+            if (hhmm !== cfg.digestTime && prev !== cfg.digestTime) return;
+            if (_lastDigestDateKey === todayKey) return; // กัน double-run ใน 1 วัน
+            _lastDigestDateKey = todayKey;
+            console.log(`[KPI Audit] 🚀 daily digest triggered — ${todayKey} ${hhmm}`);
+            runKpiAuditDigest(false).catch(e => console.error('[KPI Audit] digest error:', e.message));
+        } catch (e) { console.error('[KPI Audit] check failed:', e.message); }
+    };
+    check().catch(() => {});
+    setInterval(check, 30000);
+    console.log(`[KPI Audit] scheduler started — daily digest check every 30s`);
+}
+
+// ========== Endpoints ==========
+apiRouter.get('/kpi-audit/settings', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        _auditSettingsExpiry = 0;
+        const cfg = await getAuditSettings();
+        res.json({ success: true, data: cfg });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.post('/kpi-audit/settings', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const b = req.body || {};
+        const updates = [
+            ['kpi_audit_enabled', b.enabled === false ? 'false' : 'true'],
+            ['kpi_audit_digest_enabled', b.digestEnabled === false ? 'false' : 'true'],
+            ['kpi_audit_digest_time', b.digestTime || '17:00'],
+            ['kpi_audit_digest_email', b.digestEmail === false ? 'false' : 'true'],
+            ['kpi_audit_digest_telegram', b.digestTelegram === false ? 'false' : 'true'],
+            ['kpi_audit_digest_min_records', String(parseInt(b.minRecords) || 1)]
+        ];
+        for (const [k, v] of updates) {
+            await db.query('INSERT INTO system_settings (setting_key, setting_value) VALUES (?,?) ON DUPLICATE KEY UPDATE setting_value=?', [k, v, v]);
+        }
+        _auditSettingsExpiry = 0;
+        res.json({ success: true, message: 'บันทึก settings สำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// GET /kpi-audit/records — ดู audit log
+apiRouter.get('/kpi-audit/records', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const { limit = 200, only_unnotified } = req.query;
+        let where = '1=1';
+        if (only_unnotified === '1') where += ' AND notified_at IS NULL';
+        const [rows] = await db.query(
+            `SELECT * FROM kpi_save_audit WHERE ${where} ORDER BY id DESC LIMIT ?`,
+            [Math.min(Number(limit) || 200, 1000)]
+        );
+        const [stat] = await db.query(`
+            SELECT
+                COUNT(*) AS total,
+                COUNT(CASE WHEN notified_at IS NULL THEN 1 END) AS unnotified,
+                COUNT(CASE WHEN DATE(created_at) = CURDATE() THEN 1 END) AS today,
+                COUNT(DISTINCT user_id) AS unique_users
+            FROM kpi_save_audit
+        `);
+        res.json({ success: true, data: rows, stats: stat[0] });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// POST /kpi-audit/run-digest-now — ส่ง digest ทันที (test)
+apiRouter.post('/kpi-audit/run-digest-now', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const result = await runKpiAuditDigest(true);
+        res.json({ success: true, result });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
 // Mount Router ที่ path /khupskpi/api
 app.use('/khupskpi/api', apiRouter);
 
 app.listen(port, () => {
     console.log(`🚀 API Server เปิดทำงานแล้วที่พอร์ต ${port} (Path: /khupskpi/api)`);
     try { startExportScheduler(); } catch (e) { console.error('[Scheduler] start failed:', e.message); }
+    try { startBackupScheduler(); } catch (e) { console.error('[BackupScheduler] start failed:', e.message); }
+    try { startKpiAuditScheduler(); } catch (e) { console.error('[KPI Audit] start failed:', e.message); }
 });

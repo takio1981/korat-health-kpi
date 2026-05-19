@@ -1256,6 +1256,181 @@
         </div>
       </section>
 
+      <!-- ==================== 9. สำรอง & กู้คืนข้อมูล (Backup Manager) ==================== -->
+      <section id="section-backup" class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div (click)="toggleCollapse('backup')" class="flex items-center justify-between gap-3 p-6 cursor-pointer hover:bg-gray-50 transition-colors">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center"><i class="fas fa-database text-emerald-600"></i></div>
+            <div>
+              <h2 class="text-xl font-bold text-gray-800">9. สำรอง &amp; กู้คืนฐานข้อมูล (Backup Manager)</h2>
+              <p class="text-xs text-gray-400">เฉพาะ super_admin — Backup/Restore + Schedule + Cloud + Monitor</p>
+            </div>
+          </div>
+          <i class="fas text-gray-400 transition-transform" [ngClass]="isCollapsed('backup') ? 'fa-chevron-down' : 'fa-chevron-up'"></i>
+        </div>
+        <div [hidden]="isCollapsed('backup')" class="px-6 pb-6 space-y-4">
+
+          <p class="text-sm text-gray-600">เครื่องมือสำหรับ super_admin สำรอง/กู้คืน MySQL/MariaDB ทั้ง local + cloud + monitor สถานะระบบ — เมนู <b>"สำรอง &amp; กู้คืนข้อมูล"</b> ใน sidebar</p>
+
+          <!-- 7 Tabs Overview -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3"><p class="font-bold text-emerald-800 text-sm"><i class="fas fa-server mr-1"></i>Connections</p><p class="text-xs text-gray-600 mt-1">จัดการการเชื่อมต่อ DB หลายตัว — host/port/user/pass (encrypted AES-256-GCM)</p></div>
+            <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3"><p class="font-bold text-emerald-800 text-sm"><i class="fas fa-download mr-1"></i>Manual Backup</p><p class="text-xs text-gray-600 mt-1">สร้าง backup ด้วยมือ + gzip + progress realtime + checksum SHA-256</p></div>
+            <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3"><p class="font-bold text-emerald-800 text-sm"><i class="fas fa-folder-open mr-1"></i>Files</p><p class="text-xs text-gray-600 mt-1">รายการไฟล์ backup + ดาวน์โหลด + ดู log + restore + cloud actions</p></div>
+            <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3"><p class="font-bold text-emerald-800 text-sm"><i class="fas fa-undo mr-1"></i>Restore</p><p class="text-xs text-gray-600 mt-1">กู้คืน 2 mode: DB ใหม่ (ปลอดภัย) / ทับ DB เดิม (auto-backup ก่อน)</p></div>
+            <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3"><p class="font-bold text-emerald-800 text-sm"><i class="fas fa-clock mr-1"></i>Schedules</p><p class="text-xs text-gray-600 mt-1">ตั้งเวลา backup อัตโนมัติ + retention + Email/Telegram notification</p></div>
+            <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3"><p class="font-bold text-emerald-800 text-sm"><i class="fab fa-google-drive mr-1"></i>Cloud</p><p class="text-xs text-gray-600 mt-1">Google Drive OAuth 2.0 — ใช้พื้นที่ Gmail 15GB ฟรี (user account)</p></div>
+            <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3"><p class="font-bold text-emerald-800 text-sm"><i class="fas fa-chart-line mr-1"></i>Monitor</p><p class="text-xs text-gray-600 mt-1">Dashboard ติดตามสถานะ DB + ตาราง + disk + slow queries (refresh 10s)</p></div>
+            <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3"><p class="font-bold text-emerald-800 text-sm"><i class="fas fa-shield-halved mr-1"></i>Privilege Check</p><p class="text-xs text-gray-600 mt-1">ตรวจสิทธิ์ user ก่อน backup — กัน schema-only dump</p></div>
+          </div>
+
+          <!-- Manual Backup -->
+          <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <h4 class="font-bold text-blue-800 mb-2"><i class="fas fa-play mr-2"></i>ขั้นตอน Manual Backup</h4>
+            <ol class="list-decimal ml-5 text-sm text-gray-700 space-y-1">
+              <li>เข้าแท็บ <b>Connections</b> → กดทดสอบ <i class="fas fa-plug text-blue-600"></i> + ตรวจสิทธิ์ <i class="fas fa-shield-halved text-purple-600"></i></li>
+              <li>เข้าแท็บ <b>Manual Backup</b> → เลือก Connection → กดเริ่ม Backup</li>
+              <li>ดู progress card (bytes ที่ dump + เวลา + สถานะ) — refresh ทุก 1 วินาที</li>
+              <li>เสร็จแล้วเด้ง popup สำเร็จ + ปุ่ม "ดู Log" (checklist ตาราง + INSERTs)</li>
+              <li>ไปแท็บ Files → ดูไฟล์ใหม่ + ดาวน์โหลด/restore/upload cloud/ลบ</li>
+            </ol>
+          </div>
+
+          <!-- Restore -->
+          <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <h4 class="font-bold text-amber-800 mb-2"><i class="fas fa-undo mr-2"></i>การ Restore (กู้คืน)</h4>
+            <div class="space-y-2 text-sm text-gray-700">
+              <div class="p-2 bg-white rounded">
+                <p class="font-bold text-emerald-700">โหมด "Restore เข้า DB ใหม่" (แนะนำ — ปลอดภัย)</p>
+                <p class="text-xs">สร้าง DB ใหม่ <code>khups_kpi_db_restore_YYYYMMDDHHmmss</code> → ไม่แตะ DB เดิม → admin verify แล้ว swap manual</p>
+              </div>
+              <div class="p-2 bg-white rounded">
+                <p class="font-bold text-red-700">โหมด "Restore ทับ DB เดิม" (เสี่ยง)</p>
+                <p class="text-xs">DROP DATABASE + restore ใหม่ → บังคับ auto-backup ก่อน + confirm 2 ชั้น (พิมพ์ "RESTORE")</p>
+              </div>
+              <p class="text-xs text-gray-500">หลัง restore เสร็จ ระบบจะ verify จำนวนตาราง + COUNT(*) แต่ละตาราง + เขียน restore log file</p>
+            </div>
+          </div>
+
+          <!-- Schedules -->
+          <div class="bg-purple-50 border border-purple-200 rounded-xl p-4">
+            <h4 class="font-bold text-purple-800 mb-2"><i class="fas fa-clock mr-2"></i>Backup อัตโนมัติ (Schedule)</h4>
+            <ul class="list-disc ml-5 text-sm text-gray-700 space-y-1">
+              <li>ตั้งวัน (เลือกหลายวัน) + เวลา HH:MM (timezone Bangkok UTC+7)</li>
+              <li>เลือก <b>Connection</b> + <b>retention</b> (ลบไฟล์เก่ากว่า N วันอัตโนมัติ)</li>
+              <li>Notification: Email + Telegram (แจ้งเฉพาะสำเร็จ/ล้มเหลว/ทั้งคู่)</li>
+              <li><b>Auto-upload Google Drive</b>: เปิดได้ถ้าตั้ง OAuth แล้ว</li>
+              <li>ปุ่ม "รันทันที" ทดสอบ schedule ได้โดยไม่ต้องรอเวลา</li>
+            </ul>
+          </div>
+
+          <!-- Cloud -->
+          <div class="bg-sky-50 border border-sky-200 rounded-xl p-4">
+            <h4 class="font-bold text-sky-800 mb-2"><i class="fab fa-google-drive mr-2"></i>Cloud — Google Drive (พื้นที่ Gmail 15GB ฟรี)</h4>
+            <ol class="list-decimal ml-5 text-sm text-gray-700 space-y-1">
+              <li>Google Cloud Console → สร้าง OAuth Client ID (Web application)</li>
+              <li>กรอก <b>Authorized redirect URI</b> (copy จากระบบ)</li>
+              <li>วาง Client ID + Client Secret + Folder ID → บันทึก</li>
+              <li>กด <b>"Connect Google Drive"</b> → login Gmail → allow → เสร็จ</li>
+              <li>ไฟล์อยู่ใน Drive ของคุณจริงๆ — ใช้ quota 15GB ฟรี เห็นไฟล์ใน Drive UI ปกติ</li>
+            </ol>
+          </div>
+
+          <!-- Monitor -->
+          <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+            <h4 class="font-bold text-indigo-800 mb-2"><i class="fas fa-chart-line mr-2"></i>Monitor Dashboard</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-700">
+              <div class="bg-white rounded p-2">• ขนาดฐานข้อมูล (data + index) + จำนวนตาราง + แถวรวม</div>
+              <div class="bg-white rounded p-2">• Connection pool (ใช้/ว่าง/รอคิว) + max_connections + uptime</div>
+              <div class="bg-white rounded p-2">• Top 20 ตารางใหญ่ + slow queries</div>
+              <div class="bg-white rounded p-2">• Disk usage backup folder + filesystem progress bar</div>
+              <div class="bg-white rounded p-2">• สรุป schedules + ข้อผิดพลาดล่าสุด</div>
+              <div class="bg-white rounded p-2">• Auto-refresh ทุก 10 วินาที (ปิดได้)</div>
+            </div>
+          </div>
+
+          <!-- Security -->
+          <div class="bg-rose-50 border border-rose-200 rounded-xl p-4">
+            <h4 class="font-bold text-rose-800 mb-2"><i class="fas fa-lock mr-2"></i>ความปลอดภัย</h4>
+            <ul class="list-disc ml-5 text-sm text-gray-700 space-y-1">
+              <li>DB password + OAuth refresh token: <b>AES-256-GCM encrypted</b> ใน DB</li>
+              <li>Restore "ทับ DB" ต้องพิมพ์ "RESTORE" ยืนยัน + บังคับ auto-backup ก่อน</li>
+              <li>Validate target DB name regex (ป้องกัน SQL injection)</li>
+              <li>Log ทุก operation ลง system_logs (BACKUP_RUN / BACKUP_RESTORE / BACKUP_DELETE / GDRIVE_OAUTH_CONNECT)</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== 10. แจ้งเตือนการบันทึก KPI ==================== -->
+      <section id="section-audit-digest" class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div (click)="toggleCollapse('audit-digest')" class="flex items-center justify-between gap-3 p-6 cursor-pointer hover:bg-gray-50 transition-colors">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center"><i class="fas fa-bullhorn text-amber-600"></i></div>
+            <div>
+              <h2 class="text-xl font-bold text-gray-800">10. แจ้งเตือนการบันทึก KPI (Daily Digest)</h2>
+              <p class="text-xs text-gray-400">เฉพาะ super_admin — รวมสรุปการบันทึกข้อมูลของ user ทั้งหมดส่งวันละครั้ง</p>
+            </div>
+          </div>
+          <i class="fas text-gray-400 transition-transform" [ngClass]="isCollapsed('audit-digest') ? 'fa-chevron-down' : 'fa-chevron-up'"></i>
+        </div>
+        <div [hidden]="isCollapsed('audit-digest')" class="px-6 pb-6 space-y-4">
+
+          <p class="text-sm text-gray-600">ระบบบันทึก audit log ทุกครั้งที่ user save ข้อมูล + ส่งสรุปประจำวันให้ super_admin ทาง Email + Telegram เพื่อแจ้งให้อัพเดทตาราง Export — เมนู <b>"แจ้งเตือนการบันทึก KPI"</b> ใน sidebar</p>
+
+          <!-- การทำงาน -->
+          <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <h4 class="font-bold text-amber-800 mb-2"><i class="fas fa-cog mr-2"></i>หลักการทำงาน</h4>
+            <ol class="list-decimal ml-5 text-sm text-gray-700 space-y-1">
+              <li>ทุกครั้งที่ user บันทึกข้อมูล <b>3 ช่องทาง</b> → ระบบ log ลงตาราง <code>kpi_save_audit</code>
+                <ul class="list-disc ml-6 mt-1 text-xs">
+                  <li>Dashboard (POST /update-kpi) — บันทึกผลงาน KPI ปกติ</li>
+                  <li>Dynamic Form (POST /dynamic-data) — บันทึกผ่าน Form Builder</li>
+                  <li>Sub-indicators (POST /sub-results/upsert) — บันทึกผลงานย่อย</li>
+                </ul>
+              </li>
+              <li>ตามเวลาที่ตั้ง (default 17:00) ระบบรวบสรุปทั้งหมด → ส่ง Email + Telegram</li>
+              <li>หลังส่ง records จะถูก mark <code>notified_at</code> → ไม่ส่งซ้ำ</li>
+              <li>super_admin กด "ส่ง Digest ทันที (test)" เพื่อทดสอบหรือเรียกดูสรุปก่อนเวลา</li>
+            </ol>
+          </div>
+
+          <!-- ข้อมูลในสรุป -->
+          <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <h4 class="font-bold text-blue-800 mb-2"><i class="fas fa-file-alt mr-2"></i>ข้อมูลที่อยู่ในสรุป</h4>
+            <ul class="list-disc ml-5 text-sm text-gray-700 space-y-1">
+              <li>วันที่ + จำนวนผู้ใช้ที่บันทึก + จำนวน records ทั้งหมด</li>
+              <li><b>ตาราง Top ผู้บันทึก</b>: ชื่อ-สกุล / หน่วยงาน / หน่วยบริการ / KPI หลัก / Sub / Form / รวม</li>
+              <li><b>Top 10 ตัวชี้วัดที่ถูกบันทึกมากสุด</b></li>
+              <li><b>คำแนะนำ</b>: ให้ super_admin ไปกด "อัพเดทตาราง Export" ใน kpi-manager</li>
+            </ul>
+          </div>
+
+          <!-- Settings -->
+          <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+            <h4 class="font-bold text-emerald-800 mb-2"><i class="fas fa-sliders-h mr-2"></i>การตั้งค่า</h4>
+            <ul class="list-disc ml-5 text-sm text-gray-700 space-y-1">
+              <li><b>เปิดบันทึก Audit</b>: เปิด/ปิด log การบันทึก (ปิด = ไม่เก็บข้อมูลเลย)</li>
+              <li><b>เปิดส่ง Digest</b>: เปิด/ปิด การส่งอัตโนมัติ</li>
+              <li><b>เวลาส่ง</b>: HH:MM (timezone Bangkok)</li>
+              <li><b>ขั้นต่ำ</b>: ส่งเฉพาะเมื่อมี ≥ N รายการ (default 1)</li>
+              <li><b>ช่องทาง</b>: Email + Telegram — เลือกได้ทั้งคู่ หรืออย่างเดียว</li>
+            </ul>
+          </div>
+
+          <!-- ปุ่มและ Stats -->
+          <div class="bg-purple-50 border border-purple-200 rounded-xl p-4">
+            <h4 class="font-bold text-purple-800 mb-2"><i class="fas fa-chart-bar mr-2"></i>Stats &amp; ปุ่ม</h4>
+            <ul class="list-disc ml-5 text-sm text-gray-700 space-y-1">
+              <li><b>Stats cards</b> 4 ใบ: บันทึกวันนี้ / ยังไม่แจ้ง / ทั้งหมด / ผู้ใช้ที่บันทึก</li>
+              <li><b>Last Digest panel</b>: วันที่/เวลาส่งล่าสุด + email/telegram status</li>
+              <li><b>Tab "รายการบันทึก"</b>: ดู audit log ย้อนหลัง 300 records ล่าสุด + filter เฉพาะที่ยังไม่ได้แจ้ง</li>
+              <li><b>ปุ่ม "ส่ง Digest ทันที"</b>: สำหรับ test (ไม่ต้องรอเวลา)</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
       <!-- ==================== 11. Maintenance Mode ==================== -->
       <section id="section-maintenance" class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div (click)="toggleCollapse('maintenance')" class="flex items-center justify-between gap-3 p-6 cursor-pointer hover:bg-gray-50 transition-colors">

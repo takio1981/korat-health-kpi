@@ -34,6 +34,8 @@ export class HelpComponent {
     { id: 'notifications', icon: 'fa-bell', label: 'แจ้งเตือน' },
     { id: 'users', icon: 'fa-users-cog', label: 'จัดการผู้ใช้งาน' },
     { id: 'kpi-manager', icon: 'fa-layer-group', label: 'จัดการข้อมูล KPI' },
+    { id: 'backup', icon: 'fa-database', label: 'สำรอง & กู้คืนข้อมูล' },
+    { id: 'audit-digest', icon: 'fa-bullhorn', label: 'แจ้งเตือนการบันทึก KPI' },
     { id: 'maintenance', icon: 'fa-tools', label: 'Maintenance Mode' },
     { id: 'feedback', icon: 'fa-comments', label: 'กระดานข้อเสนอแนะ' },
     { id: 'settings', icon: 'fa-sliders-h', label: 'ตั้งค่าระบบ' },

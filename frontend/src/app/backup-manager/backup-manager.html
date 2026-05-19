@@ -1,0 +1,954 @@
+<div class="p-6">
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-4">
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <div>
+        <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+          <i class="fas fa-database text-emerald-600"></i>
+          สำรอง & กู้คืนฐานข้อมูล (Backup & Restore)
+        </h1>
+        <p class="text-sm text-gray-500 mt-1">จัดการ MySQL/MariaDB backup สำหรับ super_admin เท่านั้น — ไฟล์เก็บที่ <code class="text-xs">{{ backupDir || '/backups' }}</code></p>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex gap-2 mt-4 border-b border-gray-200 overflow-x-auto">
+      <button (click)="setTab('connections')" class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors"
+              [ngClass]="activeTab === 'connections' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-gray-500 hover:text-gray-700'">
+        <i class="fas fa-server mr-1"></i> Connections ({{ connections.length }})
+      </button>
+      <button (click)="setTab('backup')" class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap"
+              [ngClass]="activeTab === 'backup' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-gray-500 hover:text-gray-700'">
+        <i class="fas fa-download mr-1"></i> Manual Backup
+      </button>
+      <button (click)="setTab('files')" class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap"
+              [ngClass]="activeTab === 'files' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-gray-500 hover:text-gray-700'">
+        <i class="fas fa-folder-open mr-1"></i> Files ({{ files.length }})
+      </button>
+      <button (click)="setTab('restore')" class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap"
+              [ngClass]="activeTab === 'restore' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-gray-500 hover:text-gray-700'">
+        <i class="fas fa-undo mr-1"></i> Restore
+      </button>
+      <button (click)="setTab('schedules')" class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap"
+              [ngClass]="activeTab === 'schedules' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-gray-500 hover:text-gray-700'">
+        <i class="fas fa-clock mr-1"></i> Schedules ({{ schedules.length }})
+      </button>
+      <button (click)="setTab('cloud')" class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap"
+              [ngClass]="activeTab === 'cloud' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-gray-500 hover:text-gray-700'">
+        <i class="fab fa-google-drive mr-1"></i> Cloud
+      </button>
+      <button (click)="setTab('monitor')" class="px-4 py-2 text-sm font-medium border-b-2 whitespace-nowrap"
+              [ngClass]="activeTab === 'monitor' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-gray-500 hover:text-gray-700'">
+        <i class="fas fa-chart-line mr-1"></i> Monitor
+      </button>
+    </div>
+  </div>
+
+  <!-- ============== TAB: CONNECTIONS ============== -->
+  <div *ngIf="activeTab === 'connections'" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-semibold text-gray-700">รายการ Connection</h2>
+      <button (click)="openConnModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm shadow-md">
+        <i class="fas fa-plus mr-1"></i> เพิ่ม Connection
+      </button>
+    </div>
+
+    <div class="overflow-auto" style="max-height: calc(100vh - 280px)">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 sticky top-0 z-10 shadow-sm">
+          <tr class="text-left text-xs text-gray-600 uppercase">
+            <th class="px-3 py-2">ชื่อ</th>
+            <th class="px-3 py-2">Host:Port</th>
+            <th class="px-3 py-2">User</th>
+            <th class="px-3 py-2">Database</th>
+            <th class="px-3 py-2">Description</th>
+            <th class="px-3 py-2 text-center">Default</th>
+            <th class="px-3 py-2 text-center w-44">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let c of connections" class="border-b border-gray-100 hover:bg-emerald-50/40">
+            <td class="px-3 py-2 font-medium text-gray-800">{{ c.name }}</td>
+            <td class="px-3 py-2 text-gray-600"><code class="text-xs">{{ c.host }}:{{ c.port }}</code></td>
+            <td class="px-3 py-2 text-gray-600">{{ c.db_user }}</td>
+            <td class="px-3 py-2 text-gray-600"><code class="text-xs">{{ c.db_name }}</code></td>
+            <td class="px-3 py-2 text-gray-500 text-xs">{{ c.description || '-' }}</td>
+            <td class="px-3 py-2 text-center">
+              <span *ngIf="c.is_default" class="bg-emerald-100 text-emerald-700 text-xs px-2 py-0.5 rounded-full"><i class="fas fa-star mr-1"></i>Default</span>
+            </td>
+            <td class="px-3 py-2 text-center whitespace-nowrap">
+              <button (click)="testConn(c)" class="text-blue-600 hover:bg-blue-50 px-2 py-1 rounded" title="ทดสอบเชื่อมต่อ"><i class="fas fa-plug"></i></button>
+              <button (click)="verifyPrivileges(c)" class="text-purple-600 hover:bg-purple-50 px-2 py-1 rounded ml-1" title="ตรวจสิทธิ์ user (SELECT, SHOW GRANTS)"><i class="fas fa-shield-halved"></i></button>
+              <button (click)="openConnModal(c)" class="text-amber-600 hover:bg-amber-50 px-2 py-1 rounded ml-1" title="แก้ไข"><i class="fas fa-edit"></i></button>
+              <button *ngIf="!c.is_default" (click)="deleteConn(c)" class="text-red-600 hover:bg-red-50 px-2 py-1 rounded ml-1" title="ลบ"><i class="fas fa-trash"></i></button>
+            </td>
+          </tr>
+          <tr *ngIf="connections.length === 0">
+            <td colspan="7" class="text-center py-8 text-gray-400">ยังไม่มี Connection</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============== TAB: BACKUP ============== -->
+  <div *ngIf="activeTab === 'backup'" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+    <h2 class="font-semibold text-gray-700 mb-4"><i class="fas fa-download mr-2 text-emerald-600"></i>สร้าง Backup ใหม่</h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">เลือก Connection</label>
+        <select [(ngModel)]="selectedBackupConnId" class="w-full border border-gray-300 rounded-xl px-3 py-2">
+          <option [ngValue]="null">-- เลือก --</option>
+          <option *ngFor="let c of connections" [ngValue]="c.id">{{ c.name }} ({{ c.db_name }} @ {{ c.host }})</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">การบีบอัด</label>
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" [(ngModel)]="backupCompress" class="w-4 h-4 accent-emerald-600">
+          <span class="text-sm">บีบอัดด้วย gzip (ลดขนาด ~5-10 เท่า — แนะนำ)</span>
+        </label>
+      </div>
+    </div>
+
+    <button (click)="runBackup()" [disabled]="isBackingUp || !selectedBackupConnId"
+            class="mt-6 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-xl shadow-md font-semibold">
+      <i class="fas fa-play mr-2"></i> {{ isBackingUp ? 'กำลัง Backup...' : 'เริ่ม Backup' }}
+    </button>
+
+    <!-- Progress (realtime polling) -->
+    <div *ngIf="isBackingUp && currentJob" class="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-xl max-w-3xl">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-blue-800">
+          <i class="fas fa-spinner fa-spin mr-2"></i> กำลัง Backup ...
+        </h3>
+        <span class="text-xs px-2 py-0.5 rounded-full"
+              [ngClass]="{
+                'bg-yellow-100 text-yellow-700': currentJob.status === 'running',
+                'bg-green-100 text-green-700': currentJob.status === 'success',
+                'bg-red-100 text-red-700': currentJob.status === 'failed'
+              }">Status: {{ currentJob.status }}</span>
+      </div>
+      <div class="space-y-2 text-sm">
+        <div class="flex justify-between"><span class="text-gray-600">Job ID:</span><code>#{{ currentJob.id }}</code></div>
+        <div class="flex justify-between"><span class="text-gray-600">Database:</span><code>{{ currentJob.db_name }}</code></div>
+        <div class="flex justify-between"><span class="text-gray-600">เวลาผ่านไป:</span><b>{{ (currentJob.elapsed_ms / 1000).toFixed(1) }}s</b></div>
+        <div class="flex justify-between"><span class="text-gray-600">ข้อมูลที่ dump แล้ว:</span>
+          <b class="text-blue-700"><i class="fas fa-database mr-1"></i>{{ formatBytes(currentJob.size_bytes || 0) }}</b>
+        </div>
+      </div>
+      <!-- Indeterminate progress bar (เราไม่รู้ขนาดสุดท้ายล่วงหน้า) -->
+      <div class="mt-3 w-full bg-blue-200 rounded-full h-2 overflow-hidden">
+        <div class="bg-blue-600 h-2 rounded-full animate-pulse" style="width: 70%"></div>
+      </div>
+      <p class="text-xs text-blue-700 mt-2"><i class="fas fa-info-circle mr-1"></i>
+        ไม่ทราบขนาดสุดท้ายล่วงหน้า — แสดงปริมาณข้อมูลที่ dump ออกจาก mysqldump แล้ว
+      </p>
+    </div>
+
+    <div *ngIf="lastBackupResult && !isBackingUp" class="mt-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl max-w-3xl">
+      <h3 class="font-semibold text-emerald-800 mb-2"><i class="fas fa-check-circle mr-1"></i> Backup ล่าสุดสำเร็จ</h3>
+      <div class="text-sm space-y-1">
+        <div>Database: <code class="text-xs">{{ lastBackupResult.db_name }}</code></div>
+        <div>ขนาด: <b>{{ formatBytes(lastBackupResult.size_bytes) }}</b></div>
+        <div>เวลา: {{ (lastBackupResult.duration_ms / 1000).toFixed(1) }} วินาที</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== TAB: FILES ============== -->
+  <div *ngIf="activeTab === 'files'" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <h2 class="font-semibold text-gray-700">ไฟล์ Backup ทั้งหมด</h2>
+      <button (click)="loadFiles()" class="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg"><i class="fas fa-sync mr-1"></i>Refresh</button>
+    </div>
+
+    <!-- Disk Info -->
+    <div *ngIf="diskInfo" class="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-xl text-sm flex flex-wrap gap-4">
+      <span><i class="fas fa-hdd mr-1 text-blue-600"></i> Backup dir: <code class="text-xs">{{ backupDir }}</code></span>
+      <span>ว่าง: <b>{{ formatBytes(diskInfo.available_bytes) }}</b> / {{ formatBytes(diskInfo.total_bytes) }}</span>
+      <span>จำนวนไฟล์: <b>{{ files.length }}</b></span>
+    </div>
+
+    <div class="overflow-auto" style="max-height: calc(100vh - 320px)">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 sticky top-0 z-10 shadow-sm">
+          <tr class="text-left text-xs text-gray-600 uppercase">
+            <th class="px-3 py-2">ไฟล์</th>
+            <th class="px-3 py-2">Connection</th>
+            <th class="px-3 py-2">DB</th>
+            <th class="px-3 py-2 text-right">ขนาด</th>
+            <th class="px-3 py-2 text-center">Type</th>
+            <th class="px-3 py-2">สร้างเมื่อ</th>
+            <th class="px-3 py-2 text-center w-48">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let f of files" class="border-b border-gray-100 hover:bg-emerald-50/40">
+            <td class="px-3 py-2"><code class="text-xs">{{ f.file_name }}</code>
+              <div *ngIf="f.compressed" class="text-[10px] text-emerald-600"><i class="fas fa-file-archive mr-1"></i>gzip</div>
+            </td>
+            <td class="px-3 py-2 text-gray-600">{{ f.connection_name }}</td>
+            <td class="px-3 py-2 text-gray-600"><code class="text-xs">{{ f.db_name }}</code></td>
+            <td class="px-3 py-2 text-right font-mono text-xs">{{ formatBytes(f.size_bytes) }}</td>
+            <td class="px-3 py-2 text-center">
+              <span class="text-[10px] px-2 py-0.5 rounded-full"
+                    [ngClass]="{
+                      'bg-blue-100 text-blue-700': f.trigger_type === 'manual',
+                      'bg-purple-100 text-purple-700': f.trigger_type === 'scheduled',
+                      'bg-amber-100 text-amber-700': f.trigger_type === 'auto_before_restore'
+                    }">{{ f.trigger_type }}</span>
+            </td>
+            <td class="px-3 py-2 text-xs text-gray-500">{{ formatDate(f.created_at) }}</td>
+            <td class="px-3 py-2 text-center whitespace-nowrap">
+              <button *ngIf="f.has_log" (click)="viewBackupLog(f.id)" class="text-purple-600 hover:bg-purple-50 px-2 py-1 rounded" title="ดู Log (checklist ตาราง)"><i class="fas fa-list-check"></i></button>
+              <button (click)="downloadFile(f)" class="text-blue-600 hover:bg-blue-50 px-2 py-1 rounded ml-1" title="Download"><i class="fas fa-download"></i></button>
+              <button (click)="openRestore(f)" class="text-emerald-600 hover:bg-emerald-50 px-2 py-1 rounded ml-1" title="Restore"><i class="fas fa-undo"></i></button>
+              <!-- Cloud actions -->
+              <button *ngIf="!f.cloud_url" (click)="uploadFileToCloud(f)" class="text-sky-600 hover:bg-sky-50 px-2 py-1 rounded ml-1" title="อัพโหลดไป Google Drive"><i class="fas fa-cloud-arrow-up"></i></button>
+              <a *ngIf="f.cloud_url" [href]="f.cloud_url" target="_blank" class="text-sky-600 hover:bg-sky-50 px-2 py-1 rounded ml-1 inline-block" title="เปิดใน Google Drive"><i class="fas fa-cloud-arrow-down"></i></a>
+              <button *ngIf="f.cloud_url" (click)="deleteFromCloud(f)" class="text-orange-600 hover:bg-orange-50 px-2 py-1 rounded ml-1" title="ลบจาก cloud (ไฟล์ local ไม่แตะ)"><i class="fas fa-cloud-xmark"></i></button>
+              <button (click)="deleteFile(f)" class="text-red-600 hover:bg-red-50 px-2 py-1 rounded ml-1" title="Delete"><i class="fas fa-trash"></i></button>
+            </td>
+          </tr>
+          <tr *ngIf="files.length === 0">
+            <td colspan="7" class="text-center py-8 text-gray-400">ยังไม่มีไฟล์ backup</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============== TAB: RESTORE ============== -->
+  <div *ngIf="activeTab === 'restore'" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+    <h2 class="font-semibold text-gray-700 mb-4"><i class="fas fa-undo mr-2 text-emerald-600"></i>กู้คืน Database (Restore)</h2>
+
+    <div *ngIf="!selectedFileForRestore" class="p-6 bg-amber-50 border border-amber-200 rounded-xl text-center">
+      <i class="fas fa-info-circle text-amber-500 text-2xl mb-2"></i>
+      <p class="text-gray-700">กรุณาเลือกไฟล์จากแท็บ <b>Files</b> ก่อน — กดปุ่ม <i class="fas fa-undo text-emerald-600"></i> ที่ไฟล์ที่ต้องการ</p>
+      <button (click)="setTab('files')" class="mt-3 bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm">ไปที่ Files</button>
+    </div>
+
+    <div *ngIf="selectedFileForRestore" class="max-w-3xl space-y-4">
+      <div class="p-3 bg-gray-50 rounded-xl border border-gray-200">
+        <div class="text-xs text-gray-500 mb-1">ไฟล์ที่เลือก</div>
+        <code class="text-sm">{{ selectedFileForRestore.file_name }}</code>
+        <div class="text-xs text-gray-500 mt-1">DB เดิม: <code>{{ selectedFileForRestore.db_name }}</code> · ขนาด: {{ formatBytes(selectedFileForRestore.size_bytes) }}</div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">โหมด Restore</label>
+        <div class="space-y-2">
+          <label class="flex items-start gap-2 p-3 border rounded-xl cursor-pointer"
+                 [ngClass]="restoreMode === 'new_db' ? 'border-emerald-500 bg-emerald-50' : 'border-gray-200'">
+            <input type="radio" name="rmode" [(ngModel)]="restoreMode" value="new_db" class="mt-1">
+            <div>
+              <div class="font-medium text-emerald-700">Restore เข้า Database ใหม่ <span class="text-xs">(ปลอดภัย)</span></div>
+              <div class="text-xs text-gray-600">สร้าง DB ใหม่แล้ว restore — DB เดิมไม่ถูกแตะ admin สามารถ verify แล้ว swap manual</div>
+            </div>
+          </label>
+          <label class="flex items-start gap-2 p-3 border rounded-xl cursor-pointer"
+                 [ngClass]="restoreMode === 'replace' ? 'border-red-500 bg-red-50' : 'border-gray-200'">
+            <input type="radio" name="rmode" [(ngModel)]="restoreMode" value="replace" class="mt-1">
+            <div>
+              <div class="font-medium text-red-700">Restore ทับ DB ปัจจุบัน <span class="text-xs">(เสี่ยงสูง)</span></div>
+              <div class="text-xs text-gray-600">DROP DATABASE เดิม → restore ใหม่ — แนะนำให้เปิด auto-backup ก่อน</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div *ngIf="restoreMode === 'new_db'">
+        <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อ Database ปลายทาง</label>
+        <input type="text" [(ngModel)]="restoreTargetDb"
+               class="w-full border border-gray-300 rounded-xl px-3 py-2 font-mono text-sm"
+               pattern="[a-zA-Z0-9_]+">
+        <p class="text-xs text-gray-500 mt-1">a-z, 0-9, _ เท่านั้น</p>
+      </div>
+
+      <div *ngIf="restoreMode === 'replace'" class="p-3 bg-amber-50 border border-amber-300 rounded-xl">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" [(ngModel)]="restoreAutoBackup" class="w-4 h-4 accent-emerald-600">
+          <span class="text-sm font-medium">Auto-backup DB ปัจจุบันก่อน restore <span class="text-emerald-700">(แนะนำ)</span></span>
+        </label>
+      </div>
+
+      <button (click)="runRestore()" [disabled]="isRestoring"
+              class="mt-2 px-6 py-3 rounded-xl shadow-md font-semibold text-white disabled:bg-gray-400"
+              [ngClass]="restoreMode === 'replace' ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'">
+        <i class="fas fa-play mr-2"></i> {{ isRestoring ? 'กำลัง Restore...' : 'เริ่ม Restore' }}
+      </button>
+
+      <!-- Restore Progress Card -->
+      <div *ngIf="isRestoring && currentRestoreJob" class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-semibold text-blue-800">
+            <i class="fas fa-spinner fa-spin mr-2"></i> กำลัง Restore ...
+          </h3>
+          <span class="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+            Phase: {{ currentRestoreJob.phase || '...' }}
+          </span>
+        </div>
+
+        <div class="space-y-2 text-sm">
+          <div class="flex justify-between"><span class="text-gray-600">Job ID:</span><code>#{{ currentRestoreJob.id }}</code></div>
+          <div class="flex justify-between"><span class="text-gray-600">Target DB:</span><code>{{ currentRestoreJob.target_db }}</code></div>
+          <div class="flex justify-between"><span class="text-gray-600">เวลาผ่านไป:</span><b>{{ (currentRestoreJob.elapsed_ms / 1000).toFixed(1) }}s</b></div>
+          <div class="flex justify-between"><span class="text-gray-600">ตารางที่ restore แล้ว:</span>
+            <b class="text-emerald-700"><i class="fas fa-table mr-1"></i>{{ currentRestoreJob.tables_count }} ตาราง</b>
+          </div>
+          <div *ngIf="currentRestoreJob.current_table" class="flex justify-between">
+            <span class="text-gray-600">ตารางปัจจุบัน:</span>
+            <code class="text-xs text-blue-700">{{ currentRestoreJob.current_table }}</code>
+          </div>
+          <div class="flex justify-between"><span class="text-gray-600">ข้อมูล:</span>
+            <b>{{ formatBytes(currentRestoreJob.progress_bytes) }} / {{ formatBytes(currentRestoreJob.total_bytes) }}</b>
+          </div>
+        </div>
+
+        <!-- Real progress bar -->
+        <div class="mt-3">
+          <div class="flex justify-between items-center mb-1">
+            <span class="text-xs text-blue-700 font-medium">{{ currentRestoreJob.percent }}%</span>
+          </div>
+          <div class="w-full bg-blue-200 rounded-full h-3 overflow-hidden">
+            <div class="bg-gradient-to-r from-blue-500 to-emerald-500 h-3 rounded-full transition-all duration-500"
+                 [style.width.%]="currentRestoreJob.percent"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== TAB: SCHEDULES ============== -->
+  <div *ngIf="activeTab === 'schedules'" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <h2 class="font-semibold text-gray-700"><i class="fas fa-clock mr-2 text-emerald-600"></i>ตั้งเวลา Backup อัตโนมัติ</h2>
+      <div class="flex gap-2">
+        <button (click)="testNotification()" class="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg text-sm shadow">
+          <i class="fas fa-paper-plane mr-1"></i> ทดสอบ Notification
+        </button>
+        <button (click)="openScheduleModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm shadow-md">
+          <i class="fas fa-plus mr-1"></i> เพิ่ม Schedule
+        </button>
+      </div>
+    </div>
+
+    <div class="p-3 mb-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800">
+      <i class="fas fa-info-circle mr-1"></i>
+      Scheduler ตรวจทุก 30 วินาที — ใช้เวลาตาม timezone ของเซิร์ฟเวอร์ |
+      Notification ส่งจาก System Settings (Telegram bot + Admin emails) — ตั้งค่าใน
+      <a routerLink="/settings" class="underline">หน้าตั้งค่าระบบ</a>
+    </div>
+
+    <div class="overflow-auto" style="max-height: calc(100vh - 320px)">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 sticky top-0 z-10 shadow-sm">
+          <tr class="text-left text-xs text-gray-600 uppercase">
+            <th class="px-3 py-2 text-center w-12">เปิด</th>
+            <th class="px-3 py-2">ชื่อ</th>
+            <th class="px-3 py-2">Connection</th>
+            <th class="px-3 py-2 text-center">วัน</th>
+            <th class="px-3 py-2 text-center">เวลา</th>
+            <th class="px-3 py-2 text-center">เก็บไว้</th>
+            <th class="px-3 py-2 text-center">แจ้งเตือน</th>
+            <th class="px-3 py-2 text-center">รันล่าสุด</th>
+            <th class="px-3 py-2 text-center w-44">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let s of schedules" class="border-b border-gray-100 hover:bg-emerald-50/40">
+            <td class="px-3 py-2 text-center">
+              <span *ngIf="s.is_enabled" class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500" title="enabled"></span>
+              <span *ngIf="!s.is_enabled" class="inline-block w-2.5 h-2.5 rounded-full bg-gray-300" title="disabled"></span>
+            </td>
+            <td class="px-3 py-2 font-medium text-gray-800">{{ s.name }}</td>
+            <td class="px-3 py-2 text-gray-600 text-xs">{{ s.connection_name }} <span class="text-gray-400">→ {{ s.db_name }}</span></td>
+            <td class="px-3 py-2 text-center text-xs">{{ daysLabel(s) }}</td>
+            <td class="px-3 py-2 text-center font-mono">{{ s.time_of_day }}</td>
+            <td class="px-3 py-2 text-center text-xs">{{ s.retention_days }} วัน</td>
+            <td class="px-3 py-2 text-center text-xs space-x-1">
+              <span *ngIf="s.notify_email" class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full" title="email"><i class="fas fa-envelope"></i></span>
+              <span *ngIf="s.notify_telegram" class="bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded-full" title="telegram"><i class="fab fa-telegram"></i></span>
+              <span *ngIf="!s.notify_email && !s.notify_telegram" class="text-gray-300">-</span>
+            </td>
+            <td class="px-3 py-2 text-center text-xs">
+              <div *ngIf="s.last_run_at; else neverRun">
+                {{ formatDate(s.last_run_at) }}<br>
+                <span class="text-[10px] px-1.5 py-0.5 rounded-full"
+                      [ngClass]="{
+                        'bg-green-100 text-green-700': s.last_status === 'success',
+                        'bg-red-100 text-red-700': s.last_status === 'failed',
+                        'bg-gray-100 text-gray-700': !s.last_status || s.last_status === 'skipped'
+                      }">{{ s.last_status || '-' }}</span>
+              </div>
+              <ng-template #neverRun><span class="text-gray-300">ยังไม่เคยรัน</span></ng-template>
+            </td>
+            <td class="px-3 py-2 text-center whitespace-nowrap">
+              <button (click)="runScheduleNow(s)" class="text-emerald-600 hover:bg-emerald-50 px-2 py-1 rounded" title="รันทันที"><i class="fas fa-play"></i></button>
+              <button (click)="viewScheduleLogs(s)" class="text-purple-600 hover:bg-purple-50 px-2 py-1 rounded ml-1" title="ดู Log"><i class="fas fa-list"></i></button>
+              <button (click)="openScheduleModal(s)" class="text-amber-600 hover:bg-amber-50 px-2 py-1 rounded ml-1" title="แก้ไข"><i class="fas fa-edit"></i></button>
+              <button (click)="deleteSchedule(s)" class="text-red-600 hover:bg-red-50 px-2 py-1 rounded ml-1" title="ลบ"><i class="fas fa-trash"></i></button>
+            </td>
+          </tr>
+          <tr *ngIf="schedules.length === 0">
+            <td colspan="9" class="text-center py-8 text-gray-400">ยังไม่มี Schedule — กด "เพิ่ม Schedule" เพื่อตั้งการ backup อัตโนมัติ</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============== Schedule Modal ============== -->
+  <div *ngIf="showScheduleModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-bold text-lg">{{ editingSchedule ? 'แก้ไข' : 'เพิ่ม' }} Backup Schedule</h3>
+        <button (click)="showScheduleModal = false" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">ชื่อ Schedule *</label>
+          <input type="text" [(ngModel)]="scheduleForm.name" placeholder="เช่น Daily Local Backup" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Connection *</label>
+          <select [(ngModel)]="scheduleForm.connection_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <option [ngValue]="null">-- เลือก --</option>
+            <option *ngFor="let c of connections" [ngValue]="c.id">{{ c.name }} ({{ c.db_name }})</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">เวลา (HH:MM) *</label>
+            <input type="time" [(ngModel)]="scheduleForm.time_of_day" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">เก็บไว้ (วัน)</label>
+            <input type="number" [(ngModel)]="scheduleForm.retention_days" min="1" max="365" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <p class="text-[10px] text-gray-500 mt-1">ไฟล์ scheduled ที่เก่ากว่านี้จะถูกลบอัตโนมัติ</p>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-2">วันที่จะรัน *</label>
+          <div class="flex flex-wrap gap-2">
+            <button *ngFor="let d of dayOptions" type="button" (click)="toggleDay(d.value)"
+                    class="px-3 py-1.5 text-xs rounded-lg border transition-colors"
+                    [ngClass]="scheduleForm.days_of_week.includes(d.value)
+                              ? 'bg-emerald-500 text-white border-emerald-500'
+                              : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'">
+              {{ d.label }}
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <label class="flex items-center gap-2 text-sm p-3 border rounded-lg">
+            <input type="checkbox" [(ngModel)]="scheduleForm.is_enabled" class="w-4 h-4 accent-emerald-600">
+            <span>เปิดใช้งาน (enabled)</span>
+          </label>
+          <label class="flex items-center gap-2 text-sm p-3 border rounded-lg">
+            <input type="checkbox" [(ngModel)]="scheduleForm.compress" class="w-4 h-4 accent-emerald-600">
+            <span>บีบอัด gzip</span>
+          </label>
+        </div>
+
+        <label class="flex items-center gap-2 text-sm p-3 border rounded-lg bg-sky-50">
+          <input type="checkbox" [(ngModel)]="scheduleForm.auto_upload_cloud" class="w-4 h-4 accent-sky-600">
+          <i class="fab fa-google-drive text-sky-600"></i>
+          <span>Auto-upload ไป Google Drive หลัง backup สำเร็จ <span class="text-xs text-gray-500">(ตั้งค่าใน tab Cloud)</span></span>
+        </label>
+
+        <!-- Notifications -->
+        <div class="border-t pt-4">
+          <h4 class="font-semibold text-sm text-gray-700 mb-2"><i class="fas fa-bell mr-1"></i> Notification</h4>
+
+          <!-- Email -->
+          <div class="border rounded-lg p-3 mb-2">
+            <label class="flex items-center gap-2 text-sm font-medium">
+              <input type="checkbox" [(ngModel)]="scheduleForm.notify_email" class="w-4 h-4 accent-emerald-600">
+              <i class="fas fa-envelope text-blue-600"></i> ส่ง Email
+            </label>
+            <div *ngIf="scheduleForm.notify_email" class="ml-6 mt-2 space-y-1">
+              <label class="flex items-center gap-2 text-xs">
+                <input type="checkbox" [(ngModel)]="scheduleForm.notify_email_on_success" class="w-3.5 h-3.5 accent-emerald-600">
+                แจ้งเมื่อสำเร็จ
+              </label>
+              <label class="flex items-center gap-2 text-xs">
+                <input type="checkbox" [(ngModel)]="scheduleForm.notify_email_on_failure" class="w-3.5 h-3.5 accent-emerald-600">
+                แจ้งเมื่อล้มเหลว
+              </label>
+            </div>
+          </div>
+
+          <!-- Telegram -->
+          <div class="border rounded-lg p-3">
+            <label class="flex items-center gap-2 text-sm font-medium">
+              <input type="checkbox" [(ngModel)]="scheduleForm.notify_telegram" class="w-4 h-4 accent-emerald-600">
+              <i class="fab fa-telegram text-cyan-600"></i> ส่ง Telegram
+            </label>
+            <div *ngIf="scheduleForm.notify_telegram" class="ml-6 mt-2 space-y-1">
+              <label class="flex items-center gap-2 text-xs">
+                <input type="checkbox" [(ngModel)]="scheduleForm.notify_telegram_on_success" class="w-3.5 h-3.5 accent-emerald-600">
+                แจ้งเมื่อสำเร็จ
+              </label>
+              <label class="flex items-center gap-2 text-xs">
+                <input type="checkbox" [(ngModel)]="scheduleForm.notify_telegram_on_failure" class="w-3.5 h-3.5 accent-emerald-600">
+                แจ้งเมื่อล้มเหลว
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 mt-6">
+        <button (click)="showScheduleModal = false" class="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg">ยกเลิก</button>
+        <button (click)="saveSchedule()" class="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== Schedule Logs Modal ============== -->
+  <div *ngIf="showLogsModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-5xl w-full p-6 max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-bold text-lg">Schedule Logs — {{ logsScheduleName }}</h3>
+        <button (click)="showLogsModal = false" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="overflow-auto flex-1">
+        <table class="w-full text-xs">
+          <thead class="bg-gray-50 sticky top-0">
+            <tr class="text-left text-gray-600 uppercase">
+              <th class="px-2 py-2">เวลา</th>
+              <th class="px-2 py-2 text-center">Status</th>
+              <th class="px-2 py-2">ไฟล์</th>
+              <th class="px-2 py-2 text-right">ขนาด</th>
+              <th class="px-2 py-2 text-right">Tables</th>
+              <th class="px-2 py-2 text-right">INSERTs</th>
+              <th class="px-2 py-2 text-right">Cleaned</th>
+              <th class="px-2 py-2 text-center">Notify</th>
+              <th class="px-2 py-2 text-right">Duration</th>
+              <th class="px-2 py-2">Error/Warn</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let log of scheduleLogs" class="border-b hover:bg-gray-50">
+              <td class="px-2 py-2 whitespace-nowrap">{{ formatDate(log.run_at) }}</td>
+              <td class="px-2 py-2 text-center">
+                <span class="px-2 py-0.5 rounded-full text-[10px]"
+                      [ngClass]="{
+                        'bg-green-100 text-green-700': log.status === 'success',
+                        'bg-red-100 text-red-700': log.status === 'failed',
+                        'bg-gray-100 text-gray-700': log.status === 'skipped'
+                      }">{{ log.status }}</span>
+              </td>
+              <td class="px-2 py-2"><code class="text-[10px]">{{ log.file_name || '-' }}</code></td>
+              <td class="px-2 py-2 text-right font-mono">{{ formatBytes(log.size_bytes || 0) }}</td>
+              <td class="px-2 py-2 text-right">{{ log.tables_count || 0 }}</td>
+              <td class="px-2 py-2 text-right">{{ (log.total_inserts || 0).toLocaleString() }}</td>
+              <td class="px-2 py-2 text-right text-[10px]" [class.text-amber-700]="log.cleaned_up_files">
+                <span *ngIf="log.cleaned_up_files">{{ log.cleaned_up_files }} ไฟล์<br>({{ formatBytes(log.cleaned_up_bytes) }})</span>
+                <span *ngIf="!log.cleaned_up_files" class="text-gray-300">-</span>
+              </td>
+              <td class="px-2 py-2 text-center text-[10px]">
+                <span *ngIf="log.notified_email" class="text-blue-600" title="email"><i class="fas fa-envelope"></i></span>
+                <span *ngIf="log.notified_telegram" class="text-cyan-600 ml-1" title="telegram"><i class="fab fa-telegram"></i></span>
+                <span *ngIf="!log.notified_email && !log.notified_telegram" class="text-gray-300">-</span>
+              </td>
+              <td class="px-2 py-2 text-right">{{ ((log.duration_ms || 0) / 1000).toFixed(1) }}s</td>
+              <td class="px-2 py-2 text-[10px] max-w-xs">
+                <span *ngIf="log.error_msg" class="text-red-600">{{ log.error_msg }}</span>
+                <span *ngIf="log.warnings && !log.error_msg" class="text-amber-600">⚠ {{ log.warnings }}</span>
+              </td>
+            </tr>
+            <tr *ngIf="scheduleLogs.length === 0">
+              <td colspan="10" class="text-center py-8 text-gray-400">ยังไม่มี log</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== TAB: CLOUD (Google Drive OAuth 2.0 — User Account 15GB) ============== -->
+  <div *ngIf="activeTab === 'cloud'" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+    <h2 class="font-semibold text-gray-700 mb-4"><i class="fab fa-google-drive mr-2 text-sky-600"></i>Google Drive — User Account (OAuth 2.0)</h2>
+
+    <!-- คำแนะนำ -->
+    <div class="p-4 mb-4 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-900">
+      <p class="font-semibold mb-2"><i class="fas fa-info-circle mr-1"></i>วิธีตั้งค่า (ใช้พื้นที่ Gmail 15GB ฟรี)</p>
+      <ol class="ml-4 text-xs space-y-1 list-decimal">
+        <li>เข้า <a href="https://console.cloud.google.com/" target="_blank" class="underline">Google Cloud Console</a> → สร้าง project (ถ้ายังไม่มี)</li>
+        <li>เปิด API: <b>Google Drive API</b> ใน "APIs &amp; Services" → "Library"</li>
+        <li><b>OAuth consent screen</b> → User Type: <b>External</b> → กรอก app name, support email → Save → ในขั้น "Test users" เพิ่ม Gmail ที่จะใช้ backup</li>
+        <li><b>Credentials</b> → <b>Create Credentials</b> → <b>OAuth Client ID</b> → Application type: <b>Web application</b></li>
+        <li>กรอก <b>Authorized redirect URIs</b> ตามที่ระบบแสดงด้านล่าง (กด <i class="fas fa-copy"></i> เพื่อ copy)</li>
+        <li>หลังสร้างเสร็จ → copy <b>Client ID</b> + <b>Client Secret</b> มาวางในฟอร์ม</li>
+        <li>สร้าง folder ใน Google Drive ของคุณ → copy <b>Folder ID</b> จาก URL: <code>drive.google.com/drive/folders/<b>FOLDER_ID</b></code></li>
+        <li>กด <b>"บันทึก"</b> → กด <b>"Connect Google Drive"</b> → login Gmail + consent → เสร็จ!</li>
+      </ol>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- LEFT: Form -->
+      <div class="space-y-3">
+        <label class="flex items-center gap-2 text-sm p-3 border rounded-xl bg-emerald-50">
+          <input type="checkbox" [(ngModel)]="cloudSettings.enabled" class="w-4 h-4 accent-emerald-600">
+          <span class="font-medium">เปิดใช้งาน Google Drive</span>
+        </label>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">
+            Authorized Redirect URI <span class="text-red-500">*</span>
+            <span class="text-[10px] text-gray-500 ml-2">(copy ไปวางใน Google Cloud Console)</span>
+          </label>
+          <div class="flex gap-2">
+            <input type="text" [(ngModel)]="cloudSettings.redirect_uri" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono">
+            <button (click)="copyToClipboard(cloudSettings.redirect_uri)" class="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg" title="copy">
+              <i class="fas fa-copy"></i>
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">OAuth Client ID *</label>
+          <input type="text" [(ngModel)]="cloudSettings.client_id"
+                 placeholder="xxxx.apps.googleusercontent.com"
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">
+            OAuth Client Secret
+            <span *ngIf="cloudSettings.has_client_secret" class="text-emerald-600 ml-2"><i class="fas fa-check-circle"></i> บันทึกไว้แล้ว</span>
+          </label>
+          <input type="password" [(ngModel)]="cloudClientSecretInput"
+                 [placeholder]="cloudSettings.has_client_secret ? 'เว้นว่าง = คงค่าเดิม' : 'paste secret ที่นี่'"
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Folder ID *</label>
+          <input type="text" [(ngModel)]="cloudSettings.folder_id"
+                 placeholder="1aBcDeFgHiJkLmNoPqRsTuVwXyZ"
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Folder Name (แสดงผล)</label>
+          <input type="text" [(ngModel)]="cloudSettings.folder_name"
+                 placeholder="KPI Backups"
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+
+        <button (click)="saveCloudSettings()"
+                class="w-full bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm shadow-md">
+          <i class="fas fa-save mr-1"></i> บันทึก Settings
+        </button>
+      </div>
+
+      <!-- RIGHT: Status + Connect -->
+      <div>
+        <div class="bg-gray-50 rounded-xl p-4 space-y-3 text-sm">
+          <h3 class="font-semibold text-gray-700 text-sm border-b pb-2">สถานะปัจจุบัน</h3>
+
+          <div class="flex justify-between">
+            <span class="text-gray-600">Enabled:</span>
+            <span [ngClass]="cloudSettings.enabled ? 'text-emerald-600 font-bold' : 'text-gray-400'">
+              {{ cloudSettings.enabled ? '✓ เปิดใช้งาน' : '— ปิดอยู่' }}
+            </span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-600">Client ID/Secret:</span>
+            <span [ngClass]="(cloudSettings.client_id && cloudSettings.has_client_secret) ? 'text-emerald-600' : 'text-amber-600'">
+              {{ (cloudSettings.client_id && cloudSettings.has_client_secret) ? '✓ ตั้งแล้ว' : '⚠ ยังไม่ครบ' }}
+            </span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-600">Connected:</span>
+            <span [ngClass]="cloudSettings.has_refresh_token ? 'text-emerald-600 font-bold' : 'text-amber-600'">
+              {{ cloudSettings.has_refresh_token ? '✓ Connected' : '⚠ ยังไม่ได้ Connect' }}
+            </span>
+          </div>
+          <div *ngIf="cloudSettings.user_email" class="border-t pt-2">
+            <div class="text-gray-600 text-xs">Connected Account:</div>
+            <code class="text-xs break-all font-bold text-emerald-700">{{ cloudSettings.user_email }}</code>
+          </div>
+          <div *ngIf="cloudSettings.folder_id" class="border-t pt-2">
+            <div class="text-gray-600 text-xs">Folder:</div>
+            <a [href]="'https://drive.google.com/drive/folders/' + cloudSettings.folder_id" target="_blank"
+               class="text-sky-600 hover:underline text-xs">
+              <i class="fas fa-external-link-alt mr-1"></i>{{ cloudSettings.folder_name || cloudSettings.folder_id }}
+            </a>
+          </div>
+        </div>
+
+        <!-- Connect / Disconnect buttons -->
+        <div class="mt-4 space-y-2">
+          <button *ngIf="!cloudSettings.has_refresh_token"
+                  (click)="connectCloud()"
+                  [disabled]="!cloudSettings.client_id || !cloudSettings.has_client_secret"
+                  class="w-full bg-sky-600 hover:bg-sky-700 disabled:bg-gray-300 text-white px-4 py-3 rounded-xl shadow-md font-semibold">
+            <i class="fab fa-google mr-2"></i> Connect Google Drive
+          </button>
+          <button *ngIf="cloudSettings.has_refresh_token"
+                  (click)="testCloud()"
+                  class="w-full bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-xl text-sm shadow-md">
+            <i class="fas fa-plug mr-1"></i> ทดสอบเชื่อมต่อ
+          </button>
+          <button *ngIf="cloudSettings.has_refresh_token"
+                  (click)="disconnectCloud()"
+                  class="w-full bg-red-100 hover:bg-red-200 text-red-700 px-4 py-2 rounded-xl text-sm">
+            <i class="fas fa-unlink mr-1"></i> Disconnect
+          </button>
+          <p *ngIf="!cloudSettings.client_id || !cloudSettings.has_client_secret"
+             class="text-xs text-amber-600 text-center mt-2">
+            <i class="fas fa-info-circle mr-1"></i> กรอก Client ID/Secret + บันทึก ก่อนกด Connect
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== TAB: MONITOR (Dashboard ตรวจสอบสถานะระบบ) ============== -->
+  <div *ngIf="activeTab === 'monitor'" class="space-y-4">
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <h2 class="font-semibold text-gray-700"><i class="fas fa-chart-line mr-2 text-emerald-600"></i>แดชบอร์ดติดตามสถานะ</h2>
+        <div class="flex items-center gap-2">
+          <label class="flex items-center gap-2 text-xs cursor-pointer">
+            <input type="checkbox" [(ngModel)]="monitorAutoRefresh" (change)="toggleMonitorAutoRefresh()" class="w-4 h-4 accent-emerald-600">
+            <span>รีเฟรชอัตโนมัติ (ทุก 10 วินาที)</span>
+          </label>
+          <button (click)="fetchMonitor()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs">
+            <i class="fas fa-sync" [ngClass]="{'fa-spin': monitorLoading}"></i> รีเฟรช
+          </button>
+          <span *ngIf="monitor?.bangkok_time" class="text-xs text-gray-500">อัพเดทล่าสุด: {{ monitor.bangkok_time }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="monitor" class="space-y-4">
+      <!-- Summary cards -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white p-4 rounded-2xl shadow">
+          <div class="text-xs opacity-90">ขนาดฐานข้อมูลรวม</div>
+          <div class="text-2xl font-bold">{{ formatBytes(monitor.tables?.total_size_bytes || 0) }}</div>
+          <div class="text-xs opacity-80 mt-1">{{ monitor.tables?.count || 0 }} ตาราง · {{ (monitor.tables?.total_rows_approx || 0).toLocaleString() }} แถว</div>
+        </div>
+        <div class="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-4 rounded-2xl shadow">
+          <div class="text-xs opacity-90">การเชื่อมต่อ DB</div>
+          <div class="text-2xl font-bold">{{ monitor.pool?.total_connections ?? '?' }} / {{ monitor.pool?.connection_limit }}</div>
+          <div class="text-xs opacity-80 mt-1">ว่าง: {{ monitor.pool?.free_connections ?? 0 }} · รอคิว: {{ monitor.pool?.queued_requests ?? 0 }}</div>
+        </div>
+        <div class="bg-gradient-to-br from-amber-500 to-amber-600 text-white p-4 rounded-2xl shadow">
+          <div class="text-xs opacity-90">พื้นที่จัดเก็บ Backup</div>
+          <div class="text-2xl font-bold">{{ formatBytes(monitor.disk?.total_size_bytes || 0) }}</div>
+          <div class="text-xs opacity-80 mt-1">{{ monitor.disk?.file_count || 0 }} ไฟล์ในโฟลเดอร์</div>
+        </div>
+        <div class="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-4 rounded-2xl shadow">
+          <div class="text-xs opacity-90">ไฟล์ Backup ทั้งหมด</div>
+          <div class="text-2xl font-bold">{{ monitor.backups?.total_files || 0 }}</div>
+          <div class="text-xs opacity-80 mt-1">บน Cloud: {{ monitor.backups?.cloud_uploaded || 0 }} · {{ formatBytes(monitor.backups?.total_size || 0) }}</div>
+        </div>
+      </div>
+
+      <!-- DB Info + Pool -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+          <h3 class="font-semibold text-gray-700 text-sm mb-3"><i class="fas fa-database mr-2 text-emerald-600"></i>ข้อมูลเซิร์ฟเวอร์ฐานข้อมูล</h3>
+          <div *ngIf="monitor.db && !monitor.db.error" class="space-y-1 text-sm">
+            <div class="flex justify-between"><span class="text-gray-600">เวอร์ชัน:</span><b>{{ monitor.db.version }}</b></div>
+            <div class="flex justify-between"><span class="text-gray-600">โฮสต์:</span><code class="text-xs">{{ monitor.db.hostname }}:{{ monitor.db.port }}</code></div>
+            <div class="flex justify-between"><span class="text-gray-600">ฐานข้อมูล:</span><code class="text-xs">{{ monitor.db.database }}</code></div>
+            <div class="flex justify-between"><span class="text-gray-600">เปิดมาแล้ว:</span><b>{{ formatDuration(monitor.db.uptime_seconds) }}</b></div>
+            <div class="flex justify-between"><span class="text-gray-600">การเชื่อมต่อสูงสุด:</span>{{ monitor.db.max_connections }}</div>
+            <div class="flex justify-between"><span class="text-gray-600">เกณฑ์ query ช้า:</span>{{ monitor.db.long_query_time }} วินาที</div>
+          </div>
+          <div *ngIf="monitor.db?.error" class="text-red-600 text-xs">{{ monitor.db.error }}</div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+          <h3 class="font-semibold text-gray-700 text-sm mb-3"><i class="fas fa-list mr-2 text-blue-600"></i>กระบวนการกำลังทำงาน</h3>
+          <div *ngIf="monitor.processes && !monitor.processes.error" class="space-y-1 text-sm">
+            <div class="flex justify-between"><span class="text-gray-600">ทั้งหมด:</span><b>{{ monitor.processes.total }}</b></div>
+            <div class="flex justify-between"><span class="text-gray-600">กำลังทำงาน:</span><b class="text-emerald-600">{{ monitor.processes.active }}</b></div>
+            <div class="flex justify-between"><span class="text-gray-600">รอ (idle):</span><span class="text-gray-500">{{ monitor.processes.sleeping }}</span></div>
+            <div *ngIf="monitor.processes.slow_queries?.length" class="mt-3 pt-3 border-t">
+              <div class="text-xs text-red-600 font-medium mb-1">⚠ Query ทำงานช้า ({{ monitor.processes.slow_queries.length }} รายการ)</div>
+              <div *ngFor="let q of monitor.processes.slow_queries" class="text-xs bg-red-50 p-2 rounded mt-1">
+                <code class="text-[10px]">{{ q.time_seconds }}s · {{ q.user }}@{{ q.host }} · {{ q.state || q.command }}</code>
+                <div *ngIf="q.info" class="text-[10px] text-gray-700 mt-1 break-words">{{ q.info }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top Tables -->
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+        <h3 class="font-semibold text-gray-700 text-sm mb-3"><i class="fas fa-table mr-2 text-amber-600"></i>ตารางขนาดใหญ่สุด 20 อันดับ</h3>
+        <div class="overflow-auto" style="max-height: 400px">
+          <table class="w-full text-xs">
+            <thead class="bg-gray-50 sticky top-0">
+              <tr class="text-left text-gray-600">
+                <th class="px-2 py-2">ลำดับ</th>
+                <th class="px-2 py-2">ชื่อตาราง</th>
+                <th class="px-2 py-2">ประเภท</th>
+                <th class="px-2 py-2 text-right">จำนวนแถว</th>
+                <th class="px-2 py-2 text-right">ข้อมูล</th>
+                <th class="px-2 py-2 text-right">ดัชนี (Index)</th>
+                <th class="px-2 py-2 text-right">รวม</th>
+                <th class="px-2 py-2">อัพเดทล่าสุด</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let t of (monitor.tables?.list || []).slice(0, 20); let i = index" class="border-b hover:bg-emerald-50/30">
+                <td class="px-2 py-2 text-gray-400">{{ i + 1 }}</td>
+                <td class="px-2 py-2 font-medium"><code>{{ t.name }}</code></td>
+                <td class="px-2 py-2 text-[10px]"><span class="bg-gray-100 px-2 py-0.5 rounded">{{ t.type }}</span></td>
+                <td class="px-2 py-2 text-right">{{ t.rows.toLocaleString() }}</td>
+                <td class="px-2 py-2 text-right">{{ formatBytes(t.data_bytes) }}</td>
+                <td class="px-2 py-2 text-right">{{ formatBytes(t.index_bytes) }}</td>
+                <td class="px-2 py-2 text-right font-bold">{{ formatBytes(t.total_bytes) }}</td>
+                <td class="px-2 py-2 text-[10px] text-gray-500">{{ t.update_time ? formatDate(t.update_time) : '-' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Disk + Schedules -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+          <h3 class="font-semibold text-gray-700 text-sm mb-3"><i class="fas fa-hdd mr-2 text-orange-600"></i>โฟลเดอร์เก็บไฟล์ Backup</h3>
+          <div *ngIf="monitor.disk" class="space-y-1 text-sm">
+            <div class="text-gray-600 text-xs">ตำแหน่ง:</div>
+            <code class="text-xs block break-all bg-gray-50 p-2 rounded mb-2">{{ monitor.disk.backup_dir }}</code>
+            <div class="flex justify-between"><span class="text-gray-600">จำนวนไฟล์:</span><b>{{ monitor.disk.file_count }}</b></div>
+            <div class="flex justify-between"><span class="text-gray-600">ขนาดรวม:</span><b>{{ formatBytes(monitor.disk.total_size_bytes) }}</b></div>
+            <div *ngIf="monitor.disk.oldest_file" class="flex justify-between text-xs"><span class="text-gray-600">ไฟล์เก่าสุด:</span>{{ formatDate(monitor.disk.oldest_file) }}</div>
+            <div *ngIf="monitor.disk.newest_file" class="flex justify-between text-xs"><span class="text-gray-600">ไฟล์ใหม่สุด:</span>{{ formatDate(monitor.disk.newest_file) }}</div>
+            <div *ngIf="monitor.disk.filesystem" class="mt-2 pt-2 border-t">
+              <div class="text-gray-600 text-xs mb-1">พื้นที่ดิสก์:</div>
+              <div class="flex justify-between text-xs"><span>ทั้งหมด:</span>{{ formatBytes(monitor.disk.filesystem.total_bytes) }}</div>
+              <div class="flex justify-between text-xs"><span>คงเหลือ:</span><b class="text-emerald-600">{{ formatBytes(monitor.disk.filesystem.available_bytes) }}</b></div>
+              <div class="mt-2 w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                <div class="bg-orange-500 h-2"
+                     [style.width.%]="(monitor.disk.filesystem.used_bytes / monitor.disk.filesystem.total_bytes) * 100"></div>
+              </div>
+              <div class="text-[10px] text-gray-500 mt-1 text-right">
+                ใช้ไป {{ ((monitor.disk.filesystem.used_bytes / monitor.disk.filesystem.total_bytes) * 100).toFixed(1) }}%
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+          <h3 class="font-semibold text-gray-700 text-sm mb-3"><i class="fas fa-clock mr-2 text-purple-600"></i>ตารางเวลา Backup อัตโนมัติ</h3>
+          <div *ngIf="monitor.schedules" class="space-y-1 text-sm">
+            <div class="flex justify-between"><span class="text-gray-600">ทั้งหมด:</span><b>{{ monitor.schedules.total }}</b></div>
+            <div class="flex justify-between"><span class="text-gray-600">เปิดใช้งาน:</span><b class="text-emerald-600">{{ monitor.schedules.enabled }}</b></div>
+            <div *ngIf="monitor.schedules.list?.length" class="mt-2 pt-2 border-t space-y-2">
+              <div *ngFor="let s of monitor.schedules.list" class="text-xs flex justify-between items-center p-2 bg-gray-50 rounded">
+                <div>
+                  <span class="inline-block w-2 h-2 rounded-full mr-1" [ngClass]="s.is_enabled ? 'bg-emerald-500' : 'bg-gray-300'"></span>
+                  <b>{{ s.name }}</b>
+                  <span class="text-gray-500 ml-1">({{ s.time_of_day }})</span>
+                </div>
+                <span class="text-[10px] px-2 py-0.5 rounded-full"
+                      [ngClass]="{
+                        'bg-green-100 text-green-700': s.last_status === 'success',
+                        'bg-red-100 text-red-700': s.last_status === 'failed',
+                        'bg-gray-100 text-gray-700': !s.last_status
+                      }">{{ s.last_status === 'success' ? 'สำเร็จ' : s.last_status === 'failed' ? 'ล้มเหลว' : 'ยังไม่เคยรัน' }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Errors -->
+      <div *ngIf="monitor.recent_errors?.failed_backups?.length || monitor.recent_errors?.failed_restores?.length"
+           class="bg-white rounded-2xl shadow-sm border border-red-200 p-4">
+        <h3 class="font-semibold text-red-700 text-sm mb-3"><i class="fas fa-circle-exclamation mr-2"></i>ข้อผิดพลาดล่าสุด</h3>
+        <div *ngFor="let e of monitor.recent_errors.failed_backups" class="text-xs bg-red-50 p-2 rounded mb-1">
+          <span class="text-red-700 font-medium">Backup ครั้งที่ #{{ e.id }}</span> · {{ e.connection_name }} → <code>{{ e.db_name }}</code> ·
+          <span class="text-gray-500">{{ formatDate(e.created_at) }}</span>
+          <div class="text-gray-700 mt-1">{{ e.error_msg }}</div>
+        </div>
+        <div *ngFor="let e of monitor.recent_errors.failed_restores" class="text-xs bg-red-50 p-2 rounded mb-1">
+          <span class="text-red-700 font-medium">Restore ครั้งที่ #{{ e.id }}</span> · <code>{{ e.target_db }}</code> ·
+          <span class="text-gray-500">{{ formatDate(e.created_at) }}</span>
+          <div class="text-gray-700 mt-1">{{ e.error_msg }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="!monitor && !monitorLoading" class="bg-white rounded-2xl shadow-sm p-8 text-center text-gray-400">
+      <i class="fas fa-chart-line text-4xl mb-2"></i>
+      <p>กดปุ่ม "รีเฟรช" เพื่อโหลดข้อมูล</p>
+    </div>
+  </div>
+
+  <!-- ============== Connection Modal ============== -->
+  <div *ngIf="showConnModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-bold text-lg">{{ editingConn ? 'แก้ไข' : 'เพิ่ม' }} Connection</h3>
+        <button (click)="showConnModal = false" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">ชื่อ Connection *</label>
+          <input type="text" [(ngModel)]="connForm.name" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <div class="col-span-2">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Host *</label>
+            <input type="text" [(ngModel)]="connForm.host" placeholder="host.docker.internal" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Port</label>
+            <input type="number" [(ngModel)]="connForm.port" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">DB User *</label>
+          <input type="text" [(ngModel)]="connForm.db_user" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">DB Password {{ editingConn ? '(เว้นว่าง = คงเดิม)' : '*' }}</label>
+          <div class="relative">
+            <input [type]="showConnPw ? 'text' : 'password'" [(ngModel)]="connForm.db_password" class="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 text-sm">
+            <button type="button" (click)="showConnPw = !showConnPw" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400">
+              <i class="fas" [ngClass]="showConnPw ? 'fa-eye-slash' : 'fa-eye'"></i>
+            </button>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">DB Name *</label>
+          <input type="text" [(ngModel)]="connForm.db_name" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Description</label>
+          <input type="text" [(ngModel)]="connForm.description" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <label class="flex items-center gap-2 text-sm">
+          <input type="checkbox" [(ngModel)]="connForm.is_default" class="w-4 h-4 accent-emerald-600">
+          <span>ตั้งเป็น Default Connection</span>
+        </label>
+      </div>
+
+      <div class="flex justify-end gap-2 mt-6">
+        <button (click)="showConnModal = false" class="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg">ยกเลิก</button>
+        <button (click)="saveConn()" class="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow">บันทึก</button>
+      </div>
+    </div>
+  </div>
+</div>
