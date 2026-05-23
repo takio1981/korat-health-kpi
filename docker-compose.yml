@@ -33,6 +33,12 @@ services:
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
       BACKUP_DIR: /backups
       TZ: Asia/Bangkok
+      # === Tuning สำหรับ 100+ concurrent users ===
+      DB_POOL_LIMIT: ${DB_POOL_LIMIT:-150}
+      DB_POOL_MAX_IDLE: ${DB_POOL_MAX_IDLE:-30}
+      DB_POOL_QUEUE_LIMIT: ${DB_POOL_QUEUE_LIMIT:-500}
+      # Node.js heap size — เผื่อ peak load
+      NODE_OPTIONS: --max-old-space-size=2048
     volumes:
       - ./backups:/backups
     extra_hosts:
@@ -48,11 +54,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2.0'
-          memory: 1024M
+          cpus: '4.0'        # เพิ่มจาก 2.0 — เผื่อ peak 100+ users
+          memory: 2560M      # เพิ่มจาก 1024M — Node heap 2048 + buffer
         reservations:
-          cpus: '0.5'
-          memory: 256M
+          cpus: '1.0'
+          memory: 512M
     logging:
       driver: "json-file"
       options:

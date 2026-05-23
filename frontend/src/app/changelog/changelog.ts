@@ -18,6 +18,20 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.05.24',
+      date: '24 พฤษภาคม 2569',
+      changes: [
+        { type: 'fix', text: 'Login fail/blocked เมื่อหลาย users ใช้ผ่าน NAT/proxy IP เดียวกัน — เปลี่ยน loginLimiter keyGenerator เป็น IP+username (counter แยกต่อ user) + skipSuccessfulRequests กัน user ที่จำรหัสได้ติด limit' },
+        { type: 'fix', text: 'apiLimiter blocked dashboard เมื่อ 100+ users share IP — เปลี่ยนเป็น per-user (parse JWT userId) แทน per-IP, 600 req/min/user, skip backup/export/sync/monitor endpoints' },
+        { type: 'improve', text: 'DB Pool: connectionLimit 50→150, queueLimit 200→500, maxIdle 10→30 — รองรับ 100+ concurrent users + scheduler ทำงานพร้อมกันโดยไม่ติด queue' },
+        { type: 'improve', text: 'Session cache TTL 30s→2min + last_seen throttle 1min→3min → ลด DB SELECT/UPDATE 50-80% ในระบบที่มี active users' },
+        { type: 'improve', text: 'Performance indexes: เพิ่ม composite indexes บน users(username,cid), chospital(distid), kpi_results(indicator_id,year_bh,hospcode), kpi_summary, notifications(user_id,is_read)' },
+        { type: 'improve', text: 'docker-compose: เพิ่ม resource limit (CPU 2→4 cores, RAM 1GB→2.5GB), Node heap 2048MB, env DB_POOL_* configurable, นั่งกัน OOM ตอน peak load' },
+        { type: 'improve', text: 'DB pool monitor: log สถานะ pool ทุก 1 นาที เฉพาะเมื่อ usage > 70% หรือมี queue (low overhead) + auto cleanup session/last_seen cache ทุก 5 นาที กัน memory leak' },
+        { type: 'improve', text: '.env.example: เพิ่มคำแนะนำ MariaDB tuning (max_connections=250, innodb_buffer_pool_size, wait_timeout) + DB_POOL_* env vars' },
+      ]
+    },
+    {
       version: '2569.05.19',
       date: '19 พฤษภาคม 2569',
       changes: [

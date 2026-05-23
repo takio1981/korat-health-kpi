@@ -147,19 +147,47 @@ const updateSystemSettings = async () => {
 updateSystemSettings();
 
 // Rate Limiting: ป้องกัน Brute Force และ DDoS
+// loginLimiter: composite key IP+username — กัน NAT/proxy ที่ users หลายคน share IP เดียวกัน
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 นาที
-    limit: (req, res) => loginAttemptsEnabled ? maxLoginAttempts : 9999, // ถ้าปิดระบบนับ = ไม่จำกัด
+    limit: (req, res) => loginAttemptsEnabled ? maxLoginAttempts : 9999,
+    keyGenerator: (req) => {
+        // ใช้ IP + username เป็น key — แต่ละ user ที่ IP เดียวกันมี counter แยก
+        const ip = req.ip || 'unknown';
+        const username = (req.body?.username || 'anonymous').toString().toLowerCase().trim();
+        return `login:${ip}:${username}`;
+    },
     message: { success: false, message: 'ทำรายการเกินกำหนด กรุณาลองใหม่ในอีก 15 นาที' },
     standardHeaders: true,
     legacyHeaders: false,
+    skipSuccessfulRequests: true, // login สำเร็จไม่นับ → user ที่จำรหัสได้ไม่ติด limit
 });
 
+// apiLimiter: per-user (parse JWT manually) ไม่ใช่ per-IP — รองรับ users หลายคนหลัง NAT
 const apiLimiter = rateLimit({
-    windowMs: 1 * 60 * 1000, // 1 นาที per IP
-    max: 1000, // เรียก API ทั่วไปได้ 1000 ครั้งต่อนาที (เผื่อ user หลายคน share IP สำนักงาน + dashboard ที่มีหลายแถว)
+    windowMs: 1 * 60 * 1000, // 1 นาที
+    max: 600, // 600 req/min/user (เผื่อ dashboard หลายแถว + polling)
+    keyGenerator: (req) => {
+        // parse JWT manually (ก่อน authenticateToken middleware) → ใช้ userId เป็น key
+        try {
+            const authHeader = req.headers['authorization'];
+            const token = authHeader && authHeader.split(' ')[1];
+            if (token) {
+                const payload = jwt.verify(token, SECRET_KEY);
+                if (payload?.userId) return `user:${payload.userId}`;
+            }
+        } catch (_) { /* invalid token — fall through to IP */ }
+        return `ip:${req.ip || 'unknown'}`;
+    },
+    skip: (req) => {
+        // ข้าม endpoints heavy ที่ super_admin ใช้ (export, backup, restore, monitor) — มีสิทธิ์อยู่แล้ว
+        const url = req.url || '';
+        return url.includes('/backup/') || url.includes('/export-kpi-tables') || url.includes('/sync-to-hdc') ||
+               url.includes('/refresh-summary') || url.includes('/online-users');
+    },
     standardHeaders: true,
     legacyHeaders: false,
+    message: { success: false, message: 'เรียก API ถี่เกินไป กรุณารอสักครู่' }
 });
 
 const SECRET_KEY = process.env.SECRET_KEY;
@@ -171,12 +199,23 @@ if (!SECRET_KEY) {
 // Middleware ตรวจสอบ JWT Token
 // Throttle cache สำหรับ update last_seen — userId → timestamp ของ update ล่าสุด
 const _lastSeenCache = new Map();
-const LAST_SEEN_THROTTLE_MS = 60 * 1000; // update DB ไม่เกิน 1 ครั้ง/นาที/user
+const LAST_SEEN_THROTTLE_MS = 3 * 60 * 1000; // update DB ไม่เกิน 1 ครั้ง/3นาที/user (เดิม 1 นาที → ลด DB writes)
 
-// Cache active_session_id per user (TTL 30s) เพื่อลด query DB ในทุก request
+// Cache active_session_id per user (TTL 2 นาที) — ลด DB SELECT ทุก request
 // userId → { sessionId, expiry }
 const _sessionCache = new Map();
-const SESSION_CACHE_TTL = 30 * 1000; // 30 วินาที
+const SESSION_CACHE_TTL = 2 * 60 * 1000; // 2 นาที (เดิม 30s)
+
+// ล้าง cache entries เก่าเป็นระยะ กัน memory leak
+setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of _sessionCache.entries()) {
+        if (v.expiry < now - 5 * 60 * 1000) _sessionCache.delete(k);
+    }
+    for (const [k, t] of _lastSeenCache.entries()) {
+        if (t < now - 30 * 60 * 1000) _lastSeenCache.delete(k);
+    }
+}, 5 * 60 * 1000); // ทุก 5 นาที
 
 const authenticateToken = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -7952,6 +7991,17 @@ const bkDecrypt = (ciphertext) => {
         for (const [k, v, d] of auditDefaults) {
             try { await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?,?,?)', [k, v, d]); } catch (e) {}
         }
+
+        // === Performance Indexes สำหรับ high-concurrency ===
+        // เพิ่ม index ที่ขาดสำหรับ query ที่ hit ถี่ (login, dashboard, dept filter)
+        try { await db.query('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)'); } catch (e) {}
+        try { await db.query('CREATE INDEX IF NOT EXISTS idx_users_cid ON users(cid)'); } catch (e) {}
+        try { await db.query('CREATE INDEX IF NOT EXISTS idx_users_dept_role ON users(dept_id, role)'); } catch (e) {}
+        try { await db.query('CREATE INDEX IF NOT EXISTS idx_chospital_distid ON chospital(distid)'); } catch (e) {}
+        try { await db.query('CREATE INDEX IF NOT EXISTS idx_kpi_results_lookup ON kpi_results(indicator_id, year_bh, hospcode)'); } catch (e) {}
+        try { await db.query('CREATE INDEX IF NOT EXISTS idx_kpi_indicators_dept ON kpi_indicators(dept_id)'); } catch (e) {}
+        try { await db.query('CREATE INDEX IF NOT EXISTS idx_kpi_summary_lookup ON kpi_summary(indicator_id, year_bh, hospcode)'); } catch (e) {}
+        try { await db.query('CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, is_read)'); } catch (e) {}
 
         // Phase 2: backup schedules
         await db.query(`
