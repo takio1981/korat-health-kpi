@@ -7788,11 +7788,26 @@ const path = require('path');
 const zlib = require('zlib');
 
 const BACKUP_DIR = process.env.BACKUP_DIR || (process.platform === 'win32' ? path.join(process.cwd(), 'backups') : '/backups');
-// Configurable binary paths (Windows dev: ชี้ไป C:\xampp\mysql\bin\mysqldump.exe)
-const MYSQL_BIN = process.env.MYSQL_BIN || 'mysql';
-const MYSQLDUMP_BIN = process.env.MYSQLDUMP_BIN || 'mysqldump';
-console.log(`[Backup] MYSQL_BIN='${MYSQL_BIN}' exists=${fs.existsSync(MYSQL_BIN)}`);
-console.log(`[Backup] MYSQLDUMP_BIN='${MYSQLDUMP_BIN}' exists=${fs.existsSync(MYSQLDUMP_BIN)}`);
+// Configurable binary paths
+//  - prefer 'mariadb' / 'mariadb-dump' (MariaDB 10.11+) เพื่อเลี่ยง deprecation warning ของ 'mysql'
+//  - ถ้า env ไม่ตั้ง → ใช้ 'mariadb' ถ้ามี (Linux/Docker), fallback 'mysql'
+function _detectBin(envName, candidates) {
+    if (process.env[envName]) return process.env[envName];
+    // ถ้าหา binary ใน PATH ได้ → ใช้ตัวนั้น (เช็คโดย spawn --version)
+    for (const cand of candidates) {
+        try {
+            const r = require('child_process').spawnSync(cand, ['--version'], { timeout: 3000 });
+            if (r.status === 0) return cand;
+        } catch (_) {}
+    }
+    return candidates[candidates.length - 1]; // fallback ตัวสุดท้าย
+}
+const MYSQL_BIN = _detectBin('MYSQL_BIN', ['mariadb', 'mysql']);
+const MYSQLDUMP_BIN = _detectBin('MYSQLDUMP_BIN', ['mariadb-dump', 'mysqldump']);
+// SSL/auth options ที่ใช้ร่วมกันทุกคำสั่ง — กัน warning ของ MariaDB 10.11+ ที่ stderr (ทำให้ระบบจับเป็น error)
+const MARIADB_COMMON_ARGS = ['--skip-ssl-verify-server-cert'];
+console.log(`[Backup] MYSQL_BIN='${MYSQL_BIN}' exists=${fs.existsSync(MYSQL_BIN) || 'in PATH'}`);
+console.log(`[Backup] MYSQLDUMP_BIN='${MYSQLDUMP_BIN}' exists=${fs.existsSync(MYSQLDUMP_BIN) || 'in PATH'}`);
 // Ensure directory exists (sync at startup is fine)
 try { fs.mkdirSync(BACKUP_DIR, { recursive: true }); } catch (e) { /* may already exist */ }
 // Probe binary availability (non-fatal — log warning if missing)
@@ -8105,11 +8120,37 @@ const sha256File = (filePath) => new Promise((resolve, reject) => {
 // Helper: validate identifier (db name, etc.) — กัน injection
 const isValidIdent = (s) => typeof s === 'string' && /^[a-zA-Z0-9_]{1,64}$/.test(s);
 
+// Helper: กรอง stderr ที่เป็นแค่ warning (ไม่ใช่ error จริง) ของ MariaDB/MySQL client
+// MariaDB 10.11+ มี warnings หลายตัวที่เขียนไปที่ stderr แต่ไม่ทำให้ command fail:
+//   - "Deprecated program name. It will be removed..."
+//   - "Using a password on the command line interface can be insecure"
+//   - "WARNING: option --ssl-verify-server-cert is disabled..."
+function cleanStderr(stderr) {
+    if (!stderr) return '';
+    const lines = stderr.split('\n').filter(line => {
+        const l = line.trim();
+        if (!l) return false;
+        if (/Deprecated program name/i.test(l)) return false;
+        if (/use ['"]?(mariadb|mariadb-dump)['"]?/i.test(l)) return false;
+        if (/Using a password on the command line/i.test(l)) return false;
+        if (/option --ssl-verify-server-cert is disabled/i.test(l)) return false;
+        if (/insecure passwordless login/i.test(l)) return false;
+        if (/^WARNING:/i.test(l) && !/error|fail/i.test(l)) return false;
+        return true;
+    });
+    return lines.join('\n').trim();
+}
+
+// Helper: รวม args สำหรับ connect (ตัด SSL warning + auth)
+function buildConnectArgs(conn) {
+    return [`-h${conn.host}`, `-P${conn.port}`, `-u${conn.db_user}`, ...MARIADB_COMMON_ARGS];
+}
+
 // Helper: query table list + size + rows via spawn mysql client (รองรับทุก connection)
 async function listDbTables(conn, dbName) {
     const sql = `SELECT table_name, table_type, IFNULL(table_rows, 0), IFNULL(data_length, 0), IFNULL(index_length, 0) ` +
                 `FROM INFORMATION_SCHEMA.TABLES WHERE table_schema = '${dbName.replace(/'/g, "''")}' ORDER BY table_name`;
-    const args = [`-h${conn.host}`, `-P${conn.port}`, `-u${conn.db_user}`, '-N', '-B', '-e', sql];
+    const args = [...buildConnectArgs(conn), '-N', '-B', '-e', sql];
     const env = { ...process.env };
     if (conn.db_password) env.MYSQL_PWD = conn.db_password;
     return new Promise((resolve, reject) => {
@@ -8119,7 +8160,7 @@ async function listDbTables(conn, dbName) {
         p.stderr.on('data', d => err += d.toString());
         p.on('error', reject);
         p.on('close', code => {
-            if (code !== 0) return reject(new Error(err || `mysql exit ${code}`));
+            if (code !== 0) return reject(new Error(cleanStderr(err) || `mysql exit ${code}`));
             const tables = out.split('\n').filter(Boolean).map(line => {
                 const parts = line.split('\t');
                 return {
@@ -8158,14 +8199,14 @@ async function verifyBackupPrivileges(conn) {
     const sample = baseTables.find(t => t.rows > 0) || baseTables[0];
     const selectSql = `SELECT 1 FROM \`${conn.db_name}\`.\`${sample.name}\` LIMIT 1`;
     const selectResult = await new Promise((resolve) => {
-        const args = [`-h${conn.host}`, `-P${conn.port}`, `-u${conn.db_user}`, '-N', '-B', '-e', selectSql];
+        const args = [...buildConnectArgs(conn), '-N', '-B', '-e', selectSql];
         const p = spawn(MYSQL_BIN, args, { env });
         let err = '';
         p.stderr.on('data', d => err += d.toString());
         p.on('error', () => resolve({ ok: false, error: 'spawn mysql ล้มเหลว' }));
         p.on('close', code => {
             if (code === 0) resolve({ ok: true });
-            else resolve({ ok: false, error: `SELECT จากตาราง ${sample.name} ล้มเหลว: ${err.trim().slice(0, 300)}` });
+            else resolve({ ok: false, error: `SELECT จากตาราง ${sample.name} ล้มเหลว: ${cleanStderr(err).slice(0, 300)}` });
         });
     });
     if (!selectResult.ok) {
@@ -8174,7 +8215,7 @@ async function verifyBackupPrivileges(conn) {
 
     // 3. อ่าน SHOW GRANTS เพื่อดู privilege แบบ raw
     const grants = await new Promise((resolve) => {
-        const args = [`-h${conn.host}`, `-P${conn.port}`, `-u${conn.db_user}`, '-N', '-B', '-e', 'SHOW GRANTS FOR CURRENT_USER()'];
+        const args = [...buildConnectArgs(conn), '-N', '-B', '-e', 'SHOW GRANTS FOR CURRENT_USER()'];
         const p = spawn(MYSQL_BIN, args, { env });
         let out = '', err = '';
         p.stdout.on('data', d => out += d.toString());
@@ -8205,7 +8246,7 @@ async function verifyBackupPrivileges(conn) {
 async function countTableRows(conn, dbName, tableName) {
     if (!isValidIdent(tableName)) return -1;
     const sql = `SELECT COUNT(*) FROM \\\`${dbName}\\\`.\\\`${tableName}\\\``;
-    const args = [`-h${conn.host}`, `-P${conn.port}`, `-u${conn.db_user}`, '-N', '-B', '-e', sql];
+    const args = [...buildConnectArgs(conn), '-N', '-B', '-e', sql];
     const env = { ...process.env };
     if (conn.db_password) env.MYSQL_PWD = conn.db_password;
     return new Promise((resolve) => {
@@ -8460,9 +8501,7 @@ apiRouter.post('/backup/connections/:id/test', authenticateToken, isSuperAdmin, 
         const conn = await getBackupConnection(id);
         if (!conn) return safeJson(404, { success: false, message: 'ไม่พบ connection' });
         const args = [
-            `-h${conn.host}`,
-            `-P${conn.port}`,
-            `-u${conn.db_user}`,
+            ...buildConnectArgs(conn),
             `-e`,
             `SELECT 1 AS ok, VERSION() AS version, NOW() AS server_time`,
             conn.db_name,
@@ -8484,7 +8523,7 @@ apiRouter.post('/backup/connections/:id/test', authenticateToken, isSuperAdmin, 
         proc.on('close', (code) => {
             clearTimeout(timeout);
             if (code === 0) safeJson(200, { success: true, message: 'เชื่อมต่อสำเร็จ', output: out.trim() });
-            else safeJson(400, { success: false, message: 'เชื่อมต่อล้มเหลว', error: (err || '').trim(), exit_code: code });
+            else safeJson(400, { success: false, message: 'เชื่อมต่อล้มเหลว', error: cleanStderr(err), exit_code: code });
         });
         proc.on('error', (e) => {
             clearTimeout(timeout);
@@ -8563,9 +8602,7 @@ async function runBackupJob(jobId, conn, compress, trigger_type, userId, reqIp) 
         // spawn mysqldump → pipe (gzip optional) → file
         // หลีกเลี่ยง option ที่ไม่ universal: --column-statistics (MySQL 8 only), --events (อาจ permission issue)
         const dumpArgs = [
-            `-h${conn.host}`,
-            `-P${conn.port}`,
-            `-u${conn.db_user}`,
+            ...buildConnectArgs(conn),
             '--single-transaction',
             '--quick',
             '--routines',
@@ -8944,7 +8981,7 @@ async function runRestoreJob(restoreJobId, f, conn, mode, dbTarget, auto_backup_
                 const ts2 = bangkokTimestamp(new Date(), 'filename');
                 const preFileName = `${sanitizeFilename(conn.db_name)}_${sanitizeFilename(conn.name)}_PRE_RESTORE_${ts2}.sql.gz`;
                 const preFilePath = path.join(BACKUP_DIR, preFileName);
-                const dumpArgs = [`-h${conn.host}`, `-P${conn.port}`, `-u${conn.db_user}`,
+                const dumpArgs = [...buildConnectArgs(conn),
                     '--single-transaction', '--quick', '--routines', '--triggers',
                     '--default-character-set=utf8mb4', '--no-tablespaces',
                     '--skip-add-locks', '--add-drop-table',
@@ -8984,25 +9021,45 @@ async function runRestoreJob(restoreJobId, f, conn, mode, dbTarget, auto_backup_
 
         // === สร้าง / drop+create DB ปลายทาง ===
         await db.query("UPDATE restore_jobs SET phase = 'preparing_db' WHERE id = ?", [restoreJobId]);
-        const adminArgs = [`-h${conn.host}`, `-P${conn.port}`, `-u${conn.db_user}`, '-e'];
+        const adminBase = [...buildConnectArgs(conn), '-e'];
         const env = { ...process.env };
         if (conn.db_password) env.MYSQL_PWD = conn.db_password;
         const runMysql = (sql) => new Promise((resolve, reject) => {
             let settled = false;
             const done = (err) => { if (settled) return; settled = true; err ? reject(err) : resolve(); };
             let p;
-            try { p = spawn(MYSQL_BIN, [...adminArgs, sql], { env }); }
+            try { p = spawn(MYSQL_BIN, [...adminBase, sql], { env }); }
             catch (e) { return done(new Error(`spawn mysql failed: ${e.message}`)); }
-            let err = '';
-            p.stderr.on('data', d => err += d.toString());
-            p.on('close', code => code === 0 ? done() : done(new Error(`mysql exit ${code}: ${err.slice(0,300)}`)));
+            let stderr = '';
+            p.stderr.on('data', d => stderr += d.toString());
+            p.on('close', code => {
+                const cleaned = cleanStderr(stderr);
+                if (code === 0) {
+                    // success — log warnings ที่ stderr (deprecated, ssl) เพื่อ debug
+                    if (cleaned) console.warn(`[Restore] runMysql warnings:`, cleaned.slice(0, 200));
+                    done();
+                } else {
+                    done(new Error(`mysql exit ${code}: ${cleaned.slice(0, 500) || '(no error message)'}`));
+                }
+            });
             p.on('error', done);
         });
 
-        if (mode === 'new_db') {
-            await runMysql(`CREATE DATABASE IF NOT EXISTS \`${dbTarget}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
-        } else {
-            await runMysql(`DROP DATABASE IF EXISTS \`${dbTarget}\`; CREATE DATABASE \`${dbTarget}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+        try {
+            if (mode === 'new_db') {
+                await runMysql(`CREATE DATABASE IF NOT EXISTS \`${dbTarget}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+            } else {
+                // แยกเป็น 2 statement (บาง MariaDB version handle multi-statement ที่ -e ไม่ดี)
+                await runMysql(`DROP DATABASE IF EXISTS \`${dbTarget}\``);
+                await runMysql(`CREATE DATABASE \`${dbTarget}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+            }
+        } catch (e) {
+            // แปลง error message ให้เข้าใจง่าย ถ้าเป็น privilege issue
+            const msg = (e.message || '').toLowerCase();
+            if (msg.includes('access denied') || msg.includes('1044') || msg.includes('1045')) {
+                throw new Error(`User '${conn.db_user}' ไม่มีสิทธิ์ CREATE/DROP DATABASE — ต้องใช้ user ที่มี GRANT CREATE,DROP ON *.* (เช่น root) | original: ${e.message}`);
+            }
+            throw e;
         }
 
         // === Restore: ส่ง SQL ผ่าน Transform stream เพื่อนับ bytes + จับชื่อตาราง ===
@@ -9047,7 +9104,7 @@ async function runRestoreJob(restoreJobId, f, conn, mode, dbTarget, auto_backup_
             let settled = false;
             const doneP = (err) => { if (settled) return; settled = true; err ? reject(err) : resolve(); };
             let mysqlProc;
-            try { mysqlProc = spawn(MYSQL_BIN, [`-h${conn.host}`, `-P${conn.port}`, `-u${conn.db_user}`, dbTarget], { env }); }
+            try { mysqlProc = spawn(MYSQL_BIN, [...buildConnectArgs(conn), dbTarget], { env }); }
             catch (e) { return doneP(new Error(`spawn mysql failed: ${e.message}`)); }
             let mysqlErr = '';
             mysqlProc.stderr.on('data', d => mysqlErr += d.toString());
@@ -9061,7 +9118,15 @@ async function runRestoreJob(restoreJobId, f, conn, mode, dbTarget, auto_backup_
             }
             fileStream.on('error', doneP);
             progressMonitor.on('error', doneP);
-            mysqlProc.on('close', code => code === 0 ? doneP() : doneP(new Error(`mysql restore exit ${code}: ${mysqlErr.slice(0,500)}`)));
+            mysqlProc.on('close', code => {
+                const cleaned = cleanStderr(mysqlErr);
+                if (code === 0) {
+                    if (cleaned) console.warn(`[Restore] stream warnings:`, cleaned.slice(0, 200));
+                    doneP();
+                } else {
+                    doneP(new Error(`mysql restore exit ${code}: ${cleaned.slice(0, 500) || '(no error)'}`));
+                }
+            });
             mysqlProc.on('error', doneP);
         });
 

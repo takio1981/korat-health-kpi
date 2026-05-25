@@ -18,6 +18,17 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.05.25',
+      date: '25 พฤษภาคม 2569',
+      changes: [
+        { type: 'fix', text: 'Restore ล้มเหลวบน MariaDB 10.11+ — "mysql exit 1: Deprecated program name" — เพราะ warning ของ MariaDB ถูกเข้าใจผิดเป็น error: เปลี่ยน MYSQL_BIN เป็น auto-detect (mariadb > mysql) + cleanStderr filter benign warnings (deprecated, SSL, password warning) ออกจาก error message' },
+        { type: 'fix', text: 'Restore: เพิ่ม --skip-ssl-verify-server-cert ทุก spawn → กัน warning "insecure passwordless login" ของ MariaDB 10.11+' },
+        { type: 'fix', text: 'Restore replace mode: แยก DROP DATABASE + CREATE DATABASE เป็น 2 statement แทน multi-statement ใน -e (MariaDB บาง version handle ผิด)' },
+        { type: 'improve', text: 'Restore: ถ้าเจอ error 1044/1045 (Access denied) → แสดง hint "user ขาดสิทธิ์ CREATE/DROP DATABASE — ต้องใช้ root หรือ GRANT CREATE,DROP ON *.*"' },
+        { type: 'improve', text: 'buildConnectArgs() helper รวม connection args + SSL flag — ใช้ใน listDbTables, countTableRows, verifyBackupPrivileges, test connection, backup, restore เพื่อความ consistent' },
+      ]
+    },
+    {
       version: '2569.05.24',
       date: '24 พฤษภาคม 2569',
       changes: [
