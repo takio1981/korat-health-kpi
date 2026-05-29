@@ -1112,35 +1112,118 @@
           <option *ngFor="let y of addKpiYears" [value]="y">{{ y }}</option>
         </select>
       </div>
-      <!-- Admin/Admin CUP: เลือกอำเภอ/ประเภท/หน่วยบริการ/หน่วยงาน/หมวดหมู่ -->
+      <!-- Admin/Admin CUP: multi-select checkbox dropdowns (เหมือนตัวกรองหน้า dashboard) -->
       <ng-container *ngIf="isAdmin || isLocalAdmin">
+        <!-- อำเภอ (multi) -->
         <div class="space-y-1">
           <label class="text-xs font-bold text-gray-500">อำเภอ</label>
-          <select [(ngModel)]="addKpiSelectedDistrict" (change)="onAddKpiDistrictChange()" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-sm">
-            <option value="">-- เลือกอำเภอ --</option>
-            <option *ngFor="let d of addKpiDistrictList" [value]="d.distid">{{ d.distname }}</option>
-          </select>
+          <div class="relative min-w-[150px]">
+            <button type="button" (click)="toggleAddKpiDropdown('district')"
+                    class="w-full flex items-center justify-between px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm hover:border-green-400 outline-none">
+              <span class="truncate" [class.text-gray-400]="addKpiSelDistricts.length === 0">{{ addKpiDistrictLabel() }}</span>
+              <i class="fas fa-chevron-down ml-1 text-gray-400 text-xs"></i>
+            </button>
+            <div *ngIf="addKpiOpenDropdown === 'district'" class="absolute z-50 top-full left-0 mt-1 w-[min(20rem,calc(100vw-2rem))] bg-white border border-gray-200 rounded-lg shadow-xl max-h-72 overflow-hidden flex flex-col">
+              <div class="p-2 border-b bg-gray-50 flex items-center justify-between text-[11px]">
+                <button type="button" (click)="clearAddKpiArr(addKpiSelDistricts); onAddKpiDistrictChange()" class="px-2 py-0.5 bg-gray-200 hover:bg-gray-300 rounded font-bold">ทั้งหมด</button>
+                <span class="text-green-700 font-bold">เลือก: {{ addKpiSelDistricts.length }}</span>
+                <button type="button" (click)="addKpiOpenDropdown = ''" class="px-2 py-0.5 bg-green-500 text-white rounded font-bold">ตกลง</button>
+              </div>
+              <div class="overflow-y-auto flex-1">
+                <label *ngFor="let d of addKpiDistrictList" class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
+                  <input type="checkbox" [checked]="isAddKpiFilterSel(addKpiSelDistricts, d.distid)"
+                         (change)="toggleAddKpiFilter(addKpiSelDistricts, d.distid); onAddKpiDistrictChange()" class="rounded text-green-600">
+                  <span>{{ d.distname }}</span>
+                </label>
+              </div>
+            </div>
+          </div>
         </div>
+
+        <!-- ประเภทหน่วยบริการ (multi) -->
         <div class="space-y-1">
           <label class="text-xs font-bold text-teal-600">ประเภทหน่วยบริการ</label>
-          <select [(ngModel)]="addKpiSelectedHosType" (change)="onAddKpiHosTypeChange()" class="px-4 py-2 border border-teal-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none text-sm">
-            <option value="">-- ทุกประเภท --</option>
-            <option *ngFor="let ht of hosTypeList" [value]="ht.hostypecode">{{ ht.hostypename }}</option>
-          </select>
+          <div class="relative min-w-[160px]">
+            <button type="button" (click)="toggleAddKpiDropdown('hostype')"
+                    class="w-full flex items-center justify-between px-3 py-2 border border-teal-300 rounded-lg bg-white text-sm hover:border-teal-400 outline-none">
+              <span class="truncate" [class.text-gray-400]="addKpiSelHosTypes.length === 0">{{ addKpiHosTypeLabel() }}</span>
+              <i class="fas fa-chevron-down ml-1 text-gray-400 text-xs"></i>
+            </button>
+            <div *ngIf="addKpiOpenDropdown === 'hostype'" class="absolute z-50 top-full left-0 mt-1 w-[min(20rem,calc(100vw-2rem))] bg-white border border-gray-200 rounded-lg shadow-xl max-h-72 overflow-hidden flex flex-col">
+              <div class="p-2 border-b bg-teal-50 flex items-center justify-between text-[11px]">
+                <button type="button" (click)="clearAddKpiArr(addKpiSelHosTypes); onAddKpiHosTypeChange()" class="px-2 py-0.5 bg-gray-200 hover:bg-gray-300 rounded font-bold">ทั้งหมด</button>
+                <span class="text-teal-700 font-bold">เลือก: {{ addKpiSelHosTypes.length }}</span>
+                <button type="button" (click)="addKpiOpenDropdown = ''" class="px-2 py-0.5 bg-teal-500 text-white rounded font-bold">ตกลง</button>
+              </div>
+              <div class="overflow-y-auto flex-1">
+                <label *ngFor="let ht of hosTypeList" class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
+                  <input type="checkbox" [checked]="isAddKpiFilterSel(addKpiSelHosTypes, ht.hostypecode)"
+                         (change)="toggleAddKpiFilter(addKpiSelHosTypes, ht.hostypecode); onAddKpiHosTypeChange()" class="rounded text-teal-600">
+                  <span>{{ ht.hostypename }}</span>
+                </label>
+              </div>
+            </div>
+          </div>
         </div>
+
+        <!-- หน่วยบริการ (multi-target + เลือกทั้งหมด) -->
         <div class="space-y-1">
-          <label class="text-xs font-bold text-gray-500">หน่วยบริการ</label>
-          <select [(ngModel)]="addKpiSelectedHospcode" (change)="onAddKpiHospitalChange()" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-sm">
-            <option value="">-- เลือกหน่วยบริการ --</option>
-            <option *ngFor="let h of addKpiFilteredHospitals" [value]="h.hoscode">{{ h.hosname }}</option>
-          </select>
+          <label class="text-xs font-bold text-green-700">หน่วยบริการปลายทาง <span class="text-[10px] text-gray-400">(เลือกได้หลายแห่ง)</span></label>
+          <div class="relative min-w-[200px]">
+            <button type="button" (click)="toggleAddKpiDropdown('hospcode')"
+                    class="w-full flex items-center justify-between px-3 py-2 border-2 rounded-lg bg-white text-sm outline-none"
+                    [ngClass]="addKpiSelHospcodes.length > 0 ? 'border-green-500' : 'border-green-300'">
+              <span class="truncate" [class.text-gray-400]="addKpiSelHospcodes.length === 0">{{ addKpiHospLabel() }}</span>
+              <i class="fas fa-chevron-down ml-1 text-gray-400 text-xs"></i>
+            </button>
+            <div *ngIf="addKpiOpenDropdown === 'hospcode'" class="absolute z-50 top-full left-0 mt-1 w-[min(26rem,calc(100vw-2rem))] bg-white border border-gray-200 rounded-lg shadow-xl max-h-80 overflow-hidden flex flex-col">
+              <div class="p-2 border-b bg-green-50 flex items-center justify-between text-[11px]">
+                <label class="flex items-center gap-1.5 font-bold text-green-700 cursor-pointer">
+                  <input type="checkbox" [checked]="isAllAddKpiHospcodes()" (change)="toggleAllAddKpiHospcodes()" class="rounded text-green-600">
+                  เลือกทั้งหมด ({{ addKpiFilteredHospitals.length }})
+                </label>
+                <span class="text-green-700 font-bold">เลือก: {{ addKpiSelHospcodes.length }}</span>
+                <button type="button" (click)="addKpiOpenDropdown = ''" class="px-2 py-0.5 bg-green-500 text-white rounded font-bold">ตกลง</button>
+              </div>
+              <div class="overflow-y-auto flex-1">
+                <label *ngFor="let h of addKpiFilteredHospitals" class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
+                  <input type="checkbox" [checked]="isAddKpiFilterSel(addKpiSelHospcodes, h.hoscode)"
+                         (change)="toggleAddKpiFilter(addKpiSelHospcodes, h.hoscode); onAddKpiHospitalChange()" class="rounded text-green-600">
+                  <span class="truncate" [title]="h.hosname">{{ h.hosname }}</span>
+                </label>
+                <div *ngIf="addKpiFilteredHospitals.length === 0" class="px-3 py-3 text-center text-gray-400 text-xs">ไม่มีหน่วยบริการ (ลองปรับตัวกรองอำเภอ/ประเภท)</div>
+              </div>
+            </div>
+          </div>
         </div>
+
+        <!-- หน่วยงาน (multi + เลือกทั้งหมด) -->
         <div class="space-y-1">
-          <label class="text-xs font-bold text-gray-500">หน่วยงาน</label>
-          <select [(ngModel)]="addKpiSelectedDept" (change)="loadAddKpiList()" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-sm">
-            <option value="">-- ทุกหน่วยงาน --</option>
-            <option *ngFor="let dept of addKpiDeptList" [value]="dept.id">{{ dept.dept_name }}</option>
-          </select>
+          <label class="text-xs font-bold text-indigo-600">หน่วยงาน</label>
+          <div class="relative min-w-[160px]">
+            <button type="button" (click)="toggleAddKpiDropdown('dept')"
+                    class="w-full flex items-center justify-between px-3 py-2 border border-indigo-300 rounded-lg bg-white text-sm hover:border-indigo-400 outline-none">
+              <span class="truncate" [class.text-gray-400]="addKpiSelDepts.length === 0">{{ addKpiDeptLabel() }}</span>
+              <i class="fas fa-chevron-down ml-1 text-gray-400 text-xs"></i>
+            </button>
+            <div *ngIf="addKpiOpenDropdown === 'dept'" class="absolute z-50 top-full left-0 mt-1 w-[min(22rem,calc(100vw-2rem))] bg-white border border-gray-200 rounded-lg shadow-xl max-h-80 overflow-hidden flex flex-col">
+              <div class="p-2 border-b bg-indigo-50 flex items-center justify-between text-[11px]">
+                <label class="flex items-center gap-1.5 font-bold text-indigo-700 cursor-pointer">
+                  <input type="checkbox" [checked]="isAllAddKpiDepts()" (change)="toggleAllAddKpiDepts()" class="rounded text-indigo-600">
+                  เลือกทั้งหมด ({{ addKpiDeptList.length }})
+                </label>
+                <span class="text-indigo-700 font-bold">เลือก: {{ addKpiSelDepts.length }}</span>
+                <button type="button" (click)="addKpiOpenDropdown = ''" class="px-2 py-0.5 bg-indigo-500 text-white rounded font-bold">ตกลง</button>
+              </div>
+              <div class="overflow-y-auto flex-1">
+                <label *ngFor="let dept of addKpiDeptList" class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
+                  <input type="checkbox" [checked]="isAddKpiFilterSel(addKpiSelDepts, dept.id.toString())"
+                         (change)="toggleAddKpiFilter(addKpiSelDepts, dept.id.toString()); onAddKpiDeptChange()" class="rounded text-indigo-600">
+                  <span>{{ dept.dept_name }}</span>
+                </label>
+              </div>
+            </div>
+          </div>
         </div>
       </ng-container>
       <!-- User: แสดงข้อมูลหน่วยบริการ/หน่วยงาน อัตโนมัติ -->
@@ -1160,35 +1243,10 @@
       </ng-container>
     </div>
 
-    <!-- Multi-target: เพิ่มให้หลายหน่วยบริการพร้อมกัน (admin/local admin) -->
-    <div *ngIf="(isAdmin || isLocalAdmin) && addKpiSelectedHospcode && addKpiApplyCandidates.length > 0" class="mb-3">
-      <button (click)="showMultiTarget = !showMultiTarget" type="button"
-              class="flex items-center gap-2 text-sm font-bold text-teal-700 hover:text-teal-900 transition-colors">
-        <i class="fas" [ngClass]="showMultiTarget ? 'fa-chevron-down' : 'fa-chevron-right'"></i>
-        <i class="fas fa-hospital-user"></i>
-        เพิ่มให้หน่วยบริการอื่นพร้อมกัน
-        <span *ngIf="addKpiApplyHospcodes.size > 0" class="px-2 py-0.5 bg-teal-100 text-teal-700 rounded-full text-xs">+{{ addKpiApplyHospcodes.size }} แห่ง</span>
-      </button>
-      <div *ngIf="showMultiTarget" class="mt-2 border border-teal-200 rounded-xl p-3 bg-teal-50/40">
-        <div class="flex items-center justify-between mb-2">
-          <span class="text-xs text-gray-600">เลือกหน่วยบริการที่จะเพิ่มตัวชี้วัดชุดเดียวกันนี้ให้ด้วย (ตัวที่มีอยู่แล้วจะถูกข้าม)</span>
-          <label class="flex items-center gap-1.5 text-xs font-bold text-teal-700 cursor-pointer whitespace-nowrap">
-            <input type="checkbox" [checked]="isAllApplyHospcodes()" (change)="toggleAllApplyHospcodes()" class="rounded text-teal-600 focus:ring-teal-400">
-            เลือกทั้งหมด ({{ addKpiApplyCandidates.length }})
-          </label>
-        </div>
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-1.5 max-h-44 overflow-y-auto card-scroll">
-          <label *ngFor="let h of addKpiApplyCandidates"
-                 class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-colors border"
-                 [ngClass]="isApplyHospcodeSelected(h.hoscode) ? 'bg-teal-100 border-teal-300 text-teal-800 font-medium' : 'bg-white border-gray-200 hover:bg-gray-50'">
-            <input type="checkbox" [checked]="isApplyHospcodeSelected(h.hoscode)" (change)="toggleApplyHospcode(h.hoscode)" class="rounded text-teal-600 focus:ring-teal-400">
-            <span class="truncate" [title]="h.hosname">{{ h.hosname }}</span>
-          </label>
-        </div>
-        <div *ngIf="addKpiApplyHospcodes.size > 0" class="mt-2 text-xs text-teal-700 font-semibold">
-          <i class="fas fa-circle-info mr-1"></i>จะบันทึกไปยัง {{ addKpiTargetHospcodes.length }} หน่วยบริการ (รวมตัวหลัก)
-        </div>
-      </div>
+    <!-- สรุปหน่วยบริการปลายทาง -->
+    <div *ngIf="(isAdmin || isLocalAdmin) && addKpiTargetHospcodes.length > 0" class="mb-3 px-3 py-2 bg-green-50 border border-green-200 rounded-xl text-xs text-green-800">
+      <i class="fas fa-hospital-user mr-1"></i>จะบันทึกตัวชี้วัดที่เลือกไปยัง <b>{{ addKpiTargetHospcodes.length }}</b> หน่วยบริการ
+      <span class="text-green-600">(ตัวชี้วัดที่มีอยู่แล้วในแต่ละหน่วยบริการจะถูกข้ามอัตโนมัติ)</span>
     </div>
 
     <!-- Category multi-filter (chip / select all) -->
@@ -1271,8 +1329,7 @@
           </tr>
           <tr *ngIf="filteredNewKpiList.length === 0">
             <td colspan="19" class="px-6 py-8 text-center text-gray-400">
-              <ng-container *ngIf="isAdmin && !addKpiSelectedHospcode">กรุณาเลือกหน่วยบริการเพื่อแสดงตัวชี้วัด</ng-container>
-              <ng-container *ngIf="(!isAdmin || addKpiSelectedHospcode) && newKpiList.length === 0">ไม่มีตัวชี้วัดที่สามารถเพิ่มได้สำหรับปีงบประมาณนี้ (มีครบทุกตัวชี้วัดแล้ว)</ng-container>
+              <ng-container *ngIf="newKpiList.length === 0">ไม่มีตัวชี้วัดที่สามารถเพิ่มได้สำหรับปีงบประมาณนี้ (อาจมีครบแล้ว หรือลองปรับตัวกรองหน่วยงาน)</ng-container>
               <ng-container *ngIf="newKpiList.length > 0 && filteredNewKpiList.length === 0">ไม่พบรายการในหมวดหมู่ที่เลือก — ลองเปลี่ยนตัวกรอง</ng-container>
             </td>
           </tr>

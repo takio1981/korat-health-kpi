@@ -136,25 +136,24 @@ export class DashboardComponent implements OnInit, OnDestroy {
   addKpiDistrictList: any[] = [];
   addKpiHospitalList: any[] = [];
   addKpiFilteredHospitals: any[] = [];
-  addKpiSelectedDistrict: string = '';
-  addKpiSelectedHospcode: string = '';
-  addKpiSelectedHosType: string = '';
   addKpiDeptList: any[] = [];
-  addKpiSelectedDept: string = '';
   addKpiExistingCount: number = 0;
   addKpiTotalTemplateCount: number = 0;
+
+  // === Multi-select filters (เหมือนตัวกรองหน้า dashboard) ===
+  addKpiSelDistricts: string[] = [];   // distid ที่เลือก (ว่าง = ทั้งหมด)
+  addKpiSelHosTypes: string[] = [];    // hostypecode ที่เลือก
+  addKpiSelHospcodes: string[] = [];   // หน่วยบริการปลายทาง (multi-target)
+  addKpiSelDepts: string[] = [];       // dept id ที่เลือก (filter ตัวชี้วัด)
+  addKpiOpenDropdown: string = '';     // dropdown ที่เปิดอยู่ใน modal
 
   isEditing: boolean = false;
   showAddModal: boolean = false;
   newKpiList: any[] = [];
   // Add KPI: filter หมวดหมู่หลัก + selection
   addKpiMainList: string[] = [];
-  addKpiSelectedMain: string = '';                 // (legacy — เก็บไว้กัน reference เก่า)
   addKpiSelectedMains = new Set<string>();          // multi-filter หมวดหมู่ (ว่าง = ทั้งหมด)
   addKpiSelectedIds = new Set<number>();
-  // Multi-target: apply ตัวชี้วัดให้หลายหน่วยบริการพร้อมกัน
-  addKpiApplyHospcodes = new Set<string>();         // หน่วยบริการเพิ่มเติม (นอกเหนือจากตัวหลัก)
-  showMultiTarget: boolean = false;                 // toggle แสดง section เลือกหลายหน่วยบริการ
 
   // Review mode — เลือกรายการตรวจสอบ
   isReviewMode: boolean = false;
@@ -1797,12 +1796,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.addKpiSelectedYear = this.addKpiYears[0];
     }
     if (this.isAdmin || this.isLocalAdmin) {
-      this.addKpiSelectedDistrict = '';
-      this.addKpiSelectedHospcode = '';
-      this.addKpiSelectedDept = '';
+      this.addKpiSelDistricts = [];
+      this.addKpiSelHosTypes = [];
+      this.addKpiSelHospcodes = [];
+      this.addKpiSelDepts = [];
+      this.addKpiOpenDropdown = '';
       this.loadAddKpiDistrictsAndHospitals();
     } else {
-      this.addKpiSelectedHospcode = this.currentUser?.hospcode || '';
+      // user ทั่วไป — target คือ hospcode ตัวเอง
+      this.addKpiSelHospcodes = this.currentUser?.hospcode ? [this.currentUser.hospcode] : [];
       this.loadAddKpiList();
     }
   }
@@ -1826,15 +1828,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
                   const myHos = this.addKpiHospitalList.find((h: any) => h.hoscode === this.currentUser.hospcode);
                   if (this.isAdminCup && myHos?.distid) {
                     // admin_cup: ล็อคอำเภอ เลือก hospcode ในอำเภอได้
-                    this.addKpiSelectedDistrict = myHos.distid;
+                    this.addKpiSelDistricts = [myHos.distid];
                     this.addKpiDistrictList = this.addKpiDistrictList.filter((d: any) => d.distid === myHos.distid);
                     this.addKpiFilteredHospitals = this.addKpiHospitalList.filter((h: any) => h.distid === myHos.distid);
                   } else {
                     // admin_hos / admin_sso: ล็อค hospcode ตัวเอง
-                    this.addKpiSelectedHospcode = this.currentUser.hospcode;
+                    this.addKpiSelHospcodes = [this.currentUser.hospcode];
                     this.addKpiFilteredHospitals = this.addKpiHospitalList.filter((h: any) => h.hoscode === this.currentUser.hospcode);
                     if (myHos?.distid) {
-                      this.addKpiSelectedDistrict = myHos.distid;
+                      this.addKpiSelDistricts = [myHos.distid];
                       this.addKpiDistrictList = this.addKpiDistrictList.filter((d: any) => d.distid === myHos.distid);
                     }
                   }
@@ -1845,8 +1847,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
                 setTimeout(() => {
                   this.showAddModal = true;
                   this.newKpiList = [];
-                  // Admin ที่มี hospcode ถูกเลือกแล้ว (auto-select) → โหลดรายการทันที
-                  if (this.addKpiSelectedHospcode || (this.isAdmin || this.isLocalAdmin)) {
+                  if (this.isAdmin || this.isLocalAdmin) {
                     this.loadAddKpiList();
                   }
                   this.cdr.detectChanges();
@@ -1862,35 +1863,116 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  onAddKpiDistrictChange() {
-    this.rebuildAddKpiHospitals();
-    this.addKpiSelectedHospcode = '';
-    this.addKpiApplyHospcodes.clear();
-    this.newKpiList = [];
+  // === Modal dropdown helpers (multi-select เหมือนหน้า dashboard) ===
+  toggleAddKpiDropdown(name: string) {
+    this.addKpiOpenDropdown = this.addKpiOpenDropdown === name ? '' : name;
+  }
+  // toggle 1 รายการใน array
+  toggleAddKpiFilter(arr: string[], value: string) {
+    const i = arr.indexOf(value);
+    if (i >= 0) arr.splice(i, 1); else arr.push(value);
+  }
+  isAddKpiFilterSel(arr: string[], value: string): boolean {
+    return arr.includes(value);
+  }
+  clearAddKpiArr(arr: string[]) { arr.splice(0, arr.length); }
+
+  // label สำหรับปุ่ม dropdown
+  addKpiFilterLabel(arr: string[], placeholder: string): string {
+    if (arr.length === 0) return placeholder;
+    if (arr.length === 1) return arr[0];
+    return `เลือก ${arr.length} รายการ`;
+  }
+  // หน่วยบริการ: map hoscode → hosname
+  addKpiHospLabel(): string {
+    if (this.addKpiSelHospcodes.length === 0) return 'หน่วยบริการ: เลือก';
+    if (this.addKpiSelHospcodes.length === 1) {
+      const h = this.addKpiHospitalList.find((x: any) => x.hoscode === this.addKpiSelHospcodes[0]);
+      return h?.hosname || this.addKpiSelHospcodes[0];
+    }
+    return `หน่วยบริการ: ${this.addKpiSelHospcodes.length} แห่ง`;
+  }
+  // ประเภท: map code → name
+  addKpiHosTypeLabel(): string {
+    if (this.addKpiSelHosTypes.length === 0) return 'ประเภท: ทั้งหมด';
+    if (this.addKpiSelHosTypes.length === 1) {
+      const ht = (this.hosTypeList || []).find((x: any) => x.hostypecode === this.addKpiSelHosTypes[0]);
+      return ht?.hostypename || this.addKpiSelHosTypes[0];
+    }
+    return `ประเภท: ${this.addKpiSelHosTypes.length} รายการ`;
+  }
+  // อำเภอ: map distid → distname
+  addKpiDistrictLabel(): string {
+    if (this.addKpiSelDistricts.length === 0) return 'อำเภอ: ทั้งหมด';
+    if (this.addKpiSelDistricts.length === 1) {
+      const d = this.addKpiDistrictList.find((x: any) => x.distid === this.addKpiSelDistricts[0]);
+      return d?.distname || this.addKpiSelDistricts[0];
+    }
+    return `อำเภอ: ${this.addKpiSelDistricts.length} อำเภอ`;
+  }
+  // หน่วยงาน: map id → dept_name
+  addKpiDeptLabel(): string {
+    if (this.addKpiSelDepts.length === 0) return 'หน่วยงาน: ทั้งหมด';
+    if (this.addKpiSelDepts.length === 1) {
+      const d = this.addKpiDeptList.find((x: any) => String(x.id) === this.addKpiSelDepts[0]);
+      return d?.dept_name || this.addKpiSelDepts[0];
+    }
+    return `หน่วยงาน: ${this.addKpiSelDepts.length} หน่วยงาน`;
   }
 
+  // เลือกทั้งหมด — หน่วยบริการ
+  toggleAllAddKpiHospcodes() {
+    const cands = this.addKpiFilteredHospitals || [];
+    const allSel = cands.length > 0 && cands.every((h: any) => this.addKpiSelHospcodes.includes(h.hoscode));
+    if (allSel) this.addKpiSelHospcodes = [];
+    else this.addKpiSelHospcodes = cands.map((h: any) => h.hoscode);
+    this.loadAddKpiList();
+  }
+  isAllAddKpiHospcodes(): boolean {
+    const cands = this.addKpiFilteredHospitals || [];
+    return cands.length > 0 && cands.every((h: any) => this.addKpiSelHospcodes.includes(h.hoscode));
+  }
+  // เลือกทั้งหมด — หน่วยงาน
+  toggleAllAddKpiDepts() {
+    const allSel = this.addKpiDeptList.length > 0 && this.addKpiDeptList.every((d: any) => this.addKpiSelDepts.includes(String(d.id)));
+    if (allSel) this.addKpiSelDepts = [];
+    else this.addKpiSelDepts = this.addKpiDeptList.map((d: any) => String(d.id));
+    this.loadAddKpiList();
+  }
+  isAllAddKpiDepts(): boolean {
+    return this.addKpiDeptList.length > 0 && this.addKpiDeptList.every((d: any) => this.addKpiSelDepts.includes(String(d.id)));
+  }
+
+  // === Cascade handlers ===
+  onAddKpiDistrictChange() {
+    this.rebuildAddKpiHospitals();
+    this.loadAddKpiList();
+  }
   onAddKpiHosTypeChange() {
     this.rebuildAddKpiHospitals();
-    this.addKpiSelectedHospcode = '';
-    this.addKpiApplyHospcodes.clear();
-    this.newKpiList = [];
+    this.loadAddKpiList();
+  }
+  onAddKpiHospitalChange() {
+    this.loadAddKpiList();
+  }
+  onAddKpiDeptChange() {
+    this.loadAddKpiList();
   }
 
   private rebuildAddKpiHospitals() {
     let filtered = this.addKpiHospitalList;
-    if (this.addKpiSelectedDistrict) filtered = filtered.filter((h: any) => h.distid === this.addKpiSelectedDistrict);
-    if (this.addKpiSelectedHosType) filtered = filtered.filter((h: any) => h.hostype === this.addKpiSelectedHosType);
+    if (this.addKpiSelDistricts.length) filtered = filtered.filter((h: any) => this.addKpiSelDistricts.includes(h.distid));
+    if (this.addKpiSelHosTypes.length) filtered = filtered.filter((h: any) => this.addKpiSelHosTypes.includes(h.hostype));
     this.addKpiFilteredHospitals = filtered;
+    // เอา target ที่ไม่อยู่ใน filtered ออก (กันค้าง)
+    this.addKpiSelHospcodes = this.addKpiSelHospcodes.filter(hc => filtered.some((h: any) => h.hoscode === hc));
   }
 
-  onAddKpiHospitalChange() {
-    // ตัวหลักเปลี่ยน → เอาออกจาก apply list (กันซ้ำ)
-    if (this.addKpiSelectedHospcode) this.addKpiApplyHospcodes.delete(this.addKpiSelectedHospcode);
-    if (this.addKpiSelectedHospcode || (this.isAdmin || this.isLocalAdmin)) {
-      this.loadAddKpiList();
-    } else {
-      this.newKpiList = [];
-    }
+  // หน่วยบริการปลายทางทั้งหมด — admin = ที่เลือก, user = ของตัวเอง
+  get addKpiTargetHospcodes(): string[] {
+    if (this.isAdmin || this.isLocalAdmin) return [...this.addKpiSelHospcodes];
+    const hc = this.currentUser?.hospcode || '';
+    return hc ? [hc] : [];
   }
 
   calculateAddKpiYears() {
@@ -1907,10 +1989,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   loadAddKpiList() {
-    // Admin: ใช้ hospcode ที่เลือก (อาจยังไม่เลือก = ''), User: ใช้ hospcode ตัวเอง
-    const targetHospcode = (this.isAdmin || this.isLocalAdmin)
-      ? (this.addKpiSelectedHospcode || '')
-      : (this.addKpiSelectedHospcode || this.currentUser?.hospcode || '');
+    const targets = this.addKpiTargetHospcodes;
+    // hospcode อ้างอิงสำหรับเช็ค "มีอยู่แล้ว" — ใช้ได้เมื่อเลือกหน่วยบริการเดียว
+    const singleTarget = targets.length === 1 ? targets[0] : '';
     Swal.fire({
       title: 'กำลังโหลดข้อมูล...',
       allowOutsideClick: false,
@@ -1919,40 +2000,42 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.authService.getKpiTemplate().subscribe({
       next: (res) => {
         if (res.success) {
-          // สร้าง existingIds จาก kpiData
-          // สำหรับ user ปกติ: kpiData ถูก filter ด้วย hospcode จาก server แล้ว ใช้แค่ปีงบ
-          // สำหรับ admin: ต้อง filter ด้วย hospcode + ปีงบ
+          // existingIds — เช็คเฉพาะกรณีเลือกหน่วยบริการเดียว (หลายหน่วย backend skip ให้เอง)
           const existingIds = new Set(
             this.kpiData
               .filter(k => {
                 const yearMatch = String(k.year_bh) === String(this.addKpiSelectedYear);
-                if ((this.isAdmin || this.isLocalAdmin) && targetHospcode) {
-                  return yearMatch && k.hospcode === targetHospcode;
+                if ((this.isAdmin || this.isLocalAdmin)) {
+                  return singleTarget ? (yearMatch && k.hospcode === singleTarget) : false;
                 }
                 return yearMatch; // Non-admin: server already filters by hospcode
               })
               .map(k => Number(k.indicator_id))
           );
 
-          // กรองตัวชี้วัดตามหน่วยงาน
+          // กรองตัวชี้วัดตามหน่วยงาน (multi-select)
           let allForDept = res.data;
-          if ((this.isAdmin || this.isLocalAdmin) && this.addKpiSelectedDept) {
-            // admin ที่เลือก dept → กรองตาม dept ที่เลือก
-            allForDept = allForDept.filter((item: any) => String(item.dept_id) === String(this.addKpiSelectedDept));
-          } else if (!this.isAdmin && !this.isLocalAdmin && this.currentUser?.dept_name) {
+          if (this.isAdmin || this.isLocalAdmin) {
+            if (this.addKpiSelDepts.length > 0) {
+              allForDept = allForDept.filter((item: any) => this.addKpiSelDepts.includes(String(item.dept_id)));
+            }
+          } else if (this.currentUser?.dept_name) {
             // user ทั่วไป → กรองตาม dept ตัวเอง
             allForDept = allForDept.filter((item: any) => item.dept_name === this.currentUser.dept_name);
           }
 
           // คำนวณจำนวนทั้งหมด vs มีอยู่แล้ว vs ยังไม่มี
           this.addKpiTotalTemplateCount = allForDept.length;
-          const available = allForDept.filter((item: any) => !existingIds.has(Number(item.indicator_id)));
+          // ถ้าเลือกหน่วยบริการเดียว → ตัดที่มีอยู่แล้วออก / หลายหน่วย → แสดงทั้งหมด
+          const available = (singleTarget || (!this.isAdmin && !this.isLocalAdmin))
+            ? allForDept.filter((item: any) => !existingIds.has(Number(item.indicator_id)))
+            : allForDept;
           this.addKpiExistingCount = this.addKpiTotalTemplateCount - available.length;
 
           this.newKpiList = available.map((item: any) => ({
             ...item,
             year_bh: this.addKpiSelectedYear,
-            hospcode: targetHospcode,
+            hospcode: singleTarget,
             target_value: item.target_percentage != null ? String(item.target_percentage) : '',
             oct: '', nov: '', dece: '', jan: '', feb: '', mar: '',
             apr: '', may: '', jun: '', jul: '', aug: '', sep: '',
@@ -1963,7 +2046,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
           // สร้างรายการหมวดหมู่หลักสำหรับ filter + default เลือกทุกรายการ
           this.addKpiMainList = Array.from(new Set<string>(this.newKpiList.map((i: any) => i.main_indicator_name).filter(Boolean))).sort();
           this.addKpiSelectedIds = new Set(this.newKpiList.map((i: any) => Number(i.indicator_id)));
-          this.addKpiSelectedMain = '';
           this.addKpiSelectedMains.clear();   // ว่าง = แสดงทุกหมวดหมู่
           Swal.close();
           if (!this.showAddModal) {
@@ -1987,9 +2069,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   closeAddModal() {
     this.showAddModal = false;
-    this.addKpiApplyHospcodes.clear();
+    this.addKpiOpenDropdown = '';
     this.addKpiSelectedMains.clear();
-    this.showMultiTarget = false;
     this.cdr.detectChanges();
   }
 
@@ -2012,40 +2093,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
   isAllMainFilters(): boolean {
     return this.addKpiSelectedMains.size === 0;
-  }
-
-  // === Multi-target หน่วยบริการ ===
-  toggleApplyHospcode(hoscode: string) {
-    if (!hoscode) return;
-    if (this.addKpiApplyHospcodes.has(hoscode)) this.addKpiApplyHospcodes.delete(hoscode);
-    else this.addKpiApplyHospcodes.add(hoscode);
-  }
-  isApplyHospcodeSelected(hoscode: string): boolean {
-    return this.addKpiApplyHospcodes.has(hoscode);
-  }
-  // หน่วยบริการที่เลือกได้เพิ่ม (ไม่รวมตัวหลักที่เลือกใน dropdown)
-  get addKpiApplyCandidates(): any[] {
-    return (this.addKpiFilteredHospitals || []).filter((h: any) => h.hoscode !== this.addKpiSelectedHospcode);
-  }
-  toggleAllApplyHospcodes() {
-    const cands = this.addKpiApplyCandidates;
-    const allSel = cands.length > 0 && cands.every((h: any) => this.addKpiApplyHospcodes.has(h.hoscode));
-    if (allSel) cands.forEach((h: any) => this.addKpiApplyHospcodes.delete(h.hoscode));
-    else cands.forEach((h: any) => this.addKpiApplyHospcodes.add(h.hoscode));
-  }
-  isAllApplyHospcodes(): boolean {
-    const cands = this.addKpiApplyCandidates;
-    return cands.length > 0 && cands.every((h: any) => this.addKpiApplyHospcodes.has(h.hoscode));
-  }
-  // รวมรายชื่อหน่วยบริการปลายทางทั้งหมด (ตัวหลัก + เพิ่มเติม) — unique
-  get addKpiTargetHospcodes(): string[] {
-    const primary = (this.isAdmin || this.isLocalAdmin)
-      ? this.addKpiSelectedHospcode
-      : (this.addKpiSelectedHospcode || this.currentUser?.hospcode || '');
-    const set = new Set<string>();
-    if (primary) set.add(primary);
-    this.addKpiApplyHospcodes.forEach(h => set.add(h));
-    return Array.from(set);
   }
 
   isAddKpiSelected(item: any): boolean {
@@ -2153,7 +2200,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
           Swal.fire('สำเร็จ', msg, 'success');
         }
         this.showAddModal = false;
-        this.addKpiApplyHospcodes.clear();
         this.loadKpiData();
         this.loadDashboardStats();
         return;

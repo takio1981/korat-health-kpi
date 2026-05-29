@@ -21,7 +21,8 @@ export class ChangelogComponent {
       version: '2569.05.29',
       date: '29 พฤษภาคม 2569',
       changes: [
-        { type: 'feature', text: 'Modal เพิ่มตัวชี้วัด: เพิ่มความยืดหยุ่น — กรองหมวดหมู่แบบ chip หลายหมวด/เลือกทั้งหมด + เพิ่มตัวชี้วัดให้หลายหน่วยบริการพร้อมกัน (checkbox + เลือกทั้งหมด) ในครั้งเดียว (ตัวที่มีอยู่แล้วในแต่ละหน่วยบริการถูกข้ามอัตโนมัติ)' },
+        { type: 'improve', text: 'Modal เพิ่มตัวชี้วัด: แปลง dropdown ทั้ง 4 (อำเภอ/ประเภท/หน่วยบริการ/หน่วยงาน) เป็น multi-select checkbox + "เลือกทั้งหมด" แบบเดียวกับตัวกรองหน้า dashboard — เลือกหน่วยบริการปลายทางหลายแห่ง + กรองหลายหน่วยงานพร้อมกัน บันทึกครั้งเดียวไปทุกหน่วย (ข้ามตัวที่มีอยู่แล้วอัตโนมัติ)' },
+        { type: 'feature', text: 'Modal เพิ่มตัวชี้วัด: เพิ่มความยืดหยุ่น — กรองหมวดหมู่แบบ chip หลายหมวด/เลือกทั้งหมด + เพิ่มตัวชี้วัดให้หลายหน่วยบริการพร้อมกันในครั้งเดียว' },
         { type: 'feature', text: 'จัดการสิทธิ์การแก้ไขราย user: super_admin กดปุ่ม "สิทธิ์" ในหน้าจัดการผู้ใช้งาน → กำหนดได้ว่าผู้ใช้แต่ละคนแก้ผลงาน (actual) / เป้าหมาย (target) ได้หรือไม่ — modal พร้อม preset (ผลงานอย่างเดียว / เป้าหมาย+ผลงาน / ดูอย่างเดียว)' },
         { type: 'feature', text: 'Backend enforcement per-user: คอลัมน์ can_edit_actual/can_edit_target ใน users + cache 60s + PUT /users/:id/permissions + GET /my-permissions — /update-kpi preserve ค่าเดิมจาก DB ถ้าผู้ใช้ไม่มีสิทธิ์แก้ field นั้น (super_admin ข้ามเสมอ)' },
         { type: 'fix', text: 'แก้ Illegal mix of collations error — เปลี่ยนจากตาราง role_permissions (JOIN กับ users คนละ collation) เป็นคอลัมน์ใน users โดยตรง ไม่ต้อง JOIN ข้ามตาราง' },
