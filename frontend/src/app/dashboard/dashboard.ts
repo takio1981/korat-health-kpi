@@ -149,8 +149,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   newKpiList: any[] = [];
   // Add KPI: filter หมวดหมู่หลัก + selection
   addKpiMainList: string[] = [];
-  addKpiSelectedMain: string = '';
+  addKpiSelectedMain: string = '';                 // (legacy — เก็บไว้กัน reference เก่า)
+  addKpiSelectedMains = new Set<string>();          // multi-filter หมวดหมู่ (ว่าง = ทั้งหมด)
   addKpiSelectedIds = new Set<number>();
+  // Multi-target: apply ตัวชี้วัดให้หลายหน่วยบริการพร้อมกัน
+  addKpiApplyHospcodes = new Set<string>();         // หน่วยบริการเพิ่มเติม (นอกเหนือจากตัวหลัก)
+  showMultiTarget: boolean = false;                 // toggle แสดง section เลือกหลายหน่วยบริการ
 
   // Review mode — เลือกรายการตรวจสอบ
   isReviewMode: boolean = false;
@@ -1861,12 +1865,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
   onAddKpiDistrictChange() {
     this.rebuildAddKpiHospitals();
     this.addKpiSelectedHospcode = '';
+    this.addKpiApplyHospcodes.clear();
     this.newKpiList = [];
   }
 
   onAddKpiHosTypeChange() {
     this.rebuildAddKpiHospitals();
     this.addKpiSelectedHospcode = '';
+    this.addKpiApplyHospcodes.clear();
     this.newKpiList = [];
   }
 
@@ -1878,6 +1884,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   onAddKpiHospitalChange() {
+    // ตัวหลักเปลี่ยน → เอาออกจาก apply list (กันซ้ำ)
+    if (this.addKpiSelectedHospcode) this.addKpiApplyHospcodes.delete(this.addKpiSelectedHospcode);
     if (this.addKpiSelectedHospcode || (this.isAdmin || this.isLocalAdmin)) {
       this.loadAddKpiList();
     } else {
@@ -1956,6 +1964,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           this.addKpiMainList = Array.from(new Set<string>(this.newKpiList.map((i: any) => i.main_indicator_name).filter(Boolean))).sort();
           this.addKpiSelectedIds = new Set(this.newKpiList.map((i: any) => Number(i.indicator_id)));
           this.addKpiSelectedMain = '';
+          this.addKpiSelectedMains.clear();   // ว่าง = แสดงทุกหมวดหมู่
           Swal.close();
           if (!this.showAddModal) {
             setTimeout(() => {
@@ -1978,13 +1987,65 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   closeAddModal() {
     this.showAddModal = false;
+    this.addKpiApplyHospcodes.clear();
+    this.addKpiSelectedMains.clear();
+    this.showMultiTarget = false;
     this.cdr.detectChanges();
   }
 
   // === Add-KPI filter + selection helpers ===
   get filteredNewKpiList(): any[] {
-    if (!this.addKpiSelectedMain) return this.newKpiList;
-    return this.newKpiList.filter((i: any) => i.main_indicator_name === this.addKpiSelectedMain);
+    if (this.addKpiSelectedMains.size === 0) return this.newKpiList;
+    return this.newKpiList.filter((i: any) => this.addKpiSelectedMains.has(i.main_indicator_name));
+  }
+
+  // === Category multi-filter (checkbox/chip) ===
+  toggleMainFilter(main: string) {
+    if (this.addKpiSelectedMains.has(main)) this.addKpiSelectedMains.delete(main);
+    else this.addKpiSelectedMains.add(main);
+  }
+  isMainFilterActive(main: string): boolean {
+    return this.addKpiSelectedMains.has(main);
+  }
+  selectAllMainFilters() {
+    this.addKpiSelectedMains.clear(); // ว่าง = ทั้งหมด
+  }
+  isAllMainFilters(): boolean {
+    return this.addKpiSelectedMains.size === 0;
+  }
+
+  // === Multi-target หน่วยบริการ ===
+  toggleApplyHospcode(hoscode: string) {
+    if (!hoscode) return;
+    if (this.addKpiApplyHospcodes.has(hoscode)) this.addKpiApplyHospcodes.delete(hoscode);
+    else this.addKpiApplyHospcodes.add(hoscode);
+  }
+  isApplyHospcodeSelected(hoscode: string): boolean {
+    return this.addKpiApplyHospcodes.has(hoscode);
+  }
+  // หน่วยบริการที่เลือกได้เพิ่ม (ไม่รวมตัวหลักที่เลือกใน dropdown)
+  get addKpiApplyCandidates(): any[] {
+    return (this.addKpiFilteredHospitals || []).filter((h: any) => h.hoscode !== this.addKpiSelectedHospcode);
+  }
+  toggleAllApplyHospcodes() {
+    const cands = this.addKpiApplyCandidates;
+    const allSel = cands.length > 0 && cands.every((h: any) => this.addKpiApplyHospcodes.has(h.hoscode));
+    if (allSel) cands.forEach((h: any) => this.addKpiApplyHospcodes.delete(h.hoscode));
+    else cands.forEach((h: any) => this.addKpiApplyHospcodes.add(h.hoscode));
+  }
+  isAllApplyHospcodes(): boolean {
+    const cands = this.addKpiApplyCandidates;
+    return cands.length > 0 && cands.every((h: any) => this.addKpiApplyHospcodes.has(h.hoscode));
+  }
+  // รวมรายชื่อหน่วยบริการปลายทางทั้งหมด (ตัวหลัก + เพิ่มเติม) — unique
+  get addKpiTargetHospcodes(): string[] {
+    const primary = (this.isAdmin || this.isLocalAdmin)
+      ? this.addKpiSelectedHospcode
+      : (this.addKpiSelectedHospcode || this.currentUser?.hospcode || '');
+    const set = new Set<string>();
+    if (primary) set.add(primary);
+    this.addKpiApplyHospcodes.forEach(h => set.add(h));
+    return Array.from(set);
   }
 
   isAddKpiSelected(item: any): boolean {
@@ -2009,11 +2070,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   saveNewKpis() {
-    const targetHospcode = (this.isAdmin || this.isLocalAdmin)
-      ? this.addKpiSelectedHospcode
-      : (this.addKpiSelectedHospcode || this.currentUser?.hospcode || '');
-    if (!targetHospcode) {
-      Swal.fire('แจ้งเตือน', 'กรุณาเลือกหน่วยบริการก่อนบันทึก', 'warning');
+    const targets = this.addKpiTargetHospcodes;
+    if (targets.length === 0) {
+      Swal.fire('แจ้งเตือน', 'กรุณาเลือกหน่วยบริการอย่างน้อย 1 แห่งก่อนบันทึก', 'warning');
       return;
     }
     // กรองเฉพาะที่ติ๊ก
@@ -2030,12 +2089,23 @@ export class DashboardComponent implements OnInit, OnDestroy {
       return months.some(m => { const v = String(item[m] ?? '').trim(); return v && v !== '0'; });
     });
 
+    // ชื่อหน่วยบริการปลายทาง (สำหรับแสดงใน confirm)
+    const targetNames = targets.map(hc => {
+      const h = (this.addKpiHospitalList || []).find((x: any) => x.hoscode === hc);
+      return h?.hosname || hc;
+    });
+    const targetListHtml = targets.length <= 8
+      ? targetNames.map(n => `• ${n}`).join('<br>')
+      : `${targetNames.slice(0, 8).map(n => `• ${n}`).join('<br>')}<br>... และอีก ${targets.length - 8} แห่ง`;
+
     Swal.fire({
       title: 'ยืนยันการบันทึก',
       html: `<div class="text-left text-sm">
         <p class="text-gray-600">บันทึกตัวชี้วัดที่เลือก <b>${selected.length}</b> รายการ (มีข้อมูล <b>${itemsWithData.length}</b> รายการ)</p>
-        <p class="text-gray-500 text-xs mt-2">ปีงบประมาณ: <b>${this.addKpiSelectedYear}</b></p>
-        <p class="mt-2 text-gray-600">ต้องการบันทึกใช่หรือไม่?</p>
+        <p class="text-gray-500 text-xs mt-1">ปีงบประมาณ: <b>${this.addKpiSelectedYear}</b></p>
+        <p class="text-gray-600 mt-2 font-semibold">หน่วยบริการปลายทาง: ${targets.length} แห่ง</p>
+        <div class="text-xs text-gray-500 mt-1 max-h-32 overflow-auto bg-gray-50 rounded p-2">${targetListHtml}</div>
+        <p class="text-[11px] text-gray-400 mt-2">* ตัวชี้วัดที่มีอยู่แล้วในแต่ละหน่วยบริการจะถูกข้ามอัตโนมัติ</p>
       </div>`,
       icon: 'question',
       showCancelButton: true,
@@ -2044,23 +2114,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
       cancelButtonText: 'ยกเลิก'
     }).then((result) => {
       if (result.isConfirmed) {
-        // เก็บต้นฉบับไว้แล้วแทนที่ด้วย selected เพื่อให้ executeAddKpiSave ทำงานกับที่เลือก
-        const original = this.newKpiList;
-        this.newKpiList = selected;
-        this.executeAddKpiSave(targetHospcode);
-        this.newKpiList = original;
+        this.executeAddKpiSaveMulti(targets, selected);
       }
     });
   }
 
-  private executeAddKpiSave(hospcode: string) {
+  private executeAddKpiSaveMulti(targets: string[], selected: any[]) {
     Swal.fire({
       title: 'กำลังบันทึกข้อมูล...',
+      html: `<div class="text-sm text-gray-600">บันทึกไปยัง <b>${targets.length}</b> หน่วยบริการ</div>`,
       allowOutsideClick: false,
       didOpen: () => Swal.showLoading()
     });
 
-    const dataToSave = this.newKpiList.map((item: any) => ({
+    const dataToSave = selected.map((item: any) => ({
         indicator_id: item.indicator_id,
         year_bh: this.addKpiSelectedYear,
         target_value: String(item.target_value ?? '').trim(),
@@ -2070,21 +2137,44 @@ export class DashboardComponent implements OnInit, OnDestroy {
         jul: String(item.jul ?? '').trim(), aug: String(item.aug ?? '').trim(), sep: String(item.sep ?? '').trim()
       }));
 
-    this.authService.updateKpiResults(dataToSave, hospcode, 'setup_insert_new').subscribe({
-      next: (res) => {
-        let message = `เพิ่มตัวชี้วัดเรียบร้อยแล้ว ${dataToSave.length} รายการ`;
-        if (res.inserted !== undefined) {
-          message = `เพิ่มตัวชี้วัดใหม่ ${res.inserted} รายการ` + (res.skipped ? ` (ข้าม ${res.skipped} รายการที่มีอยู่แล้ว)` : '');
+    // บันทึกทีละหน่วยบริการแบบ sequential (กัน DB pool/lock ตึง)
+    let totalInserted = 0, totalSkipped = 0, failCount = 0;
+    const errors: string[] = [];
+    const saveOne = (idx: number) => {
+      if (idx >= targets.length) {
+        // เสร็จทั้งหมด
+        const okCount = targets.length - failCount;
+        let msg = `เพิ่มตัวชี้วัดสำเร็จ ${okCount}/${targets.length} หน่วยบริการ`;
+        if (totalInserted) msg += ` — เพิ่มใหม่รวม ${totalInserted} รายการ`;
+        if (totalSkipped) msg += ` (ข้ามที่มีอยู่แล้ว ${totalSkipped})`;
+        if (failCount > 0) {
+          Swal.fire('เสร็จสิ้น (มีบางส่วนผิดพลาด)', msg + `<br><span class="text-red-600 text-xs">ล้มเหลว ${failCount} แห่ง: ${errors.slice(0,3).join(', ')}</span>`, 'warning');
+        } else {
+          Swal.fire('สำเร็จ', msg, 'success');
         }
-        Swal.fire('สำเร็จ', res.message || message, 'success');
         this.showAddModal = false;
+        this.addKpiApplyHospcodes.clear();
         this.loadKpiData();
         this.loadDashboardStats();
-      },
-      error: (err) => {
-        Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถบันทึกข้อมูลได้', 'error');
+        return;
       }
-    });
+      const hc = targets[idx];
+      this.authService.updateKpiResults(dataToSave, hc, 'setup_insert_new').subscribe({
+        next: (res) => {
+          if (res.inserted !== undefined) totalInserted += Number(res.inserted) || 0;
+          if (res.skipped !== undefined) totalSkipped += Number(res.skipped) || 0;
+          saveOne(idx + 1);
+        },
+        error: (err) => {
+          failCount++;
+          const hName = (this.addKpiHospitalList || []).find((x: any) => x.hoscode === hc)?.hosname || hc;
+          errors.push(hName);
+          console.error(`[AddKPI] save to ${hc} failed:`, err.error?.message || err.message);
+          saveOne(idx + 1);
+        }
+      });
+    };
+    saveOne(0);
   }
 
   // === Add KPI Modal: ตรวจสอบการแก้ไข / Undo / Reset ===
