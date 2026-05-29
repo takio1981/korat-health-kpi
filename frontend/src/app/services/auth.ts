@@ -1179,12 +1179,10 @@ export class AuthService {
     return this.http.get(`${this.apiUrl}/backup/monitor`, { headers: this.bkHeaders() });
   }
 
-  // ===== Role Permissions =====
-  getRolePermissions(): Observable<any> {
-    return this.http.get(`${this.apiUrl}/role-permissions`, { headers: this.bkHeaders() });
-  }
-  updateRolePermissions(permissions: any[]): Observable<any> {
-    return this.http.put(`${this.apiUrl}/role-permissions`, { permissions }, { headers: this.bkHeaders() });
+  // ===== User Permissions (per-user) =====
+  updateUserPermissions(userId: number, canEditActual: boolean, canEditTarget: boolean): Observable<any> {
+    return this.http.put(`${this.apiUrl}/users/${userId}/permissions`,
+      { can_edit_actual: canEditActual, can_edit_target: canEditTarget }, { headers: this.bkHeaders() });
   }
   getMyPermissions(): Observable<any> {
     return this.http.get(`${this.apiUrl}/my-permissions`, { headers: this.bkHeaders() });

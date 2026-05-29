@@ -44,6 +44,12 @@ export class UserManagementComponent implements OnInit {
   isEditMode: boolean = false;
   currentUser: any = { id: null, username: '', password: '', role: 'user', dept_id: '', firstname: '', lastname: '', hospcode: '', phone: '', email: '', cid: '' };
 
+  // === จัดการสิทธิ์ราย user ===
+  showPermModal: boolean = false;
+  permUser: any = null;
+  permForm: any = { can_edit_actual: true, can_edit_target: true };
+  permSaving: boolean = false;
+
   selectedStatus: string = '';
   pendingCount: number = 0;
   maintenanceMode: boolean = false;
@@ -766,6 +772,47 @@ export class UserManagementComponent implements OnInit {
     this.showSyncModal = false;
     this.syncResult = null;
     this.syncSelected.clear();
+  }
+
+  // === จัดการสิทธิ์ราย user ===
+  openPermModal(user: any) {
+    this.permUser = user;
+    this.permForm = {
+      // default = true ถ้า column ยังไม่มีค่า (1/null/undefined)
+      can_edit_actual: user.can_edit_actual === undefined || user.can_edit_actual === null ? true : (user.can_edit_actual == 1),
+      can_edit_target: user.can_edit_target === undefined || user.can_edit_target === null ? true : (user.can_edit_target == 1)
+    };
+    this.showPermModal = true;
+  }
+
+  closePermModal() {
+    this.showPermModal = false;
+    this.permUser = null;
+  }
+
+  permPresetActualOnly() { this.permForm.can_edit_actual = true; this.permForm.can_edit_target = false; }
+  permPresetBoth() { this.permForm.can_edit_actual = true; this.permForm.can_edit_target = true; }
+  permPresetReadonly() { this.permForm.can_edit_actual = false; this.permForm.can_edit_target = false; }
+
+  savePermissions() {
+    if (!this.permUser) return;
+    this.permSaving = true;
+    this.authService.updateUserPermissions(this.permUser.id, this.permForm.can_edit_actual, this.permForm.can_edit_target).subscribe({
+      next: (res) => {
+        this.permSaving = false;
+        if (res.success) {
+          // อัปเดตค่าใน list ทันที
+          this.permUser.can_edit_actual = this.permForm.can_edit_actual ? 1 : 0;
+          this.permUser.can_edit_target = this.permForm.can_edit_target ? 1 : 0;
+          Swal.fire({ icon: 'success', title: 'บันทึกสิทธิ์สำเร็จ', text: 'มีผลทันที (ผู้ใช้ refresh หน้าจะเห็นผล)', timer: 2000, showConfirmButton: false });
+          this.showPermModal = false;
+        }
+      },
+      error: (err) => {
+        this.permSaving = false;
+        Swal.fire('ผิดพลาด', err.error?.message || 'บันทึกไม่สำเร็จ', 'error');
+      }
+    });
   }
 
   toggleSyncFilter(filter: string) {

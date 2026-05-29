@@ -18,7 +18,6 @@ import { AnnouncementsComponent } from './announcements/announcements';
 import { OnlineUsersComponent } from './online-users/online-users';
 import { BackupManagerComponent } from './backup-manager/backup-manager';
 import { KpiAuditDigestComponent } from './kpi-audit-digest/kpi-audit-digest';
-import { RolePermissionsComponent } from './role-permissions/role-permissions';
 import { authGuard } from './guards/auth-guard';
 import { adminGuard } from './guards/admin-guard';
 import { anyAdminGuard } from './guards/any-admin-guard';
@@ -47,7 +46,6 @@ export const routes: Routes = [
       { path: 'online-users', component: OnlineUsersComponent, canActivate: [superAdminGuard], data: { title: 'ผู้ใช้งานออนไลน์' } },
       { path: 'backup-manager', component: BackupManagerComponent, canActivate: [superAdminGuard], data: { title: 'สำรอง & กู้คืนฐานข้อมูล' } },
       { path: 'kpi-audit-digest', component: KpiAuditDigestComponent, canActivate: [superAdminGuard], data: { title: 'แจ้งเตือนการบันทึก KPI' } },
-      { path: 'role-permissions', component: RolePermissionsComponent, canActivate: [superAdminGuard], data: { title: 'จัดการสิทธิ์ตามบทบาท' } },
       { path: 'feedback', component: FeedbackComponent, data: { title: 'กระดานข้อเสนอแนะ' } },
       { path: 'changelog', component: ChangelogComponent, data: { title: 'ประวัติการอัปเดต' } },
       { path: 'help', component: HelpComponent, data: { title: 'คู่มือการใช้งาน' } },

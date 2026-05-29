@@ -287,38 +287,35 @@ const getDistrictId = async (hospcode) => {
     return rows.length > 0 ? rows[0].distid : null;
 };
 
-// === Role Permissions cache (TTL 60s) ===
-let _rolePermCache = null;
-let _rolePermExpiry = 0;
-async function getRolePermissions() {
+// === User Permissions cache (userId → perms, TTL 60s) ===
+const _userPermCache = new Map();
+const USER_PERM_TTL = 60 * 1000;
+// สิทธิ์ของ user — super_admin เต็มเสมอ
+async function getPermsForUser(userId, role) {
+    if (role === 'super_admin') return { can_edit_actual: true, can_edit_target: true };
     const now = Date.now();
-    if (_rolePermCache && _rolePermExpiry > now) return _rolePermCache;
+    const cached = _userPermCache.get(userId);
+    if (cached && cached.expiry > now) return cached.perms;
     try {
-        const [rows] = await db.query('SELECT role, can_edit_actual, can_edit_target, can_delete, label FROM role_permissions');
-        const map = {};
-        for (const r of rows) {
-            map[r.role] = {
-                can_edit_actual: !!r.can_edit_actual,
-                can_edit_target: !!r.can_edit_target,
-                can_delete: !!r.can_delete,
-                label: r.label || r.role
-            };
-        }
-        _rolePermCache = map;
-        _rolePermExpiry = now + 60 * 1000;
-        return map;
+        const [rows] = await db.query('SELECT can_edit_actual, can_edit_target FROM users WHERE id = ?', [userId]);
+        const r = rows[0] || {};
+        const perms = {
+            // ถ้า column ยังไม่มี/null → default ให้สิทธิ์เต็ม
+            can_edit_actual: r.can_edit_actual === undefined || r.can_edit_actual === null ? true : !!r.can_edit_actual,
+            can_edit_target: r.can_edit_target === undefined || r.can_edit_target === null ? true : !!r.can_edit_target
+        };
+        _userPermCache.set(userId, { perms, expiry: now + USER_PERM_TTL });
+        return perms;
     } catch (e) {
-        // fallback: ให้สิทธิ์เต็มกัน lock ทั้งระบบถ้า table ยังไม่พร้อม
-        return {};
+        return { can_edit_actual: true, can_edit_target: true }; // fallback กัน lock
     }
 }
-// สิทธิ์ของ role เดียว — super_admin เต็มเสมอ
-async function getPermsForRole(role) {
-    if (role === 'super_admin') return { can_edit_actual: true, can_edit_target: true, can_delete: true, label: 'ผู้ดูแลระบบสูงสุด' };
-    const map = await getRolePermissions();
-    return map[role] || { can_edit_actual: true, can_edit_target: true, can_delete: false, label: role };
-}
-const invalidateRolePermCache = () => { _rolePermExpiry = 0; _rolePermCache = null; };
+const invalidateUserPermCache = (userId) => { if (userId) _userPermCache.delete(Number(userId)); };
+// cleanup cache เป็นระยะ
+setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of _userPermCache.entries()) if (v.expiry < now) _userPermCache.delete(k);
+}, 5 * 60 * 1000);
 
 // Middleware ตรวจสอบสิทธิ์ Admin ส่วนกลาง (admin_ssj + super_admin)
 const isAdmin = (req, res, next) => {
@@ -1452,10 +1449,10 @@ apiRouter.post('/update-kpi', async (req, res) => {
             }
         }
 
-        // === Role Permission Enforcement (super_admin ข้าม) ===
-        // ถ้า role แก้เป้าหมาย/ผลงานไม่ได้ → preserve ค่าเดิมจาก DB (ไม่ให้ค่าที่ส่งมา override)
+        // === Permission Enforcement (super_admin ข้าม) ===
+        // ถ้า user แก้เป้าหมาย/ผลงานไม่ได้ → preserve ค่าเดิมจาก DB (ไม่ให้ค่าที่ส่งมา override)
         if (user.role !== 'super_admin') {
-            const perms = await getPermsForRole(user.role);
+            const perms = await getPermsForUser(user.userId, user.role);
             if (!perms.can_edit_target || !perms.can_edit_actual) {
                 // โหลดค่าเดิมจาก DB ทำ preserveMap: key → { target, months: {monthVal: actual} }
                 const preserveMap = {};
@@ -2496,6 +2493,7 @@ apiRouter.get('/users', authenticateToken, isAnyAdmin, async (req, res) => {
             SELECT u.id, u.username, u.role, u.dept_id, u.firstname, u.lastname, u.phone, u.hospcode,
                    u.email, u.cid, u.is_approved, u.is_active, u.approved_by,
                    u.active_session_id, u.session_started_at, u.last_seen_at, u.last_seen_ip,
+                   u.can_edit_actual, u.can_edit_target,
                    d.dept_name, h.hosname, dist.distname,
                    approver.firstname AS approved_by_name, approver.lastname AS approved_by_lastname
             FROM users u
@@ -3880,45 +3878,29 @@ apiRouter.get('/data-entry-lock', authenticateToken, async (req, res) => {
     }
 });
 
-// ========== Role Permissions ==========
-// GET /role-permissions — super_admin ดูสิทธิ์ทุก role
-apiRouter.get('/role-permissions', authenticateToken, isSuperAdmin, async (req, res) => {
+// ========== User Permissions (per-user) ==========
+// PUT /users/:id/permissions — super_admin ตั้งสิทธิ์ราย user
+apiRouter.put('/users/:id/permissions', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
-        const [rows] = await db.query(`
-            SELECT rp.role, rp.can_edit_actual, rp.can_edit_target, rp.can_delete, rp.label, rp.updated_at,
-                   (SELECT COUNT(*) FROM users u WHERE u.role = rp.role) AS user_count
-            FROM role_permissions rp
-            ORDER BY FIELD(rp.role, 'super_admin','admin_ssj','admin_cup','admin_hos','admin_sso','user_cup','user_hos','user_sso','user_ssj'), rp.role
-        `);
-        res.json({ success: true, data: rows });
-    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
-});
-
-// PUT /role-permissions — bulk update (array ของ { role, can_edit_actual, can_edit_target, can_delete })
-apiRouter.put('/role-permissions', authenticateToken, isSuperAdmin, async (req, res) => {
-    try {
-        const items = Array.isArray(req.body?.permissions) ? req.body.permissions : [];
-        if (items.length === 0) return res.status(400).json({ success: false, message: 'ไม่มีข้อมูลสิทธิ์' });
-        for (const it of items) {
-            if (!it.role) continue;
-            // super_admin บังคับสิทธิ์เต็มเสมอ ห้ามแก้
-            if (it.role === 'super_admin') continue;
-            await db.query(
-                `UPDATE role_permissions SET can_edit_actual=?, can_edit_target=?, can_delete=?, updated_by=? WHERE role=?`,
-                [it.can_edit_actual ? 1 : 0, it.can_edit_target ? 1 : 0, it.can_delete ? 1 : 0, req.user.userId, it.role]
-            );
-        }
-        invalidateRolePermCache();
-        try { await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?,?,?,?,?)',
-            [req.user.userId, 'UPDATE', 'role_permissions', JSON.stringify({ count: items.length }), req.ip]); } catch (_) {}
-        res.json({ success: true, message: 'บันทึกสิทธิ์สำเร็จ' });
+        const id = Number(req.params.id);
+        const { can_edit_actual, can_edit_target } = req.body || {};
+        // ห้ามแก้สิทธิ์ super_admin (สิทธิ์เต็มเสมอ)
+        const [u] = await db.query('SELECT role FROM users WHERE id = ?', [id]);
+        if (u.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้' });
+        if (u[0].role === 'super_admin') return res.status(400).json({ success: false, message: 'ไม่สามารถแก้สิทธิ์ super_admin ได้ (มีสิทธิ์เต็มเสมอ)' });
+        await db.query('UPDATE users SET can_edit_actual = ?, can_edit_target = ? WHERE id = ?',
+            [can_edit_actual ? 1 : 0, can_edit_target ? 1 : 0, id]);
+        invalidateUserPermCache(id);
+        try { await db.query('INSERT INTO system_logs (user_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?,?,?,?,?,?)',
+            [req.user.userId, 'UPDATE', 'users', id, JSON.stringify({ can_edit_actual: !!can_edit_actual, can_edit_target: !!can_edit_target }), req.ip]); } catch (_) {}
+        res.json({ success: true, message: 'บันทึกสิทธิ์ผู้ใช้สำเร็จ' });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
 // GET /my-permissions — สิทธิ์ของ user ปัจจุบัน (frontend ใช้ควบคุม UI)
 apiRouter.get('/my-permissions', authenticateToken, async (req, res) => {
     try {
-        const perms = await getPermsForRole(req.user.role);
+        const perms = await getPermsForUser(req.user.userId, req.user.role);
         res.json({ success: true, role: req.user.role, permissions: perms });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
@@ -6188,34 +6170,10 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)',
             ['target_edit_locked', 'false', 'ล็อคการแก้ไขเป้าหมาย (เฉพาะ admin_ssj และ super_admin)']);
 
-        // ========== Role Permissions (super_admin กำหนดสิทธิ์ per-role) ==========
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS role_permissions (
-                role VARCHAR(30) PRIMARY KEY,
-                can_edit_actual TINYINT(1) DEFAULT 1,
-                can_edit_target TINYINT(1) DEFAULT 1,
-                can_delete TINYINT(1) DEFAULT 0,
-                label VARCHAR(100) NULL,
-                updated_by INT NULL,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-        `);
-        // Seed 9 roles ตาม default behavior เดิม (super_admin = ทุกสิทธิ์)
-        const rolePermDefaults = [
-            ['super_admin', 1, 1, 1, 'ผู้ดูแลระบบสูงสุด'],
-            ['admin_ssj',   1, 1, 0, 'Admin ส่วนกลาง (สสจ.)'],
-            ['admin_cup',   1, 1, 0, 'Admin อำเภอ (CUP)'],
-            ['admin_hos',   1, 1, 0, 'Admin โรงพยาบาล'],
-            ['admin_sso',   1, 1, 0, 'Admin สสอ.'],
-            ['user_cup',    1, 1, 0, 'ผู้ใช้ระดับอำเภอ'],
-            ['user_hos',    1, 1, 0, 'ผู้ใช้ระดับโรงพยาบาล'],
-            ['user_sso',    1, 1, 0, 'ผู้ใช้ระดับ สสอ.'],
-            ['user_ssj',    1, 1, 0, 'ผู้ใช้ระดับ สสจ.']
-        ];
-        for (const [role, actual, target, del, label] of rolePermDefaults) {
-            await db.query('INSERT IGNORE INTO role_permissions (role, can_edit_actual, can_edit_target, can_delete, label) VALUES (?,?,?,?,?)',
-                [role, actual, target, del, label]);
-        }
+        // ========== User Permissions (super_admin กำหนดสิทธิ์ราย user) ==========
+        // เพิ่มคอลัมน์สิทธิ์ในตาราง users (default = แก้ได้ทั้งคู่)
+        try { await db.query('ALTER TABLE users ADD COLUMN can_edit_actual TINYINT(1) DEFAULT 1'); } catch (e) {}
+        try { await db.query('ALTER TABLE users ADD COLUMN can_edit_target TINYINT(1) DEFAULT 1'); } catch (e) {}
 
         // เพิ่ม appeal settings defaults
         const appealDefaults = [
