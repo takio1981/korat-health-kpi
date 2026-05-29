@@ -21,6 +21,11 @@ export class ChangelogComponent {
       version: '2569.05.29',
       date: '29 พฤษภาคม 2569',
       changes: [
+        { type: 'feature', text: 'เมนูจัดการผู้ใช้งาน: เพิ่ม badge ตัวเลขสีแดงแสดงจำนวน user ที่ลงทะเบียนใหม่และรออนุมัติ (ตาม scope ของ admin) — อัพเดททันทีหลัง approve/reject' },
+        { type: 'improve', text: 'Dashboard: ปิดปุ่ม "โหลดข้อมูลทั้งหมด" — ป้องกันการโหลดข้อมูลทั้งระบบพร้อมกันที่ทำให้ช้า/หน่วง ผู้ใช้ต้องเลือกตัวกรองแล้วกด "ค้นหา" เสมอ' },
+        { type: 'improve', text: 'Modal เพิ่มตัวชี้วัด: ตัวกรองหมวดหมู่หลักเปลี่ยนเป็น dropdown multi-select checkbox + "เลือกทั้งหมด" ให้เหมือนตัวกรองอื่น' },
+        { type: 'fix', text: 'Restore ค้าง/502 Bad Gateway บน production — backend crash เพราะ stdin EPIPE ไม่มีตัวจับ (mysql จบก่อน) + progressMonitor regex บล็อก event loop: จับ stdin error + นับ bytes อย่างเดียว + เพิ่ม process safety net (unhandledRejection/uncaughtException) กัน backend ล่มจาก background job' },
+        { type: 'fix', text: 'Restore สิทธิ์ database — เพิ่ม script database/grant-restore-privileges.sql (GRANT ALL PRIVILEGES บน khups_kpi_db% แก้ ERROR 1044/1142 ตอน CREATE/ALTER database ใหม่)' },
         { type: 'improve', text: 'Modal เพิ่มตัวชี้วัด: แปลง dropdown ทั้ง 4 (อำเภอ/ประเภท/หน่วยบริการ/หน่วยงาน) เป็น multi-select checkbox + "เลือกทั้งหมด" แบบเดียวกับตัวกรองหน้า dashboard — เลือกหน่วยบริการปลายทางหลายแห่ง + กรองหลายหน่วยงานพร้อมกัน บันทึกครั้งเดียวไปทุกหน่วย (ข้ามตัวที่มีอยู่แล้วอัตโนมัติ)' },
         { type: 'feature', text: 'Modal เพิ่มตัวชี้วัด: เพิ่มความยืดหยุ่น — กรองหมวดหมู่แบบ chip หลายหมวด/เลือกทั้งหมด + เพิ่มตัวชี้วัดให้หลายหน่วยบริการพร้อมกันในครั้งเดียว' },
         { type: 'feature', text: 'จัดการสิทธิ์การแก้ไขราย user: super_admin กดปุ่ม "สิทธิ์" ในหน้าจัดการผู้ใช้งาน → กำหนดได้ว่าผู้ใช้แต่ละคนแก้ผลงาน (actual) / เป้าหมาย (target) ได้หรือไม่ — modal พร้อม preset (ผลงานอย่างเดียว / เป้าหมาย+ผลงาน / ดูอย่างเดียว)' },
