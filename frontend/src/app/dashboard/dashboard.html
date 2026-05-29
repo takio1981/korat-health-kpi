@@ -572,10 +572,10 @@
                       {{ month.name }}
                       <i *ngIf="item.is_locked" class="fas fa-lock text-amber-500 text-[9px]" title="ล็อค — แก้ไขไม่ได้"></i>
                     </div>
-                    <input *ngIf="!item.is_locked" type="text" [(ngModel)]="item[month.key]" (ngModelChange)="onValueChange(item, month.key)"
+                    <input *ngIf="!item.is_locked && canEditActual" type="text" [(ngModel)]="item[month.key]" (ngModelChange)="onValueChange(item, month.key)"
                            class="w-full border border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:border-green-500 hover:border-green-400 transition-colors"
                            [ngClass]="isModified(item, month.key) ? 'bg-orange-200 font-bold text-red-600 ring-2 ring-orange-400' : 'bg-white'">
-                    <span *ngIf="item.is_locked" class="block font-bold text-gray-600">{{ (item[month.key] && item[month.key] !== '0') ? item[month.key] : '-' }}</span>
+                    <span *ngIf="item.is_locked || !canEditActual" class="block font-bold text-gray-600">{{ (item[month.key] && item[month.key] !== '0') ? item[month.key] : '-' }}</span>
                   </div>
                 </div>
 
@@ -632,8 +632,8 @@
                             class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
                       <i class="fas fa-pen-square mr-1"></i> แก้ไขข้อนี้
                     </button>
-                    <!-- ปุ่มแก้ไขเป้าหมายรายข้อ (Mobile - ทุกสิทธิ์ เมื่อไม่ล็อค) -->
-                    <button *ngIf="!targetEditLocked && !isEditing && !isSingleEditing(item) && !isEditingTarget(item) && !item.is_locked"
+                    <!-- ปุ่มแก้ไขเป้าหมายรายข้อ (Mobile - ตามสิทธิ์ role เมื่อไม่ล็อค) -->
+                    <button *ngIf="canEditTarget && !isEditing && !isSingleEditing(item) && !isEditingTarget(item) && !item.is_locked"
                             (click)="startEditTarget(item)"
                             class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
                       <i class="fas fa-bullseye mr-1"></i> แก้ไขเป้าหมาย
@@ -858,8 +858,8 @@
                               title="ยกเลิกการแก้ไข">
                         <i class="fas fa-times text-xs"></i>
                       </button>
-                      <!-- ปุ่มแก้ไขเป้าหมายรายข้อ (ทุกสิทธิ์ เมื่อไม่ล็อค) -->
-                      <button *ngIf="!targetEditLocked && !isEditing && !isSingleEditing(item) && !isEditingTarget(item) && !item.is_locked"
+                      <!-- ปุ่มแก้ไขเป้าหมายรายข้อ (ตามสิทธิ์ role เมื่อไม่ล็อค) -->
+                      <button *ngIf="canEditTarget && !isEditing && !isSingleEditing(item) && !isEditingTarget(item) && !item.is_locked"
                               (click)="startEditTarget(item)"
                               class="text-orange-500 hover:text-orange-700 p-0.5 transition-colors"
                               title="แก้ไขเป้าหมาย">
@@ -991,11 +991,11 @@
                 <td *ngFor="let m of ['oct','nov','dece','jan','feb','mar','apr','may','jun','jul','aug','sep']"
                     class="px-1 py-2 text-center border-x group whitespace-nowrap month-col relative"
                     [ngClass]="hasFormData(item, m) ? 'bg-purple-50/60 text-gray-900 font-bold' : (item[m] && item[m] !== '0') ? 'bg-green-100/40 text-gray-900 font-bold' : 'text-gray-300'">
-                  <span *ngIf="(!isEditing && !isSingleEditing(item)) || item.is_locked">
+                  <span *ngIf="(!isEditing && !isSingleEditing(item)) || item.is_locked || !canEditActual">
                     {{ (item[m] && item[m] !== '0') ? item[m] : '-' }}
                     <i *ngIf="hasFormData(item, m)" class="fas fa-clipboard-check text-purple-400 text-[8px] ml-0.5" title="ข้อมูลจากแบบฟอร์ม"></i>
                   </span>
-                  <input *ngIf="(isEditing || isSingleEditing(item)) && !item.is_locked" type="text" [(ngModel)]="item[m]" (ngModelChange)="onValueChange(item, m)"
+                  <input *ngIf="(isEditing || isSingleEditing(item)) && !item.is_locked && canEditActual" type="text" [(ngModel)]="item[m]" (ngModelChange)="onValueChange(item, m)"
                          class="w-full border border-green-200 rounded px-1 py-1 text-center text-xs focus:ring-1 focus:ring-green-500 outline-none hover:border-green-400 transition-all bg-white/80 group-hover:bg-white"
                          [ngClass]="isModified(item, m) ? '!bg-orange-200 !text-red-600 ring-2 ring-orange-400 font-bold' : ''">
                 </td>

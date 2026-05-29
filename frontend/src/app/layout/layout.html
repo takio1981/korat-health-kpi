@@ -51,6 +51,7 @@
         <a *ngIf="isSuperAdmin" routerLink="/announcements" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-bullhorn mr-3 min-w-[20px]"></i>ประกาศระบบ</a>
         <a *ngIf="isSuperAdmin" routerLink="/backup-manager" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-database mr-3 min-w-[20px]"></i>สำรอง & กู้คืนข้อมูล</a>
         <a *ngIf="isSuperAdmin" routerLink="/kpi-audit-digest" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-bullhorn mr-3 min-w-[20px]"></i>แจ้งเตือนการบันทึก KPI</a>
+        <a *ngIf="isSuperAdmin" routerLink="/role-permissions" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-user-shield mr-3 min-w-[20px]"></i>จัดการสิทธิ์ตามบทบาท</a>
         <a *ngIf="isSuperAdmin" routerLink="/settings" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-sliders-h mr-3 min-w-[20px]"></i>ตั้งค่าระบบ</a>
       </nav>
     </div>
@@ -134,6 +135,10 @@
         <a *ngIf="isSuperAdmin" routerLink="/kpi-audit-digest" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-bullhorn text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate flex justify-between items-center w-full">แจ้งเตือนการบันทึก KPI</span>
+        </a>
+        <a *ngIf="isSuperAdmin" routerLink="/role-permissions" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-colors cursor-pointer">
+          <i class="fas fa-user-shield text-lg mr-3 min-w-[24px]"></i>
+          <span class="truncate flex justify-between items-center w-full">จัดการสิทธิ์ตามบทบาท</span>
         </a>
         <a *ngIf="isSuperAdmin" routerLink="/settings" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-sliders-h text-lg mr-3 min-w-[24px]"></i>

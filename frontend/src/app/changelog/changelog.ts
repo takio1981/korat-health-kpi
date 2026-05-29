@@ -18,6 +18,15 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.05.29',
+      date: '29 พฤษภาคม 2569',
+      changes: [
+        { type: 'feature', text: 'จัดการสิทธิ์ตามบทบาท (Role Permissions): super_admin กำหนดได้ว่าแต่ละ role แก้ไขอะไรได้บ้าง — แก้ผลงาน (actual) / แก้เป้าหมาย (target) / ลบข้อมูล — หน้าใหม่ /role-permissions พร้อม toggle + preset (ผลงานอย่างเดียว / เป้าหมาย+ผลงาน / ดูอย่างเดียว)' },
+        { type: 'feature', text: 'Backend enforcement: ตาราง role_permissions + cache 60s + endpoints GET/PUT /role-permissions + GET /my-permissions — /update-kpi preserve ค่าเดิมจาก DB ถ้า role ไม่มีสิทธิ์แก้ field นั้น (super_admin ข้ามเสมอ)' },
+        { type: 'improve', text: 'Dashboard: input เป้าหมาย/ผลงานรายเดือน disable ตามสิทธิ์ role (canEditTarget/canEditActual) — ถ้าไม่มีสิทธิ์แสดงเป็นค่า readonly + ซ่อนปุ่มแก้ไขเป้าหมาย' },
+      ]
+    },
+    {
       version: '2569.05.25',
       date: '25 พฤษภาคม 2569',
       changes: [

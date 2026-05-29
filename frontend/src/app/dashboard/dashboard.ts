@@ -229,6 +229,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   dataEntryLock: any = { is_locked: false, lock_reason: '' };
   targetEditLocked: boolean = false;
 
+  // Role Permissions (จาก /my-permissions) — default ให้สิทธิ์เต็มกัน lock พลาด
+  myPerms: any = { can_edit_actual: true, can_edit_target: true, can_delete: false };
+
   // Target Edit Requests
   targetEditRequests: any[] = [];
 
@@ -306,6 +309,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
     this.loadAppealSettings();
     this.loadDataEntryLock();
+    this.loadMyPermissions();
     this.loadSubIndicatorCounts();
     this.loadSubResultSummary();
     if (this.isAdmin || this.isLocalAdmin) this.loadTargetEditRequests();
@@ -322,15 +326,34 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  loadMyPermissions() {
+    this.authService.getMyPermissions().subscribe({
+      next: (res) => {
+        if (res.success && res.permissions) {
+          this.myPerms = res.permissions;
+          this.cdr.detectChanges();
+        }
+      },
+      error: () => { /* fallback: คงสิทธิ์เต็ม */ }
+    });
+  }
+
   // admin ทุกระดับไม่ถูกล็อค, user ถูกล็อคเมื่อเปิดล็อค
   get isEntryLocked(): boolean {
     if (this.isAdmin || this.isLocalAdmin) return false;
     return this.dataEntryLock.is_locked;
   }
 
-  // ทุกสิทธิ์แก้ไขเป้าหมายได้เมื่อไม่ล็อค; เมื่อล็อคต้องผ่านขั้นตอนขออนุมัติ
+  // แก้ไขเป้าหมายได้เมื่อ: role มีสิทธิ์ (can_edit_target) + ไม่ถูก global lock
   get canEditTarget(): boolean {
-    return !this.targetEditLocked;
+    if (this.isSuperAdmin) return true;
+    return this.myPerms.can_edit_target !== false && !this.targetEditLocked;
+  }
+
+  // แก้ไขผลงาน (actual) ได้ตามสิทธิ์ role
+  get canEditActual(): boolean {
+    if (this.isSuperAdmin) return true;
+    return this.myPerms.can_edit_actual !== false;
   }
 
   // admin_cup / admin_ssj / super_admin เห็นปุ่มขอแก้ไขเป้าหมายเมื่อล็อค

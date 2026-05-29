@@ -1179,6 +1179,17 @@ export class AuthService {
     return this.http.get(`${this.apiUrl}/backup/monitor`, { headers: this.bkHeaders() });
   }
 
+  // ===== Role Permissions =====
+  getRolePermissions(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/role-permissions`, { headers: this.bkHeaders() });
+  }
+  updateRolePermissions(permissions: any[]): Observable<any> {
+    return this.http.put(`${this.apiUrl}/role-permissions`, { permissions }, { headers: this.bkHeaders() });
+  }
+  getMyPermissions(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/my-permissions`, { headers: this.bkHeaders() });
+  }
+
   // ===== KPI Save Audit + Digest =====
   getKpiAuditSettings(): Observable<any> {
     return this.http.get(`${this.apiUrl}/kpi-audit/settings`, { headers: this.bkHeaders() });
