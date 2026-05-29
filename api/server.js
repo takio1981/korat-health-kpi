@@ -9166,38 +9166,22 @@ async function runRestoreJob(restoreJobId, f, conn, mode, dbTarget, auto_backup_
             throw e;
         }
 
-        // === Restore: ส่ง SQL ผ่าน Transform stream เพื่อนับ bytes + จับชื่อตาราง ===
+        // === Restore: ส่ง SQL ผ่าน Transform stream — นับ bytes อย่างเดียว (เบา ไม่บล็อก event loop) ===
+        // ไม่ทำ chunk.toString()/regex ใน hot path (เคยทำให้ Node ค้าง → nginx 502 ตอน restore ไฟล์ใหญ่)
+        // จำนวนตาราง (tables_count) จะมาจากขั้น verification ตอนจบแทน
         await db.query("UPDATE restore_jobs SET phase = 'restoring' WHERE id = ?", [restoreJobId]);
         let bytesRead = 0;
         let lastUpdate = 0;
-        let currentTable = null;
-        let leftover = '';
-        const tableSet = new Set(); // dedup ชื่อตาราง (mysqldump เขียน "-- Table structure" + "CREATE TABLE" สำหรับตารางเดียวกัน)
-        // จับเฉพาะ CREATE TABLE statement หลัก (ไม่จับ comment) — แม่นกว่า
-        const tableRegex = /^\s*CREATE TABLE\s+(?:IF NOT EXISTS\s+)?[`"]?([a-zA-Z0-9_]+)[`"]?/gm;
 
-        // Transform: monitor SQL stream
+        // นับ compressed bytes (วางก่อน gunzip) → ตรงกับ total_bytes = ขนาดไฟล์ → % แม่นยำ
         const progressMonitor = new Transform({
             transform(chunk, enc, cb) {
                 bytesRead += chunk.length;
-                const text = leftover + chunk.toString('utf8');
-                let m;
-                while ((m = tableRegex.exec(text)) !== null) {
-                    if (!tableSet.has(m[1])) {
-                        tableSet.add(m[1]);
-                        currentTable = m[1];
-                    }
-                }
-                tableRegex.lastIndex = 0;
-                // เก็บ tail ไว้กันคำถูกตัดกลาง chunk
-                leftover = text.length > 500 ? text.slice(-500) : text;
                 const now = Date.now();
-                if (now - lastUpdate > 1000) {
+                if (now - lastUpdate > 1500) {
                     lastUpdate = now;
-                    db.query(
-                        'UPDATE restore_jobs SET progress_bytes = ?, tables_count = ?, current_table = ? WHERE id = ?',
-                        [bytesRead, tableSet.size, currentTable, restoreJobId]
-                    ).catch(() => {});
+                    // fire-and-forget — ไม่ await กัน backpressure
+                    db.query('UPDATE restore_jobs SET progress_bytes = ? WHERE id = ?', [bytesRead, restoreJobId]).catch(() => {});
                 }
                 this.push(chunk);
                 cb();
@@ -9215,7 +9199,8 @@ async function runRestoreJob(restoreJobId, f, conn, mode, dbTarget, auto_backup_
             const fileStream = fs.createReadStream(f.file_path);
             if (f.compressed) {
                 const gunzip = zlib.createGunzip();
-                fileStream.pipe(gunzip).pipe(progressMonitor).pipe(mysqlProc.stdin);
+                // นับ bytes จากไฟล์ (compressed) ก่อน → gunzip → mysql
+                fileStream.pipe(progressMonitor).pipe(gunzip).pipe(mysqlProc.stdin);
                 gunzip.on('error', doneP);
             } else {
                 fileStream.pipe(progressMonitor).pipe(mysqlProc.stdin);
@@ -9235,7 +9220,6 @@ async function runRestoreJob(restoreJobId, f, conn, mode, dbTarget, auto_backup_
         });
 
         const duration = Date.now() - startedAt;
-        const restoredTableCount = tableSet.size;
 
         // === Verification: query target DB จริงเพื่อยืนยันว่ามีตารางอะไรบ้าง + นับ row จริง ===
         await db.query("UPDATE restore_jobs SET phase = 'verifying' WHERE id = ?", [restoreJobId]);
@@ -9281,14 +9265,14 @@ async function runRestoreJob(restoreJobId, f, conn, mode, dbTarget, auto_backup_
 
         const verifiedCount = targetTables.filter(t => t.type === 'BASE TABLE').length;
         await db.query(
-            `UPDATE restore_jobs SET status='success', finished_at=NOW(), duration_ms=?, progress_bytes=?, tables_count=?, current_table=?, phase='done', log_path=? WHERE id=?`,
-            [duration, bytesRead, verifiedCount || restoredTableCount, currentTable, logPath, restoreJobId]
+            `UPDATE restore_jobs SET status='success', finished_at=NOW(), duration_ms=?, progress_bytes=?, tables_count=?, current_table=NULL, phase='done', log_path=? WHERE id=?`,
+            [duration, bytesRead, verifiedCount, logPath, restoreJobId]
         );
         try { await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?,?,?,?,?)',
             [userId, 'BACKUP_RESTORE', 'backup_files',
              JSON.stringify({ file_id: f.id, file_name: f.file_name, mode, target_db: dbTarget, pre_backup_file_id: preBackupFileId, tables: verifiedCount, duration_ms: duration }),
              reqIp]); } catch (_) {}
-        console.log(`[Restore] job ${restoreJobId} success — parsed:${restoredTableCount} verified:${verifiedCount} tables, ${duration}ms`);
+        console.log(`[Restore] job ${restoreJobId} success — verified:${verifiedCount} tables, ${duration}ms`);
     } catch (e) {
         const duration = Date.now() - startedAt;
         try { await db.query(`UPDATE restore_jobs SET status='failed', finished_at=NOW(), duration_ms=?, error_msg=? WHERE id=?`,
