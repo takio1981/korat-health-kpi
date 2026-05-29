@@ -86,6 +86,8 @@ export class UserManagementComponent implements OnInit {
         if (res.success) {
           this.users = res.data;
           this.pendingCount = this.users.filter(u => u.is_approved === 0).length;
+          // sync badge เมนู sidebar ให้ตรงกับสถานะล่าสุด (หลัง approve/reject/delete)
+          this.authService.setPendingUsers(this.pendingCount);
           this.applyFilters();
           this.cdr.detectChanges();
         }

@@ -2547,6 +2547,35 @@ apiRouter.get('/users', authenticateToken, isAnyAdmin, async (req, res) => {
     }
 });
 
+// GET /users/pending-count — จำนวน user ที่ลงทะเบียนใหม่และรออนุมัติ (is_approved = 0) ตาม scope ของ admin
+apiRouter.get('/users/pending-count', authenticateToken, isAnyAdmin, async (req, res) => {
+    const user = req.user;
+    try {
+        let where = "u.is_approved = 0 AND u.role != 'super_admin'";
+        const params = [];
+        if (user.role === 'super_admin') {
+            // เห็นทั้งหมด
+        } else if (user.role === 'admin_ssj') {
+            if (user.deptId != null) { where += ' AND u.dept_id = ?'; params.push(user.deptId); }
+        } else if (user.role === 'admin_cup') {
+            const distid = await getDistrictId(user.hospcode);
+            if (distid) { where += ' AND h.distid = ?'; params.push(distid); }
+            else { where += ' AND u.hospcode = ?'; params.push(user.hospcode); }
+        } else if (ROLE_SCOPE_HOSPCODE.includes(user.role) && ROLE_ADMIN_ALL.includes(user.role)) {
+            where += ' AND u.hospcode = ?'; params.push(user.hospcode);
+        } else {
+            where += ' AND u.dept_id = ?'; params.push(user.deptId);
+        }
+        const [rows] = await db.query(
+            `SELECT COUNT(*) AS cnt FROM users u LEFT JOIN chospital h ON u.hospcode = h.hoscode WHERE ${where}`,
+            params
+        );
+        res.json({ success: true, count: rows[0].cnt });
+    } catch (error) {
+        res.status(500).json({ success: false, count: 0 });
+    }
+});
+
 // GET /online-users — รายชื่อ user ที่ online (activity ล่าสุดภายใน windowMin นาที)
 apiRouter.get('/online-users', authenticateToken, isSuperAdmin, async (req, res) => {
     try {

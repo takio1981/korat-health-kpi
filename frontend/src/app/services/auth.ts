@@ -20,6 +20,10 @@ export class AuthService {
   private _pendingStats$ = new BehaviorSubject<any>({ deptCount: 0, hosCount: 0, indicatorCount: 0 });
   pendingStats$ = this._pendingStats$.asObservable();
 
+  // Shared realtime — จำนวน user รออนุมัติ (badge เมนูจัดการผู้ใช้งาน)
+  private _pendingUsers$ = new BehaviorSubject<number>(0);
+  pendingUsers$ = this._pendingUsers$.asObservable();
+
   // Focus mode — เมื่อผู้ใช้อยู่ในโหมดที่ต้องการพื้นที่เต็ม (edit/delete KPI)
   // Layout จะปิด sidebar ซ่อนจนกว่าจะออกจากโหมด
   private _focusMode$ = new BehaviorSubject<boolean>(false);
@@ -739,6 +743,19 @@ export class AuthService {
       }
     });
   }
+
+  /** จำนวน user รออนุมัติ (badge เมนูจัดการผู้ใช้งาน) */
+  getPendingUsersCount(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/users/pending-count`, { headers });
+  }
+  refreshPendingUsers() {
+    this.getPendingUsersCount().subscribe({
+      next: (res: any) => { if (res.success) this._pendingUsers$.next(res.count || 0); }
+    });
+  }
+  setPendingUsers(n: number) { this._pendingUsers$.next(n); }
 
   getRejectionComments(indicatorId: number, yearBh: string, hospcode: string): Observable<any> {
     const token = localStorage.getItem('kpi_token');

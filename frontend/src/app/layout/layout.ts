@@ -38,6 +38,7 @@ export class LayoutComponent implements OnInit {
   systemVersion: string = 'v1.0.0';
   pendingKpiCount: number = 0;
   pendingStats: any = { deptCount: 0, hosCount: 0, indicatorCount: 0 };
+  pendingUsersCount: number = 0;   // user รออนุมัติ (badge เมนูจัดการผู้ใช้งาน)
 
   maintenanceMode: boolean = false;
   maintenanceMessage: string = '';
@@ -83,6 +84,12 @@ export class LayoutComponent implements OnInit {
     this.authService.pendingStats$.subscribe(stats => {
       this.pendingStats = stats;
       this.pendingKpiCount = stats.indicatorCount || 0;
+      this.cdr.detectChanges();
+    });
+
+    // Subscribe จำนวน user รออนุมัติ → badge เมนูจัดการผู้ใช้งาน
+    this.authService.pendingUsers$.subscribe(count => {
+      this.pendingUsersCount = count;
       this.cdr.detectChanges();
     });
 
@@ -158,6 +165,10 @@ export class LayoutComponent implements OnInit {
   loadPendingCount() {
     if (this.isAdmin) {
       this.authService.refreshPendingStats();
+    }
+    // ทุก admin (รวม admin_cup/hos/sso) เห็น badge user รออนุมัติตาม scope
+    if (this.isAnyAdmin) {
+      this.authService.refreshPendingUsers();
     }
   }
 
