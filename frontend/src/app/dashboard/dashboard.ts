@@ -688,7 +688,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           <ul class="list-disc ml-4 text-xs text-blue-700 space-y-1">
             <li>เปลี่ยน <b>ปีงบประมาณ</b> (อาจยังไม่มีข้อมูลในปีที่เลือก)</li>
             <li>ลองเลือก <b>อำเภอ</b> หรือ <b>ประเภท รพ.</b> ที่ต่างออกไป</li>
-            <li>ล้างตัวกรอง แล้วกด <b>"โหลดข้อมูลทั้งหมด"</b></li>
+            <li>ปรับ <b>ตัวกรอง</b> ให้แคบลง แล้วกด <b>"ค้นหา"</b></li>
           </ul>
         </div>
         ${adminTip}
@@ -935,15 +935,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (!hasFilter) {
       Swal.fire({
         title: 'กรุณาเลือกตัวกรอง',
-        html: `<p class="text-sm text-gray-600">เลือกอย่างน้อย 1 เงื่อนไข เช่น อำเภอ, ประเภท รพ., หน่วยงาน หรือตัวชี้วัด<br>เพื่อจำกัดขอบเขตข้อมูล</p>`,
+        html: `<p class="text-sm text-gray-600">เลือกอย่างน้อย 1 เงื่อนไข เช่น อำเภอ, ประเภท รพ., หน่วยงาน หรือตัวชี้วัด<br>เพื่อจำกัดขอบเขตข้อมูลก่อนค้นหา</p>`,
         icon: 'info',
-        showCancelButton: true,
-        confirmButtonText: '<i class="fas fa-download mr-1"></i> โหลดข้อมูลทั้งหมด',
-        cancelButtonText: 'เลือกตัวกรอง',
+        confirmButtonText: 'ตกลง',
         confirmButtonColor: '#6366f1',
-        cancelButtonColor: '#9ca3af',
-      }).then((r) => {
-        if (r.isConfirmed) this.loadAllData();
       });
       return;
     }
