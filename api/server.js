@@ -27,6 +27,16 @@ if (process.env.NODE_ENV !== 'production') {
     }
 })();
 
+// === Safety net: กัน backend ตายทั้ง process จาก error ใน background job (restore/backup/scheduler) ===
+// ทำให้ระบบยังตอบ request อื่นได้ (ไม่ 502) แม้ background task พัง
+process.on('unhandledRejection', (reason) => {
+    console.error('[unhandledRejection]', reason instanceof Error ? reason.stack : reason);
+});
+process.on('uncaughtException', (err) => {
+    // log แล้วไม่ exit — กัน 1 error ใน child process/stream ทำให้ทั้ง backend ล่ม
+    console.error('[uncaughtException]', err && err.stack ? err.stack : err);
+});
+
 const express = require('express');
 const cors = require('cors');
 const db = require('./db');
@@ -9195,16 +9205,27 @@ async function runRestoreJob(restoreJobId, f, conn, mode, dbTarget, auto_backup_
             try { mysqlProc = spawn(MYSQL_BIN, [...buildConnectArgs(conn), dbTarget], { env }); }
             catch (e) { return doneP(new Error(`spawn mysql failed: ${e.message}`)); }
             let mysqlErr = '';
-            mysqlProc.stderr.on('data', d => mysqlErr += d.toString());
+            mysqlProc.stderr.on('data', d => { if (mysqlErr.length < 8000) mysqlErr += d.toString(); });
+
+            // *** สำคัญ: จับ error ของ stdin — ถ้า mysql จบก่อน (เจอ error ใน SQL) ขณะยัง pipe อยู่
+            // จะเกิด EPIPE/ECONNRESET ที่ stdin — ถ้าไม่จับ Node จะ crash ทั้ง process (= 502) ***
+            mysqlProc.stdin.on('error', (e) => {
+                // EPIPE = mysql ปิด stdin ไปแล้ว (มักเพราะ exit ด้วย error) — ปล่อยให้ 'close' รายงาน exit code จริง
+                if (e && e.code !== 'EPIPE') console.warn('[Restore] stdin error:', e.code || e.message);
+            });
+
             const fileStream = fs.createReadStream(f.file_path);
-            if (f.compressed) {
-                const gunzip = zlib.createGunzip();
-                // นับ bytes จากไฟล์ (compressed) ก่อน → gunzip → mysql
-                fileStream.pipe(progressMonitor).pipe(gunzip).pipe(mysqlProc.stdin);
-                gunzip.on('error', doneP);
-            } else {
-                fileStream.pipe(progressMonitor).pipe(mysqlProc.stdin);
-            }
+            // ใช้ try/catch รอบ pipe กัน throw sync
+            try {
+                if (f.compressed) {
+                    const gunzip = zlib.createGunzip();
+                    gunzip.on('error', doneP);
+                    fileStream.pipe(progressMonitor).pipe(gunzip).pipe(mysqlProc.stdin);
+                } else {
+                    fileStream.pipe(progressMonitor).pipe(mysqlProc.stdin);
+                }
+            } catch (e) { return doneP(new Error(`pipe error: ${e.message}`)); }
+
             fileStream.on('error', doneP);
             progressMonitor.on('error', doneP);
             mysqlProc.on('close', code => {
