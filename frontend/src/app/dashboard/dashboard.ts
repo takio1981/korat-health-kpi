@@ -152,7 +152,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   newKpiList: any[] = [];
   // Add KPI: filter หมวดหมู่หลัก + selection
   addKpiMainList: string[] = [];
-  addKpiSelectedMains = new Set<string>();          // multi-filter หมวดหมู่ (ว่าง = ทั้งหมด)
+  addKpiSelMains: string[] = [];          // multi-filter หมวดหมู่ (ว่าง = ทั้งหมด)
   addKpiSelectedIds = new Set<number>();
 
   // Review mode — เลือกรายการตรวจสอบ
@@ -2046,7 +2046,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           // สร้างรายการหมวดหมู่หลักสำหรับ filter + default เลือกทุกรายการ
           this.addKpiMainList = Array.from(new Set<string>(this.newKpiList.map((i: any) => i.main_indicator_name).filter(Boolean))).sort();
           this.addKpiSelectedIds = new Set(this.newKpiList.map((i: any) => Number(i.indicator_id)));
-          this.addKpiSelectedMains.clear();   // ว่าง = แสดงทุกหมวดหมู่
+          this.addKpiSelMains = [];   // ว่าง = แสดงทุกหมวดหมู่
           Swal.close();
           if (!this.showAddModal) {
             setTimeout(() => {
@@ -2070,29 +2070,29 @@ export class DashboardComponent implements OnInit, OnDestroy {
   closeAddModal() {
     this.showAddModal = false;
     this.addKpiOpenDropdown = '';
-    this.addKpiSelectedMains.clear();
+    this.addKpiSelMains = [];
     this.cdr.detectChanges();
   }
 
   // === Add-KPI filter + selection helpers ===
   get filteredNewKpiList(): any[] {
-    if (this.addKpiSelectedMains.size === 0) return this.newKpiList;
-    return this.newKpiList.filter((i: any) => this.addKpiSelectedMains.has(i.main_indicator_name));
+    if (this.addKpiSelMains.length === 0) return this.newKpiList;
+    return this.newKpiList.filter((i: any) => this.addKpiSelMains.includes(i.main_indicator_name));
   }
 
-  // === Category multi-filter (checkbox/chip) ===
-  toggleMainFilter(main: string) {
-    if (this.addKpiSelectedMains.has(main)) this.addKpiSelectedMains.delete(main);
-    else this.addKpiSelectedMains.add(main);
+  // === Category multi-filter (dropdown checkbox) ===
+  addKpiMainLabel(): string {
+    if (this.addKpiSelMains.length === 0) return 'หมวดหมู่: ทั้งหมด';
+    if (this.addKpiSelMains.length === 1) return this.addKpiSelMains[0];
+    return `หมวดหมู่: ${this.addKpiSelMains.length} รายการ`;
   }
-  isMainFilterActive(main: string): boolean {
-    return this.addKpiSelectedMains.has(main);
+  toggleAllAddKpiMains() {
+    const allSel = this.addKpiMainList.length > 0 && this.addKpiMainList.every(m => this.addKpiSelMains.includes(m));
+    if (allSel) this.addKpiSelMains = [];
+    else this.addKpiSelMains = [...this.addKpiMainList];
   }
-  selectAllMainFilters() {
-    this.addKpiSelectedMains.clear(); // ว่าง = ทั้งหมด
-  }
-  isAllMainFilters(): boolean {
-    return this.addKpiSelectedMains.size === 0;
+  isAllAddKpiMains(): boolean {
+    return this.addKpiMainList.length > 0 && this.addKpiMainList.every(m => this.addKpiSelMains.includes(m));
   }
 
   isAddKpiSelected(item: any): boolean {

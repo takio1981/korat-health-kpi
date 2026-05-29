@@ -1241,27 +1241,41 @@
           </div>
         </div>
       </ng-container>
+
+      <!-- หมวดหมู่หลัก (multi-select checkbox) — แสดงทั้ง admin + user -->
+      <div *ngIf="addKpiMainList.length > 0" class="space-y-1">
+        <label class="text-xs font-bold text-purple-600">หมวดหมู่หลัก</label>
+        <div class="relative min-w-[170px]">
+          <button type="button" (click)="toggleAddKpiDropdown('main')"
+                  class="w-full flex items-center justify-between px-3 py-2 border border-purple-300 rounded-lg bg-white text-sm hover:border-purple-400 outline-none">
+            <span class="truncate" [class.text-gray-400]="addKpiSelMains.length === 0">{{ addKpiMainLabel() }}</span>
+            <i class="fas fa-chevron-down ml-1 text-gray-400 text-xs"></i>
+          </button>
+          <div *ngIf="addKpiOpenDropdown === 'main'" class="absolute z-50 top-full left-0 mt-1 w-[min(24rem,calc(100vw-2rem))] bg-white border border-gray-200 rounded-lg shadow-xl max-h-80 overflow-hidden flex flex-col">
+            <div class="p-2 border-b bg-purple-50 flex items-center justify-between text-[11px]">
+              <label class="flex items-center gap-1.5 font-bold text-purple-700 cursor-pointer">
+                <input type="checkbox" [checked]="isAllAddKpiMains()" (change)="toggleAllAddKpiMains()" class="rounded text-purple-600">
+                เลือกทั้งหมด ({{ addKpiMainList.length }})
+              </label>
+              <span class="text-purple-700 font-bold">เลือก: {{ addKpiSelMains.length }}</span>
+              <button type="button" (click)="addKpiOpenDropdown = ''" class="px-2 py-0.5 bg-purple-500 text-white rounded font-bold">ตกลง</button>
+            </div>
+            <div class="overflow-y-auto flex-1">
+              <label *ngFor="let m of addKpiMainList" class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
+                <input type="checkbox" [checked]="isAddKpiFilterSel(addKpiSelMains, m)"
+                       (change)="toggleAddKpiFilter(addKpiSelMains, m)" class="rounded text-purple-600">
+                <span>{{ m }}</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- สรุปหน่วยบริการปลายทาง -->
     <div *ngIf="(isAdmin || isLocalAdmin) && addKpiTargetHospcodes.length > 0" class="mb-3 px-3 py-2 bg-green-50 border border-green-200 rounded-xl text-xs text-green-800">
       <i class="fas fa-hospital-user mr-1"></i>จะบันทึกตัวชี้วัดที่เลือกไปยัง <b>{{ addKpiTargetHospcodes.length }}</b> หน่วยบริการ
       <span class="text-green-600">(ตัวชี้วัดที่มีอยู่แล้วในแต่ละหน่วยบริการจะถูกข้ามอัตโนมัติ)</span>
-    </div>
-
-    <!-- Category multi-filter (chip / select all) -->
-    <div *ngIf="addKpiMainList.length > 0" class="mb-3 flex flex-wrap items-center gap-1.5">
-      <span class="text-xs font-bold text-purple-600 mr-1"><i class="fas fa-filter mr-1"></i>หมวดหมู่:</span>
-      <button (click)="selectAllMainFilters()" type="button"
-              class="px-2.5 py-1 rounded-full text-xs font-medium transition-colors border"
-              [ngClass]="isAllMainFilters() ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'">
-        ทั้งหมด
-      </button>
-      <button *ngFor="let m of addKpiMainList" (click)="toggleMainFilter(m)" type="button"
-              class="px-2.5 py-1 rounded-full text-xs font-medium transition-colors border"
-              [ngClass]="isMainFilterActive(m) ? 'bg-purple-500 text-white border-purple-500' : 'bg-white text-gray-600 border-gray-300 hover:bg-purple-50'">
-        {{ m }}
-      </button>
     </div>
 
     <!-- สรุปจำนวน + ตัวกรอง + ปุ่ม Reset -->
