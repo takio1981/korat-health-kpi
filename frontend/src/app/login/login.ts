@@ -170,20 +170,24 @@ export class LoginComponent implements OnDestroy {
               ? new Date(err.error.last_seen_at).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })
               : '-';
             Swal.fire({
-              icon: 'warning',
-              title: 'บัญชีกำลังใช้งานอยู่',
+              icon: 'info',
+              title: 'บัญชีนี้กำลังใช้งานอยู่ที่อุปกรณ์อื่น',
               html: `<div style="text-align:left;font-size:13px">
-                <p>${err.error?.message || 'บัญชีนี้กำลังใช้งานที่อุปกรณ์อื่น'}</p>
-                <div class="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200 text-xs">
-                  <div><b>ใช้งานล่าสุดที่ IP:</b> <code>${ip}</code></div>
-                  <div><b>เวลา:</b> ${lastSeenStr}</div>
+                <p class="text-gray-600">เพื่อความปลอดภัย ระบบจำกัด 1 บัญชี = 1 อุปกรณ์ในขณะเดียวกัน</p>
+                <div class="mt-3 p-3 bg-sky-50 rounded-lg border border-sky-200 text-xs space-y-1">
+                  <div class="font-semibold text-sky-700"><i class="fas fa-laptop mr-1"></i>เครื่องที่กำลังใช้งานอยู่:</div>
+                  <div><b>IP:</b> <code>${ip}</code></div>
+                  <div><b>ใช้งานล่าสุด:</b> ${lastSeenStr}</div>
                 </div>
-                <p class="mt-3 text-xs text-gray-600">หากต้องการเข้าใช้ที่อุปกรณ์นี้ ระบบจะ <b>ออกจากระบบที่อื่นทันที</b></p>
+                <div class="mt-3 p-2 bg-gray-50 rounded-lg text-[11px] text-gray-600 space-y-1">
+                  <div><b><i class="fas fa-clock text-gray-400 mr-1"></i>วิธีที่ 1:</b> รอประมาณ 5 นาที (session เก่าจะหมดอายุเอง)</div>
+                  <div><b><i class="fas fa-arrow-right text-gray-400 mr-1"></i>วิธีที่ 2:</b> เข้าใช้ที่เครื่องนี้ทันที — เครื่องเก่าจะได้รับการแจ้งเตือนและออกจากระบบโดยสุภาพ</div>
+                </div>
               </div>`,
               showCancelButton: true,
-              confirmButtonText: '<i class="fas fa-sign-in-alt mr-1"></i> ออกจากที่อื่น + Login ที่นี่',
-              cancelButtonText: 'ยกเลิก',
-              confirmButtonColor: '#dc2626',
+              confirmButtonText: '<i class="fas fa-sign-in-alt mr-1"></i> เข้าใช้ที่นี่',
+              cancelButtonText: 'รอสักครู่',
+              confirmButtonColor: '#0ea5e9',
               cancelButtonColor: '#9ca3af'
             }).then((r) => {
               if (r.isConfirmed) this.forceLogin();

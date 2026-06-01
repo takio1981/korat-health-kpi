@@ -342,10 +342,23 @@ const authenticateToken = async (req, res, next) => {
             }
         }
         if (cached.sessionId && cached.sessionId !== user.sessionId) {
+            // ดึงข้อมูล "ใครเตะ" จาก DB ให้เครื่องเก่าเห็น
+            let kickInfo = { kicked_by_ip: null, kicked_by_ua: null, kicked_at: null };
+            try {
+                const [kr] = await db.query('SELECT kicked_by_ip, kicked_by_ua, kicked_at FROM users WHERE id = ?', [uid]);
+                if (kr.length > 0) {
+                    kickInfo = {
+                        kicked_by_ip: kr[0].kicked_by_ip,
+                        kicked_by_ua: kr[0].kicked_by_ua,
+                        kicked_at: kr[0].kicked_at
+                    };
+                }
+            } catch (_) { /* column ไม่มี — ปล่อย */ }
             return res.status(401).json({
                 success: false,
                 code: 'SESSION_INVALIDATED',
-                message: 'บัญชีของคุณถูกใช้งานจากอุปกรณ์อื่น — ระบบทำการ logout อัตโนมัติ'
+                message: 'บัญชีของคุณถูกใช้งานจากอุปกรณ์อื่น',
+                ...kickInfo
             });
         }
     }
@@ -524,9 +537,16 @@ apiRouter.post('/login', loginLimiter, async (req, res) => {
                         });
                     }
                 }
-                // ถ้าเป็น force_login → log ว่า kick session เดิม
+                // ถ้าเป็น force_login → log ว่า kick session เดิม + บันทึก kicked_by_* ให้เครื่องเก่าเห็น
                 if (user.active_session_id && force_login) {
                     await saveLog(username, 'login_force', `force login — kick session เดิม (last IP: ${user.last_seen_ip || '-'})`, ip);
+                    const ua = (req.headers['user-agent'] || '').toString().slice(0, 255);
+                    try {
+                        await db.query(
+                            'UPDATE users SET kicked_by_ip = ?, kicked_by_ua = ?, kicked_at = NOW() WHERE id = ?',
+                            [ip || '-', ua, user.id]
+                        );
+                    } catch (e) { /* column อาจยังไม่ migrate — ปล่อย */ }
                     // _sessionCache.delete จะถูก override ตอน update active_session_id ใหม่ด้านล่างอยู่แล้ว
                 }
 
@@ -6423,6 +6443,12 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         // เพิ่มคอลัมน์สิทธิ์ในตาราง users (default = แก้ได้ทั้งคู่)
         try { await db.query('ALTER TABLE users ADD COLUMN can_edit_actual TINYINT(1) DEFAULT 1'); } catch (e) {}
         try { await db.query('ALTER TABLE users ADD COLUMN can_edit_target TINYINT(1) DEFAULT 1'); } catch (e) {}
+
+        // ========== Concurrent login — เก็บข้อมูล "ใครเตะ session ออก" ==========
+        // (idempotent — ถ้า column มีแล้ว skip)
+        try { await db.query('ALTER TABLE users ADD COLUMN kicked_by_ip VARCHAR(64) NULL'); } catch (e) {}
+        try { await db.query('ALTER TABLE users ADD COLUMN kicked_by_ua VARCHAR(255) NULL'); } catch (e) {}
+        try { await db.query('ALTER TABLE users ADD COLUMN kicked_at DATETIME NULL'); } catch (e) {}
 
         // เพิ่ม appeal settings defaults
         const appealDefaults = [
