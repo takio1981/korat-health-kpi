@@ -45,6 +45,20 @@ export class ReportComponent implements OnInit {
     totalActual: 0
   };
 
+  // === Recording-Status Monitor (admin_ssj + super_admin) ===
+  recordingSummary = {
+    total_indicators: 0,
+    fully_recorded: 0,
+    partially_recorded: 0,
+    not_recorded: 0,
+    avg_recording_pct: 0
+  };
+
+  get canSeeMonitor(): boolean {
+    const u = this.authService.getUser();
+    return !!u && (u.role === 'super_admin' || u.role === 'admin_ssj');
+  }
+
   // Charts
   public barChartOptions: Partial<ApexOptions> | any = {
     series: [], chart: { type: 'bar', height: 400, fontFamily: 'Sarabun, sans-serif' }
@@ -121,6 +135,7 @@ export class ReportComponent implements OnInit {
       case 'by-hospital': observable = this.authService.getReportByHospital(params); break;
       case 'by-district': observable = this.authService.getReportByDistrict(params); break;
       case 'by-year': observable = this.authService.getReportByYear(params); break;
+      case 'recording-status': observable = this.authService.getReportRecordingStatus(params); break;
       default: observable = this.authService.getReportByIndicator(params);
     }
 
@@ -128,7 +143,18 @@ export class ReportComponent implements OnInit {
       next: (res: any) => {
         this.isLoading = false;
         if (res.success) {
-          this.reportData = res.data;
+          this.reportData = res.data || [];
+          if (this.activeTab === 'recording-status') {
+            this.recordingSummary = res.summary || this.recordingSummary;
+            this.reportData.forEach((item: any) => {
+              item.recording_pct = Number(item.recording_pct) || 0;
+              item.total_hospitals = Number(item.total_hospitals) || 0;
+              item.recorded_hospitals = Number(item.recorded_hospitals) || 0;
+              item.missing_hospitals = Number(item.missing_hospitals) || 0;
+            });
+            this.cdr.detectChanges();
+            return;
+          }
           // แปลงค่าให้ปลอดภัย (รองรับข้อความ)
           // _display field: int → ไม่มีทศนิยม / float → ปัด 2 ตำแหน่ง (กันค่ายาว เช่น 77.77777778)
           const formatDisplay = (v: any): string => {
@@ -281,7 +307,8 @@ export class ReportComponent implements OnInit {
         'by-indicator': 'รายข้อตัวชี้วัด',
         'by-hospital': 'รายหน่วยบริการ',
         'by-district': 'รายอำเภอ',
-        'by-year': 'รายปีงบประมาณ'
+        'by-year': 'รายปีงบประมาณ',
+        'recording-status': 'สถานะการบันทึก'
       };
       const ws = XLSX.utils.json_to_sheet(this.reportData);
       const wb = XLSX.utils.book_new();

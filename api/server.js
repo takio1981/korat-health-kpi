@@ -6114,7 +6114,7 @@ apiRouter.get('/report/by-indicator', authenticateToken, async (req, res) => {
             FROM kpi_summary s
             ${whereStr}
             GROUP BY s.indicator_id, s.year_bh
-            ORDER BY MAX(s.main_indicator_name), MAX(s.kpi_indicators_name)
+            ORDER BY achievement_pct DESC, MAX(s.main_indicator_name), MAX(s.kpi_indicators_name)
             LIMIT 500
         `;
         const [rows] = await db.query(sql, params);
@@ -6187,7 +6187,7 @@ apiRouter.get('/report/by-hospital', authenticateToken, async (req, res) => {
             FROM kpi_summary s
             ${whereStr}
             GROUP BY s.hospcode, s.year_bh
-            ORDER BY MAX(s.distname), MAX(s.hosname)
+            ORDER BY achievement_pct DESC, MAX(s.distname), MAX(s.hosname)
         `;
         const [rows] = await db.query(sql, params);
         res.json({ success: true, data: rows });
@@ -6253,7 +6253,7 @@ apiRouter.get('/report/by-district', authenticateToken, async (req, res) => {
             FROM kpi_summary s
             ${whereStr}
             GROUP BY s.distid, s.year_bh
-            ORDER BY MAX(s.distname)
+            ORDER BY achievement_pct DESC, MAX(s.distname)
         `;
         const [rows] = await db.query(sql, params);
         res.json({ success: true, data: rows });
@@ -6319,13 +6319,114 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
             FROM kpi_summary s
             ${whereStr}
             GROUP BY s.year_bh
-            ORDER BY s.year_bh DESC
+            ORDER BY achievement_pct DESC, s.year_bh DESC
         `;
         const [rows] = await db.query(sql, params);
         res.json({ success: true, data: rows });
     } catch (error) {
         console.error('Report by-year error:', error);
         res.status(500).json({ success: false, message: 'ไม่สามารถดึงข้อมูลรายงานได้' });
+    }
+});
+
+// รายงาน: สถานะการบันทึก (Monitor) — ดูว่าตัวชี้วัดใดมีการบันทึก/ไม่ได้บันทึก คิดเป็น %
+//   - total_hospitals  = จำนวน hospcode ที่อยู่ใน kpi_results (มี target หรือ actual ใดๆ) ของตัวชี้วัดนั้น
+//   - recorded_hospitals = จำนวน hospcode ที่มี actual_value ในเดือนใดๆ (ไม่ว่า target จะตั้งหรือไม่)
+//   - recording_pct    = recorded / total × 100
+apiRouter.get('/report/recording-status', authenticateToken, async (req, res) => {
+    try {
+        const user = req.user;
+        const { year_bh, dept_id, distid, hostype } = req.query;
+        if (!year_bh) {
+            return res.status(400).json({ success: false, message: 'ต้องระบุปีงบประมาณ' });
+        }
+
+        let indicatorWhere = ['r.year_bh = ?'];
+        let params = [year_bh];
+
+        // Role-based scope (เทียบกับ kpi_indicators i, kpi_results r)
+        if (user.role === 'super_admin') {
+            // เห็นทั้งหมด
+        } else if (user.role === 'admin_ssj') {
+            if (user.deptId != null) { indicatorWhere.push('i.dept_id = ?'); params.push(user.deptId); }
+        } else if (user.role === 'admin_cup') {
+            const distid_auto = await getDistrictId(user.hospcode);
+            if (distid_auto) { indicatorWhere.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)'); params.push(distid_auto); }
+        } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
+            if (user.hospcode) { indicatorWhere.push('r.hospcode = ?'); params.push(user.hospcode); }
+        } else if (user.role === 'user_cup') {
+            const distid_auto = await getDistrictId(user.hospcode);
+            if (distid_auto) { indicatorWhere.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)'); params.push(distid_auto); }
+            if (user.deptId != null) { indicatorWhere.push('i.dept_id = ?'); params.push(user.deptId); }
+        } else {
+            if (user.hospcode) { indicatorWhere.push('r.hospcode = ?'); params.push(user.hospcode); }
+            if (user.deptId != null) { indicatorWhere.push('i.dept_id = ?'); params.push(user.deptId); }
+        }
+        if (dept_id) { indicatorWhere.push('i.dept_id = ?'); params.push(dept_id); }
+        if (distid) { indicatorWhere.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)'); params.push(distid); }
+        if (hostype) { indicatorWhere.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE hostype = ?)'); params.push(hostype); }
+
+        const whereStr = 'WHERE ' + indicatorWhere.join(' AND ');
+
+        // Per-indicator recording stats
+        const sql = `
+            WITH hospital_records AS (
+                SELECT
+                    r.indicator_id,
+                    r.year_bh,
+                    r.hospcode,
+                    MAX(CASE WHEN NULLIF(TRIM(r.actual_value), '') IS NOT NULL THEN 1 ELSE 0 END) AS has_recorded,
+                    MAX(CASE WHEN NULLIF(TRIM(r.target_value), '') IS NOT NULL THEN 1 ELSE 0 END) AS has_target
+                FROM kpi_results r
+                JOIN kpi_indicators i ON i.id = r.indicator_id
+                ${whereStr}
+                GROUP BY r.indicator_id, r.year_bh, r.hospcode
+            )
+            SELECT
+                i.id AS indicator_id,
+                i.kpi_indicators_name,
+                mi.main_indicator_name,
+                d.dept_name,
+                hr.year_bh,
+                COUNT(*) AS total_hospitals,
+                SUM(hr.has_recorded) AS recorded_hospitals,
+                SUM(hr.has_target) AS target_hospitals,
+                COUNT(*) - SUM(hr.has_recorded) AS missing_hospitals,
+                CASE WHEN COUNT(*) = 0 THEN 0
+                     ELSE ROUND(SUM(hr.has_recorded) / COUNT(*) * 100, 2)
+                END AS recording_pct
+            FROM hospital_records hr
+            JOIN kpi_indicators i ON i.id = hr.indicator_id
+            LEFT JOIN kpi_main_indicators mi ON mi.id = i.main_indicator_id
+            LEFT JOIN departments d ON d.id = i.dept_id
+            GROUP BY i.id, hr.year_bh
+            ORDER BY recording_pct DESC, mi.main_indicator_name, i.kpi_indicators_name
+            LIMIT 1000
+        `;
+        const [rows] = await db.query(sql, params);
+
+        // Summary (overall)
+        const totalIndicators = rows.length;
+        const fullyRecorded = rows.filter(r => Number(r.recording_pct) >= 100).length;
+        const notRecorded = rows.filter(r => Number(r.recording_pct) === 0).length;
+        const partiallyRecorded = totalIndicators - fullyRecorded - notRecorded;
+        const avgPct = totalIndicators === 0 ? 0 :
+            Math.round(rows.reduce((s, r) => s + Number(r.recording_pct || 0), 0) / totalIndicators * 100) / 100;
+
+        res.json({
+            success: true,
+            summary: {
+                total_indicators: totalIndicators,
+                fully_recorded: fullyRecorded,
+                partially_recorded: partiallyRecorded,
+                not_recorded: notRecorded,
+                avg_recording_pct: avgPct
+            },
+            data: rows
+        });
+    } catch (error) {
+        console.error('Report recording-status error:', error);
+        res.status(500).json({ success: false, message: 'ไม่สามารถดึงข้อมูลสถานะการบันทึกได้' });
     }
 });
 

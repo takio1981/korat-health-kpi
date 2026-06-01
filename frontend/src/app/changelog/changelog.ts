@@ -18,6 +18,18 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.06.02',
+      date: '2 มิถุนายน 2569',
+      changes: [
+        { type: 'improve', text: 'kpi-manager: แยก wizard เป็น 3 ขั้นชัดเจน (เดิม 2 ขั้น) — 1) เทียบชื่อตัวชี้วัด (Report Compare) 2) ส่งออกข้อมูล KPI ↔ HDC (DB Compare schema 2 ทาง) 3) Export ข้อมูล KPI ลงตารางรายตัวชี้วัด (data + sync HDC + scheduler) — workflow เรียงลำดับชัดเจน ไม่ต้องย้อนไปย้อนมา + เปลี่ยนสีปุ่ม Next ตามปลายทาง' },
+        { type: 'feature', text: 'Charts/Reports: เพิ่มแท็บ "สถานะการบันทึก" (super_admin + admin_ssj) — monitor ว่าตัวชี้วัดใดมีการบันทึก/ไม่มี คิดเป็น % ของ รพ. ทั้งหมด พร้อมสรุป ครบ/บางส่วน/ยังไม่บันทึก + progress bar + badge status (ครบ/บางส่วน/ยังไม่บันทึก) + Excel export' },
+        { type: 'improve', text: 'รายงาน 4 หัวข้อ (รายข้อตัวชี้วัด/หน่วยบริการ/อำเภอ/ปีงบ): เรียงจาก %สำเร็จ มาก→น้อย + แก้คอลัมน์ %สำเร็จของ by-indicator ให้ใช้ achievement_pct (count-based: passed/with_target × 100) แทนการคำนวณจาก total_actual/target_value (sum ratio) — ทั้งใน desktop table และ mobile card' },
+        { type: 'feature', text: 'Backend: endpoint ใหม่ `/report/recording-status` คำนวณ % การบันทึกต่อตัวชี้วัด (recorded_hospitals / total_hospitals) พร้อม summary (ครบ/บางส่วน/ยังไม่บันทึก/% เฉลี่ย) + role-based filtering (admin_ssj เห็นเฉพาะ dept ตัวเอง)' },
+        { type: 'feature', text: 'คู่มือการใช้งาน: filter หัวข้อตาม role ที่ login — แสดงเฉพาะส่วนที่สิทธิ์ของผู้ใช้ใช้งานได้จริง (super_admin เห็นครบ, admin_ssj เห็น users/kpi-manager/audit-digest, user_* เห็นเฉพาะส่วนทั่วไป) + ป้ายชื่อ role แบบอ่านง่าย + นับจำนวนหัวข้อที่เห็น' },
+        { type: 'improve', text: 'คู่มือ kpi-manager: เปลี่ยนป้าย Tab 1/2/3/4 → ขั้น 1/2/3 ให้ตรงกับ wizard ใหม่ + เรียงลำดับใหม่ (Report Compare ขึ้นเป็นขั้น 1)' },
+      ]
+    },
+    {
       version: '2569.06.01',
       date: '1 มิถุนายน 2569',
       changes: [

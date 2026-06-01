@@ -26,6 +26,9 @@
           <button (click)="switchTab('by-year')" [class]="activeTab === 'by-year' ? 'border-green-500 text-green-600 bg-green-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'" class="flex-1 min-w-[140px] py-3 px-4 text-center border-b-2 font-medium text-sm focus:outline-none transition-colors">
             <i class="fas fa-calendar-alt mr-1.5"></i> รายปีงบประมาณ
           </button>
+          <button *ngIf="canSeeMonitor" (click)="switchTab('recording-status')" [class]="activeTab === 'recording-status' ? 'border-fuchsia-500 text-fuchsia-600 bg-fuchsia-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'" class="flex-1 min-w-[160px] py-3 px-4 text-center border-b-2 font-medium text-sm focus:outline-none transition-colors">
+            <i class="fas fa-clipboard-check mr-1.5"></i> สถานะการบันทึก
+          </button>
         </div>
       </div>
 
@@ -76,8 +79,8 @@
         </div>
       </div>
 
-      <!-- Summary Cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <!-- Summary Cards (existing 4 reports) -->
+      <div *ngIf="activeTab !== 'recording-status'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div class="bg-gradient-to-br from-green-500 to-green-700 rounded-2xl p-5 text-white shadow-lg">
           <div class="flex items-center justify-between">
             <div>
@@ -124,6 +127,65 @@
         </div>
       </div>
 
+      <!-- Recording-Status Summary Cards (Monitor) -->
+      <div *ngIf="activeTab === 'recording-status'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+        <div class="bg-gradient-to-br from-fuchsia-500 to-fuchsia-700 rounded-2xl p-5 text-white shadow-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-xs font-bold text-fuchsia-100 uppercase">ตัวชี้วัดทั้งหมด</p>
+              <p class="text-3xl font-extrabold mt-1">{{ recordingSummary.total_indicators }}</p>
+            </div>
+            <div class="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
+              <i class="fas fa-list-ol text-xl"></i>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-2xl p-5 text-white shadow-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-xs font-bold text-emerald-100 uppercase">บันทึกครบ 100%</p>
+              <p class="text-3xl font-extrabold mt-1">{{ recordingSummary.fully_recorded }}</p>
+            </div>
+            <div class="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
+              <i class="fas fa-check-double text-xl"></i>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl p-5 text-white shadow-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-xs font-bold text-amber-100 uppercase">บันทึกบางส่วน</p>
+              <p class="text-3xl font-extrabold mt-1">{{ recordingSummary.partially_recorded }}</p>
+            </div>
+            <div class="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
+              <i class="fas fa-hourglass-half text-xl"></i>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gradient-to-br from-rose-500 to-red-700 rounded-2xl p-5 text-white shadow-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-xs font-bold text-rose-100 uppercase">ยังไม่ได้บันทึก</p>
+              <p class="text-3xl font-extrabold mt-1">{{ recordingSummary.not_recorded }}</p>
+            </div>
+            <div class="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
+              <i class="fas fa-triangle-exclamation text-xl"></i>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gradient-to-br from-indigo-500 to-purple-700 rounded-2xl p-5 text-white shadow-lg">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-xs font-bold text-indigo-100 uppercase">%บันทึกเฉลี่ย</p>
+              <p class="text-3xl font-extrabold mt-1">{{ recordingSummary.avg_recording_pct }}%</p>
+            </div>
+            <div class="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
+              <i class="fas fa-chart-pie text-xl"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Data Table -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
 
@@ -137,7 +199,7 @@
               <div class="grid grid-cols-3 gap-1 mt-2 text-xs text-center">
                 <div class="bg-amber-50 rounded p-1"><p class="text-[10px] text-gray-500">เป้าหมาย</p><p class="font-bold">{{ item._target_display || '-' }}</p></div>
                 <div class="bg-green-50 rounded p-1"><p class="text-[10px] text-gray-500">ผลงาน</p><p class="font-bold text-green-700">{{ item.total_actual > 0 ? (item.total_actual | number:'1.0-0') : '-' }}</p></div>
-                <div class="bg-blue-50 rounded p-1"><p class="text-[10px] text-gray-500">%</p><p class="font-bold" [class]="item.target_value > 0 && item.total_actual >= item.target_value ? 'text-green-600' : 'text-red-500'">{{ item.target_value > 0 ? ((item.total_actual / item.target_value * 100) | number:'1.0-0') + '%' : '-' }}</p></div>
+                <div class="bg-blue-50 rounded p-1"><p class="text-[10px] text-gray-500">%</p><p class="font-bold" [class]="item.achievement_pct >= 100 ? 'text-green-600' : (item.achievement_pct > 0 ? 'text-amber-600' : 'text-red-500')">{{ (item.achievement_pct | number:'1.0-0') }}%</p></div>
               </div>
             </ng-container>
             <!-- by-hospital -->
@@ -166,6 +228,19 @@
                 <div class="bg-gray-50 rounded p-1"><p class="text-[10px] text-gray-500">ตัวชี้วัด</p><p class="font-bold">{{ item.indicator_count }}</p></div>
                 <div class="bg-green-50 rounded p-1"><p class="text-[10px] text-gray-500">ผลงาน</p><p class="font-bold">{{ item.total_actual | number:'1.0-0' }}</p></div>
                 <div class="bg-blue-50 rounded p-1"><p class="text-[10px] text-gray-500">%</p><p class="font-bold">{{ item.achievement_pct | number:'1.0-0' }}%</p></div>
+              </div>
+            </ng-container>
+            <!-- recording-status -->
+            <ng-container *ngIf="activeTab === 'recording-status'">
+              <p class="font-bold text-gray-900 text-sm whitespace-normal break-words">{{ item.kpi_indicators_name }}</p>
+              <p class="text-[10px] text-gray-400 whitespace-normal break-words">{{ item.main_indicator_name }} | {{ item.dept_name }}</p>
+              <div class="grid grid-cols-3 gap-1 mt-2 text-xs text-center">
+                <div class="bg-emerald-50 rounded p-1"><p class="text-[10px] text-gray-500">บันทึก</p><p class="font-bold text-emerald-700">{{ item.recorded_hospitals }}/{{ item.total_hospitals }}</p></div>
+                <div class="bg-rose-50 rounded p-1"><p class="text-[10px] text-gray-500">ขาด</p><p class="font-bold text-rose-600">{{ item.missing_hospitals }}</p></div>
+                <div class="rounded p-1" [class]="item.recording_pct >= 100 ? 'bg-green-100' : (item.recording_pct > 0 ? 'bg-amber-50' : 'bg-red-50')">
+                  <p class="text-[10px] text-gray-500">%</p>
+                  <p class="font-bold" [class]="item.recording_pct >= 100 ? 'text-green-700' : (item.recording_pct > 0 ? 'text-amber-700' : 'text-red-600')">{{ (item.recording_pct | number:'1.0-0') }}%</p>
+                </div>
               </div>
             </ng-container>
           </div>
@@ -222,8 +297,9 @@
                 <td class="px-4 py-2.5 text-right" [class]="item._aug_display && item.aug > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._aug_display || '-' }}</td>
                 <td class="px-4 py-2.5 text-right" [class]="item._sep_display && item.sep > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._sep_display || '-' }}</td>
                 <td class="px-4 py-2.5 text-right font-bold text-green-700">{{ item.total_actual > 0 ? (item.total_actual | number:'1.2-2') : '-' }}</td>
-                <td class="px-4 py-2.5 text-right font-bold" [class]="(item.target_value > 0 && item.total_actual >= item.target_value) ? 'text-green-600' : 'text-red-500'">
-                  {{ item.target_value > 0 ? ((item.total_actual / item.target_value * 100) | number:'1.2-2') + '%' : (item._target_display && item._target_display === (item._oct_display || item._nov_display || item._dece_display || item._jan_display || item._feb_display || item._mar_display || item._apr_display || item._may_val_display || item._jun_display || item._jul_display || item._aug_display || item._sep_display) ? '100%' : '-') }}
+                <td class="px-4 py-2.5 text-right font-bold" [class]="(item.achievement_pct >= 100) ? 'text-green-600' : ((item.achievement_pct > 0) ? 'text-amber-600' : 'text-red-500')">
+                  {{ (item.achievement_pct | number:'1.2-2') || '0.00' }}%
+                  <span class="text-[10px] text-gray-400 font-normal block">({{ item.hospitals_passed || 0 }}/{{ item.hospitals_with_target || 0 }} รพ.)</span>
                 </td>
                 <td class="px-4 py-2.5 text-center text-gray-600">{{ item.hospital_count }}</td>
               </tr>
@@ -342,10 +418,54 @@
             </tbody>
           </table>
         </div>
+
+        <!-- Tab: recording-status (Monitor การบันทึก) -->
+        <div *ngIf="activeTab === 'recording-status'" class="overflow-x-auto hidden md:block">
+          <table class="w-full text-sm">
+            <thead class="bg-fuchsia-50 text-fuchsia-800 sticky top-0 z-10">
+              <tr>
+                <th class="px-4 py-3 text-left font-bold">#</th>
+                <th class="px-4 py-3 text-left font-bold">หมวดหมู่หลัก</th>
+                <th class="px-4 py-3 text-left font-bold">ชื่อตัวชี้วัด</th>
+                <th class="px-4 py-3 text-left font-bold">หน่วยงาน</th>
+                <th class="px-4 py-3 text-right font-bold">รพ. ทั้งหมด</th>
+                <th class="px-4 py-3 text-right font-bold">บันทึกแล้ว</th>
+                <th class="px-4 py-3 text-right font-bold">ยังไม่บันทึก</th>
+                <th class="px-4 py-3 text-right font-bold">% บันทึก</th>
+                <th class="px-4 py-3 text-center font-bold">สถานะ</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let item of reportData; let i = index" class="border-b border-gray-50 hover:bg-fuchsia-50/30 transition-colors">
+                <td class="px-4 py-2.5 text-gray-500">{{ i + 1 }}</td>
+                <td class="px-4 py-2.5 text-gray-700 whitespace-normal break-words">{{ item.main_indicator_name }}</td>
+                <td class="px-4 py-2.5 text-gray-800 font-medium whitespace-normal break-words">{{ item.kpi_indicators_name }}</td>
+                <td class="px-4 py-2.5 text-gray-600">{{ item.dept_name }}</td>
+                <td class="px-4 py-2.5 text-right text-gray-700">{{ item.total_hospitals }}</td>
+                <td class="px-4 py-2.5 text-right font-bold text-emerald-700">{{ item.recorded_hospitals }}</td>
+                <td class="px-4 py-2.5 text-right font-bold text-rose-600">{{ item.missing_hospitals }}</td>
+                <td class="px-4 py-2.5 text-right font-bold" [class]="item.recording_pct >= 100 ? 'text-green-600' : (item.recording_pct > 0 ? 'text-amber-600' : 'text-red-500')">
+                  {{ (item.recording_pct | number:'1.2-2') }}%
+                  <div class="w-full h-1.5 bg-gray-200 rounded-full mt-1 overflow-hidden">
+                    <div class="h-full rounded-full" [style.width.%]="item.recording_pct" [class]="item.recording_pct >= 100 ? 'bg-emerald-500' : (item.recording_pct > 0 ? 'bg-amber-500' : 'bg-rose-500')"></div>
+                  </div>
+                </td>
+                <td class="px-4 py-2.5 text-center">
+                  <span *ngIf="item.recording_pct >= 100" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700"><i class="fas fa-check mr-1"></i>ครบ</span>
+                  <span *ngIf="item.recording_pct > 0 && item.recording_pct < 100" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700"><i class="fas fa-hourglass-half mr-1"></i>บางส่วน</span>
+                  <span *ngIf="item.recording_pct === 0" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700"><i class="fas fa-times mr-1"></i>ยังไม่บันทึก</span>
+                </td>
+              </tr>
+              <tr *ngIf="reportData.length === 0">
+                <td colspan="9" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>ไม่พบข้อมูล</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <!-- Charts -->
-      <div *ngIf="!isLoading && reportData.length > 0" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+      <div *ngIf="!isLoading && reportData.length > 0 && activeTab !== 'recording-status'" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
         <apx-chart
           [series]="barChartOptions.series"
           [chart]="barChartOptions.chart"
