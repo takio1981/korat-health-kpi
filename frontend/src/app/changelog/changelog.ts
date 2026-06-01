@@ -21,6 +21,10 @@ export class ChangelogComponent {
       version: '2569.06.01',
       date: '1 มิถุนายน 2569',
       changes: [
+        { type: 'feature', text: 'Error Monitoring: เพิ่มหน้า "Error Logs" (super_admin) รวบ error จาก backend + frontend + HTTP 5xx ทั้งหมด — มี fingerprint dedup + count + stats + Telegram alert อัตโนมัติ (1 ครั้ง/error/ชม) + แก้แล้วทำ mark resolved' },
+        { type: 'feature', text: 'Error capture frontend: GlobalErrorHandler + HTTP interceptor — ส่ง error ทั้ง uncaught template/RxJS และ HTTP 5xx ไปยัง backend อัตโนมัติ (throttle 1 ครั้ง/error/นาที กัน loop)' },
+        { type: 'feature', text: 'Integration tests (jest + supertest) — login (5 cases), permissions enforcement (7 cases), error monitoring (4 cases) ครอบคลุม critical paths — ใช้ DB แยก khups_kpi_test_db ไม่กระทบ production' },
+        { type: 'improve', text: 'server.js refactor: export app + เปิด port เฉพาะตอน CLI (require.main === module) — รองรับ supertest โดยไม่เปิด HTTP จริง' },
         { type: 'feature', text: 'UX: เพิ่ม Toast notification (ngx-toastr) — บันทึก/อนุมัติ/อัพเดท ไม่บล็อก user ด้วย Swal modal อีก เปลี่ยนเป็นแถบเล็กมุมบนขวาที่หายเอง 3 วินาที' },
         { type: 'feature', text: 'UX: Command Palette (Cmd+K / Ctrl+K) — กดปุ่ม "ค้นหา..." บน header หรือกด Ctrl+K ที่หน้าใดก็ได้ → ค้นหาเมนู + กระโดดทันที (รองรับ ↑↓ + Enter + ESC)' },
         { type: 'feature', text: 'UX: บันทึก View (Filter Preset) — กดปุ่ม "View" ในแถบตัวกรอง dashboard → บันทึก filter ปัจจุบันด้วยชื่อ แล้วเรียกใช้ภายหลังคลิกเดียว (เก็บใน browser, สูงสุด 20 view ต่อ user)' },

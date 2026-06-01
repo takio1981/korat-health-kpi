@@ -1,0 +1,138 @@
+<div class="p-6">
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-4">
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <div>
+        <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+          <i class="fas fa-bug text-rose-500"></i>
+          ตรวจสอบ Error / Crash log
+        </h1>
+        <p class="text-sm text-gray-500 mt-1">บันทึก error จากทั้ง backend, frontend และ HTTP 5xx ทั้งหมด — ดูได้เฉพาะ super_admin</p>
+      </div>
+      <div class="flex gap-2">
+        <button (click)="load()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs">
+          <i class="fas fa-sync" [ngClass]="{'fa-spin': loading}"></i> Refresh
+        </button>
+        <button (click)="clearResolved()" class="bg-red-50 hover:bg-red-100 text-red-700 px-3 py-1.5 rounded-lg text-xs border border-red-200">
+          <i class="fas fa-trash mr-1"></i>ลบ resolved
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="grid grid-cols-2 md:grid-cols-6 gap-2 mb-4">
+    <div class="bg-gradient-to-br from-red-500 to-red-600 text-white p-3 rounded-2xl shadow">
+      <div class="text-xs opacity-90">ยังไม่แก้</div>
+      <div class="text-2xl font-bold">{{ stats.unresolved }}</div>
+    </div>
+    <div class="bg-gradient-to-br from-red-700 to-red-800 text-white p-3 rounded-2xl shadow">
+      <div class="text-xs opacity-90">FATAL</div>
+      <div class="text-2xl font-bold">{{ stats.fatal_open }}</div>
+    </div>
+    <div class="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-3 rounded-2xl shadow">
+      <div class="text-xs opacity-90">Frontend</div>
+      <div class="text-2xl font-bold">{{ stats.frontend_open }}</div>
+    </div>
+    <div class="bg-gradient-to-br from-orange-500 to-orange-600 text-white p-3 rounded-2xl shadow">
+      <div class="text-xs opacity-90">Backend</div>
+      <div class="text-2xl font-bold">{{ stats.backend_open }}</div>
+    </div>
+    <div class="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-3 rounded-2xl shadow">
+      <div class="text-xs opacity-90">วันนี้</div>
+      <div class="text-2xl font-bold">{{ stats.today }}</div>
+    </div>
+    <div class="bg-gradient-to-br from-gray-500 to-gray-600 text-white p-3 rounded-2xl shadow">
+      <div class="text-xs opacity-90">ทั้งหมด</div>
+      <div class="text-2xl font-bold">{{ stats.total }}</div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 mb-3 flex flex-wrap gap-2 items-center text-xs">
+    <select [(ngModel)]="filterSource" (change)="load()" class="px-2 py-1.5 border border-gray-300 rounded-lg">
+      <option value="">ทุก source</option>
+      <option value="backend">Backend</option>
+      <option value="frontend">Frontend</option>
+      <option value="http">HTTP</option>
+    </select>
+    <select [(ngModel)]="filterSeverity" (change)="load()" class="px-2 py-1.5 border border-gray-300 rounded-lg">
+      <option value="">ทุก severity</option>
+      <option value="fatal">Fatal</option>
+      <option value="error">Error</option>
+      <option value="warning">Warning</option>
+    </select>
+    <select [(ngModel)]="filterResolved" (change)="load()" class="px-2 py-1.5 border border-gray-300 rounded-lg">
+      <option value="">ทั้งหมด</option>
+      <option value="0">ยังไม่แก้</option>
+      <option value="1">แก้แล้ว</option>
+    </select>
+  </div>
+
+  <!-- Rows -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <div class="overflow-auto" style="max-height: calc(100vh - 380px)">
+      <table class="w-full text-xs">
+        <thead class="bg-gray-50 sticky top-0 z-10 shadow-sm">
+          <tr class="text-left text-gray-600">
+            <th class="px-3 py-2 w-32">เกิดล่าสุด</th>
+            <th class="px-2 py-2 text-center w-24">Source / Severity</th>
+            <th class="px-3 py-2">Message</th>
+            <th class="px-2 py-2 text-center w-12">Count</th>
+            <th class="px-3 py-2 w-24">User</th>
+            <th class="px-2 py-2 text-center w-24">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <ng-container *ngFor="let r of rows">
+            <tr class="border-b hover:bg-amber-50/30"
+                [class.opacity-50]="r.resolved">
+              <td class="px-3 py-2 whitespace-nowrap text-gray-500">{{ formatDate(r.last_seen) }}</td>
+              <td class="px-2 py-2 text-center space-y-1">
+                <span class="block px-2 py-0.5 rounded-full text-[10px] font-bold" [ngClass]="sourceColor(r.source)">{{ r.source }}</span>
+                <span class="block px-2 py-0.5 rounded-full text-[10px] font-bold" [ngClass]="severityColor(r.severity)">{{ r.severity }}</span>
+              </td>
+              <td class="px-3 py-2 max-w-md">
+                <button (click)="toggle(r.id)" class="text-left w-full text-gray-700 hover:text-gray-900">
+                  <span class="block font-medium truncate" [title]="r.message">{{ r.message }}</span>
+                  <span *ngIf="r.url" class="block text-[10px] text-gray-400 truncate">{{ r.url }}</span>
+                </button>
+              </td>
+              <td class="px-2 py-2 text-center font-bold">
+                <span class="px-2 py-0.5 bg-gray-100 rounded-full">{{ r.count }}</span>
+              </td>
+              <td class="px-3 py-2 text-xs text-gray-500">
+                {{ r.username || '-' }}
+                <div *ngIf="r.ip_address" class="text-[10px] text-gray-400">{{ r.ip_address }}</div>
+              </td>
+              <td class="px-2 py-2 text-center">
+                <span *ngIf="r.resolved" class="text-emerald-600 text-xs" [title]="formatDate(r.resolved_at)">
+                  <i class="fas fa-check-circle"></i> resolved
+                </span>
+                <button *ngIf="!r.resolved" (click)="resolve(r)" class="px-2 py-0.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-full text-[10px]">
+                  <i class="fas fa-check mr-1"></i>แก้แล้ว
+                </button>
+              </td>
+            </tr>
+            <tr *ngIf="isExpanded(r.id)" class="bg-gray-50">
+              <td colspan="6" class="px-4 py-3">
+                <div class="text-[11px] text-gray-700 mb-2">
+                  <b>fingerprint:</b> <code>{{ r.fingerprint }}</code> ·
+                  <b>first_seen:</b> {{ formatDate(r.first_seen) }} ·
+                  <b>last_seen:</b> {{ formatDate(r.last_seen) }}
+                </div>
+                <div *ngIf="r.stack" class="bg-gray-900 text-gray-200 rounded-lg p-3 text-[10px] font-mono whitespace-pre-wrap break-words max-h-64 overflow-auto">{{ r.stack }}</div>
+                <div *ngIf="r.user_agent" class="text-[10px] text-gray-500 mt-2 break-all"><b>UA:</b> {{ r.user_agent }}</div>
+              </td>
+            </tr>
+          </ng-container>
+          <tr *ngIf="rows.length === 0">
+            <td colspan="6" class="text-center py-12 text-gray-400">
+              <i class="fas fa-check-circle text-4xl text-emerald-300 mb-2"></i>
+              <p>ไม่มี error <span *ngIf="filterResolved === '0'">ที่ยังไม่แก้</span></p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

@@ -29,12 +29,21 @@ if (process.env.NODE_ENV !== 'production') {
 
 // === Safety net: กัน backend ตายทั้ง process จาก error ใน background job (restore/backup/scheduler) ===
 // ทำให้ระบบยังตอบ request อื่นได้ (ไม่ 502) แม้ background task พัง
+// + capture ลง error_logs (deferred — db อาจยังไม่ready ตอน startup)
 process.on('unhandledRejection', (reason) => {
-    console.error('[unhandledRejection]', reason instanceof Error ? reason.stack : reason);
+    const msg = reason instanceof Error ? reason.message : String(reason);
+    const stack = reason instanceof Error ? reason.stack : null;
+    console.error('[unhandledRejection]', stack || msg);
+    setImmediate(() => {
+        try { captureError({ source: 'backend', severity: 'error', message: 'unhandledRejection: ' + msg, stack }); } catch (_) {}
+    });
 });
 process.on('uncaughtException', (err) => {
     // log แล้วไม่ exit — กัน 1 error ใน child process/stream ทำให้ทั้ง backend ล่ม
     console.error('[uncaughtException]', err && err.stack ? err.stack : err);
+    setImmediate(() => {
+        try { captureError({ source: 'backend', severity: 'fatal', message: 'uncaughtException: ' + (err?.message || String(err)), stack: err?.stack }); } catch (_) {}
+    });
 });
 
 const express = require('express');
@@ -124,6 +133,77 @@ const notifyAdmins = async (subject, html, telegramMsg, options = {}) => {
         }
     }
 };
+
+// ============================================================
+//  Error Monitoring — capture + dedupe + throttled alert
+// ============================================================
+// fingerprint = hash ของ source+message (เพื่อ merge error ซ้ำ + INSERT...UPDATE count)
+// throttled alert: ส่ง Telegram เมื่อ error ใหม่หรือ severity=fatal เท่านั้น (1 ครั้ง/fingerprint/ชม)
+const _errorAlertThrottle = new Map(); // fingerprint → last alert timestamp
+const ERROR_ALERT_COOLDOWN_MS = 60 * 60 * 1000; // 1 ชั่วโมง
+
+async function captureError(payload) {
+    try {
+        const source = payload.source || 'backend';
+        const severity = payload.severity || 'error';
+        const message = String(payload.message || '').slice(0, 1000);
+        const stack = payload.stack ? String(payload.stack).slice(0, 8000) : null;
+        const url = payload.url ? String(payload.url).slice(0, 500) : null;
+        const userId = payload.user_id || null;
+        const username = payload.username ? String(payload.username).slice(0, 100) : null;
+        const ua = payload.user_agent ? String(payload.user_agent).slice(0, 500) : null;
+        const ip = payload.ip_address ? String(payload.ip_address).slice(0, 64) : null;
+        const extra = payload.extra ? (typeof payload.extra === 'string' ? payload.extra : JSON.stringify(payload.extra)).slice(0, 4000) : null;
+
+        // fingerprint = SHA-1(source + first line of message)
+        const firstLine = message.split('\n')[0].slice(0, 200);
+        const fingerprint = crypto.createHash('sha1').update(`${source}|${firstLine}`).digest('hex').slice(0, 16);
+
+        // INSERT...ON DUPLICATE: ถ้า fingerprint เคยมีแล้ว → count++, อัพเดท last_seen
+        const isNew = await new Promise((resolve) => {
+            db.query(
+                `INSERT INTO error_logs (source, severity, fingerprint, message, stack, url, user_id, username, user_agent, ip_address, extra)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                 ON DUPLICATE KEY UPDATE count = count + 1, last_seen = CURRENT_TIMESTAMP,
+                   severity = VALUES(severity), message = VALUES(message)`,
+                [source, severity, fingerprint, message, stack, url, userId, username, ua, ip, extra],
+                (err, result) => {
+                    // result.affectedRows === 1 = INSERT, 2 = UPDATE (mysql convention)
+                    resolve(!err && result && result.affectedRows === 1);
+                }
+            );
+        }).catch(() => false);
+
+        // === Throttled alert ===
+        // alert เฉพาะ: ใหม่ครั้งแรก หรือ severity=fatal และไม่เกิน cooldown
+        const now = Date.now();
+        const lastAlert = _errorAlertThrottle.get(fingerprint) || 0;
+        const shouldAlert = (isNew || severity === 'fatal') && (now - lastAlert > ERROR_ALERT_COOLDOWN_MS);
+        if (shouldAlert) {
+            _errorAlertThrottle.set(fingerprint, now);
+            const tgMsg = `🐛 <b>${severity.toUpperCase()}</b> [${source}]\n` +
+                          `<b>Message:</b> ${firstLine.slice(0, 200)}\n` +
+                          (url ? `<b>URL:</b> <code>${url.slice(0, 100)}</code>\n` : '') +
+                          (username ? `<b>User:</b> ${username}\n` : '') +
+                          `<b>ID:</b> ${fingerprint}`;
+            try {
+                const ns = await getNotifSettings();
+                if (ns.tgToken && ns.tgChatId) sendTelegramDirect(ns.tgToken, ns.tgChatId, tgMsg);
+            } catch (_) {}
+        }
+        return { fingerprint, alerted: shouldAlert };
+    } catch (e) {
+        // capture เองยังพังได้ — log console เท่านั้น
+        console.error('[captureError] failed:', e.message);
+        return null;
+    }
+}
+
+// cleanup throttle map ทุก 6 ชั่วโมง
+setInterval(() => {
+    const cutoff = Date.now() - 2 * ERROR_ALERT_COOLDOWN_MS;
+    for (const [k, v] of _errorAlertThrottle.entries()) if (v < cutoff) _errorAlertThrottle.delete(k);
+}, 6 * 60 * 60 * 1000);
 // ใช้ Port จาก ENV หรือ Default 8830 ตามโจทย์
 const port = process.env.PORT || 8830; 
 
@@ -2577,6 +2657,99 @@ apiRouter.get('/users/pending-count', authenticateToken, isAnyAdmin, async (req,
 });
 
 // GET /online-users — รายชื่อ user ที่ online (activity ล่าสุดภายใน windowMin นาที)
+// ============================================================
+//  Error Monitoring Endpoints
+// ============================================================
+// POST /errors/report — รับ error จาก frontend (authenticated หรือ anon ก็ได้)
+apiRouter.post('/errors/report', async (req, res) => {
+    try {
+        // ไม่ require auth — error อาจเกิดก่อน login
+        let userId = null, username = null;
+        try {
+            const token = (req.headers['authorization'] || '').split(' ')[1];
+            if (token) {
+                const decoded = jwt.verify(token, SECRET_KEY);
+                userId = decoded.userId || null;
+                username = decoded.username || null;
+            }
+        } catch (_) {}
+        const b = req.body || {};
+        const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim().slice(0, 64);
+        const result = await captureError({
+            source: b.source || 'frontend',
+            severity: b.severity || 'error',
+            message: b.message || '(empty)',
+            stack: b.stack || null,
+            url: b.url || null,
+            user_id: userId,
+            username,
+            user_agent: req.headers['user-agent'] || null,
+            ip_address: ip,
+            extra: b.extra || null
+        });
+        res.json({ success: true, ...(result || {}) });
+    } catch (e) {
+        // ไม่บอก error กลับ frontend (กัน loop) แค่ 200
+        res.json({ success: false });
+    }
+});
+
+// GET /admin/error-logs — ดู error log (super_admin)
+apiRouter.get('/admin/error-logs', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const { source, severity, resolved, limit = 100 } = req.query;
+        const params = [];
+        let where = '1=1';
+        if (source) { where += ' AND source = ?'; params.push(source); }
+        if (severity) { where += ' AND severity = ?'; params.push(severity); }
+        if (resolved !== undefined && resolved !== '') {
+            where += ' AND resolved = ?';
+            params.push(resolved === '1' || resolved === 'true' ? 1 : 0);
+        }
+        params.push(Math.min(Number(limit) || 100, 500));
+        const [rows] = await db.query(
+            `SELECT id, source, severity, fingerprint, message, stack, url, user_id, username,
+                    user_agent, ip_address, count, first_seen, last_seen, resolved, resolved_by, resolved_at
+             FROM error_logs WHERE ${where} ORDER BY last_seen DESC LIMIT ?`,
+            params
+        );
+        const [stat] = await db.query(`
+            SELECT
+              COUNT(*) AS total,
+              COUNT(CASE WHEN resolved = 0 THEN 1 END) AS unresolved,
+              COUNT(CASE WHEN source='frontend' AND resolved=0 THEN 1 END) AS frontend_open,
+              COUNT(CASE WHEN source='backend' AND resolved=0 THEN 1 END) AS backend_open,
+              COUNT(CASE WHEN severity='fatal' AND resolved=0 THEN 1 END) AS fatal_open,
+              COUNT(CASE WHEN DATE(last_seen) = CURDATE() THEN 1 END) AS today
+            FROM error_logs
+        `);
+        res.json({ success: true, data: rows, stats: stat[0] });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// POST /admin/error-logs/:id/resolve — mark error เป็น resolved
+apiRouter.post('/admin/error-logs/:id/resolve', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        await db.query(
+            'UPDATE error_logs SET resolved = 1, resolved_by = ?, resolved_at = NOW() WHERE id = ?',
+            [req.user.userId, Number(req.params.id)]
+        );
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// DELETE /admin/error-logs/clear-resolved — ลบ error ที่ resolved แล้ว
+apiRouter.delete('/admin/error-logs/clear-resolved', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [r] = await db.query('DELETE FROM error_logs WHERE resolved = 1');
+        res.json({ success: true, deleted: r.affectedRows });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// Express error middleware — capture 500 errors ที่ไม่ได้ handle ใน route
+// (ใส่ก่อน mount router — ต้องเอาก่อน app.listen)
+// ฟังก์ชันนี้ export ให้ใช้ทีหลังตอน app.use
+
 apiRouter.get('/online-users', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
         const windowMin = Math.max(1, Math.min(1440, parseInt(req.query.window || '5', 10))); // 1 นาที - 24 ชม
@@ -6121,6 +6294,36 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
                 INDEX idx_created_at (created_at)
             )
         `);
+        // Error logs — รวบ error จากทั้ง backend + frontend ไว้ที่เดียว
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS error_logs (
+                id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                source ENUM('backend','frontend','http') NOT NULL,
+                severity ENUM('error','warning','fatal') DEFAULT 'error',
+                fingerprint VARCHAR(64) NULL,
+                message TEXT NOT NULL,
+                stack TEXT NULL,
+                url VARCHAR(500) NULL,
+                user_id INT NULL,
+                username VARCHAR(100) NULL,
+                user_agent TEXT NULL,
+                ip_address VARCHAR(64) NULL,
+                extra TEXT NULL,
+                count INT DEFAULT 1,
+                first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+                last_seen DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                resolved TINYINT(1) DEFAULT 0,
+                resolved_by INT NULL,
+                resolved_at DATETIME NULL,
+                UNIQUE KEY uk_fingerprint (fingerprint),
+                INDEX idx_source_severity (source, severity),
+                INDEX idx_last_seen (last_seen),
+                INDEX idx_resolved (resolved)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+        // idempotent migration: ถ้า table เก่ามี idx_fingerprint แบบไม่ unique → DROP + ADD unique
+        try { await db.query('ALTER TABLE error_logs DROP INDEX idx_fingerprint'); } catch (e) {}
+        try { await db.query('ALTER TABLE error_logs ADD UNIQUE KEY uk_fingerprint (fingerprint)'); } catch (e) {}
         await db.query(`
             CREATE TABLE IF NOT EXISTS notifications (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -10540,9 +10743,33 @@ apiRouter.post('/kpi-audit/run-digest-now', authenticateToken, isSuperAdmin, asy
 // Mount Router ที่ path /khupskpi/api
 app.use('/khupskpi/api', apiRouter);
 
-app.listen(port, () => {
-    console.log(`🚀 API Server เปิดทำงานแล้วที่พอร์ต ${port} (Path: /khupskpi/api)`);
-    try { startExportScheduler(); } catch (e) { console.error('[Scheduler] start failed:', e.message); }
-    try { startBackupScheduler(); } catch (e) { console.error('[BackupScheduler] start failed:', e.message); }
-    try { startKpiAuditScheduler(); } catch (e) { console.error('[KPI Audit] start failed:', e.message); }
+// Express error middleware — capture 500 errors ที่ไม่ได้ handle ใน route → error_logs + Telegram
+// (ต้องอยู่หลัง mount router)
+app.use((err, req, res, next) => {
+    const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim().slice(0, 64);
+    captureError({
+        source: 'http',
+        severity: 'error',
+        message: err?.message || String(err),
+        stack: err?.stack || null,
+        url: req.originalUrl,
+        user_id: req.user?.userId || null,
+        username: req.user?.username || null,
+        user_agent: req.headers['user-agent'] || null,
+        ip_address: ip,
+        extra: { method: req.method }
+    }).catch(() => {});
+    res.status(err.status || 500).json({ success: false, message: err.message || 'Internal Server Error' });
 });
+
+// ============= Test mode: export app, ไม่ listen ตอน require =============
+// ใช้ใน integration test (supertest) — ไม่เปิด port + ไม่ start scheduler
+if (require.main === module) {
+    app.listen(port, () => {
+        console.log(`🚀 API Server เปิดทำงานแล้วที่พอร์ต ${port} (Path: /khupskpi/api)`);
+        try { startExportScheduler(); } catch (e) { console.error('[Scheduler] start failed:', e.message); }
+        try { startBackupScheduler(); } catch (e) { console.error('[BackupScheduler] start failed:', e.message); }
+        try { startKpiAuditScheduler(); } catch (e) { console.error('[KPI Audit] start failed:', e.message); }
+    });
+}
+module.exports = { app, captureError };
