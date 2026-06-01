@@ -462,7 +462,7 @@ apiRouter.get('/status', (req, res) => {
 });
 
 apiRouter.post('/login', loginLimiter, async (req, res) => {
-    const { username, password } = req.body;
+    const { username, password, force_login } = req.body;
     // ใช้ req.headers['x-forwarded-for'] กรณีอยู่หลัง Nginx/Docker Proxy
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
@@ -508,7 +508,8 @@ apiRouter.post('/login', loginLimiter, async (req, res) => {
 
                 // === ตรวจสอบ login ซ้อน (Single Session Enforcement) ===
                 // ถ้ามี active_session_id อยู่ + last_seen ภายใน 5 นาทีล่าสุด → ถือว่ายังใช้งานอยู่ ห้าม login ซ้อน
-                if (user.active_session_id) {
+                // ยกเว้น force_login = true (user ยืนยันว่าจะ kick session เก่า)
+                if (user.active_session_id && !force_login) {
                     const lastSeen = user.last_seen_at ? new Date(user.last_seen_at).getTime() : 0;
                     const fiveMinAgo = Date.now() - 5 * 60 * 1000;
                     if (lastSeen > fiveMinAgo) {
@@ -516,11 +517,17 @@ apiRouter.post('/login', loginLimiter, async (req, res) => {
                         return res.status(409).json({
                             success: false,
                             code: 'CONCURRENT_LOGIN',
-                            message: 'บัญชีนี้กำลังใช้งานอยู่ที่อุปกรณ์อื่น กรุณาออกจากระบบก่อน หรือรอประมาณ 5 นาที',
+                            message: 'บัญชีนี้กำลังใช้งานอยู่ที่อุปกรณ์อื่น',
                             last_seen_ip: user.last_seen_ip || '-',
-                            last_seen_at: user.last_seen_at
+                            last_seen_at: user.last_seen_at,
+                            can_force_login: true
                         });
                     }
+                }
+                // ถ้าเป็น force_login → log ว่า kick session เดิม
+                if (user.active_session_id && force_login) {
+                    await saveLog(username, 'login_force', `force login — kick session เดิม (last IP: ${user.last_seen_ip || '-'})`, ip);
+                    // _sessionCache.delete จะถูก override ตอน update active_session_id ใหม่ด้านล่างอยู่แล้ว
                 }
 
                 const serviceUnitDisplay = user.hosname ? `${user.hosname} ${user.distname ? 'อ.' + user.distname : ''}` : user.service_unit;

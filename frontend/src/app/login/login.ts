@@ -165,12 +165,28 @@ export class LoginComponent implements OnDestroy {
         error: (err) => {
           // 409 CONCURRENT_LOGIN — บัญชีมี session active ที่อื่นอยู่
           if (err.status === 409 && err.error?.code === 'CONCURRENT_LOGIN') {
+            const ip = err.error?.last_seen_ip || '-';
+            const lastSeenStr = err.error?.last_seen_at
+              ? new Date(err.error.last_seen_at).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })
+              : '-';
             Swal.fire({
               icon: 'warning',
               title: 'บัญชีกำลังใช้งานอยู่',
-              html: `<div style="text-align:center">${err.error?.message || 'บัญชีนี้กำลังใช้งานที่อุปกรณ์อื่น'}</div>`,
-              confirmButtonText: 'รับทราบ',
-              confirmButtonColor: '#f59e0b'
+              html: `<div style="text-align:left;font-size:13px">
+                <p>${err.error?.message || 'บัญชีนี้กำลังใช้งานที่อุปกรณ์อื่น'}</p>
+                <div class="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200 text-xs">
+                  <div><b>ใช้งานล่าสุดที่ IP:</b> <code>${ip}</code></div>
+                  <div><b>เวลา:</b> ${lastSeenStr}</div>
+                </div>
+                <p class="mt-3 text-xs text-gray-600">หากต้องการเข้าใช้ที่อุปกรณ์นี้ ระบบจะ <b>ออกจากระบบที่อื่นทันที</b></p>
+              </div>`,
+              showCancelButton: true,
+              confirmButtonText: '<i class="fas fa-sign-in-alt mr-1"></i> ออกจากที่อื่น + Login ที่นี่',
+              cancelButtonText: 'ยกเลิก',
+              confirmButtonColor: '#dc2626',
+              cancelButtonColor: '#9ca3af'
+            }).then((r) => {
+              if (r.isConfirmed) this.forceLogin();
             });
             return;
           }
@@ -178,6 +194,35 @@ export class LoginComponent implements OnDestroy {
         }
       });
     }
+  }
+
+  /** Force login — ใช้ตอน user ยืนยันใน 409 dialog ว่าจะ kick session เก่า */
+  forceLogin() {
+    const username = this.loginForm.get('username')?.value;
+    const password = this.loginForm.get('password')?.value;
+    if (!username || !password) {
+      Swal.fire('ผิดพลาด', 'กรุณากรอก Username + Password ก่อน', 'warning');
+      return;
+    }
+    Swal.fire({ title: 'กำลังเข้าสู่ระบบ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    this.authService.login({ username, password, force_login: true }).subscribe({
+      next: (response: any) => {
+        Swal.close();
+        if (response.success) {
+          this.authService.saveToken(response.token);
+          this.authService.saveUser(response.user);
+          Swal.fire({
+            icon: 'success', title: 'เข้าสู่ระบบสำเร็จ',
+            text: `ยินดีต้อนรับ คุณ${response.user.firstname} ${response.user.lastname}`,
+            timer: 1500, showConfirmButton: false
+          }).then(() => this.router.navigate(['/dashboard']));
+        }
+      },
+      error: (err) => {
+        Swal.close();
+        Swal.fire('ผิดพลาด', err.error?.message || 'เข้าสู่ระบบไม่สำเร็จ', 'error');
+      }
+    });
   }
 
   // === ลืมรหัสผ่าน ===
