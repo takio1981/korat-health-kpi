@@ -18,6 +18,18 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.06.01',
+      date: '1 มิถุนายน 2569',
+      changes: [
+        { type: 'feature', text: 'UX: เพิ่ม Toast notification (ngx-toastr) — บันทึก/อนุมัติ/อัพเดท ไม่บล็อก user ด้วย Swal modal อีก เปลี่ยนเป็นแถบเล็กมุมบนขวาที่หายเอง 3 วินาที' },
+        { type: 'feature', text: 'UX: Command Palette (Cmd+K / Ctrl+K) — กดปุ่ม "ค้นหา..." บน header หรือกด Ctrl+K ที่หน้าใดก็ได้ → ค้นหาเมนู + กระโดดทันที (รองรับ ↑↓ + Enter + ESC)' },
+        { type: 'feature', text: 'UX: บันทึก View (Filter Preset) — กดปุ่ม "View" ในแถบตัวกรอง dashboard → บันทึก filter ปัจจุบันด้วยชื่อ แล้วเรียกใช้ภายหลังคลิกเดียว (เก็บใน browser, สูงสุด 20 view ต่อ user)' },
+        { type: 'feature', text: 'UX: FAB เพิ่มตัวชี้วัด บน mobile dashboard (ปุ่มลอยมุมขวาล่าง) — ใช้งานสะดวกขึ้นบนมือถือ' },
+        { type: 'feature', text: 'Shared components: SkeletonTable / EmptyState / CommandPalette ใช้เป็น pattern ขยายไปทุกหน้าได้' },
+        { type: 'improve', text: 'ToastService wrapper รอบ ngx-toastr — มี success/info/warning/error/undo (ปุ่มยกเลิก toast) + theme mint ตรงกับระบบ' },
+      ]
+    },
+    {
       version: '2569.05.29',
       date: '29 พฤษภาคม 2569',
       changes: [

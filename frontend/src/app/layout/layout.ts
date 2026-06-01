@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, ChangeDetectorRef, NgZone } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef, NgZone, ViewChild } from '@angular/core';
 import { Router, RouterModule, RouterOutlet, NavigationEnd, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { ThemeService } from '../services/theme.service';
@@ -7,11 +7,12 @@ import { FormsModule } from '@angular/forms';
 import Swal from 'sweetalert2';
 import { filter, map, mergeMap } from 'rxjs/operators';
 import { Title } from '@angular/platform-browser';
+import { CommandPaletteComponent } from '../shared/command-palette/command-palette';
 
 @Component({
   selector: 'app-layout',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, RouterOutlet],
+  imports: [CommonModule, FormsModule, RouterModule, RouterOutlet, CommandPaletteComponent],
   templateUrl: './layout.html',
   styleUrls: ['./layout.css']
 })
@@ -24,8 +25,12 @@ export class LayoutComponent implements OnInit {
   private ngZone = inject(NgZone);
   themeService = inject(ThemeService);
 
+  @ViewChild(CommandPaletteComponent) commandPalette?: CommandPaletteComponent;
+
   pageTitle: string = '';
   announcement: any = null;
+
+  openCommandPalette() { this.commandPalette?.show(); }
 
   isSidebarOpen: boolean = window.innerWidth >= 1024; // desktop เปิด, mobile ซ่อน
   private _prevSidebarOpen: boolean = true; // เก็บค่าเดิมก่อนเข้า focus mode

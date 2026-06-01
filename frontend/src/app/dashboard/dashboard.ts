@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy, inject, ChangeDetectorRef, NgZone } from '@angular/core';
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth';
+import { ToastService } from '../services/toast.service';
 import { NgApexchartsModule } from 'ng-apexcharts';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -17,6 +18,7 @@ import { InitScrollLeftDirective } from './init-scroll-left.directive';
 })
 export class DashboardComponent implements OnInit, OnDestroy {
   private authService = inject(AuthService);
+  private toast = inject(ToastService);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
   private ngZone = inject(NgZone);
@@ -36,6 +38,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   selectedTypes: string[] = [];
   selectedHosTypes: string[] = [];
   selectedIndicatorOffTypes: string[] = [];
+
+  // === Saved Views (Filter Preset) — เก็บใน localStorage per-user ===
+  savedViews: any[] = [];
+  showSaveViewModal: boolean = false;
+  newViewName: string = '';
+
   // Backward-compat getters (ใช้ในส่วนอื่นของโค้ดที่ยังไม่ได้แก้)
   get selectedDept(): string { return this.selectedDepts[0] || ''; }
   set selectedDept(v: string) { this.selectedDepts = v ? [v] : []; }
@@ -310,6 +318,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (!this.isSuperAdmin && !this.isAdmin) {
       this.loadKpiData();
     }
+    this.loadSavedViews();    // โหลด preset filter ของ user
     this.loadAppealSettings();
     this.loadDataEntryLock();
     this.loadMyPermissions();
@@ -1077,6 +1086,78 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
+  // ============== Saved Views (Filter Preset) ==============
+  private savedViewsKey(): string {
+    const uid = this.authService.getUser()?.id || 'anon';
+    return `kpi_views_user_${uid}`;
+  }
+  loadSavedViews() {
+    try {
+      const raw = localStorage.getItem(this.savedViewsKey());
+      this.savedViews = raw ? JSON.parse(raw) : [];
+    } catch { this.savedViews = []; }
+  }
+  /** เปิด modal บันทึก view ปัจจุบัน */
+  openSaveViewModal() {
+    this.newViewName = '';
+    this.showSaveViewModal = true;
+    this.cdr.detectChanges();
+  }
+  /** บันทึก view (filter + year ปัจจุบัน) ลง localStorage */
+  saveCurrentView() {
+    const name = (this.newViewName || '').trim();
+    if (!name) { this.toast.warning('กรุณาตั้งชื่อ View'); return; }
+    const view = {
+      id: Date.now(),
+      name,
+      created_at: new Date().toISOString(),
+      filters: {
+        year: this.selectedYear,
+        districts: [...this.selectedDistricts],
+        hosTypes: [...this.selectedHosTypes],
+        hospitals: [...this.selectedHospitals],
+        depts: [...this.selectedDepts],
+        indicatorOffTypes: [...this.selectedIndicatorOffTypes],
+        statuses: [...this.selectedStatuses],
+        types: [...this.selectedTypes],
+        main: this.selectedMain,
+        indicator: this.selectedIndicator,
+        search: this.searchTerm
+      }
+    };
+    this.loadSavedViews();
+    this.savedViews.unshift(view);
+    if (this.savedViews.length > 20) this.savedViews = this.savedViews.slice(0, 20);
+    localStorage.setItem(this.savedViewsKey(), JSON.stringify(this.savedViews));
+    this.showSaveViewModal = false;
+    this.toast.success(`บันทึก "${name}" แล้ว`);
+    this.cdr.detectChanges();
+  }
+  /** โหลด view ที่บันทึกไว้ + ค้นหาทันที */
+  applySavedView(v: any) {
+    const f = v.filters || {};
+    if (f.year) this.selectedYear = f.year;
+    this.selectedDistricts = [...(f.districts || [])];
+    this.selectedHosTypes = [...(f.hosTypes || [])];
+    this.selectedHospitals = [...(f.hospitals || [])];
+    this.selectedDepts = [...(f.depts || [])];
+    this.selectedIndicatorOffTypes = [...(f.indicatorOffTypes || [])];
+    this.selectedStatuses = [...(f.statuses || [])];
+    this.selectedTypes = [...(f.types || [])];
+    this.selectedMain = f.main || '';
+    this.selectedIndicator = f.indicator || '';
+    this.searchTerm = f.search || '';
+    this.toast.info(`โหลด View "${v.name}"`);
+    this.loadKpiData();
+    this.loadDashboardStats();
+  }
+  deleteSavedView(v: any) {
+    this.savedViews = this.savedViews.filter(x => x.id !== v.id);
+    localStorage.setItem(this.savedViewsKey(), JSON.stringify(this.savedViews));
+    this.toast.success(`ลบ View "${v.name}" แล้ว`);
+    this.cdr.detectChanges();
+  }
+
   applyFilters() {
     this.filteredData = this.kpiData.filter(item => {
       const deptName = item.dept_name || '';
@@ -1397,7 +1478,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         });
 
         if (replyObservables.length === 0) {
-          Swal.fire('สำเร็จ', 'บันทึกข้อมูลเรียบร้อยแล้ว', 'success');
+          this.toast.success('บันทึกข้อมูลเรียบร้อยแล้ว');
           this.isEditing = false;
           this.authService.setFocusMode(this.isDeleteMode);
           this.loadKpiData();
@@ -1413,7 +1494,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
             next: () => {
               completed++;
               if (completed === replyObservables.length && !hasError) {
-                Swal.fire('สำเร็จ', `บันทึกข้อมูลและตอบกลับเรียบร้อยแล้ว (${resubmitItems.length} รายการ)`, 'success');
+                this.toast.success(`บันทึกข้อมูลและตอบกลับเรียบร้อยแล้ว (${resubmitItems.length} รายการ)`);
                 this.isEditing = false;
                 this.authService.setFocusMode(this.isDeleteMode);
                 this.loadKpiData();
@@ -1474,7 +1555,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.authService.approveKpi(item.indicator_id, item.year_bh, item.hospcode).subscribe({
           next: (res) => {
             if (res.success) {
-              Swal.fire('สำเร็จ', 'รับรองและล็อคข้อมูลเรียบร้อยแล้ว', 'success');
+              this.toast.success('รับรองและล็อคข้อมูลเรียบร้อยแล้ว');
               this.loadKpiData();
             }
           },
@@ -1505,7 +1586,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         }));
         this.authService.approveKpiResults(approvals).subscribe({
           next: (res) => {
-            Swal.fire('สำเร็จ', 'อนุมัติข้อมูลเรียบร้อยแล้ว', 'success');
+            this.toast.success('อนุมัติข้อมูลเรียบร้อยแล้ว');
             this.selectedStatus = '';
             this.loadKpiData();
             this.loadDashboardStats();
@@ -1695,7 +1776,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.authService.unlockKpi(item.indicator_id, item.year_bh, item.hospcode).subscribe({
           next: (res) => {
             if (res.success) {
-              Swal.fire('สำเร็จ', 'ปลดล็อคข้อมูลเรียบร้อยแล้ว', 'success');
+              this.toast.success('ปลดล็อคข้อมูลเรียบร้อยแล้ว');
               this.loadKpiData();
             }
           },
@@ -2991,7 +3072,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       next: (res) => {
         if (res.success) {
           this.showRejectModal = false;
-          Swal.fire('สำเร็จ', 'ส่งคืนแก้ไขเรียบร้อยแล้ว', 'success');
+          this.toast.success('ส่งคืนแก้ไขเรียบร้อยแล้ว');
           this.loadKpiData();
         }
       },
@@ -3048,7 +3129,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         }));
         this.authService.rejectKpi(rejections).subscribe({
           next: (res) => {
-            Swal.fire('สำเร็จ', `ส่งคืนแก้ไขเรียบร้อยแล้ว ${pendingItems.length} รายการ`, 'success');
+            this.toast.success(`ส่งคืนแก้ไขเรียบร้อยแล้ว ${pendingItems.length} รายการ`);
             this.selectedStatus = '';
             this.loadKpiData();
             this.loadDashboardStats();
@@ -3175,7 +3256,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       next: (res) => {
         if (res.success) {
           this.showReplyModal = false;
-          Swal.fire('สำเร็จ', 'ส่งตอบกลับเรียบร้อยแล้ว สถานะเปลี่ยนเป็น "รอตรวจสอบ"', 'success');
+          this.toast.success('ส่งตอบกลับเรียบร้อยแล้ว สถานะเปลี่ยนเป็น "รอตรวจสอบ"');
           this.loadKpiData();
         }
       },
@@ -3441,7 +3522,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
               }).subscribe();
 
               this.editingSingleItem = null;
-              Swal.fire('สำเร็จ', 'บันทึกข้อมูลและแจ้ง Admin ให้ตรวจสอบรับรองเรียบร้อยแล้ว', 'success');
+              this.toast.success('บันทึกข้อมูลและแจ้ง Admin ให้ตรวจสอบรับรองเรียบร้อยแล้ว');
               this.loadKpiData();
             } else {
               Swal.fire('ผิดพลาด', res.message, 'error');
@@ -3481,7 +3562,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         }).subscribe({
           next: (res) => {
             if (res.success) {
-              Swal.fire('สำเร็จ', 'ยื่นอุทธรณ์เรียบร้อยแล้ว รอ Admin พิจารณา', 'success');
+              this.toast.success('ยื่นอุทธรณ์เรียบร้อยแล้ว รอ Admin พิจารณา');
               this.loadKpiData();
             }
           },
@@ -3512,7 +3593,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         }).subscribe({
           next: (res) => {
             if (res.success) {
-              Swal.fire('สำเร็จ', 'อนุมัติอุทธรณ์เรียบร้อย ข้อมูลถูกปลดล็อคแล้ว', 'success');
+              this.toast.success('อนุมัติอุทธรณ์เรียบร้อย ข้อมูลถูกปลดล็อคแล้ว');
               this.loadKpiData();
             }
           },
@@ -3544,7 +3625,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         }).subscribe({
           next: (res) => {
             if (res.success) {
-              Swal.fire('สำเร็จ', 'ปฏิเสธอุทธรณ์เรียบร้อย', 'success');
+              this.toast.success('ปฏิเสธอุทธรณ์เรียบร้อย');
               this.loadKpiData();
             }
           },

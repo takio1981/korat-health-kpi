@@ -3,10 +3,28 @@
 @import "@fontsource/sarabun/500.css";
 @import "@fontsource/sarabun/600.css";
 @import "@fontsource/sarabun/700.css";
+@import "ngx-toastr/toastr";
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* === ngx-toastr — ปรับให้เข้ากับ theme mint/glassmorphism === */
+.toast-container .ngx-toastr {
+  border-radius: 12px !important;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.18), 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+  font-family: 'Sarabun', system-ui, sans-serif !important;
+  padding: 14px 18px 14px 52px !important;
+  background-position: 16px center !important;
+  background-size: 22px !important;
+}
+.toast-container .toast-success { background-color: #10b981 !important; }
+.toast-container .toast-info    { background-color: #3b82f6 !important; }
+.toast-container .toast-warning { background-color: #f59e0b !important; }
+.toast-container .toast-error   { background-color: #ef4444 !important; }
+.toast-container .toast-undo    { background-color: #4b5563 !important; }
+.toast-container .ngx-toastr .toast-title { font-weight: 700; }
+.toast-container .ngx-toastr .toast-message { font-size: 13px; }
 
 /* === Layout gradient (light + dark) === */
 @layer base {

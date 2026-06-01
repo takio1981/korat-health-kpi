@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../services/auth';
+import { ToastService } from '../services/toast.service';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -13,6 +14,7 @@ import Swal from 'sweetalert2';
 })
 export class UserManagementComponent implements OnInit {
   private authService = inject(AuthService);
+  private toast = inject(ToastService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private cdr = inject(ChangeDetectorRef);
@@ -423,7 +425,7 @@ export class UserManagementComponent implements OnInit {
         this.authService.approveUser(user.id).subscribe({
           next: (res) => {
             if (res.success) {
-              Swal.fire({ icon: 'success', title: 'อนุมัติแล้ว', timer: 1500, showConfirmButton: false });
+              this.toast.success('อนุมัติแล้ว', `${user.firstname || user.username} เข้าใช้งานได้แล้ว`);
               this.loadUsers();
             }
           },
@@ -453,7 +455,7 @@ export class UserManagementComponent implements OnInit {
         this.authService.rejectUser(user.id, reason).subscribe({
           next: (res) => {
             if (res.success) {
-              Swal.fire({ icon: 'success', title: 'ปฏิเสธแล้ว', text: user.email ? 'ส่ง Email แจ้งผลเรียบร้อย' : '', timer: 2000, showConfirmButton: false });
+              this.toast.success('ปฏิเสธแล้ว', user.email ? 'ส่ง Email แจ้งผลเรียบร้อย' : '');
               this.loadUsers();
             }
           },
@@ -806,7 +808,7 @@ export class UserManagementComponent implements OnInit {
           // อัปเดตค่าใน list ทันที
           this.permUser.can_edit_actual = this.permForm.can_edit_actual ? 1 : 0;
           this.permUser.can_edit_target = this.permForm.can_edit_target ? 1 : 0;
-          Swal.fire({ icon: 'success', title: 'บันทึกสิทธิ์สำเร็จ', text: 'มีผลทันที (ผู้ใช้ refresh หน้าจะเห็นผล)', timer: 2000, showConfirmButton: false });
+          this.toast.success('บันทึกสิทธิ์สำเร็จ', 'มีผลทันที (ผู้ใช้ refresh หน้าจะเห็นผล)');
           this.showPermModal = false;
         }
       },
