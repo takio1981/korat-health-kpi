@@ -1,5 +1,5 @@
 import { Injectable, ErrorHandler, inject, NgZone } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpErrorResponse } from '@angular/common/http';
 import { environment } from '../../environments/environment';
 
 /**
@@ -19,6 +19,18 @@ export class GlobalErrorHandler implements ErrorHandler {
   private THROTTLE_MS = 60 * 1000;
 
   handleError(error: any): void {
+    // === Skip HttpErrorResponse — interceptor (errorReportInterceptor) จัดการ HTTP errors อยู่แล้ว
+    //   - 4xx (401/403/404 ฯลฯ) = user/auth error ปกติ ไม่ใช่ bug
+    //   - 5xx = interceptor รายงาน + throttle ให้
+    if (error instanceof HttpErrorResponse) {
+      return;
+    }
+    // Skip rxjs error wrappers ที่ห่อ HttpErrorResponse อีกชั้น
+    const inner = error?.rejection || error?.cause;
+    if (inner instanceof HttpErrorResponse) {
+      return;
+    }
+
     // log local ก่อน (เพื่อ devtools)
     console.error('[GlobalErrorHandler]', error);
 
