@@ -194,6 +194,39 @@ export class LoginComponent implements OnDestroy {
             });
             return;
           }
+          // 429 Rate Limit — แยกประเภทให้ user เข้าใจ
+          if (err.status === 429) {
+            const code = err.error?.code;
+            const isIp = code === 'IP_RATE_LIMIT';
+            Swal.fire({
+              icon: 'warning',
+              title: isIp ? 'มี Login ผิดพลาดจากเครือข่ายนี้จำนวนมาก' : 'รหัสผ่านผิดเกินกำหนด',
+              html: `<div style="text-align:left;font-size:13px">
+                <p class="text-gray-600">${err.error?.message || 'รอ 15 นาทีแล้วลองใหม่'}</p>
+                ${isIp ? `
+                  <div class="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200 text-xs space-y-1">
+                    <p><b><i class="fas fa-info-circle text-amber-600 mr-1"></i>เกิดจากอะไร?</b></p>
+                    <ul class="ml-5 list-disc text-gray-600 space-y-0.5">
+                      <li>ออฟฟิศ/หน่วยงานของคุณใช้ IP เดียวกัน หลายคน login ผิด</li>
+                      <li>หรือมี script/bot พยายาม login รัวๆ</li>
+                    </ul>
+                    <p class="mt-2"><b>ทำยังไง:</b> รอ 15 นาที — หรือถ้าเร่งด่วน ติดต่อผู้ดูแลระบบขอ unblock</p>
+                  </div>
+                ` : `
+                  <div class="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200 text-xs">
+                    <p><b><i class="fas fa-lightbulb text-blue-600 mr-1"></i>คำแนะนำ:</b></p>
+                    <ul class="ml-5 list-disc text-gray-600 space-y-0.5 mt-1">
+                      <li>กดปุ่ม <b>"ลืมรหัสผ่าน"</b> เพื่อรับรหัสชั่วคราว 6 หลักทาง Email</li>
+                      <li>ตรวจสอบ Caps Lock + ภาษาแป้นพิมพ์ (ไทย/อังกฤษ)</li>
+                    </ul>
+                  </div>
+                `}
+              </div>`,
+              confirmButtonText: 'ตกลง',
+              confirmButtonColor: '#f59e0b'
+            });
+            return;
+          }
           Swal.fire({ icon: 'error', title: 'เข้าสู่ระบบไม่สำเร็จ', text: err.error?.message || 'เกิดข้อผิดพลาด' });
         }
       });

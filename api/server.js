@@ -236,21 +236,45 @@ const updateSystemSettings = async () => {
 // Load settings on start
 updateSystemSettings();
 
-// Rate Limiting: ป้องกัน Brute Force และ DDoS
-// loginLimiter: composite key IP+username — กัน NAT/proxy ที่ users หลายคน share IP เดียวกัน
+// ============================================================
+//  Rate Limiting — 2-layer สำหรับ /login (กัน Office NAT พลาด)
+// ============================================================
+// Layer 1: per-IP (DDoS protection only) — สูงพอให้ทั้งออฟฟิศใช้ได้
+//   - 500 attempts/15min/IP — เผื่อ 100+ users ใต้ NAT เดียวกัน
+//   - skipSuccessful: เฉพาะ fail นับ → ผู้ใช้ที่ login สำเร็จไม่กิน quota
+const loginIpLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 500,
+    keyGenerator: (req) => `loginip:${req.ip || 'unknown'}`,
+    message: {
+        success: false,
+        code: 'IP_RATE_LIMIT',
+        message: 'ระบบตรวจพบการ login ล้มเหลวจาก IP นี้จำนวนมาก กรุณารอ 15 นาที (อาจมี user หลายคนใช้ network เดียวกัน หรือ script ผิดปกติ)'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skipSuccessfulRequests: true,
+});
+
+// Layer 2: per-(IP + username) — Brute force protection (เดารหัส)
+//   - max_login_attempts (default 10) ต่อ user/15min — เข้มเพราะรู้ username แล้ว
+//   - คนละ user ที่ IP เดียวกัน = counter แยก → 1 user ติดบล็อก ไม่กระทบเพื่อน
 const loginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 นาที
+    windowMs: 15 * 60 * 1000,
     limit: (req, res) => loginAttemptsEnabled ? maxLoginAttempts : 9999,
     keyGenerator: (req) => {
-        // ใช้ IP + username เป็น key — แต่ละ user ที่ IP เดียวกันมี counter แยก
         const ip = req.ip || 'unknown';
         const username = (req.body?.username || 'anonymous').toString().toLowerCase().trim();
         return `login:${ip}:${username}`;
     },
-    message: { success: false, message: 'ทำรายการเกินกำหนด กรุณาลองใหม่ในอีก 15 นาที' },
+    message: {
+        success: false,
+        code: 'USER_RATE_LIMIT',
+        message: 'รหัสผ่านผิดเกินกำหนด กรุณารอ 15 นาที หรือกด "ลืมรหัสผ่าน" เพื่อรับรหัสชั่วคราว'
+    },
     standardHeaders: true,
     legacyHeaders: false,
-    skipSuccessfulRequests: true, // login สำเร็จไม่นับ → user ที่จำรหัสได้ไม่ติด limit
+    skipSuccessfulRequests: true,
 });
 
 // apiLimiter: per-user (parse JWT manually) ไม่ใช่ per-IP — รองรับ users หลายคนหลัง NAT
@@ -474,7 +498,21 @@ apiRouter.get('/status', (req, res) => {
     res.json({ message: '🚀 API พร้อมใช้งานที่ /khupskpi/api' });
 });
 
-apiRouter.post('/login', loginLimiter, async (req, res) => {
+// GET /debug/my-ip — ตรวจสอบว่า backend เห็น IP อะไรจาก client (debug proxy config)
+// Public — ใครเรียกก็ได้ — ใช้ตอนสงสัยว่ารับ IP ไม่ถูกต้อง (เช่น users office NAT ถูก block)
+apiRouter.get('/debug/my-ip', (req, res) => {
+    res.json({
+        success: true,
+        req_ip: req.ip,                                    // Express เห็น IP อะไร (หลัง trust proxy)
+        x_forwarded_for: req.headers['x-forwarded-for'] || null,
+        x_real_ip: req.headers['x-real-ip'] || null,
+        remote_address: req.socket?.remoteAddress || null, // raw TCP source
+        trust_proxy: app.get('trust proxy'),
+        note: 'ถ้า req_ip เป็น docker bridge IP (172.x.x.x) สำหรับ user ทุกคน = nginx X-Forwarded-For ไม่ทำงาน — แก้ nginx config ให้ส่ง XFF header'
+    });
+});
+
+apiRouter.post('/login', loginIpLimiter, loginLimiter, async (req, res) => {
     const { username, password, force_login } = req.body;
     // ใช้ req.headers['x-forwarded-for'] กรณีอยู่หลัง Nginx/Docker Proxy
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
@@ -885,7 +923,7 @@ apiRouter.get('/auth/thaid/callback', (req, res) => res.status(501).json(SSO_NOT
 apiRouter.get('/auth/providerid/callback', (req, res) => res.status(501).json(SSO_NOT_READY_RESPONSE));
 
 // === ลืมรหัสผ่าน: ส่งรหัสชั่วคราว 6 หลักทาง Email ===
-apiRouter.post('/forgot-password', loginLimiter, async (req, res) => {
+apiRouter.post('/forgot-password', loginIpLimiter, loginLimiter, async (req, res) => {
     const { username } = req.body;
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     if (!username) return res.status(400).json({ success: false, message: 'กรุณากรอก Username' });
@@ -934,7 +972,7 @@ apiRouter.post('/forgot-password', loginLimiter, async (req, res) => {
 });
 
 // === ลงทะเบียนผู้ใช้งานใหม่ (Public - ไม่ต้อง login) ===
-apiRouter.post('/register', loginLimiter, async (req, res) => {
+apiRouter.post('/register', loginIpLimiter, loginLimiter, async (req, res) => {
     const { username, password, firstname, lastname, hospcode, phone, email, dept_id, cid, role: reqRole } = req.body;
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
