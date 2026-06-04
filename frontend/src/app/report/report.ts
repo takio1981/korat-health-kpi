@@ -5,6 +5,7 @@ import { AuthService } from '../services/auth';
 import { NgApexchartsModule, ApexOptions } from 'ng-apexcharts';
 import { FormsModule } from '@angular/forms';
 import { SkeletonTableComponent } from '../shared/skeleton-table/skeleton-table';
+import { ToastService } from '../services/toast.service';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -18,6 +19,7 @@ export class ReportComponent implements OnInit {
   private authService = inject(AuthService);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
+  private toast = inject(ToastService);
 
   isLoading: boolean = false;
 
@@ -71,6 +73,8 @@ export class ReportComponent implements OnInit {
 
   switchMonitorView(view: 'by-indicator' | 'by-hospital') {
     this.monitorView = view;
+    const viewLabel = view === 'by-hospital' ? 'รายหน่วยบริการ (เรียงค้างมากสุดก่อน)' : 'รายตัวชี้วัด (เรียง %บันทึกมากสุดก่อน)';
+    this.toast.info(viewLabel, 'เปลี่ยนมุมมอง');
     this.loadReport();
   }
 
@@ -146,6 +150,10 @@ export class ReportComponent implements OnInit {
 
   switchTab(tab: string) {
     this.activeTab = tab;
+    if (tab === 'recording-status') {
+      const viewLabel = this.monitorView === 'by-hospital' ? 'รายหน่วยบริการ' : 'รายตัวชี้วัด';
+      this.toast.info(`มุมมอง: ${viewLabel}`, 'กำลังโหลดสถานะการบันทึก');
+    }
     this.loadReport();
   }
 
