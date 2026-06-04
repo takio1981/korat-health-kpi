@@ -59,6 +59,9 @@ export class ReportComponent implements OnInit {
     avg_recording_pct: 0
   };
 
+  // Toast loading — reference to dismiss when load completes
+  private monitorLoadingToastId: number | null = null;
+
   // Drill-down: ตัวชี้วัดที่ค้างบันทึกของหน่วยบริการที่เลือก
   drilldownHospcode: string = '';
   drilldownHosname: string = '';
@@ -73,8 +76,7 @@ export class ReportComponent implements OnInit {
 
   switchMonitorView(view: 'by-indicator' | 'by-hospital') {
     this.monitorView = view;
-    const viewLabel = view === 'by-hospital' ? 'รายหน่วยบริการ (เรียงค้างมากสุดก่อน)' : 'รายตัวชี้วัด (เรียง %บันทึกมากสุดก่อน)';
-    this.toast.info(viewLabel, 'เปลี่ยนมุมมอง');
+    this.showMonitorLoadingToast();
     this.loadReport();
   }
 
@@ -151,10 +153,28 @@ export class ReportComponent implements OnInit {
   switchTab(tab: string) {
     this.activeTab = tab;
     if (tab === 'recording-status') {
-      const viewLabel = this.monitorView === 'by-hospital' ? 'รายหน่วยบริการ' : 'รายตัวชี้วัด';
-      this.toast.info(`มุมมอง: ${viewLabel}`, 'กำลังโหลดสถานะการบันทึก');
+      this.showMonitorLoadingToast();
     }
     this.loadReport();
+  }
+
+  /** เปิด loading toast สี theme + เก็บ toastId เพื่อ dismiss ตอนโหลดเสร็จ */
+  private showMonitorLoadingToast() {
+    // ปิด toast เก่าก่อน (ถ้ามี — กัน toast ซ้อนกันตอนกดถี่ๆ)
+    if (this.monitorLoadingToastId != null) {
+      this.toast.dismiss(this.monitorLoadingToastId);
+      this.monitorLoadingToastId = null;
+    }
+    const isByHospital = this.monitorView === 'by-hospital';
+    const themeClass = isByHospital ? 'toast-rose' : 'toast-fuchsia';
+    const icon = isByHospital
+      ? '<i class="fas fa-hospital mr-1"></i>'
+      : '<i class="fas fa-list-ol mr-1"></i>';
+    const message = isByHospital
+      ? 'มุมมองรายหน่วยบริการ (เรียงค้างมากสุดก่อน)'
+      : 'มุมมองรายตัวชี้วัด (เรียง %บันทึกมากสุดก่อน)';
+    const t = this.toast.loading(message, 'กำลังโหลดสถานะการบันทึก', themeClass, icon);
+    if (t) this.monitorLoadingToastId = t.toastId;
   }
 
   onFilterChange() {
@@ -194,6 +214,11 @@ export class ReportComponent implements OnInit {
     observable.subscribe({
       next: (res: any) => {
         this.isLoading = false;
+        // dismiss monitor loading toast (ถ้ามี) — pace ของ progress bar = pace ของ load จริง
+        if (this.monitorLoadingToastId != null) {
+          this.toast.dismiss(this.monitorLoadingToastId);
+          this.monitorLoadingToastId = null;
+        }
         if (res.success) {
           this.reportData = res.data || [];
           if (this.activeTab === 'recording-status') {
@@ -237,6 +262,10 @@ export class ReportComponent implements OnInit {
       },
       error: (err: any) => {
         this.isLoading = false;
+        if (this.monitorLoadingToastId != null) {
+          this.toast.dismiss(this.monitorLoadingToastId);
+          this.monitorLoadingToastId = null;
+        }
         console.error('Report error:', err);
         this.cdr.detectChanges();
       }

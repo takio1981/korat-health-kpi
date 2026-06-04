@@ -23,6 +23,11 @@
 .toast-container .toast-warning { background-color: #f59e0b !important; }
 .toast-container .toast-error   { background-color: #ef4444 !important; }
 .toast-container .toast-undo    { background-color: #4b5563 !important; }
+/* Theme-matched colors สำหรับ tab สี — ใช้กับ Monitor การบันทึก */
+.toast-container .toast-fuchsia { background-color: #c026d3 !important; background-image: none !important; }
+.toast-container .toast-rose    { background-color: #e11d48 !important; background-image: none !important; }
+.toast-container .toast-fuchsia .toast-progress { background-color: rgba(255,255,255,0.55) !important; }
+.toast-container .toast-rose    .toast-progress { background-color: rgba(255,255,255,0.55) !important; }
 .toast-container .ngx-toastr .toast-title { font-weight: 700; }
 .toast-container .ngx-toastr .toast-message { font-size: 13px; }
 

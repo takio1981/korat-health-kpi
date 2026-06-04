@@ -65,4 +65,33 @@ export class ToastService {
 
   /** ปิด toast ทั้งหมด (เช่น ตอน logout) */
   clear() { this.toastr.clear(); }
+
+  /**
+   * Loading toast — sticky toast พร้อม progress bar
+   * ใช้กับ async loading: เปิดตอนเริ่มโหลด → caller dismiss ตอนโหลดเสร็จ
+   *
+   * @param themeClass — `'toast-fuchsia'` | `'toast-rose'` | custom (theme สี)
+   * @param iconHtml — Font Awesome icon (default = fa-spinner fa-spin)
+   * @returns ActiveToast — เรียก `.toastId` ส่งเข้า `dismiss()` เพื่อปิด
+   */
+  loading(message: string, title: string = 'กำลังโหลด', themeClass: string = 'toast-info', iconHtml: string = '<i class="fas fa-spinner fa-spin mr-1"></i>'): ActiveToast<any> | null {
+    return this.toastr.show(
+      `${iconHtml}${message}`,
+      title,
+      {
+        timeOut: 15000,
+        progressBar: true,
+        progressAnimation: 'decreasing',
+        enableHtml: true,
+        tapToDismiss: false,
+        closeButton: false,
+        toastClass: `ngx-toastr ${themeClass}`
+      }
+    );
+  }
+
+  /** ปิด toast เฉพาะตัวที่ส่ง toastId มา */
+  dismiss(toastId?: number) {
+    if (toastId != null) this.toastr.clear(toastId);
+  }
 }
