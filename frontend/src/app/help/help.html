@@ -562,6 +562,23 @@
           <div class="mt-3 bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
             <p><i class="fas fa-exclamation-triangle mr-1"></i><b>สำคัญ:</b> ข้อมูลรายงานดึงจากตาราง kpi_summary — ต้องกดปุ่ม <b>"อัปเดต Summary"</b> ในหน้าตั้งค่าหลังจากมีการเปลี่ยนแปลงข้อมูลผลงาน เพื่อให้รายงานเป็นปัจจุบัน</p>
           </div>
+
+          <!-- ===== Tab "สถานะการบันทึก" (Monitor) ===== -->
+          <div *ngIf="canSeeSection('users') || canSeeSection('kpi-manager')" class="mt-5 bg-fuchsia-50 border border-fuchsia-200 rounded-xl p-4">
+            <h4 class="font-bold text-fuchsia-800 text-sm mb-2"><i class="fas fa-clipboard-check mr-2"></i>Tab "สถานะการบันทึก" (Monitor — super_admin + admin_ssj)</h4>
+            <p class="text-xs text-gray-600 mb-3">ดูภาพรวมการบันทึกข้อมูลของระบบ — ใช้ติดตาม รพ. ที่ค้างบันทึก</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+              <div class="bg-white rounded-lg p-3 border border-fuchsia-200">
+                <p class="text-xs font-bold text-fuchsia-700 mb-1"><i class="fas fa-list-ol mr-1"></i>มุมมอง "รายตัวชี้วัด"</p>
+                <p class="text-[11px] text-gray-600">ดูแต่ละตัวชี้วัด: รพ. ใดบันทึกแล้ว/ยังไม่บันทึก เรียงจาก % บันทึกมาก→น้อย</p>
+              </div>
+              <div class="bg-white rounded-lg p-3 border border-rose-200">
+                <p class="text-xs font-bold text-rose-700 mb-1"><i class="fas fa-hospital mr-1"></i>มุมมอง "รายหน่วยบริการ"</p>
+                <p class="text-[11px] text-gray-600">ดูแต่ละ รพ.: ตัวชี้วัดใดยังค้างบันทึก เรียงจากค้างมากสุดก่อน — กดปุ่ม "ดูที่ค้าง" → modal แสดงรายตัวชี้วัดที่ค้าง</p>
+              </div>
+            </div>
+            <p class="text-[11px] text-gray-500"><i class="fas fa-lightbulb mr-1"></i>การ์ดสรุป: ตัวชี้วัด/รพ. ทั้งหมด, บันทึกครบ 100%, บันทึกบางส่วน, ยังไม่บันทึก, % บันทึกเฉลี่ย</p>
+          </div>
         </div>
       </section>
 

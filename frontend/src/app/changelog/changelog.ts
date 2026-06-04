@@ -18,6 +18,14 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.06.04',
+      date: '4 มิถุนายน 2569',
+      changes: [
+        { type: 'feature', text: 'Monitor การบันทึก: เพิ่มมุมมอง "รายหน่วยบริการ" (sub-tab ใน "สถานะการบันทึก") — ดูว่า รพ. ใดค้างบันทึกตัวชี้วัดกี่ตัว เรียงจากค้างมากสุดก่อน + drill-down modal ดูรายตัวชี้วัดที่ค้าง พร้อมเป้าหมาย + role-based filter (admin_ssj เห็นเฉพาะ dept ตัวเอง)' },
+        { type: 'feature', text: 'Backend endpoints ใหม่ 2 ตัว: `/report/recording-status/by-hospital` (รวม recorded/missing/% ต่อหน่วยบริการ) + `/report/recording-missing/by-hospital/:hospcode` (ดึงรายตัวชี้วัดที่ค้าง) — ใช้ CTE + chospital JOIN ครบ hosname/distname/hostype' },
+      ]
+    },
+    {
       version: '2569.06.02',
       date: '2 มิถุนายน 2569',
       changes: [

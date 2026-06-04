@@ -127,16 +127,31 @@
         </div>
       </div>
 
+      <!-- Recording-Status Sub-Tab Switcher (Monitor) -->
+      <div *ngIf="activeTab === 'recording-status'" class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-4 no-print">
+        <div class="flex border-b border-gray-200 overflow-x-auto">
+          <button (click)="switchMonitorView('by-indicator')" [class]="monitorView === 'by-indicator' ? 'border-fuchsia-500 text-fuchsia-600 bg-fuchsia-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'" class="flex-1 min-w-[160px] py-2.5 px-4 text-center border-b-2 font-medium text-sm focus:outline-none transition-colors">
+            <i class="fas fa-list-ol mr-1.5"></i> รายตัวชี้วัด
+          </button>
+          <button (click)="switchMonitorView('by-hospital')" [class]="monitorView === 'by-hospital' ? 'border-rose-500 text-rose-600 bg-rose-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'" class="flex-1 min-w-[160px] py-2.5 px-4 text-center border-b-2 font-medium text-sm focus:outline-none transition-colors">
+            <i class="fas fa-hospital mr-1.5"></i> รายหน่วยบริการ <span class="text-[10px] text-gray-400 ml-1">(ค้างมากสุดก่อน)</span>
+          </button>
+        </div>
+      </div>
+
       <!-- Recording-Status Summary Cards (Monitor) -->
       <div *ngIf="activeTab === 'recording-status'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-        <div class="bg-gradient-to-br from-fuchsia-500 to-fuchsia-700 rounded-2xl p-5 text-white shadow-lg">
+        <div class="bg-gradient-to-br rounded-2xl p-5 text-white shadow-lg"
+             [ngClass]="monitorView === 'by-hospital' ? 'from-rose-500 to-rose-700' : 'from-fuchsia-500 to-fuchsia-700'">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-xs font-bold text-fuchsia-100 uppercase">ตัวชี้วัดทั้งหมด</p>
-              <p class="text-3xl font-extrabold mt-1">{{ recordingSummary.total_indicators }}</p>
+              <p class="text-xs font-bold uppercase" [ngClass]="monitorView === 'by-hospital' ? 'text-rose-100' : 'text-fuchsia-100'">
+                {{ monitorView === 'by-hospital' ? 'หน่วยบริการทั้งหมด' : 'ตัวชี้วัดทั้งหมด' }}
+              </p>
+              <p class="text-3xl font-extrabold mt-1">{{ monitorView === 'by-hospital' ? recordingSummary.total_hospitals : recordingSummary.total_indicators }}</p>
             </div>
             <div class="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
-              <i class="fas fa-list-ol text-xl"></i>
+              <i class="fas text-xl" [ngClass]="monitorView === 'by-hospital' ? 'fa-hospital' : 'fa-list-ol'"></i>
             </div>
           </div>
         </div>
@@ -230,8 +245,8 @@
                 <div class="bg-blue-50 rounded p-1"><p class="text-[10px] text-gray-500">%</p><p class="font-bold">{{ item.achievement_pct | number:'1.0-0' }}%</p></div>
               </div>
             </ng-container>
-            <!-- recording-status -->
-            <ng-container *ngIf="activeTab === 'recording-status'">
+            <!-- recording-status: by-indicator -->
+            <ng-container *ngIf="activeTab === 'recording-status' && monitorView === 'by-indicator'">
               <p class="font-bold text-gray-900 text-sm whitespace-normal break-words">{{ item.kpi_indicators_name }}</p>
               <p class="text-[10px] text-gray-400 whitespace-normal break-words">{{ item.main_indicator_name }} | {{ item.dept_name }}</p>
               <div class="grid grid-cols-3 gap-1 mt-2 text-xs text-center">
@@ -242,6 +257,23 @@
                   <p class="font-bold" [class]="item.recording_pct >= 100 ? 'text-green-700' : (item.recording_pct > 0 ? 'text-amber-700' : 'text-red-600')">{{ (item.recording_pct | number:'1.0-0') }}%</p>
                 </div>
               </div>
+            </ng-container>
+            <!-- recording-status: by-hospital -->
+            <ng-container *ngIf="activeTab === 'recording-status' && monitorView === 'by-hospital'">
+              <p class="font-bold text-gray-900 text-sm">{{ item.hosname || item.hospcode }}</p>
+              <p class="text-[10px] text-gray-400">{{ item.distname }} | {{ item.hostypename }} | {{ item.hospcode }}</p>
+              <div class="grid grid-cols-3 gap-1 mt-2 text-xs text-center">
+                <div class="bg-emerald-50 rounded p-1"><p class="text-[10px] text-gray-500">บันทึก</p><p class="font-bold text-emerald-700">{{ item.recorded_indicators }}/{{ item.total_indicators }}</p></div>
+                <div class="bg-rose-50 rounded p-1"><p class="text-[10px] text-gray-500">ค้าง</p><p class="font-bold text-rose-600">{{ item.missing_indicators }}</p></div>
+                <div class="rounded p-1" [class]="item.recording_pct >= 100 ? 'bg-green-100' : (item.recording_pct > 0 ? 'bg-amber-50' : 'bg-red-50')">
+                  <p class="text-[10px] text-gray-500">%</p>
+                  <p class="font-bold" [class]="item.recording_pct >= 100 ? 'text-green-700' : (item.recording_pct > 0 ? 'text-amber-700' : 'text-red-600')">{{ (item.recording_pct | number:'1.0-0') }}%</p>
+                </div>
+              </div>
+              <button *ngIf="item.missing_indicators > 0" (click)="openDrilldown(item)"
+                      class="w-full mt-2 px-2 py-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-lg text-xs font-bold transition-colors">
+                <i class="fas fa-search mr-1"></i>ดูตัวชี้วัดที่ค้าง ({{ item.missing_indicators }})
+              </button>
             </ng-container>
           </div>
           <div *ngIf="reportData.length === 0" class="text-center py-10 text-gray-400">
@@ -419,8 +451,8 @@
           </table>
         </div>
 
-        <!-- Tab: recording-status (Monitor การบันทึก) -->
-        <div *ngIf="activeTab === 'recording-status'" class="overflow-x-auto hidden md:block">
+        <!-- Tab: recording-status — by-indicator -->
+        <div *ngIf="activeTab === 'recording-status' && monitorView === 'by-indicator'" class="overflow-x-auto hidden md:block">
           <table class="w-full text-sm">
             <thead class="bg-fuchsia-50 text-fuchsia-800 sticky top-0 z-10">
               <tr>
@@ -462,6 +494,60 @@
             </tbody>
           </table>
         </div>
+
+        <!-- Tab: recording-status — by-hospital (Desktop) -->
+        <div *ngIf="activeTab === 'recording-status' && monitorView === 'by-hospital'" class="overflow-x-auto hidden md:block">
+          <table class="w-full text-sm">
+            <thead class="bg-rose-50 text-rose-800 sticky top-0 z-10">
+              <tr>
+                <th class="px-4 py-3 text-left font-bold">#</th>
+                <th class="px-4 py-3 text-left font-bold">รหัส รพ.</th>
+                <th class="px-4 py-3 text-left font-bold">ชื่อหน่วยบริการ</th>
+                <th class="px-4 py-3 text-left font-bold">อำเภอ</th>
+                <th class="px-4 py-3 text-left font-bold">ประเภท</th>
+                <th class="px-4 py-3 text-right font-bold">ตัวชี้วัดทั้งหมด</th>
+                <th class="px-4 py-3 text-right font-bold">บันทึกแล้ว</th>
+                <th class="px-4 py-3 text-right font-bold">ค้างบันทึก</th>
+                <th class="px-4 py-3 text-right font-bold">% บันทึก</th>
+                <th class="px-4 py-3 text-center font-bold">สถานะ</th>
+                <th class="px-4 py-3 text-center font-bold">ดูรายละเอียด</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let item of reportData; let i = index" class="border-b border-gray-50 hover:bg-rose-50/30 transition-colors">
+                <td class="px-4 py-2.5 text-gray-500">{{ i + 1 }}</td>
+                <td class="px-4 py-2.5 text-gray-600 font-mono text-xs">{{ item.hospcode }}</td>
+                <td class="px-4 py-2.5 text-gray-800 font-medium">{{ item.hosname || '-' }}</td>
+                <td class="px-4 py-2.5 text-gray-600">{{ item.distname || '-' }}</td>
+                <td class="px-4 py-2.5 text-gray-600 text-xs">{{ item.hostypename || '-' }}</td>
+                <td class="px-4 py-2.5 text-right text-gray-700">{{ item.total_indicators }}</td>
+                <td class="px-4 py-2.5 text-right font-bold text-emerald-700">{{ item.recorded_indicators }}</td>
+                <td class="px-4 py-2.5 text-right font-bold text-rose-600">{{ item.missing_indicators }}</td>
+                <td class="px-4 py-2.5 text-right font-bold" [class]="item.recording_pct >= 100 ? 'text-green-600' : (item.recording_pct > 0 ? 'text-amber-600' : 'text-red-500')">
+                  {{ (item.recording_pct | number:'1.2-2') }}%
+                  <div class="w-full h-1.5 bg-gray-200 rounded-full mt-1 overflow-hidden">
+                    <div class="h-full rounded-full" [style.width.%]="item.recording_pct" [class]="item.recording_pct >= 100 ? 'bg-emerald-500' : (item.recording_pct > 0 ? 'bg-amber-500' : 'bg-rose-500')"></div>
+                  </div>
+                </td>
+                <td class="px-4 py-2.5 text-center">
+                  <span *ngIf="item.recording_pct >= 100" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700"><i class="fas fa-check mr-1"></i>ครบ</span>
+                  <span *ngIf="item.recording_pct > 0 && item.recording_pct < 100" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700"><i class="fas fa-hourglass-half mr-1"></i>บางส่วน</span>
+                  <span *ngIf="item.recording_pct === 0" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700"><i class="fas fa-times mr-1"></i>ค้าง</span>
+                </td>
+                <td class="px-4 py-2.5 text-center">
+                  <button *ngIf="item.missing_indicators > 0" (click)="openDrilldown(item)"
+                          class="px-2 py-1 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-lg text-[10px] font-bold transition-colors">
+                    <i class="fas fa-search mr-1"></i>ดูที่ค้าง ({{ item.missing_indicators }})
+                  </button>
+                  <span *ngIf="item.missing_indicators === 0" class="text-emerald-500 text-xs"><i class="fas fa-check-circle"></i></span>
+                </td>
+              </tr>
+              <tr *ngIf="reportData.length === 0">
+                <td colspan="11" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>ไม่พบข้อมูล</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <!-- Charts -->
@@ -491,5 +577,63 @@
           [dataLabels]="pieChartOptions.dataLabels"
           [responsive]="pieChartOptions.responsive"
         ></apx-chart>
+      </div>
+
+      <!-- Drill-down Modal: ตัวชี้วัดที่ค้างบันทึกของหน่วยบริการ -->
+      <div *ngIf="showDrilldown" class="fixed inset-0 z-50 flex items-start justify-center bg-black/60 overflow-y-auto py-6 px-3 no-print">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl my-auto">
+          <!-- Header -->
+          <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-rose-600 to-rose-500 rounded-t-2xl">
+            <div>
+              <h3 class="text-base font-bold text-white flex items-center gap-2">
+                <i class="fas fa-triangle-exclamation"></i> ตัวชี้วัดที่ค้างบันทึก
+              </h3>
+              <p class="text-rose-100 text-xs mt-0.5">{{ drilldownHosname }} ({{ drilldownHospcode }}) — ปีงบ {{ selectedYear }}</p>
+            </div>
+            <button (click)="closeDrilldown()" class="text-white/70 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+          </div>
+
+          <!-- Body -->
+          <div class="p-5 max-h-[70vh] overflow-y-auto card-scroll">
+            <div *ngIf="drilldownLoading" class="text-center py-10">
+              <div class="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-rose-600 mx-auto mb-3"></div>
+              <p class="text-rose-700 font-bold text-sm">กำลังโหลด...</p>
+            </div>
+            <div *ngIf="!drilldownLoading && drilldownData.length === 0" class="text-center py-10 text-gray-400">
+              <i class="fas fa-check-circle text-4xl text-emerald-500 mb-2"></i>
+              <p class="text-sm">ไม่มีตัวชี้วัดที่ค้างบันทึก — บันทึกครบทุกตัวแล้ว</p>
+            </div>
+            <table *ngIf="!drilldownLoading && drilldownData.length > 0" class="w-full text-sm">
+              <thead class="bg-rose-50 text-rose-800">
+                <tr>
+                  <th class="px-3 py-2 text-left text-xs font-bold">#</th>
+                  <th class="px-3 py-2 text-left text-xs font-bold">หมวดหมู่หลัก</th>
+                  <th class="px-3 py-2 text-left text-xs font-bold">ชื่อตัวชี้วัด</th>
+                  <th class="px-3 py-2 text-left text-xs font-bold">หน่วยงาน</th>
+                  <th class="px-3 py-2 text-right text-xs font-bold">เป้าหมาย</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let m of drilldownData; let i = index" class="border-b border-gray-50">
+                  <td class="px-3 py-2 text-gray-500 text-xs">{{ i + 1 }}</td>
+                  <td class="px-3 py-2 text-gray-700 text-xs whitespace-normal break-words">{{ m.main_indicator_name }}</td>
+                  <td class="px-3 py-2 text-gray-800 font-medium text-xs whitespace-normal break-words">{{ m.kpi_indicators_name }}</td>
+                  <td class="px-3 py-2 text-gray-600 text-xs">{{ m.dept_name }}</td>
+                  <td class="px-3 py-2 text-right text-gray-700 text-xs">{{ m.target_value || '-' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Footer -->
+          <div class="flex items-center justify-between px-6 py-3 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
+            <span class="text-xs text-gray-500">
+              <i class="fas fa-info-circle mr-1"></i>ค้าง {{ drilldownData.length }} ตัวชี้วัด
+            </span>
+            <button (click)="closeDrilldown()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-bold transition-colors">
+              ปิด
+            </button>
+          </div>
+        </div>
       </div>
 </div>

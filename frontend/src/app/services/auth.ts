@@ -804,6 +804,20 @@ export class AuthService {
     return this.http.get(`${this.apiUrl}/report/recording-status${queryStr ? '?' + queryStr : ''}`, { headers });
   }
 
+  getReportRecordingStatusByHospital(params: any = {}): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const queryStr = new URLSearchParams(params).toString();
+    return this.http.get(`${this.apiUrl}/report/recording-status/by-hospital${queryStr ? '?' + queryStr : ''}`, { headers });
+  }
+
+  getReportRecordingMissingByHospital(hospcode: string, params: any = {}): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const queryStr = new URLSearchParams(params).toString();
+    return this.http.get(`${this.apiUrl}/report/recording-missing/by-hospital/${encodeURIComponent(hospcode)}${queryStr ? '?' + queryStr : ''}`, { headers });
+  }
+
   // Export KPI Tables
   getExportableIndicators(): Observable<any> {
     const token = localStorage.getItem('kpi_token');

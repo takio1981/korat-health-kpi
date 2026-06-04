@@ -6430,6 +6430,166 @@ apiRouter.get('/report/recording-status', authenticateToken, async (req, res) =>
     }
 });
 
+// รายงาน: สถานะการบันทึก รายหน่วยบริการ (Monitor — Per Hospital)
+//   - total_indicators   = จำนวนตัวชี้วัดที่ รพ. นั้นต้องบันทึก (มีใน kpi_results ของปีนั้น)
+//   - recorded_indicators = จำนวนตัวชี้วัดที่ รพ. มี actual_value ในเดือนใดๆ
+//   - missing_indicators = total - recorded (ตัวที่ยังค้าง)
+//   - recording_pct      = recorded / total × 100
+//   เรียงจาก recording_pct ASC (ค้างมากสุดขึ้นก่อน) เพื่อให้ admin จับตา รพ. ที่ล่าช้าได้ง่าย
+apiRouter.get('/report/recording-status/by-hospital', authenticateToken, async (req, res) => {
+    try {
+        const user = req.user;
+        const { year_bh, dept_id, distid, hostype } = req.query;
+        if (!year_bh) {
+            return res.status(400).json({ success: false, message: 'ต้องระบุปีงบประมาณ' });
+        }
+
+        let whereClauses = ['r.year_bh = ?'];
+        let params = [year_bh];
+
+        // Role-based scope (เดียวกับ /report/recording-status)
+        if (user.role === 'super_admin') {
+            // เห็นทั้งหมด
+        } else if (user.role === 'admin_ssj') {
+            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+        } else if (user.role === 'admin_cup') {
+            const distid_auto = await getDistrictId(user.hospcode);
+            if (distid_auto) { whereClauses.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)'); params.push(distid_auto); }
+        } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
+            if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+        } else if (user.role === 'user_cup') {
+            const distid_auto = await getDistrictId(user.hospcode);
+            if (distid_auto) { whereClauses.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)'); params.push(distid_auto); }
+            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+        } else {
+            if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
+            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+        }
+        if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
+        if (distid) { whereClauses.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)'); params.push(distid); }
+        if (hostype) { whereClauses.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE hostype = ?)'); params.push(hostype); }
+
+        const whereStr = 'WHERE ' + whereClauses.join(' AND ');
+
+        const sql = `
+            WITH hospital_indicators AS (
+                SELECT
+                    r.hospcode,
+                    r.year_bh,
+                    r.indicator_id,
+                    MAX(CASE WHEN NULLIF(TRIM(r.actual_value), '') IS NOT NULL THEN 1 ELSE 0 END) AS has_recorded
+                FROM kpi_results r
+                JOIN kpi_indicators i ON i.id = r.indicator_id
+                ${whereStr}
+                GROUP BY r.hospcode, r.year_bh, r.indicator_id
+            )
+            SELECT
+                hi.hospcode,
+                MAX(h.hosname) AS hosname,
+                MAX(h.distid) AS distid,
+                MAX(cd.distname) AS distname,
+                MAX(h.hostype) AS hostype,
+                MAX(ct.hostypename) AS hostypename,
+                hi.year_bh,
+                COUNT(*) AS total_indicators,
+                SUM(hi.has_recorded) AS recorded_indicators,
+                COUNT(*) - SUM(hi.has_recorded) AS missing_indicators,
+                CASE WHEN COUNT(*) = 0 THEN 0
+                     ELSE ROUND(SUM(hi.has_recorded) / COUNT(*) * 100, 2)
+                END AS recording_pct
+            FROM hospital_indicators hi
+            LEFT JOIN chospital h ON h.hoscode = hi.hospcode
+            LEFT JOIN co_district cd ON cd.distid = h.distid
+            LEFT JOIN chostype ct ON ct.hostypecode = h.hostype
+            GROUP BY hi.hospcode, hi.year_bh
+            ORDER BY recording_pct ASC, hi.hospcode
+            LIMIT 1000
+        `;
+        const [rows] = await db.query(sql, params);
+
+        // Summary (overall)
+        const totalHospitals = rows.length;
+        const fullyRecorded = rows.filter(r => Number(r.recording_pct) >= 100).length;
+        const notRecorded = rows.filter(r => Number(r.recording_pct) === 0).length;
+        const partiallyRecorded = totalHospitals - fullyRecorded - notRecorded;
+        const avgPct = totalHospitals === 0 ? 0 :
+            Math.round(rows.reduce((s, r) => s + Number(r.recording_pct || 0), 0) / totalHospitals * 100) / 100;
+
+        res.json({
+            success: true,
+            summary: {
+                total_hospitals: totalHospitals,
+                fully_recorded: fullyRecorded,
+                partially_recorded: partiallyRecorded,
+                not_recorded: notRecorded,
+                avg_recording_pct: avgPct
+            },
+            data: rows
+        });
+    } catch (error) {
+        console.error('Report recording-status/by-hospital error:', error);
+        res.status(500).json({ success: false, message: 'ไม่สามารถดึงข้อมูลสถานะการบันทึก (รายหน่วยบริการ) ได้' });
+    }
+});
+
+// รายงาน: ตัวชี้วัดที่ค้างบันทึกของหน่วยบริการ (drill-down)
+//   ใช้ดูว่า รพ. นั้นค้างตัวชี้วัดไหนบ้าง (สำหรับปุ่ม "ดูรายละเอียด" ในแถว by-hospital)
+apiRouter.get('/report/recording-missing/by-hospital/:hospcode', authenticateToken, async (req, res) => {
+    try {
+        const user = req.user;
+        const { year_bh, dept_id } = req.query;
+        const { hospcode } = req.params;
+        if (!year_bh || !hospcode) {
+            return res.status(400).json({ success: false, message: 'ต้องระบุปีงบประมาณ + hospcode' });
+        }
+
+        let whereClauses = ['r.year_bh = ?', 'r.hospcode = ?'];
+        let params = [year_bh, hospcode];
+
+        // Role-based scope — ผู้ใช้ที่ไม่ใช่ super_admin/admin_ssj ต้องดูเฉพาะ hospcode ตัวเอง
+        if (user.role === 'super_admin') {
+            // ผ่าน
+        } else if (user.role === 'admin_ssj') {
+            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+        } else if (['admin_hos', 'admin_sso', 'user_hos', 'user_sso'].includes(user.role)) {
+            if (user.hospcode && user.hospcode !== hospcode) {
+                return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์ดูหน่วยบริการอื่น' });
+            }
+        } else if (['admin_cup', 'user_cup'].includes(user.role)) {
+            const distid_auto = await getDistrictId(user.hospcode);
+            if (distid_auto) { whereClauses.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)'); params.push(distid_auto); }
+            if (user.role === 'user_cup' && user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+        }
+        if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
+
+        const whereStr = 'WHERE ' + whereClauses.join(' AND ');
+
+        const sql = `
+            SELECT
+                i.id AS indicator_id,
+                i.kpi_indicators_name,
+                mi.main_indicator_name,
+                d.dept_name,
+                r.target_value,
+                MAX(CASE WHEN NULLIF(TRIM(r.actual_value), '') IS NOT NULL THEN 1 ELSE 0 END) AS has_recorded
+            FROM kpi_results r
+            JOIN kpi_indicators i ON i.id = r.indicator_id
+            LEFT JOIN kpi_main_indicators mi ON mi.id = i.main_indicator_id
+            LEFT JOIN departments d ON d.id = i.dept_id
+            ${whereStr}
+            GROUP BY i.id, r.target_value
+            HAVING has_recorded = 0
+            ORDER BY mi.main_indicator_name, i.kpi_indicators_name
+            LIMIT 500
+        `;
+        const [rows] = await db.query(sql, params);
+        res.json({ success: true, hospcode, year_bh, data: rows });
+    } catch (error) {
+        console.error('Report recording-missing/by-hospital error:', error);
+        res.status(500).json({ success: false, message: 'ไม่สามารถดึงข้อมูลตัวชี้วัดที่ค้างบันทึกได้' });
+    }
+});
+
 // ========== Auto-create tables for Approval & Notification system ==========
 (async () => {
     try {

@@ -46,17 +46,56 @@ export class ReportComponent implements OnInit {
   };
 
   // === Recording-Status Monitor (admin_ssj + super_admin) ===
-  recordingSummary = {
+  monitorView: 'by-indicator' | 'by-hospital' = 'by-indicator';
+  recordingSummary: any = {
     total_indicators: 0,
+    total_hospitals: 0,
     fully_recorded: 0,
     partially_recorded: 0,
     not_recorded: 0,
     avg_recording_pct: 0
   };
 
+  // Drill-down: ตัวชี้วัดที่ค้างบันทึกของหน่วยบริการที่เลือก
+  drilldownHospcode: string = '';
+  drilldownHosname: string = '';
+  drilldownLoading: boolean = false;
+  drilldownData: any[] = [];
+  showDrilldown: boolean = false;
+
   get canSeeMonitor(): boolean {
     const u = this.authService.getUser();
     return !!u && (u.role === 'super_admin' || u.role === 'admin_ssj');
+  }
+
+  switchMonitorView(view: 'by-indicator' | 'by-hospital') {
+    this.monitorView = view;
+    this.loadReport();
+  }
+
+  openDrilldown(item: any) {
+    this.drilldownHospcode = item.hospcode;
+    this.drilldownHosname = item.hosname || item.hospcode;
+    this.drilldownData = [];
+    this.drilldownLoading = true;
+    this.showDrilldown = true;
+    const params: any = { year_bh: this.selectedYear };
+    if (this.selectedDeptId) params.dept_id = this.selectedDeptId;
+    this.authService.getReportRecordingMissingByHospital(item.hospcode, params).subscribe({
+      next: (res: any) => {
+        this.drilldownLoading = false;
+        if (res.success) this.drilldownData = res.data || [];
+        this.cdr.detectChanges();
+      },
+      error: () => { this.drilldownLoading = false; this.cdr.detectChanges(); }
+    });
+  }
+
+  closeDrilldown() {
+    this.showDrilldown = false;
+    this.drilldownData = [];
+    this.drilldownHospcode = '';
+    this.drilldownHosname = '';
   }
 
   // Charts
@@ -135,7 +174,11 @@ export class ReportComponent implements OnInit {
       case 'by-hospital': observable = this.authService.getReportByHospital(params); break;
       case 'by-district': observable = this.authService.getReportByDistrict(params); break;
       case 'by-year': observable = this.authService.getReportByYear(params); break;
-      case 'recording-status': observable = this.authService.getReportRecordingStatus(params); break;
+      case 'recording-status':
+        observable = this.monitorView === 'by-hospital'
+          ? this.authService.getReportRecordingStatusByHospital(params)
+          : this.authService.getReportRecordingStatus(params);
+        break;
       default: observable = this.authService.getReportByIndicator(params);
     }
 
@@ -148,9 +191,14 @@ export class ReportComponent implements OnInit {
             this.recordingSummary = res.summary || this.recordingSummary;
             this.reportData.forEach((item: any) => {
               item.recording_pct = Number(item.recording_pct) || 0;
+              // per-indicator fields
               item.total_hospitals = Number(item.total_hospitals) || 0;
               item.recorded_hospitals = Number(item.recorded_hospitals) || 0;
               item.missing_hospitals = Number(item.missing_hospitals) || 0;
+              // per-hospital fields
+              item.total_indicators = Number(item.total_indicators) || 0;
+              item.recorded_indicators = Number(item.recorded_indicators) || 0;
+              item.missing_indicators = Number(item.missing_indicators) || 0;
             });
             this.cdr.detectChanges();
             return;
