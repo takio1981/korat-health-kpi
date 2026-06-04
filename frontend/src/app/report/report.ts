@@ -4,12 +4,13 @@ import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { NgApexchartsModule, ApexOptions } from 'ng-apexcharts';
 import { FormsModule } from '@angular/forms';
+import { SkeletonTableComponent } from '../shared/skeleton-table/skeleton-table';
 import Swal from 'sweetalert2';
 
 @Component({
   selector: 'app-report',
   standalone: true,
-  imports: [CommonModule, RouterModule, NgApexchartsModule, FormsModule],
+  imports: [CommonModule, RouterModule, NgApexchartsModule, FormsModule, SkeletonTableComponent],
   templateUrl: './report.html',
   styleUrl: './report.css'
 })
