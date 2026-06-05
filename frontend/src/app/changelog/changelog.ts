@@ -18,6 +18,16 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.06.05',
+      date: '5 มิถุนายน 2569',
+      changes: [
+        { type: 'feature', text: 'kpi_indicators: เพิ่มคอลัมน์ upload_excel (TINYINT) — 0=ส่งออกอัตโนมัติได้ (default), 1=ข้าม (อัปโหลด Excel มือเอง) ใช้กรณี HDC report ถูก deactivate หรือต้องการ override + index พร้อม auto-migration' },
+        { type: 'feature', text: 'Report Compare (Step 1): เพิ่มคอลัมน์ "upload_excel" toggle ในตาราง + แสดงสี HDC inactive (rose) แทน gray + warning banner "พบ HDC report inactive แต่ Local ยังเปิดส่งออก" พร้อมปุ่ม "ปิด N ตัว" bulk action — เสนอตั้ง upload_excel=1 อัตโนมัติ' },
+        { type: 'improve', text: 'Export pipeline: performKpiExport + checkKpiChanges กรอง upload_excel=1 ออก — ตัวชี้วัดที่ตั้งเป็น "อัปโหลดเอง" จะไม่ถูก export ทั้งใน Step 3 (manual) และ schedule อัตโนมัติ' },
+        { type: 'feature', text: 'Backend endpoints ใหม่ 2 ตัว: PUT /indicators/:id/upload-excel (toggle 1 ตัว) + POST /indicators/bulk-upload-excel (batch — ใช้กับปุ่ม bulk จาก Report Compare)' },
+      ]
+    },
+    {
       version: '2569.06.04',
       date: '4 มิถุนายน 2569',
       changes: [

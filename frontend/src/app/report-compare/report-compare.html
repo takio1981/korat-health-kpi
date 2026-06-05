@@ -105,6 +105,29 @@
       <span class="bg-green-100 text-green-800 px-3 py-1.5 rounded-full font-bold"><i class="fas fa-server mr-1"></i>Local: kpi_indicators ({{ compareResult.local_count }})</span>
       <i class="fas fa-exchange-alt text-gray-400"></i>
       <span class="bg-blue-100 text-blue-800 px-3 py-1.5 rounded-full font-bold"><i class="fas fa-cloud mr-1"></i>HDC: reports ({{ compareResult.hdc_count }})</span>
+      <span *ngIf="compareResult.summary.hdc_inactive > 0" class="bg-rose-100 text-rose-800 px-3 py-1.5 rounded-full font-bold" title="HDC report ที่ is_active = 0">
+        <i class="fas fa-power-off mr-1"></i>HDC inactive: {{ compareResult.summary.hdc_inactive }}
+      </span>
+    </div>
+
+    <!-- Suggestion banner: HDC inactive + Local ยังเปิด upload_excel -->
+    <div *ngIf="suggestDisableItems.length > 0" class="mb-4 bg-rose-50 border-2 border-rose-200 rounded-xl p-4">
+      <div class="flex items-start gap-3">
+        <div class="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center shrink-0">
+          <i class="fas fa-triangle-exclamation text-rose-600 text-lg"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <h4 class="text-sm font-bold text-rose-900">พบ HDC report ที่ inactive แต่ Local ยังเปิดส่งออกอัตโนมัติ</h4>
+          <p class="text-xs text-rose-700 mt-1">
+            <b>{{ suggestDisableItems.length }} ตัวชี้วัด</b> ที่ HDC ปิดใช้งานแล้ว (is_active=0) แต่ Local <code>upload_excel = 0</code> ยังอยู่ —
+            ระบบจะ export อัตโนมัติทุกครั้ง แนะนำให้ตั้งเป็น <code>upload_excel = 1</code> เพื่อ <b>ส่งด้วย Excel มือเอง</b>
+          </p>
+        </div>
+        <button (click)="bulkDisableSuggested()"
+                class="shrink-0 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-sm font-bold shadow-md transition-colors">
+          <i class="fas fa-toggle-off mr-1"></i>ปิด {{ suggestDisableItems.length }} ตัว
+        </button>
+      </div>
     </div>
 
     <!-- ตัวกรองรายการ (เหมือน Phase B) -->
@@ -180,6 +203,7 @@
             <th class="px-3 py-3">หน่วยงาน (HDC dept)</th>
             <th class="px-3 py-3">ยุทธศาสตร์ (HDC main_yut)</th>
             <th class="px-3 py-3 text-center">HDC active</th>
+            <th class="px-3 py-3 text-center" title="0=ส่งออกอัตโนมัติ, 1=อัปโหลด Excel เอง (ข้าม)">upload_excel</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100 bg-white">
@@ -206,13 +230,24 @@
             <td class="px-3 py-2.5 text-gray-600">{{ item.hdc_dept || '-' }}</td>
             <td class="px-3 py-2.5 text-gray-600">{{ item.hdc_main_yut || '-' }}</td>
             <td class="px-3 py-2.5 text-center">
-              <span *ngIf="item.hdc_is_active === 1" class="text-green-500"><i class="fas fa-check-circle"></i></span>
-              <span *ngIf="item.hdc_is_active === 0" class="text-gray-400"><i class="fas fa-minus-circle"></i></span>
+              <span *ngIf="item.hdc_is_active === 1" class="text-green-500" title="active"><i class="fas fa-check-circle"></i></span>
+              <span *ngIf="item.hdc_is_active === 0 || item.hdc_is_active === '0'" class="text-rose-500" title="inactive — แนะนำให้ปิด upload_excel"><i class="fas fa-power-off"></i></span>
               <span *ngIf="item.hdc_is_active == null">-</span>
+            </td>
+            <td class="px-3 py-2.5 text-center">
+              <!-- Toggle switch — เปลี่ยน upload_excel ทันทีตอน click -->
+              <button *ngIf="item.local_id" (click)="toggleSingleUploadExcel(item)" class="relative inline-flex items-center"
+                      [title]="item.local_upload_excel ? 'ปัจจุบัน: 1 (ข้าม — กดเพื่อเปิด)' : 'ปัจจุบัน: 0 (auto export — กดเพื่อปิด)'">
+                <span class="w-9 h-5 rounded-full transition-colors relative" [ngClass]="item.local_upload_excel ? 'bg-rose-500' : 'bg-emerald-500'">
+                  <span class="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all" [ngClass]="item.local_upload_excel ? 'left-4' : 'left-0.5'"></span>
+                </span>
+                <span *ngIf="item.suggest_disable_upload" class="ml-1 text-rose-600 text-[10px] font-bold animate-pulse" title="แนะนำให้ปิด"><i class="fas fa-arrow-left"></i></span>
+              </button>
+              <span *ngIf="!item.local_id" class="text-gray-300 text-[10px]">-</span>
             </td>
           </tr>
           <tr *ngIf="filteredItems.length === 0">
-            <td colspan="9" class="text-center py-10 text-gray-400">
+            <td colspan="10" class="text-center py-10 text-gray-400">
               <i class="fas fa-search text-3xl mb-2 block"></i>
               ไม่พบรายการตามเงื่อนไข
             </td>
@@ -220,8 +255,10 @@
         </tbody>
       </table>
     </div>
-    <div class="mt-2 text-xs text-gray-400">
-      <i class="fas fa-info-circle mr-1"></i>เปรียบเทียบโดยใช้ <b>table_process</b> เป็น key หลัก — HDC query: <code class="bg-gray-100 px-1 rounded">reports WHERE data_source='excel' AND is_active=1 AND LENGTH(report_code)=LENGTH(table_process)</code>
+    <div class="mt-2 text-xs text-gray-400 space-y-1">
+      <p><i class="fas fa-info-circle mr-1"></i>เปรียบเทียบโดยใช้ <b>table_process</b> เป็น key หลัก — HDC query: <code class="bg-gray-100 px-1 rounded">reports WHERE data_source='excel' AND LENGTH(report_code)=LENGTH(table_process)</code></p>
+      <p><i class="fas fa-power-off text-rose-500 mr-1"></i><b>HDC active = 0</b>: report ถูกปิดที่ฝั่ง HDC — ระบบแนะนำให้ตั้ง <code>upload_excel = 1</code> เพื่อข้าม auto export (ตั้งเองหรือกดปุ่ม "ปิด N ตัว" ข้างบน)</p>
+      <p><i class="fas fa-toggle-on text-emerald-500 mr-1"></i><b>upload_excel = 0</b> (เขียว): export อัตโนมัติได้ &nbsp;|&nbsp; <b>= 1</b> (แดง): ข้าม export — ต้องอัปโหลด Excel มือเอง</p>
     </div>
   </div>
 

@@ -105,6 +105,51 @@ export class ReportCompareComponent implements OnInit {
     }
   }
 
+  // === HDC inactive — ปุ่ม "ปิด upload_excel ทั้งหมดที่ HDC inactive" ===
+  get suggestDisableItems(): any[] {
+    return (this.compareResult?.items || []).filter((i: any) => i.suggest_disable_upload);
+  }
+
+  bulkDisableSuggested() {
+    const items = this.suggestDisableItems;
+    if (items.length === 0) { Swal.fire('แจ้งเตือน', 'ไม่มีรายการที่ต้องปิด (HDC inactive แต่ Local ยังเปิดส่งออก)', 'info'); return; }
+    const ids = items.map(i => i.local_id).filter(Boolean);
+    Swal.fire({
+      title: 'ปิดส่งออกอัตโนมัติ',
+      html: `<p class="text-sm">ตั้งค่า <code>upload_excel = 1</code> ให้ <b>${ids.length}</b> ตัวชี้วัด</p>
+             <p class="text-xs text-gray-500 mt-2">ตัวเหล่านี้ HDC report อยู่สถานะ <b>inactive</b> — ระบบจะไม่ส่งออกจาก export-kpi-tables ตามแนะนำ</p>
+             <p class="text-xs text-amber-600 mt-2"><i class="fas fa-info-circle mr-1"></i>กลับมาเปิดได้ที่ kpi-manage ทีหลัง</p>`,
+      icon: 'warning', showCancelButton: true, confirmButtonColor: '#dc2626',
+      confirmButtonText: '<i class="fas fa-toggle-off mr-1"></i> ปิดทั้งหมด',
+      cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      this.authService.bulkSetUploadExcel(ids, 1).subscribe({
+        next: (res: any) => {
+          if (res.success) {
+            Swal.fire({ icon: 'success', title: 'สำเร็จ', text: `ปิด upload_excel แล้ว ${res.affected} ตัวชี้วัด`, timer: 2500 });
+            this.runCompare();
+          }
+        },
+        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถปิดได้', 'error')
+      });
+    });
+  }
+
+  toggleSingleUploadExcel(item: any) {
+    const newVal = item.local_upload_excel ? 0 : 1;
+    this.authService.setUploadExcel(item.local_id, newVal).subscribe({
+      next: (res: any) => {
+        if (res.success) {
+          item.local_upload_excel = res.upload_excel;
+          item.suggest_disable_upload = (item.hdc_is_active === 0 || item.hdc_is_active === '0') && !res.upload_excel;
+          this.cdr.detectChanges();
+        }
+      },
+      error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถสลับสถานะได้', 'error')
+    });
+  }
+
   syncSelected() {
     const ids = [...this.selectedItems];
     if (ids.length === 0) { Swal.fire('แจ้งเตือน', 'กรุณาเลือกรายการอย่างน้อย 1 รายการ', 'warning'); return; }

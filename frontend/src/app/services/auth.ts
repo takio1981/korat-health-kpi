@@ -811,6 +811,18 @@ export class AuthService {
     return this.http.get(`${this.apiUrl}/report/recording-status/by-hospital${queryStr ? '?' + queryStr : ''}`, { headers });
   }
 
+  setUploadExcel(id: number, upload_excel: 0 | 1): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/indicators/${id}/upload-excel`, { upload_excel }, { headers });
+  }
+
+  bulkSetUploadExcel(ids: number[], upload_excel: 0 | 1): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/indicators/bulk-upload-excel`, { ids, upload_excel }, { headers });
+  }
+
   getReportRecordingMissingByHospital(hospcode: string, params: any = {}): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

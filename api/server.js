@@ -4845,8 +4845,10 @@ apiRouter.delete('/departments/:id', authenticateToken, isSuperAdmin, async (req
 // ดึงรายการ KPI indicators ที่มี table_process (สำหรับเลือก export) พร้อมชื่อหมวดหมู่และหน่วยงาน
 apiRouter.get('/exportable-indicators', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
+        // คืน upload_excel ด้วย — UI export-kpi จะใช้กรอง/แสดง badge
         const [rows] = await db.query(
             `SELECT i.id, i.kpi_indicators_name, i.table_process, i.dept_id, i.main_indicator_id, i.is_active,
+                    i.upload_excel,
                     d.dept_name, mi.main_indicator_name
              FROM kpi_indicators i
              LEFT JOIN departments d ON i.dept_id = d.id
@@ -4866,8 +4868,10 @@ async function checkKpiChanges(year_bh, indicator_ids) {
         return { success: false, message: 'กรุณาระบุปีงบประมาณ (year_bh) เป็นตัวเลข 4 หลัก' };
     }
     try {
+        // กรอง upload_excel != 1 (ตัวที่ตั้งเป็น "อัปโหลด Excel เอง" ข้ามทั้งใน check และ export)
         let indicatorQuery = `SELECT id, table_process, kpi_indicators_name FROM kpi_indicators
-            WHERE table_process IS NOT NULL AND table_process != ''`;
+            WHERE table_process IS NOT NULL AND table_process != ''
+            AND (upload_excel IS NULL OR upload_excel = 0)`;
         let indicatorParams = [];
         if (indicator_ids && indicator_ids !== 'all' && Array.isArray(indicator_ids) && indicator_ids.length > 0) {
             indicatorQuery += ` AND id IN (${indicator_ids.map(() => '?').join(',')})`;
@@ -5060,8 +5064,10 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
     const conn = await db.getConnection();
     try {
         // 1. Get indicators with valid table_process
+        //    — กรอง upload_excel != 1 (ตัวที่ตั้งเป็น "อัปโหลดเอง" ข้ามไป)
         let indicatorQuery = `SELECT id, table_process, kpi_indicators_name FROM kpi_indicators
-            WHERE is_active = 1 AND table_process IS NOT NULL AND table_process != ''`;
+            WHERE is_active = 1 AND (upload_excel IS NULL OR upload_excel = 0)
+            AND table_process IS NOT NULL AND table_process != ''`;
         let indicatorParams = [];
 
         if (indicator_ids !== 'all' && Array.isArray(indicator_ids) && indicator_ids.length > 0) {
@@ -7121,6 +7127,9 @@ apiRouter.get('/report/recording-missing/by-hospital/:hospcode', authenticateTok
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS description TEXT NULL`); } catch(e) {}
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS evaluation_mode VARCHAR(20) NULL COMMENT 'any_one | all_required'`); } catch(e) {}
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS required_off_types TEXT NULL COMMENT 'JSON array of hostypecode เช่น ["05","06","07"]'`); } catch(e) {}
+        // upload_excel: 0 = ส่งออกอัตโนมัติได้ (default), 1 = ข้าม (อัปโหลด Excel มือเอง — เช่น HDC report ถูก deactivate)
+        try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS upload_excel TINYINT(1) DEFAULT 0 COMMENT '0=auto export, 1=skip (manual Excel upload)'`); } catch(e) {}
+        try { await db.query(`ALTER TABLE kpi_indicators ADD INDEX idx_upload_excel (upload_excel)`); } catch(e) {}
 
         // เพิ่มฟิลด์ใน main_yut (ยุทธศาสตร์)
         try { await db.query(`ALTER TABLE main_yut ADD COLUMN IF NOT EXISTS yut_code VARCHAR(50) NULL COMMENT 'รหัสย่อยุทธศาสตร์'`); } catch(e) {}
@@ -7594,10 +7603,10 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
             AND LENGTH(report_code) = LENGTH(table_process)
             ORDER BY report_id
         `);
-        // ดึง kpi_indicators จาก Local (เพิ่ม dept_id, main_indicator_id เพื่อใช้กับตัวกรอง frontend)
+        // ดึง kpi_indicators จาก Local (เพิ่ม dept_id, main_indicator_id, upload_excel เพื่อ frontend)
         const [localRows] = await db.query(`
             SELECT i.id, i.kpi_indicators_name, i.table_process, i.kpi_indicators_code, i.is_active,
-                   i.dept_id, i.main_indicator_id,
+                   i.dept_id, i.main_indicator_id, i.upload_excel,
                    d.dept_name, mi.main_indicator_name
             FROM kpi_indicators i
             LEFT JOIN departments d ON i.dept_id = d.id
@@ -7612,6 +7621,14 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
 
         const items = [];
         let match = 0, different = 0, missing_local = 0, missing_remote = 0;
+        let hdc_inactive_count = 0, suggest_disable_count = 0;
+
+        // Helper: ถ้า HDC report inactive (=0) แต่ Local ยัง upload_excel=0 → suggest = ปิด upload_excel
+        const computeSuggest = (hdcIsActive, localUploadExcel) => {
+            const inactive = hdcIsActive === 0 || hdcIsActive === '0';
+            const stillAutoExport = !localUploadExcel || localUploadExcel === 0;
+            return inactive && stillAutoExport;
+        };
 
         // เทียบจาก HDC
         for (const hdc of hdcRows) {
@@ -7623,20 +7640,27 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                     hdc_report_id: hdc.report_id, hdc_name: hdc.report_name, hdc_dept: hdc.dept, hdc_main_yut: hdc.main_yut,
                     report_code: hdc.report_code, table_process: tp, hdc_is_active: hdc.is_active,
                     local_id: null, local_name: null,
-                    local_dept_id: null, local_main_indicator_id: null, local_is_active: null
+                    local_dept_id: null, local_main_indicator_id: null, local_is_active: null,
+                    local_upload_excel: null,
+                    suggest_disable_upload: false
                 });
+                if (hdc.is_active === 0 || hdc.is_active === '0') hdc_inactive_count++;
                 missing_local++;
             } else {
-                // เปรียบเทียบชื่อ
                 const nameMatch = (hdc.report_name || '').trim() === (local.kpi_indicators_name || '').trim();
                 const status = nameMatch ? 'match' : 'different';
                 if (status === 'match') match++; else different++;
+                const suggest = computeSuggest(hdc.is_active, local.upload_excel);
+                if (suggest) suggest_disable_count++;
+                if (hdc.is_active === 0 || hdc.is_active === '0') hdc_inactive_count++;
                 items.push({
                     status,
                     hdc_report_id: hdc.report_id, hdc_name: hdc.report_name, hdc_dept: hdc.dept, hdc_main_yut: hdc.main_yut,
                     report_code: hdc.report_code, table_process: tp, hdc_is_active: hdc.is_active,
                     local_id: local.id, local_name: local.kpi_indicators_name, local_dept: local.dept_name,
-                    local_dept_id: local.dept_id, local_main_indicator_id: local.main_indicator_id, local_is_active: local.is_active
+                    local_dept_id: local.dept_id, local_main_indicator_id: local.main_indicator_id, local_is_active: local.is_active,
+                    local_upload_excel: local.upload_excel || 0,
+                    suggest_disable_upload: suggest
                 });
             }
         }
@@ -7648,7 +7672,9 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                     hdc_report_id: null, hdc_name: null, hdc_dept: null, hdc_main_yut: null,
                     report_code: null, table_process: local.table_process, hdc_is_active: null,
                     local_id: local.id, local_name: local.kpi_indicators_name, local_dept: local.dept_name,
-                    local_dept_id: local.dept_id, local_main_indicator_id: local.main_indicator_id, local_is_active: local.is_active
+                    local_dept_id: local.dept_id, local_main_indicator_id: local.main_indicator_id, local_is_active: local.is_active,
+                    local_upload_excel: local.upload_excel || 0,
+                    suggest_disable_upload: false
                 });
                 missing_remote++;
             }
@@ -7656,9 +7682,38 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
         res.json({
             success: true,
             hdc_count: hdcRows.length, local_count: localRows.length,
-            summary: { total: items.length, match, different, missing_local, missing_remote },
+            summary: { total: items.length, match, different, missing_local, missing_remote, hdc_inactive: hdc_inactive_count, suggest_disable: suggest_disable_count },
             items
         });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// PUT /indicators/:id/upload-excel — toggle upload_excel (0=auto export, 1=skip)
+apiRouter.put('/indicators/:id/upload-excel', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        const v = req.body?.upload_excel;
+        const val = (v === 1 || v === '1' || v === true) ? 1 : 0;
+        const [r] = await db.query('UPDATE kpi_indicators SET upload_excel = ? WHERE id = ?', [val, id]);
+        if (r.affectedRows === 0) return res.status(404).json({ success: false, message: 'ไม่พบตัวชี้วัด' });
+        res.json({ success: true, id, upload_excel: val, message: val ? 'ตั้งเป็น "ไม่ส่งออกอัตโนมัติ" แล้ว' : 'ตั้งเป็น "ส่งออกอัตโนมัติได้" แล้ว' });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// POST /indicators/bulk-upload-excel — set upload_excel แบบ batch (ใช้ตอน "ปิดทั้งหมดที่ HDC inactive")
+apiRouter.post('/indicators/bulk-upload-excel', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(x => Number(x)).filter(Number.isFinite) : [];
+        const v = req.body?.upload_excel;
+        const val = (v === 1 || v === '1' || v === true) ? 1 : 0;
+        if (ids.length === 0) return res.status(400).json({ success: false, message: 'ต้องระบุ ids' });
+        const placeholders = ids.map(() => '?').join(',');
+        const [r] = await db.query(`UPDATE kpi_indicators SET upload_excel = ? WHERE id IN (${placeholders})`, [val, ...ids]);
+        res.json({ success: true, affected: r.affectedRows, upload_excel: val });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
