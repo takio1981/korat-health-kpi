@@ -18,6 +18,18 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.06.05.b',
+      date: '5 มิถุนายน 2569 (build b)',
+      changes: [
+        { type: 'feature', text: 'Notification: เพิ่มช่องทาง LINE Group (LINE Messaging API) — รองรับ Channel Access Token + multi Group ID (คั่นด้วย comma) — ทำงานร่วมกับ Telegram + Email ที่มีอยู่' },
+        { type: 'feature', text: 'Settings UI: เพิ่ม toggle "LINE Group" + การ์ดตั้งค่า Channel Access Token + Group ID + ปุ่มทดสอบ + คำแนะนำขั้นตอนสร้าง LINE bot' },
+        { type: 'feature', text: 'Export Schedule: เพิ่ม checkbox "ส่ง LINE Group รายงานสรุป" + badge แสดงในตาราง schedule list + เก็บ notified_line ใน export_schedule_logs' },
+        { type: 'feature', text: 'Error Monitoring: alert ส่ง LINE Group นอกเหนือจาก Telegram เมื่อพบ error ใหม่/fatal (1 ครั้ง/error/ชม cooldown เหมือนเดิม)' },
+        { type: 'feature', text: 'Backend endpoints: POST /test-line สำหรับทดสอบส่งข้อความ + auto-migration ใหม่ — export_schedules.notify_line, export_schedule_logs.notified_line + system_settings keys (line_channel_token, line_group_id, notif_line_enabled)' },
+        { type: 'fix', text: 'kpi-manage chips HDC ↔ Local: เลข "ชื่อต่างกัน" ไม่ตรงกับตาราง — เกิดจาก backend นับ HDC-centric (HDC duplicate ใน table_process ทำให้นับซ้ำ) — แก้โดยคำนวณ chips ใหม่ฝั่ง frontend (Local-centric)' },
+      ]
+    },
+    {
       version: '2569.06.05',
       date: '5 มิถุนายน 2569',
       changes: [

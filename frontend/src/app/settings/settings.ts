@@ -46,8 +46,11 @@ export class SettingsComponent implements OnInit {
   telegramBotToken: string = '';
   telegramChatId: string = '';
   adminEmails: string = '';
+  lineChannelToken: string = '';
+  lineGroupId: string = '';
   notifTelegramEnabled: boolean = true;
   notifEmailEnabled: boolean = true;
+  notifLineEnabled: boolean = true;
   notifSystemEnabled: boolean = true;
 
   // Appeal settings
@@ -143,12 +146,19 @@ export class SettingsComponent implements OnInit {
           if (tgToken) this.telegramBotToken = tgToken.setting_value || '';
           if (tgChat) this.telegramChatId = tgChat.setting_value || '';
           if (admEmails) this.adminEmails = admEmails.setting_value || '';
+          // LINE Group
+          const lnToken = this.settings.find(s => s.setting_key === 'line_channel_token');
+          const lnGroup = this.settings.find(s => s.setting_key === 'line_group_id');
+          if (lnToken) this.lineChannelToken = lnToken.setting_value || '';
+          if (lnGroup) this.lineGroupId = lnGroup.setting_value || '';
           const ntfTg = this.settings.find(s => s.setting_key === 'notif_telegram_enabled');
           const ntfEm = this.settings.find(s => s.setting_key === 'notif_email_enabled');
           const ntfSys = this.settings.find(s => s.setting_key === 'notif_system_enabled');
+          const ntfLn = this.settings.find(s => s.setting_key === 'notif_line_enabled');
           if (ntfTg) this.notifTelegramEnabled = ntfTg.setting_value !== 'false';
           if (ntfEm) this.notifEmailEnabled = ntfEm.setting_value !== 'false';
           if (ntfSys) this.notifSystemEnabled = ntfSys.setting_value !== 'false';
+          if (ntfLn) this.notifLineEnabled = ntfLn.setting_value !== 'false';
 
           // Data Entry Lock settings
           const entryLocked = this.settings.find(s => s.setting_key === 'data_entry_locked');
@@ -221,8 +231,11 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'telegram_bot_token', setting_value: this.telegramBotToken },
       { setting_key: 'telegram_chat_id', setting_value: this.telegramChatId },
       { setting_key: 'admin_emails', setting_value: this.adminEmails },
+      { setting_key: 'line_channel_token', setting_value: this.lineChannelToken },
+      { setting_key: 'line_group_id', setting_value: this.lineGroupId },
       { setting_key: 'notif_telegram_enabled', setting_value: this.notifTelegramEnabled.toString() },
       { setting_key: 'notif_email_enabled', setting_value: this.notifEmailEnabled.toString() },
+      { setting_key: 'notif_line_enabled', setting_value: this.notifLineEnabled.toString() },
       { setting_key: 'notif_system_enabled', setting_value: this.notifSystemEnabled.toString() },
       { setting_key: 'data_entry_locked', setting_value: this.dataEntryLocked.toString() },
       { setting_key: 'data_entry_lock_start', setting_value: this.dataEntryLockStart },
@@ -300,6 +313,28 @@ export class SettingsComponent implements OnInit {
       next: (res: any) => {
         if (res.success) Swal.fire({ icon: 'success', title: 'ส่ง Telegram สำเร็จ', text: 'ตรวจสอบข้อความใน Group', timer: 2000, showConfirmButton: false });
         else Swal.fire('ผิดพลาด', res.message || 'ส่งไม่สำเร็จ', 'error');
+      },
+      error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถส่งได้', 'error')
+    });
+  }
+
+  testLine() {
+    if (!this.lineChannelToken || !this.lineGroupId) {
+      Swal.fire('แจ้งเตือน', 'กรุณากรอก Channel Access Token และ Group ID ก่อน', 'warning');
+      return;
+    }
+    Swal.fire({ title: 'กำลังส่ง LINE...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    this.authService.testLine(this.lineChannelToken, this.lineGroupId).subscribe({
+      next: (res: any) => {
+        if (res.success) {
+          Swal.fire({
+            icon: 'success', title: 'ส่ง LINE สำเร็จ',
+            html: `ตรวจสอบข้อความใน Group แล้ว<br><small class="text-gray-500">ส่งสำเร็จ ${res.sent || 1} / ${(res.sent || 0) + (res.failed || 0)} group</small>`,
+            timer: 2500, showConfirmButton: false
+          });
+        } else {
+          Swal.fire('ผิดพลาด', res.message || 'ส่งไม่สำเร็จ — ตรวจสอบ Channel Access Token + Group ID + bot ได้รับเชิญเข้า group แล้วหรือไม่', 'error');
+        }
       },
       error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถส่งได้', 'error')
     });

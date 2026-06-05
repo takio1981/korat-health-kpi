@@ -404,12 +404,19 @@
           <p class="text-xs text-gray-500 mb-4">เมื่อมีผู้ลงทะเบียนใหม่ ระบบจะส่งแจ้งเตือนไปยังช่องทางที่เปิดไว้</p>
 
           <!-- สวิทช์เปิด-ปิดแต่ละช่องทาง -->
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-blue-50/50 rounded-xl p-4 border border-blue-100">
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 bg-blue-50/50 rounded-xl p-4 border border-blue-100">
             <div class="flex items-center">
               <label class="inline-flex items-center cursor-pointer">
                 <input type="checkbox" [(ngModel)]="notifTelegramEnabled" name="notifTelegramEnabled" class="peer" style="width:0;height:0;opacity:0;position:relative;margin:0;padding:0;border:0;">
                 <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
                 <span class="ms-3 text-sm font-bold text-gray-700"><i class="fab fa-telegram-plane me-1 text-blue-500"></i>Telegram</span>
+              </label>
+            </div>
+            <div class="flex items-center">
+              <label class="inline-flex items-center cursor-pointer">
+                <input type="checkbox" [(ngModel)]="notifLineEnabled" name="notifLineEnabled" class="peer" style="width:0;height:0;opacity:0;position:relative;margin:0;padding:0;border:0;">
+                <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                <span class="ms-3 text-sm font-bold text-gray-700"><i class="fab fa-line me-1 text-emerald-500"></i>LINE Group</span>
               </label>
             </div>
             <div class="flex items-center">
@@ -428,7 +435,7 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <!-- Telegram -->
             <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
               <h4 class="font-bold text-blue-800 text-sm mb-3"><i class="fab fa-telegram-plane me-2"></i>Telegram Bot</h4>
@@ -451,6 +458,38 @@
                 </button>
               </div>
               <p class="mt-2 text-xs text-blue-600"><i class="fas fa-info-circle me-1"></i>สร้าง Bot ผ่าน @BotFather แล้วเพิ่มเข้า Group</p>
+            </div>
+
+            <!-- LINE Group -->
+            <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+              <h4 class="font-bold text-emerald-800 text-sm mb-3"><i class="fab fa-line me-2"></i>LINE Messaging API</h4>
+              <div class="space-y-2">
+                <div>
+                  <label class="block text-xs font-bold text-gray-600 mb-1">Channel Access Token (long-lived)</label>
+                  <input type="password" [(ngModel)]="lineChannelToken" name="lineChannelToken"
+                         class="w-full px-3 py-2 border border-emerald-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-400 outline-none font-mono"
+                         placeholder="xxxxx..." autocomplete="off">
+                </div>
+                <div>
+                  <label class="block text-xs font-bold text-gray-600 mb-1">Group ID (คั่นด้วย comma)</label>
+                  <input type="text" [(ngModel)]="lineGroupId" name="lineGroupId"
+                         class="w-full px-3 py-2 border border-emerald-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-400 outline-none font-mono"
+                         placeholder="Cxxxxxxxxxxxxxxxx, Cyyyyyy...">
+                </div>
+                <button type="button" (click)="testLine()"
+                        class="w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition-colors">
+                  <i class="fab fa-line me-1"></i>ทดสอบส่ง LINE
+                </button>
+              </div>
+              <div class="mt-2 text-xs text-emerald-700 bg-white/70 rounded-lg p-2 space-y-1">
+                <p class="font-bold"><i class="fas fa-info-circle me-1"></i>วิธีตั้งค่า:</p>
+                <ol class="list-decimal ml-4 space-y-0.5 text-emerald-600">
+                  <li>สร้าง bot ที่ <a href="https://developers.line.biz/console" target="_blank" class="underline">LINE Developers Console</a> → "Messaging API channel"</li>
+                  <li>คัดลอก <b>Channel access token (long-lived)</b> จาก tab "Messaging API"</li>
+                  <li>เปิดใช้ <b>Use webhook = OFF</b>, <b>Auto-reply = OFF</b>, <b>Allow bot to join group chats = ON</b></li>
+                  <li>เพิ่ม bot เข้า LINE group → ใช้ helper bot หรือ webhook ดึง <code class="bg-white px-1 rounded">groupId</code></li>
+                </ol>
+              </div>
             </div>
 
             <!-- Admin Email -->
@@ -476,6 +515,9 @@
           <div class="mt-4 bg-gray-50 rounded-xl p-3 flex flex-wrap gap-3 text-xs">
             <span class="flex items-center gap-1.5" [ngClass]="telegramBotToken && telegramChatId ? 'text-green-600' : 'text-gray-400'">
               <i class="fab fa-telegram-plane"></i>Telegram: {{ telegramBotToken && telegramChatId ? 'ตั้งค่าแล้ว' : 'ยังไม่ตั้งค่า' }}
+            </span>
+            <span class="flex items-center gap-1.5" [ngClass]="lineChannelToken && lineGroupId ? 'text-green-600' : 'text-gray-400'">
+              <i class="fab fa-line"></i>LINE: {{ lineChannelToken && lineGroupId ? 'ตั้งค่าแล้ว (' + lineGroupId.split(',').length + ' group)' : 'ยังไม่ตั้งค่า' }}
             </span>
             <span class="flex items-center gap-1.5" [ngClass]="adminEmails ? 'text-green-600' : 'text-gray-400'">
               <i class="fas fa-envelope"></i>Email Admin: {{ adminEmails ? 'ตั้งค่าแล้ว (' + adminEmails.split(',').length + ' คน)' : 'ยังไม่ตั้งค่า' }}

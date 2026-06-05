@@ -81,7 +81,8 @@ export class ExportKpiComponent implements OnInit {
     indicator_ids: [] as number[],
     auto_sync_hdc: false,
     notify_email: true,
-    notify_telegram: false
+    notify_telegram: false,
+    notify_line: false
   };
   dayLabels = [
     { v: 1, label: 'จ.' },
@@ -708,8 +709,10 @@ export class ExportKpiComponent implements OnInit {
       year_bh: this.exportYear,
       indicator_scope: 'changes_only',
       indicator_ids: [],
+      auto_sync_hdc: false,
       notify_email: true,
-      notify_telegram: false
+      notify_telegram: false,
+      notify_line: false
     };
     this.showScheduleModal = true;
   }
@@ -728,7 +731,8 @@ export class ExportKpiComponent implements OnInit {
       indicator_ids: [...(s.indicator_ids_arr || [])],
       auto_sync_hdc: !!s.auto_sync_hdc,
       notify_email: !!s.notify_email,
-      notify_telegram: !!s.notify_telegram
+      notify_telegram: !!s.notify_telegram,
+      notify_line: !!s.notify_line
     };
     this.showScheduleModal = true;
   }
@@ -759,7 +763,8 @@ export class ExportKpiComponent implements OnInit {
       indicator_ids: f.indicator_scope === 'selected' ? (f.indicator_ids || []) : null,
       auto_sync_hdc: f.auto_sync_hdc,
       notify_email: f.notify_email,
-      notify_telegram: f.notify_telegram
+      notify_telegram: f.notify_telegram,
+      notify_line: f.notify_line
     };
 
     const obs = this.editingSchedule

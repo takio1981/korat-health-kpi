@@ -99,22 +99,68 @@ const sendTelegramDirect = async (botToken, chatId, message) => {
     }
 };
 
+// === LINE Messaging API Notification ===
+// ใช้ Channel Access Token (long-lived) + Group/User ID
+// สร้าง bot ที่ developers.line.biz/console → เชิญ bot เข้า group → ดึง groupId จาก webhook event
+// LINE limit text message 5000 chars/message, push API rate 1000 msg/min ต่อ channel
+const sendLineDirect = async (channelToken, groupId, message) => {
+    if (!channelToken || !groupId) return false;
+    try {
+        // LINE strip HTML tag — ส่งเป็น plain text เท่านั้น
+        const plain = String(message).replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').slice(0, 4900);
+        const res = await fetch('https://api.line.me/v2/bot/message/push', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${channelToken}`
+            },
+            body: JSON.stringify({
+                to: groupId,
+                messages: [{ type: 'text', text: plain }]
+            })
+        });
+        if (res.ok) { console.log('[LINE] Message sent to', groupId.slice(0, 8) + '...'); return true; }
+        const errBody = await res.text();
+        console.error('[LINE] Failed:', res.status, errBody.slice(0, 200));
+        return false;
+    } catch (err) {
+        console.error('[LINE] Error:', err.message);
+        return false;
+    }
+};
+
+// ส่ง LINE หลาย group ในครั้งเดียว — รับ comma-separated group IDs
+const sendLineMulticast = async (channelToken, groupIdsStr, message) => {
+    if (!channelToken || !groupIdsStr) return { sent: 0, failed: 0 };
+    const groupIds = String(groupIdsStr).split(',').map(s => s.trim()).filter(Boolean);
+    let sent = 0, failed = 0;
+    for (const gid of groupIds) {
+        const ok = await sendLineDirect(channelToken, gid, message);
+        if (ok) sent++; else failed++;
+    }
+    return { sent, failed };
+};
+
 // Helper: ดึง notification settings จาก DB (fallback ENV)
 const getNotifSettings = async () => {
     try {
-        const [rows] = await db.query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('telegram_bot_token','telegram_chat_id','admin_emails')");
+        const [rows] = await db.query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('telegram_bot_token','telegram_chat_id','admin_emails','line_channel_token','line_group_id')");
         const s = {};
         for (const r of rows) s[r.setting_key] = r.setting_value;
         return {
             tgToken: s.telegram_bot_token || process.env.TELEGRAM_BOT_TOKEN || '',
             tgChatId: s.telegram_chat_id || process.env.TELEGRAM_CHAT_ID || '',
-            adminEmails: s.admin_emails || process.env.ADMIN_EMAILS || ''
+            adminEmails: s.admin_emails || process.env.ADMIN_EMAILS || '',
+            lineToken: s.line_channel_token || process.env.LINE_CHANNEL_TOKEN || '',
+            lineGroupId: s.line_group_id || process.env.LINE_GROUP_ID || ''
         };
     } catch (e) {
         return {
             tgToken: process.env.TELEGRAM_BOT_TOKEN || '',
             tgChatId: process.env.TELEGRAM_CHAT_ID || '',
-            adminEmails: process.env.ADMIN_EMAILS || ''
+            adminEmails: process.env.ADMIN_EMAILS || '',
+            lineToken: process.env.LINE_CHANNEL_TOKEN || '',
+            lineGroupId: process.env.LINE_GROUP_ID || ''
         };
     }
 };
@@ -123,9 +169,14 @@ const notifyAdmins = async (subject, html, telegramMsg, options = {}) => {
     const ns = await getNotifSettings();
     const sendTg = options.telegram !== false;
     const sendEm = options.email !== false;
+    const sendLn = options.line !== false;
     // 1. Telegram
     if (sendTg && telegramMsg) sendTelegramDirect(ns.tgToken, ns.tgChatId, telegramMsg);
-    // 2. Email to admin list
+    // 2. LINE (ใช้ข้อความเดียวกับ Telegram แต่ strip HTML)
+    if (sendLn && telegramMsg && ns.lineToken && ns.lineGroupId) {
+        sendLineMulticast(ns.lineToken, ns.lineGroupId, telegramMsg);
+    }
+    // 3. Email to admin list
     if (sendEm && ns.adminEmails) {
         const emails = ns.adminEmails.split(',').map(e => e.trim()).filter(Boolean);
         for (const email of emails) {
@@ -189,6 +240,7 @@ async function captureError(payload) {
             try {
                 const ns = await getNotifSettings();
                 if (ns.tgToken && ns.tgChatId) sendTelegramDirect(ns.tgToken, ns.tgChatId, tgMsg);
+                if (ns.lineToken && ns.lineGroupId) sendLineMulticast(ns.lineToken, ns.lineGroupId, tgMsg);
             } catch (_) {}
         }
         return { fingerprint, alerted: shouldAlert };
@@ -1074,12 +1126,13 @@ apiRouter.post('/register', loginIpLimiter, loginLimiter, async (req, res) => {
         const roleLabel = roleLabelMap[finalRole] || finalRole;
 
         // ดึงค่า toggle แจ้งเตือนจาก settings
-        const [notifSettings] = await db.query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('notif_telegram_enabled','notif_email_enabled','notif_system_enabled')");
+        const [notifSettings] = await db.query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('notif_telegram_enabled','notif_email_enabled','notif_system_enabled','notif_line_enabled')");
         const ntfMap = {};
         notifSettings.forEach(r => ntfMap[r.setting_key] = r.setting_value);
         const ntfTelegram = ntfMap['notif_telegram_enabled'] !== 'false';
         const ntfEmail = ntfMap['notif_email_enabled'] !== 'false';
         const ntfSystem = ntfMap['notif_system_enabled'] !== 'false';
+        const ntfLine = ntfMap['notif_line_enabled'] !== 'false';
 
         // แจ้ง super_admin ทุกคน (ถ้าเปิดแจ้งเตือนในระบบ)
         if (ntfSystem) {
@@ -1128,7 +1181,7 @@ apiRouter.post('/register', loginIpLimiter, loginLimiter, async (req, res) => {
                 </div>
             </div>`,
             `🆕 ผู้สมัครใหม่รอการอนุมัติ\n━━━━━━━━━━━━━━━\n👤 ${firstname} ${lastname}\n🔑 Username: ${username}\n🏥 ${hosName}\n📋 สิทธิ์: ${roleLabel}\n📱 โทร: ${cleanPhone}\n📧 Email: ${email || '-'}\n━━━━━━━━━━━━━━━\n🔑 เข้าสู่ระบบ: ${approveUrl}`,
-            { telegram: ntfTelegram, email: ntfEmail }
+            { telegram: ntfTelegram, email: ntfEmail, line: ntfLine }
         );
 
         await saveLog(username, 'register_success', 'ลงทะเบียนผู้ใช้งานใหม่ — รอการอนุมัติ', ip);
@@ -5557,7 +5610,7 @@ async function sendExportNotification(schedule, result, durationMs) {
 
     // ดึง recipients จาก system_settings (ไม่ใช่จาก schedule)
     const ns = await getNotifSettings();
-    let sentEmail = false, sentTelegram = false;
+    let sentEmail = false, sentTelegram = false, sentLine = false;
 
     if (Number(schedule.notify_email) === 1 && ns.adminEmails) {
         const recipients = ns.adminEmails.split(',').map(e => e.trim()).filter(Boolean);
@@ -5599,9 +5652,28 @@ async function sendExportNotification(schedule, result, durationMs) {
         }
     }
 
+    // LINE (ใช้ข้อความเดียวกับ Telegram — สั้นกะทัดรัด)
+    if (Number(schedule.notify_line) === 1 && ns.lineToken && ns.lineGroupId) {
+        try {
+            // สร้าง message สั้นๆ (ไม่มี markdown ไม่ใช้)
+            const lineMsg = `📊 Export KPI — ${schedule.name}\n` +
+                `สถานะ: ${result.success ? '✅ สำเร็จ' : '❌ ผิดพลาด'}\n` +
+                `⏱ ${(durationMs/1000).toFixed(1)} วินาที\n\n` +
+                `📋 สรุปผล:\n` +
+                `• เพิ่มใหม่: ${summary.inserted}\n` +
+                `• อัปเดต: ${summary.updated}\n` +
+                `• ไม่เปลี่ยน: ${summary.unchanged}\n` +
+                `• ตารางทั้งหมด: ${tablesCount}\n` +
+                (sync ? `\n☁️ Sync HDC:\n• ${sync.success ? 'สำเร็จ' : 'ผิดพลาด'}: ${sync.summary.success}/${sync.summary.total} ตาราง\n• Rows: ${sync.summary.rows}` : '') +
+                (sync ? '\n\n📬 ข้อมูลถูกส่งเข้า HDC แล้ว' : '\n\n⚠️ กรุณาตรวจสอบก่อนส่ง HDC');
+            const r = await sendLineMulticast(ns.lineToken, ns.lineGroupId, lineMsg);
+            sentLine = r.sent > 0;
+        } catch (e) { console.error('[Schedule] LINE send error:', e.message); }
+    }
+
     // Append "สถานะการส่งรายงาน" footer ใน HTML — แต่ส่งหลังจาก email/telegram เสร็จแล้ว
     // (ไม่ส่ง email อีกครั้งเพื่อแจ้ง — เก็บใน return value แทน)
-    return { sentEmail, sentTelegram };
+    return { sentEmail, sentTelegram, sentLine };
 }
 
 // รันตาม schedule
@@ -5655,18 +5727,18 @@ async function runScheduledExport(schedule) {
     const duration = Date.now() - startTime;
 
     // ส่ง notification
-    let notif = { sentEmail: false, sentTelegram: false };
+    let notif = { sentEmail: false, sentTelegram: false, sentLine: false };
     try { notif = await sendExportNotification(schedule, result, duration); } catch (_) {}
 
     // อัปเดต last_run + log
     await db.query('UPDATE export_schedules SET last_run_at=NOW(), last_status=? WHERE id=?', [status, schedule.id]);
     const summary = result.summary || { inserted: 0, updated: 0, unchanged: 0, no_data: 0 };
     await db.query(
-        `INSERT INTO export_schedule_logs (schedule_id, status, inserted, updated_count, unchanged, no_data, tables_count, skipped_count, duration_ms, notified_email, notified_telegram, error_msg)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO export_schedule_logs (schedule_id, status, inserted, updated_count, unchanged, no_data, tables_count, skipped_count, duration_ms, notified_email, notified_telegram, notified_line, error_msg)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [schedule.id, status, summary.inserted, summary.updated, summary.unchanged, summary.no_data,
          (result.created_tables || []).length, (result.skipped || []).length, duration,
-         notif.sentEmail ? 1 : 0, notif.sentTelegram ? 1 : 0, errorMsg]
+         notif.sentEmail ? 1 : 0, notif.sentTelegram ? 1 : 0, notif.sentLine ? 1 : 0, errorMsg]
     );
     return result;
 }
@@ -5740,16 +5812,16 @@ apiRouter.get('/export-schedules', authenticateToken, isSuperAdmin, async (req, 
 
 apiRouter.post('/export-schedules', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
-        const { name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, auto_sync_hdc, notify_email, notify_telegram } = req.body;
+        const { name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, auto_sync_hdc, notify_email, notify_telegram, notify_line } = req.body;
         if (!name || !days_of_week || !time_of_day) return res.status(400).json({ success: false, message: 'ข้อมูลไม่ครบ' });
         const scope = ['all', 'selected', 'changes_only'].includes(indicator_scope) ? indicator_scope : 'all';
         const [r] = await db.query(
-            `INSERT INTO export_schedules (name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, auto_sync_hdc, notify_email, notify_telegram, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO export_schedules (name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, auto_sync_hdc, notify_email, notify_telegram, notify_line, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [name, is_enabled ? 1 : 0, days_of_week, time_of_day, year_bh || null,
              scope === 'selected' && Array.isArray(indicator_ids) ? JSON.stringify(indicator_ids) : null,
              scope, auto_sync_hdc ? 1 : 0,
-             notify_email ? 1 : 0, notify_telegram ? 1 : 0, req.user.id]
+             notify_email ? 1 : 0, notify_telegram ? 1 : 0, notify_line ? 1 : 0, req.user.id]
         );
         res.json({ success: true, id: r.insertId, message: 'สร้าง schedule สำเร็จ' });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -5757,14 +5829,14 @@ apiRouter.post('/export-schedules', authenticateToken, isSuperAdmin, async (req,
 
 apiRouter.put('/export-schedules/:id', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
-        const { name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, auto_sync_hdc, notify_email, notify_telegram } = req.body;
+        const { name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, auto_sync_hdc, notify_email, notify_telegram, notify_line } = req.body;
         const scope = ['all', 'selected', 'changes_only'].includes(indicator_scope) ? indicator_scope : 'all';
         await db.query(
-            `UPDATE export_schedules SET name=?, is_enabled=?, days_of_week=?, time_of_day=?, year_bh=?, indicator_ids=?, indicator_scope=?, auto_sync_hdc=?, notify_email=?, notify_telegram=? WHERE id=?`,
+            `UPDATE export_schedules SET name=?, is_enabled=?, days_of_week=?, time_of_day=?, year_bh=?, indicator_ids=?, indicator_scope=?, auto_sync_hdc=?, notify_email=?, notify_telegram=?, notify_line=? WHERE id=?`,
             [name, is_enabled ? 1 : 0, days_of_week, time_of_day, year_bh || null,
              scope === 'selected' && Array.isArray(indicator_ids) ? JSON.stringify(indicator_ids) : null,
              scope, auto_sync_hdc ? 1 : 0,
-             notify_email ? 1 : 0, notify_telegram ? 1 : 0, req.params.id]
+             notify_email ? 1 : 0, notify_telegram ? 1 : 0, notify_line ? 1 : 0, req.params.id]
         );
         res.json({ success: true, message: 'แก้ไข schedule สำเร็จ' });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -6780,7 +6852,10 @@ apiRouter.get('/report/recording-missing/by-hospital/:hospcode', authenticateTok
         const notifDefaults = [
             ['telegram_bot_token', '', 'Telegram Bot Token สำหรับแจ้งเตือนผู้สมัครใหม่'],
             ['telegram_chat_id', '', 'Telegram Chat ID (Group) สำหรับแจ้งเตือน'],
-            ['admin_emails', '', 'Email Admin สำหรับแจ้งเตือนผู้สมัครใหม่ (คั่นด้วย comma)']
+            ['admin_emails', '', 'Email Admin สำหรับแจ้งเตือนผู้สมัครใหม่ (คั่นด้วย comma)'],
+            ['line_channel_token', '', 'LINE Messaging API — Channel Access Token (long-lived) จาก LINE Developers Console'],
+            ['line_group_id', '', 'LINE Group ID ที่จะส่งแจ้งเตือน (คั่นด้วย comma สำหรับหลาย group)'],
+            ['notif_line_enabled', 'true', 'เปิด/ปิด LINE Group แจ้งเตือนทั่วระบบ']
         ];
         for (const [key, val, desc] of notifDefaults) {
             await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)', [key, val, desc]);
@@ -7173,6 +7248,8 @@ apiRouter.get('/report/recording-missing/by-hospital/:hospcode', authenticateTok
             `);
             try { await db.query(`ALTER TABLE export_schedules ADD COLUMN indicator_scope VARCHAR(20) DEFAULT 'all'`); } catch (_) {}
             try { await db.query(`ALTER TABLE export_schedules ADD COLUMN auto_sync_hdc TINYINT(1) DEFAULT 0`); } catch (_) {}
+            // LINE Group notification
+            try { await db.query(`ALTER TABLE export_schedules ADD COLUMN notify_line TINYINT(1) DEFAULT 0`); } catch (_) {}
         } catch (e) {}
         try {
             await db.query(`
@@ -7190,11 +7267,13 @@ apiRouter.get('/report/recording-missing/by-hospital/:hospcode', authenticateTok
                     duration_ms INT DEFAULT 0,
                     notified_email TINYINT(1) DEFAULT 0,
                     notified_telegram TINYINT(1) DEFAULT 0,
+                    notified_line TINYINT(1) DEFAULT 0,
                     error_msg TEXT,
                     INDEX idx_schedule (schedule_id),
                     INDEX idx_run_at (run_at)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             `);
+            try { await db.query(`ALTER TABLE export_schedule_logs ADD COLUMN notified_line TINYINT(1) DEFAULT 0`); } catch (_) {}
         } catch (e) {}
 
         // ตาราง system_announcements — ประกาศระบบ
@@ -8415,6 +8494,21 @@ apiRouter.post('/test-telegram', authenticateToken, isSuperAdmin, async (req, re
     if (!bot_token || !chat_id) return res.status(400).json({ success: false, message: 'กรุณากรอก Bot Token และ Chat ID' });
     const ok = await sendTelegramDirect(bot_token, chat_id, '🔔 ทดสอบการแจ้งเตือน\nจากระบบ KPI สสจ.นครราชสีมา\n✅ การเชื่อมต่อสำเร็จ!');
     res.json({ success: ok, message: ok ? 'ส่ง Telegram สำเร็จ' : 'ส่งไม่สำเร็จ ตรวจสอบ Token และ Chat ID' });
+});
+
+// === Test LINE Group Notification (super_admin) ===
+apiRouter.post('/test-line', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { channel_token, group_id } = req.body;
+    if (!channel_token || !group_id) return res.status(400).json({ success: false, message: 'กรุณากรอก Channel Access Token และ Group ID' });
+    const groupIds = String(group_id).split(',').map(s => s.trim()).filter(Boolean);
+    const msg = '🔔 ทดสอบการแจ้งเตือน\nจากระบบ KPI สสจ.นครราชสีมา\n✅ การเชื่อมต่อ LINE สำเร็จ!';
+    const r = await sendLineMulticast(channel_token, groupIds.join(','), msg);
+    const ok = r.sent > 0;
+    res.json({
+        success: ok,
+        sent: r.sent, failed: r.failed,
+        message: ok ? `ส่ง LINE สำเร็จ ${r.sent}/${groupIds.length} group` : 'ส่งไม่สำเร็จ ตรวจสอบ Channel Access Token และ Group ID'
+    });
 });
 
 // === Test Admin Email (super_admin) ===

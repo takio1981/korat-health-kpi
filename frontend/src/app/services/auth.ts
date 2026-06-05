@@ -421,6 +421,12 @@ export class AuthService {
     return this.http.post(`${this.apiUrl}/test-admin-email`, { emails }, { headers });
   }
 
+  testLine(channelToken: string, groupId: string): Observable<any> {
+    const authToken = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${authToken}` });
+    return this.http.post(`${this.apiUrl}/test-line`, { channel_token: channelToken, group_id: groupId }, { headers });
+  }
+
   backupDatabase(): Observable<Blob> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
