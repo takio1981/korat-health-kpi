@@ -21,6 +21,7 @@ export class KpiAuditDigestComponent implements OnInit {
     digestTime: '17:00',
     digestEmail: true,
     digestTelegram: true,
+    digestLine: true,
     minRecords: 1,
     lastDigestAt: '',
     lastDigestResult: ''

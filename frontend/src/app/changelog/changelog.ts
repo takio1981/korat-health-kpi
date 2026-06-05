@@ -18,6 +18,16 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.06.05.c',
+      date: '5 มิถุนายน 2569 (build c)',
+      changes: [
+        { type: 'feature', text: 'LINE Group ครอบคลุมทุก notification: Backup schedule, Audit-digest (สรุปการบันทึก KPI ประจำวัน), Feedback กระทู้ใหม่ + reply, ผู้สมัครใหม่ — ทุกที่ที่เคยส่ง Telegram + Email ตอนนี้ส่ง LINE ด้วย' },
+        { type: 'improve', text: 'Backup schedule UI: เพิ่มกล่อง "LINE Group" + sub-toggle แจ้งเมื่อสำเร็จ/ล้มเหลว แยกอิสระจาก Telegram/Email + badge LINE ในตาราง schedule list' },
+        { type: 'improve', text: 'Audit-digest UI: เพิ่ม checkbox "ส่งทาง LINE Group" — bind กับ kpi_audit_digest_line setting' },
+        { type: 'feature', text: 'Backend: notify_line + notified_line columns ใน backup_schedules + backup_schedule_logs + new setting kpi_audit_digest_line + auto-migration' },
+      ]
+    },
+    {
       version: '2569.06.05.b',
       date: '5 มิถุนายน 2569 (build b)',
       changes: [

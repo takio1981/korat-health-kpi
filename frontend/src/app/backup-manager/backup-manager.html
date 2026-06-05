@@ -370,7 +370,8 @@
             <td class="px-3 py-2 text-center text-xs space-x-1">
               <span *ngIf="s.notify_email" class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full" title="email"><i class="fas fa-envelope"></i></span>
               <span *ngIf="s.notify_telegram" class="bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded-full" title="telegram"><i class="fab fa-telegram"></i></span>
-              <span *ngIf="!s.notify_email && !s.notify_telegram" class="text-gray-300">-</span>
+              <span *ngIf="s.notify_line" class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full" title="LINE"><i class="fab fa-line"></i></span>
+              <span *ngIf="!s.notify_email && !s.notify_telegram && !s.notify_line" class="text-gray-300">-</span>
             </td>
             <td class="px-3 py-2 text-center text-xs">
               <div *ngIf="s.last_run_at; else neverRun">
@@ -498,6 +499,24 @@
               </label>
               <label class="flex items-center gap-2 text-xs">
                 <input type="checkbox" [(ngModel)]="scheduleForm.notify_telegram_on_failure" class="w-3.5 h-3.5 accent-emerald-600">
+                แจ้งเมื่อล้มเหลว
+              </label>
+            </div>
+          </div>
+
+          <!-- LINE Group -->
+          <div class="border rounded-lg p-3">
+            <label class="flex items-center gap-2 text-sm font-medium">
+              <input type="checkbox" [(ngModel)]="scheduleForm.notify_line" class="w-4 h-4 accent-emerald-600">
+              <i class="fab fa-line text-emerald-600"></i> ส่ง LINE Group
+            </label>
+            <div *ngIf="scheduleForm.notify_line" class="ml-6 mt-2 space-y-1">
+              <label class="flex items-center gap-2 text-xs">
+                <input type="checkbox" [(ngModel)]="scheduleForm.notify_line_on_success" class="w-3.5 h-3.5 accent-emerald-600">
+                แจ้งเมื่อสำเร็จ
+              </label>
+              <label class="flex items-center gap-2 text-xs">
+                <input type="checkbox" [(ngModel)]="scheduleForm.notify_line_on_failure" class="w-3.5 h-3.5 accent-emerald-600">
                 แจ้งเมื่อล้มเหลว
               </label>
             </div>

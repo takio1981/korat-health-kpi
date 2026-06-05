@@ -327,6 +327,9 @@ export class BackupManagerComponent implements OnInit, OnDestroy {
       notify_telegram: false,
       notify_telegram_on_success: true,
       notify_telegram_on_failure: true,
+      notify_line: false,
+      notify_line_on_success: true,
+      notify_line_on_failure: true,
       auto_upload_cloud: false
     };
   }
@@ -355,6 +358,9 @@ export class BackupManagerComponent implements OnInit, OnDestroy {
         notify_telegram: !!s.notify_telegram,
         notify_telegram_on_success: !!s.notify_telegram_on_success,
         notify_telegram_on_failure: !!s.notify_telegram_on_failure,
+        notify_line: !!s.notify_line,
+        notify_line_on_success: !!s.notify_line_on_success,
+        notify_line_on_failure: !!s.notify_line_on_failure,
         auto_upload_cloud: !!s.auto_upload_cloud
       };
     } else {

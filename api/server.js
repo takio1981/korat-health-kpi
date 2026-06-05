@@ -8826,6 +8826,7 @@ const bkDecrypt = (ciphertext) => {
             ['kpi_audit_digest_time', '17:00', 'เวลาส่ง digest ประจำวัน (HH:MM Bangkok)'],
             ['kpi_audit_digest_email', 'true', 'ส่ง digest ทาง Email'],
             ['kpi_audit_digest_telegram', 'true', 'ส่ง digest ทาง Telegram'],
+            ['kpi_audit_digest_line', 'true', 'ส่ง digest ทาง LINE Group'],
             ['kpi_audit_digest_min_records', '1', 'ส่ง digest เฉพาะเมื่อมีอย่างน้อย N รายการ'],
             ['kpi_audit_last_digest_at', '', 'เวลาที่ส่ง digest ล่าสุด'],
             ['kpi_audit_last_digest_result', '', 'ผลลัพธ์ digest ล่าสุด (JSON)']
@@ -8889,12 +8890,18 @@ const bkDecrypt = (ciphertext) => {
                 cleaned_up_bytes BIGINT DEFAULT 0,
                 notified_email TINYINT(1) DEFAULT 0,
                 notified_telegram TINYINT(1) DEFAULT 0,
+                notified_line TINYINT(1) DEFAULT 0,
                 warnings TEXT NULL,
                 error_msg TEXT NULL,
                 INDEX idx_schedule (schedule_id),
                 INDEX idx_run (run_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         `);
+        // backup LINE notification (auto-migrate for existing DBs)
+        try { await db.query('ALTER TABLE backup_schedules ADD COLUMN notify_line TINYINT(1) DEFAULT 0'); } catch (e) {}
+        try { await db.query('ALTER TABLE backup_schedules ADD COLUMN notify_line_on_success TINYINT(1) DEFAULT 1'); } catch (e) {}
+        try { await db.query('ALTER TABLE backup_schedules ADD COLUMN notify_line_on_failure TINYINT(1) DEFAULT 1'); } catch (e) {}
+        try { await db.query('ALTER TABLE backup_schedule_logs ADD COLUMN notified_line TINYINT(1) DEFAULT 0'); } catch (e) {}
 
         // เพิ่ม default connection (Local) ถ้ายังไม่มี
         const [defRows] = await db.query('SELECT COUNT(*) AS c FROM backup_connections');
@@ -10031,7 +10038,11 @@ async function notifyBackupResult(schedule, result) {
         (result.status === 'success' && schedule.notify_telegram_on_success) ||
         (result.status === 'failed' && schedule.notify_telegram_on_failure)
     );
-    if (!wantEmail && !wantTg) return { sent_email: false, sent_telegram: false };
+    const wantLn = schedule.notify_line && (
+        (result.status === 'success' && (schedule.notify_line_on_success === undefined ? true : schedule.notify_line_on_success)) ||
+        (result.status === 'failed' && (schedule.notify_line_on_failure === undefined ? true : schedule.notify_line_on_failure))
+    );
+    if (!wantEmail && !wantTg && !wantLn) return { sent_email: false, sent_telegram: false, sent_line: false };
 
     const fmtBytes = (b) => {
         if (!b) return '0 B';
@@ -10083,7 +10094,7 @@ async function notifyBackupResult(schedule, result) {
         tg += `❌ ${(result.error_msg || '').slice(0, 300)}`;
     }
 
-    let sent_email = false, sent_telegram = false;
+    let sent_email = false, sent_telegram = false, sent_line = false;
     if (wantEmail && ns.adminEmails) {
         const emails = ns.adminEmails.split(',').map(e => e.trim()).filter(Boolean);
         for (const email of emails) {
@@ -10093,7 +10104,10 @@ async function notifyBackupResult(schedule, result) {
     if (wantTg && ns.tgToken && ns.tgChatId) {
         try { sent_telegram = await sendTelegramDirect(ns.tgToken, ns.tgChatId, tg); } catch (e) {}
     }
-    return { sent_email, sent_telegram };
+    if (wantLn && ns.lineToken && ns.lineGroupId) {
+        try { const r = await sendLineMulticast(ns.lineToken, ns.lineGroupId, tg); sent_line = r.sent > 0; } catch (e) {}
+    }
+    return { sent_email, sent_telegram, sent_line };
 }
 
 // === Retention cleanup — ลบ backup เก่ากว่า retention_days ของ schedule ===
@@ -10207,12 +10221,12 @@ async function runScheduledBackup(schedule) {
         await db.query(
             `INSERT INTO backup_schedule_logs
              (schedule_id, schedule_name, status, job_id, file_id, file_name, size_bytes, total_inserts, tables_count,
-              duration_ms, cleaned_up_files, cleaned_up_bytes, notified_email, notified_telegram, cloud_uploaded, cloud_url, warnings, error_msg)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+              duration_ms, cleaned_up_files, cleaned_up_bytes, notified_email, notified_telegram, notified_line, cloud_uploaded, cloud_url, warnings, error_msg)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
             [schedule.id, schedule.name, result.status, result.job_id, result.file_id, result.file_name,
              result.size_bytes, result.total_inserts, result.tables_count, result.duration_ms,
              result.cleaned_up_files, result.cleaned_up_bytes,
-             notif.sent_email ? 1 : 0, notif.sent_telegram ? 1 : 0,
+             notif.sent_email ? 1 : 0, notif.sent_telegram ? 1 : 0, notif.sent_line ? 1 : 0,
              result.cloud_uploaded ? 1 : 0, result.cloud_url || null,
              result.warnings.length ? JSON.stringify(result.warnings) : null,
              result.error_msg ? result.error_msg.slice(0, 2000) : null]
@@ -10329,12 +10343,15 @@ apiRouter.post('/backup/schedules', authenticateToken, isSuperAdmin, async (req,
             `INSERT INTO backup_schedules
              (name, is_enabled, connection_id, days_of_week, time_of_day, compress, retention_days,
               notify_email, notify_email_on_success, notify_email_on_failure,
-              notify_telegram, notify_telegram_on_success, notify_telegram_on_failure, auto_upload_cloud, created_by)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+              notify_telegram, notify_telegram_on_success, notify_telegram_on_failure,
+              notify_line, notify_line_on_success, notify_line_on_failure,
+              auto_upload_cloud, created_by)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
             [b.name, b.is_enabled ? 1 : 0, Number(b.connection_id), b.days_of_week, b.time_of_day,
              b.compress !== false ? 1 : 0, Number(b.retention_days) || 30,
              b.notify_email ? 1 : 0, b.notify_email_on_success !== false ? 1 : 0, b.notify_email_on_failure !== false ? 1 : 0,
              b.notify_telegram ? 1 : 0, b.notify_telegram_on_success !== false ? 1 : 0, b.notify_telegram_on_failure !== false ? 1 : 0,
+             b.notify_line ? 1 : 0, b.notify_line_on_success !== false ? 1 : 0, b.notify_line_on_failure !== false ? 1 : 0,
              b.auto_upload_cloud ? 1 : 0,
              req.user.userId]
         );
@@ -10348,12 +10365,15 @@ apiRouter.put('/backup/schedules/:id', authenticateToken, isSuperAdmin, async (r
         await db.query(
             `UPDATE backup_schedules SET name=?, is_enabled=?, connection_id=?, days_of_week=?, time_of_day=?, compress=?, retention_days=?,
              notify_email=?, notify_email_on_success=?, notify_email_on_failure=?,
-             notify_telegram=?, notify_telegram_on_success=?, notify_telegram_on_failure=?, auto_upload_cloud=?
+             notify_telegram=?, notify_telegram_on_success=?, notify_telegram_on_failure=?,
+             notify_line=?, notify_line_on_success=?, notify_line_on_failure=?,
+             auto_upload_cloud=?
              WHERE id=?`,
             [b.name, b.is_enabled ? 1 : 0, Number(b.connection_id), b.days_of_week, b.time_of_day,
              b.compress !== false ? 1 : 0, Number(b.retention_days) || 30,
              b.notify_email ? 1 : 0, b.notify_email_on_success !== false ? 1 : 0, b.notify_email_on_failure !== false ? 1 : 0,
              b.notify_telegram ? 1 : 0, b.notify_telegram_on_success !== false ? 1 : 0, b.notify_telegram_on_failure !== false ? 1 : 0,
+             b.notify_line ? 1 : 0, b.notify_line_on_success !== false ? 1 : 0, b.notify_line_on_failure !== false ? 1 : 0,
              b.auto_upload_cloud ? 1 : 0,
              Number(req.params.id)]
         );
@@ -10921,6 +10941,7 @@ async function getAuditSettings() {
             digestTime: s.kpi_audit_digest_time || '17:00',
             digestEmail: s.kpi_audit_digest_email !== 'false',
             digestTelegram: s.kpi_audit_digest_telegram !== 'false',
+            digestLine: s.kpi_audit_digest_line !== 'false',
             minRecords: parseInt(s.kpi_audit_digest_min_records) || 1,
             lastDigestAt: s.kpi_audit_last_digest_at || '',
             lastDigestResult: s.kpi_audit_last_digest_result || ''
@@ -11096,7 +11117,7 @@ async function runKpiAuditDigest(manual = false) {
 
     // Send
     const ns = await getNotifSettings();
-    let sentEmail = false, sentTelegram = false;
+    let sentEmail = false, sentTelegram = false, sentLine = false;
     if (cfg.digestEmail && ns.adminEmails) {
         const emails = ns.adminEmails.split(',').map(e => e.trim()).filter(Boolean);
         for (const email of emails) {
@@ -11105,6 +11126,9 @@ async function runKpiAuditDigest(manual = false) {
     }
     if (cfg.digestTelegram && ns.tgToken && ns.tgChatId) {
         try { sentTelegram = await sendTelegramDirect(ns.tgToken, ns.tgChatId, tg); } catch (e) {}
+    }
+    if (cfg.digestLine && ns.lineToken && ns.lineGroupId) {
+        try { const r = await sendLineMulticast(ns.lineToken, ns.lineGroupId, tg); sentLine = r.sent > 0; } catch (e) {}
     }
 
     // Mark records as notified
@@ -11115,7 +11139,7 @@ async function runKpiAuditDigest(manual = false) {
 
     const summary = {
         total_users: totalUsers, total_saves: totalSaves,
-        sent_email: sentEmail, sent_telegram: sentTelegram,
+        sent_email: sentEmail, sent_telegram: sentTelegram, sent_line: sentLine,
         date: dateStr, ran_at: new Date().toISOString(), manual
     };
     // บันทึก last digest
@@ -11181,6 +11205,7 @@ apiRouter.post('/kpi-audit/settings', authenticateToken, isSuperAdmin, async (re
             ['kpi_audit_digest_time', b.digestTime || '17:00'],
             ['kpi_audit_digest_email', b.digestEmail === false ? 'false' : 'true'],
             ['kpi_audit_digest_telegram', b.digestTelegram === false ? 'false' : 'true'],
+            ['kpi_audit_digest_line', b.digestLine === false ? 'false' : 'true'],
             ['kpi_audit_digest_min_records', String(parseInt(b.minRecords) || 1)]
         ];
         for (const [k, v] of updates) {
