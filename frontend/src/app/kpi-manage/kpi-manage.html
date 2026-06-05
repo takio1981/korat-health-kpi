@@ -136,6 +136,18 @@
           <div class="flex items-start justify-between gap-2">
             <div class="flex-1 min-w-0">
               <p class="font-bold text-gray-900 text-sm whitespace-normal break-words" *ngIf="activeTab === 'indicators'">{{ item.kpi_indicators_name }}</p>
+              <!-- Mobile: table_process Local + HDC -->
+              <div *ngIf="activeTab === 'indicators'" class="flex flex-wrap gap-1 mt-1 text-[10px]">
+                <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 font-mono">
+                  <i class="fas fa-server text-[9px]"></i>L:{{ item.table_process || '-' }}
+                </span>
+                <ng-container *ngIf="hdcCompareSummary && getHdcData(item) as hdc">
+                  <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border font-mono"
+                        [ngClass]="(hdc.table_process === item.table_process) ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-rose-50 border-rose-300 text-rose-700'">
+                    <i class="fas fa-cloud text-[9px]"></i>H:{{ hdc.table_process || '-' }}
+                  </span>
+                </ng-container>
+              </div>
               <p class="font-bold text-gray-900 text-sm whitespace-normal break-words" *ngIf="activeTab === 'main-indicators'">{{ item.main_indicator_name }}</p>
               <p class="font-bold text-gray-900 text-sm whitespace-normal break-words" *ngIf="activeTab === 'strategies'">{{ item.yut_name }}</p>
               <p class="font-bold text-gray-900 text-sm whitespace-normal break-words" *ngIf="activeTab === 'departments'">{{ item.dept_name }}</p>
@@ -203,10 +215,49 @@
               <ng-container *ngIf="activeTab === 'indicators'">
                 <td class="px-4 py-3 font-medium text-gray-900">
                   {{ item.kpi_indicators_name }}
+
+                  <!-- table_process: Local + HDC side-by-side สำหรับ super_admin ตรวจสอบ -->
+                  <div class="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
+                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 font-mono"
+                          [title]="'Local kpi_indicators.table_process'">
+                      <i class="fas fa-server text-[9px]"></i>
+                      <span class="font-bold not-italic">Local:</span>
+                      <span>{{ item.table_process || '-' }}</span>
+                    </span>
+                    <!-- HDC table_process (เมื่อเทียบแล้ว) — แสดงสีเขียวถ้าตรงกัน, แดงถ้าต่าง -->
+                    <ng-container *ngIf="hdcCompareSummary && getHdcData(item) as hdc">
+                      <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-mono"
+                            [ngClass]="(hdc.table_process === item.table_process)
+                              ? 'bg-blue-50 border-blue-200 text-blue-700'
+                              : 'bg-rose-50 border-rose-300 text-rose-700'"
+                            [title]="'HDC reports.table_process — ' + ((hdc.table_process === item.table_process) ? 'ตรงกัน ✓' : 'ไม่ตรงกัน ✗')">
+                        <i class="fas fa-cloud text-[9px]"></i>
+                        <span class="font-bold not-italic">HDC:</span>
+                        <span>{{ hdc.table_process || '-' }}</span>
+                        <i *ngIf="hdc.table_process === item.table_process" class="fas fa-check text-emerald-600 text-[9px]" title="ตรงกัน"></i>
+                        <i *ngIf="hdc.table_process !== item.table_process" class="fas fa-times text-rose-600 text-[9px]" title="ไม่ตรงกัน"></i>
+                      </span>
+                      <!-- HDC report_code (ข้อมูลเสริม cross-reference) -->
+                      <span *ngIf="hdc.report_code" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-50 border border-slate-200 text-slate-600 font-mono"
+                            [title]="'HDC reports.report_code'">
+                        <i class="fas fa-hashtag text-[9px]"></i>
+                        <span class="font-bold not-italic">code:</span>
+                        <span>{{ hdc.report_code }}</span>
+                      </span>
+                    </ng-container>
+                    <!-- ถ้าเทียบแล้วไม่เจอใน HDC -->
+                    <span *ngIf="hdcCompareSummary && !getHdcData(item)" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-50 border border-purple-200 text-purple-700"
+                          title="ไม่พบ table_process นี้ใน HDC">
+                      <i class="fas fa-cloud-slash text-[9px]"></i>
+                      <span class="font-bold not-italic">HDC:</span>
+                      <span>ไม่พบ</span>
+                    </span>
+                  </div>
+
                   <!-- HDC name diff inline (เมื่อ status='different') -->
                   <div *ngIf="getHdcCompareStatus(item) === 'different'" class="mt-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 inline-flex items-center gap-1">
                     <i class="fas fa-arrow-down"></i>
-                    <span class="font-bold">HDC:</span>
+                    <span class="font-bold">HDC name:</span>
                     <span class="italic">{{ getHdcData(item)?.hdc_name }}</span>
                     <button (click)="syncSingleNameFromHdc(item); $event.stopPropagation()" class="ml-1 text-emerald-700 hover:text-emerald-900" title="Sync ชื่อจาก HDC">
                       <i class="fas fa-sync"></i>
