@@ -81,29 +81,29 @@
           <button (click)="filterHdcStatus = ''; applyFilter()"
                   [ngClass]="filterHdcStatus === '' ? 'bg-teal-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
                   class="px-2.5 py-1 rounded-lg font-bold transition-all">
-            ทั้งหมด ({{ hdcCompareSummary.total }})
+            ทั้งหมด ({{ hdcCounts.total }})
           </button>
           <button (click)="filterHdcStatus = filterHdcStatus === 'match' ? '' : 'match'; applyFilter()"
                   [ngClass]="filterHdcStatus === 'match' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'"
                   class="px-2.5 py-1 rounded-lg font-bold transition-all">
-            <i class="fas fa-check-circle mr-1"></i>ตรงกัน ({{ hdcCompareSummary.match }})
+            <i class="fas fa-check-circle mr-1"></i>ตรงกัน ({{ hdcCounts.match }})
           </button>
           <button (click)="filterHdcStatus = filterHdcStatus === 'different' ? '' : 'different'; applyFilter()"
                   [ngClass]="filterHdcStatus === 'different' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-700 border border-amber-200'"
                   class="px-2.5 py-1 rounded-lg font-bold transition-all">
-            <i class="fas fa-exclamation-triangle mr-1"></i>ชื่อต่างกัน ({{ hdcCompareSummary.different }})
+            <i class="fas fa-exclamation-triangle mr-1"></i>ชื่อต่างกัน ({{ hdcCounts.different }})
           </button>
           <button (click)="filterHdcStatus = filterHdcStatus === 'missing_remote' ? '' : 'missing_remote'; applyFilter()"
                   [ngClass]="filterHdcStatus === 'missing_remote' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 border border-purple-200'"
                   class="px-2.5 py-1 rounded-lg font-bold transition-all">
-            <i class="fas fa-arrow-up mr-1"></i>ไม่มีใน HDC ({{ hdcCompareSummary.missing_remote }})
+            <i class="fas fa-arrow-up mr-1"></i>ไม่มีใน HDC ({{ hdcCounts.missing_remote }})
           </button>
           <button (click)="filterHdcStatus = filterHdcStatus === 'inactive' ? '' : 'inactive'; applyFilter()"
                   [ngClass]="filterHdcStatus === 'inactive' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 border border-rose-200'"
                   class="px-2.5 py-1 rounded-lg font-bold transition-all">
-            <i class="fas fa-power-off mr-1"></i>HDC inactive ({{ hdcCompareSummary.hdc_inactive }})
+            <i class="fas fa-power-off mr-1"></i>HDC inactive ({{ hdcCounts.inactive }})
           </button>
-          <span class="text-[10px] text-gray-400 ml-auto" *ngIf="hdcCompareLastRun">
+          <span class="text-[10px] text-gray-400 ml-auto" *ngIf="hdcCompareLastRun" title="ตัวเลขในชิปนับฝั่ง Local indicators (ตรงกับที่กรองได้ในตาราง); backend summary จาก HDC อาจมากกว่าเพราะ HDC มี report ซ้ำ table_process เดียวกัน">
             <i class="fas fa-clock mr-1"></i>เทียบล่าสุด: {{ hdcCompareLastRun | date:'HH:mm:ss' }}
           </span>
         </div>

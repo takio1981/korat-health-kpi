@@ -620,6 +620,26 @@ export class KpiManageComponent implements OnInit {
     });
   }
 
+  /**
+   * นับ Local-centric counts สำหรับ chips —
+   * backend summary นับ HDC-centric (ถ้า HDC มีแถวซ้ำ tp เดียวกัน จะนับซ้ำ) ทำให้เลขชิป ≠ จำนวนที่ filter ตารางได้
+   * ตัวนี้ iterate this.indicators (ที่ table แสดงจริง) — ตรงกันการนับ
+   */
+  get hdcCounts() {
+    const counts = { match: 0, different: 0, missing_remote: 0, inactive: 0, total: 0 };
+    if (!this.hdcCompareMap.size) return counts;
+    for (const i of this.indicators) {
+      counts.total++;
+      const cmp = this.getHdcCompareStatus(i);
+      if (cmp === 'match') counts.match++;
+      else if (cmp === 'different') counts.different++;
+      else if (cmp === 'missing_remote') counts.missing_remote++;
+      const hdc = this.getHdcData(i);
+      if (hdc && (hdc.hdc_is_active === 0 || hdc.hdc_is_active === '0')) counts.inactive++;
+    }
+    return counts;
+  }
+
   /** indicator ที่ HDC inactive แต่ Local upload_excel = 0 — ใช้กับ banner + bulk action */
   get hdcInactiveSuggestItems(): any[] {
     return this.indicators.filter(i => {
