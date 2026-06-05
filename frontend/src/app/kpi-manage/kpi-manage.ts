@@ -66,6 +66,15 @@ export class KpiManageComponent implements OnInit {
   // เก็บ required_off_types ใน modal เป็น array ของ code (ตอนเปิด modal แปลงจาก JSON string)
   selectedOffTypes: string[] = [];
 
+  // === HDC Compare (ย้ายจาก kpi-manager Step 1) ===
+  // ใช้ table_process เป็น key เพราะ HDC ไม่มี local.id
+  hdcCompareMap: Map<string, any> = new Map();
+  hdcCompareSummary: any = null;     // { total, match, different, missing_local, missing_remote, hdc_inactive, suggest_disable }
+  hdcCompareLoading: boolean = false;
+  hdcCompareLastRun: Date | null = null;
+  // filter เพิ่มสำหรับ indicators tab — กรองตามสถานะ compare กับ HDC
+  filterHdcStatus: string = '';      // '' | 'match' | 'different' | 'missing_remote' | 'not_compared' | 'inactive'
+
   ngOnInit() {
     const role = this.authService.getUserRole();
     this.isAdmin = role === 'admin_ssj' || role === 'super_admin';
@@ -266,12 +275,22 @@ export class KpiManageComponent implements OnInit {
     };
 
     if (this.activeTab === 'indicators') {
-      this.filteredIndicators = this.indicators.filter(i =>
-        matchActive(i) && (
-          (i.kpi_indicators_name && i.kpi_indicators_name.toLowerCase().includes(search)) ||
-          (i.kpi_indicators_code && i.kpi_indicators_code.toLowerCase().includes(search))
-        )
-      );
+      this.filteredIndicators = this.indicators.filter(i => {
+        if (!matchActive(i)) return false;
+        const matchSearch = (i.kpi_indicators_name && i.kpi_indicators_name.toLowerCase().includes(search))
+          || (i.kpi_indicators_code && i.kpi_indicators_code.toLowerCase().includes(search));
+        if (!matchSearch) return false;
+        // HDC compare filter
+        if (this.filterHdcStatus) {
+          const cmp = this.getHdcCompareStatus(i);
+          if (this.filterHdcStatus === 'inactive') {
+            const hdc = this.hdcCompareMap.get(i.table_process || '');
+            return hdc && (hdc.hdc_is_active === 0 || hdc.hdc_is_active === '0');
+          }
+          return cmp === this.filterHdcStatus;
+        }
+        return true;
+      });
     } else if (this.activeTab === 'main-indicators') {
       this.filteredMainIndicators = this.mainIndicators.filter(i =>
         matchActive(i) && i.main_indicator_name && i.main_indicator_name.toLowerCase().includes(search)
@@ -490,5 +509,147 @@ export class KpiManageComponent implements OnInit {
     if (this.activeTab === 'strategies') return this.strategies.filter(i => Number(i.is_active) === 0).length;
     if (this.activeTab === 'departments') return this.departments.filter(i => Number(i.is_active) === 0).length;
     return 0;
+  }
+
+  // ============================================================
+  // HDC Compare — ระบบเทียบชื่อตัวชี้วัด/สถานะกับ HDC (ย้ายจาก kpi-manager)
+  // ============================================================
+
+  /** เรียก /report-compare แล้ว build map by table_process */
+  runHdcCompare() {
+    if (!this.isSuperAdmin) {
+      Swal.fire('แจ้งเตือน', 'เฉพาะ super_admin', 'warning');
+      return;
+    }
+    this.hdcCompareLoading = true;
+    this.cdr.detectChanges();
+    this.authService.reportCompare().subscribe({
+      next: (res: any) => {
+        this.hdcCompareLoading = false;
+        if (res.success) {
+          this.hdcCompareMap.clear();
+          for (const it of (res.items || [])) {
+            if (it.table_process) this.hdcCompareMap.set(it.table_process, it);
+          }
+          this.hdcCompareSummary = res.summary;
+          this.hdcCompareLastRun = new Date();
+          this.applyFilter();
+          this.cdr.detectChanges();
+        }
+      },
+      error: (err: any) => {
+        this.hdcCompareLoading = false;
+        Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถเทียบกับ HDC ได้ (ตรวจ Remote DB)', 'error');
+      }
+    });
+  }
+
+  /** สถานะ compare ของ indicator แต่ละตัว — ใช้กับ badge + filter */
+  getHdcCompareStatus(item: any): 'not_compared' | 'match' | 'different' | 'missing_remote' {
+    if (!this.hdcCompareMap.size) return 'not_compared';
+    const hdc = item.table_process ? this.hdcCompareMap.get(item.table_process) : null;
+    if (!hdc) return 'missing_remote';
+    return hdc.status === 'match' ? 'match' : (hdc.status === 'different' ? 'different' : 'missing_remote');
+  }
+
+  /** ข้อมูล HDC ดิบของ indicator (ใช้แสดง diff inline) */
+  getHdcData(item: any): any | null {
+    return item.table_process ? (this.hdcCompareMap.get(item.table_process) || null) : null;
+  }
+
+  /** Sync ชื่อจาก HDC → Local 1 ตัว (POST /report-compare/sync ด้วย hdc_report_id เดียว) */
+  syncSingleNameFromHdc(item: any) {
+    const hdc = this.getHdcData(item);
+    if (!hdc || !hdc.hdc_report_id) {
+      Swal.fire('แจ้งเตือน', 'ไม่พบ HDC report — กดเทียบกับ HDC ก่อน', 'info');
+      return;
+    }
+    if (hdc.status !== 'different') {
+      Swal.fire('แจ้งเตือน', 'ตัวชี้วัดนี้ตรงกับ HDC อยู่แล้ว', 'info');
+      return;
+    }
+    Swal.fire({
+      title: 'Sync ชื่อจาก HDC',
+      html: `<div class="text-left text-sm space-y-2">
+        <p>เปลี่ยนชื่อตัวชี้วัด Local ให้ตรงกับ HDC:</p>
+        <div class="bg-rose-50 border border-rose-200 rounded p-2 text-xs">
+          <p class="text-rose-700 font-bold">ปัจจุบัน (Local):</p>
+          <p class="text-gray-700">${item.kpi_indicators_name}</p>
+        </div>
+        <div class="text-center text-gray-400"><i class="fas fa-arrow-down"></i></div>
+        <div class="bg-emerald-50 border border-emerald-200 rounded p-2 text-xs">
+          <p class="text-emerald-700 font-bold">ใหม่ (จาก HDC):</p>
+          <p class="text-gray-700">${hdc.hdc_name}</p>
+        </div>
+      </div>`,
+      icon: 'question', showCancelButton: true, confirmButtonColor: '#10b981',
+      confirmButtonText: '<i class="fas fa-sync mr-1"></i> Sync', cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      this.authService.reportCompareSync([hdc.hdc_report_id]).subscribe({
+        next: (res: any) => {
+          if (res.success) {
+            Swal.fire({ icon: 'success', title: 'Sync สำเร็จ', text: res.message, timer: 2000 });
+            this.loadAllData();
+            this.runHdcCompare();
+          }
+        },
+        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'Sync ไม่ได้', 'error')
+      });
+    });
+  }
+
+  /** Toggle upload_excel ราย indicator */
+  toggleUploadExcel(item: any) {
+    if (!this.isSuperAdmin) return;
+    const newVal = (item.upload_excel === 1 || item.upload_excel === '1') ? 0 : 1;
+    this.authService.setUploadExcel(item.id, newVal as 0 | 1).subscribe({
+      next: (res: any) => {
+        if (res.success) {
+          item.upload_excel = res.upload_excel;
+          // ถ้ามี compare data — อัพเดท suggest_disable ด้วย
+          const hdc = this.getHdcData(item);
+          if (hdc) {
+            hdc.local_upload_excel = res.upload_excel;
+            hdc.suggest_disable_upload = (hdc.hdc_is_active === 0 || hdc.hdc_is_active === '0') && !res.upload_excel;
+          }
+          this.cdr.detectChanges();
+        }
+      },
+      error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถสลับสถานะได้', 'error')
+    });
+  }
+
+  /** indicator ที่ HDC inactive แต่ Local upload_excel = 0 — ใช้กับ banner + bulk action */
+  get hdcInactiveSuggestItems(): any[] {
+    return this.indicators.filter(i => {
+      const hdc = this.getHdcData(i);
+      return !!(hdc && hdc.suggest_disable_upload);
+    });
+  }
+
+  bulkDisableHdcInactive() {
+    const items = this.hdcInactiveSuggestItems;
+    if (items.length === 0) { Swal.fire('แจ้งเตือน', 'ไม่มีรายการที่ต้องปิด', 'info'); return; }
+    const ids = items.map(i => i.id);
+    Swal.fire({
+      title: 'ปิดส่งออกอัตโนมัติ',
+      html: `<p class="text-sm">ตั้ง <code>upload_excel = 1</code> ให้ <b>${ids.length}</b> ตัวชี้วัด</p>
+             <p class="text-xs text-gray-500 mt-2">HDC report เหล่านี้อยู่สถานะ inactive — ระบบจะไม่ export อัตโนมัติ</p>`,
+      icon: 'warning', showCancelButton: true, confirmButtonColor: '#dc2626',
+      confirmButtonText: '<i class="fas fa-toggle-off mr-1"></i> ปิดทั้งหมด', cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      this.authService.bulkSetUploadExcel(ids, 1).subscribe({
+        next: (res: any) => {
+          if (res.success) {
+            Swal.fire({ icon: 'success', title: 'สำเร็จ', text: `ปิดแล้ว ${res.affected} ตัวชี้วัด`, timer: 2000 });
+            this.loadAllData();
+            this.runHdcCompare();
+          }
+        },
+        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถปิดได้', 'error')
+      });
+    });
   }
 }

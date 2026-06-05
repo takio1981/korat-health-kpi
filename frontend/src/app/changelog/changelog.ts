@@ -21,6 +21,9 @@ export class ChangelogComponent {
       version: '2569.06.05',
       date: '5 มิถุนายน 2569',
       changes: [
+        { type: 'improve', text: 'ย้ายระบบ "เทียบชื่อตัวชี้วัด HDC ↔ Local" จากหน้า kpi-manager (Step 1 wizard) → หน้า "จัดการตัวชี้วัด" (kpi-manage) — เป็นส่วนหนึ่งของ tab "ตัวชี้วัด" ใช้งานร่วมกับการ CRUD ปกติได้เลย' },
+        { type: 'feature', text: 'kpi-manage: ปุ่ม "เทียบกับ HDC" + summary chips (ตรงกัน/ต่างกัน/ไม่มีใน HDC/HDC inactive) ใช้กรองตาราง + คอลัมน์ใหม่ "HDC ↔ Local" status + คอลัมน์ upload_excel toggle + inline diff ใต้ชื่อตัวชี้วัด (เมื่อชื่อต่าง) + ปุ่ม Sync ราย row + banner "ปิด N ตัว" bulk action สำหรับ HDC inactive' },
+        { type: 'improve', text: 'kpi-manager wizard: ลดเหลือ 2 ขั้น (จาก 3) — ขั้น 1: เทียบโครงสร้าง (DB Compare), ขั้น 2: Export ตารางรายตัวชี้วัด — workflow สั้นลง โฟกัสที่ schema + data เท่านั้น' },
         { type: 'feature', text: 'kpi_indicators: เพิ่มคอลัมน์ upload_excel (TINYINT) — 0=ส่งออกอัตโนมัติได้ (default), 1=ข้าม (อัปโหลด Excel มือเอง) ใช้กรณี HDC report ถูก deactivate หรือต้องการ override + index พร้อม auto-migration' },
         { type: 'feature', text: 'Report Compare (Step 1): เพิ่มคอลัมน์ "upload_excel" toggle ในตาราง + แสดงสี HDC inactive (rose) แทน gray + warning banner "พบ HDC report inactive แต่ Local ยังเปิดส่งออก" พร้อมปุ่ม "ปิด N ตัว" bulk action — เสนอตั้ง upload_excel=1 อัตโนมัติ' },
         { type: 'improve', text: 'Export pipeline: performKpiExport + checkKpiChanges กรอง upload_excel=1 ออก — ตัวชี้วัดที่ตั้งเป็น "อัปโหลดเอง" จะไม่ถูก export ทั้งใน Step 3 (manual) และ schedule อัตโนมัติ' },

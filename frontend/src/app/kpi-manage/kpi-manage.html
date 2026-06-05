@@ -60,7 +60,72 @@
             </span>
           </ng-container>
         </div>
-        <button (click)="openModal()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold whitespace-nowrap"><i class="fas fa-plus mr-2"></i> เพิ่มข้อมูล</button>
+        <div class="flex gap-2 flex-wrap">
+          <button *ngIf="activeTab === 'indicators' && isSuperAdmin"
+                  (click)="runHdcCompare()" [disabled]="hdcCompareLoading"
+                  class="bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold whitespace-nowrap"
+                  title="เปรียบเทียบชื่อ + สถานะกับ HDC reports">
+            <i class="fas" [ngClass]="hdcCompareLoading ? 'fa-spinner fa-spin' : 'fa-exchange-alt'"></i>
+            <span class="ml-2">{{ hdcCompareLoading ? 'กำลังเทียบ...' : (hdcCompareMap.size ? 'เทียบ HDC อีกครั้ง' : 'เทียบกับ HDC') }}</span>
+          </button>
+          <button (click)="openModal()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold whitespace-nowrap"><i class="fas fa-plus mr-2"></i> เพิ่มข้อมูล</button>
+        </div>
+      </div>
+
+      <!-- HDC Compare Summary + Filter (เฉพาะ indicators tab) -->
+      <div *ngIf="activeTab === 'indicators' && hdcCompareSummary" class="mb-4 bg-gradient-to-r from-teal-50 via-white to-teal-50 border border-teal-200 rounded-xl p-3">
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <span class="font-bold text-teal-800 flex items-center gap-1">
+            <i class="fas fa-cloud text-teal-500"></i> HDC ↔ Local:
+          </span>
+          <button (click)="filterHdcStatus = ''; applyFilter()"
+                  [ngClass]="filterHdcStatus === '' ? 'bg-teal-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all">
+            ทั้งหมด ({{ hdcCompareSummary.total }})
+          </button>
+          <button (click)="filterHdcStatus = filterHdcStatus === 'match' ? '' : 'match'; applyFilter()"
+                  [ngClass]="filterHdcStatus === 'match' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all">
+            <i class="fas fa-check-circle mr-1"></i>ตรงกัน ({{ hdcCompareSummary.match }})
+          </button>
+          <button (click)="filterHdcStatus = filterHdcStatus === 'different' ? '' : 'different'; applyFilter()"
+                  [ngClass]="filterHdcStatus === 'different' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-700 border border-amber-200'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all">
+            <i class="fas fa-exclamation-triangle mr-1"></i>ชื่อต่างกัน ({{ hdcCompareSummary.different }})
+          </button>
+          <button (click)="filterHdcStatus = filterHdcStatus === 'missing_remote' ? '' : 'missing_remote'; applyFilter()"
+                  [ngClass]="filterHdcStatus === 'missing_remote' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 border border-purple-200'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all">
+            <i class="fas fa-arrow-up mr-1"></i>ไม่มีใน HDC ({{ hdcCompareSummary.missing_remote }})
+          </button>
+          <button (click)="filterHdcStatus = filterHdcStatus === 'inactive' ? '' : 'inactive'; applyFilter()"
+                  [ngClass]="filterHdcStatus === 'inactive' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 border border-rose-200'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all">
+            <i class="fas fa-power-off mr-1"></i>HDC inactive ({{ hdcCompareSummary.hdc_inactive }})
+          </button>
+          <span class="text-[10px] text-gray-400 ml-auto" *ngIf="hdcCompareLastRun">
+            <i class="fas fa-clock mr-1"></i>เทียบล่าสุด: {{ hdcCompareLastRun | date:'HH:mm:ss' }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Banner: HDC inactive แต่ Local ยังเปิด upload_excel -->
+      <div *ngIf="activeTab === 'indicators' && hdcInactiveSuggestItems.length > 0" class="mb-4 bg-rose-50 border-2 border-rose-200 rounded-xl p-4">
+        <div class="flex items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center shrink-0">
+            <i class="fas fa-triangle-exclamation text-rose-600 text-lg"></i>
+          </div>
+          <div class="flex-1 min-w-0">
+            <h4 class="text-sm font-bold text-rose-900">พบ HDC report ที่ inactive แต่ Local ยังเปิดส่งออกอัตโนมัติ</h4>
+            <p class="text-xs text-rose-700 mt-1">
+              <b>{{ hdcInactiveSuggestItems.length }} ตัวชี้วัด</b> — แนะนำตั้ง <code>upload_excel = 1</code> ให้สอดคล้องกับ HDC (ส่งด้วย Excel มือเอง)
+            </p>
+          </div>
+          <button (click)="bulkDisableHdcInactive()"
+                  class="shrink-0 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-sm font-bold shadow-md transition-colors">
+            <i class="fas fa-toggle-off mr-1"></i>ปิด {{ hdcInactiveSuggestItems.length }} ตัว
+          </button>
+        </div>
       </div>
 
       <!-- === Mobile Card View === -->
@@ -114,6 +179,8 @@
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'indicators'">ชื่อตัวชี้วัด</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'indicators'">หมวดหมู่หลัก</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'indicators'">หน่วยงาน</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-32" *ngIf="activeTab === 'indicators' && hdcCompareSummary" title="สถานะเทียบกับ HDC">HDC ↔ Local</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-24" *ngIf="activeTab === 'indicators' && isSuperAdmin" title="0=ส่งออกอัตโนมัติ, 1=ข้าม">upload_excel</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'main-indicators'">ชื่อหมวดหมู่หลัก</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'main-indicators'">ยุทธศาสตร์</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'strategies'">ชื่อยุทธศาสตร์</th>
@@ -134,9 +201,53 @@
               <td class="px-4 py-3 text-gray-500 text-xs">{{ activeTab === 'hospitals' ? '' : item.id }}</td>
 
               <ng-container *ngIf="activeTab === 'indicators'">
-                <td class="px-4 py-3 font-medium text-gray-900">{{ item.kpi_indicators_name }}</td>
+                <td class="px-4 py-3 font-medium text-gray-900">
+                  {{ item.kpi_indicators_name }}
+                  <!-- HDC name diff inline (เมื่อ status='different') -->
+                  <div *ngIf="getHdcCompareStatus(item) === 'different'" class="mt-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 inline-flex items-center gap-1">
+                    <i class="fas fa-arrow-down"></i>
+                    <span class="font-bold">HDC:</span>
+                    <span class="italic">{{ getHdcData(item)?.hdc_name }}</span>
+                    <button (click)="syncSingleNameFromHdc(item); $event.stopPropagation()" class="ml-1 text-emerald-700 hover:text-emerald-900" title="Sync ชื่อจาก HDC">
+                      <i class="fas fa-sync"></i>
+                    </button>
+                  </div>
+                </td>
                 <td class="px-4 py-3 text-gray-600 text-xs">{{ item.main_indicator_name }}</td>
                 <td class="px-4 py-3 text-gray-600 text-xs">{{ item.dept_name }}</td>
+                <!-- HDC compare status badge -->
+                <td class="px-4 py-3 text-center" *ngIf="hdcCompareSummary">
+                  <ng-container [ngSwitch]="getHdcCompareStatus(item)">
+                    <span *ngSwitchCase="'match'" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700" title="ตรงกัน">
+                      <i class="fas fa-check-circle mr-1"></i>ตรงกัน
+                    </span>
+                    <span *ngSwitchCase="'different'" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700" title="ชื่อต่างกัน">
+                      <i class="fas fa-exclamation-triangle mr-1"></i>ต่างกัน
+                    </span>
+                    <span *ngSwitchCase="'missing_remote'" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700" title="ไม่มีใน HDC">
+                      <i class="fas fa-arrow-up mr-1"></i>ไม่มีใน HDC
+                    </span>
+                    <span *ngSwitchDefault class="text-gray-300 text-[10px]">-</span>
+                  </ng-container>
+                  <!-- HDC inactive badge -->
+                  <div *ngIf="getHdcData(item)?.hdc_is_active === 0 || getHdcData(item)?.hdc_is_active === '0'"
+                       class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700"
+                       title="HDC inactive — แนะนำตั้ง upload_excel=1">
+                    <i class="fas fa-power-off mr-1"></i>HDC inactive
+                  </div>
+                </td>
+                <!-- upload_excel toggle -->
+                <td class="px-4 py-3 text-center" *ngIf="isSuperAdmin">
+                  <button (click)="toggleUploadExcel(item)" class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
+                          [ngClass]="(item.upload_excel === 1 || item.upload_excel === '1') ? 'bg-rose-500' : 'bg-emerald-500'"
+                          [title]="(item.upload_excel === 1 || item.upload_excel === '1') ? '1 = ข้าม export (อัปโหลด Excel เอง)' : '0 = ส่งออกอัตโนมัติ'">
+                    <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform"
+                          [ngClass]="(item.upload_excel === 1 || item.upload_excel === '1') ? 'translate-x-5' : 'translate-x-0.5'"></span>
+                  </button>
+                  <div *ngIf="getHdcData(item)?.suggest_disable_upload" class="mt-1 text-rose-600 text-[10px] font-bold animate-pulse" title="แนะนำให้ปิด">
+                    <i class="fas fa-arrow-up"></i> ควรปิด
+                  </div>
+                </td>
               </ng-container>
 
               <ng-container *ngIf="activeTab === 'main-indicators'">
