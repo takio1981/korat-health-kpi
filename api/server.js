@@ -141,6 +141,56 @@ const sendLineMulticast = async (channelToken, groupIdsStr, message) => {
     return { sent, failed };
 };
 
+// === Admin Action LINE Notification — fire-and-forget + category toggle ===
+// Categories: admin_login | backup | restore | settings_change | indicator_change
+// settings keys: notif_line_admin_login, notif_line_backup, notif_line_restore,
+//                notif_line_settings_change, notif_line_indicator_change
+//                (default 'true' — เปิดทั้งหมด ผู้ใช้ปิดเองได้)
+// ใช้ cache 60s เพื่อกัน query system_settings ทุกครั้ง
+let _lineCategoryCache = null;
+let _lineCategoryExpiry = 0;
+async function getLineCategoryToggles() {
+    const now = Date.now();
+    if (_lineCategoryCache && _lineCategoryExpiry > now) return _lineCategoryCache;
+    try {
+        const [rows] = await db.query(
+            "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('notif_line_enabled','notif_line_admin_login','notif_line_backup','notif_line_restore','notif_line_settings_change','notif_line_indicator_change')"
+        );
+        const s = {};
+        for (const r of rows) s[r.setting_key] = r.setting_value;
+        _lineCategoryCache = {
+            master: s.notif_line_enabled !== 'false',
+            admin_login: s.notif_line_admin_login !== 'false',
+            backup: s.notif_line_backup !== 'false',
+            restore: s.notif_line_restore !== 'false',
+            settings_change: s.notif_line_settings_change !== 'false',
+            indicator_change: s.notif_line_indicator_change !== 'false'
+        };
+        _lineCategoryExpiry = now + 60 * 1000;
+        return _lineCategoryCache;
+    } catch (e) {
+        return { master: true, admin_login: true, backup: true, restore: true, settings_change: true, indicator_change: true };
+    }
+}
+// invalidate cache (เรียกเมื่อ save settings)
+function invalidateLineCategoryCache() { _lineCategoryExpiry = 0; }
+
+// notifyLineAction — ส่ง LINE แบบสั้นๆ + check toggle + fire-and-forget
+// ไม่ await — ไม่ block response
+async function notifyLineAction(category, message) {
+    try {
+        const cfg = await getLineCategoryToggles();
+        if (!cfg.master) return;            // master off
+        if (cfg[category] === false) return; // category off
+        const ns = await getNotifSettings();
+        if (!ns.lineToken || !ns.lineGroupId) return;
+        sendLineMulticast(ns.lineToken, ns.lineGroupId, message)
+            .catch(e => console.error('[LINE action] error:', e.message));
+    } catch (e) {
+        console.error('[notifyLineAction] failed:', e.message);
+    }
+}
+
 // Helper: ดึง notification settings จาก DB (fallback ENV)
 const getNotifSettings = async () => {
     try {
@@ -648,6 +698,22 @@ apiRouter.post('/login', loginIpLimiter, loginLimiter, async (req, res) => {
                 const forceChange = user.must_change_password === 1 || usedTempPassword;
 
                 await saveLog(username, 'login_success', usedTempPassword ? 'เข้าสู่ระบบด้วยรหัสชั่วคราว' : 'เข้าสู่ระบบสำเร็จ', ip);
+
+                // แจ้ง LINE Group เมื่อ super_admin / admin_ssj login
+                if (user.role === 'super_admin' || user.role === 'admin_ssj') {
+                    const ua = req.headers['user-agent'] || '';
+                    const uaShort = ua.length > 80 ? ua.slice(0, 80) + '...' : ua;
+                    const nowStr = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' });
+                    const roleEmoji = user.role === 'super_admin' ? '👑' : '🛡️';
+                    notifyLineAction('admin_login',
+                        `${roleEmoji} Admin login\n` +
+                        `👤 ${user.firstname || ''} ${user.lastname || ''} (${username})\n` +
+                        `🔑 Role: ${user.role}\n` +
+                        `🌐 IP: ${ip}\n` +
+                        `🕐 ${nowStr}\n` +
+                        `📱 ${uaShort}`
+                    );
+                }
 
                 // ส่ง Email แจ้งเตือนการ Login (ถ้ามี email)
                 if (user.email) {
@@ -3658,6 +3724,30 @@ apiRouter.post('/settings', async (req, res) => {
         await connection.commit();
         // Reload settings เพื่อให้ค่าใหม่มีผลทันที
         updateSystemSettings();
+        // invalidate LINE category cache (อาจเปลี่ยน toggles หรือ line_channel_token)
+        invalidateLineCategoryCache();
+
+        // LINE notify: settings เปลี่ยน (mask sensitive values + cap จำนวน key ที่แสดง)
+        try {
+            const sensitive = ['telegram_bot_token', 'line_channel_token', 'thaid_client_secret', 'providerid_client_secret'];
+            const keysChanged = settings.map(s => s.setting_key);
+            const top = keysChanged.slice(0, 10);
+            const moreCount = keysChanged.length > 10 ? keysChanged.length - 10 : 0;
+            const detailLines = settings.slice(0, 10).map(s => {
+                const v = sensitive.includes(s.setting_key) ? '***' : String(s.setting_value).slice(0, 80);
+                return `• ${s.setting_key}: ${v}`;
+            }).join('\n');
+            const [actor] = await db.query('SELECT firstname, lastname, username FROM users WHERE id = ?', [user.userId]);
+            const actorName = actor[0] ? `${actor[0].firstname} ${actor[0].lastname} (${actor[0].username})` : `user_id ${user.userId}`;
+            notifyLineAction('settings_change',
+                `⚙️ Settings ถูกแก้ไข\n` +
+                `👤 ${actorName}\n` +
+                `🔧 จำนวน key: ${keysChanged.length}\n` +
+                detailLines +
+                (moreCount > 0 ? `\n... และอีก ${moreCount} key` : '')
+            );
+        } catch (_) { /* don't fail save if LINE noti fails */ }
+
         res.json({ success: true, message: 'Settings updated' });
     } catch (error) {
         await connection.rollback();
@@ -3809,18 +3899,37 @@ const normalizeOffTypes = (v) => {
 };
 const normalizeEvalMode = (v) => (v === 'any_one' || v === 'all_required') ? v : null;
 
+// Helper: ดึงชื่อ user สำหรับ message LINE
+const _actorLabel = async (userId) => {
+    try {
+        const [r] = await db.query('SELECT firstname, lastname, username FROM users WHERE id = ?', [userId]);
+        return r[0] ? `${r[0].firstname} ${r[0].lastname} (${r[0].username})` : `user_id ${userId}`;
+    } catch (_) { return `user_id ${userId}`; }
+};
+
 apiRouter.post('/indicators', authenticateToken, isSuperAdmin, async (req, res) => {
     const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types } = req.body;
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
         return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
     }
     try {
-        await db.query(
+        const [r] = await db.query(
             `INSERT INTO kpi_indicators (kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types)]
         );
-        res.json({ success: true, message: 'Created successfully' });
+        // LINE notify: created
+        try {
+            const actor = await _actorLabel(req.user.userId);
+            notifyLineAction('indicator_change',
+                `➕ สร้างตัวชี้วัดใหม่\n` +
+                `👤 ${actor}\n` +
+                `🆔 ID: ${r.insertId}\n` +
+                `📌 ${kpi_indicators_name}` +
+                (table_process ? `\n🔑 table_process: ${table_process}` : '')
+            );
+        } catch (_) {}
+        res.json({ success: true, message: 'Created successfully', id: r.insertId });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -3832,10 +3941,36 @@ apiRouter.put('/indicators/:id', authenticateToken, isSuperAdmin, async (req, re
         return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
     }
     try {
+        // ดึง old row เพื่อหาว่าฟิลด์ไหนเปลี่ยน (diff สั้นๆ)
+        let diff = '';
+        try {
+            const [oldRow] = await db.query('SELECT kpi_indicators_name, is_active, table_process, target_percentage FROM kpi_indicators WHERE id = ?', [req.params.id]);
+            if (oldRow[0]) {
+                const o = oldRow[0];
+                const changes = [];
+                if (o.kpi_indicators_name !== kpi_indicators_name) changes.push('ชื่อ');
+                if (Number(o.is_active) !== (is_active ? 1 : 0)) changes.push(`สถานะ→${is_active ? 'เปิด' : 'ปิด'}`);
+                if ((o.table_process || '') !== (table_process || '')) changes.push('table_process');
+                if (String(o.target_percentage || '') !== String(target_percentage || '')) changes.push('เป้าหมาย');
+                if (changes.length > 0) diff = `\n📝 เปลี่ยน: ${changes.join(', ')}`;
+            }
+        } catch (_) {}
+
         await db.query(
             `UPDATE kpi_indicators SET kpi_indicators_name=?, kpi_indicators_id=?, main_indicator_id=?, dept_id=?, target_percentage=?, target_condition=?, weight=?, kpi_indicators_code=?, is_active=?, table_process=?, description=?, r9=?, moph=?, ssj=?, rmw=?, other=?, evaluation_mode=?, required_off_types=? WHERE id=?`,
             [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, is_active ? 1 : 0, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), req.params.id]
         );
+        // LINE notify: updated
+        try {
+            const actor = await _actorLabel(req.user.userId);
+            notifyLineAction('indicator_change',
+                `✏️ แก้ไขตัวชี้วัด\n` +
+                `👤 ${actor}\n` +
+                `🆔 ID: ${req.params.id}\n` +
+                `📌 ${kpi_indicators_name}` +
+                diff
+            );
+        } catch (_) {}
         res.json({ success: true, message: 'Updated successfully' });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -3844,7 +3979,23 @@ apiRouter.put('/indicators/:id', authenticateToken, isSuperAdmin, async (req, re
 
 apiRouter.delete('/indicators/:id', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
+        // ดึงชื่อก่อนลบ
+        let oldName = '';
+        try {
+            const [r] = await db.query('SELECT kpi_indicators_name FROM kpi_indicators WHERE id = ?', [req.params.id]);
+            if (r[0]) oldName = r[0].kpi_indicators_name;
+        } catch (_) {}
         await db.query('DELETE FROM kpi_indicators WHERE id = ?', [req.params.id]);
+        // LINE notify: deleted
+        try {
+            const actor = await _actorLabel(req.user.userId);
+            notifyLineAction('indicator_change',
+                `🗑️ ลบตัวชี้วัด\n` +
+                `👤 ${actor}\n` +
+                `🆔 ID: ${req.params.id}` +
+                (oldName ? `\n📌 ${oldName}` : '')
+            );
+        } catch (_) {}
         res.json({ success: true, message: 'Deleted successfully' });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Error deleting indicator' });
@@ -6855,7 +7006,12 @@ apiRouter.get('/report/recording-missing/by-hospital/:hospcode', authenticateTok
             ['admin_emails', '', 'Email Admin สำหรับแจ้งเตือนผู้สมัครใหม่ (คั่นด้วย comma)'],
             ['line_channel_token', '', 'LINE Messaging API — Channel Access Token (long-lived) จาก LINE Developers Console'],
             ['line_group_id', '', 'LINE Group ID ที่จะส่งแจ้งเตือน (คั่นด้วย comma สำหรับหลาย group)'],
-            ['notif_line_enabled', 'true', 'เปิด/ปิด LINE Group แจ้งเตือนทั่วระบบ']
+            ['notif_line_enabled', 'true', 'เปิด/ปิด LINE Group แจ้งเตือนทั่วระบบ (master switch)'],
+            ['notif_line_admin_login', 'true', 'แจ้ง LINE เมื่อ super_admin/admin_ssj login'],
+            ['notif_line_backup', 'true', 'แจ้ง LINE ผลการ backup (manual + scheduled)'],
+            ['notif_line_restore', 'true', 'แจ้ง LINE ผลการ restore'],
+            ['notif_line_settings_change', 'true', 'แจ้ง LINE เมื่อแก้ไข settings'],
+            ['notif_line_indicator_change', 'true', 'แจ้ง LINE เมื่อ CRUD ตัวชี้วัด (kpi_indicators)']
         ];
         for (const [key, val, desc] of notifDefaults) {
             await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)', [key, val, desc]);
@@ -7777,6 +7933,16 @@ apiRouter.put('/indicators/:id/upload-excel', authenticateToken, isSuperAdmin, a
         const val = (v === 1 || v === '1' || v === true) ? 1 : 0;
         const [r] = await db.query('UPDATE kpi_indicators SET upload_excel = ? WHERE id = ?', [val, id]);
         if (r.affectedRows === 0) return res.status(404).json({ success: false, message: 'ไม่พบตัวชี้วัด' });
+        // LINE notify
+        try {
+            const actor = await _actorLabel(req.user.userId);
+            notifyLineAction('indicator_change',
+                `🔁 เปลี่ยน upload_excel\n` +
+                `👤 ${actor}\n` +
+                `🆔 ID: ${id}\n` +
+                `📋 ${val ? '1 = ข้าม export (ลง Excel เอง)' : '0 = ส่งออกอัตโนมัติ'}`
+            );
+        } catch (_) {}
         res.json({ success: true, id, upload_excel: val, message: val ? 'ตั้งเป็น "ไม่ส่งออกอัตโนมัติ" แล้ว' : 'ตั้งเป็น "ส่งออกอัตโนมัติได้" แล้ว' });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
@@ -7792,6 +7958,16 @@ apiRouter.post('/indicators/bulk-upload-excel', authenticateToken, isSuperAdmin,
         if (ids.length === 0) return res.status(400).json({ success: false, message: 'ต้องระบุ ids' });
         const placeholders = ids.map(() => '?').join(',');
         const [r] = await db.query(`UPDATE kpi_indicators SET upload_excel = ? WHERE id IN (${placeholders})`, [val, ...ids]);
+        // LINE notify
+        try {
+            const actor = await _actorLabel(req.user.userId);
+            notifyLineAction('indicator_change',
+                `📦 Bulk เปลี่ยน upload_excel\n` +
+                `👤 ${actor}\n` +
+                `🔢 จำนวน: ${r.affectedRows} ตัวชี้วัด\n` +
+                `📋 → ${val ? '1 = ข้าม export' : '0 = ส่งออกอัตโนมัติ'}`
+            );
+        } catch (_) {}
         res.json({ success: true, affected: r.affectedRows, upload_excel: val });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
@@ -9599,12 +9775,35 @@ async function runBackupJob(jobId, conn, compress, trigger_type, userId, reqIp) 
             [userId, 'BACKUP_RUN', 'backup_files', JSON.stringify({ file_name: fileName, size: stat.size, conn: conn.name, tables: sourceTables.length, total_inserts: totalInserts, warnings: warnings.length }), reqIp]); } catch (_) {}
 
         console.log(`[Backup] job ${jobId} ${backupStatus} — ${fileName} (${stat.size} bytes, ${duration}ms, ${sourceTables.length} tables, ${totalInserts} INSERTs)`);
+
+        // LINE notify: backup สำเร็จ (เฉพาะ manual — schedule แจ้งผ่าน notifyBackupResult แล้ว)
+        if (trigger_type === 'manual') {
+            const sizeMB = (stat.size / (1024 * 1024)).toFixed(2);
+            notifyLineAction('backup',
+                `✅ Backup สำเร็จ (manual)\n` +
+                `🔗 ${conn.name} → ${conn.db_name}\n` +
+                `📦 ${fileName}\n` +
+                `💾 ${sizeMB} MB | ${sourceTables.length} ตาราง | ${totalInserts.toLocaleString('en-US')} rows\n` +
+                `⏱ ${(duration/1000).toFixed(1)} วินาที` +
+                (warnings.length > 0 ? `\n⚠️ ${warnings.length} warning` : '')
+            );
+        }
+
         return { file_id: fr.insertId, file_name: fileName, size: stat.size, duration, tables: sourceTables.length, total_inserts: totalInserts, warnings };
     } catch (e) {
         const duration = Date.now() - startedAt;
         try { await db.query(`UPDATE backup_jobs SET status='failed', finished_at=NOW(), duration_ms=?, error_msg=? WHERE id=?`,
             [duration, e.message.slice(0, 2000), jobId]); } catch (_) {}
         console.error(`[Backup] job ${jobId} failed:`, e.message);
+        // LINE notify: backup ล้มเหลว
+        if (trigger_type === 'manual') {
+            notifyLineAction('backup',
+                `❌ Backup ล้มเหลว (manual)\n` +
+                `🔗 ${conn.name} → ${conn.db_name}\n` +
+                `⏱ ${(duration/1000).toFixed(1)} วินาที\n` +
+                `💢 ${(e.message || '').slice(0, 200)}`
+            );
+        }
         throw e;
     }
 }
@@ -10014,11 +10213,28 @@ async function runRestoreJob(restoreJobId, f, conn, mode, dbTarget, auto_backup_
              JSON.stringify({ file_id: f.id, file_name: f.file_name, mode, target_db: dbTarget, pre_backup_file_id: preBackupFileId, tables: verifiedCount, duration_ms: duration }),
              reqIp]); } catch (_) {}
         console.log(`[Restore] job ${restoreJobId} success — verified:${verifiedCount} tables, ${duration}ms`);
+        // LINE notify: restore สำเร็จ
+        notifyLineAction('restore',
+            `✅ Restore สำเร็จ\n` +
+            `📦 ${f.file_name}\n` +
+            `🎯 → ${dbTarget} (${mode})\n` +
+            `📊 ${verifiedCount} ตาราง verified\n` +
+            `⏱ ${(duration/1000).toFixed(1)} วินาที` +
+            (preBackupFileId ? `\n🛡️ Pre-backup: file_id ${preBackupFileId}` : '')
+        );
     } catch (e) {
         const duration = Date.now() - startedAt;
         try { await db.query(`UPDATE restore_jobs SET status='failed', finished_at=NOW(), duration_ms=?, error_msg=? WHERE id=?`,
             [duration, e.message.slice(0, 2000), restoreJobId]); } catch (_) {}
         console.error(`[Restore] job ${restoreJobId} failed:`, e.message);
+        // LINE notify: restore ล้มเหลว
+        notifyLineAction('restore',
+            `❌ Restore ล้มเหลว\n` +
+            `📦 ${f.file_name}\n` +
+            `🎯 → ${dbTarget} (${mode})\n` +
+            `⏱ ${(duration/1000).toFixed(1)} วินาที\n` +
+            `💢 ${(e.message || '').slice(0, 200)}`
+        );
         throw e;
     }
 }

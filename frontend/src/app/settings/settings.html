@@ -526,6 +526,42 @@
               <i class="fas fa-bell"></i>แจ้งเตือนในระบบ: เปิดอยู่เสมอ
             </span>
           </div>
+
+          <!-- LINE Per-Category Toggles -->
+          <div *ngIf="notifLineEnabled" class="mt-4 bg-emerald-50/50 border border-emerald-200 rounded-xl p-4">
+            <h4 class="font-bold text-emerald-800 text-sm mb-3 flex items-center gap-2">
+              <i class="fab fa-line"></i>
+              <span>เลือก Event ที่จะแจ้ง LINE Group</span>
+              <span class="text-xs font-normal text-emerald-600">(default = เปิดทุก event)</span>
+            </h4>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+              <label class="flex items-center gap-2 cursor-pointer bg-white rounded-lg p-2 border border-emerald-100">
+                <input type="checkbox" [(ngModel)]="notifLineAdminLogin" name="notifLineAdminLogin" class="w-4 h-4 accent-emerald-600">
+                <span class="font-medium"><i class="fas fa-key text-amber-600 me-1"></i>Admin login (super_admin / admin_ssj)</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer bg-white rounded-lg p-2 border border-emerald-100">
+                <input type="checkbox" [(ngModel)]="notifLineBackup" name="notifLineBackup" class="w-4 h-4 accent-emerald-600">
+                <span class="font-medium"><i class="fas fa-database text-blue-600 me-1"></i>ผลการ Backup</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer bg-white rounded-lg p-2 border border-emerald-100">
+                <input type="checkbox" [(ngModel)]="notifLineRestore" name="notifLineRestore" class="w-4 h-4 accent-emerald-600">
+                <span class="font-medium"><i class="fas fa-history text-purple-600 me-1"></i>ผลการ Restore</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer bg-white rounded-lg p-2 border border-emerald-100">
+                <input type="checkbox" [(ngModel)]="notifLineSettingsChange" name="notifLineSettingsChange" class="w-4 h-4 accent-emerald-600">
+                <span class="font-medium"><i class="fas fa-sliders-h text-gray-600 me-1"></i>การแก้ไข Settings</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer bg-white rounded-lg p-2 border border-emerald-100">
+                <input type="checkbox" [(ngModel)]="notifLineIndicatorChange" name="notifLineIndicatorChange" class="w-4 h-4 accent-emerald-600">
+                <span class="font-medium"><i class="fas fa-bullseye text-green-600 me-1"></i>การแก้ไขตัวชี้วัด (kpi_indicators)</span>
+              </label>
+            </div>
+            <p class="text-[10px] text-emerald-600 mt-2"><i class="fas fa-info-circle me-1"></i>ปิดอันที่ไม่ต้องการรับ ไม่กระทบ Email / Telegram</p>
+          </div>
+
+          <div *ngIf="!notifLineEnabled" class="mt-4 bg-gray-100 border border-gray-200 rounded-xl p-3 text-xs text-gray-500 text-center">
+            <i class="fas fa-power-off me-1"></i>LINE Group ปิดอยู่ทั้งระบบ — เปิด toggle ด้านบนเพื่อตั้ง per-event
+          </div>
         </div>
 
         <div class="flex justify-end pt-4 border-t border-gray-100">

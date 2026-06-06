@@ -51,6 +51,13 @@ export class SettingsComponent implements OnInit {
   notifTelegramEnabled: boolean = true;
   notifEmailEnabled: boolean = true;
   notifLineEnabled: boolean = true;
+
+  // LINE per-category toggles (default = เปิดทุก category)
+  notifLineAdminLogin: boolean = true;
+  notifLineBackup: boolean = true;
+  notifLineRestore: boolean = true;
+  notifLineSettingsChange: boolean = true;
+  notifLineIndicatorChange: boolean = true;
   notifSystemEnabled: boolean = true;
 
   // Appeal settings
@@ -159,6 +166,16 @@ export class SettingsComponent implements OnInit {
           if (ntfEm) this.notifEmailEnabled = ntfEm.setting_value !== 'false';
           if (ntfSys) this.notifSystemEnabled = ntfSys.setting_value !== 'false';
           if (ntfLn) this.notifLineEnabled = ntfLn.setting_value !== 'false';
+          // LINE per-category
+          const grabBool = (k: string, def: boolean = true) => {
+            const r = this.settings.find(s => s.setting_key === k);
+            return r ? r.setting_value !== 'false' : def;
+          };
+          this.notifLineAdminLogin = grabBool('notif_line_admin_login');
+          this.notifLineBackup = grabBool('notif_line_backup');
+          this.notifLineRestore = grabBool('notif_line_restore');
+          this.notifLineSettingsChange = grabBool('notif_line_settings_change');
+          this.notifLineIndicatorChange = grabBool('notif_line_indicator_change');
 
           // Data Entry Lock settings
           const entryLocked = this.settings.find(s => s.setting_key === 'data_entry_locked');
@@ -236,6 +253,11 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'notif_telegram_enabled', setting_value: this.notifTelegramEnabled.toString() },
       { setting_key: 'notif_email_enabled', setting_value: this.notifEmailEnabled.toString() },
       { setting_key: 'notif_line_enabled', setting_value: this.notifLineEnabled.toString() },
+      { setting_key: 'notif_line_admin_login', setting_value: this.notifLineAdminLogin.toString() },
+      { setting_key: 'notif_line_backup', setting_value: this.notifLineBackup.toString() },
+      { setting_key: 'notif_line_restore', setting_value: this.notifLineRestore.toString() },
+      { setting_key: 'notif_line_settings_change', setting_value: this.notifLineSettingsChange.toString() },
+      { setting_key: 'notif_line_indicator_change', setting_value: this.notifLineIndicatorChange.toString() },
       { setting_key: 'notif_system_enabled', setting_value: this.notifSystemEnabled.toString() },
       { setting_key: 'data_entry_locked', setting_value: this.dataEntryLocked.toString() },
       { setting_key: 'data_entry_lock_start', setting_value: this.dataEntryLockStart },

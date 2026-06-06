@@ -18,6 +18,16 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.06.06',
+      date: '6 มิถุนายน 2569',
+      changes: [
+        { type: 'feature', text: 'LINE Group แจ้งเตือนเพิ่มเติม 4 event: 1) Admin login (super_admin / admin_ssj) แสดง username + role + IP + UA + เวลา 2) ผลการ Backup (manual + scheduled — สำเร็จ/ล้มเหลว) 3) ผลการ Restore (สำเร็จ/ล้มเหลว + target_db + tables verified) 4) การแก้ไข Settings (mask sensitive values + คนกระทำ + key ที่เปลี่ยน) 5) การ CRUD ตัวชี้วัด (create/update/delete + upload_excel toggle/bulk) — diff สั้นๆ' },
+        { type: 'feature', text: 'Settings UI: เพิ่มกล่อง "เลือก Event ที่จะแจ้ง LINE Group" 5 checkbox per-category (admin_login, backup, restore, settings_change, indicator_change) — default เปิดทุก event ปิดอันที่ไม่ต้องการได้ ไม่กระทบ Email/Telegram' },
+        { type: 'improve', text: 'Backend: helper notifyLineAction(category, message) + cache 60s + fire-and-forget — ไม่ block response เมื่อ LINE ช้า + safe (try/catch) ไม่ทำให้ endpoint ล้มเหลวถ้า LINE error' },
+        { type: 'feature', text: 'Auto-migration settings keys ใหม่: notif_line_admin_login, notif_line_backup, notif_line_restore, notif_line_settings_change, notif_line_indicator_change (default true)' },
+      ]
+    },
+    {
       version: '2569.06.05.c',
       date: '5 มิถุนายน 2569 (build c)',
       changes: [
