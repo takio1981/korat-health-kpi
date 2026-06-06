@@ -8946,22 +8946,107 @@ apiRouter.post('/webhook/line', express.json({
             ).catch(e => console.error('[LINE webhook] inbox insert error:', e.message));
 
             // ตอบกลับ user ครั้งแรก (ถ้า bot ไม่ได้ตั้ง auto-reply ใน console)
-            if (ev.type === 'follow' || (ev.type === 'message' && ev.replyToken)) {
+            // === ตอบกลับ user ตามสถานการณ์ ===
+            //   1. follow event → welcome + userId + วิธีตั้งค่า
+            //   2. message event:
+            //      - ถ้าผูกกับ user ในระบบแล้ว → ยืนยันสถานะ
+            //      - ถ้ายังไม่ผูก → ส่ง userId + วิธีตั้งค่า
+            //      - keyword "userid" / "id" / "ไอดี" / "เริ่ม" → reply ทุกครั้ง
+            if ((ev.type === 'follow' || ev.type === 'message') && ev.replyToken && ns.lineToken) {
                 try {
-                    if (ev.replyToken && ns.lineToken) {
-                        const replyMsg = `สวัสดีครับ! 🙏\n\nuserId ของคุณ:\n${lineUserId}\n\nคัดลอกไปแจ้ง super_admin หรือใส่ในหน้า "ตั้งค่า LINE แจ้งเตือนส่วนตัว" เพื่อรับการแจ้งเตือนจากระบบ KPI`;
-                        await fetch('https://api.line.me/v2/bot/message/reply', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${ns.lineToken}`
+                    // เช็คว่า userId นี้ผูกกับ user ในระบบหรือยัง
+                    const [linkedRows] = await db.query(
+                        'SELECT id, username, firstname, lastname, notif_line_enabled FROM users WHERE line_user_id = ? LIMIT 1',
+                        [lineUserId]
+                    );
+                    const linkedUser = linkedRows[0];
+
+                    // หา base URL จาก env หรือ default
+                    const baseUrl = (process.env.APP_URL || 'https://apikorat.moph.go.th/khupskpi').replace(/\/+$/, '');
+
+                    // ตรวจ keyword (ถ้า user ส่งข้อความเพื่อขอ userId ใหม่)
+                    const lowerText = (messageText || '').toLowerCase().trim();
+                    const isQuestionForId = /^(userid|user id|user_id|id|ไอดี|รหัส|เริ่ม|start|\/start|help|\?)$/i.test(lowerText);
+
+                    let messages = [];
+
+                    if (ev.type === 'follow') {
+                        // === Welcome on first add ===
+                        messages = [
+                            {
+                                type: 'text',
+                                text: `🙏 ยินดีต้อนรับสู่ระบบแจ้งเตือน KHUPS KPI\nสำนักงานสาธารณสุขจังหวัดนครราชสีมา\n\n📌 LINE userId ของคุณ:`
                             },
-                            body: JSON.stringify({
-                                replyToken: ev.replyToken,
-                                messages: [{ type: 'text', text: replyMsg }]
-                            })
-                        });
+                            {
+                                type: 'text',
+                                text: lineUserId  // ส่ง userId เป็นข้อความเดี่ยว → user แตะค้างคัดลอกได้ง่าย
+                            },
+                            {
+                                type: 'text',
+                                text: `✅ ขั้นตอนเปิดแจ้งเตือนส่วนตัว:\n` +
+                                      `1️⃣ คัดลอก userId ด้านบน (แตะค้างที่ข้อความ)\n` +
+                                      `2️⃣ Login เข้าระบบ:\n${baseUrl}/login\n` +
+                                      `3️⃣ คลิกรูปโปรไฟล์มุมขวาบน\n` +
+                                      `4️⃣ เลือก "ตั้งค่า LINE แจ้งเตือนส่วนตัว"\n` +
+                                      `5️⃣ วาง userId → กดบันทึก → กดทดสอบ\n\n` +
+                                      `❓ พิมพ์ "id" หรือ "เริ่ม" → ดู userId อีกครั้ง`
+                            }
+                        ];
+                    } else if (linkedUser) {
+                        // === ผูกแล้ว ===
+                        const userName = `${linkedUser.firstname || ''} ${linkedUser.lastname || ''}`.trim() || linkedUser.username;
+                        const status = Number(linkedUser.notif_line_enabled) === 1 ? '🟢 เปิดแจ้งเตือน' : '🔴 ปิดแจ้งเตือน';
+                        if (isQuestionForId) {
+                            messages = [{
+                                type: 'text',
+                                text: `✅ บัญชีนี้ผูกอยู่แล้ว\n\n` +
+                                      `👤 ${userName} (${linkedUser.username})\n` +
+                                      `${status}\n` +
+                                      `📌 userId: ${lineUserId}\n\n` +
+                                      `ปรับการแจ้งเตือนได้ที่ Profile → ตั้งค่า LINE แจ้งเตือนส่วนตัว`
+                            }];
+                        } else {
+                            // user แค่ทักเฉยๆ — ตอบสั้นๆ
+                            messages = [{
+                                type: 'text',
+                                text: `สวัสดีคุณ${userName} 👋\nระบบจะส่งแจ้งเตือนเข้า LINE นี้ทุกครั้งที่มีเหตุการณ์สำคัญในระบบ KPI\n\nพิมพ์ "id" → ดู userId\nพิมพ์ "help" → ดูวิธีใช้`
+                            }];
+                        }
+                    } else {
+                        // === ยังไม่ผูก — ส่ง userId + วิธีตั้งค่า ===
+                        messages = [
+                            {
+                                type: 'text',
+                                text: `📌 LINE userId ของคุณ:`
+                            },
+                            {
+                                type: 'text',
+                                text: lineUserId
+                            },
+                            {
+                                type: 'text',
+                                text: `✅ ขั้นตอนเปิดแจ้งเตือน:\n` +
+                                      `1️⃣ คัดลอก userId (แตะค้างที่ข้อความด้านบน)\n` +
+                                      `2️⃣ Login:\n${baseUrl}/login\n` +
+                                      `3️⃣ รูปโปรไฟล์ขวาบน → "ตั้งค่า LINE แจ้งเตือนส่วนตัว"\n` +
+                                      `4️⃣ วาง userId → บันทึก → ทดสอบ\n\n` +
+                                      `🔔 จะได้รับแจ้งเตือน: login, อนุมัติ/ปฏิเสธบัญชี, reset รหัสผ่าน, มีคนตอบกระทู้`
+                            }
+                        ];
                     }
+
+                    // LINE จำกัด max 5 messages ต่อ reply
+                    await fetch('https://api.line.me/v2/bot/message/reply', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${ns.lineToken}`
+                        },
+                        body: JSON.stringify({
+                            replyToken: ev.replyToken,
+                            messages: messages.slice(0, 5)
+                        })
+                    });
                 } catch (e) { console.error('[LINE webhook] reply error:', e.message); }
             }
         }

@@ -18,6 +18,15 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.06.06.e',
+      date: '6 มิถุนายน 2569 (build e)',
+      changes: [
+        { type: 'improve', text: 'LINE bot auto-reply: ปรับให้รองรับ 3 scenario — (1) follow event ครั้งแรก → welcome + userId เป็นข้อความเดี่ยว (คัดลอกง่าย) + 5 ขั้นตอนตั้งค่า + ลิงก์ login (2) user ที่ผูกแล้ว → ทักทายสั้นๆ พร้อมสถานะ + พิมพ์ "id" เพื่อดู userId ใหม่ (3) user ที่ยังไม่ผูก → ส่ง userId + คู่มือ + รายการ event ที่จะได้รับแจ้ง' },
+        { type: 'improve', text: 'LINE bot รองรับ keyword: userid / id / ไอดี / รหัส / เริ่ม / start / /start / help / ? → ตอบ userId อีกครั้ง (กัน user ลืม)' },
+        { type: 'improve', text: 'LINE bot ส่ง userId เป็น text เดี่ยวบรรทัดเดียว → user แตะค้างคัดลอกได้ทันทีในแอป LINE (UX ดีกว่ารวมข้อความ)' },
+      ]
+    },
+    {
       version: '2569.06.06.d',
       date: '6 มิถุนายน 2569 (build d)',
       changes: [
