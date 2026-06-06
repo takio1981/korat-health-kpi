@@ -18,6 +18,13 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.06.06.b',
+      date: '6 มิถุนายน 2569 (build b)',
+      changes: [
+        { type: 'improve', text: 'Settings change LINE notify: ส่งเฉพาะ key ที่ค่าเปลี่ยนจริงจากเดิม + แสดง before → after — frontend POST 30+ keys ทุกครั้งที่กด "บันทึก" ก็ส่ง LINE เฉพาะที่ user แก้จริง (กัน LINE Group noise) + ถ้าไม่มีอะไรเปลี่ยน ก็ไม่ส่งเลย' },
+      ]
+    },
+    {
       version: '2569.06.06',
       date: '6 มิถุนายน 2569',
       changes: [

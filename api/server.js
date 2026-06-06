@@ -3714,6 +3714,18 @@ apiRouter.post('/settings', async (req, res) => {
 
     const connection = await db.getConnection();
     try {
+        // === ดึง current values ของ key ทั้งหมดที่ส่งมา เพื่อ diff หา key ที่เปลี่ยนจริง ===
+        const submittedKeys = settings.map(s => s.setting_key);
+        let oldValuesMap = new Map();
+        if (submittedKeys.length > 0) {
+            const placeholders = submittedKeys.map(() => '?').join(',');
+            const [oldRows] = await connection.query(
+                `SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN (${placeholders})`,
+                submittedKeys
+            );
+            for (const r of oldRows) oldValuesMap.set(r.setting_key, r.setting_value);
+        }
+
         await connection.beginTransaction();
         for (const item of settings) {
             await connection.query(
@@ -3727,25 +3739,38 @@ apiRouter.post('/settings', async (req, res) => {
         // invalidate LINE category cache (อาจเปลี่ยน toggles หรือ line_channel_token)
         invalidateLineCategoryCache();
 
-        // LINE notify: settings เปลี่ยน (mask sensitive values + cap จำนวน key ที่แสดง)
+        // === LINE notify: เฉพาะ key ที่ค่าเปลี่ยนจริงจากเดิม ===
         try {
             const sensitive = ['telegram_bot_token', 'line_channel_token', 'thaid_client_secret', 'providerid_client_secret'];
-            const keysChanged = settings.map(s => s.setting_key);
-            const top = keysChanged.slice(0, 10);
-            const moreCount = keysChanged.length > 10 ? keysChanged.length - 10 : 0;
-            const detailLines = settings.slice(0, 10).map(s => {
-                const v = sensitive.includes(s.setting_key) ? '***' : String(s.setting_value).slice(0, 80);
-                return `• ${s.setting_key}: ${v}`;
-            }).join('\n');
-            const [actor] = await db.query('SELECT firstname, lastname, username FROM users WHERE id = ?', [user.userId]);
-            const actorName = actor[0] ? `${actor[0].firstname} ${actor[0].lastname} (${actor[0].username})` : `user_id ${user.userId}`;
-            notifyLineAction('settings_change',
-                `⚙️ Settings ถูกแก้ไข\n` +
-                `👤 ${actorName}\n` +
-                `🔧 จำนวน key: ${keysChanged.length}\n` +
-                detailLines +
-                (moreCount > 0 ? `\n... และอีก ${moreCount} key` : '')
-            );
+            // หา key ที่เปลี่ยนจริง — ใช้ string compare (DB เก็บเป็น VARCHAR)
+            const changedSettings = settings.filter(s => {
+                const oldVal = oldValuesMap.get(s.setting_key);
+                // key ใหม่ที่ไม่เคยมีใน DB → ถือว่าเปลี่ยน (ยกเว้นค่าว่าง)
+                if (oldVal === undefined) return String(s.setting_value || '') !== '';
+                return String(oldVal) !== String(s.setting_value || '');
+            });
+
+            if (changedSettings.length === 0) {
+                // ไม่มีการเปลี่ยนแปลงจริง → ไม่ส่ง LINE (กัน noise)
+                console.log('[Settings] save without actual changes — skip LINE notify');
+            } else {
+                const mask = (key, val) => sensitive.includes(key) ? '***' : String(val || '').slice(0, 80) || '(ว่าง)';
+                const detailLines = changedSettings.slice(0, 10).map(s => {
+                    const oldV = mask(s.setting_key, oldValuesMap.get(s.setting_key));
+                    const newV = mask(s.setting_key, s.setting_value);
+                    return `• ${s.setting_key}\n   ↳ ${oldV} → ${newV}`;
+                }).join('\n');
+                const moreCount = changedSettings.length > 10 ? changedSettings.length - 10 : 0;
+                const [actor] = await db.query('SELECT firstname, lastname, username FROM users WHERE id = ?', [user.userId]);
+                const actorName = actor[0] ? `${actor[0].firstname} ${actor[0].lastname} (${actor[0].username})` : `user_id ${user.userId}`;
+                notifyLineAction('settings_change',
+                    `⚙️ Settings ถูกแก้ไข\n` +
+                    `👤 ${actorName}\n` +
+                    `🔧 เปลี่ยน ${changedSettings.length} key (จาก ${settings.length} ที่ส่ง)\n` +
+                    detailLines +
+                    (moreCount > 0 ? `\n... และอีก ${moreCount} key` : '')
+                );
+            }
         } catch (_) { /* don't fail save if LINE noti fails */ }
 
         res.json({ success: true, message: 'Settings updated' });
