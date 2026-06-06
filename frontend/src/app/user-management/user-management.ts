@@ -52,6 +52,13 @@ export class UserManagementComponent implements OnInit {
   permForm: any = { can_edit_actual: true, can_edit_target: true };
   permSaving: boolean = false;
 
+  // === จัดการ LINE userId (super_admin) ===
+  showLineModal: boolean = false;
+  lineUser: any = null;
+  lineForm: { line_user_id: string; notif_line_enabled: boolean } = { line_user_id: '', notif_line_enabled: true };
+  lineInbox: any[] = [];
+  lineInboxLoading: boolean = false;
+
   selectedStatus: string = '';
   pendingCount: number = 0;
   maintenanceMode: boolean = false;
@@ -815,6 +822,117 @@ export class UserManagementComponent implements OnInit {
       error: (err) => {
         this.permSaving = false;
         Swal.fire('ผิดพลาด', err.error?.message || 'บันทึกไม่สำเร็จ', 'error');
+      }
+    });
+  }
+
+  // ============================================================
+  // จัดการ LINE userId ของแต่ละ user (super_admin)
+  // ============================================================
+  openLineModal(user: any) {
+    this.lineUser = user;
+    this.lineForm = {
+      line_user_id: user.line_user_id || '',
+      notif_line_enabled: Number(user.notif_line_enabled) !== 0
+    };
+    this.showLineModal = true;
+    this.loadLineInbox();
+  }
+
+  closeLineModal() {
+    this.showLineModal = false;
+    this.lineUser = null;
+    this.lineInbox = [];
+  }
+
+  loadLineInbox() {
+    this.lineInboxLoading = true;
+    this.authService.getLineInbox(false).subscribe({
+      next: (res: any) => {
+        this.lineInboxLoading = false;
+        if (res.success) this.lineInbox = res.data || [];
+        this.cdr.detectChanges();
+      },
+      error: () => { this.lineInboxLoading = false; }
+    });
+  }
+
+  pickFromInbox(item: any) {
+    this.lineForm.line_user_id = item.line_user_id;
+  }
+
+  saveUserLine() {
+    if (!this.lineUser) return;
+    const id = (this.lineForm.line_user_id || '').trim();
+    if (id && !/^U[a-f0-9]{32}$/i.test(id)) {
+      Swal.fire('แจ้งเตือน', 'LINE userId ต้องเป็นรูปแบบ U + 32 hex chars', 'warning');
+      return;
+    }
+    this.authService.adminSetUserLine(this.lineUser.id, id, this.lineForm.notif_line_enabled).subscribe({
+      next: (res: any) => {
+        if (res.success) {
+          this.lineUser.line_user_id = id || null;
+          this.lineUser.notif_line_enabled = this.lineForm.notif_line_enabled ? 1 : 0;
+          Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', timer: 1500, showConfirmButton: false });
+          this.cdr.detectChanges();
+        }
+      },
+      error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'บันทึกไม่ได้', 'error')
+    });
+  }
+
+  testUserLine() {
+    if (!this.lineUser) return;
+    if (!this.lineForm.line_user_id) {
+      Swal.fire('แจ้งเตือน', 'กรอก LINE userId แล้วกดบันทึกก่อนทดสอบ', 'warning');
+      return;
+    }
+    Swal.fire({ title: 'กำลังส่ง...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    this.authService.adminTestUserLine(this.lineUser.id).subscribe({
+      next: (res: any) => {
+        if (res.success) Swal.fire({ icon: 'success', title: 'สำเร็จ', text: `ส่ง LINE ทดสอบให้ ${this.lineUser.username} แล้ว`, timer: 2500, showConfirmButton: false });
+        else Swal.fire('ผิดพลาด', res.message || 'ส่งไม่สำเร็จ', 'error');
+      },
+      error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ส่งไม่ได้', 'error')
+    });
+  }
+
+  assignInboxToUser(inboxItem: any) {
+    if (!this.lineUser) return;
+    Swal.fire({
+      title: 'ผูก LINE userId นี้กับ user',
+      html: `<div class="text-left text-sm">
+        <p>ผูก userId นี้:</p>
+        <code class="block bg-emerald-50 border border-emerald-200 rounded p-1.5 my-1 text-xs">${inboxItem.line_user_id}</code>
+        <p class="mt-2">ให้กับ user: <b>${this.lineUser.username}</b></p>
+      </div>`,
+      icon: 'question', showCancelButton: true, confirmButtonColor: '#10b981',
+      confirmButtonText: 'ยืนยัน', cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      this.authService.assignLineInbox(inboxItem.id, this.lineUser.id).subscribe({
+        next: (res: any) => {
+          if (res.success) {
+            this.lineUser.line_user_id = inboxItem.line_user_id;
+            this.lineForm.line_user_id = inboxItem.line_user_id;
+            inboxItem.linked_user_id = this.lineUser.id;
+            inboxItem.username = this.lineUser.username;
+            Swal.fire({ icon: 'success', title: 'ผูกสำเร็จ', timer: 1500, showConfirmButton: false });
+            this.cdr.detectChanges();
+          }
+        },
+        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ผูกไม่ได้', 'error')
+      });
+    });
+  }
+
+  archiveInbox(item: any) {
+    this.authService.archiveLineInbox(item.id, true).subscribe({
+      next: (res: any) => {
+        if (res.success) {
+          this.lineInbox = this.lineInbox.filter(i => i.id !== item.id);
+          this.cdr.detectChanges();
+        }
       }
     });
   }

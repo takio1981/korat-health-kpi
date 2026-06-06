@@ -471,10 +471,20 @@
                          placeholder="xxxxx..." autocomplete="off">
                 </div>
                 <div>
+                  <label class="block text-xs font-bold text-gray-600 mb-1">Channel Secret <span class="text-gray-400 font-normal">(สำหรับ webhook verify signature)</span></label>
+                  <input type="password" [(ngModel)]="lineChannelSecret" name="lineChannelSecret"
+                         class="w-full px-3 py-2 border border-emerald-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-400 outline-none font-mono"
+                         placeholder="xxxxx..." autocomplete="off">
+                </div>
+                <div>
                   <label class="block text-xs font-bold text-gray-600 mb-1">Group ID (คั่นด้วย comma)</label>
                   <input type="text" [(ngModel)]="lineGroupId" name="lineGroupId"
                          class="w-full px-3 py-2 border border-emerald-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-400 outline-none font-mono"
                          placeholder="Cxxxxxxxxxxxxxxxx, Cyyyyyy...">
+                </div>
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-2 text-[11px] text-blue-700">
+                  <p class="font-bold"><i class="fas fa-link me-1"></i>Webhook URL (ตั้งใน LINE Developers Console):</p>
+                  <code class="block font-mono text-[10px] mt-1 text-blue-800 break-all">{{ origin }}/khupskpi/api/webhook/line</code>
                 </div>
                 <button type="button" (click)="testLine()"
                         class="w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition-colors">

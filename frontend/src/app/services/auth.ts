@@ -446,6 +446,37 @@ export class AuthService {
     return this.http.post(`${this.apiUrl}/me/line/test`, {}, { headers });
   }
 
+  // === Admin LINE management (super_admin) ===
+  getLineInbox(showArchived: boolean = false): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/admin/line-inbox${showArchived ? '?archived=1' : ''}`, { headers });
+  }
+
+  assignLineInbox(inboxId: number, userId: number): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/admin/line-inbox/${inboxId}/assign`, { user_id: userId }, { headers });
+  }
+
+  archiveLineInbox(inboxId: number, archived: boolean): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/admin/line-inbox/${inboxId}/archive`, { archived }, { headers });
+  }
+
+  adminSetUserLine(userId: number, line_user_id: string, notif_line_enabled: boolean): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/admin/users/${userId}/line`, { line_user_id, notif_line_enabled }, { headers });
+  }
+
+  adminTestUserLine(userId: number): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/admin/users/${userId}/line/test`, {}, { headers });
+  }
+
   backupDatabase(): Observable<Blob> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

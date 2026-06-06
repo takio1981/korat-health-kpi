@@ -47,7 +47,9 @@ export class SettingsComponent implements OnInit {
   telegramChatId: string = '';
   adminEmails: string = '';
   lineChannelToken: string = '';
+  lineChannelSecret: string = '';
   lineGroupId: string = '';
+  origin: string = (typeof window !== 'undefined' ? window.location.origin : '');
   notifTelegramEnabled: boolean = true;
   notifEmailEnabled: boolean = true;
   notifLineEnabled: boolean = true;
@@ -155,8 +157,10 @@ export class SettingsComponent implements OnInit {
           if (admEmails) this.adminEmails = admEmails.setting_value || '';
           // LINE Group
           const lnToken = this.settings.find(s => s.setting_key === 'line_channel_token');
+          const lnSecret = this.settings.find(s => s.setting_key === 'line_channel_secret');
           const lnGroup = this.settings.find(s => s.setting_key === 'line_group_id');
           if (lnToken) this.lineChannelToken = lnToken.setting_value || '';
+          if (lnSecret) this.lineChannelSecret = lnSecret.setting_value || '';
           if (lnGroup) this.lineGroupId = lnGroup.setting_value || '';
           const ntfTg = this.settings.find(s => s.setting_key === 'notif_telegram_enabled');
           const ntfEm = this.settings.find(s => s.setting_key === 'notif_email_enabled');
@@ -249,6 +253,7 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'telegram_chat_id', setting_value: this.telegramChatId },
       { setting_key: 'admin_emails', setting_value: this.adminEmails },
       { setting_key: 'line_channel_token', setting_value: this.lineChannelToken },
+      { setting_key: 'line_channel_secret', setting_value: this.lineChannelSecret },
       { setting_key: 'line_group_id', setting_value: this.lineGroupId },
       { setting_key: 'notif_telegram_enabled', setting_value: this.notifTelegramEnabled.toString() },
       { setting_key: 'notif_email_enabled', setting_value: this.notifEmailEnabled.toString() },

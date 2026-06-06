@@ -18,6 +18,19 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.06.06.d',
+      date: '6 มิถุนายน 2569 (build d)',
+      changes: [
+        { type: 'feature', text: 'LINE Webhook: รับ event เมื่อ user ทักเข้า bot — POST /webhook/line (public, verify signature ด้วย channel_secret) → ดึง profile (display name + รูป) → INSERT line_inbox + auto-reply userId กลับให้ user' },
+        { type: 'feature', text: 'User Management: ปุ่ม "LINE" (super_admin only) ในคอลัมน์จัดการ — สีเขียวมรกต + dot indicator ถ้าผูกแล้ว — คลิกเปิด modal จัดการ' },
+        { type: 'feature', text: 'LINE Modal ใน User Management: แสดง userId ปัจจุบัน + input แก้ + toggle เปิด-ปิดแจ้งเตือน + LINE Inbox รายการล่าสุดจากผู้ทักเข้า bot (รูป/ชื่อ/userId/message/เวลา) + ปุ่ม "วางใส่ช่อง" "ผูกทันที" "ซ่อน" + ปุ่มทดสอบ' },
+        { type: 'feature', text: 'Backend endpoints (super_admin only): GET /admin/line-inbox + POST /admin/line-inbox/:id/assign + POST /admin/line-inbox/:id/archive + PUT /admin/users/:id/line + POST /admin/users/:id/line/test' },
+        { type: 'feature', text: 'Settings: เพิ่ม Channel Secret (สำหรับ webhook verify) + แสดง Webhook URL พร้อมคัดลอกไปตั้งที่ LINE Developers Console' },
+        { type: 'improve', text: 'Auto-migration: line_inbox table + users.line_user_id UNIQUE index (กัน userId ผูกซ้ำกับหลาย user)' },
+        { type: 'improve', text: 'GET /users ส่ง line_user_id + notif_line_enabled ด้วย — frontend แสดง dot indicator บนปุ่ม LINE ได้ทันที' },
+      ]
+    },
+    {
       version: '2569.06.06.c',
       date: '6 มิถุนายน 2569 (build c)',
       changes: [

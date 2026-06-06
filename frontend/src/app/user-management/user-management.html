@@ -158,6 +158,10 @@
           <button (click)="openModal(user)" class="px-2.5 py-1 bg-yellow-500 text-white rounded-lg text-[10px] font-bold"><i class="fas fa-edit mr-1"></i>แก้ไข</button>
           <button (click)="resetPassword(user)" class="px-2.5 py-1 bg-orange-500 text-white rounded-lg text-[10px] font-bold"><i class="fas fa-key mr-1"></i>รีเซ็ต</button>
           <button *ngIf="isSuperAdmin && user.role !== 'super_admin'" (click)="openPermModal(user)" class="px-2.5 py-1 bg-indigo-600 text-white rounded-lg text-[10px] font-bold" title="จัดการสิทธิ์การแก้ไข"><i class="fas fa-user-shield mr-1"></i>สิทธิ์</button>
+          <button *ngIf="isSuperAdmin" (click)="openLineModal(user)" class="px-2.5 py-1 bg-emerald-600 text-white rounded-lg text-[10px] font-bold relative" [title]="user.line_user_id ? 'จัดการ LINE userId (ผูกแล้ว)' : 'ตั้ง LINE userId'">
+            <i class="fab fa-line mr-1"></i>LINE
+            <span *ngIf="user.line_user_id" class="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full ring-2 ring-white"></span>
+          </button>
           <button *ngIf="isSuperAdmin && user.active_session_id" (click)="forceLogoutUser(user)" class="px-2.5 py-1 bg-purple-600 text-white rounded-lg text-[10px] font-bold" title="บังคับ logout"><i class="fas fa-sign-out-alt mr-1"></i>Logout</button>
           <button *ngIf="isSuperAdmin" (click)="deleteUser(user.id)" class="px-2.5 py-1 bg-red-500 text-white rounded-lg text-[10px] font-bold"><i class="fas fa-trash mr-1"></i>ลบ</button>
         </div>
@@ -282,6 +286,11 @@
               <button (click)="resetPassword(user)" class="text-orange-500 hover:text-orange-600 mx-1" title="รีเซ็ตรหัสผ่าน"><i class="fas fa-key"></i></button>
               <button (click)="openModal(user)" class="text-yellow-500 hover:text-yellow-600 mx-1" title="แก้ไข"><i class="fas fa-edit"></i></button>
               <button *ngIf="isSuperAdmin && user.role !== 'super_admin'" (click)="openPermModal(user)" class="text-indigo-600 hover:text-indigo-800 mx-1" title="จัดการสิทธิ์การแก้ไข"><i class="fas fa-user-shield"></i></button>
+              <button *ngIf="isSuperAdmin" (click)="openLineModal(user)" [title]="user.line_user_id ? 'จัดการ LINE userId (ผูกแล้ว)' : 'ตั้ง LINE userId'"
+                      class="relative mx-1" [ngClass]="user.line_user_id ? 'text-emerald-600 hover:text-emerald-800' : 'text-gray-400 hover:text-emerald-600'">
+                <i class="fab fa-line"></i>
+                <span *ngIf="user.line_user_id" class="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full ring-2 ring-white"></span>
+              </button>
               <button *ngIf="isSuperAdmin && user.active_session_id" (click)="forceLogoutUser(user)" class="text-purple-600 hover:text-purple-800 mx-1" title="บังคับ logout (กำลัง online)"><i class="fas fa-sign-out-alt"></i></button>
               <button *ngIf="isSuperAdmin" (click)="deleteUser(user.id)" class="text-red-500 hover:text-red-600 mx-1" title="ลบ"><i class="fas fa-trash"></i></button>
             </td>
@@ -646,6 +655,124 @@
       <button (click)="savePermissions()" [disabled]="permSaving" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg font-bold text-sm shadow-md">
         <i class="fas fa-save mr-1"></i>{{ permSaving ? 'กำลังบันทึก...' : 'บันทึกสิทธิ์' }}
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: จัดการ LINE userId (super_admin) -->
+<div *ngIf="showLineModal" class="fixed inset-0 z-50 flex items-start justify-center bg-black/60 overflow-y-auto py-6 px-3">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-auto">
+    <!-- Header -->
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-emerald-600 to-emerald-500 rounded-t-2xl">
+      <div>
+        <h3 class="text-white font-bold flex items-center gap-2"><i class="fab fa-line text-xl"></i>จัดการ LINE userId</h3>
+        <p class="text-emerald-100 text-xs mt-0.5">{{ lineUser?.firstname }} {{ lineUser?.lastname }} ({{ lineUser?.username }})</p>
+      </div>
+      <button (click)="closeLineModal()" class="text-white/80 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+    </div>
+
+    <div class="p-6 space-y-5">
+      <!-- Current state -->
+      <div class="bg-gray-50 border border-gray-200 rounded-xl p-3">
+        <p class="text-xs font-bold text-gray-500 uppercase mb-1">ปัจจุบัน</p>
+        <div *ngIf="lineUser?.line_user_id" class="flex items-center gap-2 text-sm">
+          <span class="inline-block w-2 h-2 bg-green-500 rounded-full"></span>
+          <code class="font-mono text-xs text-gray-700 bg-white border border-gray-200 rounded px-1.5 py-0.5">{{ lineUser.line_user_id }}</code>
+          <span class="text-xs text-gray-500">{{ lineUser.notif_line_enabled ? '(แจ้งเตือนเปิด)' : '(แจ้งเตือนปิด)' }}</span>
+        </div>
+        <p *ngIf="!lineUser?.line_user_id" class="text-sm text-gray-400 italic"><i class="fas fa-circle-minus mr-1"></i>ยังไม่ผูก LINE userId</p>
+      </div>
+
+      <!-- Input + toggle -->
+      <div>
+        <label class="block text-xs font-bold text-gray-600 mb-1">LINE userId</label>
+        <input type="text" [(ngModel)]="lineForm.line_user_id"
+               placeholder="Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+               class="w-full px-3 py-2 border border-emerald-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-400 outline-none font-mono">
+        <p class="text-[10px] text-gray-500 mt-1">U + 32 hex chars — หรือเลือกจาก Inbox ด้านล่าง / ปล่อยว่างเพื่อยกเลิก</p>
+      </div>
+
+      <label class="flex items-center gap-3 cursor-pointer p-3 bg-emerald-50/60 border border-emerald-200 rounded-lg">
+        <input type="checkbox" [(ngModel)]="lineForm.notif_line_enabled" class="w-5 h-5 accent-emerald-600">
+        <div>
+          <span class="font-bold text-sm text-gray-800">เปิดการแจ้งเตือน LINE สำหรับ user นี้</span>
+          <p class="text-[11px] text-gray-500">ปิดได้กรณี user ขอ unsubscribe — line_user_id ยังคงอยู่</p>
+        </div>
+      </label>
+
+      <!-- LINE Inbox (recent users who chatted with bot) -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <h4 class="text-sm font-bold text-gray-700 flex items-center gap-2">
+            <i class="fas fa-inbox text-emerald-600"></i>
+            LINE Inbox <span class="text-xs font-normal text-gray-500">(ผู้ทักเข้า bot ล่าสุด)</span>
+          </h4>
+          <button (click)="loadLineInbox()" class="text-xs text-emerald-600 hover:text-emerald-800">
+            <i class="fas fa-sync mr-1"></i>โหลดใหม่
+          </button>
+        </div>
+
+        <div *ngIf="lineInboxLoading" class="text-center py-6 text-gray-400">
+          <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+          <p class="text-xs">กำลังโหลด...</p>
+        </div>
+
+        <div *ngIf="!lineInboxLoading && lineInbox.length === 0" class="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+          <i class="fas fa-inbox text-3xl text-gray-300 mb-2"></i>
+          <p class="text-xs text-gray-500">ยังไม่มีผู้ทักเข้า bot</p>
+          <p class="text-[10px] text-gray-400 mt-1">แจ้ง user ให้ add bot เป็นเพื่อนและทักข้อความ → จะปรากฏที่นี่</p>
+        </div>
+
+        <div *ngIf="!lineInboxLoading && lineInbox.length > 0" class="max-h-60 overflow-y-auto space-y-2 border border-gray-200 rounded-lg p-2 bg-gray-50">
+          <div *ngFor="let item of lineInbox" class="bg-white border rounded-lg p-2 transition-all"
+               [ngClass]="item.linked_user_id ? 'border-emerald-300' : 'border-gray-200 hover:border-emerald-400'">
+            <div class="flex items-start gap-2">
+              <img *ngIf="item.picture_url" [src]="item.picture_url" class="w-10 h-10 rounded-full flex-shrink-0">
+              <div *ngIf="!item.picture_url" class="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                <i class="fas fa-user text-emerald-600"></i>
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="font-bold text-sm text-gray-800">{{ item.display_name || '(ไม่มีชื่อ)' }}</span>
+                  <span *ngIf="item.linked_user_id" class="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-full font-bold">
+                    <i class="fas fa-link mr-0.5"></i>ผูกกับ {{ item.username }}
+                  </span>
+                  <span *ngIf="!item.linked_user_id" class="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full font-bold">ยังไม่ผูก</span>
+                </div>
+                <code class="block text-[10px] text-gray-600 font-mono mt-0.5 break-all">{{ item.line_user_id }}</code>
+                <p *ngIf="item.last_message" class="text-[11px] text-gray-500 mt-1 italic line-clamp-1">"{{ item.last_message }}"</p>
+                <p class="text-[10px] text-gray-400 mt-0.5">
+                  <i class="fas fa-clock"></i> {{ item.received_at | date:'short' }}
+                  <span class="ml-2"><i class="fas fa-comments"></i> {{ item.message_count }} ครั้ง</span>
+                </p>
+              </div>
+              <div class="flex flex-col gap-1 flex-shrink-0">
+                <button (click)="pickFromInbox(item)" class="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded text-[10px] font-bold transition-colors" title="วางใส่ช่องด้านบน">
+                  <i class="fas fa-arrow-up"></i>
+                </button>
+                <button (click)="assignInboxToUser(item)" class="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold transition-colors" title="ผูกกับ user นี้ทันที">
+                  <i class="fas fa-link"></i>
+                </button>
+                <button (click)="archiveInbox(item)" class="px-2 py-1 bg-gray-200 hover:bg-gray-300 text-gray-600 rounded text-[10px] transition-colors" title="ซ่อน">
+                  <i class="fas fa-eye-slash"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex items-center justify-end gap-2 px-6 py-3 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
+      <button (click)="testUserLine()" [disabled]="!lineForm.line_user_id"
+              class="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-lg text-sm font-bold transition-colors">
+        <i class="fab fa-line mr-1"></i>ทดสอบส่ง
+      </button>
+      <button (click)="saveUserLine()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold transition-colors">
+        <i class="fas fa-save mr-1"></i>บันทึก
+      </button>
+      <button (click)="closeLineModal()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm font-bold transition-colors">ปิด</button>
     </div>
   </div>
 </div>

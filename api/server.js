@@ -2813,6 +2813,7 @@ apiRouter.get('/users', authenticateToken, isAnyAdmin, async (req, res) => {
                    u.email, u.cid, u.is_approved, u.is_active, u.approved_by,
                    u.active_session_id, u.session_started_at, u.last_seen_at, u.last_seen_ip,
                    u.can_edit_actual, u.can_edit_target,
+                   u.line_user_id, u.notif_line_enabled,
                    d.dept_name, h.hosname, dist.distname,
                    approver.firstname AS approved_by_name, approver.lastname AS approved_by_lastname
             FROM users u
@@ -7069,6 +7070,26 @@ apiRouter.get('/report/recording-missing/by-hospital/:hospcode', authenticateTok
         // notif_line_enabled = master toggle ของ user (default 1 = เปิด ส่งได้ ถ้ามี line_user_id)
         try { await db.query("ALTER TABLE users ADD COLUMN line_user_id VARCHAR(64) NULL COMMENT 'LINE userId — Uxxxxx... จาก LINE Login หรือ webhook'"); } catch (e) {}
         try { await db.query('ALTER TABLE users ADD COLUMN notif_line_enabled TINYINT(1) DEFAULT 1'); } catch (e) {}
+        try { await db.query('ALTER TABLE users ADD UNIQUE INDEX uniq_line_user_id (line_user_id)'); } catch (e) {}
+        // line_inbox: เก็บ userId ที่ทักเข้า bot — super_admin ใช้ link เข้า users
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS line_inbox (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    line_user_id VARCHAR(64) NOT NULL UNIQUE,
+                    display_name VARCHAR(255) NULL,
+                    picture_url VARCHAR(500) NULL,
+                    last_message TEXT NULL,
+                    message_count INT DEFAULT 1,
+                    received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    linked_user_id INT NULL,
+                    linked_at DATETIME NULL,
+                    is_archived TINYINT(1) DEFAULT 0,
+                    INDEX idx_received_at (received_at),
+                    INDEX idx_linked_user (linked_user_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+        } catch (e) {}
 
         // ========== Concurrent login — เก็บข้อมูล "ใครเตะ session ออก" ==========
         // (idempotent — ถ้า column มีแล้ว skip)
@@ -7103,6 +7124,7 @@ apiRouter.get('/report/recording-missing/by-hospital/:hospcode', authenticateTok
             ['telegram_chat_id', '', 'Telegram Chat ID (Group) สำหรับแจ้งเตือน'],
             ['admin_emails', '', 'Email Admin สำหรับแจ้งเตือนผู้สมัครใหม่ (คั่นด้วย comma)'],
             ['line_channel_token', '', 'LINE Messaging API — Channel Access Token (long-lived) จาก LINE Developers Console'],
+            ['line_channel_secret', '', 'LINE Messaging API — Channel Secret (ใช้ verify webhook signature)'],
             ['line_group_id', '', 'LINE Group ID ที่จะส่งแจ้งเตือน (คั่นด้วย comma สำหรับหลาย group)'],
             ['notif_line_enabled', 'true', 'เปิด/ปิด LINE Group แจ้งเตือนทั่วระบบ (master switch)'],
             ['notif_line_admin_login', 'true', 'แจ้ง LINE เมื่อ super_admin/admin_ssj login'],
@@ -8852,6 +8874,197 @@ apiRouter.post('/me/line/test', authenticateToken, async (req, res) => {
             success: ok,
             message: ok ? 'ส่ง LINE ทดสอบสำเร็จ — กรุณาตรวจสอบ LINE' : 'ส่งไม่สำเร็จ — ตรวจว่าคุณ Add friend bot แล้วและ userId ถูกต้อง'
         });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// === LINE Profile API: ดึงชื่อ + รูปจาก userId ===
+const getLineProfile = async (channelToken, lineUserId) => {
+    if (!channelToken || !lineUserId) return null;
+    try {
+        const res = await fetch(`https://api.line.me/v2/bot/profile/${lineUserId}`, {
+            headers: { 'Authorization': `Bearer ${channelToken}` }
+        });
+        if (!res.ok) return null;
+        return await res.json();  // { userId, displayName, pictureUrl, statusMessage }
+    } catch (e) {
+        console.error('[LINE profile] error:', e.message);
+        return null;
+    }
+};
+
+// === LINE Webhook — รับ event จาก LINE Platform เมื่อ user ทักเข้า bot ===
+// LINE platform จะ POST ไปที่ webhook URL ที่ตั้งใน Developers Console
+// URL ที่ต้องตั้งที่ console: https://<your-domain>/khupskpi/api/webhook/line
+// ไม่ใช้ authenticateToken เพราะ LINE ไม่ส่ง JWT — verify ด้วย signature แทน
+apiRouter.post('/webhook/line', express.json({
+    verify: (req, _res, buf) => { req.rawBody = buf; }
+}), async (req, res) => {
+    try {
+        // === Verify signature (ถ้าตั้ง channel_secret ไว้) ===
+        const [secretRow] = await db.query("SELECT setting_value FROM system_settings WHERE setting_key = 'line_channel_secret' LIMIT 1");
+        const channelSecret = secretRow[0]?.setting_value || '';
+        if (channelSecret) {
+            const signature = req.headers['x-line-signature'];
+            // คำนวณ HMAC SHA256 ของ raw body ด้วย channel secret
+            const body = req.rawBody || Buffer.from(JSON.stringify(req.body), 'utf8');
+            const expected = crypto.createHmac('sha256', channelSecret).update(body).digest('base64');
+            if (signature !== expected) {
+                console.warn('[LINE webhook] signature mismatch — possibly invalid request');
+                return res.status(401).send('Invalid signature');
+            }
+        }
+        // === Reply 200 OK ทันที (LINE timeout เร็ว) ===
+        res.status(200).send('OK');
+
+        const events = req.body?.events || [];
+        if (!Array.isArray(events) || events.length === 0) return;
+
+        const ns = await getNotifSettings();
+        for (const ev of events) {
+            const lineUserId = ev?.source?.userId;
+            if (!lineUserId) continue;
+            const messageText = ev?.message?.text || `[event: ${ev.type}]`;
+            // ดึง profile (display name + picture)
+            const profile = await getLineProfile(ns.lineToken, lineUserId);
+            const displayName = profile?.displayName || null;
+            const pictureUrl = profile?.pictureUrl || null;
+
+            // INSERT ON DUPLICATE — เก็บล่าสุด + นับ message_count
+            await db.query(
+                `INSERT INTO line_inbox (line_user_id, display_name, picture_url, last_message, message_count, received_at)
+                 VALUES (?, ?, ?, ?, 1, NOW())
+                 ON DUPLICATE KEY UPDATE
+                     display_name = COALESCE(VALUES(display_name), display_name),
+                     picture_url = COALESCE(VALUES(picture_url), picture_url),
+                     last_message = VALUES(last_message),
+                     message_count = message_count + 1,
+                     received_at = NOW(),
+                     is_archived = 0`,
+                [lineUserId, displayName, pictureUrl, messageText.slice(0, 500)]
+            ).catch(e => console.error('[LINE webhook] inbox insert error:', e.message));
+
+            // ตอบกลับ user ครั้งแรก (ถ้า bot ไม่ได้ตั้ง auto-reply ใน console)
+            if (ev.type === 'follow' || (ev.type === 'message' && ev.replyToken)) {
+                try {
+                    if (ev.replyToken && ns.lineToken) {
+                        const replyMsg = `สวัสดีครับ! 🙏\n\nuserId ของคุณ:\n${lineUserId}\n\nคัดลอกไปแจ้ง super_admin หรือใส่ในหน้า "ตั้งค่า LINE แจ้งเตือนส่วนตัว" เพื่อรับการแจ้งเตือนจากระบบ KPI`;
+                        await fetch('https://api.line.me/v2/bot/message/reply', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${ns.lineToken}`
+                            },
+                            body: JSON.stringify({
+                                replyToken: ev.replyToken,
+                                messages: [{ type: 'text', text: replyMsg }]
+                            })
+                        });
+                    }
+                } catch (e) { console.error('[LINE webhook] reply error:', e.message); }
+            }
+        }
+    } catch (e) {
+        console.error('[LINE webhook] handler error:', e.message);
+        // already sent 200 — ไม่ส่งอีก
+    }
+});
+
+// === Admin: LINE Inbox + จัดการ line_user_id ของ user คนใดก็ได้ (super_admin only) ===
+// GET /admin/line-inbox — รายการล่าสุดจาก webhook
+apiRouter.get('/admin/line-inbox', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const showArchived = req.query.archived === '1';
+        const [rows] = await db.query(`
+            SELECT i.*, u.id AS user_id, u.username, u.firstname, u.lastname, u.role
+            FROM line_inbox i
+            LEFT JOIN users u ON u.id = i.linked_user_id
+            ${showArchived ? '' : 'WHERE i.is_archived = 0'}
+            ORDER BY i.received_at DESC
+            LIMIT 100
+        `);
+        res.json({ success: true, data: rows });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// POST /admin/line-inbox/:id/assign — assign userId ใน inbox ให้กับ system user
+apiRouter.post('/admin/line-inbox/:id/assign', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const inboxId = Number(req.params.id);
+        const targetUserId = Number(req.body?.user_id);
+        if (!targetUserId) return res.status(400).json({ success: false, message: 'ต้องระบุ user_id' });
+        const [inboxRow] = await db.query('SELECT line_user_id FROM line_inbox WHERE id = ?', [inboxId]);
+        if (!inboxRow[0]) return res.status(404).json({ success: false, message: 'ไม่พบ inbox' });
+        const lineUserId = inboxRow[0].line_user_id;
+        // เช็คว่า userId นี้มี user คนอื่นเซ็ตอยู่หรือไม่
+        const [conflict] = await db.query('SELECT id, username FROM users WHERE line_user_id = ? AND id != ?', [lineUserId, targetUserId]);
+        if (conflict.length > 0) {
+            return res.status(409).json({ success: false, message: `userId นี้ผูกอยู่กับ user "${conflict[0].username}" แล้ว` });
+        }
+        await db.query('UPDATE users SET line_user_id = ? WHERE id = ?', [lineUserId, targetUserId]);
+        await db.query('UPDATE line_inbox SET linked_user_id = ?, linked_at = NOW() WHERE id = ?', [targetUserId, inboxId]);
+        res.json({ success: true, message: 'ผูกสำเร็จ' });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// POST /admin/line-inbox/:id/archive — ซ่อน entry ที่ไม่ใช้
+apiRouter.post('/admin/line-inbox/:id/archive', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const archived = req.body?.archived === false ? 0 : 1;
+        await db.query('UPDATE line_inbox SET is_archived = ? WHERE id = ?', [archived, Number(req.params.id)]);
+        res.json({ success: true, archived: archived === 1 });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// PUT /admin/users/:id/line — super_admin set/clear line_user_id ของ user คนใดก็ได้
+apiRouter.put('/admin/users/:id/line', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const userId = Number(req.params.id);
+        let { line_user_id, notif_line_enabled } = req.body || {};
+        line_user_id = String(line_user_id || '').trim();
+        if (line_user_id && !/^U[a-f0-9]{32}$/i.test(line_user_id)) {
+            return res.status(400).json({ success: false, message: 'LINE userId ต้องเป็นรูปแบบ U + 32 hex chars' });
+        }
+        // เช็ค conflict (userId ซ้ำกับ user อื่น)
+        if (line_user_id) {
+            const [conflict] = await db.query('SELECT id, username FROM users WHERE line_user_id = ? AND id != ?', [line_user_id, userId]);
+            if (conflict.length > 0) {
+                return res.status(409).json({ success: false, message: `userId นี้ผูกอยู่กับ user "${conflict[0].username}" แล้ว` });
+            }
+        }
+        const enabled = (notif_line_enabled === false || notif_line_enabled === 0 || notif_line_enabled === '0') ? 0 : 1;
+        await db.query('UPDATE users SET line_user_id = ?, notif_line_enabled = ? WHERE id = ?',
+            [line_user_id || null, enabled, userId]);
+        // sync linked_user_id ใน inbox (ถ้ามี)
+        if (line_user_id) {
+            await db.query('UPDATE line_inbox SET linked_user_id = ?, linked_at = NOW() WHERE line_user_id = ?', [userId, line_user_id]);
+        } else {
+            await db.query('UPDATE line_inbox SET linked_user_id = NULL, linked_at = NULL WHERE linked_user_id = ?', [userId]);
+        }
+        res.json({ success: true, message: 'บันทึกสำเร็จ' });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// POST /admin/users/:id/line/test — super_admin ทดสอบส่ง LINE ให้ user คนใดก็ได้
+apiRouter.post('/admin/users/:id/line/test', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT firstname, lastname, line_user_id FROM users WHERE id = ? LIMIT 1', [Number(req.params.id)]);
+        if (!rows[0]) return res.status(404).json({ success: false, message: 'ไม่พบ user' });
+        if (!rows[0].line_user_id) return res.status(400).json({ success: false, message: 'user ยังไม่ได้ตั้ง LINE userId' });
+        const ns = await getNotifSettings();
+        if (!ns.lineToken) return res.status(400).json({ success: false, message: 'ระบบยังไม่ตั้ง Channel Access Token' });
+        const msg = `🔔 ทดสอบการแจ้งเตือนจาก super_admin\nสวัสดี คุณ${rows[0].firstname} ${rows[0].lastname}\n✅ การเชื่อมต่อ LINE สำเร็จ`;
+        const ok = await sendLineDirect(ns.lineToken, rows[0].line_user_id, msg);
+        res.json({ success: ok, message: ok ? 'ส่งสำเร็จ' : 'ส่งไม่สำเร็จ — userId อาจไม่ได้ Add friend bot' });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
