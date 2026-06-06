@@ -204,6 +204,62 @@ export class LayoutComponent implements OnInit {
     this.showChangePasswordModal = true;
   }
 
+  // === Personal LINE notification settings ===
+  showLineModal: boolean = false;
+  lineForm: { line_user_id: string; notif_line_enabled: boolean } = { line_user_id: '', notif_line_enabled: true };
+  lineSystemConfigured: boolean = false;
+  lineLoading: boolean = false;
+
+  openLineModal() {
+    this.showLineModal = true;
+    this.lineLoading = true;
+    this.authService.getMyLine().subscribe({
+      next: (res: any) => {
+        this.lineLoading = false;
+        if (res.success) {
+          this.lineForm.line_user_id = res.line_user_id || '';
+          this.lineForm.notif_line_enabled = res.notif_line_enabled !== false;
+          this.lineSystemConfigured = !!res.system_line_configured;
+        }
+        this.cdr.detectChanges();
+      },
+      error: () => { this.lineLoading = false; }
+    });
+  }
+
+  closeLineModal() { this.showLineModal = false; }
+
+  saveLine() {
+    const id = (this.lineForm.line_user_id || '').trim();
+    if (id && !/^U[a-f0-9]{32}$/i.test(id)) {
+      Swal.fire('แจ้งเตือน', 'LINE userId ต้องเป็นรูปแบบ U + 32 hex chars (เช่น Uxxxxxx...)', 'warning');
+      return;
+    }
+    this.authService.updateMyLine(id, this.lineForm.notif_line_enabled).subscribe({
+      next: (res: any) => {
+        if (res.success) {
+          Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', timer: 1500, showConfirmButton: false });
+        }
+      },
+      error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'บันทึกไม่ได้', 'error')
+    });
+  }
+
+  testMyLine() {
+    if (!this.lineForm.line_user_id) {
+      Swal.fire('แจ้งเตือน', 'กรอก LINE userId แล้วกดบันทึกก่อน', 'warning');
+      return;
+    }
+    Swal.fire({ title: 'กำลังส่ง...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    this.authService.testMyLine().subscribe({
+      next: (res: any) => {
+        if (res.success) Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'ตรวจสอบ LINE ของคุณ', timer: 2500, showConfirmButton: false });
+        else Swal.fire('ผิดพลาด', res.message || 'ส่งไม่สำเร็จ', 'error');
+      },
+      error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ส่งไม่ได้', 'error')
+    });
+  }
+
   closeChangePasswordModal() {
     this.showChangePasswordModal = false;
   }

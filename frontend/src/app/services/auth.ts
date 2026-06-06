@@ -427,6 +427,25 @@ export class AuthService {
     return this.http.post(`${this.apiUrl}/test-line`, { channel_token: channelToken, group_id: groupId }, { headers });
   }
 
+  // === Personal LINE (ของตัวเอง) ===
+  getMyLine(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/me/line`, { headers });
+  }
+
+  updateMyLine(line_user_id: string, notif_line_enabled: boolean): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/me/line`, { line_user_id, notif_line_enabled }, { headers });
+  }
+
+  testMyLine(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/me/line/test`, {}, { headers });
+  }
+
   backupDatabase(): Observable<Blob> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

@@ -18,6 +18,16 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.06.06.c',
+      date: '6 มิถุนายน 2569 (build c)',
+      changes: [
+        { type: 'feature', text: 'LINE แจ้งเตือนรายบุคคล: เพิ่ม users.line_user_id + notif_line_enabled per-user — แต่ละคนกรอก LINE userId (Uxxxxx...) + toggle เปิด-ปิดเอง ผ่าน Profile Dropdown → "ตั้งค่า LINE แจ้งเตือนส่วนตัว"' },
+        { type: 'feature', text: 'Events ที่ส่ง LINE ส่วนตัวให้ user: 1) Login alert (ทุก role ที่ตั้ง userId) 2) อนุมัติบัญชี 3) ปฏิเสธบัญชี (พร้อมเหตุผล) 4) Reset password (รหัสชั่วคราว) 5) มีคนตอบกระทู้ของตัวเอง' },
+        { type: 'feature', text: 'Backend: helper sendLineToUser(userId, msg) — fire-and-forget + check master toggle + per-user opt-in + ใช้ channel access token เดียวกันกับ group + endpoints GET/PUT /me/line + POST /me/line/test' },
+        { type: 'improve', text: 'Validation: line_user_id ต้องเป็น U + 32 hex chars (regex /^U[a-f0-9]{32}$/i) — frontend + backend ตรวจสอบ' },
+      ]
+    },
+    {
       version: '2569.06.06.b',
       date: '6 มิถุนายน 2569 (build b)',
       changes: [

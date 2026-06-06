@@ -191,6 +191,37 @@ async function notifyLineAction(category, message) {
     }
 }
 
+// === Personal LINE Notification — push ถึง user รายบุคคล ===
+// ใช้ channel access token เดียวกับ group + ส่งไปที่ user.line_user_id ของแต่ละคน
+// fire-and-forget — ไม่ block response
+async function sendLineToUser(userId, message) {
+    try {
+        if (!userId) return false;
+        // master switch ใช้ตัวเดียวกับ group (notif_line_enabled = 'false' → ปิดทั้งระบบรวม per-user ด้วย)
+        const cfg = await getLineCategoryToggles();
+        if (!cfg.master) return false;
+        // ดึง user line_user_id + per-user opt-in
+        const [rows] = await db.query(
+            'SELECT line_user_id, notif_line_enabled FROM users WHERE id = ? LIMIT 1',
+            [userId]
+        );
+        if (!rows[0]) return false;
+        const u = rows[0];
+        if (!u.line_user_id) return false;          // user ยังไม่ได้ลงทะเบียน LINE userId
+        if (Number(u.notif_line_enabled) === 0) return false;  // user ปิด toggle เอง
+        // ดึง channel token
+        const ns = await getNotifSettings();
+        if (!ns.lineToken) return false;
+        // ใช้ sendLineDirect (รับ user/group/room ID ได้เหมือนกัน)
+        sendLineDirect(ns.lineToken, u.line_user_id, message)
+            .catch(e => console.error('[LINE user] error:', e.message));
+        return true;
+    } catch (e) {
+        console.error('[sendLineToUser] failed:', e.message);
+        return false;
+    }
+}
+
 // Helper: ดึง notification settings จาก DB (fallback ENV)
 const getNotifSettings = async () => {
     try {
@@ -712,6 +743,20 @@ apiRouter.post('/login', loginIpLimiter, loginLimiter, async (req, res) => {
                         `🌐 IP: ${ip}\n` +
                         `🕐 ${nowStr}\n` +
                         `📱 ${uaShort}`
+                    );
+                }
+
+                // ส่ง LINE แจ้งเตือนส่วนตัวให้ user ที่ login (ถ้าเค้าตั้งค่า LINE userId แล้ว)
+                {
+                    const nowStrLn = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' });
+                    const uaLn = (req.headers['user-agent'] || '').toString();
+                    const uaShortLn = uaLn.length > 80 ? uaLn.slice(0, 80) + '...' : uaLn;
+                    sendLineToUser(user.id,
+                        `🔑 มีการเข้าสู่ระบบบัญชีของคุณ\n` +
+                        `🕐 ${nowStrLn}\n` +
+                        `🌐 IP: ${ip}\n` +
+                        `📱 ${uaShortLn}\n\n` +
+                        `❗ ถ้าไม่ใช่คุณ — เปลี่ยนรหัสผ่านทันที`
                     );
                 }
 
@@ -3501,6 +3546,14 @@ apiRouter.put('/users/:id/reset-password', authenticateToken, isAnyAdmin, async 
         const [targetUser] = await db.query('SELECT username, email, firstname, lastname FROM users WHERE id = ?', [userId]);
         const target = targetUser[0];
 
+        // LINE: แจ้งรหัสชั่วคราว (กรณี user ลงทะเบียน LINE ไว้)
+        sendLineToUser(userId,
+            `🔑 รหัสผ่านของคุณถูกรีเซ็ต\n\n` +
+            `รหัสชั่วคราว: ${tempCode}\n` +
+            `⏰ หมดอายุใน 15 นาที\n\n` +
+            `ใช้รหัสนี้แทนรหัสผ่านเดิม — ระบบจะบังคับให้เปลี่ยนรหัสใหม่ทันที`
+        );
+
         // ส่ง Email แจ้งรหัสชั่วคราว (ถ้ามี email)
         if (target && target.email) {
             sendMail(target.email, '🔑 รหัสผ่านของคุณถูกรีเซ็ต — ระบบ KPI สสจ.นครราชสีมา',
@@ -3548,6 +3601,13 @@ apiRouter.put('/users/:id/approve', authenticateToken, isAdmin, async (req, res)
             [user.userId, user.deptId, 'APPROVE_USER', 'users', userId, JSON.stringify({ username: target.username, approved_by: user.userId }), req.ip]
         );
 
+        // LINE: แจ้งผลอนุมัติให้ผู้สมัคร
+        sendLineToUser(userId,
+            `✅ บัญชีของคุณได้รับการอนุมัติแล้ว\n` +
+            `Username: ${target.username}\n\n` +
+            `เข้าใช้งานระบบได้ที่:\nhttps://apikorat.moph.go.th/khupskpi/login`
+        );
+
         // ส่ง Email แจ้งผลอนุมัติ
         if (target.email) {
             sendMail(target.email, '✅ บัญชีของคุณได้รับการอนุมัติแล้ว — ระบบ KPI สสจ.นครราชสีมา',
@@ -3591,6 +3651,14 @@ apiRouter.put('/users/:id/reject', authenticateToken, isAdmin, async (req, res) 
         await db.query(
             'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [user.userId, user.deptId, 'REJECT_USER', 'users', userId, JSON.stringify({ username: target.username, reason }), req.ip]
+        );
+
+        // LINE: แจ้งผลปฏิเสธให้ผู้สมัคร
+        sendLineToUser(userId,
+            `❌ คำขอลงทะเบียนถูกปฏิเสธ\n` +
+            `Username: ${target.username}\n` +
+            (reason ? `\nเหตุผล: ${reason}\n` : '') +
+            `\nกรุณาติดต่อผู้ดูแลระบบหากต้องการสมัครใหม่`
         );
 
         // ส่ง Email แจ้งผลปฏิเสธ พร้อมเหตุผล
@@ -6996,6 +7064,11 @@ apiRouter.get('/report/recording-missing/by-hospital/:hospcode', authenticateTok
         // เพิ่มคอลัมน์สิทธิ์ในตาราง users (default = แก้ได้ทั้งคู่)
         try { await db.query('ALTER TABLE users ADD COLUMN can_edit_actual TINYINT(1) DEFAULT 1'); } catch (e) {}
         try { await db.query('ALTER TABLE users ADD COLUMN can_edit_target TINYINT(1) DEFAULT 1'); } catch (e) {}
+        // === Personal LINE notification (per-user opt-in) ===
+        // line_user_id = LINE userId (Uxxxxx...) — ได้จาก bot webhook event หรือ LINE Login
+        // notif_line_enabled = master toggle ของ user (default 1 = เปิด ส่งได้ ถ้ามี line_user_id)
+        try { await db.query("ALTER TABLE users ADD COLUMN line_user_id VARCHAR(64) NULL COMMENT 'LINE userId — Uxxxxx... จาก LINE Login หรือ webhook'"); } catch (e) {}
+        try { await db.query('ALTER TABLE users ADD COLUMN notif_line_enabled TINYINT(1) DEFAULT 1'); } catch (e) {}
 
         // ========== Concurrent login — เก็บข้อมูล "ใครเตะ session ออก" ==========
         // (idempotent — ถ้า column มีแล้ว skip)
@@ -8168,6 +8241,14 @@ apiRouter.post('/feedback/:id/replies', authenticateToken, async (req, res) => {
                 "INSERT INTO notifications (user_id, type, title, message, created_by) VALUES (?, 'info', ?, ?, ?)",
                 [post[0].user_id, `มีคนตอบกระทู้ของคุณ`, `${replierName} ตอบกลับกระทู้ "${post[0].title}"`, req.user.userId]
             );
+            // LINE ส่วนตัวให้เจ้าของกระทู้
+            sendLineToUser(post[0].user_id,
+                `💬 มีคนตอบกระทู้ของคุณ\n` +
+                `📌 ${post[0].title}\n` +
+                `👤 ${replierName}\n` +
+                `━━━━━━━━━━━\n` +
+                `${(message || '').substring(0, 200)}`
+            );
         }
 
         // 2. แจ้ง super_admin ทุกคน (ถ้าคนตอบไม่ใช่ super_admin)
@@ -8710,6 +8791,70 @@ apiRouter.post('/test-line', authenticateToken, isSuperAdmin, async (req, res) =
         sent: r.sent, failed: r.failed,
         message: ok ? `ส่ง LINE สำเร็จ ${r.sent}/${groupIds.length} group` : 'ส่งไม่สำเร็จ ตรวจสอบ Channel Access Token และ Group ID'
     });
+});
+
+// === Personal LINE — ของ user ตัวเอง ===
+// GET /me/line — ดู LINE settings ของตัวเอง
+apiRouter.get('/me/line', authenticateToken, async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            'SELECT line_user_id, notif_line_enabled FROM users WHERE id = ? LIMIT 1',
+            [req.user.userId]
+        );
+        if (!rows[0]) return res.status(404).json({ success: false, message: 'ไม่พบ user' });
+        // ดึง system line_channel_token เพื่อบอก client ว่าระบบเปิด LINE ใช้งานได้ไหม
+        const ns = await getNotifSettings();
+        res.json({
+            success: true,
+            line_user_id: rows[0].line_user_id || '',
+            notif_line_enabled: Number(rows[0].notif_line_enabled) === 1,
+            system_line_configured: !!ns.lineToken
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// PUT /me/line — บันทึก LINE userId + toggle
+apiRouter.put('/me/line', authenticateToken, async (req, res) => {
+    try {
+        let { line_user_id, notif_line_enabled } = req.body || {};
+        line_user_id = String(line_user_id || '').trim();
+        // validate: ต้องเป็น "U" + 32 hex chars หรือว่าง (clear)
+        if (line_user_id && !/^U[a-f0-9]{32}$/i.test(line_user_id)) {
+            return res.status(400).json({ success: false, message: 'LINE userId ต้องเป็นรูปแบบ U + 32 hex chars (เช่น Uxxxxxx...)' });
+        }
+        const enabled = (notif_line_enabled === false || notif_line_enabled === 0 || notif_line_enabled === '0') ? 0 : 1;
+        await db.query(
+            'UPDATE users SET line_user_id = ?, notif_line_enabled = ? WHERE id = ?',
+            [line_user_id || null, enabled, req.user.userId]
+        );
+        res.json({ success: true, message: 'บันทึก LINE settings สำเร็จ', line_user_id: line_user_id || '', notif_line_enabled: enabled === 1 });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// POST /me/line/test — ทดสอบส่ง LINE ไปที่ user ตัวเอง
+apiRouter.post('/me/line/test', authenticateToken, async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            'SELECT firstname, lastname, line_user_id FROM users WHERE id = ? LIMIT 1',
+            [req.user.userId]
+        );
+        if (!rows[0]) return res.status(404).json({ success: false, message: 'ไม่พบ user' });
+        if (!rows[0].line_user_id) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้ง LINE userId — กรอกและบันทึกก่อนทดสอบ' });
+        const ns = await getNotifSettings();
+        if (!ns.lineToken) return res.status(400).json({ success: false, message: 'ระบบยังไม่ได้ตั้ง Channel Access Token (super_admin ต้องตั้งที่ Settings)' });
+        const msg = `🔔 ทดสอบการแจ้งเตือนส่วนตัว\nสวัสดี คุณ${rows[0].firstname} ${rows[0].lastname}\n✅ การเชื่อมต่อ LINE สำเร็จ! ระบบจะส่งแจ้งเตือนเข้าที่ LINE นี้`;
+        const ok = await sendLineDirect(ns.lineToken, rows[0].line_user_id, msg);
+        res.json({
+            success: ok,
+            message: ok ? 'ส่ง LINE ทดสอบสำเร็จ — กรุณาตรวจสอบ LINE' : 'ส่งไม่สำเร็จ — ตรวจว่าคุณ Add friend bot แล้วและ userId ถูกต้อง'
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
 });
 
 // === Test Admin Email (super_admin) ===
