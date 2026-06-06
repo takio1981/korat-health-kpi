@@ -18,6 +18,18 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.06.06.f',
+      date: '6 มิถุนายน 2569 (build f)',
+      changes: [
+        { type: 'improve', text: 'คู่มือการใช้งาน: อัปเดตทั้งระบบให้สอดคล้องกับฟีเจอร์ล่าสุด — เพิ่ม section "ช่องทางการแจ้งเตือน" รวม 4 ช่องทาง (Telegram + Email + LINE Group + ในระบบ) + ขั้นตอนตั้งค่า LINE Messaging API + Webhook URL + per-event toggles' },
+        { type: 'improve', text: 'คู่มือ: เพิ่ม section "LINE แจ้งเตือนส่วนตัว (per-user)" — ขั้นตอน 5 steps add bot → คัดลอก userId → ตั้งค่าใน Profile Dropdown + รายการ events ที่ส่งเข้า LINE ส่วนตัว (login/อนุมัติ/ปฏิเสธ/reset password/reply กระทู้)' },
+        { type: 'improve', text: 'คู่มือ: เพิ่ม "จัดการ LINE userId + LINE Inbox" ใน section จัดการผู้ใช้งาน (super_admin) — webhook flow + modal 3 ส่วน (userId/Inbox/ปุ่ม assign-archive)' },
+        { type: 'improve', text: 'คู่มือ: เพิ่ม section 9.4 "จัดการตัวชี้วัด — เทียบกับ HDC + upload_excel" — Report Compare ย้ายมาที่ kpi-manage tab "ตัวชี้วัด" พร้อม chips กรอง + table_process side-by-side + upload_excel toggle + bulk action' },
+        { type: 'improve', text: 'คู่มือ kpi-manager: ปรับ wizard จาก 3 ขั้น → 2 ขั้น (ขั้น 1 DB Compare + ขั้น 2 Export) — note ชี้ทาง Report Compare ย้ายไป kpi-manage' },
+        { type: 'improve', text: 'คู่มือ Schedule Export: เพิ่ม LINE Group เป็นช่องทางแจ้งเตือนช่องที่ 3 (เพิ่มจาก Email + Telegram)' },
+      ]
+    },
+    {
       version: '2569.06.06.e',
       date: '6 มิถุนายน 2569 (build e)',
       changes: [
