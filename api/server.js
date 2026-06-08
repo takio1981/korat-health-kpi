@@ -344,7 +344,11 @@ const port = process.env.PORT || 8830;
 app.set('trust proxy', 1); // จำเป็นเมื่ออยู่หลัง Nginx Proxy เพื่อให้ Rate Limit ทำงานถูกต้องกับ IP จริง
 app.use(helmet()); // เพิ่ม HTTP Headers เพื่อความปลอดภัย (XSS, Clickjacking, etc.)
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({
+    limit: '50mb',
+    // เก็บ raw body ไว้สำหรับ webhook ที่ต้อง verify signature (เช่น LINE)
+    verify: (req, _res, buf) => { req.rawBody = buf; }
+}));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Global settings variables
@@ -9006,22 +9010,27 @@ const getLineProfile = async (channelToken, lineUserId) => {
 // LINE platform จะ POST ไปที่ webhook URL ที่ตั้งใน Developers Console
 // URL ที่ต้องตั้งที่ console: https://<your-domain>/khupskpi/api/webhook/line
 // ไม่ใช้ authenticateToken เพราะ LINE ไม่ส่ง JWT — verify ด้วย signature แทน
-apiRouter.post('/webhook/line', express.json({
-    verify: (req, _res, buf) => { req.rawBody = buf; }
-}), async (req, res) => {
+apiRouter.post('/webhook/line', async (req, res) => {
     try {
+        console.log(`[LINE webhook] HIT — IP=${req.ip} signature=${req.headers['x-line-signature'] ? 'present' : 'MISSING'} hasRawBody=${!!req.rawBody} events=${(req.body?.events || []).length}`);
         // === Verify signature (ถ้าตั้ง channel_secret ไว้) ===
         const [secretRow] = await db.query("SELECT setting_value FROM system_settings WHERE setting_key = 'line_channel_secret' LIMIT 1");
         const channelSecret = secretRow[0]?.setting_value || '';
         if (channelSecret) {
             const signature = req.headers['x-line-signature'];
+            if (!req.rawBody) {
+                console.warn('[LINE webhook] rawBody missing — global json verify middleware not applied?');
+            }
             // คำนวณ HMAC SHA256 ของ raw body ด้วย channel secret
             const body = req.rawBody || Buffer.from(JSON.stringify(req.body), 'utf8');
             const expected = crypto.createHmac('sha256', channelSecret).update(body).digest('base64');
             if (signature !== expected) {
-                console.warn('[LINE webhook] signature mismatch — possibly invalid request');
+                console.warn(`[LINE webhook] signature mismatch — got=${signature?.slice(0, 12)}... expected=${expected.slice(0, 12)}... bodyLen=${body.length}`);
                 return res.status(401).send('Invalid signature');
             }
+            console.log('[LINE webhook] signature OK');
+        } else {
+            console.warn('[LINE webhook] no channel_secret set — skip signature verification');
         }
         // === Reply 200 OK ทันที (LINE timeout เร็ว) ===
         res.status(200).send('OK');
