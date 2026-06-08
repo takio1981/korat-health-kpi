@@ -18,6 +18,15 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.06.08.c',
+      date: '8 มิถุนายน 2569 (build c)',
+      changes: [
+        { type: 'feature', text: 'เปิดใช้งาน LINE bot auto-reply userId กลับมาใหม่ — user พิมพ์ id/help/start หรือ add bot ครั้งแรก → bot ตอบ userId เป็น message เดี่ยว (คัดลอกง่าย)' },
+        { type: 'improve', text: 'เพิ่ม diagnostic log ละเอียด: event type, replyToken (12 chars), hasToken, msgCount, status response, body error 500 chars + stack trace (3 บรรทัด) — ระบุปัญหา reply API ได้แม่นยำ' },
+        { type: 'improve', text: '3 scenario: (a) follow event → welcome + userId + 3-step setup (b) ผูกแล้ว + พิมพ์ id → userId เดี่ยว + สถานะ (c) ยังไม่ผูก → userId + วิธีติดต่อ admin' },
+      ]
+    },
+    {
       version: '2569.06.08.b',
       date: '8 มิถุนายน 2569 (build b)',
       changes: [

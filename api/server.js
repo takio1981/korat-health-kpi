@@ -9091,10 +9091,71 @@ apiRouter.post('/webhook/line', async (req, res) => {
                 [lineUserId, displayName, pictureUrl, messageText.slice(0, 500)]
             ).catch(e => console.error('[LINE webhook] inbox insert error:', e.message));
 
-            // === ไม่ตอบกลับผ่าน LINE bot (ยกเลิกแล้ว) ===
-            // เก็บ event ไว้ใน line_inbox เพื่อให้ super_admin เห็น userId
-            // → ใช้ปุ่ม "LINE" ในหน้า "จัดการผู้ใช้งาน" เพื่อ assign userId ให้ user ที่ต้องการ
-            // → user ที่ต้องการแจ้งเตือนส่วนตัว ติดต่อ admin เพื่อขอ userId ที่ปรากฏใน LINE Inbox
+            // === Auto-reply userId กลับให้ user ผ่าน LINE bot ===
+            // 3 scenario: (1) follow event ครั้งแรก (2) ผูกบัญชีแล้ว (3) ยังไม่ผูก
+            const evType = ev.type;
+            const replyToken = ev.replyToken;
+            console.log(`[LINE webhook] event type=${evType} replyToken=${replyToken ? replyToken.slice(0, 12) + '...' : 'MISSING'} hasToken=${!!ns.lineToken}`);
+
+            if ((evType === 'follow' || evType === 'message') && replyToken && ns.lineToken) {
+                try {
+                    const [linkedRows] = await db.query(
+                        'SELECT id, username, firstname, lastname, notif_line_enabled FROM users WHERE line_user_id = ? LIMIT 1',
+                        [lineUserId]
+                    );
+                    const linkedUser = linkedRows[0];
+                    const baseUrl = (process.env.APP_URL || 'https://apikorat.moph.go.th/khupskpi').replace(/\/+$/, '');
+                    const lowerText = (messageText || '').toLowerCase().trim();
+                    const isQuestionForId = /(\buserid\b|\buser id\b|\buser_id\b|\bid\b|ไอดี|รหัส|เริ่ม|\bstart\b|\/start|\bhelp\b|\?)/i.test(lowerText);
+
+                    let messages = [];
+                    if (evType === 'follow') {
+                        messages = [
+                            { type: 'text', text: `🙏 ยินดีต้อนรับสู่ระบบ KHUPS KPI\n\n📌 LINE userId ของคุณ (แตะค้างข้อความถัดไปเพื่อคัดลอก) ⬇️` },
+                            { type: 'text', text: lineUserId },
+                            { type: 'text', text: `วิธีใช้งาน:\n1️⃣ คัดลอก userId ด้านบน\n2️⃣ ส่งให้ super_admin (หรือ Login ที่ ${baseUrl}/login → Profile → "ตั้งค่า LINE แจ้งเตือนส่วนตัว")\n3️⃣ พิมพ์ "id" ที่นี่ → ขอ userId ใหม่ได้ทุกเมื่อ` }
+                        ];
+                    } else if (linkedUser && isQuestionForId) {
+                        const userName = `${linkedUser.firstname || ''} ${linkedUser.lastname || ''}`.trim() || linkedUser.username;
+                        const status = Number(linkedUser.notif_line_enabled) === 1 ? '🟢 เปิดแจ้งเตือน' : '🔴 ปิดแจ้งเตือน';
+                        messages = [
+                            { type: 'text', text: `✅ บัญชีนี้ผูกอยู่แล้ว\n\n👤 ${userName} (${linkedUser.username})\n${status}\n\n📌 LINE userId ⬇️` },
+                            { type: 'text', text: lineUserId }
+                        ];
+                    } else if (linkedUser) {
+                        // ทักเฉยๆ — ตอบสั้นๆ
+                        const userName = `${linkedUser.firstname || ''} ${linkedUser.lastname || ''}`.trim() || linkedUser.username;
+                        messages = [{ type: 'text', text: `สวัสดีคุณ${userName} 👋\nระบบจะส่งแจ้งเตือนเข้า LINE นี้\nพิมพ์ "id" → ดู userId` }];
+                    } else {
+                        // ยังไม่ผูก
+                        messages = [
+                            { type: 'text', text: `📌 LINE userId ของคุณ (แตะค้างข้อความถัดไปเพื่อคัดลอก) ⬇️` },
+                            { type: 'text', text: lineUserId },
+                            { type: 'text', text: `วิธีใช้งาน:\n1️⃣ คัดลอก userId ด้านบน\n2️⃣ ส่งให้ super_admin\n3️⃣ Login ${baseUrl}/login → Profile → "ตั้งค่า LINE แจ้งเตือนส่วนตัว" → วาง userId → บันทึก\n\nจะได้รับแจ้งเตือน: login, อนุมัติบัญชี, reset password, มีคนตอบกระทู้` }
+                        ];
+                    }
+
+                    console.log(`[LINE webhook] sending reply: replyToken=${replyToken.slice(0, 16)}... msgCount=${messages.length} tokenLen=${ns.lineToken.length}`);
+                    const replyRes = await fetch('https://api.line.me/v2/bot/message/reply', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${ns.lineToken}`
+                        },
+                        body: JSON.stringify({ replyToken, messages: messages.slice(0, 5) })
+                    });
+                    const replyBody = await replyRes.text();
+                    if (replyRes.ok) {
+                        console.log(`[LINE webhook] ✓ reply SUCCESS status=${replyRes.status}`);
+                    } else {
+                        console.error(`[LINE webhook] ✗ reply FAILED status=${replyRes.status} body=${replyBody.slice(0, 500)}`);
+                    }
+                } catch (e) {
+                    console.error('[LINE webhook] reply error:', e.message, e.stack?.split('\n').slice(0, 3).join(' | '));
+                }
+            } else {
+                console.log(`[LINE webhook] skip reply: evType=${evType} hasReplyToken=${!!replyToken} hasLineToken=${!!ns.lineToken}`);
+            }
         }
     } catch (e) {
         console.error('[LINE webhook] handler error:', e.message);
