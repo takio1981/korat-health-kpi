@@ -153,6 +153,11 @@
         <div class="text-center text-xs text-green-700/70 font-mono">
           {{ systemVersion }}
         </div>
+        <button (click)="showContactModal = true"
+                class="mt-2 w-full text-center text-[11px] text-emerald-700 hover:text-emerald-900 hover:bg-emerald-100/60 rounded-lg py-1.5 transition-colors cursor-pointer flex items-center justify-center gap-1.5">
+          <i class="fas fa-headset text-emerald-600"></i>
+          <span>ช่องทางติดต่อ</span>
+        </button>
       </div>
     </aside>
 
@@ -482,6 +487,86 @@
     <a routerLink="/notifications" (click)="showNotifDropdown = false" class="block text-center py-3 text-sm text-green-600 hover:text-green-800 font-bold border-t bg-gray-50 rounded-b-2xl hover:bg-gray-100 transition-colors">
       ดูทั้งหมด →
     </a>
+  </div>
+
+  <!-- ========== Contact Modal (ช่องทางติดต่อ) ========== -->
+  <div *ngIf="showContactModal"
+       (click)="showContactModal = false"
+       class="fixed inset-0 z-[300] bg-gray-900/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+    <div (click)="$event.stopPropagation()"
+         class="bg-white rounded-3xl shadow-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto relative">
+      <!-- Header gradient -->
+      <div class="bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 p-5 rounded-t-3xl relative">
+        <button (click)="showContactModal = false"
+                class="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/30 hover:bg-white/50 text-white flex items-center justify-center transition-colors backdrop-blur-sm">
+          <i class="fas fa-times"></i>
+        </button>
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-2xl bg-white/30 backdrop-blur-sm flex items-center justify-center">
+            <i class="fas fa-headset text-white text-2xl"></i>
+          </div>
+          <div>
+            <h2 class="text-xl font-bold text-white">ช่องทางติดต่อ</h2>
+            <p class="text-emerald-50 text-xs">กลุ่มงานสุขภาพดิจิทัล สำนักงานสาธารณสุขจังหวัดนครราชสีมา</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Body -->
+      <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
+
+        <!-- Mascot (น้องโคราชดี) -->
+        <div class="bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 rounded-2xl p-4 border border-emerald-200 flex items-center justify-center">
+          <img src="korat-d.png" alt="น้องโคราชดี (KORAT-D)"
+               onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"
+               class="max-h-72 w-auto object-contain"/>
+          <div style="display:none" class="flex-col items-center text-center text-emerald-700 p-6">
+            <i class="fas fa-robot text-6xl mb-2"></i>
+            <p class="font-bold">น้องโคราชดี (KORAT-D)</p>
+            <p class="text-xs text-gray-500 mt-1">ผู้ช่วยอัจฉริยะด้านสุขภาพดิจิทัล</p>
+          </div>
+        </div>
+
+        <!-- QR + Address -->
+        <div class="space-y-4">
+          <!-- LINE QR -->
+          <div class="bg-green-50 border border-green-200 rounded-2xl p-4 text-center">
+            <h3 class="font-bold text-green-800 text-sm mb-2 flex items-center justify-center gap-2">
+              <i class="fab fa-line text-green-600"></i>
+              LINE Official Account
+            </h3>
+            <img src="https://qr-official.line.me/gs/M_966nlptu_BW.png?oat_content=qr"
+                 alt="LINE QR Code"
+                 class="mx-auto w-44 h-44 object-contain bg-white rounded-xl p-2 shadow-sm border border-green-200"/>
+            <p class="text-[11px] text-green-700 mt-2">สแกน QR เพื่อเพิ่มเพื่อน LINE</p>
+          </div>
+
+          <!-- Address -->
+          <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs text-gray-700 space-y-2">
+            <p class="font-bold text-slate-800 flex items-center gap-1.5">
+              <i class="fas fa-map-marker-alt text-rose-500"></i>
+              ติดต่อเรา
+            </p>
+            <p class="leading-relaxed">
+              กลุ่มงานสุขภาพดิจิทัล สำนักงานสาธารณสุขจังหวัดนครราชสีมา<br>
+              255 หมู่ 11 ต. โคกกรวด อ. เมือง จ. นครราชสีมา 30000<br>
+              อาคารสำนักงานสาธารณสุขจังหวัดนครราชสีมา
+            </p>
+            <p class="font-mono text-emerald-700 flex items-center gap-1.5 pt-1 border-t border-slate-200">
+              <i class="fas fa-fax"></i>
+              โทรสาร 044-465-011 ต่อ 469
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="bg-gray-50 px-6 py-3 rounded-b-3xl border-t border-gray-200 text-center text-[11px] text-gray-500">
+        <i class="fas fa-code-branch mr-1"></i> KHUPS KPI {{ systemVersion }}
+        <span class="mx-2">•</span>
+        <i class="fas fa-calendar mr-1"></i> ปีงบประมาณ ต.ค. - ก.ย.
+      </div>
+    </div>
   </div>
 
   <!-- Maintenance Mode Overlay (บล็อกหน้าจอ — ยกเว้น super_admin) -->

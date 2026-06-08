@@ -64,6 +64,7 @@ export class LayoutComponent implements OnInit {
   feedbackUnreadCount: number = 0;
   showProfileDropdown: boolean = false;
   profileClosing: boolean = false;
+  showContactModal: boolean = false;
 
   ngOnInit() {
     this.currentUser = this.authService.getUser();

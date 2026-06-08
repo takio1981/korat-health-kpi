@@ -18,6 +18,14 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.06.08',
+      date: '8 มิถุนายน 2569',
+      changes: [
+        { type: 'feature', text: 'เพิ่มปุ่ม "ช่องทางติดต่อ" ใต้ version ที่ sidebar — กดเปิด modal แสดง QR Code LINE Official + ที่อยู่กลุ่มงานสุขภาพดิจิทัล สสจ.นครราชสีมา + เบอร์โทรสาร + รูปน้องโคราชดี (KORAT-D mascot)' },
+        { type: 'improve', text: 'Modal contact UI: header gradient emerald→teal→cyan + 2-column layout (mascot ซ้าย, QR+address ขวา) + responsive (1 col บน mobile) + click outside ปิด + max-h 92vh กัน overflow' },
+      ]
+    },
+    {
       version: '2569.06.06.f',
       date: '6 มิถุนายน 2569 (build f)',
       changes: [
