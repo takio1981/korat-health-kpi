@@ -9073,31 +9073,32 @@ apiRouter.post('/webhook/line', express.json({
                     const baseUrl = (process.env.APP_URL || 'https://apikorat.moph.go.th/khupskpi').replace(/\/+$/, '');
 
                     // ตรวจ keyword (ถ้า user ส่งข้อความเพื่อขอ userId ใหม่)
+                    // ใช้ substring match (test ทุกตำแหน่งในข้อความ) → รับ "ขอ id", "userid ครับ", "เอา ID หน่อย" ฯลฯ
                     const lowerText = (messageText || '').toLowerCase().trim();
-                    const isQuestionForId = /^(userid|user id|user_id|id|ไอดี|รหัส|เริ่ม|start|\/start|help|\?)$/i.test(lowerText);
+                    const isQuestionForId = /(\buserid\b|\buser id\b|\buser_id\b|\bid\b|ไอดี|รหัส|เริ่ม|\bstart\b|\/start|\bhelp\b|\?)/i.test(lowerText);
 
                     let messages = [];
 
                     if (ev.type === 'follow') {
-                        // === Welcome on first add ===
+                        // === Welcome on first add — ส่ง userId เป็น message เดี่ยวเสมอ (คัดลอกง่าย) ===
                         messages = [
                             {
                                 type: 'text',
-                                text: `🙏 ยินดีต้อนรับสู่ระบบแจ้งเตือน KHUPS KPI\nสำนักงานสาธารณสุขจังหวัดนครราชสีมา\n\n📌 LINE userId ของคุณ:`
+                                text: `🙏 ยินดีต้อนรับสู่ระบบแจ้งเตือน KHUPS KPI\nสำนักงานสาธารณสุขจังหวัดนครราชสีมา\n\n📌 LINE userId ของคุณ\n(แตะค้างข้อความถัดไปเพื่อคัดลอก) ⬇️`
                             },
                             {
                                 type: 'text',
-                                text: lineUserId  // ส่ง userId เป็นข้อความเดี่ยว → user แตะค้างคัดลอกได้ง่าย
+                                text: lineUserId
                             },
                             {
                                 type: 'text',
                                 text: `✅ ขั้นตอนเปิดแจ้งเตือนส่วนตัว:\n` +
-                                      `1️⃣ คัดลอก userId ด้านบน (แตะค้างที่ข้อความ)\n` +
+                                      `1️⃣ คัดลอก userId ด้านบน (แตะค้างที่ข้อความ → "คัดลอก")\n` +
                                       `2️⃣ Login เข้าระบบ:\n${baseUrl}/login\n` +
                                       `3️⃣ คลิกรูปโปรไฟล์มุมขวาบน\n` +
                                       `4️⃣ เลือก "ตั้งค่า LINE แจ้งเตือนส่วนตัว"\n` +
                                       `5️⃣ วาง userId → กดบันทึก → กดทดสอบ\n\n` +
-                                      `❓ พิมพ์ "id" หรือ "เริ่ม" → ดู userId อีกครั้ง`
+                                      `❓ ลืม userId? พิมพ์ "id" → ผมจะส่งให้ใหม่`
                             }
                         ];
                     } else if (linkedUser) {
@@ -9105,14 +9106,24 @@ apiRouter.post('/webhook/line', express.json({
                         const userName = `${linkedUser.firstname || ''} ${linkedUser.lastname || ''}`.trim() || linkedUser.username;
                         const status = Number(linkedUser.notif_line_enabled) === 1 ? '🟢 เปิดแจ้งเตือน' : '🔴 ปิดแจ้งเตือน';
                         if (isQuestionForId) {
-                            messages = [{
-                                type: 'text',
-                                text: `✅ บัญชีนี้ผูกอยู่แล้ว\n\n` +
-                                      `👤 ${userName} (${linkedUser.username})\n` +
-                                      `${status}\n` +
-                                      `📌 userId: ${lineUserId}\n\n` +
-                                      `ปรับการแจ้งเตือนได้ที่ Profile → ตั้งค่า LINE แจ้งเตือนส่วนตัว`
-                            }];
+                            // ถาม userId → ส่งเป็น message เดี่ยว (คัดลอกง่าย)
+                            messages = [
+                                {
+                                    type: 'text',
+                                    text: `✅ บัญชีนี้ผูกอยู่แล้ว\n\n` +
+                                          `👤 ${userName} (${linkedUser.username})\n` +
+                                          `${status}\n\n` +
+                                          `📌 LINE userId (แตะค้างข้อความถัดไปเพื่อคัดลอก) ⬇️`
+                                },
+                                {
+                                    type: 'text',
+                                    text: lineUserId
+                                },
+                                {
+                                    type: 'text',
+                                    text: `ปรับการแจ้งเตือนได้ที่:\n${baseUrl}/login → Profile → ตั้งค่า LINE แจ้งเตือนส่วนตัว`
+                                }
+                            ];
                         } else {
                             // user แค่ทักเฉยๆ — ตอบสั้นๆ
                             messages = [{
@@ -9121,11 +9132,11 @@ apiRouter.post('/webhook/line', express.json({
                             }];
                         }
                     } else {
-                        // === ยังไม่ผูก — ส่ง userId + วิธีตั้งค่า ===
+                        // === ยังไม่ผูก — ส่ง userId เป็น message เดี่ยว + วิธีตั้งค่า ===
                         messages = [
                             {
                                 type: 'text',
-                                text: `📌 LINE userId ของคุณ:`
+                                text: `📌 LINE userId ของคุณ\n(แตะค้างข้อความถัดไปเพื่อคัดลอก) ⬇️`
                             },
                             {
                                 type: 'text',
@@ -9134,11 +9145,12 @@ apiRouter.post('/webhook/line', express.json({
                             {
                                 type: 'text',
                                 text: `✅ ขั้นตอนเปิดแจ้งเตือน:\n` +
-                                      `1️⃣ คัดลอก userId (แตะค้างที่ข้อความด้านบน)\n` +
+                                      `1️⃣ แตะค้าง userId ด้านบน → "คัดลอก"\n` +
                                       `2️⃣ Login:\n${baseUrl}/login\n` +
                                       `3️⃣ รูปโปรไฟล์ขวาบน → "ตั้งค่า LINE แจ้งเตือนส่วนตัว"\n` +
                                       `4️⃣ วาง userId → บันทึก → ทดสอบ\n\n` +
-                                      `🔔 จะได้รับแจ้งเตือน: login, อนุมัติ/ปฏิเสธบัญชี, reset รหัสผ่าน, มีคนตอบกระทู้`
+                                      `🔔 จะได้รับแจ้งเตือน: login, อนุมัติ/ปฏิเสธบัญชี, reset รหัสผ่าน, มีคนตอบกระทู้\n\n` +
+                                      `❓ ลืม userId? พิมพ์ "id" → ผมจะส่งให้ใหม่`
                             }
                         ];
                     }
