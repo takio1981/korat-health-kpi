@@ -984,12 +984,42 @@ export class UserManagementComponent implements OnInit {
       this.authService.usersSyncToHDC(usernames).subscribe({
         next: (res: any) => {
           this.syncExecuting = false;
-          Swal.fire({ icon: 'success', title: 'Sync สำเร็จ', html: `<p>${res.message}</p>`, timer: 3000 });
-          this.closeSyncModal();
+          const synced = res.synced || 0;
+          const total = res.total || usernames.length;
+          const failed = res.failed || 0;
+          const partial = res.partial;
+          const added = (res.added_columns || []).join(', ');
+          const skipped = (res.skipped_columns || []).join(', ');
+          const errSamples = (res.errors || []).slice(0, 3).map((e: any) =>
+            `<li class="text-left"><b>Batch ${e.batch_start}</b> (${e.batch_size} rows) — ${e.error}</li>`
+          ).join('');
+          let html = `<div class="text-left">
+            <p><b>ส่งสำเร็จ:</b> <span class="text-green-600">${synced}</span> / ${total} คน</p>
+            ${failed > 0 ? `<p class="text-red-600"><b>ล้มเหลว:</b> ${failed} คน</p>` : ''}
+            ${added ? `<p class="text-xs text-emerald-600 mt-2"><i class="fas fa-plus-circle mr-1"></i>เพิ่ม column ใหม่ใน HDC: <code class="bg-emerald-50 px-1 rounded">${added}</code></p>` : ''}
+            ${skipped ? `<p class="text-xs text-amber-600 mt-1"><i class="fas fa-exclamation-triangle mr-1"></i>ข้าม column ที่ HDC ไม่มี: <code class="bg-amber-50 px-1 rounded">${skipped}</code></p>` : ''}
+            ${errSamples ? `<div class="text-xs text-red-700 mt-2 bg-red-50 border border-red-200 rounded p-2"><b>รายละเอียดข้อผิดพลาด (สูงสุด 3):</b><ul class="ml-4 mt-1 list-disc">${errSamples}</ul></div>` : ''}
+          </div>`;
+          if (partial) {
+            Swal.fire({ icon: 'warning', title: 'Sync บางส่วน', html, confirmButtonText: 'ตกลง' });
+          } else {
+            Swal.fire({ icon: 'success', title: 'Sync สำเร็จ', html, confirmButtonText: 'ตกลง' });
+          }
+          // refresh compare data
+          this.syncSelected.clear();
+          this.openUserSyncModal();
         },
         error: (err) => {
           this.syncExecuting = false;
-          Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถ sync ได้', 'error');
+          const body = err.error || {};
+          const errSamples = (body.errors || []).slice(0, 3).map((e: any) =>
+            `<li class="text-left"><b>Batch ${e.batch_start}</b> — ${e.error} ${e.code ? `<code class="bg-red-100 px-1 rounded text-[10px]">${e.code}</code>` : ''}</li>`
+          ).join('');
+          const html = `<div class="text-left">
+            <p class="text-red-700 mb-2"><b>${body.message || err.message || 'ไม่สามารถ sync ได้'}</b></p>
+            ${errSamples ? `<div class="text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2"><b>รายละเอียด:</b><ul class="ml-4 mt-1 list-disc">${errSamples}</ul></div>` : ''}
+          </div>`;
+          Swal.fire({ icon: 'error', title: 'Sync ล้มเหลว', html, confirmButtonText: 'ตกลง' });
         }
       });
     });

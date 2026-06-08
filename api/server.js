@@ -8672,15 +8672,59 @@ apiRouter.post('/users/sync-to-hdc', authenticateToken, isSuperAdmin, async (req
     const { usernames } = req.body; // optional: ถ้าไม่ส่ง = sync ทั้งหมด
 
     try {
-        // สร้างตาราง users ใน HDC ถ้ายังไม่มี (ใช้ DDL จาก Local)
+        // === Step 1: ensure HDC users table exists (สร้างจาก local DDL ถ้าไม่มี) ===
+        let hdcTableExists = true;
         try {
             await remoteDb.query('SELECT 1 FROM users LIMIT 0');
         } catch (e) {
+            hdcTableExists = false;
             const [ddlRows] = await db.query('SHOW CREATE TABLE users');
-            if (ddlRows.length > 0) await remoteDb.query(ddlRows[0]['Create Table']);
+            if (ddlRows.length > 0) {
+                try {
+                    await remoteDb.query(ddlRows[0]['Create Table']);
+                    console.log('[sync-to-hdc] Created users table in HDC');
+                    hdcTableExists = true;
+                } catch (ce) {
+                    return res.status(500).json({
+                        success: false,
+                        message: `ไม่สามารถสร้างตาราง users ใน HDC: ${ce.message}`
+                    });
+                }
+            }
         }
 
-        // ดึง users ที่ต้องการ sync
+        // === Step 2: sync schema — ALTER ADD COLUMN ที่ Local มีแต่ HDC ไม่มี ===
+        const [localColsInfo] = await db.query('SHOW COLUMNS FROM users');
+        const [remoteColsInfo] = await remoteDb.query('SHOW COLUMNS FROM users');
+        const remoteColSet = new Set(remoteColsInfo.map(c => c.Field));
+        const missingInRemote = localColsInfo.filter(c => !remoteColSet.has(c.Field));
+        const addedColumns = [];
+        const alterErrors = [];
+        for (const col of missingInRemote) {
+            // สร้าง ALTER statement (ระวัง quotes ใน Default)
+            let alter = `ALTER TABLE \`users\` ADD COLUMN \`${col.Field}\` ${col.Type}`;
+            if (col.Null === 'NO') alter += ' NOT NULL';
+            if (col.Default !== null && col.Default !== undefined) {
+                const def = String(col.Default);
+                // Skip default ที่เป็น expression (CURRENT_TIMESTAMP, etc)
+                if (/^(CURRENT_TIMESTAMP|NULL)$/i.test(def)) {
+                    alter += ` DEFAULT ${def}`;
+                } else {
+                    alter += ` DEFAULT ${remoteDb.escape ? remoteDb.escape(def) : `'${def.replace(/'/g, "''")}'`}`;
+                }
+            }
+            if (col.Extra) alter += ` ${col.Extra}`;
+            try {
+                await remoteDb.query(alter);
+                addedColumns.push(col.Field);
+                console.log(`[sync-to-hdc] Added column ${col.Field} to HDC users`);
+            } catch (ae) {
+                alterErrors.push({ column: col.Field, error: ae.message });
+                console.warn(`[sync-to-hdc] ALTER add ${col.Field} failed:`, ae.message);
+            }
+        }
+
+        // === Step 3: ดึง users ที่ต้องการ sync ===
         let query = 'SELECT * FROM users';
         const params = [];
         if (Array.isArray(usernames) && usernames.length > 0) {
@@ -8690,35 +8734,99 @@ apiRouter.post('/users/sync-to-hdc', authenticateToken, isSuperAdmin, async (req
         const [localUsers] = await db.query(query, params);
         if (localUsers.length === 0) return res.json({ success: true, synced: 0, message: 'ไม่มีข้อมูลที่จะ sync' });
 
-        // UPSERT batch 100 rows
-        const columns = Object.keys(localUsers[0]);
-        const colList = columns.map(c => `\`${c}\``).join(', ');
-        const placeholders = columns.map(() => '?').join(', ');
-        const onDup = columns.filter(c => c !== 'id').map(c => `\`${c}\`=VALUES(\`${c}\`)`).join(', ');
+        // === Step 4: re-check remote columns หลัง ALTER แล้ว → ใช้เฉพาะ columns ที่มีใน HDC จริงๆ ===
+        const [remoteColsAfter] = await remoteDb.query('SHOW COLUMNS FROM users');
+        const remoteColSetAfter = new Set(remoteColsAfter.map(c => c.Field));
+        const localCols = Object.keys(localUsers[0]);
+        // กรอง: ใช้เฉพาะ column ที่ HDC มีจริงๆ (กัน Unknown column)
+        const syncableCols = localCols.filter(c => remoteColSetAfter.has(c));
+        const skippedCols = localCols.filter(c => !remoteColSetAfter.has(c));
+        if (skippedCols.length > 0) {
+            console.warn('[sync-to-hdc] Skipped columns (not in HDC):', skippedCols.join(', '));
+        }
+
+        // === Step 5: identify JSON columns → stringify ===
+        const jsonCols = new Set(
+            localColsInfo
+                .filter(c => /^(json|longtext)/i.test(c.Type))
+                .map(c => c.Field)
+        );
+
+        // === Step 6: UPSERT batch 100 rows ===
+        const colList = syncableCols.map(c => `\`${c}\``).join(', ');
+        const placeholders = syncableCols.map(() => '?').join(', ');
+        const onDup = syncableCols.filter(c => c !== 'id').map(c => `\`${c}\`=VALUES(\`${c}\`)`).join(', ');
 
         let totalSynced = 0;
         const errors = [];
         for (let i = 0; i < localUsers.length; i += 100) {
             const batch = localUsers.slice(i, i + 100);
             const allPlaceholders = batch.map(() => `(${placeholders})`).join(', ');
-            const flatValues = batch.flatMap(row => columns.map(c => row[c]));
+            const flatValues = batch.flatMap(row => syncableCols.map(c => {
+                const v = row[c];
+                if (v === undefined) return null;
+                if (jsonCols.has(c) && v !== null && typeof v === 'object') {
+                    try { return JSON.stringify(v); } catch (e) { return null; }
+                }
+                return v;
+            }));
             try {
-                await remoteDb.query(
+                const [result] = await remoteDb.query(
                     `INSERT INTO \`users\` (${colList}) VALUES ${allPlaceholders} ON DUPLICATE KEY UPDATE ${onDup}`,
                     flatValues
                 );
                 totalSynced += batch.length;
+                console.log(`[sync-to-hdc] Batch ${i}: affected=${result.affectedRows}, inserted=${result.affectedRows - (result.changedRows || 0)}, updated=${result.changedRows || 0}`);
             } catch (e) {
-                errors.push({ batch_start: i, error: e.message });
+                console.error(`[sync-to-hdc] Batch ${i} failed:`, e.message);
+                // เก็บ usernames ที่ fail
+                errors.push({
+                    batch_start: i,
+                    batch_size: batch.length,
+                    usernames: batch.map(u => u.username),
+                    error: e.message,
+                    code: e.code
+                });
             }
         }
 
         await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
-            [req.user.userId, 'USERS_SYNC_TO_HDC', 'users', JSON.stringify({ synced: totalSynced, total: localUsers.length }), req.ip]).catch(() => {});
+            [req.user.userId, 'USERS_SYNC_TO_HDC', 'users', JSON.stringify({ synced: totalSynced, total: localUsers.length, errors: errors.length, addedColumns }), req.ip]).catch(() => {});
 
-        res.json({ success: true, message: `Sync users → HDC สำเร็จ ${totalSynced} คน`, synced: totalSynced, errors });
+        // === Step 7: build response ===
+        const success = totalSynced === localUsers.length && errors.length === 0;
+        const partial = totalSynced > 0 && totalSynced < localUsers.length;
+        const failure = totalSynced === 0;
+        let message;
+        if (success) {
+            message = `Sync สำเร็จ ${totalSynced} คน`;
+        } else if (partial) {
+            message = `Sync บางส่วน: สำเร็จ ${totalSynced}/${localUsers.length} คน (มี ${errors.length} batch ผิดพลาด)`;
+        } else {
+            message = `Sync ล้มเหลว — ไม่มีข้อมูลถูกส่ง (${errors.length} batch ผิดพลาด)`;
+        }
+        if (addedColumns.length > 0) {
+            message += ` | เพิ่ม column ใหม่ใน HDC: ${addedColumns.join(', ')}`;
+        }
+        if (skippedCols.length > 0) {
+            message += ` | ข้าม column ที่ HDC ไม่มี: ${skippedCols.join(', ')}`;
+        }
+
+        res.status(failure ? 500 : 200).json({
+            success: !failure,
+            partial,
+            synced: totalSynced,
+            total: localUsers.length,
+            failed: localUsers.length - totalSynced,
+            message,
+            errors: errors.slice(0, 5),  // ส่งกลับเฉพาะ 5 errors แรก
+            added_columns: addedColumns,
+            skipped_columns: skippedCols,
+            alter_errors: alterErrors
+        });
     } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
+        console.error('[sync-to-hdc] Fatal error:', e);
+        res.status(500).json({ success: false, message: e.message, code: e.code });
     }
 });
 
