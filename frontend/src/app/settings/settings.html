@@ -484,8 +484,37 @@
                 </div>
                 <div class="bg-blue-50 border border-blue-200 rounded-lg p-2 text-[11px] text-blue-700">
                   <p class="font-bold"><i class="fas fa-link me-1"></i>Webhook URL (ตั้งใน LINE Developers Console):</p>
-                  <code class="block font-mono text-[10px] mt-1 text-blue-800 break-all">{{ origin }}/khupskpi/api/webhook/line</code>
+                  <p class="text-[10px] text-blue-600 mt-0.5">เลือก 1 ใน 2 แบบ:</p>
+                  <div class="mt-1 space-y-1">
+                    <div>
+                      <span class="text-[10px] font-bold text-blue-800">แบบ A — ตรง:</span>
+                      <code class="block font-mono text-[10px] text-blue-800 break-all">{{ origin }}/khupskpi/api/webhook/line</code>
+                    </div>
+                    <div>
+                      <span class="text-[10px] font-bold text-purple-800">แบบ B — ผ่าน Cloudflare Worker:</span>
+                      <code class="block font-mono text-[10px] text-purple-800 break-all">https://silent-meadow-aae1.takio1981.workers.dev/</code>
+                    </div>
+                  </div>
                 </div>
+
+                <!-- Relay Auth Key for Cloudflare Worker -->
+                <div class="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                  <label class="block text-xs font-bold text-purple-800 mb-1">
+                    <i class="fas fa-key me-1"></i>Relay Auth Key (สำหรับ Cloudflare Worker)
+                  </label>
+                  <div class="flex gap-1.5">
+                    <input type="text" [value]="lineRelayAuthKey" readonly
+                           class="flex-1 px-2 py-1.5 bg-white border border-purple-200 rounded-lg text-[11px] font-mono text-purple-900 outline-none">
+                    <button type="button" (click)="copyToClipboard(lineRelayAuthKey, 'Relay Key')"
+                            class="px-3 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-xs font-bold transition-colors">
+                      <i class="fas fa-copy"></i>
+                    </button>
+                  </div>
+                  <p class="text-[10px] text-purple-700 mt-1.5">
+                    <i class="fas fa-info-circle me-1"></i>คัดลอกค่านี้ → ไปวางที่ Cloudflare Worker → Settings → Variables → <code class="bg-white px-1 rounded">RELAY_AUTH_KEY</code>
+                  </p>
+                </div>
+
                 <button type="button" (click)="testLine()"
                         class="w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition-colors">
                   <i class="fab fa-line me-1"></i>ทดสอบส่ง LINE

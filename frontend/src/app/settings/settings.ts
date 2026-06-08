@@ -49,6 +49,7 @@ export class SettingsComponent implements OnInit {
   lineChannelToken: string = '';
   lineChannelSecret: string = '';
   lineGroupId: string = '';
+  lineRelayAuthKey: string = '';
   origin: string = (typeof window !== 'undefined' ? window.location.origin : '');
   notifTelegramEnabled: boolean = true;
   notifEmailEnabled: boolean = true;
@@ -159,9 +160,11 @@ export class SettingsComponent implements OnInit {
           const lnToken = this.settings.find(s => s.setting_key === 'line_channel_token');
           const lnSecret = this.settings.find(s => s.setting_key === 'line_channel_secret');
           const lnGroup = this.settings.find(s => s.setting_key === 'line_group_id');
+          const lnRelay = this.settings.find(s => s.setting_key === 'line_relay_auth_key');
           if (lnToken) this.lineChannelToken = lnToken.setting_value || '';
           if (lnSecret) this.lineChannelSecret = lnSecret.setting_value || '';
           if (lnGroup) this.lineGroupId = lnGroup.setting_value || '';
+          if (lnRelay) this.lineRelayAuthKey = lnRelay.setting_value || '';
           const ntfTg = this.settings.find(s => s.setting_key === 'notif_telegram_enabled');
           const ntfEm = this.settings.find(s => s.setting_key === 'notif_email_enabled');
           const ntfSys = this.settings.find(s => s.setting_key === 'notif_system_enabled');
@@ -343,6 +346,26 @@ export class SettingsComponent implements OnInit {
       },
       error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถส่งได้', 'error')
     });
+  }
+
+  copyToClipboard(text: string, label: string = 'ข้อความ') {
+    if (!text) {
+      Swal.fire({ icon: 'warning', title: 'ไม่มีข้อความให้คัดลอก', timer: 1500, showConfirmButton: false });
+      return;
+    }
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(
+        () => Swal.fire({ icon: 'success', title: `คัดลอก ${label} แล้ว`, timer: 1200, showConfirmButton: false, toast: true, position: 'top-end' }),
+        () => Swal.fire('คัดลอกไม่สำเร็จ', 'กรุณาคัดลอกด้วยตัวเอง', 'error')
+      );
+    } else {
+      // fallback: select + execCommand
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); Swal.fire({ icon: 'success', title: `คัดลอก ${label} แล้ว`, timer: 1200, showConfirmButton: false, toast: true, position: 'top-end' }); }
+      catch { Swal.fire('คัดลอกไม่สำเร็จ', 'browser ไม่รองรับ', 'error'); }
+      document.body.removeChild(ta);
+    }
   }
 
   testLine() {

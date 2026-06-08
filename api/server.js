@@ -7141,6 +7141,17 @@ apiRouter.get('/report/recording-missing/by-hospital/:hospcode', authenticateTok
             await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)', [key, val, desc]);
         }
 
+        // Auto-generate relay auth key สำหรับ Cloudflare Worker (random 32 chars) ถ้ายังไม่มี
+        try {
+            const [existing] = await db.query("SELECT setting_value FROM system_settings WHERE setting_key = 'line_relay_auth_key' LIMIT 1");
+            if (!existing[0] || !existing[0].setting_value) {
+                const newKey = crypto.randomBytes(24).toString('hex'); // 48 chars hex
+                await db.query('INSERT INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)',
+                    ['line_relay_auth_key', newKey, 'Auth key สำหรับ Cloudflare Worker forward LINE webhook → KHUPS (ใส่เป็น env RELAY_AUTH_KEY ใน Worker)']);
+                console.log('[INIT] Auto-generated line_relay_auth_key for Cloudflare Worker integration');
+            }
+        } catch (e) { console.warn('[INIT] line_relay_auth_key:', e.message); }
+
         // เพิ่ม type 'appeal' ใน notifications
         try {
             await db.query(`ALTER TABLE notifications MODIFY type ENUM('approve','reject','info','appeal') NOT NULL`);
@@ -9012,26 +9023,44 @@ const getLineProfile = async (channelToken, lineUserId) => {
 // ไม่ใช้ authenticateToken เพราะ LINE ไม่ส่ง JWT — verify ด้วย signature แทน
 apiRouter.post('/webhook/line', async (req, res) => {
     try {
-        console.log(`[LINE webhook] HIT — IP=${req.ip} signature=${req.headers['x-line-signature'] ? 'present' : 'MISSING'} hasRawBody=${!!req.rawBody} events=${(req.body?.events || []).length}`);
-        // === Verify signature (ถ้าตั้ง channel_secret ไว้) ===
+        const relayAuth = req.headers['x-relay-auth'];
+        console.log(`[LINE webhook] HIT — IP=${req.ip} signature=${req.headers['x-line-signature'] ? 'present' : 'MISSING'} relayAuth=${relayAuth ? 'present' : 'MISSING'} hasRawBody=${!!req.rawBody} events=${(req.body?.events || []).length}`);
+
+        // === Auth: รับ 2 แบบ — (1) LINE signature ตรงๆ (2) X-Relay-Auth จาก Cloudflare Worker ===
         const [secretRow] = await db.query("SELECT setting_value FROM system_settings WHERE setting_key = 'line_channel_secret' LIMIT 1");
+        const [relayKeyRow] = await db.query("SELECT setting_value FROM system_settings WHERE setting_key = 'line_relay_auth_key' LIMIT 1");
         const channelSecret = secretRow[0]?.setting_value || '';
-        if (channelSecret) {
+        const relayAuthKey = relayKeyRow[0]?.setting_value || '';
+
+        let authMethod = null;
+        // ลอง relay auth ก่อน (Cloudflare Worker forward case)
+        if (relayAuth && relayAuthKey && relayAuth === relayAuthKey) {
+            authMethod = 'relay';
+            console.log('[LINE webhook] auth=RELAY OK (from Cloudflare Worker)');
+        }
+        // ถ้าไม่ใช่ relay → ลอง LINE signature
+        else if (channelSecret) {
             const signature = req.headers['x-line-signature'];
+            if (!signature) {
+                console.warn('[LINE webhook] no x-line-signature header + no valid relay auth');
+                return res.status(401).send('Unauthorized: no signature or relay auth');
+            }
             if (!req.rawBody) {
                 console.warn('[LINE webhook] rawBody missing — global json verify middleware not applied?');
             }
-            // คำนวณ HMAC SHA256 ของ raw body ด้วย channel secret
             const body = req.rawBody || Buffer.from(JSON.stringify(req.body), 'utf8');
             const expected = crypto.createHmac('sha256', channelSecret).update(body).digest('base64');
             if (signature !== expected) {
                 console.warn(`[LINE webhook] signature mismatch — got=${signature?.slice(0, 12)}... expected=${expected.slice(0, 12)}... bodyLen=${body.length}`);
                 return res.status(401).send('Invalid signature');
             }
-            console.log('[LINE webhook] signature OK');
+            authMethod = 'line-signature';
+            console.log('[LINE webhook] auth=LINE-SIGNATURE OK');
         } else {
-            console.warn('[LINE webhook] no channel_secret set — skip signature verification');
+            console.warn('[LINE webhook] no channel_secret + no relay key set — accept all (insecure)');
+            authMethod = 'none';
         }
+
         // === Reply 200 OK ทันที (LINE timeout เร็ว) ===
         res.status(200).send('OK');
 
