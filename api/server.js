@@ -9194,7 +9194,8 @@ apiRouter.post('/webhook/line', async (req, res) => {
                     }
 
                     // LINE จำกัด max 5 messages ต่อ reply
-                    await fetch('https://api.line.me/v2/bot/message/reply', {
+                    console.log(`[LINE webhook] sending reply: replyToken=${ev.replyToken?.slice(0, 16)}... messages=${messages.length} tokenLen=${ns.lineToken?.length || 0}`);
+                    const replyRes = await fetch('https://api.line.me/v2/bot/message/reply', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -9205,6 +9206,12 @@ apiRouter.post('/webhook/line', async (req, res) => {
                             messages: messages.slice(0, 5)
                         })
                     });
+                    const replyText = await replyRes.text();
+                    if (replyRes.ok) {
+                        console.log(`[LINE webhook] reply OK status=${replyRes.status}`);
+                    } else {
+                        console.error(`[LINE webhook] reply FAIL status=${replyRes.status} body=${replyText.slice(0, 500)}`);
+                    }
                 } catch (e) { console.error('[LINE webhook] reply error:', e.message); }
             }
         }
