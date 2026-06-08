@@ -18,6 +18,16 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.06.08.b',
+      date: '8 มิถุนายน 2569 (build b)',
+      changes: [
+        { type: 'improve', text: 'ยกเลิก LINE bot reply userId — bot ไม่ตอบกลับเมื่อ user พิมพ์ id/help/start ใน LINE แล้ว (LINE reply API call ไม่เสถียร debug ยาก)' },
+        { type: 'improve', text: 'เก็บ webhook + line_inbox ไว้ — super_admin ยังเห็น userId ของผู้ที่ทักเข้า bot ที่ "จัดการผู้ใช้งาน" → ปุ่ม "LINE" → LINE Inbox + ผูกให้ user ได้' },
+        { type: 'improve', text: 'แก้คำแนะนำใน modal "ตั้งค่า LINE แจ้งเตือนส่วนตัว" — ระบุว่าต้องติดต่อ super_admin เพื่อขอ userId จาก LINE Inbox' },
+        { type: 'improve', text: 'LINE Group + per-user push notifications ยังทำงานปกติ (token + group ID ถูกใช้ง่าน push API)' },
+      ]
+    },
+    {
       version: '2569.06.08',
       date: '8 มิถุนายน 2569',
       changes: [
