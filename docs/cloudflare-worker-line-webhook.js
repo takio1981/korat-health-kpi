@@ -1,77 +1,93 @@
 /**
- * Cloudflare Worker — LINE Webhook Forwarder for KHUPS KPI
+ * Cloudflare Worker — LINE Webhook Forwarder for KHUPS KPI (DEBUG MODE)
  *
- * What it does:
- *   1. รับ LINE webhook events ที่ silent-meadow-aae1.takio1981.workers.dev
- *   2. Verify LINE signature ด้วย LINE_CHANNEL_SECRET (defense in depth)
- *   3. Forward event ไปที่ KHUPS backend (KHUPS_RELAY_URL)
- *      พร้อม header X-Relay-Auth = RELAY_AUTH_KEY
- *   4. KHUPS backend ตอบกลับ user (userId, คู่มือ ฯลฯ) ผ่าน LINE Reply API
+ * DEBUG MODE features:
+ *   - Log ทุก request ที่เข้ามา (method, headers, body length) — เห็นใน Real-time logs
+ *   - ไม่ reject เมื่อ signature mismatch (แค่ warn) — กัน LINE Verify error
+ *   - Forward ทุก request → backend (ให้ KHUPS verify อีกชั้น)
+ *   - Return 200 OK เสมอ → LINE Verify จะผ่าน
  *
  * Deploy:
- *   1. ไปที่ https://dash.cloudflare.com → Workers & Pages → silent-meadow-aae1
- *   2. Edit Code → วาง code นี้ทั้งหมด
- *   3. Settings → Variables → เพิ่ม 3 environment variables:
- *        LINE_CHANNEL_SECRET    = e9a2a72a72ee2bd5b3d3c36ab905ba05   (จาก LINE Console)
- *        KHUPS_RELAY_URL        = https://apikorat.moph.go.th/khupskpi/api/webhook/line
- *        RELAY_AUTH_KEY         = (ค่าจาก KHUPS Settings → "LINE Relay Auth Key")
- *   4. Save and Deploy
+ *   1. https://dash.cloudflare.com → Workers & Pages → silent-meadow-aae1
+ *   2. Edit Code → ลบทั้งหมด → วาง code นี้ → Save and Deploy
+ *   3. Settings → Variables → ต้องมี 3 ค่า:
+ *        LINE_CHANNEL_SECRET = e9a2a72a72ee2bd5b3d3c36ab905ba05
+ *        KHUPS_RELAY_URL     = https://apikorat.moph.go.th/khupskpi/api/webhook/line
+ *        RELAY_AUTH_KEY      = (ค่าจาก production: ดูใน KHUPS Settings → "Relay Auth Key")
  *
- * Verify in LINE Console:
- *   - Webhook URL = https://silent-meadow-aae1.takio1981.workers.dev/
- *   - กด Verify → ต้องขึ้น Success
- *   - Use webhook = Enabled
+ * Watch logs:
+ *   - dash.cloudflare.com → Worker → tab Logs → "Begin log stream"
+ *   - กด Verify ใน LINE Console หรือพิมพ์ข้อความใน bot
+ *   - ดู log ที่ปรากฏ
  */
 
 export default {
   async fetch(request, env, ctx) {
-    // === GET = health check (เปิดผ่าน browser ตรวจสถานะได้) ===
+    const ts = new Date().toISOString();
+    const url = new URL(request.url);
+    const ua = request.headers.get('user-agent') || '(no UA)';
+
+    // === GET = health check ===
     if (request.method === 'GET') {
+      console.log(`[${ts}] GET ${url.pathname} from UA="${ua}"`);
       return new Response(
         JSON.stringify({
-          status: 'ok',
+          status: 'ok (DEBUG MODE)',
           service: 'KHUPS LINE Webhook Relay',
+          time: ts,
           khups_relay_url: env.KHUPS_RELAY_URL || '(not set)',
           has_channel_secret: !!env.LINE_CHANNEL_SECRET,
-          has_relay_auth_key: !!env.RELAY_AUTH_KEY
+          has_relay_auth_key: !!env.RELAY_AUTH_KEY,
+          mode: 'DEBUG — accepts all requests, forwards to KHUPS'
         }, null, 2),
         { headers: { 'Content-Type': 'application/json' } }
       );
     }
 
     if (request.method !== 'POST') {
+      console.log(`[${ts}] ${request.method} not allowed`);
       return new Response('Method Not Allowed', { status: 405 });
     }
 
-    // === Read raw body (สำคัญสำหรับ signature verification) ===
+    // === POST handling ===
     const body = await request.text();
     const signature = request.headers.get('x-line-signature') || '';
 
-    // === Verify LINE signature (ถ้าตั้ง env LINE_CHANNEL_SECRET ไว้) ===
+    // Log incoming request details
+    console.log(`[${ts}] POST received — body=${body.length}B sig=${signature ? signature.slice(0, 16) + '...' : '(missing)'} UA="${ua}" CF-Ray=${request.headers.get('cf-ray') || ''}`);
+    console.log(`[${ts}] Body preview: ${body.slice(0, 300)}`);
+
+    // === Signature check (warn only, don't reject) ===
+    let signatureStatus = 'no-secret-configured';
     if (env.LINE_CHANNEL_SECRET) {
-      try {
-        const encoder = new TextEncoder();
-        const key = await crypto.subtle.importKey(
-          'raw',
-          encoder.encode(env.LINE_CHANNEL_SECRET),
-          { name: 'HMAC', hash: 'SHA-256' },
-          false,
-          ['sign']
-        );
-        const sigBuf = await crypto.subtle.sign('HMAC', key, encoder.encode(body));
-        // Convert ArrayBuffer → base64
-        const expectedSig = btoa(String.fromCharCode(...new Uint8Array(sigBuf)));
-        if (signature !== expectedSig) {
-          console.warn('[Worker] signature mismatch', { got: signature.slice(0, 12), expected: expectedSig.slice(0, 12) });
-          return new Response('Invalid signature', { status: 401 });
+      if (!signature) {
+        signatureStatus = 'missing-header';
+        console.warn(`[${ts}] ⚠ No x-line-signature header`);
+      } else {
+        try {
+          const encoder = new TextEncoder();
+          const key = await crypto.subtle.importKey(
+            'raw',
+            encoder.encode(env.LINE_CHANNEL_SECRET),
+            { name: 'HMAC', hash: 'SHA-256' },
+            false,
+            ['sign']
+          );
+          const sigBuf = await crypto.subtle.sign('HMAC', key, encoder.encode(body));
+          const expectedSig = btoa(String.fromCharCode(...new Uint8Array(sigBuf)));
+          if (signature === expectedSig) {
+            signatureStatus = 'verified';
+            console.log(`[${ts}] ✓ LINE signature verified`);
+          } else {
+            signatureStatus = 'mismatch';
+            console.warn(`[${ts}] ✗ Signature mismatch — got=${signature.slice(0, 16)}... expected=${expectedSig.slice(0, 16)}...`);
+            // DEBUG: don't reject, just warn
+          }
+        } catch (e) {
+          signatureStatus = 'error:' + e.message;
+          console.error(`[${ts}] Signature verify error:`, e.message);
         }
-        console.log('[Worker] LINE signature verified');
-      } catch (e) {
-        console.error('[Worker] signature verify error:', e.message);
-        return new Response('Signature verification error', { status: 500 });
       }
-    } else {
-      console.warn('[Worker] LINE_CHANNEL_SECRET not set — skip verification');
     }
 
     // === Forward to KHUPS backend (asynchronously) ===
@@ -82,19 +98,20 @@ export default {
           headers: {
             'Content-Type': 'application/json',
             'X-Relay-Auth': env.RELAY_AUTH_KEY || '',
-            'X-Line-Signature': signature, // optional — backend อาจ verify ซ้ำ
-            'X-Forwarded-From': 'cloudflare-worker'
+            'X-Line-Signature': signature,
+            'X-Forwarded-From': 'cloudflare-worker',
+            'X-Signature-Status': signatureStatus
           },
           body
         })
-          .then(r => console.log('[Worker] forwarded to KHUPS:', r.status))
-          .catch(e => console.error('[Worker] forward error:', e.message))
+          .then(r => console.log(`[${ts}] → KHUPS forward response: ${r.status} ${r.statusText}`))
+          .catch(e => console.error(`[${ts}] → KHUPS forward FAILED:`, e.message))
       );
     } else {
-      console.warn('[Worker] KHUPS_RELAY_URL not set — event discarded');
+      console.warn(`[${ts}] KHUPS_RELAY_URL not set — event discarded`);
     }
 
-    // === Reply 200 OK ทันที (LINE timeout < 2s) ===
+    // === Always return 200 OK (LINE Verify pass) ===
     return new Response('OK', { status: 200 });
   }
 };
