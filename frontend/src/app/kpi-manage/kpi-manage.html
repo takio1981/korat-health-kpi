@@ -68,6 +68,30 @@
             <i class="fas" [ngClass]="hdcCompareLoading ? 'fa-spinner fa-spin' : 'fa-exchange-alt'"></i>
             <span class="ml-2">{{ hdcCompareLoading ? 'กำลังเทียบ...' : (hdcCompareMap.size ? 'เทียบ HDC อีกครั้ง' : 'เทียบกับ HDC') }}</span>
           </button>
+          <button *ngIf="activeTab === 'strategies' && isSuperAdmin"
+                  (click)="runStrategyCompare()" [disabled]="stratCompareLoading"
+                  class="bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold whitespace-nowrap">
+            <i class="fas" [ngClass]="stratCompareLoading ? 'fa-spinner fa-spin' : 'fa-exchange-alt'"></i>
+            <span class="ml-2">{{ stratCompareLoading ? 'กำลังเทียบ...' : (stratCompareSummary ? 'เทียบ HDC อีกครั้ง' : 'เทียบกับ HDC') }}</span>
+          </button>
+          <button *ngIf="activeTab === 'main-indicators' && isSuperAdmin"
+                  (click)="runMainIndCompare()" [disabled]="mainIndCompareLoading"
+                  class="bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold whitespace-nowrap">
+            <i class="fas" [ngClass]="mainIndCompareLoading ? 'fa-spinner fa-spin' : 'fa-exchange-alt'"></i>
+            <span class="ml-2">{{ mainIndCompareLoading ? 'กำลังเทียบ...' : (mainIndCompareSummary ? 'เทียบ HDC อีกครั้ง' : 'เทียบกับ HDC') }}</span>
+          </button>
+          <button *ngIf="activeTab === 'departments' && isSuperAdmin"
+                  (click)="runDeptCompare()" [disabled]="deptCompareLoading"
+                  class="bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold whitespace-nowrap">
+            <i class="fas" [ngClass]="deptCompareLoading ? 'fa-spinner fa-spin' : 'fa-exchange-alt'"></i>
+            <span class="ml-2">{{ deptCompareLoading ? 'กำลังเทียบ...' : (deptCompareSummary ? 'เทียบ HDC อีกครั้ง' : 'เทียบกับ HDC') }}</span>
+          </button>
+          <button *ngIf="activeTab === 'hospitals' && isSuperAdmin"
+                  (click)="runHospCompare()" [disabled]="hospCompareLoading"
+                  class="bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold whitespace-nowrap">
+            <i class="fas" [ngClass]="hospCompareLoading ? 'fa-spinner fa-spin' : 'fa-exchange-alt'"></i>
+            <span class="ml-2">{{ hospCompareLoading ? 'กำลังเทียบ...' : (hospCompareSummary ? 'เทียบ HDC อีกครั้ง' : 'เทียบกับ HDC') }}</span>
+          </button>
           <button (click)="openModal()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold whitespace-nowrap"><i class="fas fa-plus mr-2"></i> เพิ่มข้อมูล</button>
         </div>
       </div>
@@ -103,8 +127,114 @@
                   class="px-2.5 py-1 rounded-lg font-bold transition-all">
             <i class="fas fa-power-off mr-1"></i>HDC inactive ({{ hdcCounts.inactive }})
           </button>
+          <span *ngIf="hdcCompareSummary && hdcMissingLocalItems.length > 0"
+                class="px-2.5 py-1 rounded-lg font-bold bg-cyan-50 text-cyan-700 border border-cyan-200 inline-flex items-center gap-1">
+            <i class="fas fa-cloud-arrow-down text-[10px]"></i>HDC มีแต่ยังไม่มีใน Local ({{ hdcMissingLocalItems.length }})
+          </span>
           <span class="text-[10px] text-gray-400 ml-auto" *ngIf="hdcCompareLastRun" title="ตัวเลขในชิปนับฝั่ง Local indicators (ตรงกับที่กรองได้ในตาราง); backend summary จาก HDC อาจมากกว่าเพราะ HDC มี report ซ้ำ table_process เดียวกัน">
             <i class="fas fa-clock mr-1"></i>เทียบล่าสุด: {{ hdcCompareLastRun | date:'HH:mm:ss' }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Summary: ยุทธศาสตร์ HDC Compare -->
+      <div *ngIf="activeTab === 'strategies' && stratCompareSummary" class="mb-4 bg-gradient-to-r from-teal-50 via-white to-teal-50 border border-teal-200 rounded-xl p-3">
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <span class="font-bold text-teal-800 flex items-center gap-1"><i class="fas fa-cloud text-teal-500"></i> HDC ↔ Local (ยุทธศาสตร์):</span>
+          <button (click)="hdcCompareFilter = ''; applyFilter()"
+                  [ngClass]="hdcCompareFilter === '' ? 'bg-teal-600 text-white ring-2 ring-teal-300' : 'bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all">ทั้งหมด ({{ stratCompareSummary.total }})</button>
+          <button (click)="hdcCompareFilter = hdcCompareFilter === 'match' ? '' : 'match'; applyFilter()"
+                  [ngClass]="hdcCompareFilter === 'match' ? 'bg-emerald-600 text-white ring-2 ring-emerald-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all"><i class="fas fa-check-circle mr-1"></i>ตรงกัน ({{ stratCompareSummary.match }})</button>
+          <button (click)="hdcCompareFilter = hdcCompareFilter === 'missing_remote' ? '' : 'missing_remote'; applyFilter()"
+                  [ngClass]="hdcCompareFilter === 'missing_remote' ? 'bg-purple-600 text-white ring-2 ring-purple-300' : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all"><i class="fas fa-arrow-up mr-1"></i>ไม่มีใน HDC ({{ stratCompareSummary.missing_remote }})</button>
+          <span *ngIf="stratMissingLocalItems.length > 0" class="px-2.5 py-1 rounded-lg font-bold bg-cyan-50 text-cyan-700 border border-cyan-200 inline-flex items-center gap-1">
+            <i class="fas fa-cloud-arrow-down text-[10px]"></i>HDC มีแต่ยังไม่มีใน Local ({{ stratMissingLocalItems.length }})
+          </span>
+        </div>
+      </div>
+
+      <!-- Summary: หน่วยงาน HDC Compare -->
+      <div *ngIf="activeTab === 'departments' && deptCompareSummary" class="mb-4 bg-gradient-to-r from-teal-50 via-white to-teal-50 border border-teal-200 rounded-xl p-3">
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <span class="font-bold text-teal-800 flex items-center gap-1"><i class="fas fa-cloud text-teal-500"></i> HDC ↔ Local (หน่วยงาน):</span>
+          <button (click)="hdcCompareFilter = ''; applyFilter()"
+                  [ngClass]="hdcCompareFilter === '' ? 'bg-teal-600 text-white ring-2 ring-teal-300' : 'bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all">ทั้งหมด ({{ deptCompareSummary.total }})</button>
+          <button (click)="hdcCompareFilter = hdcCompareFilter === 'match' ? '' : 'match'; applyFilter()"
+                  [ngClass]="hdcCompareFilter === 'match' ? 'bg-emerald-600 text-white ring-2 ring-emerald-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all"><i class="fas fa-check-circle mr-1"></i>ตรงกัน ({{ deptCompareSummary.match }})</button>
+          <button (click)="hdcCompareFilter = hdcCompareFilter === 'missing_remote' ? '' : 'missing_remote'; applyFilter()"
+                  [ngClass]="hdcCompareFilter === 'missing_remote' ? 'bg-purple-600 text-white ring-2 ring-purple-300' : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all"><i class="fas fa-arrow-up mr-1"></i>ไม่มีใน HDC ({{ deptCompareSummary.missing_remote }})</button>
+          <span *ngIf="deptMissingLocalItems.length > 0" class="px-2.5 py-1 rounded-lg font-bold bg-cyan-50 text-cyan-700 border border-cyan-200 inline-flex items-center gap-1">
+            <i class="fas fa-cloud-arrow-down text-[10px]"></i>HDC มีแต่ยังไม่มีใน Local ({{ deptMissingLocalItems.length }})
+          </span>
+        </div>
+      </div>
+
+      <!-- Summary: หมวดหมู่หลัก HDC Compare -->
+      <div *ngIf="activeTab === 'main-indicators' && mainIndCompareSummary" class="mb-4 bg-gradient-to-r from-teal-50 via-white to-teal-50 border border-teal-200 rounded-xl p-3">
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <!-- hdc_table mode -->
+          <ng-container *ngIf="mainIndCompareSource === 'hdc_table'">
+            <span class="font-bold text-teal-800 flex items-center gap-1"><i class="fas fa-exchange-alt text-teal-500"></i> เปรียบเทียบ HDC ↔ Local (หมวดหมู่หลัก):</span>
+            <button (click)="hdcCompareFilter = ''; applyFilter()"
+                    [ngClass]="hdcCompareFilter === '' ? 'bg-teal-600 text-white ring-2 ring-teal-300' : 'bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100'"
+                    class="px-2.5 py-1 rounded-lg font-bold transition-all">ทั้งหมด ({{ mainIndCompareSummary.total }})</button>
+            <button (click)="hdcCompareFilter = hdcCompareFilter === 'match' ? '' : 'match'; applyFilter()"
+                    [ngClass]="hdcCompareFilter === 'match' ? 'bg-emerald-600 text-white ring-2 ring-emerald-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'"
+                    class="px-2.5 py-1 rounded-lg font-bold transition-all"><i class="fas fa-check-circle mr-1"></i>ตรงกัน ({{ mainIndCompareSummary.match }})</button>
+            <button *ngIf="mainIndCompareSummary.missing_remote > 0"
+                    (click)="hdcCompareFilter = hdcCompareFilter === 'missing_remote' ? '' : 'missing_remote'; applyFilter()"
+                    [ngClass]="hdcCompareFilter === 'missing_remote' ? 'bg-purple-600 text-white ring-2 ring-purple-300' : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'"
+                    class="px-2.5 py-1 rounded-lg font-bold transition-all"><i class="fas fa-arrow-up mr-1"></i>ไม่มีใน HDC ({{ mainIndCompareSummary.missing_remote }})</button>
+            <span *ngIf="mainIndCompareSummary.missing_local > 0" class="px-2.5 py-1 rounded-lg font-bold bg-cyan-50 text-cyan-700 border border-cyan-200 inline-flex items-center gap-1">
+              <i class="fas fa-cloud-arrow-down text-[10px]"></i>HDC มีแต่ยังไม่มีใน Local ({{ mainIndCompareSummary.missing_local }})
+            </span>
+          </ng-container>
+          <!-- coverage_fallback mode -->
+          <ng-container *ngIf="mainIndCompareSource === 'coverage_fallback'">
+            <span class="font-bold text-teal-800 flex items-center gap-1"><i class="fas fa-cloud text-teal-500"></i> Coverage ของ HDC (หมวดหมู่หลัก):</span>
+            <button (click)="hdcCompareFilter = ''; applyFilter()"
+                    [ngClass]="hdcCompareFilter === '' ? 'bg-teal-600 text-white ring-2 ring-teal-300' : 'bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100'"
+                    class="px-2.5 py-1 rounded-lg font-bold transition-all">ทั้งหมด ({{ mainIndCompareSummary.total }})</button>
+            <button (click)="hdcCompareFilter = hdcCompareFilter === 'has_hdc' ? '' : 'has_hdc'; applyFilter()"
+                    [ngClass]="hdcCompareFilter === 'has_hdc' ? 'bg-emerald-600 text-white ring-2 ring-emerald-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'"
+                    class="px-2.5 py-1 rounded-lg font-bold transition-all"><i class="fas fa-link mr-1"></i>มีตัวชี้วัดใน HDC ({{ mainIndCompareSummary.has_hdc }})</button>
+            <button (click)="hdcCompareFilter = hdcCompareFilter === 'local_only' ? '' : 'local_only'; applyFilter()"
+                    [ngClass]="hdcCompareFilter === 'local_only' ? 'bg-gray-600 text-white ring-2 ring-gray-300' : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'"
+                    class="px-2.5 py-1 rounded-lg font-bold transition-all"><i class="fas fa-unlink mr-1"></i>ไม่มีใน HDC ({{ mainIndCompareSummary.local_only }})</button>
+            <span class="text-[10px] text-gray-400 ml-auto">เทียบจาก table_process ใน HDC reports</span>
+          </ng-container>
+        </div>
+      </div>
+
+      <!-- Summary: หน่วยบริการ HDC Compare -->
+      <div *ngIf="activeTab === 'hospitals' && (hospCompareSummary || hospCompareError)" class="mb-4 rounded-xl p-3"
+           [ngClass]="hospCompareError ? 'bg-red-50 border border-red-200' : 'bg-gradient-to-r from-teal-50 via-white to-teal-50 border border-teal-200'">
+        <div *ngIf="hospCompareError" class="flex items-center gap-2 text-xs text-red-700">
+          <i class="fas fa-exclamation-circle"></i><span>{{ hospCompareError }}</span>
+        </div>
+        <div *ngIf="hospCompareSummary && !hospCompareError" class="flex flex-wrap items-center gap-2 text-xs">
+          <span class="font-bold text-teal-800 flex items-center gap-1"><i class="fas fa-cloud text-teal-500"></i> HDC ↔ Local (หน่วยบริการ):</span>
+          <button (click)="hdcCompareFilter = ''; applyFilter()"
+                  [ngClass]="hdcCompareFilter === '' ? 'bg-teal-600 text-white ring-2 ring-teal-300' : 'bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all">ทั้งหมด ({{ hospCompareSummary.total }})</button>
+          <button (click)="hdcCompareFilter = hdcCompareFilter === 'match' ? '' : 'match'; applyFilter()"
+                  [ngClass]="hdcCompareFilter === 'match' ? 'bg-emerald-600 text-white ring-2 ring-emerald-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all"><i class="fas fa-check-circle mr-1"></i>ตรงกัน ({{ hospCompareSummary.match }})</button>
+          <button *ngIf="hospCompareSummary.different > 0"
+                  (click)="hdcCompareFilter = hdcCompareFilter === 'different' ? '' : 'different'; applyFilter()"
+                  [ngClass]="hdcCompareFilter === 'different' ? 'bg-amber-600 text-white ring-2 ring-amber-300' : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all"><i class="fas fa-exclamation-triangle mr-1"></i>ชื่อต่างกัน ({{ hospCompareSummary.different }})</button>
+          <button (click)="hdcCompareFilter = hdcCompareFilter === 'missing_remote' ? '' : 'missing_remote'; applyFilter()"
+                  [ngClass]="hdcCompareFilter === 'missing_remote' ? 'bg-purple-600 text-white ring-2 ring-purple-300' : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all"><i class="fas fa-arrow-up mr-1"></i>ไม่มีใน HDC ({{ hospCompareSummary.missing_remote }})</button>
+          <span *ngIf="hospMissingLocalItems.length > 0" class="px-2.5 py-1 rounded-lg font-bold bg-cyan-50 text-cyan-700 border border-cyan-200 inline-flex items-center gap-1">
+            <i class="fas fa-cloud-arrow-down text-[10px]"></i>HDC มีแต่ยังไม่มีใน Local ({{ hospMissingLocalItems.length }})
           </span>
         </div>
       </div>
@@ -195,9 +325,12 @@
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-24" *ngIf="activeTab === 'indicators' && isSuperAdmin" title="0=ส่งออกอัตโนมัติ, 1=ข้าม">upload_excel</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'main-indicators'">ชื่อหมวดหมู่หลัก</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'main-indicators'">ยุทธศาสตร์</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-32" *ngIf="activeTab === 'main-indicators' && mainIndCompareSummary">HDC Coverage</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'strategies'">ชื่อยุทธศาสตร์</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-32" *ngIf="activeTab === 'strategies' && stratCompareSummary">HDC ↔ Local</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'departments'">รหัส</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'departments'">ชื่อหน่วยงาน</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-32" *ngIf="activeTab === 'departments' && deptCompareSummary">HDC ↔ Local</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'hospitals'">hoscode</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'hospitals'">ชื่อหน่วยบริการ</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'hospitals'">ประเภท</th>
@@ -304,15 +437,40 @@
               <ng-container *ngIf="activeTab === 'main-indicators'">
                 <td class="px-4 py-3 font-medium text-gray-900">{{ item.main_indicator_name }}</td>
                 <td class="px-4 py-3 text-gray-600 text-xs">{{ item.yut_name }}</td>
+                <td class="px-4 py-3 text-center" *ngIf="mainIndCompareSummary">
+                  <ng-container *ngIf="getMainIndCoverage(item) as cov">
+                    <span *ngIf="cov.status === 'has_hdc'" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">
+                      <i class="fas fa-link"></i>{{ cov.hdc_linked_count }}/{{ cov.total_indicators }}
+                    </span>
+                    <span *ngIf="cov.status === 'local_only'" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-500">
+                      <i class="fas fa-unlink"></i>ไม่มีใน HDC
+                    </span>
+                  </ng-container>
+                  <span *ngIf="!getMainIndCoverage(item)" class="text-gray-300 text-[10px]">-</span>
+                </td>
               </ng-container>
 
               <ng-container *ngIf="activeTab === 'strategies'">
                 <td class="px-4 py-3 font-medium text-gray-900">{{ item.yut_name }}</td>
+                <td class="px-4 py-3 text-center" *ngIf="stratCompareSummary">
+                  <ng-container *ngIf="getStratCompare(item) as cmp">
+                    <span *ngIf="cmp.status === 'match'" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700"><i class="fas fa-check-circle mr-1"></i>ตรงกัน</span>
+                    <span *ngIf="cmp.status === 'missing_remote'" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700"><i class="fas fa-arrow-up mr-1"></i>ไม่มีใน HDC</span>
+                  </ng-container>
+                  <span *ngIf="!getStratCompare(item)" class="text-gray-300 text-[10px]">-</span>
+                </td>
               </ng-container>
 
               <ng-container *ngIf="activeTab === 'departments'">
                 <td class="px-4 py-3 text-gray-600">{{ item.dept_code }}</td>
                 <td class="px-4 py-3 font-medium text-gray-900">{{ item.dept_name }}</td>
+                <td class="px-4 py-3 text-center" *ngIf="deptCompareSummary">
+                  <ng-container *ngIf="getDeptCompare(item) as cmp">
+                    <span *ngIf="cmp.status === 'match'" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700"><i class="fas fa-check-circle mr-1"></i>ตรงกัน</span>
+                    <span *ngIf="cmp.status === 'missing_remote'" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700"><i class="fas fa-arrow-up mr-1"></i>ไม่มีใน HDC</span>
+                  </ng-container>
+                  <span *ngIf="!getDeptCompare(item)" class="text-gray-300 text-[10px]">-</span>
+                </td>
               </ng-container>
 
               <ng-container *ngIf="activeTab === 'hospitals'">
@@ -346,6 +504,313 @@
           </tbody>
         </table>
       </div>
+
+      <!-- หมวดหมู่หลักจาก HDC ที่ยังไม่มีใน Local -->
+      <div *ngIf="activeTab === 'main-indicators' && mainIndCompareSource === 'hdc_table' && mainIndMissingLocalItems.length > 0"
+           class="mt-4 border border-cyan-200 rounded-xl overflow-hidden">
+        <div class="bg-cyan-50 px-4 py-2.5 flex items-center gap-2 border-b border-cyan-200">
+          <i class="fas fa-cloud-arrow-down text-cyan-600"></i>
+          <span class="font-bold text-cyan-800 text-sm">หมวดหมู่หลักจาก HDC ที่ยังไม่มีในระบบ ({{ mainIndMissingLocalItems.length }} รายการ)</span>
+        </div>
+        <table class="w-full text-xs">
+          <thead class="bg-cyan-100/60 text-cyan-800"><tr>
+            <th class="px-3 py-2 text-left font-bold">ชื่อหมวดหมู่หลัก (HDC)</th>
+            <th class="px-3 py-2 text-center font-bold" *ngIf="isSuperAdmin">จัดการ</th>
+          </tr></thead>
+          <tbody>
+            <tr *ngFor="let item of mainIndMissingLocalItems" class="border-t border-cyan-100 hover:bg-cyan-50/50">
+              <td class="px-3 py-2 text-gray-800 font-medium">{{ item.hdc_name }}</td>
+              <td class="px-3 py-2 text-center" *ngIf="isSuperAdmin">
+                <button (click)="openMainIndAdd(item)"
+                        class="inline-flex items-center gap-1 px-2.5 py-1 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-xs font-bold transition-colors">
+                  <i class="fas fa-plus text-[10px]"></i>เพิ่มเข้าระบบ
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ยุทธศาสตร์จาก HDC ที่ยังไม่มีใน Local -->
+      <div *ngIf="activeTab === 'strategies' && stratCompareSummary && stratMissingLocalItems.length > 0"
+           class="mt-4 border border-cyan-200 rounded-xl overflow-hidden">
+        <div class="bg-cyan-50 px-4 py-2.5 flex items-center gap-2 border-b border-cyan-200">
+          <i class="fas fa-cloud-arrow-down text-cyan-600"></i>
+          <span class="font-bold text-cyan-800 text-sm">ยุทธศาสตร์จาก HDC ที่ยังไม่มีในระบบ ({{ stratMissingLocalItems.length }} รายการ)</span>
+        </div>
+        <table class="w-full text-xs">
+          <thead class="bg-cyan-100/60 text-cyan-800"><tr>
+            <th class="px-3 py-2 text-left font-bold">ชื่อยุทธศาสตร์ (HDC)</th>
+            <th class="px-3 py-2 text-center font-bold" *ngIf="isSuperAdmin">จัดการ</th>
+          </tr></thead>
+          <tbody>
+            <tr *ngFor="let item of stratMissingLocalItems" class="border-t border-cyan-100 hover:bg-cyan-50/50">
+              <td class="px-3 py-2 text-gray-800 font-medium">{{ item.hdc_yut_name }}</td>
+              <td class="px-3 py-2 text-center" *ngIf="isSuperAdmin">
+                <button (click)="openSimpleAdd('strategies', item.hdc_yut_name)"
+                        class="inline-flex items-center gap-1 px-2.5 py-1 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-xs font-bold transition-colors">
+                  <i class="fas fa-plus text-[10px]"></i>เพิ่มเข้าระบบ
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- หน่วยงานจาก HDC ที่ยังไม่มีใน Local -->
+      <div *ngIf="activeTab === 'departments' && deptCompareSummary && deptMissingLocalItems.length > 0"
+           class="mt-4 border border-cyan-200 rounded-xl overflow-hidden">
+        <div class="bg-cyan-50 px-4 py-2.5 flex items-center gap-2 border-b border-cyan-200">
+          <i class="fas fa-cloud-arrow-down text-cyan-600"></i>
+          <span class="font-bold text-cyan-800 text-sm">หน่วยงานจาก HDC ที่ยังไม่มีในระบบ ({{ deptMissingLocalItems.length }} รายการ)</span>
+        </div>
+        <table class="w-full text-xs">
+          <thead class="bg-cyan-100/60 text-cyan-800"><tr>
+            <th class="px-3 py-2 text-left font-bold">ชื่อหน่วยงาน (HDC)</th>
+            <th class="px-3 py-2 text-center font-bold" *ngIf="isSuperAdmin">จัดการ</th>
+          </tr></thead>
+          <tbody>
+            <tr *ngFor="let item of deptMissingLocalItems" class="border-t border-cyan-100 hover:bg-cyan-50/50">
+              <td class="px-3 py-2 text-gray-800 font-medium">{{ item.hdc_dept_name }}</td>
+              <td class="px-3 py-2 text-center" *ngIf="isSuperAdmin">
+                <button (click)="openSimpleAdd('departments', item.hdc_dept_name)"
+                        class="inline-flex items-center gap-1 px-2.5 py-1 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-xs font-bold transition-colors">
+                  <i class="fas fa-plus text-[10px]"></i>เพิ่มเข้าระบบ
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- หน่วยบริการจาก HDC ที่ยังไม่มีใน Local -->
+      <div *ngIf="activeTab === 'hospitals' && hospCompareSummary && (hospMissingLocalItems.length > 0 || hospDifferentItems.length > 0)"
+           class="mt-4 border border-cyan-200 rounded-xl overflow-hidden">
+        <div class="bg-cyan-50 px-4 py-2.5 flex items-center gap-2 border-b border-cyan-200">
+          <i class="fas fa-cloud-arrow-down text-cyan-600"></i>
+          <span class="font-bold text-cyan-800 text-sm">
+            <span *ngIf="hospMissingLocalItems.length > 0">HDC มีแต่ยังไม่มีใน Local ({{ hospMissingLocalItems.length }})</span>
+            <span *ngIf="hospMissingLocalItems.length > 0 && hospDifferentItems.length > 0"> + </span>
+            <span *ngIf="hospDifferentItems.length > 0" class="text-amber-700">ชื่อต่างกัน ({{ hospDifferentItems.length }})</span>
+          </span>
+        </div>
+        <div class="overflow-auto">
+          <table class="w-full text-xs">
+            <thead class="bg-cyan-100/60 text-cyan-800 sticky top-0"><tr>
+              <th class="px-3 py-2 text-left font-bold">hoscode</th>
+              <th class="px-3 py-2 text-left font-bold">ชื่อ (HDC)</th>
+              <th class="px-3 py-2 text-left font-bold">ชื่อ (Local)</th>
+              <th class="px-3 py-2 text-center font-bold">สถานะ</th>
+              <th class="px-3 py-2 text-center font-bold" *ngIf="isSuperAdmin">จัดการ</th>
+            </tr></thead>
+            <tbody>
+              <ng-container *ngFor="let item of hospCompareItems">
+                <tr *ngIf="item.status === 'missing_local' || item.status === 'different'"
+                    class="border-t border-cyan-100 hover:bg-cyan-50/50">
+                  <td class="px-3 py-2 font-mono text-cyan-700">{{ item.hoscode }}</td>
+                  <td class="px-3 py-2 text-gray-800 font-medium">{{ item.hdc_hosname || '-' }}</td>
+                  <td class="px-3 py-2 text-gray-600">{{ item.local_hosname || '-' }}</td>
+                  <td class="px-3 py-2 text-center">
+                    <span *ngIf="item.status === 'missing_local'" class="px-1.5 py-0.5 rounded-full font-bold bg-cyan-100 text-cyan-700 text-[10px]">ยังไม่มี</span>
+                    <span *ngIf="item.status === 'different'" class="px-1.5 py-0.5 rounded-full font-bold bg-amber-100 text-amber-700 text-[10px]">ชื่อต่างกัน</span>
+                  </td>
+                  <td class="px-3 py-2 text-center" *ngIf="isSuperAdmin">
+                    <button *ngIf="item.status === 'missing_local'" (click)="openHospAdd(item)"
+                            class="inline-flex items-center gap-1 px-2.5 py-1 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-xs font-bold transition-colors">
+                      <i class="fas fa-plus text-[10px]"></i>เพิ่มเข้าระบบ
+                    </button>
+                  </td>
+                </tr>
+              </ng-container>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ตัวชี้วัดจาก HDC ที่ยังไม่มีใน Local -->
+      <div *ngIf="activeTab === 'indicators' && hdcCompareSummary && hdcMissingLocalItems.length > 0"
+           class="mt-4 border border-cyan-200 rounded-xl overflow-hidden">
+        <div class="bg-cyan-50 px-4 py-2.5 flex items-center gap-2 border-b border-cyan-200">
+          <i class="fas fa-cloud-arrow-down text-cyan-600"></i>
+          <span class="font-bold text-cyan-800 text-sm">ตัวชี้วัดจาก HDC ที่ยังไม่มีในระบบ ({{ hdcMissingLocalItems.length }} รายการ)</span>
+          <span class="text-xs text-cyan-600 font-normal">— กด "เพิ่มเข้าระบบ" เพื่อนำเข้ามาตั้งค่าใน Local</span>
+        </div>
+        <div class="overflow-auto">
+          <table class="w-full text-xs">
+            <thead class="bg-cyan-100/60 text-cyan-800 sticky top-0">
+              <tr>
+                <th class="px-3 py-2 text-left font-bold">table_process</th>
+                <th class="px-3 py-2 text-left font-bold">ชื่อตัวชี้วัด (HDC)</th>
+                <th class="px-3 py-2 text-left font-bold">หน่วยงาน (HDC)</th>
+                <th class="px-3 py-2 text-left font-bold">หมวด/ยุทธศาสตร์ (HDC)</th>
+                <th class="px-3 py-2 text-center font-bold">สถานะ HDC</th>
+                <th class="px-3 py-2 text-center font-bold" *ngIf="isSuperAdmin">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let item of hdcMissingLocalItems" class="border-t border-cyan-100 hover:bg-cyan-50/50 transition-colors">
+                <td class="px-3 py-2 font-mono text-cyan-700">{{ item.table_process }}</td>
+                <td class="px-3 py-2 text-gray-800 font-medium">{{ item.hdc_name }}</td>
+                <td class="px-3 py-2 text-gray-600">{{ item.hdc_dept || '-' }}</td>
+                <td class="px-3 py-2 text-gray-600">{{ item.hdc_main_yut || '-' }}</td>
+                <td class="px-3 py-2 text-center">
+                  <span [ngClass]="item.hdc_is_active == 1 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'"
+                        class="px-1.5 py-0.5 rounded-full font-bold">
+                    {{ item.hdc_is_active == 1 ? 'active' : 'inactive' }}
+                  </span>
+                </td>
+                <td class="px-3 py-2 text-center" *ngIf="isSuperAdmin">
+                  <button (click)="openAddFromHdc(item)"
+                          class="inline-flex items-center gap-1 px-2.5 py-1 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-xs font-bold transition-colors shadow-sm">
+                    <i class="fas fa-plus text-[10px]"></i>เพิ่มเข้าระบบ
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: เพิ่มหมวดหมู่หลักจาก HDC -->
+<div *ngIf="mainIndAddModal.open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+  <div class="bg-white rounded-2xl shadow-xl border border-cyan-200 w-full max-w-sm mx-4 p-6">
+    <div class="flex items-center gap-2 mb-4">
+      <i class="fas fa-cloud-arrow-down text-cyan-600 text-lg"></i>
+      <h3 class="font-bold text-gray-800 text-lg">เพิ่มหมวดหมู่หลักจาก HDC</h3>
+    </div>
+    <div class="space-y-3">
+      <div>
+        <label class="block text-xs font-bold text-gray-600 mb-1">ชื่อหมวดหมู่หลัก</label>
+        <input [(ngModel)]="mainIndAddModal.hdc_name" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-gray-600 mb-1">ยุทธศาสตร์ <span class="text-gray-400 font-normal">(ไม่บังคับ — แก้ได้ภายหลัง)</span></label>
+        <select [(ngModel)]="mainIndAddModal.yutId" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+          <option [ngValue]="null">-- ไม่ระบุ --</option>
+          <option *ngFor="let s of strategies" [ngValue]="s.id">{{ s.yut_name }}</option>
+        </select>
+      </div>
+    </div>
+    <div class="flex justify-end gap-3 mt-5">
+      <button (click)="mainIndAddModal.open = false" class="px-4 py-2 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 text-sm">ยกเลิก</button>
+      <button (click)="confirmMainIndAdd()" [disabled]="mainIndAddLoading || !mainIndAddModal.hdc_name.trim()"
+              class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm">
+        <i class="fas fa-spinner fa-spin" *ngIf="mainIndAddLoading"></i>
+        <i class="fas fa-plus" *ngIf="!mainIndAddLoading"></i>เพิ่มเข้าระบบ
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: เพิ่มยุทธศาสตร์ / หน่วยงานจาก HDC -->
+<div *ngIf="simpleAddModal.open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+  <div class="bg-white rounded-2xl shadow-xl border border-cyan-200 w-full max-w-sm mx-4 p-6">
+    <div class="flex items-center gap-2 mb-4">
+      <div class="w-9 h-9 rounded-xl bg-cyan-100 flex items-center justify-center shrink-0">
+        <i class="fas fa-cloud-arrow-down text-cyan-600"></i>
+      </div>
+      <h3 class="font-bold text-gray-800 text-lg">เพิ่ม{{ simpleAddModal.tab === 'strategies' ? 'ยุทธศาสตร์' : 'หน่วยงาน' }}จาก HDC</h3>
+    </div>
+    <div class="space-y-3">
+      <div>
+        <label class="block text-xs font-bold text-gray-600 mb-1">ชื่อ{{ simpleAddModal.tab === 'strategies' ? 'ยุทธศาสตร์' : 'หน่วยงาน' }}</label>
+        <input [(ngModel)]="simpleAddModal.itemName" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div *ngIf="simpleAddModal.tab === 'departments'">
+        <label class="block text-xs font-bold text-gray-600 mb-1">รหัสหน่วยงาน <span class="text-gray-400 font-normal">(ไม่บังคับ)</span></label>
+        <input [(ngModel)]="simpleAddModal.deptCode" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="เช่น DEPT01">
+      </div>
+    </div>
+    <div class="flex justify-end gap-3 mt-5">
+      <button (click)="simpleAddModal.open = false" class="px-4 py-2 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 text-sm">ยกเลิก</button>
+      <button (click)="confirmSimpleAdd()" [disabled]="simpleAddLoading || !simpleAddModal.itemName.trim()"
+              class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm">
+        <i class="fas fa-spinner fa-spin" *ngIf="simpleAddLoading"></i>
+        <i class="fas fa-plus" *ngIf="!simpleAddLoading"></i>เพิ่มเข้าระบบ
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: เพิ่มหน่วยบริการจาก HDC -->
+<div *ngIf="hospAddModal.open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+  <div class="bg-white rounded-2xl shadow-xl border border-cyan-200 w-full max-w-sm mx-4 p-6">
+    <div class="flex items-center gap-2 mb-4">
+      <div class="w-9 h-9 rounded-xl bg-cyan-100 flex items-center justify-center shrink-0">
+        <i class="fas fa-hospital text-cyan-600"></i>
+      </div>
+      <h3 class="font-bold text-gray-800 text-lg">เพิ่มหน่วยบริการจาก HDC</h3>
+    </div>
+    <div class="space-y-2 text-sm">
+      <div class="flex gap-2"><span class="text-gray-500 w-20 shrink-0">hoscode:</span><span class="font-mono font-bold text-cyan-700">{{ hospAddModal.item?.hoscode }}</span></div>
+      <div class="flex gap-2"><span class="text-gray-500 w-20 shrink-0">ชื่อ HDC:</span><span class="text-gray-800">{{ hospAddModal.item?.hdc_hosname }}</span></div>
+      <div class="flex gap-2"><span class="text-gray-500 w-20 shrink-0">ประเภท:</span><span class="text-gray-600">{{ hospAddModal.item?.hdc_hostype || '-' }}</span></div>
+      <div class="flex gap-2"><span class="text-gray-500 w-20 shrink-0">distid:</span><span class="text-gray-600">{{ hospAddModal.item?.hdc_distid || '-' }}</span></div>
+    </div>
+    <div class="flex justify-end gap-3 mt-5">
+      <button (click)="hospAddModal.open = false" class="px-4 py-2 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 text-sm">ยกเลิก</button>
+      <button (click)="confirmHospAdd()" [disabled]="hospAddLoading"
+              class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm">
+        <i class="fas fa-spinner fa-spin" *ngIf="hospAddLoading"></i>
+        <i class="fas fa-plus" *ngIf="!hospAddLoading"></i>เพิ่มเข้าระบบ
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: เพิ่มตัวชี้วัดจาก HDC -->
+<div *ngIf="hdcAddModal.open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+  <div class="bg-white rounded-2xl shadow-xl border border-cyan-200 w-full max-w-md mx-4 p-6">
+    <div class="flex items-center gap-2 mb-4">
+      <div class="w-9 h-9 rounded-xl bg-cyan-100 flex items-center justify-center shrink-0">
+        <i class="fas fa-cloud-arrow-down text-cyan-600"></i>
+      </div>
+      <h3 class="font-bold text-gray-800 text-lg">เพิ่มตัวชี้วัดจาก HDC</h3>
+    </div>
+    <div class="space-y-3">
+      <div>
+        <label class="block text-xs font-bold text-gray-600 mb-1">ชื่อตัวชี้วัด</label>
+        <input [value]="hdcAddModal.item?.hdc_name" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-700" readonly>
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-gray-600 mb-1">table_process</label>
+        <input [value]="hdcAddModal.item?.table_process" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono bg-gray-50 text-cyan-700" readonly>
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-gray-600 mb-1">
+          หน่วยงาน
+          <span class="text-gray-400 font-normal ml-1">(เลือกได้ — แก้ได้ภายหลัง)</span>
+        </label>
+        <select [(ngModel)]="hdcAddModal.deptId" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+          <option [ngValue]="null">-- ไม่ระบุ --</option>
+          <option *ngFor="let d of departments" [ngValue]="d.id">{{ d.dept_name }}</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-gray-600 mb-1">
+          หมวดหมู่หลัก
+          <span class="text-gray-400 font-normal ml-1">(เลือกได้ — แก้ได้ภายหลัง)</span>
+        </label>
+        <select [(ngModel)]="hdcAddModal.mainIndicatorId" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+          <option [ngValue]="null">-- ไม่ระบุ --</option>
+          <option *ngFor="let m of mainIndicators" [ngValue]="m.id">{{ m.main_indicator_name }}</option>
+        </select>
+      </div>
+    </div>
+    <div class="flex justify-end gap-3 mt-5">
+      <button (click)="hdcAddModal.open = false"
+              class="px-4 py-2 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 text-sm transition-colors">
+        ยกเลิก
+      </button>
+      <button (click)="confirmAddFromHdc()" [disabled]="hdcAddLoading"
+              class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold flex items-center gap-2 transition-colors shadow-sm">
+        <i class="fas fa-spinner fa-spin" *ngIf="hdcAddLoading"></i>
+        <i class="fas fa-plus" *ngIf="!hdcAddLoading"></i>
+        เพิ่มเข้าระบบ
+      </button>
     </div>
   </div>
 </div>

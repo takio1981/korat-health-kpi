@@ -315,15 +315,25 @@
         <h4 class="font-bold text-gray-700 text-sm mb-2"><i class="fas fa-table mr-2 text-green-500"></i>คอลัมน์ในตาราง</h4>
         <div class="bg-gray-50 rounded-xl p-4 text-xs text-gray-600 grid grid-cols-2 md:grid-cols-4 gap-2">
           <span><b>หมวดหมู่</b> — ชื่อหมวดหมู่หลัก</span>
-          <span><b>ตัวชี้วัด</b> — [สถานะ] [ปีงบฯ] [R9/MOPH/SSJ/RMW] [ตัวชี้วัดของ] ชื่อ KPI + 🏢 หน่วยงาน + 📈 ดูแนวโน้ม inline</span>
-          <span><b>หน่วยงาน</b> — ชื่อหน่วยงาน</span>
-          <span><b>ปีงบฯ</b> — ปีงบประมาณ</span>
+          <span><b>ตัวชี้วัด</b> — [สถานะ] [ปีงบฯ] [R9/MOPH/SSJ/RMW] [ตัวชี้วัดของ] ชื่อ KPI + 🟡 table_process + 🏢 หน่วยงาน + 📈 ดูแนวโน้ม inline</span>
           <span><b>จัดการ</b> — ไอคอนแนวตั้ง (อนุมัติ/ตีกลับ/ปลดล็อค/ฟอร์ม/ย่อย)</span>
           <span><b>หน่วยบริการ</b> — บรรทัด 1: ชื่อ รพ. + ตัวย่อประเภท (รพศ./รพท./รพช./รพ.สต./สสอ.) | บรรทัด 2: 📍 อำเภอ</span>
           <span><b>เป้าหมาย</b> — ตัวเลข/ข้อความ</span>
           <span><b>ผลงานรวม</b> — ค่าล่าสุด</span>
           <span><b>%</b> — เปอร์เซ็นต์</span>
           <span><b>ต.ค.-ก.ย.</b> — ข้อมูล 12 เดือน</span>
+        </div>
+
+        <!-- ปรับขนาด + เรียงลำดับ -->
+        <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="bg-amber-50 border border-amber-200 rounded-xl p-3">
+            <h4 class="font-bold text-amber-800 text-xs mb-1"><i class="fas fa-arrows-alt-h mr-1"></i>ปรับขนาดคอลัมน์</h4>
+            <p class="text-[11px] text-amber-700">วางเมาส์ที่ <b>ขอบขวา</b> ของหัวคอลัมน์ (หมวดหมู่หลัก / ชื่อตัวชี้วัด / หน่วยบริการ) จะเห็น cursor เปลี่ยนเป็น ↔ แล้วลากเพื่อขยาย-ย่อความกว้าง ระบบจำขนาดไว้อัตโนมัติ</p>
+          </div>
+          <div class="bg-green-50 border border-green-200 rounded-xl p-3">
+            <h4 class="font-bold text-green-800 text-xs mb-1"><i class="fas fa-sort mr-1"></i>เรียงลำดับข้อมูล</h4>
+            <p class="text-[11px] text-green-700"><b>คลิกหัวคอลัมน์</b> ที่มีไอคอน ⇅ เพื่อเรียง — คลิกครั้งแรก = น้อย→มาก (▲) คลิกซ้ำ = มาก→น้อย (▼) คลิกครั้งที่ 3 = กลับเรียงตามค่าปกติ<br>คอลัมน์ที่เรียงได้: หมวดหมู่หลัก / ชื่อตัวชี้วัด / หน่วยบริการ / เป้าหมาย / ผลงานรวม / %</p>
+          </div>
         </div>
 
         <!-- Edit mode steps -->
@@ -1175,26 +1185,82 @@
           <div class="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center"><i class="fas fa-exchange-alt text-teal-600"></i></div>
           <div>
             <h2 class="text-xl font-bold text-gray-800">9.4 จัดการตัวชี้วัด — เทียบกับ HDC + upload_excel</h2>
-            <p class="text-xs text-gray-400">หน้า "จัดการตัวชี้วัด" tab "ตัวชี้วัด" — รวม Report Compare เข้าใช้งานในที่เดียว</p>
+            <p class="text-xs text-gray-400">หน้า "จัดการตัวชี้วัด" — ทุก tab มีปุ่ม "เทียบกับ HDC" พร้อม filter และเพิ่มข้อมูลจาก HDC</p>
           </div>
         </div>
 
-        <!-- เทียบกับ HDC -->
+        <!-- หลักการ filter chips -->
         <div class="bg-teal-50 border border-teal-200 rounded-xl p-4 mb-4">
-          <h4 class="font-bold text-teal-800 text-sm mb-2"><i class="fas fa-sync-alt mr-2"></i>เปรียบเทียบชื่อตัวชี้วัด HDC ↔ Local</h4>
+          <h4 class="font-bold text-teal-800 text-sm mb-2"><i class="fas fa-filter mr-2"></i>การทำงานของ Chips กรองผลเทียบ HDC (ทุก Tab)</h4>
+          <ul class="list-disc ml-5 text-xs text-gray-600 space-y-1">
+            <li>กดปุ่ม <b>"เทียบกับ HDC"</b> ในแต่ละ tab → ระบบดึงข้อมูลจาก HDC แล้วแสดง <b>chips สรุปผล</b> ด้านบนตาราง</li>
+            <li>chips เหล่านั้น <b>คลิกได้</b> — กดเพื่อ <b>กรองแถวในตาราง</b> ให้แสดงเฉพาะสถานะนั้น | กดซ้ำ = ยกเลิกกรอง</li>
+            <li>ปุ่ม <b>"ทั้งหมด"</b> (สีเขียว) = แสดงทุกแถว (ยกเลิก filter)</li>
+            <li>chip ที่ active จะเปลี่ยนเป็นสีเข้ม + มี ring เพื่อบ่งบอกสถานะ</li>
+            <li>chip <span class="text-cyan-700 font-bold">"HDC มีแต่ยังไม่มีใน Local (N)"</span> — เป็น badge ไม่ใช่ปุ่ม เพราะรายการเหล่านั้น<b>ไม่อยู่ในตาราง Local</b> → ดูได้ที่ส่วน "Missing" ด้านล่างตาราง</li>
+          </ul>
+        </div>
+
+        <!-- Tab: ตัวชี้วัด -->
+        <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4">
+          <h4 class="font-bold text-emerald-800 text-sm mb-2"><i class="fas fa-list-check mr-2"></i>Tab "ตัวชี้วัด" — เปรียบเทียบ HDC ↔ Local</h4>
           <ol class="list-decimal ml-5 text-xs text-gray-600 space-y-1">
-            <li>กดปุ่ม <b>"เทียบกับ HDC"</b> ที่หัวตาราง → เปรียบเทียบ <code>kpi_indicators</code> (Local) กับ <code>hdc.reports</code> โดยใช้ <b>table_process</b> เป็น key</li>
-            <li>สรุปแสดงเป็น <b>chips กรองตาราง</b> 4 แบบ:
+            <li>ใช้ <b>table_process</b> เป็น key เทียบ <code>kpi_indicators</code> Local กับ <code>hdc.reports</code></li>
+            <li>Chips กรองได้ 4 สถานะ:
               <ul class="list-disc ml-4 mt-1 space-y-0.5">
-                <li><span class="text-emerald-700">ตรงกัน (เขียว)</span> — ชื่อใน Local ตรงกับ HDC แล้ว</li>
-                <li><span class="text-amber-700">ชื่อต่างกัน (เหลือง)</span> — table_process ตรงแต่ชื่อไม่ตรง — ดู inline diff ใต้ชื่อ</li>
-                <li><span class="text-blue-700">ไม่มีใน HDC (น้ำเงิน)</span> — Local มี แต่ HDC ไม่มี (ตัวชี้วัดที่ระบบจัดเอง)</li>
-                <li><span class="text-rose-700">HDC inactive (ชมพู)</span> — HDC ปิด is_active=0 — ควร <b>ปิด upload_excel</b> ตาม</li>
+                <li><span class="text-emerald-700 font-bold">ตรงกัน</span> — table_process + ชื่อตรงกัน</li>
+                <li><span class="text-amber-700 font-bold">ชื่อต่างกัน</span> — table_process ตรง แต่ชื่อไม่ตรง — ดู inline diff + กดปุ่ม <i class="fas fa-sync text-teal-600 mx-0.5"></i> Sync ชื่อ</li>
+                <li><span class="text-purple-700 font-bold">ไม่มีใน HDC</span> — Local มีแต่ HDC ไม่มี</li>
+                <li><span class="text-rose-700 font-bold">HDC inactive</span> — HDC ปิด is_active=0 → ควรตั้ง upload_excel=1</li>
               </ul>
             </li>
-            <li>กดปุ่ม <i class="fas fa-sync text-teal-600 mx-1"></i> ราย row → Sync ชื่อจาก HDC ทันที (เฉพาะ chip "ชื่อต่างกัน")</li>
-            <li>ถ้ามี HDC inactive — banner ด้านบนแสดง "<b>ปิด upload_excel ทั้ง N ตัว</b>" → กด <b>bulk</b> ตั้ง upload_excel=1 ครั้งเดียว</li>
+            <li>ถ้ามี HDC inactive — banner <b>"ปิด upload_excel ทั้ง N ตัว"</b> แสดงขึ้นมา → กด bulk ครั้งเดียว</li>
+            <li>ส่วน <b class="text-cyan-700">"HDC มีแต่ยังไม่มีใน Local"</b> ด้านล่าง → กด <b>"เพิ่มเข้าระบบ"</b> → modal เลือก <b>หน่วยงาน</b> + <b>หมวดหมู่หลัก</b></li>
           </ol>
+        </div>
+
+        <!-- Tab: ยุทธศาสตร์ + หน่วยงาน -->
+        <div class="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-4">
+          <h4 class="font-bold text-purple-800 text-sm mb-2"><i class="fas fa-sitemap mr-2"></i>Tab "ยุทธศาสตร์" และ "หน่วยงาน" — เปรียบเทียบ HDC ↔ Local</h4>
+          <p class="text-xs text-gray-600 mb-2">ดึงข้อมูลจาก field <code>main_yut</code> / <code>dept</code> ใน <code>hdc.reports</code> เทียบกับตาราง <code>main_yut</code> / <code>departments</code> ของ Local โดยใช้ <b>ชื่อ (text match)</b></p>
+          <ul class="list-disc ml-5 text-xs text-gray-600 space-y-1">
+            <li>Chips กรองได้ 2 สถานะ: <span class="text-emerald-700 font-bold">ตรงกัน</span> / <span class="text-purple-700 font-bold">ไม่มีใน HDC</span></li>
+            <li>ส่วน <b class="text-cyan-700">"HDC มีแต่ยังไม่มีใน Local"</b> ด้านล่าง → กด <b>"เพิ่มเข้าระบบ"</b> → modal ยืนยันชื่อ (หน่วยงานมีช่อง "รหัสหน่วยงาน" เพิ่มเติม)</li>
+          </ul>
+        </div>
+
+        <!-- Tab: หมวดหมู่หลัก -->
+        <div class="bg-teal-50 border border-teal-200 rounded-xl p-4 mb-4">
+          <h4 class="font-bold text-teal-800 text-sm mb-2"><i class="fas fa-layer-group mr-2"></i>Tab "หมวดหมู่หลัก" — เปรียบเทียบ HDC ↔ Local</h4>
+          <p class="text-xs text-gray-600 mb-1">มี 2 โหมดขึ้นอยู่กับว่า HDC มีตาราง <code>kpi_main_indicators</code> หรือไม่:</p>
+          <div class="space-y-2 text-xs text-gray-600">
+            <div class="bg-white rounded-lg p-2 border border-teal-200">
+              <b class="text-teal-700">โหมด "HDC Table"</b> — HDC มีตาราง kpi_main_indicators:
+              <ul class="list-disc ml-4 mt-1 space-y-0.5">
+                <li>เทียบชื่อตรงๆ — chips <span class="text-emerald-700 font-bold">ตรงกัน</span> / <span class="text-purple-700 font-bold">ไม่มีใน HDC</span> (กรองตารางได้)</li>
+                <li>ส่วน <b class="text-cyan-700">"HDC มีแต่ยังไม่มีใน Local"</b> → กด <b>"เพิ่มเข้าระบบ"</b> → modal เลือก <b>ยุทธศาสตร์</b> ที่จะเชื่อม</li>
+              </ul>
+            </div>
+            <div class="bg-white rounded-lg p-2 border border-gray-200">
+              <b class="text-gray-600">โหมด "Coverage Fallback"</b> — HDC ไม่มีตาราง kpi_main_indicators:
+              <ul class="list-disc ml-4 mt-1 space-y-0.5">
+                <li>วิเคราะห์จาก table_process ใน HDC reports → นับว่าหมวดหมู่ไหนมีตัวชี้วัดเชื่อมกับ HDC</li>
+                <li>Chips: <span class="text-emerald-700 font-bold">มีตัวชี้วัดใน HDC</span> / <span class="text-gray-600 font-bold">ไม่มีใน HDC</span> (กรองตารางได้)</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: หน่วยบริการ -->
+        <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-4">
+          <h4 class="font-bold text-indigo-800 text-sm mb-2"><i class="fas fa-hospital mr-2"></i>Tab "หน่วยบริการ" — เปรียบเทียบ HDC ↔ Local + CRUD</h4>
+          <p class="text-xs text-gray-600 mb-2">ดึงจาก HDC <code>chospital</code> (ถ้ามี) เทียบกับ Local <code>chospital</code> โดยใช้ <b>hoscode</b> เป็น key</p>
+          <ul class="list-disc ml-5 text-xs text-gray-600 space-y-1">
+            <li>Chips กรองได้ 3 สถานะ: <span class="text-emerald-700 font-bold">ตรงกัน</span> / <span class="text-amber-700 font-bold">ชื่อต่างกัน</span> / <span class="text-purple-700 font-bold">ไม่มีใน HDC</span></li>
+            <li>ส่วน <b class="text-cyan-700">"HDC มีแต่ยังไม่มีใน Local"</b> + <b class="text-amber-700">"ชื่อต่างกัน"</b> → กด <b>"เพิ่มเข้าระบบ"</b> สำหรับ hoscode ที่หายไป</li>
+            <li>ถ้า HDC ไม่มีตาราง chospital — แสดง error สีแดงแทน chips</li>
+            <li>CRUD ปกติ: เพิ่ม/แก้/ลบ hospcode + filter อำเภอ + ประเภท | DELETE ตรวจ users + kpi_results ก่อน</li>
+          </ul>
         </div>
 
         <!-- table_process side-by-side -->
@@ -1209,7 +1275,7 @@
         </div>
 
         <!-- upload_excel toggle -->
-        <div class="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-4">
+        <div class="bg-orange-50 border border-orange-200 rounded-xl p-4">
           <h4 class="font-bold text-orange-800 text-sm mb-2"><i class="fas fa-file-excel mr-2"></i>upload_excel — ตัวชี้วัดที่ "อัปโหลด Excel มือเอง"</h4>
           <p class="text-xs text-gray-600 mb-2">ใช้กรณีที่ HDC report ปิดไปแล้ว หรือต้องการ override ไม่ให้ระบบ export อัตโนมัติ</p>
           <ul class="list-disc ml-5 text-xs text-gray-600 space-y-1">
@@ -1217,17 +1283,6 @@
             <li><b>0 (default)</b> — ส่งออกอัตโนมัติได้ผ่าน Export pipeline</li>
             <li><b>1</b> — ข้าม Export pipeline ทั้งหมด (manual + scheduler) — ต้องอัปโหลด Excel เข้า HDC เอง</li>
             <li>Endpoints: <code>PUT /indicators/:id/upload-excel</code> (toggle 1 ตัว) + <code>POST /indicators/bulk-upload-excel</code> (batch)</li>
-          </ul>
-        </div>
-
-        <!-- Hospitals tab -->
-        <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
-          <h4 class="font-bold text-indigo-800 text-sm mb-2"><i class="fas fa-hospital mr-2"></i>Tab "หน่วยบริการ" (CRUD chospital)</h4>
-          <p class="text-xs text-gray-600 mb-2">tab ที่ 5 ใน kpi-manage — <b>super_admin</b> เท่านั้น</p>
-          <ul class="list-disc ml-5 text-xs text-gray-600 space-y-1">
-            <li>เพิ่ม/แก้/ลบ <b>hospcode</b> + filter <b>อำเภอ + ประเภท</b></li>
-            <li>DELETE ตรวจ users + kpi_results อ้างอิงก่อน — block ถ้ามี</li>
-            <li>Modal: hoscode (PK, disabled เมื่อ edit) / hosname / hostype (จาก chostype) / distid (จาก co_district, auto-fill provcode+distcode)</li>
           </ul>
         </div>
       </section>

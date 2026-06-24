@@ -408,6 +408,52 @@ export class AuthService {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.post(`${this.apiUrl}/report-compare/sync`, { hdc_report_ids }, { headers });
   }
+  reportCompareAddFromHdc(hdc_report_id: number, dept_id: number|null, main_indicator_id: number|null): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/report-compare/add-from-hdc`, { hdc_report_id, dept_id, main_indicator_id }, { headers });
+  }
+  reportCompareStrategies(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/report-compare/strategies`, { headers });
+  }
+  reportCompareAddStrategy(yut_name: string): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/report-compare/add-strategy`, { yut_name }, { headers });
+  }
+  reportCompareDepartments(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/report-compare/departments`, { headers });
+  }
+  reportCompareAddDepartment(dept_name: string, dept_code: string): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/report-compare/add-department`, { dept_name, dept_code }, { headers });
+  }
+  reportCompareMainIndicators(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/report-compare/main-indicators`, { headers });
+  }
+  reportCompareHospitals(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/report-compare/hospitals`, { headers });
+  }
+  reportCompareAddHospital(hoscode: string): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/report-compare/add-hospital`, { hoscode }, { headers });
+  }
+
+  reportCompareAddMainIndicator(hdc_name: string, yut_id: number|null): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/report-compare/add-main-indicator`, { hdc_name, yut_id }, { headers });
+  }
 
   testTelegram(token: string, chatId: string): Observable<any> {
     const authToken = localStorage.getItem('kpi_token');

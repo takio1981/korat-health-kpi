@@ -74,6 +74,41 @@ export class KpiManageComponent implements OnInit {
   hdcCompareLastRun: Date | null = null;
   // filter เพิ่มสำหรับ indicators tab — กรองตามสถานะ compare กับ HDC
   filterHdcStatus: string = '';      // '' | 'match' | 'different' | 'missing_remote' | 'not_compared' | 'inactive'
+  hdcAddModal: { open: boolean; item: any; deptId: number|null; mainIndicatorId: number|null } = {
+    open: false, item: null, deptId: null, mainIndicatorId: null
+  };
+  hdcAddLoading: boolean = false;
+
+  // ยุทธศาสตร์ compare
+  stratCompareLoading = false;
+  stratCompareSummary: any = null;
+  stratCompareItems: any[] = [];
+  // หน่วยงาน compare
+  deptCompareLoading = false;
+  deptCompareSummary: any = null;
+  deptCompareItems: any[] = [];
+  // HDC compare filter (ใช้ร่วมทุก tab — reset เมื่อ switch tab)
+  hdcCompareFilter = '';
+  // หมวดหมู่หลัก compare
+  mainIndCompareLoading = false;
+  mainIndCompareSummary: any = null;
+  mainIndCompareItems: any[] = [];
+  mainIndCompareSource = '';
+  // modal เพิ่มหมวดหมู่หลักจาก HDC
+  mainIndAddModal: { open: boolean; hdc_name: string; yutId: number|null } = { open: false, hdc_name: '', yutId: null };
+  mainIndAddLoading = false;
+  // หน่วยบริการ compare
+  hospCompareLoading = false;
+  hospCompareSummary: any = null;
+  hospCompareItems: any[] = [];
+  hospCompareError = '';
+
+  // modal เพิ่มจาก HDC (ใช้ร่วมกัน ยุทธศาสตร์ + หน่วยงาน)
+  simpleAddModal: { open: boolean; tab: string; itemName: string; deptCode: string } = { open: false, tab: '', itemName: '', deptCode: '' };
+  simpleAddLoading = false;
+  // modal เพิ่มหน่วยบริการ
+  hospAddModal: { open: boolean; item: any } = { open: false, item: null };
+  hospAddLoading = false;
 
   ngOnInit() {
     const role = this.authService.getUserRole();
@@ -292,27 +327,49 @@ export class KpiManageComponent implements OnInit {
         return true;
       });
     } else if (this.activeTab === 'main-indicators') {
-      this.filteredMainIndicators = this.mainIndicators.filter(i =>
-        matchActive(i) && i.main_indicator_name && i.main_indicator_name.toLowerCase().includes(search)
-      );
+      this.filteredMainIndicators = this.mainIndicators.filter(i => {
+        if (!matchActive(i)) return false;
+        if (search && !(i.main_indicator_name && i.main_indicator_name.toLowerCase().includes(search))) return false;
+        if (this.hdcCompareFilter && this.mainIndCompareSummary) {
+          const cmp = this.mainIndCompareItems.find(c => c.local_id === i.id);
+          const status = cmp ? cmp.status : (this.mainIndCompareSource === 'hdc_table' ? 'missing_remote' : 'local_only');
+          if (status !== this.hdcCompareFilter) return false;
+        }
+        return true;
+      });
     } else if (this.activeTab === 'strategies') {
-      this.filteredStrategies = this.strategies.filter(s =>
-        matchActive(s) && s.yut_name && s.yut_name.toLowerCase().includes(search)
-      );
+      this.filteredStrategies = this.strategies.filter(s => {
+        if (!matchActive(s)) return false;
+        if (search && !(s.yut_name && s.yut_name.toLowerCase().includes(search))) return false;
+        if (this.hdcCompareFilter && this.stratCompareSummary) {
+          const cmp = this.stratCompareItems.find(c => c.local_id === s.id);
+          const status = cmp ? cmp.status : 'missing_remote';
+          if (status !== this.hdcCompareFilter) return false;
+        }
+        return true;
+      });
     } else if (this.activeTab === 'departments') {
-      this.filteredDepartments = this.departments.filter(d =>
-        matchActive(d) && (
-          (d.dept_name && d.dept_name.toLowerCase().includes(search)) ||
-          (d.dept_code && d.dept_code.toLowerCase().includes(search))
-        )
-      );
+      this.filteredDepartments = this.departments.filter(d => {
+        if (!matchActive(d)) return false;
+        if (search && !((d.dept_name && d.dept_name.toLowerCase().includes(search)) || (d.dept_code && d.dept_code.toLowerCase().includes(search)))) return false;
+        if (this.hdcCompareFilter && this.deptCompareSummary) {
+          const cmp = this.deptCompareItems.find(c => c.local_id === d.id);
+          const status = cmp ? cmp.status : 'missing_remote';
+          if (status !== this.hdcCompareFilter) return false;
+        }
+        return true;
+      });
     } else if (this.activeTab === 'hospitals') {
       this.filteredHospitals = this.hospitals.filter(h => {
         if (this.hospFilterDistid && String(h.distid) !== this.hospFilterDistid) return false;
         if (this.hospFilterHostype && String(h.hostype) !== this.hospFilterHostype) return false;
-        if (!search) return true;
-        return (h.hosname && h.hosname.toLowerCase().includes(search)) ||
-               (h.hoscode && String(h.hoscode).toLowerCase().includes(search));
+        if (search && !((h.hosname && h.hosname.toLowerCase().includes(search)) || (h.hoscode && String(h.hoscode).toLowerCase().includes(search)))) return false;
+        if (this.hdcCompareFilter && this.hospCompareSummary) {
+          const cmp = this.hospCompareItems.find(c => String(c.hoscode).trim() === String(h.hoscode).trim());
+          const status = cmp ? cmp.status : 'missing_remote';
+          if (status !== this.hdcCompareFilter) return false;
+        }
+        return true;
       });
     }
     this.cdr.detectChanges();
@@ -324,6 +381,7 @@ export class KpiManageComponent implements OnInit {
     this.filterActive = '';
     this.hospFilterDistid = '';
     this.hospFilterHostype = '';
+    this.hdcCompareFilter = '';
     this.applyFilter();
   }
 
@@ -645,6 +703,189 @@ export class KpiManageComponent implements OnInit {
     return this.indicators.filter(i => {
       const hdc = this.getHdcData(i);
       return !!(hdc && hdc.suggest_disable_upload);
+    });
+  }
+
+  get hdcMissingLocalItems(): any[] {
+    const result: any[] = [];
+    this.hdcCompareMap.forEach((val) => {
+      if (val.status === 'missing_local') result.push(val);
+    });
+    return result;
+  }
+
+  get stratMissingLocalItems() { return this.stratCompareItems.filter(i => i.status === 'missing_local'); }
+  get deptMissingLocalItems() { return this.deptCompareItems.filter(i => i.status === 'missing_local'); }
+  get hospMissingLocalItems() { return this.hospCompareItems.filter(i => i.status === 'missing_local'); }
+  get hospDifferentItems() { return this.hospCompareItems.filter(i => i.status === 'different'); }
+  get mainIndMissingLocalItems() { return this.mainIndCompareItems.filter(i => i.status === 'missing_local'); }
+
+  getMainIndCoverage(item: any): any | null {
+    return this.mainIndCompareItems.find(c => c.local_id === item.id) || null;
+  }
+  getStratCompare(item: any): any | null {
+    const norm = (s: string) => (s || '').trim().toLowerCase();
+    return this.stratCompareItems.find(c => norm(c.local_yut_name) === norm(item.yut_name)) || null;
+  }
+  getDeptCompare(item: any): any | null {
+    const norm = (s: string) => (s || '').trim().toLowerCase();
+    return this.deptCompareItems.find(c => norm(c.local_dept_name) === norm(item.dept_name)) || null;
+  }
+
+  runStrategyCompare() {
+    if (!this.isSuperAdmin) return;
+    this.stratCompareLoading = true;
+    this.authService.reportCompareStrategies().subscribe({
+      next: (res: any) => {
+        this.stratCompareLoading = false;
+        if (res.success) { this.stratCompareSummary = res.summary; this.stratCompareItems = res.items; this.hdcCompareFilter = ''; this.applyFilter(); }
+        else Swal.fire('ผิดพลาด', res.message, 'error');
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => { this.stratCompareLoading = false; Swal.fire('ผิดพลาด', err.error?.message || 'เกิดข้อผิดพลาด', 'error'); }
+    });
+  }
+
+  runDeptCompare() {
+    if (!this.isSuperAdmin) return;
+    this.deptCompareLoading = true;
+    this.authService.reportCompareDepartments().subscribe({
+      next: (res: any) => {
+        this.deptCompareLoading = false;
+        if (res.success) { this.deptCompareSummary = res.summary; this.deptCompareItems = res.items; this.hdcCompareFilter = ''; this.applyFilter(); }
+        else Swal.fire('ผิดพลาด', res.message, 'error');
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => { this.deptCompareLoading = false; Swal.fire('ผิดพลาด', err.error?.message || 'เกิดข้อผิดพลาด', 'error'); }
+    });
+  }
+
+  runMainIndCompare() {
+    if (!this.isSuperAdmin) return;
+    this.mainIndCompareLoading = true;
+    this.authService.reportCompareMainIndicators().subscribe({
+      next: (res: any) => {
+        this.mainIndCompareLoading = false;
+        if (res.success) { this.mainIndCompareSummary = res.summary; this.mainIndCompareItems = res.items; this.mainIndCompareSource = res.source || ''; this.hdcCompareFilter = ''; this.applyFilter(); }
+        else Swal.fire('ผิดพลาด', res.message, 'error');
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => { this.mainIndCompareLoading = false; Swal.fire('ผิดพลาด', err.error?.message || 'เกิดข้อผิดพลาด', 'error'); }
+    });
+  }
+
+  runHospCompare() {
+    if (!this.isSuperAdmin) return;
+    this.hospCompareLoading = true;
+    this.hospCompareError = '';
+    this.authService.reportCompareHospitals().subscribe({
+      next: (res: any) => {
+        this.hospCompareLoading = false;
+        if (res.success) { this.hospCompareSummary = res.summary; this.hospCompareItems = res.items; this.hdcCompareFilter = ''; this.applyFilter(); }
+        else { this.hospCompareError = res.message; }
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.hospCompareLoading = false;
+        this.hospCompareError = err.error?.message || 'เกิดข้อผิดพลาด';
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  openSimpleAdd(tab: string, name: string) {
+    this.simpleAddModal = { open: true, tab, itemName: name, deptCode: '' };
+  }
+
+  confirmSimpleAdd() {
+    const m = this.simpleAddModal;
+    if (!m.itemName?.trim()) return;
+    this.simpleAddLoading = true;
+    const obs = m.tab === 'strategies'
+      ? this.authService.reportCompareAddStrategy(m.itemName)
+      : this.authService.reportCompareAddDepartment(m.itemName, m.deptCode);
+    obs.subscribe({
+      next: (res: any) => {
+        this.simpleAddLoading = false;
+        if (res.success) {
+          this.simpleAddModal.open = false;
+          Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2000, showConfirmButton: false });
+          this.loadAllData();
+          if (m.tab === 'strategies') this.runStrategyCompare(); else this.runDeptCompare();
+        } else Swal.fire('ผิดพลาด', res.message, 'error');
+      },
+      error: (err: any) => { this.simpleAddLoading = false; Swal.fire('ผิดพลาด', err.error?.message || 'เกิดข้อผิดพลาด', 'error'); }
+    });
+  }
+
+  openHospAdd(item: any) {
+    this.hospAddModal = { open: true, item };
+  }
+
+  confirmHospAdd() {
+    const m = this.hospAddModal;
+    if (!m.item?.hoscode) return;
+    this.hospAddLoading = true;
+    this.authService.reportCompareAddHospital(m.item.hoscode).subscribe({
+      next: (res: any) => {
+        this.hospAddLoading = false;
+        if (res.success) {
+          this.hospAddModal.open = false;
+          Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2000, showConfirmButton: false });
+          this.loadAllData();
+          this.runHospCompare();
+        } else Swal.fire('ผิดพลาด', res.message, 'error');
+      },
+      error: (err: any) => { this.hospAddLoading = false; Swal.fire('ผิดพลาด', err.error?.message || 'เกิดข้อผิดพลาด', 'error'); }
+    });
+  }
+
+  openMainIndAdd(item: any) {
+    this.mainIndAddModal = { open: true, hdc_name: item.hdc_name, yutId: null };
+  }
+
+  confirmMainIndAdd() {
+    const m = this.mainIndAddModal;
+    if (!m.hdc_name?.trim()) return;
+    this.mainIndAddLoading = true;
+    this.authService.reportCompareAddMainIndicator(m.hdc_name, m.yutId).subscribe({
+      next: (res: any) => {
+        this.mainIndAddLoading = false;
+        if (res.success) {
+          this.mainIndAddModal.open = false;
+          Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2000, showConfirmButton: false });
+          this.loadAllData();
+          this.runMainIndCompare();
+        } else Swal.fire('ผิดพลาด', res.message, 'error');
+      },
+      error: (err: any) => { this.mainIndAddLoading = false; Swal.fire('ผิดพลาด', err.error?.message || 'เกิดข้อผิดพลาด', 'error'); }
+    });
+  }
+
+  openAddFromHdc(item: any) {
+    this.hdcAddModal = { open: true, item, deptId: null, mainIndicatorId: null };
+  }
+
+  confirmAddFromHdc() {
+    const m = this.hdcAddModal;
+    if (!m.item?.hdc_report_id) return;
+    this.hdcAddLoading = true;
+    this.authService.reportCompareAddFromHdc(m.item.hdc_report_id, m.deptId, m.mainIndicatorId).subscribe({
+      next: (res: any) => {
+        this.hdcAddLoading = false;
+        if (res.success) {
+          this.hdcAddModal.open = false;
+          Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2000, showConfirmButton: false });
+          this.loadAllData();
+          this.runHdcCompare();
+        } else {
+          Swal.fire('ผิดพลาด', res.message, 'error');
+        }
+      },
+      error: (err: any) => {
+        this.hdcAddLoading = false;
+        Swal.fire('ผิดพลาด', err.error?.message || 'เกิดข้อผิดพลาด', 'error');
+      }
     });
   }
 

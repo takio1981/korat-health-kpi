@@ -1075,20 +1075,6 @@ apiRouter.post('/admin/force-logout-user/:userId', authenticateToken, async (req
     }
 });
 
-// === SSO Stubs (ThaID / ProviderID) — รอการเปิดใช้งานจริงเมื่อได้ credentials จากหน่วยงาน ===
-// เมื่อได้ client_id/secret จาก DGA/MOPH แล้ว แทนที่ stub ด้วย OAuth2 authorization code flow:
-//   1. /auth/<provider>/initiate → redirect ไปยัง provider /authorize พร้อม state + PKCE
-//   2. /auth/<provider>/callback → แลก code → access_token → ดึง userinfo → แมปกับ users → JWT
-const SSO_NOT_READY_RESPONSE = {
-    success: false,
-    code: 'SSO_NOT_CONFIGURED',
-    message: 'ฟีเจอร์รอการเปิดใช้งาน — ระบบยังไม่ได้รับ credentials จากหน่วยงานเจ้าของบริการ'
-};
-apiRouter.post('/auth/thaid/initiate', (req, res) => res.status(501).json(SSO_NOT_READY_RESPONSE));
-apiRouter.post('/auth/providerid/initiate', (req, res) => res.status(501).json(SSO_NOT_READY_RESPONSE));
-apiRouter.get('/auth/thaid/callback', (req, res) => res.status(501).json(SSO_NOT_READY_RESPONSE));
-apiRouter.get('/auth/providerid/callback', (req, res) => res.status(501).json(SSO_NOT_READY_RESPONSE));
-
 // === ลืมรหัสผ่าน: ส่งรหัสชั่วคราว 6 หลักทาง Email ===
 apiRouter.post('/forgot-password', loginIpLimiter, loginLimiter, async (req, res) => {
     const { username } = req.body;
@@ -3201,21 +3187,19 @@ apiRouter.put('/users/change-password', async (req, res) => {
     }
 });
 
-// ตรวจสอบสถานะ maintenance mode + SSO toggles (public — ไม่ต้อง login)
+// ตรวจสอบสถานะ maintenance mode (public — ไม่ต้อง login)
 apiRouter.get('/system/maintenance-status', async (req, res) => {
     try {
-        const [rows] = await db.query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message','thaid_enabled','providerid_enabled')");
+        const [rows] = await db.query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message')");
         const settings = {};
         rows.forEach(r => settings[r.setting_key] = r.setting_value);
         res.json({
             success: true,
             maintenance: settings['maintenance_mode'] === 'true',
             message: settings['maintenance_message'] || 'ระบบปิดให้บริการชั่วคราวเพื่อประมวลผลงาน',
-            thaid_enabled: settings['thaid_enabled'] === 'true',
-            providerid_enabled: settings['providerid_enabled'] === 'true'
         });
     } catch (error) {
-        res.json({ success: true, maintenance: false, message: '', thaid_enabled: false, providerid_enabled: false });
+        res.json({ success: true, maintenance: false, message: '' });
     }
 });
 
@@ -3245,157 +3229,6 @@ apiRouter.put('/system/maintenance-mode', authenticateToken, isSuperAdmin, async
 });
 
 // ============================================================
-// === SSO Login: ProviderID (MOPH) + ThaID (DGA) ===
-// OAuth 2.0 Authorization Code Flow — match user by cid SHA-256, ปฏิเสธ user ใหม่
-// ============================================================
-const _ssoStateMap = new Map(); // state → { provider, createdAt }
-const SSO_STATE_TTL = 10 * 60 * 1000;
-setInterval(() => {
-    const now = Date.now();
-    for (const [k, v] of _ssoStateMap.entries()) {
-        if (now - v.createdAt > SSO_STATE_TTL) _ssoStateMap.delete(k);
-    }
-}, 60_000);
-
-async function getSsoConfig(provider) {
-    const keys = ['enabled', 'client_id', 'client_secret', 'auth_url', 'token_url', 'userinfo_url', 'redirect_uri', 'scope']
-        .map(k => `${provider}_${k}`);
-    const [rows] = await db.query(
-        `SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN (${keys.map(() => '?').join(',')})`,
-        keys
-    );
-    const cfg = {};
-    rows.forEach(r => cfg[r.setting_key.replace(`${provider}_`, '')] = r.setting_value);
-    return cfg;
-}
-
-function buildLoginRedirect(reqOrigin, query) {
-    const base = (process.env.APP_URL || '').replace(/\/+$/, '');
-    const qs = new URLSearchParams(query).toString();
-    return base ? `${base}/khupskpi/login?${qs}` : `/khupskpi/login?${qs}`;
-}
-
-async function handleSsoStart(provider, req, res) {
-    try {
-        const cfg = await getSsoConfig(provider);
-        if (cfg.enabled !== 'true') return res.redirect(buildLoginRedirect(req, { sso_error: `${provider.toUpperCase()} ถูกปิดอยู่` }));
-        if (!cfg.client_id || !cfg.auth_url || !cfg.redirect_uri) {
-            return res.redirect(buildLoginRedirect(req, { sso_error: `${provider.toUpperCase()} ยังไม่ได้ตั้งค่าครบ — กรุณาตรวจสอบหน้า Settings` }));
-        }
-        const state = crypto.randomBytes(16).toString('hex');
-        _ssoStateMap.set(state, { provider, createdAt: Date.now() });
-        const url = new URL(cfg.auth_url);
-        url.searchParams.set('client_id', cfg.client_id);
-        url.searchParams.set('redirect_uri', cfg.redirect_uri);
-        url.searchParams.set('response_type', 'code');
-        url.searchParams.set('scope', cfg.scope || 'openid profile');
-        url.searchParams.set('state', state);
-        res.redirect(url.toString());
-    } catch (e) {
-        res.redirect(buildLoginRedirect(req, { sso_error: e.message }));
-    }
-}
-
-async function handleSsoCallback(provider, req, res) {
-    try {
-        const { code, state, error } = req.query;
-        if (error) return res.redirect(buildLoginRedirect(req, { sso_error: String(error) }));
-        if (!code || !state) return res.redirect(buildLoginRedirect(req, { sso_error: 'ขาดพารามิเตอร์ code/state' }));
-        const stateData = _ssoStateMap.get(state);
-        if (!stateData || stateData.provider !== provider) {
-            return res.redirect(buildLoginRedirect(req, { sso_error: 'state ไม่ถูกต้องหรือหมดอายุ' }));
-        }
-        _ssoStateMap.delete(state);
-
-        const cfg = await getSsoConfig(provider);
-        // Exchange code → access_token
-        const tokenRes = await fetch(cfg.token_url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
-            body: new URLSearchParams({
-                grant_type: 'authorization_code',
-                code: String(code),
-                redirect_uri: cfg.redirect_uri,
-                client_id: cfg.client_id,
-                client_secret: cfg.client_secret
-            }).toString()
-        });
-        if (!tokenRes.ok) {
-            const errBody = await tokenRes.text().catch(() => '');
-            return res.redirect(buildLoginRedirect(req, { sso_error: `Token exchange failed: ${tokenRes.status} ${errBody.slice(0, 200)}` }));
-        }
-        const tokenData = await tokenRes.json();
-        const accessToken = tokenData.access_token;
-        if (!accessToken) return res.redirect(buildLoginRedirect(req, { sso_error: 'ไม่ได้รับ access_token' }));
-
-        // Fetch user info
-        const userRes = await fetch(cfg.userinfo_url, {
-            headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' }
-        });
-        if (!userRes.ok) {
-            const errBody = await userRes.text().catch(() => '');
-            return res.redirect(buildLoginRedirect(req, { sso_error: `UserInfo failed: ${userRes.status} ${errBody.slice(0, 200)}` }));
-        }
-        const userInfo = await userRes.json();
-
-        // Extract CID — ลองหลาย field ตาม spec ของ ProviderID / ThaID
-        const cid = userInfo.cid || userInfo.citizen_id || userInfo.national_id || userInfo.pid || userInfo.sub_cid || (userInfo.sub && /^[0-9]{13}$/.test(userInfo.sub) ? userInfo.sub : null);
-        if (!cid) return res.redirect(buildLoginRedirect(req, { sso_error: 'ไม่พบเลขบัตรประชาชนใน response — โปรดตรวจ scope/userinfo URL' }));
-        const cidHash = crypto.createHash('sha256').update(String(cid).trim()).digest('hex');
-
-        // Match user
-        const [users] = await db.query('SELECT * FROM users WHERE cid = ? LIMIT 1', [cidHash]);
-        if (users.length === 0) {
-            return res.redirect(buildLoginRedirect(req, { sso_error: 'ไม่พบบัญชีของท่านในระบบ — กรุณาลงทะเบียนก่อนใช้งาน SSO', sso_provider: provider }));
-        }
-        const user = users[0];
-        if (user.is_approved !== 1 && user.is_approved !== true) {
-            return res.redirect(buildLoginRedirect(req, { sso_error: 'บัญชียังไม่ได้รับการอนุมัติจากผู้ดูแลระบบ' }));
-        }
-        if (user.is_active === 0) {
-            return res.redirect(buildLoginRedirect(req, { sso_error: 'บัญชีถูกระงับการใช้งาน' }));
-        }
-
-        // Issue JWT + create session (เหมือนปกติ)
-        const sessionId = crypto.randomBytes(24).toString('hex');
-        const ip = (req.ip || '').toString().split(',')[0].trim().slice(0, 64);
-        try {
-            await db.query(
-                'UPDATE users SET active_session_id = ?, session_started_at = NOW(), last_seen_at = NOW(), last_seen_ip = ? WHERE id = ?',
-                [sessionId, ip, user.id]
-            );
-            _sessionCache.delete(user.id);
-        } catch (e) { console.error('[SSO Login] update session failed:', e.message); }
-
-        const jwtToken = jwt.sign(
-            { userId: user.id, username: user.username, deptId: user.dept_id, role: user.role, hospcode: user.hospcode, sessionId },
-            SECRET_KEY,
-            { expiresIn: '8h' }
-        );
-        // Log
-        try {
-            await db.query(
-                'INSERT INTO login_logs (user_id, username, role, ip_address, user_agent, status) VALUES (?, ?, ?, ?, ?, ?)',
-                [user.id, user.username, user.role, ip, (req.headers['user-agent'] || '').slice(0, 255), 'success_sso_' + provider]
-            );
-        } catch (e) { /* ignore */ }
-
-        // Redirect ไปหน้า login พร้อม token + user info (frontend handle ต่อ)
-        const userPayload = Buffer.from(JSON.stringify({
-            id: user.id, username: user.username, firstname: user.firstname, lastname: user.lastname,
-            role: user.role, dept_id: user.dept_id, hospcode: user.hospcode
-        })).toString('base64');
-        res.redirect(buildLoginRedirect(req, { sso_token: jwtToken, sso_user: userPayload, sso_provider: provider }));
-    } catch (e) {
-        console.error(`[SSO ${provider}] callback error:`, e);
-        res.redirect(buildLoginRedirect(req, { sso_error: e.message }));
-    }
-}
-
-apiRouter.get('/auth/providerid/start', (req, res) => handleSsoStart('providerid', req, res));
-apiRouter.get('/auth/providerid/callback', (req, res) => handleSsoCallback('providerid', req, res));
-apiRouter.get('/auth/thaid/start', (req, res) => handleSsoStart('thaid', req, res));
-apiRouter.get('/auth/thaid/callback', (req, res) => handleSsoCallback('thaid', req, res));
 
 // เปิด/ปิดใช้งานทั้งหมด ยกเว้น super_admin (super_admin เท่านั้น)
 apiRouter.put('/users/bulk-toggle-active', authenticateToken, isSuperAdmin, async (req, res) => {
@@ -3814,7 +3647,7 @@ apiRouter.post('/settings', async (req, res) => {
 
         // === LINE notify: เฉพาะ key ที่ค่าเปลี่ยนจริงจากเดิม ===
         try {
-            const sensitive = ['telegram_bot_token', 'line_channel_token', 'thaid_client_secret', 'providerid_client_secret'];
+            const sensitive = ['telegram_bot_token', 'line_channel_token'];
             // หา key ที่เปลี่ยนจริง — ใช้ string compare (DB เก็บเป็น VARCHAR)
             const changedSettings = settings.filter(s => {
                 const oldVal = oldValuesMap.get(s.setting_key);
@@ -8154,6 +7987,233 @@ apiRouter.post('/report-compare/sync', authenticateToken, isSuperAdmin, async (r
     }
 });
 
+// POST /report-compare/add-from-hdc — เพิ่มตัวชี้วัดจาก HDC เข้า Local พร้อม dept_id + main_indicator_id
+apiRouter.post('/report-compare/add-from-hdc', authenticateToken, isSuperAdmin, async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
+    const { hdc_report_id, dept_id, main_indicator_id } = req.body;
+    if (!hdc_report_id) return res.status(400).json({ success: false, message: 'กรุณาระบุ hdc_report_id' });
+    try {
+        const [hdcRows] = await remoteDb.query(
+            'SELECT report_id, report_name, report_code, table_process FROM reports WHERE report_id = ?',
+            [hdc_report_id]
+        );
+        if (!hdcRows.length) return res.status(404).json({ success: false, message: 'ไม่พบรายการนี้ใน HDC' });
+        const hdc = hdcRows[0];
+        if (!hdc.table_process) return res.status(400).json({ success: false, message: 'รายการ HDC นี้ไม่มี table_process' });
+        const [existing] = await db.query('SELECT id FROM kpi_indicators WHERE table_process = ?', [hdc.table_process]);
+        if (existing.length) return res.status(409).json({ success: false, message: 'มีตัวชี้วัดนี้ในระบบแล้ว (table_process ซ้ำ)' });
+        const [ins] = await db.query(
+            'INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_code, dept_id, main_indicator_id, is_active) VALUES (?, ?, ?, ?, ?, 1)',
+            [hdc.report_name, hdc.table_process, hdc.report_code || null, dept_id || null, main_indicator_id || null]
+        );
+        await db.query(
+            'INSERT INTO system_logs (user_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+            [req.user.userId, 'ADD_FROM_HDC', 'kpi_indicators', ins.insertId,
+             JSON.stringify({ hdc_report_id, table_process: hdc.table_process, dept_id: dept_id || null, main_indicator_id: main_indicator_id || null }), req.ip]
+        );
+        res.json({ success: true, message: `เพิ่ม "${hdc.report_name}" เข้าระบบเรียบร้อย`, id: ins.insertId });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// ========== Report Compare — Tabs (Strategies / Departments / Main-Indicators / Hospitals) ==========
+
+// GET /report-compare/strategies — เปรียบเทียบ main_yut (Local) กับ distinct main_yut text ใน HDC reports
+apiRouter.get('/report-compare/strategies', authenticateToken, isSuperAdmin, async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
+    try {
+        const [hdcRows] = await remoteDb.query(
+            `SELECT DISTINCT TRIM(main_yut) AS hdc_yut FROM reports WHERE data_source='excel' AND main_yut IS NOT NULL AND TRIM(main_yut) != ''`
+        );
+        const [localRows] = await db.query('SELECT id, yut_name FROM main_yut ORDER BY yut_name');
+        const norm = s => (s || '').trim().toLowerCase();
+        const localMap = new Map(localRows.map(r => [norm(r.yut_name), r]));
+        const hdcSet = new Set(hdcRows.map(r => norm(r.hdc_yut)));
+        const items = [];
+        let match = 0, missing_local = 0, missing_remote = 0;
+        hdcRows.forEach(r => {
+            const local = localMap.get(norm(r.hdc_yut));
+            if (local) { items.push({ status: 'match', hdc_yut_name: r.hdc_yut, local_id: local.id, local_yut_name: local.yut_name }); match++; }
+            else { items.push({ status: 'missing_local', hdc_yut_name: r.hdc_yut, local_id: null, local_yut_name: null }); missing_local++; }
+        });
+        localRows.forEach(r => {
+            if (!hdcSet.has(norm(r.yut_name))) { items.push({ status: 'missing_remote', hdc_yut_name: null, local_id: r.id, local_yut_name: r.yut_name }); missing_remote++; }
+        });
+        res.json({ success: true, summary: { total: items.length, match, missing_local, missing_remote }, items });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// POST /report-compare/add-strategy — เพิ่ม yut_name ใหม่จาก HDC text
+apiRouter.post('/report-compare/add-strategy', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { yut_name } = req.body;
+    if (!yut_name?.trim()) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อยุทธศาสตร์' });
+    try {
+        const [existing] = await db.query('SELECT id FROM main_yut WHERE TRIM(LOWER(yut_name)) = TRIM(LOWER(?))', [yut_name]);
+        if (existing.length) return res.status(409).json({ success: false, message: 'มียุทธศาสตร์ชื่อนี้ในระบบแล้ว' });
+        const [ins] = await db.query('INSERT INTO main_yut (yut_name) VALUES (?)', [yut_name.trim()]);
+        await db.query('INSERT INTO system_logs (user_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+            [req.user.userId, 'ADD_FROM_HDC', 'main_yut', ins.insertId, JSON.stringify({ yut_name: yut_name.trim() }), req.ip]);
+        res.json({ success: true, message: `เพิ่มยุทธศาสตร์ "${yut_name.trim()}" เรียบร้อย`, id: ins.insertId });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// GET /report-compare/departments — เปรียบเทียบ departments (Local) กับ distinct dept text ใน HDC reports
+apiRouter.get('/report-compare/departments', authenticateToken, isSuperAdmin, async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
+    try {
+        const [hdcRows] = await remoteDb.query(
+            `SELECT DISTINCT TRIM(dept) AS hdc_dept FROM reports WHERE data_source='excel' AND dept IS NOT NULL AND TRIM(dept) != ''`
+        );
+        const [localRows] = await db.query('SELECT id, dept_name, dept_code FROM departments ORDER BY dept_name');
+        const norm = s => (s || '').trim().toLowerCase();
+        const localMap = new Map(localRows.map(r => [norm(r.dept_name), r]));
+        const hdcSet = new Set(hdcRows.map(r => norm(r.hdc_dept)));
+        const items = [];
+        let match = 0, missing_local = 0, missing_remote = 0;
+        hdcRows.forEach(r => {
+            const local = localMap.get(norm(r.hdc_dept));
+            if (local) { items.push({ status: 'match', hdc_dept_name: r.hdc_dept, local_id: local.id, local_dept_name: local.dept_name, local_dept_code: local.dept_code }); match++; }
+            else { items.push({ status: 'missing_local', hdc_dept_name: r.hdc_dept, local_id: null, local_dept_name: null }); missing_local++; }
+        });
+        localRows.forEach(r => {
+            if (!hdcSet.has(norm(r.dept_name))) { items.push({ status: 'missing_remote', hdc_dept_name: null, local_id: r.id, local_dept_name: r.dept_name, local_dept_code: r.dept_code }); missing_remote++; }
+        });
+        res.json({ success: true, summary: { total: items.length, match, missing_local, missing_remote }, items });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// POST /report-compare/add-department — เพิ่ม dept_name ใหม่จาก HDC text
+apiRouter.post('/report-compare/add-department', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { dept_name, dept_code } = req.body;
+    if (!dept_name?.trim()) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อหน่วยงาน' });
+    try {
+        const [existing] = await db.query('SELECT id FROM departments WHERE TRIM(LOWER(dept_name)) = TRIM(LOWER(?))', [dept_name]);
+        if (existing.length) return res.status(409).json({ success: false, message: 'มีหน่วยงานชื่อนี้ในระบบแล้ว' });
+        const [ins] = await db.query('INSERT INTO departments (dept_name, dept_code) VALUES (?, ?)', [dept_name.trim(), (dept_code || '').trim()]);
+        await db.query('INSERT INTO system_logs (user_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+            [req.user.userId, 'ADD_FROM_HDC', 'departments', ins.insertId, JSON.stringify({ dept_name: dept_name.trim(), dept_code }), req.ip]);
+        res.json({ success: true, message: `เพิ่มหน่วยงาน "${dept_name.trim()}" เรียบร้อย`, id: ins.insertId });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// GET /report-compare/main-indicators — เปรียบเทียบ kpi_main_indicators: HDC table (ถ้ามี) หรือ Coverage fallback
+apiRouter.get('/report-compare/main-indicators', authenticateToken, isSuperAdmin, async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
+    try {
+        const [localMainRows] = await db.query('SELECT id, main_indicator_name FROM kpi_main_indicators ORDER BY main_indicator_name');
+        // ลองดึง kpi_main_indicators จาก HDC ก่อน
+        let hdcMainRows = null;
+        try { [hdcMainRows] = await remoteDb.query('SELECT id, main_indicator_name FROM kpi_main_indicators'); } catch (e) { hdcMainRows = null; }
+
+        if (hdcMainRows) {
+            // HDC มีตาราง kpi_main_indicators — เทียบชื่อตรงๆ
+            const hdcNames = new Map(hdcMainRows.map(r => [r.main_indicator_name.trim().toLowerCase(), r]));
+            const localNames = new Map(localMainRows.map(r => [r.main_indicator_name.trim().toLowerCase(), r]));
+            const items = [];
+            let match = 0, missing_local = 0, missing_remote = 0;
+            hdcMainRows.forEach(hdc => {
+                const key = hdc.main_indicator_name.trim().toLowerCase();
+                const local = localNames.get(key);
+                if (!local) { items.push({ status: 'missing_local', hdc_name: hdc.main_indicator_name.trim(), local_id: null, local_name: null }); missing_local++; }
+                else { items.push({ status: 'match', hdc_name: hdc.main_indicator_name.trim(), local_id: local.id, local_name: local.main_indicator_name }); match++; }
+            });
+            localMainRows.forEach(local => {
+                if (!hdcNames.has(local.main_indicator_name.trim().toLowerCase())) {
+                    items.push({ status: 'missing_remote', hdc_name: null, local_id: local.id, local_name: local.main_indicator_name }); missing_remote++;
+                }
+            });
+            return res.json({ success: true, source: 'hdc_table', summary: { total: items.length, match, missing_local, missing_remote }, items });
+        }
+
+        // Fallback: coverage จาก table_process ใน HDC reports
+        const [hdcTpRows] = await remoteDb.query(
+            `SELECT DISTINCT TRIM(table_process) AS tp FROM reports WHERE data_source='excel' AND table_process IS NOT NULL AND TRIM(table_process) != ''`
+        );
+        const hdcTpSet = new Set(hdcTpRows.map(r => r.tp));
+        const [localIndRows] = await db.query('SELECT id, main_indicator_id, table_process FROM kpi_indicators WHERE is_active = 1');
+        const coverageItems = [];
+        let has_hdc = 0, local_only = 0;
+        for (const mi of localMainRows) {
+            const linked = localIndRows.filter(i => i.main_indicator_id == mi.id);
+            const hdcLinked = linked.filter(i => i.table_process && hdcTpSet.has(i.table_process.trim()));
+            const status = hdcLinked.length > 0 ? 'has_hdc' : 'local_only';
+            if (status === 'has_hdc') has_hdc++; else local_only++;
+            coverageItems.push({ status, local_id: mi.id, local_name: mi.main_indicator_name, total_indicators: linked.length, hdc_linked_count: hdcLinked.length });
+        }
+        res.json({ success: true, source: 'coverage_fallback', summary: { total: coverageItems.length, has_hdc, local_only }, items: coverageItems });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// POST /report-compare/add-main-indicator — เพิ่มหมวดหมู่หลักจาก HDC เข้า Local
+apiRouter.post('/report-compare/add-main-indicator', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { hdc_name, yut_id } = req.body;
+    if (!hdc_name?.trim()) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อหมวดหมู่หลัก' });
+    try {
+        const [existing] = await db.query('SELECT id FROM kpi_main_indicators WHERE LOWER(TRIM(main_indicator_name)) = LOWER(TRIM(?))', [hdc_name]);
+        if (existing.length) return res.status(409).json({ success: false, message: `มี "${hdc_name.trim()}" ในระบบแล้ว` });
+        const [ins] = await db.query('INSERT INTO kpi_main_indicators (main_indicator_name, yut_id) VALUES (?, ?)', [hdc_name.trim(), yut_id || null]);
+        await db.query('INSERT INTO system_logs (user_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+            [req.user.userId, 'ADD_FROM_HDC', 'kpi_main_indicators', ins.insertId, JSON.stringify({ hdc_name: hdc_name.trim(), yut_id }), req.ip]);
+        res.json({ success: true, message: `เพิ่ม "${hdc_name.trim()}" เรียบร้อย`, id: ins.insertId });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// GET /report-compare/hospitals — เปรียบเทียบ chospital Local กับ HDC chospital (ถ้ามี)
+apiRouter.get('/report-compare/hospitals', authenticateToken, isSuperAdmin, async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
+    try {
+        let hdcRows;
+        try { [hdcRows] = await remoteDb.query('SELECT hoscode, hosname, hostype, distid FROM chospital'); }
+        catch (e) { return res.status(400).json({ success: false, message: 'ไม่พบตาราง chospital ใน HDC: ' + e.message }); }
+        const [localRows] = await db.query('SELECT hoscode, hosname, hostype, distid FROM chospital');
+        const localMap = new Map(localRows.map(r => [String(r.hoscode).trim(), r]));
+        const hdcMap = new Map(hdcRows.map(r => [String(r.hoscode).trim(), r]));
+        const items = [];
+        let match = 0, different = 0, missing_local = 0, missing_remote = 0;
+        hdcRows.forEach(hdc => {
+            const key = String(hdc.hoscode).trim();
+            const local = localMap.get(key);
+            if (!local) { items.push({ status: 'missing_local', hoscode: key, hdc_hosname: hdc.hosname, hdc_hostype: hdc.hostype, hdc_distid: hdc.distid, local_hosname: null }); missing_local++; }
+            else if ((local.hosname || '').trim() !== (hdc.hosname || '').trim()) { items.push({ status: 'different', hoscode: key, hdc_hosname: hdc.hosname, local_hosname: local.hosname, hdc_hostype: hdc.hostype, hdc_distid: hdc.distid }); different++; }
+            else { items.push({ status: 'match', hoscode: key, hdc_hosname: hdc.hosname, local_hosname: local.hosname, hdc_hostype: hdc.hostype }); match++; }
+        });
+        localRows.forEach(local => {
+            if (!hdcMap.has(String(local.hoscode).trim())) { items.push({ status: 'missing_remote', hoscode: String(local.hoscode).trim(), local_hosname: local.hosname, hdc_hosname: null, hdc_hostype: null }); missing_remote++; }
+        });
+        res.json({ success: true, summary: { total: items.length, match, different, missing_local, missing_remote }, items });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// POST /report-compare/add-hospital — เพิ่ม hoscode จาก HDC chospital เข้า Local
+apiRouter.post('/report-compare/add-hospital', authenticateToken, isSuperAdmin, async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
+    const { hoscode } = req.body;
+    if (!hoscode) return res.status(400).json({ success: false, message: 'กรุณาระบุ hoscode' });
+    try {
+        const [hdcRows] = await remoteDb.query(
+            'SELECT hoscode, hosname, hostype, distid, provcode, distcode FROM chospital WHERE hoscode = ?', [hoscode]
+        );
+        if (!hdcRows.length) return res.status(404).json({ success: false, message: 'ไม่พบ hoscode นี้ใน HDC' });
+        const hdc = hdcRows[0];
+        const [existing] = await db.query('SELECT hoscode FROM chospital WHERE hoscode = ?', [hoscode]);
+        if (existing.length) return res.status(409).json({ success: false, message: 'มี hoscode นี้ในระบบแล้ว' });
+        await db.query(
+            'INSERT INTO chospital (hoscode, hosname, hostype, distid, provcode, distcode) VALUES (?, ?, ?, ?, ?, ?)',
+            [hdc.hoscode, hdc.hosname, hdc.hostype || null, hdc.distid || null, hdc.provcode || null, hdc.distcode || null]
+        );
+        await db.query('INSERT INTO system_logs (user_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+            [req.user.userId, 'ADD_FROM_HDC', 'chospital', hoscode, JSON.stringify({ hoscode, hosname: hdc.hosname }), req.ip]);
+        res.json({ success: true, message: `เพิ่ม "${hdc.hosname}" (${hoscode}) เรียบร้อย` });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
 // ========== Feedback Board API ==========
 
 // POST /feedback/mark-read — เคลียร์ badge เมื่อเข้าหน้า feedback
@@ -12039,6 +12099,7 @@ apiRouter.post('/kpi-audit/run-digest-now', authenticateToken, isSuperAdmin, asy
 
 // Mount Router ที่ path /khupskpi/api
 app.use('/khupskpi/api', apiRouter);
+
 
 // Express error middleware — capture 500 errors ที่ไม่ได้ handle ใน route → error_logs + Telegram
 // (ต้องอยู่หลัง mount router)
