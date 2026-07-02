@@ -619,7 +619,7 @@
         <app-skeleton-table [rows]="6" [cols]="6"></app-skeleton-table>
       </div>
 
-      <!-- Tab: by-dept — Dept Table -->
+      <!-- Tab: by-dept — Dept Table (accordion inline) -->
       <div *ngIf="activeTab === 'by-dept' && !isLoading" class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-4">
         <!-- Header -->
         <div class="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
@@ -640,14 +640,17 @@
                 <th class="px-4 py-3 text-center text-xs font-bold text-emerald-700">คีย์แล้ว</th>
                 <th class="px-4 py-3 text-center text-xs font-bold text-rose-600">ยังไม่คีย์</th>
                 <th class="px-4 py-3 text-left text-xs font-bold min-w-[160px]">%ความครอบคลุม</th>
-                <th class="px-4 py-3 text-center text-xs font-bold"></th>
+                <th class="px-4 py-3 text-center text-xs font-bold w-10"></th>
               </tr>
             </thead>
             <tbody>
               <ng-container *ngFor="let dept of deptSummaryData; let i = index">
+                <!-- แถวหน่วยงาน -->
                 <tr (click)="openDeptDrilldown(dept)"
-                    class="border-b border-gray-50 cursor-pointer transition-colors hover:bg-violet-50"
-                    [ngClass]="selectedDeptForDrilldown?.dept_id === dept.dept_id ? 'bg-violet-50 border-l-4 border-l-violet-500' : ''">
+                    class="cursor-pointer transition-colors hover:bg-violet-50"
+                    [ngClass]="selectedDeptForDrilldown?.dept_id === dept.dept_id
+                      ? 'bg-violet-50 border-l-4 border-l-violet-500'
+                      : 'border-b border-gray-50'">
                   <td class="px-4 py-3 text-gray-400 text-xs">{{ i + 1 }}</td>
                   <td class="px-4 py-3">
                     <span class="font-semibold text-gray-800 text-sm">{{ dept.dept_name }}</span>
@@ -681,10 +684,80 @@
                     </div>
                   </td>
                   <td class="px-4 py-3 text-center">
-                    <button class="text-violet-500 hover:text-violet-700 text-xs font-bold transition-colors"
-                            [ngClass]="selectedDeptForDrilldown?.dept_id === dept.dept_id ? 'text-violet-700' : ''">
-                      <i class="fas" [ngClass]="selectedDeptForDrilldown?.dept_id === dept.dept_id ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
-                    </button>
+                    <i class="fas text-violet-500 text-xs transition-transform"
+                       [ngClass]="selectedDeptForDrilldown?.dept_id === dept.dept_id ? 'fa-chevron-up text-violet-700' : 'fa-chevron-down'"></i>
+                  </td>
+                </tr>
+
+                <!-- Accordion: drill-down row (เฉพาะ dept ที่เลือก) -->
+                <tr *ngIf="selectedDeptForDrilldown?.dept_id === dept.dept_id" class="border-b border-violet-200">
+                  <td colspan="7" class="p-0 bg-violet-50/40">
+                    <!-- loading -->
+                    <div *ngIf="deptDrilldownLoading" class="px-6 py-4 flex items-center gap-2 text-violet-600 text-sm">
+                      <i class="fas fa-spinner fa-spin"></i> กำลังโหลดตัวชี้วัด...
+                    </div>
+                    <!-- indicator sub-table -->
+                    <div *ngIf="!deptDrilldownLoading" class="px-6 py-3">
+                      <!-- mini summary -->
+                      <div class="flex flex-wrap gap-4 text-xs text-gray-500 mb-2">
+                        <span><i class="fas fa-list-ol mr-1 text-violet-400"></i>ทั้งหมด <strong class="text-gray-700">{{ deptDrilldownData.length }}</strong> ตัว</span>
+                        <span><i class="fas fa-check-circle mr-1 text-emerald-400"></i>มี รพ.บันทึก <strong class="text-emerald-700">{{ deptDrilldownEnteredCount }}</strong> ตัว</span>
+                        <span><i class="fas fa-hourglass-half mr-1 text-rose-400"></i>ยังไม่มี รพ.บันทึก <strong class="text-rose-700">{{ deptDrilldownNotEnteredCount }}</strong> ตัว</span>
+                      </div>
+                      <table class="w-full text-xs border border-violet-100 rounded-xl overflow-hidden">
+                        <thead class="bg-violet-100/60 text-violet-800">
+                          <tr>
+                            <th class="px-3 py-2 text-left font-bold">#</th>
+                            <th class="px-3 py-2 text-left font-bold">หมวดหมู่หลัก</th>
+                            <th class="px-3 py-2 text-left font-bold">ชื่อตัวชี้วัด</th>
+                            <th class="px-3 py-2 text-center font-bold">รพ.ทั้งหมด</th>
+                            <th class="px-3 py-2 text-center font-bold text-emerald-700">คีย์แล้ว</th>
+                            <th class="px-3 py-2 text-center font-bold text-rose-600">ค้างอยู่</th>
+                            <th class="px-3 py-2 text-left font-bold min-w-[130px]">%บันทึก</th>
+                          </tr>
+                        </thead>
+                        <tbody class="bg-white">
+                          <tr *ngFor="let ind of deptDrilldownData; let j = index"
+                              class="border-t border-violet-50 hover:bg-violet-50/40 transition-colors">
+                            <td class="px-3 py-2 text-gray-400">{{ j + 1 }}</td>
+                            <td class="px-3 py-2 text-gray-500 whitespace-normal break-words max-w-[130px]">{{ ind.main_indicator_name || '-' }}</td>
+                            <td class="px-3 py-2 text-gray-800 font-medium whitespace-normal break-words max-w-[260px]">{{ ind.kpi_indicators_name }}</td>
+                            <td class="px-3 py-2 text-center text-gray-600 font-medium">{{ ind.total_hospitals }}</td>
+                            <td class="px-3 py-2 text-center">
+                              <span class="inline-flex items-center justify-center min-w-[26px] px-1.5 py-0.5 rounded-full font-bold"
+                                    [ngClass]="ind.recorded_hospitals === ind.total_hospitals && ind.total_hospitals > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-50 text-emerald-600'">
+                                {{ ind.recorded_hospitals }}
+                              </span>
+                            </td>
+                            <td class="px-3 py-2 text-center">
+                              <span class="inline-flex items-center justify-center min-w-[26px] px-1.5 py-0.5 rounded-full font-bold"
+                                    [ngClass]="ind.missing_hospitals > 0 ? 'bg-rose-100 text-rose-700' : 'bg-gray-100 text-gray-400'">
+                                {{ ind.missing_hospitals }}
+                              </span>
+                            </td>
+                            <td class="px-3 py-2">
+                              <div *ngIf="ind.total_hospitals > 0" class="flex items-center gap-1.5">
+                                <div class="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden min-w-[70px]">
+                                  <div class="h-2 rounded-full transition-all"
+                                       [ngClass]="ind.recording_pct >= 80 ? 'bg-emerald-500' : ind.recording_pct >= 50 ? 'bg-amber-400' : 'bg-rose-400'"
+                                       [style.width.%]="ind.recording_pct"></div>
+                                </div>
+                                <span class="font-bold w-9 text-right"
+                                      [ngClass]="ind.recording_pct >= 80 ? 'text-emerald-600' : ind.recording_pct >= 50 ? 'text-amber-600' : 'text-rose-600'">
+                                  {{ ind.recording_pct | number:'1.0-1' }}%
+                                </span>
+                              </div>
+                              <span *ngIf="ind.total_hospitals === 0" class="text-gray-300">ไม่มีข้อมูล</span>
+                            </td>
+                          </tr>
+                          <tr *ngIf="deptDrilldownData.length === 0">
+                            <td colspan="7" class="px-4 py-4 text-center text-gray-400">
+                              <i class="fas fa-inbox mr-1"></i>ไม่พบตัวชี้วัดที่ active
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
                   </td>
                 </tr>
               </ng-container>
@@ -697,172 +770,101 @@
           </table>
         </div>
 
-        <!-- Mobile cards -->
+        <!-- Mobile cards (accordion) -->
         <div class="md:hidden divide-y divide-gray-50">
-          <div *ngFor="let dept of deptSummaryData; let i = index"
-               (click)="openDeptDrilldown(dept)"
-               class="p-4 cursor-pointer hover:bg-violet-50 transition-colors"
-               [ngClass]="selectedDeptForDrilldown?.dept_id === dept.dept_id ? 'bg-violet-50 border-l-4 border-violet-500' : ''">
-            <div class="flex items-start justify-between mb-2">
-              <div>
-                <p class="font-semibold text-gray-800 text-sm">{{ dept.dept_name }}</p>
-                <p class="text-xs text-gray-400 mt-0.5">ตัวชี้วัด {{ dept.total_indicators }} ตัว</p>
+          <ng-container *ngFor="let dept of deptSummaryData; let i = index">
+            <!-- dept card header -->
+            <div (click)="openDeptDrilldown(dept)"
+                 class="p-4 cursor-pointer hover:bg-violet-50 transition-colors"
+                 [ngClass]="selectedDeptForDrilldown?.dept_id === dept.dept_id ? 'bg-violet-50 border-l-4 border-violet-500' : ''">
+              <div class="flex items-start justify-between mb-2">
+                <div>
+                  <p class="font-semibold text-gray-800 text-sm">{{ dept.dept_name }}</p>
+                  <p class="text-xs text-gray-400 mt-0.5">ตัวชี้วัด {{ dept.total_indicators }} ตัว</p>
+                </div>
+                <i class="fas text-violet-400 mt-1"
+                   [ngClass]="selectedDeptForDrilldown?.dept_id === dept.dept_id ? 'fa-chevron-up text-violet-600' : 'fa-chevron-down'"></i>
               </div>
-              <i class="fas text-violet-400 mt-1" [ngClass]="selectedDeptForDrilldown?.dept_id === dept.dept_id ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+              <div class="grid grid-cols-3 gap-2 text-xs text-center mb-2">
+                <div class="bg-gray-50 rounded-lg p-2">
+                  <p class="text-gray-400 text-[10px]">ทั้งหมด</p>
+                  <p class="font-bold text-gray-700 text-base">{{ dept.total_indicators }}</p>
+                </div>
+                <div class="bg-emerald-50 rounded-lg p-2">
+                  <p class="text-emerald-600 text-[10px]">คีย์แล้ว</p>
+                  <p class="font-bold text-emerald-700 text-base">{{ dept.entered_indicators }}</p>
+                </div>
+                <div class="rounded-lg p-2" [ngClass]="dept.not_entered_indicators > 0 ? 'bg-rose-50' : 'bg-gray-50'">
+                  <p class="text-[10px]" [ngClass]="dept.not_entered_indicators > 0 ? 'text-rose-600' : 'text-gray-400'">ยังไม่คีย์</p>
+                  <p class="font-bold text-base" [ngClass]="dept.not_entered_indicators > 0 ? 'text-rose-700' : 'text-gray-400'">{{ dept.not_entered_indicators }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <div class="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                  <div class="h-2 rounded-full"
+                       [ngClass]="dept.avg_coverage_pct >= 80 ? 'bg-emerald-500' : dept.avg_coverage_pct >= 50 ? 'bg-amber-400' : 'bg-rose-400'"
+                       [style.width.%]="dept.avg_coverage_pct"></div>
+                </div>
+                <span class="text-xs font-bold w-10 text-right"
+                      [ngClass]="dept.avg_coverage_pct >= 80 ? 'text-emerald-600' : dept.avg_coverage_pct >= 50 ? 'text-amber-600' : 'text-rose-600'">
+                  {{ dept.avg_coverage_pct | number:'1.0-1' }}%
+                </span>
+              </div>
             </div>
-            <div class="grid grid-cols-3 gap-2 text-xs text-center mb-2">
-              <div class="bg-gray-50 rounded-lg p-2">
-                <p class="text-gray-400 text-[10px]">ทั้งหมด</p>
-                <p class="font-bold text-gray-700 text-base">{{ dept.total_indicators }}</p>
+            <!-- accordion: drill-down content ด้านล่างทันที -->
+            <div *ngIf="selectedDeptForDrilldown?.dept_id === dept.dept_id"
+                 class="bg-violet-50/50 border-b border-violet-100 px-4 pb-4 pt-3">
+              <!-- loading -->
+              <div *ngIf="deptDrilldownLoading" class="flex items-center gap-2 text-violet-600 text-sm py-2">
+                <i class="fas fa-spinner fa-spin"></i> กำลังโหลด...
               </div>
-              <div class="bg-emerald-50 rounded-lg p-2">
-                <p class="text-emerald-600 text-[10px]">คีย์แล้ว</p>
-                <p class="font-bold text-emerald-700 text-base">{{ dept.entered_indicators }}</p>
+              <!-- mini summary -->
+              <div *ngIf="!deptDrilldownLoading" class="flex flex-wrap gap-3 text-xs text-gray-500 mb-3">
+                <span><i class="fas fa-list-ol mr-1 text-violet-400"></i><strong class="text-gray-700">{{ deptDrilldownData.length }}</strong> ตัว</span>
+                <span><i class="fas fa-check-circle mr-1 text-emerald-400"></i>บันทึกแล้ว <strong class="text-emerald-700">{{ deptDrilldownEnteredCount }}</strong></span>
+                <span><i class="fas fa-hourglass-half mr-1 text-rose-400"></i>ยังค้าง <strong class="text-rose-700">{{ deptDrilldownNotEnteredCount }}</strong></span>
               </div>
-              <div class="rounded-lg p-2" [ngClass]="dept.not_entered_indicators > 0 ? 'bg-rose-50' : 'bg-gray-50'">
-                <p class="text-[10px]" [ngClass]="dept.not_entered_indicators > 0 ? 'text-rose-600' : 'text-gray-400'">ยังไม่คีย์</p>
-                <p class="font-bold text-base" [ngClass]="dept.not_entered_indicators > 0 ? 'text-rose-700' : 'text-gray-400'">{{ dept.not_entered_indicators }}</p>
-              </div>
-            </div>
-            <div class="flex items-center gap-2">
-              <div class="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                <div class="h-2 rounded-full"
-                     [ngClass]="dept.avg_coverage_pct >= 80 ? 'bg-emerald-500' : dept.avg_coverage_pct >= 50 ? 'bg-amber-400' : 'bg-rose-400'"
-                     [style.width.%]="dept.avg_coverage_pct"></div>
-              </div>
-              <span class="text-xs font-bold w-10 text-right"
-                    [ngClass]="dept.avg_coverage_pct >= 80 ? 'text-emerald-600' : dept.avg_coverage_pct >= 50 ? 'text-amber-600' : 'text-rose-600'">
-                {{ dept.avg_coverage_pct | number:'1.0-1' }}%
-              </span>
-            </div>
-          </div>
-          <div *ngIf="deptSummaryData.length === 0" class="p-8 text-center text-gray-400">
-            <i class="fas fa-inbox text-3xl mb-2 block"></i>ไม่พบข้อมูล
-          </div>
-        </div>
-      </div>
-
-      <!-- Tab: by-dept — Drill-down Panel (ตัวชี้วัดของหน่วยงานที่เลือก) -->
-      <div *ngIf="activeTab === 'by-dept' && selectedDeptForDrilldown" class="bg-white rounded-2xl shadow-sm border border-violet-200 mb-6">
-        <!-- Drill-down Header -->
-        <div class="px-5 py-3 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-t-2xl flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <i class="fas fa-list-ul text-white/80"></i>
-            <span class="font-bold text-white text-sm">ตัวชี้วัดของ: {{ selectedDeptForDrilldown.dept_name }}</span>
-            <span class="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full font-medium">
-              {{ deptDrilldownData.length }} ตัวชี้วัด
-            </span>
-          </div>
-          <button (click)="closeDeptDrilldown()" class="text-white/70 hover:text-white text-sm transition-colors">
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-
-        <!-- Loading -->
-        <div *ngIf="deptDrilldownLoading" class="p-5">
-          <div class="flex items-center gap-2 text-violet-600 text-sm font-medium mb-3">
-            <i class="fas fa-spinner fa-spin"></i> กำลังโหลดตัวชี้วัดของ {{ selectedDeptForDrilldown.dept_name }}...
-          </div>
-          <app-skeleton-table [rows]="5" [cols]="5"></app-skeleton-table>
-        </div>
-
-        <!-- Drill-down Table (Desktop) -->
-        <div *ngIf="!deptDrilldownLoading" class="hidden md:block overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-violet-50/60 text-violet-800">
-              <tr>
-                <th class="px-4 py-2.5 text-left text-xs font-bold w-8">#</th>
-                <th class="px-4 py-2.5 text-left text-xs font-bold">หมวดหมู่หลัก</th>
-                <th class="px-4 py-2.5 text-left text-xs font-bold">ชื่อตัวชี้วัด</th>
-                <th class="px-4 py-2.5 text-center text-xs font-bold">รพ.ทั้งหมด</th>
-                <th class="px-4 py-2.5 text-center text-xs font-bold text-emerald-700">คีย์แล้ว</th>
-                <th class="px-4 py-2.5 text-center text-xs font-bold text-rose-600">ค้างอยู่</th>
-                <th class="px-4 py-2.5 text-left text-xs font-bold min-w-[140px]">%บันทึก</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let ind of deptDrilldownData; let j = index"
-                  class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                <td class="px-4 py-2.5 text-gray-400 text-xs">{{ j + 1 }}</td>
-                <td class="px-4 py-2.5 text-gray-500 text-xs whitespace-normal break-words max-w-[150px]">{{ ind.main_indicator_name || '-' }}</td>
-                <td class="px-4 py-2.5 text-gray-800 font-medium text-xs whitespace-normal break-words max-w-[280px]">{{ ind.kpi_indicators_name }}</td>
-                <td class="px-4 py-2.5 text-center text-gray-600 text-xs font-medium">{{ ind.total_hospitals }}</td>
-                <td class="px-4 py-2.5 text-center">
-                  <span class="inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full text-xs font-bold"
-                        [ngClass]="ind.recorded_hospitals === ind.total_hospitals && ind.total_hospitals > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-50 text-emerald-600'">
-                    {{ ind.recorded_hospitals }}
-                  </span>
-                </td>
-                <td class="px-4 py-2.5 text-center">
-                  <span class="inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full text-xs font-bold"
-                        [ngClass]="ind.missing_hospitals > 0 ? 'bg-rose-100 text-rose-700' : 'bg-gray-100 text-gray-400'">
-                    {{ ind.missing_hospitals }}
-                  </span>
-                </td>
-                <td class="px-4 py-2.5">
-                  <div *ngIf="ind.total_hospitals > 0" class="flex items-center gap-2">
-                    <div class="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden min-w-[80px]">
-                      <div class="h-2 rounded-full transition-all"
+              <!-- indicator cards -->
+              <div *ngIf="!deptDrilldownLoading" class="space-y-2">
+                <div *ngFor="let ind of deptDrilldownData; let j = index"
+                     class="bg-white rounded-xl border border-violet-100 px-3 py-2.5 shadow-sm">
+                  <p class="font-medium text-gray-800 text-xs break-words leading-snug mb-0.5">{{ ind.kpi_indicators_name }}</p>
+                  <p class="text-[10px] text-gray-400 mb-2">{{ ind.main_indicator_name || '-' }}</p>
+                  <div class="grid grid-cols-3 gap-1.5 text-xs text-center mb-1.5">
+                    <div class="bg-gray-50 rounded p-1">
+                      <p class="text-[9px] text-gray-400">รพ.ทั้งหมด</p>
+                      <p class="font-bold text-gray-700">{{ ind.total_hospitals }}</p>
+                    </div>
+                    <div class="bg-emerald-50 rounded p-1">
+                      <p class="text-[9px] text-emerald-600">คีย์แล้ว</p>
+                      <p class="font-bold text-emerald-700">{{ ind.recorded_hospitals }}</p>
+                    </div>
+                    <div class="rounded p-1" [ngClass]="ind.missing_hospitals > 0 ? 'bg-rose-50' : 'bg-gray-50'">
+                      <p class="text-[9px]" [ngClass]="ind.missing_hospitals > 0 ? 'text-rose-600' : 'text-gray-400'">ค้างอยู่</p>
+                      <p class="font-bold" [ngClass]="ind.missing_hospitals > 0 ? 'text-rose-700' : 'text-gray-400'">{{ ind.missing_hospitals }}</p>
+                    </div>
+                  </div>
+                  <div *ngIf="ind.total_hospitals > 0" class="flex items-center gap-1.5">
+                    <div class="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                      <div class="h-1.5 rounded-full"
                            [ngClass]="ind.recording_pct >= 80 ? 'bg-emerald-500' : ind.recording_pct >= 50 ? 'bg-amber-400' : 'bg-rose-400'"
                            [style.width.%]="ind.recording_pct"></div>
                     </div>
-                    <span class="text-xs font-bold w-10 text-right"
+                    <span class="text-[10px] font-bold w-8 text-right"
                           [ngClass]="ind.recording_pct >= 80 ? 'text-emerald-600' : ind.recording_pct >= 50 ? 'text-amber-600' : 'text-rose-600'">
                       {{ ind.recording_pct | number:'1.0-1' }}%
                     </span>
                   </div>
-                  <span *ngIf="ind.total_hospitals === 0" class="text-xs text-gray-300">ไม่มีข้อมูล</span>
-                </td>
-              </tr>
-              <tr *ngIf="deptDrilldownData.length === 0">
-                <td colspan="7" class="px-4 py-6 text-center text-gray-400 text-xs">
-                  <i class="fas fa-inbox text-2xl mb-1 block"></i>ไม่พบตัวชี้วัดที่ active ของหน่วยงานนี้
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Drill-down Mobile cards -->
-        <div *ngIf="!deptDrilldownLoading" class="md:hidden divide-y divide-gray-50">
-          <div *ngFor="let ind of deptDrilldownData; let j = index" class="p-4">
-            <p class="font-semibold text-gray-800 text-xs break-words mb-0.5">{{ ind.kpi_indicators_name }}</p>
-            <p class="text-[10px] text-gray-400 mb-2">{{ ind.main_indicator_name || '-' }}</p>
-            <div class="grid grid-cols-3 gap-2 text-xs text-center mb-2">
-              <div class="bg-gray-50 rounded p-1">
-                <p class="text-[10px] text-gray-400">รพ.ทั้งหมด</p>
-                <p class="font-bold text-gray-700">{{ ind.total_hospitals }}</p>
-              </div>
-              <div class="bg-emerald-50 rounded p-1">
-                <p class="text-[10px] text-emerald-600">คีย์แล้ว</p>
-                <p class="font-bold text-emerald-700">{{ ind.recorded_hospitals }}</p>
-              </div>
-              <div class="rounded p-1" [ngClass]="ind.missing_hospitals > 0 ? 'bg-rose-50' : 'bg-gray-50'">
-                <p class="text-[10px]" [ngClass]="ind.missing_hospitals > 0 ? 'text-rose-600' : 'text-gray-400'">ค้างอยู่</p>
-                <p class="font-bold" [ngClass]="ind.missing_hospitals > 0 ? 'text-rose-700' : 'text-gray-400'">{{ ind.missing_hospitals }}</p>
+                </div>
+                <div *ngIf="deptDrilldownData.length === 0" class="text-center text-gray-400 text-xs py-4">
+                  <i class="fas fa-inbox mr-1"></i>ไม่พบตัวชี้วัด
+                </div>
               </div>
             </div>
-            <div *ngIf="ind.total_hospitals > 0" class="flex items-center gap-2">
-              <div class="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                <div class="h-1.5 rounded-full"
-                     [ngClass]="ind.recording_pct >= 80 ? 'bg-emerald-500' : ind.recording_pct >= 50 ? 'bg-amber-400' : 'bg-rose-400'"
-                     [style.width.%]="ind.recording_pct"></div>
-              </div>
-              <span class="text-xs font-bold" [ngClass]="ind.recording_pct >= 80 ? 'text-emerald-600' : ind.recording_pct >= 50 ? 'text-amber-600' : 'text-rose-600'">
-                {{ ind.recording_pct | number:'1.0-1' }}%
-              </span>
-            </div>
+          </ng-container>
+          <div *ngIf="deptSummaryData.length === 0" class="p-8 text-center text-gray-400">
+            <i class="fas fa-inbox text-3xl mb-2 block"></i>ไม่พบข้อมูล
           </div>
-          <div *ngIf="deptDrilldownData.length === 0" class="p-6 text-center text-gray-400 text-xs">
-            <i class="fas fa-inbox text-2xl mb-1 block"></i>ไม่พบตัวชี้วัด
-          </div>
-        </div>
-
-        <!-- Drill-down footer summary -->
-        <div *ngIf="!deptDrilldownLoading && deptDrilldownData.length > 0" class="px-5 py-3 border-t border-violet-100 bg-violet-50/40 rounded-b-2xl flex flex-wrap gap-4 text-xs text-gray-600">
-          <span><i class="fas fa-list-ol mr-1 text-violet-500"></i>ตัวชี้วัดทั้งหมด <strong>{{ deptDrilldownData.length }}</strong> ตัว</span>
-          <span><i class="fas fa-check-circle mr-1 text-emerald-500"></i>มีหน่วยบริการบันทึกแล้ว <strong class="text-emerald-700">{{ deptDrilldownEnteredCount }}</strong> ตัว</span>
-          <span><i class="fas fa-hourglass-half mr-1 text-rose-500"></i>ยังไม่มีหน่วยบริการบันทึก <strong class="text-rose-700">{{ deptDrilldownNotEnteredCount }}</strong> ตัว</span>
         </div>
       </div>
 
