@@ -6759,7 +6759,7 @@ apiRouter.get('/report/by-dept-summary', authenticateToken, async (req, res) => 
         const user = req.user;
         const { year_bh, hostype } = req.query;
         if (!year_bh) {
-            return res.status(400).json({ success: false, message: 'ต้องระบุปีงบประมาณ' });
+            return res.json({ success: true, summary: { total_depts: 0, fully_covered: 0, not_entered: 0, avg_coverage_pct: 0 }, data: [] });
         }
 
         let cteWhere = ['r.year_bh = ?'];

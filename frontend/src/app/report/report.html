@@ -614,6 +614,12 @@
         </div>
       </div>
 
+      <!-- Tab: by-dept — No year selected -->
+      <div *ngIf="activeTab === 'by-dept' && !selectedYear && !isLoading" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 mb-6 text-center text-gray-400">
+        <i class="fas fa-calendar-alt text-3xl mb-2 block text-violet-300"></i>
+        <p class="text-sm font-medium">กรุณาเลือกปีงบประมาณเพื่อดูข้อมูล</p>
+      </div>
+
       <!-- Tab: by-dept — Loading skeleton -->
       <div *ngIf="activeTab === 'by-dept' && isLoading" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
         <app-skeleton-table [rows]="6" [cols]="6"></app-skeleton-table>

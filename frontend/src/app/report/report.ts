@@ -294,6 +294,13 @@ export class ReportComponent implements OnInit {
           : this.authService.getReportRecordingStatus(params);
         break;
       case 'by-dept':
+        if (!this.selectedYear) {
+          this.isLoading = false;
+          this.deptSummaryData = [];
+          this.deptSummarySummary = { total_depts: 0, fully_covered: 0, not_entered: 0, avg_coverage_pct: 0 };
+          this.cdr.detectChanges();
+          return;
+        }
         observable = this.authService.getReportByDeptSummary(params);
         break;
       default: observable = this.authService.getReportByIndicator(params);
