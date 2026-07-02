@@ -66,6 +66,11 @@ export class ReportComponent implements OnInit {
   deptDrilldownLoading: boolean = false;
   selectedDeptForDrilldown: any = null;
 
+  // === Hospital Drill-down (3rd level: indicator → hospitals) ===
+  selectedIndForHospDrilldown: { ind: any, filter: 'recorded' | 'missing' } | null = null;
+  hospDrilldownData: any[] = [];
+  hospDrilldownLoading: boolean = false;
+
   // Toast loading — reference to dismiss when load completes
   private monitorLoadingToastId: number | null = null;
 
@@ -169,7 +174,32 @@ export class ReportComponent implements OnInit {
     this.loadReport();
   }
 
+  openHospDrilldown(ind: any, filter: 'recorded' | 'missing') {
+    if (this.selectedIndForHospDrilldown?.ind?.indicator_id === ind.indicator_id
+        && this.selectedIndForHospDrilldown?.filter === filter) {
+      this.selectedIndForHospDrilldown = null;
+      this.hospDrilldownData = [];
+      return;
+    }
+    this.selectedIndForHospDrilldown = { ind, filter };
+    this.hospDrilldownData = [];
+    this.hospDrilldownLoading = true;
+    const params: any = { year_bh: this.selectedYear, indicator_id: ind.indicator_id, filter };
+    if (this.selectedHosType) params.hostype = this.selectedHosType;
+    this.authService.getReportByDeptSummaryHospitals(params).subscribe({
+      next: (res: any) => {
+        this.hospDrilldownLoading = false;
+        if (res.success) this.hospDrilldownData = res.data || [];
+        this.cdr.detectChanges();
+      },
+      error: () => { this.hospDrilldownLoading = false; this.cdr.detectChanges(); }
+    });
+  }
+
   openDeptDrilldown(dept: any) {
+    // reset hospital drill-down เมื่อเปลี่ยน dept
+    this.selectedIndForHospDrilldown = null;
+    this.hospDrilldownData = [];
     if (this.selectedDeptForDrilldown?.dept_id === dept.dept_id) {
       this.selectedDeptForDrilldown = null;
       this.deptDrilldownData = [];
@@ -201,6 +231,8 @@ export class ReportComponent implements OnInit {
   closeDeptDrilldown() {
     this.selectedDeptForDrilldown = null;
     this.deptDrilldownData = [];
+    this.selectedIndForHospDrilldown = null;
+    this.hospDrilldownData = [];
   }
 
   get deptDrilldownEnteredCount(): number {
@@ -303,6 +335,8 @@ export class ReportComponent implements OnInit {
             // reset drill-down เมื่อ reload
             this.selectedDeptForDrilldown = null;
             this.deptDrilldownData = [];
+            this.selectedIndForHospDrilldown = null;
+            this.hospDrilldownData = [];
             this.cdr.detectChanges();
             return;
           }

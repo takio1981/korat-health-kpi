@@ -6836,6 +6836,52 @@ apiRouter.get('/report/by-dept-summary', authenticateToken, async (req, res) => 
     }
 });
 
+// รายงาน: drill-down รายชื่อหน่วยบริการของตัวชี้วัด (by-dept-summary/hospitals)
+//   - filter=recorded → รพ.ที่มี actual_value แล้ว
+//   - filter=missing  → รพ.ที่ยังไม่มี actual_value (แต่มี record ใน kpi_results)
+//   - filter ไม่ส่ง   → ทั้งหมด
+apiRouter.get('/report/by-dept-summary/hospitals', authenticateToken, async (req, res) => {
+    try {
+        const { year_bh, indicator_id, filter, hostype } = req.query;
+        if (!year_bh || !indicator_id) {
+            return res.status(400).json({ success: false, message: 'ต้องระบุปีงบประมาณและตัวชี้วัด' });
+        }
+
+        let whereClauses = ['r.indicator_id = ?', 'r.year_bh = ?'];
+        let params = [indicator_id, year_bh];
+
+        if (hostype) { whereClauses.push('h.hostype = ?'); params.push(hostype); }
+
+        let having = '';
+        if (filter === 'recorded') having = 'HAVING has_recorded = 1';
+        else if (filter === 'missing') having = 'HAVING has_recorded = 0';
+
+        const sql = `
+            SELECT
+                r.hospcode,
+                MAX(COALESCE(h.hosname, r.hospcode)) AS hosname,
+                MAX(h.hostype) AS hostype,
+                MAX(ct.hostypename) AS hostypename,
+                MAX(cd.distname) AS distname,
+                MAX(CASE WHEN NULLIF(TRIM(r.actual_value), '') IS NOT NULL THEN 1 ELSE 0 END) AS has_recorded
+            FROM kpi_results r
+            LEFT JOIN chospital h ON h.hoscode = r.hospcode
+            LEFT JOIN co_district cd ON cd.distid = h.distid
+            LEFT JOIN chostype ct ON ct.hostypecode = h.hostype
+            WHERE ${whereClauses.join(' AND ')}
+            GROUP BY r.hospcode
+            ${having}
+            ORDER BY cd.distname, h.hosname
+            LIMIT 500
+        `;
+        const [rows] = await db.query(sql, params);
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        console.error('Report by-dept-summary/hospitals error:', error);
+        res.status(500).json({ success: false, message: 'ไม่สามารถดึงรายชื่อหน่วยบริการได้' });
+    }
+});
+
 // รายงาน: drill-down ตัวชี้วัดของหน่วยงาน (by-dept-summary/indicators)
 //   - ดูว่าแต่ละตัวชี้วัดใน dept นั้น มีกี่ รพ. คีย์แล้ว / ยังไม่คีย์
 apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (req, res) => {

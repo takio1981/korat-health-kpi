@@ -717,39 +717,93 @@
                           </tr>
                         </thead>
                         <tbody class="bg-white">
-                          <tr *ngFor="let ind of deptDrilldownData; let j = index"
-                              class="border-t border-violet-50 hover:bg-violet-50/40 transition-colors">
-                            <td class="px-3 py-2 text-gray-400">{{ j + 1 }}</td>
-                            <td class="px-3 py-2 text-gray-500 whitespace-normal break-words max-w-[130px]">{{ ind.main_indicator_name || '-' }}</td>
-                            <td class="px-3 py-2 text-gray-800 font-medium whitespace-normal break-words max-w-[260px]">{{ ind.kpi_indicators_name }}</td>
-                            <td class="px-3 py-2 text-center text-gray-600 font-medium">{{ ind.total_hospitals }}</td>
-                            <td class="px-3 py-2 text-center">
-                              <span class="inline-flex items-center justify-center min-w-[26px] px-1.5 py-0.5 rounded-full font-bold"
-                                    [ngClass]="ind.recorded_hospitals === ind.total_hospitals && ind.total_hospitals > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-50 text-emerald-600'">
-                                {{ ind.recorded_hospitals }}
-                              </span>
-                            </td>
-                            <td class="px-3 py-2 text-center">
-                              <span class="inline-flex items-center justify-center min-w-[26px] px-1.5 py-0.5 rounded-full font-bold"
-                                    [ngClass]="ind.missing_hospitals > 0 ? 'bg-rose-100 text-rose-700' : 'bg-gray-100 text-gray-400'">
-                                {{ ind.missing_hospitals }}
-                              </span>
-                            </td>
-                            <td class="px-3 py-2">
-                              <div *ngIf="ind.total_hospitals > 0" class="flex items-center gap-1.5">
-                                <div class="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden min-w-[70px]">
-                                  <div class="h-2 rounded-full transition-all"
-                                       [ngClass]="ind.recording_pct >= 80 ? 'bg-emerald-500' : ind.recording_pct >= 50 ? 'bg-amber-400' : 'bg-rose-400'"
-                                       [style.width.%]="ind.recording_pct"></div>
-                                </div>
-                                <span class="font-bold w-9 text-right"
-                                      [ngClass]="ind.recording_pct >= 80 ? 'text-emerald-600' : ind.recording_pct >= 50 ? 'text-amber-600' : 'text-rose-600'">
-                                  {{ ind.recording_pct | number:'1.0-1' }}%
+                          <ng-container *ngFor="let ind of deptDrilldownData; let j = index">
+                            <!-- แถวตัวชี้วัด -->
+                            <tr class="border-t border-violet-50 hover:bg-violet-50/30 transition-colors"
+                                [ngClass]="selectedIndForHospDrilldown?.ind?.indicator_id === ind.indicator_id ? 'bg-violet-50/50' : ''">
+                              <td class="px-3 py-2 text-gray-400">{{ j + 1 }}</td>
+                              <td class="px-3 py-2 text-gray-500 whitespace-normal break-words max-w-[130px]">{{ ind.main_indicator_name || '-' }}</td>
+                              <td class="px-3 py-2 text-gray-800 font-medium whitespace-normal break-words max-w-[260px]">{{ ind.kpi_indicators_name }}</td>
+                              <td class="px-3 py-2 text-center text-gray-600 font-medium">{{ ind.total_hospitals }}</td>
+                              <!-- คีย์แล้ว — คลิกได้ -->
+                              <td class="px-3 py-2 text-center cursor-pointer select-none"
+                                  [ngClass]="ind.recorded_hospitals > 0 ? 'hover:bg-emerald-50' : ''"
+                                  (click)="ind.recorded_hospitals > 0 && openHospDrilldown(ind, 'recorded')">
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-bold transition-colors"
+                                      [ngClass]="selectedIndForHospDrilldown?.ind?.indicator_id === ind.indicator_id && selectedIndForHospDrilldown?.filter === 'recorded'
+                                        ? 'bg-emerald-200 text-emerald-800 ring-1 ring-emerald-400'
+                                        : ind.recorded_hospitals === ind.total_hospitals && ind.total_hospitals > 0
+                                          ? 'bg-emerald-100 text-emerald-700'
+                                          : 'bg-emerald-50 text-emerald-600'">
+                                  {{ ind.recorded_hospitals }}
+                                  <i *ngIf="ind.recorded_hospitals > 0" class="fas text-[9px]"
+                                     [ngClass]="selectedIndForHospDrilldown?.ind?.indicator_id === ind.indicator_id && selectedIndForHospDrilldown?.filter === 'recorded' ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
                                 </span>
-                              </div>
-                              <span *ngIf="ind.total_hospitals === 0" class="text-gray-300">ไม่มีข้อมูล</span>
-                            </td>
-                          </tr>
+                              </td>
+                              <!-- ค้างอยู่ — คลิกได้ -->
+                              <td class="px-3 py-2 text-center cursor-pointer select-none"
+                                  [ngClass]="ind.missing_hospitals > 0 ? 'hover:bg-rose-50' : ''"
+                                  (click)="ind.missing_hospitals > 0 && openHospDrilldown(ind, 'missing')">
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-bold transition-colors"
+                                      [ngClass]="selectedIndForHospDrilldown?.ind?.indicator_id === ind.indicator_id && selectedIndForHospDrilldown?.filter === 'missing'
+                                        ? 'bg-rose-200 text-rose-800 ring-1 ring-rose-400'
+                                        : ind.missing_hospitals > 0
+                                          ? 'bg-rose-100 text-rose-700'
+                                          : 'bg-gray-100 text-gray-400'">
+                                  {{ ind.missing_hospitals }}
+                                  <i *ngIf="ind.missing_hospitals > 0" class="fas text-[9px]"
+                                     [ngClass]="selectedIndForHospDrilldown?.ind?.indicator_id === ind.indicator_id && selectedIndForHospDrilldown?.filter === 'missing' ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                                </span>
+                              </td>
+                              <td class="px-3 py-2">
+                                <div *ngIf="ind.total_hospitals > 0" class="flex items-center gap-1.5">
+                                  <div class="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden min-w-[70px]">
+                                    <div class="h-2 rounded-full transition-all"
+                                         [ngClass]="ind.recording_pct >= 80 ? 'bg-emerald-500' : ind.recording_pct >= 50 ? 'bg-amber-400' : 'bg-rose-400'"
+                                         [style.width.%]="ind.recording_pct"></div>
+                                  </div>
+                                  <span class="font-bold w-9 text-right"
+                                        [ngClass]="ind.recording_pct >= 80 ? 'text-emerald-600' : ind.recording_pct >= 50 ? 'text-amber-600' : 'text-rose-600'">
+                                    {{ ind.recording_pct | number:'1.0-1' }}%
+                                  </span>
+                                </div>
+                                <span *ngIf="ind.total_hospitals === 0" class="text-gray-300">ไม่มีข้อมูล</span>
+                              </td>
+                            </tr>
+
+                            <!-- Accordion: รายชื่อ รพ. ของตัวชี้วัดนี้ -->
+                            <tr *ngIf="selectedIndForHospDrilldown?.ind?.indicator_id === ind.indicator_id">
+                              <td colspan="7" class="px-4 py-0 bg-white border-t border-dashed"
+                                  [ngClass]="selectedIndForHospDrilldown?.filter === 'recorded' ? 'border-emerald-200' : 'border-rose-200'">
+                                <!-- loading -->
+                                <div *ngIf="hospDrilldownLoading" class="py-3 flex items-center gap-2 text-xs"
+                                     [ngClass]="selectedIndForHospDrilldown?.filter === 'recorded' ? 'text-emerald-600' : 'text-rose-600'">
+                                  <i class="fas fa-spinner fa-spin"></i> กำลังโหลดรายชื่อ รพ....
+                                </div>
+                                <!-- hospital chips -->
+                                <div *ngIf="!hospDrilldownLoading" class="py-3">
+                                  <p class="text-[10px] font-bold mb-2"
+                                     [ngClass]="selectedIndForHospDrilldown?.filter === 'recorded' ? 'text-emerald-700' : 'text-rose-700'">
+                                    <i class="fas mr-1" [ngClass]="selectedIndForHospDrilldown?.filter === 'recorded' ? 'fa-check-circle' : 'fa-hourglass-half'"></i>
+                                    {{ selectedIndForHospDrilldown?.filter === 'recorded' ? 'รพ.ที่คีย์แล้ว' : 'รพ.ที่ยังค้าง' }}
+                                    ({{ hospDrilldownData.length }} แห่ง)
+                                  </p>
+                                  <div *ngIf="hospDrilldownData.length > 0" class="flex flex-wrap gap-1.5">
+                                    <span *ngFor="let h of hospDrilldownData"
+                                          class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium border"
+                                          [ngClass]="selectedIndForHospDrilldown?.filter === 'recorded'
+                                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                                            : 'bg-rose-50 border-rose-200 text-rose-800'">
+                                      <span class="font-semibold">{{ h.hosname || h.hospcode }}</span>
+                                      <span class="opacity-60 text-[9px]">{{ h.hostypename || h.hostype }}</span>
+                                      <span *ngIf="h.distname" class="opacity-50 text-[9px]">· {{ h.distname }}</span>
+                                    </span>
+                                  </div>
+                                  <p *ngIf="hospDrilldownData.length === 0" class="text-xs text-gray-400 italic">ไม่พบข้อมูล</p>
+                                </div>
+                              </td>
+                            </tr>
+                          </ng-container>
                           <tr *ngIf="deptDrilldownData.length === 0">
                             <td colspan="7" class="px-4 py-4 text-center text-gray-400">
                               <i class="fas fa-inbox mr-1"></i>ไม่พบตัวชี้วัดที่ active
@@ -824,38 +878,80 @@
                 <span><i class="fas fa-check-circle mr-1 text-emerald-400"></i>บันทึกแล้ว <strong class="text-emerald-700">{{ deptDrilldownEnteredCount }}</strong></span>
                 <span><i class="fas fa-hourglass-half mr-1 text-rose-400"></i>ยังค้าง <strong class="text-rose-700">{{ deptDrilldownNotEnteredCount }}</strong></span>
               </div>
-              <!-- indicator cards -->
+              <!-- indicator cards (mobile accordion) -->
               <div *ngIf="!deptDrilldownLoading" class="space-y-2">
-                <div *ngFor="let ind of deptDrilldownData; let j = index"
-                     class="bg-white rounded-xl border border-violet-100 px-3 py-2.5 shadow-sm">
-                  <p class="font-medium text-gray-800 text-xs break-words leading-snug mb-0.5">{{ ind.kpi_indicators_name }}</p>
-                  <p class="text-[10px] text-gray-400 mb-2">{{ ind.main_indicator_name || '-' }}</p>
-                  <div class="grid grid-cols-3 gap-1.5 text-xs text-center mb-1.5">
-                    <div class="bg-gray-50 rounded p-1">
-                      <p class="text-[9px] text-gray-400">รพ.ทั้งหมด</p>
-                      <p class="font-bold text-gray-700">{{ ind.total_hospitals }}</p>
+                <ng-container *ngFor="let ind of deptDrilldownData; let j = index">
+                  <div class="bg-white rounded-xl border border-violet-100 px-3 py-2.5 shadow-sm"
+                       [ngClass]="selectedIndForHospDrilldown?.ind?.indicator_id === ind.indicator_id ? 'ring-1 ring-violet-300' : ''">
+                    <p class="font-medium text-gray-800 text-xs break-words leading-snug mb-0.5">{{ ind.kpi_indicators_name }}</p>
+                    <p class="text-[10px] text-gray-400 mb-2">{{ ind.main_indicator_name || '-' }}</p>
+                    <div class="grid grid-cols-3 gap-1.5 text-xs text-center mb-1.5">
+                      <div class="bg-gray-50 rounded p-1">
+                        <p class="text-[9px] text-gray-400">รพ.ทั้งหมด</p>
+                        <p class="font-bold text-gray-700">{{ ind.total_hospitals }}</p>
+                      </div>
+                      <!-- คีย์แล้ว — คลิกได้ -->
+                      <div class="rounded p-1 cursor-pointer select-none transition-colors"
+                           [ngClass]="selectedIndForHospDrilldown?.ind?.indicator_id === ind.indicator_id && selectedIndForHospDrilldown?.filter === 'recorded'
+                             ? 'bg-emerald-200 ring-1 ring-emerald-400'
+                             : ind.recorded_hospitals > 0 ? 'bg-emerald-50 active:bg-emerald-100' : 'bg-gray-50'"
+                           (click)="ind.recorded_hospitals > 0 && openHospDrilldown(ind, 'recorded')">
+                        <p class="text-[9px] text-emerald-600">คีย์แล้ว <i *ngIf="ind.recorded_hospitals > 0" class="fas fa-chevron-down text-[8px]"></i></p>
+                        <p class="font-bold text-emerald-700">{{ ind.recorded_hospitals }}</p>
+                      </div>
+                      <!-- ค้างอยู่ — คลิกได้ -->
+                      <div class="rounded p-1 cursor-pointer select-none transition-colors"
+                           [ngClass]="selectedIndForHospDrilldown?.ind?.indicator_id === ind.indicator_id && selectedIndForHospDrilldown?.filter === 'missing'
+                             ? 'bg-rose-200 ring-1 ring-rose-400'
+                             : ind.missing_hospitals > 0 ? 'bg-rose-50 active:bg-rose-100' : 'bg-gray-50'"
+                           (click)="ind.missing_hospitals > 0 && openHospDrilldown(ind, 'missing')">
+                        <p class="text-[9px]" [ngClass]="ind.missing_hospitals > 0 ? 'text-rose-600' : 'text-gray-400'">
+                          ค้างอยู่ <i *ngIf="ind.missing_hospitals > 0" class="fas fa-chevron-down text-[8px]"></i>
+                        </p>
+                        <p class="font-bold" [ngClass]="ind.missing_hospitals > 0 ? 'text-rose-700' : 'text-gray-400'">{{ ind.missing_hospitals }}</p>
+                      </div>
                     </div>
-                    <div class="bg-emerald-50 rounded p-1">
-                      <p class="text-[9px] text-emerald-600">คีย์แล้ว</p>
-                      <p class="font-bold text-emerald-700">{{ ind.recorded_hospitals }}</p>
-                    </div>
-                    <div class="rounded p-1" [ngClass]="ind.missing_hospitals > 0 ? 'bg-rose-50' : 'bg-gray-50'">
-                      <p class="text-[9px]" [ngClass]="ind.missing_hospitals > 0 ? 'text-rose-600' : 'text-gray-400'">ค้างอยู่</p>
-                      <p class="font-bold" [ngClass]="ind.missing_hospitals > 0 ? 'text-rose-700' : 'text-gray-400'">{{ ind.missing_hospitals }}</p>
+                    <div *ngIf="ind.total_hospitals > 0" class="flex items-center gap-1.5">
+                      <div class="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                        <div class="h-1.5 rounded-full"
+                             [ngClass]="ind.recording_pct >= 80 ? 'bg-emerald-500' : ind.recording_pct >= 50 ? 'bg-amber-400' : 'bg-rose-400'"
+                             [style.width.%]="ind.recording_pct"></div>
+                      </div>
+                      <span class="text-[10px] font-bold w-8 text-right"
+                            [ngClass]="ind.recording_pct >= 80 ? 'text-emerald-600' : ind.recording_pct >= 50 ? 'text-amber-600' : 'text-rose-600'">
+                        {{ ind.recording_pct | number:'1.0-1' }}%
+                      </span>
                     </div>
                   </div>
-                  <div *ngIf="ind.total_hospitals > 0" class="flex items-center gap-1.5">
-                    <div class="flex-1 bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                      <div class="h-1.5 rounded-full"
-                           [ngClass]="ind.recording_pct >= 80 ? 'bg-emerald-500' : ind.recording_pct >= 50 ? 'bg-amber-400' : 'bg-rose-400'"
-                           [style.width.%]="ind.recording_pct"></div>
+                  <!-- Mobile: hospital accordion ใต้ card ตัวชี้วัด -->
+                  <div *ngIf="selectedIndForHospDrilldown?.ind?.indicator_id === ind.indicator_id"
+                       class="rounded-xl border px-3 py-2.5 -mt-1"
+                       [ngClass]="selectedIndForHospDrilldown?.filter === 'recorded' ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'">
+                    <div *ngIf="hospDrilldownLoading" class="flex items-center gap-2 text-xs py-1"
+                         [ngClass]="selectedIndForHospDrilldown?.filter === 'recorded' ? 'text-emerald-600' : 'text-rose-600'">
+                      <i class="fas fa-spinner fa-spin"></i> กำลังโหลด...
                     </div>
-                    <span class="text-[10px] font-bold w-8 text-right"
-                          [ngClass]="ind.recording_pct >= 80 ? 'text-emerald-600' : ind.recording_pct >= 50 ? 'text-amber-600' : 'text-rose-600'">
-                      {{ ind.recording_pct | number:'1.0-1' }}%
-                    </span>
+                    <div *ngIf="!hospDrilldownLoading">
+                      <p class="text-[10px] font-bold mb-2"
+                         [ngClass]="selectedIndForHospDrilldown?.filter === 'recorded' ? 'text-emerald-700' : 'text-rose-700'">
+                        <i class="fas mr-1" [ngClass]="selectedIndForHospDrilldown?.filter === 'recorded' ? 'fa-check-circle' : 'fa-hourglass-half'"></i>
+                        {{ selectedIndForHospDrilldown?.filter === 'recorded' ? 'รพ.ที่คีย์แล้ว' : 'รพ.ที่ยังค้าง' }}
+                        ({{ hospDrilldownData.length }} แห่ง)
+                      </p>
+                      <div class="flex flex-wrap gap-1.5">
+                        <span *ngFor="let h of hospDrilldownData"
+                              class="inline-flex flex-col px-2 py-1 rounded-lg text-[10px] border"
+                              [ngClass]="selectedIndForHospDrilldown?.filter === 'recorded'
+                                ? 'bg-white border-emerald-200 text-emerald-900'
+                                : 'bg-white border-rose-200 text-rose-900'">
+                          <span class="font-semibold leading-tight">{{ h.hosname || h.hospcode }}</span>
+                          <span class="opacity-60 text-[9px]">{{ h.hostypename || h.hostype }}<span *ngIf="h.distname"> · {{ h.distname }}</span></span>
+                        </span>
+                      </div>
+                      <p *ngIf="hospDrilldownData.length === 0" class="text-xs text-gray-400 italic">ไม่พบข้อมูล</p>
+                    </div>
                   </div>
-                </div>
+                </ng-container>
                 <div *ngIf="deptDrilldownData.length === 0" class="text-center text-gray-400 text-xs py-4">
                   <i class="fas fa-inbox mr-1"></i>ไม่พบตัวชี้วัด
                 </div>

@@ -946,6 +946,13 @@ export class AuthService {
     return this.http.get(`${this.apiUrl}/report/by-dept-summary/indicators${queryStr ? '?' + queryStr : ''}`, { headers });
   }
 
+  getReportByDeptSummaryHospitals(params: any = {}): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const queryStr = new URLSearchParams(params).toString();
+    return this.http.get(`${this.apiUrl}/report/by-dept-summary/hospitals${queryStr ? '?' + queryStr : ''}`, { headers });
+  }
+
   // Export KPI Tables
   getExportableIndicators(): Observable<any> {
     const token = localStorage.getItem('kpi_token');
