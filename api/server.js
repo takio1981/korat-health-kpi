@@ -6750,6 +6750,153 @@ apiRouter.get('/report/recording-missing/by-hospital/:hospcode', authenticateTok
     }
 });
 
+// รายงาน: สรุปรายหน่วยงาน (Dept Summary)
+//   - แต่ละหน่วยงาน: ตัวชี้วัดทั้งหมด / คีย์แล้ว (มีอย่างน้อย 1 รพ.บันทึก actual) / ยังไม่คีย์
+//   - avg_coverage_pct = % รพ.ที่บันทึกเฉลี่ยข้ามทุกตัวชี้วัดของ dept
+//   สิทธิ์: super_admin ดูทุก dept, admin_ssj ดูเฉพาะ dept ตัวเอง
+apiRouter.get('/report/by-dept-summary', authenticateToken, async (req, res) => {
+    try {
+        const user = req.user;
+        const { year_bh, hostype } = req.query;
+        if (!year_bh) {
+            return res.status(400).json({ success: false, message: 'ต้องระบุปีงบประมาณ' });
+        }
+
+        let cteWhere = ['r.year_bh = ?'];
+        let cteParams = [year_bh];
+        let deptFilter = '';
+        let deptFilterParam = null;
+
+        // Role-based scope
+        if (user.role === 'super_admin') {
+            // เห็นทุก dept
+        } else if (user.role === 'admin_ssj') {
+            if (user.deptId != null) { deptFilter = 'AND i.dept_id = ?'; deptFilterParam = user.deptId; }
+        } else {
+            // role อื่นไม่ควรเห็น dept summary แต่ให้กรองตาม dept ตัวเองไว้
+            if (user.deptId != null) { deptFilter = 'AND i.dept_id = ?'; deptFilterParam = user.deptId; }
+        }
+
+        let hostypeJoin = '';
+        if (hostype) {
+            hostypeJoin = 'JOIN chospital ch ON ch.hoscode = r.hospcode';
+            cteWhere.push('ch.hostype = ?');
+            cteParams.push(hostype);
+        }
+
+        const cteWhereStr = cteWhere.join(' AND ');
+
+        // params สำหรับ query หลัก
+        const queryParams = [...cteParams];
+        if (deptFilterParam != null) queryParams.push(deptFilterParam);
+
+        const sql = `
+            WITH ind_stats AS (
+                SELECT
+                    r.indicator_id,
+                    COUNT(DISTINCT r.hospcode) AS total_hosp,
+                    COUNT(DISTINCT CASE WHEN NULLIF(TRIM(r.actual_value), '') IS NOT NULL THEN r.hospcode END) AS recorded_hosp
+                FROM kpi_results r
+                ${hostypeJoin}
+                WHERE ${cteWhereStr}
+                GROUP BY r.indicator_id
+            )
+            SELECT
+                d.id AS dept_id,
+                d.dept_name,
+                COUNT(DISTINCT i.id) AS total_indicators,
+                COUNT(DISTINCT CASE WHEN IFNULL(ist.recorded_hosp, 0) > 0 THEN i.id END) AS entered_indicators,
+                COUNT(DISTINCT CASE WHEN IFNULL(ist.recorded_hosp, 0) = 0 THEN i.id END) AS not_entered_indicators,
+                IFNULL(ROUND(
+                    100.0 * SUM(IFNULL(ist.recorded_hosp, 0)) / NULLIF(SUM(IFNULL(ist.total_hosp, 0)), 0)
+                , 1), 0) AS avg_coverage_pct
+            FROM departments d
+            JOIN kpi_indicators i ON i.dept_id = d.id AND i.is_active = 1
+            LEFT JOIN ind_stats ist ON ist.indicator_id = i.id
+            WHERE 1=1 ${deptFilter}
+            GROUP BY d.id, d.dept_name
+            ORDER BY d.dept_name
+        `;
+        const [rows] = await db.query(sql, queryParams);
+
+        const totalDepts = rows.length;
+        const fullyCovered = rows.filter(r => Number(r.entered_indicators) === Number(r.total_indicators) && Number(r.total_indicators) > 0).length;
+        const notEntered = rows.filter(r => Number(r.entered_indicators) === 0).length;
+        const avgPct = totalDepts === 0 ? 0 :
+            Math.round(rows.reduce((s, r) => s + Number(r.avg_coverage_pct || 0), 0) / totalDepts * 10) / 10;
+
+        res.json({
+            success: true,
+            summary: { total_depts: totalDepts, fully_covered: fullyCovered, not_entered: notEntered, avg_coverage_pct: avgPct },
+            data: rows
+        });
+    } catch (error) {
+        console.error('Report by-dept-summary error:', error);
+        res.status(500).json({ success: false, message: 'ไม่สามารถดึงข้อมูลสรุปรายหน่วยงานได้' });
+    }
+});
+
+// รายงาน: drill-down ตัวชี้วัดของหน่วยงาน (by-dept-summary/indicators)
+//   - ดูว่าแต่ละตัวชี้วัดใน dept นั้น มีกี่ รพ. คีย์แล้ว / ยังไม่คีย์
+apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (req, res) => {
+    try {
+        const user = req.user;
+        const { year_bh, dept_id, hostype } = req.query;
+        if (!year_bh || !dept_id) {
+            return res.status(400).json({ success: false, message: 'ต้องระบุปีงบประมาณและหน่วยงาน' });
+        }
+
+        // Role check: admin_ssj ดูได้เฉพาะ dept ตัวเอง
+        if (user.role === 'admin_ssj' && user.deptId != null && String(user.deptId) !== String(dept_id)) {
+            return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์ดูหน่วยงานอื่น' });
+        }
+
+        let cteWhere = ['r.year_bh = ?'];
+        let cteParams = [year_bh];
+        let hostypeJoin = '';
+        if (hostype) {
+            hostypeJoin = 'JOIN chospital ch ON ch.hoscode = r.hospcode';
+            cteWhere.push('ch.hostype = ?');
+            cteParams.push(hostype);
+        }
+        const cteWhereStr = cteWhere.join(' AND ');
+
+        const sql = `
+            WITH ind_stats AS (
+                SELECT
+                    r.indicator_id,
+                    COUNT(DISTINCT r.hospcode) AS total_hosp,
+                    COUNT(DISTINCT CASE WHEN NULLIF(TRIM(r.actual_value), '') IS NOT NULL THEN r.hospcode END) AS recorded_hosp
+                FROM kpi_results r
+                ${hostypeJoin}
+                WHERE ${cteWhereStr}
+                GROUP BY r.indicator_id
+            )
+            SELECT
+                i.id AS indicator_id,
+                i.kpi_indicators_name,
+                mi.main_indicator_name,
+                IFNULL(ist.total_hosp, 0) AS total_hospitals,
+                IFNULL(ist.recorded_hosp, 0) AS recorded_hospitals,
+                IFNULL(ist.total_hosp, 0) - IFNULL(ist.recorded_hosp, 0) AS missing_hospitals,
+                CASE WHEN IFNULL(ist.total_hosp, 0) = 0 THEN 0
+                     ELSE ROUND(IFNULL(ist.recorded_hosp, 0) / ist.total_hosp * 100, 1)
+                END AS recording_pct
+            FROM kpi_indicators i
+            LEFT JOIN ind_stats ist ON ist.indicator_id = i.id
+            LEFT JOIN kpi_main_indicators mi ON mi.id = i.main_indicator_id
+            WHERE i.dept_id = ? AND i.is_active = 1
+            ORDER BY recording_pct DESC, mi.main_indicator_name, i.kpi_indicators_name
+        `;
+        const queryParams = [...cteParams, dept_id];
+        const [rows] = await db.query(sql, queryParams);
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        console.error('Report by-dept-summary/indicators error:', error);
+        res.status(500).json({ success: false, message: 'ไม่สามารถดึงข้อมูลตัวชี้วัดของหน่วยงานได้' });
+    }
+});
+
 // ========== Auto-create tables for Approval & Notification system ==========
 (async () => {
     try {

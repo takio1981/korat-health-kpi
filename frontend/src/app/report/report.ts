@@ -59,6 +59,13 @@ export class ReportComponent implements OnInit {
     avg_recording_pct: 0
   };
 
+  // === Dept Summary (admin_ssj + super_admin) ===
+  deptSummaryData: any[] = [];
+  deptSummarySummary: any = { total_depts: 0, fully_covered: 0, not_entered: 0, avg_coverage_pct: 0 };
+  deptDrilldownData: any[] = [];
+  deptDrilldownLoading: boolean = false;
+  selectedDeptForDrilldown: any = null;
+
   // Toast loading — reference to dismiss when load completes
   private monitorLoadingToastId: number | null = null;
 
@@ -155,7 +162,53 @@ export class ReportComponent implements OnInit {
     if (tab === 'recording-status') {
       this.showMonitorLoadingToast();
     }
+    if (tab !== 'by-dept') {
+      this.selectedDeptForDrilldown = null;
+      this.deptDrilldownData = [];
+    }
     this.loadReport();
+  }
+
+  openDeptDrilldown(dept: any) {
+    if (this.selectedDeptForDrilldown?.dept_id === dept.dept_id) {
+      this.selectedDeptForDrilldown = null;
+      this.deptDrilldownData = [];
+      return;
+    }
+    this.selectedDeptForDrilldown = dept;
+    this.deptDrilldownData = [];
+    this.deptDrilldownLoading = true;
+    const params: any = { year_bh: this.selectedYear, dept_id: dept.dept_id };
+    if (this.selectedHosType) params.hostype = this.selectedHosType;
+    this.authService.getReportByDeptSummaryIndicators(params).subscribe({
+      next: (res: any) => {
+        this.deptDrilldownLoading = false;
+        if (res.success) {
+          this.deptDrilldownData = (res.data || []).map((item: any) => ({
+            ...item,
+            total_hospitals: Number(item.total_hospitals) || 0,
+            recorded_hospitals: Number(item.recorded_hospitals) || 0,
+            missing_hospitals: Number(item.missing_hospitals) || 0,
+            recording_pct: Number(item.recording_pct) || 0,
+          }));
+        }
+        this.cdr.detectChanges();
+      },
+      error: () => { this.deptDrilldownLoading = false; this.cdr.detectChanges(); }
+    });
+  }
+
+  closeDeptDrilldown() {
+    this.selectedDeptForDrilldown = null;
+    this.deptDrilldownData = [];
+  }
+
+  get deptDrilldownEnteredCount(): number {
+    return this.deptDrilldownData.filter(x => x.recorded_hospitals > 0).length;
+  }
+
+  get deptDrilldownNotEnteredCount(): number {
+    return this.deptDrilldownData.filter(x => x.recorded_hospitals === 0).length;
   }
 
   /** เปิด loading toast สี theme + เก็บ toastId เพื่อ dismiss ตอนโหลดเสร็จ */
@@ -208,6 +261,9 @@ export class ReportComponent implements OnInit {
           ? this.authService.getReportRecordingStatusByHospital(params)
           : this.authService.getReportRecordingStatus(params);
         break;
+      case 'by-dept':
+        observable = this.authService.getReportByDeptSummary(params);
+        break;
       default: observable = this.authService.getReportByIndicator(params);
     }
 
@@ -225,15 +281,28 @@ export class ReportComponent implements OnInit {
             this.recordingSummary = res.summary || this.recordingSummary;
             this.reportData.forEach((item: any) => {
               item.recording_pct = Number(item.recording_pct) || 0;
-              // per-indicator fields
               item.total_hospitals = Number(item.total_hospitals) || 0;
               item.recorded_hospitals = Number(item.recorded_hospitals) || 0;
               item.missing_hospitals = Number(item.missing_hospitals) || 0;
-              // per-hospital fields
               item.total_indicators = Number(item.total_indicators) || 0;
               item.recorded_indicators = Number(item.recorded_indicators) || 0;
               item.missing_indicators = Number(item.missing_indicators) || 0;
             });
+            this.cdr.detectChanges();
+            return;
+          }
+          if (this.activeTab === 'by-dept') {
+            this.deptSummarySummary = res.summary || this.deptSummarySummary;
+            this.deptSummaryData = (this.reportData || []).map((item: any) => ({
+              ...item,
+              total_indicators: Number(item.total_indicators) || 0,
+              entered_indicators: Number(item.entered_indicators) || 0,
+              not_entered_indicators: Number(item.not_entered_indicators) || 0,
+              avg_coverage_pct: Number(item.avg_coverage_pct) || 0,
+            }));
+            // reset drill-down เมื่อ reload
+            this.selectedDeptForDrilldown = null;
+            this.deptDrilldownData = [];
             this.cdr.detectChanges();
             return;
           }
@@ -394,12 +463,14 @@ export class ReportComponent implements OnInit {
         'by-hospital': 'รายหน่วยบริการ',
         'by-district': 'รายอำเภอ',
         'by-year': 'รายปีงบประมาณ',
-        'recording-status': 'สถานะการบันทึก'
+        'recording-status': 'สถานะการบันทึก',
+        'by-dept': 'สรุปรายหน่วยงาน'
       };
-      const ws = XLSX.utils.json_to_sheet(this.reportData);
+      const exportData = this.activeTab === 'by-dept' ? this.deptSummaryData : this.reportData;
+      const ws = XLSX.utils.json_to_sheet(exportData);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, tabNames[this.activeTab] || 'Report');
-      XLSX.writeFile(wb, `KPI_Report_${tabNames[this.activeTab]}_${this.selectedYear || 'all'}.xlsx`);
+      XLSX.writeFile(wb, `KPI_Report_${tabNames[this.activeTab] || this.activeTab}_${this.selectedYear || 'all'}.xlsx`);
     });
   }
 
