@@ -91,8 +91,7 @@ export class LoginComponent implements OnDestroy {
 
   /** กดปุ่ม ThaiD → redirect ไป DGA */
   loginWithThaID() {
-    const apiBase = environment.apiUrl.replace(/\/api\/?$/, '');
-    window.location.href = `${apiBase}/auth/thaid/start`;
+    window.location.href = `${environment.apiUrl}/auth/thaid/start`;
   }
 
   private checkMaintenance() {

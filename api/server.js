@@ -961,15 +961,15 @@ apiRouter.get('/auth/thaid/start', async (req, res) => {
     }
 });
 
-// GET /auth/thaid/callback — รับ code จาก DGA, แลก token, decode JWT, login (public)
-apiRouter.get('/auth/thaid/callback', async (req, res) => {
+// === ThaiD Callback Handler (shared function) ===
+// mount ทั้งบน apiRouter (/khupskpi/api/auth/thaid/callback)
+// และบน app root (/authen/thaid/callback — ตรงกับ redirect_uri ที่ลงทะเบียนกับ DGA)
+async function handleThaidCallback(req, res) {
     const { code, state, error, error_description } = req.query;
 
-    // ดึง origin จาก state map ก่อน (ใช้แม้ error)
     const stateData = _thaidStateMap.get(String(state || ''));
     const frontendBase = stateData?.origin || getFrontendBase(req);
     const loginUrl = `${frontendBase}/login`;
-
     const redirectErr = (msg) => res.redirect(`${loginUrl}?sso_error=${encodeURIComponent(msg)}`);
 
     if (error) {
@@ -1001,30 +1001,29 @@ apiRouter.get('/auth/thaid/callback', async (req, res) => {
 
         if (!tokenRes.ok) {
             const errBody = await tokenRes.text().catch(() => '');
-            console.error(`[ThaiD/callback] token exchange failed ${tokenRes.status}:`, errBody);
-            return redirectErr(`แลก token ไม่สำเร็จ (${tokenRes.status}) กรุณาตรวจสอบ client_id / client_secret`);
+            console.error(`[ThaiD/callback] token exchange ${tokenRes.status}:`, errBody);
+            return redirectErr(`แลก token ไม่สำเร็จ (${tokenRes.status}) — ตรวจสอบ client_secret / token_url`);
         }
 
         const tokenData = await tokenRes.json();
-        // id_token เป็น JWT ที่ DGA ออกให้ / fallback ลอง access_token
         const idToken = tokenData.id_token || tokenData.access_token;
-        if (!idToken) return redirectErr('DGA ไม่ได้ส่ง id_token กลับมา ตรวจสอบ scope หรือ config');
+        if (!idToken) return redirectErr('DGA ไม่ได้ส่ง id_token — ตรวจสอบ scope (ต้องมี openid)');
 
-        // 2. Decode JWT — ไม่ verify signature (trust DGA's HTTPS endpoint)
-        //    ถ้าต้องการ verify ด้วย RS256 → ใส่ public key ใน thaid_jwt_public_key
+        // 2. Decode JWT payload (trust HTTPS connection to DGA)
         const payload = jwt.decode(idToken);
         if (!payload || typeof payload !== 'object') {
             return redirectErr('ถอดรหัส JWT จาก DGA ไม่สำเร็จ');
         }
+        console.log('[ThaiD] JWT fields:', Object.keys(payload));
 
-        // 3. ดึงเลขบัตรประชาชน 13 หลัก
+        // 3. ดึงเลขบัตรประชาชน 13 หลัก (DGA ใช้ field "pid")
         const cidStr = extractCidFromPayload(payload);
         if (!cidStr) {
-            console.error('[ThaiD] JWT payload fields:', Object.keys(payload));
-            return redirectErr('ไม่พบเลขบัตรประชาชน 13 หลักใน JWT (ลองดู field: pid, cid, citizen_id, national_id)');
+            console.error('[ThaiD] payload:', JSON.stringify(payload));
+            return redirectErr('ไม่พบเลขบัตรประชาชน 13 หลักใน JWT (field ที่ตรวจ: pid, cid, citizen_id, national_id, sub)');
         }
 
-        // 4. SHA-256 hash แล้วเทียบ users.cid
+        // 4. SHA-256 hash → เทียบ users.cid
         const hashedCid = crypto.createHash('sha256').update(cidStr).digest('hex');
         const [rows] = await db.query(
             `SELECT id, username, role, dept_id, hospcode, firstname, lastname,
@@ -1034,18 +1033,18 @@ apiRouter.get('/auth/thaid/callback', async (req, res) => {
         );
 
         if (rows.length === 0) {
-            return redirectErr('ไม่พบบัญชีที่เชื่อมกับบัตรประชาชนนี้ — กรุณาลงทะเบียนและให้ผู้ดูแลระบบกรอก CID ก่อน');
+            return redirectErr('ไม่พบบัญชีที่เชื่อมกับบัตรประชาชนนี้ — กรุณาให้ผู้ดูแลระบบบันทึกเลขบัตรประชาชนในบัญชีก่อน');
         }
 
         const user = rows[0];
         if (!user.is_active)   return redirectErr('บัญชีถูกปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ');
         if (!user.is_approved) return redirectErr('บัญชียังรอการอนุมัติจากผู้ดูแลระบบ');
 
-        // 5. Concurrent login check (เหมือน /login)
+        // 5. Concurrent login check
         if (user.active_session_id) {
             const lastSeen = user.last_seen_at ? new Date(user.last_seen_at).getTime() : 0;
             if (lastSeen > Date.now() - 5 * 60 * 1000) {
-                return redirectErr(`บัญชีนี้กำลังใช้งานอยู่ที่ IP ${user.last_seen_ip || '-'} กรุณารอ 5 นาทีหรือ logout ก่อน`);
+                return redirectErr(`บัญชีนี้กำลังใช้งานอยู่ที่ IP ${user.last_seen_ip || '-'} — รอ 5 นาที หรือ logout เครื่องเก่าก่อน`);
             }
         }
 
@@ -1072,13 +1071,19 @@ apiRouter.get('/auth/thaid/callback', async (req, res) => {
             firstname: user.firstname, lastname: user.lastname
         };
         const ssoUser = Buffer.from(JSON.stringify(userInfo)).toString('base64');
-
         res.redirect(`${loginUrl}?sso_token=${encodeURIComponent(token)}&sso_user=${encodeURIComponent(ssoUser)}&sso_provider=thaid`);
     } catch (e) {
         console.error('[ThaiD/callback] error:', e);
-        redirectErr('เกิดข้อผิดพลาดระหว่างเชื่อมต่อ ThaiD กรุณาลองใหม่');
+        res.redirect(`${loginUrl}?sso_error=${encodeURIComponent('เกิดข้อผิดพลาดระหว่างเชื่อมต่อ ThaiD')}`);
     }
-});
+}
+
+// Mount callback บน 2 path:
+// - /khupskpi/api/auth/thaid/callback (primary — สำหรับ redirect_uri ใหม่)
+apiRouter.get('/auth/thaid/callback', handleThaidCallback);
+// - /authen/thaid/callback (ตรงกับที่ลงทะเบียน DGA: https://apikorat.moph.go.th/authen/thaid/callback)
+//   ต้องเพิ่ม nginx: location /authen/ { proxy_pass http://backend:8830; ... }
+app.get('/authen/thaid/callback', handleThaidCallback);
 
 // === Session status diagnostic (super_admin) — ตรวจว่า Single Session ทำงานหรือไม่ ===
 apiRouter.get('/admin/session-status', authenticateToken, async (req, res) => {
@@ -10007,6 +10012,23 @@ const bkDecrypt = (ciphertext) => {
         try { await db.query('ALTER TABLE backup_schedules ADD COLUMN auto_upload_cloud TINYINT(1) DEFAULT 0'); } catch (e) {}
         try { await db.query('ALTER TABLE backup_schedule_logs ADD COLUMN cloud_uploaded TINYINT(1) DEFAULT 0'); } catch (e) {}
         try { await db.query('ALTER TABLE backup_schedule_logs ADD COLUMN cloud_url VARCHAR(500) NULL'); } catch (e) {}
+
+        // Default settings — ThaiD SSO (DGA imauth.bora.dopa.go.th)
+        // ค่า auth_url, token_url, client_id, scope รู้แน่ชัดจาก DGA
+        // ค่า client_secret และ redirect_uri ต้องกรอกเองใน Settings
+        const thaidDefaults = [
+            ['thaid_enabled', 'false', 'เปิดใช้ ThaiD SSO (DGA)'],
+            ['thaid_auth_url', 'https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/', 'ThaiD Authorization Endpoint'],
+            ['thaid_token_url', 'https://imauth.bora.dopa.go.th/api/v2/oauth2/token/', 'ThaiD Token Endpoint'],
+            ['thaid_userinfo_url', 'https://imauth.bora.dopa.go.th/api/v2/oauth2/userinfo/', 'ThaiD Userinfo Endpoint'],
+            ['thaid_client_id', 'THV0dzZtYjVVOHc4WVJPQVRaVndmNVYwVG82VUdlYXM', 'ThaiD Client ID (จาก DGA)'],
+            ['thaid_client_secret', '', 'ThaiD Client Secret (จาก DGA — กรอกในหน้า Settings)'],
+            ['thaid_redirect_uri', 'https://apikorat.moph.go.th/authen/thaid/callback', 'ThaiD Redirect URI (ที่ลงทะเบียนกับ DGA)'],
+            ['thaid_scope', 'pid name birthdate openid', 'ThaiD Scopes']
+        ];
+        for (const [key, val, desc] of thaidDefaults) {
+            try { await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)', [key, val, desc]); } catch (e) {}
+        }
 
         // Default settings — Google Drive cloud config (OAuth 2.0 user account, 15GB free Gmail)
         const cloudDefaults = [
