@@ -4,9 +4,9 @@ import { ReactiveFormsModule, FormGroup, FormControl, Validators } from '@angula
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { ThemeService } from '../services/theme.service';
-import { environment } from '../../environments/environment';
 import { firstValueFrom } from 'rxjs';
 import Swal from 'sweetalert2';
+import { environment } from '../../environments/environment';
 
 @Component({
   selector: 'app-login',
@@ -28,90 +28,82 @@ export class LoginComponent implements OnDestroy {
 
   maintenanceMode: boolean = false;
   maintenanceMessage: string = '';
-
-  // === SSO providers (toggle จาก settings page โดย super_admin) ===
   isThaIdEnabled: boolean = false;
-  isProviderIdEnabled: boolean = false;
 
-  loginWithThaID() {
-    this.startSsoLogin('thaid');
-  }
-
-  loginWithProviderID() {
-    this.startSsoLogin('providerid');
-  }
-
-  // Navigate ผู้ใช้ไปยัง backend OAuth start endpoint → backend redirect ต่อไปที่ MOPH/DGA
-  private startSsoLogin(provider: 'thaid' | 'providerid') {
-    const base = environment.apiUrl.replace(/\/+$/, '');
-    window.location.href = `${base}/auth/${provider}/start`;
-  }
+  ssoLoading: boolean = false; // แสดง spinner ขณะรอ redirect กลับจาก ThaiD
 
   private statusPollTimer: any = null;
-  private onVisibilityChange = () => {
-    if (document.visibilityState === 'visible') this.refreshSsoStatus();
-  };
 
   ngOnInit() {
-    this.refreshSsoStatus();
-    this.handleSsoCallback();
-    // Poll ทุก 3 วินาที + force CD ทุกครั้งให้ UI update ทันทีโดยไม่ต้อง interact
+    this.handleSsoCallback(); // ต้องเรียกก่อน checkMaintenance เพื่อรับ sso_token ทันที
+    this.checkMaintenance();
     this.ngZone.runOutsideAngular(() => {
       this.statusPollTimer = setInterval(() => {
-        this.ngZone.run(() => this.refreshSsoStatus());
-      }, 3000);
+        this.ngZone.run(() => this.checkMaintenance());
+      }, 10000);
     });
-    document.addEventListener('visibilitychange', this.onVisibilityChange);
-  }
-
-  // อ่าน sso_token / sso_user / sso_error จาก query string หลัง redirect กลับจาก backend OAuth callback
-  private handleSsoCallback() {
-    const qp = this.route.snapshot.queryParamMap;
-    const ssoError = qp.get('sso_error');
-    const ssoToken = qp.get('sso_token');
-    const ssoUser = qp.get('sso_user');
-    const ssoProvider = qp.get('sso_provider');
-    if (ssoError) {
-      const providerLabel = ssoProvider === 'thaid' ? 'ThaID' : (ssoProvider === 'providerid' ? 'ProviderID' : 'SSO');
-      Swal.fire({ icon: 'error', title: `เข้าสู่ระบบด้วย ${providerLabel} ไม่สำเร็จ`, text: ssoError, confirmButtonColor: '#dc2626' });
-      this.router.navigate(['/login'], { replaceUrl: true });
-      return;
-    }
-    if (ssoToken && ssoUser) {
-      try {
-        const userObj = JSON.parse(atob(ssoUser));
-        this.authService.saveToken(ssoToken);
-        this.authService.saveUser(userObj);
-        const providerLabel = ssoProvider === 'thaid' ? 'ThaID' : 'ProviderID';
-        Swal.fire({
-          icon: 'success', title: `เข้าสู่ระบบด้วย ${providerLabel} สำเร็จ`,
-          text: `ยินดีต้อนรับ คุณ${userObj.firstname || ''} ${userObj.lastname || ''}`,
-          timer: 1500, showConfirmButton: false
-        }).then(() => this.router.navigate(['/dashboard'], { replaceUrl: true }));
-      } catch (e: any) {
-        Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: 'ไม่สามารถถอดรหัสข้อมูล SSO ได้: ' + e.message });
-        this.router.navigate(['/login'], { replaceUrl: true });
-      }
-    }
   }
 
   ngOnDestroy() {
     if (this.statusPollTimer) { clearInterval(this.statusPollTimer); this.statusPollTimer = null; }
-    document.removeEventListener('visibilitychange', this.onVisibilityChange);
   }
 
-  private refreshSsoStatus() {
+  /** อ่าน query params จาก ThaiD callback redirect แล้วทำ login */
+  private handleSsoCallback() {
+    const params = new URLSearchParams(window.location.search);
+    const ssoToken = params.get('sso_token');
+    const ssoUser = params.get('sso_user');
+    const ssoError = params.get('sso_error');
+
+    // เคลียร์ query string ออกจาก URL เสมอ
+    if (ssoToken || ssoError) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+
+    if (ssoError) {
+      Swal.fire({
+        icon: 'error',
+        title: 'เข้าสู่ระบบผ่าน ThaiD ไม่สำเร็จ',
+        text: decodeURIComponent(ssoError),
+        confirmButtonColor: '#10b981'
+      });
+      return;
+    }
+
+    if (ssoToken && ssoUser) {
+      try {
+        const userInfo = JSON.parse(atob(decodeURIComponent(ssoUser)));
+        this.authService.saveToken(ssoToken);
+        this.authService.saveUser(userInfo);
+        this.authService.startTokenExpiryWatcher();
+        Swal.fire({
+          icon: 'success',
+          title: 'เข้าสู่ระบบสำเร็จ',
+          text: `ยินดีต้อนรับ คุณ${userInfo.firstname || ''} ${userInfo.lastname || ''} (ThaiD)`,
+          timer: 1500,
+          showConfirmButton: false
+        }).then(() => this.router.navigate(['/dashboard']));
+      } catch {
+        Swal.fire('ผิดพลาด', 'ไม่สามารถอ่านข้อมูล SSO ได้', 'error');
+      }
+    }
+  }
+
+  /** กดปุ่ม ThaiD → redirect ไป DGA */
+  loginWithThaID() {
+    const apiBase = environment.apiUrl.replace(/\/api\/?$/, '');
+    window.location.href = `${apiBase}/auth/thaid/start`;
+  }
+
+  private checkMaintenance() {
     this.authService.getMaintenanceStatus().subscribe({
       next: (res: any) => {
-        const changed =
-          this.maintenanceMode !== !!res.maintenance ||
-          this.maintenanceMessage !== (res.message || '') ||
-          this.isThaIdEnabled !== !!res.thaid_enabled ||
-          this.isProviderIdEnabled !== !!res.providerid_enabled;
+        const changed = this.maintenanceMode !== !!res.maintenance
+          || this.maintenanceMessage !== (res.message || '')
+          || this.isThaIdEnabled !== !!res.thaid_enabled;
         this.maintenanceMode = !!res.maintenance;
         this.maintenanceMessage = res.message || '';
         this.isThaIdEnabled = !!res.thaid_enabled;
-        this.isProviderIdEnabled = !!res.providerid_enabled;
         if (changed) this.cdr.detectChanges();
       }
     });

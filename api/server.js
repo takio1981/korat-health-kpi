@@ -870,6 +870,216 @@ apiRouter.post('/auth/refresh-token', authenticateToken, async (req, res) => {
     }
 });
 
+// ============================================================
+// === ThaiD SSO — OAuth 2.0 Authorization Code + OIDC JWT ===
+// ============================================================
+// Flow:
+//  1. GET /auth/thaid/start   → redirect ไป DGA auth URL พร้อม state (CSRF)
+//  2. DGA callback กลับมาที่ GET /auth/thaid/callback?code=xxx&state=xxx
+//  3. Backend แลก code → id_token JWT จาก DGA token endpoint
+//  4. Decode JWT → ดึงเลขบัตร 13 หลัก (field: pid / cid / citizen_id / national_id / sub)
+//  5. SHA-256 hash → เทียบ users.cid
+//  6. ถ้าเจอ → issue JWT + session → redirect /login?sso_token=xxx&sso_user=xxx
+//
+// ตั้งค่าผ่าน Settings (super_admin):
+//   thaid_enabled, thaid_auth_url, thaid_token_url, thaid_client_id,
+//   thaid_client_secret, thaid_redirect_uri, thaid_scope
+
+// CSRF state map: state → { origin, created_at } — TTL 10 นาที
+const _thaidStateMap = new Map();
+setInterval(() => {
+    const cutoff = Date.now() - 10 * 60 * 1000;
+    for (const [k, v] of _thaidStateMap.entries()) {
+        if (v.created_at < cutoff) _thaidStateMap.delete(k);
+    }
+}, 60 * 1000);
+
+/** ดึง ThaiD config ทั้งหมดจาก system_settings */
+async function getThaidSettings() {
+    const keys = ['thaid_enabled','thaid_auth_url','thaid_token_url','thaid_userinfo_url',
+                   'thaid_client_id','thaid_client_secret','thaid_redirect_uri','thaid_scope'];
+    const [rows] = await db.query(
+        'SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN (?)', [keys]
+    );
+    const s = {};
+    rows.forEach(r => s[r.setting_key] = r.setting_value);
+    return s;
+}
+
+/** ดึง national ID (13 หลัก) จาก JWT payload — ลองทุก field ที่ DGA อาจใช้ */
+function extractCidFromPayload(payload) {
+    const candidates = [
+        payload.pid, payload.cid, payload.citizen_id,
+        payload.national_id, payload.citizenId, payload.sub
+    ];
+    for (const v of candidates) {
+        if (!v) continue;
+        const digits = String(v).replace(/\D/g, '');
+        if (digits.length === 13) return digits;
+    }
+    return null;
+}
+
+/** URL ฝั่ง frontend (ใช้ redirect หลัง callback) */
+function getFrontendBase(req) {
+    // ใช้ Origin ที่เก็บไว้ใน state map (เก็บตอน /start) หรือ fallback .env
+    const envBase = process.env.FRONTEND_BASE_URL || '';
+    if (envBase) return envBase.replace(/\/$/, '');
+    // derive จาก request host
+    const proto = req.headers['x-forwarded-proto'] || 'https';
+    const host = req.headers['x-forwarded-host'] || req.headers.host || '';
+    return `${proto}://${host}/khupskpi`;
+}
+
+// GET /auth/thaid/start — redirect ไป DGA (public, ไม่ต้อง auth)
+apiRouter.get('/auth/thaid/start', async (req, res) => {
+    try {
+        const s = await getThaidSettings();
+        const frontendBase = getFrontendBase(req);
+
+        if (s.thaid_enabled !== 'true') {
+            return res.redirect(`${frontendBase}/login?sso_error=${encodeURIComponent('ThaiD ยังไม่ได้เปิดใช้งาน')}`);
+        }
+        if (!s.thaid_auth_url || !s.thaid_client_id || !s.thaid_redirect_uri) {
+            return res.redirect(`${frontendBase}/login?sso_error=${encodeURIComponent('ThaiD config ไม่ครบ กรุณาตั้งค่าก่อน (auth_url / client_id / redirect_uri)')}`);
+        }
+
+        const state = crypto.randomBytes(16).toString('hex');
+        _thaidStateMap.set(state, { origin: frontendBase, created_at: Date.now() });
+
+        const params = new URLSearchParams({
+            response_type: 'code',
+            client_id: s.thaid_client_id,
+            redirect_uri: s.thaid_redirect_uri,
+            scope: s.thaid_scope || 'openid',
+            state
+        });
+        res.redirect(`${s.thaid_auth_url}?${params.toString()}`);
+    } catch (e) {
+        console.error('[ThaiD/start]', e.message);
+        res.redirect('/login?sso_error=' + encodeURIComponent('เกิดข้อผิดพลาด กรุณาลองใหม่'));
+    }
+});
+
+// GET /auth/thaid/callback — รับ code จาก DGA, แลก token, decode JWT, login (public)
+apiRouter.get('/auth/thaid/callback', async (req, res) => {
+    const { code, state, error, error_description } = req.query;
+
+    // ดึง origin จาก state map ก่อน (ใช้แม้ error)
+    const stateData = _thaidStateMap.get(String(state || ''));
+    const frontendBase = stateData?.origin || getFrontendBase(req);
+    const loginUrl = `${frontendBase}/login`;
+
+    const redirectErr = (msg) => res.redirect(`${loginUrl}?sso_error=${encodeURIComponent(msg)}`);
+
+    if (error) {
+        return redirectErr(error_description ? String(error_description) : String(error));
+    }
+    if (!state || !stateData) {
+        return redirectErr('CSRF state ไม่ถูกต้อง หรือหมดอายุ (> 10 นาที) กรุณาลองใหม่');
+    }
+    _thaidStateMap.delete(String(state));
+
+    if (!code) return redirectErr('ไม่ได้รับ authorization code จาก ThaiD');
+
+    try {
+        const s = await getThaidSettings();
+        if (!s.thaid_token_url) return redirectErr('ไม่ได้ตั้งค่า Token URL สำหรับ ThaiD');
+
+        // 1. Exchange code → id_token
+        const tokenRes = await fetch(s.thaid_token_url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+            body: new URLSearchParams({
+                grant_type: 'authorization_code',
+                code: String(code),
+                redirect_uri: s.thaid_redirect_uri,
+                client_id: s.thaid_client_id,
+                client_secret: s.thaid_client_secret || ''
+            }).toString()
+        });
+
+        if (!tokenRes.ok) {
+            const errBody = await tokenRes.text().catch(() => '');
+            console.error(`[ThaiD/callback] token exchange failed ${tokenRes.status}:`, errBody);
+            return redirectErr(`แลก token ไม่สำเร็จ (${tokenRes.status}) กรุณาตรวจสอบ client_id / client_secret`);
+        }
+
+        const tokenData = await tokenRes.json();
+        // id_token เป็น JWT ที่ DGA ออกให้ / fallback ลอง access_token
+        const idToken = tokenData.id_token || tokenData.access_token;
+        if (!idToken) return redirectErr('DGA ไม่ได้ส่ง id_token กลับมา ตรวจสอบ scope หรือ config');
+
+        // 2. Decode JWT — ไม่ verify signature (trust DGA's HTTPS endpoint)
+        //    ถ้าต้องการ verify ด้วย RS256 → ใส่ public key ใน thaid_jwt_public_key
+        const payload = jwt.decode(idToken);
+        if (!payload || typeof payload !== 'object') {
+            return redirectErr('ถอดรหัส JWT จาก DGA ไม่สำเร็จ');
+        }
+
+        // 3. ดึงเลขบัตรประชาชน 13 หลัก
+        const cidStr = extractCidFromPayload(payload);
+        if (!cidStr) {
+            console.error('[ThaiD] JWT payload fields:', Object.keys(payload));
+            return redirectErr('ไม่พบเลขบัตรประชาชน 13 หลักใน JWT (ลองดู field: pid, cid, citizen_id, national_id)');
+        }
+
+        // 4. SHA-256 hash แล้วเทียบ users.cid
+        const hashedCid = crypto.createHash('sha256').update(cidStr).digest('hex');
+        const [rows] = await db.query(
+            `SELECT id, username, role, dept_id, hospcode, firstname, lastname,
+                    is_active, is_approved, active_session_id, last_seen_at, last_seen_ip
+             FROM users WHERE cid = ?`,
+            [hashedCid]
+        );
+
+        if (rows.length === 0) {
+            return redirectErr('ไม่พบบัญชีที่เชื่อมกับบัตรประชาชนนี้ — กรุณาลงทะเบียนและให้ผู้ดูแลระบบกรอก CID ก่อน');
+        }
+
+        const user = rows[0];
+        if (!user.is_active)   return redirectErr('บัญชีถูกปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ');
+        if (!user.is_approved) return redirectErr('บัญชียังรอการอนุมัติจากผู้ดูแลระบบ');
+
+        // 5. Concurrent login check (เหมือน /login)
+        if (user.active_session_id) {
+            const lastSeen = user.last_seen_at ? new Date(user.last_seen_at).getTime() : 0;
+            if (lastSeen > Date.now() - 5 * 60 * 1000) {
+                return redirectErr(`บัญชีนี้กำลังใช้งานอยู่ที่ IP ${user.last_seen_ip || '-'} กรุณารอ 5 นาทีหรือ logout ก่อน`);
+            }
+        }
+
+        // 6. Issue session + JWT
+        const sessionId = crypto.randomBytes(24).toString('hex');
+        const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim().slice(0, 64);
+        await db.query(
+            'UPDATE users SET active_session_id = ?, session_started_at = NOW(), last_seen_at = NOW(), last_seen_ip = ? WHERE id = ?',
+            [sessionId, ip, user.id]
+        );
+        _sessionCache.delete(user.id);
+
+        const token = jwt.sign(
+            { userId: user.id, username: user.username, deptId: user.dept_id, role: user.role, hospcode: user.hospcode, sessionId },
+            SECRET_KEY,
+            { expiresIn: '8h' }
+        );
+
+        await saveLog(user.username, 'login_success', 'เข้าสู่ระบบผ่าน ThaiD SSO', ip);
+
+        const userInfo = {
+            id: user.id, username: user.username, role: user.role,
+            dept_id: user.dept_id, hospcode: user.hospcode,
+            firstname: user.firstname, lastname: user.lastname
+        };
+        const ssoUser = Buffer.from(JSON.stringify(userInfo)).toString('base64');
+
+        res.redirect(`${loginUrl}?sso_token=${encodeURIComponent(token)}&sso_user=${encodeURIComponent(ssoUser)}&sso_provider=thaid`);
+    } catch (e) {
+        console.error('[ThaiD/callback] error:', e);
+        redirectErr('เกิดข้อผิดพลาดระหว่างเชื่อมต่อ ThaiD กรุณาลองใหม่');
+    }
+});
+
 // === Session status diagnostic (super_admin) — ตรวจว่า Single Session ทำงานหรือไม่ ===
 apiRouter.get('/admin/session-status', authenticateToken, async (req, res) => {
     if (req.user.role !== 'super_admin') {
@@ -3206,16 +3416,20 @@ apiRouter.put('/users/change-password', async (req, res) => {
 // ตรวจสอบสถานะ maintenance mode (public — ไม่ต้อง login)
 apiRouter.get('/system/maintenance-status', async (req, res) => {
     try {
-        const [rows] = await db.query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message')");
-        const settings = {};
-        rows.forEach(r => settings[r.setting_key] = r.setting_value);
+        const [rows] = await db.query(
+            "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message','thaid_enabled','providerid_enabled')"
+        );
+        const s = {};
+        rows.forEach(r => s[r.setting_key] = r.setting_value);
         res.json({
             success: true,
-            maintenance: settings['maintenance_mode'] === 'true',
-            message: settings['maintenance_message'] || 'ระบบปิดให้บริการชั่วคราวเพื่อประมวลผลงาน',
+            maintenance: s['maintenance_mode'] === 'true',
+            message: s['maintenance_message'] || 'ระบบปิดให้บริการชั่วคราวเพื่อประมวลผลงาน',
+            thaid_enabled: s['thaid_enabled'] === 'true',
+            providerid_enabled: s['providerid_enabled'] === 'true',
         });
     } catch (error) {
-        res.json({ success: true, maintenance: false, message: '' });
+        res.json({ success: true, maintenance: false, message: '', thaid_enabled: false, providerid_enabled: false });
     }
 });
 

@@ -148,27 +148,22 @@
             </button>
           </form>
 
-          <!-- SSO divider + buttons (ThaID / ProviderID) -->
-          <div *ngIf="isThaIdEnabled || isProviderIdEnabled" class="mt-6 mb-4 flex items-center gap-3">
-            <div class="flex-1 h-px bg-gray-300/60 dark:bg-gray-600"></div>
-            <span class="text-xs text-gray-500 dark:text-gray-500 font-bold uppercase tracking-wider">หรือเข้าสู่ระบบด้วย</span>
-            <div class="flex-1 h-px bg-gray-300/60 dark:bg-gray-600"></div>
-          </div>
-
-          <div *ngIf="isThaIdEnabled || isProviderIdEnabled" class="grid gap-2 sm:gap-3"
-               [ngClass]="isThaIdEnabled && isProviderIdEnabled ? 'grid-cols-2' : 'grid-cols-1'">
-            <div *ngIf="isThaIdEnabled" class="relative">
-              <button type="button" (click)="loginWithThaID()" title="เข้าสู่ระบบด้วย ThaID"
-                      class="group w-full bg-white hover:bg-gray-50 border border-gray-200 hover:border-blue-300 rounded-2xl overflow-hidden transition-all flex items-center justify-center shadow-md hover:shadow-lg h-[52px] sm:h-[64px]">
-                <img src="thaid.png" alt="ThaID" class="h-full w-auto object-contain">
-              </button>
+          <!-- ThaiD SSO Button (แสดงเมื่อ admin เปิดใช้งาน) -->
+          <div *ngIf="isThaIdEnabled" class="mt-5">
+            <div class="flex items-center gap-3 mb-4">
+              <hr class="flex-1 border-gray-200/60">
+              <span class="text-xs text-gray-400 font-medium whitespace-nowrap">หรือเข้าสู่ระบบด้วย</span>
+              <hr class="flex-1 border-gray-200/60">
             </div>
-            <div *ngIf="isProviderIdEnabled" class="relative">
-              <button type="button" (click)="loginWithProviderID()" title="เข้าสู่ระบบด้วย ProviderID"
-                      class="group w-full bg-white hover:bg-gray-50 border border-gray-200 hover:border-cyan-300 rounded-2xl overflow-hidden transition-all flex items-center justify-center shadow-md hover:shadow-lg h-[52px] sm:h-[64px]">
-                <img src="provider-id.png" alt="ProviderID" class="h-full w-auto object-contain p-1.5 sm:p-2">
-              </button>
-            </div>
+            <button type="button" (click)="loginWithThaID()"
+                    class="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white/80 hover:bg-white border-2 border-blue-200 hover:border-blue-400 text-blue-800 font-bold rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 backdrop-blur-sm">
+              <img src="thaid.png" alt="ThaID" class="h-7 w-auto object-contain">
+              <span class="text-sm">เข้าสู่ระบบด้วย ThaID</span>
+              <i class="fas fa-arrow-right text-blue-400 ml-auto text-xs"></i>
+            </button>
+            <p class="text-center text-[10px] text-gray-400 mt-2">
+              <i class="fas fa-shield-halved mr-1 text-blue-300"></i>ยืนยันตัวตนด้วยบัตรประชาชนผ่าน DGA ThaID
+            </p>
           </div>
 
           <div class="text-center mt-6">
