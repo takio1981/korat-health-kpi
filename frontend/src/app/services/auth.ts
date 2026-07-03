@@ -74,6 +74,69 @@ export class AuthService {
     return userStr ? JSON.parse(userStr) : null;
   }
 
+  // === Token Refresh & Expiry Watcher ===
+  private _tokenWatcherInterval: any = null;
+
+  refreshToken(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/auth/refresh-token`, {}, { headers });
+  }
+
+  /** ดึงเวลาหมดอายุของ JWT (ms) จาก localStorage — คืน 0 ถ้า decode ไม่ได้ */
+  getTokenExpiry(): number {
+    const token = localStorage.getItem('kpi_token');
+    if (!token) return 0;
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.exp ? payload.exp * 1000 : 0;
+    } catch { return 0; }
+  }
+
+  /**
+   * เริ่ม watcher ตรวจสอบ token expiry ทุก 5 นาที
+   * - ถ้า token หมดอายุแล้ว → logout ทันที
+   * - ถ้าเหลือ < 30 นาที → refresh อัตโนมัติ (ขยาย session อีก 8h)
+   * ควรเรียกใน LayoutComponent.ngOnInit() และ stop ใน ngOnDestroy()
+   */
+  startTokenExpiryWatcher() {
+    this.stopTokenExpiryWatcher();
+    const REFRESH_THRESHOLD_MS = 30 * 60 * 1000; // 30 นาที
+
+    const check = () => {
+      if (!this.isLoggedIn()) return;
+      const exp = this.getTokenExpiry();
+      if (!exp) return;
+      const remaining = exp - Date.now();
+      if (remaining <= 0) {
+        // หมดอายุแล้ว — clear local state (interceptor จัดการ redirect)
+        localStorage.removeItem('kpi_token');
+        localStorage.removeItem('kpi_user');
+        return;
+      }
+      if (remaining < REFRESH_THRESHOLD_MS) {
+        this.refreshToken().subscribe({
+          next: (res: any) => {
+            if (res?.success && res?.token) {
+              localStorage.setItem('kpi_token', res.token);
+            }
+          },
+          error: () => {} // fail silently — interceptor จัดการเมื่อ 403
+        });
+      }
+    };
+
+    check(); // รันทันทีหลัง login
+    this._tokenWatcherInterval = setInterval(check, 5 * 60 * 1000);
+  }
+
+  stopTokenExpiryWatcher() {
+    if (this._tokenWatcherInterval) {
+      clearInterval(this._tokenWatcherInterval);
+      this._tokenWatcherInterval = null;
+    }
+  }
+
   // 2. ฟังก์ชันลบ Token เมื่อออกจากระบบ
   // เรียก backend POST /logout เพื่อเคลียร์ active_session_id (fire-and-forget)
   logout() {

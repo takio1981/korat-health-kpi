@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, ChangeDetectorRef, NgZone, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, ChangeDetectorRef, NgZone, ViewChild } from '@angular/core';
 import { Router, RouterModule, RouterOutlet, NavigationEnd, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { ThemeService } from '../services/theme.service';
@@ -16,7 +16,7 @@ import { CommandPaletteComponent } from '../shared/command-palette/command-palet
   templateUrl: './layout.html',
   styleUrls: ['./layout.css']
 })
-export class LayoutComponent implements OnInit {
+export class LayoutComponent implements OnInit, OnDestroy {
   private router = inject(Router);
   private activatedRoute = inject(ActivatedRoute);
   private titleService = inject(Title);
@@ -66,12 +66,17 @@ export class LayoutComponent implements OnInit {
   profileClosing: boolean = false;
   showContactModal: boolean = false;
 
+  ngOnDestroy() {
+    this.authService.stopTokenExpiryWatcher();
+  }
+
   ngOnInit() {
     this.currentUser = this.authService.getUser();
     const role = this.authService.getUserRole();
     this.isAdmin = ['admin_ssj', 'super_admin'].includes(role);
     this.isAnyAdmin = ['admin_hos', 'admin_sso', 'admin_cup', 'admin_ssj', 'super_admin'].includes(role);
     this.isSuperAdmin = role === 'super_admin';
+    this.authService.startTokenExpiryWatcher();
     this.loadSettings();
     this.loadPendingCount();
     this.loadUnreadNotifCount();

@@ -5,6 +5,7 @@ import { catchError, throwError } from 'rxjs';
 import Swal from 'sweetalert2';
 
 let isHandlingInvalidated = false;
+let isHandlingExpired = false;
 
 /** แปลง User-Agent → ชื่อ browser/OS แบบสั้น (เช่น "Chrome on Windows") */
 function parseUA(ua: string): string {
@@ -33,6 +34,26 @@ export const sessionInvalidatedInterceptor: HttpInterceptorFn = (req, next) => {
   return next(req).pipe(
     catchError((err: HttpErrorResponse) => {
       const code = err?.error?.code;
+      // === 403 TOKEN_EXPIRED — JWT หมดอายุ (เช่น ไม่ได้ใช้นาน > 8h) ===
+      if (err.status === 403 && code === 'TOKEN_EXPIRED' && !isHandlingExpired) {
+        isHandlingExpired = true;
+        localStorage.removeItem('kpi_token');
+        localStorage.removeItem('kpi_user');
+        Swal.fire({
+          icon: 'warning',
+          title: 'Session หมดอายุ',
+          text: 'คุณไม่ได้ใช้งานระบบนานเกิน 8 ชั่วโมง กรุณาเข้าสู่ระบบใหม่',
+          confirmButtonText: '<i class="fas fa-sign-in-alt mr-1"></i> เข้าสู่ระบบ',
+          confirmButtonColor: '#10b981',
+          allowOutsideClick: false,
+          timer: 8000,
+          timerProgressBar: true
+        }).then(() => {
+          isHandlingExpired = false;
+          router.navigate(['/login']);
+        });
+      }
+
       if (err.status === 401 && code === 'SESSION_INVALIDATED' && !isHandlingInvalidated) {
         isHandlingInvalidated = true;
 

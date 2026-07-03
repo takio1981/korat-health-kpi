@@ -478,7 +478,7 @@ const authenticateToken = async (req, res, next) => {
     try {
         user = jwt.verify(token, SECRET_KEY);
     } catch (err) {
-        return res.status(403).json({ success: false, message: 'Token ไม่ถูกต้องหรือหมดอายุ' });
+        return res.status(403).json({ success: false, code: 'TOKEN_EXPIRED', message: 'Token ไม่ถูกต้องหรือหมดอายุ กรุณาเข้าสู่ระบบใหม่' });
     }
     req.user = user;
 
@@ -851,6 +851,22 @@ apiRouter.post('/logout', authenticateToken, async (req, res) => {
         res.json({ success: true, message: 'ออกจากระบบเรียบร้อย' });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// === Refresh Token — ออก JWT ใหม่โดยไม่ต้อง login ซ้ำ (ถ้า session ยังถูกต้อง) ===
+// Frontend เรียกเมื่อ token เหลือ < 30 นาที เพื่อ extend session โดยอัตโนมัติ
+apiRouter.post('/auth/refresh-token', authenticateToken, async (req, res) => {
+    try {
+        const user = req.user;
+        const newToken = jwt.sign(
+            { userId: user.userId, username: user.username, deptId: user.deptId, role: user.role, hospcode: user.hospcode, sessionId: user.sessionId },
+            SECRET_KEY,
+            { expiresIn: '8h' }
+        );
+        res.json({ success: true, token: newToken });
+    } catch (e) {
+        res.status(500).json({ success: false, message: 'ไม่สามารถต่ออายุ Token ได้' });
     }
 });
 
@@ -12313,6 +12329,30 @@ app.use((err, req, res, next) => {
     res.status(err.status || 500).json({ success: false, message: err.message || 'Internal Server Error' });
 });
 
+// === Session Cleanup Job — เคลียร์ active_session_id ที่ค้างเกิน 8h (= JWT lifetime) ===
+// ป้องกันกรณีปิด browser โดยไม่ logout → session ค้างใน DB ตลอดไป
+function startSessionCleanupJob() {
+    const JWT_LIFETIME_HOURS = 8;
+    const runCleanup = async () => {
+        try {
+            const [result] = await db.query(`
+                UPDATE users
+                SET active_session_id = NULL, session_started_at = NULL
+                WHERE active_session_id IS NOT NULL
+                  AND last_seen_at < DATE_SUB(NOW(), INTERVAL ? HOUR)
+            `, [JWT_LIFETIME_HOURS]);
+            if (result.affectedRows > 0) {
+                console.log(`🧹 [SessionCleanup] เคลียร์ stale session ${result.affectedRows} user(s) (last_seen > ${JWT_LIFETIME_HOURS}h ago)`);
+            }
+        } catch (e) {
+            console.error('❌ [SessionCleanup] error:', e.message);
+        }
+    };
+    runCleanup(); // รันทันทีตอน startup (เผื่อ restart กลางคัน)
+    setInterval(runCleanup, 30 * 60 * 1000); // ทุก 30 นาที
+    console.log(`⏱️  [SessionCleanup] เริ่ม job — เคลียร์ session ที่ไม่ active > ${JWT_LIFETIME_HOURS}h ทุก 30 นาที`);
+}
+
 // ============= Test mode: export app, ไม่ listen ตอน require =============
 // ใช้ใน integration test (supertest) — ไม่เปิด port + ไม่ start scheduler
 if (require.main === module) {
@@ -12321,6 +12361,7 @@ if (require.main === module) {
         try { startExportScheduler(); } catch (e) { console.error('[Scheduler] start failed:', e.message); }
         try { startBackupScheduler(); } catch (e) { console.error('[BackupScheduler] start failed:', e.message); }
         try { startKpiAuditScheduler(); } catch (e) { console.error('[KPI Audit] start failed:', e.message); }
+        startSessionCleanupJob();
     });
 }
 module.exports = { app, captureError };
