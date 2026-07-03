@@ -931,6 +931,28 @@ function getFrontendBase(req) {
     return `${proto}://${host}/khupskpi`;
 }
 
+// GET /auth/thaid/test-config — ตรวจสอบค่า config ที่บันทึกไว้ (super_admin) ไม่แสดง secret
+apiRouter.get('/auth/thaid/test-config', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const s = await getThaidSettings();
+        res.json({
+            success: true,
+            config: {
+                enabled: s.thaid_enabled,
+                auth_url: s.thaid_auth_url || '(ยังไม่ได้ตั้งค่า)',
+                token_url: s.thaid_token_url || '(ยังไม่ได้ตั้งค่า)',
+                client_id: s.thaid_client_id || '(ยังไม่ได้ตั้งค่า)',
+                client_secret: s.thaid_client_secret ? '(กรอกแล้ว *** ซ่อน)' : '(ยังไม่ได้กรอก — ต้องใส่ถ้า DGA ต้องการ)',
+                redirect_uri: s.thaid_redirect_uri || '(ยังไม่ได้ตั้งค่า)',
+                scope: s.thaid_scope || '(ยังไม่ได้ตั้งค่า)',
+            },
+            ready: !!(s.thaid_enabled === 'true' && s.thaid_auth_url && s.thaid_client_id && s.thaid_redirect_uri && s.thaid_token_url)
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 // GET /auth/thaid/start — redirect ไป DGA (public, ไม่ต้อง auth)
 apiRouter.get('/auth/thaid/start', async (req, res) => {
     try {
