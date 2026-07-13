@@ -1238,7 +1238,9 @@ async function handleThaidCallback(req, res) {
         console.log('[ThaiD] return page   :', returnPage);
         console.log('[ThaiD] ================================');
 
-        res.redirect(`${frontendBase}${returnPage}?thaid_u=${encodeURIComponent(user.username)}&thaid_otp=${otp}`);
+        const fn = encodeURIComponent(user.firstname || '');
+        const ln = encodeURIComponent(user.lastname  || '');
+        res.redirect(`${frontendBase}${returnPage}?thaid_u=${encodeURIComponent(user.username)}&thaid_otp=${otp}&thaid_fn=${fn}&thaid_ln=${ln}`);
     } catch (e) {
         console.error('[ThaiD/callback] error:', e);
         res.redirect(`${loginUrl}?sso_error=${encodeURIComponent('เกิดข้อผิดพลาดระหว่างเชื่อมต่อ ThaiD')}`);

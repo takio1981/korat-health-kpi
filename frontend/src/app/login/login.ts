@@ -109,28 +109,76 @@ export class LoginComponent implements OnDestroy {
     }
   }
 
-  /** รับ ThaiD OTP จาก query params → auto-fill form → auto-submit */
+  /** รับ ThaiD OTP จาก query params → แสดง popup ยืนยัน → submit */
   private handleThaidOtp() {
     const params = new URLSearchParams(window.location.search);
     const thaidU   = params.get('thaid_u');
     const thaidOtp = params.get('thaid_otp');
+    const thaidFn  = params.get('thaid_fn') || '';
+    const thaidLn  = params.get('thaid_ln') || '';
     if (!thaidU || !thaidOtp) return;
 
-    // เคลียร์ URL ทันที
+    // เคลียร์ URL ก่อนแสดง popup
     window.history.replaceState({}, '', window.location.pathname);
 
-    // กรอก username + OTP เข้า form (ผู้ใช้เห็นทั้งสองช่อง)
+    // กรอก username + OTP เข้า form เพื่อให้ผู้ใช้เห็น
     this.loginForm.patchValue({ username: thaidU, password: thaidOtp });
-    this.thaidAutoFilling = true;
     this.cdr.detectChanges();
 
-    console.log('[ThaiD OTP] auto-fill → username:', thaidU, '| otp:', thaidOtp);
+    const fullName = `${thaidFn} ${thaidLn}`.trim();
 
-    // รอ 1.5s ให้ผู้ใช้เห็นว่าถูกกรอก แล้ว submit อัตโนมัติ
-    setTimeout(() => {
-      this.thaidAutoFilling = false;
+    // แสดง popup ยืนยันตัวตนก่อน login
+    Swal.fire({
+      title: '<span style="font-size:1.1rem;font-weight:700">ยืนยันการเข้าสู่ระบบ</span>',
+      html: `
+        <div style="text-align:left;padding:4px 0">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;margin-bottom:10px">
+            <span style="font-size:1.5rem">🪪</span>
+            <div>
+              <div style="font-size:11px;color:#6b7280;margin-bottom:2px">ยืนยันตัวตนด้วย ThaID สำเร็จ</div>
+              <div style="font-size:13px;font-weight:700;color:#166534">${fullName || 'ผู้ใช้งาน ThaiD'}</div>
+            </div>
+          </div>
+          <table style="width:100%;font-size:13px;border-collapse:collapse">
+            <tr>
+              <td style="padding:5px 0;color:#6b7280;width:110px">
+                <i class="fas fa-user" style="margin-right:6px;color:#3b82f6"></i>Username
+              </td>
+              <td style="padding:5px 0;font-weight:700;color:#1e40af">${thaidU}</td>
+            </tr>
+            <tr>
+              <td style="padding:5px 0;color:#6b7280">
+                <i class="fas fa-id-card" style="margin-right:6px;color:#8b5cf6"></i>ชื่อ-นามสกุล
+              </td>
+              <td style="padding:5px 0;font-weight:600;color:#374151">${fullName || '-'}</td>
+            </tr>
+          </table>
+          <div style="margin-top:10px;padding:8px 12px;background:#eff6ff;border-radius:8px;font-size:11px;color:#3b82f6">
+            <i class="fas fa-shield-alt" style="margin-right:4px"></i>
+            กดยืนยันเพื่อเข้าสู่ระบบในฐานะผู้ใช้นี้
+          </div>
+        </div>`,
+      icon: undefined,
+      showCancelButton: true,
+      confirmButtonColor: '#10b981',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: '<i class="fas fa-check me-1"></i> ยืนยัน เข้าสู่ระบบ',
+      cancelButtonText: 'ยกเลิก',
+      reverseButtons: false,
+      allowOutsideClick: false
+    }).then(result => {
+      if (!result.isConfirmed) {
+        // ยกเลิก — เคลียร์ form กลับไปหน้า login เฉยๆ
+        this.loginForm.reset();
+        this.cdr.detectChanges();
+        return;
+      }
+      // ยืนยัน — submit ผ่าน ThaiD OTP
+      this.thaidAutoFilling = true;
+      this.cdr.detectChanges();
       this.authService.login({ username: thaidU, password: thaidOtp, thaid_otp: thaidOtp }).subscribe({
         next: (response) => {
+          this.thaidAutoFilling = false;
           if (response.success) {
             this.authService.saveToken(response.token);
             this.authService.saveUser(response.user);
@@ -143,12 +191,13 @@ export class LoginComponent implements OnDestroy {
           }
         },
         error: (err) => {
-          Swal.fire('ผิดพลาด', err.error?.message || 'รหัส ThaiD หมดอายุ กรุณาสแกน QR ใหม่', 'error');
+          this.thaidAutoFilling = false;
           this.loginForm.patchValue({ password: '' });
           this.cdr.detectChanges();
+          Swal.fire('ผิดพลาด', err.error?.message || 'รหัส ThaiD หมดอายุ กรุณาสแกน QR ใหม่', 'error');
         }
       });
-    }, 1500);
+    });
   }
 
   /** กดปุ่ม ThaiD → redirect ไป DGA */
