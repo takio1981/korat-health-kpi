@@ -300,25 +300,50 @@
           </div>
 
           <!-- ThaID — พร้อมใช้งานทันทีเมื่อเปิด toggle -->
-          <div *ngIf="thaidEnabled" class="mt-4 bg-blue-50/40 border border-blue-200 rounded-xl p-4">
-            <div class="flex items-start gap-3">
-              <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-                <i class="fas fa-check-circle text-blue-500 text-lg"></i>
-              </div>
-              <div class="text-sm">
-                <p class="font-bold text-blue-800 mb-1">ระบบพร้อมใช้งาน ThaiD แล้ว</p>
-                <p class="text-blue-700 text-xs leading-relaxed">
-                  ผู้ใช้งานสามารถกดปุ่ม <b>"เข้าสู่ระบบด้วย ThaID"</b> ในหน้า Login
-                  เพื่อสแกน QR Code ยืนยันตัวตนได้ทันที<br>
-                  ระบบจะดึง <b>เลขบัตรประชาชน + ชื่อ-สกุล</b> จาก ThaID และเทียบกับฐานข้อมูล
-                </p>
-                <div class="mt-2 p-2 bg-blue-100/60 rounded-lg text-[11px] text-blue-700 font-mono break-all">
-                  redirect → imauth.bora.dopa.go.th → สแกน QR → ตรวจสอบเลขบัตร → เข้าระบบ
+          <div *ngIf="thaidEnabled" class="mt-4 space-y-3">
+            <!-- info panel -->
+            <div class="bg-blue-50/40 border border-blue-200 rounded-xl p-4">
+              <div class="flex items-start gap-3">
+                <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                  <i class="fas fa-check-circle text-blue-500 text-lg"></i>
                 </div>
-                <p class="text-[11px] text-gray-500 mt-2">
-                  <i class="fas fa-info-circle me-1"></i>หากต้องการเปิดใช้ ThaiD สำหรับ user ต้องกรอกเลขบัตรประชาชน 13 หลักในหน้าจัดการผู้ใช้งานก่อน
-                </p>
+                <div class="text-sm">
+                  <p class="font-bold text-blue-800 mb-1">ระบบพร้อมใช้งาน ThaiD แล้ว</p>
+                  <p class="text-blue-700 text-xs leading-relaxed">
+                    ผู้ใช้งานสแกน QR Code จาก ThaID → ระบบตรวจสอบเลขบัตร → กรอก username + OTP ในหน้าที่กำหนด → เข้าสู่ระบบอัตโนมัติ
+                  </p>
+                  <p class="text-[11px] text-gray-500 mt-2">
+                    <i class="fas fa-info-circle me-1"></i>ต้องกรอกเลขบัตรประชาชน 13 หลักในหน้าจัดการผู้ใช้งานก่อน
+                  </p>
+                </div>
               </div>
+            </div>
+            <!-- return page config -->
+            <div class="bg-white border border-gray-200 rounded-xl p-4">
+              <label class="block text-sm font-bold text-gray-700 mb-2">
+                <i class="fas fa-route me-2 text-blue-500"></i>หน้าที่แสดงปุ่ม ThaiD และรับผลการยืนยัน
+              </label>
+              <div class="flex gap-2 mb-2">
+                <button type="button" (click)="thaidReturnPage='/login'"
+                  [ngClass]="thaidReturnPage==='/login' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'"
+                  class="px-4 py-2 rounded-lg border text-sm font-medium transition-colors">
+                  <i class="fas fa-sign-in-alt me-1"></i>หน้า Login
+                </button>
+                <button type="button" (click)="thaidReturnPage='/register'"
+                  [ngClass]="thaidReturnPage==='/register' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'"
+                  class="px-4 py-2 rounded-lg border text-sm font-medium transition-colors">
+                  <i class="fas fa-user-plus me-1"></i>หน้า Register
+                </button>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-gray-500">หรือกำหนดเอง:</span>
+                <input type="text" [(ngModel)]="thaidReturnPage" name="thaidReturnPage"
+                  placeholder="/login"
+                  class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 outline-none font-mono">
+              </div>
+              <p class="text-[11px] text-gray-400 mt-1.5">
+                <i class="fas fa-lightbulb me-1"></i>หลังสแกน QR สำเร็จ ระบบจะ redirect ไปที่หน้านี้พร้อม username + OTP เพื่อเข้าสู่ระบบอัตโนมัติ
+              </p>
             </div>
           </div>
         </div>

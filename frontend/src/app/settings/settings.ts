@@ -71,6 +71,7 @@ export class SettingsComponent implements OnInit {
 
   // SSO toggles (ThaID + ProviderID)
   thaidEnabled: boolean = false;
+  thaidReturnPage: string = '/login';
   providerIdEnabled: boolean = false;
 
   // SSO OAuth config — ProviderID (MOPH) — configurable
@@ -201,6 +202,8 @@ export class SettingsComponent implements OnInit {
           const thaidSetting = this.settings.find(s => s.setting_key === 'thaid_enabled');
           const providerSetting = this.settings.find(s => s.setting_key === 'providerid_enabled');
           if (thaidSetting) this.thaidEnabled = thaidSetting.setting_value === 'true';
+          const returnPageSetting = this.settings.find(s => s.setting_key === 'thaid_return_page');
+          if (returnPageSetting) this.thaidReturnPage = returnPageSetting.setting_value || '/login';
           if (providerSetting) this.providerIdEnabled = providerSetting.setting_value === 'true';
 
           // SSO OAuth config — load
@@ -261,6 +264,7 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'appeal_end_date', setting_value: this.appealEndDate },
       { setting_key: 'appeal_days_after_approve', setting_value: this.appealDaysAfterApprove.toString() },
       { setting_key: 'thaid_enabled', setting_value: this.thaidEnabled.toString() },
+      { setting_key: 'thaid_return_page', setting_value: this.thaidReturnPage || '/login' },
       { setting_key: 'providerid_enabled', setting_value: this.providerIdEnabled.toString() },
       // ProviderID OAuth config — configurable
       { setting_key: 'providerid_client_id', setting_value: this.providerIdClientId },

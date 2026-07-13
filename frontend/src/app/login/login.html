@@ -143,7 +143,17 @@
               </button>
             </div>
 
-            <button type="submit" class="w-full py-3 px-4 bg-gradient-to-r from-green-700 to-green-600 hover:from-green-800 hover:to-green-700 text-white font-bold rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5">
+            <!-- ThaiD auto-fill indicator -->
+            <div *ngIf="thaidAutoFilling" class="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-700">
+              <svg class="animate-spin h-4 w-4 text-blue-500" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+              </svg>
+              <span>ตรวจสอบข้อมูล ThaiD แล้ว — กำลังเข้าสู่ระบบอัตโนมัติ...</span>
+            </div>
+
+            <button type="submit" [disabled]="thaidAutoFilling"
+              class="w-full py-3 px-4 bg-gradient-to-r from-green-700 to-green-600 hover:from-green-800 hover:to-green-700 text-white font-bold rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none">
               เข้าสู่ระบบ
             </button>
           </form>

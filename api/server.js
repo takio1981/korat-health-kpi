@@ -650,9 +650,47 @@ apiRouter.get('/debug/my-ip', (req, res) => {
 });
 
 apiRouter.post('/login', loginIpLimiter, loginLimiter, async (req, res) => {
-    const { username, password, force_login } = req.body;
+    const { username, password, force_login, thaid_otp } = req.body;
     // ใช้ req.headers['x-forwarded-for'] กรณีอยู่หลัง Nginx/Docker Proxy
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+    // === ThaiD OTP login — ข้าม bcrypt ตรวจสอบด้วย OTP map แทน ===
+    if (thaid_otp && username) {
+        const otpEntry = _thaidOtpMap.get(thaid_otp);
+        if (!otpEntry || otpEntry.username !== username || otpEntry.expires < Date.now()) {
+            _thaidOtpMap.delete(thaid_otp);
+            return res.status(401).json({ success: false, message: 'รหัส ThaiD หมดอายุ กรุณาสแกน QR ใหม่' });
+        }
+        _thaidOtpMap.delete(thaid_otp); // one-time use
+        // ดึง user จาก DB
+        const [otpUsers] = await db.query(`
+            SELECT u.*, d.dept_name, h.hosname, dist.distname
+            FROM users u
+            LEFT JOIN departments d ON u.dept_id = d.id
+            LEFT JOIN chospital h ON u.hospcode = h.hoscode
+            LEFT JOIN co_district dist ON dist.distid = h.distid
+            WHERE u.id = ?
+        `, [otpEntry.userId]);
+        if (!otpUsers.length) return res.status(401).json({ success: false, message: 'ไม่พบผู้ใช้' });
+        const otpUser = otpUsers[0];
+        if (!otpUser.is_active)   return res.status(403).json({ success: false, message: 'บัญชีถูกปิดใช้งาน' });
+        if (!otpUser.is_approved) return res.status(403).json({ success: false, message: 'บัญชียังรอการอนุมัติ' });
+        const sessionId = crypto.randomBytes(24).toString('hex');
+        await db.query('UPDATE users SET active_session_id=?, session_started_at=NOW(), last_seen_at=NOW(), last_seen_ip=? WHERE id=?',
+            [sessionId, String(ip).split(',')[0].trim().slice(0, 64), otpUser.id]);
+        _sessionCache.delete(otpUser.id);
+        const token = jwt.sign(
+            { userId: otpUser.id, username: otpUser.username, deptId: otpUser.dept_id, role: otpUser.role, hospcode: otpUser.hospcode, sessionId },
+            SECRET_KEY, { expiresIn: '8h' }
+        );
+        await saveLog(otpUser.username, 'login_success', 'เข้าสู่ระบบผ่าน ThaiD OTP', ip);
+        return res.json({ success: true, token, user: {
+            id: otpUser.id, username: otpUser.username, role: otpUser.role,
+            dept_id: otpUser.dept_id, hospcode: otpUser.hospcode,
+            firstname: otpUser.firstname, lastname: otpUser.lastname,
+            dept_name: otpUser.dept_name, hosname: otpUser.hosname
+        }});
+    }
 
     try {
         const [users] = await db.query(`
@@ -893,17 +931,23 @@ const THAID_SCOPE       = 'pid name birthdate openid';
 
 // CSRF state map: state → { origin, created_at } — TTL 10 นาที
 const _thaidStateMap = new Map();
+// OTP map: otp → { userId, username, expires } — TTL 2 นาที (one-time use)
+const _thaidOtpMap  = new Map();
 setInterval(() => {
-    const cutoff = Date.now() - 10 * 60 * 1000;
+    const cutoff10m = Date.now() - 10 * 60 * 1000;
     for (const [k, v] of _thaidStateMap.entries()) {
-        if (v.created_at < cutoff) _thaidStateMap.delete(k);
+        if (v.created_at < cutoff10m) _thaidStateMap.delete(k);
+    }
+    const now = Date.now();
+    for (const [k, v] of _thaidOtpMap.entries()) {
+        if (v.expires < now) _thaidOtpMap.delete(k);
     }
 }, 60 * 1000);
 
-/** ดึง ThaiD config — hardcode ทุกอย่างยกเว้น enabled + client_secret */
+/** ดึง ThaiD config — hardcode ทุกอย่างยกเว้น enabled + client_secret + return_page */
 async function getThaidSettings() {
     const [rows] = await db.query(
-        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('thaid_enabled','thaid_client_secret')"
+        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('thaid_enabled','thaid_client_secret','thaid_return_page')"
     );
     const s = {};
     rows.forEach(r => s[r.setting_key] = r.setting_value);
@@ -1178,19 +1222,23 @@ async function handleThaidCallback(req, res) {
             dept_id: user.dept_id, hospcode: user.hospcode,
             firstname: user.firstname, lastname: user.lastname
         };
-        const ssoUser = Buffer.from(JSON.stringify(userInfo)).toString('base64');
+        // สร้าง OTP (8 hex chars, 2 นาที) สำหรับ auto-fill login form
+        const otp = crypto.randomBytes(4).toString('hex');
+        _thaidOtpMap.set(otp, { userId: user.id, username: user.username, expires: Date.now() + 2 * 60 * 1000 });
 
-        // === DEBUG LOG: แสดง user + token ที่จะส่งกลับ frontend ===
+        // กำหนด return page จาก settings (default: /login)
+        const returnPage = s.thaid_return_page || '/login';
+
+        // === DEBUG LOG ===
         console.log('[ThaiD] ===== ผลการ match user =====');
         console.log('[ThaiD] user.username :', user.username);
         console.log('[ThaiD] user.role     :', user.role);
-        console.log('[ThaiD] user.hospcode :', user.hospcode);
         console.log('[ThaiD] thaiFullName  :', thaiFullName);
-        console.log('[ThaiD] JWT token (ส่วนแรก):', token.split('.')[0] + '.' + token.split('.')[1]);
-        console.log('[ThaiD] redirect to  :', dashboardUrl);
+        console.log('[ThaiD] OTP           :', otp, '(2 นาที)');
+        console.log('[ThaiD] return page   :', returnPage);
         console.log('[ThaiD] ================================');
 
-        res.redirect(`${dashboardUrl}?sso_token=${encodeURIComponent(token)}&sso_user=${encodeURIComponent(ssoUser)}&sso_provider=thaid`);
+        res.redirect(`${frontendBase}${returnPage}?thaid_u=${encodeURIComponent(user.username)}&thaid_otp=${otp}`);
     } catch (e) {
         console.error('[ThaiD/callback] error:', e);
         res.redirect(`${loginUrl}?sso_error=${encodeURIComponent('เกิดข้อผิดพลาดระหว่างเชื่อมต่อ ThaiD')}`);
@@ -10147,6 +10195,7 @@ const bkDecrypt = (ciphertext) => {
         const thaidDefaults = [
             ['thaid_enabled', 'false', 'เปิดใช้ ThaiD SSO (DGA) — true/false'],
             ['thaid_client_secret', '', 'ThaiD Client Secret (จาก DGA — กรอกในหน้า Settings)'],
+            ['thaid_return_page', '/login', 'หน้าที่จะ redirect หลัง ThaiD สำเร็จ เช่น /login หรือ /register'],
         ];
         for (const [key, val, desc] of thaidDefaults) {
             try { await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)', [key, val, desc]); } catch (e) {}
