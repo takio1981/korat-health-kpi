@@ -73,6 +73,23 @@ export class LoginComponent implements OnDestroy {
     if (ssoToken && ssoUser) {
       try {
         const userInfo = JSON.parse(atob(decodeURIComponent(ssoUser)));
+
+        // ===== DEBUG: แสดงข้อมูลที่รับมาจาก ThaiD SSO =====
+        console.log('[ThaiD SSO] ===== ข้อมูลที่รับจาก Backend =====');
+        console.log('[ThaiD SSO] username  :', userInfo.username);
+        console.log('[ThaiD SSO] role      :', userInfo.role);
+        console.log('[ThaiD SSO] hospcode  :', userInfo.hospcode);
+        console.log('[ThaiD SSO] firstname :', userInfo.firstname);
+        console.log('[ThaiD SSO] lastname  :', userInfo.lastname);
+        console.log('[ThaiD SSO] userInfo (full):', userInfo);
+        console.log('[ThaiD SSO] JWT token (header.payload):', ssoToken.split('.')[0] + '.' + ssoToken.split('.')[1]);
+        try {
+          const jwtPayload = JSON.parse(atob(ssoToken.split('.')[1]));
+          console.log('[ThaiD SSO] JWT payload decoded:', jwtPayload);
+        } catch { /* ignore */ }
+        console.log('[ThaiD SSO] =======================================');
+        // ===================================================
+
         this.authService.saveToken(ssoToken);
         this.authService.saveUser(userInfo);
         this.authService.startTokenExpiryWatcher();

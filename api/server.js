@@ -1107,7 +1107,10 @@ async function handleThaidCallback(req, res) {
         if (!payload || typeof payload !== 'object') {
             return redirectErr('ถอดรหัส JWT จาก DGA ไม่สำเร็จ');
         }
-        console.log('[ThaiD] JWT fields:', Object.keys(payload));
+        // === DEBUG LOG: แสดง JSON ทั้งหมดที่ได้จาก ThaiD ===
+        console.log('[ThaiD] ===== JWT payload จาก DGA =====');
+        console.log(JSON.stringify(payload, null, 2));
+        console.log('[ThaiD] ================================');
 
         // 3. ดึงเลขบัตรประชาชน 13 หลัก (DGA ส่งเป็น field "cid" plain text)
         const cidStr = extractCidFromPayload(payload);
@@ -1178,8 +1181,18 @@ async function handleThaidCallback(req, res) {
             firstname: user.firstname, lastname: user.lastname
         };
         const ssoUser = Buffer.from(JSON.stringify(userInfo)).toString('base64');
-        // redirect ไป dashboard โดยตรง (ไม่ผ่าน login page)
-        res.redirect(`${dashboardUrl}?sso_token=${encodeURIComponent(token)}&sso_user=${encodeURIComponent(ssoUser)}&sso_provider=thaid`);
+
+        // === DEBUG LOG: แสดง user + token ที่จะส่งกลับ frontend ===
+        console.log('[ThaiD] ===== ผลการ match user =====');
+        console.log('[ThaiD] user.username :', user.username);
+        console.log('[ThaiD] user.role     :', user.role);
+        console.log('[ThaiD] user.hospcode :', user.hospcode);
+        console.log('[ThaiD] thaiFullName  :', thaiFullName);
+        console.log('[ThaiD] JWT token (ส่วนแรก):', token.split('.')[0] + '.' + token.split('.')[1]);
+        console.log('[ThaiD] redirect to  :', loginUrl);
+        console.log('[ThaiD] ================================');
+
+        res.redirect(`${loginUrl}?sso_token=${encodeURIComponent(token)}&sso_user=${encodeURIComponent(ssoUser)}&sso_provider=thaid`);
     } catch (e) {
         console.error('[ThaiD/callback] error:', e);
         res.redirect(`${loginUrl}?sso_error=${encodeURIComponent('เกิดข้อผิดพลาดระหว่างเชื่อมต่อ ThaiD')}`);
