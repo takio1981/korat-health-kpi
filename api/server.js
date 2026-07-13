@@ -1091,6 +1091,7 @@ apiRouter.get('/auth/thaid/start', async (req, res) => {
 // และบน app root (/authen/thaid/callback — ตรงกับ redirect_uri ที่ลงทะเบียนกับ DGA)
 async function handleThaidCallback(req, res) {
     const { code, state, error, error_description } = req.query;
+    console.warn('[ThaiD/callback] path=', req.path, '| code=', code ? code.substring(0,12)+'...' : 'NONE', '| state=', String(state||'').substring(0,20));
 
     const stateStr = String(state || '');
     const stateData = _thaidStateMap.get(stateStr);
@@ -1114,15 +1115,15 @@ async function handleThaidCallback(req, res) {
     try {
         const s = await getThaidSettings();
 
-        // 1. Exchange code → id_token
-        const tokenRes = await fetch(s.thaid_token_url, {
+        // 1. Exchange code → id_token (ใช้ hardcoded constants — s มีแค่ client_secret + return_page)
+        const tokenRes = await fetch(THAID_TOKEN_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
             body: new URLSearchParams({
                 grant_type: 'authorization_code',
                 code: String(code),
-                redirect_uri: s.thaid_redirect_uri,
-                client_id: s.thaid_client_id,
+                redirect_uri: THAID_REDIRECT_URI,
+                client_id: THAID_CLIENT_ID,
                 client_secret: s.thaid_client_secret || ''
             }).toString()
         });
@@ -1240,10 +1241,14 @@ async function handleThaidCallback(req, res) {
 
         const fn = encodeURIComponent(user.firstname || '');
         const ln = encodeURIComponent(user.lastname  || '');
-        res.redirect(`${frontendBase}${returnPage}?thaid_u=${encodeURIComponent(user.username)}&thaid_otp=${otp}&thaid_fn=${fn}&thaid_ln=${ln}`);
+        const finalUrl = `${frontendBase}${returnPage}?thaid_u=${encodeURIComponent(user.username)}&thaid_otp=${otp}&thaid_fn=${fn}&thaid_ln=${ln}`;
+        console.warn('[ThaiD] ✅ SUCCESS redirect →', finalUrl);
+        res.redirect(finalUrl);
     } catch (e) {
         console.error('[ThaiD/callback] error:', e);
-        res.redirect(`${loginUrl}?sso_error=${encodeURIComponent('เกิดข้อผิดพลาดระหว่างเชื่อมต่อ ThaiD')}`);
+        const errUrl = `${loginUrl}?sso_error=${encodeURIComponent('เกิดข้อผิดพลาดระหว่างเชื่อมต่อ ThaiD')}`;
+        console.warn('[ThaiD] ❌ CATCH redirect →', errUrl);
+        res.redirect(errUrl);
     }
 }
 
