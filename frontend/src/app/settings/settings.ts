@@ -81,10 +81,7 @@ export class SettingsComponent implements OnInit {
   providerIdUserinfoUrl: string = '';
   providerIdRedirectUri: string = '';
   providerIdScope: string = 'openid profile';
-  // ThaID (DGA) — hardcoded ใน backend, เก็บแค่ client_secret
-  thaidClientSecret: string = '';
   showProviderIdSecret: boolean = false;
-  showThaIdSecret: boolean = false;
 
   ngOnInit() {
     const role = this.authService.getUserRole();
@@ -215,8 +212,6 @@ export class SettingsComponent implements OnInit {
           this.providerIdUserinfoUrl = grab('providerid_userinfo_url');
           this.providerIdRedirectUri = grab('providerid_redirect_uri');
           this.providerIdScope = grab('providerid_scope') || 'openid profile';
-          // ThaID: hardcoded ใน backend — โหลดเฉพาะ client_secret
-          this.thaidClientSecret = grab('thaid_client_secret');
         }
         this.cdr.detectChanges();
       }
@@ -275,8 +270,6 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'providerid_userinfo_url', setting_value: this.providerIdUserinfoUrl },
       { setting_key: 'providerid_redirect_uri', setting_value: this.providerIdRedirectUri },
       { setting_key: 'providerid_scope', setting_value: this.providerIdScope },
-      // ThaID — hardcoded ใน backend, บันทึกเฉพาะ client_secret
-      { setting_key: 'thaid_client_secret', setting_value: this.thaidClientSecret },
     ];
 
     this.authService.updateSettings(settingsToSave).subscribe({
