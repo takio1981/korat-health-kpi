@@ -73,7 +73,7 @@ export class SettingsComponent implements OnInit {
   thaidEnabled: boolean = false;
   providerIdEnabled: boolean = false;
 
-  // SSO OAuth config — ProviderID (MOPH)
+  // SSO OAuth config — ProviderID (MOPH) — configurable
   providerIdClientId: string = '';
   providerIdClientSecret: string = '';
   providerIdAuthUrl: string = '';
@@ -81,14 +81,8 @@ export class SettingsComponent implements OnInit {
   providerIdUserinfoUrl: string = '';
   providerIdRedirectUri: string = '';
   providerIdScope: string = 'openid profile';
-  // SSO OAuth config — ThaID (DGA)
-  thaidClientId: string = '';
+  // ThaID (DGA) — hardcoded ใน backend, เก็บแค่ client_secret
   thaidClientSecret: string = '';
-  thaidAuthUrl: string = '';
-  thaidTokenUrl: string = '';
-  thaidUserinfoUrl: string = '';
-  thaidRedirectUri: string = '';
-  thaidScope: string = 'openid profile';
   showProviderIdSecret: boolean = false;
   showThaIdSecret: boolean = false;
 
@@ -221,13 +215,8 @@ export class SettingsComponent implements OnInit {
           this.providerIdUserinfoUrl = grab('providerid_userinfo_url');
           this.providerIdRedirectUri = grab('providerid_redirect_uri');
           this.providerIdScope = grab('providerid_scope') || 'openid profile';
-          this.thaidClientId = grab('thaid_client_id');
+          // ThaID: hardcoded ใน backend — โหลดเฉพาะ client_secret
           this.thaidClientSecret = grab('thaid_client_secret');
-          this.thaidAuthUrl = grab('thaid_auth_url');
-          this.thaidTokenUrl = grab('thaid_token_url');
-          this.thaidUserinfoUrl = grab('thaid_userinfo_url');
-          this.thaidRedirectUri = grab('thaid_redirect_uri');
-          this.thaidScope = grab('thaid_scope') || 'openid profile';
         }
         this.cdr.detectChanges();
       }
@@ -278,7 +267,7 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'appeal_days_after_approve', setting_value: this.appealDaysAfterApprove.toString() },
       { setting_key: 'thaid_enabled', setting_value: this.thaidEnabled.toString() },
       { setting_key: 'providerid_enabled', setting_value: this.providerIdEnabled.toString() },
-      // ProviderID OAuth config
+      // ProviderID OAuth config — configurable
       { setting_key: 'providerid_client_id', setting_value: this.providerIdClientId },
       { setting_key: 'providerid_client_secret', setting_value: this.providerIdClientSecret },
       { setting_key: 'providerid_auth_url', setting_value: this.providerIdAuthUrl },
@@ -286,14 +275,8 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'providerid_userinfo_url', setting_value: this.providerIdUserinfoUrl },
       { setting_key: 'providerid_redirect_uri', setting_value: this.providerIdRedirectUri },
       { setting_key: 'providerid_scope', setting_value: this.providerIdScope },
-      // ThaID OAuth config
-      { setting_key: 'thaid_client_id', setting_value: this.thaidClientId },
+      // ThaID — hardcoded ใน backend, บันทึกเฉพาะ client_secret
       { setting_key: 'thaid_client_secret', setting_value: this.thaidClientSecret },
-      { setting_key: 'thaid_auth_url', setting_value: this.thaidAuthUrl },
-      { setting_key: 'thaid_token_url', setting_value: this.thaidTokenUrl },
-      { setting_key: 'thaid_userinfo_url', setting_value: this.thaidUserinfoUrl },
-      { setting_key: 'thaid_redirect_uri', setting_value: this.thaidRedirectUri },
-      { setting_key: 'thaid_scope', setting_value: this.thaidScope }
     ];
 
     this.authService.updateSettings(settingsToSave).subscribe({

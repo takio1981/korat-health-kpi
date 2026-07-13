@@ -875,15 +875,21 @@ apiRouter.post('/auth/refresh-token', authenticateToken, async (req, res) => {
 // ============================================================
 // Flow:
 //  1. GET /auth/thaid/start   → redirect ไป DGA auth URL พร้อม state (CSRF)
-//  2. DGA callback กลับมาที่ GET /auth/thaid/callback?code=xxx&state=xxx
+//  2. DGA callback กลับมาที่ /authen/thaid/callback (หรือ /khupskpi/api/auth/thaid/callback)
 //  3. Backend แลก code → id_token JWT จาก DGA token endpoint
 //  4. Decode JWT → ดึงเลขบัตร 13 หลัก (field: pid / cid / citizen_id / national_id / sub)
-//  5. SHA-256 hash → เทียบ users.cid
+//  5. SHA-256 hash เลขบัตร → เทียบ users.cid (ซึ่งเก็บ hash ไว้)
 //  6. ถ้าเจอ → issue JWT + session → redirect /login?sso_token=xxx&sso_user=xxx
 //
-// ตั้งค่าผ่าน Settings (super_admin):
-//   thaid_enabled, thaid_auth_url, thaid_token_url, thaid_client_id,
-//   thaid_client_secret, thaid_redirect_uri, thaid_scope
+// ค่าที่ hardcode (จาก DGA imauth.bora.dopa.go.th):
+//   ตั้งค่าเพียง 2 อย่างใน Settings: thaid_enabled + thaid_client_secret
+
+// === ThaiD hardcoded constants (จาก DGA) — ไม่ต้องตั้งค่าใน Settings ===
+const THAID_AUTH_URL    = 'https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/';
+const THAID_TOKEN_URL   = 'https://imauth.bora.dopa.go.th/api/v2/oauth2/token/';
+const THAID_CLIENT_ID   = 'THV0dzZtYjVVOHc4WVJPQVRaVndmNVYwVG82VUdlYXM';
+const THAID_REDIRECT_URI = 'https://apikorat.moph.go.th/authen/thaid/callback';
+const THAID_SCOPE       = 'pid name birthdate openid';
 
 // CSRF state map: state → { origin, created_at } — TTL 10 นาที
 const _thaidStateMap = new Map();
@@ -894,15 +900,21 @@ setInterval(() => {
     }
 }, 60 * 1000);
 
-/** ดึง ThaiD config ทั้งหมดจาก system_settings */
+/** ดึง ThaiD config — hardcode ทุกอย่างยกเว้น enabled + client_secret */
 async function getThaidSettings() {
-    const keys = ['thaid_enabled','thaid_auth_url','thaid_token_url','thaid_userinfo_url',
-                   'thaid_client_id','thaid_client_secret','thaid_redirect_uri','thaid_scope'];
     const [rows] = await db.query(
-        'SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN (?)', [keys]
+        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('thaid_enabled','thaid_client_secret')"
     );
     const s = {};
     rows.forEach(r => s[r.setting_key] = r.setting_value);
+    // hardcoded values — ไม่ต้องตั้งค่าใน DB
+    s.thaid_auth_url    = THAID_AUTH_URL;
+    s.thaid_token_url   = THAID_TOKEN_URL;
+    s.thaid_client_id   = THAID_CLIENT_ID;
+    s.thaid_redirect_uri = THAID_REDIRECT_URI;
+    s.thaid_scope       = THAID_SCOPE;
+    // client_secret: env var ก่อน → fallback DB setting
+    s.thaid_client_secret = process.env.THAID_CLIENT_SECRET || s.thaid_client_secret || '';
     return s;
 }
 
@@ -939,14 +951,14 @@ apiRouter.get('/auth/thaid/test-config', authenticateToken, isSuperAdmin, async 
             success: true,
             config: {
                 enabled: s.thaid_enabled,
-                auth_url: s.thaid_auth_url || '(ยังไม่ได้ตั้งค่า)',
-                token_url: s.thaid_token_url || '(ยังไม่ได้ตั้งค่า)',
-                client_id: s.thaid_client_id || '(ยังไม่ได้ตั้งค่า)',
-                client_secret: s.thaid_client_secret ? '(กรอกแล้ว *** ซ่อน)' : '(ยังไม่ได้กรอก — ต้องใส่ถ้า DGA ต้องการ)',
-                redirect_uri: s.thaid_redirect_uri || '(ยังไม่ได้ตั้งค่า)',
-                scope: s.thaid_scope || '(ยังไม่ได้ตั้งค่า)',
+                auth_url:     THAID_AUTH_URL    + ' (hardcoded)',
+                token_url:    THAID_TOKEN_URL   + ' (hardcoded)',
+                client_id:    THAID_CLIENT_ID   + ' (hardcoded)',
+                redirect_uri: THAID_REDIRECT_URI + ' (hardcoded)',
+                scope:        THAID_SCOPE       + ' (hardcoded)',
+                client_secret: s.thaid_client_secret ? '(กรอกแล้ว *** ซ่อน)' : '⚠️ ยังไม่ได้กรอก — ThaiD ใช้งานไม่ได้',
             },
-            ready: !!(s.thaid_enabled === 'true' && s.thaid_auth_url && s.thaid_client_id && s.thaid_redirect_uri && s.thaid_token_url)
+            ready: !!(s.thaid_enabled === 'true' && s.thaid_client_secret)
         });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
@@ -962,11 +974,11 @@ apiRouter.get('/auth/thaid/start', async (req, res) => {
         if (s.thaid_enabled !== 'true') {
             return res.redirect(`${frontendBase}/login?sso_error=${encodeURIComponent('ThaiD ยังไม่ได้เปิดใช้งาน')}`);
         }
-        if (!s.thaid_auth_url || !s.thaid_client_id || !s.thaid_redirect_uri) {
-            return res.redirect(`${frontendBase}/login?sso_error=${encodeURIComponent('ThaiD config ไม่ครบ กรุณาตั้งค่าก่อน (auth_url / client_id / redirect_uri)')}`);
+        if (!s.thaid_client_secret) {
+            return res.redirect(`${frontendBase}/login?sso_error=${encodeURIComponent('ThaiD ยังไม่ได้ตั้งค่า Client Secret กรุณาติดต่อผู้ดูแลระบบ')}`);
         }
 
-        const state = crypto.randomBytes(16).toString('hex');
+        const state = 'khupskpi-' + crypto.randomBytes(16).toString('hex');
         _thaidStateMap.set(state, { origin: frontendBase, created_at: Date.now() });
 
         const params = new URLSearchParams({
@@ -10045,17 +10057,11 @@ const bkDecrypt = (ciphertext) => {
         try { await db.query('ALTER TABLE backup_schedule_logs ADD COLUMN cloud_url VARCHAR(500) NULL'); } catch (e) {}
 
         // Default settings — ThaiD SSO (DGA imauth.bora.dopa.go.th)
-        // ค่า auth_url, token_url, client_id, scope รู้แน่ชัดจาก DGA
-        // ค่า client_secret และ redirect_uri ต้องกรอกเองใน Settings
+        // auth_url, token_url, client_id, redirect_uri, scope ถูก hardcode ใน constants แล้ว
+        // ใน DB เก็บแค่ enabled + client_secret เท่านั้น
         const thaidDefaults = [
-            ['thaid_enabled', 'false', 'เปิดใช้ ThaiD SSO (DGA)'],
-            ['thaid_auth_url', 'https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/', 'ThaiD Authorization Endpoint'],
-            ['thaid_token_url', 'https://imauth.bora.dopa.go.th/api/v2/oauth2/token/', 'ThaiD Token Endpoint'],
-            ['thaid_userinfo_url', 'https://imauth.bora.dopa.go.th/api/v2/oauth2/userinfo/', 'ThaiD Userinfo Endpoint'],
-            ['thaid_client_id', 'THV0dzZtYjVVOHc4WVJPQVRaVndmNVYwVG82VUdlYXM', 'ThaiD Client ID (จาก DGA)'],
+            ['thaid_enabled', 'false', 'เปิดใช้ ThaiD SSO (DGA) — true/false'],
             ['thaid_client_secret', '', 'ThaiD Client Secret (จาก DGA — กรอกในหน้า Settings)'],
-            ['thaid_redirect_uri', 'https://apikorat.moph.go.th/authen/thaid/callback', 'ThaiD Redirect URI (ที่ลงทะเบียนกับ DGA)'],
-            ['thaid_scope', 'pid name birthdate openid', 'ThaiD Scopes']
         ];
         for (const [key, val, desc] of thaidDefaults) {
             try { await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)', [key, val, desc]); } catch (e) {}
