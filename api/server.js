@@ -3539,16 +3539,25 @@ apiRouter.put('/users/:id', authenticateToken, isAnyAdmin, async (req, res) => {
 
         const isLocalAdmin = ROLE_ADMIN_LOCAL.includes(user.role);
         const finalDeptId = (isCentralAdmin || isLocalAdmin) ? (dept_id || null) : user.deptId;
-        const hashedCid = cid ? crypto.createHash('sha256').update(cid).digest('hex') : null;
+
+        // อัปเดต cid เฉพาะเมื่อส่ง raw national ID 13 หลักมาเท่านั้น
+        // (ป้องกัน frontend ส่ง SHA-256 hash กลับมา → double-hash หรือ null → ลบค่าเดิม)
+        const cidRaw = cid ? String(cid).replace(/\D/g, '') : '';
+        const shouldUpdateCid = cidRaw.length === 13;
+        const hashedCid = shouldUpdateCid ? crypto.createHash('sha256').update(cidRaw).digest('hex') : null;
 
         let sql, params;
         if (isCentralAdmin) {
-            sql = 'UPDATE users SET username = ?, role = ?, dept_id = ?, firstname = ?, lastname = ?, hospcode = ?, phone = ?, email = ?, cid = ?';
-            params = [username, role, finalDeptId, firstname, lastname, hospcode, phone, email || null, hashedCid];
+            sql = 'UPDATE users SET username = ?, role = ?, dept_id = ?, firstname = ?, lastname = ?, hospcode = ?, phone = ?, email = ?';
+            params = [username, role, finalDeptId, firstname, lastname, hospcode, phone, email || null];
         } else {
             // local admin: ไม่แก้ role
-            sql = 'UPDATE users SET username = ?, dept_id = ?, firstname = ?, lastname = ?, hospcode = ?, phone = ?, email = ?, cid = ?';
-            params = [username, finalDeptId, firstname, lastname, hospcode, phone, email || null, hashedCid];
+            sql = 'UPDATE users SET username = ?, dept_id = ?, firstname = ?, lastname = ?, hospcode = ?, phone = ?, email = ?';
+            params = [username, finalDeptId, firstname, lastname, hospcode, phone, email || null];
+        }
+        if (shouldUpdateCid) {
+            sql += ', cid = ?';
+            params.push(hashedCid);
         }
 
         if (password && password.trim() !== '') {

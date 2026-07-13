@@ -45,6 +45,7 @@ export class UserManagementComponent implements OnInit {
   showModal: boolean = false;
   isEditMode: boolean = false;
   currentUser: any = { id: null, username: '', password: '', role: 'user', dept_id: '', firstname: '', lastname: '', hospcode: '', phone: '', email: '', cid: '' };
+  editNewCid: string = '';  // เลขบัตรฯ ใหม่ในโหมด edit (raw 13 หลัก; ว่าง = ไม่เปลี่ยน)
 
   // === จัดการสิทธิ์ราย user ===
   showPermModal: boolean = false;
@@ -181,6 +182,7 @@ export class UserManagementComponent implements OnInit {
     if (user) {
       this.isEditMode = true;
       this.currentUser = { ...user, password: '' };
+      this.editNewCid = '';  // reset ทุกครั้งที่เปิด edit modal
 
       const currentHospital = this.hospitals.find(h => h.hoscode === user.hospcode);
       if (currentHospital) {
@@ -211,6 +213,13 @@ export class UserManagementComponent implements OnInit {
     let value = event.target.value.replace(/\D/g, '');
     if (value.length > 13) value = value.substring(0, 13);
     this.currentUser.cid = value;
+    event.target.value = this.formatNationalIdDisplay(value);
+  }
+
+  onEditCidInput(event: any) {
+    let value = event.target.value.replace(/\D/g, '');
+    if (value.length > 13) value = value.substring(0, 13);
+    this.editNewCid = value;
     event.target.value = this.formatNationalIdDisplay(value);
   }
 
@@ -320,6 +329,11 @@ export class UserManagementComponent implements OnInit {
       Swal.fire('แจ้งเตือน', 'เลขบัตรประชาชนไม่ถูกต้อง (ตรวจสอบ 13 หลักและ Check Digit แล้ว)', 'warning');
       return;
     }
+    // ตรวจสอบเลขบัตรฯ ใหม่ในโหมด edit (ถ้ากรอก)
+    if (this.isEditMode && this.editNewCid && !this.validateNationalId(this.editNewCid)) {
+      Swal.fire('แจ้งเตือน', 'เลขบัตรประชาชนใหม่ไม่ถูกต้อง (Check Digit ไม่ผ่าน)', 'warning');
+      return;
+    }
 
     // ตรวจสอบ email (ถ้ากรอก)
     if (this.currentUser.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.currentUser.email)) {
@@ -367,6 +381,12 @@ export class UserManagementComponent implements OnInit {
     const userData = { ...this.currentUser, phone: this.currentUser.phone.replace(/\D/g, '') };
 
     if (this.isEditMode) {
+      // ลบ cid (hash เก่า) ออก — backend จะไม่อัปเดต cid ถ้าไม่ส่งมา
+      // ถ้า admin กรอก editNewCid ใหม่ → ส่ง raw 13 หลักไปให้ backend hash ใหม่
+      delete userData.cid;
+      if (this.editNewCid && this.editNewCid.length === 13) {
+        userData.cid = this.editNewCid;
+      }
       this.authService.updateUser(userData.id, userData).subscribe({
         next: (res) => {
           if (res.success) {
