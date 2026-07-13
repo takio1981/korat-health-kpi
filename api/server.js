@@ -965,6 +965,55 @@ apiRouter.get('/auth/thaid/test-config', authenticateToken, isSuperAdmin, async 
     }
 });
 
+// POST /auth/thaid/debug-token — ทดสอบ decode JWT + ดู hash ว่าตรงกับ users.cid ไหม (super_admin)
+// ส่ง body: { token: "<jwt string>" }
+apiRouter.post('/auth/thaid/debug-token', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const { token: rawToken } = req.body;
+        if (!rawToken) return res.status(400).json({ success: false, message: 'ส่ง token มาด้วย' });
+        const s = await getThaidSettings();
+
+        let payload, verifyOk = false;
+        try {
+            payload = jwt.verify(rawToken, s.thaid_client_secret, { algorithms: ['HS256'] });
+            verifyOk = true;
+        } catch (_) {
+            payload = jwt.decode(rawToken);
+        }
+        if (!payload) return res.json({ success: false, message: 'decode JWT ไม่ได้' });
+
+        const cidStr = extractCidFromPayload(payload);
+        const hashCidDga = payload.hash_cid || null;
+        const hashCidOurs = cidStr ? crypto.createHash('sha256').update(cidStr).digest('hex') : null;
+
+        // ค้นหา user ทั้ง 2 hash
+        let userByOurs = null, userByDga = null;
+        if (hashCidOurs) {
+            const [r] = await db.query('SELECT id, username, firstname, lastname, cid FROM users WHERE cid = ?', [hashCidOurs]);
+            if (r.length) userByOurs = { id: r[0].id, username: r[0].username, name: `${r[0].firstname} ${r[0].lastname}` };
+        }
+        if (hashCidDga && hashCidDga !== hashCidOurs) {
+            const [r] = await db.query('SELECT id, username, firstname, lastname, cid FROM users WHERE cid = ?', [hashCidDga]);
+            if (r.length) userByDga = { id: r[0].id, username: r[0].username, name: `${r[0].firstname} ${r[0].lastname}` };
+        }
+
+        res.json({
+            success: true,
+            jwt_verified: verifyOk,
+            payload_fields: Object.keys(payload),
+            cid_plain: cidStr,
+            hash_by_sha256_ours: hashCidOurs,
+            hash_cid_from_dga: hashCidDga,
+            hashes_match: hashCidOurs === hashCidDga,
+            user_found_by_our_hash: userByOurs,
+            user_found_by_dga_hash: userByDga,
+            thaid_name: payload.name_th || `${payload.firstname_th||''} ${payload.lastname_th||''}`.trim(),
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 // GET /auth/thaid/start — redirect ไป DGA (public, ไม่ต้อง auth)
 apiRouter.get('/auth/thaid/start', async (req, res) => {
     try {
@@ -1043,31 +1092,52 @@ async function handleThaidCallback(req, res) {
         const idToken = tokenData.id_token || tokenData.access_token;
         if (!idToken) return redirectErr('DGA ไม่ได้ส่ง id_token — ตรวจสอบ scope (ต้องมี openid)');
 
-        // 2. Decode JWT payload (trust HTTPS connection to DGA)
-        const payload = jwt.decode(idToken);
+        // 2. Verify + Decode JWT (HS256 — signed ด้วย client_secret)
+        let payload;
+        try {
+            payload = jwt.verify(idToken, s.thaid_client_secret, { algorithms: ['HS256'] });
+        } catch (verifyErr) {
+            // fallback: decode ไม่ verify (กรณี DGA ใช้ key format ต่างกัน)
+            console.warn('[ThaiD] jwt.verify failed, fallback to decode:', verifyErr.message);
+            payload = jwt.decode(idToken);
+        }
         if (!payload || typeof payload !== 'object') {
             return redirectErr('ถอดรหัส JWT จาก DGA ไม่สำเร็จ');
         }
         console.log('[ThaiD] JWT fields:', Object.keys(payload));
 
-        // 3. ดึงเลขบัตรประชาชน 13 หลัก (DGA ใช้ field "pid")
+        // 3. ดึงเลขบัตรประชาชน 13 หลัก (DGA ส่งเป็น field "cid" plain text)
         const cidStr = extractCidFromPayload(payload);
         if (!cidStr) {
-            console.error('[ThaiD] payload:', JSON.stringify(payload));
-            return redirectErr('ไม่พบเลขบัตรประชาชน 13 หลักใน JWT (field ที่ตรวจ: pid, cid, citizen_id, national_id, sub)');
+            console.error('[ThaiD] payload keys:', Object.keys(payload));
+            return redirectErr('ไม่พบเลขบัตรประชาชน 13 หลักใน JWT (field ที่ตรวจ: cid, pid, citizen_id, national_id, sub)');
         }
 
-        // 4. SHA-256 hash → เทียบ users.cid
+        // ข้อมูลชื่อ-สกุลจาก DGA (ใช้แสดงใน log)
+        const thaiFullName = payload.name_th || `${payload.firstname_th || ''} ${payload.lastname_th || ''}`.trim();
+
+        // 4. เทียบ users.cid — ลอง 2 วิธี:
+        //    วิธี 1: SHA-256 ของ cid ที่เราคำนวณเอง (วิธีมาตรฐานที่ users ลงทะเบียน)
+        //    วิธี 2: hash_cid ที่ DGA ส่งมาตรง ๆ (DGA pre-hash ไว้ให้)
         const hashedCid = crypto.createHash('sha256').update(cidStr).digest('hex');
-        const [rows] = await db.query(
-            `SELECT id, username, role, dept_id, hospcode, firstname, lastname,
+        const hashCidFromDga = (payload.hash_cid && String(payload.hash_cid).length === 64)
+            ? String(payload.hash_cid) : null;
+
+        const SELECT_USER = `SELECT id, username, role, dept_id, hospcode, firstname, lastname,
                     is_active, is_approved, active_session_id, last_seen_at, last_seen_ip
-             FROM users WHERE cid = ?`,
-            [hashedCid]
-        );
+             FROM users WHERE cid = ? LIMIT 1`;
+
+        let [rows] = await db.query(SELECT_USER, [hashedCid]);
+
+        // fallback: ลอง hash_cid จาก DGA ถ้าไม่เจอด้วย SHA-256 ของเรา
+        if (rows.length === 0 && hashCidFromDga && hashCidFromDga !== hashedCid) {
+            console.log('[ThaiD] ไม่พบด้วย SHA-256 ของเรา ลอง hash_cid จาก DGA...');
+            [rows] = await db.query(SELECT_USER, [hashCidFromDga]);
+        }
 
         if (rows.length === 0) {
-            return redirectErr('ไม่พบบัญชีที่เชื่อมกับบัตรประชาชนนี้ — กรุณาให้ผู้ดูแลระบบบันทึกเลขบัตรประชาชนในบัญชีก่อน');
+            console.warn(`[ThaiD] ไม่พบ user: cid=${cidStr}, SHA256=${hashedCid}, hash_cid_dga=${hashCidFromDga}`);
+            return redirectErr(`ไม่พบบัญชีที่ผูกกับบัตรประชาชนนี้ (${thaiFullName}) — กรุณาให้ผู้ดูแลระบบบันทึกเลขบัตรประชาชนในบัญชีผู้ใช้ก่อน`);
         }
 
         const user = rows[0];
@@ -1097,7 +1167,7 @@ async function handleThaidCallback(req, res) {
             { expiresIn: '8h' }
         );
 
-        await saveLog(user.username, 'login_success', 'เข้าสู่ระบบผ่าน ThaiD SSO', ip);
+        await saveLog(user.username, 'login_success', `เข้าสู่ระบบผ่าน ThaiD SSO (${thaiFullName || cidStr})`, ip);
 
         const userInfo = {
             id: user.id, username: user.username, role: user.role,
