@@ -888,9 +888,7 @@ apiRouter.post('/auth/refresh-token', authenticateToken, async (req, res) => {
 const THAID_AUTH_URL    = 'https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/';
 const THAID_TOKEN_URL   = 'https://imauth.bora.dopa.go.th/api/v2/oauth2/token/';
 const THAID_CLIENT_ID   = 'THV0dzZtYjVVOHc4WVJPQVRaVndmNVYwVG82VUdlYXM';
-// dev: THAID_REDIRECT_URI=http://localhost:3700/khupskpi/api/auth/thaid/callback
-// prod: https://apikorat.moph.go.th/authen/thaid/callback
-const THAID_REDIRECT_URI = process.env.THAID_REDIRECT_URI || 'https://apikorat.moph.go.th/authen/thaid/callback';
+const THAID_REDIRECT_URI = 'https://apikorat.moph.go.th/authen/thaid/callback';
 const THAID_SCOPE       = 'pid name birthdate openid';
 
 // CSRF state map: state → { origin, created_at } — TTL 10 นาที
@@ -956,7 +954,7 @@ apiRouter.get('/auth/thaid/test-config', authenticateToken, isSuperAdmin, async 
                 auth_url:     THAID_AUTH_URL    + ' (hardcoded)',
                 token_url:    THAID_TOKEN_URL   + ' (hardcoded)',
                 client_id:    THAID_CLIENT_ID   + ' (hardcoded)',
-                redirect_uri: THAID_REDIRECT_URI + (process.env.THAID_REDIRECT_URI ? ' (from env)' : ' (hardcoded)'),
+                redirect_uri: THAID_REDIRECT_URI + ' (hardcoded)',
                 scope:        THAID_SCOPE       + ' (hardcoded)',
                 client_secret: s.thaid_client_secret ? '(กรอกแล้ว *** ซ่อน)' : '⚠️ ยังไม่ได้กรอก — ThaiD ใช้งานไม่ได้',
             },
@@ -1189,10 +1187,10 @@ async function handleThaidCallback(req, res) {
         console.log('[ThaiD] user.hospcode :', user.hospcode);
         console.log('[ThaiD] thaiFullName  :', thaiFullName);
         console.log('[ThaiD] JWT token (ส่วนแรก):', token.split('.')[0] + '.' + token.split('.')[1]);
-        console.log('[ThaiD] redirect to  :', loginUrl);
+        console.log('[ThaiD] redirect to  :', dashboardUrl);
         console.log('[ThaiD] ================================');
 
-        res.redirect(`${loginUrl}?sso_token=${encodeURIComponent(token)}&sso_user=${encodeURIComponent(ssoUser)}&sso_provider=thaid`);
+        res.redirect(`${dashboardUrl}?sso_token=${encodeURIComponent(token)}&sso_user=${encodeURIComponent(ssoUser)}&sso_provider=thaid`);
     } catch (e) {
         console.error('[ThaiD/callback] error:', e);
         res.redirect(`${loginUrl}?sso_error=${encodeURIComponent('เกิดข้อผิดพลาดระหว่างเชื่อมต่อ ThaiD')}`);
