@@ -888,12 +888,10 @@ apiRouter.post('/auth/refresh-token', authenticateToken, async (req, res) => {
 const THAID_AUTH_URL    = 'https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/';
 const THAID_TOKEN_URL   = 'https://imauth.bora.dopa.go.th/api/v2/oauth2/token/';
 const THAID_CLIENT_ID   = 'THV0dzZtYjVVOHc4WVJPQVRaVndmNVYwVG82VUdlYXM';
-const THAID_REDIRECT_URI = 'https://apikorat.moph.go.th/authen/thaid/callback';
+// dev: THAID_REDIRECT_URI=http://localhost:3700/khupskpi/api/auth/thaid/callback
+// prod: https://apikorat.moph.go.th/authen/thaid/callback
+const THAID_REDIRECT_URI = process.env.THAID_REDIRECT_URI || 'https://apikorat.moph.go.th/authen/thaid/callback';
 const THAID_SCOPE       = 'pid name birthdate openid';
-const THAID_STATE       = 'khupskpi-dashboard';  // state ที่ลงทะเบียนกับ DGA
-
-// URL สำเร็จรูปที่ใช้ redirect ไป ThaiD QR หน้าเดียว
-const THAID_FULL_URL    = `${THAID_AUTH_URL}?response_type=code&client_id=${THAID_CLIENT_ID}&redirect_uri=${encodeURIComponent(THAID_REDIRECT_URI)}&scope=${encodeURIComponent(THAID_SCOPE)}&state=${THAID_STATE}`;
 
 // CSRF state map: state → { origin, created_at } — TTL 10 นาที
 const _thaidStateMap = new Map();
@@ -958,7 +956,7 @@ apiRouter.get('/auth/thaid/test-config', authenticateToken, isSuperAdmin, async 
                 auth_url:     THAID_AUTH_URL    + ' (hardcoded)',
                 token_url:    THAID_TOKEN_URL   + ' (hardcoded)',
                 client_id:    THAID_CLIENT_ID   + ' (hardcoded)',
-                redirect_uri: THAID_REDIRECT_URI + ' (hardcoded)',
+                redirect_uri: THAID_REDIRECT_URI + (process.env.THAID_REDIRECT_URI ? ' (from env)' : ' (hardcoded)'),
                 scope:        THAID_SCOPE       + ' (hardcoded)',
                 client_secret: s.thaid_client_secret ? '(กรอกแล้ว *** ซ่อน)' : '⚠️ ยังไม่ได้กรอก — ThaiD ใช้งานไม่ได้',
             },
@@ -1027,8 +1025,19 @@ apiRouter.get('/auth/thaid/start', async (req, res) => {
         if (s.thaid_enabled !== 'true') {
             return res.redirect(`${frontendBase}/login?sso_error=${encodeURIComponent('ThaiD ยังไม่ได้เปิดใช้งาน')}`);
         }
-        // ใช้ URL ที่ลงทะเบียนกับ DGA ตรงๆ (state = khupskpi-dashboard ตามที่กำหนดไว้)
-        res.redirect(THAID_FULL_URL);
+
+        // สร้าง state แบบ dynamic — เก็บ origin ไว้ใน map เพื่อ redirect กลับหลัง callback
+        const state = 'khupskpi-' + crypto.randomBytes(8).toString('hex');
+        _thaidStateMap.set(state, { origin: frontendBase, created_at: Date.now() });
+
+        const thaidUrl = `${THAID_AUTH_URL}?response_type=code`
+            + `&client_id=${THAID_CLIENT_ID}`
+            + `&redirect_uri=${encodeURIComponent(THAID_REDIRECT_URI)}`
+            + `&scope=${encodeURIComponent(THAID_SCOPE)}`
+            + `&state=${state}`;
+
+        console.log(`[ThaiD/start] redirect → DGA | origin=${frontendBase} | redirect_uri=${THAID_REDIRECT_URI}`);
+        res.redirect(thaidUrl);
     } catch (e) {
         console.error('[ThaiD/start]', e.message);
         res.redirect('/login?sso_error=' + encodeURIComponent('เกิดข้อผิดพลาด กรุณาลองใหม่'));
@@ -1042,12 +1051,12 @@ async function handleThaidCallback(req, res) {
     const { code, state, error, error_description } = req.query;
 
     const stateStr = String(state || '');
-    // ยอมรับ state ที่ขึ้นต้น 'khupskpi-' (ลงทะเบียนกับ DGA ไว้)
-    // หรือ state ที่อยู่ใน CSRF map (random state จากเวอร์ชันเก่า)
     const stateData = _thaidStateMap.get(stateStr);
     const isKhupskpiState = stateStr.startsWith('khupskpi-');
+    // origin: ดึงจาก state map (บันทึกตอน /start) หรือ fallback จาก request
     const frontendBase = stateData?.origin || getFrontendBase(req);
     const loginUrl = `${frontendBase}/login`;
+    const dashboardUrl = `${frontendBase}/dashboard`;
     const redirectErr = (msg) => res.redirect(`${loginUrl}?sso_error=${encodeURIComponent(msg)}`);
 
     if (error) {
@@ -1169,7 +1178,8 @@ async function handleThaidCallback(req, res) {
             firstname: user.firstname, lastname: user.lastname
         };
         const ssoUser = Buffer.from(JSON.stringify(userInfo)).toString('base64');
-        res.redirect(`${loginUrl}?sso_token=${encodeURIComponent(token)}&sso_user=${encodeURIComponent(ssoUser)}&sso_provider=thaid`);
+        // redirect ไป dashboard โดยตรง (ไม่ผ่าน login page)
+        res.redirect(`${dashboardUrl}?sso_token=${encodeURIComponent(token)}&sso_user=${encodeURIComponent(ssoUser)}&sso_provider=thaid`);
     } catch (e) {
         console.error('[ThaiD/callback] error:', e);
         res.redirect(`${loginUrl}?sso_error=${encodeURIComponent('เกิดข้อผิดพลาดระหว่างเชื่อมต่อ ThaiD')}`);

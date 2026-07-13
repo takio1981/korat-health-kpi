@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject, ChangeDetectorRef, NgZone } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, inject, ChangeDetectorRef, NgZone, ElementRef } from '@angular/core';
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { ToastService } from '../services/toast.service';
@@ -16,12 +16,89 @@ import { InitScrollLeftDirective } from './init-scroll-left.directive';
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css'
 })
-export class DashboardComponent implements OnInit, OnDestroy {
+export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   private authService = inject(AuthService);
   private toast = inject(ToastService);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
   private ngZone = inject(NgZone);
+  private el = inject(ElementRef);
+
+  // === Column Sort ===
+  sortField: string = '';
+  sortDir: 'asc' | 'desc' = 'asc';
+
+  toggleSort(field: string) {
+    if (this.sortField === field) {
+      this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.sortField = field;
+      this.sortDir = 'asc';
+    }
+    this.applyFilters();
+  }
+
+  // === Column Resize ===
+  colWidths: Record<string, number> = { col1: 180, col2: 280, col4: 220 };
+  private _resizeState: { col: string; startX: number; startW: number } | null = null;
+
+  private setCssVars() {
+    const wrapper = this.el.nativeElement.querySelector('.kpi-table-wrapper');
+    if (!wrapper) return;
+    const c1 = this.colWidths['col1'];
+    const c2 = this.colWidths['col2'];
+    const c4 = this.colWidths['col4'];
+    wrapper.style.setProperty('--col1-w', c1 + 'px');
+    wrapper.style.setProperty('--col2-w', c2 + 'px');
+    wrapper.style.setProperty('--col4-w', c4 + 'px');
+    wrapper.style.setProperty('--col2-left', c1 + 'px');
+    wrapper.style.setProperty('--col3-left', (c1 + c2) + 'px');
+    wrapper.style.setProperty('--col4-left', (c1 + c2 + 64) + 'px');
+  }
+
+  private loadColWidths() {
+    try {
+      const saved = localStorage.getItem('khups_col_widths');
+      if (saved) Object.assign(this.colWidths, JSON.parse(saved));
+    } catch {}
+  }
+
+  private saveColWidths() {
+    try { localStorage.setItem('khups_col_widths', JSON.stringify(this.colWidths)); } catch {}
+  }
+
+  startResize(event: MouseEvent, col: string) {
+    event.preventDefault();
+    event.stopPropagation();
+    const minW: Record<string, number> = { col1: 100, col2: 150, col4: 100 };
+    this._resizeState = { col, startX: event.clientX, startW: this.colWidths[col] };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMove = (e: MouseEvent) => {
+      if (!this._resizeState) return;
+      const delta = e.clientX - this._resizeState.startX;
+      this.colWidths[this._resizeState.col] = Math.max(minW[this._resizeState.col] ?? 80, this._resizeState.startW + delta);
+      this.setCssVars();
+    };
+    const onUp = () => {
+      this._resizeState = null;
+      document.body.style.removeProperty('cursor');
+      document.body.style.removeProperty('user-select');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      this.saveColWidths();
+    };
+    this.ngZone.runOutsideAngular(() => {
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  }
+
+  ngAfterViewInit() {
+    this.loadColWidths();
+    setTimeout(() => this.setCssVars(), 0);
+  }
 
   kpiData: any[] = [];
   filteredData: any[] = [];
@@ -288,7 +365,32 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.authService.setFocusMode(false);
   }
 
+  private handleSsoCallback() {
+    const params = new URLSearchParams(window.location.search);
+    const ssoToken = params.get('sso_token');
+    const ssoUser = params.get('sso_user');
+    if (!ssoToken || !ssoUser) return;
+    // เคลียร์ query string ออกจาก URL ก่อนใช้งาน
+    window.history.replaceState({}, '', window.location.pathname);
+    try {
+      const userInfo = JSON.parse(atob(decodeURIComponent(ssoUser)));
+      this.authService.saveToken(ssoToken);
+      this.authService.saveUser(userInfo);
+      this.authService.startTokenExpiryWatcher();
+      Swal.fire({
+        icon: 'success',
+        title: 'เข้าสู่ระบบสำเร็จ',
+        text: `ยินดีต้อนรับ คุณ${userInfo.firstname || ''} ${userInfo.lastname || ''} (ThaiD)`,
+        timer: 1500,
+        showConfirmButton: false
+      });
+    } catch {
+      Swal.fire('ผิดพลาด', 'ไม่สามารถอ่านข้อมูล SSO ได้', 'error');
+    }
+  }
+
   ngOnInit() {
+    this.handleSsoCallback();
     this.currentUser = this.authService.getUser();
     const role = this.authService.getUserRole();
     this.isAdmin = ['admin_ssj', 'super_admin'].includes(role);      // admin ส่วนกลาง
@@ -1202,12 +1304,31 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const matchType = this.selectedTypes.length === 0 || this.selectedTypes.some(typeMatches);
       return matchSearch && matchMain && matchIndicator && matchdept && matchYear && matchStatus && matchHospital && matchDistrict && matchHosType && matchType;
     });
-    this.filteredData.sort((a, b) => {
-      if (b.year_bh !== a.year_bh) return b.year_bh.localeCompare(a.year_bh);
-      if (a.main_indicator_name < b.main_indicator_name) return -1;
-      if (a.main_indicator_name > b.main_indicator_name) return 1;
-      return a.kpi_indicators_name.localeCompare(b.kpi_indicators_name);
-    });
+    if (this.sortField) {
+      const dir = this.sortDir === 'asc' ? 1 : -1;
+      const numFields = new Set(['target_value', 'last_actual', '_pct']);
+      this.filteredData.sort((a, b) => {
+        let va: any, vb: any;
+        if (this.sortField === '_pct') {
+          va = this.calcPercent(a);
+          vb = this.calcPercent(b);
+        } else {
+          va = a[this.sortField] ?? '';
+          vb = b[this.sortField] ?? '';
+        }
+        if (numFields.has(this.sortField)) {
+          return (parseFloat(va) - parseFloat(vb)) * dir;
+        }
+        return String(va).localeCompare(String(vb), 'th') * dir;
+      });
+    } else {
+      this.filteredData.sort((a, b) => {
+        if (b.year_bh !== a.year_bh) return b.year_bh.localeCompare(a.year_bh);
+        if (a.main_indicator_name < b.main_indicator_name) return -1;
+        if (a.main_indicator_name > b.main_indicator_name) return 1;
+        return a.kpi_indicators_name.localeCompare(b.kpi_indicators_name);
+      });
+    }
     this.totalPages = Math.ceil(this.filteredData.length / this.pageSize);
     this.currentPage = 1;
     this.cdr.detectChanges();
