@@ -355,6 +355,10 @@ export class AuthService {
     return this.http.get(`${this.apiUrl}/system/maintenance-status`);
   }
 
+  getThaidRegData(token: string): Observable<any> {
+    return this.http.get(`${this.apiUrl}/auth/thaid/reg-data`, { params: { token } });
+  }
+
   setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

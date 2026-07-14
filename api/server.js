@@ -929,10 +929,12 @@ const THAID_CLIENT_ID   = 'THV0dzZtYjVVOHc4WVJPQVRaVndmNVYwVG82VUdlYXM';
 const THAID_REDIRECT_URI = 'https://apikorat.moph.go.th/authen/thaid/callback';
 const THAID_SCOPE       = 'pid name birthdate openid';
 
-// CSRF state map: state → { origin, created_at } — TTL 10 นาที
+// CSRF state map: state → { origin, created_at, flow? } — TTL 10 นาที
 const _thaidStateMap = new Map();
 // OTP map: otp → { userId, username, expires } — TTL 2 นาที (one-time use)
 const _thaidOtpMap  = new Map();
+// Register map: token → { cid_hash, firstname_th, lastname_th, expires } — TTL 10 นาที (one-time use)
+const _thaidRegMap  = new Map();
 setInterval(() => {
     const cutoff10m = Date.now() - 10 * 60 * 1000;
     for (const [k, v] of _thaidStateMap.entries()) {
@@ -942,12 +944,15 @@ setInterval(() => {
     for (const [k, v] of _thaidOtpMap.entries()) {
         if (v.expires < now) _thaidOtpMap.delete(k);
     }
+    for (const [k, v] of _thaidRegMap.entries()) {
+        if (v.expires < now) _thaidRegMap.delete(k);
+    }
 }, 60 * 1000);
 
-/** ดึง ThaiD config — hardcode ทุกอย่างยกเว้น enabled + client_secret + return_page */
+/** ดึง ThaiD config — hardcode ทุกอย่างยกเว้น enabled + client_secret + return_page + register settings */
 async function getThaidSettings() {
     const [rows] = await db.query(
-        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('thaid_enabled','thaid_client_secret','thaid_return_page')"
+        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('thaid_enabled','thaid_client_secret','thaid_return_page','thaid_register_enabled','thaid_register_url','providerid_register_enabled')"
     );
     const s = {};
     rows.forEach(r => s[r.setting_key] = r.setting_value);
@@ -1086,6 +1091,51 @@ apiRouter.get('/auth/thaid/start', async (req, res) => {
     }
 });
 
+// === ThaiD Register Start — สำหรับลงทะเบียนด้วย ThaiD (flow='register') ===
+apiRouter.get('/auth/thaid/register-start', async (req, res) => {
+    try {
+        const s = await getThaidSettings();
+        const frontendBase = getFrontendBase(req);
+
+        if (s.thaid_register_enabled !== 'true') {
+            return res.redirect(`${frontendBase}/register?sso_error=${encodeURIComponent('การลงทะเบียนด้วย ThaiD ยังไม่ได้เปิดใช้งาน')}`);
+        }
+
+        // สร้าง dynamic state สำหรับ register flow
+        const state = 'khupskpi-reg-' + crypto.randomBytes(8).toString('hex');
+        _thaidStateMap.set(state, { origin: frontendBase, flow: 'register', created_at: Date.now() });
+
+        // ใช้ URL จาก settings (configurable) หรือ default จาก hardcoded constants
+        let regUrl = s.thaid_register_url || '';
+        if (!regUrl) {
+            regUrl = `${THAID_AUTH_URL}?response_type=code&client_id=${THAID_CLIENT_ID}&redirect_uri=${encodeURIComponent(THAID_REDIRECT_URI)}&scope=${encodeURIComponent(THAID_SCOPE)}`;
+        }
+        // Replace/append state parameter (override ค่า state ที่ user กำหนดใน settings ด้วย dynamic state)
+        const urlObj = new URL(regUrl);
+        urlObj.searchParams.set('state', state);
+        const finalUrl = urlObj.toString();
+
+        console.log(`[ThaiD/register-start] state=${state} | url=${finalUrl.substring(0, 80)}...`);
+        res.redirect(finalUrl);
+    } catch (e) {
+        console.error('[ThaiD/register-start]', e.message);
+        res.redirect('/register?sso_error=' + encodeURIComponent('เกิดข้อผิดพลาด กรุณาลองใหม่'));
+    }
+});
+
+// GET /auth/thaid/reg-data — ดึงข้อมูล CID hash + ชื่อ จาก register token (public, one-time)
+apiRouter.get('/auth/thaid/reg-data', async (req, res) => {
+    const { token } = req.query;
+    if (!token) return res.status(400).json({ success: false, message: 'ไม่มี token' });
+    const entry = _thaidRegMap.get(String(token));
+    if (!entry || entry.expires < Date.now()) {
+        _thaidRegMap.delete(String(token));
+        return res.status(404).json({ success: false, message: 'Token หมดอายุ กรุณาสแกน QR ThaiD ใหม่' });
+    }
+    // ไม่ลบ token ตอนนี้ — ลบเมื่อ submit register สำเร็จ
+    res.json({ success: true, cid_hash: entry.cid_hash, firstname_th: entry.firstname_th, lastname_th: entry.lastname_th });
+});
+
 // === ThaiD Callback Handler (shared function) ===
 // mount ทั้งบน apiRouter (/khupskpi/api/auth/thaid/callback)
 // และบน app root (/authen/thaid/callback — ตรงกับ redirect_uri ที่ลงทะเบียนกับ DGA)
@@ -1172,6 +1222,23 @@ async function handleThaidCallback(req, res) {
         const hashCidFromDga = (payload.hash_cid && String(payload.hash_cid).length === 64)
             ? String(payload.hash_cid) : null;
 
+        // === Register flow — ไม่ match user, สร้าง reg token แล้ว redirect ไปหน้า register ===
+        if (stateData?.flow === 'register') {
+            const regToken = crypto.randomBytes(8).toString('hex');
+            _thaidRegMap.set(regToken, {
+                cid_hash: hashedCid,
+                firstname_th: payload.firstname_th || payload.given_name || '',
+                lastname_th: payload.lastname_th || payload.family_name || '',
+                expires: Date.now() + 10 * 60 * 1000
+            });
+            const fn = encodeURIComponent(payload.firstname_th || payload.given_name || '');
+            const ln = encodeURIComponent(payload.lastname_th || payload.family_name || '');
+            const regUrl = `${frontendBase}/register?thaid_reg=${regToken}&thaid_fn=${fn}&thaid_ln=${ln}`;
+            console.warn('[ThaiD/register] reg token created, redirect →', regUrl);
+            return res.redirect(regUrl);
+        }
+
+        // === Login flow — match user by CID hash ===
         const SELECT_USER = `SELECT id, username, role, dept_id, hospcode, firstname, lastname,
                     is_active, is_approved, active_session_id, last_seen_at, last_seen_ip
              FROM users WHERE cid = ? LIMIT 1`;
@@ -1531,12 +1598,13 @@ apiRouter.post('/forgot-password', loginIpLimiter, loginLimiter, async (req, res
 
 // === ลงทะเบียนผู้ใช้งานใหม่ (Public - ไม่ต้อง login) ===
 apiRouter.post('/register', loginIpLimiter, loginLimiter, async (req, res) => {
-    const { username, password, firstname, lastname, hospcode, phone, email, dept_id, cid, role: reqRole } = req.body;
+    const { username, password, firstname, lastname, hospcode, phone, email, dept_id, cid, role: reqRole, thaid_reg_token } = req.body;
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
     try {
-        // ตรวจสอบข้อมูลครบถ้วน (บังคับทุกช่อง)
-        if (!username || !password || !firstname || !lastname || !hospcode || !phone || !cid || !dept_id) {
+        // ตรวจสอบข้อมูลครบถ้วน — ถ้ามี thaid_reg_token ไม่ต้องการ cid (ได้มาจาก ThaiD แล้ว)
+        const needCid = !thaid_reg_token;
+        if (!username || !password || !firstname || !lastname || !hospcode || !phone || !dept_id || (needCid && !cid)) {
             return res.status(400).json({ success: false, message: 'กรุณากรอกข้อมูลให้ครบทุกช่อง' });
         }
 
@@ -1553,19 +1621,33 @@ apiRouter.post('/register', loginIpLimiter, loginLimiter, async (req, res) => {
             return res.status(400).json({ success: false, message: 'รูปแบบอีเมลไม่ถูกต้อง' });
         }
 
-        // ตรวจสอบ cid — บังคับ 13 หลัก + Check Digit (Modulus 11) + ไม่ซ้ำ
-        if (!/^\d{13}$/.test(cid)) {
-            return res.status(400).json({ success: false, message: 'เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก' });
+        // === กำหนด cid hash: จาก ThaiD reg token หรือ กรอกเอง ===
+        let hashedCidCheck;
+        if (thaid_reg_token) {
+            // ลงทะเบียนผ่าน ThaiD — ดึง cid_hash จาก map (ข้าม 13-หลัก validation)
+            const regEntry = _thaidRegMap.get(String(thaid_reg_token));
+            if (!regEntry || regEntry.expires < Date.now()) {
+                _thaidRegMap.delete(String(thaid_reg_token));
+                return res.status(400).json({ success: false, message: 'Token ThaiD หมดอายุ กรุณาสแกน QR ใหม่' });
+            }
+            hashedCidCheck = regEntry.cid_hash;
+            _thaidRegMap.delete(String(thaid_reg_token)); // one-time use
+        } else {
+            // ลงทะเบียนด้วยตัวเอง — ตรวจสอบ cid 13 หลัก + Check Digit (Modulus 11)
+            if (!/^\d{13}$/.test(cid)) {
+                return res.status(400).json({ success: false, message: 'เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก' });
+            }
+            const digits = cid.split('').map(Number);
+            let sum = 0;
+            for (let i = 0; i < 12; i++) sum += digits[i] * (13 - i);
+            const checkDigit = (11 - (sum % 11)) % 10;
+            if (checkDigit !== digits[12]) {
+                return res.status(400).json({ success: false, message: 'เลขบัตรประชาชนไม่ผ่านการตรวจสอบ Check Digit (Modulus 11)' });
+            }
+            hashedCidCheck = crypto.createHash('sha256').update(cid).digest('hex');
         }
-        const digits = cid.split('').map(Number);
-        let sum = 0;
-        for (let i = 0; i < 12; i++) sum += digits[i] * (13 - i);
-        const checkDigit = (11 - (sum % 11)) % 10;
-        if (checkDigit !== digits[12]) {
-            return res.status(400).json({ success: false, message: 'เลขบัตรประชาชนไม่ผ่านการตรวจสอบ Check Digit (Modulus 11)' });
-        }
+
         // ตรวจสอบ cid ซ้ำ (hash แล้วเทียบกับ DB)
-        const hashedCidCheck = crypto.createHash('sha256').update(cid).digest('hex');
         const [existingCid] = await db.query('SELECT id, is_approved FROM users WHERE cid = ?', [hashedCidCheck]);
         if (existingCid.length > 0) {
             if (existingCid[0].is_approved === -1) {
@@ -1610,8 +1692,8 @@ apiRouter.post('/register', loginIpLimiter, loginLimiter, async (req, res) => {
         // Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Hash CID ด้วย SHA-256 ก่อนบันทึก
-        const hashedCid = cid ? crypto.createHash('sha256').update(cid).digest('hex') : null;
+        // CID hash: ใช้จาก ThaiD token (หาก login ด้วย ThaiD) หรือ hash ตัวเอง
+        const hashedCid = thaid_reg_token ? hashedCidCheck : (cid ? crypto.createHash('sha256').update(cid).digest('hex') : null);
 
         // บันทึกผู้ใช้ is_approved = 0 (รอการอนุมัติ)
         const [result] = await db.query(
@@ -3596,7 +3678,7 @@ apiRouter.put('/users/change-password', async (req, res) => {
 apiRouter.get('/system/maintenance-status', async (req, res) => {
     try {
         const [rows] = await db.query(
-            "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message','thaid_enabled','providerid_enabled')"
+            "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message','thaid_enabled','providerid_enabled','thaid_register_enabled','providerid_register_enabled')"
         );
         const s = {};
         rows.forEach(r => s[r.setting_key] = r.setting_value);
@@ -3606,9 +3688,11 @@ apiRouter.get('/system/maintenance-status', async (req, res) => {
             message: s['maintenance_message'] || 'ระบบปิดให้บริการชั่วคราวเพื่อประมวลผลงาน',
             thaid_enabled: s['thaid_enabled'] === 'true',
             providerid_enabled: s['providerid_enabled'] === 'true',
+            thaid_register_enabled: s['thaid_register_enabled'] === 'true',
+            providerid_register_enabled: s['providerid_register_enabled'] === 'true',
         });
     } catch (error) {
-        res.json({ success: true, maintenance: false, message: '', thaid_enabled: false, providerid_enabled: false });
+        res.json({ success: true, maintenance: false, message: '', thaid_enabled: false, providerid_enabled: false, thaid_register_enabled: false, providerid_register_enabled: false });
     }
 });
 
@@ -10203,6 +10287,9 @@ const bkDecrypt = (ciphertext) => {
             ['thaid_enabled', 'false', 'เปิดใช้ ThaiD SSO (DGA) — true/false'],
             ['thaid_client_secret', '', 'ThaiD Client Secret (จาก DGA — กรอกในหน้า Settings)'],
             ['thaid_return_page', '/login', 'หน้าที่จะ redirect หลัง ThaiD สำเร็จ เช่น /login หรือ /register'],
+            ['thaid_register_enabled', 'false', 'เปิดให้ลงทะเบียนด้วย ThaiD — true/false'],
+            ['providerid_register_enabled', 'false', 'เปิดให้ลงทะเบียนด้วย ProviderID — true/false'],
+            ['thaid_register_url', `https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/?response_type=code&client_id=THV0dzZtYjVVOHc4WVJPQVRaVndmNVYwVG82VUdlYXM&redirect_uri=https://apikorat.moph.go.th/authen/thaid/callback&scope=pid%20name%20birthdate%20openid`, 'URL ThaiD OAuth สำหรับหน้าลงทะเบียน (state จะถูก override โดย backend)'],
         ];
         for (const [key, val, desc] of thaidDefaults) {
             try { await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)', [key, val, desc]); } catch (e) {}

@@ -1,9 +1,10 @@
 import { Component, OnInit, OnDestroy, inject, ChangeDetectorRef, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterModule } from '@angular/router';
+import { Router, RouterModule, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { ThemeService } from '../services/theme.service';
+import { environment } from '../../environments/environment';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -15,6 +16,7 @@ import Swal from 'sweetalert2';
 export class RegisterComponent implements OnInit, OnDestroy {
   private authService = inject(AuthService);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
   private cdr = inject(ChangeDetectorRef);
   private ngZone = inject(NgZone);
   themeService = inject(ThemeService);
@@ -55,6 +57,12 @@ export class RegisterComponent implements OnInit, OnDestroy {
   // === SSO providers (toggle จาก settings page โดย super_admin) ===
   isThaIdEnabled: boolean = false;
   isProviderIdEnabled: boolean = false;
+  isThaIdRegisterEnabled: boolean = false;
+  isProviderIdRegisterEnabled: boolean = false;
+
+  // === ThaiD register pre-fill ===
+  thaidRegToken: string = '';
+  thaidRegVerified: boolean = false;
 
   // === Registration method selection (modal เลือก 3 วิธี) ===
   // 'choose' = แสดง modal เลือกวิธี | 'manual' = แสดง form กรอกเอง
@@ -65,7 +73,11 @@ export class RegisterComponent implements OnInit, OnDestroy {
   }
 
   registerWithThaID() {
-    this.showSsoUnavailable('ThaID', 'fa-id-card', '#1e40af');
+    if (this.isThaIdRegisterEnabled) {
+      window.location.href = `${environment.apiUrl}/auth/thaid/register-start`;
+    } else {
+      this.showSsoUnavailable('ThaID', 'fa-id-card', '#1e40af');
+    }
   }
 
   registerWithProviderID() {
@@ -97,6 +109,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
   };
 
   ngOnInit() {
+    this.handleThaidRegCallback(); // ต้องอ่าน query params ก่อนที่ Angular จะ clear URL
     // โหลด maintenance status + SSO toggles + poll ทุก 3s ให้ตอบสนอง toggle ทันที (ใช้ ngZone กัน CD spam)
     this.refreshSsoStatus();
     this.ngZone.runOutsideAngular(() => {
@@ -123,12 +136,69 @@ export class RegisterComponent implements OnInit, OnDestroy {
           this.maintenanceMode !== !!res.maintenance ||
           this.maintenanceMessage !== (res.message || '') ||
           this.isThaIdEnabled !== !!res.thaid_enabled ||
-          this.isProviderIdEnabled !== !!res.providerid_enabled;
+          this.isProviderIdEnabled !== !!res.providerid_enabled ||
+          this.isThaIdRegisterEnabled !== !!res.thaid_register_enabled ||
+          this.isProviderIdRegisterEnabled !== !!res.providerid_register_enabled;
         this.maintenanceMode = !!res.maintenance;
         this.maintenanceMessage = res.message || '';
         this.isThaIdEnabled = !!res.thaid_enabled;
         this.isProviderIdEnabled = !!res.providerid_enabled;
+        this.isThaIdRegisterEnabled = !!res.thaid_register_enabled;
+        this.isProviderIdRegisterEnabled = !!res.providerid_register_enabled;
         if (changed) this.cdr.detectChanges();
+      }
+    });
+  }
+
+  /** อ่าน ThaiD register redirect params → pre-fill ฟอร์ม */
+  private handleThaidRegCallback() {
+    const qp = this.route.snapshot.queryParams;
+    const ssoError = qp['sso_error'] || '';
+    const regToken = qp['thaid_reg'] || '';
+    const fn = qp['thaid_fn'] || '';
+    const ln = qp['thaid_ln'] || '';
+
+    // เคลียร์ query params ออกจาก URL ทันที
+    this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
+
+    if (ssoError) {
+      setTimeout(() => {
+        Swal.fire({ icon: 'error', title: 'ThaiD ไม่สำเร็จ', text: decodeURIComponent(ssoError), confirmButtonColor: '#10b981' });
+      }, 50);
+      return;
+    }
+
+    if (!regToken) return;
+
+    // ดึง cid_hash จาก backend (ไม่ผ่าน URL — ปลอดภัยกว่า)
+    this.authService.getThaidRegData(regToken).subscribe({
+      next: (res: any) => {
+        if (res.success) {
+          this.thaidRegToken = regToken;
+          this.thaidRegVerified = true;
+          this.formData.firstname = fn ? decodeURIComponent(fn) : '';
+          this.formData.lastname  = ln ? decodeURIComponent(ln) : '';
+          // เปิด manual form อัตโนมัติ
+          this.registerMode = 'manual';
+          this.cdr.detectChanges();
+          setTimeout(() => {
+            Swal.fire({
+              icon: 'success',
+              title: 'ยืนยันตัวตนด้วย ThaiD สำเร็จ',
+              html: `<div style="font-size:14px">
+                <p>🪪 <b>${(fn ? decodeURIComponent(fn) : '') + ' ' + (ln ? decodeURIComponent(ln) : '')}</b></p>
+                <p class="text-gray-500 text-xs mt-1">กรุณากรอกข้อมูลที่เหลือและตั้งรหัสผ่านเพื่อสร้างบัญชี</p>
+              </div>`,
+              timer: 3000,
+              showConfirmButton: false
+            });
+          }, 100);
+        }
+      },
+      error: () => {
+        setTimeout(() => {
+          Swal.fire({ icon: 'warning', title: 'Token ThaiD หมดอายุ', text: 'กรุณาสแกน QR ใหม่อีกครั้ง', confirmButtonColor: '#10b981' });
+        }, 50);
       }
     });
   }
@@ -262,11 +332,13 @@ export class RegisterComponent implements OnInit, OnDestroy {
   }
 
   onSubmit() {
-    // ตรวจสอบข้อมูลครบถ้วน
+    // ตรวจสอบข้อมูลครบถ้วน — ถ้า ThaiD verified ไม่ต้องการ cid จากฟอร์ม
+    const needCid = !this.thaidRegVerified;
     if (!this.formData.username || !this.formData.password ||
         !this.formData.firstname || !this.formData.lastname ||
-        !this.formData.hospcode || !this.formData.phone || !this.formData.cid || !this.formData.dept_id) {
-      Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลให้ครบถ้วนทุกช่อง (รวมเลขบัตรประชาชนและหน่วยงาน)', 'warning');
+        !this.formData.hospcode || !this.formData.phone || !this.formData.dept_id ||
+        (needCid && !this.formData.cid)) {
+      Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลให้ครบถ้วนทุกช่อง' + (needCid ? ' (รวมเลขบัตรประชาชนและหน่วยงาน)' : ''), 'warning');
       return;
     }
 
@@ -283,8 +355,8 @@ export class RegisterComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // ตรวจสอบ cid (13 หลัก + Check Digit Modulus 11)
-    if (!this.validateNationalId(this.formData.cid)) {
+    // ตรวจสอบ cid (13 หลัก + Check Digit Modulus 11) — ข้ามถ้า ThaiD verified
+    if (!this.thaidRegVerified && !this.validateNationalId(this.formData.cid)) {
       Swal.fire('แจ้งเตือน', 'เลขบัตรประชาชนไม่ถูกต้อง (ตรวจสอบ 13 หลักและ Check Digit แล้ว)', 'warning');
       return;
     }
@@ -309,7 +381,11 @@ export class RegisterComponent implements OnInit, OnDestroy {
     }
 
     this.isSubmitting = true;
-    const submitData = { ...this.formData, phone: this.formData.phone.replace(/\D/g, '') };
+    const submitData: any = { ...this.formData, phone: this.formData.phone.replace(/\D/g, '') };
+    if (this.thaidRegVerified && this.thaidRegToken) {
+      submitData.thaid_reg_token = this.thaidRegToken;
+      delete submitData.cid; // ไม่ส่ง cid plain text เมื่อใช้ ThaiD
+    }
 
     this.authService.register(submitData).subscribe({
       next: (res) => {
