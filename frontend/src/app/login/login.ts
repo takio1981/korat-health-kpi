@@ -43,7 +43,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.ngZone.runOutsideAngular(() => {
       this.statusPollTimer = setInterval(() => {
         this.ngZone.run(() => this.checkMaintenance());
-      }, 10000);
+      }, 30000);
     });
   }
 

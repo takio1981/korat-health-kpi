@@ -114,7 +114,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
     this.ngZone.runOutsideAngular(() => {
       this.statusPollTimer = setInterval(() => {
         this.ngZone.run(() => this.refreshSsoStatus());
-      }, 3000);
+      }, 30000);
     });
     document.addEventListener('visibilitychange', this.onVisibilityChange);
 
