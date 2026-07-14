@@ -20,6 +20,7 @@ import { BackupManagerComponent } from './backup-manager/backup-manager';
 import { KpiAuditDigestComponent } from './kpi-audit-digest/kpi-audit-digest';
 import { ErrorLogsComponent } from './error-logs/error-logs';
 import { SsoLogsComponent } from './sso-logs/sso-logs';
+import { SsoCallbackComponent } from './sso-callback/sso-callback';
 import { authGuard } from './guards/auth-guard';
 import { adminGuard } from './guards/admin-guard';
 import { anyAdminGuard } from './guards/any-admin-guard';
@@ -29,6 +30,7 @@ import { LayoutComponent } from './layout/layout';
 export const routes: Routes = [
   { path: 'login', component: LoginComponent },
   { path: 'register', component: RegisterComponent },
+  { path: 'sso-callback', component: SsoCallbackComponent },
   { path: 'help-public', component: HelpComponent },
   {
     path: '',

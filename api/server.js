@@ -1400,10 +1400,10 @@ async function handleThaidCallback(req, res) {
             firstname: user.firstname, lastname: user.lastname
         };
 
-        // Redirect ไป /login พร้อม sso_token — handleSsoCallback() ใน frontend รับต่อ
+        // Redirect ไป /sso-callback (public route) — save token แล้วไป /dashboard ทันที
         const ssoUserB64 = encodeURIComponent(Buffer.from(JSON.stringify(userInfo)).toString('base64'));
-        const finalUrl = `${frontendBase}/login?sso_token=${encodeURIComponent(token)}&sso_user=${ssoUserB64}&sso_provider=thaid`;
-        console.warn('[ThaiD] ✅ SUCCESS redirect →', finalUrl.replace(token, token.substring(0,20)+'...'));
+        const finalUrl = `${frontendBase}/sso-callback?sso_token=${encodeURIComponent(token)}&sso_user=${ssoUserB64}&sso_provider=thaid`;
+        console.warn('[ThaiD] ✅ SUCCESS redirect →', finalUrl.substring(0, 80) + '...');
         res.redirect(finalUrl);
     } catch (e) {
         console.error('[ThaiD/callback] error:', e);
