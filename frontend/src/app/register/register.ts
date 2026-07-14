@@ -54,15 +54,14 @@ export class RegisterComponent implements OnInit, OnDestroy {
   maintenanceMode: boolean = false;
   maintenanceMessage: string = '';
 
-  // === SSO providers (toggle จาก settings page โดย super_admin) ===
+  // === SSO providers (toggle จาก settings page โดย super_admin — ใช้ร่วมกับ login) ===
   isThaIdEnabled: boolean = false;
   isProviderIdEnabled: boolean = false;
-  isThaIdRegisterEnabled: boolean = false;
-  isProviderIdRegisterEnabled: boolean = false;
 
   // === ThaiD register pre-fill ===
   thaidRegToken: string = '';
   thaidRegVerified: boolean = false;
+  thaidRegLoading: boolean = false;
 
   // === Registration method selection (modal เลือก 3 วิธี) ===
   // 'choose' = แสดง modal เลือกวิธี | 'manual' = แสดง form กรอกเอง
@@ -73,7 +72,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
   }
 
   registerWithThaID() {
-    if (this.isThaIdRegisterEnabled) {
+    if (this.isThaIdEnabled) {
       window.location.href = `${environment.apiUrl}/auth/thaid/register-start`;
     } else {
       this.showSsoUnavailable('ThaID', 'fa-id-card', '#1e40af');
@@ -136,15 +135,11 @@ export class RegisterComponent implements OnInit, OnDestroy {
           this.maintenanceMode !== !!res.maintenance ||
           this.maintenanceMessage !== (res.message || '') ||
           this.isThaIdEnabled !== !!res.thaid_enabled ||
-          this.isProviderIdEnabled !== !!res.providerid_enabled ||
-          this.isThaIdRegisterEnabled !== !!res.thaid_register_enabled ||
-          this.isProviderIdRegisterEnabled !== !!res.providerid_register_enabled;
+          this.isProviderIdEnabled !== !!res.providerid_enabled;
         this.maintenanceMode = !!res.maintenance;
         this.maintenanceMessage = res.message || '';
         this.isThaIdEnabled = !!res.thaid_enabled;
         this.isProviderIdEnabled = !!res.providerid_enabled;
-        this.isThaIdRegisterEnabled = !!res.thaid_register_enabled;
-        this.isProviderIdRegisterEnabled = !!res.providerid_register_enabled;
         if (changed) this.cdr.detectChanges();
       }
     });
@@ -170,32 +165,41 @@ export class RegisterComponent implements OnInit, OnDestroy {
 
     if (!regToken) return;
 
-    // ดึง cid_hash จาก backend (ไม่ผ่าน URL — ปลอดภัยกว่า)
+    // เปิดฟอร์มทันที + pre-fill ชื่อจาก query params (ไม่รอ HTTP)
+    const decodedFn = fn ? decodeURIComponent(fn) : '';
+    const decodedLn = ln ? decodeURIComponent(ln) : '';
+    this.formData.firstname = decodedFn;
+    this.formData.lastname  = decodedLn;
+    this.thaidRegLoading    = true;
+    this.registerMode       = 'manual';
+    this.cdr.detectChanges();
+
+    // ยืนยัน token กับ backend (เพื่อ get cid_hash + ตรวจอายุ)
     this.authService.getThaidRegData(regToken).subscribe({
       next: (res: any) => {
+        this.thaidRegLoading = false;
         if (res.success) {
-          this.thaidRegToken = regToken;
+          this.thaidRegToken    = regToken;
           this.thaidRegVerified = true;
-          this.formData.firstname = fn ? decodeURIComponent(fn) : '';
-          this.formData.lastname  = ln ? decodeURIComponent(ln) : '';
-          // เปิด manual form อัตโนมัติ
-          this.registerMode = 'manual';
           this.cdr.detectChanges();
           setTimeout(() => {
             Swal.fire({
               icon: 'success',
               title: 'ยืนยันตัวตนด้วย ThaiD สำเร็จ',
               html: `<div style="font-size:14px">
-                <p>🪪 <b>${(fn ? decodeURIComponent(fn) : '') + ' ' + (ln ? decodeURIComponent(ln) : '')}</b></p>
+                <p>🪪 <b>${decodedFn} ${decodedLn}</b></p>
                 <p class="text-gray-500 text-xs mt-1">กรุณากรอกข้อมูลที่เหลือและตั้งรหัสผ่านเพื่อสร้างบัญชี</p>
               </div>`,
               timer: 3000,
               showConfirmButton: false
             });
-          }, 100);
+          }, 50);
         }
       },
       error: () => {
+        this.thaidRegLoading = false;
+        this.registerMode    = 'choose';
+        this.cdr.detectChanges();
         setTimeout(() => {
           Swal.fire({ icon: 'warning', title: 'Token ThaiD หมดอายุ', text: 'กรุณาสแกน QR ใหม่อีกครั้ง', confirmButtonColor: '#10b981' });
         }, 50);

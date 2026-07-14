@@ -82,8 +82,7 @@
         <!-- Card 1: ThaID -->
         <div *ngIf="isThaIdEnabled" class="relative">
           <button type="button" (click)="registerWithThaID()" title="ลงทะเบียนด้วย ThaID"
-                  class="group w-full bg-white hover:bg-gray-50 border border-gray-200 hover:border-blue-300 rounded-xl text-left transition-all shadow-md hover:shadow-lg overflow-hidden"
-                  [class.opacity-60]="!isThaIdRegisterEnabled" [class.cursor-default]="!isThaIdRegisterEnabled">
+                  class="group w-full bg-white hover:bg-gray-50 border border-gray-200 hover:border-blue-300 rounded-xl text-left transition-all shadow-md hover:shadow-lg overflow-hidden">
             <div class="flex items-stretch h-20">
               <div class="w-20 h-full shrink-0 overflow-hidden flex items-center justify-center">
                 <img src="thaid.png" alt="ThaID" class="h-full w-full object-contain">
@@ -96,8 +95,6 @@
               </div>
             </div>
           </button>
-          <span *ngIf="!isThaIdRegisterEnabled" class="absolute -top-2 -right-2 px-2 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-[10px] font-bold shadow-sm z-10 pointer-events-none">รอเปิดใช้</span>
-          <span *ngIf="isThaIdRegisterEnabled" class="absolute -top-2 -right-2 px-2 py-0.5 bg-green-100 text-green-700 border border-green-300 rounded-full text-[10px] font-bold shadow-sm z-10 pointer-events-none">พร้อมใช้</span>
         </div>
 
         <!-- Card 2: ProviderID -->
@@ -134,11 +131,6 @@
           </div>
         </button>
 
-        <!-- Note — แสดงเฉพาะเมื่อยังไม่พร้อมใช้ -->
-        <div *ngIf="(isThaIdEnabled && !isThaIdRegisterEnabled) || (isProviderIdEnabled && !isProviderIdRegisterEnabled)"
-             class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-700 mt-4">
-          <p><i class="fas fa-info-circle mr-1"></i><b>หมายเหตุ:</b> SSO ที่แสดงสีเทา รอการเปิดใช้จากผู้ดูแลระบบ — กรุณาลงทะเบียนด้วยตัวเองไปก่อน</p>
-        </div>
 
         <!-- Already have account link -->
         <div class="text-center mt-4">
