@@ -1,0 +1,405 @@
+<div class="p-4 md:p-6">
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100">
+
+    <!-- Header -->
+    <div class="p-4 md:p-6 border-b border-gray-100">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 class="text-xl font-bold text-gray-800">
+            <i class="fas fa-shield-alt text-blue-600 me-2"></i>SSO Audit Logs
+          </h1>
+          <p class="text-sm text-gray-500 mt-0.5">บันทึกการเชื่อมต่อ ThaiD / ProviderID ทุกครั้ง</p>
+        </div>
+        <button (click)="activeTab==='logs' ? loadLogs() : activeTab==='profiles' ? loadProfiles() : loadStats()"
+          class="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors shadow-sm">
+          <i class="fas fa-sync-alt me-1"></i>รีเฟรช
+        </button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="flex gap-1 mt-4 bg-gray-100 rounded-xl p-1 w-fit">
+        <button (click)="switchTab('logs')"
+          [ngClass]="activeTab==='logs' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500 hover:text-gray-700'"
+          class="px-4 py-1.5 rounded-lg text-sm transition-all">
+          <i class="fas fa-list me-1"></i>Logs
+          <span *ngIf="total" class="ms-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[11px]">{{total}}</span>
+        </button>
+        <button (click)="switchTab('profiles')"
+          [ngClass]="activeTab==='profiles' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500 hover:text-gray-700'"
+          class="px-4 py-1.5 rounded-lg text-sm transition-all">
+          <i class="fas fa-id-card me-1"></i>Profiles
+          <span *ngIf="profilesTotal" class="ms-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[11px]">{{profilesTotal}}</span>
+        </button>
+        <button (click)="switchTab('stats')"
+          [ngClass]="activeTab==='stats' ? 'bg-white shadow text-blue-700 font-bold' : 'text-gray-500 hover:text-gray-700'"
+          class="px-4 py-1.5 rounded-lg text-sm transition-all">
+          <i class="fas fa-chart-pie me-1"></i>สถิติ
+        </button>
+      </div>
+    </div>
+
+    <!-- ===== TAB: LOGS ===== -->
+    <div *ngIf="activeTab==='logs'" class="p-4 md:p-6">
+
+      <!-- Filter bar -->
+      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-4">
+        <select [(ngModel)]="filterProvider" name="fp" (change)="applyFilters()"
+          class="col-span-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-300 outline-none bg-white">
+          <option value="">ทุก Provider</option>
+          <option value="thaid">ThaID</option>
+          <option value="providerid">ProviderID</option>
+        </select>
+        <select [(ngModel)]="filterFlow" name="ff" (change)="applyFilters()"
+          class="col-span-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-300 outline-none bg-white">
+          <option value="">ทุก Flow</option>
+          <option value="login">Login</option>
+          <option value="register">Register</option>
+        </select>
+        <select [(ngModel)]="filterOutcome" name="fo" (change)="applyFilters()"
+          class="col-span-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-300 outline-none bg-white">
+          <option value="">ทุก Outcome</option>
+          <option *ngFor="let o of OUTCOMES" [value]="o.value">{{o.label}}</option>
+        </select>
+        <input type="date" [(ngModel)]="filterFrom" name="fd" (change)="applyFilters()"
+          class="col-span-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-300 outline-none bg-white"
+          placeholder="จากวันที่">
+        <input type="date" [(ngModel)]="filterTo" name="ft" (change)="applyFilters()"
+          class="col-span-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-300 outline-none bg-white"
+          placeholder="ถึงวันที่">
+        <button (click)="clearFilters()"
+          class="col-span-1 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-500 hover:bg-gray-50 transition-colors">
+          <i class="fas fa-times me-1"></i>ล้างตัวกรอง
+        </button>
+      </div>
+
+      <!-- Table -->
+      <div class="overflow-auto card-scroll rounded-xl border border-gray-100"
+           style="max-height: calc(100vh - 360px)">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 sticky top-0 z-20 shadow-sm">
+            <tr>
+              <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase w-16">ID</th>
+              <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase">Provider</th>
+              <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase">Flow</th>
+              <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase">ผลลัพธ์</th>
+              <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase">Username</th>
+              <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase">ชื่อ (จาก SSO)</th>
+              <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase">IP</th>
+              <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase">เวลา</th>
+              <th class="px-3 py-3 text-center text-xs font-bold text-gray-500 uppercase w-16">รายละเอียด</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="loading">
+              <td colspan="9" class="text-center py-12 text-gray-400">
+                <i class="fas fa-spinner fa-spin text-2xl"></i>
+                <p class="mt-2 text-sm">กำลังโหลด...</p>
+              </td>
+            </tr>
+            <tr *ngIf="!loading && logs.length===0">
+              <td colspan="9" class="text-center py-12 text-gray-400">
+                <i class="fas fa-inbox text-3xl mb-2 block"></i>ยังไม่มีข้อมูล SSO logs
+              </td>
+            </tr>
+            <tr *ngFor="let log of logs; let i=index"
+                class="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
+              <td class="px-3 py-3 text-gray-400 text-xs">{{log.id}}</td>
+              <td class="px-3 py-3">
+                <span class="px-2 py-0.5 rounded-full text-xs font-bold" [ngClass]="providerBadge(log.provider)">
+                  {{providerLabel(log.provider)}}
+                </span>
+              </td>
+              <td class="px-3 py-3">
+                <span class="text-xs text-gray-600">
+                  <i class="fas" [ngClass]="log.flow==='login' ? 'fa-sign-in-alt text-green-500' : 'fa-user-plus text-blue-500'"></i>
+                  {{log.flow}}
+                </span>
+              </td>
+              <td class="px-3 py-3">
+                <span class="px-2 py-0.5 rounded-full text-xs font-medium" [ngClass]="outcomeColor(log.outcome)">
+                  {{outcomeLabel(log.outcome)}}
+                </span>
+              </td>
+              <td class="px-3 py-3 font-mono text-xs text-gray-700">{{log.username || '–'}}</td>
+              <td class="px-3 py-3 text-sm text-gray-700">
+                <ng-container *ngIf="log.extracted_fields">
+                  <span *ngIf="log.extracted_fields?.firstname_th || log.extracted_fields?.lastname_th">
+                    {{log.extracted_fields?.firstname_th}} {{log.extracted_fields?.lastname_th}}
+                  </span>
+                  <span *ngIf="!log.extracted_fields?.firstname_th && !log.extracted_fields?.lastname_th" class="text-gray-400">–</span>
+                </ng-container>
+                <span *ngIf="!log.extracted_fields" class="text-gray-400">–</span>
+              </td>
+              <td class="px-3 py-3 font-mono text-xs text-gray-500">{{log.ip || '–'}}</td>
+              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">
+                {{log.created_at | date:'dd/MM/yyyy HH:mm:ss'}}
+              </td>
+              <td class="px-3 py-3 text-center">
+                <button (click)="openDetail(log)"
+                  class="w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 transition-colors text-sm">
+                  <i class="fas fa-eye"></i>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div *ngIf="pages > 1" class="flex items-center justify-between mt-4">
+        <p class="text-sm text-gray-500">ทั้งหมด {{total | number}} รายการ | หน้า {{page}}/{{pages}}</p>
+        <div class="flex gap-1">
+          <button (click)="goPage(page-1)" [disabled]="page<=1"
+            class="px-3 py-1.5 rounded-lg border text-sm disabled:opacity-40 hover:bg-gray-50 transition-colors">
+            <i class="fas fa-chevron-left"></i>
+          </button>
+          <ng-container *ngFor="let p of pagesArray()">
+            <button *ngIf="p>0" (click)="goPage(p)"
+              [ngClass]="p===page ? 'bg-blue-600 text-white border-blue-600' : 'border hover:bg-gray-50'"
+              class="w-9 py-1.5 rounded-lg text-sm transition-colors">{{p}}</button>
+            <span *ngIf="p<0" class="px-2 py-1.5 text-gray-400 text-sm">…</span>
+          </ng-container>
+          <button (click)="goPage(page+1)" [disabled]="page>=pages"
+            class="px-3 py-1.5 rounded-lg border text-sm disabled:opacity-40 hover:bg-gray-50 transition-colors">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== TAB: PROFILES ===== -->
+    <div *ngIf="activeTab==='profiles'" class="p-4 md:p-6">
+      <p class="text-sm text-gray-500 mb-4">
+        <i class="fas fa-info-circle me-1 text-blue-400"></i>
+        โปรไฟล์ SSO ล่าสุดต่อ user — อัปเดตอัตโนมัติทุกครั้งที่ login/register สำเร็จ
+      </p>
+      <!-- Filter -->
+      <div class="flex gap-3 mb-4">
+        <select [(ngModel)]="filterProvider" name="pfp" (change)="loadProfiles(true)"
+          class="px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-300 outline-none bg-white">
+          <option value="">ทุก Provider</option>
+          <option value="thaid">ThaID</option>
+          <option value="providerid">ProviderID</option>
+        </select>
+      </div>
+
+      <div class="overflow-auto card-scroll rounded-xl border border-gray-100"
+           style="max-height: calc(100vh - 380px)">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 sticky top-0 z-20 shadow-sm">
+            <tr>
+              <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase">Provider</th>
+              <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase">Username</th>
+              <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase">ชื่อ-สกุล (จาก SSO)</th>
+              <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase">วันเกิด</th>
+              <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase">เลขบัตร 4 ท้าย</th>
+              <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase">เชื่อมครั้งแรก</th>
+              <th class="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase">ล่าสุด</th>
+              <th class="px-3 py-3 text-center text-xs font-bold text-gray-500 uppercase">จำนวนครั้ง</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="profilesLoading">
+              <td colspan="8" class="text-center py-12 text-gray-400">
+                <i class="fas fa-spinner fa-spin text-2xl"></i><p class="mt-2 text-sm">กำลังโหลด...</p>
+              </td>
+            </tr>
+            <tr *ngIf="!profilesLoading && profiles.length===0">
+              <td colspan="8" class="text-center py-12 text-gray-400">
+                <i class="fas fa-user-slash text-3xl mb-2 block"></i>ยังไม่มี SSO profiles
+              </td>
+            </tr>
+            <tr *ngFor="let p of profiles" class="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
+              <td class="px-3 py-3">
+                <span class="px-2 py-0.5 rounded-full text-xs font-bold" [ngClass]="providerBadge(p.provider)">
+                  {{providerLabel(p.provider)}}
+                </span>
+              </td>
+              <td class="px-3 py-3 font-mono text-xs text-gray-700">{{p.username || '–'}}</td>
+              <td class="px-3 py-3 font-medium text-gray-800">
+                {{p.firstname_th}} {{p.lastname_th}}
+                <span *ngIf="p.name_th && !p.firstname_th" class="text-gray-600">{{p.name_th}}</span>
+              </td>
+              <td class="px-3 py-3 text-xs text-gray-500">{{p.birthdate || '–'}}</td>
+              <td class="px-3 py-3 text-center">
+                <span *ngIf="p.pid_partial" class="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">xxxx{{p.pid_partial}}</span>
+                <span *ngIf="!p.pid_partial" class="text-gray-400">–</span>
+              </td>
+              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">
+                {{p.linked_at | date:'dd/MM/yyyy HH:mm'}}
+              </td>
+              <td class="px-3 py-3 text-xs text-gray-500 whitespace-nowrap">
+                {{p.last_seen_at | date:'dd/MM/yyyy HH:mm'}}
+              </td>
+              <td class="px-3 py-3 text-center">
+                <span class="px-2 py-0.5 bg-green-50 text-green-700 rounded-full text-xs font-bold">
+                  {{p.login_count | number}}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===== TAB: STATS ===== -->
+    <div *ngIf="activeTab==='stats'" class="p-4 md:p-6">
+      <div *ngIf="statsLoading" class="text-center py-16 text-gray-400">
+        <i class="fas fa-spinner fa-spin text-3xl"></i>
+        <p class="mt-3">กำลังโหลดสถิติ...</p>
+      </div>
+
+      <div *ngIf="!statsLoading && stats">
+        <!-- Provider summary cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <!-- ThaID -->
+          <div class="bg-blue-50 border border-blue-100 rounded-2xl p-4">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white">
+                <i class="fas fa-id-badge"></i>
+              </div>
+              <div>
+                <p class="font-bold text-blue-900">ThaID</p>
+                <p class="text-xs text-blue-600">{{statProfileCount('thaid')}} users linked · {{statTotalLogins('thaid')}} total logins</p>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div *ngFor="let o of OUTCOMES"
+                class="bg-white rounded-xl p-3 text-center border border-blue-100">
+                <p class="text-xl font-bold text-gray-800">{{statCount('thaid', o.value)}}</p>
+                <p class="text-[11px] text-gray-500 mt-0.5">{{o.label}}</p>
+              </div>
+            </div>
+          </div>
+          <!-- ProviderID -->
+          <div class="bg-cyan-50 border border-cyan-100 rounded-2xl p-4">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-10 h-10 bg-cyan-600 rounded-xl flex items-center justify-center text-white">
+                <i class="fas fa-user-md"></i>
+              </div>
+              <div>
+                <p class="font-bold text-cyan-900">ProviderID</p>
+                <p class="text-xs text-cyan-600">{{statProfileCount('providerid')}} users linked · {{statTotalLogins('providerid')}} total logins</p>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div *ngFor="let o of OUTCOMES"
+                class="bg-white rounded-xl p-3 text-center border border-cyan-100">
+                <p class="text-xl font-bold text-gray-800">{{statCount('providerid', o.value)}}</p>
+                <p class="text-[11px] text-gray-500 mt-0.5">{{o.label}}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Daily breakdown (30 วัน) -->
+        <div *ngIf="stats.by_day?.length">
+          <h3 class="font-bold text-gray-700 mb-3"><i class="fas fa-calendar-alt me-2 text-gray-400"></i>30 วันล่าสุด</h3>
+          <div class="overflow-auto rounded-xl border border-gray-100" style="max-height: 340px">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 sticky top-0 z-10">
+                <tr>
+                  <th class="px-3 py-2 text-left text-xs font-bold text-gray-500">วันที่</th>
+                  <th class="px-3 py-2 text-left text-xs font-bold text-gray-500">Provider</th>
+                  <th class="px-3 py-2 text-left text-xs font-bold text-gray-500">ผลลัพธ์</th>
+                  <th class="px-3 py-2 text-right text-xs font-bold text-gray-500">จำนวน</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of stats.by_day" class="border-b border-gray-50 hover:bg-gray-50/50">
+                  <td class="px-3 py-2 text-xs text-gray-600">{{row.day}}</td>
+                  <td class="px-3 py-2">
+                    <span class="px-2 py-0.5 rounded-full text-xs font-bold" [ngClass]="providerBadge(row.provider)">
+                      {{providerLabel(row.provider)}}
+                    </span>
+                  </td>
+                  <td class="px-3 py-2">
+                    <span class="px-2 py-0.5 rounded-full text-xs" [ngClass]="outcomeColor(row.outcome)">
+                      {{outcomeLabel(row.outcome)}}
+                    </span>
+                  </td>
+                  <td class="px-3 py-2 text-right font-bold text-gray-700">{{row.cnt}}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== Modal: Raw Payload ===== -->
+<div *ngIf="showModal && selectedLog"
+  class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+  (click)="closeModal()">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col"
+       (click)="$event.stopPropagation()">
+    <!-- Modal header -->
+    <div class="flex items-center justify-between p-5 border-b border-gray-100">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl flex items-center justify-center" [ngClass]="selectedLog.provider==='thaid' ? 'bg-blue-100 text-blue-700' : 'bg-cyan-100 text-cyan-700'">
+          <i class="fas fa-shield-alt"></i>
+        </div>
+        <div>
+          <p class="font-bold text-gray-800">SSO Log #{{selectedLog.id}}</p>
+          <p class="text-xs text-gray-500">
+            {{providerLabel(selectedLog.provider)}} · {{selectedLog.flow}} ·
+            <span class="px-1.5 py-0.5 rounded-full text-[11px] font-bold" [ngClass]="outcomeColor(selectedLog.outcome)">{{outcomeLabel(selectedLog.outcome)}}</span>
+          </p>
+        </div>
+      </div>
+      <button (click)="closeModal()" class="w-9 h-9 rounded-xl hover:bg-gray-100 text-gray-500 transition-colors text-lg">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+
+    <!-- Modal body -->
+    <div class="flex-1 overflow-auto p-5 space-y-4">
+      <!-- Meta info -->
+      <div class="grid grid-cols-2 gap-3 text-sm">
+        <div class="bg-gray-50 rounded-xl p-3">
+          <p class="text-xs text-gray-400 mb-1">User</p>
+          <p class="font-mono font-bold text-gray-700">{{selectedLog.username || '–'}}</p>
+        </div>
+        <div class="bg-gray-50 rounded-xl p-3">
+          <p class="text-xs text-gray-400 mb-1">IP Address</p>
+          <p class="font-mono text-gray-700">{{selectedLog.ip || '–'}}</p>
+        </div>
+        <div class="bg-gray-50 rounded-xl p-3">
+          <p class="text-xs text-gray-400 mb-1">CID Hash (SHA-256)</p>
+          <p class="font-mono text-[11px] text-gray-600 break-all">{{selectedLog.cid_hash || '–'}}</p>
+        </div>
+        <div class="bg-gray-50 rounded-xl p-3">
+          <p class="text-xs text-gray-400 mb-1">เวลา</p>
+          <p class="text-gray-700">{{selectedLog.created_at | date:'dd/MM/yyyy HH:mm:ss'}}</p>
+        </div>
+      </div>
+
+      <!-- Error msg -->
+      <div *ngIf="selectedLog.error_msg" class="bg-red-50 border border-red-200 rounded-xl p-3">
+        <p class="text-xs font-bold text-red-600 mb-1"><i class="fas fa-exclamation-triangle me-1"></i>Error</p>
+        <p class="text-sm text-red-700">{{selectedLog.error_msg}}</p>
+      </div>
+
+      <!-- Extracted fields -->
+      <div *ngIf="selectedLog.extracted_fields">
+        <p class="text-xs font-bold text-gray-500 uppercase mb-2">ข้อมูลที่ Extract</p>
+        <pre class="bg-green-50 border border-green-100 rounded-xl p-3 text-xs text-green-900 overflow-auto font-mono">{{formatJson(selectedLog.extracted_fields)}}</pre>
+      </div>
+
+      <!-- Raw payload -->
+      <div *ngIf="selectedLog.raw_payload">
+        <p class="text-xs font-bold text-gray-500 uppercase mb-2">Raw Payload (JWT)</p>
+        <pre class="bg-gray-900 text-green-300 rounded-xl p-4 text-xs overflow-auto font-mono max-h-72">{{formatJson(selectedLog.raw_payload)}}</pre>
+      </div>
+    </div>
+
+    <div class="p-4 border-t border-gray-100 flex justify-end">
+      <button (click)="closeModal()" class="px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-sm font-bold transition-colors">
+        ปิด
+      </button>
+    </div>
+  </div>
+</div>

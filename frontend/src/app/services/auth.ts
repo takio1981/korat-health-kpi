@@ -1442,4 +1442,21 @@ export class AuthService {
   runKpiAuditDigestNow(): Observable<any> {
     return this.http.post(`${this.apiUrl}/kpi-audit/run-digest-now`, {}, { headers: this.bkHeaders() });
   }
+
+  // === Generic helpers สำหรับ SSO Logs ===
+  apiGet(path: string, params?: Record<string, any>): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    let qp = '';
+    if (params) {
+      const p = new URLSearchParams();
+      Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== '') p.set(k, String(v)); });
+      qp = p.toString() ? '?' + p.toString() : '';
+    }
+    return this.http.get(`${this.apiUrl}${path}${qp}`, { headers });
+  }
+
+  apiPost(path: string, body: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}${path}`, body, { headers: this.bkHeaders() });
+  }
 }

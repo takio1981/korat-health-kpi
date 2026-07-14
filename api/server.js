@@ -949,6 +949,74 @@ setInterval(() => {
     }
 }, 60 * 1000);
 
+/**
+ * บันทึก SSO log ทุก attempt (login/register/error)
+ * @param {string} provider  'thaid' | 'providerid'
+ * @param {string} flow      'login' | 'register'
+ * @param {object} data      { outcome, cid_hash, user_id, username, raw_payload, extracted_fields, ip, error_msg }
+ */
+async function saveSsoLog(provider, flow, data) {
+    try {
+        await db.query(
+            `INSERT INTO sso_logs (provider, flow, cid_hash, user_id, username, outcome, raw_payload, extracted_fields, ip, error_msg)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                provider, flow,
+                data.cid_hash || null,
+                data.user_id  || null,
+                data.username || null,
+                data.outcome,
+                data.raw_payload  ? JSON.stringify(data.raw_payload)  : null,
+                data.extracted_fields ? JSON.stringify(data.extracted_fields) : null,
+                data.ip       || null,
+                data.error_msg || null
+            ]
+        );
+    } catch (e) {
+        console.error('[saveSsoLog] error:', e.message);
+    }
+}
+
+/**
+ * UPSERT sso_profiles — เรียกเมื่อ SSO login/register สำเร็จ
+ * @param {string} provider  'thaid' | 'providerid'
+ * @param {number} userId    users.id
+ * @param {object} profile   { cid_hash, firstname_th, lastname_th, birthdate, name_th, pid_partial, extra_fields, raw_payload }
+ */
+async function upsertSsoProfile(provider, userId, profile) {
+    try {
+        await db.query(
+            `INSERT INTO sso_profiles
+                (user_id, provider, cid_hash, firstname_th, lastname_th, birthdate, name_th, pid_partial, extra_fields, raw_payload, linked_at, last_seen_at, login_count)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), 1)
+             ON DUPLICATE KEY UPDATE
+                cid_hash       = VALUES(cid_hash),
+                firstname_th   = VALUES(firstname_th),
+                lastname_th    = VALUES(lastname_th),
+                birthdate      = VALUES(birthdate),
+                name_th        = VALUES(name_th),
+                pid_partial    = VALUES(pid_partial),
+                extra_fields   = VALUES(extra_fields),
+                raw_payload    = VALUES(raw_payload),
+                last_seen_at   = NOW(),
+                login_count    = login_count + 1`,
+            [
+                userId, provider,
+                profile.cid_hash    || null,
+                profile.firstname_th || null,
+                profile.lastname_th  || null,
+                profile.birthdate    || null,
+                profile.name_th      || null,
+                profile.pid_partial  || null,
+                profile.extra_fields ? JSON.stringify(profile.extra_fields) : null,
+                profile.raw_payload  ? JSON.stringify(profile.raw_payload)  : null
+            ]
+        );
+    } catch (e) {
+        console.error('[upsertSsoProfile] error:', e.message);
+    }
+}
+
 /** ดึง ThaiD config — hardcode ทุกอย่างยกเว้น enabled + client_secret + return_page + register settings */
 async function getThaidSettings() {
     const [rows] = await db.query(
@@ -1150,7 +1218,12 @@ async function handleThaidCallback(req, res) {
     const frontendBase = stateData?.origin || getFrontendBase(req);
     const loginUrl = `${frontendBase}/login`;
     const dashboardUrl = `${frontendBase}/dashboard`;
-    const redirectErr = (msg) => res.redirect(`${loginUrl}?sso_error=${encodeURIComponent(msg)}`);
+    const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim().slice(0, 64);
+    const _thaidFlow = stateData?.flow || 'login';
+    const redirectErr = (msg, opts = {}) => {
+        saveSsoLog('thaid', _thaidFlow, { outcome: 'error', ip, error_msg: msg, ...opts });
+        return res.redirect(`${loginUrl}?sso_error=${encodeURIComponent(msg)}`);
+    };
 
     if (error) {
         return redirectErr(error_description ? String(error_description) : String(error));
@@ -1209,11 +1282,19 @@ async function handleThaidCallback(req, res) {
         const cidStr = extractCidFromPayload(payload);
         if (!cidStr) {
             console.error('[ThaiD] payload keys:', Object.keys(payload));
-            return redirectErr('ไม่พบเลขบัตรประชาชน 13 หลักใน JWT (field ที่ตรวจ: cid, pid, citizen_id, national_id, sub)');
+            return redirectErr('ไม่พบเลขบัตรประชาชน 13 หลักใน JWT (field ที่ตรวจ: cid, pid, citizen_id, national_id, sub)', { raw_payload: payload });
         }
 
         // ข้อมูลชื่อ-สกุลจาก DGA (ใช้แสดงใน log)
         const thaiFullName = payload.name_th || `${payload.firstname_th || ''} ${payload.lastname_th || ''}`.trim();
+        // extracted_fields ที่ใช้บ่อย — บันทึกใน log ทุกครั้ง
+        const _extracted = {
+            firstname_th: payload.firstname_th || payload.given_name || '',
+            lastname_th:  payload.lastname_th  || payload.family_name || '',
+            name_th:      payload.name_th || thaiFullName || '',
+            birthdate:    payload.birthdate || '',
+            sub:          payload.sub || ''
+        };
 
         // 4. เทียบ users.cid — ลอง 2 วิธี:
         //    วิธี 1: SHA-256 ของ cid ที่เราคำนวณเอง (วิธีมาตรฐานที่ users ลงทะเบียน)
@@ -1221,6 +1302,7 @@ async function handleThaidCallback(req, res) {
         const hashedCid = crypto.createHash('sha256').update(cidStr).digest('hex');
         const hashCidFromDga = (payload.hash_cid && String(payload.hash_cid).length === 64)
             ? String(payload.hash_cid) : null;
+        const pidPartial = cidStr.length >= 4 ? cidStr.slice(-4) : '';
 
         // === Register flow — ไม่ match user, สร้าง reg token แล้ว redirect ไปหน้า register ===
         if (stateData?.flow === 'register') {
@@ -1235,6 +1317,10 @@ async function handleThaidCallback(req, res) {
             const ln = encodeURIComponent(payload.lastname_th || payload.family_name || '');
             const regUrl = `${frontendBase}/register?thaid_reg=${regToken}&thaid_fn=${fn}&thaid_ln=${ln}`;
             console.warn('[ThaiD/register] reg token created, redirect →', regUrl);
+            saveSsoLog('thaid', 'register', {
+                outcome: 'register_redirect', cid_hash: hashedCid, ip,
+                raw_payload: payload, extracted_fields: _extracted
+            });
             return res.redirect(regUrl);
         }
 
@@ -1253,24 +1339,35 @@ async function handleThaidCallback(req, res) {
 
         if (rows.length === 0) {
             console.warn(`[ThaiD] ไม่พบ user: cid=${cidStr}, SHA256=${hashedCid}, hash_cid_dga=${hashCidFromDga}`);
-            return redirectErr(`ไม่พบบัญชีที่ผูกกับบัตรประชาชนนี้ (${thaiFullName}) — กรุณาให้ผู้ดูแลระบบบันทึกเลขบัตรประชาชนในบัญชีผู้ใช้ก่อน`);
+            saveSsoLog('thaid', 'login', {
+                outcome: 'no_match', cid_hash: hashedCid, ip,
+                raw_payload: payload, extracted_fields: _extracted,
+                error_msg: `ไม่พบ user สำหรับ CID hash นี้`
+            });
+            return res.redirect(`${loginUrl}?sso_error=${encodeURIComponent(`ไม่พบบัญชีที่ผูกกับบัตรประชาชนนี้ (${thaiFullName}) — กรุณาให้ผู้ดูแลระบบบันทึกเลขบัตรประชาชนในบัญชีผู้ใช้ก่อน`)}`);
         }
 
         const user = rows[0];
-        if (!user.is_active)   return redirectErr('บัญชีถูกปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ');
-        if (!user.is_approved) return redirectErr('บัญชียังรอการอนุมัติจากผู้ดูแลระบบ');
+        if (!user.is_active) {
+            saveSsoLog('thaid', 'login', { outcome: 'blocked', cid_hash: hashedCid, user_id: user.id, username: user.username, ip, raw_payload: payload, extracted_fields: _extracted, error_msg: 'บัญชีถูกปิดใช้งาน' });
+            return res.redirect(`${loginUrl}?sso_error=${encodeURIComponent('บัญชีถูกปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ')}`);
+        }
+        if (!user.is_approved) {
+            saveSsoLog('thaid', 'login', { outcome: 'blocked', cid_hash: hashedCid, user_id: user.id, username: user.username, ip, raw_payload: payload, extracted_fields: _extracted, error_msg: 'บัญชียังรอการอนุมัติ' });
+            return res.redirect(`${loginUrl}?sso_error=${encodeURIComponent('บัญชียังรอการอนุมัติจากผู้ดูแลระบบ')}`);
+        }
 
         // 5. Concurrent login check
         if (user.active_session_id) {
             const lastSeen = user.last_seen_at ? new Date(user.last_seen_at).getTime() : 0;
             if (lastSeen > Date.now() - 5 * 60 * 1000) {
-                return redirectErr(`บัญชีนี้กำลังใช้งานอยู่ที่ IP ${user.last_seen_ip || '-'} — รอ 5 นาที หรือ logout เครื่องเก่าก่อน`);
+                saveSsoLog('thaid', 'login', { outcome: 'blocked', cid_hash: hashedCid, user_id: user.id, username: user.username, ip, raw_payload: payload, extracted_fields: _extracted, error_msg: `Concurrent session ที่ IP ${user.last_seen_ip}` });
+                return res.redirect(`${loginUrl}?sso_error=${encodeURIComponent(`บัญชีนี้กำลังใช้งานอยู่ที่ IP ${user.last_seen_ip || '-'} — รอ 5 นาที หรือ logout เครื่องเก่าก่อน`)}`);
             }
         }
 
         // 6. Issue session + JWT
         const sessionId = crypto.randomBytes(24).toString('hex');
-        const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim().slice(0, 64);
         await db.query(
             'UPDATE users SET active_session_id = ?, session_started_at = NOW(), last_seen_at = NOW(), last_seen_ip = ? WHERE id = ?',
             [sessionId, ip, user.id]
@@ -1284,6 +1381,22 @@ async function handleThaidCallback(req, res) {
         );
 
         await saveLog(user.username, 'login_success', `เข้าสู่ระบบผ่าน ThaiD SSO (${thaiFullName || cidStr})`, ip);
+
+        // บันทึก SSO log + อัปเดต profile
+        saveSsoLog('thaid', 'login', {
+            outcome: 'success', cid_hash: hashedCid, user_id: user.id, username: user.username, ip,
+            raw_payload: payload, extracted_fields: _extracted
+        });
+        upsertSsoProfile('thaid', user.id, {
+            cid_hash: hashedCid,
+            firstname_th: _extracted.firstname_th,
+            lastname_th:  _extracted.lastname_th,
+            birthdate:    _extracted.birthdate,
+            name_th:      _extracted.name_th,
+            pid_partial:  pidPartial,
+            extra_fields: { sub: payload.sub, hash_cid: payload.hash_cid, iss: payload.iss },
+            raw_payload:  payload
+        });
 
         const userInfo = {
             id: user.id, username: user.username, role: user.role,
@@ -1313,6 +1426,7 @@ async function handleThaidCallback(req, res) {
         res.redirect(finalUrl);
     } catch (e) {
         console.error('[ThaiD/callback] error:', e);
+        saveSsoLog('thaid', _thaidFlow, { outcome: 'error', ip, error_msg: e.message });
         const errUrl = `${loginUrl}?sso_error=${encodeURIComponent('เกิดข้อผิดพลาดระหว่างเชื่อมต่อ ThaiD')}`;
         console.warn('[ThaiD] ❌ CATCH redirect →', errUrl);
         res.redirect(errUrl);
@@ -1542,6 +1656,118 @@ apiRouter.post('/admin/force-logout-user/:userId', authenticateToken, async (req
         _sessionCache.delete(uid);
         await saveLog(req.user.username, 'admin_force_logout', `บังคับ logout user id=${uid}`, req.headers['x-forwarded-for'] || req.ip);
         res.json({ success: true, message: 'บังคับ logout user สำเร็จ' });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// ============================================================
+// === SSO Audit Endpoints (super_admin) ======================
+// ============================================================
+
+// GET /admin/sso-logs?provider=&flow=&outcome=&user_id=&page=&limit=&from=&to=
+apiRouter.get('/admin/sso-logs', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const page    = Math.max(1, parseInt(req.query.page)  || 1);
+        const limit   = Math.min(200, Math.max(10, parseInt(req.query.limit) || 50));
+        const offset  = (page - 1) * limit;
+        const where   = [];
+        const params  = [];
+        if (req.query.provider) { where.push('provider = ?'); params.push(req.query.provider); }
+        if (req.query.flow)     { where.push('flow = ?');     params.push(req.query.flow); }
+        if (req.query.outcome)  { where.push('outcome = ?');  params.push(req.query.outcome); }
+        if (req.query.user_id)  { where.push('user_id = ?'); params.push(parseInt(req.query.user_id)); }
+        if (req.query.from)     { where.push('created_at >= ?'); params.push(req.query.from); }
+        if (req.query.to)       { where.push('created_at <= ?'); params.push(req.query.to + ' 23:59:59'); }
+        const whereStr = where.length ? 'WHERE ' + where.join(' AND ') : '';
+        const [[{ total }]] = await db.query(`SELECT COUNT(*) AS total FROM sso_logs ${whereStr}`, params);
+        const [rows] = await db.query(
+            `SELECT id, provider, flow, cid_hash, user_id, username, outcome,
+                    extracted_fields, ip, error_msg, created_at
+             FROM sso_logs ${whereStr}
+             ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+            [...params, limit, offset]
+        );
+        res.json({ success: true, data: rows, total, page, limit, pages: Math.ceil(total / limit) });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// GET /admin/sso-logs/:id — ดู raw_payload ของ log รายการเดียว
+apiRouter.get('/admin/sso-logs/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM sso_logs WHERE id = ?', [parseInt(req.params.id)]);
+        if (!rows.length) return res.status(404).json({ success: false, message: 'ไม่พบ log' });
+        res.json({ success: true, data: rows[0] });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// GET /admin/sso-profiles?user_id=&provider=&page=&limit=
+apiRouter.get('/admin/sso-profiles', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const page   = Math.max(1, parseInt(req.query.page) || 1);
+        const limit  = Math.min(200, Math.max(10, parseInt(req.query.limit) || 50));
+        const offset = (page - 1) * limit;
+        const where  = [];
+        const params = [];
+        if (req.query.user_id)  { where.push('p.user_id = ?');  params.push(parseInt(req.query.user_id)); }
+        if (req.query.provider) { where.push('p.provider = ?'); params.push(req.query.provider); }
+        const whereStr = where.length ? 'WHERE ' + where.join(' AND ') : '';
+        const [[{ total }]] = await db.query(`SELECT COUNT(*) AS total FROM sso_profiles p ${whereStr}`, params);
+        const [rows] = await db.query(
+            `SELECT p.id, p.user_id, p.provider, p.cid_hash, p.firstname_th, p.lastname_th,
+                    p.birthdate, p.name_th, p.pid_partial, p.extra_fields,
+                    p.linked_at, p.last_seen_at, p.login_count,
+                    u.username, u.hospcode, u.role
+             FROM sso_profiles p
+             LEFT JOIN users u ON u.id = p.user_id
+             ${whereStr}
+             ORDER BY p.last_seen_at DESC LIMIT ? OFFSET ?`,
+            [...params, limit, offset]
+        );
+        res.json({ success: true, data: rows, total, page, limit, pages: Math.ceil(total / limit) });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// GET /admin/sso-profiles/user/:userId — โปรไฟล์ทุก provider ของ user คนเดียว
+apiRouter.get('/admin/sso-profiles/user/:userId', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            `SELECT p.*, u.username, u.hospcode, u.role
+             FROM sso_profiles p
+             LEFT JOIN users u ON u.id = p.user_id
+             WHERE p.user_id = ?`,
+            [parseInt(req.params.userId)]
+        );
+        res.json({ success: true, data: rows });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// GET /admin/sso-stats — สรุปสถิติ SSO
+apiRouter.get('/admin/sso-stats', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [byOutcome] = await db.query(
+            `SELECT provider, outcome, COUNT(*) AS cnt
+             FROM sso_logs GROUP BY provider, outcome ORDER BY provider, cnt DESC`
+        );
+        const [byDay] = await db.query(
+            `SELECT DATE(created_at) AS day, provider, outcome, COUNT(*) AS cnt
+             FROM sso_logs
+             WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+             GROUP BY day, provider, outcome ORDER BY day DESC`
+        );
+        const [profiles] = await db.query(
+            `SELECT provider, COUNT(*) AS cnt, SUM(login_count) AS total_logins
+             FROM sso_profiles GROUP BY provider`
+        );
+        res.json({ success: true, by_outcome: byOutcome, by_day: byDay, profiles });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
@@ -8156,6 +8382,55 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
         console.log('✅ login_logs, system_logs, notifications, rejection & appeal tables + indexes ready');
     } catch (err) {
         console.error('⚠️ Auto-create tables error:', err.message);
+    }
+})();
+
+// ========== Auto-create SSO Audit tables ==========
+(async () => {
+    try {
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS sso_logs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                provider VARCHAR(20) NOT NULL COMMENT 'thaid | providerid',
+                flow VARCHAR(20) NOT NULL COMMENT 'login | register',
+                cid_hash VARCHAR(64) NULL COMMENT 'SHA-256 ของ CID ไม่เก็บ CID จริง',
+                user_id INT NULL COMMENT 'FK users.id ถ้า match สำเร็จ',
+                username VARCHAR(100) NULL,
+                outcome VARCHAR(30) NOT NULL COMMENT 'success | no_match | register_redirect | blocked | error',
+                raw_payload JSON NULL COMMENT 'full JSON จาก JWT/userinfo endpoint',
+                extracted_fields JSON NULL COMMENT 'ฟิลด์สำคัญ: firstname_th, lastname_th, birthdate',
+                ip VARCHAR(64) NULL,
+                error_msg TEXT NULL,
+                created_at DATETIME DEFAULT NOW(),
+                INDEX idx_sso_logs_provider_created (provider, created_at),
+                INDEX idx_sso_logs_user_id (user_id),
+                INDEX idx_sso_logs_cid_hash (cid_hash),
+                INDEX idx_sso_logs_outcome (outcome, created_at)
+            ) COMMENT 'บันทึกทุก SSO callback attempt (ThaiD + ProviderID)'
+        `);
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS sso_profiles (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL COMMENT 'FK users.id',
+                provider VARCHAR(20) NOT NULL COMMENT 'thaid | providerid',
+                cid_hash VARCHAR(64) NULL,
+                firstname_th VARCHAR(100) NULL,
+                lastname_th VARCHAR(100) NULL,
+                birthdate VARCHAR(20) NULL,
+                name_th VARCHAR(200) NULL COMMENT 'ชื่อเต็มภาษาไทยจาก provider',
+                pid_partial VARCHAR(10) NULL COMMENT 'เลขบัตร 4 ตัวหลัง (แสดงผลเท่านั้น)',
+                extra_fields JSON NULL COMMENT 'ฟิลด์อื่นๆ เช่น title, gender, sub, hash_cid',
+                raw_payload JSON NULL COMMENT 'full payload ล่าสุด',
+                linked_at DATETIME NULL COMMENT 'ครั้งแรกที่ SSO สำเร็จ',
+                last_seen_at DATETIME NULL COMMENT 'ครั้งล่าสุดที่ SSO สำเร็จ',
+                login_count INT DEFAULT 0 COMMENT 'จำนวนครั้ง SSO สำเร็จ',
+                UNIQUE KEY uk_sso_profiles_user_provider (user_id, provider),
+                INDEX idx_sso_profiles_cid_hash (cid_hash)
+            ) COMMENT 'โปรไฟล์ SSO ล่าสุดต่อ user — อัปเดตทุกครั้งที่ login/register สำเร็จ'
+        `);
+        console.log('✅ sso_logs + sso_profiles tables ready');
+    } catch (err) {
+        console.error('⚠️ SSO audit tables error:', err.message);
     }
 })();
 
