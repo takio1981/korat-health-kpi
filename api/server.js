@@ -1273,10 +1273,6 @@ async function handleThaidCallback(req, res) {
         if (!payload || typeof payload !== 'object') {
             return redirectErr('ถอดรหัส JWT จาก DGA ไม่สำเร็จ');
         }
-        // === DEBUG LOG: แสดง JSON ทั้งหมดที่ได้จาก ThaiD ===
-        console.log('[ThaiD] ===== JWT payload จาก DGA =====');
-        console.log(JSON.stringify(payload, null, 2));
-        console.log('[ThaiD] ================================');
 
         // 3. ดึงเลขบัตรประชาชน 13 หลัก (DGA ส่งเป็น field "cid" plain text)
         const cidStr = extractCidFromPayload(payload);
@@ -1403,26 +1399,11 @@ async function handleThaidCallback(req, res) {
             dept_id: user.dept_id, hospcode: user.hospcode,
             firstname: user.firstname, lastname: user.lastname
         };
-        // สร้าง OTP (8 hex chars, 2 นาที) สำหรับ auto-fill login form
-        const otp = crypto.randomBytes(4).toString('hex');
-        _thaidOtpMap.set(otp, { userId: user.id, username: user.username, expires: Date.now() + 2 * 60 * 1000 });
 
-        // กำหนด return page จาก settings (default: /login)
-        const returnPage = s.thaid_return_page || '/login';
-
-        // === DEBUG LOG ===
-        console.log('[ThaiD] ===== ผลการ match user =====');
-        console.log('[ThaiD] user.username :', user.username);
-        console.log('[ThaiD] user.role     :', user.role);
-        console.log('[ThaiD] thaiFullName  :', thaiFullName);
-        console.log('[ThaiD] OTP           :', otp, '(2 นาที)');
-        console.log('[ThaiD] return page   :', returnPage);
-        console.log('[ThaiD] ================================');
-
-        const fn = encodeURIComponent(user.firstname || '');
-        const ln = encodeURIComponent(user.lastname  || '');
-        const finalUrl = `${frontendBase}${returnPage}?thaid_u=${encodeURIComponent(user.username)}&thaid_otp=${otp}&thaid_fn=${fn}&thaid_ln=${ln}`;
-        console.warn('[ThaiD] ✅ SUCCESS redirect →', finalUrl);
+        // Redirect ไป /login พร้อม sso_token — handleSsoCallback() ใน frontend รับต่อ
+        const ssoUserB64 = encodeURIComponent(Buffer.from(JSON.stringify(userInfo)).toString('base64'));
+        const finalUrl = `${frontendBase}/login?sso_token=${encodeURIComponent(token)}&sso_user=${ssoUserB64}&sso_provider=thaid`;
+        console.warn('[ThaiD] ✅ SUCCESS redirect →', finalUrl.replace(token, token.substring(0,20)+'...'));
         res.redirect(finalUrl);
     } catch (e) {
         console.error('[ThaiD/callback] error:', e);

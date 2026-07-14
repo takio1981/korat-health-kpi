@@ -37,8 +37,7 @@ export class LoginComponent implements OnInit, OnDestroy {
   thaidAutoFilling: boolean = false; // แสดงสถานะกำลัง auto-fill
 
   ngOnInit() {
-    this.handleSsoCallback(); // ต้องเรียกก่อน checkMaintenance เพื่อรับ sso_token ทันที
-    this.handleThaidOtp();    // รับ ThaiD OTP จาก query params แล้ว auto-fill + submit
+    this.handleSsoCallback(); // รับ sso_token จาก ThaiD/ProviderID callback → save + navigate /dashboard
     this.checkMaintenance();
     this.ngZone.runOutsideAngular(() => {
       this.statusPollTimer = setInterval(() => {
@@ -76,30 +75,16 @@ export class LoginComponent implements OnInit, OnDestroy {
     if (ssoToken && ssoUser) {
       try {
         const userInfo = JSON.parse(atob(decodeURIComponent(ssoUser)));
-
-        // ===== DEBUG: แสดงข้อมูลที่รับมาจาก ThaiD SSO =====
-        console.log('[ThaiD SSO] ===== ข้อมูลที่รับจาก Backend =====');
-        console.log('[ThaiD SSO] username  :', userInfo.username);
-        console.log('[ThaiD SSO] role      :', userInfo.role);
-        console.log('[ThaiD SSO] hospcode  :', userInfo.hospcode);
-        console.log('[ThaiD SSO] firstname :', userInfo.firstname);
-        console.log('[ThaiD SSO] lastname  :', userInfo.lastname);
-        console.log('[ThaiD SSO] userInfo (full):', userInfo);
-        console.log('[ThaiD SSO] JWT token (header.payload):', ssoToken.split('.')[0] + '.' + ssoToken.split('.')[1]);
-        try {
-          const jwtPayload = JSON.parse(atob(ssoToken.split('.')[1]));
-          console.log('[ThaiD SSO] JWT payload decoded:', jwtPayload);
-        } catch { /* ignore */ }
-        console.log('[ThaiD SSO] =======================================');
-        // ===================================================
-
         this.authService.saveToken(ssoToken);
         this.authService.saveUser(userInfo);
         this.authService.startTokenExpiryWatcher();
+        const provider = params.get('sso_provider') || 'SSO';
+        const providerLabel = provider === 'thaid' ? 'ThaID' : provider === 'providerid' ? 'ProviderID' : 'SSO';
         Swal.fire({
           icon: 'success',
           title: 'เข้าสู่ระบบสำเร็จ',
-          text: `ยินดีต้อนรับ คุณ${userInfo.firstname || ''} ${userInfo.lastname || ''} (ThaiD)`,
+          html: `ยินดีต้อนรับ <b>${userInfo.firstname || ''} ${userInfo.lastname || ''}</b><br>
+                 <span style="font-size:12px;color:#6b7280">(${providerLabel})</span>`,
           timer: 1500,
           showConfirmButton: false
         }).then(() => this.router.navigate(['/dashboard']));
@@ -107,107 +92,6 @@ export class LoginComponent implements OnInit, OnDestroy {
         Swal.fire('ผิดพลาด', 'ไม่สามารถอ่านข้อมูล SSO ได้', 'error');
       }
     }
-  }
-
-  /** รับ ThaiD OTP จาก query params → แสดง popup ยืนยัน → submit */
-  private handleThaidOtp() {
-    // ใช้ ActivatedRoute (reliable ใน Angular production AOT)
-    const qp      = this.route.snapshot.queryParams;
-    const thaidU   = qp['thaid_u']   || '';
-    const thaidOtp = qp['thaid_otp'] || '';
-    const thaidFn  = qp['thaid_fn']  || '';
-    const thaidLn  = qp['thaid_ln']  || '';
-
-    if (!thaidU || !thaidOtp) return;
-
-    console.warn('[ThaiD] handleThaidOtp: u=', thaidU, 'fn=', thaidFn, 'ln=', thaidLn);
-
-    // เคลียร์ query params ออกจาก URL ทันที (ก่อน Angular Router อ่านซ้ำ)
-    this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
-
-    // กรอก username + OTP เข้า form เพื่อให้ผู้ใช้เห็นขณะรอ popup
-    this.loginForm.patchValue({ username: thaidU, password: thaidOtp });
-    this.cdr.detectChanges();
-
-    const fullName = `${thaidFn} ${thaidLn}`.trim();
-
-    // defer Swal ให้ Angular render เสร็จก่อน (50ms)
-    setTimeout(() => {
-      Swal.fire({
-        title: 'ยืนยันการเข้าสู่ระบบ',
-        html: `
-          <div style="text-align:left">
-            <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;
-                        background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;margin-bottom:14px">
-              <span style="font-size:2rem">🪪</span>
-              <div>
-                <div style="font-size:11px;color:#6b7280;margin-bottom:3px">ยืนยันตัวตนด้วย ThaID สำเร็จ</div>
-                <div style="font-size:15px;font-weight:700;color:#166534">
-                  ${fullName || 'ผู้ใช้งาน ThaiD'}
-                </div>
-              </div>
-            </div>
-            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;font-size:13px">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-                <span style="color:#3b82f6;font-size:16px">👤</span>
-                <span style="color:#6b7280;min-width:90px">Username</span>
-                <span style="font-weight:700;color:#1e40af">${thaidU}</span>
-              </div>
-              <div style="display:flex;align-items:center;gap:8px">
-                <span style="color:#8b5cf6;font-size:16px">📛</span>
-                <span style="color:#6b7280;min-width:90px">ชื่อ-นามสกุล</span>
-                <span style="font-weight:600;color:#374151">${fullName || '-'}</span>
-              </div>
-            </div>
-            <div style="margin-top:12px;padding:8px 12px;background:#eff6ff;
-                        border-radius:8px;font-size:11px;color:#3b82f6;text-align:center">
-              🔐 กดยืนยันเพื่อเข้าสู่ระบบในฐานะผู้ใช้นี้
-            </div>
-          </div>`,
-        icon: undefined,
-        showCancelButton: true,
-        confirmButtonColor: '#10b981',
-        cancelButtonColor: '#6b7280',
-        confirmButtonText: '✓ ยืนยัน เข้าสู่ระบบ',
-        cancelButtonText: 'ยกเลิก',
-        reverseButtons: false,
-        allowOutsideClick: false,
-        customClass: { popup: 'rounded-2xl' }
-      }).then(result => {
-        if (!result.isConfirmed) {
-          this.loginForm.reset();
-          this.cdr.detectChanges();
-          return;
-        }
-        // ยืนยัน → submit ThaiD OTP
-        this.thaidAutoFilling = true;
-        this.cdr.detectChanges();
-        this.authService.login({ username: thaidU, password: thaidOtp, thaid_otp: thaidOtp }).subscribe({
-          next: (response) => {
-            this.thaidAutoFilling = false;
-            if (response.success) {
-              this.authService.saveToken(response.token);
-              this.authService.saveUser(response.user);
-              this.authService.startTokenExpiryWatcher();
-              Swal.fire({
-                icon: 'success', title: 'เข้าสู่ระบบสำเร็จ',
-                html: `ยินดีต้อนรับ <b>${response.user.firstname || ''} ${response.user.lastname || ''}</b><br>
-                       <span style="font-size:12px;color:#6b7280">(ThaiD)</span>`,
-                timer: 2000, showConfirmButton: false
-              }).then(() => this.router.navigate(['/dashboard']));
-            }
-          },
-          error: (err) => {
-            this.thaidAutoFilling = false;
-            this.loginForm.patchValue({ password: '' });
-            this.cdr.detectChanges();
-            const msg = err.error?.message || 'รหัส ThaiD หมดอายุ กรุณาสแกน QR ใหม่';
-            console.error('[ThaiD] login error:', msg);
-            Swal.fire({ icon: 'error', title: 'เข้าสู่ระบบไม่สำเร็จ', text: msg, confirmButtonColor: '#10b981' });
-          }
-        });
-      });
-    }, 50);
   }
 
   /** กดปุ่ม ThaiD → redirect ไป DGA */
