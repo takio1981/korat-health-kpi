@@ -917,7 +917,7 @@ apiRouter.post('/auth/refresh-token', authenticateToken, async (req, res) => {
 //  3. Backend แลก code → id_token JWT จาก DGA token endpoint
 //  4. Decode JWT → ดึงเลขบัตร 13 หลัก (field: pid / cid / citizen_id / national_id / sub)
 //  5. SHA-256 hash เลขบัตร → เทียบ users.cid (ซึ่งเก็บ hash ไว้)
-//  6. ถ้าเจอ → issue JWT + session → redirect /login?sso_token=xxx&sso_user=xxx
+//  6. ถ้าเจอ → issue JWT + session → redirect /sso-callback?sso_token=xxx&sso_user=xxx → /dashboard
 //
 // ค่าที่ hardcode (จาก DGA imauth.bora.dopa.go.th):
 //   ตั้งค่าเพียง 2 อย่างใน Settings: thaid_enabled + thaid_client_secret
@@ -931,8 +931,6 @@ const THAID_SCOPE       = 'pid name birthdate openid';
 
 // CSRF state map: state → { origin, created_at, flow? } — TTL 10 นาที
 const _thaidStateMap = new Map();
-// OTP map: otp → { userId, username, expires } — TTL 2 นาที (one-time use)
-const _thaidOtpMap  = new Map();
 // Register map: token → { cid_hash, firstname_th, lastname_th, expires } — TTL 10 นาที (one-time use)
 const _thaidRegMap  = new Map();
 setInterval(() => {
@@ -941,9 +939,6 @@ setInterval(() => {
         if (v.created_at < cutoff10m) _thaidStateMap.delete(k);
     }
     const now = Date.now();
-    for (const [k, v] of _thaidOtpMap.entries()) {
-        if (v.expires < now) _thaidOtpMap.delete(k);
-    }
     for (const [k, v] of _thaidRegMap.entries()) {
         if (v.expires < now) _thaidRegMap.delete(k);
     }
@@ -1017,10 +1012,10 @@ async function upsertSsoProfile(provider, userId, profile) {
     }
 }
 
-/** ดึง ThaiD config — hardcode ทุกอย่างยกเว้น enabled + client_secret + return_page + register settings */
+/** ดึง ThaiD config — hardcode ทุกอย่างยกเว้น enabled + client_secret + register_url */
 async function getThaidSettings() {
     const [rows] = await db.query(
-        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('thaid_enabled','thaid_client_secret','thaid_return_page','thaid_register_enabled','thaid_register_url','providerid_register_enabled')"
+        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('thaid_enabled','thaid_client_secret','thaid_register_url')"
     );
     const s = {};
     rows.forEach(r => s[r.setting_key] = r.setting_value);
@@ -1165,8 +1160,8 @@ apiRouter.get('/auth/thaid/register-start', async (req, res) => {
         const s = await getThaidSettings();
         const frontendBase = getFrontendBase(req);
 
-        if (s.thaid_register_enabled !== 'true') {
-            return res.redirect(`${frontendBase}/register?sso_error=${encodeURIComponent('การลงทะเบียนด้วย ThaiD ยังไม่ได้เปิดใช้งาน')}`);
+        if (s.thaid_enabled !== 'true') {
+            return res.redirect(`${frontendBase}/register?sso_error=${encodeURIComponent('ThaiD ยังไม่ได้เปิดใช้งาน')}`);
         }
 
         // สร้าง dynamic state สำหรับ register flow
