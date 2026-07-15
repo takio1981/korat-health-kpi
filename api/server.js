@@ -1204,7 +1204,7 @@ apiRouter.get('/auth/thaid/reg-data', async (req, res) => {
 // และบน app root (/authen/thaid/callback — ตรงกับ redirect_uri ที่ลงทะเบียนกับ DGA)
 async function handleThaidCallback(req, res) {
     const { code, state, error, error_description } = req.query;
-    console.warn('[ThaiD/callback] path=', req.path, '| code=', code ? code.substring(0,12)+'...' : 'NONE', '| state=', String(state||'').substring(0,20));
+    console.warn('[ThaiD/callback] ▶ path=', req.path, '| code=', code ? code.substring(0,12)+'...' : 'NONE', '| state=', String(state||'').substring(0,30), '| error=', error||'-');
 
     const stateStr = String(state || '');
     const stateData = _thaidStateMap.get(stateStr);
@@ -1215,9 +1215,14 @@ async function handleThaidCallback(req, res) {
     const dashboardUrl = `${frontendBase}/dashboard`;
     const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim().slice(0, 64);
     const _thaidFlow = stateData?.flow || 'login';
+
+    console.warn('[ThaiD/callback] stateFound=', !!stateData, '| isKhupskpiState=', isKhupskpiState, '| frontendBase=', frontendBase);
+
     const redirectErr = (msg, opts = {}) => {
+        console.error('[ThaiD/callback] ❌ ERROR:', msg);
         saveSsoLog('thaid', _thaidFlow, { outcome: 'error', ip, error_msg: msg, ...opts });
-        return res.redirect(`${loginUrl}?sso_error=${encodeURIComponent(msg)}`);
+        const ssoCallbackUrl = `${frontendBase}/sso-callback?sso_error=${encodeURIComponent(msg)}`;
+        return res.redirect(ssoCallbackUrl);
     };
 
     if (error) {
@@ -1248,11 +1253,12 @@ async function handleThaidCallback(req, res) {
 
         if (!tokenRes.ok) {
             const errBody = await tokenRes.text().catch(() => '');
-            console.error(`[ThaiD/callback] token exchange ${tokenRes.status}:`, errBody);
-            return redirectErr(`แลก token ไม่สำเร็จ (${tokenRes.status}) — ตรวจสอบ client_secret / token_url`);
+            console.error(`[ThaiD/callback] ❌ token exchange FAILED ${tokenRes.status}:`, errBody.substring(0, 300));
+            return redirectErr(`แลก token ไม่สำเร็จ (${tokenRes.status}) — ตรวจสอบ client_secret ในหน้า Settings`);
         }
 
         const tokenData = await tokenRes.json();
+        console.warn('[ThaiD/callback] ✓ token exchange OK | keys:', Object.keys(tokenData));
         const idToken = tokenData.id_token || tokenData.access_token;
         if (!idToken) return redirectErr('DGA ไม่ได้ส่ง id_token — ตรวจสอบ scope (ต้องมี openid)');
 
@@ -1260,10 +1266,12 @@ async function handleThaidCallback(req, res) {
         let payload;
         try {
             payload = jwt.verify(idToken, s.thaid_client_secret, { algorithms: ['HS256'] });
+            console.warn('[ThaiD/callback] ✓ JWT verified | fields:', Object.keys(payload));
         } catch (verifyErr) {
             // fallback: decode ไม่ verify (กรณี DGA ใช้ key format ต่างกัน)
             console.warn('[ThaiD] jwt.verify failed, fallback to decode:', verifyErr.message);
             payload = jwt.decode(idToken);
+            console.warn('[ThaiD/callback] decoded (no verify) | fields:', payload ? Object.keys(payload) : 'null');
         }
         if (!payload || typeof payload !== 'object') {
             return redirectErr('ถอดรหัส JWT จาก DGA ไม่สำเร็จ');
@@ -1271,8 +1279,8 @@ async function handleThaidCallback(req, res) {
 
         // 3. ดึงเลขบัตรประชาชน 13 หลัก (DGA ส่งเป็น field "cid" plain text)
         const cidStr = extractCidFromPayload(payload);
+        console.warn('[ThaiD/callback] CID extracted:', cidStr ? `****${cidStr.slice(-4)}` : 'NOT FOUND', '| payload keys:', Object.keys(payload));
         if (!cidStr) {
-            console.error('[ThaiD] payload keys:', Object.keys(payload));
             return redirectErr('ไม่พบเลขบัตรประชาชน 13 หลักใน JWT (field ที่ตรวจ: cid, pid, citizen_id, national_id, sub)', { raw_payload: payload });
         }
 
@@ -1329,23 +1337,25 @@ async function handleThaidCallback(req, res) {
         }
 
         if (rows.length === 0) {
-            console.warn(`[ThaiD] ไม่พบ user: cid=${cidStr}, SHA256=${hashedCid}, hash_cid_dga=${hashCidFromDga}`);
+            console.warn(`[ThaiD/callback] ❌ no_match | SHA256=${hashedCid} | hash_cid_dga=${hashCidFromDga}`);
             saveSsoLog('thaid', 'login', {
                 outcome: 'no_match', cid_hash: hashedCid, ip,
                 raw_payload: payload, extracted_fields: _extracted,
                 error_msg: `ไม่พบ user สำหรับ CID hash นี้`
             });
-            return res.redirect(`${loginUrl}?sso_error=${encodeURIComponent(`ไม่พบบัญชีที่ผูกกับบัตรประชาชนนี้ (${thaiFullName}) — กรุณาให้ผู้ดูแลระบบบันทึกเลขบัตรประชาชนในบัญชีผู้ใช้ก่อน`)}`);
+            return res.redirect(`${frontendBase}/sso-callback?sso_error=${encodeURIComponent(`ไม่พบบัญชีที่ผูกกับบัตรประชาชนนี้ (${thaiFullName || 'ไม่ทราบชื่อ'}) — กรุณาให้ผู้ดูแลระบบบันทึกเลขบัตรประชาชนในบัญชีผู้ใช้ก่อน`)}`);
         }
 
         const user = rows[0];
+        const ssoErrUrl = (msg) => `${frontendBase}/sso-callback?sso_error=${encodeURIComponent(msg)}`;
+
         if (!user.is_active) {
             saveSsoLog('thaid', 'login', { outcome: 'blocked', cid_hash: hashedCid, user_id: user.id, username: user.username, ip, raw_payload: payload, extracted_fields: _extracted, error_msg: 'บัญชีถูกปิดใช้งาน' });
-            return res.redirect(`${loginUrl}?sso_error=${encodeURIComponent('บัญชีถูกปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ')}`);
+            return res.redirect(ssoErrUrl('บัญชีถูกปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ'));
         }
         if (!user.is_approved) {
             saveSsoLog('thaid', 'login', { outcome: 'blocked', cid_hash: hashedCid, user_id: user.id, username: user.username, ip, raw_payload: payload, extracted_fields: _extracted, error_msg: 'บัญชียังรอการอนุมัติ' });
-            return res.redirect(`${loginUrl}?sso_error=${encodeURIComponent('บัญชียังรอการอนุมัติจากผู้ดูแลระบบ')}`);
+            return res.redirect(ssoErrUrl('บัญชียังรอการอนุมัติจากผู้ดูแลระบบ'));
         }
 
         // 5. Concurrent login check
@@ -1353,11 +1363,12 @@ async function handleThaidCallback(req, res) {
             const lastSeen = user.last_seen_at ? new Date(user.last_seen_at).getTime() : 0;
             if (lastSeen > Date.now() - 5 * 60 * 1000) {
                 saveSsoLog('thaid', 'login', { outcome: 'blocked', cid_hash: hashedCid, user_id: user.id, username: user.username, ip, raw_payload: payload, extracted_fields: _extracted, error_msg: `Concurrent session ที่ IP ${user.last_seen_ip}` });
-                return res.redirect(`${loginUrl}?sso_error=${encodeURIComponent(`บัญชีนี้กำลังใช้งานอยู่ที่ IP ${user.last_seen_ip || '-'} — รอ 5 นาที หรือ logout เครื่องเก่าก่อน`)}`);
+                return res.redirect(ssoErrUrl(`บัญชีนี้กำลังใช้งานอยู่ที่ IP ${user.last_seen_ip || '-'} — รอ 5 นาที หรือ logout เครื่องเก่าก่อน`));
             }
         }
 
         // 6. Issue session + JWT
+        console.warn(`[ThaiD/callback] ✓ user found: ${user.username} (id=${user.id})`);
         const sessionId = crypto.randomBytes(24).toString('hex');
         await db.query(
             'UPDATE users SET active_session_id = ?, session_started_at = NOW(), last_seen_at = NOW(), last_seen_ip = ? WHERE id = ?',
@@ -1401,10 +1412,9 @@ async function handleThaidCallback(req, res) {
         console.warn('[ThaiD] ✅ SUCCESS redirect →', finalUrl.substring(0, 80) + '...');
         res.redirect(finalUrl);
     } catch (e) {
-        console.error('[ThaiD/callback] error:', e);
+        console.error('[ThaiD/callback] ❌ EXCEPTION:', e.message, e.stack?.split('\n')[1]);
         saveSsoLog('thaid', _thaidFlow, { outcome: 'error', ip, error_msg: e.message });
-        const errUrl = `${loginUrl}?sso_error=${encodeURIComponent('เกิดข้อผิดพลาดระหว่างเชื่อมต่อ ThaiD')}`;
-        console.warn('[ThaiD] ❌ CATCH redirect →', errUrl);
+        const errUrl = `${frontendBase}/sso-callback?sso_error=${encodeURIComponent('เกิดข้อผิดพลาดระหว่างเชื่อมต่อ ThaiD — ' + e.message)}`;
         res.redirect(errUrl);
     }
 }
