@@ -70,6 +70,17 @@ export class UserManagementComponent implements OnInit {
   showPassword: boolean = false;
   showConfirmPassword: boolean = false;
 
+  // === Tab: รายชื่อ / สถิติ ===
+  activeTab: 'list' | 'stats' = 'list';
+  statsLoading: boolean = false;
+  stats: {
+    summary: { total: number; active: number; pending: number; rejected: number; disabled: number; approved: number };
+    byRole: { role: string; count: number }[];
+    byDistrict: { distid: string; distname: string; count: number }[];
+    byHospital: { hospcode: string; hosname: string; hostype: string; distname: string; count: number }[];
+    byDept: { dept_id: number; dept_name: string; count: number }[];
+  } | null = null;
+
   ngOnInit() {
     const role = this.authService.getUserRole();
     this.isAdmin = ['admin_hos', 'admin_sso', 'admin_cup', 'admin_ssj', 'super_admin'].includes(role);
@@ -88,6 +99,50 @@ export class UserManagementComponent implements OnInit {
     this.loadHospitals();
     this.loadDistricts();
     if (this.isSuperAdmin) this.loadMaintenanceStatus();
+  }
+
+  switchTab(tab: 'list' | 'stats') {
+    this.activeTab = tab;
+    if (tab === 'stats' && !this.stats) this.loadStats();
+  }
+
+  loadStats() {
+    this.statsLoading = true;
+    this.authService.getUserStats().subscribe({
+      next: (res) => {
+        if (res.success) { this.stats = res; }
+        this.statsLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: () => { this.statsLoading = false; this.cdr.detectChanges(); }
+    });
+  }
+
+  getRoleLabel(role: string): string {
+    const map: Record<string, string> = {
+      super_admin: 'Super Admin', admin_ssj: 'Admin SSJ', admin_cup: 'Admin CUP',
+      admin_hos: 'Admin รพ.', admin_sso: 'Admin รพ.สต.',
+      user_cup: 'User CUP', user_hos: 'User รพ.', user_sso: 'User รพ.สต.', user_ssj: 'User SSJ'
+    };
+    return map[role] || role;
+  }
+
+  getRoleBadgeClass(role: string): string {
+    if (role.startsWith('super')) return 'bg-purple-100 text-purple-700';
+    if (role.startsWith('admin')) return 'bg-blue-100 text-blue-700';
+    return 'bg-green-100 text-green-700';
+  }
+
+  getHostypeLabel(hostype: string): string {
+    const map: Record<string, string> = {
+      '05': 'รพ.ศูนย์', '06': 'รพ.ทั่วไป', '07': 'รพช.', '08': 'รพ.ทหาร',
+      '11': 'รพ.เอกชน', '17': 'สสอ.', '18': 'รพ.สต.', '73': 'ศสม.'
+    };
+    return map[hostype] || hostype;
+  }
+
+  getBarWidth(count: number, max: number): string {
+    return max > 0 ? Math.round((count / max) * 100) + '%' : '0%';
   }
 
   loadUsers() {

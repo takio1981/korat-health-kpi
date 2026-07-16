@@ -1,7 +1,19 @@
 <div class="p-6">
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
     <div class="p-6 border-b border-gray-100 flex flex-wrap justify-between items-center gap-3">
-      <h3 class="text-lg font-bold text-gray-800">รายชื่อผู้ใช้งานในระบบ</h3>
+      <!-- Tab Switcher -->
+      <div class="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+        <button (click)="switchTab('list')"
+                [ngClass]="activeTab === 'list' ? 'bg-white text-green-700 shadow-sm font-bold' : 'text-gray-500 hover:text-gray-700'"
+                class="px-4 py-1.5 rounded-lg text-sm transition-all">
+          <i class="fas fa-users mr-1.5"></i> รายชื่อผู้ใช้
+        </button>
+        <button (click)="switchTab('stats')"
+                [ngClass]="activeTab === 'stats' ? 'bg-white text-indigo-700 shadow-sm font-bold' : 'text-gray-500 hover:text-gray-700'"
+                class="px-4 py-1.5 rounded-lg text-sm transition-all">
+          <i class="fas fa-chart-bar mr-1.5"></i> สถิติผู้ใช้งาน
+        </button>
+      </div>
       <div class="flex flex-wrap items-center gap-2">
         <div *ngIf="isSuperAdmin" class="flex gap-1">
           <button (click)="toggleMaintenanceMode()"
@@ -28,6 +40,9 @@
         </button>
       </div>
     </div>
+
+    <!-- ===== TAB: รายชื่อผู้ใช้ ===== -->
+    <div [hidden]="activeTab !== 'list'">
 
     <!-- ปุ่มซ่อน/แสดงตัวกรอง -->
     <div class="px-6 py-2 border-b border-gray-100">
@@ -303,7 +318,156 @@
     <div class="p-4 bg-white border-t border-gray-100">
         <span class="text-xs text-gray-500 font-medium">ทั้งหมด {{ filteredUsers.length }} รายการ</span>
     </div>
-  </div>
+
+    </div><!-- /tab:list -->
+
+    <!-- ===== TAB: สถิติผู้ใช้งาน ===== -->
+    <div [hidden]="activeTab !== 'stats'" class="p-6">
+
+      <!-- Loading -->
+      <div *ngIf="statsLoading" class="flex flex-col items-center justify-center py-16 text-gray-400">
+        <i class="fas fa-spinner fa-spin text-3xl mb-3"></i>
+        <p class="text-sm">กำลังโหลดสถิติ...</p>
+      </div>
+
+      <ng-container *ngIf="!statsLoading && stats">
+
+        <!-- === Summary Cards === -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+          <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-center">
+            <p class="text-2xl font-extrabold text-indigo-700">{{ stats.summary.total }}</p>
+            <p class="text-xs text-indigo-500 font-semibold mt-1">ผู้ใช้ทั้งหมด</p>
+          </div>
+          <div class="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-center">
+            <p class="text-2xl font-extrabold text-emerald-700">{{ stats.summary.active }}</p>
+            <p class="text-xs text-emerald-500 font-semibold mt-1">ใช้งานอยู่</p>
+          </div>
+          <div class="bg-amber-50 border border-amber-100 rounded-xl p-4 text-center">
+            <p class="text-2xl font-extrabold text-amber-700">{{ stats.summary.pending }}</p>
+            <p class="text-xs text-amber-500 font-semibold mt-1">รออนุมัติ</p>
+          </div>
+          <div class="bg-sky-50 border border-sky-100 rounded-xl p-4 text-center">
+            <p class="text-2xl font-extrabold text-sky-700">{{ stats.summary.approved }}</p>
+            <p class="text-xs text-sky-500 font-semibold mt-1">อนุมัติแล้ว</p>
+          </div>
+          <div class="bg-red-50 border border-red-100 rounded-xl p-4 text-center">
+            <p class="text-2xl font-extrabold text-red-700">{{ stats.summary.rejected }}</p>
+            <p class="text-xs text-red-500 font-semibold mt-1">ปฏิเสธ</p>
+          </div>
+          <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+            <p class="text-2xl font-extrabold text-gray-600">{{ stats.summary.disabled }}</p>
+            <p class="text-xs text-gray-400 font-semibold mt-1">ปิดใช้งาน</p>
+          </div>
+        </div>
+
+        <!-- === 4 กล่องสถิติ === -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+          <!-- 1. By Role -->
+          <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+            <div class="px-5 py-3 border-b border-gray-100 flex items-center gap-2 bg-blue-50">
+              <i class="fas fa-shield-halved text-blue-500"></i>
+              <h4 class="text-sm font-bold text-blue-800">สิทธิ์การใช้งาน (Role)</h4>
+              <span class="ml-auto text-xs text-blue-400">{{ stats.byRole.length }} สิทธิ์</span>
+            </div>
+            <div class="p-4 space-y-2.5 overflow-y-auto card-scroll" style="max-height:280px">
+              <div *ngFor="let r of stats.byRole" class="flex items-center gap-3">
+                <span class="text-xs font-semibold rounded-full px-2.5 py-0.5 min-w-[90px] text-center" [ngClass]="getRoleBadgeClass(r.role)">
+                  {{ getRoleLabel(r.role) }}
+                </span>
+                <div class="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+                  <div class="h-full rounded-full bg-blue-400 transition-all duration-500"
+                       [style.width]="getBarWidth(r.count, stats.byRole[0].count)"></div>
+                </div>
+                <span class="text-sm font-extrabold text-gray-700 min-w-[28px] text-right">{{ r.count }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. By Dept -->
+          <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+            <div class="px-5 py-3 border-b border-gray-100 flex items-center gap-2 bg-teal-50">
+              <i class="fas fa-sitemap text-teal-500"></i>
+              <h4 class="text-sm font-bold text-teal-800">กลุ่มงาน / หน่วยงาน</h4>
+              <span class="ml-auto text-xs text-teal-400">{{ stats.byDept.length }} หน่วยงาน</span>
+            </div>
+            <div class="p-4 space-y-2.5 overflow-y-auto card-scroll" style="max-height:280px">
+              <div *ngFor="let d of stats.byDept" class="flex items-center gap-3">
+                <span class="text-xs text-gray-600 truncate min-w-0 flex-1">
+                  <i class="fas fa-building text-gray-300 mr-1"></i>
+                  {{ d.dept_name || '(ไม่ระบุ)' }}
+                </span>
+                <div class="w-28 bg-gray-100 rounded-full h-4 overflow-hidden flex-shrink-0">
+                  <div class="h-full rounded-full bg-teal-400 transition-all duration-500"
+                       [style.width]="getBarWidth(d.count, stats.byDept[0].count)"></div>
+                </div>
+                <span class="text-sm font-extrabold text-gray-700 min-w-[28px] text-right flex-shrink-0">{{ d.count }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. By District -->
+          <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+            <div class="px-5 py-3 border-b border-gray-100 flex items-center gap-2 bg-purple-50">
+              <i class="fas fa-map-marker-alt text-purple-500"></i>
+              <h4 class="text-sm font-bold text-purple-800">อำเภอ</h4>
+              <span class="ml-auto text-xs text-purple-400">{{ stats.byDistrict.length }} อำเภอ</span>
+            </div>
+            <div class="p-4 space-y-2.5 overflow-y-auto card-scroll" style="max-height:280px">
+              <div *ngFor="let dist of stats.byDistrict" class="flex items-center gap-3">
+                <span class="text-xs text-gray-600 truncate min-w-0 flex-1">
+                  <i class="fas fa-location-dot text-gray-300 mr-1"></i>
+                  {{ dist.distname || '(ไม่ระบุอำเภอ)' }}
+                </span>
+                <div class="w-28 bg-gray-100 rounded-full h-4 overflow-hidden flex-shrink-0">
+                  <div class="h-full rounded-full bg-purple-400 transition-all duration-500"
+                       [style.width]="getBarWidth(dist.count, stats.byDistrict[0].count)"></div>
+                </div>
+                <span class="text-sm font-extrabold text-gray-700 min-w-[28px] text-right flex-shrink-0">{{ dist.count }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. By Hospital -->
+          <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+            <div class="px-5 py-3 border-b border-gray-100 flex items-center gap-2 bg-orange-50">
+              <i class="fas fa-hospital text-orange-500"></i>
+              <h4 class="text-sm font-bold text-orange-800">หน่วยบริการ</h4>
+              <span class="ml-auto text-xs text-orange-400">{{ stats.byHospital.length }} แห่ง</span>
+            </div>
+            <div class="p-4 space-y-2.5 overflow-y-auto card-scroll" style="max-height:280px">
+              <div *ngFor="let h of stats.byHospital" class="flex items-center gap-2">
+                <div class="min-w-0 flex-1">
+                  <p class="text-xs text-gray-700 font-medium truncate">{{ h.hosname || h.hospcode || '(ไม่ระบุ)' }}</p>
+                  <p class="text-[10px] text-gray-400 truncate">
+                    <span class="bg-cyan-100 text-cyan-700 rounded px-1 mr-1">{{ getHostypeLabel(h.hostype) }}</span>
+                    {{ h.distname || '' }}
+                  </p>
+                </div>
+                <div class="w-20 bg-gray-100 rounded-full h-4 overflow-hidden flex-shrink-0">
+                  <div class="h-full rounded-full bg-orange-400 transition-all duration-500"
+                       [style.width]="getBarWidth(h.count, stats.byHospital[0].count)"></div>
+                </div>
+                <span class="text-sm font-extrabold text-gray-700 min-w-[28px] text-right flex-shrink-0">{{ h.count }}</span>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /grid 4 boxes -->
+
+        <!-- ปุ่ม refresh -->
+        <div class="mt-5 flex justify-end">
+          <button (click)="stats = null; loadStats()"
+                  class="px-4 py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-xl text-xs font-bold transition-colors">
+            <i class="fas fa-rotate-right mr-1.5"></i> รีเฟรชข้อมูล
+          </button>
+        </div>
+
+      </ng-container><!-- /stats loaded -->
+
+    </div><!-- /tab:stats -->
+
+  </div><!-- /card -->
 </div>
 
 <!-- Modal เพิ่ม/แก้ไขผู้ใช้งาน -->

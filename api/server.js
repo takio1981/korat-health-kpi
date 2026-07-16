@@ -3546,6 +3546,82 @@ apiRouter.get('/users', authenticateToken, isAnyAdmin, async (req, res) => {
     }
 });
 
+// GET /users/stats — สถิติผู้ใช้งาน แยกตาม role / อำเภอ / หน่วยบริการ / กลุ่มงาน (anyAdmin)
+apiRouter.get('/users/stats', authenticateToken, isAnyAdmin, async (req, res) => {
+    const user = req.user;
+    try {
+        // ---- สร้าง WHERE + params เดียวกับ GET /users ----
+        let where = `WHERE u.role != 'super_admin'`;
+        let params = [];
+        if (user.role === 'super_admin') {
+            where = '';
+        } else if (user.role === 'admin_ssj') {
+            if (user.deptId != null) { where += ' AND u.dept_id = ?'; params.push(user.deptId); }
+        } else if (user.role === 'admin_cup') {
+            const distid = await getDistrictId(user.hospcode);
+            if (distid) { where += ' AND h.distid = ?'; params.push(distid); }
+            else { where += ' AND u.hospcode = ?'; params.push(user.hospcode); }
+        } else if (ROLE_SCOPE_HOSPCODE.includes(user.role) && ROLE_ADMIN_ALL.includes(user.role)) {
+            where += ' AND u.hospcode = ?'; params.push(user.hospcode);
+        } else {
+            where += ' AND u.dept_id = ?'; params.push(user.deptId);
+        }
+
+        const join = `FROM users u LEFT JOIN chospital h ON u.hospcode = h.hoscode LEFT JOIN co_district dist ON dist.distid = h.distid LEFT JOIN departments d ON u.dept_id = d.id`;
+
+        // 1. Summary totals
+        const [summary] = await db.query(`
+            SELECT
+              COUNT(*) AS total,
+              SUM(CASE WHEN u.is_approved = 1 AND u.is_active = 1 THEN 1 ELSE 0 END) AS active,
+              SUM(CASE WHEN u.is_approved = 0 THEN 1 ELSE 0 END) AS pending,
+              SUM(CASE WHEN u.is_approved = -1 THEN 1 ELSE 0 END) AS rejected,
+              SUM(CASE WHEN u.is_active = 0 THEN 1 ELSE 0 END) AS disabled,
+              SUM(CASE WHEN u.is_approved = 1 THEN 1 ELSE 0 END) AS approved
+            ${join} ${where}
+        `, params);
+
+        // 2. By role
+        const [byRole] = await db.query(`
+            SELECT u.role, COUNT(*) AS count
+            ${join} ${where}
+            GROUP BY u.role ORDER BY count DESC
+        `, params);
+
+        // 3. By district
+        const [byDistrict] = await db.query(`
+            SELECT h.distid, dist.distname, COUNT(*) AS count
+            ${join} ${where}
+            GROUP BY h.distid, dist.distname ORDER BY count DESC
+        `, params);
+
+        // 4. By hospital (top 50)
+        const [byHospital] = await db.query(`
+            SELECT u.hospcode, h.hosname, h.hostype, dist.distname, COUNT(*) AS count
+            ${join} ${where}
+            GROUP BY u.hospcode, h.hosname, h.hostype, dist.distname ORDER BY count DESC LIMIT 50
+        `, params);
+
+        // 5. By department
+        const [byDept] = await db.query(`
+            SELECT d.id AS dept_id, d.dept_name, COUNT(*) AS count
+            ${join} ${where}
+            GROUP BY d.id, d.dept_name ORDER BY count DESC
+        `, params);
+
+        res.json({
+            success: true,
+            summary: summary[0],
+            byRole,
+            byDistrict,
+            byHospital,
+            byDept
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 // GET /users/pending-count — จำนวน user ที่ลงทะเบียนใหม่และรออนุมัติ (is_approved = 0) ตาม scope ของ admin
 apiRouter.get('/users/pending-count', authenticateToken, isAnyAdmin, async (req, res) => {
     const user = req.user;

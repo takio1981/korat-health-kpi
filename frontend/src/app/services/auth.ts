@@ -253,6 +253,12 @@ export class AuthService {
     return this.http.get(`${this.apiUrl}/users`, { headers });
   }
 
+  getUserStats(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/users/stats`, { headers });
+  }
+
   getDepartments(): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
