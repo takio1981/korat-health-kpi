@@ -427,21 +427,21 @@
             </div>
             <div class="p-4 space-y-1 overflow-y-auto card-scroll" style="max-height:280px">
               <div *ngFor="let d of stats.byDept"
-                   (click)="drillDown('dept', d.dept_id.toString(), d.dept_name || '(ไม่ระบุ)')"
-                   [ngClass]="isActiveDrill('dept', d.dept_id.toString()) ? 'bg-teal-100 ring-1 ring-teal-300' : 'hover:bg-teal-50'"
+                   (click)="drillDown('dept', '' + d.dept_id, d.dept_name || '(ไม่ระบุ)')"
+                   [ngClass]="isActiveDrill('dept', '' + d.dept_id) ? 'bg-teal-100 ring-1 ring-teal-300' : 'hover:bg-teal-50'"
                    class="flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer transition-all group" title="คลิกเพื่อดูรายชื่อ">
-                <i *ngIf="isActiveDrill('dept', d.dept_id.toString())" class="fas fa-check-circle text-teal-500 text-xs flex-shrink-0"></i>
+                <i *ngIf="isActiveDrill('dept', '' + d.dept_id)" class="fas fa-check-circle text-teal-500 text-xs flex-shrink-0"></i>
                 <span class="text-xs text-gray-600 truncate min-w-0 flex-1">
-                  <i class="fas fa-building mr-1 transition-colors" [ngClass]="isActiveDrill('dept', d.dept_id.toString()) ? 'text-teal-500' : 'text-gray-300'"></i>
+                  <i class="fas fa-building mr-1 transition-colors" [ngClass]="isActiveDrill('dept', '' + d.dept_id) ? 'text-teal-500' : 'text-gray-300'"></i>
                   {{ d.dept_name || '(ไม่ระบุ)' }}
                 </span>
                 <div class="w-28 bg-gray-100 rounded-full h-4 overflow-hidden flex-shrink-0">
                   <div class="h-full rounded-full transition-all duration-500"
-                       [ngClass]="isActiveDrill('dept', d.dept_id.toString()) ? 'bg-teal-600' : 'bg-teal-400'"
+                       [ngClass]="isActiveDrill('dept', '' + d.dept_id) ? 'bg-teal-600' : 'bg-teal-400'"
                        [style.width]="getBarWidth(d.count, stats.byDept[0].count)"></div>
                 </div>
                 <span class="text-sm font-extrabold min-w-[28px] text-right flex-shrink-0"
-                      [ngClass]="isActiveDrill('dept', d.dept_id.toString()) ? 'text-teal-700' : 'text-gray-700'">{{ d.count }}</span>
+                      [ngClass]="isActiveDrill('dept', '' + d.dept_id) ? 'text-teal-700' : 'text-gray-700'">{{ d.count }}</span>
                 <i class="fas fa-chevron-right text-[10px] text-teal-300 opacity-0 group-hover:opacity-100 transition-opacity"></i>
               </div>
             </div>
