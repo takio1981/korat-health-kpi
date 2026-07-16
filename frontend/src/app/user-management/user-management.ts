@@ -226,6 +226,52 @@ export class UserManagementComponent implements OnInit {
     return this.drillUsers.filter(u => Number(u.is_approved) === 0).length;
   }
 
+  // Cross-filter getters — ถ้า drill active → chart อื่นกรองตาม drillUsers
+  // chart ของ activeDrillType เองไม่กรอง เพื่อให้ user สลับเลือกได้
+  get filteredByRole(): { role: string; count: number }[] {
+    if (!this.activeDrillType || this.activeDrillType === 'role') return this.stats?.byRole ?? [];
+    const counts = new Map<string, number>();
+    for (const u of this.drillUsers) counts.set(u.role, (counts.get(u.role) || 0) + 1);
+    return (this.stats?.byRole ?? [])
+      .map(r => ({ ...r, count: counts.get(r.role) ?? 0 }))
+      .filter(r => r.count > 0).sort((a, b) => b.count - a.count);
+  }
+
+  get filteredByDept(): { dept_id: number | null; dept_name: string; count: number }[] {
+    if (!this.activeDrillType || this.activeDrillType === 'dept') return this.stats?.byDept ?? [];
+    const counts = new Map<string, number>();
+    for (const u of this.drillUsers) {
+      const k = String(u.dept_id ?? '');
+      counts.set(k, (counts.get(k) || 0) + 1);
+    }
+    return (this.stats?.byDept ?? [])
+      .map(d => ({ ...d, count: counts.get(String(d.dept_id ?? '')) ?? 0 }))
+      .filter(d => d.count > 0).sort((a, b) => b.count - a.count);
+  }
+
+  get filteredByDistrict(): { distid: string; distname: string; count: number }[] {
+    if (!this.activeDrillType || this.activeDrillType === 'district') return this.stats?.byDistrict ?? [];
+    const counts = new Map<string, number>();
+    for (const u of this.drillUsers) {
+      const h = this.hospitals.find((hh: any) => hh.hoscode === u.hospcode);
+      if (h?.distid) counts.set(h.distid, (counts.get(h.distid) || 0) + 1);
+    }
+    return (this.stats?.byDistrict ?? [])
+      .map(d => ({ ...d, count: counts.get(d.distid) ?? 0 }))
+      .filter(d => d.count > 0).sort((a, b) => b.count - a.count);
+  }
+
+  get filteredByHospital(): { hospcode: string; hosname: string; hostype: string; distname: string; count: number }[] {
+    if (!this.activeDrillType || this.activeDrillType === 'hospcode') return this.stats?.byHospital ?? [];
+    const counts = new Map<string, number>();
+    for (const u of this.drillUsers) {
+      if (u.hospcode) counts.set(u.hospcode, (counts.get(u.hospcode) || 0) + 1);
+    }
+    return (this.stats?.byHospital ?? [])
+      .map(h => ({ ...h, count: counts.get(h.hospcode) ?? 0 }))
+      .filter(h => h.count > 0).sort((a, b) => b.count - a.count);
+  }
+
   getDonutStyle(): { [key: string]: string } {
     const c = this.getDrillColor();
     const p = this.drillPct;

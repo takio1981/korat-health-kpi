@@ -389,15 +389,20 @@
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
           <!-- 1. By Role -->
-          <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden"
-               [class.ring-2]="activeDrillType === 'role'" [class.ring-indigo-300]="activeDrillType === 'role'">
+          <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden transition-all"
+               [class.ring-2]="activeDrillType"
+               [class.ring-indigo-400]="activeDrillType === 'role'"
+               [class.ring-blue-200]="activeDrillType && activeDrillType !== 'role'">
             <div class="px-5 py-3 border-b border-gray-100 flex items-center gap-2 bg-blue-50">
               <i class="fas fa-shield-halved text-blue-500"></i>
               <h4 class="text-sm font-bold text-blue-800">สิทธิ์การใช้งาน (Role)</h4>
-              <span class="ml-auto text-xs text-blue-400">{{ stats.byRole.length }} สิทธิ์</span>
+              <span *ngIf="activeDrillType && activeDrillType !== 'role'" class="text-[9px] bg-blue-200 text-blue-700 px-1.5 py-0.5 rounded-full font-bold">กรอง</span>
+              <span class="ml-auto text-xs text-blue-400">
+                {{ activeDrillType && activeDrillType !== 'role' ? filteredByRole.length + '/' + stats.byRole.length : stats.byRole.length }} สิทธิ์
+              </span>
             </div>
             <div class="p-4 space-y-1 overflow-y-auto card-scroll" style="max-height:280px">
-              <div *ngFor="let r of stats.byRole"
+              <div *ngFor="let r of filteredByRole"
                    (click)="drillDown('role', r.role, getRoleLabel(r.role))"
                    [ngClass]="isActiveDrill('role', r.role) ? 'bg-indigo-100 ring-1 ring-indigo-300' : 'hover:bg-blue-50'"
                    class="flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer transition-all group" title="คลิกเพื่อดูรายชื่อ">
@@ -408,7 +413,7 @@
                 <div class="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
                   <div class="h-full rounded-full transition-all duration-500"
                        [ngClass]="isActiveDrill('role', r.role) ? 'bg-indigo-500' : 'bg-blue-400'"
-                       [style.width]="getBarWidth(r.count, stats.byRole[0].count)"></div>
+                       [style.width]="getBarWidth(r.count, filteredByRole[0]?.count || 1)"></div>
                 </div>
                 <span class="text-sm font-extrabold min-w-[28px] text-right"
                       [ngClass]="isActiveDrill('role', r.role) ? 'text-indigo-700' : 'text-gray-700'">{{ r.count }}</span>
@@ -418,15 +423,20 @@
           </div>
 
           <!-- 2. By Dept -->
-          <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden"
-               [class.ring-2]="activeDrillType === 'dept'" [class.ring-teal-300]="activeDrillType === 'dept'">
+          <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden transition-all"
+               [class.ring-2]="activeDrillType"
+               [class.ring-teal-400]="activeDrillType === 'dept'"
+               [class.ring-teal-200]="activeDrillType && activeDrillType !== 'dept'">
             <div class="px-5 py-3 border-b border-gray-100 flex items-center gap-2 bg-teal-50">
               <i class="fas fa-sitemap text-teal-500"></i>
               <h4 class="text-sm font-bold text-teal-800">กลุ่มงาน / หน่วยงาน</h4>
-              <span class="ml-auto text-xs text-teal-400">{{ stats.byDept.length }} หน่วยงาน</span>
+              <span *ngIf="activeDrillType && activeDrillType !== 'dept'" class="text-[9px] bg-teal-200 text-teal-700 px-1.5 py-0.5 rounded-full font-bold">กรอง</span>
+              <span class="ml-auto text-xs text-teal-400">
+                {{ activeDrillType && activeDrillType !== 'dept' ? filteredByDept.length + '/' + stats.byDept.length : stats.byDept.length }} หน่วยงาน
+              </span>
             </div>
             <div class="p-4 space-y-1 overflow-y-auto card-scroll" style="max-height:280px">
-              <div *ngFor="let d of stats.byDept"
+              <div *ngFor="let d of filteredByDept"
                    (click)="drillDown('dept', '' + d.dept_id, d.dept_name || '(ไม่ระบุ)')"
                    [ngClass]="isActiveDrill('dept', '' + d.dept_id) ? 'bg-teal-100 ring-1 ring-teal-300' : 'hover:bg-teal-50'"
                    class="flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer transition-all group" title="คลิกเพื่อดูรายชื่อ">
@@ -438,7 +448,7 @@
                 <div class="w-28 bg-gray-100 rounded-full h-4 overflow-hidden flex-shrink-0">
                   <div class="h-full rounded-full transition-all duration-500"
                        [ngClass]="isActiveDrill('dept', '' + d.dept_id) ? 'bg-teal-600' : 'bg-teal-400'"
-                       [style.width]="getBarWidth(d.count, stats.byDept[0].count)"></div>
+                       [style.width]="getBarWidth(d.count, filteredByDept[0]?.count || 1)"></div>
                 </div>
                 <span class="text-sm font-extrabold min-w-[28px] text-right flex-shrink-0"
                       [ngClass]="isActiveDrill('dept', '' + d.dept_id) ? 'text-teal-700' : 'text-gray-700'">{{ d.count }}</span>
@@ -448,15 +458,20 @@
           </div>
 
           <!-- 3. By District -->
-          <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden"
-               [class.ring-2]="activeDrillType === 'district'" [class.ring-purple-300]="activeDrillType === 'district'">
+          <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden transition-all"
+               [class.ring-2]="activeDrillType"
+               [class.ring-purple-400]="activeDrillType === 'district'"
+               [class.ring-purple-200]="activeDrillType && activeDrillType !== 'district'">
             <div class="px-5 py-3 border-b border-gray-100 flex items-center gap-2 bg-purple-50">
               <i class="fas fa-map-marker-alt text-purple-500"></i>
               <h4 class="text-sm font-bold text-purple-800">อำเภอ</h4>
-              <span class="ml-auto text-xs text-purple-400">{{ stats.byDistrict.length }} อำเภอ</span>
+              <span *ngIf="activeDrillType && activeDrillType !== 'district'" class="text-[9px] bg-purple-200 text-purple-700 px-1.5 py-0.5 rounded-full font-bold">กรอง</span>
+              <span class="ml-auto text-xs text-purple-400">
+                {{ activeDrillType && activeDrillType !== 'district' ? filteredByDistrict.length + '/' + stats.byDistrict.length : stats.byDistrict.length }} อำเภอ
+              </span>
             </div>
             <div class="p-4 space-y-1 overflow-y-auto card-scroll" style="max-height:280px">
-              <div *ngFor="let dist of stats.byDistrict"
+              <div *ngFor="let dist of filteredByDistrict"
                    (click)="drillDown('district', dist.distid, dist.distname || '(ไม่ระบุอำเภอ)')"
                    [ngClass]="isActiveDrill('district', dist.distid) ? 'bg-purple-100 ring-1 ring-purple-300' : 'hover:bg-purple-50'"
                    class="flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer transition-all group" title="คลิกเพื่อดูรายชื่อ">
@@ -468,7 +483,7 @@
                 <div class="w-28 bg-gray-100 rounded-full h-4 overflow-hidden flex-shrink-0">
                   <div class="h-full rounded-full transition-all duration-500"
                        [ngClass]="isActiveDrill('district', dist.distid) ? 'bg-purple-600' : 'bg-purple-400'"
-                       [style.width]="getBarWidth(dist.count, stats.byDistrict[0].count)"></div>
+                       [style.width]="getBarWidth(dist.count, filteredByDistrict[0]?.count || 1)"></div>
                 </div>
                 <span class="text-sm font-extrabold min-w-[28px] text-right flex-shrink-0"
                       [ngClass]="isActiveDrill('district', dist.distid) ? 'text-purple-700' : 'text-gray-700'">{{ dist.count }}</span>
@@ -478,15 +493,20 @@
           </div>
 
           <!-- 4. By Hospital -->
-          <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden"
-               [class.ring-2]="activeDrillType === 'hospcode'" [class.ring-orange-300]="activeDrillType === 'hospcode'">
+          <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden transition-all"
+               [class.ring-2]="activeDrillType"
+               [class.ring-orange-400]="activeDrillType === 'hospcode'"
+               [class.ring-orange-200]="activeDrillType && activeDrillType !== 'hospcode'">
             <div class="px-5 py-3 border-b border-gray-100 flex items-center gap-2 bg-orange-50">
               <i class="fas fa-hospital text-orange-500"></i>
               <h4 class="text-sm font-bold text-orange-800">หน่วยบริการ</h4>
-              <span class="ml-auto text-xs text-orange-400">{{ stats.byHospital.length }} แห่ง</span>
+              <span *ngIf="activeDrillType && activeDrillType !== 'hospcode'" class="text-[9px] bg-orange-200 text-orange-700 px-1.5 py-0.5 rounded-full font-bold">กรอง</span>
+              <span class="ml-auto text-xs text-orange-400">
+                {{ activeDrillType && activeDrillType !== 'hospcode' ? filteredByHospital.length + '/' + stats.byHospital.length : stats.byHospital.length }} แห่ง
+              </span>
             </div>
             <div class="p-4 space-y-1 overflow-y-auto card-scroll" style="max-height:280px">
-              <div *ngFor="let h of stats.byHospital"
+              <div *ngFor="let h of filteredByHospital"
                    (click)="drillDown('hospcode', h.hospcode, h.hosname || h.hospcode)"
                    [ngClass]="isActiveDrill('hospcode', h.hospcode) ? 'bg-orange-100 ring-1 ring-orange-300' : 'hover:bg-orange-50'"
                    class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all group" title="คลิกเพื่อดูรายชื่อ">
@@ -501,7 +521,7 @@
                 <div class="w-20 bg-gray-100 rounded-full h-4 overflow-hidden flex-shrink-0">
                   <div class="h-full rounded-full transition-all duration-500"
                        [ngClass]="isActiveDrill('hospcode', h.hospcode) ? 'bg-orange-500' : 'bg-orange-400'"
-                       [style.width]="getBarWidth(h.count, stats.byHospital[0].count)"></div>
+                       [style.width]="getBarWidth(h.count, filteredByHospital[0]?.count || 1)"></div>
                 </div>
                 <span class="text-sm font-extrabold min-w-[28px] text-right flex-shrink-0"
                       [ngClass]="isActiveDrill('hospcode', h.hospcode) ? 'text-orange-700' : 'text-gray-700'">{{ h.count }}</span>
