@@ -3,15 +3,15 @@
     <div class="p-6 border-b border-gray-100 flex flex-wrap justify-between items-center gap-3">
       <!-- Tab Switcher -->
       <div class="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
-        <button (click)="switchTab('list')"
-                [ngClass]="activeTab === 'list' ? 'bg-white text-green-700 shadow-sm font-bold' : 'text-gray-500 hover:text-gray-700'"
-                class="px-4 py-1.5 rounded-lg text-sm transition-all">
-          <i class="fas fa-users mr-1.5"></i> รายชื่อผู้ใช้
-        </button>
         <button (click)="switchTab('stats')"
                 [ngClass]="activeTab === 'stats' ? 'bg-white text-indigo-700 shadow-sm font-bold' : 'text-gray-500 hover:text-gray-700'"
                 class="px-4 py-1.5 rounded-lg text-sm transition-all">
           <i class="fas fa-chart-bar mr-1.5"></i> สถิติผู้ใช้งาน
+        </button>
+        <button (click)="switchTab('list')"
+                [ngClass]="activeTab === 'list' ? 'bg-white text-green-700 shadow-sm font-bold' : 'text-gray-500 hover:text-gray-700'"
+                class="px-4 py-1.5 rounded-lg text-sm transition-all">
+          <i class="fas fa-users mr-1.5"></i> รายชื่อผู้ใช้
         </button>
       </div>
       <div class="flex flex-wrap items-center gap-2">

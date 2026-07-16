@@ -71,7 +71,7 @@ export class UserManagementComponent implements OnInit {
   showConfirmPassword: boolean = false;
 
   // === Tab: รายชื่อ / สถิติ ===
-  activeTab: 'list' | 'stats' = 'list';
+  activeTab: 'list' | 'stats' = 'stats';
   statsLoading: boolean = false;
   stats: {
     summary: { total: number; active: number; pending: number; rejected: number; disabled: number; approved: number };
@@ -102,6 +102,7 @@ export class UserManagementComponent implements OnInit {
     this.loadDepartments();
     this.loadHospitals();
     this.loadDistricts();
+    this.loadStats();
     if (this.isSuperAdmin) this.loadMaintenanceStatus();
   }
 
