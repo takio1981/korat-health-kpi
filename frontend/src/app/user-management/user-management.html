@@ -347,7 +347,7 @@
           <i class="fas fa-hand-pointer"></i> คลิกที่การ์ดหรือรายการด้านล่างเพื่อดูรายชื่อผู้ใช้งานในกลุ่มนั้น
         </p>
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-          <div (click)="clearDrillFilter(); activeTab = 'list'"
+          <div (click)="clearDrillFilter()"
                class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-center cursor-pointer hover:shadow-md hover:border-indigo-300 transition-all group" title="ดูผู้ใช้งานทั้งหมด">
             <p class="text-2xl font-extrabold text-indigo-700 group-hover:scale-110 transition-transform inline-block">{{ stats.summary.total }}</p>
             <p class="text-xs text-indigo-500 font-semibold mt-1">ผู้ใช้ทั้งหมด</p>
@@ -389,7 +389,8 @@
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
           <!-- 1. By Role -->
-          <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+          <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden"
+               [class.ring-2]="activeDrillType === 'role'" [class.ring-indigo-300]="activeDrillType === 'role'">
             <div class="px-5 py-3 border-b border-gray-100 flex items-center gap-2 bg-blue-50">
               <i class="fas fa-shield-halved text-blue-500"></i>
               <h4 class="text-sm font-bold text-blue-800">สิทธิ์การใช้งาน (Role)</h4>
@@ -398,22 +399,27 @@
             <div class="p-4 space-y-1 overflow-y-auto card-scroll" style="max-height:280px">
               <div *ngFor="let r of stats.byRole"
                    (click)="drillDown('role', r.role, getRoleLabel(r.role))"
-                   class="flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-blue-50 transition-colors group" title="คลิกเพื่อดูรายชื่อ">
-                <span class="text-xs font-semibold rounded-full px-2.5 py-0.5 min-w-[90px] text-center group-hover:ring-2 group-hover:ring-blue-300 transition-all" [ngClass]="getRoleBadgeClass(r.role)">
+                   [ngClass]="isActiveDrill('role', r.role) ? 'bg-indigo-100 ring-1 ring-indigo-300' : 'hover:bg-blue-50'"
+                   class="flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer transition-all group" title="คลิกเพื่อดูรายชื่อ">
+                <i *ngIf="isActiveDrill('role', r.role)" class="fas fa-check-circle text-indigo-500 text-xs flex-shrink-0"></i>
+                <span class="text-xs font-semibold rounded-full px-2.5 py-0.5 min-w-[90px] text-center transition-all" [ngClass]="getRoleBadgeClass(r.role)">
                   {{ getRoleLabel(r.role) }}
                 </span>
                 <div class="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
-                  <div class="h-full rounded-full bg-blue-400 transition-all duration-500"
+                  <div class="h-full rounded-full transition-all duration-500"
+                       [ngClass]="isActiveDrill('role', r.role) ? 'bg-indigo-500' : 'bg-blue-400'"
                        [style.width]="getBarWidth(r.count, stats.byRole[0].count)"></div>
                 </div>
-                <span class="text-sm font-extrabold text-gray-700 min-w-[28px] text-right">{{ r.count }}</span>
-                <i class="fas fa-arrow-right text-[10px] text-blue-300 opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                <span class="text-sm font-extrabold min-w-[28px] text-right"
+                      [ngClass]="isActiveDrill('role', r.role) ? 'text-indigo-700' : 'text-gray-700'">{{ r.count }}</span>
+                <i class="fas fa-chevron-right text-[10px] text-blue-300 opacity-0 group-hover:opacity-100 transition-opacity"></i>
               </div>
             </div>
           </div>
 
           <!-- 2. By Dept -->
-          <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+          <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden"
+               [class.ring-2]="activeDrillType === 'dept'" [class.ring-teal-300]="activeDrillType === 'dept'">
             <div class="px-5 py-3 border-b border-gray-100 flex items-center gap-2 bg-teal-50">
               <i class="fas fa-sitemap text-teal-500"></i>
               <h4 class="text-sm font-bold text-teal-800">กลุ่มงาน / หน่วยงาน</h4>
@@ -422,23 +428,28 @@
             <div class="p-4 space-y-1 overflow-y-auto card-scroll" style="max-height:280px">
               <div *ngFor="let d of stats.byDept"
                    (click)="drillDown('dept', d.dept_id.toString(), d.dept_name || '(ไม่ระบุ)')"
-                   class="flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-teal-50 transition-colors group" title="คลิกเพื่อดูรายชื่อ">
+                   [ngClass]="isActiveDrill('dept', d.dept_id.toString()) ? 'bg-teal-100 ring-1 ring-teal-300' : 'hover:bg-teal-50'"
+                   class="flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer transition-all group" title="คลิกเพื่อดูรายชื่อ">
+                <i *ngIf="isActiveDrill('dept', d.dept_id.toString())" class="fas fa-check-circle text-teal-500 text-xs flex-shrink-0"></i>
                 <span class="text-xs text-gray-600 truncate min-w-0 flex-1">
-                  <i class="fas fa-building text-gray-300 mr-1 group-hover:text-teal-400 transition-colors"></i>
+                  <i class="fas fa-building mr-1 transition-colors" [ngClass]="isActiveDrill('dept', d.dept_id.toString()) ? 'text-teal-500' : 'text-gray-300'"></i>
                   {{ d.dept_name || '(ไม่ระบุ)' }}
                 </span>
                 <div class="w-28 bg-gray-100 rounded-full h-4 overflow-hidden flex-shrink-0">
-                  <div class="h-full rounded-full bg-teal-400 transition-all duration-500"
+                  <div class="h-full rounded-full transition-all duration-500"
+                       [ngClass]="isActiveDrill('dept', d.dept_id.toString()) ? 'bg-teal-600' : 'bg-teal-400'"
                        [style.width]="getBarWidth(d.count, stats.byDept[0].count)"></div>
                 </div>
-                <span class="text-sm font-extrabold text-gray-700 min-w-[28px] text-right flex-shrink-0">{{ d.count }}</span>
-                <i class="fas fa-arrow-right text-[10px] text-teal-300 opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                <span class="text-sm font-extrabold min-w-[28px] text-right flex-shrink-0"
+                      [ngClass]="isActiveDrill('dept', d.dept_id.toString()) ? 'text-teal-700' : 'text-gray-700'">{{ d.count }}</span>
+                <i class="fas fa-chevron-right text-[10px] text-teal-300 opacity-0 group-hover:opacity-100 transition-opacity"></i>
               </div>
             </div>
           </div>
 
           <!-- 3. By District -->
-          <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+          <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden"
+               [class.ring-2]="activeDrillType === 'district'" [class.ring-purple-300]="activeDrillType === 'district'">
             <div class="px-5 py-3 border-b border-gray-100 flex items-center gap-2 bg-purple-50">
               <i class="fas fa-map-marker-alt text-purple-500"></i>
               <h4 class="text-sm font-bold text-purple-800">อำเภอ</h4>
@@ -447,23 +458,28 @@
             <div class="p-4 space-y-1 overflow-y-auto card-scroll" style="max-height:280px">
               <div *ngFor="let dist of stats.byDistrict"
                    (click)="drillDown('district', dist.distid, dist.distname || '(ไม่ระบุอำเภอ)')"
-                   class="flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-purple-50 transition-colors group" title="คลิกเพื่อดูรายชื่อ">
+                   [ngClass]="isActiveDrill('district', dist.distid) ? 'bg-purple-100 ring-1 ring-purple-300' : 'hover:bg-purple-50'"
+                   class="flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer transition-all group" title="คลิกเพื่อดูรายชื่อ">
+                <i *ngIf="isActiveDrill('district', dist.distid)" class="fas fa-check-circle text-purple-500 text-xs flex-shrink-0"></i>
                 <span class="text-xs text-gray-600 truncate min-w-0 flex-1">
-                  <i class="fas fa-location-dot text-gray-300 mr-1 group-hover:text-purple-400 transition-colors"></i>
+                  <i class="fas fa-location-dot mr-1 transition-colors" [ngClass]="isActiveDrill('district', dist.distid) ? 'text-purple-500' : 'text-gray-300'"></i>
                   {{ dist.distname || '(ไม่ระบุอำเภอ)' }}
                 </span>
                 <div class="w-28 bg-gray-100 rounded-full h-4 overflow-hidden flex-shrink-0">
-                  <div class="h-full rounded-full bg-purple-400 transition-all duration-500"
+                  <div class="h-full rounded-full transition-all duration-500"
+                       [ngClass]="isActiveDrill('district', dist.distid) ? 'bg-purple-600' : 'bg-purple-400'"
                        [style.width]="getBarWidth(dist.count, stats.byDistrict[0].count)"></div>
                 </div>
-                <span class="text-sm font-extrabold text-gray-700 min-w-[28px] text-right flex-shrink-0">{{ dist.count }}</span>
-                <i class="fas fa-arrow-right text-[10px] text-purple-300 opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                <span class="text-sm font-extrabold min-w-[28px] text-right flex-shrink-0"
+                      [ngClass]="isActiveDrill('district', dist.distid) ? 'text-purple-700' : 'text-gray-700'">{{ dist.count }}</span>
+                <i class="fas fa-chevron-right text-[10px] text-purple-300 opacity-0 group-hover:opacity-100 transition-opacity"></i>
               </div>
             </div>
           </div>
 
           <!-- 4. By Hospital -->
-          <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+          <div class="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden"
+               [class.ring-2]="activeDrillType === 'hospcode'" [class.ring-orange-300]="activeDrillType === 'hospcode'">
             <div class="px-5 py-3 border-b border-gray-100 flex items-center gap-2 bg-orange-50">
               <i class="fas fa-hospital text-orange-500"></i>
               <h4 class="text-sm font-bold text-orange-800">หน่วยบริการ</h4>
@@ -472,31 +488,191 @@
             <div class="p-4 space-y-1 overflow-y-auto card-scroll" style="max-height:280px">
               <div *ngFor="let h of stats.byHospital"
                    (click)="drillDown('hospcode', h.hospcode, h.hosname || h.hospcode)"
-                   class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-orange-50 transition-colors group" title="คลิกเพื่อดูรายชื่อ">
+                   [ngClass]="isActiveDrill('hospcode', h.hospcode) ? 'bg-orange-100 ring-1 ring-orange-300' : 'hover:bg-orange-50'"
+                   class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all group" title="คลิกเพื่อดูรายชื่อ">
+                <i *ngIf="isActiveDrill('hospcode', h.hospcode)" class="fas fa-check-circle text-orange-500 text-xs flex-shrink-0"></i>
                 <div class="min-w-0 flex-1">
-                  <p class="text-xs text-gray-700 font-medium truncate group-hover:text-orange-700 transition-colors">{{ h.hosname || h.hospcode || '(ไม่ระบุ)' }}</p>
+                  <p class="text-xs font-medium truncate transition-colors" [ngClass]="isActiveDrill('hospcode', h.hospcode) ? 'text-orange-700' : 'text-gray-700'">{{ h.hosname || h.hospcode || '(ไม่ระบุ)' }}</p>
                   <p class="text-[10px] text-gray-400 truncate">
                     <span class="bg-cyan-100 text-cyan-700 rounded px-1 mr-1">{{ getHostypeLabel(h.hostype) }}</span>
                     {{ h.distname || '' }}
                   </p>
                 </div>
                 <div class="w-20 bg-gray-100 rounded-full h-4 overflow-hidden flex-shrink-0">
-                  <div class="h-full rounded-full bg-orange-400 transition-all duration-500"
+                  <div class="h-full rounded-full transition-all duration-500"
+                       [ngClass]="isActiveDrill('hospcode', h.hospcode) ? 'bg-orange-500' : 'bg-orange-400'"
                        [style.width]="getBarWidth(h.count, stats.byHospital[0].count)"></div>
                 </div>
-                <span class="text-sm font-extrabold text-gray-700 min-w-[28px] text-right flex-shrink-0">{{ h.count }}</span>
-                <i class="fas fa-arrow-right text-[10px] text-orange-300 opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                <span class="text-sm font-extrabold min-w-[28px] text-right flex-shrink-0"
+                      [ngClass]="isActiveDrill('hospcode', h.hospcode) ? 'text-orange-700' : 'text-gray-700'">{{ h.count }}</span>
+                <i class="fas fa-chevron-right text-[10px] text-orange-300 opacity-0 group-hover:opacity-100 transition-opacity"></i>
               </div>
             </div>
           </div>
 
         </div><!-- /grid 4 boxes -->
 
-        <!-- ปุ่ม refresh -->
+        <!-- ===== Detail Panel + Donut Chart (แสดงเมื่อเลือกหัวข้อ) ===== -->
+        <div *ngIf="activeDrillType" class="mt-5 rounded-2xl border overflow-hidden"
+             [style.border-color]="getDrillColor() + '44'">
+          <!-- Header -->
+          <div class="px-5 py-3 flex flex-wrap items-center gap-3" [style.background-color]="getDrillColor() + '18'">
+            <div class="flex items-center gap-2 min-w-0">
+              <i class="fas fa-filter text-sm" [style.color]="getDrillColor()"></i>
+              <span class="text-xs font-bold uppercase text-gray-500">{{ getDrillCategoryLabel() }}</span>
+              <i class="fas fa-chevron-right text-gray-300 text-xs"></i>
+              <span class="text-sm font-extrabold text-gray-800 truncate">{{ drillLabel }}</span>
+            </div>
+            <div class="ml-auto flex items-center gap-2">
+              <button (click)="clearDrillFilter()"
+                      class="px-3 py-1.5 bg-white border border-gray-200 hover:border-red-300 hover:text-red-600 rounded-lg text-xs font-bold text-gray-500 transition-colors shadow-sm">
+                <i class="fas fa-times mr-1"></i>ล้างการเลือก
+              </button>
+            </div>
+          </div>
+
+          <!-- Body: Donut + Stats -->
+          <div class="p-5 flex flex-wrap items-center gap-6 bg-white">
+            <!-- CSS Donut Chart -->
+            <div class="flex-shrink-0 flex flex-col items-center gap-2">
+              <div class="relative w-32 h-32">
+                <div class="w-32 h-32 rounded-full transition-all duration-700"
+                     [style.background]="'conic-gradient(' + getDrillColor() + ' 0% ' + drillPct + '%, #f1f5f9 ' + drillPct + '% 100%)'">
+                </div>
+                <div class="absolute inset-0 flex items-center justify-center">
+                  <div class="w-20 h-20 rounded-full bg-white shadow-inner flex flex-col items-center justify-center">
+                    <span class="text-2xl font-extrabold leading-none" [style.color]="getDrillColor()">{{ drillPct }}%</span>
+                    <span class="text-[10px] text-gray-400 mt-0.5">ของทั้งหมด</span>
+                  </div>
+                </div>
+              </div>
+              <!-- Mini legend -->
+              <div class="flex items-center gap-2 text-xs">
+                <span class="w-3 h-3 rounded-full flex-shrink-0" [style.background-color]="getDrillColor()"></span>
+                <span class="text-gray-600">{{ drillLabel }}</span>
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <span class="w-3 h-3 rounded-full bg-slate-200 flex-shrink-0"></span>
+                <span class="text-gray-400">กลุ่มอื่นๆ</span>
+              </div>
+            </div>
+
+            <!-- Numbers -->
+            <div class="flex-1 min-w-0 grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div class="text-center p-3 rounded-xl" [style.background-color]="getDrillColor() + '12'">
+                <div class="text-3xl font-extrabold" [style.color]="getDrillColor()">{{ drillUsers.length }}</div>
+                <div class="text-xs text-gray-500 mt-1">จำนวนผู้ใช้</div>
+              </div>
+              <div class="text-center p-3 bg-gray-50 rounded-xl">
+                <div class="text-3xl font-extrabold text-gray-600">{{ stats?.summary?.total }}</div>
+                <div class="text-xs text-gray-400 mt-1">ทั้งหมดในระบบ</div>
+              </div>
+              <div class="text-center p-3 bg-emerald-50 rounded-xl">
+                <div class="text-3xl font-extrabold text-emerald-600">
+                  {{ getDrillActiveCount() }}
+                </div>
+                <div class="text-xs text-emerald-500 mt-1">ใช้งานได้</div>
+              </div>
+              <div class="text-center p-3 bg-amber-50 rounded-xl">
+                <div class="text-3xl font-extrabold text-amber-600">
+                  {{ getDrillPendingCount() }}
+                </div>
+                <div class="text-xs text-amber-500 mt-1">รออนุมัติ</div>
+              </div>
+            </div>
+
+            <!-- Stacked percentage bar -->
+            <div class="w-full mt-2">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-xs text-gray-400">สัดส่วน</span>
+                <div class="flex-1 bg-slate-100 rounded-full h-5 overflow-hidden flex">
+                  <div class="h-full rounded-l-full transition-all duration-700 flex items-center justify-center"
+                       [style.width.%]="drillPct" [style.background-color]="getDrillColor()">
+                    <span *ngIf="drillPct >= 10" class="text-white text-[10px] font-bold px-1">{{ drillPct }}%</span>
+                  </div>
+                  <div class="flex-1 h-full bg-slate-200 rounded-r-full flex items-center pl-2">
+                    <span *ngIf="drillPct < 10" class="text-slate-500 text-[10px] font-bold">{{ drillPct }}%</span>
+                  </div>
+                </div>
+                <span class="text-xs text-gray-400">{{ 100 - drillPct }}% กลุ่มอื่น</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== User Table (แสดงเมื่อเลือกหัวข้อและมีข้อมูล) ===== -->
+        <div *ngIf="drillUsers.length > 0" class="mt-4 bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+          <div class="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center gap-3"
+               [style.background-color]="getDrillColor() + '10'">
+            <i class="fas fa-users text-sm" [style.color]="getDrillColor()"></i>
+            <h4 class="text-sm font-bold text-gray-700">รายชื่อผู้ใช้งาน — {{ drillLabel }}</h4>
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-bold text-white" [style.background-color]="getDrillColor()">
+              {{ drillUsers.length }} คน
+            </span>
+            <p class="ml-auto text-xs text-gray-400">
+              <i class="fas fa-info-circle mr-1"></i>คลิก "จัดการ" เพื่อไปหน้าจัดการผู้ใช้งาน
+            </p>
+          </div>
+          <div class="overflow-x-auto overflow-y-auto card-scroll" style="max-height: 400px">
+            <table class="w-full text-sm min-w-[640px]">
+              <thead class="sticky top-0 z-10 shadow-sm">
+                <tr class="text-xs font-bold text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
+                  <th class="px-4 py-2.5 text-center w-20">จัดการ</th>
+                  <th class="px-4 py-2.5 text-left">ชื่อ-นามสกุล</th>
+                  <th class="px-4 py-2.5 text-left">Username</th>
+                  <th class="px-4 py-2.5 text-left">สิทธิ์</th>
+                  <th class="px-4 py-2.5 text-left">หน่วยบริการ</th>
+                  <th class="px-4 py-2.5 text-left">กลุ่มงาน</th>
+                  <th class="px-4 py-2.5 text-center">สถานะ</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-50">
+                <tr *ngFor="let u of drillUsers; let i = index"
+                    class="hover:bg-slate-50 transition-colors">
+                  <td class="px-4 py-2.5 text-center">
+                    <button (click)="goManageUser(u)"
+                            class="px-3 py-1.5 text-white rounded-lg text-xs font-bold shadow-sm transition-all hover:scale-105 hover:shadow-md"
+                            [style.background-color]="getDrillColor()" title="ไปยังหน้าจัดการผู้ใช้งาน">
+                      <i class="fas fa-arrow-right mr-1"></i>จัดการ
+                    </button>
+                  </td>
+                  <td class="px-4 py-2.5">
+                    <div class="font-medium text-gray-800 text-sm">{{ u.firstname }} {{ u.lastname }}</div>
+                    <div *ngIf="u.email" class="text-xs text-gray-400 truncate max-w-[160px]">{{ u.email }}</div>
+                  </td>
+                  <td class="px-4 py-2.5 font-mono text-xs text-gray-500">{{ u.username }}</td>
+                  <td class="px-4 py-2.5">
+                    <span class="text-xs px-2 py-0.5 rounded-full font-semibold" [ngClass]="getRoleBadgeClass(u.role)">
+                      {{ getRoleLabel(u.role) }}
+                    </span>
+                  </td>
+                  <td class="px-4 py-2.5">
+                    <div class="text-xs text-gray-700 font-medium">{{ u.hosname || u.hospcode || '-' }}</div>
+                    <div class="text-[10px] text-gray-400">{{ getHostypeLabel(u.hostype) }}</div>
+                  </td>
+                  <td class="px-4 py-2.5 text-xs text-gray-600">{{ u.dept_name || '-' }}</td>
+                  <td class="px-4 py-2.5 text-center">
+                    <span class="text-xs px-2 py-0.5 rounded-full font-semibold" [ngClass]="getUserStatusBadge(u).cls">
+                      {{ getUserStatusBadge(u).text }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Empty state เมื่อเลือกหัวข้อแต่ไม่มีผู้ใช้ -->
+        <div *ngIf="activeDrillType && drillUsers.length === 0" class="mt-4 flex flex-col items-center justify-center py-10 text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+          <i class="fas fa-users-slash text-3xl mb-2"></i>
+          <p class="text-sm">ไม่พบผู้ใช้งานในกลุ่มนี้</p>
+        </div>
+
+        <!-- ปุ่ม refresh (ซ้าย) -->
         <div class="mt-5 flex justify-end">
-          <button (click)="stats = null; loadStats()"
+          <button (click)="stats = null; drillUsers = []; activeDrillType = ''; loadStats()"
                   class="px-4 py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-xl text-xs font-bold transition-colors">
-            <i class="fas fa-rotate-right mr-1.5"></i> รีเฟรชข้อมูล
+            <i class="fas fa-rotate-right mr-1.5"></i> รีเฟรชข้อมูลสถิติ
           </button>
         </div>
 

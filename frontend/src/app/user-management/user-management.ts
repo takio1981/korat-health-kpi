@@ -84,6 +84,10 @@ export class UserManagementComponent implements OnInit {
   // === Drill-down filter จาก stats tab ===
   drillLabel: string = '';
   selectedDistrictFilter: string = '';
+  activeDrillType: string = '';
+  activeDrillValue: string = '';
+  drillUsers: any[] = [];
+  drillPct: number = 0;
 
   ngOnInit() {
     const role = this.authService.getUserRole();
@@ -126,13 +130,19 @@ export class UserManagementComponent implements OnInit {
       case 'status':   this.selectedStatus = value; break;
     }
     this.drillLabel = label;
+    this.activeDrillType = type;
+    this.activeDrillValue = value;
     this.applyFilters();
-    this.activeTab = 'list';
+    this.computeDrillUsers();
     this.cdr.detectChanges();
   }
 
   clearDrillFilter() {
     this.drillLabel = '';
+    this.activeDrillType = '';
+    this.activeDrillValue = '';
+    this.drillUsers = [];
+    this.drillPct = 0;
     this.searchTerm = '';
     this.selectedRole = '';
     this.selectedDept = '';
@@ -140,6 +150,91 @@ export class UserManagementComponent implements OnInit {
     this.selectedStatus = '';
     this.selectedDistrictFilter = '';
     this.applyFilters();
+    this.cdr.detectChanges();
+  }
+
+  computeDrillUsers() {
+    if (!this.activeDrillType) { this.drillUsers = []; this.drillPct = 0; return; }
+    this.drillUsers = this.users.filter(user => {
+      switch (this.activeDrillType) {
+        case 'role':     return user.role === this.activeDrillValue;
+        case 'dept':     return user.dept_id?.toString() === this.activeDrillValue;
+        case 'hospcode': return user.hospcode === this.activeDrillValue;
+        case 'district': {
+          const h = this.hospitals.find((h: any) => h.hoscode === user.hospcode);
+          return h?.distid === this.activeDrillValue;
+        }
+        case 'status': return this.matchStatusFilter(user, this.activeDrillValue);
+        default: return false;
+      }
+    }).sort((a, b) => ((a.firstname || '') + (a.lastname || '')).localeCompare((b.firstname || '') + (b.lastname || ''), 'th'));
+    this.drillPct = (this.stats?.summary?.total ?? 0) > 0
+      ? Math.round((this.drillUsers.length / this.stats!.summary.total) * 100) : 0;
+  }
+
+  matchStatusFilter(user: any, status: string): boolean {
+    switch (status) {
+      case 'pending':  return user.is_approved === 0;
+      case 'approved': return user.is_approved === 1;
+      case 'rejected': return user.is_approved === -1;
+      case 'active':   return user.is_active === 1;
+      case 'disabled': return user.is_active === 0;
+      default: return true;
+    }
+  }
+
+  isActiveDrill(type: string, value: string): boolean {
+    return this.activeDrillType === type && this.activeDrillValue === value;
+  }
+
+  getDrillColor(): string {
+    const colorMap: Record<string, string> = {
+      role: '#6366f1', dept: '#0d9488', district: '#a855f7', hospcode: '#f97316',
+    };
+    const statusColorMap: Record<string, string> = {
+      active: '#10b981', pending: '#f59e0b', approved: '#0ea5e9',
+      rejected: '#ef4444', disabled: '#9ca3af'
+    };
+    return colorMap[this.activeDrillType] || statusColorMap[this.activeDrillValue] || '#6b7280';
+  }
+
+  getDrillCategoryLabel(): string {
+    const map: Record<string, string> = {
+      role: 'สิทธิ์การใช้งาน', dept: 'กลุ่มงาน / หน่วยงาน',
+      district: 'อำเภอ', hospcode: 'หน่วยบริการ', status: 'สถานะบัญชี'
+    };
+    return map[this.activeDrillType] || '';
+  }
+
+  getUserStatusBadge(user: any): { text: string; cls: string } {
+    if (user.is_active === 0) return { text: 'ปิดใช้งาน', cls: 'bg-gray-100 text-gray-500' };
+    if (user.is_approved === 0) return { text: 'รออนุมัติ', cls: 'bg-amber-100 text-amber-700' };
+    if (user.is_approved === -1) return { text: 'ปฏิเสธ', cls: 'bg-red-100 text-red-700' };
+    return { text: 'ใช้งานได้', cls: 'bg-emerald-100 text-emerald-700' };
+  }
+
+  getDrillActiveCount(): number {
+    return this.drillUsers.filter(u => u.is_active === 1 && u.is_approved === 1).length;
+  }
+
+  getDrillPendingCount(): number {
+    return this.drillUsers.filter(u => u.is_approved === 0).length;
+  }
+
+  goManageUser(user: any) {
+    this.selectedRole = '';
+    this.selectedDept = '';
+    this.selectedHospcode = '';
+    this.selectedStatus = '';
+    this.selectedDistrictFilter = '';
+    this.drillLabel = '';
+    this.activeDrillType = '';
+    this.activeDrillValue = '';
+    this.drillUsers = [];
+    this.drillPct = 0;
+    this.searchTerm = user.username;
+    this.applyFilters();
+    this.activeTab = 'list';
     this.cdr.detectChanges();
   }
 
