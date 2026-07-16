@@ -86,8 +86,6 @@ export class UserManagementComponent implements OnInit {
   selectedDistrictFilter: string = '';
   activeDrillType: string = '';
   activeDrillValue: string = '';
-  drillUsers: any[] = [];
-  drillPct: number = 0;
 
   ngOnInit() {
     const role = this.authService.getUserRole();
@@ -116,6 +114,7 @@ export class UserManagementComponent implements OnInit {
   }
 
   drillDown(type: string, value: string, label: string) {
+    console.log('[DrillDown]', type, value, '— users loaded:', this.users.length);
     this.searchTerm = '';
     this.selectedRole = '';
     this.selectedDept = '';
@@ -133,7 +132,7 @@ export class UserManagementComponent implements OnInit {
     this.activeDrillType = type;
     this.activeDrillValue = value;
     this.applyFilters();
-    this.computeDrillUsers();
+    console.log('[DrillDown] drillUsers:', this.drillUsers.length, 'drillPct:', this.drillPct);
     this.cdr.detectChanges();
   }
 
@@ -141,8 +140,6 @@ export class UserManagementComponent implements OnInit {
     this.drillLabel = '';
     this.activeDrillType = '';
     this.activeDrillValue = '';
-    this.drillUsers = [];
-    this.drillPct = 0;
     this.searchTerm = '';
     this.selectedRole = '';
     this.selectedDept = '';
@@ -153,12 +150,13 @@ export class UserManagementComponent implements OnInit {
     this.cdr.detectChanges();
   }
 
-  computeDrillUsers() {
-    if (!this.activeDrillType) { this.drillUsers = []; this.drillPct = 0; return; }
-    this.drillUsers = this.users.filter(user => {
+  // getter — computed ทุก render cycle ไม่มี timing issue
+  get drillUsers(): any[] {
+    if (!this.activeDrillType || !this.activeDrillValue) return [];
+    return this.users.filter(user => {
       switch (this.activeDrillType) {
         case 'role':     return user.role === this.activeDrillValue;
-        case 'dept':     return user.dept_id?.toString() === this.activeDrillValue;
+        case 'dept':     return String(user.dept_id ?? '') === this.activeDrillValue;
         case 'hospcode': return user.hospcode === this.activeDrillValue;
         case 'district': {
           const h = this.hospitals.find((h: any) => h.hoscode === user.hospcode);
@@ -168,23 +166,30 @@ export class UserManagementComponent implements OnInit {
         default: return false;
       }
     }).sort((a, b) => ((a.firstname || '') + (a.lastname || '')).localeCompare((b.firstname || '') + (b.lastname || ''), 'th'));
-    this.drillPct = (this.stats?.summary?.total ?? 0) > 0
-      ? Math.round((this.drillUsers.length / this.stats!.summary.total) * 100) : 0;
+  }
+
+  get drillPct(): number {
+    const total = this.stats?.summary?.total ?? 0;
+    return total > 0 ? Math.round((this.drillUsers.length / total) * 100) : 0;
   }
 
   matchStatusFilter(user: any, status: string): boolean {
     switch (status) {
-      case 'pending':  return user.is_approved === 0;
-      case 'approved': return user.is_approved === 1;
-      case 'rejected': return user.is_approved === -1;
-      case 'active':   return user.is_active === 1;
-      case 'disabled': return user.is_active === 0;
+      case 'pending':  return Number(user.is_approved) === 0;
+      case 'approved': return Number(user.is_approved) === 1;
+      case 'rejected': return Number(user.is_approved) === -1;
+      case 'active':   return Number(user.is_active) === 1 && Number(user.is_approved) === 1;
+      case 'disabled': return Number(user.is_active) === 0;
       default: return true;
     }
   }
 
   isActiveDrill(type: string, value: string): boolean {
     return this.activeDrillType === type && this.activeDrillValue === value;
+  }
+
+  trackByUserId(index: number, u: any): any {
+    return u.id ?? index;
   }
 
   getDrillColor(): string {
@@ -207,18 +212,32 @@ export class UserManagementComponent implements OnInit {
   }
 
   getUserStatusBadge(user: any): { text: string; cls: string } {
-    if (user.is_active === 0) return { text: 'ปิดใช้งาน', cls: 'bg-gray-100 text-gray-500' };
-    if (user.is_approved === 0) return { text: 'รออนุมัติ', cls: 'bg-amber-100 text-amber-700' };
-    if (user.is_approved === -1) return { text: 'ปฏิเสธ', cls: 'bg-red-100 text-red-700' };
+    if (Number(user.is_active) === 0) return { text: 'ปิดใช้งาน', cls: 'bg-gray-100 text-gray-500' };
+    if (Number(user.is_approved) === 0) return { text: 'รออนุมัติ', cls: 'bg-amber-100 text-amber-700' };
+    if (Number(user.is_approved) === -1) return { text: 'ปฏิเสธ', cls: 'bg-red-100 text-red-700' };
     return { text: 'ใช้งานได้', cls: 'bg-emerald-100 text-emerald-700' };
   }
 
   getDrillActiveCount(): number {
-    return this.drillUsers.filter(u => u.is_active === 1 && u.is_approved === 1).length;
+    return this.drillUsers.filter(u => Number(u.is_active) === 1 && Number(u.is_approved) === 1).length;
   }
 
   getDrillPendingCount(): number {
-    return this.drillUsers.filter(u => u.is_approved === 0).length;
+    return this.drillUsers.filter(u => Number(u.is_approved) === 0).length;
+  }
+
+  getDonutStyle(): { [key: string]: string } {
+    const c = this.getDrillColor();
+    const p = this.drillPct;
+    return { background: `conic-gradient(${c} 0% ${p}%, #f1f5f9 ${p}% 100%)` };
+  }
+
+  getDrillColorRgba(alpha: number): string {
+    const hex = this.getDrillColor().replace('#', '');
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
   }
 
   goManageUser(user: any) {
@@ -230,8 +249,6 @@ export class UserManagementComponent implements OnInit {
     this.drillLabel = '';
     this.activeDrillType = '';
     this.activeDrillValue = '';
-    this.drillUsers = [];
-    this.drillPct = 0;
     this.searchTerm = user.username;
     this.applyFilters();
     this.activeTab = 'list';
