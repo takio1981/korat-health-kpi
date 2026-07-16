@@ -44,12 +44,22 @@
     <!-- ===== TAB: รายชื่อผู้ใช้ ===== -->
     <div [hidden]="activeTab !== 'list'">
 
-    <!-- ปุ่มซ่อน/แสดงตัวกรอง -->
-    <div class="px-6 py-2 border-b border-gray-100">
+    <!-- ปุ่มซ่อน/แสดงตัวกรอง + drill-down chip -->
+    <div class="px-6 py-2 border-b border-gray-100 flex flex-wrap items-center gap-3">
       <button (click)="showFilters = !showFilters" class="flex items-center gap-2 text-xs font-bold text-gray-500 hover:text-green-600 transition-colors">
         <i class="fas" [ngClass]="showFilters ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
         {{ showFilters ? 'ซ่อนตัวกรอง' : 'แสดงตัวกรอง' }}
       </button>
+      <!-- Drill-down active chip -->
+      <div *ngIf="drillLabel" class="flex items-center gap-2 px-3 py-1 bg-indigo-100 border border-indigo-200 rounded-full text-xs text-indigo-700 font-semibold">
+        <i class="fas fa-filter text-indigo-400"></i>
+        กรองตาม: <span class="font-bold">{{ drillLabel }}</span>
+        <span class="text-indigo-400 mx-1">·</span>
+        <span class="text-indigo-500">{{ filteredUsers.length }} คน</span>
+        <button (click)="clearDrillFilter()" class="ml-1 text-indigo-400 hover:text-indigo-700 transition-colors" title="ล้างการกรอง">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
     </div>
 
     <!-- ส่วนค้นหาและตัวกรอง -->
@@ -332,31 +342,46 @@
 
       <ng-container *ngIf="!statsLoading && stats">
 
-        <!-- === Summary Cards === -->
+        <!-- === Summary Cards (คลิกเพื่อกรองรายชื่อ) === -->
+        <p class="text-xs text-gray-400 mb-2 flex items-center gap-1">
+          <i class="fas fa-hand-pointer"></i> คลิกที่การ์ดหรือรายการด้านล่างเพื่อดูรายชื่อผู้ใช้งานในกลุ่มนั้น
+        </p>
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-          <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-center">
-            <p class="text-2xl font-extrabold text-indigo-700">{{ stats.summary.total }}</p>
+          <div (click)="clearDrillFilter(); activeTab = 'list'"
+               class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-center cursor-pointer hover:shadow-md hover:border-indigo-300 transition-all group" title="ดูผู้ใช้งานทั้งหมด">
+            <p class="text-2xl font-extrabold text-indigo-700 group-hover:scale-110 transition-transform inline-block">{{ stats.summary.total }}</p>
             <p class="text-xs text-indigo-500 font-semibold mt-1">ผู้ใช้ทั้งหมด</p>
+            <p class="text-[9px] text-indigo-300 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">คลิกเพื่อดูรายชื่อ</p>
           </div>
-          <div class="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-center">
-            <p class="text-2xl font-extrabold text-emerald-700">{{ stats.summary.active }}</p>
+          <div (click)="drillDown('status','active','ใช้งานอยู่')"
+               class="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-center cursor-pointer hover:shadow-md hover:border-emerald-300 transition-all group" title="ดูผู้ใช้ที่ใช้งานอยู่">
+            <p class="text-2xl font-extrabold text-emerald-700 group-hover:scale-110 transition-transform inline-block">{{ stats.summary.active }}</p>
             <p class="text-xs text-emerald-500 font-semibold mt-1">ใช้งานอยู่</p>
+            <p class="text-[9px] text-emerald-300 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">คลิกเพื่อดูรายชื่อ</p>
           </div>
-          <div class="bg-amber-50 border border-amber-100 rounded-xl p-4 text-center">
-            <p class="text-2xl font-extrabold text-amber-700">{{ stats.summary.pending }}</p>
+          <div (click)="drillDown('status','pending','รออนุมัติ')"
+               class="bg-amber-50 border border-amber-100 rounded-xl p-4 text-center cursor-pointer hover:shadow-md hover:border-amber-300 transition-all group" title="ดูผู้ใช้รออนุมัติ">
+            <p class="text-2xl font-extrabold text-amber-700 group-hover:scale-110 transition-transform inline-block">{{ stats.summary.pending }}</p>
             <p class="text-xs text-amber-500 font-semibold mt-1">รออนุมัติ</p>
+            <p class="text-[9px] text-amber-300 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">คลิกเพื่อดูรายชื่อ</p>
           </div>
-          <div class="bg-sky-50 border border-sky-100 rounded-xl p-4 text-center">
-            <p class="text-2xl font-extrabold text-sky-700">{{ stats.summary.approved }}</p>
+          <div (click)="drillDown('status','approved','อนุมัติแล้ว')"
+               class="bg-sky-50 border border-sky-100 rounded-xl p-4 text-center cursor-pointer hover:shadow-md hover:border-sky-300 transition-all group" title="ดูผู้ใช้ที่อนุมัติแล้ว">
+            <p class="text-2xl font-extrabold text-sky-700 group-hover:scale-110 transition-transform inline-block">{{ stats.summary.approved }}</p>
             <p class="text-xs text-sky-500 font-semibold mt-1">อนุมัติแล้ว</p>
+            <p class="text-[9px] text-sky-300 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">คลิกเพื่อดูรายชื่อ</p>
           </div>
-          <div class="bg-red-50 border border-red-100 rounded-xl p-4 text-center">
-            <p class="text-2xl font-extrabold text-red-700">{{ stats.summary.rejected }}</p>
+          <div (click)="drillDown('status','rejected','ปฏิเสธ')"
+               class="bg-red-50 border border-red-100 rounded-xl p-4 text-center cursor-pointer hover:shadow-md hover:border-red-300 transition-all group" title="ดูผู้ใช้ที่ถูกปฏิเสธ">
+            <p class="text-2xl font-extrabold text-red-700 group-hover:scale-110 transition-transform inline-block">{{ stats.summary.rejected }}</p>
             <p class="text-xs text-red-500 font-semibold mt-1">ปฏิเสธ</p>
+            <p class="text-[9px] text-red-300 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">คลิกเพื่อดูรายชื่อ</p>
           </div>
-          <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
-            <p class="text-2xl font-extrabold text-gray-600">{{ stats.summary.disabled }}</p>
+          <div (click)="drillDown('status','disabled','ปิดใช้งาน')"
+               class="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center cursor-pointer hover:shadow-md hover:border-gray-300 transition-all group" title="ดูผู้ใช้ที่ปิดใช้งาน">
+            <p class="text-2xl font-extrabold text-gray-600 group-hover:scale-110 transition-transform inline-block">{{ stats.summary.disabled }}</p>
             <p class="text-xs text-gray-400 font-semibold mt-1">ปิดใช้งาน</p>
+            <p class="text-[9px] text-gray-300 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">คลิกเพื่อดูรายชื่อ</p>
           </div>
         </div>
 
@@ -370,9 +395,11 @@
               <h4 class="text-sm font-bold text-blue-800">สิทธิ์การใช้งาน (Role)</h4>
               <span class="ml-auto text-xs text-blue-400">{{ stats.byRole.length }} สิทธิ์</span>
             </div>
-            <div class="p-4 space-y-2.5 overflow-y-auto card-scroll" style="max-height:280px">
-              <div *ngFor="let r of stats.byRole" class="flex items-center gap-3">
-                <span class="text-xs font-semibold rounded-full px-2.5 py-0.5 min-w-[90px] text-center" [ngClass]="getRoleBadgeClass(r.role)">
+            <div class="p-4 space-y-1 overflow-y-auto card-scroll" style="max-height:280px">
+              <div *ngFor="let r of stats.byRole"
+                   (click)="drillDown('role', r.role, getRoleLabel(r.role))"
+                   class="flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-blue-50 transition-colors group" title="คลิกเพื่อดูรายชื่อ">
+                <span class="text-xs font-semibold rounded-full px-2.5 py-0.5 min-w-[90px] text-center group-hover:ring-2 group-hover:ring-blue-300 transition-all" [ngClass]="getRoleBadgeClass(r.role)">
                   {{ getRoleLabel(r.role) }}
                 </span>
                 <div class="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
@@ -380,6 +407,7 @@
                        [style.width]="getBarWidth(r.count, stats.byRole[0].count)"></div>
                 </div>
                 <span class="text-sm font-extrabold text-gray-700 min-w-[28px] text-right">{{ r.count }}</span>
+                <i class="fas fa-arrow-right text-[10px] text-blue-300 opacity-0 group-hover:opacity-100 transition-opacity"></i>
               </div>
             </div>
           </div>
@@ -391,10 +419,12 @@
               <h4 class="text-sm font-bold text-teal-800">กลุ่มงาน / หน่วยงาน</h4>
               <span class="ml-auto text-xs text-teal-400">{{ stats.byDept.length }} หน่วยงาน</span>
             </div>
-            <div class="p-4 space-y-2.5 overflow-y-auto card-scroll" style="max-height:280px">
-              <div *ngFor="let d of stats.byDept" class="flex items-center gap-3">
+            <div class="p-4 space-y-1 overflow-y-auto card-scroll" style="max-height:280px">
+              <div *ngFor="let d of stats.byDept"
+                   (click)="drillDown('dept', d.dept_id.toString(), d.dept_name || '(ไม่ระบุ)')"
+                   class="flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-teal-50 transition-colors group" title="คลิกเพื่อดูรายชื่อ">
                 <span class="text-xs text-gray-600 truncate min-w-0 flex-1">
-                  <i class="fas fa-building text-gray-300 mr-1"></i>
+                  <i class="fas fa-building text-gray-300 mr-1 group-hover:text-teal-400 transition-colors"></i>
                   {{ d.dept_name || '(ไม่ระบุ)' }}
                 </span>
                 <div class="w-28 bg-gray-100 rounded-full h-4 overflow-hidden flex-shrink-0">
@@ -402,6 +432,7 @@
                        [style.width]="getBarWidth(d.count, stats.byDept[0].count)"></div>
                 </div>
                 <span class="text-sm font-extrabold text-gray-700 min-w-[28px] text-right flex-shrink-0">{{ d.count }}</span>
+                <i class="fas fa-arrow-right text-[10px] text-teal-300 opacity-0 group-hover:opacity-100 transition-opacity"></i>
               </div>
             </div>
           </div>
@@ -413,10 +444,12 @@
               <h4 class="text-sm font-bold text-purple-800">อำเภอ</h4>
               <span class="ml-auto text-xs text-purple-400">{{ stats.byDistrict.length }} อำเภอ</span>
             </div>
-            <div class="p-4 space-y-2.5 overflow-y-auto card-scroll" style="max-height:280px">
-              <div *ngFor="let dist of stats.byDistrict" class="flex items-center gap-3">
+            <div class="p-4 space-y-1 overflow-y-auto card-scroll" style="max-height:280px">
+              <div *ngFor="let dist of stats.byDistrict"
+                   (click)="drillDown('district', dist.distid, dist.distname || '(ไม่ระบุอำเภอ)')"
+                   class="flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-purple-50 transition-colors group" title="คลิกเพื่อดูรายชื่อ">
                 <span class="text-xs text-gray-600 truncate min-w-0 flex-1">
-                  <i class="fas fa-location-dot text-gray-300 mr-1"></i>
+                  <i class="fas fa-location-dot text-gray-300 mr-1 group-hover:text-purple-400 transition-colors"></i>
                   {{ dist.distname || '(ไม่ระบุอำเภอ)' }}
                 </span>
                 <div class="w-28 bg-gray-100 rounded-full h-4 overflow-hidden flex-shrink-0">
@@ -424,6 +457,7 @@
                        [style.width]="getBarWidth(dist.count, stats.byDistrict[0].count)"></div>
                 </div>
                 <span class="text-sm font-extrabold text-gray-700 min-w-[28px] text-right flex-shrink-0">{{ dist.count }}</span>
+                <i class="fas fa-arrow-right text-[10px] text-purple-300 opacity-0 group-hover:opacity-100 transition-opacity"></i>
               </div>
             </div>
           </div>
@@ -435,10 +469,12 @@
               <h4 class="text-sm font-bold text-orange-800">หน่วยบริการ</h4>
               <span class="ml-auto text-xs text-orange-400">{{ stats.byHospital.length }} แห่ง</span>
             </div>
-            <div class="p-4 space-y-2.5 overflow-y-auto card-scroll" style="max-height:280px">
-              <div *ngFor="let h of stats.byHospital" class="flex items-center gap-2">
+            <div class="p-4 space-y-1 overflow-y-auto card-scroll" style="max-height:280px">
+              <div *ngFor="let h of stats.byHospital"
+                   (click)="drillDown('hospcode', h.hospcode, h.hosname || h.hospcode)"
+                   class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-orange-50 transition-colors group" title="คลิกเพื่อดูรายชื่อ">
                 <div class="min-w-0 flex-1">
-                  <p class="text-xs text-gray-700 font-medium truncate">{{ h.hosname || h.hospcode || '(ไม่ระบุ)' }}</p>
+                  <p class="text-xs text-gray-700 font-medium truncate group-hover:text-orange-700 transition-colors">{{ h.hosname || h.hospcode || '(ไม่ระบุ)' }}</p>
                   <p class="text-[10px] text-gray-400 truncate">
                     <span class="bg-cyan-100 text-cyan-700 rounded px-1 mr-1">{{ getHostypeLabel(h.hostype) }}</span>
                     {{ h.distname || '' }}
@@ -449,6 +485,7 @@
                        [style.width]="getBarWidth(h.count, stats.byHospital[0].count)"></div>
                 </div>
                 <span class="text-sm font-extrabold text-gray-700 min-w-[28px] text-right flex-shrink-0">{{ h.count }}</span>
+                <i class="fas fa-arrow-right text-[10px] text-orange-300 opacity-0 group-hover:opacity-100 transition-opacity"></i>
               </div>
             </div>
           </div>

@@ -81,6 +81,10 @@ export class UserManagementComponent implements OnInit {
     byDept: { dept_id: number; dept_name: string; count: number }[];
   } | null = null;
 
+  // === Drill-down filter จาก stats tab ===
+  drillLabel: string = '';
+  selectedDistrictFilter: string = '';
+
   ngOnInit() {
     const role = this.authService.getUserRole();
     this.isAdmin = ['admin_hos', 'admin_sso', 'admin_cup', 'admin_ssj', 'super_admin'].includes(role);
@@ -104,6 +108,38 @@ export class UserManagementComponent implements OnInit {
   switchTab(tab: 'list' | 'stats') {
     this.activeTab = tab;
     if (tab === 'stats' && !this.stats) this.loadStats();
+  }
+
+  drillDown(type: string, value: string, label: string) {
+    this.searchTerm = '';
+    this.selectedRole = '';
+    this.selectedDept = '';
+    this.selectedHospcode = '';
+    this.selectedStatus = '';
+    this.selectedDistrictFilter = '';
+    switch (type) {
+      case 'role':     this.selectedRole = value; break;
+      case 'dept':     this.selectedDept = value; break;
+      case 'hospcode': this.selectedHospcode = value; break;
+      case 'district': this.selectedDistrictFilter = value; break;
+      case 'status':   this.selectedStatus = value; break;
+    }
+    this.drillLabel = label;
+    this.applyFilters();
+    this.activeTab = 'list';
+    this.cdr.detectChanges();
+  }
+
+  clearDrillFilter() {
+    this.drillLabel = '';
+    this.searchTerm = '';
+    this.selectedRole = '';
+    this.selectedDept = '';
+    this.selectedHospcode = '';
+    this.selectedStatus = '';
+    this.selectedDistrictFilter = '';
+    this.applyFilters();
+    this.cdr.detectChanges();
   }
 
   loadStats() {
@@ -210,9 +246,15 @@ export class UserManagementComponent implements OnInit {
       const matchStatus = this.selectedStatus === '' ||
                           (this.selectedStatus === 'pending' && user.is_approved === 0) ||
                           (this.selectedStatus === 'approved' && user.is_approved === 1) ||
-                          (this.selectedStatus === 'rejected' && user.is_approved === -1);
+                          (this.selectedStatus === 'rejected' && user.is_approved === -1) ||
+                          (this.selectedStatus === 'active' && user.is_active === 1) ||
+                          (this.selectedStatus === 'disabled' && user.is_active === 0);
+      const matchDistrict = this.selectedDistrictFilter === '' || (() => {
+        const h = this.hospitals.find((h: any) => h.hoscode === user.hospcode);
+        return h?.distid === this.selectedDistrictFilter;
+      })();
 
-      return matchSearch && matchRole && matchDept && matchHosp && matchStatus;
+      return matchSearch && matchRole && matchDept && matchHosp && matchStatus && matchDistrict;
     });
 
     this.totalPages = Math.ceil(this.filteredUsers.length / this.pageSize);
