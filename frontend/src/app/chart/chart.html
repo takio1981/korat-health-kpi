@@ -51,43 +51,47 @@
       <!-- Stats Cards -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
         <div class="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl shadow-lg p-4 sm:p-6 flex items-center transform hover:-translate-y-1 transition-all duration-300">
-          <div class="p-3 sm:p-4 rounded-full bg-white/20 text-white mr-3 sm:mr-4 backdrop-blur-sm">
+          <div class="p-3 sm:p-4 rounded-full bg-white/20 text-white mr-3 sm:mr-4 backdrop-blur-sm flex-shrink-0">
             <i class="fas fa-check-circle text-lg sm:text-2xl"></i>
           </div>
-          <div>
+          <div class="min-w-0">
             <p class="text-xs sm:text-sm font-medium text-emerald-100">ร้อยละความสำเร็จ KPI</p>
             <p class="text-xl sm:text-3xl font-bold text-white">{{ stats.successRate }}%</p>
+            <p class="text-[10px] text-emerald-200 mt-0.5 leading-tight">= ตัวชี้วัดที่บรรลุเป้าหมาย ÷ ทั้งหมด × 100</p>
           </div>
         </div>
 
         <div class="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-lg p-4 sm:p-6 flex items-center transform hover:-translate-y-1 transition-all duration-300">
-          <div class="p-3 sm:p-4 rounded-full bg-white/20 text-white mr-3 sm:mr-4 backdrop-blur-sm">
-            <i class="fas fa-hospital text-lg sm:text-2xl"></i>
+          <div class="p-3 sm:p-4 rounded-full bg-white/20 text-white mr-3 sm:mr-4 backdrop-blur-sm flex-shrink-0">
+            <i class="fas fa-layer-group text-lg sm:text-2xl"></i>
           </div>
-          <div>
+          <div class="min-w-0">
             <p class="text-xs sm:text-sm font-medium text-blue-100">กลุ่มงานที่บันทึกแล้ว</p>
             <p class="text-xl sm:text-3xl font-bold text-white">{{ stats.recordedCount }} <span class="text-sm sm:text-lg font-normal text-blue-200">/ {{ stats.totalDepts }}</span></p>
+            <p class="text-[10px] text-blue-200 mt-0.5 leading-tight">กลุ่มงานที่มีผลงานบันทึก / ทั้งหมด</p>
           </div>
         </div>
 
         <div class="bg-gradient-to-br from-orange-400 to-red-500 rounded-2xl shadow-lg p-4 sm:p-6 flex items-center transform hover:-translate-y-1 transition-all duration-300">
-          <div class="p-3 sm:p-4 rounded-full bg-white/20 text-white mr-3 sm:mr-4 backdrop-blur-sm">
+          <div class="p-3 sm:p-4 rounded-full bg-white/20 text-white mr-3 sm:mr-4 backdrop-blur-sm flex-shrink-0">
             <i class="fas fa-clock text-lg sm:text-2xl"></i>
           </div>
-          <div>
+          <div class="min-w-0">
             <p class="text-xs sm:text-sm font-medium text-orange-100">รอการตรวจสอบ</p>
             <p class="text-xl sm:text-3xl font-bold text-white">{{ stats.pendingCount }} <span class="text-xs sm:text-sm font-normal text-orange-200">รายการ</span></p>
+            <p class="text-[10px] text-orange-200 mt-0.5 leading-tight">รายการที่ส่งแล้ว ยังรอ admin ตรวจสอบ</p>
           </div>
         </div>
 
         <div class="bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl shadow-lg p-4 sm:p-6 flex items-center transform hover:-translate-y-1 transition-all duration-300">
-          <div class="p-3 sm:p-4 rounded-full bg-white/20 text-white mr-3 sm:mr-4 backdrop-blur-sm">
+          <div class="p-3 sm:p-4 rounded-full bg-white/20 text-white mr-3 sm:mr-4 backdrop-blur-sm flex-shrink-0">
             <i class="fas fa-trophy text-lg sm:text-2xl"></i>
           </div>
-          <div>
+          <div class="min-w-0">
             <p class="text-xs sm:text-sm font-medium text-purple-100">อันดับผลงานระดับจังหวัด</p>
             <p *ngIf="stats.rank > 0" class="text-xl sm:text-3xl font-bold text-white">อันดับ {{ stats.rank }} <span class="text-xs sm:text-sm font-normal text-purple-200">/ {{ stats.totalHospitals }} หน่วยบริการ</span></p>
             <p *ngIf="!stats.rank" class="text-xl sm:text-3xl font-bold text-white/70">- <span class="text-xs sm:text-sm font-normal text-purple-200">ยังไม่มีข้อมูล</span></p>
+            <p class="text-[10px] text-purple-200 mt-0.5 leading-tight">จัดอันดับตาม % KPI ที่บรรลุเป้าหมายสูงสุด</p>
           </div>
         </div>
       </div>
@@ -131,8 +135,30 @@
             </div>
         </div>
       </div>
+
+      <!-- Data scope notice -->
+      <div *ngIf="!isLoading && filteredData.length > 0" class="mb-5 flex items-center gap-2 text-xs text-slate-500 bg-slate-50 rounded-xl px-4 py-2.5 border border-slate-100">
+        <i class="fas fa-database text-slate-400 flex-shrink-0"></i>
+        <span>
+          แสดงข้อมูล <b class="text-slate-700">{{ filteredData.length }}</b> รายการ
+          <ng-container *ngIf="selectedYear"> · ปีงบ <b class="text-slate-700">{{ selectedYear }}</b></ng-container>
+          <ng-container *ngIf="selectedMain"> · หมวด <b class="text-slate-700">{{ selectedMain }}</b></ng-container>
+          <ng-container *ngIf="selectedIndicator"> · ตัวชี้วัด <b class="text-slate-700">{{ selectedIndicator }}</b></ng-container>
+          <ng-container *ngIf="selectedDept"> · กลุ่มงาน <b class="text-slate-700">{{ selectedDept }}</b></ng-container>
+          <span class="ml-1 text-slate-400">· ข้อมูลจาก kpi_summary (last_actual)</span>
+          <span *ngIf="!selectedIndicator" class="ml-2 text-amber-500"><i class="fas fa-triangle-exclamation mr-0.5"></i>กราฟรวม SUM ตัวชี้วัดหลายประเภท — กรอง "เลือกตัวชี้วัด" หรือ "หมวดหมู่" เพื่อความแม่นยำ</span>
+        </span>
+      </div>
+
         <!-- Bar Chart (Full Width) -->
       <div *ngIf="!isLoading" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
+        <div class="flex items-start gap-2 text-xs text-gray-500 bg-gray-50 rounded-xl px-3 py-2.5 mb-4 border border-gray-100">
+          <i class="fas fa-circle-info text-blue-400 mt-0.5 flex-shrink-0"></i>
+          <span>
+            <b>วิธีคำนวณ:</b> สำหรับแต่ละหมวดหมู่ นำ <b>ผลรวม last_actual</b> ÷ <b>ผลรวม target_value</b> × 100
+            · แถบสีเขียว = บรรลุ ≥80% | สีเหลือง = 50–79% | สีแดง = &lt;50% · เส้นประ = เกณฑ์ 80%
+          </span>
+        </div>
         <apx-chart
           [series]="barChartOptions.series"
           [chart]="barChartOptions.chart"
@@ -150,6 +176,14 @@
       </div>
       <!-- Line Chart (Full Width) -->
       <div *ngIf="!isLoading" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6 sm:mb-8">
+        <div class="flex items-start gap-2 text-xs text-gray-500 bg-gray-50 rounded-xl px-3 py-2.5 mb-4 border border-gray-100">
+          <i class="fas fa-circle-info text-blue-400 mt-0.5 flex-shrink-0"></i>
+          <span>
+            <b>วิธีคำนวณ:</b> <b>ผลรวม actual_value</b> รายเดือน (ต.ค.–ก.ย.) ของตัวชี้วัดทั้งหมดที่อยู่ในตัวกรอง
+            · <span class="text-yellow-600 font-medium">เส้นประสีเหลือง</span> = ค่าเฉลี่ยเป้าหมาย (SUM target_value ÷ 12)
+            · เดือนที่ไม่มีข้อมูลจะไม่แสดงค่า
+          </span>
+        </div>
         <apx-chart
           [series]="trendChartOptions.series"
           [chart]="trendChartOptions.chart"
@@ -170,7 +204,14 @@
           <h3 class="text-lg font-bold text-gray-800 mb-1">
             <i class="fas fa-map-marked-alt text-green-600 mr-2"></i>แผนที่ผลงาน KPI รายอำเภอ — จ.นครราชสีมา
           </h3>
-          <p class="text-xs text-gray-400 mb-4">แสดงเปอร์เซ็นต์ผลงานภาพรวมแต่ละอำเภอ ตามตัวกรองที่เลือก</p>
+          <div class="flex items-start gap-2 text-xs text-gray-500 bg-gray-50 rounded-xl px-3 py-2.5 mb-4 border border-gray-100">
+            <i class="fas fa-circle-info text-blue-400 mt-0.5 flex-shrink-0"></i>
+            <span>
+              <b>วิธีคำนวณ:</b> <b>SUM(actual)</b> ÷ <b>SUM(target)</b> × 100 รวมทุกตัวชี้วัดในแต่ละอำเภอ ตามตัวกรองที่เลือก
+              · ตัวเลขใต้วงกลม = ผลรวม actual / ผลรวม target (raw values)
+              · hover เพื่อดูชื่ออำเภอ, ค่า actual, และ target
+            </span>
+          </div>
 
           <!-- Legend -->
           <div class="flex items-center gap-4 mb-4 text-xs font-bold">
@@ -220,6 +261,14 @@
 
         <!-- กราฟวงกลม (Full Width) -->
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+          <div class="flex items-start gap-2 text-xs text-gray-500 bg-gray-50 rounded-xl px-3 py-2.5 mb-4 border border-gray-100">
+            <i class="fas fa-circle-info text-blue-400 mt-0.5 flex-shrink-0"></i>
+            <span>
+              <b>วิธีคำนวณ:</b> <b>ผลรวม last_actual</b> ต่อกลุ่มงาน
+              · <b>หมายเหตุ:</b> % ในกราฟวงกลมคือ <i>สัดส่วนของผลรวมทั้งหมด</i> ไม่ใช่อัตราความสำเร็จ —
+              กรอง "เลือกหน่วยงาน" หรือ "เลือกตัวชี้วัด" เพื่อดูเฉพาะกลุ่มที่ต้องการ
+            </span>
+          </div>
           <apx-chart *ngIf="pieChartOptions.series && pieChartOptions.series.length > 0"
             [series]="pieChartOptions.series"
             [chart]="pieChartOptions.chart"
