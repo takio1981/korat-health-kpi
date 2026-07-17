@@ -114,7 +114,7 @@ export class UserManagementComponent implements OnInit {
   }
 
   drillDown(type: string, value: string, label: string) {
-    console.log('[DrillDown]', type, value, '— users loaded:', this.users.length);
+
     this.searchTerm = '';
     this.selectedRole = '';
     this.selectedDept = '';
@@ -132,7 +132,7 @@ export class UserManagementComponent implements OnInit {
     this.activeDrillType = type;
     this.activeDrillValue = value;
     this.applyFilters();
-    console.log('[DrillDown] drillUsers:', this.drillUsers.length, 'drillPct:', this.drillPct);
+
     this.cdr.detectChanges();
   }
 
