@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { FormBuilderComponent } from '../form-builder/form-builder';
 import Swal from 'sweetalert2';
+import * as XLSX from 'xlsx';
 
 @Component({
   selector: 'app-kpi-manage',
@@ -109,6 +110,19 @@ export class KpiManageComponent implements OnInit {
   // modal เพิ่มหน่วยบริการ
   hospAddModal: { open: boolean; item: any } = { open: false, item: null };
   hospAddLoading = false;
+
+  // === Excel Import ===
+  showImportModal = false;
+  importStep: 1 | 2 = 1;
+  importRows: any[] = [];
+  importErrors: { rowIndex: number; col: string; field: string; message: string }[] = [];
+  importLoading = false;
+  importResult: { inserted: number; errors: any[] } | null = null;
+
+  get importValidRows(): any[] {
+    const errorRows = new Set(this.importErrors.map(e => e.rowIndex));
+    return this.importRows.filter((_, i) => !errorRows.has(i));
+  }
 
   ngOnInit() {
     const role = this.authService.getUserRole();
@@ -885,6 +899,195 @@ export class KpiManageComponent implements OnInit {
       error: (err: any) => {
         this.hdcAddLoading = false;
         Swal.fire('ผิดพลาด', err.error?.message || 'เกิดข้อผิดพลาด', 'error');
+      }
+    });
+  }
+
+  openImportModal() {
+    this.showImportModal = true;
+    this.importStep = 1;
+    this.importRows = [];
+    this.importErrors = [];
+    this.importResult = null;
+    this.cdr.detectChanges();
+  }
+
+  closeImportModal() {
+    this.showImportModal = false;
+    if (this.importResult && this.importResult.inserted > 0) {
+      this.authService.getIndicators().subscribe(r => {
+        if (r.success) { this.indicators = r.data; this.applyFilter(); }
+        this.cdr.detectChanges();
+      });
+    }
+  }
+
+  downloadTemplate() {
+    const COLS = [
+      { key: 'kpi_indicators_name', desc: 'ชื่อตัวชี้วัด (จำเป็น — ห้ามเว้นว่าง)', example: 'ร้อยละผู้ป่วยความดันโลหิตสูงที่ควบคุมได้' },
+      { key: 'kpi_indicators_id',   desc: 'รหัสอ้างอิง เช่น 1901 (ไม่จำเป็น)', example: '1901' },
+      { key: 'kpi_indicators_code', desc: 'รหัสตัวชี้วัดย่อ เช่น KPI001 (ไม่จำเป็น)', example: 'KPI-NCD-001' },
+      { key: 'main_indicator_name', desc: 'ชื่อหมวดหมู่หลัก — ต้องตรงกับระบบ (ดูชีต "หมวดหมู่หลัก")', example: this.mainIndicators[0]?.main_indicator_name || 'งานควบคุมโรค' },
+      { key: 'dept_name',           desc: 'ชื่อหน่วยงาน — ต้องตรงกับระบบ (ดูชีต "หน่วยงาน")', example: this.departments[0]?.dept_name || 'กลุ่มงานโรคไม่ติดต่อ' },
+      { key: 'target_percentage',   desc: 'เป้าหมาย % เช่น 80 (ตัวเลข ไม่มีเครื่องหมาย)', example: '80' },
+      { key: 'target_condition',    desc: 'เงื่อนไข: GTE=มากกว่าเท่ากับ / LTE=น้อยกว่าเท่ากับ / EQ=เท่ากับ', example: 'GTE' },
+      { key: 'weight',              desc: 'น้ำหนัก (ตัวเลข ค่าเริ่มต้น 1)', example: '1' },
+      { key: 'table_process',       desc: 'ชื่อตาราง MySQL: ขึ้นต้นด้วยตัวอักษร a-z ใช้ได้ a-z 0-9 _ เท่านั้น', example: 'kpi_ncd_001' },
+      { key: 'r9',                  desc: 'ตัวชี้วัดระดับเขต 9 (1=ใช่, 0=ไม่ใช่)', example: '0' },
+      { key: 'moph',                desc: 'ตัวชี้วัดกระทรวงสาธารณสุข (1=ใช่, 0=ไม่ใช่)', example: '1' },
+      { key: 'ssj',                 desc: 'ตัวชี้วัด สสจ.นครราชสีมา (1=ใช่, 0=ไม่ใช่)', example: '1' },
+      { key: 'rmw',                 desc: 'ตัวชี้วัดผู้ว่าราชการจังหวัด (1=ใช่, 0=ไม่ใช่)', example: '0' },
+      { key: 'other',               desc: 'ตัวชี้วัดอื่นๆ (1=ใช่, 0=ไม่ใช่)', example: '0' },
+      { key: 'evaluation_mode',     desc: 'โหมดประเมิน: any_one=เฉพาะบางประเภท / all_required=ทุกประเภทบังคับ', example: 'any_one' },
+      { key: 'required_off_types',  desc: 'รหัสหน่วยบริการ คั่นด้วย , เช่น 05,06,07 (ใช้เมื่อ evaluation_mode=any_one เท่านั้น)', example: '05,06,07' },
+      { key: 'description',         desc: 'รายละเอียดเพิ่มเติม (ไม่จำเป็น)', example: 'ตรวจสอบจาก HDC ทุกเดือน' },
+    ];
+
+    const wb = XLSX.utils.book_new();
+
+    // Sheet 1: data template
+    const wsData: any[][] = [
+      COLS.map(c => c.key),   // row 1: headers (field names)
+      COLS.map(c => c.desc),  // row 2: descriptions
+      COLS.map(c => c.example), // row 3: example
+      ...Array(20).fill(null).map(() => new Array(COLS.length).fill('')),
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols'] = COLS.map((c, i) => ({ wch: i === 0 ? 45 : (i === 3 || i === 4 || i === 15 || i === 16) ? 38 : 18 }));
+    XLSX.utils.book_append_sheet(wb, ws, 'นำเข้าตัวชี้วัด');
+
+    // Sheet 2: main indicators reference
+    const ws2 = XLSX.utils.aoa_to_sheet([
+      ['main_indicator_name (ใส่ในคอลัมน์ D)', 'ยุทธศาสตร์'],
+      ...this.mainIndicators.map(m => [m.main_indicator_name, m.yut_name || '']),
+    ]);
+    ws2['!cols'] = [{ wch: 50 }, { wch: 30 }];
+    XLSX.utils.book_append_sheet(wb, ws2, 'หมวดหมู่หลัก');
+
+    // Sheet 3: departments reference
+    const ws3 = XLSX.utils.aoa_to_sheet([
+      ['dept_name (ใส่ในคอลัมน์ E)', 'รหัสหน่วยงาน'],
+      ...this.departments.map(d => [d.dept_name, d.dept_code || '']),
+    ]);
+    ws3['!cols'] = [{ wch: 40 }, { wch: 15 }];
+    XLSX.utils.book_append_sheet(wb, ws3, 'หน่วยงาน');
+
+    // Sheet 4: hostype reference
+    const ws4 = XLSX.utils.aoa_to_sheet([
+      ['hostypecode (ใส่ใน required_off_types คั่นด้วย ,)', 'ประเภทสถานบริการ'],
+      ...this.hosTypes.map(h => [h.hostypecode, h.hostypename]),
+    ]);
+    ws4['!cols'] = [{ wch: 20 }, { wch: 35 }];
+    XLSX.utils.book_append_sheet(wb, ws4, 'รหัสหน่วยบริการ');
+
+    XLSX.writeFile(wb, 'template_นำเข้าตัวชี้วัด.xlsx');
+  }
+
+  onExcelFileSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (!input.files?.length) return;
+    const file = input.files[0];
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rawRows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: '' }) as any[][];
+
+        if (rawRows.length < 4) {
+          Swal.fire('ข้อมูลไม่เพียงพอ', 'ไฟล์ต้องมีข้อมูลตั้งแต่แถวที่ 4 เป็นต้นไป (แถว 1=ชื่อคอลัมน์, 2=คำอธิบาย, 3=ตัวอย่าง)', 'warning');
+          return;
+        }
+
+        const headers: string[] = rawRows[0].map((h: any) => String(h).trim());
+        const dataRows = rawRows.slice(3).filter((row: any[]) => row.some(c => c !== '' && c !== null && c !== undefined));
+
+        if (dataRows.length === 0) {
+          Swal.fire('ไม่มีข้อมูล', 'ไม่พบข้อมูลในไฟล์ (กรอกข้อมูลตั้งแต่แถวที่ 4 เป็นต้นไป)', 'warning');
+          return;
+        }
+
+        this.importRows = [];
+        this.importErrors = [];
+        const COL_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+        dataRows.forEach((raw: any[], i: number) => {
+          const obj: any = {};
+          headers.forEach((h, hi) => { obj[h] = raw[hi] !== undefined ? String(raw[hi]).trim() : ''; });
+
+          const rowNum = i + 4;
+          const addErr = (colIdx: number, field: string, msg: string) => {
+            this.importErrors.push({ rowIndex: i, col: COL_LETTERS[colIdx] || String(colIdx + 1), field, message: `แถวที่ ${rowNum}, คอลัมน์ ${COL_LETTERS[colIdx] || colIdx + 1} (${field}): ${msg}` });
+          };
+
+          if (!obj.kpi_indicators_name) addErr(0, 'kpi_indicators_name', 'ชื่อตัวชี้วัดไม่สามารถเว้นว่างได้');
+          if (obj.table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(obj.table_process))
+            addErr(8, 'table_process', 'ต้องขึ้นต้นด้วยตัวอักษร ใช้ได้เฉพาะ a-z 0-9 _');
+          if (obj.target_condition && !['GTE','LTE','EQ'].includes(obj.target_condition.toUpperCase()))
+            addErr(6, 'target_condition', `"${obj.target_condition}" ไม่ถูกต้อง ต้องเป็น GTE, LTE หรือ EQ`);
+          if (obj.evaluation_mode && !['any_one','all_required'].includes(obj.evaluation_mode))
+            addErr(14, 'evaluation_mode', `"${obj.evaluation_mode}" ไม่ถูกต้อง ต้องเป็น any_one หรือ all_required`);
+
+          if (obj.main_indicator_name) {
+            const found = this.mainIndicators.find(m => m.main_indicator_name.trim() === obj.main_indicator_name.trim());
+            if (found) obj.main_indicator_id = found.id;
+            else addErr(3, 'main_indicator_name', `ไม่พบหมวดหมู่ "${obj.main_indicator_name}" ในระบบ`);
+          }
+
+          if (obj.dept_name) {
+            const found = this.departments.find(d => d.dept_name.trim() === obj.dept_name.trim());
+            if (found) obj.dept_id = found.id;
+            else addErr(4, 'dept_name', `ไม่พบหน่วยงาน "${obj.dept_name}" ในระบบ`);
+          }
+
+          ['r9','moph','ssj','rmw','other'].forEach(flag => {
+            obj[flag] = obj[flag] === '1' || obj[flag] === 1 || obj[flag] === 'true' || obj[flag] === 'ใช่';
+          });
+
+          if (obj.required_off_types)
+            obj.required_off_types = String(obj.required_off_types).split(',').map((s: string) => s.trim()).filter(Boolean);
+
+          this.importRows.push(obj);
+        });
+
+        this.importStep = 2;
+        this.cdr.detectChanges();
+      } catch (err: any) {
+        Swal.fire('อ่านไฟล์ไม่ได้', 'ไม่สามารถอ่านไฟล์ Excel ได้: ' + (err.message || err), 'error');
+      }
+      input.value = '';
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  rowHasError(rowIndex: number): boolean {
+    return this.importErrors.some(e => e.rowIndex === rowIndex);
+  }
+
+  getRowErrors(rowIndex: number): string[] {
+    return this.importErrors.filter(e => e.rowIndex === rowIndex).map(e => e.message);
+  }
+
+  confirmImport() {
+    const validRows = this.importValidRows;
+    if (validRows.length === 0) {
+      Swal.fire('ไม่มีข้อมูลที่ถูกต้อง', 'ทุกแถวมีข้อผิดพลาด กรุณาแก้ไขไฟล์แล้วอัปโหลดใหม่', 'warning');
+      return;
+    }
+    this.importLoading = true;
+    this.cdr.detectChanges();
+    this.authService.bulkImportIndicators(validRows).subscribe({
+      next: (res: any) => {
+        this.importLoading = false;
+        this.importResult = { inserted: res.inserted, errors: res.errors || [] };
+        this.importStep = 1;
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.importLoading = false;
+        Swal.fire('ผิดพลาด', err.error?.message || 'เกิดข้อผิดพลาดในการนำเข้า', 'error');
+        this.cdr.detectChanges();
       }
     });
   }

@@ -4626,6 +4626,38 @@ const _actorLabel = async (userId) => {
     } catch (_) { return `user_id ${userId}`; }
 };
 
+apiRouter.post('/indicators/bulk-import', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { rows } = req.body;
+    if (!Array.isArray(rows) || rows.length === 0)
+        return res.status(400).json({ success: false, message: 'ไม่มีข้อมูลสำหรับนำเข้า' });
+    const results = [];
+    for (const row of rows) {
+        const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types } = row;
+        try {
+            const [r] = await db.query(
+                `INSERT INTO kpi_indicators (kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types)]
+            );
+            results.push({ name: kpi_indicators_name, status: 'success', id: r.insertId });
+        } catch (e) {
+            results.push({ name: kpi_indicators_name, status: 'error', message: e.message });
+        }
+    }
+    const inserted = results.filter(r => r.status === 'success').length;
+    const errors = results.filter(r => r.status === 'error');
+    try {
+        const actor = await _actorLabel(req.user.userId);
+        notifyLineAction('indicator_change',
+            `📥 นำเข้าตัวชี้วัดจาก Excel\n` +
+            `👤 ${actor}\n` +
+            `✅ สำเร็จ: ${inserted} รายการ` +
+            (errors.length ? `\n❌ ผิดพลาด: ${errors.length} รายการ` : '')
+        );
+    } catch (_) {}
+    res.json({ success: true, inserted, errors, results });
+});
+
 apiRouter.post('/indicators', authenticateToken, isSuperAdmin, async (req, res) => {
     const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types } = req.body;
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
