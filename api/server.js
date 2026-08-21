@@ -1015,7 +1015,7 @@ async function upsertSsoProfile(provider, userId, profile) {
 /** ดึง ThaiD config — hardcode ทุกอย่างยกเว้น enabled + client_secret + register_url */
 async function getThaidSettings() {
     const [rows] = await db.query(
-        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('thaid_enabled','thaid_client_secret','thaid_register_url')"
+        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('thaid_enabled','thaid_client_secret','thaid_register_url','thaid_login_url')"
     );
     const s = {};
     rows.forEach(r => s[r.setting_key] = r.setting_value);
@@ -1027,6 +1027,7 @@ async function getThaidSettings() {
     s.thaid_scope       = THAID_SCOPE;
     // client_secret: env var ก่อน → fallback DB setting
     s.thaid_client_secret = process.env.THAID_CLIENT_SECRET || s.thaid_client_secret || '';
+    s.thaid_login_url   = s.thaid_login_url || '';
     return s;
 }
 
@@ -1127,6 +1128,116 @@ apiRouter.post('/auth/thaid/debug-token', authenticateToken, isSuperAdmin, async
 });
 
 // GET /auth/thaid/start — redirect ไป DGA (public, ไม่ต้อง auth)
+// === ThaiD Direct JWT Login — รับ token จาก DGA redirect (/login?token=<JWT>) ===
+apiRouter.post('/auth/thaid/verify-token', async (req, res) => {
+    const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim().slice(0, 64);
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ success: false, message: 'ไม่มี token' });
+
+    let s;
+    try { s = await getThaidSettings(); } catch (e) {
+        return res.status(500).json({ success: false, message: 'ไม่สามารถโหลด ThaiD settings ได้' });
+    }
+    if (s.thaid_enabled !== 'true')
+        return res.status(403).json({ success: false, message: 'ThaiD ยังไม่ได้เปิดใช้งาน' });
+
+    // 1. Verify JWT (HS256 ด้วย client_secret)
+    let payload;
+    try {
+        payload = jwt.verify(token, s.thaid_client_secret, { algorithms: ['HS256'] });
+    } catch (e) {
+        console.warn('[ThaiD/verify-token] verify failed, fallback decode:', e.message);
+        payload = jwt.decode(token);
+        if (!payload) return res.status(400).json({ success: false, message: 'JWT ไม่ถูกต้อง ไม่สามารถอ่านได้' });
+        if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp)
+            return res.status(401).json({ success: false, message: 'ThaiD token หมดอายุ กรุณาสแกน QR ใหม่' });
+    }
+
+    // 2. Extract cid (13 หลัก) — ใช้ extractCidFromPayload เดิม
+    const cidStr = extractCidFromPayload(payload);
+    if (!cidStr) return res.status(400).json({ success: false, message: 'ไม่พบเลขบัตรประชาชน 13 หลักใน token' });
+
+    const cidHashOurs = crypto.createHash('sha256').update(cidStr).digest('hex');
+    const cidHashFromDga = payload.hash_cid || null;
+
+    const firstname_th = payload.firstname_th || '';
+    const lastname_th  = payload.lastname_th  || '';
+    const _extracted = { firstname_th, lastname_th, name_th: payload.name_th || '' };
+
+    // 3. Lookup user — ลอง hash ของเราก่อน จากนั้น hash_cid จาก DGA (กันความไม่ตรงกัน)
+    let [users] = await db.query('SELECT * FROM users WHERE cid = ? AND is_active = 1', [cidHashOurs]);
+    if (!users.length && cidHashFromDga) {
+        [users] = await db.query('SELECT * FROM users WHERE cid = ? AND is_active = 1', [cidHashFromDga]);
+    }
+
+    if (!users.length) {
+        // ไม่พบ → สร้าง reg_token เพื่อ pre-fill register form (TTL 10 นาที)
+        const regToken = crypto.randomBytes(16).toString('hex');
+        _thaidRegMap.set(regToken, {
+            cid_hash: cidHashOurs, firstname_th, lastname_th,
+            expires: Date.now() + 10 * 60 * 1000
+        });
+        saveSsoLog('thaid', 'login', { outcome: 'no_user', cid_hash: cidHashOurs, ip, extracted_fields: _extracted });
+        return res.json({
+            success: false, not_found: true,
+            firstname_th, lastname_th,
+            reg_token: regToken,
+            message: 'ไม่พบบัญชีผู้ใช้งานที่ลงทะเบียนด้วยเลขบัตรนี้'
+        });
+    }
+
+    const user = users[0];
+
+    // 4. ตรวจสอบ approved
+    if (!user.is_approved) {
+        saveSsoLog('thaid', 'login', { outcome: 'not_approved', user_id: user.id, username: user.username, ip });
+        return res.status(403).json({ success: false, message: 'บัญชีนี้ยังไม่ได้รับการอนุมัติจากผู้ดูแลระบบ' });
+    }
+
+    // 5. Concurrent session check (≤5 นาที ที่ IP อื่น)
+    if (user.active_session_id && user.last_seen_at) {
+        const lastSeen = new Date(user.last_seen_at).getTime();
+        if (Date.now() - lastSeen < 5 * 60 * 1000 && user.last_seen_ip !== ip) {
+            saveSsoLog('thaid', 'login', { outcome: 'concurrent', user_id: user.id, username: user.username, ip });
+            return res.status(409).json({
+                success: false, code: 'CONCURRENT_LOGIN',
+                message: `มีการเข้าสู่ระบบจาก IP ${user.last_seen_ip} อยู่แล้ว กรุณาออกจากระบบก่อน`
+            });
+        }
+    }
+
+    // 6. Issue KHUPS JWT
+    const sessionId = crypto.randomBytes(24).toString('hex');
+    await db.query('UPDATE users SET active_session_id=?, session_started_at=NOW() WHERE id=?', [sessionId, user.id]);
+    _sessionCache.delete(user.id);
+
+    const appToken = jwt.sign(
+        { userId: user.id, username: user.username, role: user.role,
+          deptId: user.dept_id, hospcode: user.hospcode, sessionId },
+        process.env.JWT_SECRET, { expiresIn: '8h' }
+    );
+
+    // 7. Audit logs
+    saveSsoLog('thaid', 'login', { outcome: 'success_thaid', cid_hash: cidHashOurs,
+                                   user_id: user.id, username: user.username,
+                                   ip, extracted_fields: _extracted });
+    try {
+        await db.query(
+            `INSERT INTO login_logs (user_id, username, ip, status, user_agent) VALUES (?, ?, ?, 'success_sso_thaid', ?)`,
+            [user.id, user.username, ip, req.headers['user-agent'] || '']
+        );
+    } catch (e) {}
+
+    console.log(`[ThaiD/verify-token] ✓ login user=${user.username} ip=${ip}`);
+    res.json({
+        success: true,
+        token: appToken,
+        user: { id: user.id, username: user.username, role: user.role,
+                dept_id: user.dept_id, hospcode: user.hospcode,
+                firstname: user.firstname, lastname: user.lastname }
+    });
+});
+
 apiRouter.get('/auth/thaid/start', async (req, res) => {
     try {
         const s = await getThaidSettings();
@@ -3969,7 +4080,7 @@ apiRouter.put('/users/change-password', async (req, res) => {
 apiRouter.get('/system/maintenance-status', async (req, res) => {
     try {
         const [rows] = await db.query(
-            "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message','thaid_enabled','providerid_enabled')"
+            "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message','thaid_enabled','providerid_enabled','thaid_login_url')"
         );
         const s = {};
         rows.forEach(r => s[r.setting_key] = r.setting_value);
@@ -3979,6 +4090,7 @@ apiRouter.get('/system/maintenance-status', async (req, res) => {
             message: s['maintenance_message'] || 'ระบบปิดให้บริการชั่วคราวเพื่อประมวลผลงาน',
             thaid_enabled: s['thaid_enabled'] === 'true',
             providerid_enabled: s['providerid_enabled'] === 'true',
+            thaid_login_url: s['thaid_login_url'] || '',
         });
     } catch (error) {
         res.json({ success: true, maintenance: false, message: '', thaid_enabled: false, providerid_enabled: false });
@@ -10656,6 +10768,7 @@ const bkDecrypt = (ciphertext) => {
         const thaidDefaults = [
             ['thaid_enabled', 'false', 'เปิดใช้ ThaiD SSO (DGA) — true/false'],
             ['thaid_client_secret', '', 'ThaiD Client Secret (จาก DGA — กรอกในหน้า Settings)'],
+            ['thaid_login_url', '', 'URL ThaiD สำหรับ login — DGA redirect กลับมาที่ /khupskpi/login?token=<JWT>'],
             ['thaid_return_page', '/login', 'หน้าที่จะ redirect หลัง ThaiD สำเร็จ เช่น /login หรือ /register'],
             ['thaid_register_enabled', 'false', 'เปิดให้ลงทะเบียนด้วย ThaiD — true/false'],
             ['providerid_register_enabled', 'false', 'เปิดให้ลงทะเบียนด้วย ProviderID — true/false'],

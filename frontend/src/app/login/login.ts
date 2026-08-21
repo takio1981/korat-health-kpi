@@ -29,15 +29,18 @@ export class LoginComponent implements OnInit, OnDestroy {
   maintenanceMode: boolean = false;
   maintenanceMessage: string = '';
   isThaIdEnabled: boolean = false;
+  thaidLoginUrl: string = '';      // URL จาก DGA ThaiD Portal (admin ตั้งค่าใน Settings)
+  thaidVerifying: boolean = false; // loading state ขณะ verify token จาก DGA
 
-  ssoLoading: boolean = false; // แสดง spinner ขณะรอ redirect กลับจาก ThaiD
+  ssoLoading: boolean = false;
 
   private statusPollTimer: any = null;
 
-  thaidAutoFilling: boolean = false; // แสดงสถานะกำลัง auto-fill
+  thaidAutoFilling: boolean = false;
 
   ngOnInit() {
-    this.handleSsoCallback(); // รับ sso_token จาก ThaiD/ProviderID callback → save + navigate /dashboard
+    this.handleThaidTokenParam(); // รับ ?token= จาก DGA direct JWT redirect
+    this.handleSsoCallback();     // รับ sso_token จาก OAuth callback (legacy)
     this.checkMaintenance();
     this.ngZone.runOutsideAngular(() => {
       this.statusPollTimer = setInterval(() => {
@@ -48,6 +51,61 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     if (this.statusPollTimer) { clearInterval(this.statusPollTimer); this.statusPollTimer = null; }
+  }
+
+  /** รับ JWT token จาก DGA ที่ redirect มาที่ /login?token=<JWT> (Direct JWT Flow ใหม่) */
+  private handleThaidTokenParam(): void {
+    const params = new URLSearchParams(window.location.search);
+    const thaidToken = params.get('token');
+    if (!thaidToken) return;
+
+    // ลบ ?token= ออกจาก URL bar ทันที (กัน token ถูก refresh/share)
+    window.history.replaceState({}, '', window.location.pathname);
+
+    this.thaidVerifying = true;
+    this.cdr.detectChanges();
+
+    this.authService.verifyThaidToken(thaidToken).subscribe({
+      next: (res: any) => {
+        this.thaidVerifying = false;
+        if (res.success) {
+          this.authService.saveToken(res.token);
+          this.authService.saveUser(res.user);
+          this.authService.startTokenExpiryWatcher();
+          Swal.fire({
+            icon: 'success',
+            title: 'เข้าสู่ระบบสำเร็จ (ThaID)',
+            text: `ยินดีต้อนรับ ${res.user.firstname || ''} ${res.user.lastname || ''}`,
+            timer: 1500, showConfirmButton: false
+          }).then(() => this.router.navigate(['/dashboard']));
+        } else if (res.not_found) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'ไม่พบบัญชีผู้ใช้งาน',
+            html: `<p>ไม่พบบัญชีที่ผูกกับ<br><b>${res.firstname_th || ''} ${res.lastname_th || ''}</b><br>ในระบบนี้</p>
+                   <p class="text-sm text-gray-500 mt-2">กรุณาลงทะเบียนก่อนเข้าใช้งาน หรือติดต่อผู้ดูแลระบบเพื่อผูกบัญชี</p>`,
+            showCancelButton: true,
+            confirmButtonText: '<i class="fas fa-user-plus mr-1"></i> ลงทะเบียน',
+            cancelButtonText: 'ปิด',
+            confirmButtonColor: '#10b981',
+            cancelButtonColor: '#6b7280'
+          }).then(r => {
+            if (r.isConfirmed && res.reg_token) {
+              this.router.navigate(['/register'], { queryParams: { thaid_reg: res.reg_token } });
+            }
+          });
+        } else {
+          Swal.fire('ไม่สำเร็จ', res.message || 'เกิดข้อผิดพลาด', 'error');
+        }
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.thaidVerifying = false;
+        const msg = err.error?.message || 'ไม่สามารถยืนยัน ThaiD token ได้';
+        Swal.fire({ icon: 'error', title: 'ThaiD Login ไม่สำเร็จ', text: msg });
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   /** อ่าน query params จาก ThaiD callback redirect แล้วทำ login */
@@ -94,9 +152,13 @@ export class LoginComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** กดปุ่ม ThaiD → redirect ไป DGA */
+  /** กดปุ่ม ThaiD → redirect ไปที่ URL ที่ admin ตั้งค่าใน Settings */
   loginWithThaID() {
-    window.location.href = `${environment.apiUrl}/auth/thaid/start`;
+    if (!this.thaidLoginUrl) {
+      Swal.fire('ยังไม่ได้ตั้งค่า', 'กรุณาติดต่อผู้ดูแลระบบเพื่อตั้งค่า ThaiD Login URL ในหน้า Settings', 'warning');
+      return;
+    }
+    window.location.href = this.thaidLoginUrl;
   }
 
   private checkMaintenance() {
@@ -104,10 +166,12 @@ export class LoginComponent implements OnInit, OnDestroy {
       next: (res: any) => {
         const changed = this.maintenanceMode !== !!res.maintenance
           || this.maintenanceMessage !== (res.message || '')
-          || this.isThaIdEnabled !== !!res.thaid_enabled;
+          || this.isThaIdEnabled !== !!res.thaid_enabled
+          || this.thaidLoginUrl !== (res.thaid_login_url || '');
         this.maintenanceMode = !!res.maintenance;
         this.maintenanceMessage = res.message || '';
         this.isThaIdEnabled = !!res.thaid_enabled;
+        this.thaidLoginUrl = res.thaid_login_url || '';
         if (changed) this.cdr.detectChanges();
       }
     });

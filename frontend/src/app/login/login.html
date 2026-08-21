@@ -162,11 +162,17 @@
               <span class="text-xs text-gray-400 font-medium whitespace-nowrap">หรือเข้าสู่ระบบด้วย</span>
               <hr class="flex-1 border-gray-200/60">
             </div>
-            <button type="button" (click)="loginWithThaID()"
-                    class="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white/80 hover:bg-white border-2 border-blue-200 hover:border-blue-400 text-blue-800 font-bold rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 backdrop-blur-sm">
-              <img src="thaid.png" alt="ThaID" class="h-7 w-auto object-contain">
-              <span class="text-sm">เข้าสู่ระบบด้วย ThaID</span>
-              <i class="fas fa-arrow-right text-blue-400 ml-auto text-xs"></i>
+            <button type="button" (click)="loginWithThaID()" [disabled]="thaidVerifying"
+                    class="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white/80 hover:bg-white border-2 border-blue-200 hover:border-blue-400 text-blue-800 font-bold rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 backdrop-blur-sm disabled:opacity-60 disabled:cursor-not-allowed">
+              <span *ngIf="thaidVerifying" class="flex items-center gap-2">
+                <i class="fas fa-spinner fa-spin text-blue-500"></i>
+                <span class="text-sm">กำลังตรวจสอบ ThaID...</span>
+              </span>
+              <span *ngIf="!thaidVerifying" class="flex items-center gap-3 w-full">
+                <img src="thaid.png" alt="ThaID" class="h-7 w-auto object-contain">
+                <span class="text-sm">เข้าสู่ระบบด้วย ThaID</span>
+                <i class="fas fa-arrow-right text-blue-400 ml-auto text-xs"></i>
+              </span>
             </button>
             <p class="text-center text-[10px] text-gray-400 mt-2">
               <i class="fas fa-shield-halved mr-1 text-blue-300"></i>ยืนยันตัวตนด้วยบัตรประชาชนผ่าน DGA ThaID
