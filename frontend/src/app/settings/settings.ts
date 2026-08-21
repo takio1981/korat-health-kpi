@@ -76,6 +76,10 @@ export class SettingsComponent implements OnInit {
   providerIdEnabled: boolean = false;
   thaidRegisterUrl: string = '';
 
+  // ThaiD client_secret (ใช้ verify JWT จาก DGA)
+  thaidClientSecret: string = '';
+  showThaidSecret: boolean = false;
+
   // SSO OAuth config — ProviderID (MOPH) — configurable
   providerIdClientId: string = '';
   providerIdClientSecret: string = '';
@@ -212,6 +216,7 @@ export class SettingsComponent implements OnInit {
 
           // SSO OAuth config — load
           const grab = (k: string) => (this.settings.find(s => s.setting_key === k)?.setting_value) || '';
+          this.thaidClientSecret = grab('thaid_client_secret');
           this.providerIdClientId = grab('providerid_client_id');
           this.providerIdClientSecret = grab('providerid_client_secret');
           this.providerIdAuthUrl = grab('providerid_auth_url');
@@ -269,6 +274,7 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'appeal_days_after_approve', setting_value: this.appealDaysAfterApprove.toString() },
       { setting_key: 'thaid_enabled', setting_value: this.thaidEnabled.toString() },
       { setting_key: 'thaid_return_page', setting_value: this.thaidReturnPage || '/login' },
+      { setting_key: 'thaid_client_secret', setting_value: this.thaidClientSecret },
       { setting_key: 'providerid_enabled', setting_value: this.providerIdEnabled.toString() },
       { setting_key: 'thaid_register_url', setting_value: this.thaidRegisterUrl },
       // ProviderID OAuth config — configurable

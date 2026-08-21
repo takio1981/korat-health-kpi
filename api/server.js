@@ -1150,7 +1150,8 @@ apiRouter.get('/auth/thaid/start', async (req, res) => {
         res.redirect(thaidUrl);
     } catch (e) {
         console.error('[ThaiD/start]', e.message);
-        res.redirect('/login?sso_error=' + encodeURIComponent('เกิดข้อผิดพลาด กรุณาลองใหม่'));
+        const base = getFrontendBase(req);
+        res.redirect(`${base}/login?sso_error=` + encodeURIComponent('เกิดข้อผิดพลาด กรุณาลองใหม่'));
     }
 });
 
@@ -1228,7 +1229,7 @@ async function handleThaidCallback(req, res) {
     if (error) {
         return redirectErr(error_description ? String(error_description) : String(error));
     }
-    if (!state || (!stateData && !isKhupskpiState)) {
+    if (!state || !stateData) {
         return redirectErr('state ไม่ถูกต้อง กรุณาลอง login ใหม่');
     }
     if (stateData) _thaidStateMap.delete(stateStr);
@@ -1268,10 +1269,12 @@ async function handleThaidCallback(req, res) {
             payload = jwt.verify(idToken, s.thaid_client_secret, { algorithms: ['HS256'] });
             console.warn('[ThaiD/callback] ✓ JWT verified | fields:', Object.keys(payload));
         } catch (verifyErr) {
-            // fallback: decode ไม่ verify (กรณี DGA ใช้ key format ต่างกัน)
-            console.warn('[ThaiD] jwt.verify failed, fallback to decode:', verifyErr.message);
+            console.warn('[ThaiD] JWT verify failed (อาจเป็น RS256), ใช้ decode แทน:', verifyErr.message);
             payload = jwt.decode(idToken);
-            console.warn('[ThaiD/callback] decoded (no verify) | fields:', payload ? Object.keys(payload) : 'null');
+            if (!payload) return redirectErr('ไม่สามารถอ่าน token จาก ThaiD ได้');
+            if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp)
+                return redirectErr('ThaiD token หมดอายุ กรุณา login ใหม่');
+            console.warn('[ThaiD/callback] decoded (no verify) | fields:', Object.keys(payload));
         }
         if (!payload || typeof payload !== 'object') {
             return redirectErr('ถอดรหัส JWT จาก DGA ไม่สำเร็จ');
