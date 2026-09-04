@@ -1,0 +1,111 @@
+<div class="p-4 lg:p-6 h-full flex flex-col gap-4">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between flex-wrap gap-3">
+    <div>
+      <h1 class="text-xl font-bold text-green-900">ผังกระบวนการทำงาน (SOP)</h1>
+      <p class="text-sm text-green-700 mt-0.5">Standard Operating Procedures — ระบบ KHUPS KPI</p>
+    </div>
+    <!-- Sub-flow tabs (shown when system has subflows) -->
+    <div *ngIf="selectedSystem.subflows && selectedSystem.subflows.length > 1" class="flex gap-1 flex-wrap">
+      <button *ngFor="let sf of selectedSystem.subflows"
+        (click)="selectSystem(selectedSystem, sf.id)"
+        [class.bg-green-700]="selectedSubflow === sf.id"
+        [class.text-white]="selectedSubflow === sf.id"
+        [class.bg-white]="selectedSubflow !== sf.id"
+        [class.text-green-800]="selectedSubflow !== sf.id"
+        class="px-3 py-1.5 rounded-lg text-xs font-semibold border border-green-300 transition-colors shadow-sm hover:bg-green-600 hover:text-white">
+        {{ sf.title }}
+      </button>
+    </div>
+  </div>
+
+  <!-- Main content: sidebar + diagram -->
+  <div class="flex gap-4 flex-1 min-h-0">
+
+    <!-- Left sidebar — system list -->
+    <div class="hidden lg:flex flex-col w-48 shrink-0 bg-white/70 rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div class="p-3 border-b border-gray-100">
+        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">เลือกระบบ</p>
+      </div>
+      <nav class="overflow-y-auto flex-1 card-scroll p-2 space-y-0.5">
+        <button *ngFor="let sys of systems"
+          (click)="selectSystem(sys)"
+          [class.bg-green-700]="selectedSystem.id === sys.id"
+          [class.text-white]="selectedSystem.id === sys.id"
+          [class.text-green-800]="selectedSystem.id !== sys.id"
+          class="w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition-colors hover:bg-green-100/80 flex items-center gap-2 leading-tight">
+          <span class="text-base shrink-0">{{ sys.icon }}</span>
+          <span class="truncate">{{ sys.title }}</span>
+        </button>
+      </nav>
+    </div>
+
+    <!-- Diagram area -->
+    <div class="flex-1 min-w-0 flex flex-col gap-3">
+
+      <!-- Mobile: system selector -->
+      <div class="lg:hidden">
+        <select class="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white/80 text-green-900 text-sm font-medium"
+          (change)="selectSystem(getSystemById($any($event.target).value))">
+          <option *ngFor="let sys of systems" [value]="sys.id" [selected]="sys.id === selectedSystem.id">
+            {{ sys.icon }} {{ sys.title }}
+          </option>
+        </select>
+      </div>
+
+      <!-- System description card -->
+      <div class="bg-white/70 rounded-2xl border border-gray-100 shadow-sm p-4 flex items-start gap-3">
+        <div class="text-3xl shrink-0 leading-none pt-0.5">{{ selectedSystem.icon }}</div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-bold text-green-900 text-base leading-tight">{{ selectedSystem.title }}</span>
+            <span class="text-xs text-gray-400 font-normal">{{ selectedSystem.sub }}</span>
+          </div>
+          <p class="text-sm text-gray-600 mt-1 leading-relaxed">{{ selectedSystem.desc }}</p>
+        </div>
+      </div>
+
+      <!-- SVG Diagram container -->
+      <div class="flex-1 bg-white/70 rounded-2xl border border-gray-100 shadow-sm overflow-hidden relative"
+           style="min-height: 420px; max-height: calc(100vh - 340px);">
+        <div #flowArea class="w-full h-full overflow-auto card-scroll" style="min-height: 420px;"></div>
+      </div>
+
+      <!-- Legend -->
+      <div class="bg-white/70 rounded-2xl border border-gray-100 shadow-sm px-4 py-3 flex items-center gap-6 flex-wrap text-xs text-gray-600">
+        <span class="font-semibold text-gray-700 shrink-0">สัญลักษณ์:</span>
+        <span class="flex items-center gap-1.5">
+          <svg width="28" height="16" viewBox="0 0 28 16"><ellipse cx="14" cy="8" rx="13" ry="7" fill="#d1fae5" stroke="#6ee7b7" stroke-width="1.5"/></svg>
+          เริ่ม/จบ
+        </span>
+        <span class="flex items-center gap-1.5">
+          <svg width="28" height="16" viewBox="0 0 28 16"><rect x="1" y="2" width="26" height="12" rx="4" fill="#dbeafe" stroke="#93c5fd" stroke-width="1.5"/></svg>
+          กระบวนการ
+        </span>
+        <span class="flex items-center gap-1.5">
+          <svg width="20" height="16" viewBox="0 0 20 16"><polygon points="10,1 19,8 10,15 1,8" fill="#fef3c7" stroke="#fbbf24" stroke-width="1.5"/></svg>
+          ตัดสินใจ
+        </span>
+        <span class="flex items-center gap-1.5">
+          <svg width="28" height="16" viewBox="0 0 28 16">
+            <ellipse cx="14" cy="4" rx="13" ry="4" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.5"/>
+            <rect x="1" y="4" width="26" height="8" fill="#f1f5f9" stroke="none"/>
+            <ellipse cx="14" cy="12" rx="13" ry="4" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.5"/>
+            <line x1="1" y1="4" x2="1" y2="12" stroke="#94a3b8" stroke-width="1.5"/>
+            <line x1="27" y1="4" x2="27" y2="12" stroke="#94a3b8" stroke-width="1.5"/>
+          </svg>
+          ฐานข้อมูล
+        </span>
+        <span class="flex items-center gap-1.5 ml-auto">
+          <svg width="36" height="10" viewBox="0 0 36 10">
+            <line x1="2" y1="5" x2="30" y2="5" stroke="#10b981" stroke-width="2" stroke-dasharray="4 2"/>
+            <circle cx="18" cy="5" r="3" fill="#2db573"/>
+          </svg>
+          การไหลของข้อมูล
+        </span>
+      </div>
+
+    </div>
+  </div>
+</div>

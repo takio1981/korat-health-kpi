@@ -21,6 +21,7 @@ import { KpiAuditDigestComponent } from './kpi-audit-digest/kpi-audit-digest';
 import { ErrorLogsComponent } from './error-logs/error-logs';
 import { SsoLogsComponent } from './sso-logs/sso-logs';
 import { SsoCallbackComponent } from './sso-callback/sso-callback';
+import { SopComponent } from './sop/sop';
 import { authGuard } from './guards/auth-guard';
 import { adminGuard } from './guards/admin-guard';
 import { anyAdminGuard } from './guards/any-admin-guard';
@@ -52,6 +53,7 @@ export const routes: Routes = [
       { path: 'kpi-audit-digest', component: KpiAuditDigestComponent, canActivate: [superAdminGuard], data: { title: 'แจ้งเตือนการบันทึก KPI' } },
       { path: 'error-logs', component: ErrorLogsComponent, canActivate: [superAdminGuard], data: { title: 'Error Logs' } },
       { path: 'sso-logs', component: SsoLogsComponent, canActivate: [superAdminGuard], data: { title: 'SSO Audit Logs' } },
+      { path: 'sop', component: SopComponent, data: { title: 'ผังกระบวนการทำงาน (SOP)' } },
       { path: 'feedback', component: FeedbackComponent, data: { title: 'กระดานข้อเสนอแนะ' } },
       { path: 'changelog', component: ChangelogComponent, data: { title: 'ประวัติการอัปเดต' } },
       { path: 'help', component: HelpComponent, data: { title: 'คู่มือการใช้งาน' } },

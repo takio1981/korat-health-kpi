@@ -41,6 +41,7 @@
       <nav class="px-3 py-3 space-y-0.5 text-sm">
         <a routerLink="/dashboard" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-th-large text-base mr-3 min-w-[20px]"></i>บันทึกผลงานตัวชี้วัด <span *ngIf="pendingKpiCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px] font-bold">{{ pendingKpiCount }}</span></a>
         <a routerLink="/charts" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-chart-bar text-base mr-3 min-w-[20px]"></i>รายงานสถิติ</a>
+        <a routerLink="/sop" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-sitemap text-base mr-3 min-w-[20px]"></i>ผังกระบวนการ SOP</a>
         <a routerLink="/notifications" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-bell text-base mr-3 min-w-[20px]" [class.bell-shake]="unreadNotifCount > 0"></i>แจ้งเตือน <span *ngIf="unreadNotifCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px] font-bold">{{ unreadNotifCount }}</span></a>
         <a *ngIf="isAnyAdmin" routerLink="/users" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-users-cog text-base mr-3 min-w-[20px]"></i>จัดการผู้ใช้งาน <span *ngIf="pendingUsersCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px] font-bold" title="ผู้ใช้รออนุมัติ">{{ pendingUsersCount }}</span></a>
         <a *ngIf="isAdmin" routerLink="/kpi-manage" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-tasks text-base mr-3 min-w-[20px]"></i>จัดการตัวชี้วัด</a>
@@ -79,6 +80,10 @@
         <a routerLink="/charts" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-chart-bar text-lg mr-3 min-w-[24px]"></i>
           <span class="truncate">รายงานสถิติ</span>
+        </a>
+        <a routerLink="/sop" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-colors cursor-pointer">
+          <i class="fas fa-sitemap text-lg mr-3 min-w-[24px]"></i>
+          <span class="truncate">ผังกระบวนการ SOP</span>
         </a>
         <a routerLink="/notifications" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-colors cursor-pointer">
           <i class="fas fa-bell text-lg mr-3 min-w-[24px]" [class.bell-shake]="unreadNotifCount > 0"></i>
@@ -518,7 +523,7 @@
 
         <!-- Mascot (น้องโคราชดี) -->
         <div class="bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 rounded-2xl p-4 border border-emerald-200 flex items-center justify-center">
-          <img src="frontend/public/korat-d.png" alt="น้องโคราชดี (KORAT-D)"
+          <img src="korat-d.png" alt="น้องโคราชดี (KORAT-D)"
                onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"
                class="max-h-72 w-auto object-contain"/>
           <div style="display:none" class="flex-col items-center text-center text-emerald-700 p-6">
