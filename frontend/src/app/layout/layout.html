@@ -58,17 +58,26 @@
     </div>
 
     <!-- Desktop: Side sidebar (glassmorphism — frosted white) -->
-    <aside class="hidden lg:flex bg-white/65 backdrop-blur-xl text-green-900 flex-col shadow-xl shrink-0 transition-all duration-500 ease-in-out overflow-hidden border-r border-white/60"
-           [ngClass]="isSidebarOpen ? 'w-64' : 'w-0'">
-      <div class="h-16 flex items-center px-6 border-b border-green-200/60 bg-white/40">
-        <i class="fas fa-heartbeat text-2xl mr-3 refresh-icon cursor-pointer text-green-700" (click)="refreshDashboard()"></i>
-        <span class="text-lg font-bold tracking-wide text-green-900">Korat Health KPI</span>
+    <aside class="hidden lg:flex bg-white/65 backdrop-blur-xl text-green-900 flex-col shadow-xl shrink-0 transition-all duration-300 ease-in-out overflow-hidden border-r border-white/60"
+           [ngClass]="!isSidebarOpen ? 'w-0' : isSidebarCollapsed ? 'w-16' : 'w-64'">
+      <div class="h-16 flex items-center border-b border-green-200/60 bg-white/40 transition-all duration-300"
+           [ngClass]="isSidebarCollapsed ? 'justify-center px-0' : 'px-6'">
+        <i class="fas fa-heartbeat text-2xl refresh-icon cursor-pointer text-green-700 transition-all duration-300"
+           [ngClass]="isSidebarCollapsed ? '' : 'mr-3'"
+           [title]="isSidebarCollapsed ? 'Korat Health KPI' : ''"
+           (click)="refreshDashboard()"></i>
+        <span *ngIf="!isSidebarCollapsed" class="text-lg font-bold tracking-wide text-green-900">Korat Health KPI</span>
       </div>
 
-      <nav class="flex-1 px-4 py-4 space-y-1 overflow-y-auto text-sm">
-        <a routerLink="/dashboard" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-th-large text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate flex justify-between items-center w-full">
+      <nav class="flex-1 py-4 space-y-1 overflow-y-auto text-sm transition-all duration-300"
+           [ngClass]="isSidebarCollapsed ? 'px-2' : 'px-4'">
+        <!-- บันทึกผลงานตัวชี้วัด -->
+        <a routerLink="/dashboard" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+           [title]="isSidebarCollapsed ? 'บันทึกผลงานตัวชี้วัด' : ''"
+           class="relative flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
+           [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
+          <i class="fas fa-th-large text-lg min-w-[24px]" [ngClass]="isSidebarCollapsed ? 'text-center' : 'mr-3'"></i>
+          <span *ngIf="!isSidebarCollapsed" class="truncate flex justify-between items-center w-full">
             ผลงานตัวชี้วัด
             <span *ngIf="(isAdmin || isSuperAdmin) && pendingKpiCount > 0"
                   class="flex h-5 min-w-[20px] px-1 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ml-2 animate-pulse shadow-lg"
@@ -76,85 +85,144 @@
               {{ pendingKpiCount }}
             </span>
           </span>
+          <span *ngIf="isSidebarCollapsed && (isAdmin || isSuperAdmin) && pendingKpiCount > 0"
+                class="absolute top-0.5 right-0.5 flex h-4 min-w-[16px] px-0.5 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
+            {{ pendingKpiCount }}
+          </span>
         </a>
-        <a routerLink="/charts" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-chart-bar text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate">รายงานสถิติ</span>
+        <!-- รายงานสถิติ -->
+        <a routerLink="/charts" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+           [title]="isSidebarCollapsed ? 'รายงานสถิติ' : ''"
+           class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
+           [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
+          <i class="fas fa-chart-bar text-lg min-w-[24px]" [ngClass]="isSidebarCollapsed ? 'text-center' : 'mr-3'"></i>
+          <span *ngIf="!isSidebarCollapsed" class="truncate">รายงานสถิติ</span>
         </a>
-        <a routerLink="/sop" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-sitemap text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate">ผังกระบวนการ SOP</span>
+        <!-- ผังกระบวนการ SOP -->
+        <a routerLink="/sop" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+           [title]="isSidebarCollapsed ? 'ผังกระบวนการ SOP' : ''"
+           class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
+           [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
+          <i class="fas fa-sitemap text-lg min-w-[24px]" [ngClass]="isSidebarCollapsed ? 'text-center' : 'mr-3'"></i>
+          <span *ngIf="!isSidebarCollapsed" class="truncate">ผังกระบวนการ SOP</span>
         </a>
-        <a routerLink="/notifications" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-bell text-lg mr-3 min-w-[24px]" [class.bell-shake]="unreadNotifCount > 0"></i>
-          <span class="truncate flex justify-between items-center w-full">
+        <!-- แจ้งเตือน -->
+        <a routerLink="/notifications" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+           [title]="isSidebarCollapsed ? 'แจ้งเตือน' : ''"
+           class="relative flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
+           [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
+          <i class="fas fa-bell text-lg min-w-[24px]" [ngClass]="isSidebarCollapsed ? 'text-center' : 'mr-3'" [class.bell-shake]="unreadNotifCount > 0"></i>
+          <span *ngIf="!isSidebarCollapsed" class="truncate flex justify-between items-center w-full">
             แจ้งเตือน
             <span *ngIf="unreadNotifCount > 0" class="flex h-5 min-w-[20px] px-1 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white animate-pulse">{{ unreadNotifCount }}</span>
           </span>
+          <span *ngIf="isSidebarCollapsed && unreadNotifCount > 0"
+                class="absolute top-0.5 right-0.5 flex h-4 min-w-[16px] px-0.5 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
+            {{ unreadNotifCount }}
+          </span>
         </a>
-        <a *ngIf="isAnyAdmin" routerLink="/users" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-users-cog text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate flex justify-between items-center w-full">
+        <!-- จัดการผู้ใช้งาน -->
+        <a *ngIf="isAnyAdmin" routerLink="/users" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+           [title]="isSidebarCollapsed ? 'จัดการผู้ใช้งาน' : ''"
+           class="relative flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
+           [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
+          <i class="fas fa-users-cog text-lg min-w-[24px]" [ngClass]="isSidebarCollapsed ? 'text-center' : 'mr-3'"></i>
+          <span *ngIf="!isSidebarCollapsed" class="truncate flex justify-between items-center w-full">
             จัดการผู้ใช้งาน
             <span *ngIf="pendingUsersCount > 0" class="px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px] font-bold animate-pulse" title="ผู้ใช้ลงทะเบียนใหม่ รออนุมัติ">{{ pendingUsersCount }}</span>
           </span>
-        </a>
-        <a *ngIf="isAdmin" routerLink="/kpi-manage" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-tasks text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate flex justify-between items-center w-full">
-            จัดการตัวชี้วัด
+          <span *ngIf="isSidebarCollapsed && pendingUsersCount > 0"
+                class="absolute top-0.5 right-0.5 flex h-4 min-w-[16px] px-0.5 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
+            {{ pendingUsersCount }}
           </span>
         </a>
-        <a *ngIf="isSuperAdmin" routerLink="/audit-logs" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-history text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate flex justify-between items-center w-full">
-            ประวัติการใช้งาน
-          </span>
+        <!-- จัดการตัวชี้วัด -->
+        <a *ngIf="isAdmin" routerLink="/kpi-manage" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+           [title]="isSidebarCollapsed ? 'จัดการตัวชี้วัด' : ''"
+           class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
+           [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
+          <i class="fas fa-tasks text-lg min-w-[24px]" [ngClass]="isSidebarCollapsed ? 'text-center' : 'mr-3'"></i>
+          <span *ngIf="!isSidebarCollapsed" class="truncate">จัดการตัวชี้วัด</span>
         </a>
-        <a *ngIf="isSuperAdmin" routerLink="/online-users" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-satellite-dish text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate flex justify-between items-center w-full">
+        <!-- ประวัติการใช้งาน -->
+        <a *ngIf="isSuperAdmin" routerLink="/audit-logs" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+           [title]="isSidebarCollapsed ? 'ประวัติการใช้งาน' : ''"
+           class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
+           [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
+          <i class="fas fa-history text-lg min-w-[24px]" [ngClass]="isSidebarCollapsed ? 'text-center' : 'mr-3'"></i>
+          <span *ngIf="!isSidebarCollapsed" class="truncate">ประวัติการใช้งาน</span>
+        </a>
+        <!-- ผู้ใช้งานออนไลน์ -->
+        <a *ngIf="isSuperAdmin" routerLink="/online-users" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+           [title]="isSidebarCollapsed ? 'ผู้ใช้งานออนไลน์' : ''"
+           class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
+           [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
+          <i class="fas fa-satellite-dish text-lg min-w-[24px]" [ngClass]="isSidebarCollapsed ? 'text-center' : 'mr-3'"></i>
+          <span *ngIf="!isSidebarCollapsed" class="truncate flex justify-between items-center w-full">
             ผู้ใช้งานออนไลน์
             <span class="ml-2 w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
           </span>
         </a>
-        <a *ngIf="isSuperAdmin" routerLink="/kpi-setup" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-plus-circle text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate flex justify-between items-center w-full">
-            +KPI ปีงบประมาณใหม่
-          </span>
+        <!-- +KPI ปีงบประมาณใหม่ -->
+        <a *ngIf="isSuperAdmin" routerLink="/kpi-setup" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+           [title]="isSidebarCollapsed ? '+KPI ปีงบประมาณใหม่' : ''"
+           class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
+           [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
+          <i class="fas fa-plus-circle text-lg min-w-[24px]" [ngClass]="isSidebarCollapsed ? 'text-center' : 'mr-3'"></i>
+          <span *ngIf="!isSidebarCollapsed" class="truncate">+KPI ปีงบประมาณใหม่</span>
         </a>
-        <a *ngIf="isSuperAdmin" routerLink="/kpi-manager" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-layer-group text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate flex justify-between items-center w-full">
-            จัดการข้อมูล KPI
-          </span>
+        <!-- จัดการข้อมูล KPI -->
+        <a *ngIf="isSuperAdmin" routerLink="/kpi-manager" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+           [title]="isSidebarCollapsed ? 'จัดการข้อมูล KPI' : ''"
+           class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
+           [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
+          <i class="fas fa-layer-group text-lg min-w-[24px]" [ngClass]="isSidebarCollapsed ? 'text-center' : 'mr-3'"></i>
+          <span *ngIf="!isSidebarCollapsed" class="truncate">จัดการข้อมูล KPI</span>
         </a>
-        <a *ngIf="isSuperAdmin" routerLink="/announcements" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-bullhorn text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate flex justify-between items-center w-full">ประกาศระบบ</span>
+        <!-- ประกาศระบบ -->
+        <a *ngIf="isSuperAdmin" routerLink="/announcements" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+           [title]="isSidebarCollapsed ? 'ประกาศระบบ' : ''"
+           class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
+           [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
+          <i class="fas fa-bullhorn text-lg min-w-[24px]" [ngClass]="isSidebarCollapsed ? 'text-center' : 'mr-3'"></i>
+          <span *ngIf="!isSidebarCollapsed" class="truncate">ประกาศระบบ</span>
         </a>
-        <a *ngIf="isSuperAdmin" routerLink="/backup-manager" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-database text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate flex justify-between items-center w-full">สำรอง & กู้คืนข้อมูล</span>
+        <!-- สำรอง & กู้คืนข้อมูล -->
+        <a *ngIf="isSuperAdmin" routerLink="/backup-manager" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+           [title]="isSidebarCollapsed ? 'สำรอง & กู้คืนข้อมูล' : ''"
+           class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
+           [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
+          <i class="fas fa-database text-lg min-w-[24px]" [ngClass]="isSidebarCollapsed ? 'text-center' : 'mr-3'"></i>
+          <span *ngIf="!isSidebarCollapsed" class="truncate">สำรอง & กู้คืนข้อมูล</span>
         </a>
-        <a *ngIf="isSuperAdmin" routerLink="/kpi-audit-digest" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-bullhorn text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate flex justify-between items-center w-full">แจ้งเตือนการบันทึก KPI</span>
+        <!-- แจ้งเตือนการบันทึก KPI -->
+        <a *ngIf="isSuperAdmin" routerLink="/kpi-audit-digest" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+           [title]="isSidebarCollapsed ? 'แจ้งเตือนการบันทึก KPI' : ''"
+           class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
+           [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
+          <i class="fas fa-bell-slash text-lg min-w-[24px]" [ngClass]="isSidebarCollapsed ? 'text-center' : 'mr-3'"></i>
+          <span *ngIf="!isSidebarCollapsed" class="truncate">แจ้งเตือนการบันทึก KPI</span>
         </a>
-        <a *ngIf="isSuperAdmin" routerLink="/error-logs" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-bug text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate flex justify-between items-center w-full">Error Logs</span>
+        <!-- Error Logs -->
+        <a *ngIf="isSuperAdmin" routerLink="/error-logs" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+           [title]="isSidebarCollapsed ? 'Error Logs' : ''"
+           class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
+           [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
+          <i class="fas fa-bug text-lg min-w-[24px]" [ngClass]="isSidebarCollapsed ? 'text-center' : 'mr-3'"></i>
+          <span *ngIf="!isSidebarCollapsed" class="truncate">Error Logs</span>
         </a>
-        <a *ngIf="isSuperAdmin" routerLink="/settings" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-colors cursor-pointer">
-          <i class="fas fa-sliders-h text-lg mr-3 min-w-[24px]"></i>
-          <span class="truncate flex justify-between items-center w-full">
-            ตั้งค่าระบบ
-          </span>
+        <!-- ตั้งค่าระบบ -->
+        <a *ngIf="isSuperAdmin" routerLink="/settings" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+           [title]="isSidebarCollapsed ? 'ตั้งค่าระบบ' : ''"
+           class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
+           [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
+          <i class="fas fa-sliders-h text-lg min-w-[24px]" [ngClass]="isSidebarCollapsed ? 'text-center' : 'mr-3'"></i>
+          <span *ngIf="!isSidebarCollapsed" class="truncate">ตั้งค่าระบบ</span>
         </a>
       </nav>
 
-      <div class="p-4 border-t border-green-200/60 bg-white/40">
+      <!-- Footer -->
+      <div *ngIf="!isSidebarCollapsed" class="p-4 border-t border-green-200/60 bg-white/40">
         <div class="text-center text-xs text-green-700/70 font-mono">
           {{ systemVersion }}
         </div>
@@ -162,6 +230,12 @@
                 class="mt-2 w-full text-center text-[11px] text-emerald-700 hover:text-emerald-900 hover:bg-emerald-100/60 rounded-lg py-1.5 transition-colors cursor-pointer flex items-center justify-center gap-1.5">
           <i class="fas fa-headset text-emerald-600"></i>
           <span>ช่องทางติดต่อ</span>
+        </button>
+      </div>
+      <div *ngIf="isSidebarCollapsed" class="py-3 border-t border-green-200/60 bg-white/40 flex justify-center">
+        <button (click)="showContactModal = true" title="ช่องทางติดต่อ"
+                class="text-emerald-600 hover:text-emerald-800 p-1.5 rounded-lg hover:bg-emerald-100/60 transition-colors">
+          <i class="fas fa-headset text-base"></i>
         </button>
       </div>
     </aside>

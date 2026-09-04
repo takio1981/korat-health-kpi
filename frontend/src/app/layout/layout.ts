@@ -33,7 +33,9 @@ export class LayoutComponent implements OnInit, OnDestroy {
   openCommandPalette() { this.commandPalette?.show(); }
 
   isSidebarOpen: boolean = window.innerWidth >= 1024; // desktop เปิด, mobile ซ่อน
+  isSidebarCollapsed: boolean = false; // desktop icon-only mode
   private _prevSidebarOpen: boolean = true; // เก็บค่าเดิมก่อนเข้า focus mode
+  private _prevSidebarCollapsed: boolean = false;
   isFocusMode: boolean = false;
   isLoading: boolean = false;
   isAdmin: boolean = false;       // admin_ssj + super_admin (ส่วนกลาง)
@@ -108,9 +110,12 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.authService.focusMode$.subscribe(focus => {
       if (focus && !this.isFocusMode) {
         this._prevSidebarOpen = this.isSidebarOpen;
+        this._prevSidebarCollapsed = this.isSidebarCollapsed;
         this.isSidebarOpen = false;
+        this.isSidebarCollapsed = true;
       } else if (!focus && this.isFocusMode) {
         this.isSidebarOpen = this._prevSidebarOpen;
+        this.isSidebarCollapsed = this._prevSidebarCollapsed;
       }
       this.isFocusMode = focus;
       this.cdr.detectChanges();
@@ -317,7 +322,13 @@ export class LayoutComponent implements OnInit, OnDestroy {
   }
 
   toggleSidebar() {
-    this.isSidebarOpen = !this.isSidebarOpen;
+    if (window.innerWidth >= 1024) {
+      // Desktop: toggle icon-only mode (ไม่ซ่อนทั้งหมด)
+      this.isSidebarCollapsed = !this.isSidebarCollapsed;
+    } else {
+      // Mobile: toggle dropdown
+      this.isSidebarOpen = !this.isSidebarOpen;
+    }
   }
 
   refreshDashboard(): void {
