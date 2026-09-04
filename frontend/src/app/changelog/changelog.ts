@@ -18,6 +18,16 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.09.04',
+      date: '4 กันยายน 2569',
+      changes: [
+        { type: 'feature', text: 'เพิ่มหน้า "ผังกระบวนการทำงาน (SOP)" เมนู sidebar ทุก role — แสดงผังแบบ Swim Lane ครบ 12 ระบบหลัก' },
+        { type: 'feature', text: 'SOP: animation การไหลของข้อมูล (flowing dashes + moving dots) ตาม actor lane ด้วย SVG animateMotion' },
+        { type: 'feature', text: 'SOP: ระบบ Auth มี 3 sub-flow (Username/Password, ThaiD JWT, ProviderID OAuth), Charts มี 2 sub-flow (กราฟ, รายงาน)' },
+        { type: 'feature', text: 'SOP: Overview screen แสดงแผนที่ระบบทั้ง 12 พร้อมลูกศรแสดงความเชื่อมโยงระหว่างระบบ' },
+      ]
+    },
+    {
       version: '2569.06.24',
       date: '24 มิถุนายน 2569',
       changes: [
