@@ -1,6 +1,6 @@
 import { Component, inject, OnInit, OnDestroy, ChangeDetectorRef, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ReactiveFormsModule, FormGroup, FormControl, Validators } from '@angular/forms';
+import { ReactiveFormsModule, FormsModule, FormGroup, FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { ThemeService } from '../services/theme.service';
@@ -11,7 +11,7 @@ import { environment } from '../../environments/environment';
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, RouterModule],
+  imports: [CommonModule, ReactiveFormsModule, FormsModule, RouterModule],
   templateUrl: './login.html'
 })
 export class LoginComponent implements OnInit, OnDestroy {
@@ -37,6 +37,12 @@ export class LoginComponent implements OnInit, OnDestroy {
   private statusPollTimer: any = null;
 
   thaidAutoFilling: boolean = false;
+
+  // DEV mode ThaiD test
+  isDevMode: boolean = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  devCidInput: string = '';
+  devCidTesting: boolean = false;
+  devCidResult: { ok?: boolean; msg: string; hash?: string } | null = null;
 
   ngOnInit() {
     this.handleThaidTokenParam(); // รับ ?token= จาก DGA direct JWT redirect
@@ -159,6 +165,44 @@ export class LoginComponent implements OnInit, OnDestroy {
       return;
     }
     window.location.href = this.thaidLoginUrl;
+  }
+
+  /** DEV ONLY — ทดสอบ ThaiD login ด้วย CID 13 หลักโดยตรง */
+  devTestThaidLogin() {
+    const cid = this.devCidInput.replace(/\D/g, '');
+    if (cid.length !== 13) {
+      this.devCidResult = { ok: false, msg: 'CID ต้องเป็นตัวเลข 13 หลัก' };
+      return;
+    }
+    this.devCidTesting = true;
+    this.devCidResult = null;
+    this.cdr.detectChanges();
+
+    this.authService.devTestThaidCid(cid).subscribe({
+      next: (res: any) => {
+        this.devCidTesting = false;
+        if (res.success) {
+          this.authService.saveToken(res.token);
+          this.authService.saveUser(res.user);
+          this.authService.startTokenExpiryWatcher();
+          this.devCidResult = { ok: true, msg: `พบ user: ${res.user.username} (${res.user.firstname} ${res.user.lastname})` };
+          this.cdr.detectChanges();
+          setTimeout(() => this.router.navigate(['/dashboard']), 800);
+        } else {
+          this.devCidResult = {
+            ok: false,
+            msg: res.message || 'ไม่พบ user',
+            hash: res.cid_hash
+          };
+        }
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.devCidTesting = false;
+        this.devCidResult = { ok: false, msg: err.error?.message || 'เกิดข้อผิดพลาด' };
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   private checkMaintenance() {

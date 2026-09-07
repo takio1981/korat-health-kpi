@@ -369,6 +369,11 @@ export class AuthService {
     return this.http.post(`${this.apiUrl}/auth/thaid/verify-token`, { token });
   }
 
+  /** DEV ONLY — ทดสอบ ThaiD login ด้วย CID 13 หลักโดยตรง (ไม่ต้องมี JWT จาก DGA) */
+  devTestThaidCid(cid: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/auth/thaid/dev-test-cid`, { cid });
+  }
+
   setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
