@@ -73,8 +73,13 @@ export class SettingsComponent implements OnInit {
   // SSO toggles (ThaID + ProviderID)
   thaidEnabled: boolean = false;
   providerIdEnabled: boolean = false;
-  thaidLoginUrl: string = '';
   thaidClientSecret: string = '';
+  thaidLoginUrl: string = '';
+  // ThaiD system config (ปรับได้ใน UI — fallback to hardcoded ถ้าไม่กรอก)
+  thaidClientId: string = '';
+  thaidAuthUrl: string = '';
+  thaidRedirectUri: string = '';
+  thaidScope: string = '';
   showThaidSecret: boolean = false;
 
   // SSO OAuth config — ProviderID (MOPH) — configurable
@@ -211,6 +216,10 @@ export class SettingsComponent implements OnInit {
           const grab = (k: string) => (this.settings.find(s => s.setting_key === k)?.setting_value) || '';
           this.thaidClientSecret = grab('thaid_client_secret');
           this.thaidLoginUrl = grab('thaid_login_url');
+          this.thaidClientId = grab('thaid_client_id');
+          this.thaidAuthUrl = grab('thaid_auth_url');
+          this.thaidRedirectUri = grab('thaid_redirect_uri');
+          this.thaidScope = grab('thaid_scope');
           this.providerIdClientId = grab('providerid_client_id');
           this.providerIdClientSecret = grab('providerid_client_secret');
           this.providerIdAuthUrl = grab('providerid_auth_url');
@@ -269,6 +278,10 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'thaid_enabled', setting_value: this.thaidEnabled.toString() },
       { setting_key: 'thaid_client_secret', setting_value: this.thaidClientSecret },
       { setting_key: 'thaid_login_url', setting_value: this.thaidLoginUrl },
+      { setting_key: 'thaid_client_id', setting_value: this.thaidClientId },
+      { setting_key: 'thaid_auth_url', setting_value: this.thaidAuthUrl },
+      { setting_key: 'thaid_redirect_uri', setting_value: this.thaidRedirectUri },
+      { setting_key: 'thaid_scope', setting_value: this.thaidScope },
       { setting_key: 'providerid_enabled', setting_value: this.providerIdEnabled.toString() },
       // ProviderID OAuth config — configurable
       { setting_key: 'providerid_client_id', setting_value: this.providerIdClientId },

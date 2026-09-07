@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject, ChangeDetectorRef, NgZone, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, ChangeDetectorRef, NgZone, ViewChild, HostListener, ElementRef } from '@angular/core';
 import { Router, RouterModule, RouterOutlet, NavigationEnd, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { ThemeService } from '../services/theme.service';
@@ -23,6 +23,17 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
   private ngZone = inject(NgZone);
+  private el = inject(ElementRef);
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent) {
+    if (this.showProfileDropdown && !this.profileClosing) {
+      const container = this.el.nativeElement.querySelector('.profile-dropdown-container');
+      if (container && !container.contains(event.target as Node)) {
+        this.closeProfileDropdown();
+      }
+    }
+  }
   themeService = inject(ThemeService);
 
   @ViewChild(CommandPaletteComponent) commandPalette?: CommandPaletteComponent;

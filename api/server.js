@@ -1012,22 +1012,22 @@ async function upsertSsoProfile(provider, userId, profile) {
     }
 }
 
-/** ดึง ThaiD config — hardcode ทุกอย่างยกเว้น enabled + client_secret + register_url */
+/** ดึง ThaiD config — DB ก่อน fallback hardcode สำหรับ client_id / auth_url / redirect_uri / scope */
 async function getThaidSettings() {
     const [rows] = await db.query(
-        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('thaid_enabled','thaid_client_secret','thaid_register_url','thaid_login_url')"
+        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('thaid_enabled','thaid_client_secret','thaid_login_url','thaid_client_id','thaid_auth_url','thaid_redirect_uri','thaid_scope','thaid_token_url')"
     );
     const s = {};
     rows.forEach(r => s[r.setting_key] = r.setting_value);
-    // hardcoded values — ไม่ต้องตั้งค่าใน DB
-    s.thaid_auth_url    = THAID_AUTH_URL;
-    s.thaid_token_url   = THAID_TOKEN_URL;
-    s.thaid_client_id   = THAID_CLIENT_ID;
-    s.thaid_redirect_uri = THAID_REDIRECT_URI;
-    s.thaid_scope       = THAID_SCOPE;
-    // client_secret: env var ก่อน → fallback DB setting
+    // fallback to hardcoded defaults ถ้า DB ยังไม่ได้ตั้ง
+    s.thaid_client_id    = s.thaid_client_id    || THAID_CLIENT_ID;
+    s.thaid_auth_url     = s.thaid_auth_url     || THAID_AUTH_URL;
+    s.thaid_token_url    = s.thaid_token_url    || THAID_TOKEN_URL;
+    s.thaid_redirect_uri = s.thaid_redirect_uri || THAID_REDIRECT_URI;
+    s.thaid_scope        = s.thaid_scope        || THAID_SCOPE;
+    // client_secret: env var ก่อน → DB → ''
     s.thaid_client_secret = process.env.THAID_CLIENT_SECRET || s.thaid_client_secret || '';
-    s.thaid_login_url   = s.thaid_login_url || '';
+    s.thaid_login_url    = s.thaid_login_url    || '';
     return s;
 }
 
@@ -1214,10 +1214,19 @@ apiRouter.post('/auth/thaid/verify-token', async (req, res) => {
     const lastname_th  = payload.lastname_th  || '';
     const _extracted = { firstname_th, lastname_th, name_th: payload.name_th || '' };
 
-    // 3. Lookup user — ลอง hash ของเราก่อน จากนั้น hash_cid จาก DGA (กันความไม่ตรงกัน)
-    let [users] = await db.query('SELECT * FROM users WHERE cid = ? AND is_active = 1', [cidHashOurs]);
+    // 3. Lookup user — JOIN departments + chospital เพื่อได้ข้อมูล profile ครบ
+    const userQuery = `
+        SELECT u.*, d.dept_name, h.hosname,
+               dist.distname,
+               CONCAT(COALESCE(h.hosname,''), IF(dist.distname IS NOT NULL AND dist.distname != '', CONCAT(' อ.', dist.distname), '')) AS service_unit
+        FROM users u
+        LEFT JOIN departments d ON d.id = u.dept_id
+        LEFT JOIN chospital h ON h.hoscode = u.hospcode
+        LEFT JOIN co_district dist ON dist.distid = h.distid
+        WHERE u.cid = ? AND u.is_active = 1`;
+    let [users] = await db.query(userQuery, [cidHashOurs]);
     if (!users.length && cidHashFromDga) {
-        [users] = await db.query('SELECT * FROM users WHERE cid = ? AND is_active = 1', [cidHashFromDga]);
+        [users] = await db.query(userQuery, [cidHashFromDga]);
     }
 
     if (!users.length) {
@@ -1279,12 +1288,17 @@ apiRouter.post('/auth/thaid/verify-token', async (req, res) => {
     } catch (e) {}
 
     console.log(`[ThaiD/verify-token] ✓ login user=${user.username} ip=${ip}`);
+    const serviceUnitDisplay = user.service_unit?.trim() || user.hosname || '';
     res.json({
         success: true,
         token: appToken,
         user: { id: user.id, username: user.username, role: user.role,
                 dept_id: user.dept_id, hospcode: user.hospcode,
-                firstname: user.firstname, lastname: user.lastname }
+                firstname: user.firstname, lastname: user.lastname,
+                dept_name: user.dept_name || '',
+                service_unit: serviceUnitDisplay,
+                email: user.email || '',
+                phone: user.phone || '' }
     });
 });
 

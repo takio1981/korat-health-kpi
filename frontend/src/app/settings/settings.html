@@ -306,28 +306,46 @@
           <!-- ThaID config — แสดงเมื่อเปิด toggle -->
           <div *ngIf="thaidEnabled" class="mt-4 space-y-3">
 
-            <!-- ข้อมูลระบบ (read-only reference) -->
+            <!-- ThaiD System Config (แก้ไขได้ — fallback hardcode ถ้าปล่อยว่าง) -->
             <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-              <p class="text-sm font-bold text-emerald-800 mb-2.5">
-                <i class="fas fa-circle-info me-2"></i>ข้อมูลระบบที่กำหนดไว้แล้ว
-                <span class="text-[11px] font-normal text-emerald-600 ms-2">(ต้องตรงกับที่ลงทะเบียนใน DGA Developer Portal)</span>
+              <p class="text-sm font-bold text-emerald-800 mb-2.5 flex items-center gap-2">
+                <i class="fas fa-sliders-h"></i>ค่าตั้งต้น ThaiD (ปรับแก้ได้)
+                <span class="text-[11px] font-normal text-emerald-600">— ปล่อยว่างเพื่อใช้ค่าเริ่มต้นของระบบ</span>
               </p>
-              <div class="grid grid-cols-1 gap-1.5 text-[11px] font-mono">
-                <div class="flex gap-2 items-start">
-                  <span class="text-emerald-600 shrink-0 w-28">Client ID</span>
-                  <span class="text-gray-700 break-all">THV0dzZtYjVVOHc4WVJPQVRaVndmNVYwVG82VUdlYXM</span>
+              <div class="grid grid-cols-1 gap-2.5 text-[12px]">
+                <div>
+                  <label class="block text-emerald-700 font-bold mb-1">Client ID
+                    <span class="font-normal text-gray-400 ms-1">ค่าเริ่มต้น: THV0dzZtYjVVOHc4WVJPQVRaVndmNVYwVG82VUdlYXM</span>
+                  </label>
+                  <input type="text" [(ngModel)]="thaidClientId" name="thaidClientId"
+                    placeholder="THV0dzZtYjVVOHc4WVJPQVRaVndmNVYwVG82VUdlYXM"
+                    class="w-full px-3 py-1.5 border border-emerald-300 rounded-lg text-[11px] font-mono focus:ring-2 focus:ring-emerald-400 outline-none bg-white">
+                  <p class="text-[10px] text-gray-400 mt-0.5">ขอรับจาก DGA BORA Developer Portal → Applications → Client ID</p>
                 </div>
-                <div class="flex gap-2 items-start">
-                  <span class="text-emerald-600 shrink-0 w-28">Auth URL</span>
-                  <span class="text-gray-700 break-all">https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/</span>
+                <div>
+                  <label class="block text-emerald-700 font-bold mb-1">Auth URL
+                    <span class="font-normal text-gray-400 ms-1">ค่าเริ่มต้น: https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/</span>
+                  </label>
+                  <input type="url" [(ngModel)]="thaidAuthUrl" name="thaidAuthUrl"
+                    placeholder="https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/"
+                    class="w-full px-3 py-1.5 border border-emerald-300 rounded-lg text-[11px] font-mono focus:ring-2 focus:ring-emerald-400 outline-none bg-white">
                 </div>
-                <div class="flex gap-2 items-start">
-                  <span class="text-emerald-600 shrink-0 w-28">Callback URL</span>
-                  <span class="text-gray-700 break-all">https://apikorat.moph.go.th/authen/thaid/callback</span>
+                <div>
+                  <label class="block text-emerald-700 font-bold mb-1">Redirect URI (Callback URL)
+                    <span class="font-normal text-gray-400 ms-1">ค่าเริ่มต้น: https://apikorat.moph.go.th/authen/thaid/callback</span>
+                  </label>
+                  <input type="url" [(ngModel)]="thaidRedirectUri" name="thaidRedirectUri"
+                    placeholder="https://apikorat.moph.go.th/authen/thaid/callback"
+                    class="w-full px-3 py-1.5 border border-emerald-300 rounded-lg text-[11px] font-mono focus:ring-2 focus:ring-emerald-400 outline-none bg-white">
+                  <p class="text-[10px] text-gray-400 mt-0.5">URL ที่ต้องลงทะเบียนใน DGA Portal ให้ตรงกัน</p>
                 </div>
-                <div class="flex gap-2 items-start">
-                  <span class="text-emerald-600 shrink-0 w-28">Scope</span>
-                  <span class="text-gray-700">pid name birthdate openid</span>
+                <div>
+                  <label class="block text-emerald-700 font-bold mb-1">Scope
+                    <span class="font-normal text-gray-400 ms-1">ค่าเริ่มต้น: pid name birthdate openid</span>
+                  </label>
+                  <input type="text" [(ngModel)]="thaidScope" name="thaidScope"
+                    placeholder="pid name birthdate openid"
+                    class="w-full px-3 py-1.5 border border-emerald-300 rounded-lg text-[11px] font-mono focus:ring-2 focus:ring-emerald-400 outline-none bg-white">
                 </div>
               </div>
               <p class="text-[11px] text-emerald-700 mt-2.5">

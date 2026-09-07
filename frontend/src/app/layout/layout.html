@@ -293,7 +293,7 @@
             <i class="fas text-lg" [ngClass]="themeService.isDark ? 'fa-sun text-yellow-500' : 'fa-moon'"></i>
           </button>
           <!-- Profile Avatar + Dropdown -->
-          <div class="relative">
+          <div class="relative profile-dropdown-container">
             <button (click)="showProfileDropdown ? closeProfileDropdown() : (showProfileDropdown = true); showNotifDropdown = false" class="flex items-center gap-2 cursor-pointer">
               <div class="text-right mr-1 hidden sm:block">
                 <p class="text-sm font-bold text-green-900">{{ currentUser?.firstname }} {{ currentUser?.lastname }}</p>
@@ -303,8 +303,6 @@
                 {{ currentUser?.username?.charAt(0).toUpperCase() }}
               </div>
             </button>
-            <!-- Profile Dropdown Backdrop (click outside to close) -->
-            <div *ngIf="showProfileDropdown" class="fixed inset-0 z-40" (click)="closeProfileDropdown()"></div>
             <!-- Profile Dropdown -->
             <div *ngIf="showProfileDropdown" class="absolute right-0 top-12 w-72 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden"
                  [ngClass]="profileClosing ? 'profile-dropdown-drain' : 'profile-dropdown-enter'">
