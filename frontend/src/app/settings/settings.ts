@@ -72,12 +72,8 @@ export class SettingsComponent implements OnInit {
 
   // SSO toggles (ThaID + ProviderID)
   thaidEnabled: boolean = false;
-  thaidReturnPage: string = '/login';
   providerIdEnabled: boolean = false;
-  thaidRegisterUrl: string = '';
-  thaidLoginUrl: string = '';      // URL สำหรับปุ่ม ThaiD ใน login page (redirect_uri=/khupskpi/login)
-
-  // ThaiD client_secret (ใช้ verify JWT จาก DGA)
+  thaidLoginUrl: string = '';
   thaidClientSecret: string = '';
   showThaidSecret: boolean = false;
 
@@ -209,11 +205,7 @@ export class SettingsComponent implements OnInit {
           const thaidSetting = this.settings.find(s => s.setting_key === 'thaid_enabled');
           const providerSetting = this.settings.find(s => s.setting_key === 'providerid_enabled');
           if (thaidSetting) this.thaidEnabled = thaidSetting.setting_value === 'true';
-          const returnPageSetting = this.settings.find(s => s.setting_key === 'thaid_return_page');
-          if (returnPageSetting) this.thaidReturnPage = returnPageSetting.setting_value || '/login';
           if (providerSetting) this.providerIdEnabled = providerSetting.setting_value === 'true';
-          const thaidRegUrlSetting = this.settings.find(s => s.setting_key === 'thaid_register_url');
-          if (thaidRegUrlSetting) this.thaidRegisterUrl = thaidRegUrlSetting.setting_value || '';
 
           // SSO OAuth config — load
           const grab = (k: string) => (this.settings.find(s => s.setting_key === k)?.setting_value) || '';
@@ -275,11 +267,9 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'appeal_end_date', setting_value: this.appealEndDate },
       { setting_key: 'appeal_days_after_approve', setting_value: this.appealDaysAfterApprove.toString() },
       { setting_key: 'thaid_enabled', setting_value: this.thaidEnabled.toString() },
-      { setting_key: 'thaid_return_page', setting_value: this.thaidReturnPage || '/login' },
       { setting_key: 'thaid_client_secret', setting_value: this.thaidClientSecret },
       { setting_key: 'thaid_login_url', setting_value: this.thaidLoginUrl },
       { setting_key: 'providerid_enabled', setting_value: this.providerIdEnabled.toString() },
-      { setting_key: 'thaid_register_url', setting_value: this.thaidRegisterUrl },
       // ProviderID OAuth config — configurable
       { setting_key: 'providerid_client_id', setting_value: this.providerIdClientId },
       { setting_key: 'providerid_client_secret', setting_value: this.providerIdClientSecret },

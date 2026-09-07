@@ -303,95 +303,76 @@
             <p class="text-[11px] text-cyan-700 mt-2"><i class="fas fa-shield-alt me-1"></i>ระบบจะ match user ด้วย <b>เลขบัตรประชาชน (SHA-256 hash)</b> — ถ้าไม่พบในระบบ จะปฏิเสธและให้ลงทะเบียนก่อน</p>
           </div>
 
-          <!-- ThaID — พร้อมใช้งานทันทีเมื่อเปิด toggle -->
+          <!-- ThaID config — แสดงเมื่อเปิด toggle -->
           <div *ngIf="thaidEnabled" class="mt-4 space-y-3">
-            <!-- info panel -->
-            <div class="bg-blue-50/40 border border-blue-200 rounded-xl p-4">
-              <div class="flex items-start gap-3">
-                <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-                  <i class="fas fa-check-circle text-blue-500 text-lg"></i>
+
+            <!-- ข้อมูลระบบ (read-only reference) -->
+            <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+              <p class="text-sm font-bold text-emerald-800 mb-2.5">
+                <i class="fas fa-circle-info me-2"></i>ข้อมูลระบบที่กำหนดไว้แล้ว
+                <span class="text-[11px] font-normal text-emerald-600 ms-2">(ต้องตรงกับที่ลงทะเบียนใน DGA Developer Portal)</span>
+              </p>
+              <div class="grid grid-cols-1 gap-1.5 text-[11px] font-mono">
+                <div class="flex gap-2 items-start">
+                  <span class="text-emerald-600 shrink-0 w-28">Client ID</span>
+                  <span class="text-gray-700 break-all">THV0dzZtYjVVOHc4WVJPQVRaVndmNVYwVG82VUdlYXM</span>
                 </div>
-                <div class="text-sm">
-                  <p class="font-bold text-blue-800 mb-1">ระบบพร้อมใช้งาน ThaiD แล้ว</p>
-                  <p class="text-blue-700 text-xs leading-relaxed">
-                    ผู้ใช้งานสแกน QR Code จาก ThaID → ระบบตรวจสอบเลขบัตร → กรอก username + OTP ในหน้าที่กำหนด → เข้าสู่ระบบอัตโนมัติ
-                  </p>
-                  <p class="text-[11px] text-gray-500 mt-2">
-                    <i class="fas fa-info-circle me-1"></i>ต้องกรอกเลขบัตรประชาชน 13 หลักในหน้าจัดการผู้ใช้งานก่อน
-                  </p>
+                <div class="flex gap-2 items-start">
+                  <span class="text-emerald-600 shrink-0 w-28">Auth URL</span>
+                  <span class="text-gray-700 break-all">https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/</span>
+                </div>
+                <div class="flex gap-2 items-start">
+                  <span class="text-emerald-600 shrink-0 w-28">Callback URL</span>
+                  <span class="text-gray-700 break-all">https://apikorat.moph.go.th/authen/thaid/callback</span>
+                </div>
+                <div class="flex gap-2 items-start">
+                  <span class="text-emerald-600 shrink-0 w-28">Scope</span>
+                  <span class="text-gray-700">pid name birthdate openid</span>
                 </div>
               </div>
+              <p class="text-[11px] text-emerald-700 mt-2.5">
+                <i class="fas fa-user-check me-1"></i>ระบบจับคู่ผู้ใช้ด้วย <b>เลขบัตรประชาชน 13 หลัก (SHA-256 hash)</b> — ต้องกรอกเลขบัตรในหน้าจัดการผู้ใช้งานก่อน
+              </p>
             </div>
-            <!-- ThaiD Client Secret -->
+
+            <!-- Client Secret -->
             <div class="bg-white border border-gray-200 rounded-xl p-4">
-              <label class="block text-sm font-bold text-gray-700 mb-2 flex items-center justify-between">
+              <label class="block text-sm font-bold text-gray-700 mb-1.5 flex items-center justify-between">
                 <span><i class="fas fa-key me-2 text-blue-500"></i>Client Secret <span class="text-red-500">*</span></span>
-                <button type="button" (click)="showThaidSecret = !showThaidSecret" class="text-blue-600 hover:text-blue-800 font-normal text-[10px]">
+                <button type="button" (click)="showThaidSecret = !showThaidSecret" class="text-blue-600 hover:text-blue-800 font-normal text-[11px]">
                   <i class="fas" [ngClass]="showThaidSecret ? 'fa-eye-slash' : 'fa-eye'"></i> {{ showThaidSecret ? 'ซ่อน' : 'แสดง' }}
                 </button>
               </label>
               <input [type]="showThaidSecret ? 'text' : 'password'" [(ngModel)]="thaidClientSecret" name="thaidClientSecret"
-                     placeholder="กรอก Client Secret จาก DGA (จำเป็นสำหรับแลก token)"
+                     placeholder="กรอก Client Secret จาก DGA Developer Portal"
                      class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none text-sm font-mono">
-              <p class="text-[11px] text-gray-400 mt-1.5">
-                <i class="fas fa-shield-alt me-1 text-green-500"></i>ใช้ verify JWT จาก DGA — ขอรับจาก DGA Developer Portal (BORA)<br>
-                <i class="fas fa-exclamation-triangle me-1 text-amber-500"></i>ถ้าไม่กรอก ระบบจะ fallback เป็น decode โดยไม่ verify signature
-              </p>
+              <div class="mt-2 space-y-1 text-[11px] text-gray-500">
+                <p><i class="fas fa-location-arrow me-1 text-blue-400"></i>ขอรับได้จาก: <b class="text-gray-700">https://dga.or.th → BORA Developer Portal → แอปพลิเคชันของคุณ → Client Credentials</b></p>
+                <p><i class="fas fa-shield-alt me-1 text-green-500"></i>ใช้ตรวจสอบ (verify) ลายเซ็น JWT ที่ DGA ส่งกลับมา — ถ้าไม่กรอก ระบบจะข้าม signature verification</p>
+                <p class="text-gray-400">ตัวอย่าง: <code class="bg-gray-100 px-1 rounded">c2VjcmV0S2V5SGVyZUZyb21ER0ExMjM0NTY3</code></p>
+              </div>
             </div>
-            <!-- ThaiD Login URL -->
+
+            <!-- URL ปุ่ม ThaiD -->
             <div class="bg-white border border-gray-200 rounded-xl p-4">
-              <label class="block text-sm font-bold text-gray-700 mb-2">
-                <i class="fas fa-qrcode me-2 text-blue-500"></i>URL เปิดหน้า ThaiD Login (QR)
-                <span class="text-red-500">*</span>
+              <label class="block text-sm font-bold text-gray-700 mb-1.5">
+                <i class="fas fa-qrcode me-2 text-blue-500"></i>URL เปิดหน้าสแกน QR Code ThaiD (สำหรับปุ่ม Login)
               </label>
               <input type="url" [(ngModel)]="thaidLoginUrl" name="thaidLoginUrl"
-                     placeholder="https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/?..."
+                     placeholder="https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/?response_type=code&client_id=..."
                      class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 outline-none text-xs font-mono">
-              <p class="text-[11px] text-gray-400 mt-1.5">
-                <i class="fas fa-circle-info me-1 text-blue-400"></i>URL ที่ได้จาก DGA ThaiD Portal — เมื่อผู้ใช้คลิกปุ่ม ThaiD จะถูก redirect ไปที่ URL นี้<br>
-                <i class="fas fa-arrow-right me-1 text-gray-300"></i>DGA จะ redirect กลับมาที่ <code class="bg-gray-100 px-1 rounded text-[10px]">https://apikorat.moph.go.th/khupskpi/login?token=&lt;JWT&gt;</code>
-              </p>
-            </div>
-            <!-- return page config -->
-            <div class="bg-white border border-gray-200 rounded-xl p-4">
-              <label class="block text-sm font-bold text-gray-700 mb-2">
-                <i class="fas fa-route me-2 text-blue-500"></i>หน้าที่แสดงปุ่ม ThaiD และรับผลการยืนยัน
-              </label>
-              <div class="flex gap-2 mb-2">
-                <button type="button" (click)="thaidReturnPage='/login'"
-                  [ngClass]="thaidReturnPage==='/login' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'"
-                  class="px-4 py-2 rounded-lg border text-sm font-medium transition-colors">
-                  <i class="fas fa-sign-in-alt me-1"></i>หน้า Login
-                </button>
-                <button type="button" (click)="thaidReturnPage='/register'"
-                  [ngClass]="thaidReturnPage==='/register' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'"
-                  class="px-4 py-2 rounded-lg border text-sm font-medium transition-colors">
-                  <i class="fas fa-user-plus me-1"></i>หน้า Register
-                </button>
+              <div class="mt-2 space-y-1 text-[11px] text-gray-500">
+                <p><i class="fas fa-mouse-pointer me-1 text-blue-400"></i>เมื่อผู้ใช้กดปุ่ม "เข้าสู่ระบบด้วย ThaiD" → browser จะ redirect ไปที่ URL นี้</p>
+                <p><i class="fas fa-reply me-1 text-gray-400"></i>DGA จะ redirect กลับมาที่ <code class="bg-gray-100 px-1 rounded">https://apikorat.moph.go.th/authen/thaid/callback</code> ให้อัตโนมัติ</p>
+                <details class="mt-1.5">
+                  <summary class="cursor-pointer text-blue-500 hover:text-blue-700 font-medium">ดูตัวอย่าง URL เต็ม</summary>
+                  <code class="block mt-1.5 bg-gray-50 border border-gray-200 rounded p-2 text-[10px] break-all leading-relaxed text-gray-600">
+                    https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/?response_type=code&amp;client_id=THV0dzZtYjVVOHc4WVJPQVRaVndmNVYwVG82VUdlYXM&amp;redirect_uri=https%3A%2F%2Fapikorat.moph.go.th%2Fauthen%2Fthaid%2Fcallback&amp;scope=pid%20name%20birthdate%20openid
+                  </code>
+                </details>
               </div>
-              <div class="flex items-center gap-2">
-                <span class="text-xs text-gray-500">หรือกำหนดเอง:</span>
-                <input type="text" [(ngModel)]="thaidReturnPage" name="thaidReturnPage"
-                  placeholder="/login"
-                  class="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-400 outline-none font-mono">
-              </div>
-              <p class="text-[11px] text-gray-400 mt-1.5">
-                <i class="fas fa-lightbulb me-1"></i>หลังสแกน QR สำเร็จ ระบบจะ redirect ไปที่หน้านี้พร้อม username + OTP เพื่อเข้าสู่ระบบอัตโนมัติ
-              </p>
             </div>
-            <!-- ThaiD Register URL -->
-            <div class="bg-blue-50/40 border border-blue-200 rounded-xl p-4">
-              <label class="block text-sm font-bold text-gray-700 mb-2">
-                <i class="fas fa-link me-2 text-blue-500"></i>URL ThaiD OAuth สำหรับลงทะเบียน (Register)
-              </label>
-              <textarea [(ngModel)]="thaidRegisterUrl" name="thaidRegisterUrl" rows="3"
-                class="w-full px-3 py-2 border border-blue-300 rounded-lg text-xs font-mono focus:ring-2 focus:ring-blue-400 outline-none bg-white"
-                placeholder="https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/?..."></textarea>
-              <p class="text-[11px] text-gray-400 mt-1.5">
-                <i class="fas fa-info-circle me-1"></i>ค่า <code>state=</code> จะถูก override อัตโนมัติโดย backend (ไม่จำเป็นต้องระบุ)<br>
-                <i class="fas fa-shield-alt me-1 text-green-500"></i>redirect_uri ต้องตรงกับ <code>https://apikorat.moph.go.th/authen/thaid/callback</code>
-              </p>
-            </div>
+
           </div>
         </div>
 
