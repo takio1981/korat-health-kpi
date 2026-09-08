@@ -101,7 +101,14 @@ export class LoginComponent implements OnInit, OnDestroy {
             cancelButtonColor: '#6b7280'
           }).then(r => {
             if (r.isConfirmed && res.reg_token) {
-              this.router.navigate(['/register'], { queryParams: { thaid_reg: res.reg_token } });
+              this.router.navigate(['/register'], {
+                queryParams: {
+                  thaid_reg:    res.reg_token,
+                  thaid_fn:     encodeURIComponent(res.firstname_th || ''),
+                  thaid_ln:     encodeURIComponent(res.lastname_th || ''),
+                  sso_provider: ssoIntent
+                }
+              });
             }
           });
         } else {

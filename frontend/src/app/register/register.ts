@@ -58,10 +58,11 @@ export class RegisterComponent implements OnInit, OnDestroy {
   isThaIdEnabled: boolean = false;
   isProviderIdEnabled: boolean = false;
 
-  // === ThaiD register pre-fill ===
+  // === ThaiD / ProviderID register pre-fill ===
   thaidRegToken: string = '';
   thaidRegVerified: boolean = false;
   thaidRegLoading: boolean = false;
+  ssoProvider: 'thaid' | 'providerid' | '' = '';
 
   // === Registration method selection (modal เลือก 3 วิธี) ===
   // 'choose' = แสดง modal เลือกวิธี | 'manual' = แสดง form กรอกเอง
@@ -80,7 +81,28 @@ export class RegisterComponent implements OnInit, OnDestroy {
   }
 
   registerWithProviderID() {
-    this.showSsoUnavailable('ProviderID (กระทรวงสาธารณสุข)', 'fa-user-md', '#0284c7');
+    if (!this.isProviderIdEnabled) {
+      this.showSsoUnavailable('ProviderID (กระทรวงสาธารณสุข)', 'fa-user-md', '#0284c7');
+      return;
+    }
+    // ProviderID ใช้ Direct JWT Flow — ลงทะเบียนเริ่มต้นจากหน้า Login ไม่ใช่กดปุ่มนี้
+    Swal.fire({
+      icon: 'info',
+      title: 'ลงทะเบียนด้วย ProviderID',
+      html: `<div style="text-align:left;font-size:13px;line-height:1.8">
+        <p>การลงทะเบียนด้วย <b style="color:#0284c7">ProviderID (MOPH)</b> เริ่มจากหน้า <b>เข้าสู่ระบบ</b>:</p>
+        <ol style="margin-left:16px;margin-top:8px;color:#374151">
+          <li>คลิกปุ่ม <b>ProviderID</b> ในหน้า Login</li>
+          <li>ยืนยันตัวตนบน MOPH Portal</li>
+          <li>หากยังไม่มีบัญชี — ระบบจะนำท่านกลับหน้านี้พร้อมข้อมูลอัตโนมัติ</li>
+        </ol>
+      </div>`,
+      confirmButtonText: '<i class="fas fa-sign-in-alt mr-1"></i> ไปหน้า Login',
+      cancelButtonText: 'ปิด',
+      showCancelButton: true,
+      confirmButtonColor: '#0284c7',
+      cancelButtonColor: '#6b7280'
+    }).then(r => { if (r.isConfirmed) this.router.navigate(['/login']); });
   }
 
   private showSsoUnavailable(providerName: string, icon: string, color: string) {
@@ -145,50 +167,62 @@ export class RegisterComponent implements OnInit, OnDestroy {
     });
   }
 
-  /** อ่าน ThaiD register redirect params → pre-fill ฟอร์ม */
+  /** อ่าน ThaiD/ProviderID register redirect params → pre-fill ฟอร์ม */
   private handleThaidRegCallback() {
     const qp = this.route.snapshot.queryParams;
-    const ssoError = qp['sso_error'] || '';
-    const regToken = qp['thaid_reg'] || '';
-    const fn = qp['thaid_fn'] || '';
-    const ln = qp['thaid_ln'] || '';
+    const ssoError   = qp['sso_error']    || '';
+    const regToken   = qp['thaid_reg']    || '';
+    const fn         = qp['thaid_fn']     || '';
+    const ln         = qp['thaid_ln']     || '';
+    const ssoProvRaw = qp['sso_provider'] || 'thaid';
 
     // เคลียร์ query params ออกจาก URL ทันที
     this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
 
     if (ssoError) {
       setTimeout(() => {
-        Swal.fire({ icon: 'error', title: 'ThaiD ไม่สำเร็จ', text: decodeURIComponent(ssoError), confirmButtonColor: '#10b981' });
+        Swal.fire({ icon: 'error', title: 'SSO ไม่สำเร็จ', text: decodeURIComponent(ssoError), confirmButtonColor: '#10b981' });
       }, 50);
       return;
     }
 
     if (!regToken) return;
 
+    // บันทึก provider ที่ใช้ (thaid / providerid)
+    this.ssoProvider = ssoProvRaw as any;
+
     // เปิดฟอร์มทันที + pre-fill ชื่อจาก query params (ไม่รอ HTTP)
     const decodedFn = fn ? decodeURIComponent(fn) : '';
     const decodedLn = ln ? decodeURIComponent(ln) : '';
-    this.formData.firstname = decodedFn;
-    this.formData.lastname  = decodedLn;
-    this.thaidRegLoading    = true;
-    this.registerMode       = 'manual';
+    if (decodedFn) this.formData.firstname = decodedFn;
+    if (decodedLn) this.formData.lastname  = decodedLn;
+    this.thaidRegLoading = true;
+    this.registerMode    = 'manual';
     this.cdr.detectChanges();
 
-    // ยืนยัน token กับ backend (เพื่อ get cid_hash + ตรวจอายุ)
+    // ยืนยัน token กับ backend (get cid_hash + ชื่อ/email/phone verified + ตรวจอายุ)
     this.authService.getThaidRegData(regToken).subscribe({
       next: (res: any) => {
         this.thaidRegLoading = false;
         if (res.success) {
           this.thaidRegToken    = regToken;
           this.thaidRegVerified = true;
+          // override ด้วยข้อมูล verified จาก server (ป้องกัน query param ถูก tamper)
+          if (res.firstname_th) this.formData.firstname = res.firstname_th;
+          if (res.lastname_th)  this.formData.lastname  = res.lastname_th;
+          if (res.email)        this.formData.email      = res.email;
+          if (res.phone)        this.formData.phone      = res.phone;
+          // sync ssoProvider จาก server response (ถ้า backend รู้จริง)
+          if (res.provider) this.ssoProvider = res.provider;
           this.cdr.detectChanges();
+          const providerLabel = this.ssoProvider === 'providerid' ? 'ProviderID (MOPH)' : 'ThaID (DGA)';
           setTimeout(() => {
             Swal.fire({
               icon: 'success',
-              title: 'ยืนยันตัวตนด้วย ThaiD สำเร็จ',
+              title: `ยืนยันตัวตนด้วย ${providerLabel} สำเร็จ`,
               html: `<div style="font-size:14px">
-                <p>🪪 <b>${decodedFn} ${decodedLn}</b></p>
-                <p class="text-gray-500 text-xs mt-1">กรุณากรอกข้อมูลที่เหลือและตั้งรหัสผ่านเพื่อสร้างบัญชี</p>
+                <p>🪪 <b>${res.firstname_th || decodedFn} ${res.lastname_th || decodedLn}</b></p>
+                <p style="color:#6b7280;font-size:12px;margin-top:6px">กรุณากรอกข้อมูลที่เหลือและตั้งรหัสผ่านเพื่อสร้างบัญชี</p>
               </div>`,
               timer: 3000,
               showConfirmButton: false
@@ -201,7 +235,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
         this.registerMode    = 'choose';
         this.cdr.detectChanges();
         setTimeout(() => {
-          Swal.fire({ icon: 'warning', title: 'Token ThaiD หมดอายุ', text: 'กรุณาสแกน QR ใหม่อีกครั้ง', confirmButtonColor: '#10b981' });
+          Swal.fire({ icon: 'warning', title: 'Token SSO หมดอายุ', text: 'กรุณาลองเข้าสู่ระบบใหม่อีกครั้ง', confirmButtonColor: '#10b981' });
         }, 50);
       }
     });

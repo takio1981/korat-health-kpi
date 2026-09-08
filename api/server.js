@@ -1232,8 +1232,12 @@ apiRouter.post('/auth/thaid/verify-token', async (req, res) => {
     if (!users.length) {
         // ไม่พบ → สร้าง reg_token เพื่อ pre-fill register form (TTL 10 นาที)
         const regToken = crypto.randomBytes(16).toString('hex');
+        const emailFromJwt = String(rawDecoded?.email || '').trim();
+        const phoneFromJwt = String(rawDecoded?.phone_number || rawDecoded?.phone || '').trim();
         _thaidRegMap.set(regToken, {
             cid_hash: cidHashOurs, firstname_th, lastname_th,
+            email: emailFromJwt, phone: phoneFromJwt,
+            provider: detectedProvider,
             expires: Date.now() + 10 * 60 * 1000
         });
         saveSsoLog(detectedProvider, 'login', { outcome: 'no_user', cid_hash: cidHashOurs, ip, extracted_fields: _extracted });
@@ -1375,7 +1379,15 @@ apiRouter.get('/auth/thaid/reg-data', async (req, res) => {
         return res.status(404).json({ success: false, message: 'Token หมดอายุ กรุณาสแกน QR ThaiD ใหม่' });
     }
     // ไม่ลบ token ตอนนี้ — ลบเมื่อ submit register สำเร็จ
-    res.json({ success: true, cid_hash: entry.cid_hash, firstname_th: entry.firstname_th, lastname_th: entry.lastname_th });
+    res.json({
+        success: true,
+        cid_hash: entry.cid_hash,
+        firstname_th: entry.firstname_th || '',
+        lastname_th: entry.lastname_th || '',
+        email: entry.email || '',
+        phone: entry.phone || '',
+        provider: entry.provider || 'thaid'
+    });
 });
 
 // === ThaiD Callback Handler (shared function) ===
