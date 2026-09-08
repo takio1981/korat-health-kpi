@@ -330,6 +330,39 @@ export class SettingsComponent implements OnInit {
     this.appealDaysAfterApprove = 0;
   }
 
+  testProviderIdConfig() {
+    Swal.fire({ title: 'กำลังตรวจสอบ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    this.authService.apiGet('/admin/test-providerid-config').subscribe({
+      next: (res: any) => {
+        const d = res.data || {};
+        const checks = d.checks || {};
+        const tu = checks.token_url || {};
+        Swal.fire({
+          icon: d.checks?.config_complete ? 'success' : 'warning',
+          title: 'ผล: ProviderID Config',
+          html: `
+            <div class="text-left text-sm space-y-1">
+              <p><b>Client ID:</b> ${d.client_id}</p>
+              <p><b>Client Secret:</b> ${d.has_secret ? '✅ ตั้งค่าแล้ว' : '❌ ยังไม่ได้ตั้ง'}</p>
+              <p><b>Auth URL:</b> <code class="text-xs">${d.auth_url}</code></p>
+              <p><b>Token URL:</b> <code class="text-xs">${d.token_url}</code></p>
+              <p><b>UserInfo URL:</b> <code class="text-xs">${d.userinfo_url}</code></p>
+              <p><b>Redirect URI:</b> <code class="text-xs">${d.redirect_uri}</code></p>
+              <p><b>Scope:</b> ${d.scope}</p>
+              <hr class="my-2">
+              <p><b>Token URL reachable:</b> ${tu.reachable ? `✅ HTTP ${tu.status} — ${tu.note}` : `❌ ${tu.error || 'ไม่ตอบสนอง'}`}</p>
+              <p><b>Redirect URI format:</b> ${checks.redirect_uri_match ? '✅ ถูกต้อง' : '⚠️ ตรวจสอบ path'}</p>
+              <hr class="my-2">
+              <p class="font-bold text-base">${d.recommendation}</p>
+            </div>`,
+          confirmButtonColor: '#0891b2',
+          width: '600px'
+        });
+      },
+      error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถตรวจสอบได้', 'error')
+    });
+  }
+
   testTelegram() {
     if (!this.telegramBotToken || !this.telegramChatId) {
       Swal.fire('แจ้งเตือน', 'กรุณากรอก Bot Token และ Chat ID ก่อน', 'warning');
