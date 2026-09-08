@@ -230,19 +230,22 @@ async function sendLoginNotifications(user, ip, ua, provider) {
     try {
         const nowStr = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' });
         const uaShort = String(ua || '').slice(0, 80);
-        const providerLabel = provider === 'thaid' ? 'ThaID' : provider === 'providerid' ? 'ProviderID' : 'SSO';
+        const providerLabel = provider === 'thaid' ? 'ThaID'
+                           : provider === 'providerid' ? 'ProviderID'
+                           : provider === 'password' ? 'Username/Password'
+                           : 'SSO';
+        const notifType   = provider === 'password' ? 'login' : 'login_sso';
 
         // [1] Local DB — บันทึกใน notifications (ทุก user ทุก role)
         try {
+            const notifTitle = provider === 'password' ? 'เข้าสู่ระบบสำเร็จ' : `เข้าสู่ระบบผ่าน ${providerLabel}`;
             await db.query(
-                `INSERT INTO notifications (user_id, type, title, message) VALUES (?, 'login_sso', ?, ?)`,
-                [user.id,
-                 `เข้าสู่ระบบผ่าน ${providerLabel}`,
-                 `เวลา ${nowStr} | IP: ${ip}`]
+                `INSERT INTO notifications (user_id, type, title, message) VALUES (?, ?, ?, ?)`,
+                [user.id, notifType, notifTitle, `เวลา ${nowStr} | IP: ${ip}`]
             );
         } catch (e) { /* ไม่ block ถ้า notifications ยังไม่มีตาราง */ }
 
-        // [2] LINE group — admin_login category (super_admin / admin_ssj เท่านั้น)
+        // [2] LINE group + Telegram — admin_login category (super_admin / admin_ssj เท่านั้น)
         if (user.role === 'super_admin' || user.role === 'admin_ssj') {
             const roleEmoji = user.role === 'super_admin' ? '👑' : '🛡️';
             const adminMsg = `${roleEmoji} Admin login (${providerLabel})\n` +
@@ -258,8 +261,9 @@ async function sendLoginNotifications(user, ip, ua, provider) {
         }
 
         // [3] LINE personal — push ถึง user รายบุคคล (ถ้าผูก line_user_id)
+        const personalVia = provider === 'password' ? '' : `ผ่าน ${providerLabel} `;
         sendLineToUser(user.id,
-            `🔑 มีการเข้าสู่ระบบบัญชีของคุณผ่าน ${providerLabel}\n` +
+            `🔑 มีการเข้าสู่ระบบบัญชีของคุณ ${personalVia}\n` +
             `🕐 ${nowStr}\n🌐 IP: ${ip}\n📱 ${uaShort}\n\n` +
             `❗ ถ้าไม่ใช่คุณ — แจ้งผู้ดูแลระบบทันที`
         );
@@ -274,7 +278,7 @@ async function sendLoginNotifications(user, ip, ua, provider) {
                     </div>
                     <div style="padding:20px">
                         <p>เรียน คุณ${user.firstname || ''} ${user.lastname || ''},</p>
-                        <p style="color:#6b7280">บัญชีของคุณถูกเข้าสู่ระบบผ่าน ${providerLabel} เมื่อ:</p>
+                        <p style="color:#6b7280">บัญชีของคุณถูกเข้าสู่ระบบเมื่อ:</p>
                         <table style="width:100%;font-size:14px;border-collapse:collapse;margin-top:10px">
                             <tr><td style="padding:6px 0;color:#6b7280">เวลา</td><td style="font-weight:bold">${nowStr}</td></tr>
                             <tr><td style="padding:6px 0;color:#6b7280">IP Address</td><td style="font-weight:bold">${ip}</td></tr>
@@ -841,58 +845,7 @@ apiRouter.post('/login', loginIpLimiter, loginLimiter, async (req, res) => {
 
                 await saveLog(username, 'login_success', usedTempPassword ? 'เข้าสู่ระบบด้วยรหัสชั่วคราว' : 'เข้าสู่ระบบสำเร็จ', ip);
 
-                // แจ้ง LINE Group เมื่อ super_admin / admin_ssj login
-                if (user.role === 'super_admin' || user.role === 'admin_ssj') {
-                    const ua = req.headers['user-agent'] || '';
-                    const uaShort = ua.length > 80 ? ua.slice(0, 80) + '...' : ua;
-                    const nowStr = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' });
-                    const roleEmoji = user.role === 'super_admin' ? '👑' : '🛡️';
-                    notifyLineAction('admin_login',
-                        `${roleEmoji} Admin login\n` +
-                        `👤 ${user.firstname || ''} ${user.lastname || ''} (${username})\n` +
-                        `🔑 Role: ${user.role}\n` +
-                        `🌐 IP: ${ip}\n` +
-                        `🕐 ${nowStr}\n` +
-                        `📱 ${uaShort}`
-                    );
-                }
-
-                // ส่ง LINE แจ้งเตือนส่วนตัวให้ user ที่ login (ถ้าเค้าตั้งค่า LINE userId แล้ว)
-                {
-                    const nowStrLn = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' });
-                    const uaLn = (req.headers['user-agent'] || '').toString();
-                    const uaShortLn = uaLn.length > 80 ? uaLn.slice(0, 80) + '...' : uaLn;
-                    sendLineToUser(user.id,
-                        `🔑 มีการเข้าสู่ระบบบัญชีของคุณ\n` +
-                        `🕐 ${nowStrLn}\n` +
-                        `🌐 IP: ${ip}\n` +
-                        `📱 ${uaShortLn}\n\n` +
-                        `❗ ถ้าไม่ใช่คุณ — เปลี่ยนรหัสผ่านทันที`
-                    );
-                }
-
-                // ส่ง Email แจ้งเตือนการ Login (ถ้ามี email)
-                if (user.email) {
-                    const now = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' });
-                    sendMail(user.email,
-                        '🔑 แจ้งเตือนการเข้าสู่ระบบ — ระบบ KPI สสจ.นครราชสีมา',
-                        `<div style="font-family:Sarabun,sans-serif;max-width:500px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
-                            <div style="background:linear-gradient(135deg,#16a34a,#22c55e);padding:20px;text-align:center;color:white">
-                                <h2 style="margin:0;font-size:18px">🔑 แจ้งเตือนการเข้าสู่ระบบ</h2>
-                            </div>
-                            <div style="padding:20px">
-                                <p>เรียน คุณ${user.firstname} ${user.lastname},</p>
-                                <p style="color:#6b7280">บัญชีของคุณถูกเข้าสู่ระบบเมื่อ:</p>
-                                <table style="width:100%;font-size:14px;border-collapse:collapse;margin-top:10px">
-                                    <tr><td style="padding:6px 0;color:#6b7280">เวลา</td><td style="font-weight:bold">${now}</td></tr>
-                                    <tr><td style="padding:6px 0;color:#6b7280">IP Address</td><td style="font-weight:bold">${ip}</td></tr>
-                                    <tr><td style="padding:6px 0;color:#6b7280">Username</td><td style="font-weight:bold">${username}</td></tr>
-                                </table>
-                                <p style="color:#dc2626;font-size:13px;margin-top:15px">หากไม่ใช่คุณ กรุณาเปลี่ยนรหัสผ่านทันทีหรือติดต่อผู้ดูแลระบบ</p>
-                            </div>
-                        </div>`
-                    );
-                }
+                sendLoginNotifications(user, ip, req.headers['user-agent'] || '', 'password');
 
                 // สร้าง sessionId ใหม่ + บันทึกลง DB (overwrite session เดิมถ้า stale > 5 นาที)
                 const sessionId = crypto.randomBytes(24).toString('hex');
@@ -1204,13 +1157,15 @@ apiRouter.post('/auth/thaid/verify-token', async (req, res) => {
     const { token } = req.body;
     if (!token) return res.status(400).json({ success: false, message: 'ไม่มี token' });
 
-    // 0. Peek at JWT iss เพื่อตรวจว่า MOPH (ProviderID) หรือ DGA (ThaID)
+    // 0. ตรวจ provider — 2 วิธีรวมกัน: (a) JWT iss field (b) hint จาก frontend
+    const hintProvider = String(req.body.hint_provider || '').toLowerCase(); // 'providerid' | 'thaid' | ''
     let rawDecoded;
     try { rawDecoded = jwt.decode(token); } catch (_) { rawDecoded = null; }
     const rawIss = String(rawDecoded?.iss || '').toLowerCase();
-    const isMoph = rawIss.includes('moph') || rawIss.includes('health.moph') || rawIss.includes('moph.id');
+    const issIsMoph = rawIss.includes('moph') || rawIss.includes('health.moph') || rawIss.includes('moph.id');
+    const isMoph = issIsMoph || hintProvider === 'providerid';
     const detectedProvider = isMoph ? 'providerid' : 'thaid';
-    console.log(`[verify-token] iss="${rawDecoded?.iss}" fields=${Object.keys(rawDecoded||{}).join(',')} -> provider=${detectedProvider}`);
+    console.log(`[verify-token] iss="${rawDecoded?.iss}" hint="${hintProvider}" fields=${Object.keys(rawDecoded||{}).join(',')} -> provider=${detectedProvider}`);
 
     let s;
     if (detectedProvider === 'providerid') {

@@ -56,11 +56,15 @@ export class LoginComponent implements OnInit, OnDestroy {
     if (this.statusPollTimer) { clearInterval(this.statusPollTimer); this.statusPollTimer = null; }
   }
 
-  /** รับ JWT token จาก DGA ที่ redirect มาที่ /login?token=<JWT> (Direct JWT Flow ใหม่) */
+  /** รับ JWT token ที่ redirect มาที่ /login?token=<JWT> — รองรับทั้ง ThaID และ ProviderID */
   private handleThaidTokenParam(): void {
     const params = new URLSearchParams(window.location.search);
     const thaidToken = params.get('token');
     if (!thaidToken) return;
+
+    // อ่าน sso_intent ที่ frontend เก็บไว้ก่อน redirect (reliable กว่าตรวจ JWT iss)
+    const ssoIntent = sessionStorage.getItem('sso_intent') || 'thaid';
+    sessionStorage.removeItem('sso_intent');
 
     // ลบ ?token= ออกจาก URL bar ทันที (กัน token ถูก refresh/share)
     window.history.replaceState({}, '', window.location.pathname);
@@ -68,7 +72,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.thaidVerifying = true;
     this.cdr.detectChanges();
 
-    this.authService.verifyThaidToken(thaidToken).subscribe({
+    this.authService.verifyThaidToken(thaidToken, ssoIntent).subscribe({
       next: (res: any) => {
         this.thaidVerifying = false;
         if (res.success) {
@@ -162,11 +166,13 @@ export class LoginComponent implements OnInit, OnDestroy {
       Swal.fire('ยังไม่ได้ตั้งค่า', 'กรุณาติดต่อผู้ดูแลระบบเพื่อตั้งค่า ThaiD Login URL ในหน้า Settings', 'warning');
       return;
     }
+    sessionStorage.setItem('sso_intent', 'thaid');
     window.location.href = this.thaidLoginUrl;
   }
 
   /** กดปุ่ม ProviderID → redirect ไปที่ OAuth start endpoint */
   loginWithProviderID() {
+    sessionStorage.setItem('sso_intent', 'providerid');
     const apiUrl = environment.apiUrl || '/khupskpi/api';
     window.location.href = `${apiUrl}/auth/providerid/start`;
   }

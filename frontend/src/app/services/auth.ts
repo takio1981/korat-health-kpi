@@ -365,8 +365,8 @@ export class AuthService {
     return this.http.get(`${this.apiUrl}/auth/thaid/reg-data`, { params: { token } });
   }
 
-  verifyThaidToken(token: string): Observable<any> {
-    return this.http.post(`${this.apiUrl}/auth/thaid/verify-token`, { token });
+  verifyThaidToken(token: string, hintProvider: string = 'thaid'): Observable<any> {
+    return this.http.post(`${this.apiUrl}/auth/thaid/verify-token`, { token, hint_provider: hintProvider });
   }
 
 setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
