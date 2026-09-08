@@ -32,6 +32,8 @@ export class LoginComponent implements OnInit, OnDestroy {
   thaidLoginUrl: string = '';      // URL จาก DGA ThaiD Portal (admin ตั้งค่าใน Settings)
   thaidVerifying: boolean = false; // loading state ขณะ verify token จาก DGA
 
+  isProviderIdEnabled: boolean = false;
+
   ssoLoading: boolean = false;
 
   private statusPollTimer: any = null;
@@ -167,6 +169,12 @@ export class LoginComponent implements OnInit, OnDestroy {
     window.location.href = this.thaidLoginUrl;
   }
 
+  /** กดปุ่ม ProviderID → redirect ไปที่ OAuth start endpoint */
+  loginWithProviderID() {
+    const apiUrl = environment.apiUrl || '/khupskpi/api';
+    window.location.href = `${apiUrl}/auth/providerid/start`;
+  }
+
   /** DEV ONLY — ทดสอบ ThaiD login ด้วย CID 13 หลักโดยตรง */
   devTestThaidLogin() {
     const cid = this.devCidInput.replace(/\D/g, '');
@@ -211,11 +219,13 @@ export class LoginComponent implements OnInit, OnDestroy {
         const changed = this.maintenanceMode !== !!res.maintenance
           || this.maintenanceMessage !== (res.message || '')
           || this.isThaIdEnabled !== !!res.thaid_enabled
-          || this.thaidLoginUrl !== (res.thaid_login_url || '');
+          || this.thaidLoginUrl !== (res.thaid_login_url || '')
+          || this.isProviderIdEnabled !== !!res.providerid_enabled;
         this.maintenanceMode = !!res.maintenance;
         this.maintenanceMessage = res.message || '';
         this.isThaIdEnabled = !!res.thaid_enabled;
         this.thaidLoginUrl = res.thaid_login_url || '';
+        this.isProviderIdEnabled = !!res.providerid_enabled;
         if (changed) this.cdr.detectChanges();
       }
     });

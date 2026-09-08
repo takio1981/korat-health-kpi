@@ -222,6 +222,53 @@ async function sendLineToUser(userId, message) {
     }
 }
 
+/** ส่งการแจ้งเตือน login ทุกช่องทาง (LINE admin / LINE user / Email) — fire-and-forget */
+async function sendLoginNotifications(user, ip, ua, provider) {
+    try {
+        const nowStr = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' });
+        const uaShort = String(ua || '').slice(0, 80);
+        const providerLabel = provider === 'thaid' ? 'ThaID' : provider === 'providerid' ? 'ProviderID' : 'SSO';
+        // LINE admin notification (super_admin / admin_ssj เท่านั้น)
+        if (user.role === 'super_admin' || user.role === 'admin_ssj') {
+            const roleEmoji = user.role === 'super_admin' ? '👑' : '🛡️';
+            notifyLineAction('admin_login',
+                `${roleEmoji} Admin login (${providerLabel})\n` +
+                `👤 ${user.firstname || ''} ${user.lastname || ''} (${user.username})\n` +
+                `🔑 Role: ${user.role}\n🌐 IP: ${ip}\n🕐 ${nowStr}\n📱 ${uaShort}`
+            );
+        }
+        // LINE notification ส่วนตัวให้ user (ถ้าผูก LINE แล้ว)
+        sendLineToUser(user.id,
+            `🔑 มีการเข้าสู่ระบบบัญชีของคุณผ่าน ${providerLabel}\n` +
+            `🕐 ${nowStr}\n🌐 IP: ${ip}\n📱 ${uaShort}\n\n` +
+            `❗ ถ้าไม่ใช่คุณ — แจ้งผู้ดูแลระบบทันที`
+        );
+        // Email notification (ถ้ามี email)
+        if (user.email) {
+            sendMail(user.email,
+                `🔑 แจ้งเตือนการเข้าสู่ระบบ (${providerLabel}) — ระบบ KPI สสจ.นครราชสีมา`,
+                `<div style="font-family:Sarabun,sans-serif;max-width:500px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
+                    <div style="background:linear-gradient(135deg,#16a34a,#22c55e);padding:20px;text-align:center;color:white">
+                        <h2 style="margin:0;font-size:18px">🔑 แจ้งเตือนการเข้าสู่ระบบ (${providerLabel})</h2>
+                    </div>
+                    <div style="padding:20px">
+                        <p>เรียน คุณ${user.firstname || ''} ${user.lastname || ''},</p>
+                        <p style="color:#6b7280">บัญชีของคุณถูกเข้าสู่ระบบผ่าน ${providerLabel} เมื่อ:</p>
+                        <table style="width:100%;font-size:14px;border-collapse:collapse;margin-top:10px">
+                            <tr><td style="padding:6px 0;color:#6b7280">เวลา</td><td style="font-weight:bold">${nowStr}</td></tr>
+                            <tr><td style="padding:6px 0;color:#6b7280">IP Address</td><td style="font-weight:bold">${ip}</td></tr>
+                            <tr><td style="padding:6px 0;color:#6b7280">Username</td><td style="font-weight:bold">${user.username}</td></tr>
+                        </table>
+                        <p style="color:#dc2626;font-size:13px;margin-top:15px">หากไม่ใช่คุณ กรุณาติดต่อผู้ดูแลระบบทันที</p>
+                    </div>
+                </div>`
+            );
+        }
+    } catch (e) {
+        console.error('[sendLoginNotifications] error:', e.message);
+    }
+}
+
 // Helper: ดึง notification settings จาก DB (fallback ENV)
 const getNotifSettings = async () => {
     try {
@@ -1288,6 +1335,7 @@ apiRouter.post('/auth/thaid/verify-token', async (req, res) => {
     } catch (e) {}
 
     console.log(`[ThaiD/verify-token] ✓ login user=${user.username} ip=${ip}`);
+    sendLoginNotifications(user, ip, req.headers['user-agent'] || '', 'thaid');
     const serviceUnitDisplay = user.service_unit?.trim() || user.hosname || '';
     res.json({
         success: true,
@@ -1501,10 +1549,18 @@ async function handleThaidCallback(req, res) {
             return res.redirect(regUrl);
         }
 
-        // === Login flow — match user by CID hash ===
-        const SELECT_USER = `SELECT id, username, role, dept_id, hospcode, firstname, lastname,
-                    is_active, is_approved, active_session_id, last_seen_at, last_seen_ip
-             FROM users WHERE cid = ? LIMIT 1`;
+        // === Login flow — match user by CID hash (JOIN for full profile) ===
+        const SELECT_USER = `
+            SELECT u.id, u.username, u.role, u.dept_id, u.hospcode, u.firstname, u.lastname,
+                   u.is_active, u.is_approved, u.active_session_id, u.last_seen_at, u.last_seen_ip,
+                   u.email, u.phone,
+                   d.dept_name, h.hosname,
+                   TRIM(CONCAT(COALESCE(h.hosname,''), IF(dist.distname IS NOT NULL AND dist.distname != '', CONCAT(' อ.', dist.distname), ''))) AS service_unit
+            FROM users u
+            LEFT JOIN departments d ON d.id = u.dept_id
+            LEFT JOIN chospital h ON h.hoscode = u.hospcode
+            LEFT JOIN co_district dist ON dist.distid = h.distid
+            WHERE u.cid = ? LIMIT 1`;
 
         let [rows] = await db.query(SELECT_USER, [hashedCid]);
 
@@ -1561,6 +1617,7 @@ async function handleThaidCallback(req, res) {
         );
 
         await saveLog(user.username, 'login_success', `เข้าสู่ระบบผ่าน ThaiD SSO (${thaiFullName || cidStr})`, ip);
+        sendLoginNotifications(user, ip, req.headers['user-agent'] || '', 'thaid');
 
         // บันทึก SSO log + อัปเดต profile
         saveSsoLog('thaid', 'login', {
@@ -1581,7 +1638,11 @@ async function handleThaidCallback(req, res) {
         const userInfo = {
             id: user.id, username: user.username, role: user.role,
             dept_id: user.dept_id, hospcode: user.hospcode,
-            firstname: user.firstname, lastname: user.lastname
+            firstname: user.firstname, lastname: user.lastname,
+            dept_name: user.dept_name || '',
+            service_unit: user.service_unit || user.hosname || '',
+            email: user.email || '',
+            phone: user.phone || ''
         };
 
         // Redirect ไป /sso-callback (public route) — save token แล้วไป /dashboard ทันที
@@ -1603,6 +1664,235 @@ apiRouter.get('/auth/thaid/callback', handleThaidCallback);
 // - /authen/thaid/callback (ตรงกับที่ลงทะเบียน DGA: https://apikorat.moph.go.th/authen/thaid/callback)
 //   ต้องเพิ่ม nginx: location /authen/ { proxy_pass http://backend:8830; ... }
 app.get('/authen/thaid/callback', handleThaidCallback);
+
+// ============================================================
+// === ProviderID (MOPH) OAuth 2.0 Login Flow ================
+// ============================================================
+
+/** ดึง ProviderID config จาก DB */
+async function getProviderIdSettings() {
+    const [rows] = await db.query(
+        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'providerid_%'"
+    );
+    const s = {};
+    rows.forEach(r => s[r.setting_key] = r.setting_value);
+    return {
+        enabled:       s.providerid_enabled === 'true',
+        client_id:     s.providerid_client_id    || process.env.PROVIDERID_CLIENT_ID    || '',
+        client_secret: s.providerid_client_secret || process.env.PROVIDERID_CLIENT_SECRET || '',
+        auth_url:      s.providerid_auth_url      || '',
+        token_url:     s.providerid_token_url     || '',
+        userinfo_url:  s.providerid_userinfo_url  || '',
+        redirect_uri:  s.providerid_redirect_uri  || '',
+        scope:         s.providerid_scope         || 'openid profile',
+    };
+}
+
+/** CSRF state map สำหรับ ProviderID (TTL 10 นาที) */
+const _providerIdStateMap = new Map();
+setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of _providerIdStateMap) {
+        if (v.expires < now) _providerIdStateMap.delete(k);
+    }
+}, 60000);
+
+/** GET /auth/providerid/start — redirect ไปหน้า ProviderID Login */
+apiRouter.get('/auth/providerid/start', async (req, res) => {
+    try {
+        const s = await getProviderIdSettings();
+        const frontendBase = getFrontendBase(req);
+        if (!s.enabled)
+            return res.redirect(`${frontendBase}/sso-callback?sso_error=${encodeURIComponent('ProviderID ยังไม่ได้เปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ')}`);
+        if (!s.client_id || !s.auth_url || !s.redirect_uri)
+            return res.redirect(`${frontendBase}/sso-callback?sso_error=${encodeURIComponent('ProviderID ยังไม่ได้ตั้งค่า กรุณาตรวจสอบ Settings')}`);
+
+        const state = crypto.randomBytes(16).toString('hex');
+        _providerIdStateMap.set(state, { flow: req.query.flow || 'login', expires: Date.now() + 10 * 60 * 1000 });
+
+        const authUrl = `${s.auth_url}?response_type=code&client_id=${encodeURIComponent(s.client_id)}`
+            + `&redirect_uri=${encodeURIComponent(s.redirect_uri)}`
+            + `&scope=${encodeURIComponent(s.scope)}`
+            + `&state=${state}`;
+        console.log(`[ProviderID/start] redirect → ProviderID auth | redirect_uri=${s.redirect_uri}`);
+        res.redirect(authUrl);
+    } catch (e) {
+        console.error('[ProviderID/start] error:', e.message);
+        const frontendBase = getFrontendBase(req);
+        res.redirect(`${frontendBase}/sso-callback?sso_error=${encodeURIComponent('เกิดข้อผิดพลาดในการเชื่อมต่อ ProviderID')}`);
+    }
+});
+
+/** Handler หลักของ ProviderID OAuth callback */
+async function handleProviderIdCallback(req, res) {
+    const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim().slice(0, 64);
+    const frontendBase = getFrontendBase(req);
+    const { code, state, error, error_description } = req.query;
+    const stateStr = String(state || '');
+    const stateData = _providerIdStateMap.get(stateStr);
+
+    const redirectErr = (msg) => {
+        console.error('[ProviderID/callback] ❌ ERROR:', msg);
+        saveSsoLog('providerid', 'login', { outcome: 'error', ip, error_msg: msg });
+        return res.redirect(`${frontendBase}/sso-callback?sso_error=${encodeURIComponent(msg)}`);
+    };
+
+    if (error) return redirectErr(error_description ? String(error_description) : String(error));
+    if (!state || !stateData) return redirectErr('state ไม่ถูกต้อง กรุณาลอง login ใหม่');
+    if (stateData) _providerIdStateMap.delete(stateStr);
+    if (!code) return redirectErr('ไม่ได้รับ authorization code จาก ProviderID');
+
+    try {
+        const s = await getProviderIdSettings();
+        if (!s.enabled) return redirectErr('ProviderID ยังไม่ได้เปิดใช้งาน');
+
+        // 1. Exchange code → access_token
+        const tokenRes = await fetch(s.token_url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+            body: new URLSearchParams({
+                grant_type: 'authorization_code',
+                code: String(code),
+                redirect_uri: s.redirect_uri,
+                client_id: s.client_id,
+                client_secret: s.client_secret
+            }).toString()
+        });
+        if (!tokenRes.ok) {
+            const errBody = await tokenRes.text().catch(() => '');
+            console.error(`[ProviderID/callback] ❌ token exchange FAILED ${tokenRes.status}:`, errBody.substring(0, 300));
+            return redirectErr(`แลก token ไม่สำเร็จ (${tokenRes.status}) — ตรวจสอบ client_secret ในหน้า Settings`);
+        }
+        const tokenData = await tokenRes.json();
+        const accessToken = tokenData.access_token;
+        if (!accessToken) return redirectErr('ProviderID ไม่ได้ส่ง access_token กลับมา');
+        console.warn('[ProviderID/callback] ✓ token exchange OK');
+
+        // 2. Call userinfo endpoint — ดึงเลขบัตร 13 หลัก
+        let userProfile = null;
+        if (s.userinfo_url) {
+            const uiRes = await fetch(s.userinfo_url, {
+                headers: { 'Authorization': `Bearer ${accessToken}`, 'Accept': 'application/json' }
+            });
+            if (uiRes.ok) {
+                userProfile = await uiRes.json();
+                console.warn('[ProviderID/callback] userinfo keys:', Object.keys(userProfile || {}));
+            } else {
+                console.warn('[ProviderID/callback] userinfo failed', uiRes.status, '— ลอง decode access_token แทน');
+            }
+        }
+        // fallback: decode access_token ถ้าเป็น JWT
+        if (!userProfile) {
+            userProfile = jwt.decode(accessToken) || {};
+            console.warn('[ProviderID/callback] decoded access_token keys:', Object.keys(userProfile));
+        }
+
+        // 3. ดึงเลขบัตรประชาชน 13 หลัก
+        const cidStr = extractCidFromPayload(userProfile);
+        if (!cidStr) {
+            return redirectErr('ไม่พบเลขบัตรประชาชน 13 หลักจาก ProviderID (field ที่ตรวจ: cid, pid, citizen_id, national_id, sub)');
+        }
+        const hashedCid = crypto.createHash('sha256').update(cidStr).digest('hex');
+        const pidPartial = cidStr.slice(-4);
+        const fullName = userProfile.name_th || userProfile.name || `${userProfile.given_name || ''} ${userProfile.family_name || ''}`.trim();
+        console.warn(`[ProviderID/callback] CID extracted ****${pidPartial} | name: ${fullName || '-'}`);
+
+        // 4. Lookup user — JOIN departments + chospital
+        const SELECT_USER_PID = `
+            SELECT u.id, u.username, u.role, u.dept_id, u.hospcode, u.firstname, u.lastname,
+                   u.is_active, u.is_approved, u.active_session_id, u.last_seen_at, u.last_seen_ip,
+                   u.email, u.phone,
+                   d.dept_name, h.hosname,
+                   TRIM(CONCAT(COALESCE(h.hosname,''), IF(dist.distname IS NOT NULL AND dist.distname != '', CONCAT(' อ.', dist.distname), ''))) AS service_unit
+            FROM users u
+            LEFT JOIN departments d ON d.id = u.dept_id
+            LEFT JOIN chospital h ON h.hoscode = u.hospcode
+            LEFT JOIN co_district dist ON dist.distid = h.distid
+            WHERE u.cid = ? LIMIT 1`;
+        const [rows] = await db.query(SELECT_USER_PID, [hashedCid]);
+
+        if (rows.length === 0) {
+            saveSsoLog('providerid', 'login', { outcome: 'no_match', cid_hash: hashedCid, ip, error_msg: 'ไม่พบ user' });
+            return redirectErr(`ไม่พบบัญชีที่ผูกกับบัตรประชาชนนี้${fullName ? ` (${fullName})` : ''} — กรุณาให้ผู้ดูแลระบบบันทึกเลขบัตรในบัญชีผู้ใช้ก่อน`);
+        }
+
+        const user = rows[0];
+        if (!user.is_active) {
+            saveSsoLog('providerid', 'login', { outcome: 'blocked', user_id: user.id, ip, error_msg: 'บัญชีถูกปิด' });
+            return redirectErr('บัญชีถูกปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ');
+        }
+        if (!user.is_approved) {
+            saveSsoLog('providerid', 'login', { outcome: 'blocked', user_id: user.id, ip, error_msg: 'รออนุมัติ' });
+            return redirectErr('บัญชียังรอการอนุมัติจากผู้ดูแลระบบ');
+        }
+
+        // 5. Concurrent session check
+        if (user.active_session_id) {
+            const lastSeen = user.last_seen_at ? new Date(user.last_seen_at).getTime() : 0;
+            if (lastSeen > Date.now() - 5 * 60 * 1000) {
+                saveSsoLog('providerid', 'login', { outcome: 'blocked', user_id: user.id, ip, error_msg: `Concurrent session at ${user.last_seen_ip}` });
+                return redirectErr(`บัญชีนี้กำลังใช้งานอยู่ที่ IP ${user.last_seen_ip || '-'} — รอ 5 นาที หรือ logout เครื่องเก่าก่อน`);
+            }
+        }
+
+        // 6. Issue session + JWT
+        console.warn(`[ProviderID/callback] ✓ user found: ${user.username} (id=${user.id})`);
+        const sessionId = crypto.randomBytes(24).toString('hex');
+        await db.query(
+            'UPDATE users SET active_session_id = ?, session_started_at = NOW(), last_seen_at = NOW(), last_seen_ip = ? WHERE id = ?',
+            [sessionId, ip, user.id]
+        );
+        _sessionCache.delete(user.id);
+
+        const token = jwt.sign(
+            { userId: user.id, username: user.username, deptId: user.dept_id, role: user.role, hospcode: user.hospcode, sessionId },
+            SECRET_KEY, { expiresIn: '8h' }
+        );
+
+        // 7. Log + notifications
+        await saveLog(user.username, 'login_success', `เข้าสู่ระบบผ่าน ProviderID SSO (${fullName || cidStr})`, ip);
+        saveSsoLog('providerid', 'login', { outcome: 'success', cid_hash: hashedCid, user_id: user.id, username: user.username, ip });
+        try {
+            await db.query(
+                `INSERT INTO login_logs (user_id, username, ip, status, user_agent) VALUES (?, ?, ?, 'success_sso_providerid', ?)`,
+                [user.id, user.username, ip, req.headers['user-agent'] || '']
+            );
+        } catch (e) {}
+        upsertSsoProfile('providerid', user.id, {
+            cid_hash: hashedCid,
+            firstname_th: userProfile.given_name || userProfile.firstname_th || '',
+            lastname_th:  userProfile.family_name || userProfile.lastname_th  || '',
+            name_th:      fullName || '',
+            pid_partial:  pidPartial,
+            extra_fields: { sub: userProfile.sub, iss: userProfile.iss },
+            raw_payload:  userProfile
+        });
+        sendLoginNotifications(user, ip, req.headers['user-agent'] || '', 'providerid');
+
+        // 8. Redirect ไป sso-callback
+        const userInfo = {
+            id: user.id, username: user.username, role: user.role,
+            dept_id: user.dept_id, hospcode: user.hospcode,
+            firstname: user.firstname, lastname: user.lastname,
+            dept_name: user.dept_name || '',
+            service_unit: user.service_unit || user.hosname || '',
+            email: user.email || '',
+            phone: user.phone || ''
+        };
+        const ssoUserB64 = encodeURIComponent(Buffer.from(JSON.stringify(userInfo)).toString('base64'));
+        const finalUrl = `${frontendBase}/sso-callback?sso_token=${encodeURIComponent(token)}&sso_user=${ssoUserB64}&sso_provider=providerid`;
+        console.warn('[ProviderID] ✅ SUCCESS redirect →', finalUrl.substring(0, 80) + '...');
+        res.redirect(finalUrl);
+    } catch (e) {
+        console.error('[ProviderID/callback] ❌ EXCEPTION:', e.message, e.stack?.split('\n')[1]);
+        saveSsoLog('providerid', 'login', { outcome: 'error', ip, error_msg: e.message });
+        res.redirect(`${frontendBase}/sso-callback?sso_error=${encodeURIComponent('เกิดข้อผิดพลาดระหว่างเชื่อมต่อ ProviderID — ' + e.message)}`);
+    }
+}
+
+// Mount ProviderID callback บน 2 path
+apiRouter.get('/auth/providerid/callback', handleProviderIdCallback);
+app.get('/authen/providerid/callback', handleProviderIdCallback);
 
 // === Session status diagnostic (super_admin) — ตรวจว่า Single Session ทำงานหรือไม่ ===
 apiRouter.get('/admin/session-status', authenticateToken, async (req, res) => {
