@@ -222,28 +222,49 @@ async function sendLineToUser(userId, message) {
     }
 }
 
-/** ส่งการแจ้งเตือน login ทุกช่องทาง (LINE admin / LINE user / Email) — fire-and-forget */
+/**
+ * ส่งการแจ้งเตือน login ทุกช่องทาง — fire-and-forget (ไม่ await)
+ * 4 ช่องทาง: Local DB | LINE group (admin) | LINE personal (user) | Email | Telegram (admin)
+ */
 async function sendLoginNotifications(user, ip, ua, provider) {
     try {
         const nowStr = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' });
         const uaShort = String(ua || '').slice(0, 80);
-        const providerLabel = provider === 'thaid' ? 'ThaID' : provider === 'providerid' ? 'ProviderID' : 'SSO';
-        // LINE admin notification (super_admin / admin_ssj เท่านั้น)
+        const providerLabel = provider === 'thaid' ? 'ThaID' : provider === 'providerid' ? 'ProviderID (MOPH)' : 'SSO';
+
+        // [1] Local DB — บันทึกใน notifications (ทุก user ทุก role)
+        try {
+            await db.query(
+                `INSERT INTO notifications (user_id, type, title, message) VALUES (?, 'login_sso', ?, ?)`,
+                [user.id,
+                 `เข้าสู่ระบบผ่าน ${providerLabel}`,
+                 `เวลา ${nowStr} | IP: ${ip}`]
+            );
+        } catch (e) { /* ไม่ block ถ้า notifications ยังไม่มีตาราง */ }
+
+        // [2] LINE group — admin_login category (super_admin / admin_ssj เท่านั้น)
         if (user.role === 'super_admin' || user.role === 'admin_ssj') {
             const roleEmoji = user.role === 'super_admin' ? '👑' : '🛡️';
-            notifyLineAction('admin_login',
-                `${roleEmoji} Admin login (${providerLabel})\n` +
+            const adminMsg = `${roleEmoji} Admin login (${providerLabel})\n` +
                 `👤 ${user.firstname || ''} ${user.lastname || ''} (${user.username})\n` +
-                `🔑 Role: ${user.role}\n🌐 IP: ${ip}\n🕐 ${nowStr}\n📱 ${uaShort}`
-            );
+                `🔑 Role: ${user.role}\n🌐 IP: ${ip}\n🕐 ${nowStr}\n📱 ${uaShort}`;
+            notifyLineAction('admin_login', adminMsg);
+
+            // [5] Telegram — admin login (same message)
+            const ns = await getNotifSettings();
+            if (ns.tgToken && ns.tgChatId) {
+                sendTelegramDirect(ns.tgToken, ns.tgChatId, adminMsg);
+            }
         }
-        // LINE notification ส่วนตัวให้ user (ถ้าผูก LINE แล้ว)
+
+        // [3] LINE personal — push ถึง user รายบุคคล (ถ้าผูก line_user_id)
         sendLineToUser(user.id,
             `🔑 มีการเข้าสู่ระบบบัญชีของคุณผ่าน ${providerLabel}\n` +
             `🕐 ${nowStr}\n🌐 IP: ${ip}\n📱 ${uaShort}\n\n` +
             `❗ ถ้าไม่ใช่คุณ — แจ้งผู้ดูแลระบบทันที`
         );
-        // Email notification (ถ้ามี email)
+
+        // [4] Email — ถ้ามี email บันทึกในระบบ
         if (user.email) {
             sendMail(user.email,
                 `🔑 แจ้งเตือนการเข้าสู่ระบบ (${providerLabel}) — ระบบ KPI สสจ.นครราชสีมา`,
@@ -258,6 +279,7 @@ async function sendLoginNotifications(user, ip, ua, provider) {
                             <tr><td style="padding:6px 0;color:#6b7280">เวลา</td><td style="font-weight:bold">${nowStr}</td></tr>
                             <tr><td style="padding:6px 0;color:#6b7280">IP Address</td><td style="font-weight:bold">${ip}</td></tr>
                             <tr><td style="padding:6px 0;color:#6b7280">Username</td><td style="font-weight:bold">${user.username}</td></tr>
+                            <tr><td style="padding:6px 0;color:#6b7280">วิธีเข้าสู่ระบบ</td><td style="font-weight:bold">${providerLabel}</td></tr>
                         </table>
                         <p style="color:#dc2626;font-size:13px;margin-top:15px">หากไม่ใช่คุณ กรุณาติดต่อผู้ดูแลระบบทันที</p>
                     </div>
@@ -1890,9 +1912,13 @@ async function handleProviderIdCallback(req, res) {
     }
 }
 
-// Mount ProviderID callback บน 2 path
+// Mount ProviderID callback — 3 paths:
+// 1. /khupskpi/api/auth/providerid/callback (dev / API-prefixed)
+// 2. /authen/providerid/callback (legacy nginx alias)
+// 3. /authen/healthid/callback (redirect_uri จดทะเบียนกับ MOPH moph.id.th)
 apiRouter.get('/auth/providerid/callback', handleProviderIdCallback);
 app.get('/authen/providerid/callback', handleProviderIdCallback);
+app.get('/authen/healthid/callback', handleProviderIdCallback);
 
 // === Session status diagnostic (super_admin) — ตรวจว่า Single Session ทำงานหรือไม่ ===
 apiRouter.get('/admin/session-status', authenticateToken, async (req, res) => {

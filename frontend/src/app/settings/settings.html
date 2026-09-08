@@ -257,50 +257,73 @@
 
           <!-- ProviderID OAuth config -->
           <div *ngIf="providerIdEnabled" class="mt-4 bg-cyan-50/40 border border-cyan-200 rounded-xl p-4">
-            <h4 class="font-bold text-cyan-800 text-sm mb-3"><i class="fas fa-user-md me-2"></i>ProviderID OAuth Config (MOPH)</h4>
+            <h4 class="font-bold text-cyan-800 text-sm mb-1"><i class="fas fa-user-md me-2"></i>ProviderID OAuth Config (MOPH Health ID)</h4>
+            <p class="text-[11px] text-cyan-600 mb-3">ใช้ค่าจากระบบ MOPH Health ID (<code class="bg-cyan-100 px-1 rounded">moph.id.th</code>) — ขอ client credentials จาก MOPH ผ่านช่องทางราชการ</p>
+
+            <!-- ตัวอย่าง Auth URL จากระบบจริง -->
+            <div class="bg-cyan-100/60 border border-cyan-300 rounded-lg p-3 mb-3 text-[11px] text-cyan-800">
+              <p class="font-bold mb-1"><i class="fas fa-link me-1"></i>ตัวอย่าง Authorization URL จริง (MOPH):</p>
+              <code class="break-all text-[10px] bg-white/80 px-2 py-1 rounded block">https://moph.id.th/oauth/redirect?client_id=<span class="text-cyan-700">YOUR_CLIENT_ID</span>&amp;redirect_uri=https://apikorat.moph.go.th/authen/healthid/callback&amp;response_type=code&amp;state=khupskpi-login</code>
+            </div>
+
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
               <div>
-                <label class="block font-bold text-gray-700 mb-1">Client ID</label>
+                <label class="block font-bold text-gray-700 mb-1">Client ID <small class="font-normal text-gray-400">(จาก MOPH Portal)</small></label>
                 <input type="text" [(ngModel)]="providerIdClientId" name="providerIdClientId"
-                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none">
+                       placeholder="เช่น 0198c05c-2455-7938-9c89-5c08252f731c"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none font-mono text-[11px]">
               </div>
               <div>
                 <label class="block font-bold text-gray-700 mb-1 flex items-center justify-between">
-                  <span>Client Secret</span>
+                  <span>Client Secret <small class="font-normal text-gray-400">(จาก MOPH Portal)</small></span>
                   <button type="button" (click)="showProviderIdSecret = !showProviderIdSecret" class="text-cyan-600 hover:text-cyan-800 font-normal text-[10px]">
                     <i class="fas" [ngClass]="showProviderIdSecret ? 'fa-eye-slash' : 'fa-eye'"></i> {{ showProviderIdSecret ? 'ซ่อน' : 'แสดง' }}
                   </button>
                 </label>
                 <input [type]="showProviderIdSecret ? 'text' : 'password'" [(ngModel)]="providerIdClientSecret" name="providerIdClientSecret"
+                       placeholder="client_secret จาก MOPH"
                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none">
               </div>
               <div class="md:col-span-2">
-                <label class="block font-bold text-gray-700 mb-1">Authorization URL <small class="font-normal text-gray-400">(เช่น https://providerid.moph.go.th/oauth/authorize)</small></label>
-                <input type="url" [(ngModel)]="providerIdAuthUrl" name="providerIdAuthUrl" placeholder="https://..."
-                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none">
+                <label class="block font-bold text-gray-700 mb-1">Authorization URL <small class="font-normal text-gray-400">(endpoint ที่ redirect ผู้ใช้ไป login)</small></label>
+                <input type="url" [(ngModel)]="providerIdAuthUrl" name="providerIdAuthUrl"
+                       placeholder="https://moph.id.th/oauth/redirect"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none font-mono text-[11px]">
+                <p class="text-[10px] text-gray-400 mt-0.5">ค่า MOPH จริง: <code>https://moph.id.th/oauth/redirect</code></p>
               </div>
               <div>
-                <label class="block font-bold text-gray-700 mb-1">Token URL</label>
-                <input type="url" [(ngModel)]="providerIdTokenUrl" name="providerIdTokenUrl" placeholder="https://..."
-                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none">
+                <label class="block font-bold text-gray-700 mb-1">Token URL <small class="font-normal text-gray-400">(แลก code → access_token)</small></label>
+                <input type="url" [(ngModel)]="providerIdTokenUrl" name="providerIdTokenUrl"
+                       placeholder="https://moph.id.th/oauth/token"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none font-mono text-[11px]">
+                <p class="text-[10px] text-gray-400 mt-0.5">ค่า MOPH จริง: <code>https://moph.id.th/oauth/token</code></p>
               </div>
               <div>
-                <label class="block font-bold text-gray-700 mb-1">UserInfo URL</label>
-                <input type="url" [(ngModel)]="providerIdUserinfoUrl" name="providerIdUserinfoUrl" placeholder="https://..."
-                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none">
+                <label class="block font-bold text-gray-700 mb-1">UserInfo URL <small class="font-normal text-gray-400">(ดึงข้อมูล profile + CID)</small></label>
+                <input type="url" [(ngModel)]="providerIdUserinfoUrl" name="providerIdUserinfoUrl"
+                       placeholder="https://moph.id.th/api/v2/userinfo"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none font-mono text-[11px]">
+                <p class="text-[10px] text-gray-400 mt-0.5">ค่า MOPH จริง: <code>https://moph.id.th/api/v2/userinfo</code></p>
               </div>
               <div>
-                <label class="block font-bold text-gray-700 mb-1">Redirect URI <small class="font-normal text-gray-400">(URL ของระบบเรา)</small></label>
-                <input type="url" [(ngModel)]="providerIdRedirectUri" name="providerIdRedirectUri" placeholder="https://yourdomain/khupskpi/api/auth/providerid/callback"
-                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none">
+                <label class="block font-bold text-gray-700 mb-1">Redirect URI <small class="font-normal text-gray-400">(จดทะเบียนกับ MOPH ตรงนี้)</small></label>
+                <input type="url" [(ngModel)]="providerIdRedirectUri" name="providerIdRedirectUri"
+                       placeholder="https://apikorat.moph.go.th/authen/healthid/callback"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none font-mono text-[11px]">
+                <p class="text-[10px] text-orange-500 mt-0.5"><i class="fas fa-exclamation-circle me-1"></i>ต้องตรงกับที่จดทะเบียนกับ MOPH <b>ทุกตัวอักษร</b></p>
               </div>
               <div>
                 <label class="block font-bold text-gray-700 mb-1">Scope</label>
-                <input type="text" [(ngModel)]="providerIdScope" name="providerIdScope" placeholder="openid profile"
-                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none">
+                <input type="text" [(ngModel)]="providerIdScope" name="providerIdScope"
+                       placeholder="openid profile"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none font-mono text-[11px]">
+                <p class="text-[10px] text-gray-400 mt-0.5">ค่าปกติ: <code>openid profile</code></p>
               </div>
             </div>
-            <p class="text-[11px] text-cyan-700 mt-2"><i class="fas fa-shield-alt me-1"></i>ระบบจะ match user ด้วย <b>เลขบัตรประชาชน (SHA-256 hash)</b> — ถ้าไม่พบในระบบ จะปฏิเสธและให้ลงทะเบียนก่อน</p>
+            <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
+              <p class="text-cyan-700"><i class="fas fa-shield-alt me-1"></i>ระบบ match user ด้วย <b>เลขบัตรประชาชน (SHA-256 hash)</b> — ไม่เก็บเลขบัตรตรงๆ</p>
+              <p class="text-cyan-700"><i class="fas fa-route me-1"></i>Callback รับได้ 3 path: <code>/authen/healthid/callback</code>, <code>/authen/providerid/callback</code>, <code>/khupskpi/api/auth/providerid/callback</code></p>
+            </div>
           </div>
 
           <!-- ThaID config — แสดงเมื่อเปิด toggle -->
