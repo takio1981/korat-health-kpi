@@ -75,9 +75,10 @@ export class LoginComponent implements OnInit, OnDestroy {
           this.authService.saveToken(res.token);
           this.authService.saveUser(res.user);
           this.authService.startTokenExpiryWatcher();
+          const providerLabel = res.provider === 'providerid' ? 'ProviderID' : 'ThaID';
           Swal.fire({
             icon: 'success',
-            title: 'เข้าสู่ระบบสำเร็จ (ThaID)',
+            title: `เข้าสู่ระบบสำเร็จ (${providerLabel})`,
             text: `ยินดีต้อนรับ ${res.user.firstname || ''} ${res.user.lastname || ''}`,
             timer: 1500, showConfirmButton: false
           }).then(() => this.router.navigate(['/dashboard']));
@@ -104,8 +105,8 @@ export class LoginComponent implements OnInit, OnDestroy {
       },
       error: (err: any) => {
         this.thaidVerifying = false;
-        const msg = err.error?.message || 'ไม่สามารถยืนยัน ThaiD token ได้';
-        Swal.fire({ icon: 'error', title: 'ThaiD Login ไม่สำเร็จ', text: msg });
+        const msg = err.error?.message || 'ไม่สามารถยืนยัน SSO token ได้';
+        Swal.fire({ icon: 'error', title: 'เข้าสู่ระบบไม่สำเร็จ', text: msg });
         this.cdr.detectChanges();
       }
     });

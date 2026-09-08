@@ -1198,29 +1198,54 @@ apiRouter.post('/auth/thaid/debug-token', authenticateToken, isSuperAdmin, async
 
 
 // GET /auth/thaid/start — redirect ไป DGA (public, ไม่ต้อง auth)
-// === ThaiD Direct JWT Login — รับ token จาก DGA redirect (/login?token=<JWT>) ===
+// === Direct JWT Login — รับ token จาก redirect (/login?token=<JWT>) — รองรับทั้ง ThaID (DGA) และ ProviderID (MOPH) ===
 apiRouter.post('/auth/thaid/verify-token', async (req, res) => {
     const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim().slice(0, 64);
     const { token } = req.body;
     if (!token) return res.status(400).json({ success: false, message: 'ไม่มี token' });
 
-    let s;
-    try { s = await getThaidSettings(); } catch (e) {
-        return res.status(500).json({ success: false, message: 'ไม่สามารถโหลด ThaiD settings ได้' });
-    }
-    if (s.thaid_enabled !== 'true')
-        return res.status(403).json({ success: false, message: 'ThaiD ยังไม่ได้เปิดใช้งาน' });
+    // 0. Peek at JWT iss เพื่อตรวจว่า MOPH (ProviderID) หรือ DGA (ThaID)
+    let rawDecoded;
+    try { rawDecoded = jwt.decode(token); } catch (_) { rawDecoded = null; }
+    const rawIss = String(rawDecoded?.iss || '').toLowerCase();
+    const isMoph = rawIss.includes('moph') || rawIss.includes('health.moph') || rawIss.includes('moph.id');
+    const detectedProvider = isMoph ? 'providerid' : 'thaid';
+    console.log(`[verify-token] iss="${rawDecoded?.iss}" fields=${Object.keys(rawDecoded||{}).join(',')} -> provider=${detectedProvider}`);
 
-    // 1. Verify JWT (HS256 ด้วย client_secret)
+    let s;
+    if (detectedProvider === 'providerid') {
+        try {
+            const ps = await getProviderIdSettings();
+            if (!ps.enabled) return res.status(403).json({ success: false, message: 'ProviderID ยังไม่ได้เปิดใช้งาน' });
+        } catch (e) {
+            return res.status(500).json({ success: false, message: 'ไม่สามารถโหลด ProviderID settings ได้' });
+        }
+    } else {
+        try { s = await getThaidSettings(); } catch (e) {
+            return res.status(500).json({ success: false, message: 'ไม่สามารถโหลด ThaiD settings ได้' });
+        }
+        if (s.thaid_enabled !== 'true')
+            return res.status(403).json({ success: false, message: 'ThaiD ยังไม่ได้เปิดใช้งาน' });
+    }
+
+    // 1. Verify/Decode JWT
     let payload;
-    try {
-        payload = jwt.verify(token, s.thaid_client_secret, { algorithms: ['HS256'] });
-    } catch (e) {
-        console.warn('[ThaiD/verify-token] verify failed, fallback decode:', e.message);
-        payload = jwt.decode(token);
+    if (detectedProvider === 'thaid') {
+        try {
+            payload = jwt.verify(token, s.thaid_client_secret, { algorithms: ['HS256'] });
+        } catch (e) {
+            console.warn('[verify-token] ThaiD verify failed, fallback decode:', e.message);
+            payload = jwt.decode(token);
+            if (!payload) return res.status(400).json({ success: false, message: 'JWT ไม่ถูกต้อง ไม่สามารถอ่านได้' });
+            if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp)
+                return res.status(401).json({ success: false, message: 'ThaiD token หมดอายุ กรุณาสแกน QR ใหม่' });
+        }
+    } else {
+        // ProviderID (MOPH): decode only + exp check
+        payload = rawDecoded;
         if (!payload) return res.status(400).json({ success: false, message: 'JWT ไม่ถูกต้อง ไม่สามารถอ่านได้' });
         if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp)
-            return res.status(401).json({ success: false, message: 'ThaiD token หมดอายุ กรุณาสแกน QR ใหม่' });
+            return res.status(401).json({ success: false, message: 'ProviderID token หมดอายุ กรุณาเข้าสู่ระบบใหม่' });
     }
 
     // 2. Extract cid (13 หลัก) — ใช้ extractCidFromPayload เดิม
@@ -1256,7 +1281,7 @@ apiRouter.post('/auth/thaid/verify-token', async (req, res) => {
             cid_hash: cidHashOurs, firstname_th, lastname_th,
             expires: Date.now() + 10 * 60 * 1000
         });
-        saveSsoLog('thaid', 'login', { outcome: 'no_user', cid_hash: cidHashOurs, ip, extracted_fields: _extracted });
+        saveSsoLog(detectedProvider, 'login', { outcome: 'no_user', cid_hash: cidHashOurs, ip, extracted_fields: _extracted });
         return res.json({
             success: false, not_found: true,
             firstname_th, lastname_th,
@@ -1269,7 +1294,7 @@ apiRouter.post('/auth/thaid/verify-token', async (req, res) => {
 
     // 4. ตรวจสอบ approved
     if (!user.is_approved) {
-        saveSsoLog('thaid', 'login', { outcome: 'not_approved', user_id: user.id, username: user.username, ip });
+        saveSsoLog(detectedProvider, 'login', { outcome: 'not_approved', user_id: user.id, username: user.username, ip });
         return res.status(403).json({ success: false, message: 'บัญชีนี้ยังไม่ได้รับการอนุมัติจากผู้ดูแลระบบ' });
     }
 
@@ -1277,7 +1302,7 @@ apiRouter.post('/auth/thaid/verify-token', async (req, res) => {
     if (user.active_session_id && user.last_seen_at) {
         const lastSeen = new Date(user.last_seen_at).getTime();
         if (Date.now() - lastSeen < 5 * 60 * 1000 && user.last_seen_ip !== ip) {
-            saveSsoLog('thaid', 'login', { outcome: 'concurrent', user_id: user.id, username: user.username, ip });
+            saveSsoLog(detectedProvider, 'login', { outcome: 'concurrent', user_id: user.id, username: user.username, ip });
             return res.status(409).json({
                 success: false, code: 'CONCURRENT_LOGIN',
                 message: `มีการเข้าสู่ระบบจาก IP ${user.last_seen_ip} อยู่แล้ว กรุณาออกจากระบบก่อน`
@@ -1297,21 +1322,23 @@ apiRouter.post('/auth/thaid/verify-token', async (req, res) => {
     );
 
     // 7. Audit logs
-    saveSsoLog('thaid', 'login', { outcome: 'success_thaid', cid_hash: cidHashOurs,
-                                   user_id: user.id, username: user.username,
-                                   ip, extracted_fields: _extracted });
+    const outcomeKey = detectedProvider === 'providerid' ? 'success_providerid' : 'success_thaid';
+    saveSsoLog(detectedProvider, 'login', { outcome: outcomeKey, cid_hash: cidHashOurs,
+                                            user_id: user.id, username: user.username,
+                                            ip, extracted_fields: _extracted });
     try {
         await db.query(
-            `INSERT INTO login_logs (user_id, username, ip, status, user_agent) VALUES (?, ?, ?, 'success_sso_thaid', ?)`,
-            [user.id, user.username, ip, req.headers['user-agent'] || '']
+            `INSERT INTO login_logs (user_id, username, ip, status, user_agent) VALUES (?, ?, ?, ?, ?)`,
+            [user.id, user.username, ip, `success_sso_${detectedProvider}`, req.headers['user-agent'] || '']
         );
     } catch (e) {}
 
-    console.log(`[ThaiD/verify-token] ✓ login user=${user.username} ip=${ip}`);
-    sendLoginNotifications(user, ip, req.headers['user-agent'] || '', 'thaid');
+    console.log(`[verify-token/${detectedProvider}] ✓ login user=${user.username} ip=${ip}`);
+    sendLoginNotifications(user, ip, req.headers['user-agent'] || '', detectedProvider);
     const serviceUnitDisplay = user.service_unit?.trim() || user.hosname || '';
     res.json({
         success: true,
+        provider: detectedProvider,
         token: appToken,
         user: { id: user.id, username: user.username, role: user.role,
                 dept_id: user.dept_id, hospcode: user.hospcode,
