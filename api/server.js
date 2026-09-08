@@ -1210,9 +1210,10 @@ apiRouter.post('/auth/thaid/verify-token', async (req, res) => {
     const cidHashOurs = crypto.createHash('sha256').update(cidStr).digest('hex');
     const cidHashFromDga = payload.hash_cid || null;
 
-    const firstname_th = payload.firstname_th || '';
-    const lastname_th  = payload.lastname_th  || '';
-    const _extracted = { firstname_th, lastname_th, name_th: payload.name_th || '' };
+    const firstname_th = payload.firstname_th || payload.th_given_name || payload.given_name || '';
+    const lastname_th  = payload.lastname_th  || payload.th_family_name || payload.family_name || '';
+    const _extracted = { firstname_th, lastname_th, name_th: payload.name_th || payload.name || '' };
+    console.log(`[verify-token] name fields: firstname_th="${firstname_th}" lastname_th="${lastname_th}" keys=${Object.keys(payload||{}).join(',')}`)
 
     // 3. Lookup user — JOIN departments + chospital เพื่อได้ข้อมูล profile ครบ
     const userQuery = `
