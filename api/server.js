@@ -1196,55 +1196,6 @@ apiRouter.post('/auth/thaid/debug-token', authenticateToken, isSuperAdmin, async
     }
 });
 
-// POST /auth/thaid/dev-test-cid — ทดสอบ CID lookup โดยตรง (DEV ONLY, ไม่ต้อง JWT จริง)
-// ส่ง body: { cid: "1234567890123" }  — ใช้ได้เฉพาะ NODE_ENV !== 'production'
-apiRouter.post('/auth/thaid/dev-test-cid', async (req, res) => {
-    if (process.env.NODE_ENV === 'production')
-        return res.status(403).json({ success: false, message: 'ใช้ได้เฉพาะ development mode เท่านั้น' });
-
-    const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim().slice(0, 64);
-    const { cid } = req.body;
-    if (!cid) return res.status(400).json({ success: false, message: 'ส่ง cid มาด้วย' });
-
-    const cidStr = String(cid).replace(/\D/g, '');
-    if (cidStr.length !== 13)
-        return res.status(400).json({ success: false, message: 'CID ต้องเป็นตัวเลข 13 หลัก' });
-
-    const cidHash = crypto.createHash('sha256').update(cidStr).digest('hex');
-    console.log(`[DEV/ThaiD-test] CID=${cidStr} → SHA256=${cidHash}`);
-
-    let [users] = await db.query('SELECT * FROM users WHERE cid = ? AND is_active = 1', [cidHash]);
-    if (!users.length)
-        return res.json({
-            success: false, not_found: true,
-            cid_hash: cidHash,
-            message: `ไม่พบ user ที่ผูก CID นี้ใน users.cid (hash: ${cidHash.slice(0,16)}...)`
-        });
-
-    const user = users[0];
-    if (!user.is_approved)
-        return res.status(403).json({ success: false, message: 'บัญชีนี้ยังไม่ได้รับการอนุมัติ' });
-
-    const sessionId = crypto.randomBytes(24).toString('hex');
-    await db.query('UPDATE users SET active_session_id=?, session_started_at=NOW() WHERE id=?', [sessionId, user.id]);
-    _sessionCache.delete(user.id);
-
-    const appToken = jwt.sign(
-        { userId: user.id, username: user.username, role: user.role,
-          deptId: user.dept_id, hospcode: user.hospcode, sessionId },
-        SECRET_KEY, { expiresIn: '8h' }
-    );
-
-    console.log(`[DEV/ThaiD-test] ✓ login user=${user.username} ip=${ip}`);
-    res.json({
-        success: true,
-        token: appToken,
-        cid_hash: cidHash,
-        user: { id: user.id, username: user.username, role: user.role,
-                dept_id: user.dept_id, hospcode: user.hospcode,
-                firstname: user.firstname, lastname: user.lastname }
-    });
-});
 
 // GET /auth/thaid/start — redirect ไป DGA (public, ไม่ต้อง auth)
 // === ThaiD Direct JWT Login — รับ token จาก DGA redirect (/login?token=<JWT>) ===
