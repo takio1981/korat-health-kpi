@@ -10,6 +10,14 @@ import { environment } from './environments/environment';
 // เราต้อง forward query params ไปยัง API endpoint
 // ที่ nginx รู้จักก่อน (/khupskpi/api/auth/thaid/callback)
 // ======================================================
+// Suppress PerformanceObserver "startTime" errors จาก Angular 21 internals
+// (เกิดใน web-vitals / zone.js PerformanceObserver callback ใน browser บางรุ่น)
+window.addEventListener('error', (e) => {
+  if (e.message && e.message.includes('startTime') && e.filename?.includes('main')) {
+    e.preventDefault();
+  }
+}, true);
+
 const _path = window.location.pathname;
 if (_path.endsWith('/authen/thaid/callback') || _path.includes('/authen/thaid/callback')) {
   // Forward ทันทีก่อน Angular bootstrap (ไม่ render UI)

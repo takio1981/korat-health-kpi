@@ -83,17 +83,31 @@ export class LoginComponent implements OnInit, OnDestroy {
         this.thaidVerifying = false;
         if (res.success) {
           if (ssoFlow === 'register') {
-            // มาจากหน้า Register แต่บัญชีมีอยู่แล้ว → แจ้งและ Login เลย
-            this.authService.saveToken(res.token);
-            this.authService.saveUser(res.user);
-            this.authService.startTokenExpiryWatcher();
+            // มาจากหน้า Register — บัญชีมีอยู่แล้ว → แจ้งให้ใช้ Login แทน (ไม่ save token)
             const providerLabel = res.provider === 'providerid' ? 'ProviderID' : 'ThaID';
+            this.thaidVerifying = false;
+            this.cdr.detectChanges();
             Swal.fire({
-              icon: 'info',
+              icon: 'warning',
               title: 'บัญชีนี้มีอยู่ในระบบแล้ว',
-              html: `<p>พบบัญชีของ <b>${res.user.firstname || ''} ${res.user.lastname || ''}</b> ในระบบ<br>เข้าสู่ระบบด้วย ${providerLabel} สำเร็จ</p>`,
-              timer: 2000, showConfirmButton: false
-            }).then(() => this.router.navigate(['/dashboard']));
+              html: `<p>พบบัญชีของ <b>${res.user?.firstname || ''} ${res.user?.lastname || ''}</b> ในระบบ<br>
+                     <span style="font-size:13px;color:#6b7280">กรุณาใช้ปุ่ม <b>เข้าสู่ระบบ</b> แทนการลงทะเบียน</span></p>`,
+              confirmButtonText: `<i class="fas fa-sign-in-alt mr-1"></i> เข้าสู่ระบบด้วย ${providerLabel}`,
+              cancelButtonText: 'ยกเลิก',
+              showCancelButton: true,
+              confirmButtonColor: '#10b981',
+              cancelButtonColor: '#6b7280'
+            }).then(r => {
+              if (r.isConfirmed) {
+                // Login โดยตรง (user ยืนยันตัวตนด้วย SSO แล้ว — safe)
+                this.authService.saveToken(res.token);
+                this.authService.saveUser(res.user);
+                this.authService.startTokenExpiryWatcher();
+                this.router.navigate(['/dashboard']);
+              } else {
+                this.router.navigate(['/login']);
+              }
+            });
           } else {
             this.authService.saveToken(res.token);
             this.authService.saveUser(res.user);
