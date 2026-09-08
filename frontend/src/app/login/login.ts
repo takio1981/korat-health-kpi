@@ -29,10 +29,12 @@ export class LoginComponent implements OnInit, OnDestroy {
   maintenanceMode: boolean = false;
   maintenanceMessage: string = '';
   isThaIdEnabled: boolean = false;
-  thaidLoginUrl: string = '';      // URL จาก DGA ThaiD Portal (admin ตั้งค่าใน Settings)
-  thaidVerifying: boolean = false; // loading state ขณะ verify token จาก DGA
+  thaidLoginUrl: string = '';
+  thaidVerifying: boolean = false;
+  thaidConnected: 'checking' | 'ok' | 'error' = 'checking';
 
   isProviderIdEnabled: boolean = false;
+  providerIdConnected: 'checking' | 'ok' | 'error' = 'checking';
 
   ssoLoading: boolean = false;
 
@@ -180,17 +182,40 @@ export class LoginComponent implements OnInit, OnDestroy {
   private checkMaintenance() {
     this.authService.getMaintenanceStatus().subscribe({
       next: (res: any) => {
+        const prevThaid = this.isThaIdEnabled;
+        const prevProvider = this.isProviderIdEnabled;
         const changed = this.maintenanceMode !== !!res.maintenance
           || this.maintenanceMessage !== (res.message || '')
-          || this.isThaIdEnabled !== !!res.thaid_enabled
+          || prevThaid !== !!res.thaid_enabled
           || this.thaidLoginUrl !== (res.thaid_login_url || '')
-          || this.isProviderIdEnabled !== !!res.providerid_enabled;
+          || prevProvider !== !!res.providerid_enabled;
         this.maintenanceMode = !!res.maintenance;
         this.maintenanceMessage = res.message || '';
         this.isThaIdEnabled = !!res.thaid_enabled;
         this.thaidLoginUrl = res.thaid_login_url || '';
         this.isProviderIdEnabled = !!res.providerid_enabled;
         if (changed) this.cdr.detectChanges();
+        // ตรวจ connectivity เมื่อ SSO เพิ่งเปิดใช้หรือ first load
+        if ((this.isThaIdEnabled || this.isProviderIdEnabled) &&
+            (prevThaid !== this.isThaIdEnabled || prevProvider !== this.isProviderIdEnabled ||
+             this.thaidConnected === 'checking' || this.providerIdConnected === 'checking')) {
+          this.checkSsoConnectivity();
+        }
+      }
+    });
+  }
+
+  private checkSsoConnectivity() {
+    this.authService.checkSsoConnectivity().subscribe({
+      next: (res: any) => {
+        this.thaidConnected = this.isThaIdEnabled ? (res.thaid ? 'ok' : 'error') : 'checking';
+        this.providerIdConnected = this.isProviderIdEnabled ? (res.providerid ? 'ok' : 'error') : 'checking';
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.thaidConnected = 'error';
+        this.providerIdConnected = 'error';
+        this.cdr.detectChanges();
       }
     });
   }

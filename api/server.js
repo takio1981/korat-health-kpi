@@ -4455,6 +4455,32 @@ apiRouter.put('/users/change-password', async (req, res) => {
     }
 });
 
+// ตรวจสอบการเชื่อมต่อ SSO provider จากฝั่ง server (public — หลีกเลี่ยง CORS)
+apiRouter.get('/sso/connectivity', async (req, res) => {
+    const checkUrl = async (url) => {
+        if (!url) return false;
+        let origin;
+        try { origin = new URL(url).origin; } catch { return false; }
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 4000);
+        try {
+            const r = await fetch(origin, { method: 'HEAD', redirect: 'follow', signal: ctrl.signal });
+            clearTimeout(timer);
+            return r.status < 500;
+        } catch { clearTimeout(timer); return false; }
+    };
+
+    const [ts, ps] = await Promise.all([
+        getThaidSettings().catch(() => null),
+        getProviderIdSettings().catch(() => null)
+    ]);
+    const thaidUrl   = (ts?.thaid_enabled === 'true' && ts?.thaid_login_url) ? ts.thaid_login_url : '';
+    const providerUrl = (ps?.enabled && ps?.login_url) ? ps.login_url : '';
+
+    const [thaid, providerid] = await Promise.all([checkUrl(thaidUrl), checkUrl(providerUrl)]);
+    res.json({ success: true, thaid, providerid });
+});
+
 // ตรวจสอบสถานะ maintenance mode (public — ไม่ต้อง login)
 apiRouter.get('/system/maintenance-status', async (req, res) => {
     try {

@@ -177,9 +177,17 @@
                   <i class="fas fa-arrow-right text-blue-400 ml-auto text-xs"></i>
                 </span>
               </button>
-              <p class="text-center text-[10px] text-gray-400 mt-1.5">
-                <i class="fas fa-shield-halved mr-1 text-blue-300"></i>ยืนยันตัวตนด้วยบัตรประชาชนผ่าน DGA ThaID
-              </p>
+              <div class="flex items-center justify-between mt-1.5 px-0.5">
+                <p class="text-[10px] text-gray-400">
+                  <i class="fas fa-shield-halved mr-1 text-blue-300"></i>ยืนยันตัวตนด้วยบัตรประชาชนผ่าน DGA ThaID
+                </p>
+                <span class="flex items-center gap-1 text-[10px] shrink-0"
+                      [ngClass]="thaidConnected==='ok' ? 'text-green-600' : thaidConnected==='error' ? 'text-red-500' : 'text-gray-400'">
+                  <span class="w-1.5 h-1.5 rounded-full inline-block"
+                        [ngClass]="thaidConnected==='ok' ? 'bg-green-500' : thaidConnected==='error' ? 'bg-red-500' : 'bg-gray-400 animate-pulse'"></span>
+                  {{ thaidConnected==='ok' ? 'เชื่อมต่อได้' : thaidConnected==='error' ? 'ไม่สามารถเชื่อมต่อ' : 'กำลังตรวจสอบ...' }}
+                </span>
+              </div>
             </div>
 
             <!-- ProviderID Button -->
@@ -196,9 +204,17 @@
                   <i class="fas fa-arrow-right text-teal-400 ml-auto text-xs"></i>
                 </span>
               </button>
-              <p class="text-center text-[10px] text-gray-400 mt-1.5">
-                <i class="fas fa-shield-halved mr-1 text-teal-300"></i>ยืนยันตัวตนผ่าน MOPH Provider ID
-              </p>
+              <div class="flex items-center justify-between mt-1.5 px-0.5">
+                <p class="text-[10px] text-gray-400">
+                  <i class="fas fa-shield-halved mr-1 text-teal-300"></i>ยืนยันตัวตนผ่าน MOPH Provider ID
+                </p>
+                <span class="flex items-center gap-1 text-[10px] shrink-0"
+                      [ngClass]="providerIdConnected==='ok' ? 'text-green-600' : providerIdConnected==='error' ? 'text-red-500' : 'text-gray-400'">
+                  <span class="w-1.5 h-1.5 rounded-full inline-block"
+                        [ngClass]="providerIdConnected==='ok' ? 'bg-green-500' : providerIdConnected==='error' ? 'bg-red-500' : 'bg-gray-400 animate-pulse'"></span>
+                  {{ providerIdConnected==='ok' ? 'เชื่อมต่อได้' : providerIdConnected==='error' ? 'ไม่สามารถเชื่อมต่อ' : 'กำลังตรวจสอบ...' }}
+                </span>
+              </div>
             </div>
           </div>
 

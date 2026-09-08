@@ -369,6 +369,10 @@ export class AuthService {
     return this.http.post(`${this.apiUrl}/auth/thaid/verify-token`, { token, hint_provider: hintProvider });
   }
 
+  checkSsoConnectivity(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/sso/connectivity`);
+  }
+
 setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
