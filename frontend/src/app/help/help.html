@@ -791,18 +791,27 @@
         <div class="bg-cyan-50 border border-cyan-200 rounded-xl p-4 mb-4">
           <h4 class="font-bold text-cyan-800 text-sm mb-2"><i class="fas fa-id-card mr-2"></i>ตั้งค่าการเข้าสู่ระบบด้วย SSO (ProviderID + ThaID)</h4>
           <p class="text-xs text-gray-600 mb-2">เปิด/ปิด + กรอก config OAuth สำหรับ login ผ่านบริการกลาง:</p>
-          <ol class="list-decimal ml-5 text-xs text-gray-600 space-y-1">
-            <li>เปิด <b>toggle ProviderID</b> หรือ <b>ThaID</b> ที่ต้องการใช้</li>
-            <li>กรอก config OAuth (ขอจาก MOPH/DGA):
-              <ul class="list-disc ml-4 mt-1 space-y-0.5">
-                <li><b>Client ID</b> + <b>Client Secret</b> (มี toggle ซ่อน/แสดง)</li>
-                <li><b>Authorization URL</b> / <b>Token URL</b> / <b>UserInfo URL</b></li>
-                <li><b>Redirect URI</b> — ลงทะเบียนกับ MOPH/DGA: <code>https://yourdomain/khupskpi/api/auth/&#123;providerid&#124;thaid&#125;/callback</code></li>
-                <li><b>Scope</b> — เช่น <code>openid profile</code></li>
-              </ul>
-            </li>
-            <li>กดบันทึก → ปุ่ม SSO ในหน้า Login/Register ปรากฏภายใน ≤3 วินาที (poll auto)</li>
-          </ol>
+          <div class="space-y-3">
+            <div class="bg-blue-100/60 border border-blue-200 rounded-lg p-3 text-xs">
+              <p class="font-bold text-blue-800 mb-1"><i class="fas fa-id-card mr-1"></i>ThaID (DGA)</p>
+              <ol class="list-decimal ml-4 text-gray-600 space-y-0.5">
+                <li>เปิด toggle ThaID</li>
+                <li>กรอก <b>ThaID Login URL</b> — URL ของหน้า QR scan DGA (ขอจาก DGA)</li>
+                <li>กรอก <b>Client Secret</b> — ใช้ verify JWT signature จาก DGA</li>
+                <li>กดบันทึก → ปุ่ม ThaID ปรากฏในหน้า Login ภายใน ≤3 วินาที</li>
+              </ol>
+            </div>
+            <div class="bg-cyan-100/60 border border-cyan-200 rounded-lg p-3 text-xs">
+              <p class="font-bold text-cyan-800 mb-1"><i class="fas fa-user-md mr-1"></i>ProviderID (MOPH)</p>
+              <ol class="list-decimal ml-4 text-gray-600 space-y-0.5">
+                <li>เปิด toggle ProviderID</li>
+                <li>กรอก <b>URL ปุ่มเข้าสู่ระบบ</b> — URL เต็มที่ปุ่มจะ redirect ไป เช่น:<br>
+                  <code class="text-[10px] break-all">https://moph.id.th/oauth/redirect?client_id=...&amp;redirect_uri=...&amp;response_type=code&amp;state=khupskpi-login</code>
+                </li>
+                <li>กดบันทึก → ปุ่ม ProviderID ปรากฏในหน้า Login ภายใน ≤3 วินาที</li>
+              </ol>
+            </div>
+          </div>
           <p class="text-[11px] text-cyan-700 mt-2"><i class="fas fa-shield-alt mr-1"></i>ระบบ match user ด้วย <b>เลขบัตรประชาชน (SHA-256 hash)</b> — ปฏิเสธ user ใหม่ ต้องลงทะเบียนก่อน</p>
         </div>
 

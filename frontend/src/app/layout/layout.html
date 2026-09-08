@@ -515,6 +515,8 @@
                               notif.type === 'appeal' ? 'fa-gavel text-purple-500' :
                               notif.title?.includes('กระทู้') ? 'fa-comments text-teal-500' :
                               notif.title?.includes('รอการอนุมัติ') ? 'fa-user-clock text-amber-500' :
+                              notif.title?.includes('ProviderID') ? 'fa-user-md text-cyan-500' :
+                              notif.title?.includes('ThaID') ? 'fa-id-card text-blue-500' :
                               'fa-bell text-blue-500'"></i>
           <div class="flex-1 min-w-0">
             <p class="text-xs font-semibold text-gray-800 truncate">{{ notif.title }}</p>
@@ -552,6 +554,8 @@
                               notif.type === 'appeal' ? 'fa-gavel text-purple-500' :
                               notif.title?.includes('กระทู้') ? 'fa-comments text-teal-500' :
                               notif.title?.includes('รอการอนุมัติ') ? 'fa-user-clock text-amber-500' :
+                              notif.title?.includes('ProviderID') ? 'fa-user-md text-cyan-500' :
+                              notif.title?.includes('ThaID') ? 'fa-id-card text-blue-500' :
                               'fa-bell text-blue-500'"></i>
           <div class="flex-1 min-w-0">
             <p class="text-sm font-semibold text-gray-800">{{ notif.title }}</p>
