@@ -54,9 +54,13 @@ export class RegisterComponent implements OnInit, OnDestroy {
   maintenanceMode: boolean = false;
   maintenanceMessage: string = '';
 
-  // === SSO providers (toggle จาก settings page โดย super_admin — ใช้ร่วมกับ login) ===
+  // === SSO providers Login (ใช้เฉพาะ fallback / UI ทั่วไป) ===
   isThaIdEnabled: boolean = false;
   isProviderIdEnabled: boolean = false;
+
+  // === SSO providers Register (แยก toggle จาก Login) ===
+  isThaIdRegisterEnabled: boolean = false;
+  isProviderIdRegisterEnabled: boolean = false;
 
   // === ThaiD / ProviderID register pre-fill ===
   thaidRegToken: string = '';
@@ -73,7 +77,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
   }
 
   registerWithThaID() {
-    if (this.isThaIdEnabled) {
+    if (this.isThaIdRegisterEnabled) {
       sessionStorage.setItem('sso_flow', 'register');
       window.location.href = `${environment.apiUrl}/auth/thaid/register-start`;
     } else {
@@ -82,7 +86,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
   }
 
   registerWithProviderID() {
-    if (!this.isProviderIdEnabled) {
+    if (!this.isProviderIdRegisterEnabled) {
       this.showSsoUnavailable('ProviderID (กระทรวงสาธารณสุข)', 'fa-user-md', '#0284c7');
       return;
     }
@@ -143,11 +147,15 @@ export class RegisterComponent implements OnInit, OnDestroy {
           this.maintenanceMode !== !!res.maintenance ||
           this.maintenanceMessage !== (res.message || '') ||
           this.isThaIdEnabled !== !!res.thaid_enabled ||
-          this.isProviderIdEnabled !== !!res.providerid_enabled;
+          this.isProviderIdEnabled !== !!res.providerid_enabled ||
+          this.isThaIdRegisterEnabled !== !!res.thaid_register_enabled ||
+          this.isProviderIdRegisterEnabled !== !!res.providerid_register_enabled;
         this.maintenanceMode = !!res.maintenance;
         this.maintenanceMessage = res.message || '';
         this.isThaIdEnabled = !!res.thaid_enabled;
         this.isProviderIdEnabled = !!res.providerid_enabled;
+        this.isThaIdRegisterEnabled = !!res.thaid_register_enabled;
+        this.isProviderIdRegisterEnabled = !!res.providerid_register_enabled;
         if (changed) this.cdr.detectChanges();
       }
     });

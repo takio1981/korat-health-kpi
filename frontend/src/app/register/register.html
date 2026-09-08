@@ -121,17 +121,17 @@
         </div>
       </div>
 
-      <!-- SSO pre-fill section (manual form — แสดงเฉพาะเมื่อยังไม่ได้ยืนยัน) -->
-      <div *ngIf="registerMode === 'manual' && !thaidRegVerified && (isThaIdEnabled || isProviderIdEnabled)"
+      <!-- SSO pre-fill section (manual form — แสดงเฉพาะเมื่อยังไม่ได้ยืนยัน + Register SSO เปิดอยู่) -->
+      <div *ngIf="registerMode === 'manual' && !thaidRegVerified && (isThaIdRegisterEnabled || isProviderIdRegisterEnabled)"
            class="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-xl">
         <p class="text-xs text-gray-500 mb-2 font-medium"><i class="fas fa-magic me-1 text-purple-400"></i>กรอกข้อมูลอัตโนมัติจากบัญชีของคุณ</p>
         <div class="flex gap-2 flex-wrap">
-          <button *ngIf="isThaIdEnabled" type="button" (click)="registerWithThaID()"
+          <button *ngIf="isThaIdRegisterEnabled" type="button" (click)="registerWithThaID()"
                   class="flex items-center gap-2 px-3 py-2 bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded-lg shadow-sm transition-all text-xs font-medium text-gray-700">
             <img src="thaid.png" alt="ThaID" class="h-5 w-auto object-contain">
             ดึงข้อมูลจาก ThaID (DGA)
           </button>
-          <button *ngIf="isProviderIdEnabled" type="button" (click)="registerWithProviderID()"
+          <button *ngIf="isProviderIdRegisterEnabled" type="button" (click)="registerWithProviderID()"
                   class="flex items-center gap-2 px-3 py-2 bg-white hover:bg-cyan-50 border border-gray-200 hover:border-cyan-300 rounded-lg shadow-sm transition-all text-xs font-medium text-gray-700">
             <img src="provider-id.png" alt="ProviderID" class="h-5 w-auto object-contain">
             ดึงข้อมูลจาก ProviderID (MOPH)

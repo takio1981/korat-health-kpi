@@ -82,11 +82,13 @@ export class SettingsComponent implements OnInit {
   thaidScope: string = '';
   showThaidSecret: boolean = false;
 
-  // SSO — ProviderID login/register URL (URL เต็มของปุ่ม)
+  // SSO — ProviderID login/register
   providerIdLoginUrl: string = '';
+  providerIdRegisterEnabled: boolean = false;
   providerIdRegisterUrl: string = '';
 
-  // SSO — ThaID register URL (URL เต็มสำหรับปุ่ม Register)
+  // SSO — ThaID register (แยกจาก Login)
+  thaidRegisterEnabled: boolean = false;
   thaidRegisterUrl: string = '';
 
   ngOnInit() {
@@ -206,8 +208,12 @@ export class SettingsComponent implements OnInit {
           // SSO toggles
           const thaidSetting = this.settings.find(s => s.setting_key === 'thaid_enabled');
           const providerSetting = this.settings.find(s => s.setting_key === 'providerid_enabled');
+          const thaidRegEnSetting = this.settings.find(s => s.setting_key === 'thaid_register_enabled');
+          const providerRegEnSetting = this.settings.find(s => s.setting_key === 'providerid_register_enabled');
           if (thaidSetting) this.thaidEnabled = thaidSetting.setting_value === 'true';
           if (providerSetting) this.providerIdEnabled = providerSetting.setting_value === 'true';
+          if (thaidRegEnSetting) this.thaidRegisterEnabled = thaidRegEnSetting.setting_value === 'true';
+          if (providerRegEnSetting) this.providerIdRegisterEnabled = providerRegEnSetting.setting_value === 'true';
 
           // SSO OAuth config — load
           const grab = (k: string) => (this.settings.find(s => s.setting_key === k)?.setting_value) || '';
@@ -277,8 +283,10 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'thaid_scope', setting_value: this.thaidScope },
       { setting_key: 'providerid_enabled', setting_value: this.providerIdEnabled.toString() },
       { setting_key: 'providerid_login_url', setting_value: this.providerIdLoginUrl },
-      { setting_key: 'providerid_register_url', setting_value: this.providerIdRegisterUrl },
+      { setting_key: 'thaid_register_enabled', setting_value: this.thaidRegisterEnabled.toString() },
       { setting_key: 'thaid_register_url', setting_value: this.thaidRegisterUrl },
+      { setting_key: 'providerid_register_enabled', setting_value: this.providerIdRegisterEnabled.toString() },
+      { setting_key: 'providerid_register_url', setting_value: this.providerIdRegisterUrl },
     ];
 
     this.authService.updateSettings(settingsToSave).subscribe({

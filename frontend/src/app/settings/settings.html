@@ -255,23 +255,14 @@
             <i class="fas fa-exclamation-triangle me-1"></i><b>หมายเหตุ:</b> เปิดสวิตช์เพื่อให้ระบบเปิด OAuth login — ปุ่มจะปรากฏในหน้า Login/Register และ redirect ไปยัง MOPH/DGA จริง (ต้องกรอก config OAuth ด้านล่างก่อน)
           </div>
 
-          <!-- ProviderID URL config -->
-          <div *ngIf="providerIdEnabled" class="mt-4 bg-cyan-50/40 border border-cyan-200 rounded-xl p-4 space-y-3">
-            <h4 class="font-bold text-cyan-800 text-sm mb-2"><i class="fas fa-user-md me-2"></i>ProviderID — URL ปุ่มเข้าสู่ระบบ / ลงทะเบียน</h4>
-            <div>
-              <label class="block font-bold text-gray-700 mb-1 text-xs">URL ปุ่ม Login (เข้าสู่ระบบ) <small class="font-normal text-gray-400">— state=khupskpi-login</small></label>
-              <input type="url" [(ngModel)]="providerIdLoginUrl" name="providerIdLoginUrl"
-                     placeholder="https://moph.id.th/oauth/redirect?client_id=...&redirect_uri=...&response_type=code&state=khupskpi-login"
-                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none font-mono text-[11px]">
-              <p class="text-[10px] text-gray-400 mt-1">ตัวอย่าง: <code class="break-all">https://moph.id.th/oauth/redirect?client_id=0198c05c-2455-7938-9c89-5c08252f731c&amp;redirect_uri=https://apikorat.moph.go.th/authen/healthid/callback&amp;response_type=code&amp;state=khupskpi-login</code></p>
-            </div>
-            <div>
-              <label class="block font-bold text-gray-700 mb-1 text-xs">URL ปุ่ม Register (ลงทะเบียน) <small class="font-normal text-gray-400">— state=khupskpi-register (ปล่อยว่าง = ใช้ Login URL แทน)</small></label>
-              <input type="url" [(ngModel)]="providerIdRegisterUrl" name="providerIdRegisterUrl"
-                     placeholder="https://moph.id.th/oauth/redirect?client_id=...&redirect_uri=...&response_type=code&state=khupskpi-register"
-                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none font-mono text-[11px]">
-              <p class="text-[10px] text-gray-400 mt-1">เหมือน Login URL แต่เปลี่ยน <code class="bg-cyan-50 px-1 rounded">state=khupskpi-register</code> — ใช้กับปุ่ม ProviderID ในหน้าลงทะเบียน</p>
-            </div>
+          <!-- ProviderID URL config (Login only) -->
+          <div *ngIf="providerIdEnabled" class="mt-4 bg-cyan-50/40 border border-cyan-200 rounded-xl p-4">
+            <h4 class="font-bold text-cyan-800 text-sm mb-2"><i class="fas fa-user-md me-2"></i>ProviderID — URL ปุ่มเข้าสู่ระบบ</h4>
+            <label class="block font-bold text-gray-700 mb-1 text-xs">URL ปุ่ม Login <small class="font-normal text-gray-400">— state=khupskpi-login</small></label>
+            <input type="url" [(ngModel)]="providerIdLoginUrl" name="providerIdLoginUrl"
+                   placeholder="https://moph.id.th/oauth/redirect?client_id=...&redirect_uri=...&response_type=code&state=khupskpi-login"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none font-mono text-[11px]">
+            <p class="text-[10px] text-gray-400 mt-1">ตัวอย่าง: <code class="break-all">https://moph.id.th/oauth/redirect?client_id=0198c05c-2455-7938-9c89-5c08252f731c&amp;redirect_uri=https://apikorat.moph.go.th/authen/healthid/callback&amp;response_type=code&amp;state=khupskpi-login</code></p>
           </div>
 
           <!-- ThaID config — แสดงเมื่อเปิด toggle -->
@@ -363,18 +354,69 @@
               </div>
             </div>
 
-            <!-- URL ปุ่ม ThaiD Register -->
-            <div class="bg-white border border-gray-200 rounded-xl p-4">
-              <label class="block text-sm font-bold text-gray-700 mb-1.5">
-                <i class="fas fa-user-plus me-2 text-emerald-500"></i>URL ThaiD (สำหรับปุ่ม Register)
-                <small class="font-normal text-gray-400 ms-1">— state=khupskpi-register (ปล่อยว่าง = ใช้ Backend /auth/thaid/register-start แทน)</small>
-              </label>
-              <input type="url" [(ngModel)]="thaidRegisterUrl" name="thaidRegisterUrl"
-                     placeholder="https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/?response_type=code&client_id=...&state=khupskpi-register"
-                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-400 outline-none text-xs font-mono">
-              <p class="text-[11px] text-gray-500 mt-1.5"><i class="fas fa-info-circle me-1 text-emerald-400"></i>เหมือน Login URL แต่เปลี่ยน <code class="bg-gray-100 px-1 rounded">state=khupskpi-register</code> — ใช้กับปุ่ม ThaID ในหน้าลงทะเบียน เพื่อ pre-fill ข้อมูล</p>
-            </div>
 
+          </div>
+        </div>
+
+        <!-- ตั้งค่า SSO Register: ThaID + ProviderID (แยกจาก Login) -->
+        <div class="mt-8 pt-6 border-t border-gray-100">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-user-plus me-2 text-emerald-600"></i>ตั้งค่าการลงทะเบียนด้วย SSO</h3>
+          </div>
+          <p class="text-xs text-gray-500 mb-4">เปิด/ปิดปุ่ม ThaID และ ProviderID ในหน้า <b>ลงทะเบียน</b> — แยกอิสระจากการตั้งค่า Login ด้านบน (เปิด Login ไม่จำเป็นต้องเปิด Register)</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-emerald-50/50 rounded-xl p-4 border border-emerald-100">
+            <!-- ThaID Register -->
+            <div class="bg-white rounded-lg p-3 border border-gray-200">
+              <label class="inline-flex items-center cursor-pointer w-full">
+                <input type="checkbox" [(ngModel)]="thaidRegisterEnabled" name="thaidRegisterEnabled" class="peer" style="width:0;height:0;opacity:0;position:relative;margin:0;padding:0;border:0;">
+                <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600 shrink-0"></div>
+                <div class="ms-3 flex-1 min-w-0">
+                  <p class="text-sm font-bold text-gray-700"><i class="fas fa-id-badge text-emerald-600 me-1"></i>ThaID — ปุ่มในหน้าลงทะเบียน</p>
+                  <p class="text-xs text-gray-500 mt-0.5">ดึงข้อมูลจากบัตรประชาชน (DGA) เพื่อ pre-fill ฟอร์ม</p>
+                </div>
+              </label>
+            </div>
+            <!-- ProviderID Register -->
+            <div class="bg-white rounded-lg p-3 border border-gray-200">
+              <label class="inline-flex items-center cursor-pointer w-full">
+                <input type="checkbox" [(ngModel)]="providerIdRegisterEnabled" name="providerIdRegisterEnabled" class="peer" style="width:0;height:0;opacity:0;position:relative;margin:0;padding:0;border:0;">
+                <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600 shrink-0"></div>
+                <div class="ms-3 flex-1 min-w-0">
+                  <p class="text-sm font-bold text-gray-700"><i class="fas fa-user-md text-teal-600 me-1"></i>ProviderID — ปุ่มในหน้าลงทะเบียน</p>
+                  <p class="text-xs text-gray-500 mt-0.5">ดึงข้อมูลจาก MOPH Portal เพื่อ pre-fill ฟอร์ม</p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- ThaID Register URL config -->
+          <div *ngIf="thaidRegisterEnabled" class="mt-4 bg-emerald-50/40 border border-emerald-200 rounded-xl p-4">
+            <h4 class="font-bold text-emerald-800 text-sm mb-2"><i class="fas fa-id-badge me-2"></i>ThaID — URL สำหรับปุ่มลงทะเบียน</h4>
+            <label class="block font-bold text-gray-700 mb-1 text-xs">URL เปิดหน้าสแกน QR Code ThaiD (Register) <small class="font-normal text-gray-400">— state=khupskpi-register</small></label>
+            <input type="url" [(ngModel)]="thaidRegisterUrl" name="thaidRegisterUrl"
+                   placeholder="https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/?response_type=code&client_id=...&state=khupskpi-register"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-400 outline-none text-xs font-mono">
+            <div class="mt-2 space-y-1 text-[11px] text-gray-500">
+              <p><i class="fas fa-info-circle me-1 text-emerald-400"></i>ปล่อยว่าง = ระบบใช้ค่าตั้งต้น (Client ID + Auth URL ด้านบน) พร้อม state=khupskpi-register อัตโนมัติ</p>
+              <p><i class="fas fa-mouse-pointer me-1 text-blue-400"></i>เมื่อผู้ใช้กดปุ่ม "ดึงข้อมูลจาก ThaID" ในหน้าลงทะเบียน → redirect ไปที่ URL นี้</p>
+            </div>
+          </div>
+
+          <!-- ProviderID Register URL config -->
+          <div *ngIf="providerIdRegisterEnabled" class="mt-4 bg-teal-50/40 border border-teal-200 rounded-xl p-4">
+            <h4 class="font-bold text-teal-800 text-sm mb-2"><i class="fas fa-user-md me-2"></i>ProviderID — URL สำหรับปุ่มลงทะเบียน</h4>
+            <label class="block font-bold text-gray-700 mb-1 text-xs">URL ปุ่ม Register (ProviderID) <small class="font-normal text-gray-400">— state=khupskpi-register</small></label>
+            <input type="url" [(ngModel)]="providerIdRegisterUrl" name="providerIdRegisterUrl"
+                   placeholder="https://moph.id.th/oauth/redirect?client_id=...&redirect_uri=...&response_type=code&state=khupskpi-register"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none font-mono text-[11px]">
+            <div class="mt-2 space-y-1 text-[11px] text-gray-500">
+              <p><i class="fas fa-info-circle me-1 text-teal-400"></i>เหมือน Login URL แต่เปลี่ยน <code class="bg-teal-50 px-1 rounded">state=khupskpi-register</code></p>
+              <p><i class="fas fa-mouse-pointer me-1 text-blue-400"></i>ปล่อยว่าง = ใช้ Login URL แทน (แต่ระบบจะ redirect กลับมา Register ผ่าน sso_flow)</p>
+            </div>
+          </div>
+
+          <div class="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700">
+            <i class="fas fa-info-circle me-1"></i><b>หมายเหตุ:</b> เปิด Register SSO เพื่อให้ปุ่ม ThaID/ProviderID ปรากฏในหน้าลงทะเบียน — ผู้ใช้ที่ยังไม่มีบัญชีจะได้รับข้อมูล pre-fill จาก SSO, ผู้ใช้ที่มีบัญชีแล้วจะได้รับแจ้งให้ Login แทน
           </div>
         </div>
 

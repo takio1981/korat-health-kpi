@@ -1037,7 +1037,7 @@ async function upsertSsoProfile(provider, userId, profile) {
 /** ดึง ThaiD config — DB ก่อน fallback hardcode สำหรับ client_id / auth_url / redirect_uri / scope */
 async function getThaidSettings() {
     const [rows] = await db.query(
-        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('thaid_enabled','thaid_client_secret','thaid_login_url','thaid_client_id','thaid_auth_url','thaid_redirect_uri','thaid_scope','thaid_token_url')"
+        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('thaid_enabled','thaid_client_secret','thaid_login_url','thaid_register_url','thaid_register_enabled','thaid_client_id','thaid_auth_url','thaid_redirect_uri','thaid_scope','thaid_token_url')"
     );
     const s = {};
     rows.forEach(r => s[r.setting_key] = r.setting_value);
@@ -1343,8 +1343,10 @@ apiRouter.get('/auth/thaid/register-start', async (req, res) => {
         const s = await getThaidSettings();
         const frontendBase = getFrontendBase(req);
 
-        if (s.thaid_enabled !== 'true') {
-            return res.redirect(`${frontendBase}/register?sso_error=${encodeURIComponent('ThaiD ยังไม่ได้เปิดใช้งาน')}`);
+        // ตรวจ register enabled (แยกจาก login enabled)
+        const registerEnabled = s.thaid_register_enabled === 'true';
+        if (!registerEnabled) {
+            return res.redirect(`${frontendBase}/register?sso_error=${encodeURIComponent('ThaiD สำหรับลงทะเบียนยังไม่ได้เปิดใช้งาน')}`);
         }
 
         // สร้าง dynamic state สำหรับ register flow
@@ -1645,14 +1647,15 @@ const MOPH_REDIRECT_URI = 'https://apikorat.moph.go.th/authen/healthid/callback'
 
 async function getProviderIdSettings() {
     const [rows] = await db.query(
-        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('providerid_enabled','providerid_login_url','providerid_register_url')"
+        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('providerid_enabled','providerid_login_url','providerid_register_url','providerid_register_enabled')"
     );
     const s = {};
     rows.forEach(r => s[r.setting_key] = r.setting_value);
     return {
-        enabled:      s.providerid_enabled === 'true',
-        login_url:    s.providerid_login_url || '',
-        register_url: s.providerid_register_url || '',
+        enabled:          s.providerid_enabled === 'true',
+        login_url:        s.providerid_login_url || '',
+        register_enabled: s.providerid_register_enabled === 'true',
+        register_url:     s.providerid_register_url || '',
         // MOPH defaults — ใช้ใน callback ถ้ายังต้องการ OAuth flow ในอนาคต
         token_url:    MOPH_TOKEN_URL,
         userinfo_url: MOPH_USERINFO_URL,
@@ -1692,8 +1695,8 @@ apiRouter.get('/auth/providerid/register-start', async (req, res) => {
     try {
         const s = await getProviderIdSettings();
         const frontendBase = getFrontendBase(req);
-        if (!s.enabled)
-            return res.redirect(`${frontendBase}/register?sso_error=${encodeURIComponent('ProviderID ยังไม่ได้เปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ')}`);
+        if (!s.register_enabled)
+            return res.redirect(`${frontendBase}/register?sso_error=${encodeURIComponent('ProviderID สำหรับลงทะเบียนยังไม่ได้เปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ')}`);
         // ใช้ register_url ถ้าตั้งไว้ ไม่งั้น fallback เป็น login_url (เปลี่ยน state เองไม่ได้เพราะ URL สำเร็จรูป)
         const targetUrl = s.register_url || s.login_url;
         if (!targetUrl)
@@ -4518,7 +4521,7 @@ apiRouter.get('/sso/connectivity', async (req, res) => {
 apiRouter.get('/system/maintenance-status', async (req, res) => {
     try {
         const [rows] = await db.query(
-            "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message','thaid_enabled','providerid_enabled','thaid_login_url')"
+            "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message','thaid_enabled','providerid_enabled','thaid_login_url','thaid_register_enabled','providerid_register_enabled')"
         );
         const s = {};
         rows.forEach(r => s[r.setting_key] = r.setting_value);
@@ -4529,6 +4532,8 @@ apiRouter.get('/system/maintenance-status', async (req, res) => {
             thaid_enabled: s['thaid_enabled'] === 'true',
             providerid_enabled: s['providerid_enabled'] === 'true',
             thaid_login_url: s['thaid_login_url'] || '',
+            thaid_register_enabled: s['thaid_register_enabled'] === 'true',
+            providerid_register_enabled: s['providerid_register_enabled'] === 'true',
         });
     } catch (error) {
         res.json({ success: true, maintenance: false, message: '', thaid_enabled: false, providerid_enabled: false });
