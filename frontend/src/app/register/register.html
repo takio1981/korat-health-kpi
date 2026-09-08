@@ -77,46 +77,9 @@
         </p>
       </div>
 
-      <!-- ===== Mode: เลือกวิธีลงทะเบียน (3 การ์ด) ===== -->
+      <!-- ===== Mode: เลือกวิธีลงทะเบียน (legacy — ไม่ใช้แล้ว แต่ยังคงไว้เพื่อ back nav) ===== -->
       <div *ngIf="registerMode === 'choose'" class="space-y-3">
-        <!-- Card 1: ThaID -->
-        <div *ngIf="isThaIdEnabled" class="relative">
-          <button type="button" (click)="registerWithThaID()" title="ลงทะเบียนด้วย ThaID"
-                  class="group w-full bg-white hover:bg-gray-50 border border-gray-200 hover:border-blue-300 rounded-xl text-left transition-all shadow-md hover:shadow-lg overflow-hidden">
-            <div class="flex items-stretch h-20">
-              <div class="w-20 h-full shrink-0 overflow-hidden flex items-center justify-center">
-                <img src="thaid.png" alt="ThaID" class="h-full w-full object-contain">
-              </div>
-              <div class="flex-1 min-w-0 flex items-center px-4">
-                <p class="text-xs text-gray-600 leading-snug">ใช้บัญชี Thai Digital ID (DGA) ลงทะเบียนอัตโนมัติด้วยข้อมูลจากบัตรประชาชน</p>
-              </div>
-              <div class="flex items-center justify-center pr-4 shrink-0">
-                <i class="fas fa-chevron-right text-blue-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all"></i>
-              </div>
-            </div>
-          </button>
-        </div>
-
-        <!-- Card 2: ProviderID -->
-        <div *ngIf="isProviderIdEnabled" class="relative">
-          <button type="button" (click)="registerWithProviderID()" title="ลงทะเบียนด้วย ProviderID"
-                  class="group w-full bg-white hover:bg-gray-50 border border-gray-200 hover:border-cyan-300 rounded-xl text-left transition-all shadow-md hover:shadow-lg overflow-hidden">
-            <div class="flex items-stretch h-20">
-              <div class="w-20 h-full shrink-0 flex items-center justify-center p-2">
-                <img src="provider-id.png" alt="ProviderID" class="h-full w-full object-contain">
-              </div>
-              <div class="flex-1 min-w-0 flex items-center px-4">
-                <p class="text-xs text-gray-600 leading-snug">ใช้บัญชี Provider ID ของกระทรวงสาธารณสุข สำหรับบุคลากรในระบบ HDC/MOPH</p>
-              </div>
-              <div class="flex items-center justify-center pr-4 shrink-0">
-                <i class="fas fa-chevron-right text-cyan-400 group-hover:text-cyan-600 group-hover:translate-x-1 transition-all"></i>
-              </div>
-            </div>
-          </button>
-          <span class="absolute -top-2 -right-2 px-2 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-[10px] font-bold shadow-sm z-10 pointer-events-none">รอเปิดใช้</span>
-        </div>
-
-        <!-- Card 3: Manual -->
+        <!-- Card: Manual -->
         <button type="button" (click)="selectManualRegister()"
                 class="group relative w-full p-4 bg-white hover:bg-green-50 border-2 border-green-600 hover:border-green-700 rounded-xl text-left transition-all shadow-sm hover:shadow-md">
           <div class="flex items-center gap-4">
@@ -124,13 +87,12 @@
               <i class="fas fa-keyboard text-2xl"></i>
             </div>
             <div class="flex-1 min-w-0">
-              <p class="font-bold text-green-700 text-sm">ลงทะเบียนด้วยตัวเอง</p>
-              <p class="text-xs text-gray-500 mt-0.5">กรอกแบบฟอร์มข้อมูลด้วยตนเอง (รอ Admin SSJ อนุมัติก่อนใช้งานจริง)</p>
+              <p class="font-bold text-green-700 text-sm">ลงทะเบียน</p>
+              <p class="text-xs text-gray-500 mt-0.5">กรอกแบบฟอร์มข้อมูล (รอ Admin SSJ อนุมัติก่อนใช้งานจริง)</p>
             </div>
             <i class="fas fa-chevron-right text-green-400 group-hover:text-green-600 group-hover:translate-x-1 transition-all"></i>
           </div>
         </button>
-
 
         <!-- Already have account link -->
         <div class="text-center mt-4">
@@ -156,6 +118,24 @@
             ยืนยันตัวตนด้วย {{ ssoProvider === 'providerid' ? 'ProviderID (MOPH)' : 'ThaID (DGA)' }} สำเร็จ
           </p>
           <p class="text-xs text-blue-600 mt-0.5">ข้อมูลบางส่วนถูกกรอกอัตโนมัติจากระบบ — กรุณาตรวจสอบและกรอกส่วนที่เหลือ</p>
+        </div>
+      </div>
+
+      <!-- SSO pre-fill section (manual form — แสดงเฉพาะเมื่อยังไม่ได้ยืนยัน) -->
+      <div *ngIf="registerMode === 'manual' && !thaidRegVerified && (isThaIdEnabled || isProviderIdEnabled)"
+           class="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-xl">
+        <p class="text-xs text-gray-500 mb-2 font-medium"><i class="fas fa-magic me-1 text-purple-400"></i>กรอกข้อมูลอัตโนมัติจากบัญชีของคุณ</p>
+        <div class="flex gap-2 flex-wrap">
+          <button *ngIf="isThaIdEnabled" type="button" (click)="registerWithThaID()"
+                  class="flex items-center gap-2 px-3 py-2 bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded-lg shadow-sm transition-all text-xs font-medium text-gray-700">
+            <img src="thaid.png" alt="ThaID" class="h-5 w-auto object-contain">
+            ดึงข้อมูลจาก ThaID (DGA)
+          </button>
+          <button *ngIf="isProviderIdEnabled" type="button" (click)="registerWithProviderID()"
+                  class="flex items-center gap-2 px-3 py-2 bg-white hover:bg-cyan-50 border border-gray-200 hover:border-cyan-300 rounded-lg shadow-sm transition-all text-xs font-medium text-gray-700">
+            <img src="provider-id.png" alt="ProviderID" class="h-5 w-auto object-contain">
+            ดึงข้อมูลจาก ProviderID (MOPH)
+          </button>
         </div>
       </div>
 

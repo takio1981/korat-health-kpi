@@ -68,6 +68,10 @@ export class LoginComponent implements OnInit, OnDestroy {
     const ssoIntent = sessionStorage.getItem('sso_intent') || 'thaid';
     sessionStorage.removeItem('sso_intent');
 
+    // อ่าน sso_flow — 'register' = มาจากปุ่ม ThaID/ProviderID ในหน้า Register
+    const ssoFlow = sessionStorage.getItem('sso_flow') || 'login';
+    sessionStorage.removeItem('sso_flow');
+
     // ลบ ?token= ออกจาก URL bar ทันที (กัน token ถูก refresh/share)
     window.history.replaceState({}, '', window.location.pathname);
 
@@ -78,39 +82,60 @@ export class LoginComponent implements OnInit, OnDestroy {
       next: (res: any) => {
         this.thaidVerifying = false;
         if (res.success) {
-          this.authService.saveToken(res.token);
-          this.authService.saveUser(res.user);
-          this.authService.startTokenExpiryWatcher();
-          const providerLabel = res.provider === 'providerid' ? 'ProviderID' : 'ThaID';
-          Swal.fire({
-            icon: 'success',
-            title: `เข้าสู่ระบบสำเร็จ (${providerLabel})`,
-            text: `ยินดีต้อนรับ ${res.user.firstname || ''} ${res.user.lastname || ''}`,
-            timer: 1500, showConfirmButton: false
-          }).then(() => this.router.navigate(['/dashboard']));
+          if (ssoFlow === 'register') {
+            // มาจากหน้า Register แต่บัญชีมีอยู่แล้ว → แจ้งและ Login เลย
+            this.authService.saveToken(res.token);
+            this.authService.saveUser(res.user);
+            this.authService.startTokenExpiryWatcher();
+            const providerLabel = res.provider === 'providerid' ? 'ProviderID' : 'ThaID';
+            Swal.fire({
+              icon: 'info',
+              title: 'บัญชีนี้มีอยู่ในระบบแล้ว',
+              html: `<p>พบบัญชีของ <b>${res.user.firstname || ''} ${res.user.lastname || ''}</b> ในระบบ<br>เข้าสู่ระบบด้วย ${providerLabel} สำเร็จ</p>`,
+              timer: 2000, showConfirmButton: false
+            }).then(() => this.router.navigate(['/dashboard']));
+          } else {
+            this.authService.saveToken(res.token);
+            this.authService.saveUser(res.user);
+            this.authService.startTokenExpiryWatcher();
+            const providerLabel = res.provider === 'providerid' ? 'ProviderID' : 'ThaID';
+            Swal.fire({
+              icon: 'success',
+              title: `เข้าสู่ระบบสำเร็จ (${providerLabel})`,
+              text: `ยินดีต้อนรับ ${res.user.firstname || ''} ${res.user.lastname || ''}`,
+              timer: 1500, showConfirmButton: false
+            }).then(() => this.router.navigate(['/dashboard']));
+          }
         } else if (res.not_found) {
-          Swal.fire({
-            icon: 'warning',
-            title: 'ไม่พบบัญชีผู้ใช้งาน',
-            html: `<p>ไม่พบบัญชีที่ผูกกับ<br><b>${res.firstname_th || ''} ${res.lastname_th || ''}</b><br>ในระบบนี้</p>
-                   <p class="text-sm text-gray-500 mt-2">กรุณาลงทะเบียนก่อนเข้าใช้งาน หรือติดต่อผู้ดูแลระบบเพื่อผูกบัญชี</p>`,
-            showCancelButton: true,
-            confirmButtonText: '<i class="fas fa-user-plus mr-1"></i> ลงทะเบียน',
-            cancelButtonText: 'ปิด',
-            confirmButtonColor: '#10b981',
-            cancelButtonColor: '#6b7280'
-          }).then(r => {
-            if (r.isConfirmed && res.reg_token) {
-              this.router.navigate(['/register'], {
-                queryParams: {
-                  thaid_reg:    res.reg_token,
-                  thaid_fn:     encodeURIComponent(res.firstname_th || ''),
-                  thaid_ln:     encodeURIComponent(res.lastname_th || ''),
-                  sso_provider: ssoIntent
-                }
-              });
-            }
-          });
+          const regParams = res.reg_token ? {
+            thaid_reg:    res.reg_token,
+            thaid_fn:     encodeURIComponent(res.firstname_th || ''),
+            thaid_ln:     encodeURIComponent(res.lastname_th || ''),
+            sso_provider: ssoIntent
+          } : null;
+          if (ssoFlow === 'register' && regParams) {
+            // มาจากปุ่ม ThaID/ProviderID ในหน้า Register → ไป Register โดยตรง ไม่ต้องถาม
+            this.router.navigate(['/register'], { queryParams: regParams });
+          } else if (ssoFlow === 'register') {
+            // Register flow แต่ไม่มี reg_token (ไม่น่าเกิด)
+            Swal.fire('ลงทะเบียนไม่สำเร็จ', 'ไม่สามารถดึงข้อมูลได้ กรุณาลองใหม่', 'error');
+          } else {
+            Swal.fire({
+              icon: 'warning',
+              title: 'ไม่พบบัญชีผู้ใช้งาน',
+              html: `<p>ไม่พบบัญชีที่ผูกกับ<br><b>${res.firstname_th || ''} ${res.lastname_th || ''}</b><br>ในระบบนี้</p>
+                     <p class="text-sm text-gray-500 mt-2">กรุณาลงทะเบียนก่อนเข้าใช้งาน หรือติดต่อผู้ดูแลระบบเพื่อผูกบัญชี</p>`,
+              showCancelButton: true,
+              confirmButtonText: '<i class="fas fa-user-plus mr-1"></i> ลงทะเบียน',
+              cancelButtonText: 'ปิด',
+              confirmButtonColor: '#10b981',
+              cancelButtonColor: '#6b7280'
+            }).then(r => {
+              if (r.isConfirmed && regParams) {
+                this.router.navigate(['/register'], { queryParams: regParams });
+              }
+            });
+          }
         } else {
           Swal.fire('ไม่สำเร็จ', res.message || 'เกิดข้อผิดพลาด', 'error');
         }

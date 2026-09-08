@@ -64,9 +64,9 @@ export class RegisterComponent implements OnInit, OnDestroy {
   thaidRegLoading: boolean = false;
   ssoProvider: 'thaid' | 'providerid' | '' = '';
 
-  // === Registration method selection (modal เลือก 3 วิธี) ===
-  // 'choose' = แสดง modal เลือกวิธี | 'manual' = แสดง form กรอกเอง
-  registerMode: 'choose' | 'manual' = 'choose';
+  // === Registration method selection ===
+  // 'choose' = modal เลือกวิธี (legacy nav) | 'manual' = form กรอก + SSO pre-fill buttons
+  registerMode: 'choose' | 'manual' = 'manual';
 
   selectManualRegister() {
     this.registerMode = 'manual';
@@ -74,6 +74,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
 
   registerWithThaID() {
     if (this.isThaIdEnabled) {
+      sessionStorage.setItem('sso_flow', 'register');
       window.location.href = `${environment.apiUrl}/auth/thaid/register-start`;
     } else {
       this.showSsoUnavailable('ThaID', 'fa-id-card', '#1e40af');
@@ -85,24 +86,9 @@ export class RegisterComponent implements OnInit, OnDestroy {
       this.showSsoUnavailable('ProviderID (กระทรวงสาธารณสุข)', 'fa-user-md', '#0284c7');
       return;
     }
-    // ProviderID ใช้ Direct JWT Flow — ลงทะเบียนเริ่มต้นจากหน้า Login ไม่ใช่กดปุ่มนี้
-    Swal.fire({
-      icon: 'info',
-      title: 'ลงทะเบียนด้วย ProviderID',
-      html: `<div style="text-align:left;font-size:13px;line-height:1.8">
-        <p>การลงทะเบียนด้วย <b style="color:#0284c7">ProviderID (MOPH)</b> เริ่มจากหน้า <b>เข้าสู่ระบบ</b>:</p>
-        <ol style="margin-left:16px;margin-top:8px;color:#374151">
-          <li>คลิกปุ่ม <b>ProviderID</b> ในหน้า Login</li>
-          <li>ยืนยันตัวตนบน MOPH Portal</li>
-          <li>หากยังไม่มีบัญชี — ระบบจะนำท่านกลับหน้านี้พร้อมข้อมูลอัตโนมัติ</li>
-        </ol>
-      </div>`,
-      confirmButtonText: '<i class="fas fa-sign-in-alt mr-1"></i> ไปหน้า Login',
-      cancelButtonText: 'ปิด',
-      showCancelButton: true,
-      confirmButtonColor: '#0284c7',
-      cancelButtonColor: '#6b7280'
-    }).then(r => { if (r.isConfirmed) this.router.navigate(['/login']); });
+    sessionStorage.setItem('sso_flow', 'register');
+    sessionStorage.setItem('sso_intent', 'providerid');
+    window.location.href = `${environment.apiUrl}/auth/providerid/register-start`;
   }
 
   private showSsoUnavailable(providerName: string, icon: string, color: string) {

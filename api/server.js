@@ -1645,13 +1645,14 @@ const MOPH_REDIRECT_URI = 'https://apikorat.moph.go.th/authen/healthid/callback'
 
 async function getProviderIdSettings() {
     const [rows] = await db.query(
-        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('providerid_enabled','providerid_login_url')"
+        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('providerid_enabled','providerid_login_url','providerid_register_url')"
     );
     const s = {};
     rows.forEach(r => s[r.setting_key] = r.setting_value);
     return {
-        enabled:   s.providerid_enabled === 'true',
-        login_url: s.providerid_login_url || '',
+        enabled:      s.providerid_enabled === 'true',
+        login_url:    s.providerid_login_url || '',
+        register_url: s.providerid_register_url || '',
         // MOPH defaults — ใช้ใน callback ถ้ายังต้องการ OAuth flow ในอนาคต
         token_url:    MOPH_TOKEN_URL,
         userinfo_url: MOPH_USERINFO_URL,
@@ -1683,6 +1684,26 @@ apiRouter.get('/auth/providerid/start', async (req, res) => {
         console.error('[ProviderID/start] error:', e.message);
         const frontendBase = getFrontendBase(req);
         res.redirect(`${frontendBase}/sso-callback?sso_error=${encodeURIComponent('เกิดข้อผิดพลาดในการเชื่อมต่อ ProviderID')}`);
+    }
+});
+
+/** GET /auth/providerid/register-start — redirect ไปหน้า ProviderID (สำหรับ flow ลงทะเบียน) */
+apiRouter.get('/auth/providerid/register-start', async (req, res) => {
+    try {
+        const s = await getProviderIdSettings();
+        const frontendBase = getFrontendBase(req);
+        if (!s.enabled)
+            return res.redirect(`${frontendBase}/register?sso_error=${encodeURIComponent('ProviderID ยังไม่ได้เปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ')}`);
+        // ใช้ register_url ถ้าตั้งไว้ ไม่งั้น fallback เป็น login_url (เปลี่ยน state เองไม่ได้เพราะ URL สำเร็จรูป)
+        const targetUrl = s.register_url || s.login_url;
+        if (!targetUrl)
+            return res.redirect(`${frontendBase}/register?sso_error=${encodeURIComponent('ProviderID ยังไม่ได้ตั้งค่า Register URL กรุณาตรวจสอบ Settings')}`);
+        console.log(`[ProviderID/register-start] → ${targetUrl.slice(0, 80)}...`);
+        res.redirect(targetUrl);
+    } catch (e) {
+        console.error('[ProviderID/register-start] error:', e.message);
+        const frontendBase = getFrontendBase(req);
+        res.redirect(`${frontendBase}/register?sso_error=${encodeURIComponent('เกิดข้อผิดพลาดในการเชื่อมต่อ ProviderID')}`);
     }
 });
 
