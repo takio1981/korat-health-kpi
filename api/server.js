@@ -230,7 +230,7 @@ async function sendLoginNotifications(user, ip, ua, provider) {
     try {
         const nowStr = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' });
         const uaShort = String(ua || '').slice(0, 80);
-        const providerLabel = provider === 'thaid' ? 'ThaID' : provider === 'providerid' ? 'ProviderID (MOPH)' : 'SSO';
+        const providerLabel = provider === 'thaid' ? 'ThaID' : provider === 'providerid' ? 'ProviderID' : 'SSO';
 
         // [1] Local DB — บันทึกใน notifications (ทุก user ทุก role)
         try {

@@ -90,7 +90,7 @@ export class SsoCallbackComponent implements OnInit {
     Swal.fire({
       icon: 'warning',
       title: 'ไม่พบข้อมูล SSO',
-      html: `<p style="font-size:13px;color:#374151">ไม่พบ token ใน URL<br>กรุณาลองเข้าสู่ระบบด้วย ThaiD ใหม่อีกครั้ง</p>`,
+      html: `<p style="font-size:13px;color:#374151">ไม่พบ token ใน URL<br>กรุณาลองเข้าสู่ระบบใหม่อีกครั้ง</p>`,
       confirmButtonColor: '#10b981',
       confirmButtonText: 'กลับไปหน้า Login'
     }).then(() => this.router.navigate(['/login']));
