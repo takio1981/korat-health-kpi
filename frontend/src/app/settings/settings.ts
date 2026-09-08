@@ -84,13 +84,8 @@ export class SettingsComponent implements OnInit {
 
   // SSO OAuth config — ProviderID (MOPH) — configurable
   providerIdClientId: string = '';
-  providerIdClientSecret: string = '';
   providerIdAuthUrl: string = '';
-  providerIdTokenUrl: string = '';
-  providerIdUserinfoUrl: string = '';
   providerIdRedirectUri: string = '';
-  providerIdScope: string = 'openid profile';
-  showProviderIdSecret: boolean = false;
 
   ngOnInit() {
     const role = this.authService.getUserRole();
@@ -221,12 +216,8 @@ export class SettingsComponent implements OnInit {
           this.thaidRedirectUri = grab('thaid_redirect_uri');
           this.thaidScope = grab('thaid_scope');
           this.providerIdClientId = grab('providerid_client_id');
-          this.providerIdClientSecret = grab('providerid_client_secret');
           this.providerIdAuthUrl = grab('providerid_auth_url');
-          this.providerIdTokenUrl = grab('providerid_token_url');
-          this.providerIdUserinfoUrl = grab('providerid_userinfo_url');
           this.providerIdRedirectUri = grab('providerid_redirect_uri');
-          this.providerIdScope = grab('providerid_scope') || 'openid profile';
         }
         this.cdr.detectChanges();
       }
@@ -285,12 +276,8 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'providerid_enabled', setting_value: this.providerIdEnabled.toString() },
       // ProviderID OAuth config — configurable
       { setting_key: 'providerid_client_id', setting_value: this.providerIdClientId },
-      { setting_key: 'providerid_client_secret', setting_value: this.providerIdClientSecret },
       { setting_key: 'providerid_auth_url', setting_value: this.providerIdAuthUrl },
-      { setting_key: 'providerid_token_url', setting_value: this.providerIdTokenUrl },
-      { setting_key: 'providerid_userinfo_url', setting_value: this.providerIdUserinfoUrl },
       { setting_key: 'providerid_redirect_uri', setting_value: this.providerIdRedirectUri },
-      { setting_key: 'providerid_scope', setting_value: this.providerIdScope },
     ];
 
     this.authService.updateSettings(settingsToSave).subscribe({
@@ -328,39 +315,6 @@ export class SettingsComponent implements OnInit {
     this.appealStartDate = '';
     this.appealEndDate = '';
     this.appealDaysAfterApprove = 0;
-  }
-
-  testProviderIdConfig() {
-    Swal.fire({ title: 'กำลังตรวจสอบ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    this.authService.apiGet('/admin/test-providerid-config').subscribe({
-      next: (res: any) => {
-        const d = res.data || {};
-        const checks = d.checks || {};
-        const tu = checks.token_url || {};
-        Swal.fire({
-          icon: d.checks?.config_complete ? 'success' : 'warning',
-          title: 'ผล: ProviderID Config',
-          html: `
-            <div class="text-left text-sm space-y-1">
-              <p><b>Client ID:</b> ${d.client_id}</p>
-              <p><b>Client Secret:</b> ${d.has_secret ? '✅ ตั้งค่าแล้ว' : '❌ ยังไม่ได้ตั้ง'}</p>
-              <p><b>Auth URL:</b> <code class="text-xs">${d.auth_url}</code></p>
-              <p><b>Token URL:</b> <code class="text-xs">${d.token_url}</code></p>
-              <p><b>UserInfo URL:</b> <code class="text-xs">${d.userinfo_url}</code></p>
-              <p><b>Redirect URI:</b> <code class="text-xs">${d.redirect_uri}</code></p>
-              <p><b>Scope:</b> ${d.scope}</p>
-              <hr class="my-2">
-              <p><b>Token URL reachable:</b> ${tu.reachable ? `✅ HTTP ${tu.status} — ${tu.note}` : `❌ ${tu.error || 'ไม่ตอบสนอง'}`}</p>
-              <p><b>Redirect URI format:</b> ${checks.redirect_uri_match ? '✅ ถูกต้อง' : '⚠️ ตรวจสอบ path'}</p>
-              <hr class="my-2">
-              <p class="font-bold text-base">${d.recommendation}</p>
-            </div>`,
-          confirmButtonColor: '#0891b2',
-          width: '600px'
-        });
-      },
-      error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถตรวจสอบได้', 'error')
-    });
   }
 
   testTelegram() {

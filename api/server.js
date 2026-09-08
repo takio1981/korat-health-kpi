@@ -1692,21 +1692,27 @@ app.get('/authen/thaid/callback', handleThaidCallback);
 // ============================================================
 
 /** ดึง ProviderID config จาก DB */
+// MOPH Health ID (moph.id.th) — default endpoints (discovered from /back/oauth/service-provider pattern)
+const MOPH_AUTH_URL     = 'https://moph.id.th/oauth/redirect';
+const MOPH_TOKEN_URL    = 'https://moph.id.th/back/oauth/token';
+const MOPH_USERINFO_URL = 'https://moph.id.th/back/oauth/userinfo';
+const MOPH_REDIRECT_URI = 'https://apikorat.moph.go.th/authen/healthid/callback';
+
 async function getProviderIdSettings() {
     const [rows] = await db.query(
-        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'providerid_%'"
+        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('providerid_enabled','providerid_client_id','providerid_auth_url','providerid_redirect_uri')"
     );
     const s = {};
     rows.forEach(r => s[r.setting_key] = r.setting_value);
     return {
-        enabled:       s.providerid_enabled === 'true',
-        client_id:     s.providerid_client_id    || process.env.PROVIDERID_CLIENT_ID    || '',
-        client_secret: s.providerid_client_secret || process.env.PROVIDERID_CLIENT_SECRET || '',
-        auth_url:      s.providerid_auth_url      || '',
-        token_url:     s.providerid_token_url     || '',
-        userinfo_url:  s.providerid_userinfo_url  || '',
-        redirect_uri:  s.providerid_redirect_uri  || '',
-        scope:         s.providerid_scope         || 'openid profile',
+        enabled:      s.providerid_enabled === 'true',
+        client_id:    s.providerid_client_id   || process.env.PROVIDERID_CLIENT_ID || '',
+        auth_url:     s.providerid_auth_url    || MOPH_AUTH_URL,
+        redirect_uri: s.providerid_redirect_uri || MOPH_REDIRECT_URI,
+        // token/userinfo คงที่ตาม MOPH defaults — ไม่รับจาก DB
+        token_url:    MOPH_TOKEN_URL,
+        userinfo_url: MOPH_USERINFO_URL,
+        client_secret: process.env.PROVIDERID_CLIENT_SECRET || '',
     };
 }
 
@@ -1732,11 +1738,14 @@ apiRouter.get('/auth/providerid/start', async (req, res) => {
         const state = crypto.randomBytes(16).toString('hex');
         _providerIdStateMap.set(state, { flow: req.query.flow || 'login', expires: Date.now() + 10 * 60 * 1000 });
 
-        const authUrl = `${s.auth_url}?response_type=code&client_id=${encodeURIComponent(s.client_id)}`
+        // Build auth URL — ไม่ encode client_id (MOPH อาจต้องการ raw UUID)
+        // ไม่ส่ง scope ถ้าว่าง (MOPH อาจไม่รองรับ)
+        let authUrl = `${s.auth_url}?response_type=code`
+            + `&client_id=${s.client_id}`
             + `&redirect_uri=${encodeURIComponent(s.redirect_uri)}`
-            + `&scope=${encodeURIComponent(s.scope)}`
             + `&state=${state}`;
-        console.log(`[ProviderID/start] redirect → ProviderID auth | redirect_uri=${s.redirect_uri}`);
+        if (s.scope) authUrl += `&scope=${encodeURIComponent(s.scope)}`;
+        console.log(`[ProviderID/start] → MOPH auth | client_id=${s.client_id.slice(0,8)}... redirect_uri=${s.redirect_uri}`);
         res.redirect(authUrl);
     } catch (e) {
         console.error('[ProviderID/start] error:', e.message);
@@ -1769,26 +1778,46 @@ async function handleProviderIdCallback(req, res) {
         if (!s.enabled) return redirectErr('ProviderID ยังไม่ได้เปิดใช้งาน');
 
         // 1. Exchange code → access_token
-        const tokenRes = await fetch(s.token_url, {
+        // ลอง form-urlencoded ก่อน ถ้า 400/500 ลอง JSON (MOPH บางเวอร์ชันใช้ JSON body)
+        if (!s.token_url) return redirectErr('ยังไม่ได้ตั้งค่า Token URL — กรุณากรอกใน Settings');
+        const tokenBody = {
+            grant_type: 'authorization_code',
+            code: String(code),
+            redirect_uri: s.redirect_uri,
+            client_id: s.client_id,
+            ...(s.client_secret ? { client_secret: s.client_secret } : {})
+        };
+        console.log(`[ProviderID/callback] token exchange → ${s.token_url} | client_id=${s.client_id.slice(0,8)}...`);
+        let tokenRes = await fetch(s.token_url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
-            body: new URLSearchParams({
-                grant_type: 'authorization_code',
-                code: String(code),
-                redirect_uri: s.redirect_uri,
-                client_id: s.client_id,
-                client_secret: s.client_secret
-            }).toString()
+            body: new URLSearchParams(tokenBody).toString()
         });
+        // fallback: ลอง JSON body ถ้า form-encoded ไม่สำเร็จ
+        if (!tokenRes.ok && (tokenRes.status === 400 || tokenRes.status === 415 || tokenRes.status === 500)) {
+            console.warn(`[ProviderID/callback] form-encoded ${tokenRes.status} → ลอง JSON body`);
+            tokenRes = await fetch(s.token_url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(tokenBody)
+            });
+        }
         if (!tokenRes.ok) {
             const errBody = await tokenRes.text().catch(() => '');
-            console.error(`[ProviderID/callback] ❌ token exchange FAILED ${tokenRes.status}:`, errBody.substring(0, 300));
-            return redirectErr(`แลก token ไม่สำเร็จ (${tokenRes.status}) — ตรวจสอบ client_secret ในหน้า Settings`);
+            console.error(`[ProviderID/callback] ❌ token exchange FAILED ${tokenRes.status}:`, errBody.substring(0, 500));
+            const hint = tokenRes.status === 401 ? 'client_id หรือ client_secret ไม่ถูกต้อง'
+                       : tokenRes.status === 400 ? 'redirect_uri ไม่ตรงกับที่จด หรือ code หมดอายุ'
+                       : tokenRes.status === 500 ? 'MOPH server error — ตรวจสอบว่า client_id ลงทะเบียนแล้ว'
+                       : `HTTP ${tokenRes.status}`;
+            return redirectErr(`แลก token ไม่สำเร็จ — ${hint}`);
         }
-        const tokenData = await tokenRes.json();
-        const accessToken = tokenData.access_token;
-        if (!accessToken) return redirectErr('ProviderID ไม่ได้ส่ง access_token กลับมา');
-        console.warn('[ProviderID/callback] ✓ token exchange OK');
+        const tokenData = await tokenRes.json().catch(() => ({}));
+        const accessToken = tokenData.access_token || tokenData.token;
+        if (!accessToken) {
+            console.error('[ProviderID/callback] ❌ token response keys:', Object.keys(tokenData));
+            return redirectErr('ProviderID ไม่ได้ส่ง access_token กลับมา — ตรวจสอบ Token URL และ scope');
+        }
+        console.warn('[ProviderID/callback] ✓ token exchange OK | keys:', Object.keys(tokenData));
 
         // 2. Call userinfo endpoint — ดึงเลขบัตร 13 หลัก
         let userProfile = null;
@@ -1919,6 +1948,56 @@ async function handleProviderIdCallback(req, res) {
 apiRouter.get('/auth/providerid/callback', handleProviderIdCallback);
 app.get('/authen/providerid/callback', handleProviderIdCallback);
 app.get('/authen/healthid/callback', handleProviderIdCallback);
+
+// === ProviderID Config Diagnostic — ตรวจสอบ config และ MOPH endpoint (super_admin) ===
+apiRouter.get('/admin/test-providerid-config', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'super_admin') return res.status(403).json({ success: false, message: 'super_admin only' });
+    try {
+        const s = await getProviderIdSettings();
+        const result = {
+            enabled:      s.enabled,
+            client_id:    s.client_id ? `${s.client_id.slice(0,8)}...` : '(ไม่ได้ตั้ง)',
+            has_secret:   !!s.client_secret,
+            auth_url:     s.auth_url,
+            token_url:    s.token_url,
+            userinfo_url: s.userinfo_url,
+            redirect_uri: s.redirect_uri,
+            scope:        s.scope || '(ไม่ส่ง)',
+            checks: {}
+        };
+        // ตรวจ token_url ว่าเข้าถึงได้
+        try {
+            const tokenCheck = await fetch(s.token_url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'grant_type=authorization_code&code=test_probe&client_id=test&redirect_uri=test',
+                signal: AbortSignal.timeout(5000)
+            });
+            const body = await tokenCheck.text().catch(() => '');
+            result.checks.token_url = {
+                status: tokenCheck.status,
+                reachable: true,
+                note: tokenCheck.status === 400 ? 'endpoint ตอบสนอง (400=param ผิด — ปกติ)' :
+                      tokenCheck.status === 401 ? 'endpoint ตอบสนอง (401=auth ผิด — ปกติ)' :
+                      tokenCheck.status === 500 ? 'endpoint ตอบสนอง แต่ server error (ตรวจ client_id/secret)' :
+                      `HTTP ${tokenCheck.status}`,
+                body_preview: body.substring(0, 200)
+            };
+        } catch (e) {
+            result.checks.token_url = { reachable: false, error: e.message };
+        }
+        result.checks.config_complete = !!(s.client_id && s.client_secret && s.token_url && s.redirect_uri);
+        result.checks.redirect_uri_match = s.redirect_uri.includes('/authen/healthid/callback') ||
+                                           s.redirect_uri.includes('/authen/providerid/callback');
+        result.recommendation = !s.client_id ? '⚠️ ยังไม่ได้ตั้ง client_id' :
+                                !s.client_secret ? '⚠️ ยังไม่ได้ตั้ง client_secret (รับจาก MOPH portal)' :
+                                result.checks.config_complete ? '✅ Config ครบ — ทดสอบ login ได้' :
+                                '⚠️ Config ยังไม่ครบ';
+        res.json({ success: true, data: result });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
 
 // === Session status diagnostic (super_admin) — ตรวจว่า Single Session ทำงานหรือไม่ ===
 apiRouter.get('/admin/session-status', authenticateToken, async (req, res) => {
