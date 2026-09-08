@@ -1700,16 +1700,14 @@ const MOPH_REDIRECT_URI = 'https://apikorat.moph.go.th/authen/healthid/callback'
 
 async function getProviderIdSettings() {
     const [rows] = await db.query(
-        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('providerid_enabled','providerid_client_id','providerid_auth_url','providerid_redirect_uri')"
+        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('providerid_enabled','providerid_login_url')"
     );
     const s = {};
     rows.forEach(r => s[r.setting_key] = r.setting_value);
     return {
-        enabled:      s.providerid_enabled === 'true',
-        client_id:    s.providerid_client_id   || process.env.PROVIDERID_CLIENT_ID || '',
-        auth_url:     s.providerid_auth_url    || MOPH_AUTH_URL,
-        redirect_uri: s.providerid_redirect_uri || MOPH_REDIRECT_URI,
-        // token/userinfo คงที่ตาม MOPH defaults — ไม่รับจาก DB
+        enabled:   s.providerid_enabled === 'true',
+        login_url: s.providerid_login_url || '',
+        // MOPH defaults — ใช้ใน callback ถ้ายังต้องการ OAuth flow ในอนาคต
         token_url:    MOPH_TOKEN_URL,
         userinfo_url: MOPH_USERINFO_URL,
         client_secret: process.env.PROVIDERID_CLIENT_SECRET || '',
@@ -1732,21 +1730,10 @@ apiRouter.get('/auth/providerid/start', async (req, res) => {
         const frontendBase = getFrontendBase(req);
         if (!s.enabled)
             return res.redirect(`${frontendBase}/sso-callback?sso_error=${encodeURIComponent('ProviderID ยังไม่ได้เปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ')}`);
-        if (!s.client_id || !s.auth_url || !s.redirect_uri)
-            return res.redirect(`${frontendBase}/sso-callback?sso_error=${encodeURIComponent('ProviderID ยังไม่ได้ตั้งค่า กรุณาตรวจสอบ Settings')}`);
-
-        const state = crypto.randomBytes(16).toString('hex');
-        _providerIdStateMap.set(state, { flow: req.query.flow || 'login', expires: Date.now() + 10 * 60 * 1000 });
-
-        // Build auth URL — ไม่ encode client_id (MOPH อาจต้องการ raw UUID)
-        // ไม่ส่ง scope ถ้าว่าง (MOPH อาจไม่รองรับ)
-        let authUrl = `${s.auth_url}?response_type=code`
-            + `&client_id=${s.client_id}`
-            + `&redirect_uri=${encodeURIComponent(s.redirect_uri)}`
-            + `&state=${state}`;
-        if (s.scope) authUrl += `&scope=${encodeURIComponent(s.scope)}`;
-        console.log(`[ProviderID/start] → MOPH auth | client_id=${s.client_id.slice(0,8)}... redirect_uri=${s.redirect_uri}`);
-        res.redirect(authUrl);
+        if (!s.login_url)
+            return res.redirect(`${frontendBase}/sso-callback?sso_error=${encodeURIComponent('ProviderID ยังไม่ได้ตั้งค่า URL กรุณาตรวจสอบ Settings')}`);
+        console.log(`[ProviderID/start] → ${s.login_url.slice(0, 80)}...`);
+        res.redirect(s.login_url);
     } catch (e) {
         console.error('[ProviderID/start] error:', e.message);
         const frontendBase = getFrontendBase(req);

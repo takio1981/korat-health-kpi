@@ -255,32 +255,14 @@
             <i class="fas fa-exclamation-triangle me-1"></i><b>หมายเหตุ:</b> เปิดสวิตช์เพื่อให้ระบบเปิด OAuth login — ปุ่มจะปรากฏในหน้า Login/Register และ redirect ไปยัง MOPH/DGA จริง (ต้องกรอก config OAuth ด้านล่างก่อน)
           </div>
 
-          <!-- ProviderID OAuth config -->
+          <!-- ProviderID URL config -->
           <div *ngIf="providerIdEnabled" class="mt-4 bg-cyan-50/40 border border-cyan-200 rounded-xl p-4">
-            <h4 class="font-bold text-cyan-800 text-sm mb-3"><i class="fas fa-user-md me-2"></i>ProviderID Config (MOPH Health ID)</h4>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-              <div>
-                <label class="block font-bold text-gray-700 mb-1">Client ID <small class="font-normal text-gray-400">(จาก MOPH Portal)</small></label>
-                <input type="text" [(ngModel)]="providerIdClientId" name="providerIdClientId"
-                       placeholder="เช่น 0198c05c-2455-7938-9c89-5c08252f731c"
-                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none font-mono text-[11px]">
-              </div>
-              <div>
-                <label class="block font-bold text-gray-700 mb-1">Redirect URI <small class="font-normal text-orange-500">⚠️ ต้องตรงกับที่จด MOPH ทุกตัวอักษร</small></label>
-                <input type="url" [(ngModel)]="providerIdRedirectUri" name="providerIdRedirectUri"
-                       placeholder="https://apikorat.moph.go.th/authen/healthid/callback"
-                       class="w-full px-3 py-2 border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-400 outline-none font-mono text-[11px]">
-                <p class="text-[10px] text-gray-400 mt-0.5">ปล่อยว่าง = ใช้ค่า default ของระบบ</p>
-              </div>
-              <div class="md:col-span-2">
-                <label class="block font-bold text-gray-700 mb-1">Authorization URL <small class="font-normal text-gray-400">(URL หน้า Login MOPH — ปรับแก้ได้หากเปลี่ยน endpoint)</small></label>
-                <input type="url" [(ngModel)]="providerIdAuthUrl" name="providerIdAuthUrl"
-                       placeholder="https://moph.id.th/oauth/redirect"
-                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none font-mono text-[11px]">
-                <p class="text-[10px] text-gray-400 mt-0.5">ปล่อยว่าง = ใช้ค่า default: <code>https://moph.id.th/oauth/redirect</code></p>
-              </div>
-            </div>
-            <p class="text-[11px] text-cyan-700 mt-3"><i class="fas fa-shield-alt me-1"></i>match user ด้วย <b>เลขบัตรประชาชน (SHA-256 hash)</b> — Callback: <code>/authen/healthid/callback</code></p>
+            <h4 class="font-bold text-cyan-800 text-sm mb-2"><i class="fas fa-user-md me-2"></i>ProviderID — URL ปุ่มเข้าสู่ระบบ</h4>
+            <label class="block font-bold text-gray-700 mb-1 text-xs">URL ที่ปุ่ม ProviderID จะนำไป <small class="font-normal text-gray-400">(URL เต็ม รวม query string)</small></label>
+            <input type="url" [(ngModel)]="providerIdLoginUrl" name="providerIdLoginUrl"
+                   placeholder="https://moph.id.th/oauth/redirect?client_id=...&redirect_uri=...&response_type=code&state=khupskpi-login"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 outline-none font-mono text-[11px]">
+            <p class="text-[10px] text-gray-400 mt-1">ตัวอย่าง: <code class="break-all">https://moph.id.th/oauth/redirect?client_id=0198c05c-2455-7938-9c89-5c08252f731c&amp;redirect_uri=https://apikorat.moph.go.th/authen/healthid/callback&amp;response_type=code&amp;state=khupskpi-login</code></p>
           </div>
 
           <!-- ThaID config — แสดงเมื่อเปิด toggle -->

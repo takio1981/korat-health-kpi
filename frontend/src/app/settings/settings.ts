@@ -82,10 +82,8 @@ export class SettingsComponent implements OnInit {
   thaidScope: string = '';
   showThaidSecret: boolean = false;
 
-  // SSO OAuth config — ProviderID (MOPH) — configurable
-  providerIdClientId: string = '';
-  providerIdAuthUrl: string = '';
-  providerIdRedirectUri: string = '';
+  // SSO — ProviderID login URL (URL เต็มของปุ่ม)
+  providerIdLoginUrl: string = '';
 
   ngOnInit() {
     const role = this.authService.getUserRole();
@@ -215,9 +213,7 @@ export class SettingsComponent implements OnInit {
           this.thaidAuthUrl = grab('thaid_auth_url');
           this.thaidRedirectUri = grab('thaid_redirect_uri');
           this.thaidScope = grab('thaid_scope');
-          this.providerIdClientId = grab('providerid_client_id');
-          this.providerIdAuthUrl = grab('providerid_auth_url');
-          this.providerIdRedirectUri = grab('providerid_redirect_uri');
+          this.providerIdLoginUrl = grab('providerid_login_url');
         }
         this.cdr.detectChanges();
       }
@@ -275,9 +271,7 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'thaid_scope', setting_value: this.thaidScope },
       { setting_key: 'providerid_enabled', setting_value: this.providerIdEnabled.toString() },
       // ProviderID OAuth config — configurable
-      { setting_key: 'providerid_client_id', setting_value: this.providerIdClientId },
-      { setting_key: 'providerid_auth_url', setting_value: this.providerIdAuthUrl },
-      { setting_key: 'providerid_redirect_uri', setting_value: this.providerIdRedirectUri },
+      { setting_key: 'providerid_login_url', setting_value: this.providerIdLoginUrl },
     ];
 
     this.authService.updateSettings(settingsToSave).subscribe({
