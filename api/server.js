@@ -416,7 +416,23 @@ const port = process.env.PORT || 8830;
 // Security Middleware
 app.set('trust proxy', 1); // จำเป็นเมื่ออยู่หลัง Nginx Proxy เพื่อให้ Rate Limit ทำงานถูกต้องกับ IP จริง
 app.use(helmet()); // เพิ่ม HTTP Headers เพื่อความปลอดภัย (XSS, Clickjacking, etc.)
-app.use(cors());
+// CORS — จำกัด origin เฉพาะ frontend ที่รู้จัก (กัน cross-origin API abuse)
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_BASE_URL || '')
+    .split(',').map(o => o.trim().replace(/\/$/, '')).filter(Boolean);
+app.use(cors({
+    origin: (origin, callback) => {
+        // ยอมรับ request ที่ไม่มี origin (curl, server-to-server) และ origin ที่อยู่ใน allowlist
+        if (!origin || ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin)) {
+            return callback(null, true);
+        }
+        // อนุญาต localhost ทุก port สำหรับ development
+        if (/^https?:\/\/localhost(:\d+)?$/.test(origin) || /^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) {
+            return callback(null, true);
+        }
+        callback(new Error(`CORS: origin ${origin} not allowed`));
+    },
+    credentials: true
+}));
 app.use(express.json({
     limit: '50mb',
     // เก็บ raw body ไว้สำหรับ webhook ที่ต้อง verify signature (เช่น LINE)
@@ -888,11 +904,11 @@ apiRouter.post('/login', loginIpLimiter, loginLimiter, async (req, res) => {
                 });
             } else {
                 await saveLog(username, 'login_failed', 'รหัสผ่านไม่ถูกต้อง', ip);
-                res.status(401).json({ success: false, message: 'รหัสผ่านไม่ถูกต้อง' });
+                res.status(401).json({ success: false, message: 'ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง' });
             }
         } else {
             await saveLog(username, 'login_failed', 'ไม่พบชื่อผู้ใช้งาน', ip);
-            res.status(401).json({ success: false, message: 'ไม่พบชื่อผู้ใช้งาน' });
+            res.status(401).json({ success: false, message: 'ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง' });
         }
     } catch (error) {
         console.error(error);
@@ -2328,8 +2344,8 @@ apiRouter.post('/forgot-password', loginIpLimiter, loginLimiter, async (req, res
         const user = users[0];
         if (!user.email) return res.status(400).json({ success: false, message: 'บัญชีนี้ไม่มี Email ลงทะเบียนไว้ กรุณาติดต่อผู้ดูแลระบบ' });
 
-        // สร้างรหัสชั่วคราว 6 หลัก
-        const tempCode = String(Math.floor(100000 + Math.random() * 900000));
+        // สร้างรหัสชั่วคราว 6 หลัก — ใช้ crypto.randomInt (CSPRNG)
+        const tempCode = String(crypto.randomInt(100000, 1000000));
         const hashedTemp = await bcrypt.hash(tempCode, 10);
         const expiry = new Date(Date.now() + 15 * 60 * 1000); // หมดอายุ 15 นาที
 
@@ -4474,16 +4490,9 @@ apiRouter.post('/users', authenticateToken, isAnyAdmin, async (req, res) => {
 });
 
 // เปลี่ยนรหัสผ่านตัวเอง (ทุก role ใช้ได้)
-apiRouter.put('/users/change-password', async (req, res) => {
+apiRouter.put('/users/change-password', authenticateToken, async (req, res) => {
     const { currentPassword, newPassword } = req.body;
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (!token) return res.status(401).json({ success: false, message: 'กรุณาเข้าสู่ระบบ' });
-
-    let user;
-    try { user = jwt.verify(token, SECRET_KEY); } catch (err) {
-        return res.status(403).json({ success: false, message: 'Token ไม่ถูกต้อง' });
-    }
+    const user = req.user; // authenticateToken ตรวจ session + set req.user แล้ว
 
     if (!currentPassword || !newPassword) {
         return res.status(400).json({ success: false, message: 'กรุณากรอกข้อมูลให้ครบ' });
