@@ -967,6 +967,20 @@ setInterval(() => {
 }, 60 * 1000);
 
 /**
+ * ลบฟิลด์ที่อาจมีเลขบัตรประชาชน 13 หลัก (plain CID) ออกจาก JWT payload ก่อนบันทึก DB
+ * เพื่อให้ sso_logs/sso_profiles เก็บเฉพาะข้อมูลที่ไม่ใช่ PII ที่ละเอียดอ่อน
+ */
+function sanitizeSsoPayload(payload) {
+    if (!payload) return null;
+    const safe = { ...payload };
+    // ฟิลด์ที่อาจมีเลขบัตร 13 หลัก
+    for (const f of ['cid','pid','citizen_id','national_id','personal_id','id_card','hash_cid','sub_id']) delete safe[f];
+    // sub อาจเป็น user identifier ธรรมดา (ไม่ใช่ CID) ให้เก็บแค่ 4 ตัวสุดท้ายหาก format เป็น 13 หลัก
+    if (safe.sub && /^\d{13}$/.test(String(safe.sub).trim())) safe.sub = '***' + String(safe.sub).slice(-4);
+    return safe;
+}
+
+/**
  * บันทึก SSO log ทุก attempt (login/register/error)
  * @param {string} provider  'thaid' | 'providerid'
  * @param {string} flow      'login' | 'register'
@@ -983,7 +997,7 @@ async function saveSsoLog(provider, flow, data) {
                 data.user_id  || null,
                 data.username || null,
                 data.outcome,
-                data.raw_payload  ? JSON.stringify(data.raw_payload)  : null,
+                data.raw_payload  ? JSON.stringify(sanitizeSsoPayload(data.raw_payload))  : null,
                 data.extracted_fields ? JSON.stringify(data.extracted_fields) : null,
                 data.ip       || null,
                 data.error_msg || null
@@ -1026,7 +1040,7 @@ async function upsertSsoProfile(provider, userId, profile) {
                 profile.name_th      || null,
                 profile.pid_partial  || null,
                 profile.extra_fields ? JSON.stringify(profile.extra_fields) : null,
-                profile.raw_payload  ? JSON.stringify(profile.raw_payload)  : null
+                profile.raw_payload  ? JSON.stringify(sanitizeSsoPayload(profile.raw_payload))  : null
             ]
         );
     } catch (e) {
@@ -1157,15 +1171,28 @@ apiRouter.post('/auth/thaid/verify-token', async (req, res) => {
     const { token } = req.body;
     if (!token) return res.status(400).json({ success: false, message: 'ไม่มี token' });
 
-    // 0. ตรวจ provider — 2 วิธีรวมกัน: (a) JWT iss field (b) hint จาก frontend
-    const hintProvider = String(req.body.hint_provider || '').toLowerCase(); // 'providerid' | 'thaid' | ''
+    // 0. ตรวจ provider — ใช้ JWT iss field เป็นหลัก (hint_provider จาก frontend ใช้เพื่อ logging เท่านั้น)
+    const hintProvider = String(req.body.hint_provider || '').toLowerCase();
     let rawDecoded;
     try { rawDecoded = jwt.decode(token); } catch (_) { rawDecoded = null; }
+    if (!rawDecoded) return res.status(400).json({ success: false, message: 'JWT ไม่ถูกต้อง ไม่สามารถอ่านได้' });
     const rawIss = String(rawDecoded?.iss || '').toLowerCase();
+    // ตัดสินใจ provider จาก iss เท่านั้น — ไม่ใช้ hint_provider เป็นตัวตัดสิน (security decision)
     const issIsMoph = rawIss.includes('moph') || rawIss.includes('health.moph') || rawIss.includes('moph.id');
-    const isMoph = issIsMoph || hintProvider === 'providerid';
-    const detectedProvider = isMoph ? 'providerid' : 'thaid';
+    const detectedProvider = issIsMoph ? 'providerid' : 'thaid';
     console.log(`[verify-token] iss="${rawDecoded?.iss}" hint="${hintProvider}" fields=${Object.keys(rawDecoded||{}).join(',')} -> provider=${detectedProvider}`);
+
+    // MOPH ISS allowlist — ProviderID token ต้องมาจาก domain ที่รู้จักเท่านั้น
+    const MOPH_ISS_DOMAINS = ['moph.id.th', 'moph.go.th', 'health.moph.go.th', 'moph.id'];
+    if (detectedProvider === 'providerid') {
+        let issHost = '';
+        try { issHost = new URL(rawDecoded.iss.startsWith('http') ? rawDecoded.iss : `https://${rawDecoded.iss}`).hostname.toLowerCase(); } catch (_) { issHost = rawDecoded.iss || ''; }
+        const issAllowed = MOPH_ISS_DOMAINS.some(d => issHost === d || issHost.endsWith('.' + d));
+        if (!issAllowed) {
+            console.warn(`[verify-token] ProviderID rejected: iss="${rawDecoded.iss}" not in allowlist`);
+            return res.status(401).json({ success: false, message: 'ProviderID JWT มาจาก issuer ที่ไม่รู้จัก' });
+        }
+    }
 
     let s;
     if (detectedProvider === 'providerid') {
@@ -1183,22 +1210,20 @@ apiRouter.post('/auth/thaid/verify-token', async (req, res) => {
             return res.status(403).json({ success: false, message: 'ThaiD ยังไม่ได้เปิดใช้งาน' });
     }
 
-    // 1. Verify/Decode JWT
+    // 1. Verify JWT — ต้องผ่าน signature check เสมอ ไม่มี fallback decode
     let payload;
     if (detectedProvider === 'thaid') {
+        if (!s.thaid_client_secret)
+            return res.status(500).json({ success: false, message: 'ThaiD client secret ยังไม่ได้ตั้งค่า' });
         try {
             payload = jwt.verify(token, s.thaid_client_secret, { algorithms: ['HS256'] });
         } catch (e) {
-            console.warn('[verify-token] ThaiD verify failed, fallback decode:', e.message);
-            payload = jwt.decode(token);
-            if (!payload) return res.status(400).json({ success: false, message: 'JWT ไม่ถูกต้อง ไม่สามารถอ่านได้' });
-            if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp)
-                return res.status(401).json({ success: false, message: 'ThaiD token หมดอายุ กรุณาสแกน QR ใหม่' });
+            console.warn('[verify-token] ThaiD JWT verify failed:', e.message);
+            return res.status(401).json({ success: false, message: 'ThaiD JWT ไม่ถูกต้องหรือลายเซ็นไม่ตรง กรุณาสแกน QR ใหม่' });
         }
     } else {
-        // ProviderID (MOPH): decode only + exp check
+        // ProviderID (MOPH): ไม่มี shared secret — ตรวจ iss allowlist (ข้างบน) + exp
         payload = rawDecoded;
-        if (!payload) return res.status(400).json({ success: false, message: 'JWT ไม่ถูกต้อง ไม่สามารถอ่านได้' });
         if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp)
             return res.status(401).json({ success: false, message: 'ProviderID token หมดอายุ กรุณาเข้าสู่ระบบใหม่' });
     }
@@ -1381,7 +1406,8 @@ apiRouter.get('/auth/thaid/reg-data', async (req, res) => {
         _thaidRegMap.delete(String(token));
         return res.status(404).json({ success: false, message: 'Token หมดอายุ กรุณาสแกน QR ThaiD ใหม่' });
     }
-    // ไม่ลบ token ตอนนี้ — ลบเมื่อ submit register สำเร็จ
+    // ลบทันทีหลัง read — one-time token (กัน replay ภายใน TTL)
+    _thaidRegMap.delete(String(token));
     res.json({
         success: true,
         cid_hash: entry.cid_hash,
@@ -1586,7 +1612,7 @@ async function handleThaidCallback(req, res) {
             { expiresIn: '8h' }
         );
 
-        await saveLog(user.username, 'login_success', `เข้าสู่ระบบผ่าน ThaiD SSO (${thaiFullName || cidStr})`, ip);
+        await saveLog(user.username, 'login_success', `เข้าสู่ระบบผ่าน ThaiD SSO (${thaiFullName || '****' + cidStr.slice(-4)})`, ip);
         sendLoginNotifications(user, ip, req.headers['user-agent'] || '', 'thaid');
 
         // บันทึก SSO log + อัปเดต profile
@@ -1858,7 +1884,7 @@ async function handleProviderIdCallback(req, res) {
         );
 
         // 7. Log + notifications
-        await saveLog(user.username, 'login_success', `เข้าสู่ระบบผ่าน ProviderID SSO (${fullName || cidStr})`, ip);
+        await saveLog(user.username, 'login_success', `เข้าสู่ระบบผ่าน ProviderID SSO (${fullName || '****' + cidStr.slice(-4)})`, ip);
         saveSsoLog('providerid', 'login', { outcome: 'success', cid_hash: hashedCid, user_id: user.id, username: user.username, ip });
         try {
             await db.query(
