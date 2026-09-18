@@ -75,6 +75,8 @@ export class KpiManageComponent implements OnInit {
   hdcCompareLastRun: Date | null = null;
   // filter เพิ่มสำหรับ indicators tab — กรองตามสถานะ compare กับ HDC
   filterHdcStatus: string = '';      // '' | 'match' | 'different' | 'missing_remote' | 'not_compared' | 'inactive'
+  // filter ตามสถานะการบันทึกผลงาน (ใช้ร่วมกับ filterHdcStatus ได้ — คนละมิติกัน)
+  filterResultStatus: string = '';   // '' | 'has_results' | 'no_results'
   hdcAddModal: { open: boolean; item: any; deptId: number|null; mainIndicatorId: number|null } = {
     open: false, item: null, deptId: null, mainIndicatorId: null
   };
@@ -382,10 +384,14 @@ export class KpiManageComponent implements OnInit {
           const cmp = this.getHdcCompareStatus(i);
           if (this.filterHdcStatus === 'inactive') {
             const hdc = this.hdcCompareMap.get(i.table_process || '');
-            return hdc && (hdc.hdc_is_active === 0 || hdc.hdc_is_active === '0');
+            if (!(hdc && (hdc.hdc_is_active === 0 || hdc.hdc_is_active === '0'))) return false;
+          } else if (cmp !== this.filterHdcStatus) {
+            return false;
           }
-          return cmp === this.filterHdcStatus;
         }
+        // Result status filter (มีผลงาน / ยังไม่มีผลงาน)
+        if (this.filterResultStatus === 'has_results' && !(i.result_count > 0)) return false;
+        if (this.filterResultStatus === 'no_results' && i.result_count > 0) return false;
         return true;
       });
     } else if (this.activeTab === 'main-indicators') {
@@ -812,6 +818,15 @@ export class KpiManageComponent implements OnInit {
       else if (cmp === 'missing_remote') counts.missing_remote++;
       const hdc = this.getHdcData(i);
       if (hdc && (hdc.hdc_is_active === 0 || hdc.hdc_is_active === '0')) counts.inactive++;
+    }
+    return counts;
+  }
+
+  // นับจำนวนตัวชี้วัดที่มี/ยังไม่มีผลงาน — ไม่ต้องรอ compare กับ HDC ก่อน (result_count มาจาก GET /indicators โดยตรง)
+  get resultStatusCounts() {
+    const counts = { has: 0, no: 0 };
+    for (const i of this.indicators) {
+      if (i.result_count > 0) counts.has++; else counts.no++;
     }
     return counts;
   }

@@ -132,6 +132,17 @@
                   class="px-2.5 py-1 rounded-lg font-bold transition-all">
             <i class="fas fa-power-off mr-1"></i>HDC inactive ({{ hdcCounts.inactive }})
           </button>
+          <span class="w-px h-4 bg-teal-200"></span>
+          <button (click)="filterResultStatus = filterResultStatus === 'has_results' ? '' : 'has_results'; applyFilter()"
+                  [ngClass]="filterResultStatus === 'has_results' ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all">
+            <i class="fas fa-chart-bar mr-1"></i>มีผลงาน ({{ resultStatusCounts.has }})
+          </button>
+          <button (click)="filterResultStatus = filterResultStatus === 'no_results' ? '' : 'no_results'; applyFilter()"
+                  [ngClass]="filterResultStatus === 'no_results' ? 'bg-gray-600 text-white' : 'bg-gray-50 text-gray-500 border border-gray-200'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all">
+            <i class="fas fa-chart-bar mr-1"></i>ยังไม่มีผลงาน ({{ resultStatusCounts.no }})
+          </button>
           <button *ngIf="hdcCompareSummary && hdcMissingLocalItems.length > 0"
                   (click)="scrollToSection('missing-local-indicators')"
                   class="px-2.5 py-1 rounded-lg font-bold bg-cyan-50 text-cyan-700 border border-cyan-200 inline-flex items-center gap-1 hover:bg-cyan-100 transition-colors cursor-pointer">
