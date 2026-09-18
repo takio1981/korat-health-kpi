@@ -737,6 +737,11 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.delete(`${this.apiUrl}/indicators/${id}`, { headers });
   }
+  getIndicatorResultSummary(id: number): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/indicators/${id}/result-summary`, { headers });
+  }
 
   // Sub-Indicators CRUD
   getSubIndicators(indicator_id?: number): Observable<any> {

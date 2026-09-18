@@ -327,6 +327,14 @@
                     <i class="fas fa-hospital text-[9px]"></i>{{ off.label }}
                   </span>
                 </ng-container>
+                <button *ngIf="item.result_count > 0" (click)="openResultSummary(item); $event.stopPropagation()"
+                        class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold"
+                        title="คลิกดูรายละเอียดหน่วยบริการ/ปีที่มีผลงาน">
+                  <i class="fas fa-chart-bar text-[9px]"></i>มีผลงาน {{ item.result_count }} รายการ
+                </button>
+                <span *ngIf="!item.result_count" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-50 border border-gray-200 text-gray-400" title="ยังไม่มีผลงานบันทึก">
+                  <i class="fas fa-chart-bar text-[9px]"></i>ยังไม่มีผลงาน
+                </span>
               </div>
             </div>
             <div class="flex items-center gap-2 shrink-0">
@@ -450,6 +458,14 @@
                         <i class="fas fa-hospital text-[9px]"></i>{{ off.label }}
                       </span>
                     </ng-container>
+                    <button *ngIf="item.result_count > 0" (click)="openResultSummary(item); $event.stopPropagation()"
+                            class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold hover:bg-emerald-100 transition-colors cursor-pointer"
+                            title="คลิกดูรายละเอียดหน่วยบริการ/ปีที่มีผลงาน">
+                      <i class="fas fa-chart-bar text-[9px]"></i>มีผลงาน {{ item.result_count }} รายการ
+                    </button>
+                    <span *ngIf="!item.result_count" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-50 border border-gray-200 text-gray-400" title="ยังไม่มีผลงานบันทึก">
+                      <i class="fas fa-chart-bar text-[9px]"></i>ยังไม่มีผลงาน
+                    </span>
                   </div>
 
                   <!-- HDC name diff inline (เมื่อ status='different') -->

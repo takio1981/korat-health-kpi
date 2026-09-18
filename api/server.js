@@ -5185,11 +5185,21 @@ apiRouter.get('/indicators', authenticateToken, async (req, res) => {
             params.push(user.deptId);
         }
         const [rows] = await db.query(`
-            SELECT i.*, mi.main_indicator_name, mi.yut_id, my.yut_name, d.dept_name
+            SELECT i.*, mi.main_indicator_name, mi.yut_id, my.yut_name, d.dept_name,
+                   COALESCE(rc.cnt, 0) + COALESCE(src.cnt, 0) AS result_count
             FROM kpi_indicators i
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
             LEFT JOIN main_yut my ON mi.yut_id = my.id
             LEFT JOIN departments d ON i.dept_id = d.id
+            LEFT JOIN (
+                SELECT indicator_id, COUNT(*) AS cnt FROM kpi_results
+                WHERE actual_value IS NOT NULL AND actual_value != '' GROUP BY indicator_id
+            ) rc ON rc.indicator_id = i.id
+            LEFT JOIN (
+                SELECT si.indicator_id, COUNT(*) AS cnt FROM kpi_sub_results sr
+                JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
+                WHERE sr.actual_value IS NOT NULL AND sr.actual_value != '' GROUP BY si.indicator_id
+            ) src ON src.indicator_id = i.id
             ${whereClause}
             ORDER BY i.id DESC
         `, params);
@@ -5326,13 +5336,29 @@ apiRouter.put('/indicators/:id', authenticateToken, isSuperAdmin, async (req, re
 
 apiRouter.delete('/indicators/:id', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
+        const id = req.params.id;
+        // เช็คผลงานที่บันทึกแล้วก่อนลบ — กันข้อมูลสูญหาย (mirror pattern เดียวกับ DELETE /hospitals/:hoscode)
+        const [results] = await db.query(
+            "SELECT COUNT(*) AS cnt FROM kpi_results WHERE indicator_id = ? AND actual_value IS NOT NULL AND actual_value != ''",
+            [id]
+        );
+        const [subResults] = await db.query(
+            `SELECT COUNT(*) AS cnt FROM kpi_sub_results sr
+             JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
+             WHERE si.indicator_id = ? AND sr.actual_value IS NOT NULL AND sr.actual_value != ''`,
+            [id]
+        );
+        const totalResults = results[0].cnt + subResults[0].cnt;
+        if (totalResults > 0) {
+            return res.status(400).json({ success: false, message: `ไม่สามารถลบได้: มีผลงานบันทึกแล้ว ${totalResults} รายการ กรุณา "ปิดใช้งาน" แทนการลบ` });
+        }
         // ดึงชื่อก่อนลบ
         let oldName = '';
         try {
-            const [r] = await db.query('SELECT kpi_indicators_name FROM kpi_indicators WHERE id = ?', [req.params.id]);
+            const [r] = await db.query('SELECT kpi_indicators_name FROM kpi_indicators WHERE id = ?', [id]);
             if (r[0]) oldName = r[0].kpi_indicators_name;
         } catch (_) {}
-        await db.query('DELETE FROM kpi_indicators WHERE id = ?', [req.params.id]);
+        await db.query('DELETE FROM kpi_indicators WHERE id = ?', [id]);
         // LINE notify: deleted
         try {
             const actor = await _actorLabel(req.user.userId);
@@ -5346,6 +5372,23 @@ apiRouter.delete('/indicators/:id', authenticateToken, isSuperAdmin, async (req,
         res.json({ success: true, message: 'Deleted successfully' });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Error deleting indicator' });
+    }
+});
+
+// GET /indicators/:id/result-summary — รายชื่อหน่วยบริการ+ปีที่มีผลงานบันทึกแล้ว (เรียกเมื่อคลิก badge เท่านั้น)
+apiRouter.get('/indicators/:id/result-summary', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query(`
+            SELECT r.hospcode, h.hosname, r.year_bh, COUNT(*) AS month_count
+            FROM kpi_results r
+            LEFT JOIN chospital h ON h.hoscode = r.hospcode
+            WHERE r.indicator_id = ? AND r.actual_value IS NOT NULL AND r.actual_value != ''
+            GROUP BY r.hospcode, r.year_bh
+            ORDER BY r.year_bh DESC, h.hosname
+        `, [req.params.id]);
+        res.json({ success: true, data: rows });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
     }
 });
 

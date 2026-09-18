@@ -554,9 +554,13 @@ export class KpiManageComponent implements OnInit {
   }
 
   deleteItem(id: number) {
+    const item = this.activeTab === 'indicators' ? this.indicators.find(i => i.id === id) : null;
+    const resultCount = item?.result_count || 0;
     Swal.fire({
       title: 'ยืนยันการลบ',
-      text: "คุณต้องการลบข้อมูลนี้ใช่หรือไม่?",
+      html: resultCount > 0
+        ? `<p>ตัวชี้วัดนี้มี<b>ผลงานบันทึกแล้ว ${resultCount} รายการ</b></p><p class="text-red-600 text-sm mt-1">ระบบจะไม่อนุญาตให้ลบ กรุณา "ปิดใช้งาน" แทน</p>`
+        : 'คุณต้องการลบข้อมูลนี้ใช่หรือไม่?',
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#d33',
@@ -580,7 +584,7 @@ export class KpiManageComponent implements OnInit {
               }
               this.cdr.detectChanges();
             },
-            error: () => Swal.fire('ผิดพลาด', 'ไม่สามารถลบข้อมูลได้ (อาจมีการใช้งานอยู่)', 'error')
+            error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถลบข้อมูลได้ (อาจมีการใช้งานอยู่)', 'error')
           });
         }
       }
@@ -589,29 +593,81 @@ export class KpiManageComponent implements OnInit {
 
   toggleActive(item: any) {
     const newStatus = !item.is_active || item.is_active === 0;
-    let observable;
+    const doToggle = () => {
+      let observable;
+      if (this.activeTab === 'indicators') {
+        observable = this.authService.toggleIndicatorActive(item.id, newStatus);
+      } else if (this.activeTab === 'main-indicators') {
+        observable = this.authService.toggleMainIndicatorActive(item.id, newStatus);
+      } else if (this.activeTab === 'strategies') {
+        observable = this.authService.toggleStrategyActive(item.id, newStatus);
+      } else if (this.activeTab === 'departments') {
+        observable = this.authService.toggleDepartmentActive(item.id, newStatus);
+      }
 
-    if (this.activeTab === 'indicators') {
-      observable = this.authService.toggleIndicatorActive(item.id, newStatus);
-    } else if (this.activeTab === 'main-indicators') {
-      observable = this.authService.toggleMainIndicatorActive(item.id, newStatus);
-    } else if (this.activeTab === 'strategies') {
-      observable = this.authService.toggleStrategyActive(item.id, newStatus);
-    } else if (this.activeTab === 'departments') {
-      observable = this.authService.toggleDepartmentActive(item.id, newStatus);
-    }
+      if (observable) {
+        observable.subscribe({
+          next: (res) => {
+            if (res.success) {
+              item.is_active = newStatus ? 1 : 0;
+              this.applyFilter();
+            }
+          },
+          error: () => Swal.fire('ผิดพลาด', 'ไม่สามารถเปลี่ยนสถานะได้', 'error')
+        });
+      }
+    };
 
-    if (observable) {
-      observable.subscribe({
-        next: (res) => {
-          if (res.success) {
-            item.is_active = newStatus ? 1 : 0;
-            this.applyFilter();
-          }
-        },
-        error: () => Swal.fire('ผิดพลาด', 'ไม่สามารถเปลี่ยนสถานะได้', 'error')
-      });
+    // ปิดใช้งานตัวชี้วัดที่มีผลงานแล้ว — เตือนก่อน แต่ยังดำเนินการต่อได้ถ้ายืนยัน
+    if (this.activeTab === 'indicators' && !newStatus && item.result_count > 0) {
+      Swal.fire({
+        title: 'ยืนยันการปิดใช้งาน',
+        html: `<p>ตัวชี้วัดนี้มี<b>ผลงานบันทึกแล้ว ${item.result_count} รายการ</b></p><p class="text-sm text-gray-500 mt-1">การปิดใช้งานไม่ลบข้อมูลเดิม แต่จะซ่อนตัวชี้วัดนี้จากรายการหลัก</p>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#f59e0b',
+        confirmButtonText: 'ปิดใช้งาน',
+        cancelButtonText: 'ยกเลิก'
+      }).then(r => { if (r.isConfirmed) doToggle(); });
+    } else {
+      doToggle();
     }
+  }
+
+  // แสดงรายละเอียดหน่วยบริการ+ปีที่มีผลงานบันทึกแล้วของตัวชี้วัด
+  openResultSummary(item: any) {
+    this.authService.getIndicatorResultSummary(item.id).subscribe({
+      next: (res: any) => {
+        if (!res.success) { Swal.fire('ผิดพลาด', res.message || 'ไม่สามารถโหลดข้อมูลได้', 'error'); return; }
+        const rows = res.data || [];
+        const tableRows = rows.map((r: any) => `
+          <tr class="border-b border-gray-100">
+            <td class="px-2 py-1.5 text-left">${r.hosname || r.hospcode}</td>
+            <td class="px-2 py-1.5 text-center">${r.year_bh}</td>
+            <td class="px-2 py-1.5 text-center">${r.month_count}</td>
+          </tr>`).join('');
+        Swal.fire({
+          title: item.kpi_indicators_name,
+          html: `
+            <div class="text-left max-h-80 overflow-y-auto">
+              <table class="w-full text-xs">
+                <thead class="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th class="px-2 py-1.5 text-left">หน่วยบริการ</th>
+                    <th class="px-2 py-1.5 text-center">ปีงบ</th>
+                    <th class="px-2 py-1.5 text-center">จำนวนเดือน</th>
+                  </tr>
+                </thead>
+                <tbody>${tableRows || '<tr><td colspan="3" class="px-2 py-4 text-center text-gray-400">ไม่พบข้อมูล</td></tr>'}</tbody>
+              </table>
+            </div>`,
+          confirmButtonText: 'ปิด',
+          confirmButtonColor: '#10b981',
+          width: 500
+        });
+      },
+      error: () => Swal.fire('ผิดพลาด', 'ไม่สามารถโหลดข้อมูลได้', 'error')
+    });
   }
 
   getActiveCount(): number {
