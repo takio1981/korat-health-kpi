@@ -212,7 +212,7 @@
           <div *ngFor="let item of reportData; let i = index" class="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
             <!-- by-indicator -->
             <ng-container *ngIf="activeTab === 'by-indicator'">
-              <p class="font-bold text-gray-900 text-sm whitespace-normal break-words">{{ item.kpi_indicators_name }}</p>
+              <p class="font-bold text-gray-900 text-sm whitespace-normal break-words">{{ item.kpi_indicators_name }}<span *ngIf="item | criteriaText as crit" class="text-xs font-normal text-amber-600 ml-1">({{ crit }})</span></p>
               <p class="text-[10px] text-gray-400 whitespace-normal break-words">{{ item.main_indicator_name }} | {{ item.dept_name }}</p>
               <div class="grid grid-cols-3 gap-1 mt-2 text-xs text-center">
                 <div class="bg-amber-50 rounded p-1"><p class="text-[10px] text-gray-500">เป้าหมาย</p><p class="font-bold">{{ item._target_display || '-' }}</p></div>
@@ -250,7 +250,7 @@
             </ng-container>
             <!-- recording-status: by-indicator -->
             <ng-container *ngIf="activeTab === 'recording-status' && monitorView === 'by-indicator'">
-              <p class="font-bold text-gray-900 text-sm whitespace-normal break-words">{{ item.kpi_indicators_name }}</p>
+              <p class="font-bold text-gray-900 text-sm whitespace-normal break-words">{{ item.kpi_indicators_name }}<span *ngIf="item | criteriaText as crit" class="text-xs font-normal text-amber-600 ml-1">({{ crit }})</span></p>
               <p class="text-[10px] text-gray-400 whitespace-normal break-words">{{ item.main_indicator_name }} | {{ item.dept_name }}</p>
               <div class="grid grid-cols-3 gap-1 mt-2 text-xs text-center">
                 <div class="bg-emerald-50 rounded p-1"><p class="text-[10px] text-gray-500">บันทึก</p><p class="font-bold text-emerald-700">{{ item.recorded_hospitals }}/{{ item.total_hospitals }}</p></div>
@@ -316,7 +316,7 @@
               <tr *ngFor="let item of reportData; let i = index" class="border-b border-gray-50 hover:bg-green-50/30 transition-colors">
                 <td class="px-4 py-2.5 text-gray-500">{{ i + 1 }}</td>
                 <td class="px-4 py-2.5 text-gray-700 whitespace-normal break-words">{{ item.main_indicator_name }}</td>
-                <td class="px-4 py-2.5 text-gray-800 font-medium whitespace-normal break-words">{{ item.kpi_indicators_name }}</td>
+                <td class="px-4 py-2.5 text-gray-800 font-medium whitespace-normal break-words">{{ item.kpi_indicators_name }}<span *ngIf="item | criteriaText as crit" class="text-xs font-normal text-amber-600 ml-1">({{ crit }})</span></td>
                 <td class="px-4 py-2.5 text-gray-600">{{ item.dept_name }}</td>
                 <td class="px-4 py-2.5 text-right text-gray-700">{{ item._target_display || '-' }}</td>
                 <td class="px-4 py-2.5 text-right" [class]="item._oct_display && item.oct > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._oct_display || '-' }}</td>
@@ -474,7 +474,7 @@
               <tr *ngFor="let item of reportData; let i = index" class="border-b border-gray-50 hover:bg-fuchsia-50/30 transition-colors">
                 <td class="px-4 py-2.5 text-gray-500">{{ i + 1 }}</td>
                 <td class="px-4 py-2.5 text-gray-700 whitespace-normal break-words">{{ item.main_indicator_name }}</td>
-                <td class="px-4 py-2.5 text-gray-800 font-medium whitespace-normal break-words">{{ item.kpi_indicators_name }}</td>
+                <td class="px-4 py-2.5 text-gray-800 font-medium whitespace-normal break-words">{{ item.kpi_indicators_name }}<span *ngIf="item | criteriaText as crit" class="text-xs font-normal text-amber-600 ml-1">({{ crit }})</span></td>
                 <td class="px-4 py-2.5 text-gray-600">{{ item.dept_name }}</td>
                 <td class="px-4 py-2.5 text-right text-gray-700">{{ item.total_hospitals }}</td>
                 <td class="px-4 py-2.5 text-right font-bold text-emerald-700">{{ item.recorded_hospitals }}</td>
@@ -729,7 +729,7 @@
                                 [ngClass]="selectedIndForHospDrilldown?.ind?.indicator_id === ind.indicator_id ? 'bg-violet-50/50' : ''">
                               <td class="px-3 py-2 text-gray-400">{{ j + 1 }}</td>
                               <td class="px-3 py-2 text-gray-500 whitespace-normal break-words max-w-[130px]">{{ ind.main_indicator_name || '-' }}</td>
-                              <td class="px-3 py-2 text-gray-800 font-medium whitespace-normal break-words max-w-[260px]">{{ ind.kpi_indicators_name }}</td>
+                              <td class="px-3 py-2 text-gray-800 font-medium whitespace-normal break-words max-w-[260px]">{{ ind.kpi_indicators_name }}<span *ngIf="ind | criteriaText as crit" class="text-xs font-normal text-amber-600 ml-1">({{ crit }})</span></td>
                               <td class="px-3 py-2 text-center text-gray-600 font-medium">{{ ind.total_hospitals }}</td>
                               <!-- คีย์แล้ว — คลิกได้ -->
                               <td class="px-3 py-2 text-center cursor-pointer select-none"
@@ -889,7 +889,7 @@
                 <ng-container *ngFor="let ind of deptDrilldownData; let j = index">
                   <div class="bg-white rounded-xl border border-violet-100 px-3 py-2.5 shadow-sm"
                        [ngClass]="selectedIndForHospDrilldown?.ind?.indicator_id === ind.indicator_id ? 'ring-1 ring-violet-300' : ''">
-                    <p class="font-medium text-gray-800 text-xs break-words leading-snug mb-0.5">{{ ind.kpi_indicators_name }}</p>
+                    <p class="font-medium text-gray-800 text-xs break-words leading-snug mb-0.5">{{ ind.kpi_indicators_name }}<span *ngIf="ind | criteriaText as crit" class="font-normal text-amber-600 ml-1">({{ crit }})</span></p>
                     <p class="text-[10px] text-gray-400 mb-2">{{ ind.main_indicator_name || '-' }}</p>
                     <div class="grid grid-cols-3 gap-1.5 text-xs text-center mb-1.5">
                       <div class="bg-gray-50 rounded p-1">
@@ -1024,7 +1024,7 @@
                 <tr *ngFor="let m of drilldownData; let i = index" class="border-b border-gray-50">
                   <td class="px-3 py-2 text-gray-500 text-xs">{{ i + 1 }}</td>
                   <td class="px-3 py-2 text-gray-700 text-xs whitespace-normal break-words">{{ m.main_indicator_name }}</td>
-                  <td class="px-3 py-2 text-gray-800 font-medium text-xs whitespace-normal break-words">{{ m.kpi_indicators_name }}</td>
+                  <td class="px-3 py-2 text-gray-800 font-medium text-xs whitespace-normal break-words">{{ m.kpi_indicators_name }}<span *ngIf="m | criteriaText as crit" class="text-[11px] font-normal text-amber-600 ml-1">({{ crit }})</span></td>
                   <td class="px-3 py-2 text-gray-600 text-xs">{{ m.dept_name }}</td>
                   <td class="px-3 py-2 text-right text-gray-700 text-xs">{{ m.target_value || '-' }}</td>
                 </tr>

@@ -49,6 +49,9 @@
                 <tr class="hover:bg-green-50/30 transition-colors">
                   <td class="px-4 py-3 font-medium text-gray-800">
                     <span class="whitespace-normal break-words">{{ ind.kpi_indicators_name }}</span>
+                    @if (ind | criteriaText; as crit) {
+                      <span class="text-xs font-normal text-amber-600 ml-1">({{ crit }})</span>
+                    }
                   </td>
                   <td class="px-4 py-3 text-gray-600">{{ ind.dept_name || '-' }}</td>
                   <td class="px-4 py-3">
@@ -135,7 +138,12 @@
               <i class="fas fa-wpforms"></i>
               {{ editingSchemaId ? 'แก้ไข' : 'สร้าง' }}แบบฟอร์ม
             </h3>
-            <p class="text-green-200 text-xs mt-0.5 whitespace-normal break-words">{{ selectedIndicator.kpi_indicators_name }}</p>
+            <p class="text-green-200 text-xs mt-0.5 whitespace-normal break-words">
+              {{ selectedIndicator.kpi_indicators_name }}
+              @if (selectedIndicator | criteriaText; as crit) {
+                <span class="text-amber-200">({{ crit }})</span>
+              }
+            </p>
           </div>
           <div class="flex items-center gap-2">
             <button (click)="openPreview()"

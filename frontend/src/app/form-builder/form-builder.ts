@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth';
+import { CriteriaTextPipe } from '../shared/criteria-text.pipe';
 import Swal from 'sweetalert2';
 
 interface FormField {
@@ -20,7 +21,7 @@ interface FormField {
 @Component({
   selector: 'app-form-builder',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule],
+  imports: [CommonModule, FormsModule, RouterModule, CriteriaTextPipe],
   templateUrl: './form-builder.html'
 })
 export class FormBuilderComponent implements OnInit, OnChanges {

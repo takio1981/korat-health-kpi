@@ -3,12 +3,13 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
+import { CriteriaTextPipe } from '../shared/criteria-text.pipe';
 import Swal from 'sweetalert2';
 
 @Component({
   selector: 'app-kpi-setup',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, CriteriaTextPipe],
   templateUrl: './kpi-setup.html'
 })
 export class KpiSetupComponent implements OnInit {

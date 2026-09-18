@@ -287,7 +287,7 @@
               <input type="checkbox" [checked]="isIndicatorSelected(ind.id)" (change)="toggleIndicator(ind.id)"
                      class="w-4 h-4 mt-0.5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
               <div class="flex-1 min-w-0">
-                <div class="text-sm text-gray-800 leading-snug">{{ind.kpi_indicators_name}}</div>
+                <div class="text-sm text-gray-800 leading-snug">{{ind.kpi_indicators_name}}<span *ngIf="ind | criteriaText as crit" class="text-xs font-normal text-amber-600 ml-1">({{ crit }})</span></div>
                 <div class="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
                   <span class="text-xs text-gray-400">table: {{ind.table_process}}</span>
                   <span *ngIf="ind.dept_name" class="text-xs text-green-600"><i class="fas fa-building me-0.5"></i>{{ind.dept_name}}</span>

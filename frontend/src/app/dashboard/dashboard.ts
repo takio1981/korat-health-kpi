@@ -8,11 +8,12 @@ import { FormsModule } from '@angular/forms';
 import Swal from 'sweetalert2';
 import { HttpErrorResponse } from '@angular/common/http';
 import { InitScrollLeftDirective } from './init-scroll-left.directive';
+import { CriteriaTextPipe } from '../shared/criteria-text.pipe';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, NgApexchartsModule, InitScrollLeftDirective],
+  imports: [CommonModule, FormsModule, RouterModule, NgApexchartsModule, InitScrollLeftDirective, CriteriaTextPipe],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css'
 })
@@ -250,6 +251,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
 
   showTrendModal: boolean = false;
   selectedKpiName: string = '';
+  selectedKpiCriteria: string = '';
   kpiTrendOptions: any = {};
 
   // Sub-Indicator Result Modal (ใน dashboard สำหรับบันทึกผลงานย่อย)
@@ -2460,6 +2462,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
 
   openTrendModal(item: any) {
     this.selectedKpiName = item.kpi_indicators_name;
+    this.selectedKpiCriteria = new CriteriaTextPipe().transform(item);
     const months = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
     const labels = ['ต.ค.', 'พ.ย.', 'ธ.ค.', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.'];
 

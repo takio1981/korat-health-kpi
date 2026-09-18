@@ -3330,7 +3330,7 @@ apiRouter.get('/form-schemas/indicator/:indicator_id', authenticateToken, async 
 apiRouter.get('/form-schemas/all-indicators', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
         const [rows] = await db.query(`
-            SELECT i.id, i.kpi_indicators_name, i.table_process, d.dept_name,
+            SELECT i.id, i.kpi_indicators_name, i.table_process, i.target_percentage, i.target_condition, d.dept_name,
                    fs.id AS schema_id, fs.form_title, fs.is_active AS schema_active,
                    (SELECT COUNT(*) FROM kpi_form_fields ff WHERE ff.schema_id = fs.id) AS field_count
             FROM kpi_indicators i
@@ -3790,6 +3790,7 @@ apiRouter.get('/kpi-template', authenticateToken, async (req, res) => {
                 i.id AS indicator_id,
                 i.dept_id,
                 i.target_percentage,
+                i.target_condition,
                 d.dept_name
             FROM kpi_indicators i
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
@@ -6398,7 +6399,7 @@ apiRouter.get('/exportable-indicators', authenticateToken, isSuperAdmin, async (
         // คืน upload_excel ด้วย — UI export-kpi จะใช้กรอง/แสดง badge
         const [rows] = await db.query(
             `SELECT i.id, i.kpi_indicators_name, i.table_process, i.dept_id, i.main_indicator_id, i.is_active,
-                    i.upload_excel,
+                    i.upload_excel, i.target_percentage, i.target_condition,
                     d.dept_name, mi.main_indicator_name
              FROM kpi_indicators i
              LEFT JOIN departments d ON i.dept_id = d.id
@@ -7656,6 +7657,8 @@ apiRouter.get('/report/by-indicator', authenticateToken, async (req, res) => {
                 MAX(s.kpi_indicators_name) AS kpi_indicators_name,
                 MAX(s.main_indicator_name) AS main_indicator_name,
                 MAX(s.dept_name) AS dept_name,
+                MAX(i.target_percentage) AS ind_target_percentage,
+                MAX(i.target_condition) AS ind_target_condition,
                 s.year_bh,
                 MAX(CAST(s.target_value AS DECIMAL(20,4))) AS target_value,
                 SUM(CAST(s.oct AS DECIMAL(20,4))) AS oct,
@@ -7687,6 +7690,7 @@ apiRouter.get('/report/by-indicator', authenticateToken, async (req, res) => {
                         / SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0 THEN 1 ELSE 0 END) * 100, 2)
                 END AS achievement_pct
             FROM kpi_summary s
+            LEFT JOIN kpi_indicators i ON i.id = s.indicator_id
             ${whereStr}
             GROUP BY s.indicator_id, s.year_bh
             ORDER BY achievement_pct DESC, MAX(s.main_indicator_name), MAX(s.kpi_indicators_name)
@@ -7960,6 +7964,8 @@ apiRouter.get('/report/recording-status', authenticateToken, async (req, res) =>
             SELECT
                 i.id AS indicator_id,
                 i.kpi_indicators_name,
+                i.target_percentage,
+                i.target_condition,
                 mi.main_indicator_name,
                 d.dept_name,
                 hr.year_bh,
@@ -8143,6 +8149,8 @@ apiRouter.get('/report/recording-missing/by-hospital/:hospcode', authenticateTok
             SELECT
                 i.id AS indicator_id,
                 i.kpi_indicators_name,
+                i.target_percentage,
+                i.target_condition,
                 mi.main_indicator_name,
                 d.dept_name,
                 r.target_value,

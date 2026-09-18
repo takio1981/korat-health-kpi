@@ -6,12 +6,13 @@ import { NgApexchartsModule, ApexOptions } from 'ng-apexcharts';
 import { FormsModule } from '@angular/forms';
 import { SkeletonTableComponent } from '../shared/skeleton-table/skeleton-table';
 import { ToastService } from '../services/toast.service';
+import { CriteriaTextPipe } from '../shared/criteria-text.pipe';
 import Swal from 'sweetalert2';
 
 @Component({
   selector: 'app-report',
   standalone: true,
-  imports: [CommonModule, RouterModule, NgApexchartsModule, FormsModule, SkeletonTableComponent],
+  imports: [CommonModule, RouterModule, NgApexchartsModule, FormsModule, SkeletonTableComponent, CriteriaTextPipe],
   templateUrl: './report.html',
   styleUrl: './report.css'
 })
