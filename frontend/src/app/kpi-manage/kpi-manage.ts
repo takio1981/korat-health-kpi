@@ -207,6 +207,43 @@ export class KpiManageComponent implements OnInit {
     } catch { return []; }
   }
 
+  // สัญลักษณ์เงื่อนไข: GTE→≥, LTE→≤, EQ→=
+  private readonly CONDITION_SYMBOL: { [k: string]: string } = { GTE: '≥', LTE: '≤', EQ: '=' };
+  getConditionSymbol(condition: any): string {
+    return this.CONDITION_SYMBOL[String(condition || '')] || '';
+  }
+
+  // เงื่อนไข+เกณฑ์ รวมเป็นข้อความเดียว เช่น "≥ 80%"
+  getCriteriaText(item: any): string {
+    const pct = item?.target_percentage;
+    if (pct == null || pct === '') return '-';
+    const sym = this.getConditionSymbol(item?.target_condition);
+    return `${sym ? sym + ' ' : ''}${pct}%`;
+  }
+
+  // ดึงประเภทตัวชี้วัด (R9, MOPH, SSJ, RMW, Other) — badge สีต่างกัน
+  getIndicatorTypes(item: any): Array<{ type: string; color: string; label: string }> {
+    const types: Array<{ type: string; color: string; label: string }> = [];
+    if (item?.r9 && String(item.r9).trim() && item.r9 !== '0') types.push({ type: 'r9', color: 'bg-blue-100 text-blue-700', label: 'R9' });
+    if (item?.moph && String(item.moph).trim() && item.moph !== '0') types.push({ type: 'moph', color: 'bg-red-100 text-red-700', label: 'MOPH' });
+    if (item?.ssj && String(item.ssj).trim() && item.ssj !== '0') types.push({ type: 'ssj', color: 'bg-green-100 text-green-700', label: 'SSJ' });
+    if (item?.rmw && String(item.rmw).trim() && item.rmw !== '0') types.push({ type: 'rmw', color: 'bg-yellow-100 text-yellow-700', label: 'RMW' });
+    if (item?.other && String(item.other).trim() && item.other !== '0') types.push({ type: 'other', color: 'bg-gray-100 text-gray-700', label: 'อื่นๆ' });
+    return types;
+  }
+
+  // ประเภทหน่วยบริการ — 'all_required' = ทุกประเภท, 'any_one' + required_off_types = รายชื่อ
+  getOffTypeBadge(item: any): { label: string; title: string } | null {
+    const mode = item?.evaluation_mode;
+    if (mode === 'all_required') return { label: 'ทุกประเภท', title: 'บังคับทุกประเภทหน่วยบริการ' };
+    if (mode !== 'any_one') return null;
+    const codes = this.parseOffTypes(item?.required_off_types);
+    if (codes.length === 0) return null;
+    const names = codes.map(c => this.hosTypes.find((h: any) => h.hostypecode === c)?.hostypename || c);
+    const label = codes.length <= 2 ? names.join(', ') : `${codes.length} ประเภท`;
+    return { label, title: names.join(', ') };
+  }
+
   toggleOffType(code: string) {
     const i = this.selectedOffTypes.indexOf(code);
     if (i >= 0) this.selectedOffTypes.splice(i, 1);
