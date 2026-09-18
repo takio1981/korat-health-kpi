@@ -221,6 +221,11 @@ export class KpiManageComponent implements OnInit {
     return `${sym ? sym + ' ' : ''}${pct}%`;
   }
 
+  // เกณฑ์ของ HDC (จาก getHdcData) — เทียบคู่กับ getCriteriaText(item) ของ Local
+  getHdcCriteriaText(hdc: any): string {
+    return this.getCriteriaText({ target_percentage: hdc?.hdc_target_percentage, target_condition: hdc?.hdc_target_condition });
+  }
+
   // ดึงประเภทตัวชี้วัด (R9, MOPH, SSJ, RMW, Other) — badge สีต่างกัน
   getIndicatorTypes(item: any): Array<{ type: string; color: string; label: string }> {
     const types: Array<{ type: string; color: string; label: string }> = [];

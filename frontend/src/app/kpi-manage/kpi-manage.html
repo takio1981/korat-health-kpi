@@ -303,8 +303,16 @@
                 <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-700 font-bold" title="เงื่อนไข + เกณฑ์">
                   <i class="fas fa-bullseye text-[9px]"></i>{{ getCriteriaText(item) }}
                 </span>
+                <span *ngIf="getHdcData(item)?.criteria_match === false"
+                      class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-50 border border-orange-300 text-orange-700 font-bold"
+                      [title]="'HDC เกณฑ์: ' + getHdcCriteriaText(getHdcData(item))">
+                  <i class="fas fa-bullseye text-[9px]"></i>HDC: {{ getHdcCriteriaText(getHdcData(item)) }}
+                </span>
                 <span *ngIf="item.weight" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-50 border border-orange-200 text-orange-700" title="น้ำหนัก">
                   <i class="fas fa-weight-hanging text-[9px]"></i>{{ item.weight }}
+                </span>
+                <span *ngIf="item.data_source" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-700" title="data_source">
+                  <i class="fas fa-database text-[9px]"></i>{{ item.data_source }}
                 </span>
                 <span *ngFor="let t of getIndicatorTypes(item)" class="inline-flex items-center px-1.5 py-0.5 rounded font-bold" [ngClass]="t.color" [title]="'ประเภทตัวชี้วัด: ' + t.label">
                   {{ t.label }}
@@ -415,11 +423,19 @@
                     <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-700 font-bold" title="เงื่อนไข + เกณฑ์">
                       <i class="fas fa-bullseye text-[9px]"></i>{{ getCriteriaText(item) }}
                     </span>
+                    <span *ngIf="getHdcData(item)?.criteria_match === false"
+                          class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-50 border border-orange-300 text-orange-700 font-bold"
+                          [title]="'HDC เกณฑ์: ' + getHdcCriteriaText(getHdcData(item))">
+                      <i class="fas fa-bullseye text-[9px]"></i>HDC: {{ getHdcCriteriaText(getHdcData(item)) }}
+                    </span>
                     <span *ngIf="item.weight" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-50 border border-orange-200 text-orange-700" title="น้ำหนัก">
                       <i class="fas fa-weight-hanging text-[9px]"></i>{{ item.weight }}
                     </span>
                     <span *ngIf="item.dept_name" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-50 border border-teal-200 text-teal-700" title="หน่วยงาน">
                       <i class="fas fa-building text-[9px]"></i>{{ item.dept_name }}
+                    </span>
+                    <span *ngIf="item.data_source" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-700" title="data_source">
+                      <i class="fas fa-database text-[9px]"></i>{{ item.data_source }}
                     </span>
                     <span *ngFor="let t of getIndicatorTypes(item)" class="inline-flex items-center px-1.5 py-0.5 rounded font-bold" [ngClass]="t.color" [title]="'ประเภทตัวชี้วัด: ' + t.label">
                       {{ t.label }}
@@ -462,6 +478,12 @@
                        class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700"
                        title="HDC inactive — แนะนำตั้ง upload_excel=1">
                     <i class="fas fa-power-off mr-1"></i>HDC inactive
+                  </div>
+                  <!-- เกณฑ์ต่างกัน badge -->
+                  <div *ngIf="getHdcData(item)?.criteria_match === false"
+                       class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-700"
+                       title="เกณฑ์ (target_percentage/target_condition) ไม่ตรงกับ HDC">
+                    <i class="fas fa-bullseye mr-1"></i>เกณฑ์ต่างกัน
                   </div>
                 </td>
                 <!-- upload_excel toggle -->

@@ -8945,6 +8945,11 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
         // upload_excel: 0 = ส่งออกอัตโนมัติได้ (default), 1 = ข้าม (อัปโหลด Excel มือเอง — เช่น HDC report ถูก deactivate)
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS upload_excel TINYINT(1) DEFAULT 0 COMMENT '0=auto export, 1=skip (manual Excel upload)'`); } catch(e) {}
         try { await db.query(`ALTER TABLE kpi_indicators ADD INDEX idx_upload_excel (upload_excel)`); } catch(e) {}
+        // data_source: จาก hdc.reports.data_source ('hdc'|'excel') — เก็บไว้อ้างอิง/กรองในอนาคต
+        // ใช้ VARCHAR ไม่ใช่ ENUM — กัน HDC เพิ่มค่าใหม่แล้ว local ตามไม่ทัน (evaluation_mode/target_condition ก็ใช้ VARCHAR ด้วยเหตุผลเดียวกัน)
+        try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS data_source VARCHAR(10) NULL COMMENT 'จาก hdc.reports.data_source: hdc|excel'`); } catch(e) {}
+        // hdc_fiscal_year: ปีงบฯ (พ.ศ.) ที่ค่า target_percentage/target_condition ปัจจุบันอ้างอิงมาจาก HDC ล่าสุด — audit only ไม่ใช่ FK
+        try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS hdc_fiscal_year VARCHAR(10) NULL COMMENT 'ปีงบฯ ที่ใช้อ้างอิง target_percentage/target_condition ล่าสุดจาก HDC (audit only)'`); } catch(e) {}
 
         // เพิ่มฟิลด์ใน main_yut (ยุทธศาสตร์)
         try { await db.query(`ALTER TABLE main_yut ADD COLUMN IF NOT EXISTS yut_code VARCHAR(50) NULL COMMENT 'รหัสย่อยุทธศาสตร์'`); } catch(e) {}
@@ -9463,6 +9468,13 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
     const remoteDb = getRemotePool();
     if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
     try {
+        // ปีงบประมาณที่ใช้เทียบเกณฑ์ — จาก query param หรือ default ปีงบปัจจุบัน (ต.ค. ขึ้นปีใหม่)
+        const today = new Date();
+        let fyYear = today.getFullYear();
+        if (today.getMonth() >= 9) fyYear += 1;
+        const currentFY = (fyYear + 543).toString();
+        const year_bh = req.query.year_bh ? String(req.query.year_bh) : currentFY;
+
         // ดึง reports จาก HDC
         const [hdcRows] = await remoteDb.query(`
             SELECT *
@@ -9471,10 +9483,20 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
             AND LENGTH(report_code) = LENGTH(table_process)
             ORDER BY report_id
         `);
-        // ดึง kpi_indicators จาก Local (เพิ่ม dept_id, main_indicator_id, upload_excel เพื่อ frontend)
+        // ดึง override เกณฑ์รายปีงบจาก report_fiscal_year_config (เฉพาะปีที่กำลังเทียบ)
+        const [fyRows] = await remoteDb.query(
+            `SELECT report_id, fiscal_year, target_percentage, target_condition, is_active
+             FROM report_fiscal_year_config WHERE fiscal_year = ?`,
+            [year_bh]
+        );
+        const fyConfigMap = new Map();
+        fyRows.forEach(r => fyConfigMap.set(r.report_id, r));
+
+        // ดึง kpi_indicators จาก Local (เพิ่ม dept_id, main_indicator_id, upload_excel, เกณฑ์ + data_source เพื่อ frontend)
         const [localRows] = await db.query(`
             SELECT i.id, i.kpi_indicators_name, i.table_process, i.kpi_indicators_code, i.is_active,
                    i.dept_id, i.main_indicator_id, i.upload_excel,
+                   i.target_percentage, i.target_condition, i.data_source,
                    d.dept_name, mi.main_indicator_name
             FROM kpi_indicators i
             LEFT JOIN departments d ON i.dept_id = d.id
@@ -9488,7 +9510,7 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
         localRows.forEach(r => { if (r.table_process) localMap.set(r.table_process, r); });
 
         const items = [];
-        let match = 0, different = 0, missing_local = 0, missing_remote = 0;
+        let match = 0, different = 0, missing_local = 0, missing_remote = 0, criteria_different = 0;
         let hdc_inactive_count = 0, suggest_disable_count = 0;
 
         // Helper: ถ้า HDC report inactive (=0) แต่ Local ยัง upload_excel=0 → suggest = ปิด upload_excel
@@ -9498,18 +9520,33 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
             return inactive && stillAutoExport;
         };
 
+        // Helper: ค่าเกณฑ์ที่ใช้จริง — ใช้ report_fiscal_year_config (ปีที่กำลังเทียบ) ถ้ามี ไม่งั้น fallback ไปที่ reports (base value)
+        const getEffectiveHdcCriteria = (hdc, fyConfig) => {
+            if (fyConfig && fyConfig.target_percentage != null) {
+                return { target_percentage: fyConfig.target_percentage, target_condition: fyConfig.target_condition, source: 'fiscal_year_config' };
+            }
+            return { target_percentage: hdc.target_percentage, target_condition: hdc.target_condition, source: 'reports' };
+        };
+
         // เทียบจาก HDC
         for (const hdc of hdcRows) {
             const tp = hdc.table_process;
             const local = tp ? localMap.get(tp) : null;
+            const fyConfig = fyConfigMap.get(hdc.report_id) || null;
+            const effective = getEffectiveHdcCriteria(hdc, fyConfig);
             if (!local) {
                 items.push({
                     status: 'missing_local',
                     hdc_report_id: hdc.report_id, hdc_name: hdc.report_name, hdc_dept: hdc.dept, hdc_main_yut: hdc.main_yut,
                     report_code: hdc.report_code, table_process: tp, hdc_is_active: hdc.is_active,
+                    hdc_data_source: hdc.data_source,
+                    hdc_target_percentage: effective.target_percentage, hdc_target_condition: effective.target_condition,
+                    hdc_criteria_source: effective.source, hdc_fiscal_year: fyConfig ? year_bh : null,
                     local_id: null, local_name: null,
                     local_dept_id: null, local_main_indicator_id: null, local_is_active: null,
                     local_upload_excel: null,
+                    local_target_percentage: null, local_target_condition: null, local_data_source: null,
+                    criteria_match: null,
                     suggest_disable_upload: false
                 });
                 if (hdc.is_active === 0 || hdc.is_active === '0') hdc_inactive_count++;
@@ -9518,6 +9555,14 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                 const nameMatch = (hdc.report_name || '').trim() === (local.kpi_indicators_name || '').trim();
                 const status = nameMatch ? 'match' : 'different';
                 if (status === 'match') match++; else different++;
+
+                // criteria_match: เทียบ target_percentage (numeric-aware) + target_condition
+                const pctMatch = Number(effective.target_percentage) === Number(local.target_percentage)
+                    || (effective.target_percentage == null && local.target_percentage == null);
+                const condMatch = String(effective.target_condition || '') === String(local.target_condition || '');
+                const criteria_match = pctMatch && condMatch;
+                if (!criteria_match) criteria_different++;
+
                 const suggest = computeSuggest(hdc.is_active, local.upload_excel);
                 if (suggest) suggest_disable_count++;
                 if (hdc.is_active === 0 || hdc.is_active === '0') hdc_inactive_count++;
@@ -9525,9 +9570,15 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                     status,
                     hdc_report_id: hdc.report_id, hdc_name: hdc.report_name, hdc_dept: hdc.dept, hdc_main_yut: hdc.main_yut,
                     report_code: hdc.report_code, table_process: tp, hdc_is_active: hdc.is_active,
+                    hdc_data_source: hdc.data_source,
+                    hdc_target_percentage: effective.target_percentage, hdc_target_condition: effective.target_condition,
+                    hdc_criteria_source: effective.source, hdc_fiscal_year: fyConfig ? year_bh : null,
                     local_id: local.id, local_name: local.kpi_indicators_name, local_dept: local.dept_name,
                     local_dept_id: local.dept_id, local_main_indicator_id: local.main_indicator_id, local_is_active: local.is_active,
                     local_upload_excel: local.upload_excel || 0,
+                    local_target_percentage: local.target_percentage, local_target_condition: local.target_condition,
+                    local_data_source: local.data_source,
+                    criteria_match,
                     suggest_disable_upload: suggest
                 });
             }
@@ -9539,9 +9590,14 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                     status: 'missing_remote',
                     hdc_report_id: null, hdc_name: null, hdc_dept: null, hdc_main_yut: null,
                     report_code: null, table_process: local.table_process, hdc_is_active: null,
+                    hdc_data_source: null, hdc_target_percentage: null, hdc_target_condition: null,
+                    hdc_criteria_source: null, hdc_fiscal_year: null,
                     local_id: local.id, local_name: local.kpi_indicators_name, local_dept: local.dept_name,
                     local_dept_id: local.dept_id, local_main_indicator_id: local.main_indicator_id, local_is_active: local.is_active,
                     local_upload_excel: local.upload_excel || 0,
+                    local_target_percentage: local.target_percentage, local_target_condition: local.target_condition,
+                    local_data_source: local.data_source,
+                    criteria_match: null,
                     suggest_disable_upload: false
                 });
                 missing_remote++;
@@ -9550,7 +9606,11 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
         res.json({
             success: true,
             hdc_count: hdcRows.length, local_count: localRows.length,
-            summary: { total: items.length, match, different, missing_local, missing_remote, hdc_inactive: hdc_inactive_count, suggest_disable: suggest_disable_count },
+            summary: {
+                total: items.length, match, different, missing_local, missing_remote,
+                hdc_inactive: hdc_inactive_count, suggest_disable: suggest_disable_count,
+                criteria_different, year_bh
+            },
             items
         });
     } catch (e) {
@@ -9617,7 +9677,7 @@ apiRouter.post('/report-compare/sync', authenticateToken, isSuperAdmin, async (r
     }
     try {
         const [hdcRows] = await remoteDb.query(
-            `SELECT report_id, report_name, dept, main_yut, report_code, table_process FROM reports WHERE report_id IN (?)`,
+            `SELECT report_id, report_name, dept, main_yut, report_code, table_process, data_source FROM reports WHERE report_id IN (?)`,
             [hdc_report_ids]
         );
         let inserted = 0, updated = 0, skipped = 0;
@@ -9626,17 +9686,17 @@ apiRouter.post('/report-compare/sync', authenticateToken, isSuperAdmin, async (r
             // ตรวจสอบว่ามีอยู่แล้วหรือไม่ (โดย table_process)
             const [existing] = await db.query('SELECT id, kpi_indicators_name FROM kpi_indicators WHERE table_process = ?', [hdc.table_process]);
             if (existing.length > 0) {
-                // อัปเดตชื่อ + report_code
+                // อัปเดตชื่อ + report_code + data_source (ไม่แตะ target_percentage/target_condition — local อาจตั้งค่าเองไว้)
                 await db.query(
-                    'UPDATE kpi_indicators SET kpi_indicators_name = ?, kpi_indicators_code = ? WHERE table_process = ?',
-                    [hdc.report_name, hdc.report_code || null, hdc.table_process]
+                    'UPDATE kpi_indicators SET kpi_indicators_name = ?, kpi_indicators_code = ?, data_source = ? WHERE table_process = ?',
+                    [hdc.report_name, hdc.report_code || null, hdc.data_source || null, hdc.table_process]
                 );
                 updated++;
             } else {
                 // สร้างใหม่
                 await db.query(
-                    'INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_code) VALUES (?, ?, ?)',
-                    [hdc.report_name, hdc.table_process, hdc.report_code || null]
+                    'INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_code, data_source) VALUES (?, ?, ?, ?)',
+                    [hdc.report_name, hdc.table_process, hdc.report_code || null, hdc.data_source || null]
                 );
                 inserted++;
             }
@@ -9660,7 +9720,7 @@ apiRouter.post('/report-compare/add-from-hdc', authenticateToken, isSuperAdmin, 
     if (!hdc_report_id) return res.status(400).json({ success: false, message: 'กรุณาระบุ hdc_report_id' });
     try {
         const [hdcRows] = await remoteDb.query(
-            'SELECT report_id, report_name, report_code, table_process FROM reports WHERE report_id = ?',
+            'SELECT report_id, report_name, report_code, table_process, data_source FROM reports WHERE report_id = ?',
             [hdc_report_id]
         );
         if (!hdcRows.length) return res.status(404).json({ success: false, message: 'ไม่พบรายการนี้ใน HDC' });
@@ -9669,8 +9729,8 @@ apiRouter.post('/report-compare/add-from-hdc', authenticateToken, isSuperAdmin, 
         const [existing] = await db.query('SELECT id FROM kpi_indicators WHERE table_process = ?', [hdc.table_process]);
         if (existing.length) return res.status(409).json({ success: false, message: 'มีตัวชี้วัดนี้ในระบบแล้ว (table_process ซ้ำ)' });
         const [ins] = await db.query(
-            'INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_code, dept_id, main_indicator_id, is_active) VALUES (?, ?, ?, ?, ?, 1)',
-            [hdc.report_name, hdc.table_process, hdc.report_code || null, dept_id || null, main_indicator_id || null]
+            'INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_code, dept_id, main_indicator_id, is_active, data_source) VALUES (?, ?, ?, ?, ?, 1, ?)',
+            [hdc.report_name, hdc.table_process, hdc.report_code || null, dept_id || null, main_indicator_id || null, hdc.data_source || null]
         );
         await db.query(
             'INSERT INTO system_logs (user_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
