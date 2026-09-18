@@ -776,7 +776,7 @@
                   </div>
                   <span class="col-resize-handle" (click)="$event.stopPropagation()" (mousedown)="startResize($event,'col2')"></span>
                 </th>
-                <th class="px-2 py-3 frozen col-3 bg-green-700 text-center border-r border-green-600">จัดการ</th>
+                <th class="px-2 py-3 frozen col-3 bg-green-700 text-center border-r border-green-600" title="เกณฑ์มาตรฐานของตัวชี้วัด (จากการตั้งค่าตัวชี้วัด)">เกณฑ์</th>
                 <th class="px-3 py-3 frozen col-4 bg-green-700 border-r border-green-600 relative overflow-hidden select-none cursor-pointer"
                     (click)="toggleSort('hosname')">
                   <div class="flex items-center justify-between gap-1">
@@ -786,15 +786,13 @@
                   </div>
                   <span class="col-resize-handle" (click)="$event.stopPropagation()" (mousedown)="startResize($event,'col4')"></span>
                 </th>
+                <th class="px-2 py-3 bg-green-800 text-center border-r border-green-600">จัดการ</th>
                 <th class="px-3 py-3 bg-green-800 text-right select-none cursor-pointer" (click)="toggleSort('target_value')">
                   <div class="flex items-center justify-end gap-1">
                     <span>เป้าหมาย</span>
                     <i class="fas text-[10px] shrink-0"
                        [ngClass]="sortField==='target_value' ? (sortDir==='asc' ? 'fa-sort-up text-yellow-300' : 'fa-sort-down text-yellow-300') : 'fa-sort text-white/40'"></i>
                   </div>
-                </th>
-                <th class="px-2 py-3 bg-green-800 text-center border-r border-green-600" title="เกณฑ์มาตรฐานของตัวชี้วัด (จากการตั้งค่าตัวชี้วัด)">
-                  <span>เกณฑ์</span>
                 </th>
                 <th class="px-3 py-3 bg-green-800 text-right select-none cursor-pointer" (click)="toggleSort('last_actual')">
                   <div class="flex items-center justify-end gap-1">
@@ -901,8 +899,25 @@
                   </div>
                 </td>
 
-                <!-- Col 3: จัดการ (action icons — แนวตั้ง) — frozen -->
-                <td class="px-1 py-2 frozen col-3 bg-white border-r border-gray-100">
+                <!-- Col 3: เกณฑ์ (target_percentage จาก kpi_indicators) — frozen -->
+                <td class="px-1 py-2 frozen col-3 bg-white border-r border-gray-100 text-gray-600 text-center text-xs font-bold">
+                  {{ item.target_percentage != null && item.target_percentage !== '' ? item.target_percentage + '%' : '-' }}
+                </td>
+
+                <!-- Col 4: หน่วยบริการ (+ ประเภทย่อ + อำเภอบรรทัด 2) — frozen -->
+                <td class="px-3 py-2 frozen col-4 bg-white border-r border-gray-100 text-gray-600 text-xs">
+                  <div class="flex items-center gap-1 flex-wrap">
+                    <span class="break-words">{{ item.hosname || '-' }}</span>
+                    <span *ngIf="item.hostype" class="px-1.5 py-0.5 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded text-[10px] font-bold whitespace-nowrap shrink-0"
+                          [title]="item.hostypename">{{ getHosTypeAbbr(item.hostype) }}</span>
+                  </div>
+                  <div *ngIf="item.distname" class="text-[10px] text-gray-500 mt-0.5 flex items-center gap-1">
+                    <i class="fas fa-map-marker-alt text-gray-400 text-[9px]"></i>{{ item.distname }}
+                  </div>
+                </td>
+
+                <!-- Col: จัดการ (action icons — แนวตั้ง) -->
+                <td class="px-1 py-2 bg-white border-r border-gray-100">
                   <div class="flex flex-col items-center gap-0.5">
                       <button *ngIf="(isAdmin || isSuperAdmin) && (item.indicator_status === 'pending' || item.indicator_status === 'Pending')"
                               (click)="approveKpi(item)"
@@ -1043,18 +1058,6 @@
                   </div>
                 </td>
 
-                <!-- Col 4: หน่วยบริการ (+ ประเภทย่อ + อำเภอบรรทัด 2) — frozen -->
-                <td class="px-3 py-2 frozen col-4 bg-white border-r border-gray-100 text-gray-600 text-xs">
-                  <div class="flex items-center gap-1 flex-wrap">
-                    <span class="break-words">{{ item.hosname || '-' }}</span>
-                    <span *ngIf="item.hostype" class="px-1.5 py-0.5 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded text-[10px] font-bold whitespace-nowrap shrink-0"
-                          [title]="item.hostypename">{{ getHosTypeAbbr(item.hostype) }}</span>
-                  </div>
-                  <div *ngIf="item.distname" class="text-[10px] text-gray-500 mt-0.5 flex items-center gap-1">
-                    <i class="fas fa-map-marker-alt text-gray-400 text-[9px]"></i>{{ item.distname }}
-                  </div>
-                </td>
-
 
                 <!-- Col 8: เป้าหมาย -->
                 <td class="px-1 py-2 bg-amber-50/30 font-bold text-gray-800 text-right whitespace-nowrap">
@@ -1062,11 +1065,6 @@
                   <input *ngIf="canShowTargetInput(item)" type="text" [(ngModel)]="item.target_value"
                          class="w-20 border border-amber-200 rounded px-1 py-1 text-right text-xs focus:ring-1 focus:ring-orange-500 outline-none bg-orange-50 hover:border-orange-400 transition-all"
                          [ngClass]="isModified(item, 'target_value') || isEditingTarget(item) ? '!bg-orange-100 !text-orange-700 ring-2 ring-orange-400 font-bold' : ''">
-                </td>
-
-                <!-- Col: เกณฑ์ (target_percentage จาก kpi_indicators) -->
-                <td class="px-2 py-2 bg-yellow-50/40 text-gray-600 text-center border-r whitespace-nowrap">
-                  {{ item.target_percentage != null && item.target_percentage !== '' ? item.target_percentage + '%' : '-' }}
                 </td>
 
                 <!-- Col 7: ผลงานล่าสุด -->
