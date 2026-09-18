@@ -2767,6 +2767,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 MAX(r.status) AS indicator_status,
                 MAX(CASE WHEN r.is_locked = 1 THEN 1 ELSE 0 END) AS is_locked,
                 MIN(i.table_process) AS table_process,
+                MIN(i.target_percentage) AS target_percentage,
                 MAX(i.r9) AS r9, MAX(i.moph) AS moph, MAX(i.ssj) AS ssj, MAX(i.rmw) AS rmw, MAX(i.other) AS other,
                 MIN(i.evaluation_mode) AS evaluation_mode,
                 MIN(i.required_off_types) AS required_off_types,
