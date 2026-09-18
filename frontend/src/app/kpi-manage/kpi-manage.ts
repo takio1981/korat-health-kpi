@@ -197,6 +197,12 @@ export class KpiManageComponent implements OnInit {
     });
   }
 
+  // เลื่อนหน้าจอไปยัง section ที่ระบุ (ใช้กับชิปสรุป "HDC มีแต่ยังไม่มีใน Local")
+  scrollToSection(id: string) {
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   // Parse required_off_types JSON → string[] ของ hostypecode
   parseOffTypes(v: any): string[] {
     if (!v) return [];

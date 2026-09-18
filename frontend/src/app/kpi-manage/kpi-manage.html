@@ -132,10 +132,11 @@
                   class="px-2.5 py-1 rounded-lg font-bold transition-all">
             <i class="fas fa-power-off mr-1"></i>HDC inactive ({{ hdcCounts.inactive }})
           </button>
-          <span *ngIf="hdcCompareSummary && hdcMissingLocalItems.length > 0"
-                class="px-2.5 py-1 rounded-lg font-bold bg-cyan-50 text-cyan-700 border border-cyan-200 inline-flex items-center gap-1">
+          <button *ngIf="hdcCompareSummary && hdcMissingLocalItems.length > 0"
+                  (click)="scrollToSection('missing-local-indicators')"
+                  class="px-2.5 py-1 rounded-lg font-bold bg-cyan-50 text-cyan-700 border border-cyan-200 inline-flex items-center gap-1 hover:bg-cyan-100 transition-colors cursor-pointer">
             <i class="fas fa-cloud-arrow-down text-[10px]"></i>HDC มีแต่ยังไม่มีใน Local ({{ hdcMissingLocalItems.length }})
-          </span>
+          </button>
           <span class="text-[10px] text-gray-400 ml-auto" *ngIf="hdcCompareLastRun" title="ตัวเลขในชิปนับฝั่ง Local indicators (ตรงกับที่กรองได้ในตาราง); backend summary จาก HDC อาจมากกว่าเพราะ HDC มี report ซ้ำ table_process เดียวกัน">
             <i class="fas fa-clock mr-1"></i>เทียบล่าสุด: {{ hdcCompareLastRun | date:'HH:mm:ss' }}
           </span>
@@ -155,9 +156,10 @@
           <button (click)="hdcCompareFilter = hdcCompareFilter === 'missing_remote' ? '' : 'missing_remote'; applyFilter()"
                   [ngClass]="hdcCompareFilter === 'missing_remote' ? 'bg-purple-600 text-white ring-2 ring-purple-300' : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'"
                   class="px-2.5 py-1 rounded-lg font-bold transition-all"><i class="fas fa-arrow-up mr-1"></i>ไม่มีใน HDC ({{ stratCompareSummary.missing_remote }})</button>
-          <span *ngIf="stratMissingLocalItems.length > 0" class="px-2.5 py-1 rounded-lg font-bold bg-cyan-50 text-cyan-700 border border-cyan-200 inline-flex items-center gap-1">
+          <button *ngIf="stratMissingLocalItems.length > 0" (click)="scrollToSection('missing-local-strategies')"
+                  class="px-2.5 py-1 rounded-lg font-bold bg-cyan-50 text-cyan-700 border border-cyan-200 inline-flex items-center gap-1 hover:bg-cyan-100 transition-colors cursor-pointer">
             <i class="fas fa-cloud-arrow-down text-[10px]"></i>HDC มีแต่ยังไม่มีใน Local ({{ stratMissingLocalItems.length }})
-          </span>
+          </button>
         </div>
       </div>
 
@@ -174,9 +176,10 @@
           <button (click)="hdcCompareFilter = hdcCompareFilter === 'missing_remote' ? '' : 'missing_remote'; applyFilter()"
                   [ngClass]="hdcCompareFilter === 'missing_remote' ? 'bg-purple-600 text-white ring-2 ring-purple-300' : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'"
                   class="px-2.5 py-1 rounded-lg font-bold transition-all"><i class="fas fa-arrow-up mr-1"></i>ไม่มีใน HDC ({{ deptCompareSummary.missing_remote }})</button>
-          <span *ngIf="deptMissingLocalItems.length > 0" class="px-2.5 py-1 rounded-lg font-bold bg-cyan-50 text-cyan-700 border border-cyan-200 inline-flex items-center gap-1">
+          <button *ngIf="deptMissingLocalItems.length > 0" (click)="scrollToSection('missing-local-departments')"
+                  class="px-2.5 py-1 rounded-lg font-bold bg-cyan-50 text-cyan-700 border border-cyan-200 inline-flex items-center gap-1 hover:bg-cyan-100 transition-colors cursor-pointer">
             <i class="fas fa-cloud-arrow-down text-[10px]"></i>HDC มีแต่ยังไม่มีใน Local ({{ deptMissingLocalItems.length }})
-          </span>
+          </button>
         </div>
       </div>
 
@@ -196,9 +199,10 @@
                     (click)="hdcCompareFilter = hdcCompareFilter === 'missing_remote' ? '' : 'missing_remote'; applyFilter()"
                     [ngClass]="hdcCompareFilter === 'missing_remote' ? 'bg-purple-600 text-white ring-2 ring-purple-300' : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'"
                     class="px-2.5 py-1 rounded-lg font-bold transition-all"><i class="fas fa-arrow-up mr-1"></i>ไม่มีใน HDC ({{ mainIndCompareSummary.missing_remote }})</button>
-            <span *ngIf="mainIndCompareSummary.missing_local > 0" class="px-2.5 py-1 rounded-lg font-bold bg-cyan-50 text-cyan-700 border border-cyan-200 inline-flex items-center gap-1">
+            <button *ngIf="mainIndCompareSummary.missing_local > 0" (click)="scrollToSection('missing-local-main-indicators')"
+                    class="px-2.5 py-1 rounded-lg font-bold bg-cyan-50 text-cyan-700 border border-cyan-200 inline-flex items-center gap-1 hover:bg-cyan-100 transition-colors cursor-pointer">
               <i class="fas fa-cloud-arrow-down text-[10px]"></i>HDC มีแต่ยังไม่มีใน Local ({{ mainIndCompareSummary.missing_local }})
-            </span>
+            </button>
           </ng-container>
           <!-- coverage_fallback mode -->
           <ng-container *ngIf="mainIndCompareSource === 'coverage_fallback'">
@@ -238,9 +242,10 @@
           <button (click)="hdcCompareFilter = hdcCompareFilter === 'missing_remote' ? '' : 'missing_remote'; applyFilter()"
                   [ngClass]="hdcCompareFilter === 'missing_remote' ? 'bg-purple-600 text-white ring-2 ring-purple-300' : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'"
                   class="px-2.5 py-1 rounded-lg font-bold transition-all"><i class="fas fa-arrow-up mr-1"></i>ไม่มีใน HDC ({{ hospCompareSummary.missing_remote }})</button>
-          <span *ngIf="hospMissingLocalItems.length > 0" class="px-2.5 py-1 rounded-lg font-bold bg-cyan-50 text-cyan-700 border border-cyan-200 inline-flex items-center gap-1">
+          <button *ngIf="hospMissingLocalItems.length > 0" (click)="scrollToSection('missing-local-hospitals')"
+                  class="px-2.5 py-1 rounded-lg font-bold bg-cyan-50 text-cyan-700 border border-cyan-200 inline-flex items-center gap-1 hover:bg-cyan-100 transition-colors cursor-pointer">
             <i class="fas fa-cloud-arrow-down text-[10px]"></i>HDC มีแต่ยังไม่มีใน Local ({{ hospMissingLocalItems.length }})
-          </span>
+          </button>
         </div>
       </div>
 
@@ -572,7 +577,8 @@
       </div>
 
       <!-- หมวดหมู่หลักจาก HDC ที่ยังไม่มีใน Local -->
-      <div *ngIf="activeTab === 'main-indicators' && mainIndCompareSource === 'hdc_table' && mainIndMissingLocalItems.length > 0"
+      <div id="missing-local-main-indicators"
+           *ngIf="activeTab === 'main-indicators' && mainIndCompareSource === 'hdc_table' && mainIndMissingLocalItems.length > 0"
            class="mt-4 border border-cyan-200 rounded-xl overflow-hidden">
         <div class="bg-cyan-50 px-4 py-2.5 flex items-center gap-2 border-b border-cyan-200">
           <i class="fas fa-cloud-arrow-down text-cyan-600"></i>
@@ -598,7 +604,8 @@
       </div>
 
       <!-- ยุทธศาสตร์จาก HDC ที่ยังไม่มีใน Local -->
-      <div *ngIf="activeTab === 'strategies' && stratCompareSummary && stratMissingLocalItems.length > 0"
+      <div id="missing-local-strategies"
+           *ngIf="activeTab === 'strategies' && stratCompareSummary && stratMissingLocalItems.length > 0"
            class="mt-4 border border-cyan-200 rounded-xl overflow-hidden">
         <div class="bg-cyan-50 px-4 py-2.5 flex items-center gap-2 border-b border-cyan-200">
           <i class="fas fa-cloud-arrow-down text-cyan-600"></i>
@@ -624,7 +631,8 @@
       </div>
 
       <!-- หน่วยงานจาก HDC ที่ยังไม่มีใน Local -->
-      <div *ngIf="activeTab === 'departments' && deptCompareSummary && deptMissingLocalItems.length > 0"
+      <div id="missing-local-departments"
+           *ngIf="activeTab === 'departments' && deptCompareSummary && deptMissingLocalItems.length > 0"
            class="mt-4 border border-cyan-200 rounded-xl overflow-hidden">
         <div class="bg-cyan-50 px-4 py-2.5 flex items-center gap-2 border-b border-cyan-200">
           <i class="fas fa-cloud-arrow-down text-cyan-600"></i>
@@ -650,7 +658,8 @@
       </div>
 
       <!-- หน่วยบริการจาก HDC ที่ยังไม่มีใน Local -->
-      <div *ngIf="activeTab === 'hospitals' && hospCompareSummary && (hospMissingLocalItems.length > 0 || hospDifferentItems.length > 0)"
+      <div id="missing-local-hospitals"
+           *ngIf="activeTab === 'hospitals' && hospCompareSummary && (hospMissingLocalItems.length > 0 || hospDifferentItems.length > 0)"
            class="mt-4 border border-cyan-200 rounded-xl overflow-hidden">
         <div class="bg-cyan-50 px-4 py-2.5 flex items-center gap-2 border-b border-cyan-200">
           <i class="fas fa-cloud-arrow-down text-cyan-600"></i>
@@ -694,7 +703,8 @@
       </div>
 
       <!-- ตัวชี้วัดจาก HDC ที่ยังไม่มีใน Local -->
-      <div *ngIf="activeTab === 'indicators' && hdcCompareSummary && hdcMissingLocalItems.length > 0"
+      <div id="missing-local-indicators"
+           *ngIf="activeTab === 'indicators' && hdcCompareSummary && hdcMissingLocalItems.length > 0"
            class="mt-4 border border-cyan-200 rounded-xl overflow-hidden">
         <div class="bg-cyan-50 px-4 py-2.5 flex items-center gap-2 border-b border-cyan-200">
           <i class="fas fa-cloud-arrow-down text-cyan-600"></i>
