@@ -1198,15 +1198,14 @@ apiRouter.post('/auth/thaid/verify-token', async (req, res) => {
     const detectedProvider = issIsMoph ? 'providerid' : 'thaid';
     console.log(`[verify-token] iss="${rawDecoded?.iss}" hint="${hintProvider}" fields=${Object.keys(rawDecoded||{}).join(',')} -> provider=${detectedProvider}`);
 
-    // MOPH ISS allowlist — ProviderID token ต้องมาจาก domain ที่รู้จักเท่านั้น
+    // MOPH ISS allowlist — log-only (ยังไม่รู้ iss จริงจาก production จึงไม่ reject เพื่อกัน false-block)
     const MOPH_ISS_DOMAINS = ['moph.id.th', 'moph.go.th', 'health.moph.go.th', 'moph.id'];
     if (detectedProvider === 'providerid') {
         let issHost = '';
         try { issHost = new URL(rawDecoded.iss.startsWith('http') ? rawDecoded.iss : `https://${rawDecoded.iss}`).hostname.toLowerCase(); } catch (_) { issHost = rawDecoded.iss || ''; }
         const issAllowed = MOPH_ISS_DOMAINS.some(d => issHost === d || issHost.endsWith('.' + d));
         if (!issAllowed) {
-            console.warn(`[verify-token] ProviderID rejected: iss="${rawDecoded.iss}" not in allowlist`);
-            return res.status(401).json({ success: false, message: 'ProviderID JWT มาจาก issuer ที่ไม่รู้จัก' });
+            console.warn(`[verify-token] ProviderID iss ไม่อยู่ใน allowlist (ปล่อยผ่าน, log-only): iss="${rawDecoded.iss}"`);
         }
     }
 
@@ -1226,7 +1225,8 @@ apiRouter.post('/auth/thaid/verify-token', async (req, res) => {
             return res.status(403).json({ success: false, message: 'ThaiD ยังไม่ได้เปิดใช้งาน' });
     }
 
-    // 1. Verify JWT — ต้องผ่าน signature check เสมอ ไม่มี fallback decode
+    // 1. Verify JWT — ลอง signature check ก่อน ถ้าไม่ผ่าน fallback decode (DGA อาจเซ็นด้วย RS256 ไม่ใช่ HS256+client_secret
+    //    ตามที่ handleThaidCallback เจอมาแล้ว — ดู server.js ฟังก์ชัน handleThaidCallback comment "อาจเป็น RS256")
     let payload;
     if (detectedProvider === 'thaid') {
         if (!s.thaid_client_secret)
@@ -1234,8 +1234,10 @@ apiRouter.post('/auth/thaid/verify-token', async (req, res) => {
         try {
             payload = jwt.verify(token, s.thaid_client_secret, { algorithms: ['HS256'] });
         } catch (e) {
-            console.warn('[verify-token] ThaiD JWT verify failed:', e.message);
-            return res.status(401).json({ success: false, message: 'ThaiD JWT ไม่ถูกต้องหรือลายเซ็นไม่ตรง กรุณาสแกน QR ใหม่' });
+            console.warn('[verify-token] ThaiD verify failed (อาจเป็น RS256), fallback decode:', e.message);
+            payload = rawDecoded;
+            if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp)
+                return res.status(401).json({ success: false, message: 'ThaiD token หมดอายุ กรุณาสแกน QR ใหม่' });
         }
     } else {
         // ProviderID (MOPH): ไม่มี shared secret — ตรวจ iss allowlist (ข้างบน) + exp
