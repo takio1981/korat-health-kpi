@@ -177,9 +177,11 @@ export class LoginComponent implements OnInit, OnDestroy {
     }
 
     if (ssoError) {
+      const provider = params.get('sso_provider') || '';
+      const providerLabel = provider === 'thaid' ? 'ThaID' : provider === 'providerid' ? 'ProviderID' : 'SSO';
       Swal.fire({
         icon: 'error',
-        title: 'เข้าสู่ระบบผ่าน ThaiD ไม่สำเร็จ',
+        title: `เข้าสู่ระบบผ่าน ${providerLabel} ไม่สำเร็จ`,
         text: decodeURIComponent(ssoError),
         confirmButtonColor: '#10b981'
       });

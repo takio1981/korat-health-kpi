@@ -42,9 +42,10 @@ export class SsoCallbackComponent implements OnInit {
     });
 
     if (ssoError) {
+      const providerLabel = provider === 'thaid' ? 'ThaID' : provider === 'providerid' ? 'ProviderID' : 'SSO';
       Swal.fire({
         icon: 'error',
-        title: 'เข้าสู่ระบบไม่สำเร็จ',
+        title: `เข้าสู่ระบบผ่าน ${providerLabel} ไม่สำเร็จ`,
         html: `<div style="text-align:left;font-size:13px;padding:4px 0">
           <p style="color:#374151">${decodeURIComponent(ssoError)}</p>
           <div style="margin-top:12px;padding:10px;background:#f9fafb;border-radius:8px;font-size:11px;color:#6b7280">

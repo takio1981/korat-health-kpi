@@ -1461,7 +1461,7 @@ async function handleThaidCallback(req, res) {
     const redirectErr = (msg, opts = {}) => {
         console.error('[ThaiD/callback] ❌ ERROR:', msg);
         saveSsoLog('thaid', _thaidFlow, { outcome: 'error', ip, error_msg: msg, ...opts });
-        const ssoCallbackUrl = `${frontendBase}/sso-callback?sso_error=${encodeURIComponent(msg)}`;
+        const ssoCallbackUrl = `${frontendBase}/sso-callback?sso_error=${encodeURIComponent(msg)}&sso_provider=thaid`;
         return res.redirect(ssoCallbackUrl);
     };
 
@@ -1768,7 +1768,7 @@ async function handleProviderIdCallback(req, res) {
     const redirectErr = (msg) => {
         console.error('[ProviderID/callback] ❌ ERROR:', msg);
         saveSsoLog('providerid', 'login', { outcome: 'error', ip, error_msg: msg });
-        return res.redirect(`${frontendBase}/sso-callback?sso_error=${encodeURIComponent(msg)}`);
+        return res.redirect(`${frontendBase}/sso-callback?sso_error=${encodeURIComponent(msg)}&sso_provider=providerid`);
     };
 
     if (error) return redirectErr(error_description ? String(error_description) : String(error));
