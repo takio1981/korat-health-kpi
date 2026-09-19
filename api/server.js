@@ -2615,11 +2615,26 @@ apiRouter.get('/public/kpi-results', async (req, res) => {
                 MAX(CASE WHEN r.month_bh = 7  THEN r.actual_value ELSE NULL END) AS jul,
                 MAX(CASE WHEN r.month_bh = 8  THEN r.actual_value ELSE NULL END) AS aug,
                 MAX(CASE WHEN r.month_bh = 9  THEN r.actual_value ELSE NULL END) AS sep,
-                (SELECT r2.actual_value FROM kpi_results r2
-                 WHERE r2.indicator_id = r.indicator_id AND r2.year_bh = r.year_bh AND r2.hospcode = r.hospcode
-                   AND r2.actual_value IS NOT NULL AND TRIM(r2.actual_value) != '' AND TRIM(r2.actual_value) != '0'
-                 ORDER BY FIELD(r2.month_bh,10,11,12,1,2,3,4,5,6,7,8,9) DESC LIMIT 1
-                ) AS last_actual,
+                CASE WHEN MAX(i.is_cumulative) = 1 THEN (
+                    CASE WHEN SUM(CASE WHEN r.actual_value REGEXP '^-?[0-9]+(\\.[0-9]+)?$' THEN 1 ELSE 0 END) = 0 THEN NULL
+                         ELSE SUM(CASE WHEN r.actual_value REGEXP '^-?[0-9]+(\\.[0-9]+)?$' THEN CAST(r.actual_value AS DECIMAL(20,4)) ELSE 0 END)
+                    END
+                ) ELSE (
+                    COALESCE(
+                        MAX(CASE WHEN r.month_bh=9  AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
+                        MAX(CASE WHEN r.month_bh=8  AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
+                        MAX(CASE WHEN r.month_bh=7  AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
+                        MAX(CASE WHEN r.month_bh=6  AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
+                        MAX(CASE WHEN r.month_bh=5  AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
+                        MAX(CASE WHEN r.month_bh=4  AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
+                        MAX(CASE WHEN r.month_bh=3  AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
+                        MAX(CASE WHEN r.month_bh=2  AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
+                        MAX(CASE WHEN r.month_bh=1  AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
+                        MAX(CASE WHEN r.month_bh=12 AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
+                        MAX(CASE WHEN r.month_bh=11 AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
+                        MAX(CASE WHEN r.month_bh=10 AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END)
+                    )
+                ) END AS last_actual,
                 r.hospcode, h.hosname, dist.distname
             FROM kpi_results r
             LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
@@ -2771,6 +2786,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 MAX(i.r9) AS r9, MAX(i.moph) AS moph, MAX(i.ssj) AS ssj, MAX(i.rmw) AS rmw, MAX(i.other) AS other,
                 MIN(i.evaluation_mode) AS evaluation_mode,
                 MIN(i.required_off_types) AS required_off_types,
+                MAX(i.is_cumulative) AS is_cumulative,
                 r.hospcode,
                 MIN(h.hosname) AS hosname,
                 MIN(h.hostype) AS hostype,
@@ -2794,11 +2810,18 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         const monthOrder = [10,11,12,1,2,3,4,5,6,7,8,9];
         const monthKeys = ['oct','nov','dece','jan','feb','mar','apr','may','jun','jul','aug','sep'];
         for (const row of rows) {
-            // last_actual: หาเดือนล่าสุดที่มีค่า
+            const isCumulative = Number(row.is_cumulative) === 1;
             let lastVal = null;
-            for (let m = monthKeys.length - 1; m >= 0; m--) {
-                const v = row[monthKeys[m]];
-                if (v != null && String(v).trim() !== '' && String(v).trim() !== '0') { lastVal = v; break; }
+            if (isCumulative) {
+                // ตัวชี้วัดสะสม: รวมค่าตัวเลขทุกเดือนที่มีข้อมูล (ไม่ sum ถ้าไม่มีเดือนไหนมีค่าเลย → คง null)
+                const numericVals = monthKeys.map(k => row[k]).filter(v => v != null && String(v).trim() !== '' && !isNaN(parseFloat(v)));
+                lastVal = numericVals.length > 0 ? String(numericVals.reduce((s, v) => s + parseFloat(v), 0)) : null;
+            } else {
+                // last_actual: หาเดือนล่าสุดที่มีค่า
+                for (let m = monthKeys.length - 1; m >= 0; m--) {
+                    const v = row[monthKeys[m]];
+                    if (v != null && String(v).trim() !== '' && String(v).trim() !== '0') { lastVal = v; break; }
+                }
             }
             row.last_actual = lastVal;
             row.has_form_schema = formSchemaSet.has(row.indicator_id) ? 1 : 0;
@@ -2812,6 +2835,19 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
     }
 });
 
+// Helper: หน่วยบริการ (hostype) ที่ใช้ได้กับตัวชี้วัด — อ้างอิง evaluation_mode/required_off_types
+// 'any_one' + required_off_types มีค่า → เฉพาะประเภทที่ระบุ, กรณีอื่น (all_required/ว่าง/parse ไม่ได้) → ชุดเดิมทั้งหมด (backward compat)
+const ALL_BULK_HOSTYPES = ['05', '06', '07', '18'];
+const resolveIndicatorHostypes = (ind) => {
+    if (ind.evaluation_mode === 'any_one' && ind.required_off_types) {
+        try {
+            const codes = JSON.parse(ind.required_off_types);
+            if (Array.isArray(codes) && codes.length > 0) return new Set(codes.map(String));
+        } catch (_) {}
+    }
+    return new Set(ALL_BULK_HOSTYPES);
+};
+
 // GET /bulk-add-kpi/preview — ตรวจสอบก่อนเพิ่ม KPI ทั้งหมด
 apiRouter.get('/bulk-add-kpi/preview', authenticateToken, isAdmin, async (req, res) => {
     const year_bh = req.query.year;
@@ -2822,16 +2858,26 @@ apiRouter.get('/bulk-add-kpi/preview', authenticateToken, isAdmin, async (req, r
         const indParams = [];
         const filterDeptId = req.user.role === 'admin_ssj' ? req.user.deptId : (dept_id || null);
         if (filterDeptId) { indWhere += ' AND dept_id = ?'; indParams.push(filterDeptId); }
-        const [indicators] = await db.query(`SELECT COUNT(*) AS cnt FROM kpi_indicators ${indWhere}`, indParams);
-        const [hospitals] = await db.query("SELECT COUNT(*) AS cnt FROM chospital WHERE hostype IN ('05','06','07','18')");
-        const [existing] = await db.query('SELECT COUNT(DISTINCT CONCAT(indicator_id,"_",hospcode)) AS cnt FROM kpi_results WHERE year_bh = ?', [year_bh]);
-        const totalPossible = indicators[0].cnt * hospitals[0].cnt;
-        const toAdd = Math.max(0, totalPossible - existing[0].cnt);
+        const [indicators] = await db.query(`SELECT id, evaluation_mode, required_off_types FROM kpi_indicators ${indWhere}`, indParams);
+        const [hospitals] = await db.query("SELECT hoscode, hostype FROM chospital WHERE hostype IN ('05','06','07','18')");
+        const [existing] = await db.query('SELECT indicator_id, hospcode FROM kpi_results WHERE year_bh = ? GROUP BY indicator_id, hospcode', [year_bh]);
+        const existSet = new Set(existing.map(r => `${r.indicator_id}_${r.hospcode}`));
+
+        // นับ totalPossible/toAdd จริงต่อตัวชี้วัด (กรองตาม hostype ที่ใช้ได้ของแต่ละตัว) ให้ตรงกับที่จะ insert จริง
+        let totalPossible = 0, toAdd = 0;
+        for (const ind of indicators) {
+            const allowedTypes = resolveIndicatorHostypes(ind);
+            for (const hos of hospitals) {
+                if (!allowedTypes.has(String(hos.hostype))) continue;
+                totalPossible++;
+                if (!existSet.has(`${ind.id}_${hos.hoscode}`)) toAdd++;
+            }
+        }
         res.json({
             success: true,
-            indicatorCount: indicators[0].cnt,
-            hospitalCount: hospitals[0].cnt,
-            existingCount: existing[0].cnt,
+            indicatorCount: indicators.length,
+            hospitalCount: hospitals.length,
+            existingCount: existing.length,
             totalPossible,
             toAdd,
             year_bh
@@ -2851,9 +2897,9 @@ apiRouter.post('/bulk-add-kpi', authenticateToken, isAdmin, async (req, res) => 
         const indParams = [];
         const filterDeptId = req.user.role === 'admin_ssj' ? req.user.deptId : (dept_id || null);
         if (filterDeptId) { indWhere += ' AND dept_id = ?'; indParams.push(filterDeptId); }
-        const [indicators] = await db.query(`SELECT id, target_percentage FROM kpi_indicators ${indWhere}`, indParams);
-        // ดึงเฉพาะ รพ., สสอ., รพ.สต. (hostype 05,06,07,18)
-        const [hospitals] = await db.query("SELECT hoscode FROM chospital WHERE hostype IN ('05','06','07','18')");
+        const [indicators] = await db.query(`SELECT id, target_percentage, evaluation_mode, required_off_types FROM kpi_indicators ${indWhere}`, indParams);
+        // ดึงเฉพาะ รพ., สสอ., รพ.สต. (hostype 05,06,07,18) — กรองแคบลงต่อตัวชี้วัดด้วย resolveIndicatorHostypes() ด้านล่าง
+        const [hospitals] = await db.query("SELECT hoscode, hostype FROM chospital WHERE hostype IN ('05','06','07','18')");
         if (indicators.length === 0) return res.json({ success: true, message: 'ไม่มีตัวชี้วัดที่ active', inserted: 0, skipped: 0 });
         if (hospitals.length === 0) return res.json({ success: true, message: 'ไม่มีหน่วยบริการในระบบ', inserted: 0, skipped: 0 });
 
@@ -2865,8 +2911,10 @@ apiRouter.post('/bulk-add-kpi', authenticateToken, isAdmin, async (req, res) => 
         const connection = await db.getConnection();
         try {
             await connection.beginTransaction();
-            for (const hos of hospitals) {
-                for (const ind of indicators) {
+            for (const ind of indicators) {
+                const allowedTypes = resolveIndicatorHostypes(ind);
+                const hospsForThisIndicator = hospitals.filter(h => allowedTypes.has(String(h.hostype)));
+                for (const hos of hospsForThisIndicator) {
                     const key = `${ind.id}_${hos.hoscode}`;
                     if (existSet.has(key)) { skipped++; continue; }
                     // สร้าง 12 records (เดือน 10-9)
@@ -5265,15 +5313,15 @@ apiRouter.post('/indicators/bulk-import', authenticateToken, isSuperAdmin, async
 });
 
 apiRouter.post('/indicators', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types } = req.body;
+    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative } = req.body;
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
         return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
     }
     try {
         const [r] = await db.query(
-            `INSERT INTO kpi_indicators (kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types)]
+            `INSERT INTO kpi_indicators (kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), is_cumulative ? 1 : 0]
         );
         // LINE notify: created
         try {
@@ -5293,7 +5341,7 @@ apiRouter.post('/indicators', authenticateToken, isSuperAdmin, async (req, res) 
 });
 
 apiRouter.put('/indicators/:id', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, is_active, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types } = req.body;
+    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, is_active, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative } = req.body;
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
         return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
     }
@@ -5314,8 +5362,8 @@ apiRouter.put('/indicators/:id', authenticateToken, isSuperAdmin, async (req, re
         } catch (_) {}
 
         await db.query(
-            `UPDATE kpi_indicators SET kpi_indicators_name=?, kpi_indicators_id=?, main_indicator_id=?, dept_id=?, target_percentage=?, target_condition=?, weight=?, kpi_indicators_code=?, is_active=?, table_process=?, description=?, r9=?, moph=?, ssj=?, rmw=?, other=?, evaluation_mode=?, required_off_types=? WHERE id=?`,
-            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, is_active ? 1 : 0, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), req.params.id]
+            `UPDATE kpi_indicators SET kpi_indicators_name=?, kpi_indicators_id=?, main_indicator_id=?, dept_id=?, target_percentage=?, target_condition=?, weight=?, kpi_indicators_code=?, is_active=?, table_process=?, description=?, r9=?, moph=?, ssj=?, rmw=?, other=?, evaluation_mode=?, required_off_types=?, is_cumulative=? WHERE id=?`,
+            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, is_active ? 1 : 0, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), is_cumulative ? 1 : 0, req.params.id]
         );
         // LINE notify: updated
         try {
@@ -6463,7 +6511,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
     }
     try {
         // กรอง upload_excel != 1 (ตัวที่ตั้งเป็น "อัปโหลด Excel เอง" ข้ามทั้งใน check และ export)
-        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name FROM kpi_indicators
+        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative FROM kpi_indicators
             WHERE table_process IS NOT NULL AND table_process != ''
             AND (upload_excel IS NULL OR upload_excel = 0)`;
         let indicatorParams = [];
@@ -6592,10 +6640,16 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                 if (!hasActualResult(d)) continue; // ไม่มีผลงาน → ไม่นับ (matches export behavior)
                 const target = emptyToNull(d.target);
                 const monthValues = months.map(m => emptyToNull(d[m]));
-                // result = ค่าเดือนล่าสุดที่คีย์ (ก.ย.→ต.ค.) — เหมือน performKpiExport
-                const reverseMonths = [...monthValues].reverse();
-                const lastActual = reverseMonths.find(v => v !== null && v !== undefined);
-                const resultVal = lastActual !== undefined ? lastActual : null;
+                // result: ตัวชี้วัดสะสม → รวมทุกเดือน, ปกติ → ค่าเดือนล่าสุดที่คีย์ (ก.ย.→ต.ค.) — เหมือน performKpiExport
+                let resultVal;
+                if (Number(indicator.is_cumulative) === 1) {
+                    const numericVals = monthValues.filter(v => v !== null && v !== undefined && !isNaN(parseFloat(v)));
+                    resultVal = numericVals.length > 0 ? numericVals.reduce((s, v) => s + parseFloat(v), 0) : null;
+                } else {
+                    const reverseMonths = [...monthValues].reverse();
+                    const lastActual = reverseMonths.find(v => v !== null && v !== undefined);
+                    resultVal = lastActual !== undefined ? lastActual : null;
+                }
 
                 const existing = existingMap.get(hc);
                 if (!existing) {
@@ -6659,7 +6713,7 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
     try {
         // 1. Get indicators with valid table_process
         //    — กรอง upload_excel != 1 (ตัวที่ตั้งเป็น "อัปโหลดเอง" ข้ามไป)
-        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name FROM kpi_indicators
+        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative FROM kpi_indicators
             WHERE is_active = 1 AND (upload_excel IS NULL OR upload_excel = 0)
             AND table_process IS NOT NULL AND table_process != ''`;
         let indicatorParams = [];
@@ -6988,10 +7042,16 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                     const target = emptyToNull(d.target);
                     const dynValues = dynFieldKeys.map(k => emptyToNull(d['_dyn_' + k]));
                     const monthValues = months.map(m => emptyToNull(d[m]));
-                    // result = ค่าล่าสุดที่คีย์ (เดือนท้ายสุดตามปีงบ: ก.ย.→ต.ค.)
-                    const reverseMonths = [...monthValues].reverse();
-                    const lastActual = reverseMonths.find(v => v !== null && v !== undefined);
-                    const resultVal = lastActual !== undefined ? lastActual : null;
+                    // result: ตัวชี้วัดสะสม → รวมทุกเดือน, ปกติ → ค่าล่าสุดที่คีย์ (เดือนท้ายสุดตามปีงบ: ก.ย.→ต.ค.)
+                    let resultVal;
+                    if (Number(indicator.is_cumulative) === 1) {
+                        const numericVals = monthValues.filter(v => v !== null && v !== undefined && !isNaN(parseFloat(v)));
+                        resultVal = numericVals.length > 0 ? numericVals.reduce((s, v) => s + parseFloat(v), 0) : null;
+                    } else {
+                        const reverseMonths = [...monthValues].reverse();
+                        const lastActual = reverseMonths.find(v => v !== null && v !== undefined);
+                        resultVal = lastActual !== undefined ? lastActual : null;
+                    }
 
                     // เปรียบเทียบค่าเดิม vs ใหม่ ทีละคอลัมน์
                     const existing = existingDataMap.get(hc);
@@ -7605,16 +7665,41 @@ apiRouter.post('/refresh-summary/batch', authenticateToken, isSuperAdmin, async 
 apiRouter.post('/refresh-summary/finalize', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
         const year = req.body.year_bh || '';
-        const lastActualWhere = year ? `WHERE year_bh = ?` : '';
-        const lastActualParams = year ? [year] : [];
+        const yearWhere = year ? `AND s.year_bh = ?` : '';
+        const yearParams = year ? [year] : [];
 
+        // ตัวชี้วัดปกติ: last_actual = ค่าเดือนล่าสุดที่มีข้อมูล (เดิม)
         await db.query(`
-            UPDATE kpi_summary SET last_actual = COALESCE(
-                NULLIF(sep,''), NULLIF(aug,''), NULLIF(jul,''), NULLIF(jun,''),
-                NULLIF(may,''), NULLIF(apr,''), NULLIF(mar,''), NULLIF(feb,''),
-                NULLIF(jan,''), NULLIF(dece,''), NULLIF(nov,''), NULLIF(oct,'')
-            ) ${lastActualWhere}
-        `, lastActualParams);
+            UPDATE kpi_summary s
+            JOIN kpi_indicators i ON i.id = s.indicator_id AND (i.is_cumulative = 0 OR i.is_cumulative IS NULL)
+            SET s.last_actual = COALESCE(
+                NULLIF(s.sep,''), NULLIF(s.aug,''), NULLIF(s.jul,''), NULLIF(s.jun,''),
+                NULLIF(s.may,''), NULLIF(s.apr,''), NULLIF(s.mar,''), NULLIF(s.feb,''),
+                NULLIF(s.jan,''), NULLIF(s.dece,''), NULLIF(s.nov,''), NULLIF(s.oct,'')
+            )
+            WHERE 1=1 ${yearWhere}
+        `, yearParams);
+
+        // ตัวชี้วัดสะสม: last_actual = ผลรวมตัวเลขทุกเดือนในปีงบ (NULL ถ้าไม่มีเดือนไหนมีค่าเลย)
+        await db.query(`
+            UPDATE kpi_summary s
+            JOIN kpi_indicators i ON i.id = s.indicator_id AND i.is_cumulative = 1
+            SET s.last_actual = CASE
+                WHEN NULLIF(s.oct,'') IS NULL AND NULLIF(s.nov,'') IS NULL AND NULLIF(s.dece,'') IS NULL AND NULLIF(s.jan,'') IS NULL
+                 AND NULLIF(s.feb,'') IS NULL AND NULLIF(s.mar,'') IS NULL AND NULLIF(s.apr,'') IS NULL AND NULLIF(s.may,'') IS NULL
+                 AND NULLIF(s.jun,'') IS NULL AND NULLIF(s.jul,'') IS NULL AND NULLIF(s.aug,'') IS NULL AND NULLIF(s.sep,'') IS NULL
+                THEN NULL
+                ELSE (
+                    COALESCE(CAST(NULLIF(s.oct,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.nov,'') AS DECIMAL(20,4)),0) +
+                    COALESCE(CAST(NULLIF(s.dece,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.jan,'') AS DECIMAL(20,4)),0) +
+                    COALESCE(CAST(NULLIF(s.feb,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.mar,'') AS DECIMAL(20,4)),0) +
+                    COALESCE(CAST(NULLIF(s.apr,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.may,'') AS DECIMAL(20,4)),0) +
+                    COALESCE(CAST(NULLIF(s.jun,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.jul,'') AS DECIMAL(20,4)),0) +
+                    COALESCE(CAST(NULLIF(s.aug,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.sep,'') AS DECIMAL(20,4)),0)
+                )
+            END
+            WHERE 1=1 ${yearWhere}
+        `, yearParams);
 
         const [formSchemas] = await db.query('SELECT indicator_id FROM kpi_form_schemas WHERE is_active = 1');
         if (formSchemas.length > 0) {
@@ -8993,6 +9078,8 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS data_source VARCHAR(10) NULL COMMENT 'จาก hdc.reports.data_source: hdc|excel'`); } catch(e) {}
         // hdc_fiscal_year: ปีงบฯ (พ.ศ.) ที่ค่า target_percentage/target_condition ปัจจุบันอ้างอิงมาจาก HDC ล่าสุด — audit only ไม่ใช่ FK
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS hdc_fiscal_year VARCHAR(10) NULL COMMENT 'ปีงบฯ ที่ใช้อ้างอิง target_percentage/target_condition ล่าสุดจาก HDC (audit only)'`); } catch(e) {}
+        // is_cumulative: 1 = ผลงานสะสมทุกเดือนในปีงบ (SUM) แทนค่าเดือนล่าสุด — ใช้กับตัวชี้วัดนับสะสม เช่น จำนวนราย/ครั้งสะสม
+        try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS is_cumulative TINYINT(1) DEFAULT 0 COMMENT 'สะสมทุกเดือนในปีงบ (SUM) แทนค่าเดือนล่าสุด'`); } catch(e) {}
 
         // เพิ่มฟิลด์ใน main_yut (ยุทธศาสตร์)
         try { await db.query(`ALTER TABLE main_yut ADD COLUMN IF NOT EXISTS yut_code VARCHAR(50) NULL COMMENT 'รหัสย่อยุทธศาสตร์'`); } catch(e) {}

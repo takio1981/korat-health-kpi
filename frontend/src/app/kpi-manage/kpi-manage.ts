@@ -47,6 +47,8 @@ export class KpiManageComponent implements OnInit {
   showModal: boolean = false;
   isEditMode: boolean = false;
   currentItem: any = {};
+  // ตั้งค่าเมื่อเปิด modal จากปุ่ม "คัดลอกไปปีใหม่" — เก็บ id ของตัวชี้วัดต้นทาง เพื่อถามปิดใช้งานหลังบันทึกสำเร็จ
+  private _cloneSourceId: number | null = null;
 
   // Cascade: selected yut → filter main_indicators
   selectedYutInModal: number | null = null;
@@ -465,6 +467,7 @@ export class KpiManageComponent implements OnInit {
         src.ssj = Number(src.ssj) === 1;
         src.rmw = Number(src.rmw) === 1;
         src.other = Number(src.other) === 1;
+        src.is_cumulative = Number(src.is_cumulative) === 1;
         src.evaluation_mode = src.evaluation_mode || 'any_one';
         this.selectedOffTypes = this.parseOffTypes(src.required_off_types);
         // auto-set yut_id จาก main_indicator ที่เลือก
@@ -476,13 +479,22 @@ export class KpiManageComponent implements OnInit {
       if (this.activeTab === 'indicators') {
         this.selectedYutInModal = null;
         this.selectedOffTypes = [];
-        this.currentItem = { ...baseDefaults, r9: false, moph: false, ssj: false, rmw: false, other: false, weight: 1, target_condition: 'GTE', evaluation_mode: 'any_one' };
+        this.currentItem = { ...baseDefaults, r9: false, moph: false, ssj: false, rmw: false, other: false, is_cumulative: false, weight: 1, target_condition: 'GTE', evaluation_mode: 'any_one' };
       } else {
         this.currentItem = { ...baseDefaults };
       }
     }
     this.rebuildMainForModal();
     this.showModal = true;
+  }
+
+  // คัดลอกตัวชี้วัดไปปีใหม่ — เปิด modal พร้อม pre-fill ข้อมูลเดิม แต่บันทึกเป็นแถวใหม่ (กันย้อนเปลี่ยนชื่อของปีเก่า)
+  cloneItem(item: any) {
+    this.openModal(item);
+    this.isEditMode = false;           // บังคับให้ saveItem() ยิง POST (สร้างใหม่) ไม่ใช่ PUT
+    delete this.currentItem.id;        // ตัด id ออก กัน saveItem() หลุดไปอัปเดตแถวเดิม
+    this.currentItem.kpi_indicators_name = (item.kpi_indicators_name || '') + ' (คัดลอก)'; // ชื่อชั่วคราว — ต้องแก้ก่อนบันทึก
+    this._cloneSourceId = item.id;
   }
 
   // เมื่อเลือกยุทธศาสตร์ → กรอง main_indicators dropdown
@@ -545,12 +557,31 @@ export class KpiManageComponent implements OnInit {
     }
 
     if (observable) {
+      const cloneSourceId = this._cloneSourceId;
+      this._cloneSourceId = null;
       observable.subscribe({
         next: (res) => {
           if (res.success) {
-            Swal.fire('สำเร็จ', 'บันทึกข้อมูลเรียบร้อย', 'success');
             this.closeModal();
             this.loadAllData();
+            if (cloneSourceId && !this.isEditMode) {
+              // มาจากปุ่ม "คัดลอกไปปีใหม่" — ถามว่าจะปิดใช้งานตัวเดิมไหม (ข้อมูลปีเก่าไม่หายแน่นอน)
+              Swal.fire({
+                title: 'บันทึกตัวชี้วัดใหม่สำเร็จ',
+                text: 'ต้องการปิดใช้งานตัวชี้วัดเดิมหรือไม่ (เนื่องจากถูกแทนที่ด้วยตัวใหม่แล้ว)',
+                icon: 'question', showCancelButton: true,
+                confirmButtonText: 'ปิดใช้งานตัวเดิม', cancelButtonText: 'ไม่ — เก็บไว้ทั้งคู่'
+              }).then(r => {
+                if (r.isConfirmed) {
+                  this.authService.toggleIndicatorActive(cloneSourceId, false).subscribe({
+                    next: (r2: any) => { if (r2.success) { this.loadAllData(); } },
+                    error: () => Swal.fire('ผิดพลาด', 'ไม่สามารถปิดใช้งานตัวเดิมได้', 'error')
+                  });
+                }
+              });
+            } else {
+              Swal.fire('สำเร็จ', 'บันทึกข้อมูลเรียบร้อย', 'success');
+            }
           }
           this.cdr.detectChanges();
         },

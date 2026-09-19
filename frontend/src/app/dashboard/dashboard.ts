@@ -3054,9 +3054,15 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   onValueChange(item: any, month: string) {
     const fiscalOrder = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
     let lastActual = '';
-    for (const m of fiscalOrder) {
-      const v = String(item[m] ?? '').trim();
-      if (v && v !== '0') lastActual = v;
+    if (Number(item.is_cumulative) === 1) {
+      // ตัวชี้วัดสะสม: รวมค่าตัวเลขทุกเดือนที่มีข้อมูล
+      const nums = fiscalOrder.map(m => parseFloat(item[m])).filter(n => !isNaN(n));
+      lastActual = nums.length > 0 ? String(nums.reduce((s, n) => s + n, 0)) : '';
+    } else {
+      for (const m of fiscalOrder) {
+        const v = String(item[m] ?? '').trim();
+        if (v && v !== '0') lastActual = v;
+      }
     }
     item.last_actual = lastActual;
     item.total_actual = parseFloat(lastActual) || 0;
