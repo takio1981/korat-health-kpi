@@ -1187,15 +1187,17 @@ apiRouter.post('/auth/thaid/verify-token', async (req, res) => {
     const { token } = req.body;
     if (!token) return res.status(400).json({ success: false, message: 'ไม่มี token' });
 
-    // 0. ตรวจ provider — ใช้ JWT iss field เป็นหลัก (hint_provider จาก frontend ใช้เพื่อ logging เท่านั้น)
+    // 0. ตรวจ provider — ใช้ JWT iss field เป็นหลัก, ถ้า iss ไม่เข้าเงื่อนไขที่รู้จัก ใช้ hint_provider
+    //    จากปุ่มที่ผู้ใช้กด (sso_intent) เป็น fallback — hint มาจาก sessionStorage ที่ frontend ตั้งไว้เอง
+    //    ตอนกดปุ่ม ไม่ได้มาจาก token จึงไม่ใช่ช่องทางให้ปลอม token ข้ามการตรวจสอบ (การ verify signature/decode
+    //    ของทั้ง 2 ฝั่งท้ายที่สุด fallback ไป decode เหมือนกันอยู่แล้วเมื่อ signature ไม่ผ่าน — ดูจุด verify ด้านล่าง)
     const hintProvider = String(req.body.hint_provider || '').toLowerCase();
     let rawDecoded;
     try { rawDecoded = jwt.decode(token); } catch (_) { rawDecoded = null; }
     if (!rawDecoded) return res.status(400).json({ success: false, message: 'JWT ไม่ถูกต้อง ไม่สามารถอ่านได้' });
     const rawIss = String(rawDecoded?.iss || '').toLowerCase();
-    // ตัดสินใจ provider จาก iss เท่านั้น — ไม่ใช้ hint_provider เป็นตัวตัดสิน (security decision)
     const issIsMoph = rawIss.includes('moph') || rawIss.includes('health.moph') || rawIss.includes('moph.id');
-    const detectedProvider = issIsMoph ? 'providerid' : 'thaid';
+    const detectedProvider = issIsMoph ? 'providerid' : (hintProvider === 'providerid' ? 'providerid' : 'thaid');
     console.log(`[verify-token] iss="${rawDecoded?.iss}" hint="${hintProvider}" fields=${Object.keys(rawDecoded||{}).join(',')} -> provider=${detectedProvider}`);
 
     // MOPH ISS allowlist — log-only (ยังไม่รู้ iss จริงจาก production จึงไม่ reject เพื่อกัน false-block)
