@@ -2836,6 +2836,20 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     return startIdx * (cellWidth + gap);
   }
 
+  // คำนวณ scrollLeft (px) ให้ตาราง desktop เลื่อนไปยัง "3 เดือนล่าสุดที่มีข้อมูล" (รวมทุกแถวที่แสดงอยู่)
+  // ยังเลื่อนดูเดือนอื่น ต.ค.-ก.ย. ได้ตามปกติ เพราะแค่ตั้งตำแหน่งเริ่มต้น ไม่ล็อคสกอร์ล
+  getDesktopMonthScroll(visibleCount: number = 3, cellWidth: number = 75): number {
+    let lastIdx = -1;
+    for (const item of this.pagedData) {
+      for (let i = 0; i < this.FISCAL_MONTHS.length; i++) {
+        if (i > lastIdx && this.hasMonthData(item[this.FISCAL_MONTHS[i].key])) lastIdx = i;
+      }
+    }
+    if (lastIdx < 0) return 0; // ไม่มีข้อมูลเลย → เริ่มจาก ต.ค.
+    const startIdx = Math.max(0, lastIdx - (visibleCount - 1));
+    return startIdx * cellWidth;
+  }
+
   // ค่าเดือนล่าสุดที่มีผลงาน (ลำดับย้อนกลับ ก.ย.→ต.ค.) — format จำนวนเต็ม/2 ตำแหน่ง
   getSubLastActual(sub: any): string {
     if (!sub?._actuals) return '';
