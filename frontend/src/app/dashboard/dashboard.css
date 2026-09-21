@@ -62,37 +62,85 @@
 /* Column 1 - หมวดหมู่หลัก */
 .col-1 {
   left: 0;
-  min-width: 180px;
-  max-width: 180px;
-  width: 180px;
+  width: var(--col1-w, 180px);
+  min-width: var(--col1-w, 100px);
+  max-width: none;
 }
 
-/* Column 2 - ชื่อตัวชี้วัด */
+/* Column 2 - จัดการ (narrow - icons vertical, fixed) */
 .col-2 {
-  left: 180px;
-  min-width: 280px;
-  max-width: 280px;
-  width: 280px;
-}
-
-/* Column 3 - จัดการ (narrow - icons vertical) */
-.col-3 {
-  left: 460px;
+  left: var(--col2-left, 180px);
   min-width: 56px;
   max-width: 72px;
   width: 64px;
 }
 
-/* Column 4 - หน่วยบริการ (last frozen - with shadow separator) */
+/* Column 3 - ชื่อตัวชี้วัด */
+.col-3 {
+  left: var(--col3-left, 244px);
+  width: var(--col3-w, 280px);
+  min-width: var(--col3-w, 150px);
+  max-width: none;
+}
+
+/* Column 4 - เกณฑ์ (narrow, fixed) */
 .col-4 {
-  left: 524px; /* 180 + 280 + 64 */
-  min-width: 200px;
-  max-width: 240px;
-  width: 220px;
+  left: var(--col4-left, 524px);
+  min-width: 56px;
+  max-width: 72px;
+  width: 64px;
+}
+
+/* Column 5 - หน่วยบริการ */
+.col-5 {
+  left: var(--col5-left, 588px);
+  width: var(--col5-w, 220px);
+  min-width: var(--col5-w, 100px);
+  max-width: none;
+}
+
+/* Column 6 - เป้าหมาย (fixed) */
+.col-6 {
+  left: var(--col6-left, 808px);
+  min-width: 80px;
+  max-width: 90px;
+  width: 90px;
+}
+
+/* Column 7 - ผลงานล่าสุด (fixed) */
+.col-7 {
+  left: var(--col7-left, 898px);
+  min-width: 80px;
+  max-width: 90px;
+  width: 90px;
+}
+
+/* Column 8 - ร้อยละ (last frozen - with shadow separator) */
+.col-8 {
+  left: var(--col8-left, 988px);
+  min-width: 70px;
+  max-width: 90px;
+  width: 80px;
+}
+
+/* Resize handle */
+.col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 10;
+  transition: background 0.15s;
+}
+.col-resize-handle:hover {
+  background: rgba(255, 255, 255, 0.35);
 }
 
 /* Shadow separator on last frozen column */
-.col-4::after {
+.col-8::after {
   content: '';
   position: absolute;
   top: 0;
@@ -174,4 +222,13 @@
 /* RowSpan cell for grouped category */
 .kpi-table td.rowspan-cell {
   vertical-align: top;
+}
+
+/* Slow blink for the cumulative-data warning text */
+@keyframes blink-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.blink-slow {
+  animation: blink-slow 2.5s ease-in-out infinite;
 }

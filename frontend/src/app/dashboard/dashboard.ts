@@ -43,18 +43,27 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   colWidths: Record<string, number> = { col1: 180, col2: 280, col4: 220 };
   private _resizeState: { col: string; startX: number; startW: number } | null = null;
 
+  // ความกว้างคงที่ของคอลัมน์ที่ไม่ resize: จัดการ(64) เกณฑ์(64) เป้าหมาย(90) ผลงานล่าสุด(90) ร้อยละ(80)
   private setCssVars() {
     const wrapper = this.el.nativeElement.querySelector('.kpi-table-wrapper');
     if (!wrapper) return;
-    const c1 = this.colWidths['col1'];
-    const c2 = this.colWidths['col2'];
-    const c4 = this.colWidths['col4'];
+    const c1 = this.colWidths['col1'];       // หมวดหมู่หลัก
+    const c2 = 64;                            // จัดการ (fixed)
+    const c3 = this.colWidths['col2'];       // ชื่อตัวชี้วัด
+    const c4 = 64;                            // เกณฑ์ (fixed)
+    const c5 = this.colWidths['col4'];       // หน่วยบริการ
+    const c6 = 90;                            // เป้าหมาย (fixed)
+    const c7 = 90;                            // ผลงานล่าสุด (fixed)
     wrapper.style.setProperty('--col1-w', c1 + 'px');
-    wrapper.style.setProperty('--col2-w', c2 + 'px');
-    wrapper.style.setProperty('--col4-w', c4 + 'px');
+    wrapper.style.setProperty('--col3-w', c3 + 'px');
+    wrapper.style.setProperty('--col5-w', c5 + 'px');
     wrapper.style.setProperty('--col2-left', c1 + 'px');
     wrapper.style.setProperty('--col3-left', (c1 + c2) + 'px');
-    wrapper.style.setProperty('--col4-left', (c1 + c2 + 64) + 'px');
+    wrapper.style.setProperty('--col4-left', (c1 + c2 + c3) + 'px');
+    wrapper.style.setProperty('--col5-left', (c1 + c2 + c3 + c4) + 'px');
+    wrapper.style.setProperty('--col6-left', (c1 + c2 + c3 + c4 + c5) + 'px');
+    wrapper.style.setProperty('--col7-left', (c1 + c2 + c3 + c4 + c5 + c6) + 'px');
+    wrapper.style.setProperty('--col8-left', (c1 + c2 + c3 + c4 + c5 + c6 + c7) + 'px');
   }
 
   private loadColWidths() {
