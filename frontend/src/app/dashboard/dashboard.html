@@ -817,13 +817,15 @@
             <tbody class="divide-y divide-gray-100 bg-white">
               <!-- super_admin: เลือกตัวกรองก่อน — แสดงใต้หัวตารางสีเขียว -->
               <tr *ngIf="(isSuperAdmin || isAdmin) && kpiData.length === 0 && !isLoading">
-                <td colspan="22" class="px-6 py-16 text-center">
-                  <div class="inline-flex items-center justify-center w-20 h-20 bg-indigo-100 rounded-2xl mb-4">
-                    <i class="fas fa-filter text-indigo-500 text-3xl"></i>
+                <td colspan="22" class="p-0">
+                  <div class="sticky left-0 right-0 px-6 py-16 text-center">
+                    <div class="inline-flex items-center justify-center w-20 h-20 bg-indigo-100 rounded-2xl mb-4">
+                      <i class="fas fa-filter text-indigo-500 text-3xl"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-gray-700 mb-2">กรุณาเลือกตัวกรองก่อนดูข้อมูล</h3>
+                    <p class="text-sm text-gray-400 mb-4">เลือก อำเภอ, หน่วยบริการ, หน่วยงาน หรือตัวชี้วัด แล้วกดปุ่ม <b>"ค้นหา"</b></p>
+                    <p class="text-xs text-gray-400"><i class="fas fa-circle-info mr-1"></i>เพื่อประสิทธิภาพการโหลด กรุณาเลือกตัวกรองให้แคบลงก่อนค้นหา</p>
                   </div>
-                  <h3 class="text-lg font-bold text-gray-700 mb-2">กรุณาเลือกตัวกรองก่อนดูข้อมูล</h3>
-                  <p class="text-sm text-gray-400 mb-4">เลือก อำเภอ, หน่วยบริการ, หน่วยงาน หรือตัวชี้วัด แล้วกดปุ่ม <b>"ค้นหา"</b></p>
-                  <p class="text-xs text-gray-400"><i class="fas fa-circle-info mr-1"></i>เพื่อประสิทธิภาพการโหลด กรุณาเลือกตัวกรองให้แคบลงก่อนค้นหา</p>
                 </td>
               </tr>
               <tr *ngFor="let item of pagedData; let i = index" class="hover:bg-green-50/30 transition-all duration-150 text-xs">
