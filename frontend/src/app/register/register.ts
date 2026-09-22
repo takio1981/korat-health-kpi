@@ -114,6 +114,11 @@ export class RegisterComponent implements OnInit, OnDestroy {
   filteredHospitals: any[] = [];
   selectedDistrictId: string = '';
 
+  // ค่า distid/hospcode ที่ได้จาก JWT ของ ProviderID (best-effort — เดา field name เพราะไม่มีเอกสารยืนยัน)
+  // รอ districts + hospitals โหลดเสร็จก่อนค่อย apply กัน dropdown ว่างเพราะข้อมูลยังไม่มา
+  private _pendingRegDistid: string = '';
+  private _pendingRegHospcode: string = '';
+
   private statusPollTimer: any = null;
   private onVisibilityChange = () => {
     if (document.visibilityState === 'visible') this.refreshSsoStatus();
@@ -206,6 +211,12 @@ export class RegisterComponent implements OnInit, OnDestroy {
           if (res.lastname_th)  this.formData.lastname  = res.lastname_th;
           if (res.email)        this.formData.email      = res.email;
           if (res.phone)        this.formData.phone      = res.phone;
+          // pre-fill อำเภอ/หน่วยบริการ จาก ProviderID JWT (best-effort) — apply ทันทีถ้า districts/hospitals โหลดเสร็จแล้ว
+          if (res.distid) {
+            this._pendingRegDistid   = res.distid;
+            this._pendingRegHospcode = res.hospcode || '';
+            this.tryApplyPendingRegLocation();
+          }
           // sync ssoProvider จาก server response (ถ้า backend รู้จริง)
           if (res.provider) this.ssoProvider = res.provider;
           this.cdr.detectChanges();
@@ -251,6 +262,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
       next: (res) => {
         if (res.success) {
           this.hospitals = res.data;
+          this.tryApplyPendingRegLocation();
           this.cdr.detectChanges();
         }
       }
@@ -262,6 +274,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
       next: (res) => {
         if (res.success) {
           this.districts = res.data;
+          this.tryApplyPendingRegLocation();
           this.cdr.detectChanges();
         }
       }
@@ -272,6 +285,21 @@ export class RegisterComponent implements OnInit, OnDestroy {
     this.filteredHospitals = this.hospitals.filter(h => h.distid === this.selectedDistrictId);
     this.formData.hospcode = '';
     this.cdr.detectChanges();
+  }
+
+  /** pre-fill อำเภอ/หน่วยบริการ จาก ProviderID JWT — รอให้ districts + hospitals โหลดเสร็จก่อนค่อย apply */
+  private tryApplyPendingRegLocation() {
+    if (!this._pendingRegDistid || this.districts.length === 0 || this.hospitals.length === 0) return;
+    const distExists = this.districts.some((d: any) => d.distid === this._pendingRegDistid);
+    if (distExists) {
+      this.selectedDistrictId = this._pendingRegDistid;
+      this.onDistrictChange();
+      if (this._pendingRegHospcode && this.filteredHospitals.some((h: any) => h.hoscode === this._pendingRegHospcode)) {
+        this.formData.hospcode = this._pendingRegHospcode;
+      }
+    }
+    this._pendingRegDistid = '';
+    this._pendingRegHospcode = '';
   }
 
   // === National ID formatting ===

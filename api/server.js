@@ -1097,6 +1097,73 @@ function extractCidFromPayload(payload) {
     return null;
 }
 
+/**
+ * ลองดึงรหัสหน่วยบริการ (hospcode) จาก JWT payload ของ ProviderID (MOPH)
+ * ไม่มีเอกสารยืนยันชื่อ field จริง — ลองหลายชื่อที่เป็นไปได้ ถ้าไม่เจอคืน null (ไม่กระทบ flow ปกติ)
+ */
+function extractHospcodeFromPayload(payload) {
+    if (!payload) return null;
+    const candidates = [
+        payload.hospcode, payload.hospital_code, payload.hcode,
+        payload.agency_code, payload.agencycode, payload.org_code, payload.orgcode,
+        payload.workplace, payload.work_place, payload.affiliation,
+        payload.unit_code, payload.unitcode, payload.moph_hospcode
+    ];
+    for (const v of candidates) {
+        if (!v) continue;
+        const code = String(v).trim();
+        if (code) return code;
+    }
+    return null;
+}
+
+/**
+ * ลองดึงรหัสอำเภอ (distcode) จาก JWT payload — ใช้เป็น fallback เมื่อไม่มี hospcode
+ * หรือหา hospcode ในตาราง chospital ไม่เจอ (ไม่มีเอกสารยืนยันชื่อ field จริง)
+ */
+function extractDistCodeFromPayload(payload) {
+    if (!payload) return null;
+    const candidates = [
+        payload.distcode, payload.district_code, payload.amphoe_code,
+        payload.amphur_code, payload.district, payload.amphoe
+    ];
+    for (const v of candidates) {
+        if (!v) continue;
+        const code = String(v).trim();
+        if (code) return code;
+    }
+    return null;
+}
+
+/**
+ * แปลง hospcode/distcode ที่ดึงจาก JWT (best-effort, ไม่รับประกันชื่อ field ถูกต้อง)
+ * เป็น { hospcode, distid } ที่ตรงกับข้อมูลจริงในระบบ — ตรวจสอบกับตาราง chospital/co_district
+ * ก่อนส่งกลับให้ frontend เสมอ กัน pre-fill ค่าที่ไม่มีอยู่จริง
+ */
+async function resolveRegLocationFromPayload(payload) {
+    const result = { hospcode: null, distid: null };
+    try {
+        const hospcodeGuess = extractHospcodeFromPayload(payload);
+        if (hospcodeGuess) {
+            const [rows] = await db.query('SELECT hoscode, distid FROM chospital WHERE hoscode = ? LIMIT 1', [hospcodeGuess]);
+            if (rows.length) {
+                result.hospcode = rows[0].hoscode;
+                result.distid = rows[0].distid || null;
+            }
+        }
+        if (!result.distid) {
+            const distcodeGuess = extractDistCodeFromPayload(payload);
+            if (distcodeGuess) {
+                const [drows] = await db.query('SELECT distid FROM co_district WHERE distid = ? LIMIT 1', [distcodeGuess]);
+                if (drows.length) result.distid = drows[0].distid;
+            }
+        }
+    } catch (e) {
+        console.warn('[resolveRegLocationFromPayload] lookup failed (non-fatal):', e.message);
+    }
+    return result;
+}
+
 /** URL ฝั่ง frontend (ใช้ redirect หลัง callback) */
 function getFrontendBase(req) {
     // ใช้ Origin ที่เก็บไว้ใน state map (เก็บตอน /start) หรือ fallback .env
@@ -1280,9 +1347,11 @@ apiRouter.post('/auth/thaid/verify-token', async (req, res) => {
         const regToken = crypto.randomBytes(16).toString('hex');
         const emailFromJwt = String(rawDecoded?.email || '').trim();
         const phoneFromJwt = String(rawDecoded?.phone_number || rawDecoded?.phone || '').trim();
+        const regLocation = await resolveRegLocationFromPayload(payload);
         _thaidRegMap.set(regToken, {
             cid_hash: cidHashOurs, firstname_th, lastname_th,
             email: emailFromJwt, phone: phoneFromJwt,
+            hospcode: regLocation.hospcode, distid: regLocation.distid,
             provider: detectedProvider,
             expires: Date.now() + 10 * 60 * 1000
         });
@@ -1435,6 +1504,8 @@ apiRouter.get('/auth/thaid/reg-data', async (req, res) => {
         lastname_th: entry.lastname_th || '',
         email: entry.email || '',
         phone: entry.phone || '',
+        hospcode: entry.hospcode || '',
+        distid: entry.distid || '',
         provider: entry.provider || 'thaid'
     });
 });
@@ -1548,10 +1619,12 @@ async function handleThaidCallback(req, res) {
         // === Register flow — ไม่ match user, สร้าง reg token แล้ว redirect ไปหน้า register ===
         if (stateData?.flow === 'register') {
             const regToken = crypto.randomBytes(8).toString('hex');
+            const regLocation = await resolveRegLocationFromPayload(payload);
             _thaidRegMap.set(regToken, {
                 cid_hash: hashedCid,
                 firstname_th: payload.firstname_th || payload.given_name || '',
                 lastname_th: payload.lastname_th || payload.family_name || '',
+                hospcode: regLocation.hospcode, distid: regLocation.distid,
                 expires: Date.now() + 10 * 60 * 1000
             });
             const fn = encodeURIComponent(payload.firstname_th || payload.given_name || '');

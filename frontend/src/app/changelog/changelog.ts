@@ -18,6 +18,16 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.09.22.d',
+      date: '22 กันยายน 2569 (build d)',
+      changes: [
+        { type: 'feature', text: 'หน้า Login: แสดงเลขเวอร์ชันระบบ (ดึงจาก system_settings ผ่าน public endpoint ที่มีอยู่แล้ว) เป็น footer เล็กๆ ใต้การ์ด login' },
+        { type: 'improve', text: 'หน้า Login: ย้ายปุ่ม "ลงทะเบียน" และ "คู่มือการใช้งาน" จากด้านล่างสุดของการ์ด (ต้อง scroll ผ่าน SSO buttons) มาไว้ด้านบนสุด เหนือช่อง "ชื่อผู้ใช้งาน" ให้สังเกตเห็นง่าย' },
+        { type: 'feature', text: 'ฟอร์มลงทะเบียนผ่าน ProviderID: เพิ่มการ pre-fill "อำเภอ" และ "หน่วยบริการ" จาก JWT (best-effort — ลองดึงจากชื่อ field ที่เป็นไปได้หลายแบบ เช่น hospcode/agency_code/work_place เพราะไม่มีเอกสารยืนยันชื่อ field จริงจาก MOPH) ตรวจสอบกับตาราง chospital/co_district ก่อนเสมอ ถ้าไม่เจอ field ที่ตรงก็ปล่อยว่างให้กรอกเองตามปกติ ไม่กระทบการทำงานเดิม' },
+        { type: 'improve', text: 'เลขบัตรประชาชน 13 หลัก: ตัดสินใจไม่ pre-fill จาก JWT (คงพฤติกรรมเดิมให้ผู้ใช้กรอกเอง) เพื่อไม่ต้องส่งค่า CID แบบ plain text กลับมาที่ frontend แม้จะชั่วคราวก็ตาม — ตรงตามนโยบาย CLAUDE.md ที่ห้ามเก็บ CID เป็น plain text' },
+      ]
+    },
+    {
       version: '2569.09.22.c',
       date: '22 กันยายน 2569 (build c)',
       changes: [
