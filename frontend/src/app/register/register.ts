@@ -211,6 +211,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
           if (res.lastname_th)  this.formData.lastname  = res.lastname_th;
           if (res.email)        this.formData.email      = res.email;
           if (res.phone)        this.formData.phone      = res.phone;
+          if (res.cid)          this.formData.cid         = res.cid;
           // pre-fill อำเภอ/หน่วยบริการ จาก ProviderID JWT (best-effort) — apply ทันทีถ้า districts/hospitals โหลดเสร็จแล้ว
           if (res.distid) {
             this._pendingRegDistid   = res.distid;

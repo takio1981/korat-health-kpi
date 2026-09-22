@@ -1099,12 +1099,13 @@ function extractCidFromPayload(payload) {
 
 /**
  * ลองดึงรหัสหน่วยบริการ (hospcode) จาก JWT payload ของ ProviderID (MOPH)
- * ไม่มีเอกสารยืนยันชื่อ field จริง — ลองหลายชื่อที่เป็นไปได้ ถ้าไม่เจอคืน null (ไม่กระทบ flow ปกติ)
+ * ยืนยันแล้วจาก token จริง (ทดสอบผ่านเครื่องมือ "ทดสอบถอดรหัส JWT" ใน Settings) ว่า MOPH ใช้ field
+ * ชื่อ "hcode" — เก็บชื่อ candidate อื่นไว้เป็น fallback เผื่อ provider เวอร์ชันอื่น/token รูปแบบอื่น
  */
 function extractHospcodeFromPayload(payload) {
     if (!payload) return null;
     const candidates = [
-        payload.hospcode, payload.hospital_code, payload.hcode,
+        payload.hcode, payload.hospcode, payload.hospital_code,
         payload.agency_code, payload.agencycode, payload.org_code, payload.orgcode,
         payload.workplace, payload.work_place, payload.affiliation,
         payload.unit_code, payload.unitcode, payload.moph_hospcode
@@ -1388,7 +1389,7 @@ apiRouter.post('/auth/thaid/verify-token', async (req, res) => {
         const phoneFromJwt = String(rawDecoded?.phone_number || rawDecoded?.phone || '').trim();
         const regLocation = await resolveRegLocationFromPayload(payload);
         _thaidRegMap.set(regToken, {
-            cid_hash: cidHashOurs, firstname_th, lastname_th,
+            cid_hash: cidHashOurs, cid: cidStr, firstname_th, lastname_th,
             email: emailFromJwt, phone: phoneFromJwt,
             hospcode: regLocation.hospcode, distid: regLocation.distid,
             provider: detectedProvider,
@@ -1539,6 +1540,7 @@ apiRouter.get('/auth/thaid/reg-data', async (req, res) => {
     res.json({
         success: true,
         cid_hash: entry.cid_hash,
+        cid: entry.cid || '',
         firstname_th: entry.firstname_th || '',
         lastname_th: entry.lastname_th || '',
         email: entry.email || '',
@@ -1660,7 +1662,7 @@ async function handleThaidCallback(req, res) {
             const regToken = crypto.randomBytes(8).toString('hex');
             const regLocation = await resolveRegLocationFromPayload(payload);
             _thaidRegMap.set(regToken, {
-                cid_hash: hashedCid,
+                cid_hash: hashedCid, cid: cidStr,
                 firstname_th: payload.firstname_th || payload.given_name || '',
                 lastname_th: payload.lastname_th || payload.family_name || '',
                 hospcode: regLocation.hospcode, distid: regLocation.distid,

@@ -18,6 +18,14 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.09.22.f',
+      date: '22 กันยายน 2569 (build f)',
+      changes: [
+        { type: 'fix', text: 'ยืนยันชื่อ field จริงของ JWT ProviderID แล้วจากการทดสอบด้วยเครื่องมือ "ทดสอบถอดรหัส JWT" — รหัสหน่วยบริการใช้ field ชื่อ "hcode" (ไม่ใช่ hospcode ที่เดาไว้ก่อนหน้า) เปลี่ยนลำดับความสำคัญใน extractHospcodeFromPayload() ให้ตรวจ hcode ก่อนเป็นอันดับแรก' },
+        { type: 'feature', text: 'ฟอร์มลงทะเบียนผ่าน ProviderID: เพิ่ม pre-fill "เลขบัตรประชาชน 13 หลัก" — เดิมตัดสินใจไม่ทำเพราะกังวลเรื่องส่ง CID plain text กลับมาที่ frontend แต่พบว่า browser มี JWT ตัวเต็ม (รวม CID plain text อยู่แล้ว) ตั้งแต่ MOPH redirect กลับมา ก่อนจะยิง request ไปที่ backend ด้วยซ้ำ — การส่งค่านี้กลับจึงไม่เพิ่มความเสี่ยงเทียบกับที่ผู้ใช้เข้าถึงอยู่แล้ว' },
+      ]
+    },
+    {
       version: '2569.09.22.e',
       date: '22 กันยายน 2569 (build e)',
       changes: [
