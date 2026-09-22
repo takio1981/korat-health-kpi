@@ -35,22 +35,22 @@ export class HelpComponent {
 
   // section.roles: 'all' = แสดงทุกคน (รวม public), array = แสดงเฉพาะ role ที่ระบุ
   sections: { id: string; icon: string; label: string; roles: 'all' | string[] }[] = [
-    { id: 'overview',      icon: 'fa-home',             label: 'ภาพรวมระบบ',                  roles: 'all' },
-    { id: 'register',      icon: 'fa-user-plus',        label: 'การลงทะเบียน',                 roles: 'all' },
-    { id: 'login',         icon: 'fa-sign-in-alt',      label: 'การเข้าสู่ระบบ',                roles: 'all' },
-    { id: 'dashboard',     icon: 'fa-th-large',         label: 'Dashboard',                  roles: 'all' },
-    { id: 'charts',        icon: 'fa-chart-bar',        label: 'กราฟและสถิติ',                roles: 'all' },
-    { id: 'notifications', icon: 'fa-bell',             label: 'แจ้งเตือน',                    roles: 'all' },
-    { id: 'users',         icon: 'fa-users-cog',        label: 'จัดการผู้ใช้งาน',              roles: HelpComponent.ADMIN_CENTRAL },
-    { id: 'kpi-manager',   icon: 'fa-layer-group',      label: 'จัดการข้อมูล KPI',             roles: HelpComponent.ADMIN_CENTRAL },
-    { id: 'online-users',  icon: 'fa-users',            label: 'ผู้ใช้งานออนไลน์',             roles: HelpComponent.SUPER_ONLY },
-    { id: 'backup',        icon: 'fa-database',         label: 'สำรอง & กู้คืนข้อมูล',         roles: HelpComponent.SUPER_ONLY },
-    { id: 'audit-digest',  icon: 'fa-bullhorn',         label: 'แจ้งเตือนการบันทึก KPI',       roles: HelpComponent.ADMIN_CENTRAL },
-    { id: 'maintenance',   icon: 'fa-tools',            label: 'Maintenance Mode',           roles: HelpComponent.SUPER_ONLY },
-    { id: 'feedback',      icon: 'fa-comments',         label: 'กระดานข้อเสนอแนะ',             roles: 'all' },
-    { id: 'settings',      icon: 'fa-sliders-h',        label: 'ตั้งค่าระบบ',                  roles: HelpComponent.SUPER_ONLY },
-    { id: 'roles',         icon: 'fa-shield-alt',       label: 'สิทธิ์การใช้งาน',              roles: 'all' },
-    { id: 'faq',           icon: 'fa-question-circle',  label: 'คำถามที่พบบ่อย',               roles: 'all' }
+    { id: 'overview',      icon: 'fa-home',             label: '1. ภาพรวมระบบ',                    roles: 'all' },
+    { id: 'register',      icon: 'fa-user-plus',        label: '2. การลงทะเบียน',                   roles: 'all' },
+    { id: 'login',         icon: 'fa-sign-in-alt',      label: '3. การเข้าสู่ระบบ',                  roles: 'all' },
+    { id: 'dashboard',     icon: 'fa-th-large',         label: '4. บันทึกผลงานตัวชี้วัด',             roles: 'all' },
+    { id: 'charts',        icon: 'fa-chart-bar',        label: '5. รายงานสถิติ',                    roles: 'all' },
+    { id: 'notifications', icon: 'fa-bell',             label: '6. แจ้งเตือน',                      roles: 'all' },
+    { id: 'users',         icon: 'fa-users-cog',        label: '7. จัดการผู้ใช้งาน',                 roles: HelpComponent.ADMIN_CENTRAL },
+    { id: 'settings',      icon: 'fa-sliders-h',        label: '8. ตั้งค่าระบบ',                     roles: HelpComponent.SUPER_ONLY },
+    { id: 'roles',         icon: 'fa-shield-alt',       label: '9. สิทธิ์การใช้งาน',                 roles: 'all' },
+    { id: 'kpi-manager',   icon: 'fa-layer-group',      label: '10. จัดการข้อมูล KPI',               roles: HelpComponent.ADMIN_CENTRAL },
+    { id: 'online-users',  icon: 'fa-users',            label: '11. ผู้ใช้งานออนไลน์',               roles: HelpComponent.SUPER_ONLY },
+    { id: 'backup',        icon: 'fa-database',         label: '12. สำรอง & กู้คืนข้อมูล',           roles: HelpComponent.SUPER_ONLY },
+    { id: 'audit-digest',  icon: 'fa-bullhorn',         label: '13. แจ้งเตือนการบันทึก KPI',         roles: HelpComponent.ADMIN_CENTRAL },
+    { id: 'maintenance',   icon: 'fa-tools',            label: '14. โหมดปิดปรับปรุงระบบ',            roles: HelpComponent.SUPER_ONLY },
+    { id: 'feedback',      icon: 'fa-comments',         label: '15. กระดานข้อเสนอแนะ',               roles: 'all' },
+    { id: 'faq',           icon: 'fa-question-circle',  label: '16. คำถามที่พบบ่อย',                 roles: 'all' }
   ];
 
   /** sections ที่ user role ปัจจุบันเห็น (sidebar/menu ใช้ตัวนี้) */

@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, AfterViewInit, inject, ChangeDetectorRef, NgZone, ElementRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, inject, ChangeDetectorRef, NgZone, ElementRef, HostListener } from '@angular/core';
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { ToastService } from '../services/toast.service';
@@ -147,6 +147,16 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   // UI: dropdown ไหนกำลังเปิด
   openFilterDropdown: string = '';
   showManageMenu: boolean = false;
+
+  // ปิด dropdown "จัดการตัวชี้วัด" เมื่อคลิกนอกกรอบ
+  @HostListener('document:click', ['$event'])
+  onDocumentClickManageMenu(event: MouseEvent) {
+    if (!this.showManageMenu) return;
+    const container = this.el.nativeElement.querySelector('.manage-menu-container');
+    if (container && !container.contains(event.target as Node)) {
+      this.showManageMenu = false;
+    }
+  }
 
   // จำนวนรายการ pending (รอตรวจสอบ)
   get pendingCount(): number {

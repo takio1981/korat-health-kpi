@@ -14,7 +14,7 @@
           </div>
           <div class="flex flex-wrap gap-2 w-full md:w-auto">
             <!-- กลุ่ม "จัดการข้อมูลตัวชี้วัด" (เฉพาะ admin_ssj + super_admin) -->
-            <div *ngIf="isAdmin && !isEditing && !isReviewMode && !isDeleteMode" class="relative flex-1 md:flex-initial md:w-auto min-w-0">
+            <div *ngIf="isAdmin && !isEditing && !isReviewMode && !isDeleteMode" class="relative flex-1 md:flex-initial md:w-auto min-w-0 manage-menu-container">
               <button (click)="showManageMenu = !showManageMenu"
                       class="w-full md:w-auto px-3 md:px-4 py-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white rounded-xl shadow-md transition-all text-xs font-bold flex items-center justify-center gap-1.5">
                 <i class="fas fa-tools shrink-0"></i>
@@ -484,24 +484,23 @@
         </div>
         <!-- END sticky top wrapper -->
 
-        <!-- super_admin: เลือกตัวกรองก่อน -->
-        <div *ngIf="(isSuperAdmin || isAdmin) && kpiData.length === 0 && !isLoading" class="px-6 py-16 text-center">
-          <div class="inline-flex items-center justify-center w-20 h-20 bg-indigo-100 rounded-2xl mb-4">
-            <i class="fas fa-filter text-indigo-500 text-3xl"></i>
-          </div>
-          <h3 class="text-lg font-bold text-gray-700 mb-2">กรุณาเลือกตัวกรองก่อนดูข้อมูล</h3>
-          <p class="text-sm text-gray-400 mb-4">เลือก อำเภอ, หน่วยบริการ, หน่วยงาน หรือตัวชี้วัด แล้วกดปุ่ม <b>"ค้นหา"</b></p>
-          <p class="text-xs text-gray-400"><i class="fas fa-circle-info mr-1"></i>เพื่อประสิทธิภาพการโหลด กรุณาเลือกตัวกรองให้แคบลงก่อนค้นหา</p>
-        </div>
-
         <!-- คำแนะนำการคีย์ข้อมูลรายเดือน -->
-        <div class="mx-5 mt-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2 text-[11px] text-amber-700">
+        <div class="mx-5 mt-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-[11px] text-red-700">
           <i class="fas fa-circle-info mt-0.5 shrink-0"></i>
           <span class="text-red-600 font-semibold blink-slow">ข้อมูลผลงานที่คีย์ในแต่ละเดือน คือข้อมูลสะสมตั้งแต่เดือน <b>ตุลาคม</b> ถึง <b>เดือนปัจจุบัน</b> ของปีงบประมาณ (ไม่ใช่ผลงานเฉพาะเดือนนั้น)</span>
         </div>
 
         <!-- Mobile Card View -->
         <div class="overflow-x-auto bg-gray-50/30 lg:hidden">
+            <!-- super_admin: เลือกตัวกรองก่อน (Mobile) -->
+            <div *ngIf="(isSuperAdmin || isAdmin) && kpiData.length === 0 && !isLoading" class="px-6 py-16 text-center">
+              <div class="inline-flex items-center justify-center w-20 h-20 bg-indigo-100 rounded-2xl mb-4">
+                <i class="fas fa-filter text-indigo-500 text-3xl"></i>
+              </div>
+              <h3 class="text-lg font-bold text-gray-700 mb-2">กรุณาเลือกตัวกรองก่อนดูข้อมูล</h3>
+              <p class="text-sm text-gray-400 mb-4">เลือก อำเภอ, หน่วยบริการ, หน่วยงาน หรือตัวชี้วัด แล้วกดปุ่ม <b>"ค้นหา"</b></p>
+              <p class="text-xs text-gray-400"><i class="fas fa-circle-info mr-1"></i>เพื่อประสิทธิภาพการโหลด กรุณาเลือกตัวกรองให้แคบลงก่อนค้นหา</p>
+            </div>
             <div>
               <div *ngFor="let item of pagedData; let i = index" class="border-b border-gray-200 p-4 space-y-3 relative">
                 <!-- Review checkbox (Mobile) -->
@@ -758,7 +757,7 @@
                 <th *ngIf="isDeleteMode" class="px-2 py-3 bg-red-700 text-center w-8" title="เลือกทั้งหมด">
                   <input type="checkbox" [checked]="deleteAllChecked" (change)="toggleDeleteAll()" class="rounded text-red-400 focus:ring-red-400">
                 </th>
-                <th class="px-3 py-3 frozen col-1 bg-green-700 relative overflow-hidden select-none cursor-pointer"
+                <th class="px-2 py-3 frozen col-1 bg-green-700 relative overflow-hidden select-none cursor-pointer"
                     (click)="toggleSort('main_indicator_name')">
                   <div class="flex items-center justify-between gap-1">
                     <span>หมวดหมู่หลัก</span>
@@ -768,7 +767,7 @@
                   <span class="col-resize-handle" (click)="$event.stopPropagation()" (mousedown)="startResize($event,'col1')"></span>
                 </th>
                 <th class="px-2 py-3 frozen col-2 bg-green-700 text-center border-r border-green-600">จัดการ</th>
-                <th class="px-3 py-3 frozen col-3 bg-green-700 border-r border-green-600 relative overflow-hidden select-none cursor-pointer"
+                <th class="px-2 py-3 frozen col-3 bg-green-700 border-r border-green-600 relative overflow-hidden select-none cursor-pointer"
                     (click)="toggleSort('kpi_indicators_name')">
                   <div class="flex items-center justify-between gap-1">
                     <span>ชื่อตัวชี้วัด</span>
@@ -778,7 +777,7 @@
                   <span class="col-resize-handle" (click)="$event.stopPropagation()" (mousedown)="startResize($event,'col2')"></span>
                 </th>
                 <th class="px-2 py-3 frozen col-4 bg-green-700 text-center border-r border-green-600" title="เกณฑ์มาตรฐานของตัวชี้วัด (จากการตั้งค่าตัวชี้วัด)">เกณฑ์</th>
-                <th class="px-3 py-3 frozen col-5 bg-green-700 border-r border-green-600 relative overflow-hidden select-none cursor-pointer"
+                <th class="px-2 py-3 frozen col-5 bg-green-700 border-r border-green-600 relative overflow-hidden select-none cursor-pointer"
                     (click)="toggleSort('hosname')">
                   <div class="flex items-center justify-between gap-1">
                     <span>หน่วยบริการ</span>
@@ -787,14 +786,14 @@
                   </div>
                   <span class="col-resize-handle" (click)="$event.stopPropagation()" (mousedown)="startResize($event,'col4')"></span>
                 </th>
-                <th class="px-3 py-3 frozen col-6 bg-green-700 border-r border-green-600 text-right select-none cursor-pointer" (click)="toggleSort('target_value')">
+                <th class="px-2 py-3 frozen col-6 bg-green-700 border-r border-green-600 text-right select-none cursor-pointer" (click)="toggleSort('target_value')">
                   <div class="flex items-center justify-end gap-1">
                     <span>เป้าหมาย</span>
                     <i class="fas text-[10px] shrink-0"
                        [ngClass]="sortField==='target_value' ? (sortDir==='asc' ? 'fa-sort-up text-yellow-300' : 'fa-sort-down text-yellow-300') : 'fa-sort text-white/40'"></i>
                   </div>
                 </th>
-                <th class="px-3 py-3 frozen col-7 bg-green-700 border-r border-green-600 text-right select-none cursor-pointer" (click)="toggleSort('last_actual')">
+                <th class="px-2 py-3 frozen col-7 bg-green-700 border-r border-green-600 text-right select-none cursor-pointer" (click)="toggleSort('last_actual')">
                   <div class="flex items-center justify-end gap-1">
                     <span>ผลงานล่าสุด</span>
                     <i class="fas text-[10px] shrink-0"
@@ -816,6 +815,17 @@
             </thead>
 
             <tbody class="divide-y divide-gray-100 bg-white">
+              <!-- super_admin: เลือกตัวกรองก่อน — แสดงใต้หัวตารางสีเขียว -->
+              <tr *ngIf="(isSuperAdmin || isAdmin) && kpiData.length === 0 && !isLoading">
+                <td colspan="22" class="px-6 py-16 text-center">
+                  <div class="inline-flex items-center justify-center w-20 h-20 bg-indigo-100 rounded-2xl mb-4">
+                    <i class="fas fa-filter text-indigo-500 text-3xl"></i>
+                  </div>
+                  <h3 class="text-lg font-bold text-gray-700 mb-2">กรุณาเลือกตัวกรองก่อนดูข้อมูล</h3>
+                  <p class="text-sm text-gray-400 mb-4">เลือก อำเภอ, หน่วยบริการ, หน่วยงาน หรือตัวชี้วัด แล้วกดปุ่ม <b>"ค้นหา"</b></p>
+                  <p class="text-xs text-gray-400"><i class="fas fa-circle-info mr-1"></i>เพื่อประสิทธิภาพการโหลด กรุณาเลือกตัวกรองให้แคบลงก่อนค้นหา</p>
+                </td>
+              </tr>
               <tr *ngFor="let item of pagedData; let i = index" class="hover:bg-green-50/30 transition-all duration-150 text-xs">
 
                 <!-- Review checkbox -->
