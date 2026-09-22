@@ -28,6 +28,7 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   maintenanceMode: boolean = false;
   maintenanceMessage: string = '';
+  systemVersion: string = '';
   isThaIdEnabled: boolean = false;
   thaidLoginUrl: string = '';
   thaidVerifying: boolean = false;
@@ -239,6 +240,7 @@ export class LoginComponent implements OnInit, OnDestroy {
           || prevProvider !== !!res.providerid_enabled;
         this.maintenanceMode = !!res.maintenance;
         this.maintenanceMessage = res.message || '';
+        this.systemVersion = res.system_version || '';
         this.isThaIdEnabled = !!res.thaid_enabled;
         this.thaidLoginUrl = res.thaid_login_url || '';
         this.isProviderIdEnabled = !!res.providerid_enabled;

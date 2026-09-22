@@ -4611,7 +4611,7 @@ apiRouter.get('/sso/connectivity', async (req, res) => {
 apiRouter.get('/system/maintenance-status', async (req, res) => {
     try {
         const [rows] = await db.query(
-            "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message','thaid_enabled','providerid_enabled','thaid_login_url','thaid_register_enabled','providerid_register_enabled')"
+            "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message','thaid_enabled','providerid_enabled','thaid_login_url','thaid_register_enabled','providerid_register_enabled','system_version')"
         );
         const s = {};
         rows.forEach(r => s[r.setting_key] = r.setting_value);
@@ -4624,9 +4624,10 @@ apiRouter.get('/system/maintenance-status', async (req, res) => {
             thaid_login_url: s['thaid_login_url'] || '',
             thaid_register_enabled: s['thaid_register_enabled'] === 'true',
             providerid_register_enabled: s['providerid_register_enabled'] === 'true',
+            system_version: s['system_version'] || 'v1.0.0',
         });
     } catch (error) {
-        res.json({ success: true, maintenance: false, message: '', thaid_enabled: false, providerid_enabled: false });
+        res.json({ success: true, maintenance: false, message: '', thaid_enabled: false, providerid_enabled: false, system_version: 'v1.0.0' });
     }
 });
 
