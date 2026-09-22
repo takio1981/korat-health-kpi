@@ -221,6 +221,20 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     arr.splice(0, arr.length);
   }
 
+  // เลือกทั้งหมด/ยกเลิกทั้งหมด (toggle) — ใช้ร่วมกับ checkbox "เลือกทั้งหมด" ในทุก dropdown multi-select
+  isAllFilterSelected(arr: string[], allValues: string[]): boolean {
+    return allValues.length > 0 && arr.length === allValues.length && allValues.every(v => arr.includes(v));
+  }
+  toggleSelectAllFilterArr(arr: string[], allValues: string[]) {
+    if (this.isAllFilterSelected(arr, allValues)) arr.splice(0, arr.length);
+    else arr.splice(0, arr.length, ...allValues);
+  }
+  // รายการ code ล้วนๆ สำหรับ dropdown ที่เก็บเป็น object (ใช้กับ "เลือกทั้งหมด" ใน template)
+  get hosTypeCodes(): string[] { return this.hosTypeList.map((h: any) => h.hostypecode); }
+  get indOffTypeCodes(): string[] { return this._allHosTypes.map((h: any) => h.hostypecode); }
+  readonly statusFilterValues: string[] = ['pass', 'fail', 'pending', 'reviewed', 'has_target_actual', 'no_target', 'no_actual', 'no_target_no_actual'];
+  readonly typeFilterValues: string[] = ['r9', 'moph', 'ssj', 'rmw', 'other'];
+
   showFilters: boolean = true;
   showGuide: boolean = false;
   mainCategories: string[] = [];

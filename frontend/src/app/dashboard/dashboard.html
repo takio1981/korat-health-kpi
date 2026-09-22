@@ -237,6 +237,11 @@
                   <span class="text-teal-700 font-bold">เลือก: {{ selectedDistricts.length }}</span>
                   <button type="button" (click)="openFilterDropdown = ''" class="px-2 py-0.5 bg-teal-500 text-white rounded font-bold">ตกลง</button>
                 </div>
+                <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-teal-50 cursor-pointer text-xs border-b border-gray-100 font-bold">
+                  <input type="checkbox" [checked]="isAllFilterSelected(selectedDistricts, districtNames)"
+                         (change)="toggleSelectAllFilterArr(selectedDistricts, districtNames); onDistrictCascade()" class="rounded text-teal-600">
+                  <span>เลือกทั้งหมด</span>
+                </label>
                 <div class="overflow-y-auto flex-1">
                   <label *ngFor="let name of districtNames" class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
                     <input type="checkbox" [checked]="isFilterSelected(selectedDistricts, name)"
@@ -259,6 +264,11 @@
                   <span class="text-teal-700 font-bold">เลือก: {{ selectedHosTypes.length }}</span>
                   <button type="button" (click)="openFilterDropdown = ''" class="px-2 py-0.5 bg-teal-500 text-white rounded font-bold">ตกลง</button>
                 </div>
+                <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-teal-50 cursor-pointer text-xs border-b border-gray-100 font-bold">
+                  <input type="checkbox" [checked]="isAllFilterSelected(selectedHosTypes, hosTypeCodes)"
+                         (change)="toggleSelectAllFilterArr(selectedHosTypes, hosTypeCodes); onHosTypeCascade()" class="rounded text-teal-600">
+                  <span>เลือกทั้งหมด</span>
+                </label>
                 <div class="overflow-y-auto flex-1">
                   <label *ngFor="let ht of hosTypeList" class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
                     <input type="checkbox" [checked]="isFilterSelected(selectedHosTypes, ht.hostypecode)"
@@ -281,6 +291,11 @@
                   <span class="text-teal-700 font-bold">เลือก: {{ selectedHospitals.length }} / {{ hospitalNames.length }}</span>
                   <button type="button" (click)="openFilterDropdown = ''" class="px-2 py-0.5 bg-teal-500 text-white rounded font-bold">ตกลง</button>
                 </div>
+                <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-teal-50 cursor-pointer text-xs border-b border-gray-100 font-bold">
+                  <input type="checkbox" [checked]="isAllFilterSelected(selectedHospitals, hospitalNames)"
+                         (change)="toggleSelectAllFilterArr(selectedHospitals, hospitalNames)" class="rounded text-teal-600">
+                  <span>เลือกทั้งหมด</span>
+                </label>
                 <div class="overflow-y-auto flex-1">
                   <label *ngFor="let name of hospitalNames" class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
                     <input type="checkbox" [checked]="isFilterSelected(selectedHospitals, name)"
@@ -310,6 +325,11 @@
                   <button type="button" (click)="clearFilterArr(selectedStatuses)" class="px-2 py-0.5 bg-gray-200 hover:bg-gray-300 rounded font-bold">ล้าง</button>
                   <button type="button" (click)="openFilterDropdown = ''" class="px-2 py-0.5 bg-amber-500 text-white rounded font-bold">ตกลง</button>
                 </div>
+                <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-amber-50 cursor-pointer text-xs border-b border-gray-100 font-bold">
+                  <input type="checkbox" [checked]="isAllFilterSelected(selectedStatuses, statusFilterValues)"
+                         (change)="toggleSelectAllFilterArr(selectedStatuses, statusFilterValues)" class="rounded text-amber-600">
+                  <span>เลือกทั้งหมด</span>
+                </label>
                 <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
                   <input type="checkbox" [checked]="isFilterSelected(selectedStatuses, 'pass')" (change)="toggleFilterItem(selectedStatuses, 'pass')" class="rounded text-green-600"><span class="text-green-600">ผ่านเป้าหมาย</span></label>
                 <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
@@ -345,6 +365,11 @@
                   <span class="text-indigo-700 font-bold">เลือก: {{ selectedDepts.length }}</span>
                   <button type="button" (click)="openFilterDropdown = ''" class="px-2 py-0.5 bg-indigo-500 text-white rounded font-bold">ตกลง</button>
                 </div>
+                <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-indigo-50 cursor-pointer text-xs border-b border-gray-100 font-bold">
+                  <input type="checkbox" [checked]="isAllFilterSelected(selectedDepts, deptNames)"
+                         (change)="toggleSelectAllFilterArr(selectedDepts, deptNames); onDeptCascade()" class="rounded text-indigo-600">
+                  <span>เลือกทั้งหมด</span>
+                </label>
                 <div class="overflow-y-auto flex-1">
                   <label *ngFor="let name of deptNames" class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
                     <input type="checkbox" [checked]="isFilterSelected(selectedDepts, name)"
@@ -383,6 +408,11 @@
                   <span class="text-cyan-700 font-bold">เลือก: {{ selectedIndicatorOffTypes.length }}</span>
                   <button type="button" (click)="openFilterDropdown = ''" class="px-2 py-0.5 bg-cyan-500 text-white rounded font-bold">ตกลง</button>
                 </div>
+                <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-cyan-50 cursor-pointer text-xs border-b border-gray-100 font-bold">
+                  <input type="checkbox" [checked]="isAllFilterSelected(selectedIndicatorOffTypes, indOffTypeCodes)"
+                         (change)="toggleSelectAllFilterArr(selectedIndicatorOffTypes, indOffTypeCodes)" class="rounded text-cyan-600">
+                  <span>เลือกทั้งหมด</span>
+                </label>
                 <div class="overflow-y-auto flex-1">
                   <label *ngFor="let ht of _allHosTypes" class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
                     <input type="checkbox" [checked]="isFilterSelected(selectedIndicatorOffTypes, ht.hostypecode)"
@@ -405,6 +435,11 @@
                   <button type="button" (click)="clearFilterArr(selectedTypes)" class="px-2 py-0.5 bg-gray-200 hover:bg-gray-300 rounded font-bold">ล้าง</button>
                   <button type="button" (click)="openFilterDropdown = ''" class="px-2 py-0.5 bg-indigo-500 text-white rounded font-bold">ตกลง</button>
                 </div>
+                <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-indigo-50 cursor-pointer text-xs border-b border-gray-100 font-bold">
+                  <input type="checkbox" [checked]="isAllFilterSelected(selectedTypes, typeFilterValues)"
+                         (change)="toggleSelectAllFilterArr(selectedTypes, typeFilterValues)" class="rounded text-indigo-600">
+                  <span>เลือกทั้งหมด</span>
+                </label>
                 <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
                   <input type="checkbox" [checked]="isFilterSelected(selectedTypes, 'r9')" (change)="toggleFilterItem(selectedTypes, 'r9')" class="rounded text-blue-600"><span>เขต 9</span></label>
                 <label class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
