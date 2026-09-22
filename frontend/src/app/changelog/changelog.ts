@@ -18,6 +18,14 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.09.22.h',
+      date: '22 กันยายน 2569 (build h)',
+      changes: [
+        { type: 'fix', text: 'ลงทะเบียนด้วย ProviderID (MOPH): แก้บั๊กที่ทำให้ไม่เคยไปถึงหน้ากรอกฟอร์ม/กล่อง JSON เลย — เดิม backend ไม่เคยบันทึก state ที่ใช้ยืนยันตอน callback (ทุกครั้งเจอ "state ไม่ถูกต้อง") และไม่มี branch แยกกรณีลงทะเบียนใหม่ (ถือว่าเป็นการ login เสมอ จึงเจอ "ไม่พบบัญชี" แทน) ทั้งสองจุดนี้ทำให้ผู้ใช้ใหม่ไปไม่ถึงกล่องตรวจสอบข้อมูล JSON ที่เพิ่มไว้ใน build g เลย' },
+        { type: 'fix', text: 'ProviderID: แก้ config ที่ไม่เคยถูกอ่านมาใช้จริง — client_id ไม่เคยถูกส่งไปตอนแลก token (ทำให้ error) และ token/userinfo URL ใช้ค่า default เก่าแทนค่าที่ตั้งไว้จริงในหน้า Settings' },
+      ]
+    },
+    {
       version: '2569.09.22.g',
       date: '22 กันยายน 2569 (build g)',
       changes: [

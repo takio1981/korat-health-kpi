@@ -81,7 +81,6 @@ if %FRONTEND_OK%==1 (
     echo   [OK] Frontend ^(Angular^)
     if exist "frontend\dist\index.html" (
         echo        -^> Output : frontend\dist\
-        for /f %%A in ('dir /s /b "frontend\dist" 2^>nul ^| find /c /v ""') do echo        -^> Files  : %%A files
     )
 ) else (
     echo   [FAIL] Frontend ^(Angular^) - Build failed!

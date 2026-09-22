@@ -1808,7 +1808,10 @@ const MOPH_REDIRECT_URI = 'https://apikorat.moph.go.th/authen/healthid/callback'
 
 async function getProviderIdSettings() {
     const [rows] = await db.query(
-        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('providerid_enabled','providerid_login_url','providerid_register_url','providerid_register_enabled')"
+        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN " +
+        "('providerid_enabled','providerid_login_url','providerid_register_url','providerid_register_enabled'," +
+        "'providerid_client_id','providerid_client_secret','providerid_token_url','providerid_userinfo_url'," +
+        "'providerid_auth_url','providerid_redirect_uri','providerid_scope')"
     );
     const s = {};
     rows.forEach(r => s[r.setting_key] = r.setting_value);
@@ -1817,10 +1820,15 @@ async function getProviderIdSettings() {
         login_url:        s.providerid_login_url || '',
         register_enabled: s.providerid_register_enabled === 'true',
         register_url:     s.providerid_register_url || '',
-        // MOPH defaults — ใช้ใน callback ถ้ายังต้องการ OAuth flow ในอนาคต
-        token_url:    MOPH_TOKEN_URL,
-        userinfo_url: MOPH_USERINFO_URL,
-        client_secret: process.env.PROVIDERID_CLIENT_SECRET || '',
+        // เดิม client_id ไม่เคย SELECT/return เลย ทำให้ token exchange พังเสมอ (s.client_id undefined
+        // → .slice() throw) — ตอนนี้อ่านจาก system_settings จริง (Settings UI บันทึกไว้แล้ว) ก่อน fallback
+        client_id:     s.providerid_client_id || '',
+        client_secret: s.providerid_client_secret || process.env.PROVIDERID_CLIENT_SECRET || '',
+        token_url:     s.providerid_token_url    || MOPH_TOKEN_URL,
+        userinfo_url:  s.providerid_userinfo_url || MOPH_USERINFO_URL,
+        auth_url:      s.providerid_auth_url     || '',
+        redirect_uri:  s.providerid_redirect_uri || '',
+        scope:         s.providerid_scope        || '',
     };
 }
 
@@ -1842,8 +1850,17 @@ apiRouter.get('/auth/providerid/start', async (req, res) => {
             return res.redirect(`${frontendBase}/sso-callback?sso_error=${encodeURIComponent('ProviderID ยังไม่ได้เปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ')}`);
         if (!s.login_url)
             return res.redirect(`${frontendBase}/sso-callback?sso_error=${encodeURIComponent('ProviderID ยังไม่ได้ตั้งค่า URL กรุณาตรวจสอบ Settings')}`);
-        console.log(`[ProviderID/start] → ${s.login_url.slice(0, 80)}...`);
-        res.redirect(s.login_url);
+
+        // สร้าง dynamic state + เก็บใน _providerIdStateMap (เดิมไม่เคยเก็บเลย ทำให้ callback
+        // เช็ค state ไม่เจอ → error ทุกครั้ง) แล้ว override ค่า state เดิมใน URL (เหมือน ThaiD /auth/thaid/start)
+        const state = 'khupskpi-' + crypto.randomBytes(8).toString('hex');
+        _providerIdStateMap.set(state, { origin: frontendBase, flow: 'login', expires: Date.now() + 10 * 60 * 1000 });
+        const urlObj = new URL(s.login_url);
+        urlObj.searchParams.set('state', state);
+        const finalUrl = urlObj.toString();
+
+        console.log(`[ProviderID/start] state=${state} | → ${finalUrl.slice(0, 80)}...`);
+        res.redirect(finalUrl);
     } catch (e) {
         console.error('[ProviderID/start] error:', e.message);
         const frontendBase = getFrontendBase(req);
@@ -1858,12 +1875,21 @@ apiRouter.get('/auth/providerid/register-start', async (req, res) => {
         const frontendBase = getFrontendBase(req);
         if (!s.register_enabled)
             return res.redirect(`${frontendBase}/register?sso_error=${encodeURIComponent('ProviderID สำหรับลงทะเบียนยังไม่ได้เปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ')}`);
-        // ใช้ register_url ถ้าตั้งไว้ ไม่งั้น fallback เป็น login_url (เปลี่ยน state เองไม่ได้เพราะ URL สำเร็จรูป)
+        // ใช้ register_url ถ้าตั้งไว้ ไม่งั้น fallback เป็น login_url
         const targetUrl = s.register_url || s.login_url;
         if (!targetUrl)
             return res.redirect(`${frontendBase}/register?sso_error=${encodeURIComponent('ProviderID ยังไม่ได้ตั้งค่า Register URL กรุณาตรวจสอบ Settings')}`);
-        console.log(`[ProviderID/register-start] → ${targetUrl.slice(0, 80)}...`);
-        res.redirect(targetUrl);
+
+        // สร้าง dynamic state + เก็บ flow='register' — callback จะเช็คค่านี้เพื่อรู้ว่าต้อง
+        // พาไปหน้า register (ไม่ใช่พยายาม login) เมื่อ MOPH redirect กลับมา
+        const state = 'khupskpi-reg-' + crypto.randomBytes(8).toString('hex');
+        _providerIdStateMap.set(state, { origin: frontendBase, flow: 'register', expires: Date.now() + 10 * 60 * 1000 });
+        const urlObj = new URL(targetUrl);
+        urlObj.searchParams.set('state', state);
+        const finalUrl = urlObj.toString();
+
+        console.log(`[ProviderID/register-start] state=${state} | → ${finalUrl.slice(0, 80)}...`);
+        res.redirect(finalUrl);
     } catch (e) {
         console.error('[ProviderID/register-start] error:', e.message);
         const frontendBase = getFrontendBase(req);
@@ -1878,10 +1904,11 @@ async function handleProviderIdCallback(req, res) {
     const { code, state, error, error_description } = req.query;
     const stateStr = String(state || '');
     const stateData = _providerIdStateMap.get(stateStr);
+    const _pidFlow = stateData?.flow || 'login';
 
     const redirectErr = (msg) => {
         console.error('[ProviderID/callback] ❌ ERROR:', msg);
-        saveSsoLog('providerid', 'login', { outcome: 'error', ip, error_msg: msg });
+        saveSsoLog('providerid', _pidFlow, { outcome: 'error', ip, error_msg: msg });
         return res.redirect(`${frontendBase}/sso-callback?sso_error=${encodeURIComponent(msg)}&sso_provider=providerid`);
     };
 
@@ -1964,6 +1991,31 @@ async function handleProviderIdCallback(req, res) {
         const pidPartial = cidStr.slice(-4);
         const fullName = userProfile.name_th || userProfile.name || `${userProfile.given_name || ''} ${userProfile.family_name || ''}`.trim();
         console.warn(`[ProviderID/callback] CID extracted ****${pidPartial} | name: ${fullName || '-'}`);
+
+        // === Register flow — ไม่ match user, สร้าง reg token แล้ว redirect ไปหน้า register ===
+        // (เดิมไม่มี branch นี้เลย — ทุก callback ถูกปฏิบัติเหมือน login ทำให้ผู้ลงทะเบียนใหม่เจอ
+        // ข้อความ error "ไม่พบบัญชี" แทนที่จะไปหน้า register — ดู handleThaidCallback สำหรับ pattern เดิม)
+        if (stateData?.flow === 'register') {
+            const regToken = crypto.randomBytes(8).toString('hex');
+            const regLocation = await resolveRegLocationFromPayload(userProfile);
+            _thaidRegMap.set(regToken, {
+                cid_hash: hashedCid, cid: cidStr,
+                firstname_th: userProfile.firstname_th || userProfile.given_name || '',
+                lastname_th: userProfile.lastname_th || userProfile.family_name || '',
+                hospcode: regLocation.hospcode, distid: regLocation.distid,
+                provider: 'providerid',
+                expires: Date.now() + 10 * 60 * 1000
+            });
+            const fn = encodeURIComponent(userProfile.firstname_th || userProfile.given_name || '');
+            const ln = encodeURIComponent(userProfile.lastname_th || userProfile.family_name || '');
+            const regUrl = `${frontendBase}/register?thaid_reg=${regToken}&thaid_fn=${fn}&thaid_ln=${ln}&sso_provider=providerid`;
+            console.warn('[ProviderID/register] reg token created, redirect →', regUrl);
+            saveSsoLog('providerid', 'register', {
+                outcome: 'register_redirect', cid_hash: hashedCid, ip,
+                raw_payload: userProfile, extracted_fields: { firstname_th: userProfile.given_name || '', lastname_th: userProfile.family_name || '', name_th: fullName }
+            });
+            return res.redirect(regUrl);
+        }
 
         // 4. Lookup user — JOIN departments + chospital
         const SELECT_USER_PID = `
