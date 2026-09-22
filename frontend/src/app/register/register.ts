@@ -119,6 +119,10 @@ export class RegisterComponent implements OnInit, OnDestroy {
   private _pendingRegDistid: string = '';
   private _pendingRegHospcode: string = '';
 
+  // ข้อมูลที่ถอดรหัสได้จาก JWT — แสดงเป็น JSON ให้ผู้ใช้ตรวจสอบก่อน แล้วกดปุ่ม "นำไปใช้" เอง
+  ssoDecodedPreview: any = null;
+  ssoDataApplied: boolean = false;
+
   private statusPollTimer: any = null;
   private onVisibilityChange = () => {
     if (document.visibilityState === 'visible') this.refreshSsoStatus();
@@ -190,34 +194,29 @@ export class RegisterComponent implements OnInit, OnDestroy {
     // บันทึก provider ที่ใช้ (thaid / providerid)
     this.ssoProvider = ssoProvRaw as any;
 
-    // เปิดฟอร์มทันที + pre-fill ชื่อจาก query params (ไม่รอ HTTP)
+    // เปิดฟอร์มทันที (ไม่รอ HTTP) — ไม่ auto-fill จาก query param อีกต่อไป รอข้อมูล verified
+    // จาก server แล้วให้ผู้ใช้ตรวจสอบ + กดปุ่ม "นำไปใช้" เอง (decodedFn/Ln ใช้แค่แสดงใน popup ระหว่างรอ)
     const decodedFn = fn ? decodeURIComponent(fn) : '';
     const decodedLn = ln ? decodeURIComponent(ln) : '';
-    if (decodedFn) this.formData.firstname = decodedFn;
-    if (decodedLn) this.formData.lastname  = decodedLn;
     this.thaidRegLoading = true;
     this.registerMode    = 'manual';
     this.cdr.detectChanges();
 
-    // ยืนยัน token กับ backend (get cid_hash + ชื่อ/email/phone verified + ตรวจอายุ)
+    // ยืนยัน token กับ backend (get cid_hash + ชื่อ/email/phone/ตำแหน่ง verified + ตรวจอายุ)
+    // ไม่ auto-fill ฟอร์มทันที — เก็บไว้ให้ดูเป็น JSON ก่อน แล้วกดปุ่ม "นำไปใช้" เองอีกที
     this.authService.getThaidRegData(regToken).subscribe({
       next: (res: any) => {
         this.thaidRegLoading = false;
         if (res.success) {
           this.thaidRegToken    = regToken;
           this.thaidRegVerified = true;
-          // override ด้วยข้อมูล verified จาก server (ป้องกัน query param ถูก tamper)
-          if (res.firstname_th) this.formData.firstname = res.firstname_th;
-          if (res.lastname_th)  this.formData.lastname  = res.lastname_th;
-          if (res.email)        this.formData.email      = res.email;
-          if (res.phone)        this.formData.phone      = res.phone;
-          if (res.cid)          this.formData.cid         = res.cid;
-          // pre-fill อำเภอ/หน่วยบริการ จาก ProviderID JWT (best-effort) — apply ทันทีถ้า districts/hospitals โหลดเสร็จแล้ว
-          if (res.distid) {
-            this._pendingRegDistid   = res.distid;
-            this._pendingRegHospcode = res.hospcode || '';
-            this.tryApplyPendingRegLocation();
-          }
+          this.ssoDataApplied   = false;
+          this.ssoDecodedPreview = {
+            firstname_th: res.firstname_th || '', lastname_th: res.lastname_th || '',
+            cid: res.cid || '', email: res.email || '', phone: res.phone || '',
+            hospcode: res.hospcode || '', hospname: this.lookupHospname(res.hospcode) || '',
+            distid: res.distid || '', distname: this.lookupDistname(res.distid) || '',
+          };
           // sync ssoProvider จาก server response (ถ้า backend รู้จริง)
           if (res.provider) this.ssoProvider = res.provider;
           this.cdr.detectChanges();
@@ -228,9 +227,9 @@ export class RegisterComponent implements OnInit, OnDestroy {
               title: `ยืนยันตัวตนด้วย ${providerLabel} สำเร็จ`,
               html: `<div style="font-size:14px">
                 <p>🪪 <b>${res.firstname_th || decodedFn} ${res.lastname_th || decodedLn}</b></p>
-                <p style="color:#6b7280;font-size:12px;margin-top:6px">กรุณากรอกข้อมูลที่เหลือและตั้งรหัสผ่านเพื่อสร้างบัญชี</p>
+                <p style="color:#6b7280;font-size:12px;margin-top:6px">ตรวจสอบข้อมูลด้านล่างแล้วกดปุ่ม "นำข้อมูลนี้ไปใช้ในฟอร์ม" เพื่อกรอกอัตโนมัติ</p>
               </div>`,
-              timer: 3000,
+              timer: 3500,
               showConfirmButton: false
             });
           }, 50);
@@ -264,6 +263,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
         if (res.success) {
           this.hospitals = res.data;
           this.tryApplyPendingRegLocation();
+          this.refreshSsoPreviewNames();
           this.cdr.detectChanges();
         }
       }
@@ -276,6 +276,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
         if (res.success) {
           this.districts = res.data;
           this.tryApplyPendingRegLocation();
+          this.refreshSsoPreviewNames();
           this.cdr.detectChanges();
         }
       }
@@ -301,6 +302,52 @@ export class RegisterComponent implements OnInit, OnDestroy {
     }
     this._pendingRegDistid = '';
     this._pendingRegHospcode = '';
+  }
+
+  private lookupHospname(hospcode: string): string {
+    if (!hospcode) return '';
+    const h = this.hospitals.find((x: any) => x.hoscode === hospcode);
+    return h?.hosname || '';
+  }
+
+  private lookupDistname(distid: string): string {
+    if (!distid) return '';
+    const d = this.districts.find((x: any) => x.distid === distid);
+    return d?.distname || '';
+  }
+
+  /** hospitals/districts โหลดแบบ async แยกจาก reg-data — เติมชื่อที่ยังว่างใน preview เมื่อข้อมูลมาถึงทีหลัง */
+  private refreshSsoPreviewNames() {
+    if (!this.ssoDecodedPreview) return;
+    if (!this.ssoDecodedPreview.hospname && this.ssoDecodedPreview.hospcode) {
+      this.ssoDecodedPreview.hospname = this.lookupHospname(this.ssoDecodedPreview.hospcode);
+    }
+    if (!this.ssoDecodedPreview.distname && this.ssoDecodedPreview.distid) {
+      this.ssoDecodedPreview.distname = this.lookupDistname(this.ssoDecodedPreview.distid);
+    }
+  }
+
+  /** ผู้ใช้กดปุ่ม "นำข้อมูลนี้ไปใช้ในฟอร์ม" หลังตรวจสอบ JSON ที่ถอดรหัสได้แล้ว */
+  applySsoDataToForm() {
+    if (!this.ssoDecodedPreview) return;
+    const d = this.ssoDecodedPreview;
+    if (d.firstname_th) this.formData.firstname = d.firstname_th;
+    if (d.lastname_th)  this.formData.lastname  = d.lastname_th;
+    if (d.email)         this.formData.email     = d.email;
+    if (d.phone)          this.formData.phone     = d.phone;
+    if (d.cid)             this.formData.cid       = d.cid;
+    if (d.distid) {
+      this._pendingRegDistid   = d.distid;
+      this._pendingRegHospcode = d.hospcode || '';
+      this.tryApplyPendingRegLocation();
+    }
+    this.ssoDataApplied = true;
+    this.cdr.detectChanges();
+  }
+
+  formatJson(val: any): string {
+    if (!val) return '–';
+    try { return JSON.stringify(val, null, 2); } catch { return String(val); }
   }
 
   // === National ID formatting ===
