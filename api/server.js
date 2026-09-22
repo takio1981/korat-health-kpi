@@ -1246,6 +1246,45 @@ apiRouter.post('/auth/thaid/debug-token', authenticateToken, isSuperAdmin, async
     }
 });
 
+// POST /auth/sso/decode-token — super_admin วาง token จริงมาทดสอบ ดูว่า extraction logic
+// ปัจจุบันดึงข้อมูลอะไรได้บ้าง เทียบกับ raw payload ทั้งหมด (ไม่ verify signature — เพื่อ inspect เท่านั้น
+// ไม่ insert/log อะไรลง DB, เลขบัตรประชาชน mask บางส่วนก่อนส่งกลับ)
+apiRouter.post('/auth/sso/decode-token', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ success: false, message: 'ไม่มี token' });
+    let payload;
+    try { payload = jwt.decode(token); } catch (e) { payload = null; }
+    if (!payload) return res.status(400).json({ success: false, message: 'ไม่สามารถถอดรหัส JWT ได้ — รูปแบบ token ไม่ถูกต้อง' });
+
+    const cidStr = extractCidFromPayload(payload);
+    const firstname_th = payload.firstname_th || payload.th_given_name || payload.given_name || '';
+    const lastname_th  = payload.lastname_th  || payload.th_family_name || payload.family_name || '';
+    const regLocation = await resolveRegLocationFromPayload(payload);
+
+    // resolve ชื่อจริงของ hospcode/distid ที่เจอ (ถ้ามี) ให้ super_admin เห็นชัดว่า match ถูกต้อง
+    let hospname = '', distname = '';
+    if (regLocation.hospcode) {
+        const [h] = await db.query('SELECT hosname FROM chospital WHERE hoscode = ? LIMIT 1', [regLocation.hospcode]);
+        if (h.length) hospname = h[0].hosname;
+    }
+    if (regLocation.distid) {
+        const [d] = await db.query('SELECT distname FROM co_district WHERE distid = ? LIMIT 1', [regLocation.distid]);
+        if (d.length) distname = d[0].distname;
+    }
+
+    res.json({
+        success: true,
+        extracted: {
+            firstname_th, lastname_th,
+            cid_masked: cidStr ? `${cidStr.slice(0, 1)}-****-*****-**-${cidStr.slice(-1)}` : null,
+            hospcode: regLocation.hospcode || null, hospname,
+            distid: regLocation.distid || null, distname,
+        },
+        raw_payload: payload,           // ดูทั้งหมดเพื่อหา field name จริงถ้า extraction พลาด
+        raw_keys: Object.keys(payload),
+    });
+});
+
 
 // GET /auth/thaid/start — redirect ไป DGA (public, ไม่ต้อง auth)
 // === Direct JWT Login — รับ token จาก redirect (/login?token=<JWT>) — รองรับทั้ง ThaID (DGA) และ ProviderID (MOPH) ===

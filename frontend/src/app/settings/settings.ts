@@ -91,6 +91,11 @@ export class SettingsComponent implements OnInit {
   thaidRegisterEnabled: boolean = false;
   thaidRegisterUrl: string = '';
 
+  // SSO — ทดสอบถอดรหัส JWT (diagnostic)
+  ssoDecodeTokenInput: string = '';
+  ssoDecodeResult: any = null;
+  ssoDecodeLoading: boolean = false;
+
   ngOnInit() {
     const role = this.authService.getUserRole();
     this.isAdmin = role === 'admin_ssj' || role === 'super_admin';
@@ -381,6 +386,36 @@ export class SettingsComponent implements OnInit {
       },
       error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถส่งได้', 'error')
     });
+  }
+
+  decodeSsoToken() {
+    if (!this.ssoDecodeTokenInput.trim()) return;
+    this.ssoDecodeLoading = true;
+    this.ssoDecodeResult = null;
+    this.authService.decodeSsoToken(this.ssoDecodeTokenInput.trim()).subscribe({
+      next: (res: any) => {
+        this.ssoDecodeLoading = false;
+        if (res.success) {
+          this.ssoDecodeResult = res;
+        } else {
+          Swal.fire('ผิดพลาด', res.message || 'ไม่สามารถถอดรหัส token ได้', 'error');
+        }
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.ssoDecodeLoading = false;
+        Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถถอดรหัส token ได้', 'error');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  formatJson(val: any): string {
+    if (!val) return '–';
+    try {
+      const obj = typeof val === 'string' ? JSON.parse(val) : val;
+      return JSON.stringify(obj, null, 2);
+    } catch { return String(val); }
   }
 
   testAdminEmail() {

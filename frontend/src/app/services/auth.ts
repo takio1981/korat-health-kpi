@@ -373,6 +373,12 @@ export class AuthService {
     return this.http.get(`${this.apiUrl}/sso/connectivity`);
   }
 
+  decodeSsoToken(token: string): Observable<any> {
+    const authToken = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${authToken}` });
+    return this.http.post(`${this.apiUrl}/auth/sso/decode-token`, { token }, { headers });
+  }
+
 setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

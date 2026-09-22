@@ -18,6 +18,14 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.09.22.e',
+      date: '22 กันยายน 2569 (build e)',
+      changes: [
+        { type: 'feature', text: 'Settings (super_admin): เพิ่มกล่อง "ทดสอบถอดรหัส JWT" — วาง token จริงจาก ThaID/ProviderID เพื่อดูว่าระบบดึงชื่อ/นามสกุล/เลขบัตรประชาชน (masked)/อำเภอ/หน่วยบริการ ได้ถูกต้องหรือไม่ พร้อม raw payload แบบเต็มด้านล่างไว้หา field name จริงถ้าดึงไม่ได้ — ช่วยแก้ปัญหา pre-fill ฟอร์มลงทะเบียนที่ยังไม่ได้ข้อมูลอำเภอ/หน่วยบริการจาก ProviderID เพราะไม่มีเอกสารยืนยันชื่อ field' },
+        { type: 'feature', text: 'Backend: endpoint ใหม่ POST /auth/sso/decode-token (super_admin เท่านั้น) — decode JWT อย่างเดียวไม่ verify signature (เพื่อ inspect เท่านั้น) reuse extraction logic เดิมทั้งหมด ไม่บันทึก/log token หรือข้อมูลลง DB' },
+      ]
+    },
+    {
       version: '2569.09.22.d',
       date: '22 กันยายน 2569 (build d)',
       changes: [
