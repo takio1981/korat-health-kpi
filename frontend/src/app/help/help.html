@@ -601,12 +601,29 @@
         </div>
       </section>
 
-      <!-- ==================== 6. แจ้งเตือน ==================== -->
+      <!-- ==================== 7. แจ้งเตือน ==================== -->
+      <section id="section-sop" *ngIf="canSeeSection('sop')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center"><i class="fas fa-sitemap text-slate-600"></i></div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-800">6. ผังกระบวนการ SOP</h2>
+            <p class="text-xs text-gray-400">แผนผังขั้นตอนการทำงานของระบบ — ดูอย่างเดียว ไม่มีการบันทึกข้อมูล</p>
+          </div>
+        </div>
+        <p class="text-xs text-gray-500 mb-3">หน้านี้แสดง Flowchart แบบ interactive อธิบายขั้นตอนการทำงานของ 12 ระบบย่อย ใช้เพื่อศึกษา/อ้างอิงขั้นตอนการทำงานของระบบ ไม่ใช่หน้าที่ต้องกรอกหรือบันทึกข้อมูลใดๆ — ทุก role เข้าดูได้</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-list mr-1 text-slate-500"></i><b>เมนูซ้าย (จอใหญ่) / dropdown (มือถือ):</b> เลือกดูระบบย่อยที่ต้องการ — Login, ลงทะเบียน, บันทึก KPI, จัดการตัวชี้วัด, ตั้งค่าปีงบ, กราฟ&amp;รายงาน, จัดการผู้ใช้, Export&amp;HDC, แจ้งเตือน, ตั้งค่าระบบ, ข้อเสนอแนะ, ตัวชี้วัดย่อย</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-layer-group mr-1 text-slate-500"></i><b>แท็บย่อย (subflow):</b> บางระบบมีหลายวิธี เช่น ระบบ Login แยก 3 แท็บ — Username/Password, ThaID, ProviderID</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-shapes mr-1 text-slate-500"></i><b>สัญลักษณ์มาตรฐาน:</b> เริ่ม/จบ, กระบวนการ, จุดตัดสินใจ, ฐานข้อมูล — มี Legend อธิบายด้านล่างไดอะแกรมทุกหน้า</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-info-circle mr-1 text-slate-500"></i><b>หมายเหตุ:</b> แต่ละระบบมีกล่องสรุปจุดสำคัญ/ข้อควรระวังทางเทคนิคกำกับท้ายไดอะแกรม</div>
+        </div>
+      </section>
+
       <section id="section-notifications" *ngIf="canSeeSection('notifications')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center"><i class="fas fa-bell text-red-500"></i></div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">6. แจ้งเตือน</h2>
+            <h2 class="text-xl font-bold text-gray-800">7. แจ้งเตือน</h2>
             <p class="text-xs text-gray-400">ระบบแจ้งเตือนอัตโนมัติ</p>
           </div>
         </div>
@@ -625,12 +642,12 @@
         </div>
       </section>
 
-      <!-- ==================== 7. จัดการผู้ใช้งาน ==================== -->
+      <!-- ==================== 8. จัดการผู้ใช้งาน ==================== -->
       <section id="section-users" *ngIf="canSeeSection('users')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center"><i class="fas fa-users-cog text-orange-600"></i></div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">7. จัดการผู้ใช้งาน</h2>
+            <h2 class="text-xl font-bold text-gray-800">8. จัดการผู้ใช้งาน</h2>
             <p class="text-xs text-gray-400">Admin ทุกระดับเข้าถึงได้</p>
           </div>
         </div>
@@ -757,14 +774,36 @@
         </div>
       </section>
 
-      <!-- Note: สร้างแบบฟอร์ม + Export ย้ายไปอยู่ในหัวข้อ 10 "จัดการข้อมูล KPI" แล้ว -->
+      <!-- Note: สร้างแบบฟอร์ม + Export ย้ายไปอยู่ในหัวข้อ 13 "จัดการข้อมูล KPI" แล้ว -->
 
-      <!-- ==================== 8. ตั้งค่าระบบ ==================== -->
+      <section id="section-kpi-manage" *ngIf="canSeeSection('kpi-manage')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center"><i class="fas fa-tasks text-teal-600"></i></div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-800">9. จัดการตัวชี้วัด</h2>
+            <p class="text-xs text-gray-400">admin_ssj + super_admin — ศูนย์กลางบริหารข้อมูลหลัก (master data) ของตัวชี้วัดและโครงสร้างองค์กร</p>
+          </div>
+        </div>
+        <div class="bg-teal-50 border border-teal-200 rounded-xl p-3 mb-3 text-xs text-teal-700">
+          <i class="fas fa-layer-group mr-1"></i><b>5 แท็บ:</b> ตัวชี้วัด (KPIs) / หมวดหมู่หลัก / ยุทธศาสตร์ / หน่วยงาน / หน่วยบริการ — แท็บนอกจาก "ตัวชี้วัด" แก้ไขได้เฉพาะ super_admin เท่านั้น
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-plus mr-1 text-green-500"></i><b>เพิ่มข้อมูล:</b> เปิด modal CRUD ตามแท็บที่เลือก พร้อม toggle เปิด/ปิดใช้งาน (is_active) ต่อรายการ</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-file-excel mr-1 text-green-600"></i><b>นำเข้า Excel</b> (super_admin, เฉพาะแท็บตัวชี้วัด): Bulk Import 2 ขั้น — preview ตรวจ error รายแถว/คอลัมน์ก่อนนำเข้าจริง</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-exchange-alt mr-1 text-blue-500"></i><b>เทียบกับ HDC</b> (super_admin, ทุกแท็บ): เปรียบเทียบชื่อ/สถานะกับ HDC ภายนอก แสดงสรุปตรงกัน/ต่างกัน/ไม่มีใน HDC/ไม่มีใน Local เพื่อช่วย sync</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-clipboard-list mr-1 text-purple-500"></i><b>ไอคอนตัวชี้วัดย่อย:</b> เปิด modal จัดการ sub-indicators ต่อตัวชี้วัด</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-copy mr-1 text-cyan-500"></i><b>คัดลอกไปปีใหม่</b> (super_admin): clone ตัวชี้วัดไปปีงบประมาณถัดไป</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-wpforms mr-1 text-indigo-500"></i><b>Form Builder ฝังในหน้า:</b> สร้าง/แก้ไข schema ฟอร์มบันทึกผลงานแบบ dynamic จากไอคอนในแถวตัวชี้วัด</div>
+        </div>
+        <p class="text-xs text-gray-500 mt-3"><i class="fas fa-search mr-1"></i>มีระบบค้นหา + filter สถานะเปิด/ปิดใช้งาน + filter ตามผลเทียบ HDC + filter ตามสถานะมีผลงานหรือยัง</p>
+      </section>
+
+      <!-- ==================== 10. ตั้งค่าระบบ ==================== -->
       <section id="section-settings" *ngIf="canSeeSection('settings')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-gray-200 flex items-center justify-center"><i class="fas fa-sliders-h text-gray-600"></i></div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">8. ตั้งค่าระบบ</h2>
+            <h2 class="text-xl font-bold text-gray-800">10. ตั้งค่าระบบ</h2>
             <p class="text-xs text-gray-400">super_admin เท่านั้น</p>
           </div>
         </div>
@@ -859,12 +898,12 @@
         </div>
       </section>
 
-      <!-- ==================== 9. สิทธิ์การใช้งาน ==================== -->
+      <!-- ==================== 11. สิทธิ์การใช้งาน ==================== -->
       <section id="section-roles" *ngIf="canSeeSection('roles')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center"><i class="fas fa-shield-alt text-emerald-600"></i></div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">9. สิทธิ์การใช้งาน (Roles)</h2>
+            <h2 class="text-xl font-bold text-gray-800">11. สิทธิ์การใช้งาน (Roles)</h2>
             <p class="text-xs text-gray-400">ตารางเปรียบเทียบทุก Role</p>
           </div>
         </div>
@@ -950,7 +989,7 @@
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-gray-800 flex items-center justify-center"><i class="fas fa-moon text-yellow-300"></i></div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">9.1 Dark Mode + โปรไฟล์ + สำรองข้อมูล</h2>
+            <h2 class="text-xl font-bold text-gray-800">11.1 Dark Mode + โปรไฟล์ + สำรองข้อมูล</h2>
             <p class="text-xs text-gray-400">ฟีเจอร์เสริมสำหรับทุก Role — เข้าถึงผ่าน Header bar + Profile dropdown</p>
           </div>
         </div>
@@ -1006,7 +1045,7 @@
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center"><i class="fas fa-bullhorn text-blue-600"></i></div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">9.2 ช่องทางการแจ้งเตือน (Telegram + Email + LINE Group + ในระบบ)</h2>
+            <h2 class="text-xl font-bold text-gray-800">11.2 ช่องทางการแจ้งเตือน (Telegram + Email + LINE Group + ในระบบ)</h2>
             <p class="text-xs text-gray-400">ตั้งค่าที่หน้าตั้งค่าระบบ — super_admin เท่านั้น</p>
           </div>
         </div>
@@ -1115,7 +1154,7 @@
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center"><i class="fab fa-line text-green-600"></i></div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">9.3 LINE แจ้งเตือนส่วนตัว (per-user)</h2>
+            <h2 class="text-xl font-bold text-gray-800">11.3 LINE แจ้งเตือนส่วนตัว (per-user)</h2>
             <p class="text-xs text-gray-400">ทุกผู้ใช้ตั้งค่าเองได้ — รับแจ้งเตือนเข้า LINE ส่วนตัว</p>
           </div>
         </div>
@@ -1152,7 +1191,7 @@
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-cyan-100 flex items-center justify-center"><i class="fas fa-mobile-alt text-cyan-600"></i></div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">9.4 การใช้งานบน Mobile + Profile</h2>
+            <h2 class="text-xl font-bold text-gray-800">11.4 การใช้งานบน Mobile + Profile</h2>
           </div>
         </div>
 
@@ -1196,12 +1235,12 @@
         </div>
       </section>
 
-      <!-- ==================== 9.4 จัดการตัวชี้วัด — HDC Compare + upload_excel ==================== -->
+      <!-- ==================== 11.5 จัดการตัวชี้วัด — HDC Compare + upload_excel ==================== -->
       <section *ngIf="canSeeSection('users') || canSeeSection('kpi-manager')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center"><i class="fas fa-exchange-alt text-teal-600"></i></div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">9.5 จัดการตัวชี้วัด — เทียบกับ HDC + upload_excel</h2>
+            <h2 class="text-xl font-bold text-gray-800">11.5 จัดการตัวชี้วัด — เทียบกับ HDC + upload_excel</h2>
             <p class="text-xs text-gray-400">หน้า "จัดการตัวชี้วัด" — ทุก tab มีปุ่ม "เทียบกับ HDC" พร้อม filter และเพิ่มข้อมูลจาก HDC</p>
           </div>
         </div>
@@ -1304,12 +1343,12 @@
         </div>
       </section>
 
-      <!-- ==================== 9.5 ตัวชี้วัดย่อย (Sub-Indicators) ==================== -->
+      <!-- ==================== 11.6 ตัวชี้วัดย่อย (Sub-Indicators) ==================== -->
       <section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center"><i class="fas fa-list-ul text-indigo-600"></i></div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">9.6 ตัวชี้วัดย่อย (Sub-Indicators)</h2>
+            <h2 class="text-xl font-bold text-gray-800">11.6 ตัวชี้วัดย่อย (Sub-Indicators)</h2>
             <p class="text-xs text-gray-400">ตัวชี้วัด 1 ตัว สามารถมีย่อยได้หลายตัว + บันทึกผลงานรายเดือนต่อ hospcode</p>
           </div>
         </div>
@@ -1398,13 +1437,32 @@
         </div>
       </section>
 
-      <!-- ==================== 10. จัดการข้อมูล KPI ==================== -->
+      <section id="section-audit-logs" *ngIf="canSeeSection('audit-logs')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center"><i class="fas fa-history text-slate-600"></i></div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-800">12. ประวัติการใช้งาน</h2>
+            <p class="text-xs text-gray-400">super_admin เท่านั้น — Audit Trail ทุกการกระทำในระบบ</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-chart-pie mr-1 text-indigo-500"></i><b>Dashboard สรุป</b> (พับ/ขยายได้): การ์ดสถิติทั้งหมด/วันนี้/7 วันล่าสุด/ผู้ใช้ที่มีกิจกรรม + การ์ดแยกตาม 6 ประเภท (เพิ่ม/แก้ไข/ลบ/อนุมัติ/ตีกลับ/ตอบกลับ — คลิกเพื่อกรอง) + Top 5 ผู้ใช้ที่มีกิจกรรมมากสุด</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-table mr-1 text-blue-500"></i><b>ตารางประวัติ:</b> วัน-เวลา / ผู้ใช้งาน / การกระทำ / ตารางที่เกี่ยวข้อง / รายละเอียด (JSON) / IP Address พร้อม pagination (การ์ดบนมือถือ)</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-search mr-1 text-teal-500"></i><b>ค้นหา + กรอง:</b> ค้นหาชื่อผู้ใช้/รายละเอียด + dropdown กรองตามประเภทการกระทำ</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-file-csv mr-1 text-green-600"></i><b>สำรองข้อมูล (CSV):</b> ดาวน์โหลด log ทั้งหมดเป็นไฟล์ CSV</div>
+        </div>
+        <div class="mt-3 bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700">
+          <i class="fas fa-triangle-exclamation mr-1"></i><b>ล้าง Logs ทั้งหมด</b> (super_admin) — ลบถาวร กู้คืนไม่ได้ ต้องยืนยัน 2 ชั้น (กดยืนยัน + พิมพ์คำว่า "CONFIRM") — ใช้ด้วยความระมัดระวังสูงสุด
+        </div>
+      </section>
+
+      <!-- ==================== 13. จัดการข้อมูล KPI ==================== -->
       <section id="section-kpi-manager" *ngIf="canSeeSection('kpi-manager')" class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div (click)="toggleCollapse('kpi-manager')" class="flex items-center justify-between gap-3 p-6 cursor-pointer hover:bg-gray-50 transition-colors">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center"><i class="fas fa-layer-group text-indigo-600"></i></div>
             <div>
-              <h2 class="text-xl font-bold text-gray-800">10. จัดการข้อมูล KPI</h2>
+              <h2 class="text-xl font-bold text-gray-800">13. จัดการข้อมูล KPI</h2>
               <p class="text-xs text-gray-400">DB Compare / สร้างแบบฟอร์ม / Export</p>
             </div>
           </div>
@@ -1537,14 +1595,14 @@
         </div>
       </section>
 
-      <!-- ==================== 10.5 Online Users (Realtime) ==================== -->
+      <!-- ==================== 14. Online Users (Realtime) ==================== -->
       <section id="section-online-users" *ngIf="canSeeSection('online-users')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
             <i class="fas fa-satellite-dish text-green-600"></i>
           </div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">11. ผู้ใช้งานออนไลน์ (Realtime)</h2>
+            <h2 class="text-xl font-bold text-gray-800">14. ผู้ใช้งานออนไลน์ (Realtime)</h2>
             <p class="text-xs text-gray-400">ตรวจสอบผู้ใช้ที่กำลังใช้งานระบบ — super_admin เท่านั้น</p>
           </div>
         </div>
@@ -1590,13 +1648,32 @@
         </div>
       </section>
 
-      <!-- ==================== 9. สำรอง & กู้คืนข้อมูล (Backup Manager) ==================== -->
+      <section id="section-kpi-setup" *ngIf="canSeeSection('kpi-setup')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center"><i class="fas fa-plus-circle text-emerald-600"></i></div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-800">15. KPI ปีงบประมาณใหม่</h2>
+            <p class="text-xs text-gray-400">super_admin เท่านั้น — สร้างชุดข้อมูลเป้าหมายเริ่มต้นให้หน่วยงาน/หน่วยบริการเมื่อขึ้นปีงบใหม่</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-filter mr-1 text-teal-500"></i><b>ตัวกรอง:</b> ปีงบประมาณ, อำเภอ, หน่วยบริการ (ต้องเลือกก่อนบันทึกเดี่ยว), หน่วยงาน (admin_ssj ถูกล็อคเป็นหน่วยงานตัวเองอัตโนมัติ)</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-table mr-1 text-indigo-500"></i><b>ตารางแก้ไขตรงในหน้า:</b> ช่องเป้าหมาย + ผลงานรายเดือน 12 ช่อง (ต.ค.-ก.ย.) — "ผลงานรวม" คำนวณอัตโนมัติจากผลรวม 12 เดือน</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-save mr-1 text-green-600"></i><b>บันทึก:</b> บันทึกเฉพาะหน่วยบริการที่เลือก เลือกโหมด "เพิ่มทั้งหมด (เขียนทับ)" หรือ "เพิ่มเฉพาะที่ยังไม่มี" — ถ้ามีผลงานอยู่แล้วจะมี modal เตือนพิเศษก่อนเขียนทับ</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-layer-group mr-1 text-purple-500"></i><b>เพิ่มทุกหน่วยบริการ:</b> สร้างชุดข้อมูลให้ทุกหน่วยบริการในคราวเดียว ข้ามรายการที่มีอยู่แล้วอัตโนมัติ (ไม่ทับข้อมูลเดิม) แสดงสรุปจำนวนที่เพิ่มใหม่/ข้าม</div>
+        </div>
+        <div class="mt-3 bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
+          <i class="fas fa-circle-info mr-1"></i>ค่าที่กรอกในหน้านี้เป็นเพียง <b>"เป้าหมายเริ่มต้น"</b> ยังไม่ใช่การบันทึกผลงานจริงรายเดือน — ผลงานจริงบันทึกที่หน้า <b>"บันทึกผลงานตัวชี้วัด"</b> (Dashboard)
+        </div>
+      </section>
+
+      <!-- ==================== 16. สำรอง & กู้คืนข้อมูล (Backup Manager) ==================== -->
       <section id="section-backup" *ngIf="canSeeSection('backup')" class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div (click)="toggleCollapse('backup')" class="flex items-center justify-between gap-3 p-6 cursor-pointer hover:bg-gray-50 transition-colors">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center"><i class="fas fa-database text-emerald-600"></i></div>
             <div>
-              <h2 class="text-xl font-bold text-gray-800">12. สำรอง &amp; กู้คืนฐานข้อมูล (Backup Manager)</h2>
+              <h2 class="text-xl font-bold text-gray-800">16. สำรอง &amp; กู้คืนฐานข้อมูล (Backup Manager)</h2>
               <p class="text-xs text-gray-400">เฉพาะ super_admin — Backup/Restore + Schedule + Cloud + Monitor</p>
             </div>
           </div>
@@ -1696,13 +1773,13 @@
         </div>
       </section>
 
-      <!-- ==================== 10. แจ้งเตือนการบันทึก KPI ==================== -->
+      <!-- ==================== 17. แจ้งเตือนการบันทึก KPI ==================== -->
       <section id="section-audit-digest" *ngIf="canSeeSection('audit-digest')" class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div (click)="toggleCollapse('audit-digest')" class="flex items-center justify-between gap-3 p-6 cursor-pointer hover:bg-gray-50 transition-colors">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center"><i class="fas fa-bullhorn text-amber-600"></i></div>
             <div>
-              <h2 class="text-xl font-bold text-gray-800">13. แจ้งเตือนการบันทึก KPI (Daily Digest)</h2>
+              <h2 class="text-xl font-bold text-gray-800">17. แจ้งเตือนการบันทึก KPI (Daily Digest)</h2>
               <p class="text-xs text-gray-400">เฉพาะ super_admin — รวมสรุปการบันทึกข้อมูลของ user ทั้งหมดส่งวันละครั้ง</p>
             </div>
           </div>
@@ -1765,13 +1842,56 @@
         </div>
       </section>
 
-      <!-- ==================== 11. Maintenance Mode ==================== -->
+      <section id="section-announcements" *ngIf="canSeeSection('announcements')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-pink-100 flex items-center justify-center"><i class="fas fa-bullhorn text-pink-600"></i></div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-800">18. ประกาศระบบ</h2>
+            <p class="text-xs text-gray-400">super_admin เท่านั้น — ประกาศแสดงบน Header ทุกหน้า และ/หรือหน้า Login</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-list mr-1 text-gray-500"></i><b>รายการประกาศ:</b> แสดงสถานะ Active/Header/Login/กระพริบ พร้อม preview ตัวอย่าง pill ที่จะแสดงจริง</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-edit mr-1 text-blue-500"></i><b>เพิ่ม/แก้ไข:</b> modal rich text editor — ตัวหนา/เอียง/ขีดเส้นใต้, ขนาด/สีตัวอักษร, ไฮไลต์, อีโมจิ/ไอคอน/รูปภาพจาก URL (จำกัด 200 ตัวอักษร) + ตั้งสีพื้นหลัง/สีตัวอักษรของ pill</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-check-square mr-1 text-green-500"></i><b>ตัวเลือก:</b> กระพริบ / แสดงบน Header / แสดงบนหน้า Login / เปิดใช้งาน (is_active)</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-toggle-on mr-1 text-emerald-500"></i><b>Activate:</b> เปิดใช้งานประกาศ — ระบบรองรับ "active" ได้ครั้งละ 1 รายการเท่านั้น</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-envelope mr-1 text-amber-500"></i><b>ส่งอีเมล:</b> ส่งเนื้อหาประกาศเป็นอีเมลแยก เลือกกลุ่มผู้รับได้ 3 แบบ — ทั้งหมด / ตามหน่วยงาน / เลือกรายบุคคล พร้อมแสดงจำนวนผู้รับก่อนยืนยันส่ง</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-trash mr-1 text-red-500"></i><b>ลบ:</b> มี confirm dialog ก่อนลบทุกครั้ง</div>
+        </div>
+      </section>
+
+      <section id="section-error-logs" *ngIf="canSeeSection('error-logs')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center"><i class="fas fa-bug text-red-600"></i></div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-800">19. Error Logs</h2>
+            <p class="text-xs text-gray-400">super_admin เท่านั้น — รวม error/crash log ของ backend, frontend และ HTTP 5xx ไว้ที่เดียว</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs mb-3">
+          <div class="bg-red-50 rounded-lg p-2 border border-red-200 text-center"><b class="text-red-700">ยังไม่แก้</b></div>
+          <div class="bg-rose-50 rounded-lg p-2 border border-rose-200 text-center"><b class="text-rose-700">FATAL</b></div>
+          <div class="bg-blue-50 rounded-lg p-2 border border-blue-200 text-center"><b class="text-blue-700">Frontend</b></div>
+          <div class="bg-indigo-50 rounded-lg p-2 border border-indigo-200 text-center"><b class="text-indigo-700">Backend</b></div>
+          <div class="bg-amber-50 rounded-lg p-2 border border-amber-200 text-center"><b class="text-amber-700">วันนี้</b></div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200 text-center"><b class="text-gray-700">ทั้งหมด</b></div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-filter mr-1 text-teal-500"></i><b>ตัวกรอง 3 ตัว:</b> Source (backend/frontend/http), Severity (fatal/error/warning), สถานะแก้ไข — ค่าเริ่มต้นแสดงเฉพาะ "ยังไม่แก้"</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-table mr-1 text-purple-500"></i><b>ตาราง:</b> จัดกลุ่มตาม fingerprint ที่ซ้ำกัน (แสดงเป็น Count) — เวลาที่พบล่าสุด, source/severity, ข้อความ error, จำนวนครั้งที่ซ้ำ, ผู้ใช้ + IP</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-expand mr-1 text-blue-500"></i><b>คลิกแถวเพื่อขยาย:</b> ดู fingerprint, first_seen/last_seen, stack trace เต็ม, User-Agent</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-check mr-1 text-green-500"></i><b>แก้แล้ว / ลบ resolved:</b> mark resolved รายตัว หรือลบ error ที่ resolved แล้วทั้งหมดพร้อมกัน (มี confirm)</div>
+        </div>
+        <p class="text-xs text-gray-500 mt-3"><i class="fas fa-sync-alt mr-1"></i>ปุ่ม "Refresh" โหลดข้อมูลล่าสุดซ้ำ — จำกัดแสดงสูงสุด 200 รายการต่อครั้ง</p>
+      </section>
+
+      <!-- ==================== 20. Maintenance Mode ==================== -->
       <section id="section-maintenance" *ngIf="canSeeSection('maintenance')" class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div (click)="toggleCollapse('maintenance')" class="flex items-center justify-between gap-3 p-6 cursor-pointer hover:bg-gray-50 transition-colors">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center"><i class="fas fa-tools text-red-600"></i></div>
             <div>
-              <h2 class="text-xl font-bold text-gray-800">14. โหมดปิดปรับปรุงระบบ (Maintenance)</h2>
+              <h2 class="text-xl font-bold text-gray-800">20. โหมดปิดปรับปรุงระบบ (Maintenance)</h2>
               <p class="text-xs text-gray-400">ปิดการใช้งานชั่วคราวเพื่อประมวลผลงาน</p>
             </div>
           </div>
@@ -1804,13 +1924,13 @@
         </div>
       </section>
 
-      <!-- ==================== 12. กระดานข้อเสนอแนะ ==================== -->
+      <!-- ==================== 21. กระดานข้อเสนอแนะ ==================== -->
       <section id="section-feedback" *ngIf="canSeeSection('feedback')" class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div (click)="toggleCollapse('feedback')" class="flex items-center justify-between gap-3 p-6 cursor-pointer hover:bg-gray-50 transition-colors">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center"><i class="fas fa-comments text-teal-600"></i></div>
             <div>
-              <h2 class="text-xl font-bold text-gray-800">15. กระดานข้อเสนอแนะ (Feedback Board)</h2>
+              <h2 class="text-xl font-bold text-gray-800">21. กระดานข้อเสนอแนะ (Feedback Board)</h2>
               <p class="text-xs text-gray-400">แลกเปลี่ยนความคิดเห็น แจ้งปัญหา เสนอแนะระบบ</p>
             </div>
           </div>
@@ -1874,12 +1994,12 @@
         </div>
       </section>
 
-      <!-- ==================== 13. FAQ ==================== -->
+      <!-- ==================== 22. FAQ ==================== -->
       <section id="section-faq" *ngIf="canSeeSection('faq')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-pink-100 flex items-center justify-center"><i class="fas fa-question-circle text-pink-600"></i></div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">16. คำถามที่พบบ่อย (FAQ)</h2>
+            <h2 class="text-xl font-bold text-gray-800">22. คำถามที่พบบ่อย (FAQ)</h2>
           </div>
         </div>
         <div class="space-y-3">

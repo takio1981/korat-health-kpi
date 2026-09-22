@@ -30,27 +30,35 @@ export class HelpComponent {
   //   'authenticated' = ต้อง login (ไม่ต้องสน role)
   //   อื่นๆ = ระบุ role array
   private static readonly ALL_ROLES = ['super_admin','admin_ssj','admin_cup','admin_hos','admin_sso','user_cup','user_hos','user_sso','user_ssj'];
-  private static readonly ADMIN_CENTRAL = ['super_admin','admin_ssj'];
+  private static readonly ADMIN_CENTRAL = ['super_admin','admin_ssj'];                                     // ตรงกับ isAdmin ใน layout.ts
+  private static readonly ANY_ADMIN = ['super_admin','admin_ssj','admin_cup','admin_hos','admin_sso'];     // ตรงกับ isAnyAdmin ใน layout.ts
   private static readonly SUPER_ONLY = ['super_admin'];
 
   // section.roles: 'all' = แสดงทุกคน (รวม public), array = แสดงเฉพาะ role ที่ระบุ
+  // ลำดับ + roles gate ต้องตรงกับเมนู sidebar จริงใน layout.html เสมอ (isAdmin/isAnyAdmin/isSuperAdmin)
   sections: { id: string; icon: string; label: string; roles: 'all' | string[] }[] = [
-    { id: 'overview',      icon: 'fa-home',             label: '1. ภาพรวมระบบ',                    roles: 'all' },
-    { id: 'register',      icon: 'fa-user-plus',        label: '2. การลงทะเบียน',                   roles: 'all' },
-    { id: 'login',         icon: 'fa-sign-in-alt',      label: '3. การเข้าสู่ระบบ',                  roles: 'all' },
-    { id: 'dashboard',     icon: 'fa-th-large',         label: '4. บันทึกผลงานตัวชี้วัด',             roles: 'all' },
-    { id: 'charts',        icon: 'fa-chart-bar',        label: '5. รายงานสถิติ',                    roles: 'all' },
-    { id: 'notifications', icon: 'fa-bell',             label: '6. แจ้งเตือน',                      roles: 'all' },
-    { id: 'users',         icon: 'fa-users-cog',        label: '7. จัดการผู้ใช้งาน',                 roles: HelpComponent.ADMIN_CENTRAL },
-    { id: 'settings',      icon: 'fa-sliders-h',        label: '8. ตั้งค่าระบบ',                     roles: HelpComponent.SUPER_ONLY },
-    { id: 'roles',         icon: 'fa-shield-alt',       label: '9. สิทธิ์การใช้งาน',                 roles: 'all' },
-    { id: 'kpi-manager',   icon: 'fa-layer-group',      label: '10. จัดการข้อมูล KPI',               roles: HelpComponent.ADMIN_CENTRAL },
-    { id: 'online-users',  icon: 'fa-users',            label: '11. ผู้ใช้งานออนไลน์',               roles: HelpComponent.SUPER_ONLY },
-    { id: 'backup',        icon: 'fa-database',         label: '12. สำรอง & กู้คืนข้อมูล',           roles: HelpComponent.SUPER_ONLY },
-    { id: 'audit-digest',  icon: 'fa-bullhorn',         label: '13. แจ้งเตือนการบันทึก KPI',         roles: HelpComponent.ADMIN_CENTRAL },
-    { id: 'maintenance',   icon: 'fa-tools',            label: '14. โหมดปิดปรับปรุงระบบ',            roles: HelpComponent.SUPER_ONLY },
-    { id: 'feedback',      icon: 'fa-comments',         label: '15. กระดานข้อเสนอแนะ',               roles: 'all' },
-    { id: 'faq',           icon: 'fa-question-circle',  label: '16. คำถามที่พบบ่อย',                 roles: 'all' }
+    { id: 'overview',       icon: 'fa-home',             label: '1. ภาพรวมระบบ',                    roles: 'all' },
+    { id: 'register',       icon: 'fa-user-plus',        label: '2. การลงทะเบียน',                   roles: 'all' },
+    { id: 'login',          icon: 'fa-sign-in-alt',      label: '3. การเข้าสู่ระบบ',                  roles: 'all' },
+    { id: 'dashboard',      icon: 'fa-th-large',         label: '4. บันทึกผลงานตัวชี้วัด',             roles: 'all' },
+    { id: 'charts',         icon: 'fa-chart-bar',        label: '5. รายงานสถิติ',                    roles: 'all' },
+    { id: 'sop',            icon: 'fa-sitemap',          label: '6. ผังกระบวนการ SOP',                roles: 'all' },
+    { id: 'notifications',  icon: 'fa-bell',             label: '7. แจ้งเตือน',                      roles: 'all' },
+    { id: 'users',          icon: 'fa-users-cog',        label: '8. จัดการผู้ใช้งาน',                 roles: HelpComponent.ANY_ADMIN },
+    { id: 'kpi-manage',     icon: 'fa-tasks',            label: '9. จัดการตัวชี้วัด',                 roles: HelpComponent.ADMIN_CENTRAL },
+    { id: 'settings',       icon: 'fa-sliders-h',        label: '10. ตั้งค่าระบบ',                    roles: HelpComponent.SUPER_ONLY },
+    { id: 'roles',          icon: 'fa-shield-alt',       label: '11. สิทธิ์การใช้งาน',                roles: 'all' },
+    { id: 'audit-logs',     icon: 'fa-history',          label: '12. ประวัติการใช้งาน',               roles: HelpComponent.SUPER_ONLY },
+    { id: 'kpi-manager',    icon: 'fa-layer-group',      label: '13. จัดการข้อมูล KPI',               roles: HelpComponent.SUPER_ONLY },
+    { id: 'online-users',   icon: 'fa-users',            label: '14. ผู้ใช้งานออนไลน์',               roles: HelpComponent.SUPER_ONLY },
+    { id: 'kpi-setup',      icon: 'fa-plus-circle',      label: '15. KPI ปีงบประมาณใหม่',             roles: HelpComponent.SUPER_ONLY },
+    { id: 'backup',         icon: 'fa-database',         label: '16. สำรอง & กู้คืนข้อมูล',           roles: HelpComponent.SUPER_ONLY },
+    { id: 'audit-digest',   icon: 'fa-bullhorn',         label: '17. แจ้งเตือนการบันทึก KPI',         roles: HelpComponent.SUPER_ONLY },
+    { id: 'announcements',  icon: 'fa-bullhorn',         label: '18. ประกาศระบบ',                    roles: HelpComponent.SUPER_ONLY },
+    { id: 'error-logs',     icon: 'fa-bug',              label: '19. Error Logs',                   roles: HelpComponent.SUPER_ONLY },
+    { id: 'maintenance',    icon: 'fa-tools',            label: '20. โหมดปิดปรับปรุงระบบ',            roles: HelpComponent.SUPER_ONLY },
+    { id: 'feedback',       icon: 'fa-comments',         label: '21. กระดานข้อเสนอแนะ',               roles: 'all' },
+    { id: 'faq',            icon: 'fa-question-circle',  label: '22. คำถามที่พบบ่อย',                 roles: 'all' }
   ];
 
   /** sections ที่ user role ปัจจุบันเห็น (sidebar/menu ใช้ตัวนี้) */

@@ -6,7 +6,7 @@ echo      KORAT HEALTH KPI - BUILD ^& DEPLOY SCRIPT
 echo ===================================================
 echo.
 
-echo [1/5] Cleaning up old distribution artifacts...
+echo [1/6] Cleaning up old distribution artifacts...
 echo      -^> Targeting 'frontend\dist'...
 del /f /q frontend\dist 2>nul
 rd /s /q frontend\dist 2>nul
@@ -22,7 +22,7 @@ set API_OK=0
 REM -------------------------------------------------------
 REM [2/5] Build Frontend (Angular)
 REM -------------------------------------------------------
-echo [2/5] Building Frontend Application (Angular)...
+echo [2/6] Building Frontend Application (Angular)...
 cd frontend
 call npm run build -- --base-href /khupskpi/
 if %errorlevel% neq 0 (
@@ -47,7 +47,7 @@ echo.
 REM -------------------------------------------------------
 REM [3/5] Build API (copy source -> dist, install deps)
 REM -------------------------------------------------------
-echo [3/5] Building API Application (Node.js)...
+echo [3/6] Building API Application (Node.js)...
 cd api
 call npm run build
 if %errorlevel% neq 0 (
@@ -116,7 +116,7 @@ REM -------------------------------------------------------
 REM [4/5] Deploy to Docker
 REM -------------------------------------------------------
 echo ===================================================
-echo [4/5] Deploying to Docker (background mode)...
+echo [4/6] Deploying to Docker (background mode)...
 echo ===================================================
 echo.
 
@@ -130,14 +130,25 @@ if %errorlevel% neq 0 (
 echo.
 
 REM -------------------------------------------------------
-REM [5/5] Final Status
+REM [5/6] Final Status
 REM -------------------------------------------------------
 echo ===================================================
-echo [5/5] Verifying containers...
+echo [5/6] Verifying containers...
 echo ===================================================
 echo.
 docker compose ps
 echo.
+
+REM -------------------------------------------------------
+REM [6/6] Clear Docker build cache (กัน disk เต็มจาก layer สะสม)
+REM -------------------------------------------------------
+echo ===================================================
+echo [6/6] Clearing Docker build cache...
+echo ===================================================
+echo.
+docker builder prune -af
+echo.
+
 echo ===================================================
 echo   [DONE] Deploy successful!
 echo   Frontend : http://localhost:8881/khupskpi/
