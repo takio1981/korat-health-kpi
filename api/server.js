@@ -5637,6 +5637,33 @@ apiRouter.post('/sub-indicators', authenticateToken, isSuperAdmin, async (req, r
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
+// POST /sub-indicators/bulk-import — นำเข้าตัวชี้วัดย่อยหลายรายการจาก Excel (scoped ต่อ indicator_id เดียว)
+apiRouter.post('/sub-indicators/bulk-import', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { indicator_id, rows } = req.body;
+    if (!indicator_id) return res.status(400).json({ success: false, message: 'ไม่พบ indicator_id' });
+    if (!Array.isArray(rows) || rows.length === 0)
+        return res.status(400).json({ success: false, message: 'ไม่มีข้อมูลสำหรับนำเข้า' });
+    const [indRows] = await db.query('SELECT id FROM kpi_indicators WHERE id = ?', [indicator_id]);
+    if (indRows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบตัวชี้วัดหลัก' });
+
+    const results = [];
+    for (const row of rows) {
+        const { sub_indicator_name, sub_indicator_code, target_percentage, weight, description, sort_order } = row;
+        try {
+            const [r] = await db.query(
+                `INSERT INTO kpi_sub_indicators (indicator_id, sub_indicator_name, sub_indicator_code, target_percentage, weight, description, sort_order) VALUES (?,?,?,?,?,?,?)`,
+                [indicator_id, sub_indicator_name, sub_indicator_code || null, target_percentage || null, weight || 1, description || null, sort_order || 0]
+            );
+            results.push({ name: sub_indicator_name, status: 'success', id: r.insertId });
+        } catch (e) {
+            results.push({ name: sub_indicator_name, status: 'error', message: e.message });
+        }
+    }
+    const inserted = results.filter(r => r.status === 'success').length;
+    const errors = results.filter(r => r.status === 'error');
+    res.json({ success: true, inserted, errors, results });
+});
+
 apiRouter.put('/sub-indicators/:id', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
         const { sub_indicator_name, sub_indicator_code, target_percentage, weight, description, sort_order, is_active } = req.body;
@@ -7051,7 +7078,7 @@ apiRouter.post('/check-kpi-export', authenticateToken, isSuperAdmin, async (req,
 // Sanitize ชื่อ sub-indicator ให้ใช้เป็น MySQL column identifier ได้ (quote ด้วย backtick, utf8mb4 รองรับ Unicode)
 function sanitizeSubIndicatorColName(name) {
     let n = String(name || '').trim().replace(/`/g, '');
-    if (n.length > 60) n = n.substring(0, 60);
+    if (n.length > 60) n = n.substring(0, 60).trim(); // trim ซ้ำ — ตัดตรงกลางคำอาจเหลือช่องว่างท้ายชื่อ ซึ่ง MySQL ปฏิเสธชื่อคอลัมน์ที่ลงท้ายด้วยช่องว่าง (ER_WRONG_COLUMN_NAME)
     return n || 'sub_col';
 }
 
@@ -7205,7 +7232,13 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                         `CREATE TABLE IF NOT EXISTS \`${tableName}\` (hospcode VARCHAR(5) NOT NULL, byear VARCHAR(4) NOT NULL, target VARCHAR(100) DEFAULT NULL, result VARCHAR(100) DEFAULT NULL, ${subColsSql}, create_date DATETIME DEFAULT CURRENT_TIMESTAMP, update_date DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (hospcode, byear)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
                     );
                     for (const c of subCols) {
-                        try { await conn.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`${c.colName}\` VARCHAR(500) DEFAULT NULL`); } catch (e) { /* already exists */ }
+                        try {
+                            await conn.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`${c.colName}\` VARCHAR(500) DEFAULT NULL`);
+                        } catch (e) {
+                            // ยอมรับเฉพาะ "คอลัมน์นี้มีอยู่แล้ว" (ER_DUP_FIELDNAME) — error อื่นต้องไม่ถูกกลืนเงียบๆ
+                            // ไม่งั้นคอลัมน์จะไม่ถูกสร้างจริงแต่โค้ดเดินต่อเหมือนสำเร็จ แล้วไป error ตอน INSERT แทน (วินิจฉัยยาก)
+                            if (e.code !== 'ER_DUP_FIELDNAME') throw e;
+                        }
                     }
 
                     // ดึงผลงานย่อยทั้งหมดของปีนี้ สำหรับข้อย่อยที่ active

@@ -761,6 +761,11 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.post(`${this.apiUrl}/sub-indicators`, data, { headers });
   }
+  bulkImportSubIndicators(indicator_id: number, rows: any[]): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/sub-indicators/bulk-import`, { indicator_id, rows }, { headers });
+  }
   updateSubIndicator(id: number, data: any): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

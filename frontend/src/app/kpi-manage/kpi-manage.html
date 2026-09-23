@@ -932,9 +932,12 @@
     </div>
     <div class="p-6">
       <!-- ปุ่มเพิ่ม -->
-      <div *ngIf="isSuperAdmin && !showSubForm" class="mb-4">
+      <div *ngIf="isSuperAdmin && !showSubForm" class="mb-4 flex flex-wrap gap-2">
         <button (click)="openSubForm()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow">
           <i class="fas fa-plus mr-1"></i>เพิ่มตัวชี้วัดย่อย
+        </button>
+        <button (click)="openSubImportModal()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-bold shadow">
+          <i class="fas fa-file-excel mr-1"></i>นำเข้าจาก Excel
         </button>
       </div>
       <!-- ฟอร์มเพิ่ม/แก้ไข -->
@@ -1014,6 +1017,173 @@
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal นำเข้าตัวชี้วัดย่อยจาก Excel (mirror โครงสร้างของ modal นำเข้าตัวชี้วัดหลัก) -->
+<div *ngIf="showSubImportModal" class="fixed inset-0 z-[60] flex items-start justify-center bg-black/40 backdrop-blur-sm overflow-y-auto py-6 px-4">
+  <div class="bg-white rounded-2xl shadow-xl border border-purple-200 w-full max-w-3xl">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center flex-shrink-0">
+          <i class="fas fa-file-excel text-purple-600 text-lg"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-gray-800 text-lg">นำเข้าตัวชี้วัดย่อยจาก Excel</h3>
+          <p class="text-xs text-gray-400 truncate max-w-[420px]">สำหรับตัวชี้วัด: {{ subParentIndicator?.kpi_indicators_name }}</p>
+        </div>
+      </div>
+      <button (click)="closeSubImportModal()" class="text-gray-400 hover:text-gray-600 text-xl w-9 h-9 flex items-center justify-center rounded-lg hover:bg-gray-100">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+
+    <!-- Body -->
+    <div class="p-6">
+
+      <!-- ===== ผลลัพธ์หลัง import ===== -->
+      <div *ngIf="subImportResult" class="mb-5">
+        <div class="rounded-xl border p-4" [ngClass]="subImportResult.inserted > 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'">
+          <p class="font-bold text-sm mb-2" [ngClass]="subImportResult.inserted > 0 ? 'text-green-800' : 'text-red-800'">
+            <i class="fas fa-check-circle mr-2" *ngIf="subImportResult.inserted > 0"></i>
+            <i class="fas fa-exclamation-circle mr-2" *ngIf="subImportResult.inserted === 0"></i>
+            ผลการนำเข้า
+          </p>
+          <p class="text-sm text-green-700" *ngIf="subImportResult.inserted > 0">
+            <i class="fas fa-check mr-1"></i> นำเข้าสำเร็จ <b>{{ subImportResult.inserted }}</b> รายการ
+          </p>
+          <div *ngIf="subImportResult && subImportResult.errors && subImportResult.errors.length > 0" class="mt-2 space-y-1">
+            <p class="text-xs font-bold text-red-700"><i class="fas fa-times-circle mr-1"></i>รายการที่ไม่สามารถนำเข้าได้:</p>
+            <div class="max-h-28 overflow-auto">
+              <p *ngFor="let e of subImportResult.errors" class="text-xs text-red-600">• {{ e.name }}: {{ e.message }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="mt-3 flex justify-end">
+          <button (click)="closeSubImportModal()" class="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-bold shadow">
+            <i class="fas fa-check mr-2"></i>ปิด
+          </button>
+        </div>
+      </div>
+
+      <!-- ===== Step 1: เลือกไฟล์ ===== -->
+      <div *ngIf="!subImportResult && subImportStep === 1">
+        <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-5 text-xs text-blue-700 space-y-1.5">
+          <p class="font-bold text-sm text-blue-800"><i class="fas fa-circle-info mr-1.5"></i>วิธีการนำเข้า</p>
+          <p><b>ขั้นที่ 1:</b> Download template Excel แล้วกรอกข้อมูลตัวชี้วัดย่อยตั้งแต่ <b>แถวที่ 4</b> เป็นต้นไป</p>
+          <p><b>ขั้นที่ 2:</b> อัปโหลดไฟล์ที่กรอกแล้ว — ระบบจะตรวจสอบและแสดง preview ก่อน</p>
+          <p><b>ขั้นที่ 3:</b> ยืนยันนำเข้า — แถวที่ถูกต้องจะถูก insert เข้าตัวชี้วัด "{{ subParentIndicator?.kpi_indicators_name }}" อัตโนมัติ</p>
+          <p class="text-blue-500">แถว 1 = ชื่อคอลัมน์, แถว 2 = คำอธิบาย, แถว 3 = ตัวอย่าง — <b>อย่าแก้ไขหรือลบ 3 แถวแรก</b></p>
+        </div>
+
+        <div class="mb-5">
+          <p class="text-sm font-bold text-gray-700 mb-2"><i class="fas fa-download text-purple-500 mr-1.5"></i>ดาวน์โหลด Template</p>
+          <button (click)="downloadSubTemplate()"
+                  class="inline-flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-bold shadow-md transition-all transform hover:-translate-y-0.5">
+            <i class="fas fa-file-excel text-lg"></i>
+            <div class="text-left">
+              <p class="leading-tight">template_นำเข้าตัวชี้วัดย่อย.xlsx</p>
+              <p class="text-[10px] text-green-200 leading-tight">ชื่อ / รหัส / เป้าหมาย / น้ำหนัก / ลำดับ / รายละเอียด</p>
+            </div>
+          </button>
+        </div>
+
+        <div class="border-2 border-dashed border-purple-200 rounded-xl p-8 text-center hover:border-purple-400 transition-colors">
+          <i class="fas fa-cloud-upload-alt text-4xl text-purple-300 mb-3"></i>
+          <p class="text-sm font-bold text-gray-600 mb-1">อัปโหลดไฟล์ Excel ที่กรอกข้อมูลแล้ว</p>
+          <p class="text-xs text-gray-400 mb-4">รองรับ .xlsx และ .xls</p>
+          <label class="inline-flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-bold shadow cursor-pointer transition-all transform hover:-translate-y-0.5">
+            <i class="fas fa-folder-open"></i> เลือกไฟล์
+            <input type="file" accept=".xlsx,.xls" class="hidden" (change)="onSubExcelFileSelected($event)">
+          </label>
+        </div>
+      </div>
+
+      <!-- ===== Step 2: Preview ===== -->
+      <div *ngIf="!subImportResult && subImportStep === 2">
+
+        <div class="flex flex-wrap items-center gap-3 mb-4">
+          <span class="px-3 py-1.5 rounded-xl bg-gray-100 text-sm font-bold text-gray-700">
+            <i class="fas fa-table mr-1.5 text-gray-400"></i>ทั้งหมด {{ subImportRows.length }} แถว
+          </span>
+          <span class="px-3 py-1.5 rounded-xl bg-green-100 text-sm font-bold text-green-700">
+            <i class="fas fa-check-circle mr-1.5"></i>ถูกต้อง {{ subImportValidRows.length }} แถว
+          </span>
+          <span *ngIf="subImportErrors.length > 0" class="px-3 py-1.5 rounded-xl bg-red-100 text-sm font-bold text-red-700">
+            <i class="fas fa-times-circle mr-1.5"></i>ผิดพลาด {{ subImportRows.length - subImportValidRows.length }} แถว (จะข้ามแถวเหล่านี้)
+          </span>
+          <button (click)="subImportStep = 1; subImportRows = []; subImportErrors = []"
+                  class="ml-auto text-xs text-gray-500 hover:text-gray-700 underline">
+            <i class="fas fa-arrow-left mr-1"></i>อัปโหลดไฟล์ใหม่
+          </button>
+        </div>
+
+        <div class="overflow-auto rounded-xl border border-gray-200 mb-4" style="max-height: 360px;">
+          <table class="w-full text-xs border-collapse min-w-[560px]">
+            <thead class="sticky top-0 bg-gray-50 shadow-sm z-10">
+              <tr>
+                <th class="px-3 py-2.5 text-left font-bold text-gray-500 border-b border-gray-200 w-10">#</th>
+                <th class="px-3 py-2.5 text-left font-bold text-gray-600 border-b border-gray-200 min-w-[220px]">ชื่อตัวชี้วัดย่อย</th>
+                <th class="px-3 py-2.5 text-left font-bold text-gray-600 border-b border-gray-200">รหัส</th>
+                <th class="px-3 py-2.5 text-center font-bold text-gray-600 border-b border-gray-200">เป้าหมาย</th>
+                <th class="px-3 py-2.5 text-center font-bold text-gray-600 border-b border-gray-200">น้ำหนัก</th>
+                <th class="px-3 py-2.5 text-center font-bold text-gray-600 border-b border-gray-200 w-16">สถานะ</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let row of subImportRows; let i = index"
+                  [ngClass]="rowHasSubError(i) ? 'bg-red-50' : (i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50')"
+                  class="hover:bg-yellow-50 transition-colors">
+                <td class="px-3 py-2 text-gray-400 text-center border-b border-gray-100">{{ i + 4 }}</td>
+                <td class="px-3 py-2 border-b border-gray-100 font-medium text-gray-800 max-w-[260px]">
+                  <p class="truncate">{{ row.sub_indicator_name || '—' }}</p>
+                </td>
+                <td class="px-3 py-2 border-b border-gray-100 text-gray-600">{{ row.sub_indicator_code || '—' }}</td>
+                <td class="px-3 py-2 border-b border-gray-100 text-center text-gray-600">{{ row.target_percentage ? row.target_percentage + '%' : '—' }}</td>
+                <td class="px-3 py-2 border-b border-gray-100 text-center text-gray-600">{{ row.weight || '—' }}</td>
+                <td class="px-3 py-2 border-b border-gray-100 text-center">
+                  <span *ngIf="!rowHasSubError(i)" class="text-green-600 text-base" title="ถูกต้อง"><i class="fas fa-check-circle"></i></span>
+                  <span *ngIf="rowHasSubError(i)"
+                        class="text-red-500 text-base cursor-help"
+                        [title]="getSubRowErrors(i).join('\n')">
+                    <i class="fas fa-times-circle"></i>
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div *ngIf="subImportErrors.length > 0" class="mb-4 bg-red-50 border border-red-200 rounded-xl p-3">
+          <p class="text-xs font-bold text-red-700 mb-2"><i class="fas fa-triangle-exclamation mr-1.5"></i>รายการข้อผิดพลาด (แถวเหล่านี้จะถูกข้ามในการนำเข้า)</p>
+          <div class="max-h-32 overflow-auto space-y-0.5">
+            <p *ngFor="let e of subImportErrors" class="text-xs text-red-600">
+              <i class="fas fa-times-circle mr-1 text-red-400"></i>{{ e.message }}
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between">
+          <p *ngIf="subImportValidRows.length === 0" class="text-sm text-red-600 font-bold">
+            <i class="fas fa-ban mr-1.5"></i>ไม่มีแถวที่ถูกต้อง ไม่สามารถนำเข้าได้
+          </p>
+          <div class="ml-auto flex gap-3">
+            <button (click)="subImportStep = 1; subImportRows = []; subImportErrors = []"
+                    class="px-5 py-2 text-gray-600 hover:bg-gray-100 rounded-xl font-bold text-sm border border-gray-200">
+              <i class="fas fa-arrow-left mr-1.5"></i>กลับ
+            </button>
+            <button (click)="confirmSubImport()"
+                    [disabled]="subImportValidRows.length === 0 || subImportLoading"
+                    class="px-6 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold shadow-md transition-all transform hover:-translate-y-0.5">
+              <i class="fas" [ngClass]="subImportLoading ? 'fa-spinner fa-spin' : 'fa-cloud-upload-alt'" class="mr-1.5"></i>
+              {{ subImportLoading ? 'กำลังนำเข้า...' : 'ยืนยันนำเข้า ' + subImportValidRows.length + ' แถว' }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>

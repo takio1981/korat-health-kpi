@@ -64,6 +64,19 @@ export class KpiManageComponent implements OnInit {
   // นับจำนวน sub-indicator ต่อ indicator_id (แสดงบาดจ์บนแถว)
   subCountMap: Map<number, number> = new Map();
 
+  // นำเข้าตัวชี้วัดย่อยจาก Excel (scoped ต่อ subParentIndicator เดียวกับ showSubModal)
+  showSubImportModal: boolean = false;
+  subImportStep: 1 | 2 = 1;
+  subImportRows: any[] = [];
+  subImportErrors: { rowIndex: number; col: string; field: string; message: string }[] = [];
+  subImportLoading = false;
+  subImportResult: { inserted: number; errors: any[] } | null = null;
+
+  get subImportValidRows(): any[] {
+    const errorRows = new Set(this.subImportErrors.map(e => e.rowIndex));
+    return this.subImportRows.filter((_, i) => !errorRows.has(i));
+  }
+
   // รายการประเภทหน่วยบริการ (จาก chostype)
   hosTypes: any[] = [];
   // เก็บ required_off_types ใน modal เป็น array ของ code (ตอนเปิด modal แปลงจาก JSON string)
@@ -362,6 +375,133 @@ export class KpiManageComponent implements OnInit {
     const newStatus = !item.is_active || item.is_active === 0;
     this.authService.toggleSubIndicatorActive(item.id, newStatus).subscribe({
       next: (res: any) => { if (res.success) { item.is_active = newStatus ? 1 : 0; this.cdr.detectChanges(); } }
+    });
+  }
+
+  // === นำเข้าตัวชี้วัดย่อยจาก Excel (mirror pattern ของ downloadTemplate/onExcelFileSelected/confirmImport ของตัวชี้วัดหลัก) ===
+  openSubImportModal() {
+    this.showSubImportModal = true;
+    this.subImportStep = 1;
+    this.subImportRows = [];
+    this.subImportErrors = [];
+    this.subImportResult = null;
+    this.cdr.detectChanges();
+  }
+
+  closeSubImportModal() {
+    this.showSubImportModal = false;
+    if (this.subImportResult && this.subImportResult.inserted > 0 && this.subParentIndicator) {
+      this.loadSubList(this.subParentIndicator.id);
+      this.loadAllData();
+    }
+  }
+
+  downloadSubTemplate() {
+    const COLS = [
+      { key: 'sub_indicator_name', desc: 'ชื่อตัวชี้วัดย่อย (จำเป็น — ห้ามเว้นว่าง)', example: 'เกณฑ์ข้อที่ 1 มีการแต่งตั้งคณะทำงาน' },
+      { key: 'sub_indicator_code', desc: 'รหัสตัวชี้วัดย่อย (ไม่จำเป็น)', example: 'SUB-001' },
+      { key: 'target_percentage', desc: 'เป้าหมาย % เช่น 80 (ไม่จำเป็น)', example: '80' },
+      { key: 'weight',             desc: 'น้ำหนัก (ตัวเลข ค่าเริ่มต้น 1)', example: '1' },
+      { key: 'sort_order',         desc: 'ลำดับการแสดงผล (ตัวเลข ค่าเริ่มต้น 0)', example: '1' },
+      { key: 'description',        desc: 'รายละเอียดเพิ่มเติม (ไม่จำเป็น)', example: '' },
+    ];
+    const wb = XLSX.utils.book_new();
+    const wsData: any[][] = [
+      COLS.map(c => c.key),
+      COLS.map(c => c.desc),
+      COLS.map(c => c.example),
+      ...Array(20).fill(null).map(() => new Array(COLS.length).fill('')),
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols'] = COLS.map((c, i) => ({ wch: i === 0 ? 45 : 20 }));
+    XLSX.utils.book_append_sheet(wb, ws, 'นำเข้าตัวชี้วัดย่อย');
+    XLSX.writeFile(wb, 'template_นำเข้าตัวชี้วัดย่อย.xlsx');
+  }
+
+  onSubExcelFileSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (!input.files?.length) return;
+    const file = input.files[0];
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rawRows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: '' }) as any[][];
+
+        if (rawRows.length < 4) {
+          Swal.fire('ข้อมูลไม่เพียงพอ', 'ไฟล์ต้องมีข้อมูลตั้งแต่แถวที่ 4 เป็นต้นไป (แถว 1=ชื่อคอลัมน์, 2=คำอธิบาย, 3=ตัวอย่าง)', 'warning');
+          return;
+        }
+
+        const headers: string[] = rawRows[0].map((h: any) => String(h).trim());
+        const dataRows = rawRows.slice(3).filter((row: any[]) => row.some(c => c !== '' && c !== null && c !== undefined));
+
+        if (dataRows.length === 0) {
+          Swal.fire('ไม่มีข้อมูล', 'ไม่พบข้อมูลในไฟล์ (กรอกข้อมูลตั้งแต่แถวที่ 4 เป็นต้นไป)', 'warning');
+          return;
+        }
+
+        this.subImportRows = [];
+        this.subImportErrors = [];
+        const COL_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+        dataRows.forEach((raw: any[], i: number) => {
+          const obj: any = {};
+          headers.forEach((h, hi) => { obj[h] = raw[hi] !== undefined ? String(raw[hi]).trim() : ''; });
+
+          const rowNum = i + 4;
+          const addErr = (colIdx: number, field: string, msg: string) => {
+            this.subImportErrors.push({ rowIndex: i, col: COL_LETTERS[colIdx] || String(colIdx + 1), field, message: `แถวที่ ${rowNum}, คอลัมน์ ${COL_LETTERS[colIdx] || colIdx + 1} (${field}): ${msg}` });
+          };
+
+          if (!obj.sub_indicator_name) addErr(0, 'sub_indicator_name', 'ชื่อตัวชี้วัดย่อยไม่สามารถเว้นว่างได้');
+          if (obj.weight && isNaN(Number(obj.weight))) addErr(3, 'weight', `"${obj.weight}" ต้องเป็นตัวเลข`);
+          if (obj.sort_order && isNaN(Number(obj.sort_order))) addErr(4, 'sort_order', `"${obj.sort_order}" ต้องเป็นตัวเลข`);
+
+          this.subImportRows.push(obj);
+        });
+
+        this.subImportStep = 2;
+        this.cdr.detectChanges();
+      } catch (err: any) {
+        Swal.fire('อ่านไฟล์ไม่ได้', 'ไม่สามารถอ่านไฟล์ Excel ได้: ' + (err.message || err), 'error');
+      }
+      input.value = '';
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  rowHasSubError(rowIndex: number): boolean {
+    return this.subImportErrors.some(e => e.rowIndex === rowIndex);
+  }
+
+  getSubRowErrors(rowIndex: number): string[] {
+    return this.subImportErrors.filter(e => e.rowIndex === rowIndex).map(e => e.message);
+  }
+
+  confirmSubImport() {
+    const validRows = this.subImportValidRows;
+    if (validRows.length === 0) {
+      Swal.fire('ไม่มีข้อมูลที่ถูกต้อง', 'ทุกแถวมีข้อผิดพลาด กรุณาแก้ไขไฟล์แล้วอัปโหลดใหม่', 'warning');
+      return;
+    }
+    if (!this.subParentIndicator) return;
+    this.subImportLoading = true;
+    this.cdr.detectChanges();
+    this.authService.bulkImportSubIndicators(this.subParentIndicator.id, validRows).subscribe({
+      next: (res: any) => {
+        this.subImportLoading = false;
+        this.subImportResult = { inserted: res.inserted, errors: res.errors || [] };
+        this.subImportStep = 1;
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.subImportLoading = false;
+        Swal.fire('ผิดพลาด', err.error?.message || 'เกิดข้อผิดพลาดในการนำเข้า', 'error');
+        this.cdr.detectChanges();
+      }
     });
   }
 
