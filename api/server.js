@@ -8001,24 +8001,35 @@ apiRouter.post('/sync-to-hdc/preview', authenticateToken, isSuperAdmin, async (r
     const remoteDb = getRemotePool();
     if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
     try {
-        // ดึงตาราง export ทั้งหมดจาก local (table_process ที่มีข้อมูล)
+        // ดึงตาราง export ทั้งหมดจาก local (table_process ที่มีข้อมูล) พร้อมหมวดหมู่หลัก + หน่วยงาน สำหรับ filter/แสดงผล
         const [indicators] = await db.query(`
-            SELECT i.id, i.kpi_indicators_name, i.table_process
+            SELECT i.id, i.kpi_indicators_name, i.table_process,
+                   mi.main_indicator_name, d.dept_name
             FROM kpi_indicators i
+            LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
+            LEFT JOIN departments d ON i.dept_id = d.id
             WHERE i.is_active = 1 AND i.table_process IS NOT NULL AND i.table_process != ''
         `);
-        // deduplicate ตาม table_process
+        // deduplicate ตาม table_process (1 ตารางอาจมีหลายตัวชี้วัด/หลายหมวดหมู่/หลายหน่วยงานรวมกันได้)
         const tableMap = new Map();
         for (const ind of indicators) {
             const tp = ind.table_process.trim();
-            if (!tableMap.has(tp)) tableMap.set(tp, { table: tp, names: [], ids: [] });
-            tableMap.get(tp).names.push(ind.kpi_indicators_name);
-            tableMap.get(tp).ids.push(ind.id);
+            if (!tableMap.has(tp)) tableMap.set(tp, { table: tp, names: [], ids: [], mainIndicatorNames: new Set(), deptNames: new Set() });
+            const entry = tableMap.get(tp);
+            entry.names.push(ind.kpi_indicators_name);
+            entry.ids.push(ind.id);
+            if (ind.main_indicator_name) entry.mainIndicatorNames.add(ind.main_indicator_name);
+            if (ind.dept_name) entry.deptNames.add(ind.dept_name);
         }
         const tables = [];
         for (const [tp, info] of tableMap) {
             if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(tp)) continue;
-            const item = { table: tp, name: info.names.join(' | '), local_rows: 0, remote_rows: 0, local_columns: [], remote_columns: [], status: 'unknown' };
+            const item = {
+                table: tp, name: info.names.join(' | '),
+                main_indicator_name: Array.from(info.mainIndicatorNames).join(' | ') || null,
+                dept_name: Array.from(info.deptNames).join(' | ') || null,
+                local_rows: 0, remote_rows: 0, local_columns: [], remote_columns: [], status: 'unknown'
+            };
             // ตรวจ local table
             try {
                 const [localCount] = await db.query(`SELECT COUNT(*) AS cnt FROM \`${tp}\``);

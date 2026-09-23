@@ -65,6 +65,8 @@ export class ExportKpiComponent implements OnInit {
   // Filter + search สำหรับ modal sync
   syncSearch: string = '';
   syncStatusFilter: string = ''; // '' = ทั้งหมด | 'ready' | 'empty' | 'no_remote'
+  syncMainIndicatorFilter: string = '';
+  syncDeptFilter: string = '';
 
   // === Export Schedule (ตารางเวลา export อัตโนมัติ) ===
   showSettingsModal: boolean = false;
@@ -552,6 +554,8 @@ export class ExportKpiComponent implements OnInit {
     this.syncSelectedTables.clear();
     this.syncSearch = '';
     this.syncStatusFilter = '';
+    this.syncMainIndicatorFilter = '';
+    this.syncDeptFilter = '';
     this.cdr.detectChanges();
 
     this.authService.syncToHdcPreview().subscribe({
@@ -601,24 +605,51 @@ export class ExportKpiComponent implements OnInit {
     return selectedVisible > 0 && selectedVisible < visibleReady.length;
   }
 
-  // กรองตาม search (table/name) + status
+  // กรองตาม search (table/name) + status + หมวดหมู่หลัก + หน่วยงาน
   get filteredSyncPreview(): any[] {
     const q = (this.syncSearch || '').trim().toLowerCase();
     return this.syncPreviewData.filter((t: any) => {
       if (this.syncStatusFilter && t.status !== this.syncStatusFilter) return false;
+      if (this.syncMainIndicatorFilter && !this.syncFieldIncludes(t.main_indicator_name, this.syncMainIndicatorFilter)) return false;
+      if (this.syncDeptFilter && !this.syncFieldIncludes(t.dept_name, this.syncDeptFilter)) return false;
       if (!q) return true;
       return (t.table && String(t.table).toLowerCase().includes(q)) ||
              (t.name && String(t.name).toLowerCase().includes(q));
     });
   }
 
+  // ตาราง export 1 ตารางอาจรวมหลายตัวชี้วัด → main_indicator_name/dept_name เป็น string คั่นด้วย ' | '
+  private syncFieldIncludes(value: string | null | undefined, target: string): boolean {
+    if (!value) return false;
+    return value.split(' | ').includes(target);
+  }
+
+  // รายการหมวดหมู่หลัก/หน่วยงานที่พบจริงในผลตรวจสอบ ใช้เติม dropdown filter
+  get syncMainIndicatorOptions(): string[] {
+    const set = new Set<string>();
+    this.syncPreviewData.forEach((t: any) => (t.main_indicator_name || '').split(' | ').forEach((n: string) => n && set.add(n)));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'th'));
+  }
+
+  get syncDeptOptions(): string[] {
+    const set = new Set<string>();
+    this.syncPreviewData.forEach((t: any) => (t.dept_name || '').split(' | ').forEach((n: string) => n && set.add(n)));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'th'));
+  }
+
   getSyncCount(status: string): number {
     return this.syncPreviewData.filter((t: any) => t.status === status).length;
+  }
+
+  hasActiveSyncFilters(): boolean {
+    return !!(this.syncSearch || this.syncStatusFilter || this.syncMainIndicatorFilter || this.syncDeptFilter);
   }
 
   clearSyncFilters() {
     this.syncSearch = '';
     this.syncStatusFilter = '';
+    this.syncMainIndicatorFilter = '';
+    this.syncDeptFilter = '';
   }
 
   executeSyncToHdc() {

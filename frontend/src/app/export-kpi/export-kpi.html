@@ -476,7 +476,7 @@
       <!-- Preview Table -->
       @if (syncPreviewData.length > 0) {
         <!-- Filter + Search -->
-        <div class="flex flex-col sm:flex-row gap-2 mb-3 items-stretch sm:items-end">
+        <div class="flex flex-col sm:flex-row sm:flex-wrap gap-2 mb-3 items-stretch sm:items-end">
           <div class="relative flex-1">
             <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 z-10">ค้นหา</label>
             <input type="text" [(ngModel)]="syncSearch"
@@ -486,6 +486,26 @@
                     class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 p-1" title="ล้างค้นหา">
               <i class="fas fa-times-circle"></i>
             </button>
+          </div>
+          <div class="relative">
+            <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 z-10">หมวดหมู่หลัก</label>
+            <select [(ngModel)]="syncMainIndicatorFilter"
+                    class="w-full sm:w-40 pl-3 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none text-sm hover:border-teal-400 transition-colors">
+              <option value="">ทั้งหมด</option>
+              @for (opt of syncMainIndicatorOptions; track opt) {
+                <option [value]="opt">{{ opt }}</option>
+              }
+            </select>
+          </div>
+          <div class="relative">
+            <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 z-10">หน่วยงาน</label>
+            <select [(ngModel)]="syncDeptFilter"
+                    class="w-full sm:w-40 pl-3 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none text-sm hover:border-teal-400 transition-colors">
+              <option value="">ทั้งหมด</option>
+              @for (opt of syncDeptOptions; track opt) {
+                <option [value]="opt">{{ opt }}</option>
+              }
+            </select>
           </div>
           <div class="flex gap-1 flex-wrap">
             <button (click)="syncStatusFilter = ''"
@@ -508,7 +528,7 @@
                     class="px-3 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap">
               <i class="fas fa-inbox mr-1"></i>ไม่มีข้อมูล ({{ getSyncCount('empty') }})
             </button>
-            <button *ngIf="syncSearch || syncStatusFilter" (click)="clearSyncFilters()"
+            <button *ngIf="hasActiveSyncFilters()" (click)="clearSyncFilters()"
                     class="px-3 py-2 bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 rounded-lg text-xs font-bold transition-all whitespace-nowrap" title="ล้างตัวกรองทั้งหมด">
               <i class="fas fa-times mr-1"></i>ล้างตัวกรอง
             </button>
@@ -536,6 +556,8 @@
                 <th class="px-4 py-3 w-10"></th>
                 <th class="px-4 py-3 text-left">ตาราง</th>
                 <th class="px-4 py-3 text-left">ชื่อตัวชี้วัด</th>
+                <th class="px-4 py-3 text-left">หมวดหมู่หลัก</th>
+                <th class="px-4 py-3 text-left">หน่วยงาน</th>
                 <th class="px-4 py-3 text-center">Local rows</th>
                 <th class="px-4 py-3 text-center">HDC rows</th>
                 <th class="px-4 py-3 text-center">Sync columns</th>
@@ -544,7 +566,7 @@
             </thead>
             <tbody class="divide-y divide-gray-100">
               @if (filteredSyncPreview.length === 0) {
-                <tr><td colspan="7" class="px-4 py-8 text-center text-gray-400 text-sm">
+                <tr><td colspan="9" class="px-4 py-8 text-center text-gray-400 text-sm">
                   <i class="fas fa-filter text-2xl mb-2 block"></i>ไม่พบรายการที่ตรงกับตัวกรอง
                 </td></tr>
               }
@@ -557,6 +579,8 @@
                   </td>
                   <td class="px-4 py-3 font-mono font-bold text-gray-800">{{ t.table }}</td>
                   <td class="px-4 py-3 text-gray-600 max-w-[250px] truncate" [title]="t.name">{{ t.name }}</td>
+                  <td class="px-4 py-3 text-gray-600 max-w-[160px] truncate" [title]="t.main_indicator_name">{{ t.main_indicator_name || '-' }}</td>
+                  <td class="px-4 py-3 text-gray-600 max-w-[160px] truncate" [title]="t.dept_name">{{ t.dept_name || '-' }}</td>
                   <td class="px-4 py-3 text-center font-bold text-green-700">{{ t.local_rows }}</td>
                   <td class="px-4 py-3 text-center font-bold text-blue-700">{{ t.remote_rows }}</td>
                   <td class="px-4 py-3 text-center text-gray-500">{{ t.sync_columns?.length || 0 }}</td>
