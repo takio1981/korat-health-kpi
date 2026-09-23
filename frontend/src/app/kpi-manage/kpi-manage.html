@@ -1098,6 +1098,10 @@
             <input type="checkbox" [(ngModel)]="currentItem.is_cumulative" class="rounded text-amber-600">
             <span class="font-bold text-gray-700">ตัวชี้วัดสะสม (ผลงานล่าสุด = รวมทุกเดือนในปีงบ แทนค่าเดือนล่าสุด)</span>
           </label>
+          <label class="inline-flex items-center gap-2 mt-2 text-xs cursor-pointer">
+            <input type="checkbox" [(ngModel)]="currentItem.use_sub_indicator_export" class="rounded text-amber-600">
+            <span class="font-bold text-gray-700">ส่งออกผลงานจากตัวชี้วัดย่อย (แต่ละข้อย่อย = 1 คอลัมน์ แทนคอลัมน์รายเดือน)</span>
+          </label>
         </div>
         <div>
           <label class="block text-xs font-bold text-gray-600 mb-1">

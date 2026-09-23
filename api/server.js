@@ -5457,12 +5457,12 @@ apiRouter.post('/indicators/bulk-import', authenticateToken, isSuperAdmin, async
         return res.status(400).json({ success: false, message: 'ไม่มีข้อมูลสำหรับนำเข้า' });
     const results = [];
     for (const row of rows) {
-        const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types } = row;
+        const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, use_sub_indicator_export } = row;
         try {
             const [r] = await db.query(
-                `INSERT INTO kpi_indicators (kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types)]
+                `INSERT INTO kpi_indicators (kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, use_sub_indicator_export)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), use_sub_indicator_export ? 1 : 0]
             );
             results.push({ name: kpi_indicators_name, status: 'success', id: r.insertId });
         } catch (e) {
@@ -5484,15 +5484,15 @@ apiRouter.post('/indicators/bulk-import', authenticateToken, isSuperAdmin, async
 });
 
 apiRouter.post('/indicators', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative } = req.body;
+    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export } = req.body;
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
         return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
     }
     try {
         const [r] = await db.query(
-            `INSERT INTO kpi_indicators (kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), is_cumulative ? 1 : 0]
+            `INSERT INTO kpi_indicators (kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), is_cumulative ? 1 : 0, use_sub_indicator_export ? 1 : 0]
         );
         // LINE notify: created
         try {
@@ -5512,7 +5512,7 @@ apiRouter.post('/indicators', authenticateToken, isSuperAdmin, async (req, res) 
 });
 
 apiRouter.put('/indicators/:id', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, is_active, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative } = req.body;
+    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, is_active, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export } = req.body;
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
         return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
     }
@@ -5533,8 +5533,8 @@ apiRouter.put('/indicators/:id', authenticateToken, isSuperAdmin, async (req, re
         } catch (_) {}
 
         await db.query(
-            `UPDATE kpi_indicators SET kpi_indicators_name=?, kpi_indicators_id=?, main_indicator_id=?, dept_id=?, target_percentage=?, target_condition=?, weight=?, kpi_indicators_code=?, is_active=?, table_process=?, description=?, r9=?, moph=?, ssj=?, rmw=?, other=?, evaluation_mode=?, required_off_types=?, is_cumulative=? WHERE id=?`,
-            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, is_active ? 1 : 0, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), is_cumulative ? 1 : 0, req.params.id]
+            `UPDATE kpi_indicators SET kpi_indicators_name=?, kpi_indicators_id=?, main_indicator_id=?, dept_id=?, target_percentage=?, target_condition=?, weight=?, kpi_indicators_code=?, is_active=?, table_process=?, description=?, r9=?, moph=?, ssj=?, rmw=?, other=?, evaluation_mode=?, required_off_types=?, is_cumulative=?, use_sub_indicator_export=? WHERE id=?`,
+            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, is_active ? 1 : 0, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), is_cumulative ? 1 : 0, use_sub_indicator_export ? 1 : 0, req.params.id]
         );
         // LINE notify: updated
         try {
@@ -5731,6 +5731,16 @@ apiRouter.post('/sub-results/upsert', authenticateToken, async (req, res) => {
         if (!sub_indicator_id || !year_bh || !hospcode || !month_bh) {
             return res.status(400).json({ success: false, message: 'sub_indicator_id, year_bh, hospcode, month_bh required' });
         }
+        // ตรวจสอบล็อค (super_admin ข้ามได้) — mirror /update-kpi (ล็อคจะถูก cascade มาจากตัวชี้วัดหลักตอนอนุมัติ)
+        if (req.user.role !== 'super_admin') {
+            const [lockedRows] = await db.query(
+                'SELECT COUNT(*) as cnt FROM kpi_sub_results WHERE sub_indicator_id = ? AND year_bh = ? AND hospcode = ? AND is_locked = 1',
+                [sub_indicator_id, year_bh, hospcode]
+            );
+            if (lockedRows[0].cnt > 0) {
+                return res.status(403).json({ success: false, message: 'ไม่สามารถแก้ไขได้ ตัวชี้วัดย่อยนี้ถูกล็อคอยู่ (ตัวชี้วัดหลักได้รับการอนุมัติแล้ว)' });
+            }
+        }
         await db.query(
             `INSERT INTO kpi_sub_results (sub_indicator_id, year_bh, hospcode, month_bh, target_value, actual_value, status, user_id)
              VALUES (?,?,?,?,?,?,?,?)
@@ -5818,6 +5828,18 @@ apiRouter.put('/departments/:id/toggle-active', authenticateToken, isSuperAdmin,
 });
 
 // อนุมัติผล KPI และ Lock ข้อมูล (รองรับทั้งรายการเดียวและหลายรายการ)
+// Cascade สถานะ/ล็อคจากตัวชี้วัดหลักไปตัวชี้วัดย่อยทั้งหมดของ indicator นั้น (join ผ่าน kpi_sub_indicators)
+// ใช้โดย approve/reject/unlock/appeal ทุกจุด — ให้ kpi_sub_results.status/is_locked mirror ค่าที่ตั้งบน kpi_results เสมอ
+async function cascadeSubResultsStatus(dbOrConn, indicator_id, year_bh, hospcode, status, is_locked) {
+    let sql = `UPDATE kpi_sub_results sr
+               JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
+               SET sr.status = ?, sr.is_locked = ?
+               WHERE si.indicator_id = ? AND sr.year_bh = ?`;
+    const params = [status, is_locked, indicator_id, year_bh];
+    if (hospcode) { sql += ' AND sr.hospcode = ?'; params.push(hospcode); }
+    await dbOrConn.query(sql, params);
+}
+
 apiRouter.post('/approve-kpi', authenticateToken, isAdmin, async (req, res) => {
     const user = req.user;
     // รองรับทั้ง object เดียว และ array หลายรายการ
@@ -5849,6 +5871,9 @@ apiRouter.post('/approve-kpi', authenticateToken, isAdmin, async (req, res) => {
                 `UPDATE kpi_results SET status = 'Approved', is_locked = 1 WHERE ${whereClause}`,
                 params
             );
+            // Cascade ไปตัวชี้วัดย่อย (ถ้ามี) — hospcode เดียวกับที่ใช้ตัดสินใน whereClause ด้านบน
+            const cascadeHospcode = item.hospcode || (user.role !== 'super_admin' ? user.hospcode : null);
+            await cascadeSubResultsStatus(connection, item.indicator_id, item.year_bh, cascadeHospcode, 'Approved', 1);
         }
 
         // Create notifications for approved items
@@ -5887,6 +5912,8 @@ apiRouter.post('/unlock-kpi', authenticateToken, isSuperAdmin, async (req, res) 
             "UPDATE kpi_results SET is_locked = 0, status = 'Pending' WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?",
             [indicator_id, year_bh, hospcode]
         );
+        // Cascade ไปตัวชี้วัดย่อย (ถ้ามี)
+        await cascadeSubResultsStatus(db, indicator_id, year_bh, hospcode, 'Pending', 0);
 
         await db.query(
             'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
@@ -5906,6 +5933,11 @@ apiRouter.post('/unlock-kpi-all', authenticateToken, isSuperAdmin, async (req, r
     try {
         const [result] = await db.query(
             "UPDATE kpi_results SET is_locked = 0, status = 'Pending' WHERE year_bh = ? AND is_locked = 1",
+            [year_bh]
+        );
+        // Cascade ไปตัวชี้วัดย่อยทั้งหมดที่ล็อคอยู่ในปีนี้ (ไม่กรอง indicator — unlock ทั้งปี)
+        await db.query(
+            "UPDATE kpi_sub_results SET is_locked = 0, status = 'Pending' WHERE year_bh = ? AND is_locked = 1",
             [year_bh]
         );
         await db.query(
@@ -6090,6 +6122,12 @@ apiRouter.post('/appeal-kpi', authenticateToken, async (req, res) => {
             "UPDATE kpi_results SET status = 'Appeal' WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?",
             [indicator_id, year_bh, hospcode]
         );
+        // Cascade สถานะไปตัวชี้วัดย่อย (ไม่แตะ lock เหมือน kpi_results)
+        await db.query(
+            `UPDATE kpi_sub_results sr JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
+             SET sr.status = 'Appeal' WHERE si.indicator_id = ? AND sr.year_bh = ? AND sr.hospcode = ?`,
+            [indicator_id, year_bh, hospcode]
+        );
 
         // บันทึกเหตุผลอุทธรณ์
         await db.query(
@@ -6136,6 +6174,8 @@ apiRouter.post('/appeal-approve', authenticateToken, isAdmin, async (req, res) =
             "UPDATE kpi_results SET status = 'Pending', is_locked = 0 WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?",
             [indicator_id, year_bh, hospcode]
         );
+        // Cascade ไปตัวชี้วัดย่อย
+        await cascadeSubResultsStatus(db, indicator_id, year_bh, hospcode, 'Pending', 0);
 
         // บันทึก comment
         await db.query(
@@ -6179,6 +6219,8 @@ apiRouter.post('/appeal-reject', authenticateToken, isAdmin, async (req, res) =>
             "UPDATE kpi_results SET status = 'Approved', is_locked = 1 WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?",
             [indicator_id, year_bh, hospcode]
         );
+        // Cascade ไปตัวชี้วัดย่อย
+        await cascadeSubResultsStatus(db, indicator_id, year_bh, hospcode, 'Approved', 1);
 
         // บันทึก comment
         await db.query(
@@ -6682,7 +6724,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
     }
     try {
         // กรอง upload_excel != 1 (ตัวที่ตั้งเป็น "อัปโหลด Excel เอง" ข้ามทั้งใน check และ export)
-        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative FROM kpi_indicators
+        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, use_sub_indicator_export FROM kpi_indicators
             WHERE table_process IS NOT NULL AND table_process != ''
             AND (upload_excel IS NULL OR upload_excel = 0)`;
         let indicatorParams = [];
@@ -6699,6 +6741,139 @@ async function checkKpiChanges(year_bh, indicator_ids) {
             let tableName = indicator.table_process.trim().replace(/-/g, '_');
             if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(tableName)) {
                 results.push({ id: indicator.id, status: 'invalid_name', has_data: false, new_count: 0, changed_count: 0, unchanged_count: 0, no_data: true });
+                continue;
+            }
+
+            // === โหมดส่งออกจากตัวชี้วัดย่อย: ตรวจการเปลี่ยนแปลงจาก kpi_sub_results แทน kpi_results/month columns ===
+            if (Number(indicator.use_sub_indicator_export) === 1) {
+                const [subInds] = await db.query(
+                    'SELECT id, sub_indicator_name, sort_order FROM kpi_sub_indicators WHERE indicator_id = ? AND is_active = 1 ORDER BY sort_order, id',
+                    [indicator.id]
+                );
+                if (subInds.length === 0) {
+                    results.push({ id: indicator.id, status: 'no_data', has_data: false, new_count: 0, changed_count: 0, unchanged_count: 0, no_data: true });
+                    continue;
+                }
+                const usedColNames = new Set(['hospcode', 'byear', 'target', 'result', 'create_date', 'update_date']);
+                const subCols = subInds.map(si => {
+                    const base = sanitizeSubIndicatorColName(si.sub_indicator_name);
+                    let name = base, n = 2;
+                    while (usedColNames.has(name)) name = `${base} (${n++})`;
+                    usedColNames.add(name);
+                    return { ...si, colName: name };
+                });
+
+                const [subResultRows] = await db.query(
+                    `SELECT sub_indicator_id, hospcode, month_bh, actual_value FROM kpi_sub_results
+                     WHERE sub_indicator_id IN (${subInds.map(() => '?').join(',')}) AND year_bh = ?`,
+                    [...subInds.map(s => s.id), year_bh]
+                );
+                if (subResultRows.length === 0) {
+                    results.push({ id: indicator.id, status: 'no_data', has_data: false, new_count: 0, changed_count: 0, unchanged_count: 0, no_data: true });
+                    continue;
+                }
+
+                const bySubHospcode = new Map();
+                for (const row of subResultRows) {
+                    const hc = row.hospcode != null ? String(row.hospcode).trim() : '';
+                    if (!hc) continue;
+                    const key = `${row.sub_indicator_id}_${hc}`;
+                    if (!bySubHospcode.has(key)) bySubHospcode.set(key, {});
+                    const entry = bySubHospcode.get(key);
+                    const mKey = 'm' + String(row.month_bh).padStart(2, '0');
+                    const actualVal = row.actual_value;
+                    entry[mKey] = (actualVal != null && actualVal !== '') ? String(actualVal) : null;
+                }
+
+                const isCumulativeSub = Number(indicator.is_cumulative) === 1;
+                const computeResultValueSub = (monthVals) => {
+                    if (isCumulativeSub) {
+                        const numericVals = monthVals.filter(v => v !== null && v !== undefined && !isNaN(parseFloat(v)));
+                        return numericVals.length > 0 ? numericVals.reduce((s, v) => s + parseFloat(v), 0) : null;
+                    }
+                    const reverseMonths = [...monthVals].reverse();
+                    const lastActual = reverseMonths.find(v => v !== null && v !== undefined);
+                    return lastActual !== undefined ? lastActual : null;
+                };
+
+                const dataMapSub = new Map();
+                const allHospcodesSub = new Set(subResultRows.map(r => (r.hospcode != null ? String(r.hospcode).trim() : '')).filter(Boolean));
+                for (const hc of allHospcodesSub) {
+                    const entry = {};
+                    for (const c of subCols) {
+                        const monthEntry = bySubHospcode.get(`${c.id}_${hc}`) || {};
+                        const monthVals = months.map(m => (monthEntry[m] !== undefined ? monthEntry[m] : null));
+                        entry[c.colName] = computeResultValueSub(monthVals);
+                    }
+                    dataMapSub.set(hc, entry);
+                }
+
+                const fmtSub = (v) => {
+                    if (v === null || v === undefined) return null;
+                    const n = parseFloat(v);
+                    if (isNaN(n)) return null;
+                    return Number.isInteger(n) ? String(n) : n.toFixed(2);
+                };
+                for (const [, entry] of dataMapSub) {
+                    const numericVals = subCols.map(c => entry[c.colName]).filter(v => v !== null && v !== undefined && !isNaN(parseFloat(v))).map(v => parseFloat(v));
+                    entry._avgResult = numericVals.length > 0 ? fmtSub(numericVals.reduce((s, v) => s + v, 0) / numericVals.length) : null;
+                }
+                const [subTargetRows] = await db.query(
+                    `SELECT hospcode, AVG(CAST(NULLIF(target_value,'') AS DECIMAL(20,4))) AS avg_target
+                     FROM kpi_sub_results WHERE sub_indicator_id IN (${subInds.map(() => '?').join(',')}) AND year_bh = ? AND month_bh = 10
+                     GROUP BY hospcode`,
+                    [...subInds.map(s => s.id), year_bh]
+                );
+                const targetByHospcodeSub = new Map(subTargetRows.map(r => [String(r.hospcode).trim(), fmtSub(r.avg_target)]));
+
+                const subColNames = subCols.map(c => c.colName);
+                let existingSubMap = new Map();
+                try {
+                    const selectCols = ['hospcode', 'target', 'result', ...subColNames.map(k => `\`${k}\``)].join(', ');
+                    const [existingRows] = await db.query(`SELECT ${selectCols} FROM \`${tableName}\` WHERE byear = ?`, [year_bh]);
+                    for (const row of existingRows) existingSubMap.set(row.hospcode, row);
+                } catch (_) { /* ตารางยังไม่มี — ทุก row เป็น new */ }
+
+                const sameValueSub2 = (a, b) => {
+                    const na = a === null || a === undefined || a === '' ? null : a;
+                    const nb = b === null || b === undefined || b === '' ? null : b;
+                    if (na === null && nb === null) return true;
+                    if (na === null || nb === null) return false;
+                    const fa = parseFloat(na), fb = parseFloat(nb);
+                    if (!isNaN(fa) && !isNaN(fb)) return fa === fb;
+                    return String(na) === String(nb);
+                };
+                const hasActualDataSub = (entry) => subCols.some(c => entry[c.colName] !== null && entry[c.colName] !== undefined && entry[c.colName] !== '');
+
+                let newCountSub = 0, changedCountSub = 0, unchangedCountSub = 0;
+                for (const [hc, entry] of dataMapSub) {
+                    if (!hasActualDataSub(entry)) continue;
+                    const target = targetByHospcodeSub.get(hc) || null;
+                    const resultVal = entry._avgResult;
+                    const subValues = subColNames.map(k => entry[k]);
+                    const existing = existingSubMap.get(hc);
+                    if (!existing) {
+                        newCountSub++;
+                    } else {
+                        const changed =
+                            !sameValueSub2(existing.target, target) ||
+                            !sameValueSub2(existing.result, resultVal) ||
+                            subColNames.some((k, idx) => !sameValueSub2(existing[k], subValues[idx]));
+                        if (changed) changedCountSub++;
+                        else unchangedCountSub++;
+                    }
+                }
+
+                results.push({
+                    id: indicator.id,
+                    status: (newCountSub > 0 || changedCountSub > 0) ? 'has_changes' : 'up_to_date',
+                    has_data: true,
+                    hospcode_count: dataMapSub.size,
+                    new_count: newCountSub,
+                    changed_count: changedCountSub,
+                    unchanged_count: unchangedCountSub,
+                    no_data: false
+                });
                 continue;
             }
 
@@ -6873,6 +7048,13 @@ apiRouter.post('/check-kpi-export', authenticateToken, isSuperAdmin, async (req,
 
 // สร้างตาราง MySQL แยกรายตัวชี้วัด พร้อมข้อมูลคะแนนทุก hospcode
 // Core function: ใช้ทั้งจาก HTTP endpoint และ scheduler
+// Sanitize ชื่อ sub-indicator ให้ใช้เป็น MySQL column identifier ได้ (quote ด้วย backtick, utf8mb4 รองรับ Unicode)
+function sanitizeSubIndicatorColName(name) {
+    let n = String(name || '').trim().replace(/`/g, '');
+    if (n.length > 60) n = n.substring(0, 60);
+    return n || 'sub_col';
+}
+
 async function performKpiExport(year_bh, indicator_ids, userId) {
     if (!year_bh || !/^\d{4}$/.test(year_bh)) {
         return { success: false, message: 'กรุณาระบุปีงบประมาณ (year_bh) เป็นตัวเลข 4 หลัก' };
@@ -6884,7 +7066,7 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
     try {
         // 1. Get indicators with valid table_process
         //    — กรอง upload_excel != 1 (ตัวที่ตั้งเป็น "อัปโหลดเอง" ข้ามไป)
-        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative FROM kpi_indicators
+        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, use_sub_indicator_export FROM kpi_indicators
             WHERE is_active = 1 AND (upload_excel IS NULL OR upload_excel = 0)
             AND table_process IS NOT NULL AND table_process != ''`;
         let indicatorParams = [];
@@ -6994,6 +7176,174 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
 
             await conn.beginTransaction();
             try {
+                // === โหมดส่งออกจากตัวชี้วัดย่อย: 1 คอลัมน์ต่อข้อย่อย แทนคอลัมน์รายเดือน+form fields ===
+                // แยกเด็ดขาดจาก logic เดิมด้านล่าง (form schema / month columns) — ไม่ผสมกัน
+                if (Number(indicator.use_sub_indicator_export) === 1) {
+                    const [subInds] = await conn.query(
+                        'SELECT id, sub_indicator_name, sub_indicator_code, sort_order FROM kpi_sub_indicators WHERE indicator_id = ? AND is_active = 1 ORDER BY sort_order, id',
+                        [indicator.id]
+                    );
+                    if (subInds.length === 0) {
+                        await conn.rollback();
+                        skipped.push({ id: indicator.id, name: indicator.kpi_indicators_name, table_process: indicator.table_process, reason: 'เปิดใช้ "ส่งออกจากข้อย่อย" แต่ยังไม่มีตัวชี้วัดย่อยที่ active' });
+                        continue;
+                    }
+
+                    // สร้างชื่อคอลัมน์จากชื่อข้อย่อย (Unicode column name — utf8mb4 รองรับ) กันชื่อซ้ำ/ชนกับคอลัมน์มาตรฐาน
+                    const usedColNames = new Set(['hospcode', 'byear', 'target', 'result', 'create_date', 'update_date']);
+                    const subCols = subInds.map(si => {
+                        const base = sanitizeSubIndicatorColName(si.sub_indicator_name);
+                        let name = base, n = 2;
+                        while (usedColNames.has(name)) name = `${base} (${n++})`;
+                        usedColNames.add(name);
+                        return { ...si, colName: name };
+                    });
+
+                    // Create/alter export table: hospcode, byear, target, result (AVG ภาพรวม) + 1 คอลัมน์ต่อข้อย่อย
+                    const subColsSql = subCols.map(c => `\`${c.colName}\` VARCHAR(500) DEFAULT NULL`).join(', ');
+                    await conn.query(
+                        `CREATE TABLE IF NOT EXISTS \`${tableName}\` (hospcode VARCHAR(5) NOT NULL, byear VARCHAR(4) NOT NULL, target VARCHAR(100) DEFAULT NULL, result VARCHAR(100) DEFAULT NULL, ${subColsSql}, create_date DATETIME DEFAULT CURRENT_TIMESTAMP, update_date DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (hospcode, byear)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+                    );
+                    for (const c of subCols) {
+                        try { await conn.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`${c.colName}\` VARCHAR(500) DEFAULT NULL`); } catch (e) { /* already exists */ }
+                    }
+
+                    // ดึงผลงานย่อยทั้งหมดของปีนี้ สำหรับข้อย่อยที่ active
+                    const [subResultRows] = await conn.query(
+                        `SELECT sub_indicator_id, hospcode, month_bh, actual_value FROM kpi_sub_results
+                         WHERE sub_indicator_id IN (${subInds.map(() => '?').join(',')}) AND year_bh = ?`,
+                        [...subInds.map(s => s.id), year_bh]
+                    );
+
+                    // จัดกลุ่มเป็น (sub_indicator_id, hospcode) -> เดือน -> ค่า
+                    const bySubHospcode = new Map();
+                    for (const row of subResultRows) {
+                        const hc = row.hospcode != null ? String(row.hospcode).trim() : '';
+                        if (!hc) continue;
+                        const key = `${row.sub_indicator_id}_${hc}`;
+                        if (!bySubHospcode.has(key)) bySubHospcode.set(key, {});
+                        const entry = bySubHospcode.get(key);
+                        const mKey = 'm' + String(row.month_bh).padStart(2, '0');
+                        const actualVal = row.actual_value;
+                        entry[mKey] = (actualVal != null && actualVal !== '') ? String(actualVal) : null;
+                    }
+
+                    // result ต่อข้อย่อย: is_cumulative ของตัวชี้วัดหลัก → SUM ทุกเดือน, ปกติ → ค่าล่าสุดที่คีย์ (เหมือน logic เดิมบรรทัด ~7265-7274)
+                    const isCumulative = Number(indicator.is_cumulative) === 1;
+                    const computeResultValue = (monthVals) => {
+                        if (isCumulative) {
+                            const numericVals = monthVals.filter(v => v !== null && v !== undefined && !isNaN(parseFloat(v)));
+                            return numericVals.length > 0 ? numericVals.reduce((s, v) => s + parseFloat(v), 0) : null;
+                        }
+                        const reverseMonths = [...monthVals].reverse();
+                        const lastActual = reverseMonths.find(v => v !== null && v !== undefined);
+                        return lastActual !== undefined ? lastActual : null;
+                    };
+
+                    // Build dataMap: hospcode -> { [colName]: ค่าต่อข้อย่อย }
+                    const dataMap = new Map();
+                    const allHospcodes = new Set(subResultRows.map(r => (r.hospcode != null ? String(r.hospcode).trim() : '')).filter(Boolean));
+                    for (const hc of allHospcodes) {
+                        const entry = {};
+                        for (const c of subCols) {
+                            const monthEntry = bySubHospcode.get(`${c.id}_${hc}`) || {};
+                            const monthVals = months.map(m => (monthEntry[m] !== undefined ? monthEntry[m] : null));
+                            entry[c.colName] = computeResultValue(monthVals);
+                        }
+                        dataMap.set(hc, entry);
+                    }
+
+                    const fmtNum = (v) => {
+                        if (v === null || v === undefined) return null;
+                        const n = parseFloat(v);
+                        if (isNaN(n)) return null;
+                        return Number.isInteger(n) ? String(n) : n.toFixed(2);
+                    };
+                    // target/result ภาพรวม = AVG ข้ามข้อย่อยทั้งหมด ต่อ hospcode (เหมือนหลักการของ /sub-results/summary)
+                    for (const [, entry] of dataMap) {
+                        const numericVals = subCols
+                            .map(c => entry[c.colName])
+                            .filter(v => v !== null && v !== undefined && !isNaN(parseFloat(v)))
+                            .map(v => parseFloat(v));
+                        entry._avgResult = numericVals.length > 0 ? fmtNum(numericVals.reduce((s, v) => s + v, 0) / numericVals.length) : null;
+                    }
+                    const [subTargetRows] = await conn.query(
+                        `SELECT hospcode, AVG(CAST(NULLIF(target_value,'') AS DECIMAL(20,4))) AS avg_target
+                         FROM kpi_sub_results WHERE sub_indicator_id IN (${subInds.map(() => '?').join(',')}) AND year_bh = ? AND month_bh = 10
+                         GROUP BY hospcode`,
+                        [...subInds.map(s => s.id), year_bh]
+                    );
+                    const targetByHospcode = new Map(subTargetRows.map(r => [String(r.hospcode).trim(), fmtNum(r.avg_target)]));
+
+                    const hasActualDataSub = (entry) => subCols.some(c => entry[c.colName] !== null && entry[c.colName] !== undefined && entry[c.colName] !== '');
+                    const sameValueSub = (a, b) => {
+                        const na = a === null || a === undefined || a === '' ? null : a;
+                        const nb = b === null || b === undefined || b === '' ? null : b;
+                        if (na === null && nb === null) return true;
+                        if (na === null || nb === null) return false;
+                        const fa = parseFloat(na), fb = parseFloat(nb);
+                        if (!isNaN(fa) && !isNaN(fb)) return fa === fb;
+                        return String(na) === String(nb);
+                    };
+
+                    const subColNames = subCols.map(c => c.colName);
+                    const existingDataMap = new Map();
+                    try {
+                        const selectCols = ['hospcode', 'target', 'result', ...subColNames.map(k => `\`${k}\``)].join(', ');
+                        const [existingRows] = await conn.query(`SELECT ${selectCols} FROM \`${tableName}\` WHERE byear = ?`, [year_bh]);
+                        for (const r of existingRows) existingDataMap.set(r.hospcode, r);
+                    } catch (e) { /* ตารางเพิ่งสร้าง */ }
+
+                    const upsertRows = [];
+                    let updatedCount = 0, insertedCount = 0, unchangedCount = 0, noDataCount = 0;
+                    for (const [hc, entry] of dataMap) {
+                        if (!hasActualDataSub(entry)) { noDataCount++; continue; }
+                        const target = targetByHospcode.get(hc) || null;
+                        const resultVal = entry._avgResult;
+                        const subValues = subColNames.map(k => entry[k]);
+
+                        const existing = existingDataMap.get(hc);
+                        if (existing) {
+                            const changed =
+                                !sameValueSub(existing.target, target) ||
+                                !sameValueSub(existing.result, resultVal) ||
+                                subColNames.some((k, idx) => !sameValueSub(existing[k], subValues[idx]));
+                            if (!changed) { unchangedCount++; continue; }
+                            updatedCount++;
+                        } else {
+                            insertedCount++;
+                        }
+                        upsertRows.push([hc, year_bh, target, resultVal, ...subValues]);
+                    }
+
+                    if (upsertRows.length > 0) {
+                        const colsList = ['hospcode', 'byear', 'target', 'result', ...subColNames.map(k => `\`${k}\``)];
+                        const onDupParts = ['target=VALUES(target)', 'result=VALUES(result)', ...subColNames.map(k => `\`${k}\`=VALUES(\`${k}\`)`)];
+                        const cols = colsList.join(', ');
+                        const onDup = onDupParts.join(', ');
+                        const singlePlaceholder = '(' + Array(colsList.length).fill('?').join(',') + ')';
+                        for (let i = 0; i < upsertRows.length; i += 100) {
+                            const batch = upsertRows.slice(i, i + 100);
+                            const placeholders = batch.map(() => singlePlaceholder).join(',');
+                            const flatValues = batch.flat();
+                            await conn.query(`INSERT INTO \`${tableName}\` (${cols}) VALUES ${placeholders} ON DUPLICATE KEY UPDATE ${onDup}`, flatValues);
+                        }
+                    }
+
+                    await conn.commit();
+                    created.push({
+                        table: tableName,
+                        name: indicator.kpi_indicators_name,
+                        total_hospcode: dataMap.size,
+                        inserted: insertedCount,
+                        updated: updatedCount,
+                        unchanged: unchangedCount,
+                        no_data: noDataCount,
+                        sub_columns: subColNames
+                    });
+                    continue;
+                }
+
                 // ดึง form schema + fields สำหรับ indicator นี้
                 // Priority: active schema ก่อน → ถ้าไม่มีลอง inactive schema → ถ้าไม่มี schema เลย → infer จาก columns
                 const [schemaRows] = await conn.query(
@@ -9251,6 +9601,8 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS hdc_fiscal_year VARCHAR(10) NULL COMMENT 'ปีงบฯ ที่ใช้อ้างอิง target_percentage/target_condition ล่าสุดจาก HDC (audit only)'`); } catch(e) {}
         // is_cumulative: 1 = ผลงานสะสมทุกเดือนในปีงบ (SUM) แทนค่าเดือนล่าสุด — ใช้กับตัวชี้วัดนับสะสม เช่น จำนวนราย/ครั้งสะสม
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS is_cumulative TINYINT(1) DEFAULT 0 COMMENT 'สะสมทุกเดือนในปีงบ (SUM) แทนค่าเดือนล่าสุด'`); } catch(e) {}
+        // use_sub_indicator_export: 1 = ตอน export ให้สร้างคอลัมน์ตามตัวชี้วัดย่อยแทนคอลัมน์รายเดือน (m10-m09)
+        try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS use_sub_indicator_export TINYINT(1) DEFAULT 0 COMMENT 'ส่งออกโดยใช้ผลงานตัวชี้วัดย่อยแทนรายเดือน (1 คอลัมน์ต่อข้อย่อย)'`); } catch(e) {}
 
         // เพิ่มฟิลด์ใน main_yut (ยุทธศาสตร์)
         try { await db.query(`ALTER TABLE main_yut ADD COLUMN IF NOT EXISTS yut_code VARCHAR(50) NULL COMMENT 'รหัสย่อยุทธศาสตร์'`); } catch(e) {}
@@ -9475,6 +9827,9 @@ apiRouter.post('/reject-kpi', authenticateToken, isAdmin, async (req, res) => {
                 `UPDATE kpi_results SET status = 'Rejected', is_locked = 0 WHERE ${whereClause}`,
                 params
             );
+            // Cascade ไปตัวชี้วัดย่อย (ถ้ามี) — hospcode เดียวกับที่ใช้ตัดสินใน whereClause ด้านบน
+            const cascadeHospcode = hospcode || (user.role !== 'super_admin' ? user.hospcode : null);
+            await cascadeSubResultsStatus(connection, indicator_id, year_bh, cascadeHospcode, 'Rejected', 0);
 
             // Save rejection comment with reject_months
             const targetHospcode = hospcode || user.hospcode;

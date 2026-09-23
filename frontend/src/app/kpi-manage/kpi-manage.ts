@@ -468,6 +468,7 @@ export class KpiManageComponent implements OnInit {
         src.rmw = Number(src.rmw) === 1;
         src.other = Number(src.other) === 1;
         src.is_cumulative = Number(src.is_cumulative) === 1;
+        src.use_sub_indicator_export = Number(src.use_sub_indicator_export) === 1;
         src.evaluation_mode = src.evaluation_mode || 'any_one';
         this.selectedOffTypes = this.parseOffTypes(src.required_off_types);
         // auto-set yut_id จาก main_indicator ที่เลือก
@@ -479,7 +480,7 @@ export class KpiManageComponent implements OnInit {
       if (this.activeTab === 'indicators') {
         this.selectedYutInModal = null;
         this.selectedOffTypes = [];
-        this.currentItem = { ...baseDefaults, r9: false, moph: false, ssj: false, rmw: false, other: false, is_cumulative: false, weight: 1, target_condition: 'GTE', evaluation_mode: 'any_one' };
+        this.currentItem = { ...baseDefaults, r9: false, moph: false, ssj: false, rmw: false, other: false, is_cumulative: false, use_sub_indicator_export: false, weight: 1, target_condition: 'GTE', evaluation_mode: 'any_one' };
       } else {
         this.currentItem = { ...baseDefaults };
       }

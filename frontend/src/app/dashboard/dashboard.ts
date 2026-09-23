@@ -2679,7 +2679,8 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       indicator_name: item.kpi_indicators_name,
       hospcode: item.hospcode,
       hosname: item.hosname,
-      year_bh: item.year_bh || this.selectedYear
+      year_bh: item.year_bh || this.selectedYear,
+      is_locked: item.is_locked
     };
     // Reset modal-local state ทุกครั้งที่เปิด modal ใหม่
     this.subEditMode = false;
