@@ -1,6 +1,8 @@
 import { Component, ElementRef, ViewChild, inject, ChangeDetectorRef, AfterViewInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../services/auth';
+import { PdfExportService } from '../services/pdf-export.service';
+import Swal from 'sweetalert2';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface SopNode { id: string; r: number; c: number; t: 'start'|'end'|'process'|'decision'|'db'; l: string; s?: string; }
@@ -598,13 +600,17 @@ const SYSTEMS: SopSystem[] = [
 export class SopComponent implements AfterViewInit, OnDestroy {
   private cdr = inject(ChangeDetectorRef);
   private authService = inject(AuthService);
+  private pdfExport = inject(PdfExportService);
 
   systems = SYSTEMS;
   selectedSystem: SopSystem = SYSTEMS[0];
   selectedSubflow: string | null = null;
   animFrame = 0;
+  exportingPdf = false;
 
   @ViewChild('flowArea') flowArea!: ElementRef<HTMLDivElement>;
+  @ViewChild('captureArea') captureArea!: ElementRef<HTMLDivElement>;
+  @ViewChild('diagramBox') diagramBox!: ElementRef<HTMLDivElement>;
 
   ngAfterViewInit() { this.renderDiagram(); }
   ngOnDestroy() { if (this.animFrame) cancelAnimationFrame(this.animFrame); }
@@ -621,6 +627,92 @@ export class SopComponent implements AfterViewInit, OnDestroy {
 
   get activeSubflows() { return this.selectedSystem.subflows || []; }
   get activeSubflowId() { return this.selectedSubflow || (this.activeSubflows[0]?.id ?? null); }
+  get activeSubflowTitle(): string | null {
+    const list = this.activeSubflows;
+    if (list.length === 0) return null;
+    return list.find(sf => sf.id === this.activeSubflowId)?.title || null;
+  }
+
+  /** รอ N มิลลิวินาที — ใช้รอ renderDiagram() (setTimeout 20ms ภายใน selectSystem) วาด SVG เสร็จก่อน capture */
+  private wait(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * ส่งออกผังกระบวนการทุกระบบ + ทุก sub-flow เป็น PDF (1 หน้าต่อระบบ/sub-flow)
+   * วน selectSystem() ทีละตัว รอ render เสร็จ แล้ว capture #captureArea (description + diagram + legend)
+   */
+  async exportToPdf() {
+    if (this.exportingPdf) return;
+    this.exportingPdf = true;
+    this.cdr.detectChanges();
+
+    // เก็บ system/subflow ปัจจุบันไว้ คืนค่าหลัง export เสร็จ ไม่ให้ผู้ใช้เห็นหน้าจอเปลี่ยนค้างไว้
+    const origSystem = this.selectedSystem;
+    const origSubflow = this.selectedSubflow;
+
+    // รายการ (system, subflowId?) ทั้งหมดที่ต้อง capture — ระบบที่มี subflow นับทีละ subflow
+    const jobs: { sys: SopSystem; sfId?: string }[] = [];
+    for (const sys of this.systems) {
+      if (sys.subflows && sys.subflows.length > 0) {
+        for (const sf of sys.subflows) jobs.push({ sys, sfId: sf.id });
+      } else {
+        jobs.push({ sys });
+      }
+    }
+
+    Swal.fire({
+      title: 'กำลังสร้าง PDF...',
+      html: `<div class="text-left text-sm space-y-2">
+        <div class="flex items-center gap-2"><i class="fas fa-spinner fa-spin text-red-500"></i> <span id="sop-pdf-step">เตรียมข้อมูล...</span></div>
+        <div class="w-full bg-gray-200 rounded-full h-3 mt-2"><div id="sop-pdf-progress" class="bg-red-500 h-3 rounded-full transition-all duration-300" style="width: 0%"></div></div>
+      </div>`,
+      allowOutsideClick: false,
+      showConfirmButton: false,
+    });
+
+    try {
+      await this.pdfExport.waitFontsReady();
+      const doc = this.pdfExport.createDoc();
+
+      for (let i = 0; i < jobs.length; i++) {
+        const { sys, sfId } = jobs[i];
+        this.selectSystem(sys, sfId);
+        await this.wait(400); // renderDiagram() ใช้ setTimeout 20ms ภายใน + เผื่อเวลา browser paint SVG ที่ node/edge เยอะ
+
+        const stepEl = document.getElementById('sop-pdf-step');
+        const progEl = document.getElementById('sop-pdf-progress');
+        const label = sfId ? `${sys.title} — ${this.activeSubflowTitle}` : sys.title;
+        if (stepEl) stepEl.textContent = `${i + 1}/${jobs.length}: ${label}`;
+        if (progEl) (progEl as HTMLElement).style.width = `${Math.round(((i + 1) / jobs.length) * 100)}%`;
+
+        // ถอด max-height/overflow ของกล่อง diagram ชั่วคราว กัน canvas ตัดภาพเฉพาะส่วนที่ scroll เห็น
+        const diagramEl = this.diagramBox?.nativeElement;
+        const prevStyle = diagramEl ? diagramEl.getAttribute('style') : null;
+        if (diagramEl) diagramEl.style.cssText = 'max-height:none; overflow:visible;';
+        await this.wait(80); // ให้ reflow ก่อน capture
+
+        if (this.captureArea?.nativeElement) {
+          await this.pdfExport.addElementAsPages(doc, this.captureArea.nativeElement, i === 0);
+        }
+
+        if (diagramEl && prevStyle !== null) diagramEl.setAttribute('style', prevStyle);
+      }
+
+      const dateStr = new Date().toISOString().slice(0, 10);
+      this.pdfExport.save(doc, `SOP_ผังกระบวนการทำงาน_KHUPS-KPI_${dateStr}.pdf`);
+      Swal.close();
+      Swal.fire({ icon: 'success', title: 'สร้าง PDF สำเร็จ', timer: 1800, showConfirmButton: false });
+    } catch (e: any) {
+      Swal.close();
+      Swal.fire('ผิดพลาด', 'ไม่สามารถสร้าง PDF ได้: ' + (e?.message || e), 'error');
+    } finally {
+      // คืนค่า system/subflow เดิมที่ผู้ใช้กำลังดูอยู่ก่อนกด export
+      this.selectSystem(origSystem, origSubflow || undefined);
+      this.exportingPdf = false;
+      this.cdr.detectChanges();
+    }
+  }
 
   getActorStyle(actor: string): string {
     const ac = ACTOR[actor] || ACTOR['Backend API'];

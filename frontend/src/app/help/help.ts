@@ -2,6 +2,8 @@ import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth';
+import { PdfExportService } from '../services/pdf-export.service';
+import Swal from 'sweetalert2';
 
 @Component({
   selector: 'app-help',
@@ -12,10 +14,12 @@ import { AuthService } from '../services/auth';
 export class HelpComponent {
   private authService = inject(AuthService);
   private router = inject(Router);
+  private pdfExport = inject(PdfExportService);
   activeSection: string = 'overview';
   currentRole: string = '';
   showMobileTopics: boolean = false;
   isPublicView: boolean = false;
+  exportingPdf: boolean = false;
 
   ngOnInit() {
     this.currentRole = this.authService.getUserRole();
@@ -104,5 +108,62 @@ export class HelpComponent {
     this.activeSection = id;
     const el = document.getElementById('section-' + id);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  private wait(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /**
+   * ส่งออกคู่มือทั้งหมด (เฉพาะหัวข้อที่สิทธิ์ปัจจุบันเห็น) เป็น PDF — 1 หัวข้อต่อ 1 หน้าขึ้นไป
+   * ขยายหัวข้อที่พับไว้ (collapsedSections) ให้ครบก่อน capture แล้วคืนค่าเดิมหลังเสร็จ
+   */
+  async exportToPdf() {
+    if (this.exportingPdf) return;
+    this.exportingPdf = true;
+
+    // เก็บสถานะการพับหัวข้อเดิมไว้ก่อน แล้วขยายให้หมด — กันเนื้อหาที่ผู้ใช้พับไว้ก่อนกด export หายไปจาก PDF
+    const priorCollapsed = { ...this.collapsedSections };
+    this.collapsedSections = {};
+
+    Swal.fire({
+      title: 'กำลังสร้าง PDF...',
+      html: `<div class="text-left text-sm space-y-2">
+        <div class="flex items-center gap-2"><i class="fas fa-spinner fa-spin text-green-500"></i> <span id="help-pdf-step">เตรียมข้อมูล...</span></div>
+        <div class="w-full bg-gray-200 rounded-full h-3 mt-2"><div id="help-pdf-progress" class="bg-green-500 h-3 rounded-full transition-all duration-300" style="width: 0%"></div></div>
+      </div>`,
+      allowOutsideClick: false,
+      showConfirmButton: false,
+    });
+    await this.wait(150); // ให้ Angular re-render หัวข้อที่เพิ่งขยายก่อน capture
+
+    try {
+      await this.pdfExport.waitFontsReady();
+      const doc = this.pdfExport.createDoc();
+      const sections = this.visibleSections;
+
+      for (let i = 0; i < sections.length; i++) {
+        const s = sections[i];
+        const stepEl = document.getElementById('help-pdf-step');
+        const progEl = document.getElementById('help-pdf-progress');
+        if (stepEl) stepEl.textContent = `${i + 1}/${sections.length}: ${s.label}`;
+        if (progEl) (progEl as HTMLElement).style.width = `${Math.round(((i + 1) / sections.length) * 100)}%`;
+
+        const el = document.getElementById('section-' + s.id);
+        if (!el) continue;
+        await this.pdfExport.addElementAsPages(doc, el, i === 0);
+      }
+
+      const dateStr = new Date().toISOString().slice(0, 10);
+      this.pdfExport.save(doc, `คู่มือการใช้งาน_KHUPS-KPI_${dateStr}.pdf`);
+      Swal.close();
+      Swal.fire({ icon: 'success', title: 'สร้าง PDF สำเร็จ', timer: 1800, showConfirmButton: false });
+    } catch (e: any) {
+      Swal.close();
+      Swal.fire('ผิดพลาด', 'ไม่สามารถสร้าง PDF ได้: ' + (e?.message || e), 'error');
+    } finally {
+      this.collapsedSections = priorCollapsed;
+      this.exportingPdf = false;
+    }
   }
 }

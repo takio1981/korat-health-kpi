@@ -24,6 +24,11 @@
       <p *ngIf="isPublicView" class="text-green-100/80 text-xs mt-2">
         <i class="fas fa-info-circle mr-1"></i>โหมดเปิดสาธารณะ — login เพื่อดูคู่มือเฉพาะสิทธิ์ของคุณ
       </p>
+      <button (click)="exportToPdf()" [disabled]="exportingPdf"
+        class="mt-4 px-4 py-2 rounded-xl text-sm font-bold bg-white/90 hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed text-green-800 shadow-md transition-all inline-flex items-center gap-2">
+        <i class="fas" [ngClass]="exportingPdf ? 'fa-spinner fa-spin' : 'fa-file-pdf'"></i>
+        {{ exportingPdf ? 'กำลังส่งออก...' : 'ส่งออก PDF' }}
+      </button>
     </div>
   </div>
 
