@@ -3,7 +3,10 @@
       <!-- Loading overlay ถูก replace ด้วย Search Status SweetAlert -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col">
         <!-- Sticky top wrapper (mobile/tablet): ตรึงส่วนบน header + filter + search ให้คงที่ ขณะที่ตัวชี้วัด scroll -->
-        <div class="sticky top-0 z-30 bg-white lg:static lg:z-auto rounded-t-2xl">
+        <!-- z-50 (ไม่ใช่ z-30 เดิม) — ต้องสูงกว่า .kpi-table thead th.frozen (z-index:40 ใน dashboard.css) เพราะ
+             .kpi-table-wrapper ไม่มี z-index เป็นของตัวเอง ทำให้ z-40 ของหัวตารางหลุดออกมาเทียบชั้นกับ wrapper นี้โดยตรง
+             เดิม z-30 < 40 ทำให้ dropdown (เช่น "View") ที่อยู่ใน wrapper นี้ถูกหัวตารางบังเมื่อทั้งคู่ sticky พร้อมกัน -->
+        <div class="sticky top-0 z-50 bg-white lg:static lg:z-auto rounded-t-2xl">
         <div class="px-4 md:px-6 py-3 md:py-4 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center bg-white gap-3 rounded-t-2xl">
           <div>
             <h4 class="text-lg font-bold text-gray-800 flex items-center gap-2">
