@@ -6751,7 +6751,8 @@ async function checkKpiChanges(year_bh, indicator_ids) {
     }
     try {
         // กรอง upload_excel != 1 (ตัวที่ตั้งเป็น "อัปโหลด Excel เอง" ข้ามทั้งใน check และ export)
-        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, use_sub_indicator_export FROM kpi_indicators
+        // ดึง evaluation_mode/required_off_types ด้วย เพื่อคำนวณขอบเขตหน่วยบริการเหมือน performKpiExport
+        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, use_sub_indicator_export, evaluation_mode, required_off_types FROM kpi_indicators
             WHERE table_process IS NOT NULL AND table_process != ''
             AND (upload_excel IS NULL OR upload_excel = 0)`;
         let indicatorParams = [];
@@ -6760,6 +6761,9 @@ async function checkKpiChanges(year_bh, indicator_ids) {
             indicatorParams = indicator_ids;
         }
         const [indicators] = await db.query(indicatorQuery, indicatorParams);
+
+        // ดึงรายชื่อหน่วยบริการทั้งหมดครั้งเดียว — เหมือน performKpiExport (resolveIndicatorHostypes ต่อตัวชี้วัด)
+        const [allHospitals] = await db.query('SELECT hoscode, hostype FROM chospital');
 
         const months = ['m10', 'm11', 'm12', 'm01', 'm02', 'm03', 'm04', 'm05', 'm06', 'm07', 'm08', 'm09'];
         const results = [];
@@ -6770,6 +6774,13 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                 results.push({ id: indicator.id, status: 'invalid_name', has_data: false, new_count: 0, changed_count: 0, unchanged_count: 0, no_data: true });
                 continue;
             }
+
+            // ขอบเขตหน่วยบริการของตัวชี้วัดนี้ — เหมือน performKpiExport ทุกประการ
+            const allowedHostypes = resolveIndicatorHostypes(indicator);
+            const scopeHospcodes = allHospitals
+                .filter(h => allowedHostypes.has(String(h.hostype)))
+                .map(h => String(h.hoscode).trim())
+                .filter(Boolean);
 
             // === โหมดส่งออกจากตัวชี้วัดย่อย: ตรวจการเปลี่ยนแปลงจาก kpi_sub_results แทน kpi_results/month columns ===
             if (Number(indicator.use_sub_indicator_export) === 1) {
@@ -6795,10 +6806,8 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                      WHERE sub_indicator_id IN (${subInds.map(() => '?').join(',')}) AND year_bh = ?`,
                     [...subInds.map(s => s.id), year_bh]
                 );
-                if (subResultRows.length === 0) {
-                    results.push({ id: indicator.id, status: 'no_data', has_data: false, new_count: 0, changed_count: 0, unchanged_count: 0, no_data: true });
-                    continue;
-                }
+                // ไม่ early-exit ที่ไม่มีผลงานอีกต่อไป — ต้องตรวจครบทุกหน่วยบริการในขอบเขต (scopeHospcodes)
+                // ด้วยเสมอ เพื่อให้ scheduler เห็นว่ามีแถวใหม่ (ที่ยังว่าง) ต้อง export
 
                 const bySubHospcode = new Map();
                 for (const row of subResultRows) {
@@ -6824,7 +6833,10 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                 };
 
                 const dataMapSub = new Map();
-                const allHospcodesSub = new Set(subResultRows.map(r => (r.hospcode != null ? String(r.hospcode).trim() : '')).filter(Boolean));
+                const allHospcodesSub = new Set([
+                    ...scopeHospcodes,
+                    ...subResultRows.map(r => (r.hospcode != null ? String(r.hospcode).trim() : '')).filter(Boolean)
+                ]);
                 for (const hc of allHospcodesSub) {
                     const entry = {};
                     for (const c of subCols) {
@@ -6870,11 +6882,11 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                     if (!isNaN(fa) && !isNaN(fb)) return fa === fb;
                     return String(na) === String(nb);
                 };
-                const hasActualDataSub = (entry) => subCols.some(c => entry[c.colName] !== null && entry[c.colName] !== undefined && entry[c.colName] !== '');
 
                 let newCountSub = 0, changedCountSub = 0, unchangedCountSub = 0;
                 for (const [hc, entry] of dataMapSub) {
-                    if (!hasActualDataSub(entry)) continue;
+                    // ไม่ข้าม hospcode ที่ยังไม่มีผลงานแล้ว — ต้องนับเป็น new/unchanged ด้วยเพื่อให้ scheduler
+                    // เห็นว่ามีแถวในขอบเขตที่ยังไม่ถูกสร้าง (mirror performKpiExport)
                     const target = targetByHospcodeSub.get(hc) || null;
                     const resultVal = entry._avgResult;
                     const subValues = subColNames.map(k => entry[k]);
@@ -6912,6 +6924,8 @@ async function checkKpiChanges(year_bh, indicator_ids) {
 
             // Pivot kpi_results — แปลง '' → null ทันที (กัน block merge sub_results)
             const dataMap = new Map();
+            // Seed ด้วยขอบเขตหน่วยบริการของตัวชี้วัด — เหมือน performKpiExport
+            for (const hc of scopeHospcodes) dataMap.set(hc, {});
             for (const row of kpiRows) {
                 if (!dataMap.has(row.hospcode)) dataMap.set(row.hospcode, {});
                 const entry = dataMap.get(row.hospcode);
@@ -6970,10 +6984,8 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                 }
             } catch (_) {}
 
-            if (dataMap.size === 0) {
-                results.push({ id: indicator.id, status: 'no_data', has_data: false, new_count: 0, changed_count: 0, unchanged_count: 0, no_data: true });
-                continue;
-            }
+            // ไม่ early-exit เมื่อ dataMap ว่างอีกต่อไป — ปกติจะไม่ว่างเพราะ seed จาก scopeHospcodes ไว้แล้ว
+            // (resolveIndicatorHostypes คืนค่า default เสมอ) เหลือแค่กรณี chospital ไม่มีหน่วยบริการที่ hostype ตรงเลยจริงๆ
 
             // ตรวจสอบตาราง export มีอยู่หรือไม่
             let existingMap = new Map();
@@ -6998,19 +7010,9 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                 if (!isNaN(fa) && !isNaN(fb)) return fa === fb;
                 return String(na) === String(nb);
             };
-            // ข้าม hospcode ที่ไม่มี "ผลงาน" จริง (ต้องมีเดือนใดเดือนหนึ่งที่ actual_value ไม่ว่าง)
-            // ยอมรับ "0" เป็นค่าที่ถูกต้อง (เช่น "0 ราย" ใน KPI ผลข้างเคียง)
-            const hasActualResult = (d) => {
-                for (const m of months) {
-                    const v = d[m];
-                    if (v !== null && v !== undefined && v !== '') return true;
-                }
-                return false;
-            };
-
             let newCount = 0, changedCount = 0, unchangedCount = 0;
             for (const [hc, d] of dataMap) {
-                if (!hasActualResult(d)) continue; // ไม่มีผลงาน → ไม่นับ (matches export behavior)
+                // ไม่ข้าม hospcode ที่ยังไม่มีผลงานแล้ว — ต้องนับเป็น new/unchanged ด้วย (mirror performKpiExport)
                 const target = emptyToNull(d.target);
                 const monthValues = months.map(m => emptyToNull(d[m]));
                 // result: ตัวชี้วัดสะสม → รวมทุกเดือน, ปกติ → ค่าเดือนล่าสุดที่คีย์ (ก.ย.→ต.ค.) — เหมือน performKpiExport
@@ -7093,7 +7095,8 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
     try {
         // 1. Get indicators with valid table_process
         //    — กรอง upload_excel != 1 (ตัวที่ตั้งเป็น "อัปโหลดเอง" ข้ามไป)
-        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, use_sub_indicator_export FROM kpi_indicators
+        //    — ดึง evaluation_mode/required_off_types ด้วย เพื่อคำนวณขอบเขตหน่วยบริการที่ต้อง export (ดู resolveIndicatorHostypes)
+        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, use_sub_indicator_export, evaluation_mode, required_off_types FROM kpi_indicators
             WHERE is_active = 1 AND (upload_excel IS NULL OR upload_excel = 0)
             AND table_process IS NOT NULL AND table_process != ''`;
         let indicatorParams = [];
@@ -7108,62 +7111,14 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
         const created = [];
         const skipped = [];
 
-        // Prefilter: เก็บเฉพาะตัวชี้วัดที่มีข้อมูลใน kpi_results (target/actual) **หรือ** kpi_sub_results (ผ่าน sub-indicators)
-        let indicators = [];
-        if (allIndicators.length > 0) {
-            const indIds = allIndicators.map(i => i.id);
-            // 1) ตัวชี้วัดที่มีข้อมูลใน kpi_results
-            const [withData] = await conn.query(
-                `SELECT DISTINCT indicator_id FROM kpi_results
-                 WHERE indicator_id IN (${indIds.map(() => '?').join(',')})
-                 AND year_bh = ?
-                 AND ((target_value IS NOT NULL AND target_value != '') OR (actual_value IS NOT NULL AND actual_value != ''))`,
-                [...indIds, year_bh]
-            );
-            const validIds = new Set(withData.map(r => r.indicator_id));
-            // 2) ตัวชี้วัดที่มีข้อมูลใน kpi_sub_results (ผ่าน kpi_sub_indicators)
-            const [withSubData] = await conn.query(
-                `SELECT DISTINCT si.indicator_id
-                 FROM kpi_sub_results sr
-                 JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
-                 WHERE si.indicator_id IN (${indIds.map(() => '?').join(',')})
-                 AND sr.year_bh = ?
-                 AND ((sr.target_value IS NOT NULL AND sr.target_value != '') OR (sr.actual_value IS NOT NULL AND sr.actual_value != ''))`,
-                [...indIds, year_bh]
-            );
-            for (const r of withSubData) validIds.add(r.indicator_id);
+        // ทุกตัวชี้วัดที่ active + มี table_process ต้อง export เสมอ (ครบทุกหน่วยบริการตามขอบเขต evaluation_mode/
+        // required_off_types) แม้ไม่มีผลงานคีย์ไว้เลยก็ตาม — เดิมมี prefilter ข้ามตัวชี้วัดที่ไม่มีข้อมูลใน
+        // kpi_results/kpi_sub_results/form_* ทั้งตัว ตัดออกเพราะขัดกับเป้าหมายนี้โดยตรง
+        let indicators = allIndicators;
 
-            // 3) ตัวชี้วัดที่มีข้อมูลใน dynamic form table (form_<table_process>)
-            //    — กรณี form schema ไม่มี actual_value_field → ข้อมูลไม่ sync เข้า kpi_results
-            //    — รับ indicator_id IS NULL ด้วย (กรณี dynamic-data save ไม่ส่ง indicator_id)
-            for (const ind of allIndicators) {
-                if (validIds.has(ind.id)) continue;
-                if (!ind.table_process) continue;
-                const tp = ind.table_process.trim().replace(/-/g, '_');
-                if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(tp)) continue;
-                const dynTable = 'form_' + tp;
-                try {
-                    const [chk] = await conn.query(
-                        "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME IN ('year_bh','indicator_id')",
-                        [dynTable]
-                    );
-                    if (chk.length === 0) continue;  // ตารางไม่มี → ข้าม
-                    const hasIndId = chk.some(c => (c.COLUMN_NAME || c.column_name) === 'indicator_id');
-                    const indFilter = hasIndId ? 'AND (indicator_id = ? OR indicator_id IS NULL)' : '';
-                    const params = hasIndId ? [year_bh, ind.id] : [year_bh];
-                    const [dynRows] = await conn.query(
-                        `SELECT 1 FROM \`${dynTable}\` WHERE year_bh = ? ${indFilter} LIMIT 1`,
-                        params
-                    );
-                    if (dynRows.length > 0) validIds.add(ind.id);
-                } catch (_) { /* skip table check error */ }
-            }
-
-            for (const ind of allIndicators) {
-                if (validIds.has(ind.id)) indicators.push(ind);
-                else skipped.push({ id: ind.id, name: ind.kpi_indicators_name, table_process: ind.table_process, reason: 'ไม่มีข้อมูลใน kpi_results / kpi_sub_results / form_*' });
-            }
-        }
+        // ดึงรายชื่อหน่วยบริการทั้งหมดครั้งเดียว (ไม่ query ซ้ำต่อตัวชี้วัด) — ใช้ resolveIndicatorHostypes()
+        // ต่อตัวชี้วัดกรองว่า hostype ไหนอยู่ในขอบเขต แล้วดึงเฉพาะ hoscode ของ hostype นั้น
+        const [allHospitals] = await conn.query('SELECT hoscode, hostype FROM chospital');
 
         // ตารางมีคอลัมน์เดือน (m10-m09) เสมอ + เพิ่ม form fields ถ้ามี
         const baseColsWithMonths = 'hospcode VARCHAR(5) NOT NULL, byear VARCHAR(4) NOT NULL, target VARCHAR(100) DEFAULT NULL, result VARCHAR(100) DEFAULT NULL, m10 VARCHAR(100) DEFAULT NULL, m11 VARCHAR(100) DEFAULT NULL, m12 VARCHAR(100) DEFAULT NULL, m01 VARCHAR(100) DEFAULT NULL, m02 VARCHAR(100) DEFAULT NULL, m03 VARCHAR(100) DEFAULT NULL, m04 VARCHAR(100) DEFAULT NULL, m05 VARCHAR(100) DEFAULT NULL, m06 VARCHAR(100) DEFAULT NULL, m07 VARCHAR(100) DEFAULT NULL, m08 VARCHAR(100) DEFAULT NULL, m09 VARCHAR(100) DEFAULT NULL';
@@ -7200,6 +7155,14 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                 skipped.push({ id: indicator.id, name: indicator.kpi_indicators_name, table_process: indicator.table_process, reason: 'ชื่อตารางไม่ถูกต้อง' });
                 continue;
             }
+
+            // ขอบเขตหน่วยบริการของตัวชี้วัดนี้ (evaluation_mode/required_off_types) → รายชื่อ hoscode ที่ต้อง
+            // export เสมอ ไม่ว่าจะมีผลงานคีย์ไว้หรือไม่ — ใช้ seed dataMap ของทั้ง 2 path ด้านล่าง
+            const allowedHostypes = resolveIndicatorHostypes(indicator);
+            const scopeHospcodes = allHospitals
+                .filter(h => allowedHostypes.has(String(h.hostype)))
+                .map(h => String(h.hoscode).trim())
+                .filter(Boolean);
 
             await conn.beginTransaction();
             try {
@@ -7274,8 +7237,13 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                     };
 
                     // Build dataMap: hospcode -> { [colName]: ค่าต่อข้อย่อย }
+                    // รวม scopeHospcodes (ขอบเขตตาม evaluation_mode/required_off_types) เข้ากับ hospcode ที่มีผลงานจริง
+                    // — ให้ครบทุกหน่วยบริการในขอบเขตเสมอ แม้ยังไม่มีใครคีย์ผลงานย่อยเลยก็ตาม
                     const dataMap = new Map();
-                    const allHospcodes = new Set(subResultRows.map(r => (r.hospcode != null ? String(r.hospcode).trim() : '')).filter(Boolean));
+                    const allHospcodes = new Set([
+                        ...scopeHospcodes,
+                        ...subResultRows.map(r => (r.hospcode != null ? String(r.hospcode).trim() : '')).filter(Boolean)
+                    ]);
                     for (const hc of allHospcodes) {
                         const entry = {};
                         for (const c of subCols) {
@@ -7330,7 +7298,8 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                     const upsertRows = [];
                     let updatedCount = 0, insertedCount = 0, unchangedCount = 0, noDataCount = 0;
                     for (const [hc, entry] of dataMap) {
-                        if (!hasActualDataSub(entry)) { noDataCount++; continue; }
+                        // ไม่ข้ามแถวที่ยังไม่มีผลงานแล้ว (ต้อง export ครบทุกหน่วยบริการในขอบเขต) — นับไว้รายงานเฉยๆ
+                        if (!hasActualDataSub(entry)) noDataCount++;
                         const target = targetByHospcode.get(hc) || null;
                         const resultVal = entry._avgResult;
                         const subValues = subColNames.map(k => entry[k]);
@@ -7432,6 +7401,9 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                 // Build hospcode -> month data map
                 // ⚠️ แปลง '' → null ทันที — ป้องกันบล็อก merge sub_results ภายหลัง (string '' ไม่ใช่ null/undefined)
                 const dataMap = new Map();
+                // Seed ด้วยขอบเขตหน่วยบริการของตัวชี้วัด (evaluation_mode/required_off_types) ก่อน — ให้ทุกหน่วยบริการ
+                // ในขอบเขตมีแถวว่างรอไว้เสมอ แม้ยังไม่มีผลงานคีย์ไว้เลย (merge ด้านล่างจะเติมค่าจริงทับให้ภายหลัง)
+                for (const hc of scopeHospcodes) dataMap.set(hc, {});
                 for (const row of results) {
                     const hc = row.hospcode != null ? String(row.hospcode).trim() : '';
                     if (!hc) continue;
@@ -7591,7 +7563,8 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                 let noDataCount = 0;
 
                 for (const [hc, d] of dataMap) {
-                    if (!hasActualData(d)) { noDataCount++; continue; }
+                    // ไม่ข้ามแถวที่ยังไม่มีผลงานแล้ว (ต้อง export ครบทุกหน่วยบริการในขอบเขต) — นับไว้รายงานเฉยๆ
+                    if (!hasActualData(d)) noDataCount++;
 
                     const target = emptyToNull(d.target);
                     const dynValues = dynFieldKeys.map(k => emptyToNull(d['_dyn_' + k]));

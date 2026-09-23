@@ -522,7 +522,7 @@ export class ExportKpiComponent implements OnInit {
                     </table>
                   </div>` : ''}
 
-                  ${res.skipped.length > 0 && !tablesRows ? `<p style="color:#6b7280;font-size:11px;margin-top:8px"><i class="fas fa-forward"></i> ข้าม ${res.skipped.length} รายการ (ไม่มีข้อมูล)</p>` : ''}
+                  ${res.skipped.length > 0 && !tablesRows ? `<p style="color:#6b7280;font-size:11px;margin-top:8px"><i class="fas fa-forward"></i> ข้าม ${res.skipped.length} รายการ (ดูเหตุผลรายตัวด้านล่าง)</p>` : ''}
                 </div>`,
                 icon: 'success',
                 width: 720,
