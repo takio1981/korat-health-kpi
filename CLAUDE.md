@@ -564,10 +564,31 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 # Dev
 ./dev.bat
 
-# Production
-docker compose build --no-cache
-docker compose up -d
+# Production — ใช้ build.bat (แนะนำ) หรือทำตามขั้นตอนเดียวกันด้วยมือ
+build.bat
 ```
+
+**⚠️ สำคัญมาก — Docker ไม่ได้ build จาก source โดยตรง:** `api/Dockerfile` copy `api/dist/`
+(ไม่ใช่ `api/server.js`) และ `frontend/Dockerfile` copy `frontend/dist/` (ไม่ใช่ผลลัพธ์ดิบจาก
+`ng build` ที่อยู่ใน `dist/kpi-web/browser/`) — ทั้งสองเป็นไฟล์ **pre-built ที่ต้องเตรียมเองก่อน**
+`docker compose up -d --build` เสมอ ไม่งั้น Docker จะใช้ `dist/` เก่าที่ค้างจากรอบก่อนหน้าเงียบๆ
+โดยไม่มี error ใดๆ (container ขึ้น "Healthy" ปกติ แต่โค้ดที่รันจริงเป็นของเก่า):
+```bash
+# 1) Backend — แค่ copy ไฟล์ (api/package.json "build" script)
+cd api && npm run build && cd ..
+
+# 2) Frontend — ng build + flatten dist/kpi-web/browser/* -> dist/ (ต้องใช้ base-href ถูกต้อง)
+cd frontend && npm run build -- --base-href /khupskpi/
+# Windows: flatten ด้วย xcopy (ดู build.bat) | git-bash: MSYS_NO_PATHCONV=1 กัน path ถูกแปลงเป็น Windows path ผิดๆ
+cd ..
+
+# 3) แล้วค่อย build+deploy Docker
+docker compose down && docker compose up -d --build
+docker builder prune -af
+```
+ถ้าใช้ Bash tool (git-bash) รัน `ng build -- --base-href /khupskpi/` ตรงๆ **ต้องใส่ `MSYS_NO_PATHCONV=1`**
+นำหน้าเสมอ ไม่งั้น MSYS จะแปลง `/khupskpi/` เป็น Windows path (เช่น `C:/Program Files/Git/khupskpi/`)
+ทำให้ asset ทั้งหมดโหลดผิด — ตรวจสอบด้วย `grep '<base href' frontend/dist/index.html` ก่อน deploy ทุกครั้ง
 
 ### Nginx
 - Frontend serve static files ที่ `/khupskpi/`
