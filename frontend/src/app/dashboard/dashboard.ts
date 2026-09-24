@@ -217,6 +217,25 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     this.openFilterDropdown = this.openFilterDropdown === name ? '' : name;
   }
 
+  // ตำแหน่งกล่อง dropdown "View ของฉัน" (คำนวณสดทุกครั้งที่เปิด กัน left-0/right-0 ตายตัวล้นขอบจอ)
+  savedViewsLeftPx: number = 0;
+  savedViewsWidthPx: number = 288;
+
+  toggleSavedViewsDropdown(event: MouseEvent) {
+    const willOpen = this.openFilterDropdown !== 'savedViews';
+    this.openFilterDropdown = willOpen ? 'savedViews' : '';
+    if (!willOpen) return;
+    const wrapper = (event.currentTarget as HTMLElement).closest('.saved-views-container') as HTMLElement;
+    if (!wrapper) return;
+    const margin = 8;
+    const width = Math.min(288, window.innerWidth - margin * 2);
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const maxViewportLeft = Math.max(margin, window.innerWidth - width - margin);
+    const clampedViewportLeft = Math.min(Math.max(wrapperRect.left, margin), maxViewportLeft);
+    this.savedViewsWidthPx = width;
+    this.savedViewsLeftPx = clampedViewportLeft - wrapperRect.left;
+  }
+
   clearFilterArr(arr: string[]) {
     arr.splice(0, arr.length);
   }
