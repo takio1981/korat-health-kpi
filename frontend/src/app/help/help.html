@@ -1999,12 +1999,38 @@
         </div>
       </section>
 
-      <!-- ==================== 22. FAQ ==================== -->
+      <!-- ==================== 22. สิทธิ์การเข้าถึงหน้า ==================== -->
+      <section id="section-role-page-access" *ngIf="canSeeSection('role-page-access')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center"><i class="fas fa-user-lock text-indigo-600"></i></div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-800">22. สิทธิ์การเข้าถึงหน้า</h2>
+            <p class="text-xs text-gray-400">super_admin เท่านั้น</p>
+          </div>
+        </div>
+        <p class="text-sm text-gray-600 mb-4">เปิด/ปิดการเข้าถึงแต่ละหน้าของระบบ แยกตาม Role ได้ทั้ง 8 Role (admin_ssj, admin_cup, admin_hos, admin_sso, user_cup, user_hos, user_sso, user_ssj) — <b>super_admin เข้าได้ทุกหน้าเสมอ</b> ไม่แสดงในตารางและปิดไม่ได้ (กันตั้งค่าผิดพลาดจนเข้าระบบไม่ได้)</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+          <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-3"><p class="text-sm font-bold text-indigo-800"><i class="fas fa-table mr-2"></i>ตารางสิทธิ์ (Matrix)</p><p class="text-xs text-gray-500">แถว = หน้าในระบบ (19 หน้า) / คอลัมน์ = Role — ติ๊ก = เข้าได้</p></div>
+          <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3"><p class="text-sm font-bold text-emerald-800"><i class="fas fa-check-double mr-2"></i>เลือกทั้งหมด</p><p class="text-xs text-gray-500">ปุ่ม "ทั้งหมด" ที่หัวคอลัมน์ (ทีละ Role) หรือไอคอนหน้าแถว (ทีละหน้า)</p></div>
+          <div class="bg-amber-50 border border-amber-200 rounded-xl p-3"><p class="text-sm font-bold text-amber-800"><i class="fas fa-bolt mr-2"></i>มีผลทันที</p><p class="text-xs text-gray-500">กด "บันทึก" แล้วมีผลกับผู้ใช้ที่ login อยู่ในระบบทันที</p></div>
+          <div class="bg-rose-50 border border-rose-200 rounded-xl p-3"><p class="text-sm font-bold text-rose-800"><i class="fas fa-shield-alt mr-2"></i>ควบคุมจริง ไม่ใช่แค่ซ่อนเมนู</p><p class="text-xs text-gray-500">ครอบคลุมทั้งเมนูที่เห็นและสิทธิ์เรียกใช้งาน API จริง</p></div>
+        </div>
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <h4 class="font-bold text-amber-800 text-sm mb-2"><i class="fas fa-exclamation-triangle mr-2"></i>ข้อจำกัดสำคัญที่ควรทราบ</h4>
+          <ul class="list-disc ml-5 text-xs text-gray-700 space-y-1.5">
+            <li>หน้า <b>"จัดการตัวชี้วัด"</b> เมื่อเปิดให้ Role อื่นที่ไม่ใช่ admin_ssj/super_admin จะปลดล็อคเฉพาะฟีเจอร์ <b>"เพิ่มตัวชี้วัดจำนวนมาก"</b> เท่านั้น — การแก้ไข/ลบตัวชี้วัด/หมวดหมู่/หน่วยงาน/หน่วยบริการ และ Form Builder ยังคงจำกัดเฉพาะ super_admin เหมือนเดิมเสมอ</li>
+            <li>หน้า <b>"จัดการผู้ใช้งาน"</b> เมื่อเปิดให้ Role อื่น จะปลดล็อคเฉพาะการดู/เพิ่ม/แก้ไข/ลบ/รีเซ็ตรหัสผ่านผู้ใช้งานทั่วไป — ส่วนอนุมัติ/ตีกลับผู้ใช้ใหม่ ตั้งค่าสิทธิ์แก้ไขข้อมูล และ sync ข้อมูลไป HDC ยังคงจำกัดเฉพาะที่กำหนดไว้เดิม</li>
+            <li>ค่าเริ่มต้นของทุก Role/หน้า ตรงกับพฤติกรรมเดิมของระบบก่อนมีฟีเจอร์นี้ทุกประการ — ไม่กระทบผู้ใช้งานเดิมจนกว่า super_admin จะปรับแก้เอง</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ==================== 23. FAQ ==================== -->
       <section id="section-faq" *ngIf="canSeeSection('faq')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-pink-100 flex items-center justify-center"><i class="fas fa-question-circle text-pink-600"></i></div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">22. คำถามที่พบบ่อย (FAQ)</h2>
+            <h2 class="text-xl font-bold text-gray-800">23. คำถามที่พบบ่อย (FAQ)</h2>
           </div>
         </div>
         <div class="space-y-3">

@@ -66,6 +66,46 @@ export class AuthService {
   // 1.1 ฟังก์ชันบันทึกข้อมูลผู้ใช้
   saveUser(user: any) {
     localStorage.setItem('kpi_user', JSON.stringify(user));
+    this.refreshPageAccessCache();
+  }
+
+  // === Role × Page Access — cache สิทธิ์การเข้าถึงหน้าของ role ปัจจุบัน (โหลดหลัง login ทุกช่องทาง) ===
+  private refreshPageAccessCache() {
+    if (this.getUserRole() === 'super_admin') { localStorage.removeItem('kpi_page_access'); return; }
+    this.getMyPageAccess().subscribe({
+      next: (res: any) => { if (res?.success) localStorage.setItem('kpi_page_access', JSON.stringify(res.access)); },
+      error: () => {} // เงียบไว้ — canAccessPage() fail-open ถ้ายังไม่มี cache กันบล็อกผิดพลาดช่วงรอ fetch
+    });
+  }
+
+  getMyPageAccess(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/my-page-access`, { headers });
+  }
+
+  getRolePageAccess(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/role-page-access`, { headers });
+  }
+
+  saveRolePageAccess(items: { role: string; page_key: string; is_enabled: boolean }[]): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/role-page-access`, { items }, { headers });
+  }
+
+  // true = role ปัจจุบันเข้าหน้านี้ได้ — super_admin ผ่านเสมอ, ไม่มี cache (ยังรอ fetch/หน้าที่ไม่อยู่ใน matrix) = fail-open
+  // (backend เป็นด่านตัดสินจริงเสมอ — ฝั่งนี้แค่กันไม่ให้ navigate ไปหน้าที่ไม่ควรเห็นแบบ proactive)
+  canAccessPage(pageKey: string): boolean {
+    if (this.getUserRole() === 'super_admin') return true;
+    try {
+      const raw = localStorage.getItem('kpi_page_access');
+      if (!raw) return true;
+      const map = JSON.parse(raw);
+      return map[pageKey] !== false;
+    } catch { return true; }
   }
 
   // 1.2 ฟังก์ชันดึงข้อมูลผู้ใช้ปัจจุบัน
@@ -150,6 +190,7 @@ export class AuthService {
     }
     localStorage.removeItem('kpi_token');
     localStorage.removeItem('kpi_user');
+    localStorage.removeItem('kpi_page_access');
   }
 
   // 3. ฟังก์ชันเช็คว่าล็อกอินอยู่หรือไม่ (เช็คว่ามี Token ไหม)
@@ -432,9 +473,12 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
   }
 
   getSettings(): Observable<any> {
+    // ไม่แนบ Authorization ถ้ายังไม่ login (เช่น IdleTimeoutService.start() ที่ทำงานตั้งแต่หน้า login ก่อน login จริง)
+    // กัน backend ได้ "Bearer null" แล้วตีความเป็น token ผิดรูปแบบ → 403 TOKEN_EXPIRED ซึ่ง interceptor จะโชว์ popup
+    // "Session หมดอายุ" หลอกผู้ใช้ทั้งที่ไม่เคย login เลย — ไม่มี token จริงๆ ควรได้ 401 เงียบๆ แทน
     const token = localStorage.getItem('kpi_token');
-    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.get(`${this.apiUrl}/settings`, { headers });
+    const headers = token ? new HttpHeaders({ 'Authorization': `Bearer ${token}` }) : undefined;
+    return this.http.get(`${this.apiUrl}/settings`, headers ? { headers } : {});
   }
 
   updateSettings(settings: any[]): Observable<any> {

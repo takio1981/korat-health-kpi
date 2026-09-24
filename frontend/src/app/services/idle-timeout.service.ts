@@ -20,7 +20,7 @@ export class IdleTimeoutService {
 
   public start(): void {
     this.stop(); // Stop any existing timers
-    
+
     // ดึงค่า Config จาก Server ก่อนเริ่มจับเวลา
     this.authService.getSettings().subscribe({
       next: (res) => {

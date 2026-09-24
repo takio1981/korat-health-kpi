@@ -73,6 +73,11 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.authService.stopTokenExpiryWatcher();
   }
 
+  // ใช้ใน sidebar *ngIf — เมนูไหนแสดง/กดเข้าได้ ควบคุมได้จากหน้า "สิทธิ์การเข้าถึงหน้า" (super_admin)
+  canAccess(pageKey: string): boolean {
+    return this.authService.canAccessPage(pageKey);
+  }
+
   ngOnInit() {
     this.currentUser = this.authService.getUser();
     const role = this.authService.getUserRole();

@@ -39,21 +39,22 @@
     <div class="lg:hidden fixed top-[84px] left-0 right-0 z-50 bg-white/85 backdrop-blur-xl text-green-900 shadow-2xl overflow-y-auto transition-all duration-500 ease-in-out border-b border-white/60"
          [ngClass]="isSidebarOpen ? 'max-h-[75vh] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'">
       <nav class="px-3 py-3 space-y-0.5 text-sm">
-        <a routerLink="/dashboard" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-th-large text-base mr-3 min-w-[20px]"></i>บันทึกผลงานตัวชี้วัด <span *ngIf="pendingKpiCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px] font-bold">{{ pendingKpiCount }}</span></a>
-        <a routerLink="/charts" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-chart-bar text-base mr-3 min-w-[20px]"></i>รายงานสถิติ</a>
-        <a routerLink="/sop" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-sitemap text-base mr-3 min-w-[20px]"></i>ผังกระบวนการ SOP</a>
-        <a routerLink="/notifications" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-bell text-base mr-3 min-w-[20px]" [class.bell-shake]="unreadNotifCount > 0"></i>แจ้งเตือน <span *ngIf="unreadNotifCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px] font-bold">{{ unreadNotifCount }}</span></a>
-        <a *ngIf="isAnyAdmin" routerLink="/users" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-users-cog text-base mr-3 min-w-[20px]"></i>จัดการผู้ใช้งาน <span *ngIf="pendingUsersCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px] font-bold" title="ผู้ใช้รออนุมัติ">{{ pendingUsersCount }}</span></a>
-        <a *ngIf="isAdmin" routerLink="/kpi-manage" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-tasks text-base mr-3 min-w-[20px]"></i>จัดการตัวชี้วัด</a>
-        <a *ngIf="isSuperAdmin" routerLink="/audit-logs" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-history text-base mr-3 min-w-[20px]"></i>ประวัติการใช้งาน</a>
-        <a *ngIf="isSuperAdmin" routerLink="/online-users" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-satellite-dish text-base mr-3 min-w-[20px]"></i>ผู้ใช้งานออนไลน์</a>
-        <a *ngIf="isSuperAdmin" routerLink="/kpi-setup" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-plus-circle text-base mr-3 min-w-[20px]"></i>+KPI ปีงบประมาณใหม่</a>
-        <a *ngIf="isSuperAdmin" routerLink="/kpi-manager" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-layer-group text-base mr-3 min-w-[20px]"></i>จัดการข้อมูล KPI</a>
-        <a *ngIf="isSuperAdmin" routerLink="/announcements" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-bullhorn text-base mr-3 min-w-[20px]"></i>ประกาศระบบ</a>
-        <a *ngIf="isSuperAdmin" routerLink="/backup-manager" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-database text-base mr-3 min-w-[20px]"></i>สำรอง & กู้คืนข้อมูล</a>
-        <a *ngIf="isSuperAdmin" routerLink="/kpi-audit-digest" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-bullhorn text-base mr-3 min-w-[20px]"></i>แจ้งเตือนการบันทึก KPI</a>
-        <a *ngIf="isSuperAdmin" routerLink="/error-logs" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-bug text-base mr-3 min-w-[20px]"></i>Error Logs</a>
-        <a *ngIf="isSuperAdmin" routerLink="/settings" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-sliders-h text-base mr-3 min-w-[20px]"></i>ตั้งค่าระบบ</a>
+        <a *ngIf="canAccess('dashboard')" routerLink="/dashboard" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-th-large text-base mr-3 min-w-[20px]"></i>บันทึกผลงานตัวชี้วัด <span *ngIf="pendingKpiCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px] font-bold">{{ pendingKpiCount }}</span></a>
+        <a *ngIf="canAccess('charts')" routerLink="/charts" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-chart-bar text-base mr-3 min-w-[20px]"></i>รายงานสถิติ</a>
+        <a *ngIf="canAccess('sop')" routerLink="/sop" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-sitemap text-base mr-3 min-w-[20px]"></i>ผังกระบวนการ SOP</a>
+        <a *ngIf="canAccess('notifications')" routerLink="/notifications" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-bell text-base mr-3 min-w-[20px]" [class.bell-shake]="unreadNotifCount > 0"></i>แจ้งเตือน <span *ngIf="unreadNotifCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px] font-bold">{{ unreadNotifCount }}</span></a>
+        <a *ngIf="isAnyAdmin && canAccess('users')" routerLink="/users" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-users-cog text-base mr-3 min-w-[20px]"></i>จัดการผู้ใช้งาน <span *ngIf="pendingUsersCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px] font-bold" title="ผู้ใช้รออนุมัติ">{{ pendingUsersCount }}</span></a>
+        <a *ngIf="canAccess('kpi-manage')" routerLink="/kpi-manage" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-tasks text-base mr-3 min-w-[20px]"></i>จัดการตัวชี้วัด</a>
+        <a *ngIf="canAccess('audit-logs')" routerLink="/audit-logs" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-history text-base mr-3 min-w-[20px]"></i>ประวัติการใช้งาน</a>
+        <a *ngIf="canAccess('online-users')" routerLink="/online-users" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-satellite-dish text-base mr-3 min-w-[20px]"></i>ผู้ใช้งานออนไลน์</a>
+        <a *ngIf="canAccess('kpi-setup')" routerLink="/kpi-setup" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-plus-circle text-base mr-3 min-w-[20px]"></i>+KPI ปีงบประมาณใหม่</a>
+        <a *ngIf="canAccess('kpi-manager')" routerLink="/kpi-manager" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-layer-group text-base mr-3 min-w-[20px]"></i>จัดการข้อมูล KPI</a>
+        <a *ngIf="canAccess('announcements')" routerLink="/announcements" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-bullhorn text-base mr-3 min-w-[20px]"></i>ประกาศระบบ</a>
+        <a *ngIf="canAccess('backup-manager')" routerLink="/backup-manager" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-database text-base mr-3 min-w-[20px]"></i>สำรอง & กู้คืนข้อมูล</a>
+        <a *ngIf="canAccess('kpi-audit-digest')" routerLink="/kpi-audit-digest" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-bullhorn text-base mr-3 min-w-[20px]"></i>แจ้งเตือนการบันทึก KPI</a>
+        <a *ngIf="canAccess('error-logs')" routerLink="/error-logs" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-bug text-base mr-3 min-w-[20px]"></i>Error Logs</a>
+        <a *ngIf="canAccess('settings')" routerLink="/settings" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-sliders-h text-base mr-3 min-w-[20px]"></i>ตั้งค่าระบบ</a>
+        <a *ngIf="isSuperAdmin" routerLink="/role-page-access" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-user-lock text-base mr-3 min-w-[20px]"></i>สิทธิ์การเข้าถึงหน้า</a>
       </nav>
     </div>
 
@@ -72,7 +73,7 @@
       <nav class="flex-1 py-4 space-y-1 overflow-y-auto text-sm transition-all duration-300"
            [ngClass]="isSidebarCollapsed ? 'px-2' : 'px-4'">
         <!-- บันทึกผลงานตัวชี้วัด -->
-        <a routerLink="/dashboard" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+        <a *ngIf="canAccess('dashboard')" routerLink="/dashboard" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
            [title]="isSidebarCollapsed ? 'บันทึกผลงานตัวชี้วัด' : ''"
            class="relative flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
            [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
@@ -91,7 +92,7 @@
           </span>
         </a>
         <!-- รายงานสถิติ -->
-        <a routerLink="/charts" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+        <a *ngIf="canAccess('charts')" routerLink="/charts" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
            [title]="isSidebarCollapsed ? 'รายงานสถิติ' : ''"
            class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
            [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
@@ -99,7 +100,7 @@
           <span *ngIf="!isSidebarCollapsed" class="truncate">รายงานสถิติ</span>
         </a>
         <!-- ผังกระบวนการ SOP -->
-        <a routerLink="/sop" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+        <a *ngIf="canAccess('sop')" routerLink="/sop" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
            [title]="isSidebarCollapsed ? 'ผังกระบวนการ SOP' : ''"
            class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
            [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
@@ -107,7 +108,7 @@
           <span *ngIf="!isSidebarCollapsed" class="truncate">ผังกระบวนการ SOP</span>
         </a>
         <!-- แจ้งเตือน -->
-        <a routerLink="/notifications" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+        <a *ngIf="canAccess('notifications')" routerLink="/notifications" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
            [title]="isSidebarCollapsed ? 'แจ้งเตือน' : ''"
            class="relative flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
            [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
@@ -122,7 +123,7 @@
           </span>
         </a>
         <!-- จัดการผู้ใช้งาน -->
-        <a *ngIf="isAnyAdmin" routerLink="/users" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+        <a *ngIf="isAnyAdmin && canAccess('users')" routerLink="/users" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
            [title]="isSidebarCollapsed ? 'จัดการผู้ใช้งาน' : ''"
            class="relative flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
            [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
@@ -137,7 +138,7 @@
           </span>
         </a>
         <!-- จัดการตัวชี้วัด -->
-        <a *ngIf="isAdmin" routerLink="/kpi-manage" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+        <a *ngIf="canAccess('kpi-manage')" routerLink="/kpi-manage" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
            [title]="isSidebarCollapsed ? 'จัดการตัวชี้วัด' : ''"
            class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
            [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
@@ -145,7 +146,7 @@
           <span *ngIf="!isSidebarCollapsed" class="truncate">จัดการตัวชี้วัด</span>
         </a>
         <!-- ประวัติการใช้งาน -->
-        <a *ngIf="isSuperAdmin" routerLink="/audit-logs" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+        <a *ngIf="canAccess('audit-logs')" routerLink="/audit-logs" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
            [title]="isSidebarCollapsed ? 'ประวัติการใช้งาน' : ''"
            class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
            [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
@@ -153,7 +154,7 @@
           <span *ngIf="!isSidebarCollapsed" class="truncate">ประวัติการใช้งาน</span>
         </a>
         <!-- ผู้ใช้งานออนไลน์ -->
-        <a *ngIf="isSuperAdmin" routerLink="/online-users" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+        <a *ngIf="canAccess('online-users')" routerLink="/online-users" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
            [title]="isSidebarCollapsed ? 'ผู้ใช้งานออนไลน์' : ''"
            class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
            [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
@@ -164,7 +165,7 @@
           </span>
         </a>
         <!-- +KPI ปีงบประมาณใหม่ -->
-        <a *ngIf="isSuperAdmin" routerLink="/kpi-setup" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+        <a *ngIf="canAccess('kpi-setup')" routerLink="/kpi-setup" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
            [title]="isSidebarCollapsed ? '+KPI ปีงบประมาณใหม่' : ''"
            class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
            [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
@@ -172,7 +173,7 @@
           <span *ngIf="!isSidebarCollapsed" class="truncate">+KPI ปีงบประมาณใหม่</span>
         </a>
         <!-- จัดการข้อมูล KPI -->
-        <a *ngIf="isSuperAdmin" routerLink="/kpi-manager" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+        <a *ngIf="canAccess('kpi-manager')" routerLink="/kpi-manager" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
            [title]="isSidebarCollapsed ? 'จัดการข้อมูล KPI' : ''"
            class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
            [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
@@ -180,7 +181,7 @@
           <span *ngIf="!isSidebarCollapsed" class="truncate">จัดการข้อมูล KPI</span>
         </a>
         <!-- ประกาศระบบ -->
-        <a *ngIf="isSuperAdmin" routerLink="/announcements" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+        <a *ngIf="canAccess('announcements')" routerLink="/announcements" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
            [title]="isSidebarCollapsed ? 'ประกาศระบบ' : ''"
            class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
            [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
@@ -188,7 +189,7 @@
           <span *ngIf="!isSidebarCollapsed" class="truncate">ประกาศระบบ</span>
         </a>
         <!-- สำรอง & กู้คืนข้อมูล -->
-        <a *ngIf="isSuperAdmin" routerLink="/backup-manager" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+        <a *ngIf="canAccess('backup-manager')" routerLink="/backup-manager" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
            [title]="isSidebarCollapsed ? 'สำรอง & กู้คืนข้อมูล' : ''"
            class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
            [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
@@ -196,7 +197,7 @@
           <span *ngIf="!isSidebarCollapsed" class="truncate">สำรอง & กู้คืนข้อมูล</span>
         </a>
         <!-- แจ้งเตือนการบันทึก KPI -->
-        <a *ngIf="isSuperAdmin" routerLink="/kpi-audit-digest" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+        <a *ngIf="canAccess('kpi-audit-digest')" routerLink="/kpi-audit-digest" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
            [title]="isSidebarCollapsed ? 'แจ้งเตือนการบันทึก KPI' : ''"
            class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
            [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
@@ -204,7 +205,7 @@
           <span *ngIf="!isSidebarCollapsed" class="truncate">แจ้งเตือนการบันทึก KPI</span>
         </a>
         <!-- Error Logs -->
-        <a *ngIf="isSuperAdmin" routerLink="/error-logs" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+        <a *ngIf="canAccess('error-logs')" routerLink="/error-logs" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
            [title]="isSidebarCollapsed ? 'Error Logs' : ''"
            class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
            [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
@@ -212,12 +213,20 @@
           <span *ngIf="!isSidebarCollapsed" class="truncate">Error Logs</span>
         </a>
         <!-- ตั้งค่าระบบ -->
-        <a *ngIf="isSuperAdmin" routerLink="/settings" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+        <a *ngIf="canAccess('settings')" routerLink="/settings" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
            [title]="isSidebarCollapsed ? 'ตั้งค่าระบบ' : ''"
            class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
            [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
           <i class="fas fa-sliders-h text-lg min-w-[24px]" [ngClass]="isSidebarCollapsed ? 'text-center' : 'mr-3'"></i>
           <span *ngIf="!isSidebarCollapsed" class="truncate">ตั้งค่าระบบ</span>
+        </a>
+        <!-- สิทธิ์การเข้าถึงหน้า (super_admin เท่านั้น — ไม่ผ่านระบบ toggle ป้องกันปิดสิทธิ์ตัวเอง) -->
+        <a *ngIf="isSuperAdmin" routerLink="/role-page-access" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+           [title]="isSidebarCollapsed ? 'สิทธิ์การเข้าถึงหน้า' : ''"
+           class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
+           [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
+          <i class="fas fa-user-lock text-lg min-w-[24px]" [ngClass]="isSidebarCollapsed ? 'text-center' : 'mr-3'"></i>
+          <span *ngIf="!isSidebarCollapsed" class="truncate">สิทธิ์การเข้าถึงหน้า</span>
         </a>
       </nav>
 
@@ -261,7 +270,7 @@
 
         <div class="flex items-center shrink-0 gap-3 sm:gap-4">
           <!-- Feedback Icon -->
-          <a routerLink="/feedback" class="relative text-green-800 hover:text-green-600">
+          <a *ngIf="canAccess('feedback')" routerLink="/feedback" class="relative text-green-800 hover:text-green-600">
             <i class="fas fa-comments text-lg sm:text-xl"></i>
             <span *ngIf="feedbackUnreadCount > 0" class="absolute -top-1 -right-2 flex h-4 min-w-[16px] px-0.5 items-center justify-center rounded-full bg-teal-500 text-[9px] font-bold text-white animate-pulse">
               {{ feedbackUnreadCount > 9 ? '9+' : feedbackUnreadCount }}
@@ -549,14 +558,14 @@
     </div>
     <!-- Quick Links -->
     <div class="p-2 space-y-0.5 border-b border-gray-100">
-      <a routerLink="/feedback" (click)="closeProfileDropdown()" class="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
+      <a *ngIf="canAccess('feedback')" routerLink="/feedback" (click)="closeProfileDropdown()" class="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
         <i class="fas fa-comments w-4 text-center text-teal-500"></i>ข้อเสนอแนะ
         <span *ngIf="feedbackUnreadCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[9px] font-bold">{{ feedbackUnreadCount }}</span>
       </a>
-      <a routerLink="/help" (click)="closeProfileDropdown()" class="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
+      <a *ngIf="canAccess('help')" routerLink="/help" (click)="closeProfileDropdown()" class="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
         <i class="fas fa-book-open w-4 text-center text-blue-500"></i>คู่มือการใช้งาน
       </a>
-      <a routerLink="/changelog" (click)="closeProfileDropdown()" class="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
+      <a *ngIf="canAccess('changelog')" routerLink="/changelog" (click)="closeProfileDropdown()" class="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
         <i class="fas fa-history w-4 text-center text-indigo-500"></i>ประวัติการอัปเดต
       </a>
     </div>

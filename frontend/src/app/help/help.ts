@@ -62,7 +62,8 @@ export class HelpComponent {
     { id: 'error-logs',     icon: 'fa-bug',              label: '19. Error Logs',                   roles: HelpComponent.SUPER_ONLY },
     { id: 'maintenance',    icon: 'fa-tools',            label: '20. โหมดปิดปรับปรุงระบบ',            roles: HelpComponent.SUPER_ONLY },
     { id: 'feedback',       icon: 'fa-comments',         label: '21. กระดานข้อเสนอแนะ',               roles: 'all' },
-    { id: 'faq',            icon: 'fa-question-circle',  label: '22. คำถามที่พบบ่อย',                 roles: 'all' }
+    { id: 'role-page-access', icon: 'fa-user-lock',      label: '22. สิทธิ์การเข้าถึงหน้า',            roles: HelpComponent.SUPER_ONLY },
+    { id: 'faq',            icon: 'fa-question-circle',  label: '23. คำถามที่พบบ่อย',                 roles: 'all' }
   ];
 
   /** sections ที่ user role ปัจจุบันเห็น (sidebar/menu ใช้ตัวนี้) */

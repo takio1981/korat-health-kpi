@@ -22,10 +22,10 @@ import { ErrorLogsComponent } from './error-logs/error-logs';
 import { SsoLogsComponent } from './sso-logs/sso-logs';
 import { SsoCallbackComponent } from './sso-callback/sso-callback';
 import { SopComponent } from './sop/sop';
+import { RolePageAccessComponent } from './role-page-access/role-page-access';
 import { authGuard } from './guards/auth-guard';
-import { adminGuard } from './guards/admin-guard';
-import { anyAdminGuard } from './guards/any-admin-guard';
 import { superAdminGuard } from './guards/super-admin-guard';
+import { pageAccessGuard } from './guards/page-access-guard';
 import { LayoutComponent } from './layout/layout';
 
 export const routes: Routes = [
@@ -38,25 +38,26 @@ export const routes: Routes = [
     component: LayoutComponent,
     canActivate: [authGuard],
     children: [
-      { path: 'dashboard', component: DashboardComponent, data: { title: 'บันทึกผลงานตัวชี้วัด' } },
-      { path: 'charts', component: ChartComponent, data: { title: 'รายงานสถิติ' } },
-      { path: 'notifications', component: NotificationsComponent, data: { title: 'การแจ้งเตือน' } },
-      { path: 'users', component: UserManagementComponent, canActivate: [anyAdminGuard], data: { title: 'จัดการผู้ใช้งาน' } },
-      { path: 'kpi-setup', component: KpiSetupComponent, canActivate: [superAdminGuard], data: { title: 'สร้าง KPI ปีงบประมาณใหม่' } },
-      { path: 'audit-logs', component: AuditLogComponent, canActivate: [superAdminGuard], data: { title: 'ประวัติการใช้งาน' } },
-      { path: 'kpi-manage', component: KpiManageComponent, canActivate: [adminGuard], data: { title: 'จัดการตัวชี้วัด' } },
-      { path: 'kpi-manager', component: KpiManagerComponent, canActivate: [superAdminGuard], data: { title: 'จัดการข้อมูล KPI' } },
-      { path: 'settings', component: SettingsComponent, canActivate: [superAdminGuard], data: { title: 'ตั้งค่าระบบ' } },
-      { path: 'announcements', component: AnnouncementsComponent, canActivate: [superAdminGuard], data: { title: 'ประกาศระบบ' } },
-      { path: 'online-users', component: OnlineUsersComponent, canActivate: [superAdminGuard], data: { title: 'ผู้ใช้งานออนไลน์' } },
-      { path: 'backup-manager', component: BackupManagerComponent, canActivate: [superAdminGuard], data: { title: 'สำรอง & กู้คืนฐานข้อมูล' } },
-      { path: 'kpi-audit-digest', component: KpiAuditDigestComponent, canActivate: [superAdminGuard], data: { title: 'แจ้งเตือนการบันทึก KPI' } },
-      { path: 'error-logs', component: ErrorLogsComponent, canActivate: [superAdminGuard], data: { title: 'Error Logs' } },
-      { path: 'sso-logs', component: SsoLogsComponent, canActivate: [superAdminGuard], data: { title: 'SSO Audit Logs' } },
-      { path: 'sop', component: SopComponent, data: { title: 'ผังกระบวนการทำงาน (SOP)' } },
-      { path: 'feedback', component: FeedbackComponent, data: { title: 'กระดานข้อเสนอแนะ' } },
-      { path: 'changelog', component: ChangelogComponent, data: { title: 'ประวัติการอัปเดต' } },
-      { path: 'help', component: HelpComponent, data: { title: 'คู่มือการใช้งาน' } },
+      { path: 'dashboard', component: DashboardComponent, canActivate: [pageAccessGuard], data: { title: 'บันทึกผลงานตัวชี้วัด', pageKey: 'dashboard' } },
+      { path: 'charts', component: ChartComponent, canActivate: [pageAccessGuard], data: { title: 'รายงานสถิติ', pageKey: 'charts' } },
+      { path: 'notifications', component: NotificationsComponent, canActivate: [pageAccessGuard], data: { title: 'การแจ้งเตือน', pageKey: 'notifications' } },
+      { path: 'users', component: UserManagementComponent, canActivate: [pageAccessGuard], data: { title: 'จัดการผู้ใช้งาน', pageKey: 'users' } },
+      { path: 'kpi-setup', component: KpiSetupComponent, canActivate: [pageAccessGuard], data: { title: 'สร้าง KPI ปีงบประมาณใหม่', pageKey: 'kpi-setup' } },
+      { path: 'audit-logs', component: AuditLogComponent, canActivate: [pageAccessGuard], data: { title: 'ประวัติการใช้งาน', pageKey: 'audit-logs' } },
+      { path: 'kpi-manage', component: KpiManageComponent, canActivate: [pageAccessGuard], data: { title: 'จัดการตัวชี้วัด', pageKey: 'kpi-manage' } },
+      { path: 'kpi-manager', component: KpiManagerComponent, canActivate: [pageAccessGuard], data: { title: 'จัดการข้อมูล KPI', pageKey: 'kpi-manager' } },
+      { path: 'settings', component: SettingsComponent, canActivate: [pageAccessGuard], data: { title: 'ตั้งค่าระบบ', pageKey: 'settings' } },
+      { path: 'role-page-access', component: RolePageAccessComponent, canActivate: [superAdminGuard], data: { title: 'สิทธิ์การเข้าถึงหน้า' } },
+      { path: 'announcements', component: AnnouncementsComponent, canActivate: [pageAccessGuard], data: { title: 'ประกาศระบบ', pageKey: 'announcements' } },
+      { path: 'online-users', component: OnlineUsersComponent, canActivate: [pageAccessGuard], data: { title: 'ผู้ใช้งานออนไลน์', pageKey: 'online-users' } },
+      { path: 'backup-manager', component: BackupManagerComponent, canActivate: [pageAccessGuard], data: { title: 'สำรอง & กู้คืนฐานข้อมูล', pageKey: 'backup-manager' } },
+      { path: 'kpi-audit-digest', component: KpiAuditDigestComponent, canActivate: [pageAccessGuard], data: { title: 'แจ้งเตือนการบันทึก KPI', pageKey: 'kpi-audit-digest' } },
+      { path: 'error-logs', component: ErrorLogsComponent, canActivate: [pageAccessGuard], data: { title: 'Error Logs', pageKey: 'error-logs' } },
+      { path: 'sso-logs', component: SsoLogsComponent, canActivate: [pageAccessGuard], data: { title: 'SSO Audit Logs', pageKey: 'sso-logs' } },
+      { path: 'sop', component: SopComponent, canActivate: [pageAccessGuard], data: { title: 'ผังกระบวนการทำงาน (SOP)', pageKey: 'sop' } },
+      { path: 'feedback', component: FeedbackComponent, canActivate: [pageAccessGuard], data: { title: 'กระดานข้อเสนอแนะ', pageKey: 'feedback' } },
+      { path: 'changelog', component: ChangelogComponent, canActivate: [pageAccessGuard], data: { title: 'ประวัติการอัปเดต', pageKey: 'changelog' } },
+      { path: 'help', component: HelpComponent, canActivate: [pageAccessGuard], data: { title: 'คู่มือการใช้งาน', pageKey: 'help' } },
     ]
   },
   { path: '**', redirectTo: 'login' }

@@ -334,6 +334,43 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - UI `/online-users` — auto-refresh 5-60s, filter role + time window, สถานะ dot สีตาม idle_seconds (<60/<300/<900/>900)
 - Parse user-agent ฝั่ง frontend (Windows/Android/iOS/macOS/Linux × Edge/Chrome/Firefox/Safari)
 
+### Role × Page Access (Dynamic — Super Admin ตั้งค่าได้)
+- หน้า `/role-page-access` (sidebar: "สิทธิ์การเข้าถึงหน้า", super_admin เท่านั้น เสมอ ไม่ผ่านระบบนี้เอง กันปิดสิทธิ์ตัวเอง) —
+  Super Admin เปิด/ปิดการเข้าถึงแต่ละหน้าของระบบ แยกตาม role ได้ทั้ง 8 role (ไม่รวม super_admin ซึ่งเข้าได้ทุกหน้าเสมอ)
+- ตาราง `role_page_access` (role, page_key, is_enabled) UNIQUE(role, page_key) — auto-seed ตอน startup ให้ตรงกับ
+  พฤติกรรม route guard/middleware **เดิม** เป๊ะ (ไม่เปลี่ยนพฤติกรรมจนกว่า super_admin จะแก้เอง)
+- `pageKey` ต้องตรงกับ `route.data['pageKey']` ใน `app.routes.ts` เสมอ (19 หน้า: dashboard, charts, notifications, sop,
+  feedback, help, changelog, users, kpi-manage, kpi-setup, audit-logs, kpi-manager, settings, announcements,
+  online-users, backup-manager, kpi-audit-digest, error-logs, sso-logs)
+- **Backend enforcement** (`api/server.js`):
+  - `PAGE_ACCESS_RULES` (exact/regex/prefix ผสมกัน) + `resolvePageKeyFromPath(method, path)` → เช็คใน
+    `authenticateToken` กลาง (ก่อน session check) + OR เพิ่มใน `isAdmin`/`isAnyAdmin`/`isSuperAdmin` (ให้ role ที่ถูก
+    เปิดสิทธิ์เพิ่มผ่านหน้านี้ ผ่าน middleware เดิมได้จริง ไม่ใช่แค่ผ่าน authenticateToken แล้วโดน middleware เดิมเตะออก)
+  - **ห้าม map ด้วย prefix กว้างๆ กับ endpoint ที่มี authorization หลายระดับปนกันใต้ path เดียวกัน** (over-grant risk) —
+    เช่น `/users` มีทั้ง isAnyAdmin (จัดการทั่วไป) + isAdmin (approve/reject) + isSuperAdmin (permissions/sync-to-hdc)
+    ปนกัน, `/indicators`+`/departments`+`/hospitals`+... มีทั้ง GET เปิดให้ทุก role (dropdown ใช้ร่วมทั้งระบบ) และ
+    POST/PUT/DELETE ที่ isSuperAdmin — ต้องใช้ exact/regex เฉพาะจุด ดู comment เหนือ `PAGE_ACCESS_RULES` ในโค้ดก่อนเพิ่ม
+    endpoint ใหม่เข้ากลุ่มเดิมเสมอ
+  - **ข้อจำกัดที่ตั้งใจ (ไม่ครอบคลุมทั้งหน้า):** pageKey `kpi-manage` ครอบคลุมเฉพาะ `/bulk-add-kpi*` (isAdmin เดิม) —
+    การแก้ไข/ลบตัวชี้วัด/หมวดหมู่/หน่วยงาน/หน่วยบริการ/Form Builder ยังคง hardcode `isSuperAdmin` เสมอ (ตรงกับที่
+    `kpi-manage.html` เองก็ซ่อนปุ่มเหล่านี้จาก admin_ssj ด้วย `*ngIf="isSuperAdmin"` อยู่แล้ว) — pageKey `users`
+    ครอบคลุมเฉพาะ endpoint ที่เดิมเป็น isAnyAdmin — approve/reject/toggle-active/basic (isAdmin เดิม) และ
+    bulk-toggle-active/permissions/sync-compare/sync-to-hdc (isSuperAdmin เดิม) ไม่รวมอยู่ในระบบนี้
+  - Endpoint ที่เปิดให้ทุก role ใช้ร่วมกันข้ามหน้า (เช่น `/users/change-password`, `/notifications/unread-count`,
+    `/notifications/pending-kpi`) ถูก exclude ออกจากระบบนี้โดยเจตนา (`pageKey: null` ใน rule หรือไม่มี rule เลย)
+  - `_rolePageAccessCache` (Map, role → Set<pageKey>) โหลดตอน startup + reload ทุกครั้งที่ `PUT /role-page-access`
+- **Frontend enforcement**: `guards/page-access-guard.ts` เช็ค `route.data['pageKey']` กับ
+  `authService.canAccessPage()` — ใช้แทน `adminGuard`/`anyAdminGuard`/`superAdminGuard` เดิมในทุก route ที่ toggle ได้
+  (ไฟล์ guard เดิม 2 ไฟล์นี้ถูกลบแล้ว — เหลือแค่ `auth-guard.ts` + `super-admin-guard.ts` ที่ยัง hardcode จริงๆ
+  เช่น `/role-page-access` เอง)
+  - `AuthService.canAccessPage(pageKey)` อ่านจาก `localStorage['kpi_page_access']` (cache ที่ set โดย
+    `saveUser()` ทุกครั้งหลัง login ผ่าน `GET /my-page-access`) — **fail-open** (คืน `true`) ถ้ายังไม่มี cache/pageKey
+    ไม่อยู่ใน map เพราะ backend เป็นด่านตัดสินจริงเสมอ ฝั่งนี้แค่กัน navigate แบบ proactive/ซ่อนเมนู
+  - Layout sidebar (ทั้ง desktop expanded/collapsed + mobile + profile dropdown) ใช้ `canAccess('pageKey')`
+    (wrapper ใน `layout.ts` เรียก `authService.canAccessPage()`) แทนเช็ค role ตรงๆ ทุกจุด
+- API: `GET /my-page-access` (ทุก role, คืน `{pageKey: boolean}` ของ role ตัวเอง), `GET /role-page-access` +
+  `PUT /role-page-access` (super_admin เท่านั้น, จัดการทั้งเมทริกซ์)
+
 ### Single Session Enforcement (กัน login ซ้อน)
 - ตาราง `users` เพิ่ม 2 คอลัมน์: `active_session_id` VARCHAR(64) + `session_started_at` DATETIME + index `idx_active_session`
 - หลักการ: 1 user = 1 active session — login ใหม่ขณะมี session ที่อื่นอยู่จะถูก block (ถ้า last_seen ≤ 5 นาที)
@@ -565,6 +602,8 @@ docker compose up -d
 - ❌ Export `result` ใช้ SUM ของทุกเดือน — ต้องใช้ค่าเดือนล่าสุดที่คีย์ (last actual)
 - ❌ Export ใช้ timestamp-based diff (created_at vs update_date) — ต้องใช้ content-based diff
 - ❌ Export แยก hasForm path (ไม่ส่ง m10-m09) — ตารางต้องมีเดือนเสมอ + form fields เพิ่มเติม
+- ❌ เพิ่ม route ใหม่ใน app.routes.ts โดยไม่ใส่ `data.pageKey` + `pageAccessGuard` (ระบบ Role × Page Access จะไม่ครอบคลุมหน้านั้น)
+- ❌ Map endpoint ใหม่เข้า `PAGE_ACCESS_RULES` ด้วย prefix กว้างๆ โดยไม่เช็คก่อนว่า path นั้นมี middleware ระดับต่างกันปนกันหรือไม่ (over-grant) — ดูส่วน "Role × Page Access" ก่อนเสมอ
 
 ## 12. Key Tables
 
@@ -589,3 +628,4 @@ docker compose up -d
 | system_announcements | ประกาศระบบ | id, title, content_html, bg_color, text_color, blink_enabled, show_on_header, show_on_login, is_active |
 | export_schedules | ตารางเวลา Export อัตโนมัติ | id, name, is_enabled, days_of_week, time_of_day, year_bh, indicator_scope, indicator_ids, auto_sync_hdc, notify_email, notify_telegram, last_run_at, last_status |
 | export_schedule_logs | ประวัติการรัน schedule | id, schedule_id, run_at, status, inserted, updated_count, unchanged, tables_count, duration_ms, notified_email, notified_telegram, error_msg |
+| role_page_access | สิทธิ์การเข้าถึงหน้าต่อ role (super_admin ตั้งค่าได้) | id, role, page_key, is_enabled (UNIQUE role+page_key) |

@@ -557,6 +557,172 @@ setInterval(() => {
     }
 }, 5 * 60 * 1000); // ทุก 5 นาที
 
+// ============================================================================
+// === Role × Page Access — Super Admin เปิด/ปิดการเข้าถึงแต่ละหน้าต่อ Role ===
+// ============================================================================
+// pageKey ต้องตรงกับ path ใน frontend app.routes.ts (route.data.pageKey) เพื่อให้ sidebar/guard
+// ฝั่ง frontend และ enforcement ฝั่ง backend อ้างอิง key เดียวกัน
+const PAGE_ACCESS_ROLES = ['admin_ssj', 'admin_cup', 'admin_hos', 'admin_sso', 'user_cup', 'user_hos', 'user_sso', 'user_ssj'];
+// super_admin ไม่เก็บ row — เข้าได้ทุกหน้าเสมอ (hardcode ผ่าน hasPageAccess ด้านล่าง กันปิดตัวเองไม่ได้)
+const PAGE_ACCESS_PAGES = [
+    { key: 'dashboard', label: 'บันทึกผลงานตัวชี้วัด' },
+    { key: 'charts', label: 'รายงานสถิติ' },
+    { key: 'notifications', label: 'แจ้งเตือน' },
+    { key: 'sop', label: 'ผังกระบวนการ SOP' },
+    { key: 'feedback', label: 'กระดานข้อเสนอแนะ' },
+    { key: 'help', label: 'คู่มือการใช้งาน' },
+    { key: 'changelog', label: 'ประวัติการอัปเดต' },
+    { key: 'users', label: 'จัดการผู้ใช้งาน' },
+    { key: 'kpi-manage', label: 'จัดการตัวชี้วัด' },
+    { key: 'kpi-setup', label: '+KPI ปีงบประมาณใหม่' },
+    { key: 'audit-logs', label: 'ประวัติการใช้งาน' },
+    { key: 'kpi-manager', label: 'จัดการข้อมูล KPI ↔ HDC' },
+    { key: 'settings', label: 'ตั้งค่าระบบ' },
+    { key: 'announcements', label: 'ประกาศระบบ' },
+    { key: 'online-users', label: 'ผู้ใช้งานออนไลน์' },
+    { key: 'backup-manager', label: 'สำรอง & กู้คืนข้อมูล' },
+    { key: 'kpi-audit-digest', label: 'แจ้งเตือนการบันทึก KPI' },
+    { key: 'error-logs', label: 'Error Logs' },
+    { key: 'sso-logs', label: 'SSO Audit Logs' },
+];
+// ค่าเริ่มต้น (seed ครั้งแรกเท่านั้น) — สะท้อนพฤติกรรมเดิมของระบบก่อนมี feature นี้ทุกประการ
+// (route guard เดิมใน app.routes.ts + isAdmin/isAnyAdmin/isSuperAdmin เดิมในแต่ละ endpoint)
+// ไม่ list role ในหน้าไหน = ปิดเริ่มต้นสำหรับหน้านั้น
+const ROLES_ALL_LOGGED_IN = ['admin_ssj', 'admin_cup', 'admin_hos', 'admin_sso', 'user_cup', 'user_hos', 'user_sso', 'user_ssj'];
+const ROLES_ANY_ADMIN = ['admin_ssj', 'admin_cup', 'admin_hos', 'admin_sso']; // ตรงกับ ROLE_ADMIN_ALL (ไม่รวม super_admin)
+const PAGE_ACCESS_DEFAULT_ENABLED = {
+    dashboard: ROLES_ALL_LOGGED_IN,
+    charts: ROLES_ALL_LOGGED_IN,
+    notifications: ROLES_ALL_LOGGED_IN,
+    sop: ROLES_ALL_LOGGED_IN,
+    feedback: ROLES_ALL_LOGGED_IN,
+    help: ROLES_ALL_LOGGED_IN,
+    changelog: ROLES_ALL_LOGGED_IN,
+    users: ROLES_ANY_ADMIN,
+    'kpi-manage': ['admin_ssj'], // ตรงกับ ROLE_ADMIN_CENTRAL (isAdmin เดิม)
+    'kpi-setup': [], // route guard เดิม = superAdminGuard เท่านั้น
+    'audit-logs': [],
+    'kpi-manager': [],
+    settings: [],
+    announcements: [],
+    'online-users': [],
+    'backup-manager': [],
+    'kpi-audit-digest': [],
+    'error-logs': [],
+    'sso-logs': [],
+};
+
+// Cache ในหน่วยความจำ — role -> Set<pageKey ที่เปิดใช้งาน> โหลดตอน startup + reload เมื่อมีการบันทึกค่าใหม่
+const _rolePageAccessCache = new Map();
+async function loadRolePageAccessCache() {
+    try {
+        const [rows] = await db.query('SELECT role, page_key FROM role_page_access WHERE is_enabled = 1');
+        const next = new Map();
+        for (const r of rows) {
+            if (!next.has(r.role)) next.set(r.role, new Set());
+            next.get(r.role).add(r.page_key);
+        }
+        _rolePageAccessCache.clear();
+        for (const [k, v] of next) _rolePageAccessCache.set(k, v);
+    } catch (e) {
+        console.error('❌ loadRolePageAccessCache failed:', e.message);
+    }
+}
+// super_admin เข้าได้ทุกหน้าเสมอ (hardcode กันตั้งค่าผิดพลาดจนตัวเองเข้าระบบไม่ได้)
+function hasPageAccess(role, pageKey) {
+    if (role === 'super_admin') return true;
+    if (!pageKey) return false;
+    const set = _rolePageAccessCache.get(role);
+    return !!(set && set.has(pageKey));
+}
+
+// === Path → pageKey resolver สำหรับ enforcement ฝั่ง backend ===
+// สำคัญมาก — กันไม่ให้เปิดสิทธิ์เกินของเดิมโดยไม่ตั้งใจ (over-grant): endpoint หลายกลุ่มใน server.js มี
+// authorization ปนกันหลายระดับใต้ path เดียวกัน (isAnyAdmin/isAdmin/isSuperAdmin ปนกัน หรือแม้แต่เปิดให้ทุก role)
+// เช่น /users มีทั้ง endpoint isAnyAdmin (จัดการผู้ใช้ทั่วไป) และ isAdmin (approve/reject) และ isSuperAdmin
+// (permissions/sync-to-hdc) ปนกัน — ห้าม map ด้วย prefix กว้างๆ เด็ดขาดเพราะจะทำให้ role ที่ถูก seed
+// ให้เข้าหน้านี้ได้ (ตรงกับ tier ที่กว้างที่สุด) ได้สิทธิ์ทำ action ระดับที่แคบกว่าไปด้วยทั้งที่ไม่เคยมีสิทธิ์มาก่อน
+// หลักการ: pageKey หนึ่งจะรวม endpoint ได้ก็ต่อเมื่อทุก role ที่ default เปิดหน้านั้น มีสิทธิ์ endpoint นั้นอยู่แล้วจริง
+// endpoint ที่ authorization เข้มกว่า default ของหน้า (เช่น kpi-manage.html เองก็ซ่อนปุ่มแก้ไข/ลบ/Form Builder
+// จาก admin_ssj ด้วย *ngIf="isSuperAdmin" ทั้งหมด เหลือแค่ "เพิ่มจำนวนมาก" ที่ admin_ssj ใช้ได้จริง) จะถูกคงไว้
+// เป็น isSuperAdmin ตรงๆ ไม่ผ่านระบบนี้ — Super Admin ยังคุมได้อยู่ดีเพราะเป็น super_admin เข้าได้ทุกอย่างเสมอ
+// เพียงแต่ "เปิดให้ role อื่นแก้ไข/ลบตัวชี้วัด" ยังทำไม่ได้ผ่านหน้านี้ (นอกขอบเขตที่ตั้งใจในรอบนี้)
+
+// เรียงจากเฉพาะเจาะจง → กว้าง — ตัวแรกที่ match ถูกใช้เสมอ (rule ที่มี pageKey: null = endpoint ยกเว้น ไม่ gate)
+const PAGE_ACCESS_RULES = [
+    // ข้อยกเว้น — endpoint ที่ใช้ได้ทุก role แม้ path จะขึ้นต้นเหมือน endpoint เฉพาะ admin
+    { method: 'PUT', path: '/users/change-password', pageKey: null },
+    // ข้อยกเว้น — 'bulk-toggle-active' ไม่มี '/' จึงหน้าตาเหมือน :id ห้ามให้ regex /users/:id ด้านล่างจับ (เดิม isSuperAdmin ไม่ใช่ isAnyAdmin)
+    { method: 'PUT', path: '/users/bulk-toggle-active', pageKey: null },
+
+    // หน้าเปิดทั่วไป — gate เฉพาะ endpoint หลักที่อ่านข้อมูลของหน้านั้นโดยตรง (ปลอดภัย ไม่กระทบ endpoint ย่อยที่ใช้ร่วมกันข้ามหน้า เช่น notifications/unread-count)
+    { method: 'GET', path: '/kpi-results', pageKey: 'dashboard' },
+    { method: 'GET', path: '/kpi-setup-check', pageKey: 'kpi-setup' },
+    { method: 'GET', path: '/notifications', pageKey: 'notifications' },
+    { method: 'GET', path: '/feedback', pageKey: 'feedback' },
+    { prefix: '/report/', pageKey: 'charts' },
+
+    // settings (กลุ่มนี้ทั้งหมด isSuperAdmin เดิม ไม่มี endpoint เปิดปนอยู่ — ยืนยันแล้ว ปลอดภัยใช้ prefix กว้าง)
+    { method: 'POST', path: '/settings', pageKey: 'settings' },
+    { prefix: '/env-config', pageKey: 'settings' },
+    { prefix: '/test-telegram', pageKey: 'settings' },
+    { prefix: '/test-line', pageKey: 'settings' },
+    { prefix: '/test-admin-email', pageKey: 'settings' },
+    { prefix: '/admin/line-inbox', pageKey: 'settings' },
+    { prefix: '/admin/users/', pageKey: 'settings' },
+    { path: '/system/maintenance-mode', pageKey: 'settings' },
+
+    // users — เฉพาะ endpoint ที่เดิมเป็น isAnyAdmin เท่านั้น (ตรงกับ default seed ROLES_ANY_ADMIN)
+    // ไม่รวม: bulk-toggle-active/permissions/sync-compare/sync-to-hdc (isSuperAdmin เดิม) และ
+    // approve/reject/toggle-active/basic (isAdmin เดิม — admin_ssj+super_admin เท่านั้น) — คงไว้ตามเดิมทุกจุด
+    { method: 'GET',  path: '/users', pageKey: 'users' },
+    { method: 'GET',  path: '/users/stats', pageKey: 'users' },
+    { method: 'GET',  path: '/users/pending-count', pageKey: 'users' },
+    { method: 'POST', path: '/users', pageKey: 'users' },
+    { method: 'PUT',  re: /^\/users\/[^/]+$/, pageKey: 'users' },
+    { method: 'DELETE', re: /^\/users\/[^/]+$/, pageKey: 'users' },
+    { method: 'PUT',  re: /^\/users\/[^/]+\/reset-password$/, pageKey: 'users' },
+
+    // kpi-manage — เฉพาะ bulk-add-kpi (isAdmin เดิม) เท่านั้น ตรงกับที่ admin_ssj ใช้ได้จริงวันนี้
+    // (แก้ไข/ลบตัวชี้วัด/หมวดหมู่/หน่วยงาน/หน่วยบริการ/Form Builder ทั้งหมด — kpi-manage.html ซ่อนปุ่มจาก
+    // admin_ssj ด้วย *ngIf="isSuperAdmin" อยู่แล้ว จึงคงเป็น isSuperAdmin ตรงๆ ไม่ผ่านระบบนี้)
+    { method: 'GET',  path: '/bulk-add-kpi/preview', pageKey: 'kpi-manage' },
+    { method: 'POST', path: '/bulk-add-kpi', pageKey: 'kpi-manage' },
+
+    // audit-logs
+    { path: '/system-logs', pageKey: 'audit-logs' },
+
+    // kpi-manager (Export/Sync/DB Compare/Report Compare ↔ HDC — ทั้งหมด isSuperAdmin เดิม ไม่มี endpoint เปิด)
+    { prefix: '/export-schedules', pageKey: 'kpi-manager' },
+    { prefix: '/sync-to-hdc', pageKey: 'kpi-manager' },
+    { prefix: '/db-compare', pageKey: 'kpi-manager' },
+    { prefix: '/export-kpi-tables', pageKey: 'kpi-manager' },
+    { prefix: '/report-compare', pageKey: 'kpi-manager' },
+    { prefix: '/check-kpi-export', pageKey: 'kpi-manager' },
+    { prefix: '/exportable-indicators', pageKey: 'kpi-manager' },
+    { prefix: '/refresh-summary', pageKey: 'kpi-manager' },
+
+    // announcements / online-users / sso-logs / error-logs / kpi-audit-digest / backup-manager
+    { prefix: '/announcements', pageKey: 'announcements' },
+    { prefix: '/online-users', pageKey: 'online-users' },
+    { prefix: '/admin/sso-', pageKey: 'sso-logs' },
+    { prefix: '/admin/error-logs', pageKey: 'error-logs' },
+    { prefix: '/logs/', pageKey: 'error-logs' },
+    { prefix: '/kpi-audit', pageKey: 'kpi-audit-digest' },
+    { prefix: '/backup', pageKey: 'backup-manager' },
+    { prefix: '/clear-kpi-data', pageKey: 'backup-manager' },
+];
+
+function resolvePageKeyFromPath(method, path) {
+    for (const rule of PAGE_ACCESS_RULES) {
+        if (rule.method && rule.method !== method) continue;
+        if (rule.path !== undefined) { if (path === rule.path) return rule.pageKey; continue; }
+        if (rule.re) { if (rule.re.test(path)) return rule.pageKey; continue; }
+        if (rule.prefix !== undefined) { if (path.startsWith(rule.prefix)) return rule.pageKey; continue; }
+    }
+    return null; // ไม่พบ mapping — endpoint นี้ไม่ถูกควบคุมด้วยระบบสิทธิ์หน้า (คงพฤติกรรมเดิม)
+}
+
 const authenticateToken = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -570,6 +736,12 @@ const authenticateToken = async (req, res, next) => {
         return res.status(403).json({ success: false, code: 'TOKEN_EXPIRED', message: 'Token ไม่ถูกต้องหรือหมดอายุ กรุณาเข้าสู่ระบบใหม่' });
     }
     req.user = user;
+
+    // === Role × Page Access — ปฏิเสธก่อน session/last-seen ถ้า role นี้ไม่มีสิทธิ์เข้าหน้าที่ endpoint นี้สังกัดอยู่ ===
+    const _pageKey = resolvePageKeyFromPath(req.method, req.path);
+    if (_pageKey && !hasPageAccess(user.role, _pageKey)) {
+        return res.status(403).json({ success: false, code: 'PAGE_ACCESS_DENIED', message: 'ไม่มีสิทธิ์เข้าถึงเมนูนี้ กรุณาติดต่อผู้ดูแลระบบ' });
+    }
 
     const uid = user.userId;
     if (!uid) return next();
@@ -671,26 +843,30 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 // Middleware ตรวจสอบสิทธิ์ Admin ส่วนกลาง (admin_ssj + super_admin)
+// OR hasPageAccess — เผื่อ Super Admin เปิดสิทธิ์หน้านี้ให้ role อื่นเพิ่มผ่านหน้า "สิทธิ์การเข้าถึงหน้า"
+// (ค่าเริ่มต้นในตาราง role_page_access seed ให้ตรงกับ ROLE_ADMIN_CENTRAL เป๊ะ จึงไม่เปลี่ยนพฤติกรรมเดิมจนกว่าจะถูกแก้ไข)
 const isAdmin = (req, res, next) => {
-    if (req.user && ROLE_ADMIN_CENTRAL.includes(req.user.role)) {
+    const role = req.user?.role;
+    if (role && (ROLE_ADMIN_CENTRAL.includes(role) || hasPageAccess(role, resolvePageKeyFromPath(req.method, req.path)))) {
         next();
     } else {
         res.status(403).json({ success: false, message: 'สิทธิ์การเข้าถึงจำกัดเฉพาะผู้ดูแลระบบส่วนกลาง (สสจ.) เท่านั้น' });
     }
 };
 
-// Middleware ตรวจสอบสิทธิ์ Admin ทุกระดับ
+// Middleware ตรวจสอบสิทธิ์ Admin ทุกระดับ (+ hasPageAccess เช่นเดียวกับ isAdmin)
 const isAnyAdmin = (req, res, next) => {
-    if (req.user && ROLE_ADMIN_ALL.includes(req.user.role)) {
+    const role = req.user?.role;
+    if (role && (ROLE_ADMIN_ALL.includes(role) || hasPageAccess(role, resolvePageKeyFromPath(req.method, req.path)))) {
         next();
     } else {
         res.status(403).json({ success: false, message: 'สิทธิ์การเข้าถึงจำกัดเฉพาะผู้ดูแลระบบเท่านั้น' });
     }
 };
 
-// Middleware ตรวจสอบสิทธิ์ Super Admin เท่านั้น
+// Middleware ตรวจสอบสิทธิ์ Super Admin เท่านั้น (+ hasPageAccess — hasPageAccess คืน true เสมอถ้า role==='super_admin' อยู่แล้ว)
 const isSuperAdmin = (req, res, next) => {
-    if (req.user && req.user.role === 'super_admin') {
+    if (req.user && (req.user.role === 'super_admin' || hasPageAccess(req.user.role, resolvePageKeyFromPath(req.method, req.path)))) {
         next();
     } else {
         res.status(403).json({ success: false, message: 'สิทธิ์การเข้าถึงจำกัดเฉพาะผู้ดูแลระบบสูงสุด (Super Admin) เท่านั้น' });
@@ -5178,15 +5354,7 @@ apiRouter.get('/users/:id/basic', authenticateToken, isAdmin, async (req, res) =
     }
 });
 
-apiRouter.get('/system-logs', async (req, res) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (!token) return res.status(401).json({ success: false });
-
-    let user;
-    try { user = jwt.verify(token, SECRET_KEY); } catch (err) { return res.status(403).json({ success: false, message: 'Token ไม่ถูกต้องหรือหมดอายุ' }); }
-    if (user.role !== 'admin_ssj' && user.role !== 'super_admin') return res.status(403).json({ success: false, message: 'สิทธิ์การเข้าถึงจำกัดเฉพาะผู้ดูแลระบบเท่านั้น' });
-
+apiRouter.get('/system-logs', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
         const [logs] = await db.query(`
             SELECT s.*, u.username, u.firstname, u.lastname 
@@ -5201,7 +5369,10 @@ apiRouter.get('/system-logs', async (req, res) => {
     }
 });
 
-apiRouter.get('/settings', async (req, res) => {
+// หมายเหตุ: เปิดให้ทุก role ที่ login แล้วอ่านได้ (ไม่ผูกกับหน้า "ตั้งค่าระบบ" โดยเฉพาะ) — layout.ts/idle-timeout.service.ts
+// ใช้ดึงค่า system_version/idle timeout ที่ทุก role ต้องเห็น ไม่ใช่แค่ super_admin — เดิมไม่มี authenticateToken เลย (เปิดสาธารณะ
+// แม้ไม่ login ก็อ่าน secrets เช่น thaid_client_secret/telegram token ได้) แก้ให้ต้อง login อย่างน้อย
+apiRouter.get('/settings', authenticateToken, async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM system_settings');
         res.json({ success: true, data: rows });
@@ -5210,17 +5381,8 @@ apiRouter.get('/settings', async (req, res) => {
     }
 });
 
-apiRouter.post('/settings', async (req, res) => {
+apiRouter.post('/settings', authenticateToken, isSuperAdmin, async (req, res) => {
     const settings = req.body; // Expect array of { key, value }
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    
-    if (!token) return res.status(401).json({ success: false, message: 'Unauthorized' });
-
-    let user;
-    try { user = jwt.verify(token, SECRET_KEY); } catch (err) { return res.status(403).json({ success: false }); }
-
-    if (user.role !== 'super_admin') return res.status(403).json({ success: false, message: 'Super Admin only' });
 
     const connection = await db.getConnection();
     try {
@@ -5271,8 +5433,8 @@ apiRouter.post('/settings', async (req, res) => {
                     return `• ${s.setting_key}\n   ↳ ${oldV} → ${newV}`;
                 }).join('\n');
                 const moreCount = changedSettings.length > 10 ? changedSettings.length - 10 : 0;
-                const [actor] = await db.query('SELECT firstname, lastname, username FROM users WHERE id = ?', [user.userId]);
-                const actorName = actor[0] ? `${actor[0].firstname} ${actor[0].lastname} (${actor[0].username})` : `user_id ${user.userId}`;
+                const [actor] = await db.query('SELECT firstname, lastname, username FROM users WHERE id = ?', [req.user.userId]);
+                const actorName = actor[0] ? `${actor[0].firstname} ${actor[0].lastname} (${actor[0].username})` : `user_id ${req.user.userId}`;
                 notifyLineAction('settings_change',
                     `⚙️ Settings ถูกแก้ไข\n` +
                     `👤 ${actorName}\n` +
@@ -5289,6 +5451,65 @@ apiRouter.post('/settings', async (req, res) => {
         res.status(500).json({ success: false, message: 'Update failed' });
     } finally {
         connection.release();
+    }
+});
+
+// ========== Role × Page Access — หน้า "สิทธิ์การเข้าถึงหน้า" (Super Admin) ==========
+
+// GET /my-page-access — role ของ user ปัจจุบันเข้าหน้าไหนได้บ้าง (ทุก role ใช้ได้ — frontend เรียกตอน login/app init)
+apiRouter.get('/my-page-access', authenticateToken, async (req, res) => {
+    const role = req.user.role;
+    const access = {};
+    for (const page of PAGE_ACCESS_PAGES) access[page.key] = hasPageAccess(role, page.key);
+    res.json({ success: true, role, access });
+});
+
+// GET /role-page-access — เมทริกซ์เต็ม 9 role × ทุกหน้า (super_admin เท่านั้น — จัดการหน้านี้เองไม่ผูกกับตาราง toggle ได้)
+apiRouter.get('/role-page-access', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT role, page_key, is_enabled FROM role_page_access');
+        res.json({
+            success: true,
+            roles: PAGE_ACCESS_ROLES,
+            pages: PAGE_ACCESS_PAGES,
+            data: rows
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// PUT /role-page-access — บันทึกทั้งเมทริกซ์ (super_admin เท่านั้น)
+apiRouter.put('/role-page-access', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { items } = req.body; // [{ role, page_key, is_enabled }]
+    if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ success: false, message: 'ไม่มีข้อมูลที่จะบันทึก' });
+    }
+    const validPageKeys = new Set(PAGE_ACCESS_PAGES.map(p => p.key));
+    const validRoles = new Set(PAGE_ACCESS_ROLES);
+    const clean = [];
+    for (const it of items) {
+        const role = String(it.role || '');
+        const pageKey = String(it.page_key || '');
+        if (!validRoles.has(role) || !validPageKeys.has(pageKey)) continue; // ข้าม role/page ที่ไม่รู้จัก (กัน payload มั่ว)
+        clean.push([role, pageKey, it.is_enabled ? 1 : 0]);
+    }
+    if (clean.length === 0) return res.status(400).json({ success: false, message: 'ไม่มีข้อมูลที่ถูกต้อง' });
+
+    try {
+        await db.query(
+            `INSERT INTO role_page_access (role, page_key, is_enabled) VALUES ?
+             ON DUPLICATE KEY UPDATE is_enabled = VALUES(is_enabled)`,
+            [clean]
+        );
+        await loadRolePageAccessCache();
+        await db.query(
+            'INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?,?,?,?,?)',
+            [req.user.userId || null, 'UPDATE', 'role_page_access', JSON.stringify({ count: clean.length }), (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim().slice(0, 64)]
+        ).catch(() => {});
+        res.json({ success: true, message: `บันทึกสิทธิ์การเข้าถึงหน้า ${clean.length} รายการสำเร็จ` });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
     }
 });
 
@@ -9753,6 +9974,42 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
         console.log('✅ login_logs, system_logs, notifications, rejection & appeal tables + indexes ready');
     } catch (err) {
         console.error('⚠️ Auto-create tables error:', err.message);
+    }
+})();
+
+// ========== Auto-create + seed role_page_access (Role × Page Access) ==========
+(async () => {
+    try {
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS role_page_access (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                role VARCHAR(20) NOT NULL,
+                page_key VARCHAR(40) NOT NULL,
+                is_enabled TINYINT(1) NOT NULL DEFAULT 0,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uk_role_page (role, page_key)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+        // seed เฉพาะคู่ (role, page_key) ที่ยังไม่มี row — กันทับค่าที่ Super Admin แก้ไขไว้แล้วตอน restart
+        const [existingRows] = await db.query('SELECT role, page_key FROM role_page_access');
+        const existingSet = new Set(existingRows.map(r => `${r.role}::${r.page_key}`));
+        const toInsert = [];
+        for (const page of PAGE_ACCESS_PAGES) {
+            const enabledRoles = new Set(PAGE_ACCESS_DEFAULT_ENABLED[page.key] || []);
+            for (const role of PAGE_ACCESS_ROLES) {
+                const k = `${role}::${page.key}`;
+                if (existingSet.has(k)) continue;
+                toInsert.push([role, page.key, enabledRoles.has(role) ? 1 : 0]);
+            }
+        }
+        if (toInsert.length > 0) {
+            await db.query('INSERT INTO role_page_access (role, page_key, is_enabled) VALUES ?', [toInsert]);
+            console.log(`✅ role_page_access: seeded ${toInsert.length} แถวเริ่มต้น`);
+        }
+        await loadRolePageAccessCache();
+        console.log('✅ role_page_access cache พร้อมใช้งาน');
+    } catch (err) {
+        console.error('⚠️ role_page_access setup error:', err.message);
     }
 })();
 

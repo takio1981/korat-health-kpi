@@ -1,0 +1,105 @@
+<div class="p-3 sm:p-6 max-w-7xl mx-auto w-full">
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100">
+    <!-- Header -->
+    <div class="p-4 sm:p-6 border-b border-gray-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+      <div class="min-w-0">
+        <h3 class="text-base sm:text-lg font-bold text-gray-800">
+          <i class="fas fa-user-lock mr-2 text-indigo-500"></i>สิทธิ์การเข้าถึงหน้า
+        </h3>
+        <p class="text-[11px] sm:text-xs text-gray-400 mt-1">
+          เปิด/ปิดการเข้าถึงแต่ละหน้าของระบบ แยกตาม Role — Super Admin เข้าได้ทุกหน้าเสมอ ไม่แสดงในตาราง
+        </p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button (click)="load()" [disabled]="isLoading"
+                class="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50">
+          <i class="fas" [ngClass]="isLoading ? 'fa-spinner fa-spin' : 'fa-sync-alt'"></i>
+          <span class="hidden sm:inline ml-1">โหลดใหม่</span>
+        </button>
+        <button (click)="save()" [disabled]="isSaving || isLoading"
+                class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md transition-all disabled:opacity-50">
+          <i class="fas" [ngClass]="isSaving ? 'fa-spinner fa-spin' : 'fa-save'"></i>
+          <span class="ml-1">{{ isSaving ? 'กำลังบันทึก...' : 'บันทึก' }}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- คำแนะนำ (ซ่อนได้) -->
+    <div class="px-4 sm:px-6 pt-3">
+      <button (click)="showGuide = !showGuide" class="flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors">
+        <i class="fas" [ngClass]="showGuide ? 'fa-chevron-up' : 'fa-question-circle'"></i>
+        {{ showGuide ? 'ซ่อนคำแนะนำ' : 'คำแนะนำการใช้งาน' }}
+      </button>
+      <div *ngIf="showGuide" class="mt-2 mb-1 p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-800 space-y-1.5">
+        <p><i class="fas fa-check-circle text-indigo-500 mr-1"></i>ติ๊กช่อง = Role นั้นเห็นเมนูและเข้าหน้านั้นได้ (ทั้งฝั่งหน้าเว็บและสิทธิ์เรียก API จริง ไม่ใช่แค่ซ่อน/แสดงเมนู)</p>
+        <p><i class="fas fa-check-circle text-indigo-500 mr-1"></i>Super Admin เข้าได้ทุกหน้าเสมอ ไม่สามารถปิดได้ (กันตั้งค่าผิดพลาดจนเข้าระบบไม่ได้)</p>
+        <p><i class="fas fa-exclamation-triangle text-amber-500 mr-1"></i><b>ข้อจำกัดสำคัญ:</b> หน้า <b>"จัดการตัวชี้วัด"</b> เมื่อเปิดให้ Role อื่น จะปลดล็อคเฉพาะฟีเจอร์ "เพิ่มตัวชี้วัดจำนวนมาก" เท่านั้น — การแก้ไข/ลบตัวชี้วัด/หมวดหมู่/หน่วยงาน/หน่วยบริการ และ Form Builder ยังคงจำกัดเฉพาะ Super Admin เหมือนเดิมเสมอ</p>
+        <p><i class="fas fa-exclamation-triangle text-amber-500 mr-1"></i>หน้า <b>"จัดการผู้ใช้งาน"</b> เมื่อเปิดให้ Role อื่น จะปลดล็อคการดู/เพิ่ม/แก้ไข/ลบ/รีเซ็ตรหัสผ่านผู้ใช้งานทั่วไป — ส่วนอนุมัติ/ตีกลับผู้ใช้ใหม่, ตั้งค่าสิทธิ์แก้ไขข้อมูล, และ sync ข้อมูลไป HDC ยังคงจำกัดเฉพาะที่กำหนดไว้เดิม (admin_ssj/super_admin หรือ super_admin เท่านั้นตามแต่ละฟีเจอร์)</p>
+      </div>
+    </div>
+
+    <!-- Search -->
+    <div class="px-4 sm:px-6 pt-2">
+      <div class="relative max-w-sm">
+        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+        <input type="text" [(ngModel)]="searchTerm"
+               placeholder="ค้นหาชื่อหน้า..."
+               class="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-xs hover:border-indigo-400 transition-all">
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div *ngIf="isLoading" class="flex items-center justify-center py-16">
+      <div class="text-center">
+        <div class="animate-spin rounded-full h-12 w-12 border-4 border-indigo-200 border-t-indigo-600 mx-auto mb-3"></div>
+        <p class="text-gray-500 text-sm">กำลังโหลดข้อมูล...</p>
+      </div>
+    </div>
+
+    <!-- Matrix table -->
+    <div *ngIf="!isLoading" class="p-4 sm:p-6">
+      <div class="overflow-auto card-scroll border border-gray-200 rounded-xl" style="max-height: calc(100vh - 320px);">
+        <table class="w-full text-xs min-w-[900px]">
+          <thead class="sticky top-0 z-20 shadow-md">
+            <tr>
+              <th class="sticky left-0 z-30 bg-indigo-700 text-white px-3 py-3 text-left min-w-[220px]">หน้า</th>
+              <th *ngFor="let role of roles" class="bg-indigo-700 text-white px-2 py-3 text-center min-w-[90px]" [title]="roleLabels[role] || role">
+                <div class="flex flex-col items-center gap-1">
+                  <span class="font-mono">{{ role }}</span>
+                  <button (click)="toggleAllForRole(role)"
+                          class="px-1.5 py-0.5 bg-white/20 hover:bg-white/30 rounded text-[9px] font-bold transition-all"
+                          [title]="'เลือก/ยกเลิกทั้งหมดสำหรับ ' + role">
+                    <i class="fas" [ngClass]="isAllOnForRole(role) ? 'fa-check-square' : 'fa-square'"></i> ทั้งหมด
+                  </button>
+                </div>
+              </th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100 bg-white">
+            <tr *ngFor="let page of filteredPages" class="hover:bg-indigo-50/30 transition-all">
+              <td class="sticky left-0 z-10 bg-white px-3 py-2.5 font-bold text-gray-700 border-r border-gray-100">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="truncate">{{ page.label }}</span>
+                  <button (click)="toggleAllForPage(page.key)"
+                          class="text-gray-300 hover:text-indigo-600 transition-colors shrink-0" title="เลือก/ยกเลิกทั้งหมดสำหรับหน้านี้">
+                    <i class="fas" [ngClass]="isAllOnForPage(page.key) ? 'fa-check-square text-indigo-500' : 'fa-square'"></i>
+                  </button>
+                </div>
+                <span class="text-[9px] text-gray-400 font-mono">{{ page.key }}</span>
+              </td>
+              <td *ngFor="let role of roles" class="px-2 py-2.5 text-center">
+                <input type="checkbox" [checked]="matrix[page.key]?.[role]" (change)="toggle(page.key, role)"
+                       class="rounded text-indigo-600 focus:ring-indigo-400 h-4 w-4 cursor-pointer">
+              </td>
+            </tr>
+            <tr *ngIf="filteredPages.length === 0">
+              <td [attr.colspan]="roles.length + 1" class="px-4 py-8 text-center text-gray-400 text-sm">
+                <i class="fas fa-search text-2xl mb-2 block"></i>ไม่พบหน้าที่ตรงกับคำค้นหา
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
