@@ -1526,7 +1526,10 @@ apiRouter.get('/auth/thaid/register-start', async (req, res) => {
     }
 });
 
-// GET /auth/thaid/reg-data — ดึงข้อมูล CID hash + ชื่อ จาก register token (public, one-time)
+// GET /auth/thaid/reg-data — ดึงข้อมูล CID hash + ชื่อ จาก register token เพื่อ pre-fill ฟอร์ม (public)
+// หมายเหตุ: ไม่ลบ entry ที่นี่ — ต้องคงอยู่จนกว่าจะใช้จริงตอน POST /register (บรรทัดที่ลบคือจุด one-time consume จริง)
+// เดิมลบทิ้งทันทีหลัง read ที่นี่ ทำให้ POST /register (ซึ่งอ่าน token เดิมอีกครั้งตอนกดบันทึก) หา entry ไม่เจอเสมอ
+// กลายเป็น "Token ThaiD หมดอายุ" ทุกครั้งแม้กรอกฟอร์มเสร็จเร็วก็ตาม เพราะถูกลบไปตั้งแต่ตอนโหลดหน้าแล้ว
 apiRouter.get('/auth/thaid/reg-data', async (req, res) => {
     const { token } = req.query;
     if (!token) return res.status(400).json({ success: false, message: 'ไม่มี token' });
@@ -1535,8 +1538,6 @@ apiRouter.get('/auth/thaid/reg-data', async (req, res) => {
         _thaidRegMap.delete(String(token));
         return res.status(404).json({ success: false, message: 'Token หมดอายุ กรุณาสแกน QR ThaiD ใหม่' });
     }
-    // ลบทันทีหลัง read — one-time token (กัน replay ภายใน TTL)
-    _thaidRegMap.delete(String(token));
     res.json({
         success: true,
         cid_hash: entry.cid_hash,
