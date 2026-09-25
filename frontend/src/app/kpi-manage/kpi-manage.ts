@@ -248,9 +248,9 @@ export class KpiManageComponent implements OnInit {
     return this.CONDITION_SYMBOL[String(condition || '')] || '';
   }
 
-  // เงื่อนไข+เกณฑ์ รวมเป็นข้อความเดียว เช่น "≥ 80%"
+  // เงื่อนไข+เกณฑ์ รวมเป็นข้อความเดียว เช่น "≥ 80%" — item.criterion (ไม่ใช่ target_percentage/เป้าหมาย)
   getCriteriaText(item: any): string {
-    const pct = item?.target_percentage;
+    const pct = item?.criterion;
     if (pct == null || pct === '') return '-';
     const sym = this.getConditionSymbol(item?.target_condition);
     return `${sym ? sym + ' ' : ''}${pct}%`;
@@ -258,7 +258,7 @@ export class KpiManageComponent implements OnInit {
 
   // เกณฑ์ของ HDC (จาก getHdcData) — เทียบคู่กับ getCriteriaText(item) ของ Local
   getHdcCriteriaText(hdc: any): string {
-    return this.getCriteriaText({ target_percentage: hdc?.hdc_target_percentage, target_condition: hdc?.hdc_target_condition });
+    return this.getCriteriaText({ criterion: hdc?.hdc_target_percentage, target_condition: hdc?.hdc_target_condition });
   }
 
   // ดึงประเภทตัวชี้วัด (R9, MOPH, SSJ, RMW, Other) — badge สีต่างกัน
@@ -1267,6 +1267,7 @@ export class KpiManageComponent implements OnInit {
       { key: 'evaluation_mode',     desc: 'โหมดประเมิน: any_one=เฉพาะบางประเภท / all_required=ทุกประเภทบังคับ', example: 'any_one' },
       { key: 'required_off_types',  desc: 'รหัสหน่วยบริการ คั่นด้วย , เช่น 05,06,07 (ใช้เมื่อ evaluation_mode=any_one เท่านั้น)', example: '05,06,07' },
       { key: 'description',         desc: 'รายละเอียดเพิ่มเติม (ไม่จำเป็น)', example: 'ตรวจสอบจาก HDC ทุกเดือน' },
+      { key: 'criterion',           desc: 'เกณฑ์ % (จับคู่กับ target_condition เพื่อเทียบกับ HDC) — คนละอันกับ target_percentage/เป้าหมาย', example: '80' },
     ];
 
     const wb = XLSX.utils.book_new();

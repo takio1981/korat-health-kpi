@@ -3199,6 +3199,12 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     return { label, title, color: 'bg-cyan-100 text-cyan-700 border border-cyan-200' };
   }
 
+  // badge "สะสม" — is_cumulative=1 → ผลงานล่าสุดคำนวณจาก SUM ทุกเดือนในปีงบ แทนค่าเดือนล่าสุด
+  getCumulativeBadge(item: any): { label: string; title: string; color: string } | null {
+    if (Number(item?.is_cumulative) !== 1) return null;
+    return { label: 'สะสม', title: 'ผลงานเดือนล่าสุด = ผลรวมสะสมตั้งแต่ตุลาคมถึงเดือนนี้', color: 'bg-violet-100 text-violet-700 border border-violet-200' };
+  }
+
   // ดึงประเภทตัวชี้วัด (R9, MOPH, SSJ, RMW, Other)
   getIndicatorTypes(item: any): Array<{type: string, color: string, label: string}> {
     const types: Array<{type: string, color: string, label: string}> = [];

@@ -224,6 +224,31 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - Dashboard filter `indicator_off_type`: SQL `(i.evaluation_mode='all_required' OR i.required_off_types LIKE '%"CODE"%')`
 - Dashboard badge: `evaluation_mode='all_required'` → "ทุกประเภท" (purple) | `'any_one'` + codes → ชื่อประเภท (cyan)
 
+### เป้าหมาย (target_percentage) vs เกณฑ์ (criterion) — คนละความหมาย, ห้ามสลับกันใช้
+- 2 คอลัมน์ใน `kpi_indicators` ที่ดูคล้ายกันแต่ใช้งานคนละจุด:
+  - `target_percentage` VARCHAR(50) — **"เป้าหมาย"** ค่าเริ่มต้นที่ copy เข้า `kpi_results.target_value`
+    (per หน่วยบริการ/เดือน/ปีงบ) ตอนตั้งค่าปีงบใหม่ (kpi-setup) หรือเพิ่ม KPI ให้หน่วยบริการ (Dashboard "Add KPI") —
+    copy-then-diverge ครั้งเดียว ไม่มีความเชื่อมโยงกลับมาอีก
+  - `criterion` VARCHAR(50) — **"เกณฑ์"** จับคู่กับ `target_condition` (GTE/LTE/EQ) ใช้เทียบ "เกณฑ์ต่างกัน" กับ HDC
+    (`GET /report-compare`) และแสดงผลผ่าน `criteriaText` pipe ทั่วทั้งระบบ (dashboard, report, form-builder,
+    export-kpi, kpi-setup)
+- Modal เพิ่ม/แก้ไขตัวชี้วัดมี 2 กล่องแยกกันชัดเจน: "เป้าหมาย (ค่าเริ่มต้น)" (emerald, ผูก `target_percentage`)
+  กับ "เกณฑ์" (amber, ผูก `criterion` + `target_condition`)
+- Migrate มาจาก conflation เดิม (ก่อนหน้านี้ทั้งสองใช้ `target_percentage` ตัวเดียวปนกัน) — มี backfill one-time
+  ตอน deploy (`UPDATE kpi_indicators SET criterion = target_percentage WHERE criterion IS NULL`) กัน HDC-compare
+  ของตัวชี้วัดเดิมพังตอน deploy ครั้งแรก
+- CRUD `/indicators` POST/PUT/`bulk-import` รับทั้ง 2 ฟิลด์อิสระต่อกัน — audit-log diff message แยก "เป้าหมาย"
+  กับ "เกณฑ์" คนละบรรทัด
+
+### ตัวชี้วัดสะสม (is_cumulative)
+- `is_cumulative` TINYINT(1) DEFAULT 0 ใน `kpi_indicators` — 1 = `last_actual` คำนวณจาก **SUM ทุกเดือนที่มีค่า
+  ในปีงบ** แทน "ค่าเดือนล่าสุดที่คีย์" ปกติ — ใช้กับตัวชี้วัดนับสะสม (เช่น จำนวนราย/ครั้งสะสม)
+- Toggle: checkbox ในกล่อง "เกณฑ์" ของ modal kpi-manage
+- คำนวณฝั่ง client: `dashboard.ts` `onValueChange()` | ฝั่ง backend: `kpi_summary` refresh และ
+  `GET /public/kpi-results`
+- Dashboard badge "สะสม" (violet, `fa-layer-group`) ใน col-2 ชื่อตัวชี้วัด — `getCumulativeBadge()` ใน
+  `dashboard.ts` — แทนที่ข้อความแจ้งเตือน static เดิมที่เหมารวมทุกแถวโดยไม่ตรงกับความจริงเสมอไป
+
 ### kpi-manage Hospitals tab
 - 5 tabs: ตัวชี้วัด / หมวดหมู่หลัก / ยุทธศาสตร์ / หน่วยงาน / **หน่วยบริการ**
 - CRUD endpoints `/hospitals` (super_admin): GET/POST/PUT/DELETE
@@ -707,7 +732,7 @@ docker builder prune -af
 |-------|---------|-------------|
 | users | ผู้ใช้งาน | id, username, role, dept_id, hospcode, is_approved, approved_by, last_seen_at, last_seen_ip, last_seen_ua, **active_session_id**, **session_started_at** |
 | departments | หน่วยงาน | id, dept_name, dept_code |
-| kpi_indicators | ตัวชี้วัด | id, kpi_indicators_name, main_indicator_id, dept_id, table_process, target_percentage, r9, moph, ssj, rmw, other, evaluation_mode ('any_one'\|'all_required'), required_off_types (JSON array ของ hostypecode) |
+| kpi_indicators | ตัวชี้วัด | id, kpi_indicators_name, main_indicator_id, dept_id, table_process, target_percentage (เป้าหมาย), criterion (เกณฑ์), target_condition, is_cumulative, r9, moph, ssj, rmw, other, evaluation_mode ('any_one'\|'all_required'), required_off_types (JSON array ของ hostypecode) |
 | kpi_main_indicators | หมวดหมู่หลัก | id, main_indicator_name, yut_id |
 | main_yut | ยุทธศาสตร์ | id, yut_name |
 | kpi_results | ผลงาน KPI | id, indicator_id, year_bh, hospcode, month_bh, target_value, actual_value, status, is_locked |

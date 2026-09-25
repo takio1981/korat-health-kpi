@@ -221,7 +221,7 @@
               </span>
               <span *ngIf="item.criteria_match === false"
                     class="ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-800"
-                    [title]="'HDC: ' + (item.hdc_target_condition||'') + ' ' + item.hdc_target_percentage + '% / Local: ' + (item.local_target_condition||'') + ' ' + item.local_target_percentage + '%'">
+                    [title]="'HDC: ' + (item.hdc_target_condition||'') + ' ' + item.hdc_target_percentage + '% / Local: ' + (item.local_target_condition||'') + ' ' + item.local_criterion + '%'">
                 <i class="fas fa-bullseye mr-1"></i>เกณฑ์ต่างกัน
               </span>
             </td>
@@ -270,7 +270,7 @@
       <p><i class="fas fa-info-circle mr-1"></i>เปรียบเทียบโดยใช้ <b>table_process</b> เป็น key หลัก — HDC query: <code class="bg-gray-100 px-1 rounded">reports WHERE data_source='excel' AND LENGTH(report_code)=LENGTH(table_process)</code></p>
       <p><i class="fas fa-power-off text-rose-500 mr-1"></i><b>HDC active = 0</b>: report ถูกปิดที่ฝั่ง HDC — ระบบแนะนำให้ตั้ง <code>upload_excel = 1</code> เพื่อข้าม auto export (ตั้งเองหรือกดปุ่ม "ปิด N ตัว" ข้างบน)</p>
       <p><i class="fas fa-toggle-on text-emerald-500 mr-1"></i><b>upload_excel = 0</b> (เขียว): export อัตโนมัติได้ &nbsp;|&nbsp; <b>= 1</b> (แดง): ข้าม export — ต้องอัปโหลด Excel มือเอง</p>
-      <p *ngIf="compareResult?.summary?.year_bh"><i class="fas fa-bullseye text-orange-500 mr-1"></i>เทียบเกณฑ์ (target_percentage/target_condition) กับปีงบ <b>{{ compareResult.summary.year_bh }}</b> — ใช้ค่าจาก <code class="bg-gray-100 px-1 rounded">report_fiscal_year_config</code> ถ้ามี ไม่งั้น fallback ไปที่ค่า default ใน <code class="bg-gray-100 px-1 rounded">reports</code></p>
+      <p *ngIf="compareResult?.summary?.year_bh"><i class="fas fa-bullseye text-orange-500 mr-1"></i>เทียบเกณฑ์ (criterion/target_condition) กับปีงบ <b>{{ compareResult.summary.year_bh }}</b> — ใช้ค่าจาก <code class="bg-gray-100 px-1 rounded">report_fiscal_year_config</code> ถ้ามี ไม่งั้น fallback ไปที่ค่า default ใน <code class="bg-gray-100 px-1 rounded">reports</code></p>
     </div>
   </div>
 

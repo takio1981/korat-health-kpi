@@ -3216,7 +3216,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 MAX(r.status) AS indicator_status,
                 MAX(CASE WHEN r.is_locked = 1 THEN 1 ELSE 0 END) AS is_locked,
                 MIN(i.table_process) AS table_process,
-                MIN(i.target_percentage) AS target_percentage,
+                MIN(i.criterion) AS criterion,
                 MAX(i.r9) AS r9, MAX(i.moph) AS moph, MAX(i.ssj) AS ssj, MAX(i.rmw) AS rmw, MAX(i.other) AS other,
                 MIN(i.evaluation_mode) AS evaluation_mode,
                 MIN(i.required_off_types) AS required_off_types,
@@ -3812,7 +3812,7 @@ apiRouter.get('/form-schemas/indicator/:indicator_id', authenticateToken, async 
 apiRouter.get('/form-schemas/all-indicators', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
         const [rows] = await db.query(`
-            SELECT i.id, i.kpi_indicators_name, i.table_process, i.target_percentage, i.target_condition, d.dept_name,
+            SELECT i.id, i.kpi_indicators_name, i.table_process, i.criterion, i.target_condition, d.dept_name,
                    fs.id AS schema_id, fs.form_title, fs.is_active AS schema_active,
                    (SELECT COUNT(*) FROM kpi_form_fields ff WHERE ff.schema_id = fs.id) AS field_count
             FROM kpi_indicators i
@@ -4273,6 +4273,7 @@ apiRouter.get('/kpi-template', authenticateToken, async (req, res) => {
                 i.dept_id,
                 i.target_percentage,
                 i.target_condition,
+                i.criterion,
                 d.dept_name
             FROM kpi_indicators i
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
@@ -5866,12 +5867,12 @@ apiRouter.post('/indicators/bulk-import', authenticateToken, requireAction('kpi-
         return res.status(400).json({ success: false, message: 'ไม่มีข้อมูลสำหรับนำเข้า' });
     const results = [];
     for (const row of rows) {
-        const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, use_sub_indicator_export } = row;
+        const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, criterion, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export } = row;
         try {
             const [r] = await db.query(
-                `INSERT INTO kpi_indicators (kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, use_sub_indicator_export)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), use_sub_indicator_export ? 1 : 0]
+                `INSERT INTO kpi_indicators (kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, criterion, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, criterion || null, weight || null, kpi_indicators_code || null, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), is_cumulative ? 1 : 0, use_sub_indicator_export ? 1 : 0]
             );
             results.push({ name: kpi_indicators_name, status: 'success', id: r.insertId });
         } catch (e) {
@@ -5893,15 +5894,15 @@ apiRouter.post('/indicators/bulk-import', authenticateToken, requireAction('kpi-
 });
 
 apiRouter.post('/indicators', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
-    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export } = req.body;
+    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, criterion, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export } = req.body;
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
         return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
     }
     try {
         const [r] = await db.query(
-            `INSERT INTO kpi_indicators (kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), is_cumulative ? 1 : 0, use_sub_indicator_export ? 1 : 0]
+            `INSERT INTO kpi_indicators (kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, criterion, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, criterion || null, weight || null, kpi_indicators_code || null, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), is_cumulative ? 1 : 0, use_sub_indicator_export ? 1 : 0]
         );
         // LINE notify: created
         try {
@@ -5921,7 +5922,7 @@ apiRouter.post('/indicators', authenticateToken, requireAction('kpi-manage', 'ad
 });
 
 apiRouter.put('/indicators/:id', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
-    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, is_active, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export } = req.body;
+    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, criterion, weight, kpi_indicators_code, is_active, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export } = req.body;
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
         return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
     }
@@ -5929,7 +5930,7 @@ apiRouter.put('/indicators/:id', authenticateToken, requireAction('kpi-manage', 
         // ดึง old row เพื่อหาว่าฟิลด์ไหนเปลี่ยน (diff สั้นๆ)
         let diff = '';
         try {
-            const [oldRow] = await db.query('SELECT kpi_indicators_name, is_active, table_process, target_percentage FROM kpi_indicators WHERE id = ?', [req.params.id]);
+            const [oldRow] = await db.query('SELECT kpi_indicators_name, is_active, table_process, target_percentage, criterion FROM kpi_indicators WHERE id = ?', [req.params.id]);
             if (oldRow[0]) {
                 const o = oldRow[0];
                 const changes = [];
@@ -5937,13 +5938,14 @@ apiRouter.put('/indicators/:id', authenticateToken, requireAction('kpi-manage', 
                 if (Number(o.is_active) !== (is_active ? 1 : 0)) changes.push(`สถานะ→${is_active ? 'เปิด' : 'ปิด'}`);
                 if ((o.table_process || '') !== (table_process || '')) changes.push('table_process');
                 if (String(o.target_percentage || '') !== String(target_percentage || '')) changes.push('เป้าหมาย');
+                if (String(o.criterion || '') !== String(criterion || '')) changes.push('เกณฑ์');
                 if (changes.length > 0) diff = `\n📝 เปลี่ยน: ${changes.join(', ')}`;
             }
         } catch (_) {}
 
         await db.query(
-            `UPDATE kpi_indicators SET kpi_indicators_name=?, kpi_indicators_id=?, main_indicator_id=?, dept_id=?, target_percentage=?, target_condition=?, weight=?, kpi_indicators_code=?, is_active=?, table_process=?, description=?, r9=?, moph=?, ssj=?, rmw=?, other=?, evaluation_mode=?, required_off_types=?, is_cumulative=?, use_sub_indicator_export=? WHERE id=?`,
-            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, weight || null, kpi_indicators_code || null, is_active ? 1 : 0, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), is_cumulative ? 1 : 0, use_sub_indicator_export ? 1 : 0, req.params.id]
+            `UPDATE kpi_indicators SET kpi_indicators_name=?, kpi_indicators_id=?, main_indicator_id=?, dept_id=?, target_percentage=?, target_condition=?, criterion=?, weight=?, kpi_indicators_code=?, is_active=?, table_process=?, description=?, r9=?, moph=?, ssj=?, rmw=?, other=?, evaluation_mode=?, required_off_types=?, is_cumulative=?, use_sub_indicator_export=? WHERE id=?`,
+            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, criterion || null, weight || null, kpi_indicators_code || null, is_active ? 1 : 0, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), is_cumulative ? 1 : 0, use_sub_indicator_export ? 1 : 0, req.params.id]
         );
         // LINE notify: updated
         try {
@@ -7139,7 +7141,7 @@ apiRouter.get('/exportable-indicators', authenticateToken, isSuperAdmin, async (
         // คืน upload_excel ด้วย — UI export-kpi จะใช้กรอง/แสดง badge
         const [rows] = await db.query(
             `SELECT i.id, i.kpi_indicators_name, i.table_process, i.dept_id, i.main_indicator_id, i.is_active,
-                    i.upload_excel, i.target_percentage, i.target_condition,
+                    i.upload_excel, i.criterion, i.target_condition,
                     d.dept_name, mi.main_indicator_name
              FROM kpi_indicators i
              LEFT JOIN departments d ON i.dept_id = d.id
@@ -8732,7 +8734,7 @@ apiRouter.get('/report/by-indicator', authenticateToken, async (req, res) => {
                 MAX(s.kpi_indicators_name) AS kpi_indicators_name,
                 MAX(s.main_indicator_name) AS main_indicator_name,
                 MAX(s.dept_name) AS dept_name,
-                MAX(i.target_percentage) AS ind_target_percentage,
+                MAX(i.criterion) AS ind_criterion,
                 MAX(i.target_condition) AS ind_target_condition,
                 s.year_bh,
                 MAX(CAST(s.target_value AS DECIMAL(20,4))) AS target_value,
@@ -9039,7 +9041,7 @@ apiRouter.get('/report/recording-status', authenticateToken, async (req, res) =>
             SELECT
                 i.id AS indicator_id,
                 i.kpi_indicators_name,
-                i.target_percentage,
+                i.criterion,
                 i.target_condition,
                 mi.main_indicator_name,
                 d.dept_name,
@@ -9224,7 +9226,7 @@ apiRouter.get('/report/recording-missing/by-hospital/:hospcode', authenticateTok
             SELECT
                 i.id AS indicator_id,
                 i.kpi_indicators_name,
-                i.target_percentage,
+                i.criterion,
                 i.target_condition,
                 mi.main_indicator_name,
                 d.dept_name,
@@ -10043,6 +10045,12 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS hdc_fiscal_year VARCHAR(10) NULL COMMENT 'ปีงบฯ ที่ใช้อ้างอิง target_percentage/target_condition ล่าสุดจาก HDC (audit only)'`); } catch(e) {}
         // is_cumulative: 1 = ผลงานสะสมทุกเดือนในปีงบ (SUM) แทนค่าเดือนล่าสุด — ใช้กับตัวชี้วัดนับสะสม เช่น จำนวนราย/ครั้งสะสม
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS is_cumulative TINYINT(1) DEFAULT 0 COMMENT 'สะสมทุกเดือนในปีงบ (SUM) แทนค่าเดือนล่าสุด'`); } catch(e) {}
+        // criterion: "เกณฑ์" แยกออกจาก target_percentage ("เป้าหมาย") — เดิมทั้งสองความหมายใช้ target_percentage
+        // ตัวเดียวปนกัน (เกณฑ์เทียบ HDC vs ค่าเริ่มต้นที่ copy เข้า kpi_results.target_value) ทำให้แก้ไขอย่างใดอย่างหนึ่ง
+        // กระทบอีกอย่างโดยไม่ตั้งใจ — แยกเป็นคอลัมน์ใหม่ ก๊อปปี้ค่าที่เคย "เป็นเกณฑ์" อยู่แล้วมาไว้ที่นี่ครั้งเดียว (backfill)
+        try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS criterion VARCHAR(50) NULL COMMENT 'เกณฑ์ % (จับคู่กับ target_condition) — แยกจาก target_percentage (เป้าหมาย)'`); } catch(e) {}
+        // Backfill ครั้งเดียว: idempotent ด้วย WHERE criterion IS NULL — รันซ้ำได้ทุก restart โดยไม่ทับค่าที่ admin ตั้งไว้แล้ว
+        try { await db.query(`UPDATE kpi_indicators SET criterion = target_percentage WHERE criterion IS NULL AND target_percentage IS NOT NULL`); } catch(e) {}
         // use_sub_indicator_export: 1 = ตอน export ให้สร้างคอลัมน์ตามตัวชี้วัดย่อยแทนคอลัมน์รายเดือน (m10-m09)
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS use_sub_indicator_export TINYINT(1) DEFAULT 0 COMMENT 'ส่งออกโดยใช้ผลงานตัวชี้วัดย่อยแทนรายเดือน (1 คอลัมน์ต่อข้อย่อย)'`); } catch(e) {}
 
@@ -10668,7 +10676,7 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
         const [localRows] = await db.query(`
             SELECT i.id, i.kpi_indicators_name, i.table_process, i.kpi_indicators_code, i.is_active,
                    i.dept_id, i.main_indicator_id, i.upload_excel,
-                   i.target_percentage, i.target_condition, i.data_source,
+                   i.criterion, i.target_condition, i.data_source,
                    d.dept_name, mi.main_indicator_name
             FROM kpi_indicators i
             LEFT JOIN departments d ON i.dept_id = d.id
@@ -10717,7 +10725,7 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                     local_id: null, local_name: null,
                     local_dept_id: null, local_main_indicator_id: null, local_is_active: null,
                     local_upload_excel: null,
-                    local_target_percentage: null, local_target_condition: null, local_data_source: null,
+                    local_criterion: null, local_target_condition: null, local_data_source: null,
                     criteria_match: null,
                     suggest_disable_upload: false
                 });
@@ -10728,9 +10736,9 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                 const status = nameMatch ? 'match' : 'different';
                 if (status === 'match') match++; else different++;
 
-                // criteria_match: เทียบ target_percentage (numeric-aware) + target_condition
-                const pctMatch = Number(effective.target_percentage) === Number(local.target_percentage)
-                    || (effective.target_percentage == null && local.target_percentage == null);
+                // criteria_match: เทียบ criterion (numeric-aware) + target_condition — local.criterion คือ "เกณฑ์" จริง (แยกจาก target_percentage/เป้าหมาย แล้ว)
+                const pctMatch = Number(effective.target_percentage) === Number(local.criterion)
+                    || (effective.target_percentage == null && local.criterion == null);
                 const condMatch = String(effective.target_condition || '') === String(local.target_condition || '');
                 const criteria_match = pctMatch && condMatch;
                 if (!criteria_match) criteria_different++;
@@ -10748,7 +10756,7 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                     local_id: local.id, local_name: local.kpi_indicators_name, local_dept: local.dept_name,
                     local_dept_id: local.dept_id, local_main_indicator_id: local.main_indicator_id, local_is_active: local.is_active,
                     local_upload_excel: local.upload_excel || 0,
-                    local_target_percentage: local.target_percentage, local_target_condition: local.target_condition,
+                    local_criterion: local.criterion, local_target_condition: local.target_condition,
                     local_data_source: local.data_source,
                     criteria_match,
                     suggest_disable_upload: suggest
@@ -10767,7 +10775,7 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                     local_id: local.id, local_name: local.kpi_indicators_name, local_dept: local.dept_name,
                     local_dept_id: local.dept_id, local_main_indicator_id: local.main_indicator_id, local_is_active: local.is_active,
                     local_upload_excel: local.upload_excel || 0,
-                    local_target_percentage: local.target_percentage, local_target_condition: local.target_condition,
+                    local_criterion: local.criterion, local_target_condition: local.target_condition,
                     local_data_source: local.data_source,
                     criteria_match: null,
                     suggest_disable_upload: false

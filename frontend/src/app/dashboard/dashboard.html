@@ -530,12 +530,6 @@
         </div>
         <!-- END sticky top wrapper -->
 
-        <!-- คำแนะนำการคีย์ข้อมูลรายเดือน -->
-        <div class="mx-5 mt-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-[11px] text-red-700">
-          <i class="fas fa-circle-info mt-0.5 shrink-0"></i>
-          <span class="text-red-600 font-semibold blink-slow">ข้อมูลผลงานที่คีย์ในแต่ละเดือน คือข้อมูลสะสมตั้งแต่เดือน <b>ตุลาคม</b> ถึง <b>เดือนปัจจุบัน</b> ของปีงบประมาณ (ไม่ใช่ผลงานเฉพาะเดือนนั้น)</span>
-        </div>
-
         <!-- Mobile Card View -->
         <div class="overflow-x-auto bg-gray-50/30 lg:hidden">
             <div>
@@ -607,6 +601,12 @@
                           <i class="fas fa-hospital text-[8px]"></i>{{ offBadge.label }}
                         </span>
                       </ng-container>
+                      <ng-container *ngIf="getCumulativeBadge(item) as cumBadge">
+                        <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap"
+                              [ngClass]="cumBadge.color" [title]="cumBadge.title">
+                          <i class="fas fa-layer-group text-[8px]"></i>{{ cumBadge.label }}
+                        </span>
+                      </ng-container>
                       <h3 class="font-semibold text-gray-900 text-sm">{{ item.kpi_indicators_name }}<span *ngIf="item | criteriaText as crit" class="text-[11px] font-normal text-amber-600 ml-1">({{ crit }})</span></h3>
                     </div>
                     <p class="text-xs text-gray-600 mb-1">{{ item.main_indicator_name }}</p>
@@ -639,7 +639,7 @@
                   </div>
                   <div class="bg-amber-50 p-2 rounded">
                     <span class="text-gray-600">เกณฑ์:</span>
-                    <span class="font-bold ml-1">{{ item.target_percentage != null && item.target_percentage !== '' ? item.target_percentage + '%' : '-' }}</span>
+                    <span class="font-bold ml-1">{{ item.criterion != null && item.criterion !== '' ? item.criterion + '%' : '-' }}</span>
                   </div>
                   <div class="bg-blue-50 p-2 rounded">
                     <span class="text-gray-600">ผลงานล่าสุด:</span>
@@ -1074,6 +1074,12 @@
                           <i class="fas fa-hospital text-[7px]"></i>{{ offBadge.label }}
                         </span>
                       </ng-container>
+                      <ng-container *ngIf="getCumulativeBadge(item) as cumBadge">
+                        <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] font-bold whitespace-nowrap shrink-0 mt-0.5"
+                              [ngClass]="cumBadge.color" [title]="cumBadge.title">
+                          <i class="fas fa-layer-group text-[7px]"></i>{{ cumBadge.label }}
+                        </span>
+                      </ng-container>
                       <span class="font-medium text-gray-900 whitespace-normal break-words" [title]="item.kpi_indicators_name">{{ item.kpi_indicators_name }}</span>
                       <span *ngIf="item | criteriaText as crit" class="text-[11px] font-normal text-amber-600 shrink-0">({{ crit }})</span>
                       <span *ngIf="item.table_process" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded text-[10px] font-mono whitespace-nowrap shrink-0" [title]="'table_process: ' + item.table_process">
@@ -1088,9 +1094,9 @@
                   </div>
                 </td>
 
-                <!-- Col 4: เกณฑ์ (target_percentage จาก kpi_indicators) — frozen -->
+                <!-- Col 4: เกณฑ์ (criterion จาก kpi_indicators) — frozen -->
                 <td class="px-1 py-2 frozen col-4 bg-white border-r border-gray-100 text-gray-600 text-center text-xs font-bold">
-                  {{ item.target_percentage != null && item.target_percentage !== '' ? item.target_percentage + '%' : '-' }}
+                  {{ item.criterion != null && item.criterion !== '' ? item.criterion + '%' : '-' }}
                 </td>
 
                 <!-- Col 5: หน่วยบริการ (+ ประเภทย่อ + อำเภอบรรทัด 2) — frozen -->

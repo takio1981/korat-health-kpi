@@ -4,6 +4,48 @@
 
 ---
 
+## 2569-09-25 — แยก "เป้าหมาย" ออกจาก "เกณฑ์" ในตัวชี้วัด + เพิ่ม badge "สะสม" แทนข้อความแจ้งเตือน static
+
+### คำขอ
+1. ปรับหน้า "จัดการตัวชี้วัด" ปุ่ม "เพิ่มข้อมูล" ให้กำหนด "เป้าหมาย" เริ่มต้นให้ตัวชี้วัดได้ โดยไม่เกี่ยวข้องกับ
+   "เกณฑ์" — เสนอให้เพิ่ม field `criterion` เก็บ "เกณฑ์" แทนที่ `target_percentage` ซึ่งควรเก็บ "เป้าหมาย" อยู่แล้ว
+2. เอาข้อความ "ข้อมูลผลงานที่คีย์ในแต่ละเดือน คือข้อมูลสะสมตั้งแต่เดือนตุลาคม..." ออกจากหน้า "บันทึกผลงานตัวชี้วัด"
+   แล้วเพิ่ม icon "สะสม" สำหรับตัวชี้วัดที่ตั้งค่า "ตัวชี้วัดสะสม" แทน
+
+### สาเหตุที่ยืนยันจากการอ่านโค้ดจริง (2 รอบอ่านซ้ำยืนยันทุกจุด)
+**ข้อ 1 — เป้าหมาย/เกณฑ์ปนกัน:** `target_percentage` (คู่กับ `target_condition`) ถูกใช้งานจริง 2 บทบาทที่ต่างกัน
+โดยสิ้นเชิงในคอลัมน์เดียว — (ก) "เกณฑ์" สำหรับเทียบ HDC ผ่าน `GET /report-compare` และแสดงผลผ่าน `criteriaText`
+pipe ทั่วทั้งระบบ (dashboard, report, form-builder, export-kpi, kpi-setup) (ข) "เป้าหมาย" ค่าเริ่มต้นที่คัดลอก
+เข้า `kpi_results.target_value` ตอนตั้งปีงบใหม่/เพิ่ม KPI ให้หน่วยบริการ — modal เพิ่ม/แก้ไขตัวชี้วัดเดิมมีแค่
+กล่องเดียวชื่อ "เกณฑ์" ให้กรอก `target_percentage` ไม่มีช่องตั้ง "เป้าหมาย" แยกเลย
+
+**ข้อ 2 — ข้อความ static ไม่ตรงความจริงเสมอไป:** ระบบมีคอลัมน์ `is_cumulative` ที่แยกตัวชี้วัดเป็น 2 แบบจริงอยู่
+แล้วครบวงจร (checkbox ตั้งค่าใน kpi-manage, logic คำนวณทั้ง backend/frontend) — ข้อความเดิมที่ขึ้นทุกแถวเสมอ
+จึงไม่ถูกต้องสำหรับตัวชี้วัดที่ไม่ใช่สะสม (ส่วนใหญ่ของระบบ)
+
+### วิธีแก้
+**ส่วนที่ 1:** เพิ่มคอลัมน์ `criterion VARCHAR(50)` ใหม่ พร้อม backfill ค่าเดิมจาก `target_percentage` ครั้งเดียว
+ตอน deploy (กัน HDC-compare ของตัวชี้วัดเดิม ~172+ ตัวพังทันที) แล้วปล่อยให้ `target_percentage` ทำหน้าที่
+"เป้าหมาย" อย่างเดียวต่อไป — อัปเดตทุกจุดที่ query/แสดงผล "เกณฑ์" ให้อ่านจาก `criterion` แทน (backend 7 endpoint
++ HDC-diff logic, frontend: `criteria-text.pipe.ts`, `kpi-manage.ts`/`.html`, `dashboard.html`,
+`report-compare.html`) เพิ่มกล่อง "เป้าหมาย (ค่าเริ่มต้น)" ใหม่แยกจากกล่อง "เกณฑ์" เดิมใน modal เพิ่ม/แก้ไข
+ตัวชี้วัด พร้อม badge "เป้าหมาย" ในรายการหลักและคอลัมน์แยกใน Excel import preview
+
+**ส่วนที่ 2:** ลบข้อความ static ออกจาก `dashboard.html` เพิ่ม `getCumulativeBadge()` แสดง badge "สะสม" (สีม่วง)
+ต่อชื่อตัวชี้วัดที่ `is_cumulative=1` เท่านั้น — งานหลัก (backend logic, checkbox ตั้งค่า) มีอยู่แล้วทั้งหมด
+เหลือแค่เพิ่ม UI แสดงผลที่ dashboard
+
+### ไฟล์ที่แก้ไข
+- `api/server.js` — migration + backfill, CRUD 3 endpoint (`/indicators`, `/indicators` POST, `/indicators/:id`
+  PUT, `/indicators/bulk-import`), read-path 7 จุด, HDC-diff logic ใน `/report-compare`
+- `frontend/src/app/shared/criteria-text.pipe.ts`
+- `frontend/src/app/kpi-manage/kpi-manage.html` + `.ts`
+- `frontend/src/app/dashboard/dashboard.html` + `.ts`
+- `frontend/src/app/report-compare/report-compare.html`
+- `CLAUDE.md`, `frontend/src/app/changelog/changelog.ts` (`2569.09.25.j`)
+
+---
+
 ## 2569-09-25 — หน้า "จัดการตัวชี้วัด": ปรับตำแหน่งตัวกรองให้กระชับขึ้น
 
 ### อาการที่พบ
