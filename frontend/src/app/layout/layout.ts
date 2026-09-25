@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy, inject, ChangeDetectorRef, NgZone, ViewCh
 import { Router, RouterModule, RouterOutlet, NavigationEnd, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { ThemeService } from '../services/theme.service';
+import { IdleTimeoutService } from '../services/idle-timeout.service';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import Swal from 'sweetalert2';
@@ -23,6 +24,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
   private ngZone = inject(NgZone);
+  private idleTimeoutService = inject(IdleTimeoutService);
 
   themeService = inject(ThemeService);
 
@@ -85,6 +87,11 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.isAnyAdmin = ['admin_hos', 'admin_sso', 'admin_cup', 'admin_ssj', 'super_admin'].includes(role);
     this.isSuperAdmin = role === 'super_admin';
     this.authService.startTokenExpiryWatcher();
+    // เรียกซ้ำที่นี่ (นอกจากที่ app.ts เรียกไว้ตอน bootstrap) — ตอน bootstrap อาจยังไม่ login เลย ทำให้
+    // GET /settings ที่ใช้ดึงค่า config (idle_timeout_minutes ฯลฯ) ได้ 401 แล้ว fallback เป็นค่า default เสมอ
+    // (ตั้งแต่ GET /settings เปลี่ยนมาต้อง login ก่อน) — ที่นี่การันตีว่า login แล้วแน่นอน (ผ่าน authGuard มาแล้ว)
+    // จึงดึงค่า config จริงจาก server ได้ถูกต้อง ไม่ใช่แค่ค่า default เสมอไป
+    this.idleTimeoutService.start();
     this.loadSettings();
     this.loadPendingCount();
     this.loadUnreadNotifCount();
