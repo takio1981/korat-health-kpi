@@ -222,6 +222,21 @@ async function sendLineToUser(userId, message) {
     }
 }
 
+// ลบ notification "ผู้ใช้งานใหม่รอการอนุมัติ" ที่อ้างอิง user ที่ถูกลบไปแล้ว (created_by = deletedUserId)
+// กันไม่ให้เกิด notification ค้าง → คลิกแล้ว 404 (/users/:id/basic ไม่พบ)
+// ใช้ title เจาะจงแทน created_by อย่างเดียว เพราะ created_by ใช้ร่วมกับ notification ประเภทอื่นๆ ด้วย (approve/reject/appeal ฯลฯ)
+async function cleanupPendingApprovalNotifications(deletedUserId) {
+    try {
+        if (!deletedUserId) return;
+        await db.query(
+            "DELETE FROM notifications WHERE title = 'ผู้ใช้งานใหม่รอการอนุมัติ' AND created_by = ?",
+            [deletedUserId]
+        );
+    } catch (e) {
+        console.error('[cleanupPendingApprovalNotifications] failed:', e.message);
+    }
+}
+
 /**
  * ส่งการแจ้งเตือน login ทุกช่องทาง — fire-and-forget (ไม่ await)
  * 4 ช่องทาง: Local DB | LINE group (admin) | LINE personal (user) | Email | Telegram (admin)
@@ -2853,6 +2868,7 @@ apiRouter.post('/register', loginIpLimiter, loginLimiter, async (req, res) => {
             if (existingCid[0].is_approved === -1) {
                 // ถูกปฏิเสธ → ลบ account เก่าแล้วให้สมัครใหม่ได้
                 await db.query('DELETE FROM users WHERE id = ?', [existingCid[0].id]);
+                await cleanupPendingApprovalNotifications(existingCid[0].id);
             } else {
                 return res.status(400).json({ success: false, message: 'เลขบัตรประชาชนนี้ถูกลงทะเบียนไปแล้ว' });
             }
@@ -2884,6 +2900,7 @@ apiRouter.post('/register', loginIpLimiter, loginLimiter, async (req, res) => {
             if (existing[0].is_approved === -1) {
                 // ถูกปฏิเสธ → ลบ account เก่า
                 await db.query('DELETE FROM users WHERE id = ?', [existing[0].id]);
+                await cleanupPendingApprovalNotifications(existing[0].id);
             } else {
                 return res.status(400).json({ success: false, message: 'ชื่อผู้ใช้งานนี้ถูกใช้แล้ว กรุณาเปลี่ยนชื่อผู้ใช้งาน' });
             }
@@ -5185,6 +5202,7 @@ apiRouter.delete('/users/:id', authenticateToken, isAnyAdmin, async (req, res) =
         }
 
         await db.query('DELETE FROM users WHERE id = ?', [userId]);
+        await cleanupPendingApprovalNotifications(userId);
         await db.query(
             'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [user.userId, user.deptId, 'DELETE', 'users', userId, JSON.stringify({ message: `Deleted ID: ${userId}` }), req.ip]
