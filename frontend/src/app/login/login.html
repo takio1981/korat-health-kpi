@@ -91,34 +91,34 @@
         </div>
 
         <!-- Glassmorphism Card -->
-        <div class="bg-white/65 backdrop-blur-xl rounded-3xl shadow-2xl p-7 sm:p-9 border border-white/60 dark:bg-[#24243a]/80 dark:border-gray-700 max-h-[90vh] overflow-y-scroll card-scroll" style="scrollbar-width: thin; scrollbar-color: rgba(16, 185, 129, 0.5) rgba(229, 231, 235, 0.3);">
+        <div class="bg-white/65 backdrop-blur-xl rounded-3xl shadow-2xl p-5 sm:p-6 border border-white/60 dark:bg-[#24243a]/80 dark:border-gray-700 max-h-[92vh] overflow-y-auto card-scroll" style="scrollbar-width: thin; scrollbar-color: rgba(16, 185, 129, 0.5) rgba(229, 231, 235, 0.3);">
 
-          <div class="text-center mb-7">
-            <h2 class="text-3xl font-bold text-green-900 dark:text-white">เข้าสู่ระบบ</h2>
-            <div class="flex items-center justify-center gap-2 mt-2">
+          <div class="text-center mb-3.5">
+            <h2 class="text-2xl font-bold text-green-900 dark:text-white">เข้าสู่ระบบ</h2>
+            <div class="flex items-center justify-center gap-2 mt-1">
               <div class="w-8 h-px bg-green-300"></div>
               <span class="w-2 h-2 bg-green-500 rounded-full"></span>
               <div class="w-8 h-px bg-green-300"></div>
             </div>
-            <p class="text-gray-600 mt-2 text-sm dark:text-gray-400">กรุณากรอกข้อมูลเพื่อเข้าถึงระบบบันทึกผลงานตัวชี้วัด</p>
+            <p class="text-gray-600 mt-1 text-xs dark:text-gray-400">กรุณากรอกข้อมูลเพื่อเข้าถึงระบบบันทึกผลงานตัวชี้วัด</p>
           </div>
 
           <!-- ลงทะเบียน + คู่มือการใช้งาน — ย้ายมาไว้บนสุด (เหนือชื่อผู้ใช้งาน) ให้สังเกตเห็นง่าย -->
-          <div class="flex items-center justify-center gap-3 mb-6">
+          <div class="flex items-center justify-center gap-3 mb-3.5">
             <a routerLink="/register"
-               class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs sm:text-sm font-bold transition-all shadow-sm hover:shadow-md">
+               class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs sm:text-sm font-bold transition-all shadow-sm hover:shadow-md">
               <i class="fas fa-user-plus"></i>ลงทะเบียน
             </a>
             <a routerLink="/help-public"
-               class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-white/80 hover:bg-white border border-white/80 text-green-800 hover:text-green-900 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-sm hover:shadow-md">
+               class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white/80 hover:bg-white border border-white/80 text-green-800 hover:text-green-900 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-sm hover:shadow-md">
               <i class="fas fa-book-open"></i>คู่มือการใช้งาน
             </a>
           </div>
 
-          <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="space-y-5">
+          <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="space-y-3">
 
             <div>
-              <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2" for="username">ชื่อผู้ใช้งาน</label>
+              <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1" for="username">ชื่อผู้ใช้งาน</label>
               <div class="relative">
                 <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -126,13 +126,13 @@
                   </svg>
                 </div>
                 <input type="text" id="username" formControlName="username" autocomplete="username"
-                       class="w-full pl-11 pr-4 py-3 bg-white/80 border border-white/80 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:bg-white transition-all text-gray-800 placeholder-gray-400"
+                       class="w-full pl-11 pr-4 py-2.5 bg-white/80 border border-white/80 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:bg-white transition-all text-gray-800 placeholder-gray-400"
                        placeholder="Username">
               </div>
             </div>
 
             <div>
-              <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2" for="password">รหัสผ่าน</label>
+              <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1" for="password">รหัสผ่าน</label>
               <div class="relative">
                 <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -140,7 +140,7 @@
                   </svg>
                 </div>
                 <input [type]="showPassword ? 'text' : 'password'" id="password" formControlName="password" autocomplete="current-password"
-                       class="w-full pl-11 pr-11 py-3 bg-white/80 border border-white/80 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:bg-white transition-all text-gray-800 placeholder-gray-400"
+                       class="w-full pl-11 pr-11 py-2.5 bg-white/80 border border-white/80 rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 focus:bg-white transition-all text-gray-800 placeholder-gray-400"
                        placeholder="Password">
                 <button type="button" (click)="showPassword = !showPassword"
                         class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-600">
@@ -149,14 +149,14 @@
               </div>
             </div>
 
-            <div class="flex items-center justify-end">
+            <div class="flex items-center justify-end -mt-1">
               <button type="button" (click)="forgotPassword()" class="text-sm font-semibold text-green-700 hover:text-green-900 transition-colors">
                 <i class="fas fa-key mr-1"></i>ลืมรหัสผ่าน?
               </button>
             </div>
 
             <button type="submit" [disabled]="thaidAutoFilling"
-              class="w-full py-3 px-4 bg-gradient-to-r from-green-700 to-green-600 hover:from-green-800 hover:to-green-700 text-white font-bold rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none">
+              class="w-full py-2.5 px-4 bg-gradient-to-r from-green-700 to-green-600 hover:from-green-800 hover:to-green-700 text-white font-bold rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none">
               <span *ngIf="!thaidAutoFilling">เข้าสู่ระบบ</span>
               <span *ngIf="thaidAutoFilling">
                 <svg class="inline animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
@@ -168,30 +168,30 @@
           </form>
 
           <!-- SSO Buttons: ThaiD + ProviderID -->
-          <div *ngIf="isThaIdEnabled || isProviderIdEnabled" class="mt-5">
-            <div class="flex items-center gap-3 mb-4">
+          <div *ngIf="isThaIdEnabled || isProviderIdEnabled" class="mt-3">
+            <div class="flex items-center gap-3 mb-2.5">
               <hr class="flex-1 border-gray-200/60">
               <span class="text-xs text-gray-400 font-medium whitespace-nowrap">หรือเข้าสู่ระบบด้วย</span>
               <hr class="flex-1 border-gray-200/60">
             </div>
 
             <!-- ThaiD Button -->
-            <div *ngIf="isThaIdEnabled" class="mb-3">
+            <div *ngIf="isThaIdEnabled" class="mb-2">
               <button type="button" (click)="loginWithThaID()" [disabled]="thaidVerifying"
-                      class="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white/80 hover:bg-white border-2 border-blue-200 hover:border-blue-400 text-blue-800 font-bold rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 backdrop-blur-sm disabled:opacity-60 disabled:cursor-not-allowed">
+                      class="w-full flex items-center justify-center gap-3 py-2 px-4 bg-white/80 hover:bg-white border-2 border-blue-200 hover:border-blue-400 text-blue-800 font-bold rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 backdrop-blur-sm disabled:opacity-60 disabled:cursor-not-allowed">
                 <span *ngIf="thaidVerifying" class="flex items-center gap-2">
                   <i class="fas fa-spinner fa-spin text-blue-500"></i>
                   <span class="text-sm">กำลังตรวจสอบ ThaID...</span>
                 </span>
                 <span *ngIf="!thaidVerifying" class="flex items-center gap-3 w-full">
-                  <img src="thaid.png" alt="ThaID" class="h-7 w-auto object-contain">
+                  <img src="thaid.png" alt="ThaID" class="h-6 w-auto object-contain">
                   <span class="text-sm">เข้าสู่ระบบด้วย ThaID</span>
                   <i class="fas fa-arrow-right text-blue-400 ml-auto text-xs"></i>
                 </span>
               </button>
-              <div class="flex items-center justify-between mt-1.5 px-0.5">
-                <p class="text-[10px] text-gray-400">
-                  <i class="fas fa-shield-halved mr-1 text-blue-300"></i>ยืนยันตัวตนด้วยบัตรประชาชนผ่าน DGA ThaID
+              <div class="flex items-center justify-between mt-1 px-0.5">
+                <p class="text-[10px] text-gray-400 truncate">
+                  <i class="fas fa-shield-halved mr-1 text-blue-300"></i>ยืนยันตัวตนผ่าน DGA ThaID
                 </p>
                 <span class="flex items-center gap-1 text-[10px] shrink-0"
                       [ngClass]="thaidConnected==='ok' ? 'text-green-600' : thaidConnected==='error' ? 'text-red-500' : 'text-gray-400'">
@@ -205,19 +205,19 @@
             <!-- ProviderID Button -->
             <div *ngIf="isProviderIdEnabled">
               <button type="button" (click)="loginWithProviderID()"
-                      class="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white/80 hover:bg-white border-2 border-teal-200 hover:border-teal-400 text-teal-800 font-bold rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 backdrop-blur-sm">
+                      class="w-full flex items-center justify-center gap-3 py-2 px-4 bg-white/80 hover:bg-white border-2 border-teal-200 hover:border-teal-400 text-teal-800 font-bold rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 backdrop-blur-sm">
                 <span class="flex items-center gap-3 w-full">
-                  <img src="provider-id.png" alt="ProviderID MOPH" class="h-7 w-auto object-contain p-0.5"
+                  <img src="provider-id.png" alt="ProviderID MOPH" class="h-6 w-auto object-contain p-0.5"
                        onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='inline-flex'">
-                  <span class="hidden items-center justify-center h-7 w-7 rounded bg-teal-100 text-teal-700 text-xs font-bold">
+                  <span class="hidden items-center justify-center h-6 w-6 rounded bg-teal-100 text-teal-700 text-xs font-bold">
                     <i class="fas fa-hospital"></i>
                   </span>
                   <span class="text-sm">เข้าสู่ระบบด้วย ProviderID</span>
                   <i class="fas fa-arrow-right text-teal-400 ml-auto text-xs"></i>
                 </span>
               </button>
-              <div class="flex items-center justify-between mt-1.5 px-0.5">
-                <p class="text-[10px] text-gray-400">
+              <div class="flex items-center justify-between mt-1 px-0.5">
+                <p class="text-[10px] text-gray-400 truncate">
                   <i class="fas fa-shield-halved mr-1 text-teal-300"></i>ยืนยันตัวตนผ่าน MOPH Provider ID
                 </p>
                 <span class="flex items-center gap-1 text-[10px] shrink-0"
