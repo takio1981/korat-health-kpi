@@ -176,22 +176,22 @@
             </div>
 
             <!-- ThaiD Button -->
-            <div *ngIf="isThaIdEnabled" class="mb-2">
+            <div *ngIf="isThaIdEnabled" class="mb-1.5">
               <button type="button" (click)="loginWithThaID()" [disabled]="thaidVerifying"
-                      class="w-full flex items-center justify-center gap-3 py-2 px-4 bg-white/80 hover:bg-white border-2 border-blue-200 hover:border-blue-400 text-blue-800 font-bold rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 backdrop-blur-sm disabled:opacity-60 disabled:cursor-not-allowed">
+                      class="w-full flex items-center justify-center gap-3 py-1.5 px-4 bg-white/80 hover:bg-white border-2 border-indigo-200 hover:border-indigo-400 text-indigo-800 font-bold rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 backdrop-blur-sm disabled:opacity-60 disabled:cursor-not-allowed">
                 <span *ngIf="thaidVerifying" class="flex items-center gap-2">
-                  <i class="fas fa-spinner fa-spin text-blue-500"></i>
+                  <i class="fas fa-spinner fa-spin text-indigo-500"></i>
                   <span class="text-sm">กำลังตรวจสอบ ThaID...</span>
                 </span>
                 <span *ngIf="!thaidVerifying" class="flex items-center gap-3 w-full">
-                  <img src="thaid.png" alt="ThaID" class="h-6 w-auto object-contain">
+                  <img src="thaid.png" alt="ThaID" class="h-8 w-auto object-contain">
                   <span class="text-sm">เข้าสู่ระบบด้วย ThaID</span>
-                  <i class="fas fa-arrow-right text-blue-400 ml-auto text-xs"></i>
+                  <i class="fas fa-arrow-right text-indigo-400 ml-auto text-xs"></i>
                 </span>
               </button>
-              <div class="flex items-center justify-between mt-1 px-0.5">
+              <div class="flex items-center justify-between mt-0.5 px-0.5">
                 <p class="text-[10px] text-gray-400 truncate">
-                  <i class="fas fa-shield-halved mr-1 text-blue-300"></i>ยืนยันตัวตนผ่าน DGA ThaID
+                  <i class="fas fa-shield-halved mr-1 text-indigo-300"></i>ยืนยันตัวตนผ่าน DGA ThaID
                 </p>
                 <span class="flex items-center gap-1 text-[10px] shrink-0"
                       [ngClass]="thaidConnected==='ok' ? 'text-green-600' : thaidConnected==='error' ? 'text-red-500' : 'text-gray-400'">
@@ -205,20 +205,20 @@
             <!-- ProviderID Button -->
             <div *ngIf="isProviderIdEnabled">
               <button type="button" (click)="loginWithProviderID()"
-                      class="w-full flex items-center justify-center gap-3 py-2 px-4 bg-white/80 hover:bg-white border-2 border-teal-200 hover:border-teal-400 text-teal-800 font-bold rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 backdrop-blur-sm">
+                      class="w-full flex items-center justify-center gap-3 py-1.5 px-4 bg-white/80 hover:bg-white border-2 border-emerald-200 hover:border-emerald-400 text-emerald-800 font-bold rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 backdrop-blur-sm">
                 <span class="flex items-center gap-3 w-full">
-                  <img src="provider-id.png" alt="ProviderID MOPH" class="h-6 w-auto object-contain p-0.5"
+                  <img src="provider-id.png" alt="ProviderID MOPH" class="h-8 w-auto object-contain"
                        onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='inline-flex'">
-                  <span class="hidden items-center justify-center h-6 w-6 rounded bg-teal-100 text-teal-700 text-xs font-bold">
+                  <span class="hidden items-center justify-center h-8 w-8 rounded bg-emerald-100 text-emerald-700 text-xs font-bold">
                     <i class="fas fa-hospital"></i>
                   </span>
                   <span class="text-sm">เข้าสู่ระบบด้วย ProviderID</span>
-                  <i class="fas fa-arrow-right text-teal-400 ml-auto text-xs"></i>
+                  <i class="fas fa-arrow-right text-emerald-400 ml-auto text-xs"></i>
                 </span>
               </button>
-              <div class="flex items-center justify-between mt-1 px-0.5">
+              <div class="flex items-center justify-between mt-0.5 px-0.5">
                 <p class="text-[10px] text-gray-400 truncate">
-                  <i class="fas fa-shield-halved mr-1 text-teal-300"></i>ยืนยันตัวตนผ่าน MOPH Provider ID
+                  <i class="fas fa-shield-halved mr-1 text-emerald-300"></i>ยืนยันตัวตนผ่าน MOPH Provider ID
                 </p>
                 <span class="flex items-center gap-1 text-[10px] shrink-0"
                       [ngClass]="providerIdConnected==='ok' ? 'text-green-600' : providerIdConnected==='error' ? 'text-red-500' : 'text-gray-400'">
