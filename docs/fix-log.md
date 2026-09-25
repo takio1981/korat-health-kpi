@@ -4,6 +4,41 @@
 
 ---
 
+## 2569-09-25 — console error "GET /settings 401" ขึ้นทุกครั้งที่เปิดแอป (แม้หน้า login)
+
+### อาการที่พบ
+```
+idle-timeout.service.ts:25  GET http://localhost:3700/khupskpi/api/settings 401 (Unauthorized)
+```
+ขึ้นซ้ำทุกครั้งที่โหลดแอป รวมถึงตอนอยู่หน้า login เอง (ก่อนหน้านี้เข้าใจว่าเป็นแค่ log ที่เลี่ยงไม่ได้ตาม
+ธรรมชาติของ browser ที่ log ทุก request ที่ fail — แต่ครั้งนี้ตรวจสอบพบว่าจริงๆ แล้วแก้ที่ root cause ได้เลย)
+
+### สาเหตุ
+`app.ts` (root component ของทั้งแอป) เรียก `idleTimeoutService.start()` ใน `ngOnInit()` โดยไม่มีเงื่อนไขใดๆ —
+ฟังก์ชันนี้เรียก `GET /settings` ทันทีเพื่อดึงค่า config (idle_timeout_minutes ฯลฯ) แต่ `app.ts` ทำงานทุกครั้งที่
+แอป bootstrap รวมถึงตอนอยู่หน้า login/register (ยังไม่มี token เลย) ทำให้ 401 แน่นอนทุกครั้ง
+
+ตรวจสอบ `app.routes.ts` พบว่าทุกหน้าที่ต้อง login (dashboard, users, settings ฯลฯ) ถูกครอบด้วย
+`LayoutComponent` ผ่าน `authGuard` เสมอ ไม่มีหน้าไหนหลุดออกไปนอก layout เลย และ `layout.ts` ก็เรียก
+`idleTimeoutService.start()` ซ้ำอยู่แล้วใน `ngOnInit()` ของตัวเอง (มี comment เดิมอธิบายเหตุผลไว้ชัดเจนว่า
+เพิ่มมาเพราะจุดใน `app.ts` ทำงานก่อน login) — สรุปคือจุดเรียกใน `app.ts` **ไม่จำเป็นเลย** เพราะ `layout.ts`
+รับหน้าที่นี้ไปแล้วอย่างถูกต้อง (รันได้ก็ต่อเมื่อผ่าน `authGuard` แล้วเท่านั้น การันตี login แน่นอน)
+
+### วิธีแก้
+ลบการเรียก `idleTimeoutService.start()` (และ `stop()` ใน `ngOnDestroy`) ออกจาก `app.ts` ทั้งหมด รวมถึง import/
+inject ที่ไม่ใช้แล้ว — เหลือจุดเรียกเดียวที่ `layout.ts` เท่านั้น อัปเดต comment ใน `layout.ts` ให้ตรงกับเหตุผล
+ปัจจุบัน (ไม่ใช่ "เรียกซ้ำ" อีกต่อไป แต่เป็นจุดเดียวที่เรียก)
+
+ทดสอบยืนยันด้วย Playwright: หน้า login โหลดแล้ว **ไม่มี request ไหนขึ้น 401 เลย** และหลัง login (จำลองด้วย token
+จริง) เข้าหน้า dashboard แล้ว `GET /settings` ยิงสำเร็จ (200) ตามปกติ ไม่กระทบการทำงานของ Auto Logout เลย
+
+### ไฟล์ที่แก้ไข
+- `frontend/src/app/app.ts` — ลบการเรียก `idleTimeoutService` ที่ไม่จำเป็นออกทั้งหมด
+- `frontend/src/app/layout/layout.ts` — อัปเดต comment ให้ตรงกับเหตุผลปัจจุบัน
+- `frontend/src/app/changelog/changelog.ts` — เพิ่ม entry `2569.09.25.g`
+
+---
+
 ## 2569-09-25 — Data Synchronization (Users): แสดง Field Diff รายคน + ตรวจสอบ/ปรับแต่ง Mapping โครงสร้างตาราง Local ↔ HDC
 
 ### คำขอ

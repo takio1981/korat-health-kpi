@@ -87,10 +87,10 @@ export class LayoutComponent implements OnInit, OnDestroy {
     this.isAnyAdmin = ['admin_hos', 'admin_sso', 'admin_cup', 'admin_ssj', 'super_admin'].includes(role);
     this.isSuperAdmin = role === 'super_admin';
     this.authService.startTokenExpiryWatcher();
-    // เรียกซ้ำที่นี่ (นอกจากที่ app.ts เรียกไว้ตอน bootstrap) — ตอน bootstrap อาจยังไม่ login เลย ทำให้
-    // GET /settings ที่ใช้ดึงค่า config (idle_timeout_minutes ฯลฯ) ได้ 401 แล้ว fallback เป็นค่า default เสมอ
-    // (ตั้งแต่ GET /settings เปลี่ยนมาต้อง login ก่อน) — ที่นี่การันตีว่า login แล้วแน่นอน (ผ่าน authGuard มาแล้ว)
-    // จึงดึงค่า config จริงจาก server ได้ถูกต้อง ไม่ใช่แค่ค่า default เสมอไป
+    // เรียกที่นี่เท่านั้น (ไม่เรียกจาก app.ts ตอน bootstrap อีกต่อไป) — LayoutComponent mount ได้ก็ต่อเมื่อผ่าน
+    // authGuard แล้ว จึงการันตีว่า login แล้วแน่นอน ดึงค่า config จริงจาก GET /settings ได้ถูกต้อง
+    // (เดิมเรียกซ้ำจาก app.ts ด้วย ทำให้ทุกหน้ารวมถึงหน้า login ยิง GET /settings ก่อน login เสมอ ได้ 401
+    // ค้างใน console โดยไม่จำเป็น — เอาออกแล้ว)
     this.idleTimeoutService.start();
     this.loadSettings();
     this.loadPendingCount();

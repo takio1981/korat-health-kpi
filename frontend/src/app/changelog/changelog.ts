@@ -18,6 +18,13 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.09.25.g',
+      date: '25 กันยายน 2569 (build g)',
+      changes: [
+        { type: 'fix', text: 'แก้ไข console error "GET /settings 401 (Unauthorized)" ที่ขึ้นทุกครั้งที่เปิดแอป แม้แต่หน้า login เอง — สาเหตุคือ component หลักของแอป (app.ts) เรียกฟังก์ชันเริ่มนับเวลา Auto Logout ตั้งแต่ตอน bootstrap แอปทันที ซึ่งจะไปเรียก GET /settings ทั้งที่ยังไม่ login เสมอ (ได้ 401 แน่นอน) ทั้งที่มีจุดที่เรียกซ้ำอย่างถูกต้องอยู่แล้วใน layout.ts (รันหลัง login ผ่าน authGuard แน่นอน) แก้โดยลบการเรียกซ้ำที่ไม่จำเป็นออกจาก app.ts เหลือแค่จุดเดียวที่ layout.ts — ไม่กระทบการทำงานของ Auto Logout เลย (ยังคงเริ่มนับเวลาถูกต้องหลัง login ทุกกรณี) แค่ไม่มี request ที่รู้อยู่แล้วว่าต้อง 401 ยิงออกไปโดยไม่จำเป็นอีกต่อไป' },
+      ]
+    },
+    {
       version: '2569.09.25.f',
       date: '25 กันยายน 2569 (build f)',
       changes: [

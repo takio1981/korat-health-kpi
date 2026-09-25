@@ -1,6 +1,5 @@
-import { Component, signal, OnInit, OnDestroy, inject } from '@angular/core';
+import { Component, signal, OnInit, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
-import { IdleTimeoutService } from './services/idle-timeout.service';
 import { ThemeService } from './services/theme.service';
 
 @Component({
@@ -9,9 +8,8 @@ import { ThemeService } from './services/theme.service';
   templateUrl: './app.html',
   styleUrl: './app.css'
 })
-export class App implements OnInit, OnDestroy {
+export class App implements OnInit {
   protected readonly title = signal('Korat Health KPI');
-  private idleTimeoutService = inject(IdleTimeoutService);
   private themeService = inject(ThemeService); // โหลด theme ตั้งแต่เริ่ม app
 
   ngOnInit() {
@@ -38,11 +36,5 @@ export class App implements OnInit, OnDestroy {
       }
       sessionStorage.setItem(sessionKey, '1');
     }
-
-    this.idleTimeoutService.start();
-  }
-
-  ngOnDestroy() {
-    this.idleTimeoutService.stop();
   }
 }
