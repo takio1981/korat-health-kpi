@@ -937,6 +937,21 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.post(`${this.apiUrl}/users/sync-to-hdc`, { usernames }, { headers });
   }
+  getUsersStructureCompare(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/users/structure-compare`, { headers });
+  }
+  getUsersSyncMapping(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/users/sync-mapping`, { headers });
+  }
+  saveUsersSyncMapping(payload: { exclude: string[]; mapping: Record<string, string> }): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/users/sync-mapping`, payload, { headers });
+  }
 
   // Departments (CRUD)
   createDepartment(data: any): Observable<any> {

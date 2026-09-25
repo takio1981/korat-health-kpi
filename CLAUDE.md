@@ -289,10 +289,32 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - `formatNum()` helper: จำนวนเต็มไม่มีทศนิยม (70), มีเศษ 2 ตำแหน่ง (70.50)
 
 ### Users Data Sync (Local ↔ HDC)
-- `GET /users/sync-compare` — เทียบ 4 สถานะ (matched/different/local_only/hdc_only)
-- `POST /users/sync-to-hdc` — UPSERT batch 100 rows (สร้างตารางใน HDC อัตโนมัติถ้ายังไม่มี)
-- Log: `USERS_SYNC_TO_HDC` ใน system_logs
-- UI: ปุ่ม "Data Synchronization" ใน user-management (เฉพาะ super_admin) → modal เทียบ + เลือก + sync
+- `GET /users/sync-compare` — เทียบ 4 สถานะ (matched/different/local_only/hdc_only) — แต่ละ user ใน `different[]`
+  แนบ `_diff: [{field, hdc_field?, local_value, hdc_value}]` (เก็บทุก field ที่ต่างกันจริง ไม่ break ที่ตัวแรก)
+  พร้อม `sync_config: {exclude, mapping}` บอก context ว่ากำลังใช้ config ไหนอยู่
+- `POST /users/sync-to-hdc` — UPSERT batch 100 rows (สร้างตารางใน HDC อัตโนมัติถ้ายังไม่มี — เฉพาะทิศทาง
+  Local→HDC คอลัมน์ที่ Local มีแต่ HDC ไม่มี ยังคง auto-ALTER ADD COLUMN เหมือนเดิม) — เขียนลงคอลัมน์ปลายทางตาม
+  mapping ที่ตั้งไว้ (ถ้ามี) แทนชื่อคอลัมน์เดิม
+- `GET /users/structure-compare` (super_admin) — `SHOW COLUMNS FROM users` เทียบ local vs HDC เฉพาะตาราง
+  `users` (ใช้ helper `diffTableColumns()` ร่วมกับ `/db-compare`) — **รายงานอย่างเดียว ไม่แก้โครงสร้าง HDC
+  อัตโนมัติ** เพราะ HDC.users ถูกใช้ร่วมกับระบบอื่นจริง (พบว่ามี user มากกว่า Local หลายเท่า)
+- `GET /users/sync-mapping` + `PUT /users/sync-mapping` (super_admin) — ตั้งค่า column mapping (local field ↔
+  HDC field ที่ชื่อไม่ตรงกัน) + exclude list (คอลัมน์ที่ไม่ต้อง sync/เทียบเลย) เก็บใน `system_settings` keys
+  `users_sync_field_mapping` (JSON object) + `users_sync_exclude_columns` (JSON array) — default exclude
+  seed คอลัมน์ session/tracking ที่เปลี่ยนตลอดเวลา (`last_seen_at`, `active_session_id`, `session_started_at`,
+  `last_seen_ip`, `last_seen_ua`, `kicked_by_ip`, `kicked_by_ua`, `kicked_at`, `temp_password`,
+  `temp_password_expiry`, `must_change_password`) กันขึ้น "ต่างกัน" ปลอมๆ บัง diff จริงของ role/cid — mapping
+  default ว่าง (ไม่ pre-seed `cid→cid_hash` แม้จะรู้ว่าน่าจะถูก ให้ super_admin ยืนยันเองหลังดูรายงานโครงสร้าง)
+  - **⚠️ ต้องประกาศ route ตรงตัว (`/users/sync-mapping`) ก่อน `/users/:id` เสมอ** — Express จับ path ตามลำดับ
+    ประกาศ ถ้าวางหลัง wildcard route จะโดน `/users/:id` ดักจับ "sync-mapping" เป็นค่า `:id` ไปเงียบๆ (เจอบั๊กนี้
+    จริงตอนพัฒนา แก้โดยย้าย `PUT /users/sync-mapping` มาก่อน `PUT /users/:id`)
+  - `system_settings.setting_value` widen จาก `VARCHAR(255)` → `TEXT` แล้ว (migration auto-run) เพราะ JSON ของ
+    exclude list เกือบเต็ม 255 ตัวอักษรตั้งแต่ default
+- Log: `USERS_SYNC_TO_HDC`, `USERS_SYNC_MAPPING_UPDATE` ใน system_logs
+- UI: ปุ่ม "Data Synchronization" ใน user-management (เฉพาะ super_admin) → modal 3 แท็บ (ใช้ `[hidden]` ไม่ใช่
+  `*ngIf` กันโหลดซ้ำ): **เปรียบเทียบข้อมูล** (ตารางเดิม + แถวขยายดู field diff รายคนได้), **ตรวจสอบโครงสร้าง
+  ตาราง** (ปุ่มเทียบ SHOW COLUMNS + diff chip list สไตล์เดียวกับ `db-compare.html`), **ตั้งค่า Mapping** (ตาราง
+  input ชื่อคอลัมน์ปลายทาง + checkbox exclude ต่อคอลัมน์)
 
 ### Export KPI Tables
 - Endpoint: `POST /export-kpi-tables` — สร้าง/อัปเดตตาราง MySQL แยกรายตัวชี้วัด

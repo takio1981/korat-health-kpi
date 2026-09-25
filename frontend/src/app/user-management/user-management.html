@@ -921,90 +921,203 @@
       </div>
       <button (click)="closeSyncModal()" class="text-white/70 hover:text-white"><i class="fas fa-times text-xl"></i></button>
     </div>
-    <div class="p-6">
-      <!-- Loading -->
-      <div *ngIf="syncLoading" class="flex items-center justify-center py-12">
-        <div class="text-center">
-          <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600 mx-auto mb-3"></div>
-          <p class="text-gray-500 text-sm">กำลังเปรียบเทียบข้อมูล...</p>
+
+    <!-- Tab Switcher -->
+    <div class="flex gap-1 mx-6 mt-4 bg-gray-100 p-1 rounded-xl max-w-xl">
+      <button (click)="switchSyncTab('compare')" class="flex-1 px-3 py-2 rounded-lg text-xs font-bold transition-all"
+              [ngClass]="syncActiveTab === 'compare' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+        <i class="fas fa-exchange-alt mr-1"></i>เปรียบเทียบข้อมูล
+      </button>
+      <button (click)="switchSyncTab('structure')" class="flex-1 px-3 py-2 rounded-lg text-xs font-bold transition-all"
+              [ngClass]="syncActiveTab === 'structure' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+        <i class="fas fa-columns mr-1"></i>ตรวจสอบโครงสร้างตาราง
+      </button>
+      <button (click)="switchSyncTab('mapping')" class="flex-1 px-3 py-2 rounded-lg text-xs font-bold transition-all"
+              [ngClass]="syncActiveTab === 'mapping' ? 'bg-white text-purple-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+        <i class="fas fa-cog mr-1"></i>ตั้งค่า Mapping
+      </button>
+    </div>
+
+    <!-- ===== TAB 1: เปรียบเทียบข้อมูล ===== -->
+    <div [hidden]="syncActiveTab !== 'compare'">
+      <div class="p-6">
+        <!-- Loading -->
+        <div *ngIf="syncLoading" class="flex items-center justify-center py-12">
+          <div class="text-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600 mx-auto mb-3"></div>
+            <p class="text-gray-500 text-sm">กำลังเปรียบเทียบข้อมูล...</p>
+          </div>
+        </div>
+
+        <!-- Summary Cards -->
+        <div *ngIf="!syncLoading && syncResult" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <div class="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
+            <p class="text-2xl font-bold text-green-600">{{ syncResult.summary.matched }}</p>
+            <p class="text-[10px] text-green-700 font-bold"><i class="fas fa-check-circle mr-1"></i>ตรงกัน</p>
+          </div>
+          <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center cursor-pointer hover:shadow-md" (click)="toggleSyncFilter('different')" [class.ring-2]="syncFilter === 'different'">
+            <p class="text-2xl font-bold text-amber-600">{{ syncResult.summary.different }}</p>
+            <p class="text-[10px] text-amber-700 font-bold"><i class="fas fa-exclamation-triangle mr-1"></i>ต่างกัน</p>
+          </div>
+          <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center cursor-pointer hover:shadow-md" (click)="toggleSyncFilter('local_only')" [class.ring-2]="syncFilter === 'local_only'">
+            <p class="text-2xl font-bold text-blue-600">{{ syncResult.summary.local_only }}</p>
+            <p class="text-[10px] text-blue-700 font-bold"><i class="fas fa-arrow-up mr-1"></i>เฉพาะ Local</p>
+          </div>
+          <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 text-center cursor-pointer hover:shadow-md" (click)="toggleSyncFilter('hdc_only')" [class.ring-2]="syncFilter === 'hdc_only'">
+            <p class="text-2xl font-bold text-gray-500">{{ syncResult.summary.hdc_only }}</p>
+            <p class="text-[10px] text-gray-600 font-bold"><i class="fas fa-arrow-down mr-1"></i>เฉพาะ HDC</p>
+          </div>
+        </div>
+
+        <!-- Filter -->
+        <div *ngIf="!syncLoading && syncResult" class="flex flex-wrap items-center gap-2 mb-2 text-xs">
+          <span class="text-gray-500">แสดง:</span>
+          <button (click)="syncFilter = ''; buildSyncList()" class="px-2 py-1 rounded" [ngClass]="syncFilter === '' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'">ทั้งหมด</button>
+          <button (click)="toggleSyncFilter('different')" class="px-2 py-1 rounded" [ngClass]="syncFilter === 'different' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700'">ต่างกัน</button>
+          <button (click)="toggleSyncFilter('local_only')" class="px-2 py-1 rounded" [ngClass]="syncFilter === 'local_only' ? 'bg-blue-500 text-white' : 'bg-blue-50 text-blue-700'">เฉพาะ Local</button>
+          <span class="text-gray-400 ml-auto">เลือก: <b>{{ syncSelected.size }}</b> / {{ syncListFiltered.length }}</span>
+        </div>
+
+        <!-- Config note -->
+        <p *ngIf="syncResult?.sync_config?.exclude?.length" class="text-[11px] text-gray-400 mb-2">
+          <i class="fas fa-info-circle mr-1"></i>ไม่รวม {{ syncResult.sync_config.exclude.length }} คอลัมน์ในการเปรียบเทียบนี้ —
+          <button (click)="switchSyncTab('mapping')" class="text-purple-600 underline">ดู/แก้ไขที่แท็บ "ตั้งค่า Mapping"</button>
+        </p>
+
+        <!-- List -->
+        <div *ngIf="!syncLoading && syncResult" class="border border-gray-200 rounded-xl max-h-[50vh] overflow-y-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-xs sticky top-0">
+              <tr>
+                <th class="px-3 py-2 text-center w-10">
+                  <input type="checkbox" [checked]="isSyncAllSelected()" (change)="toggleSyncAll()">
+                </th>
+                <th class="px-3 py-2 text-left">Username</th>
+                <th class="px-3 py-2 text-left">ชื่อ-นามสกุล</th>
+                <th class="px-3 py-2 text-left">Role</th>
+                <th class="px-3 py-2 text-left">Hospcode</th>
+                <th class="px-3 py-2 text-center">สถานะ</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <ng-container *ngFor="let u of syncListFiltered">
+                <tr class="hover:bg-gray-50" [class.bg-blue-50]="syncSelected.has(u.username)">
+                  <td class="px-3 py-2 text-center">
+                    <input type="checkbox" [checked]="syncSelected.has(u.username)" (change)="toggleSyncUser(u.username)" [disabled]="u._syncStatus === 'hdc_only'">
+                  </td>
+                  <td class="px-3 py-2 font-mono font-bold text-gray-800">{{ u.username }}</td>
+                  <td class="px-3 py-2 text-gray-600">{{ u.firstname }} {{ u.lastname }}</td>
+                  <td class="px-3 py-2 text-gray-600 text-xs">{{ u.role }}</td>
+                  <td class="px-3 py-2 text-gray-600 text-xs">{{ u.hospcode || '-' }}</td>
+                  <td class="px-3 py-2 text-center">
+                    <span *ngIf="u._syncStatus === 'matched'" class="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-bold">ตรงกัน</span>
+                    <button *ngIf="u._syncStatus === 'different'" (click)="toggleExpandDiff(u.username)"
+                            class="px-2 py-0.5 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-full text-[10px] font-bold">
+                      ต่างกัน ({{ u._diff?.length || 0 }}) <i class="fas ml-1" [ngClass]="expandedSyncUser === u.username ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                    </button>
+                    <span *ngIf="u._syncStatus === 'local_only'" class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-bold">เฉพาะ Local</span>
+                    <span *ngIf="u._syncStatus === 'hdc_only'" class="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[10px] font-bold">เฉพาะ HDC</span>
+                  </td>
+                </tr>
+                <!-- Expandable per-field diff row -->
+                <tr *ngIf="u._syncStatus === 'different' && expandedSyncUser === u.username">
+                  <td colspan="6" class="bg-amber-50/50 px-4 py-2">
+                    <div class="flex flex-wrap gap-1.5">
+                      <span *ngFor="let d of u._diff" class="text-[11px] bg-white border border-amber-200 rounded-lg px-2 py-1 font-mono">
+                        <b>{{ d.field }}</b><span *ngIf="d.hdc_field" class="text-gray-400"> (HDC: {{ d.hdc_field }})</span>:
+                        <span class="text-gray-500">{{ d.local_value ?? '—' }}</span>
+                        <i class="fas fa-arrow-right mx-1 text-gray-400"></i>
+                        <span class="text-amber-700 font-bold">{{ d.hdc_value ?? '—' }}</span>
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              </ng-container>
+              <tr *ngIf="syncListFiltered.length === 0">
+                <td colspan="6" class="px-3 py-10 text-center text-gray-400 text-sm">ไม่มีข้อมูล</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
-
-      <!-- Summary Cards -->
-      <div *ngIf="!syncLoading && syncResult" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-        <div class="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
-          <p class="text-2xl font-bold text-green-600">{{ syncResult.summary.matched }}</p>
-          <p class="text-[10px] text-green-700 font-bold"><i class="fas fa-check-circle mr-1"></i>ตรงกัน</p>
+      <div class="px-6 py-4 border-t flex justify-between items-center bg-gray-50 rounded-b-2xl">
+        <p class="text-xs text-gray-500"><i class="fas fa-info-circle mr-1"></i>UPSERT: ข้อมูลซ้ำจะถูกอัปเดต, ที่ไม่ซ้ำใน HDC ยังอยู่</p>
+        <div class="flex gap-2">
+          <button (click)="closeSyncModal()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-bold">ยกเลิก</button>
+          <button (click)="executeSyncUsers()" [disabled]="syncSelected.size === 0 || syncExecuting"
+                  class="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl text-sm font-bold shadow">
+            <i class="fas fa-cloud-upload-alt mr-1"></i>Sync → HDC ({{ syncSelected.size }})
+          </button>
         </div>
-        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center cursor-pointer hover:shadow-md" (click)="toggleSyncFilter('different')" [class.ring-2]="syncFilter === 'different'">
-          <p class="text-2xl font-bold text-amber-600">{{ syncResult.summary.different }}</p>
-          <p class="text-[10px] text-amber-700 font-bold"><i class="fas fa-exclamation-triangle mr-1"></i>ต่างกัน</p>
-        </div>
-        <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center cursor-pointer hover:shadow-md" (click)="toggleSyncFilter('local_only')" [class.ring-2]="syncFilter === 'local_only'">
-          <p class="text-2xl font-bold text-blue-600">{{ syncResult.summary.local_only }}</p>
-          <p class="text-[10px] text-blue-700 font-bold"><i class="fas fa-arrow-up mr-1"></i>เฉพาะ Local</p>
-        </div>
-        <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 text-center cursor-pointer hover:shadow-md" (click)="toggleSyncFilter('hdc_only')" [class.ring-2]="syncFilter === 'hdc_only'">
-          <p class="text-2xl font-bold text-gray-500">{{ syncResult.summary.hdc_only }}</p>
-          <p class="text-[10px] text-gray-600 font-bold"><i class="fas fa-arrow-down mr-1"></i>เฉพาะ HDC</p>
-        </div>
-      </div>
-
-      <!-- Filter -->
-      <div *ngIf="!syncLoading && syncResult" class="flex flex-wrap items-center gap-2 mb-2 text-xs">
-        <span class="text-gray-500">แสดง:</span>
-        <button (click)="syncFilter = ''; buildSyncList()" class="px-2 py-1 rounded" [ngClass]="syncFilter === '' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'">ทั้งหมด</button>
-        <button (click)="toggleSyncFilter('different')" class="px-2 py-1 rounded" [ngClass]="syncFilter === 'different' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-700'">ต่างกัน</button>
-        <button (click)="toggleSyncFilter('local_only')" class="px-2 py-1 rounded" [ngClass]="syncFilter === 'local_only' ? 'bg-blue-500 text-white' : 'bg-blue-50 text-blue-700'">เฉพาะ Local</button>
-        <span class="text-gray-400 ml-auto">เลือก: <b>{{ syncSelected.size }}</b> / {{ syncListFiltered.length }}</span>
-      </div>
-
-      <!-- List -->
-      <div *ngIf="!syncLoading && syncResult" class="border border-gray-200 rounded-xl max-h-[50vh] overflow-y-auto">
-        <table class="w-full text-sm">
-          <thead class="bg-gray-50 text-xs sticky top-0">
-            <tr>
-              <th class="px-3 py-2 text-center w-10">
-                <input type="checkbox" [checked]="isSyncAllSelected()" (change)="toggleSyncAll()">
-              </th>
-              <th class="px-3 py-2 text-left">Username</th>
-              <th class="px-3 py-2 text-left">ชื่อ-นามสกุล</th>
-              <th class="px-3 py-2 text-left">Role</th>
-              <th class="px-3 py-2 text-left">Hospcode</th>
-              <th class="px-3 py-2 text-center">สถานะ</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            <tr *ngFor="let u of syncListFiltered" class="hover:bg-gray-50" [class.bg-blue-50]="syncSelected.has(u.username)">
-              <td class="px-3 py-2 text-center">
-                <input type="checkbox" [checked]="syncSelected.has(u.username)" (change)="toggleSyncUser(u.username)" [disabled]="u._syncStatus === 'hdc_only'">
-              </td>
-              <td class="px-3 py-2 font-mono font-bold text-gray-800">{{ u.username }}</td>
-              <td class="px-3 py-2 text-gray-600">{{ u.firstname }} {{ u.lastname }}</td>
-              <td class="px-3 py-2 text-gray-600 text-xs">{{ u.role }}</td>
-              <td class="px-3 py-2 text-gray-600 text-xs">{{ u.hospcode || '-' }}</td>
-              <td class="px-3 py-2 text-center">
-                <span *ngIf="u._syncStatus === 'matched'" class="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-bold">ตรงกัน</span>
-                <span *ngIf="u._syncStatus === 'different'" class="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-[10px] font-bold">ต่างกัน</span>
-                <span *ngIf="u._syncStatus === 'local_only'" class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-bold">เฉพาะ Local</span>
-                <span *ngIf="u._syncStatus === 'hdc_only'" class="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[10px] font-bold">เฉพาะ HDC</span>
-              </td>
-            </tr>
-            <tr *ngIf="syncListFiltered.length === 0">
-              <td colspan="6" class="px-3 py-10 text-center text-gray-400 text-sm">ไม่มีข้อมูล</td>
-            </tr>
-          </tbody>
-        </table>
       </div>
     </div>
-    <div class="px-6 py-4 border-t flex justify-between items-center bg-gray-50 rounded-b-2xl">
-      <p class="text-xs text-gray-500"><i class="fas fa-info-circle mr-1"></i>UPSERT: ข้อมูลซ้ำจะถูกอัปเดต, ที่ไม่ซ้ำใน HDC ยังอยู่</p>
-      <div class="flex gap-2">
-        <button (click)="closeSyncModal()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-bold">ยกเลิก</button>
-        <button (click)="executeSyncUsers()" [disabled]="syncSelected.size === 0 || syncExecuting"
-                class="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl text-sm font-bold shadow">
-          <i class="fas fa-cloud-upload-alt mr-1"></i>Sync → HDC ({{ syncSelected.size }})
-        </button>
+
+    <!-- ===== TAB 2: ตรวจสอบโครงสร้างตาราง ===== -->
+    <div [hidden]="syncActiveTab !== 'structure'" class="p-6">
+      <div *ngIf="structureLoading" class="flex items-center justify-center py-12">
+        <div class="text-center">
+          <div class="animate-spin rounded-full h-12 w-12 border-4 border-indigo-200 border-t-indigo-600 mx-auto mb-3"></div>
+          <p class="text-gray-500 text-sm">กำลังตรวจสอบโครงสร้าง...</p>
+        </div>
+      </div>
+      <div *ngIf="!structureLoading && structureResult">
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <div class="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+            <p class="text-xs text-green-600 font-bold mb-1"><i class="fas fa-server mr-1"></i>Local ({{ structureResult.local_db }})</p>
+            <p class="text-lg font-bold text-green-800">{{ structureResult.local_columns.length }} columns</p>
+          </div>
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+            <p class="text-xs text-blue-600 font-bold mb-1"><i class="fas fa-cloud mr-1"></i>HDC ({{ structureResult.remote_db }})</p>
+            <p class="text-lg font-bold text-blue-800">{{ structureResult.remote_columns.length }} columns</p>
+          </div>
+        </div>
+        <div *ngIf="structureResult.diff.length === 0" class="text-center py-6 text-green-700 text-sm"><i class="fas fa-check-circle mr-1"></i>โครงสร้างตรงกันทั้งหมด</div>
+        <div *ngIf="structureResult.diff.length > 0" class="space-y-1">
+          <div *ngFor="let d of structureResult.diff" class="flex items-center gap-2 text-xs bg-white rounded-lg px-3 py-1.5 border"
+               [ngClass]="d.issue === 'missing_in_local' ? 'border-blue-200' : d.issue === 'type_mismatch' ? 'border-amber-200' : 'border-purple-200'">
+            <i class="fas" [ngClass]="d.issue === 'missing_in_local' ? 'fa-plus-circle text-blue-500' : d.issue === 'type_mismatch' ? 'fa-exchange-alt text-amber-500' : 'fa-minus-circle text-purple-500'"></i>
+            <span class="font-mono font-bold">{{ d.field }}</span>
+            <span *ngIf="d.issue === 'missing_in_local'" class="text-blue-600">ไม่มีใน Local (HDC: {{ d.remote_type }})</span>
+            <span *ngIf="d.issue === 'type_mismatch'" class="text-amber-600">Type ต่างกัน — Local: {{ d.local_type }} / HDC: {{ d.remote_type }}</span>
+            <span *ngIf="d.issue === 'missing_in_remote'" class="text-purple-600">ไม่มีใน HDC (มีเฉพาะ Local)</span>
+          </div>
+          <p class="text-[11px] text-gray-500 mt-2"><i class="fas fa-shield-alt mr-1"></i>ระบบจะไม่แก้ไขโครงสร้าง HDC อัตโนมัติ — ถ้าต้องการ map เช่น cid → cid_hash ให้ไปตั้งค่าที่แท็บ "ตั้งค่า Mapping"</p>
+        </div>
+        <button (click)="loadStructureCompare()" class="mt-4 text-xs text-indigo-600 font-bold"><i class="fas fa-sync-alt mr-1"></i>ตรวจสอบใหม่</button>
+      </div>
+    </div>
+
+    <!-- ===== TAB 3: ตั้งค่า Mapping ===== -->
+    <div [hidden]="syncActiveTab !== 'mapping'" class="p-6">
+      <div *ngIf="mappingLoading" class="text-center py-12 text-gray-400 text-sm">กำลังโหลด...</div>
+      <div *ngIf="!mappingLoading && mappingRows.length > 0">
+        <div class="border border-gray-200 rounded-xl max-h-[50vh] overflow-y-auto">
+          <table class="w-full text-xs">
+            <thead class="bg-gray-50 sticky top-0">
+              <tr>
+                <th class="px-3 py-2 text-left">คอลัมน์ (Local)</th>
+                <th class="px-3 py-2 text-left">คอลัมน์ปลายทางใน HDC</th>
+                <th class="px-3 py-2 text-center">ไม่ต้อง sync</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr *ngFor="let r of mappingRows" [class.opacity-50]="r.excluded">
+                <td class="px-3 py-2 font-mono font-bold">{{ r.field }}</td>
+                <td class="px-3 py-2">
+                  <input [(ngModel)]="r.hdc_field" [disabled]="r.excluded" [placeholder]="r.field"
+                         class="border border-gray-300 rounded-lg px-2 py-1 w-full font-mono text-xs focus:ring-2 focus:ring-purple-400 outline-none">
+                </td>
+                <td class="px-3 py-2 text-center"><input type="checkbox" [(ngModel)]="r.excluded"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="text-[11px] text-gray-400 mt-2"><i class="fas fa-info-circle mr-1"></i>ว่าง = ใช้ชื่อเดิม (identity mapping) — คอลัมน์ที่ "ไม่ต้อง sync" จะไม่ถูกส่งหรือเทียบกับ HDC เลย</p>
+        <div class="flex justify-end mt-4">
+          <button (click)="saveSyncMapping()" [disabled]="mappingSaving" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white rounded-xl text-sm font-bold shadow">
+            <i class="fas fa-save mr-1"></i>บันทึก Mapping
+          </button>
+        </div>
       </div>
     </div>
   </div>

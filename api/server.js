@@ -690,6 +690,7 @@ const PAGE_ACCESS_RULES = [
     // users — เฉพาะ endpoint ที่เดิมเป็น isAnyAdmin เท่านั้น (ตรงกับ default seed ROLES_ANY_ADMIN)
     // ไม่รวม: bulk-toggle-active/permissions/sync-compare/sync-to-hdc (isSuperAdmin เดิม) และ
     // approve/reject/toggle-active/basic (isAdmin เดิม — admin_ssj+super_admin เท่านั้น) — คงไว้ตามเดิมทุกจุด
+    // structure-compare/sync-mapping (GET+PUT) ก็ hardcode isSuperAdmin เหมือนกลุ่ม sync-compare/sync-to-hdc ข้างต้น — ไม่เพิ่มเข้า rules นี้เช่นกัน
     { method: 'GET',  path: '/users', pageKey: 'users' },
     { method: 'GET',  path: '/users/stats', pageKey: 'users' },
     { method: 'GET',  path: '/users/pending-count', pageKey: 'users' },
@@ -5105,6 +5106,42 @@ apiRouter.put('/users/bulk-toggle-active', authenticateToken, isSuperAdmin, asyn
         res.json({ success: true, message: `${actionText}ผู้ใช้งานทั้งหมด ${result.affectedRows} คน (ยกเว้น super_admin)` });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// PUT /users/sync-mapping — บันทึก config mapping/exclude ใหม่ (super_admin)
+// ⚠️ ต้องอยู่ก่อน PUT /users/:id เสมอ — ไม่งั้น Express จะจับ 'sync-mapping' เป็นค่า :id แทน (route ตรงตัวต้องมาก่อน wildcard เสมอ)
+apiRouter.put('/users/sync-mapping', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { exclude, mapping } = req.body;
+    try {
+        if (!Array.isArray(exclude)) return res.status(400).json({ success: false, message: 'exclude ต้องเป็น array' });
+        if (typeof mapping !== 'object' || mapping === null || Array.isArray(mapping)) return res.status(400).json({ success: false, message: 'mapping ต้องเป็น object' });
+
+        const [localColsInfo] = await db.query('SHOW COLUMNS FROM users');
+        const validFields = new Set(localColsInfo.map(c => c.Field));
+        const cleanExclude = [...new Set(exclude)].filter(f => validFields.has(f) && f !== 'id' && f !== 'username');
+
+        const cleanMapping = {};
+        for (const [local, hdc] of Object.entries(mapping)) {
+            if (!validFields.has(local)) continue;
+            const target = String(hdc || '').trim();
+            if (!target || target === local) continue; // ว่าง/ไม่เปลี่ยน = identity, ไม่ต้องเก็บ
+            if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/.test(target)) continue; // กันชื่อ identifier ผิดรูปแบบ
+            cleanMapping[local] = target;
+        }
+        const targets = Object.values(cleanMapping);
+        const dupTargets = [...new Set(targets.filter((t, i) => targets.indexOf(t) !== i))];
+        if (dupTargets.length > 0) return res.status(400).json({ success: false, message: `มีหลายคอลัมน์ map ไปชื่อ HDC เดียวกัน: ${dupTargets.join(', ')}` });
+
+        await db.query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('users_sync_exclude_columns', ?) ON DUPLICATE KEY UPDATE setting_value = ?", [JSON.stringify(cleanExclude), JSON.stringify(cleanExclude)]);
+        await db.query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('users_sync_field_mapping', ?) ON DUPLICATE KEY UPDATE setting_value = ?", [JSON.stringify(cleanMapping), JSON.stringify(cleanMapping)]);
+
+        await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+            [req.user.userId, 'USERS_SYNC_MAPPING_UPDATE', 'system_settings', JSON.stringify({ exclude: cleanExclude, mapping: cleanMapping }), req.ip]).catch(() => {});
+
+        res.json({ success: true, message: 'บันทึกการตั้งค่า Mapping สำเร็จ', exclude: cleanExclude, mapping: cleanMapping });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
     }
 });
 
@@ -9628,6 +9665,22 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
             await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)', [key, val, desc]);
         }
 
+        // ========== Users Data Sync — Field Mapping / Exclude Config ==========
+        // Widen ครั้งเดียว (ปลอดภัย เป็นแค่ widen VARCHAR→TEXT ไม่เสียข้อมูลเดิม) กัน JSON mapping/exclude list ยาวเกิน 255
+        try { await db.query('ALTER TABLE system_settings MODIFY COLUMN setting_value TEXT NULL'); } catch (e) {}
+        const usersSyncDefaults = [
+            ['users_sync_exclude_columns', JSON.stringify([
+                'last_seen_at', 'last_seen_ip', 'last_seen_ua',
+                'active_session_id', 'session_started_at',
+                'kicked_by_ip', 'kicked_by_ua', 'kicked_at',
+                'temp_password', 'temp_password_expiry', 'must_change_password'
+            ]), 'คอลัมน์ users ที่ไม่ต้อง sync/เทียบกับ HDC (JSON array ชื่อคอลัมน์ local)'],
+            ['users_sync_field_mapping', '{}', 'Mapping ชื่อคอลัมน์ users local → HDC ที่ไม่ตรงกัน (JSON object {local_field:hdc_field}) — ว่าง = identity ทั้งหมด']
+        ];
+        for (const [key, val, desc] of usersSyncDefaults) {
+            await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)', [key, val, desc]);
+        }
+
         // Auto-generate relay auth key สำหรับ Cloudflare Worker (random 32 chars) ถ้ายังไม่มี
         try {
             const [existing] = await db.query("SELECT setting_value FROM system_settings WHERE setting_key = 'line_relay_auth_key' LIMIT 1");
@@ -11241,6 +11294,21 @@ apiRouter.delete('/feedback/:id', authenticateToken, isSuperAdmin, async (req, r
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
+// Shared: เทียบ column ระหว่าง local vs remote (ใช้ร่วมกันทั้ง /db-compare และ /users/structure-compare)
+function diffTableColumns(localColumns, remoteColumns) {
+    const diff = [];
+    const localFields = new Map(localColumns.map(c => [c.field, c]));
+    const remoteFields = new Map(remoteColumns.map(c => [c.field, c]));
+    for (const [name, col] of remoteFields) {
+        if (!localFields.has(name)) { diff.push({ field: name, issue: 'missing_in_local', remote_type: col.type }); }
+        else if (localFields.get(name).type !== col.type) { diff.push({ field: name, issue: 'type_mismatch', local_type: localFields.get(name).type, remote_type: col.type }); }
+    }
+    for (const [name] of localFields) {
+        if (!remoteFields.has(name)) { diff.push({ field: name, issue: 'missing_in_remote' }); }
+    }
+    return diff;
+}
+
 // GET /db-compare — เปรียบเทียบ structure ตาราง table_process ระหว่าง local กับ hdc
 apiRouter.get('/db-compare', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
@@ -11301,15 +11369,7 @@ apiRouter.get('/db-compare', authenticateToken, isSuperAdmin, async (req, res) =
             else if (!item.remote.exists) { item.status = 'missing_remote'; }
             else {
                 // เปรียบเทียบ columns
-                const localFields = new Map(item.local.columns.map(c => [c.field, c]));
-                const remoteFields = new Map(item.remote.columns.map(c => [c.field, c]));
-                for (const [name, col] of remoteFields) {
-                    if (!localFields.has(name)) { item.diff.push({ field: name, issue: 'missing_in_local', remote_type: col.type }); }
-                    else if (localFields.get(name).type !== col.type) { item.diff.push({ field: name, issue: 'type_mismatch', local_type: localFields.get(name).type, remote_type: col.type }); }
-                }
-                for (const [name] of localFields) {
-                    if (!remoteFields.has(name)) { item.diff.push({ field: name, issue: 'missing_in_remote' }); }
-                }
+                item.diff = diffTableColumns(item.local.columns, item.remote.columns);
                 item.status = item.diff.length === 0 ? 'match' : 'different';
             }
 
@@ -11536,11 +11596,27 @@ apiRouter.post('/db-compare/sync-to-hdc', authenticateToken, isSuperAdmin, async
 });
 
 // ========== Users Data Sync (Local ↔ HDC) ==========
-// GET /users/sync-compare — เปรียบเทียบ users ระหว่าง Local กับ HDC
+// โหลด config exclude/mapping ของ Users Data Sync จาก system_settings
+async function getUsersSyncConfig() {
+    const [rows] = await db.query(
+        "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('users_sync_exclude_columns','users_sync_field_mapping')"
+    );
+    const map = new Map(rows.map(r => [r.setting_key, r.setting_value]));
+    let exclude = [], mapping = {};
+    try { exclude = JSON.parse(map.get('users_sync_exclude_columns') || '[]'); } catch (e) { exclude = []; }
+    try { mapping = JSON.parse(map.get('users_sync_field_mapping') || '{}'); } catch (e) { mapping = {}; }
+    // safety: กันไม่ให้ id/username ถูก exclude เผลอ (username คือ key เทียบ, id คือ PK local)
+    exclude = exclude.filter(c => c !== 'id' && c !== 'username');
+    return { exclude: new Set(exclude), mapping };
+}
+
+// GET /users/sync-compare — เปรียบเทียบ users ระหว่าง Local กับ HDC (เก็บ diff รายฟิลด์จริง ไม่ใช่แค่ boolean)
 apiRouter.get('/users/sync-compare', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
     if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (HDC)' });
     try {
+        const { exclude, mapping } = await getUsersSyncConfig();
+
         // ดึง local users (ทุกคอลัมน์)
         const [localUsers] = await db.query('SELECT * FROM users ORDER BY username');
 
@@ -11555,20 +11631,23 @@ apiRouter.get('/users/sync-compare', authenticateToken, isSuperAdmin, async (req
         const localMap = new Map(localUsers.map(u => [u.username, u]));
 
         const matched = [], different = [], local_only = [], hdc_only = [];
+        const alwaysSkip = ['id', 'created_at', 'updated_at']; // baseline เดิม ไม่เปลี่ยน
 
         for (const lu of localUsers) {
             const ru = remoteMap.get(lu.username);
             if (!ru) { local_only.push(lu); continue; }
-            // เทียบค่าทีละ field (ข้าม id + timestamps)
-            const skip = ['id', 'created_at', 'updated_at'];
-            let isDiff = false;
+            // เทียบค่าทีละ field — เก็บ diff ทุกฟิลด์ (ไม่ break ที่ตัวแรก) + ใช้ mapping ชื่อ field ถ้ามี
+            const fieldDiffs = [];
             for (const k of Object.keys(lu)) {
-                if (skip.includes(k)) continue;
+                if (alwaysSkip.includes(k) || exclude.has(k)) continue;
+                const remoteKey = mapping[k] || k;
                 const lv = lu[k] == null ? '' : String(lu[k]);
-                const rv = ru[k] == null ? '' : String(ru[k]);
-                if (lv !== rv) { isDiff = true; break; }
+                const rv = ru[remoteKey] == null ? '' : String(ru[remoteKey]);
+                if (lv !== rv) {
+                    fieldDiffs.push({ field: k, hdc_field: remoteKey !== k ? remoteKey : undefined, local_value: lu[k], hdc_value: ru[remoteKey] });
+                }
             }
-            (isDiff ? different : matched).push(lu);
+            (fieldDiffs.length > 0 ? different : matched).push(fieldDiffs.length > 0 ? { ...lu, _diff: fieldDiffs } : lu);
         }
         for (const ru of remoteUsers) {
             if (!localMap.has(ru.username)) hdc_only.push(ru);
@@ -11577,7 +11656,8 @@ apiRouter.get('/users/sync-compare', authenticateToken, isSuperAdmin, async (req
         res.json({
             success: true,
             summary: { matched: matched.length, different: different.length, local_only: local_only.length, hdc_only: hdc_only.length, total_local: localUsers.length, total_hdc: remoteUsers.length },
-            matched, different, local_only, hdc_only
+            matched, different, local_only, hdc_only,
+            sync_config: { exclude: [...exclude], mapping }
         });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
@@ -11589,6 +11669,7 @@ apiRouter.post('/users/sync-to-hdc', authenticateToken, isSuperAdmin, async (req
     const remoteDb = getRemotePool();
     if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (HDC)' });
     const { usernames } = req.body; // optional: ถ้าไม่ส่ง = sync ทั้งหมด
+    const { exclude, mapping } = await getUsersSyncConfig();
 
     try {
         // === Step 1: ensure HDC users table exists (สร้างจาก local DDL ถ้าไม่มี) ===
@@ -11612,11 +11693,11 @@ apiRouter.post('/users/sync-to-hdc', authenticateToken, isSuperAdmin, async (req
             }
         }
 
-        // === Step 2: sync schema — ALTER ADD COLUMN ที่ Local มีแต่ HDC ไม่มี ===
+        // === Step 2: sync schema — ALTER ADD COLUMN ที่ Local มีแต่ HDC ไม่มี (ข้ามคอลัมน์ที่ตั้งใจไม่ sync) ===
         const [localColsInfo] = await db.query('SHOW COLUMNS FROM users');
         const [remoteColsInfo] = await remoteDb.query('SHOW COLUMNS FROM users');
         const remoteColSet = new Set(remoteColsInfo.map(c => c.Field));
-        const missingInRemote = localColsInfo.filter(c => !remoteColSet.has(c.Field));
+        const missingInRemote = localColsInfo.filter(c => !remoteColSet.has(c.Field) && !exclude.has(c.Field));
         const addedColumns = [];
         const alterErrors = [];
         for (const col of missingInRemote) {
@@ -11653,15 +11734,18 @@ apiRouter.post('/users/sync-to-hdc', authenticateToken, isSuperAdmin, async (req
         const [localUsers] = await db.query(query, params);
         if (localUsers.length === 0) return res.json({ success: true, synced: 0, message: 'ไม่มีข้อมูลที่จะ sync' });
 
-        // === Step 4: re-check remote columns หลัง ALTER แล้ว → ใช้เฉพาะ columns ที่มีใน HDC จริงๆ ===
+        // === Step 4: resolve local→HDC target column names (mapping) + ตัด exclude + ใช้เฉพาะ columns ที่มีใน HDC จริงๆ ===
         const [remoteColsAfter] = await remoteDb.query('SHOW COLUMNS FROM users');
         const remoteColSetAfter = new Set(remoteColsAfter.map(c => c.Field));
         const localCols = Object.keys(localUsers[0]);
-        // กรอง: ใช้เฉพาะ column ที่ HDC มีจริงๆ (กัน Unknown column)
-        const syncableCols = localCols.filter(c => remoteColSetAfter.has(c));
-        const skippedCols = localCols.filter(c => !remoteColSetAfter.has(c));
+        const eligibleCols = localCols.filter(c => !exclude.has(c));
+        const excludedCols = localCols.filter(c => exclude.has(c));
+        const colPairs = eligibleCols.map(c => ({ local: c, hdc: mapping[c] || c }));
+        // กรอง: ใช้เฉพาะ column ปลายทางที่ HDC มีจริงๆ (กัน Unknown column) — ไม่ ALTER สร้างตามชื่อ mapping อัตโนมัติ
+        const syncableCols = colPairs.filter(p => remoteColSetAfter.has(p.hdc));
+        const skippedCols = colPairs.filter(p => !remoteColSetAfter.has(p.hdc)).map(p => p.local);
         if (skippedCols.length > 0) {
-            console.warn('[sync-to-hdc] Skipped columns (not in HDC):', skippedCols.join(', '));
+            console.warn('[sync-to-hdc] Skipped columns (target not in HDC):', skippedCols.join(', '));
         }
 
         // === Step 5: identify JSON columns → stringify ===
@@ -11671,20 +11755,20 @@ apiRouter.post('/users/sync-to-hdc', authenticateToken, isSuperAdmin, async (req
                 .map(c => c.Field)
         );
 
-        // === Step 6: UPSERT batch 100 rows ===
-        const colList = syncableCols.map(c => `\`${c}\``).join(', ');
+        // === Step 6: UPSERT batch 100 rows (เขียนลงชื่อคอลัมน์ปลายทางตาม mapping) ===
+        const colList = syncableCols.map(p => `\`${p.hdc}\``).join(', ');
         const placeholders = syncableCols.map(() => '?').join(', ');
-        const onDup = syncableCols.filter(c => c !== 'id').map(c => `\`${c}\`=VALUES(\`${c}\`)`).join(', ');
+        const onDup = syncableCols.filter(p => p.hdc !== 'id').map(p => `\`${p.hdc}\`=VALUES(\`${p.hdc}\`)`).join(', ');
 
         let totalSynced = 0;
         const errors = [];
         for (let i = 0; i < localUsers.length; i += 100) {
             const batch = localUsers.slice(i, i + 100);
             const allPlaceholders = batch.map(() => `(${placeholders})`).join(', ');
-            const flatValues = batch.flatMap(row => syncableCols.map(c => {
-                const v = row[c];
+            const flatValues = batch.flatMap(row => syncableCols.map(p => {
+                const v = row[p.local];
                 if (v === undefined) return null;
-                if (jsonCols.has(c) && v !== null && typeof v === 'object') {
+                if (jsonCols.has(p.local) && v !== null && typeof v === 'object') {
                     try { return JSON.stringify(v); } catch (e) { return null; }
                 }
                 return v;
@@ -11730,6 +11814,9 @@ apiRouter.post('/users/sync-to-hdc', authenticateToken, isSuperAdmin, async (req
         if (skippedCols.length > 0) {
             message += ` | ข้าม column ที่ HDC ไม่มี: ${skippedCols.join(', ')}`;
         }
+        if (excludedCols.length > 0) {
+            message += ` | ไม่ sync (ตั้งค่าไว้): ${excludedCols.join(', ')}`;
+        }
 
         res.status(failure ? 500 : 200).json({
             success: !failure,
@@ -11741,11 +11828,47 @@ apiRouter.post('/users/sync-to-hdc', authenticateToken, isSuperAdmin, async (req
             errors: errors.slice(0, 5),  // ส่งกลับเฉพาะ 5 errors แรก
             added_columns: addedColumns,
             skipped_columns: skippedCols,
+            excluded_columns: excludedCols,
+            applied_mapping: mapping,
             alter_errors: alterErrors
         });
     } catch (e) {
         console.error('[sync-to-hdc] Fatal error:', e);
         res.status(500).json({ success: false, message: e.message, code: e.code });
+    }
+});
+
+// GET /users/structure-compare — SHOW COLUMNS diff เฉพาะตาราง users ระหว่าง Local กับ HDC (รายงานอย่างเดียว ไม่แก้โครงสร้าง HDC อัตโนมัติ)
+apiRouter.get('/users/structure-compare', authenticateToken, isSuperAdmin, async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (HDC)' });
+    try {
+        const [localColsRaw] = await db.query('SHOW COLUMNS FROM users');
+        let remoteColsRaw = [];
+        try { const [rc] = await remoteDb.query('SHOW COLUMNS FROM users'); remoteColsRaw = rc; } catch (e) { /* ตาราง users ไม่มีใน HDC */ }
+        const local_columns = localColsRaw.map(c => ({ field: c.Field, type: c.Type, nullable: c.Null, key: c.Key, default: c.Default }));
+        const remote_columns = remoteColsRaw.map(c => ({ field: c.Field, type: c.Type, nullable: c.Null, key: c.Key, default: c.Default }));
+        const diff = diffTableColumns(local_columns, remote_columns);
+        res.json({
+            success: true,
+            local_db: process.env.DB_NAME || 'khups_kpi_db',
+            remote_db: process.env.HDC_DB_NAME || 'hdc',
+            local_columns, remote_columns, diff,
+            status: diff.length === 0 ? 'match' : 'different'
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// GET /users/sync-mapping — ดึง config mapping/exclude ปัจจุบัน + รายชื่อคอลัมน์ local ทั้งหมด
+apiRouter.get('/users/sync-mapping', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const { exclude, mapping } = await getUsersSyncConfig();
+        const [localColsInfo] = await db.query('SHOW COLUMNS FROM users');
+        res.json({ success: true, columns: localColsInfo.map(c => c.Field), exclude: [...exclude], mapping });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
     }
 });
 

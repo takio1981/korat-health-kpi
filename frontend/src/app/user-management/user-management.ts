@@ -6,6 +6,9 @@ import { AuthService } from '../services/auth';
 import { ToastService } from '../services/toast.service';
 import Swal from 'sweetalert2';
 
+interface UsersFieldDiff { field: string; hdc_field?: string; local_value: any; hdc_value: any; }
+interface UsersSyncMappingRow { field: string; hdc_field: string; excluded: boolean; }
+
 @Component({
   selector: 'app-user-management',
   standalone: true,
@@ -1030,8 +1033,43 @@ export class UserManagementComponent implements OnInit {
   syncSelected: Set<string> = new Set<string>();
   private _syncAllList: any[] = [];
 
+  // === Data Sync Modal — Tabs (reuse [hidden] pattern, not *ngIf — keep state) ===
+  syncActiveTab: 'compare' | 'structure' | 'mapping' = 'compare';
+  expandedSyncUser: string | null = null;   // username ที่กำลัง expand ดู field diff (tab compare)
+
+  structureLoading = false;
+  structureResult: any = null;              // { local_db, remote_db, local_columns, remote_columns, diff, status }
+
+  mappingLoading = false;
+  mappingSaving = false;
+  mappingRows: UsersSyncMappingRow[] = [];
+
   openUserSyncModal() {
     this.showSyncModal = true;
+    this.syncActiveTab = 'compare';
+    this.expandedSyncUser = null;
+    this.structureResult = null;
+    this.mappingRows = [];
+    this.reloadSyncCompare();
+  }
+
+  closeSyncModal() {
+    this.showSyncModal = false;
+    this.syncResult = null;
+    this.syncSelected.clear();
+    this.syncActiveTab = 'compare';
+    this.expandedSyncUser = null;
+  }
+
+  switchSyncTab(tab: 'compare' | 'structure' | 'mapping') {
+    this.syncActiveTab = tab;
+    if (tab === 'compare' && !this.syncResult && !this.syncLoading) this.reloadSyncCompare();
+    if (tab === 'structure' && !this.structureResult) this.loadStructureCompare();
+    if (tab === 'mapping' && this.mappingRows.length === 0) this.loadSyncMapping();
+  }
+
+  // แยกจาก openUserSyncModal — ใช้ตอนสลับกลับแท็บเปรียบเทียบหลังบันทึก mapping ใหม่ (ไม่ reset tab/selection ของ modal)
+  reloadSyncCompare() {
     this.syncLoading = true;
     this.syncResult = null;
     this.syncSelected.clear();
@@ -1040,14 +1078,12 @@ export class UserManagementComponent implements OnInit {
         this.syncLoading = false;
         if (res.success) {
           this.syncResult = res;
-          // รวม list พร้อม status
           this._syncAllList = [
             ...(res.matched || []).map((u: any) => ({ ...u, _syncStatus: 'matched' })),
             ...(res.different || []).map((u: any) => ({ ...u, _syncStatus: 'different' })),
             ...(res.local_only || []).map((u: any) => ({ ...u, _syncStatus: 'local_only' })),
             ...(res.hdc_only || []).map((u: any) => ({ ...u, _syncStatus: 'hdc_only' }))
           ];
-          // default เลือก different + local_only
           for (const u of this._syncAllList) {
             if (u._syncStatus === 'different' || u._syncStatus === 'local_only') this.syncSelected.add(u.username);
           }
@@ -1062,10 +1098,76 @@ export class UserManagementComponent implements OnInit {
     });
   }
 
-  closeSyncModal() {
-    this.showSyncModal = false;
-    this.syncResult = null;
-    this.syncSelected.clear();
+  loadStructureCompare() {
+    this.structureLoading = true;
+    this.authService.getUsersStructureCompare().subscribe({
+      next: (res: any) => {
+        this.structureLoading = false;
+        if (res.success) this.structureResult = res;
+        else Swal.fire('ผิดพลาด', res.message || 'ตรวจสอบโครงสร้างไม่สำเร็จ', 'error');
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.structureLoading = false;
+        Swal.fire('ผิดพลาด', err.error?.message || 'ตรวจสอบโครงสร้างไม่สำเร็จ', 'error');
+      }
+    });
+  }
+
+  loadSyncMapping() {
+    this.mappingLoading = true;
+    this.authService.getUsersSyncMapping().subscribe({
+      next: (res: any) => {
+        this.mappingLoading = false;
+        if (res.success) {
+          this.mappingRows = res.columns.map((f: string) => ({
+            field: f,
+            hdc_field: res.mapping[f] || '',
+            excluded: res.exclude.includes(f)
+          }));
+        } else {
+          Swal.fire('ผิดพลาด', res.message || 'โหลด mapping ไม่สำเร็จ', 'error');
+        }
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.mappingLoading = false;
+        Swal.fire('ผิดพลาด', err.error?.message || 'โหลด mapping ไม่สำเร็จ', 'error');
+      }
+    });
+  }
+
+  saveSyncMapping() {
+    const exclude = this.mappingRows.filter(r => r.excluded).map(r => r.field);
+    const mapping: Record<string, string> = {};
+    for (const r of this.mappingRows) {
+      const t = (r.hdc_field || '').trim();
+      if (t && t !== r.field) mapping[r.field] = t;
+    }
+    this.mappingSaving = true;
+    this.authService.saveUsersSyncMapping({ exclude, mapping }).subscribe({
+      next: (res: any) => {
+        this.mappingSaving = false;
+        if (res.success) {
+          this.toast.success('บันทึกสำเร็จ', 'มีผลกับการเปรียบเทียบ/sync ครั้งถัดไป');
+          // เคลียร์ผลเปรียบเทียบเก่าที่ยังไม่ผ่าน config ใหม่ — ให้โหลดใหม่ตอนกลับไปแท็บเปรียบเทียบ
+          this.syncResult = null;
+          this._syncAllList = [];
+          this.syncListFiltered = [];
+        } else {
+          Swal.fire('ผิดพลาด', res.message || 'บันทึกไม่สำเร็จ', 'error');
+        }
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.mappingSaving = false;
+        Swal.fire('ผิดพลาด', err.error?.message || 'บันทึกไม่สำเร็จ', 'error');
+      }
+    });
+  }
+
+  toggleExpandDiff(username: string) {
+    this.expandedSyncUser = this.expandedSyncUser === username ? null : username;
   }
 
   // === จัดการสิทธิ์ราย user ===

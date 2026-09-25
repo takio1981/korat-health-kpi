@@ -678,18 +678,31 @@
         <!-- Data Synchronization -->
         <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
           <h4 class="font-bold text-blue-800 text-sm mb-2"><i class="fas fa-cloud-upload-alt mr-2"></i>Data Synchronization — Users Local ↔ HDC</h4>
-          <ol class="list-decimal ml-5 text-xs text-gray-600 space-y-1">
-            <li>กดปุ่ม <b>"Data Synchronization"</b> (สีน้ำเงิน) ใน toolbar (เฉพาะ super_admin)</li>
-            <li>Modal เปิดและ <b>เปรียบเทียบ</b> users Local vs HDC ทันที → แสดง 4 cards:
-              <span class="text-green-600">ตรงกัน</span> |
-              <span class="text-amber-600">ต่างกัน</span> |
-              <span class="text-blue-600">เฉพาะ Local</span> |
-              <span class="text-gray-500">เฉพาะ HDC</span>
-            </li>
-            <li>Default เลือก users ที่ "ต่างกัน" + "เฉพาะ Local" → ปรับเลือกเองได้</li>
-            <li>กด <b>"Sync → HDC"</b> → UPSERT ข้อมูลเข้า HDC (ทุกคอลัมน์รวม password_hash)</li>
-          </ol>
-          <div class="mt-2 text-[11px] text-blue-700"><i class="fas fa-shield-alt mr-1"></i>ระบบสร้างตาราง users ใน HDC อัตโนมัติถ้ายังไม่มี + log ลง system_logs (USERS_SYNC_TO_HDC)</div>
+          <p class="text-xs text-gray-600 mb-2">กดปุ่ม <b>"Data Synchronization"</b> (สีน้ำเงิน) ใน toolbar (เฉพาะ super_admin) — Modal มี 3 แท็บ:</p>
+          <div class="space-y-2">
+            <div>
+              <p class="text-xs font-bold text-gray-700"><i class="fas fa-exchange-alt mr-1 text-blue-500"></i>แท็บ 1 — เปรียบเทียบข้อมูล</p>
+              <ol class="list-decimal ml-5 text-xs text-gray-600 space-y-1">
+                <li>เปรียบเทียบ users Local vs HDC ทันที → แสดง 4 cards:
+                  <span class="text-green-600">ตรงกัน</span> |
+                  <span class="text-amber-600">ต่างกัน</span> |
+                  <span class="text-blue-600">เฉพาะ Local</span> |
+                  <span class="text-gray-500">เฉพาะ HDC</span>
+                </li>
+                <li>แถวที่ "ต่างกัน" กดเข้าไปดูรายละเอียดได้ว่าฟิลด์ไหนต่างกันบ้าง (เช่น <code>role: user_hos → admin_hos</code>) เทียบค่า Local กับ HDC ตรงๆ</li>
+                <li>Default เลือก users ที่ "ต่างกัน" + "เฉพาะ Local" → ปรับเลือกเองได้ → กด <b>"Sync → HDC"</b> UPSERT เข้า HDC</li>
+              </ol>
+            </div>
+            <div>
+              <p class="text-xs font-bold text-gray-700"><i class="fas fa-columns mr-1 text-indigo-500"></i>แท็บ 2 — ตรวจสอบโครงสร้างตาราง</p>
+              <p class="text-xs text-gray-600 ml-1">ตรวจสอบว่าคอลัมน์ของตาราง <code>users</code> ระหว่าง Local กับ HDC ตรงกันไหม (ชื่อ/type) — ถ้าไม่ตรงจะแสดงเป็นรายการสีต่างๆ แต่ <b>ระบบจะไม่แก้ไขโครงสร้าง HDC ให้อัตโนมัติ</b> (HDC ใช้ร่วมกับระบบอื่นด้วย) ถ้าต้องการแก้ให้ไปตั้งค่าที่แท็บ 3</p>
+            </div>
+            <div>
+              <p class="text-xs font-bold text-gray-700"><i class="fas fa-cog mr-1 text-purple-500"></i>แท็บ 3 — ตั้งค่า Mapping</p>
+              <p class="text-xs text-gray-600 ml-1">จับคู่ชื่อคอลัมน์ Local ↔ HDC ที่ไม่ตรงกัน (เช่น <code>cid</code> ของ Local ควรไปลง <code>cid_hash</code> ของ HDC) และเลือกคอลัมน์ที่ไม่ต้องการ sync/เปรียบเทียบเลยได้ (ค่าเริ่มต้นไม่เทียบคอลัมน์ session เช่น last_seen_at เพราะเปลี่ยนตลอดเวลา ทำให้ผลเปรียบเทียบไม่นิ่ง)</p>
+            </div>
+          </div>
+          <div class="mt-2 text-[11px] text-blue-700"><i class="fas fa-shield-alt mr-1"></i>ระบบสร้างตาราง users ใน HDC อัตโนมัติถ้ายังไม่มี + log ลง system_logs (USERS_SYNC_TO_HDC, USERS_SYNC_MAPPING_UPDATE)</div>
         </div>
 
         <!-- ตัวกรอง -->

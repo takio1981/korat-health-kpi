@@ -4,6 +4,53 @@
 
 ---
 
+## 2569-09-25 — Data Synchronization (Users): แสดง Field Diff รายคน + ตรวจสอบ/ปรับแต่ง Mapping โครงสร้างตาราง Local ↔ HDC
+
+### คำขอ
+ปรับหน้าแบบฟอร์ม "Data Synchronization — Users" ให้: (1) แสดงว่าข้อมูล user ที่ "ต่างกัน" ต่างกันตรงไหนบ้าง
+(2) เพิ่มปุ่มตรวจสอบว่าโครงสร้างตาราง `users` ระหว่าง khups_kpi กับ HDC ตรงกันไหม พร้อมหน้ารายงานและหน้า
+customize ได้ — เพราะข้อมูลที่ sync ไปไม่ถูกต้องจริง โดยเฉพาะ Role และ CID
+
+### สาเหตุที่ยืนยันจากการตรวจสอบ DB จริง (read-only) ทั้ง 2 ฝั่ง
+1. **CID ผิดเพราะ map ชื่อคอลัมน์ผิด ไม่ใช่ type ไม่พอ** — HDC.users มีทั้งคอลัมน์ `cid` และ `cid_hash` แยกกัน
+   (Local มีแค่ `cid` เก็บค่า hash) ระบบ sync เดิม match ด้วยชื่อคอลัมน์เป๊ะเท่านั้น ทำให้ hash ของ Local ถูก
+   เขียนลง `cid` ของ HDC (ผิดคอลัมน์) ส่วน `cid_hash` ที่ HDC เตรียมไว้ไม่เคยถูกแตะเลย
+2. **Role ผิดเพราะข้อมูลจริงต่างกัน (ไม่ใช่โครงสร้าง)** — พบตัวอย่างจริง user `hosp00018`/`hosp10877` ที่ Local
+   เป็น `user_hos` แต่ HDC เป็น `admin_ssj` — column type ตรงกันทั้ง 2 ฝั่ง เป็นข้อมูล drift ที่ต้องให้ admin
+   เห็นแล้วตัดสินใจ sync เองเท่านั้น
+3. `GET /users/sync-compare` เดิม `break` ที่ field แรกที่ต่างกัน ไม่เคยเก็บว่าต่างตรงไหน/ค่าอะไร ทำให้ frontend
+   เห็นแค่ badge "ต่างกัน" เฉยๆ และ skip-list ไม่ครอบคลุมคอลัมน์ session/tracking (`last_seen_at` ฯลฯ) ทำให้
+   user ที่ active เกือบทุกคนขึ้น "ต่างกัน" ปลอมๆ กลบ diff จริงของ role/cid
+
+### วิธีแก้
+เพิ่ม 3 แท็บในหน้าต่าง modal เดิม (ไม่สร้างหน้าใหม่):
+- **เปรียบเทียบข้อมูล** — แถวที่ "ต่างกัน" ขยายดู field diff ได้ (`role: user_hos → admin_hos`)
+- **ตรวจสอบโครงสร้างตาราง** — ปุ่มเทียบ `SHOW COLUMNS` ระหว่าง local/HDC เฉพาะตาราง users (reuse algorithm จาก
+  `/db-compare` ที่มีอยู่แล้ว) — รายงานอย่างเดียว ไม่แก้โครงสร้าง HDC อัตโนมัติ (เพราะ HDC.users ใช้ร่วมกับระบบ
+  อื่นจริง มี user มากกว่า Local หลายเท่า)
+- **ตั้งค่า Mapping** — Super Admin จับคู่คอลัมน์ Local↔HDC เอง (เช่น `cid`→`cid_hash`) + เลือกคอลัมน์ที่ไม่ต้อง
+  sync ได้ (default ตัดคอลัมน์ session/tracking ออกให้แล้ว) — บันทึกใน `system_settings` (widen column เป็น
+  `TEXT` เพราะ JSON เกือบเต็ม `VARCHAR(255)` เดิม)
+
+**บั๊กที่เจอระหว่างพัฒนา (แก้แล้ว):** วาง `PUT /users/sync-mapping` ไว้หลัง `PUT /users/:id` ทำให้ Express จับ
+"sync-mapping" เป็นค่า `:id` แทนเงียบๆ (ได้ 500 ไม่มี error message) — แก้โดยย้ายมาก่อน wildcard route เสมอ
+
+### ข้อจำกัดที่พบระหว่างทดสอบ
+เซิร์ฟเวอร์ HDC (192.168.88.203) **unreachable จากเครื่อง dev ปัจจุบันชั่วคราว** (ยืนยันด้วย raw connection
+timeout นอก API เลย ไม่เกี่ยวกับโค้ดที่แก้) ทำให้ verification step ที่ต้องการ sync จริงกับ HDC (ทดสอบว่า hash
+ไปลง `cid_hash` จริง) ยังไม่สามารถทำจบได้ในรอบนี้ — ทดสอบอย่างอื่นครบแล้ว: การ์ดสรุป/แท็บทั้ง 3 render ถูกต้อง,
+แท็บโครงสร้างตรวจพบ `cid_hash` diff จริงตอนที่ HDC ยังเชื่อมได้, mapping CRUD round-trip ถูกต้อง, validation
+(ชื่อคอลัมน์ซ้ำ/format ผิด/exclude username-id) ทำงานถูกต้องทุกกรณี
+
+### ไฟล์ที่แก้ไข
+- `api/server.js` — endpoint ใหม่ 3 ตัว (`structure-compare`, `sync-mapping` GET/PUT) + แก้ `sync-compare`/
+  `sync-to-hdc` เดิม + helper `diffTableColumns()`/`getUsersSyncConfig()` + migration widen `system_settings`
+- `frontend/src/app/user-management/user-management.ts` + `.html` — modal 3 แท็บ
+- `frontend/src/app/services/auth.ts` — service methods ใหม่
+- `CLAUDE.md`, `frontend/src/app/changelog/changelog.ts` (`2569.09.25.f`), `frontend/src/app/help/help.html`
+
+---
+
 ## 2569-09-25 — ปุ่ม ThaID/ProviderID: ขยายโลโก้ + ปรับสีให้เข้าธีมโลโก้
 
 ### คำขอ
