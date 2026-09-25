@@ -537,7 +537,7 @@ const apiLimiter = rateLimit({
     skip: (req) => {
         // ข้าม endpoints heavy ที่ super_admin ใช้ (export, backup, restore, monitor) — มีสิทธิ์อยู่แล้ว
         const url = req.url || '';
-        return url.includes('/backup/') || url.includes('/export-kpi-tables') || url.includes('/sync-to-hdc') ||
+        return url.includes('/backup/') || url.includes('/export-kpi-tables') || url.includes('/sync-to-khd') ||
                url.includes('/refresh-summary') || url.includes('/online-users');
     },
     standardHeaders: true,
@@ -591,7 +591,7 @@ const PAGE_ACCESS_PAGES = [
     { key: 'kpi-manage', label: 'จัดการตัวชี้วัด' },
     { key: 'kpi-setup', label: '+KPI ปีงบประมาณใหม่' },
     { key: 'audit-logs', label: 'ประวัติการใช้งาน' },
-    { key: 'kpi-manager', label: 'จัดการข้อมูล KPI ↔ HDC' },
+    { key: 'kpi-manager', label: 'จัดการข้อมูล KPI ↔ KHD' },
     { key: 'settings', label: 'ตั้งค่าระบบ' },
     { key: 'announcements', label: 'ประกาศระบบ' },
     { key: 'online-users', label: 'ผู้ใช้งานออนไลน์' },
@@ -655,7 +655,7 @@ function hasPageAccess(role, pageKey) {
 // สำคัญมาก — กันไม่ให้เปิดสิทธิ์เกินของเดิมโดยไม่ตั้งใจ (over-grant): endpoint หลายกลุ่มใน server.js มี
 // authorization ปนกันหลายระดับใต้ path เดียวกัน (isAnyAdmin/isAdmin/isSuperAdmin ปนกัน หรือแม้แต่เปิดให้ทุก role)
 // เช่น /users มีทั้ง endpoint isAnyAdmin (จัดการผู้ใช้ทั่วไป) และ isAdmin (approve/reject) และ isSuperAdmin
-// (permissions/sync-to-hdc) ปนกัน — ห้าม map ด้วย prefix กว้างๆ เด็ดขาดเพราะจะทำให้ role ที่ถูก seed
+// (permissions/sync-to-khd) ปนกัน — ห้าม map ด้วย prefix กว้างๆ เด็ดขาดเพราะจะทำให้ role ที่ถูก seed
 // ให้เข้าหน้านี้ได้ (ตรงกับ tier ที่กว้างที่สุด) ได้สิทธิ์ทำ action ระดับที่แคบกว่าไปด้วยทั้งที่ไม่เคยมีสิทธิ์มาก่อน
 // หลักการ: pageKey หนึ่งจะรวม endpoint ได้ก็ต่อเมื่อทุก role ที่ default เปิดหน้านั้น มีสิทธิ์ endpoint นั้นอยู่แล้วจริง
 // endpoint ที่ authorization เข้มกว่า default ของหน้า (เช่น kpi-manage.html เองก็ซ่อนปุ่มแก้ไข/ลบ/Form Builder
@@ -688,9 +688,9 @@ const PAGE_ACCESS_RULES = [
     { path: '/system/maintenance-mode', pageKey: 'settings' },
 
     // users — เฉพาะ endpoint ที่เดิมเป็น isAnyAdmin เท่านั้น (ตรงกับ default seed ROLES_ANY_ADMIN)
-    // ไม่รวม: bulk-toggle-active/permissions/sync-compare/sync-to-hdc (isSuperAdmin เดิม) และ
+    // ไม่รวม: bulk-toggle-active/permissions/sync-compare/sync-to-khd (isSuperAdmin เดิม) และ
     // approve/reject/toggle-active/basic (isAdmin เดิม — admin_ssj+super_admin เท่านั้น) — คงไว้ตามเดิมทุกจุด
-    // structure-compare/sync-mapping (GET+PUT) ก็ hardcode isSuperAdmin เหมือนกลุ่ม sync-compare/sync-to-hdc ข้างต้น — ไม่เพิ่มเข้า rules นี้เช่นกัน
+    // structure-compare/sync-mapping (GET+PUT) ก็ hardcode isSuperAdmin เหมือนกลุ่ม sync-compare/sync-to-khd ข้างต้น — ไม่เพิ่มเข้า rules นี้เช่นกัน
     { method: 'GET',  path: '/users', pageKey: 'users' },
     { method: 'GET',  path: '/users/stats', pageKey: 'users' },
     { method: 'GET',  path: '/users/pending-count', pageKey: 'users' },
@@ -708,9 +708,9 @@ const PAGE_ACCESS_RULES = [
     // audit-logs
     { path: '/system-logs', pageKey: 'audit-logs' },
 
-    // kpi-manager (Export/Sync/DB Compare/Report Compare ↔ HDC — ทั้งหมด isSuperAdmin เดิม ไม่มี endpoint เปิด)
+    // kpi-manager (Export/Sync/DB Compare/Report Compare ↔ KHD — ทั้งหมด isSuperAdmin เดิม ไม่มี endpoint เปิด)
     { prefix: '/export-schedules', pageKey: 'kpi-manager' },
-    { prefix: '/sync-to-hdc', pageKey: 'kpi-manager' },
+    { prefix: '/sync-to-khd', pageKey: 'kpi-manager' },
     { prefix: '/db-compare', pageKey: 'kpi-manager' },
     { prefix: '/export-kpi-tables', pageKey: 'kpi-manager' },
     { prefix: '/report-compare', pageKey: 'kpi-manager' },
@@ -750,7 +750,7 @@ function resolvePageKeyFromPath(method, path) {
 //
 // ขอบเขตที่ตั้งใจไม่ครอบคลุม (เก็บพฤติกรรมเดิมไว้ hardcode เหมือนเดิมทุกจุด — เหตุผลดูแต่ละจุด):
 // - users: approve/reject/toggle-active/basic (isAdmin เดิม, เข้มกว่า isAnyAdmin ของ view) และ
-//   permissions/bulk-toggle-active/sync-compare/sync-to-hdc (isSuperAdmin เดิม) — เป็น action
+//   permissions/bulk-toggle-active/sync-compare/sync-to-khd (isSuperAdmin เดิม) — เป็น action
 //   คนละระดับกับ "แก้ไขข้อมูลผู้ใช้ทั่วไป" (อนุมัติ/สิทธิ์พิเศษ/sync ข้ามระบบ) ไม่ใช่ "เพิ่ม/แก้ไข" ตรงๆ
 // - kpi-manage: GET .../result-summary, GET /form-schemas/all-indicators เป็น read ไม่ใช่เขียน
 // - announcements: POST .../send-email เป็น action แจ้งเตือน ไม่ใช่เพิ่ม/แก้ไขข้อมูลประกาศ
@@ -5123,16 +5123,16 @@ apiRouter.put('/users/sync-mapping', authenticateToken, isSuperAdmin, async (req
         const cleanExclude = [...new Set(exclude)].filter(f => validFields.has(f) && f !== 'id' && f !== 'username');
 
         const cleanMapping = {};
-        for (const [local, hdc] of Object.entries(mapping)) {
+        for (const [local, khd] of Object.entries(mapping)) {
             if (!validFields.has(local)) continue;
-            const target = String(hdc || '').trim();
+            const target = String(khd || '').trim();
             if (!target || target === local) continue; // ว่าง/ไม่เปลี่ยน = identity, ไม่ต้องเก็บ
             if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/.test(target)) continue; // กันชื่อ identifier ผิดรูปแบบ
             cleanMapping[local] = target;
         }
         const targets = Object.values(cleanMapping);
         const dupTargets = [...new Set(targets.filter((t, i) => targets.indexOf(t) !== i))];
-        if (dupTargets.length > 0) return res.status(400).json({ success: false, message: `มีหลายคอลัมน์ map ไปชื่อ HDC เดียวกัน: ${dupTargets.join(', ')}` });
+        if (dupTargets.length > 0) return res.status(400).json({ success: false, message: `มีหลายคอลัมน์ map ไปชื่อ KHD เดียวกัน: ${dupTargets.join(', ')}` });
 
         await db.query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('users_sync_exclude_columns', ?) ON DUPLICATE KEY UPDATE setting_value = ?", [JSON.stringify(cleanExclude), JSON.stringify(cleanExclude)]);
         await db.query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('users_sync_field_mapping', ?) ON DUPLICATE KEY UPDATE setting_value = ?", [JSON.stringify(cleanMapping), JSON.stringify(cleanMapping)]);
@@ -8097,12 +8097,12 @@ async function sendExportNotification(schedule, result, durationMs) {
     }).join('');
     const tablesMore = allTables.length > 100 ? `<p style="color:#6b7280;font-size:11px;margin-top:4px">... และอีก ${allTables.length - 100} ตาราง</p>` : '';
 
-    // Sync-to-HDC summary (ถ้ามี)
+    // Sync-to-KHD summary (ถ้ามี)
     const sync = result.sync;
     const syncHtml = sync ? `
         <div style="margin-top:16px;padding:14px;border-radius:10px;background:${sync.success ? '#ecfdf5' : '#fef2f2'};border-left:4px solid ${sync.success ? '#10b981' : '#ef4444'}">
           <h3 style="margin:0 0 8px;color:${sync.success ? '#065f46' : '#991b1b'};font-size:14px">
-            ${sync.success ? '☁️ Sync ไปยัง HDC สำเร็จ' : '⚠️ Sync ไปยัง HDC ผิดพลาดบางส่วน'}
+            ${sync.success ? '☁️ Sync ไปยัง KHD สำเร็จ' : '⚠️ Sync ไปยัง KHD ผิดพลาดบางส่วน'}
           </h3>
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0">
             <div style="background:white;padding:8px;border-radius:6px;text-align:center"><div style="font-size:16px;font-weight:bold;color:#065f46">${sync.summary.success}</div><div style="font-size:10px;color:#065f46">สำเร็จ</div></div>
@@ -8140,8 +8140,8 @@ async function sendExportNotification(schedule, result, durationMs) {
         <div style="background:#fef9c3;border-left:4px solid #eab308;padding:12px;margin-top:16px;border-radius:4px">
           <p style="margin:0;color:#713f12;font-size:13px">
             ${sync
-              ? `📬 ระบบส่งข้อมูลเข้า HDC เรียบร้อยแล้ว — กรุณาตรวจสอบที่ <a href="https://apikorat.moph.go.th/khupskpi/">Korat Health KPI</a>`
-              : `⚠️ <b>กรุณาตรวจสอบผลก่อนส่งไปยัง HDC</b> โดยเข้าระบบที่ <a href="https://apikorat.moph.go.th/khupskpi/">Korat Health KPI</a> → จัดการข้อมูล KPI → Tab "Export ข้อมูล"`}
+              ? `📬 ระบบส่งข้อมูลเข้า KHD เรียบร้อยแล้ว — กรุณาตรวจสอบที่ <a href="https://apikorat.moph.go.th/khupskpi/">Korat Health KPI</a>`
+              : `⚠️ <b>กรุณาตรวจสอบผลก่อนส่งไปยัง KHD</b> โดยเข้าระบบที่ <a href="https://apikorat.moph.go.th/khupskpi/">Korat Health KPI</a> → จัดการข้อมูล KPI → Tab "Export ข้อมูล"`}
           </p>
         </div>
       </div>
@@ -8160,7 +8160,7 @@ async function sendExportNotification(schedule, result, durationMs) {
     if (Number(schedule.notify_telegram) === 1 && ns.tgToken && ns.tgChatId) {
         const chatIds = ns.tgChatId.split(',').map(c => c.trim()).filter(Boolean);
         const syncBlock = sync
-          ? `\n☁️ *Sync ไปยัง HDC:*\n` +
+          ? `\n☁️ *Sync ไปยัง KHD:*\n` +
             `• ${sync.success ? 'สำเร็จ' : 'มีข้อผิดพลาด'}: *${sync.summary.success}/${sync.summary.total}* ตาราง\n` +
             `• Rows: *${sync.summary.rows}*\n` +
             (sync.summary.error > 0 ? `• ผิดพลาด: *${sync.summary.error}*\n` : '')
@@ -8174,7 +8174,7 @@ async function sendExportNotification(schedule, result, durationMs) {
               return `${icon} \`${t.table}\` (+${t.inserted || 0}/~${t.updated || 0}/=${t.unchanged || 0})`;
             }).join('\n') + (allTables.length > 20 ? `\n... และอีก ${allTables.length - 20} ตาราง` : '')
           : '';
-        const footer = sync ? '\n\n📬 ข้อมูลถูกส่งเข้า HDC แล้ว' : '\n\n⚠️ กรุณาตรวจสอบก่อนส่ง HDC';
+        const footer = sync ? '\n\n📬 ข้อมูลถูกส่งเข้า KHD แล้ว' : '\n\n⚠️ กรุณาตรวจสอบก่อนส่ง KHD';
         const tgMsg = `📊 *รายงาน Export KPI — ${schedule.name}*\n\n` +
             `สถานะ: ${result.success ? '✅ สำเร็จ' : '❌ ผิดพลาด'}\n` +
             `⏱ เวลา: ${(durationMs/1000).toFixed(1)} วินาที\n\n` +
@@ -8203,8 +8203,8 @@ async function sendExportNotification(schedule, result, durationMs) {
                 `• อัปเดต: ${summary.updated}\n` +
                 `• ไม่เปลี่ยน: ${summary.unchanged}\n` +
                 `• ตารางทั้งหมด: ${tablesCount}\n` +
-                (sync ? `\n☁️ Sync HDC:\n• ${sync.success ? 'สำเร็จ' : 'ผิดพลาด'}: ${sync.summary.success}/${sync.summary.total} ตาราง\n• Rows: ${sync.summary.rows}` : '') +
-                (sync ? '\n\n📬 ข้อมูลถูกส่งเข้า HDC แล้ว' : '\n\n⚠️ กรุณาตรวจสอบก่อนส่ง HDC');
+                (sync ? `\n☁️ Sync KHD:\n• ${sync.success ? 'สำเร็จ' : 'ผิดพลาด'}: ${sync.summary.success}/${sync.summary.total} ตาราง\n• Rows: ${sync.summary.rows}` : '') +
+                (sync ? '\n\n📬 ข้อมูลถูกส่งเข้า KHD แล้ว' : '\n\n⚠️ กรุณาตรวจสอบก่อนส่ง KHD');
             const r = await sendLineMulticast(ns.lineToken, ns.lineGroupId, lineMsg);
             sentLine = r.sent > 0;
         } catch (e) { console.error('[Schedule] LINE send error:', e.message); }
@@ -8247,16 +8247,16 @@ async function runScheduledExport(schedule) {
             if (!result.success) { status = 'failed'; errorMsg = result.message; }
         }
 
-        // Auto-sync to HDC ถ้า export สำเร็จและมีตารางและเปิด auto_sync_hdc
-        if (Number(schedule.auto_sync_hdc) === 1 && result.success && (result.created_tables || []).length > 0) {
+        // Auto-sync to KHD ถ้า export สำเร็จและมีตารางและเปิด auto_sync_khd
+        if (Number(schedule.auto_sync_khd) === 1 && result.success && (result.created_tables || []).length > 0) {
             try {
                 const syncTables = result.created_tables.map(t => ({ table: t.table, sync_columns: null }));
-                const syncOut = await performSyncToHdc(syncTables, schedule.created_by);
+                const syncOut = await performSyncToKhd(syncTables, schedule.created_by);
                 result.sync = syncOut;
-                if (!syncOut.success) { status = 'partial'; errorMsg = 'Export สำเร็จแต่ sync HDC มีข้อผิดพลาด'; }
+                if (!syncOut.success) { status = 'partial'; errorMsg = 'Export สำเร็จแต่ sync KHD มีข้อผิดพลาด'; }
             } catch (e) {
                 result.sync = { success: false, message: e.message, summary: { total: 0, success: 0, error: 0, skipped: 0, rows: 0 }, results: [] };
-                status = 'partial'; errorMsg = `Sync HDC failed: ${e.message}`;
+                status = 'partial'; errorMsg = `Sync KHD failed: ${e.message}`;
             }
         }
     } catch (e) {
@@ -8351,15 +8351,15 @@ apiRouter.get('/export-schedules', authenticateToken, isSuperAdmin, async (req, 
 
 apiRouter.post('/export-schedules', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
-        const { name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, auto_sync_hdc, notify_email, notify_telegram, notify_line } = req.body;
+        const { name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, auto_sync_khd, notify_email, notify_telegram, notify_line } = req.body;
         if (!name || !days_of_week || !time_of_day) return res.status(400).json({ success: false, message: 'ข้อมูลไม่ครบ' });
         const scope = ['all', 'selected', 'changes_only'].includes(indicator_scope) ? indicator_scope : 'all';
         const [r] = await db.query(
-            `INSERT INTO export_schedules (name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, auto_sync_hdc, notify_email, notify_telegram, notify_line, created_by)
+            `INSERT INTO export_schedules (name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, auto_sync_khd, notify_email, notify_telegram, notify_line, created_by)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [name, is_enabled ? 1 : 0, days_of_week, time_of_day, year_bh || null,
              scope === 'selected' && Array.isArray(indicator_ids) ? JSON.stringify(indicator_ids) : null,
-             scope, auto_sync_hdc ? 1 : 0,
+             scope, auto_sync_khd ? 1 : 0,
              notify_email ? 1 : 0, notify_telegram ? 1 : 0, notify_line ? 1 : 0, req.user.id]
         );
         res.json({ success: true, id: r.insertId, message: 'สร้าง schedule สำเร็จ' });
@@ -8368,13 +8368,13 @@ apiRouter.post('/export-schedules', authenticateToken, isSuperAdmin, async (req,
 
 apiRouter.put('/export-schedules/:id', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
-        const { name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, auto_sync_hdc, notify_email, notify_telegram, notify_line } = req.body;
+        const { name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, auto_sync_khd, notify_email, notify_telegram, notify_line } = req.body;
         const scope = ['all', 'selected', 'changes_only'].includes(indicator_scope) ? indicator_scope : 'all';
         await db.query(
-            `UPDATE export_schedules SET name=?, is_enabled=?, days_of_week=?, time_of_day=?, year_bh=?, indicator_ids=?, indicator_scope=?, auto_sync_hdc=?, notify_email=?, notify_telegram=?, notify_line=? WHERE id=?`,
+            `UPDATE export_schedules SET name=?, is_enabled=?, days_of_week=?, time_of_day=?, year_bh=?, indicator_ids=?, indicator_scope=?, auto_sync_khd=?, notify_email=?, notify_telegram=?, notify_line=? WHERE id=?`,
             [name, is_enabled ? 1 : 0, days_of_week, time_of_day, year_bh || null,
              scope === 'selected' && Array.isArray(indicator_ids) ? JSON.stringify(indicator_ids) : null,
-             scope, auto_sync_hdc ? 1 : 0,
+             scope, auto_sync_khd ? 1 : 0,
              notify_email ? 1 : 0, notify_telegram ? 1 : 0, notify_line ? 1 : 0, req.params.id]
         );
         res.json({ success: true, message: 'แก้ไข schedule สำเร็จ' });
@@ -8407,10 +8407,10 @@ apiRouter.get('/export-schedules/:id/logs', authenticateToken, isSuperAdmin, asy
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-// POST /sync-to-hdc/preview — ตรวจสอบข้อมูลก่อนส่ง HDC
-apiRouter.post('/sync-to-hdc/preview', authenticateToken, isSuperAdmin, async (req, res) => {
+// POST /sync-to-khd/preview — ตรวจสอบข้อมูลก่อนส่ง KHD
+apiRouter.post('/sync-to-khd/preview', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
-    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
     try {
         // ดึงตาราง export ทั้งหมดจาก local (table_process ที่มีข้อมูล) พร้อมหมวดหมู่หลัก + หน่วยงาน สำหรับ filter/แสดงผล
         const [indicators] = await db.query(`
@@ -8470,10 +8470,10 @@ apiRouter.post('/sync-to-hdc/preview', authenticateToken, isSuperAdmin, async (r
     }
 });
 
-// Core: sync export tables to HDC — ใช้ร่วมกัน (HTTP + scheduler auto_sync_hdc)
-async function performSyncToHdc(tables, userId) {
+// Core: sync export tables to KHD — ใช้ร่วมกัน (HTTP + scheduler auto_sync_khd)
+async function performSyncToKhd(tables, userId) {
     const remoteDb = getRemotePool();
-    if (!remoteDb) return { success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)', results: [] };
+    if (!remoteDb) return { success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)', results: [] };
     if (!Array.isArray(tables) || tables.length === 0) return { success: false, message: 'ไม่มีตารางที่จะ sync', results: [] };
     const results = [];
     for (const t of tables) {
@@ -8488,7 +8488,7 @@ async function performSyncToHdc(tables, userId) {
                 const local = localCols.map(c => c.Field);
                 const remote = remoteCols.map(c => c.Field);
                 cols = local.filter(c => remote.includes(c));
-            } catch (e) { results.push({ table: tp, status: 'skipped', reason: 'ตาราง HDC ยังไม่มี' }); continue; }
+            } catch (e) { results.push({ table: tp, status: 'skipped', reason: 'ตาราง KHD ยังไม่มี' }); continue; }
             if (cols.length === 0) { results.push({ table: tp, status: 'skipped', reason: 'ไม่มีคอลัมน์ที่ตรงกัน' }); continue; }
         }
         try {
@@ -8511,7 +8511,7 @@ async function performSyncToHdc(tables, userId) {
     try {
         await db.query(
             'INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?,?,?,?,?)',
-            [userId || null, 'SYNC_TO_HDC', 'multiple', JSON.stringify({ tables: results.length, success: results.filter(r => r.status === 'success').length }), null]
+            [userId || null, 'SYNC_TO_KHD', 'multiple', JSON.stringify({ tables: results.length, success: results.filter(r => r.status === 'success').length }), null]
         );
     } catch (_) {}
     const successCount = results.filter(r => r.status === 'success').length;
@@ -8525,11 +8525,11 @@ async function performSyncToHdc(tables, userId) {
     };
 }
 
-// POST /sync-to-hdc/execute — ส่งข้อมูลจาก local export tables เข้า HDC
-apiRouter.post('/sync-to-hdc/execute', authenticateToken, isSuperAdmin, async (req, res) => {
+// POST /sync-to-khd/execute — ส่งข้อมูลจาก local export tables เข้า KHD
+apiRouter.post('/sync-to-khd/execute', authenticateToken, isSuperAdmin, async (req, res) => {
     const { tables } = req.body;
     if (!Array.isArray(tables) || tables.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตารางที่ต้องการ' });
-    const out = await performSyncToHdc(tables, req.user.userId);
+    const out = await performSyncToKhd(tables, req.user.userId);
     if (!out.success && out.results.length === 0) return res.status(400).json(out);
     res.json(out);
 });
@@ -9676,8 +9676,8 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
                 'active_session_id', 'session_started_at',
                 'kicked_by_ip', 'kicked_by_ua', 'kicked_at',
                 'temp_password', 'temp_password_expiry', 'must_change_password'
-            ]), 'คอลัมน์ users ที่ไม่ต้อง sync/เทียบกับ HDC (JSON array ชื่อคอลัมน์ local)'],
-            ['users_sync_field_mapping', '{}', 'Mapping ชื่อคอลัมน์ users local → HDC ที่ไม่ตรงกัน (JSON object {local_field:hdc_field}) — ว่าง = identity ทั้งหมด']
+            ]), 'คอลัมน์ users ที่ไม่ต้อง sync/เทียบกับ KHD (JSON array ชื่อคอลัมน์ local)'],
+            ['users_sync_field_mapping', '{}', 'Mapping ชื่อคอลัมน์ users local → KHD ที่ไม่ตรงกัน (JSON object {local_field:khd_field}) — ว่าง = identity ทั้งหมด']
         ];
         for (const [key, val, desc] of usersSyncDefaults) {
             await db.query('INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES (?, ?, ?)', [key, val, desc]);
@@ -10035,18 +10035,23 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS description TEXT NULL`); } catch(e) {}
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS evaluation_mode VARCHAR(20) NULL COMMENT 'any_one | all_required'`); } catch(e) {}
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS required_off_types TEXT NULL COMMENT 'JSON array of hostypecode เช่น ["05","06","07"]'`); } catch(e) {}
-        // upload_excel: 0 = ส่งออกอัตโนมัติได้ (default), 1 = ข้าม (อัปโหลด Excel มือเอง — เช่น HDC report ถูก deactivate)
+        // upload_excel: 0 = ส่งออกอัตโนมัติได้ (default), 1 = ข้าม (อัปโหลด Excel มือเอง — เช่น KHD report ถูก deactivate)
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS upload_excel TINYINT(1) DEFAULT 0 COMMENT '0=auto export, 1=skip (manual Excel upload)'`); } catch(e) {}
         try { await db.query(`ALTER TABLE kpi_indicators ADD INDEX idx_upload_excel (upload_excel)`); } catch(e) {}
-        // data_source: จาก hdc.reports.data_source ('hdc'|'excel') — เก็บไว้อ้างอิง/กรองในอนาคต
-        // ใช้ VARCHAR ไม่ใช่ ENUM — กัน HDC เพิ่มค่าใหม่แล้ว local ตามไม่ทัน (evaluation_mode/target_condition ก็ใช้ VARCHAR ด้วยเหตุผลเดียวกัน)
+        // data_source: จาก hdc.reports.data_source ('hdc'|'excel' — ค่าจริงจากฐานข้อมูล KHD ภายนอก) — เก็บไว้อ้างอิง/กรองในอนาคต
+        // ใช้ VARCHAR ไม่ใช่ ENUM — กัน KHD เพิ่มค่าใหม่แล้ว local ตามไม่ทัน (evaluation_mode/target_condition ก็ใช้ VARCHAR ด้วยเหตุผลเดียวกัน)
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS data_source VARCHAR(10) NULL COMMENT 'จาก hdc.reports.data_source: hdc|excel'`); } catch(e) {}
-        // hdc_fiscal_year: ปีงบฯ (พ.ศ.) ที่ค่า target_percentage/target_condition ปัจจุบันอ้างอิงมาจาก HDC ล่าสุด — audit only ไม่ใช่ FK
-        try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS hdc_fiscal_year VARCHAR(10) NULL COMMENT 'ปีงบฯ ที่ใช้อ้างอิง target_percentage/target_condition ล่าสุดจาก HDC (audit only)'`); } catch(e) {}
+        // khd_fiscal_year: ปีงบฯ (พ.ศ.) ที่ค่า target_percentage/target_condition ปัจจุบันอ้างอิงมาจาก KHD ล่าสุด — audit only ไม่ใช่ FK
+        // เดิมชื่อ hdc_fiscal_year (ส่วนหนึ่งของการเปลี่ยนชื่อการเชื่อมต่อ HDC → KHD ทั้งระบบ) — rename คอลัมน์เดิมก่อนกันข้อมูลหาย
+        try { await db.query(`ALTER TABLE kpi_indicators CHANGE COLUMN hdc_fiscal_year khd_fiscal_year VARCHAR(10) NULL COMMENT 'ปีงบฯ ที่ใช้อ้างอิง target_percentage/target_condition ล่าสุดจาก KHD (audit only)'`); } catch(e) {}
+        try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS khd_fiscal_year VARCHAR(10) NULL COMMENT 'ปีงบฯ ที่ใช้อ้างอิง target_percentage/target_condition ล่าสุดจาก KHD (audit only)'`); } catch(e) {}
+        // Migrate ข้อมูล override เดิมใน system_settings (env_HDC_DB_* -> env_KHD_DB_*) ที่ admin เคยตั้งค่าผ่านหน้า Environment Config
+        // กันการเชื่อมต่อ KHD ที่ใช้งานจริงอยู่ขาดหาย — idempotent เพราะรันซ้ำแล้วไม่มีแถว env_HDC% เหลือให้ match
+        try { await db.query(`UPDATE system_settings SET setting_key = REPLACE(setting_key, 'HDC', 'KHD') WHERE setting_key LIKE 'env_HDC%'`); } catch(e) {}
         // is_cumulative: 1 = ผลงานสะสมทุกเดือนในปีงบ (SUM) แทนค่าเดือนล่าสุด — ใช้กับตัวชี้วัดนับสะสม เช่น จำนวนราย/ครั้งสะสม
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS is_cumulative TINYINT(1) DEFAULT 0 COMMENT 'สะสมทุกเดือนในปีงบ (SUM) แทนค่าเดือนล่าสุด'`); } catch(e) {}
         // criterion: "เกณฑ์" แยกออกจาก target_percentage ("เป้าหมาย") — เดิมทั้งสองความหมายใช้ target_percentage
-        // ตัวเดียวปนกัน (เกณฑ์เทียบ HDC vs ค่าเริ่มต้นที่ copy เข้า kpi_results.target_value) ทำให้แก้ไขอย่างใดอย่างหนึ่ง
+        // ตัวเดียวปนกัน (เกณฑ์เทียบ KHD vs ค่าเริ่มต้นที่ copy เข้า kpi_results.target_value) ทำให้แก้ไขอย่างใดอย่างหนึ่ง
         // กระทบอีกอย่างโดยไม่ตั้งใจ — แยกเป็นคอลัมน์ใหม่ ก๊อปปี้ค่าที่เคย "เป็นเกณฑ์" อยู่แล้วมาไว้ที่นี่ครั้งเดียว (backfill)
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS criterion VARCHAR(50) NULL COMMENT 'เกณฑ์ % (จับคู่กับ target_condition) — แยกจาก target_percentage (เป้าหมาย)'`); } catch(e) {}
         // Backfill ครั้งเดียว: idempotent ด้วย WHERE criterion IS NULL — รันซ้ำได้ทุก restart โดยไม่ทับค่าที่ admin ตั้งไว้แล้ว
@@ -10085,7 +10090,7 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
                     telegram_chat_ids TEXT,
                     telegram_bot_token VARCHAR(255),
                     indicator_scope VARCHAR(20) DEFAULT 'all',
-                    auto_sync_hdc TINYINT(1) DEFAULT 0,
+                    auto_sync_khd TINYINT(1) DEFAULT 0,
                     last_run_at DATETIME,
                     last_status VARCHAR(20),
                     next_run_at DATETIME,
@@ -10095,7 +10100,9 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             `);
             try { await db.query(`ALTER TABLE export_schedules ADD COLUMN indicator_scope VARCHAR(20) DEFAULT 'all'`); } catch (_) {}
-            try { await db.query(`ALTER TABLE export_schedules ADD COLUMN auto_sync_hdc TINYINT(1) DEFAULT 0`); } catch (_) {}
+            // เดิมชื่อ auto_sync_hdc (ส่วนหนึ่งของการเปลี่ยนชื่อการเชื่อมต่อ HDC → KHD ทั้งระบบ) — rename คอลัมน์เดิมก่อนกันข้อมูลหาย
+            try { await db.query(`ALTER TABLE export_schedules CHANGE COLUMN auto_sync_hdc auto_sync_khd TINYINT(1) DEFAULT 0`); } catch (_) {}
+            try { await db.query(`ALTER TABLE export_schedules ADD COLUMN auto_sync_khd TINYINT(1) DEFAULT 0`); } catch (_) {}
             // LINE Group notification
             try { await db.query(`ALTER TABLE export_schedules ADD COLUMN notify_line TINYINT(1) DEFAULT 0`); } catch (_) {}
         } catch (e) {}
@@ -10640,13 +10647,13 @@ apiRouter.get('/kpi-replies', authenticateToken, async (req, res) => {
 
 // === Test Telegram (super_admin) ===
 // ============================================================
-// === Structure Compare: Local DB vs Remote HDC DB ===
+// === Structure Compare: Local DB vs Remote KHD DB ===
 // ============================================================
 
-// GET /report-compare — เปรียบเทียบ reports (HDC) กับ kpi_indicators (Local) โดยใช้ table_process เป็น key
+// GET /report-compare — เปรียบเทียบ reports (KHD) กับ kpi_indicators (Local) โดยใช้ table_process เป็น key
 apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
-    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
     try {
         // ปีงบประมาณที่ใช้เทียบเกณฑ์ — จาก query param หรือ default ปีงบปัจจุบัน (ต.ค. ขึ้นปีใหม่)
         const today = new Date();
@@ -10655,8 +10662,8 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
         const currentFY = (fyYear + 543).toString();
         const year_bh = req.query.year_bh ? String(req.query.year_bh) : currentFY;
 
-        // ดึง reports จาก HDC
-        const [hdcRows] = await remoteDb.query(`
+        // ดึง reports จาก KHD
+        const [khdRows] = await remoteDb.query(`
             SELECT *
             FROM reports
             WHERE data_source = 'excel'
@@ -10684,44 +10691,44 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
             ORDER BY i.id
         `);
         // สร้าง map โดยใช้ table_process เป็น key
-        const hdcMap = new Map();
-        hdcRows.forEach(r => { if (r.table_process) hdcMap.set(r.table_process, r); });
+        const khdMap = new Map();
+        khdRows.forEach(r => { if (r.table_process) khdMap.set(r.table_process, r); });
         const localMap = new Map();
         localRows.forEach(r => { if (r.table_process) localMap.set(r.table_process, r); });
 
         const items = [];
         let match = 0, different = 0, missing_local = 0, missing_remote = 0, criteria_different = 0;
-        let hdc_inactive_count = 0, suggest_disable_count = 0;
+        let khd_inactive_count = 0, suggest_disable_count = 0;
 
-        // Helper: ถ้า HDC report inactive (=0) แต่ Local ยัง upload_excel=0 → suggest = ปิด upload_excel
-        const computeSuggest = (hdcIsActive, localUploadExcel) => {
-            const inactive = hdcIsActive === 0 || hdcIsActive === '0';
+        // Helper: ถ้า KHD report inactive (=0) แต่ Local ยัง upload_excel=0 → suggest = ปิด upload_excel
+        const computeSuggest = (khdIsActive, localUploadExcel) => {
+            const inactive = khdIsActive === 0 || khdIsActive === '0';
             const stillAutoExport = !localUploadExcel || localUploadExcel === 0;
             return inactive && stillAutoExport;
         };
 
         // Helper: ค่าเกณฑ์ที่ใช้จริง — ใช้ report_fiscal_year_config (ปีที่กำลังเทียบ) ถ้ามี ไม่งั้น fallback ไปที่ reports (base value)
-        const getEffectiveHdcCriteria = (hdc, fyConfig) => {
+        const getEffectiveKhdCriteria = (khd, fyConfig) => {
             if (fyConfig && fyConfig.target_percentage != null) {
                 return { target_percentage: fyConfig.target_percentage, target_condition: fyConfig.target_condition, source: 'fiscal_year_config' };
             }
-            return { target_percentage: hdc.target_percentage, target_condition: hdc.target_condition, source: 'reports' };
+            return { target_percentage: khd.target_percentage, target_condition: khd.target_condition, source: 'reports' };
         };
 
-        // เทียบจาก HDC
-        for (const hdc of hdcRows) {
-            const tp = hdc.table_process;
+        // เทียบจาก KHD
+        for (const khd of khdRows) {
+            const tp = khd.table_process;
             const local = tp ? localMap.get(tp) : null;
-            const fyConfig = fyConfigMap.get(hdc.report_id) || null;
-            const effective = getEffectiveHdcCriteria(hdc, fyConfig);
+            const fyConfig = fyConfigMap.get(khd.report_id) || null;
+            const effective = getEffectiveKhdCriteria(khd, fyConfig);
             if (!local) {
                 items.push({
                     status: 'missing_local',
-                    hdc_report_id: hdc.report_id, hdc_name: hdc.report_name, hdc_dept: hdc.dept, hdc_main_yut: hdc.main_yut,
-                    report_code: hdc.report_code, table_process: tp, hdc_is_active: hdc.is_active,
-                    hdc_data_source: hdc.data_source,
-                    hdc_target_percentage: effective.target_percentage, hdc_target_condition: effective.target_condition,
-                    hdc_criteria_source: effective.source, hdc_fiscal_year: fyConfig ? year_bh : null,
+                    khd_report_id: khd.report_id, khd_name: khd.report_name, khd_dept: khd.dept, khd_main_yut: khd.main_yut,
+                    report_code: khd.report_code, table_process: tp, khd_is_active: khd.is_active,
+                    khd_data_source: khd.data_source,
+                    khd_target_percentage: effective.target_percentage, khd_target_condition: effective.target_condition,
+                    khd_criteria_source: effective.source, khd_fiscal_year: fyConfig ? year_bh : null,
                     local_id: null, local_name: null,
                     local_dept_id: null, local_main_indicator_id: null, local_is_active: null,
                     local_upload_excel: null,
@@ -10729,10 +10736,10 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                     criteria_match: null,
                     suggest_disable_upload: false
                 });
-                if (hdc.is_active === 0 || hdc.is_active === '0') hdc_inactive_count++;
+                if (khd.is_active === 0 || khd.is_active === '0') khd_inactive_count++;
                 missing_local++;
             } else {
-                const nameMatch = (hdc.report_name || '').trim() === (local.kpi_indicators_name || '').trim();
+                const nameMatch = (khd.report_name || '').trim() === (local.kpi_indicators_name || '').trim();
                 const status = nameMatch ? 'match' : 'different';
                 if (status === 'match') match++; else different++;
 
@@ -10743,16 +10750,16 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                 const criteria_match = pctMatch && condMatch;
                 if (!criteria_match) criteria_different++;
 
-                const suggest = computeSuggest(hdc.is_active, local.upload_excel);
+                const suggest = computeSuggest(khd.is_active, local.upload_excel);
                 if (suggest) suggest_disable_count++;
-                if (hdc.is_active === 0 || hdc.is_active === '0') hdc_inactive_count++;
+                if (khd.is_active === 0 || khd.is_active === '0') khd_inactive_count++;
                 items.push({
                     status,
-                    hdc_report_id: hdc.report_id, hdc_name: hdc.report_name, hdc_dept: hdc.dept, hdc_main_yut: hdc.main_yut,
-                    report_code: hdc.report_code, table_process: tp, hdc_is_active: hdc.is_active,
-                    hdc_data_source: hdc.data_source,
-                    hdc_target_percentage: effective.target_percentage, hdc_target_condition: effective.target_condition,
-                    hdc_criteria_source: effective.source, hdc_fiscal_year: fyConfig ? year_bh : null,
+                    khd_report_id: khd.report_id, khd_name: khd.report_name, khd_dept: khd.dept, khd_main_yut: khd.main_yut,
+                    report_code: khd.report_code, table_process: tp, khd_is_active: khd.is_active,
+                    khd_data_source: khd.data_source,
+                    khd_target_percentage: effective.target_percentage, khd_target_condition: effective.target_condition,
+                    khd_criteria_source: effective.source, khd_fiscal_year: fyConfig ? year_bh : null,
                     local_id: local.id, local_name: local.kpi_indicators_name, local_dept: local.dept_name,
                     local_dept_id: local.dept_id, local_main_indicator_id: local.main_indicator_id, local_is_active: local.is_active,
                     local_upload_excel: local.upload_excel || 0,
@@ -10763,15 +10770,15 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                 });
             }
         }
-        // เทียบจาก Local ที่ไม่มีใน HDC
+        // เทียบจาก Local ที่ไม่มีใน KHD
         for (const local of localRows) {
-            if (local.table_process && !hdcMap.has(local.table_process)) {
+            if (local.table_process && !khdMap.has(local.table_process)) {
                 items.push({
                     status: 'missing_remote',
-                    hdc_report_id: null, hdc_name: null, hdc_dept: null, hdc_main_yut: null,
-                    report_code: null, table_process: local.table_process, hdc_is_active: null,
-                    hdc_data_source: null, hdc_target_percentage: null, hdc_target_condition: null,
-                    hdc_criteria_source: null, hdc_fiscal_year: null,
+                    khd_report_id: null, khd_name: null, khd_dept: null, khd_main_yut: null,
+                    report_code: null, table_process: local.table_process, khd_is_active: null,
+                    khd_data_source: null, khd_target_percentage: null, khd_target_condition: null,
+                    khd_criteria_source: null, khd_fiscal_year: null,
                     local_id: local.id, local_name: local.kpi_indicators_name, local_dept: local.dept_name,
                     local_dept_id: local.dept_id, local_main_indicator_id: local.main_indicator_id, local_is_active: local.is_active,
                     local_upload_excel: local.upload_excel || 0,
@@ -10785,10 +10792,10 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
         }
         res.json({
             success: true,
-            hdc_count: hdcRows.length, local_count: localRows.length,
+            khd_count: khdRows.length, local_count: localRows.length,
             summary: {
                 total: items.length, match, different, missing_local, missing_remote,
-                hdc_inactive: hdc_inactive_count, suggest_disable: suggest_disable_count,
+                khd_inactive: khd_inactive_count, suggest_disable: suggest_disable_count,
                 criteria_different, year_bh
             },
             items
@@ -10822,7 +10829,7 @@ apiRouter.put('/indicators/:id/upload-excel', authenticateToken, requireAction('
     }
 });
 
-// POST /indicators/bulk-upload-excel — set upload_excel แบบ batch (ใช้ตอน "ปิดทั้งหมดที่ HDC inactive")
+// POST /indicators/bulk-upload-excel — set upload_excel แบบ batch (ใช้ตอน "ปิดทั้งหมดที่ KHD inactive")
 apiRouter.post('/indicators/bulk-upload-excel', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
     try {
         const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(x => Number(x)).filter(Number.isFinite) : [];
@@ -10847,36 +10854,36 @@ apiRouter.post('/indicators/bulk-upload-excel', authenticateToken, requireAction
     }
 });
 
-// POST /report-compare/sync — Sync reports จาก HDC เข้า kpi_indicators (Local)
+// POST /report-compare/sync — Sync reports จาก KHD เข้า kpi_indicators (Local)
 apiRouter.post('/report-compare/sync', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
-    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
-    const { hdc_report_ids } = req.body;
-    if (!Array.isArray(hdc_report_ids) || hdc_report_ids.length === 0) {
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
+    const { khd_report_ids } = req.body;
+    if (!Array.isArray(khd_report_ids) || khd_report_ids.length === 0) {
         return res.status(400).json({ success: false, message: 'กรุณาเลือกรายการที่ต้องการ Sync' });
     }
     try {
-        const [hdcRows] = await remoteDb.query(
+        const [khdRows] = await remoteDb.query(
             `SELECT report_id, report_name, dept, main_yut, report_code, table_process, data_source FROM reports WHERE report_id IN (?)`,
-            [hdc_report_ids]
+            [khd_report_ids]
         );
         let inserted = 0, updated = 0, skipped = 0;
-        for (const hdc of hdcRows) {
-            if (!hdc.table_process) { skipped++; continue; }
+        for (const khd of khdRows) {
+            if (!khd.table_process) { skipped++; continue; }
             // ตรวจสอบว่ามีอยู่แล้วหรือไม่ (โดย table_process)
-            const [existing] = await db.query('SELECT id, kpi_indicators_name FROM kpi_indicators WHERE table_process = ?', [hdc.table_process]);
+            const [existing] = await db.query('SELECT id, kpi_indicators_name FROM kpi_indicators WHERE table_process = ?', [khd.table_process]);
             if (existing.length > 0) {
                 // อัปเดตชื่อ + report_code + data_source (ไม่แตะ target_percentage/target_condition — local อาจตั้งค่าเองไว้)
                 await db.query(
                     'UPDATE kpi_indicators SET kpi_indicators_name = ?, kpi_indicators_code = ?, data_source = ? WHERE table_process = ?',
-                    [hdc.report_name, hdc.report_code || null, hdc.data_source || null, hdc.table_process]
+                    [khd.report_name, khd.report_code || null, khd.data_source || null, khd.table_process]
                 );
                 updated++;
             } else {
                 // สร้างใหม่
                 await db.query(
                     'INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_code, data_source) VALUES (?, ?, ?, ?)',
-                    [hdc.report_name, hdc.table_process, hdc.report_code || null, hdc.data_source || null]
+                    [khd.report_name, khd.table_process, khd.report_code || null, khd.data_source || null]
                 );
                 inserted++;
             }
@@ -10884,7 +10891,7 @@ apiRouter.post('/report-compare/sync', authenticateToken, isSuperAdmin, async (r
         await db.query(
             'INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
             [req.user.userId, 'SYNC_REPORTS', 'kpi_indicators',
-             JSON.stringify({ hdc_ids: hdc_report_ids, inserted, updated, skipped }), req.ip]
+             JSON.stringify({ khd_ids: khd_report_ids, inserted, updated, skipped }), req.ip]
         );
         res.json({ success: true, message: `Sync สำเร็จ — เพิ่มใหม่ ${inserted} รายการ, อัปเดตชื่อ ${updated} รายการ${skipped > 0 ? ', ข้าม ' + skipped + ' รายการ' : ''}`, inserted, updated, skipped });
     } catch (e) {
@@ -10892,32 +10899,32 @@ apiRouter.post('/report-compare/sync', authenticateToken, isSuperAdmin, async (r
     }
 });
 
-// POST /report-compare/add-from-hdc — เพิ่มตัวชี้วัดจาก HDC เข้า Local พร้อม dept_id + main_indicator_id
-apiRouter.post('/report-compare/add-from-hdc', authenticateToken, isSuperAdmin, async (req, res) => {
+// POST /report-compare/add-from-khd — เพิ่มตัวชี้วัดจาก KHD เข้า Local พร้อม dept_id + main_indicator_id
+apiRouter.post('/report-compare/add-from-khd', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
-    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
-    const { hdc_report_id, dept_id, main_indicator_id } = req.body;
-    if (!hdc_report_id) return res.status(400).json({ success: false, message: 'กรุณาระบุ hdc_report_id' });
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
+    const { khd_report_id, dept_id, main_indicator_id } = req.body;
+    if (!khd_report_id) return res.status(400).json({ success: false, message: 'กรุณาระบุ khd_report_id' });
     try {
-        const [hdcRows] = await remoteDb.query(
+        const [khdRows] = await remoteDb.query(
             'SELECT report_id, report_name, report_code, table_process, data_source FROM reports WHERE report_id = ?',
-            [hdc_report_id]
+            [khd_report_id]
         );
-        if (!hdcRows.length) return res.status(404).json({ success: false, message: 'ไม่พบรายการนี้ใน HDC' });
-        const hdc = hdcRows[0];
-        if (!hdc.table_process) return res.status(400).json({ success: false, message: 'รายการ HDC นี้ไม่มี table_process' });
-        const [existing] = await db.query('SELECT id FROM kpi_indicators WHERE table_process = ?', [hdc.table_process]);
+        if (!khdRows.length) return res.status(404).json({ success: false, message: 'ไม่พบรายการนี้ใน KHD' });
+        const khd = khdRows[0];
+        if (!khd.table_process) return res.status(400).json({ success: false, message: 'รายการ KHD นี้ไม่มี table_process' });
+        const [existing] = await db.query('SELECT id FROM kpi_indicators WHERE table_process = ?', [khd.table_process]);
         if (existing.length) return res.status(409).json({ success: false, message: 'มีตัวชี้วัดนี้ในระบบแล้ว (table_process ซ้ำ)' });
         const [ins] = await db.query(
             'INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_code, dept_id, main_indicator_id, is_active, data_source) VALUES (?, ?, ?, ?, ?, 1, ?)',
-            [hdc.report_name, hdc.table_process, hdc.report_code || null, dept_id || null, main_indicator_id || null, hdc.data_source || null]
+            [khd.report_name, khd.table_process, khd.report_code || null, dept_id || null, main_indicator_id || null, khd.data_source || null]
         );
         await db.query(
             'INSERT INTO system_logs (user_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
-            [req.user.userId, 'ADD_FROM_HDC', 'kpi_indicators', ins.insertId,
-             JSON.stringify({ hdc_report_id, table_process: hdc.table_process, dept_id: dept_id || null, main_indicator_id: main_indicator_id || null }), req.ip]
+            [req.user.userId, 'ADD_FROM_KHD', 'kpi_indicators', ins.insertId,
+             JSON.stringify({ khd_report_id, table_process: khd.table_process, dept_id: dept_id || null, main_indicator_id: main_indicator_id || null }), req.ip]
         );
-        res.json({ success: true, message: `เพิ่ม "${hdc.report_name}" เข้าระบบเรียบร้อย`, id: ins.insertId });
+        res.json({ success: true, message: `เพิ่ม "${khd.report_name}" เข้าระบบเรียบร้อย`, id: ins.insertId });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
@@ -10925,33 +10932,33 @@ apiRouter.post('/report-compare/add-from-hdc', authenticateToken, isSuperAdmin, 
 
 // ========== Report Compare — Tabs (Strategies / Departments / Main-Indicators / Hospitals) ==========
 
-// GET /report-compare/strategies — เปรียบเทียบ main_yut (Local) กับ distinct main_yut text ใน HDC reports
+// GET /report-compare/strategies — เปรียบเทียบ main_yut (Local) กับ distinct main_yut text ใน KHD reports
 apiRouter.get('/report-compare/strategies', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
-    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
     try {
-        const [hdcRows] = await remoteDb.query(
-            `SELECT DISTINCT TRIM(main_yut) AS hdc_yut FROM reports WHERE data_source='excel' AND main_yut IS NOT NULL AND TRIM(main_yut) != ''`
+        const [khdRows] = await remoteDb.query(
+            `SELECT DISTINCT TRIM(main_yut) AS khd_yut FROM reports WHERE data_source='excel' AND main_yut IS NOT NULL AND TRIM(main_yut) != ''`
         );
         const [localRows] = await db.query('SELECT id, yut_name FROM main_yut ORDER BY yut_name');
         const norm = s => (s || '').trim().toLowerCase();
         const localMap = new Map(localRows.map(r => [norm(r.yut_name), r]));
-        const hdcSet = new Set(hdcRows.map(r => norm(r.hdc_yut)));
+        const khdSet = new Set(khdRows.map(r => norm(r.khd_yut)));
         const items = [];
         let match = 0, missing_local = 0, missing_remote = 0;
-        hdcRows.forEach(r => {
-            const local = localMap.get(norm(r.hdc_yut));
-            if (local) { items.push({ status: 'match', hdc_yut_name: r.hdc_yut, local_id: local.id, local_yut_name: local.yut_name }); match++; }
-            else { items.push({ status: 'missing_local', hdc_yut_name: r.hdc_yut, local_id: null, local_yut_name: null }); missing_local++; }
+        khdRows.forEach(r => {
+            const local = localMap.get(norm(r.khd_yut));
+            if (local) { items.push({ status: 'match', khd_yut_name: r.khd_yut, local_id: local.id, local_yut_name: local.yut_name }); match++; }
+            else { items.push({ status: 'missing_local', khd_yut_name: r.khd_yut, local_id: null, local_yut_name: null }); missing_local++; }
         });
         localRows.forEach(r => {
-            if (!hdcSet.has(norm(r.yut_name))) { items.push({ status: 'missing_remote', hdc_yut_name: null, local_id: r.id, local_yut_name: r.yut_name }); missing_remote++; }
+            if (!khdSet.has(norm(r.yut_name))) { items.push({ status: 'missing_remote', khd_yut_name: null, local_id: r.id, local_yut_name: r.yut_name }); missing_remote++; }
         });
         res.json({ success: true, summary: { total: items.length, match, missing_local, missing_remote }, items });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-// POST /report-compare/add-strategy — เพิ่ม yut_name ใหม่จาก HDC text
+// POST /report-compare/add-strategy — เพิ่ม yut_name ใหม่จาก KHD text
 apiRouter.post('/report-compare/add-strategy', authenticateToken, isSuperAdmin, async (req, res) => {
     const { yut_name } = req.body;
     if (!yut_name?.trim()) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อยุทธศาสตร์' });
@@ -10960,38 +10967,38 @@ apiRouter.post('/report-compare/add-strategy', authenticateToken, isSuperAdmin, 
         if (existing.length) return res.status(409).json({ success: false, message: 'มียุทธศาสตร์ชื่อนี้ในระบบแล้ว' });
         const [ins] = await db.query('INSERT INTO main_yut (yut_name) VALUES (?)', [yut_name.trim()]);
         await db.query('INSERT INTO system_logs (user_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
-            [req.user.userId, 'ADD_FROM_HDC', 'main_yut', ins.insertId, JSON.stringify({ yut_name: yut_name.trim() }), req.ip]);
+            [req.user.userId, 'ADD_FROM_KHD', 'main_yut', ins.insertId, JSON.stringify({ yut_name: yut_name.trim() }), req.ip]);
         res.json({ success: true, message: `เพิ่มยุทธศาสตร์ "${yut_name.trim()}" เรียบร้อย`, id: ins.insertId });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-// GET /report-compare/departments — เปรียบเทียบ departments (Local) กับ distinct dept text ใน HDC reports
+// GET /report-compare/departments — เปรียบเทียบ departments (Local) กับ distinct dept text ใน KHD reports
 apiRouter.get('/report-compare/departments', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
-    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
     try {
-        const [hdcRows] = await remoteDb.query(
-            `SELECT DISTINCT TRIM(dept) AS hdc_dept FROM reports WHERE data_source='excel' AND dept IS NOT NULL AND TRIM(dept) != ''`
+        const [khdRows] = await remoteDb.query(
+            `SELECT DISTINCT TRIM(dept) AS khd_dept FROM reports WHERE data_source='excel' AND dept IS NOT NULL AND TRIM(dept) != ''`
         );
         const [localRows] = await db.query('SELECT id, dept_name, dept_code FROM departments ORDER BY dept_name');
         const norm = s => (s || '').trim().toLowerCase();
         const localMap = new Map(localRows.map(r => [norm(r.dept_name), r]));
-        const hdcSet = new Set(hdcRows.map(r => norm(r.hdc_dept)));
+        const khdSet = new Set(khdRows.map(r => norm(r.khd_dept)));
         const items = [];
         let match = 0, missing_local = 0, missing_remote = 0;
-        hdcRows.forEach(r => {
-            const local = localMap.get(norm(r.hdc_dept));
-            if (local) { items.push({ status: 'match', hdc_dept_name: r.hdc_dept, local_id: local.id, local_dept_name: local.dept_name, local_dept_code: local.dept_code }); match++; }
-            else { items.push({ status: 'missing_local', hdc_dept_name: r.hdc_dept, local_id: null, local_dept_name: null }); missing_local++; }
+        khdRows.forEach(r => {
+            const local = localMap.get(norm(r.khd_dept));
+            if (local) { items.push({ status: 'match', khd_dept_name: r.khd_dept, local_id: local.id, local_dept_name: local.dept_name, local_dept_code: local.dept_code }); match++; }
+            else { items.push({ status: 'missing_local', khd_dept_name: r.khd_dept, local_id: null, local_dept_name: null }); missing_local++; }
         });
         localRows.forEach(r => {
-            if (!hdcSet.has(norm(r.dept_name))) { items.push({ status: 'missing_remote', hdc_dept_name: null, local_id: r.id, local_dept_name: r.dept_name, local_dept_code: r.dept_code }); missing_remote++; }
+            if (!khdSet.has(norm(r.dept_name))) { items.push({ status: 'missing_remote', khd_dept_name: null, local_id: r.id, local_dept_name: r.dept_name, local_dept_code: r.dept_code }); missing_remote++; }
         });
         res.json({ success: true, summary: { total: items.length, match, missing_local, missing_remote }, items });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-// POST /report-compare/add-department — เพิ่ม dept_name ใหม่จาก HDC text
+// POST /report-compare/add-department — เพิ่ม dept_name ใหม่จาก KHD text
 apiRouter.post('/report-compare/add-department', authenticateToken, isSuperAdmin, async (req, res) => {
     const { dept_name, dept_code } = req.body;
     if (!dept_name?.trim()) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อหน่วยงาน' });
@@ -11000,122 +11007,122 @@ apiRouter.post('/report-compare/add-department', authenticateToken, isSuperAdmin
         if (existing.length) return res.status(409).json({ success: false, message: 'มีหน่วยงานชื่อนี้ในระบบแล้ว' });
         const [ins] = await db.query('INSERT INTO departments (dept_name, dept_code) VALUES (?, ?)', [dept_name.trim(), (dept_code || '').trim()]);
         await db.query('INSERT INTO system_logs (user_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
-            [req.user.userId, 'ADD_FROM_HDC', 'departments', ins.insertId, JSON.stringify({ dept_name: dept_name.trim(), dept_code }), req.ip]);
+            [req.user.userId, 'ADD_FROM_KHD', 'departments', ins.insertId, JSON.stringify({ dept_name: dept_name.trim(), dept_code }), req.ip]);
         res.json({ success: true, message: `เพิ่มหน่วยงาน "${dept_name.trim()}" เรียบร้อย`, id: ins.insertId });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-// GET /report-compare/main-indicators — เปรียบเทียบ kpi_main_indicators: HDC table (ถ้ามี) หรือ Coverage fallback
+// GET /report-compare/main-indicators — เปรียบเทียบ kpi_main_indicators: KHD table (ถ้ามี) หรือ Coverage fallback
 apiRouter.get('/report-compare/main-indicators', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
-    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
     try {
         const [localMainRows] = await db.query('SELECT id, main_indicator_name FROM kpi_main_indicators ORDER BY main_indicator_name');
-        // ลองดึง kpi_main_indicators จาก HDC ก่อน
-        let hdcMainRows = null;
-        try { [hdcMainRows] = await remoteDb.query('SELECT id, main_indicator_name FROM kpi_main_indicators'); } catch (e) { hdcMainRows = null; }
+        // ลองดึง kpi_main_indicators จาก KHD ก่อน
+        let khdMainRows = null;
+        try { [khdMainRows] = await remoteDb.query('SELECT id, main_indicator_name FROM kpi_main_indicators'); } catch (e) { khdMainRows = null; }
 
-        if (hdcMainRows) {
-            // HDC มีตาราง kpi_main_indicators — เทียบชื่อตรงๆ
-            const hdcNames = new Map(hdcMainRows.map(r => [r.main_indicator_name.trim().toLowerCase(), r]));
+        if (khdMainRows) {
+            // KHD มีตาราง kpi_main_indicators — เทียบชื่อตรงๆ
+            const khdNames = new Map(khdMainRows.map(r => [r.main_indicator_name.trim().toLowerCase(), r]));
             const localNames = new Map(localMainRows.map(r => [r.main_indicator_name.trim().toLowerCase(), r]));
             const items = [];
             let match = 0, missing_local = 0, missing_remote = 0;
-            hdcMainRows.forEach(hdc => {
-                const key = hdc.main_indicator_name.trim().toLowerCase();
+            khdMainRows.forEach(khd => {
+                const key = khd.main_indicator_name.trim().toLowerCase();
                 const local = localNames.get(key);
-                if (!local) { items.push({ status: 'missing_local', hdc_name: hdc.main_indicator_name.trim(), local_id: null, local_name: null }); missing_local++; }
-                else { items.push({ status: 'match', hdc_name: hdc.main_indicator_name.trim(), local_id: local.id, local_name: local.main_indicator_name }); match++; }
+                if (!local) { items.push({ status: 'missing_local', khd_name: khd.main_indicator_name.trim(), local_id: null, local_name: null }); missing_local++; }
+                else { items.push({ status: 'match', khd_name: khd.main_indicator_name.trim(), local_id: local.id, local_name: local.main_indicator_name }); match++; }
             });
             localMainRows.forEach(local => {
-                if (!hdcNames.has(local.main_indicator_name.trim().toLowerCase())) {
-                    items.push({ status: 'missing_remote', hdc_name: null, local_id: local.id, local_name: local.main_indicator_name }); missing_remote++;
+                if (!khdNames.has(local.main_indicator_name.trim().toLowerCase())) {
+                    items.push({ status: 'missing_remote', khd_name: null, local_id: local.id, local_name: local.main_indicator_name }); missing_remote++;
                 }
             });
-            return res.json({ success: true, source: 'hdc_table', summary: { total: items.length, match, missing_local, missing_remote }, items });
+            return res.json({ success: true, source: 'khd_table', summary: { total: items.length, match, missing_local, missing_remote }, items });
         }
 
-        // Fallback: coverage จาก table_process ใน HDC reports
-        const [hdcTpRows] = await remoteDb.query(
+        // Fallback: coverage จาก table_process ใน KHD reports
+        const [khdTpRows] = await remoteDb.query(
             `SELECT DISTINCT TRIM(table_process) AS tp FROM reports WHERE data_source='excel' AND table_process IS NOT NULL AND TRIM(table_process) != ''`
         );
-        const hdcTpSet = new Set(hdcTpRows.map(r => r.tp));
+        const khdTpSet = new Set(khdTpRows.map(r => r.tp));
         const [localIndRows] = await db.query('SELECT id, main_indicator_id, table_process FROM kpi_indicators WHERE is_active = 1');
         const coverageItems = [];
-        let has_hdc = 0, local_only = 0;
+        let has_khd = 0, local_only = 0;
         for (const mi of localMainRows) {
             const linked = localIndRows.filter(i => i.main_indicator_id == mi.id);
-            const hdcLinked = linked.filter(i => i.table_process && hdcTpSet.has(i.table_process.trim()));
-            const status = hdcLinked.length > 0 ? 'has_hdc' : 'local_only';
-            if (status === 'has_hdc') has_hdc++; else local_only++;
-            coverageItems.push({ status, local_id: mi.id, local_name: mi.main_indicator_name, total_indicators: linked.length, hdc_linked_count: hdcLinked.length });
+            const khdLinked = linked.filter(i => i.table_process && khdTpSet.has(i.table_process.trim()));
+            const status = khdLinked.length > 0 ? 'has_khd' : 'local_only';
+            if (status === 'has_khd') has_khd++; else local_only++;
+            coverageItems.push({ status, local_id: mi.id, local_name: mi.main_indicator_name, total_indicators: linked.length, khd_linked_count: khdLinked.length });
         }
-        res.json({ success: true, source: 'coverage_fallback', summary: { total: coverageItems.length, has_hdc, local_only }, items: coverageItems });
+        res.json({ success: true, source: 'coverage_fallback', summary: { total: coverageItems.length, has_khd, local_only }, items: coverageItems });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-// POST /report-compare/add-main-indicator — เพิ่มหมวดหมู่หลักจาก HDC เข้า Local
+// POST /report-compare/add-main-indicator — เพิ่มหมวดหมู่หลักจาก KHD เข้า Local
 apiRouter.post('/report-compare/add-main-indicator', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { hdc_name, yut_id } = req.body;
-    if (!hdc_name?.trim()) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อหมวดหมู่หลัก' });
+    const { khd_name, yut_id } = req.body;
+    if (!khd_name?.trim()) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อหมวดหมู่หลัก' });
     try {
-        const [existing] = await db.query('SELECT id FROM kpi_main_indicators WHERE LOWER(TRIM(main_indicator_name)) = LOWER(TRIM(?))', [hdc_name]);
-        if (existing.length) return res.status(409).json({ success: false, message: `มี "${hdc_name.trim()}" ในระบบแล้ว` });
-        const [ins] = await db.query('INSERT INTO kpi_main_indicators (main_indicator_name, yut_id) VALUES (?, ?)', [hdc_name.trim(), yut_id || null]);
+        const [existing] = await db.query('SELECT id FROM kpi_main_indicators WHERE LOWER(TRIM(main_indicator_name)) = LOWER(TRIM(?))', [khd_name]);
+        if (existing.length) return res.status(409).json({ success: false, message: `มี "${khd_name.trim()}" ในระบบแล้ว` });
+        const [ins] = await db.query('INSERT INTO kpi_main_indicators (main_indicator_name, yut_id) VALUES (?, ?)', [khd_name.trim(), yut_id || null]);
         await db.query('INSERT INTO system_logs (user_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
-            [req.user.userId, 'ADD_FROM_HDC', 'kpi_main_indicators', ins.insertId, JSON.stringify({ hdc_name: hdc_name.trim(), yut_id }), req.ip]);
-        res.json({ success: true, message: `เพิ่ม "${hdc_name.trim()}" เรียบร้อย`, id: ins.insertId });
+            [req.user.userId, 'ADD_FROM_KHD', 'kpi_main_indicators', ins.insertId, JSON.stringify({ khd_name: khd_name.trim(), yut_id }), req.ip]);
+        res.json({ success: true, message: `เพิ่ม "${khd_name.trim()}" เรียบร้อย`, id: ins.insertId });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-// GET /report-compare/hospitals — เปรียบเทียบ chospital Local กับ HDC chospital (ถ้ามี)
+// GET /report-compare/hospitals — เปรียบเทียบ chospital Local กับ KHD chospital (ถ้ามี)
 apiRouter.get('/report-compare/hospitals', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
-    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
     try {
-        let hdcRows;
-        try { [hdcRows] = await remoteDb.query('SELECT hoscode, hosname, hostype, distid FROM chospital'); }
-        catch (e) { return res.status(400).json({ success: false, message: 'ไม่พบตาราง chospital ใน HDC: ' + e.message }); }
+        let khdRows;
+        try { [khdRows] = await remoteDb.query('SELECT hoscode, hosname, hostype, distid FROM chospital'); }
+        catch (e) { return res.status(400).json({ success: false, message: 'ไม่พบตาราง chospital ใน KHD: ' + e.message }); }
         const [localRows] = await db.query('SELECT hoscode, hosname, hostype, distid FROM chospital');
         const localMap = new Map(localRows.map(r => [String(r.hoscode).trim(), r]));
-        const hdcMap = new Map(hdcRows.map(r => [String(r.hoscode).trim(), r]));
+        const khdMap = new Map(khdRows.map(r => [String(r.hoscode).trim(), r]));
         const items = [];
         let match = 0, different = 0, missing_local = 0, missing_remote = 0;
-        hdcRows.forEach(hdc => {
-            const key = String(hdc.hoscode).trim();
+        khdRows.forEach(khd => {
+            const key = String(khd.hoscode).trim();
             const local = localMap.get(key);
-            if (!local) { items.push({ status: 'missing_local', hoscode: key, hdc_hosname: hdc.hosname, hdc_hostype: hdc.hostype, hdc_distid: hdc.distid, local_hosname: null }); missing_local++; }
-            else if ((local.hosname || '').trim() !== (hdc.hosname || '').trim()) { items.push({ status: 'different', hoscode: key, hdc_hosname: hdc.hosname, local_hosname: local.hosname, hdc_hostype: hdc.hostype, hdc_distid: hdc.distid }); different++; }
-            else { items.push({ status: 'match', hoscode: key, hdc_hosname: hdc.hosname, local_hosname: local.hosname, hdc_hostype: hdc.hostype }); match++; }
+            if (!local) { items.push({ status: 'missing_local', hoscode: key, khd_hosname: khd.hosname, khd_hostype: khd.hostype, khd_distid: khd.distid, local_hosname: null }); missing_local++; }
+            else if ((local.hosname || '').trim() !== (khd.hosname || '').trim()) { items.push({ status: 'different', hoscode: key, khd_hosname: khd.hosname, local_hosname: local.hosname, khd_hostype: khd.hostype, khd_distid: khd.distid }); different++; }
+            else { items.push({ status: 'match', hoscode: key, khd_hosname: khd.hosname, local_hosname: local.hosname, khd_hostype: khd.hostype }); match++; }
         });
         localRows.forEach(local => {
-            if (!hdcMap.has(String(local.hoscode).trim())) { items.push({ status: 'missing_remote', hoscode: String(local.hoscode).trim(), local_hosname: local.hosname, hdc_hosname: null, hdc_hostype: null }); missing_remote++; }
+            if (!khdMap.has(String(local.hoscode).trim())) { items.push({ status: 'missing_remote', hoscode: String(local.hoscode).trim(), local_hosname: local.hosname, khd_hosname: null, khd_hostype: null }); missing_remote++; }
         });
         res.json({ success: true, summary: { total: items.length, match, different, missing_local, missing_remote }, items });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-// POST /report-compare/add-hospital — เพิ่ม hoscode จาก HDC chospital เข้า Local
+// POST /report-compare/add-hospital — เพิ่ม hoscode จาก KHD chospital เข้า Local
 apiRouter.post('/report-compare/add-hospital', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
-    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (HDC)' });
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
     const { hoscode } = req.body;
     if (!hoscode) return res.status(400).json({ success: false, message: 'กรุณาระบุ hoscode' });
     try {
-        const [hdcRows] = await remoteDb.query(
+        const [khdRows] = await remoteDb.query(
             'SELECT hoscode, hosname, hostype, distid, provcode, distcode FROM chospital WHERE hoscode = ?', [hoscode]
         );
-        if (!hdcRows.length) return res.status(404).json({ success: false, message: 'ไม่พบ hoscode นี้ใน HDC' });
-        const hdc = hdcRows[0];
+        if (!khdRows.length) return res.status(404).json({ success: false, message: 'ไม่พบ hoscode นี้ใน KHD' });
+        const khd = khdRows[0];
         const [existing] = await db.query('SELECT hoscode FROM chospital WHERE hoscode = ?', [hoscode]);
         if (existing.length) return res.status(409).json({ success: false, message: 'มี hoscode นี้ในระบบแล้ว' });
         await db.query(
             'INSERT INTO chospital (hoscode, hosname, hostype, distid, provcode, distcode) VALUES (?, ?, ?, ?, ?, ?)',
-            [hdc.hoscode, hdc.hosname, hdc.hostype || null, hdc.distid || null, hdc.provcode || null, hdc.distcode || null]
+            [khd.hoscode, khd.hosname, khd.hostype || null, khd.distid || null, khd.provcode || null, khd.distcode || null]
         );
         await db.query('INSERT INTO system_logs (user_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
-            [req.user.userId, 'ADD_FROM_HDC', 'chospital', hoscode, JSON.stringify({ hoscode, hosname: hdc.hosname }), req.ip]);
-        res.json({ success: true, message: `เพิ่ม "${hdc.hosname}" (${hoscode}) เรียบร้อย` });
+            [req.user.userId, 'ADD_FROM_KHD', 'chospital', hoscode, JSON.stringify({ hoscode, hosname: khd.hosname }), req.ip]);
+        res.json({ success: true, message: `เพิ่ม "${khd.hosname}" (${hoscode}) เรียบร้อย` });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
@@ -11317,10 +11324,10 @@ function diffTableColumns(localColumns, remoteColumns) {
     return diff;
 }
 
-// GET /db-compare — เปรียบเทียบ structure ตาราง table_process ระหว่าง local กับ hdc
+// GET /db-compare — เปรียบเทียบ structure ตาราง table_process ระหว่าง local กับ khd
 apiRouter.get('/db-compare', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
-    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (HDC) ใน .env (HDC_DB_HOST)' });
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (KHD) ใน .env (KHD_DB_HOST)' });
 
     try {
         // 1. ดึง table_process ทั้งหมดจาก kpi_indicators (deduplicate ตาม table_process)
@@ -11345,7 +11352,7 @@ apiRouter.get('/db-compare', authenticateToken, isSuperAdmin, async (req, res) =
 
         const results = [];
         const localDbName = process.env.DB_NAME || 'khups_kpi_db';
-        const remoteDbName = process.env.HDC_DB_NAME || 'hdc';
+        const remoteDbName = process.env.KHD_DB_NAME || 'hdc';
 
         for (const ind of indicators) {
             const tableName = ind.table_process.trim().replace(/-/g, '_');
@@ -11402,7 +11409,7 @@ apiRouter.get('/db-compare', authenticateToken, isSuperAdmin, async (req, res) =
 // POST /db-compare/create-local — สร้าง/แก้ไขตารางใน local ให้ตรงกับ remote
 apiRouter.post('/db-compare/create-local', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
-    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (HDC)' });
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (KHD)' });
 
     const { tables } = req.body; // ['table1', 'table2']
     if (!Array.isArray(tables) || tables.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตาราง' });
@@ -11453,10 +11460,10 @@ apiRouter.post('/db-compare/create-local', authenticateToken, isSuperAdmin, asyn
     res.json({ success: true, message: `สร้าง ${created.length} ตาราง, แก้ไข ${altered.length} ตาราง`, created, altered, errors });
 });
 
-// POST /db-compare/sync-data — Sync ข้อมูลจาก remote (hdc) เข้า local
+// POST /db-compare/sync-data — Sync ข้อมูลจาก remote (khd) เข้า local
 apiRouter.post('/db-compare/sync-data', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
-    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (HDC)' });
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (KHD)' });
 
     const { tables } = req.body;
     if (!Array.isArray(tables) || tables.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตาราง' });
@@ -11501,10 +11508,10 @@ apiRouter.post('/db-compare/sync-data', authenticateToken, isSuperAdmin, async (
     res.json({ success: true, message: `Sync สำเร็จ ${synced.length} ตาราง`, synced, errors });
 });
 
-// POST /db-compare/create-remote — สร้าง/แก้ไขตารางใน HDC จาก DDL ของ Local (สำหรับ missing_remote)
+// POST /db-compare/create-remote — สร้าง/แก้ไขตารางใน KHD จาก DDL ของ Local (สำหรับ missing_remote)
 apiRouter.post('/db-compare/create-remote', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
-    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (HDC)' });
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (KHD)' });
 
     const { tables } = req.body;
     if (!Array.isArray(tables) || tables.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตาราง' });
@@ -11525,11 +11532,11 @@ apiRouter.post('/db-compare/create-remote', authenticateToken, isSuperAdmin, asy
             try { await remoteDb.query(`SELECT 1 FROM \`${tableName}\` LIMIT 0`); remoteExists = true; } catch (e) {}
 
             if (!remoteExists) {
-                // สร้างใหม่ใน HDC
+                // สร้างใหม่ใน KHD
                 await remoteDb.query(ddl);
                 created.push(tableName);
             } else {
-                // ALTER เพิ่มคอลัมน์ที่ขาดใน HDC
+                // ALTER เพิ่มคอลัมน์ที่ขาดใน KHD
                 const [localCols] = await db.query(`SHOW COLUMNS FROM \`${tableName}\``);
                 const [remoteCols] = await remoteDb.query(`SHOW COLUMNS FROM \`${tableName}\``);
                 const remoteFieldSet = new Set(remoteCols.map(c => c.Field));
@@ -11552,13 +11559,13 @@ apiRouter.post('/db-compare/create-remote', authenticateToken, isSuperAdmin, asy
     await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
         [req.user.userId, 'DB_COMPARE_CREATE_REMOTE', 'MULTIPLE', JSON.stringify({ created, altered }), req.ip]).catch(() => {});
 
-    res.json({ success: true, message: `สร้าง ${created.length} ตาราง, แก้ไข ${altered.length} ตารางใน HDC`, created, altered, errors });
+    res.json({ success: true, message: `สร้าง ${created.length} ตาราง, แก้ไข ${altered.length} ตารางใน KHD`, created, altered, errors });
 });
 
-// POST /db-compare/sync-to-hdc — Sync ข้อมูลจาก Local → HDC (upsert batch 100 rows)
-apiRouter.post('/db-compare/sync-to-hdc', authenticateToken, isSuperAdmin, async (req, res) => {
+// POST /db-compare/sync-to-khd — Sync ข้อมูลจาก Local → KHD (upsert batch 100 rows)
+apiRouter.post('/db-compare/sync-to-khd', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
-    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (HDC)' });
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (KHD)' });
 
     const { tables } = req.body;
     if (!Array.isArray(tables) || tables.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตาราง' });
@@ -11570,7 +11577,7 @@ apiRouter.post('/db-compare/sync-to-hdc', authenticateToken, isSuperAdmin, async
         try {
             // ตรวจว่า remote มีตารางนี้
             try { await remoteDb.query(`SELECT 1 FROM \`${tableName}\` LIMIT 0`); } catch (e) {
-                errors.push({ table: tableName, error: 'ตารางไม่มีใน HDC กรุณาสร้างก่อน' }); continue;
+                errors.push({ table: tableName, error: 'ตารางไม่มีใน KHD กรุณาสร้างก่อน' }); continue;
             }
 
             // ดึงข้อมูลจาก local
@@ -11583,7 +11590,7 @@ apiRouter.post('/db-compare/sync-to-hdc', authenticateToken, isSuperAdmin, async
             const placeholders = columns.map(() => '?').join(', ');
             const onDup = columns.map(c => `\`${c}\`=VALUES(\`${c}\`)`).join(', ');
 
-            // Batch upsert → HDC (100 rows per batch)
+            // Batch upsert → KHD (100 rows per batch)
             let totalInserted = 0;
             for (let i = 0; i < localRows.length; i += 100) {
                 const batch = localRows.slice(i, i + 100);
@@ -11598,12 +11605,12 @@ apiRouter.post('/db-compare/sync-to-hdc', authenticateToken, isSuperAdmin, async
     }
 
     await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
-        [req.user.userId, 'DB_COMPARE_SYNC_TO_HDC', 'MULTIPLE', JSON.stringify({ synced: synced.length, total_rows: synced.reduce((s, t) => s + t.rows, 0) }), req.ip]).catch(() => {});
+        [req.user.userId, 'DB_COMPARE_SYNC_TO_KHD', 'MULTIPLE', JSON.stringify({ synced: synced.length, total_rows: synced.reduce((s, t) => s + t.rows, 0) }), req.ip]).catch(() => {});
 
-    res.json({ success: true, message: `Sync → HDC สำเร็จ ${synced.length} ตาราง`, synced, errors });
+    res.json({ success: true, message: `Sync → KHD สำเร็จ ${synced.length} ตาราง`, synced, errors });
 });
 
-// ========== Users Data Sync (Local ↔ HDC) ==========
+// ========== Users Data Sync (Local ↔ KHD) ==========
 // โหลด config exclude/mapping ของ Users Data Sync จาก system_settings
 async function getUsersSyncConfig() {
     const [rows] = await db.query(
@@ -11618,10 +11625,10 @@ async function getUsersSyncConfig() {
     return { exclude: new Set(exclude), mapping };
 }
 
-// GET /users/sync-compare — เปรียบเทียบ users ระหว่าง Local กับ HDC (เก็บ diff รายฟิลด์จริง ไม่ใช่แค่ boolean)
+// GET /users/sync-compare — เปรียบเทียบ users ระหว่าง Local กับ KHD (เก็บ diff รายฟิลด์จริง ไม่ใช่แค่ boolean)
 apiRouter.get('/users/sync-compare', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
-    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (HDC)' });
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (KHD)' });
     try {
         const { exclude, mapping } = await getUsersSyncConfig();
 
@@ -11633,12 +11640,12 @@ apiRouter.get('/users/sync-compare', authenticateToken, isSuperAdmin, async (req
         try {
             const [rows] = await remoteDb.query('SELECT * FROM users ORDER BY username');
             remoteUsers = rows;
-        } catch (e) { /* ตาราง users ไม่มีใน HDC */ }
+        } catch (e) { /* ตาราง users ไม่มีใน KHD */ }
 
         const remoteMap = new Map(remoteUsers.map(u => [u.username, u]));
         const localMap = new Map(localUsers.map(u => [u.username, u]));
 
-        const matched = [], different = [], local_only = [], hdc_only = [];
+        const matched = [], different = [], local_only = [], khd_only = [];
         const alwaysSkip = ['id', 'created_at', 'updated_at']; // baseline เดิม ไม่เปลี่ยน
 
         for (const lu of localUsers) {
@@ -11652,19 +11659,19 @@ apiRouter.get('/users/sync-compare', authenticateToken, isSuperAdmin, async (req
                 const lv = lu[k] == null ? '' : String(lu[k]);
                 const rv = ru[remoteKey] == null ? '' : String(ru[remoteKey]);
                 if (lv !== rv) {
-                    fieldDiffs.push({ field: k, hdc_field: remoteKey !== k ? remoteKey : undefined, local_value: lu[k], hdc_value: ru[remoteKey] });
+                    fieldDiffs.push({ field: k, khd_field: remoteKey !== k ? remoteKey : undefined, local_value: lu[k], khd_value: ru[remoteKey] });
                 }
             }
             (fieldDiffs.length > 0 ? different : matched).push(fieldDiffs.length > 0 ? { ...lu, _diff: fieldDiffs } : lu);
         }
         for (const ru of remoteUsers) {
-            if (!localMap.has(ru.username)) hdc_only.push(ru);
+            if (!localMap.has(ru.username)) khd_only.push(ru);
         }
 
         res.json({
             success: true,
-            summary: { matched: matched.length, different: different.length, local_only: local_only.length, hdc_only: hdc_only.length, total_local: localUsers.length, total_hdc: remoteUsers.length },
-            matched, different, local_only, hdc_only,
+            summary: { matched: matched.length, different: different.length, local_only: local_only.length, khd_only: khd_only.length, total_local: localUsers.length, total_khd: remoteUsers.length },
+            matched, different, local_only, khd_only,
             sync_config: { exclude: [...exclude], mapping }
         });
     } catch (e) {
@@ -11672,36 +11679,36 @@ apiRouter.get('/users/sync-compare', authenticateToken, isSuperAdmin, async (req
     }
 });
 
-// POST /users/sync-to-hdc — ส่ง users จาก Local → HDC (UPSERT)
-apiRouter.post('/users/sync-to-hdc', authenticateToken, isSuperAdmin, async (req, res) => {
+// POST /users/sync-to-khd — ส่ง users จาก Local → KHD (UPSERT)
+apiRouter.post('/users/sync-to-khd', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
-    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (HDC)' });
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (KHD)' });
     const { usernames } = req.body; // optional: ถ้าไม่ส่ง = sync ทั้งหมด
     const { exclude, mapping } = await getUsersSyncConfig();
 
     try {
-        // === Step 1: ensure HDC users table exists (สร้างจาก local DDL ถ้าไม่มี) ===
-        let hdcTableExists = true;
+        // === Step 1: ensure KHD users table exists (สร้างจาก local DDL ถ้าไม่มี) ===
+        let khdTableExists = true;
         try {
             await remoteDb.query('SELECT 1 FROM users LIMIT 0');
         } catch (e) {
-            hdcTableExists = false;
+            khdTableExists = false;
             const [ddlRows] = await db.query('SHOW CREATE TABLE users');
             if (ddlRows.length > 0) {
                 try {
                     await remoteDb.query(ddlRows[0]['Create Table']);
-                    console.log('[sync-to-hdc] Created users table in HDC');
-                    hdcTableExists = true;
+                    console.log('[sync-to-khd] Created users table in KHD');
+                    khdTableExists = true;
                 } catch (ce) {
                     return res.status(500).json({
                         success: false,
-                        message: `ไม่สามารถสร้างตาราง users ใน HDC: ${ce.message}`
+                        message: `ไม่สามารถสร้างตาราง users ใน KHD: ${ce.message}`
                     });
                 }
             }
         }
 
-        // === Step 2: sync schema — ALTER ADD COLUMN ที่ Local มีแต่ HDC ไม่มี (ข้ามคอลัมน์ที่ตั้งใจไม่ sync) ===
+        // === Step 2: sync schema — ALTER ADD COLUMN ที่ Local มีแต่ KHD ไม่มี (ข้ามคอลัมน์ที่ตั้งใจไม่ sync) ===
         const [localColsInfo] = await db.query('SHOW COLUMNS FROM users');
         const [remoteColsInfo] = await remoteDb.query('SHOW COLUMNS FROM users');
         const remoteColSet = new Set(remoteColsInfo.map(c => c.Field));
@@ -11725,10 +11732,10 @@ apiRouter.post('/users/sync-to-hdc', authenticateToken, isSuperAdmin, async (req
             try {
                 await remoteDb.query(alter);
                 addedColumns.push(col.Field);
-                console.log(`[sync-to-hdc] Added column ${col.Field} to HDC users`);
+                console.log(`[sync-to-khd] Added column ${col.Field} to KHD users`);
             } catch (ae) {
                 alterErrors.push({ column: col.Field, error: ae.message });
-                console.warn(`[sync-to-hdc] ALTER add ${col.Field} failed:`, ae.message);
+                console.warn(`[sync-to-khd] ALTER add ${col.Field} failed:`, ae.message);
             }
         }
 
@@ -11742,18 +11749,18 @@ apiRouter.post('/users/sync-to-hdc', authenticateToken, isSuperAdmin, async (req
         const [localUsers] = await db.query(query, params);
         if (localUsers.length === 0) return res.json({ success: true, synced: 0, message: 'ไม่มีข้อมูลที่จะ sync' });
 
-        // === Step 4: resolve local→HDC target column names (mapping) + ตัด exclude + ใช้เฉพาะ columns ที่มีใน HDC จริงๆ ===
+        // === Step 4: resolve local→KHD target column names (mapping) + ตัด exclude + ใช้เฉพาะ columns ที่มีใน KHD จริงๆ ===
         const [remoteColsAfter] = await remoteDb.query('SHOW COLUMNS FROM users');
         const remoteColSetAfter = new Set(remoteColsAfter.map(c => c.Field));
         const localCols = Object.keys(localUsers[0]);
         const eligibleCols = localCols.filter(c => !exclude.has(c));
         const excludedCols = localCols.filter(c => exclude.has(c));
-        const colPairs = eligibleCols.map(c => ({ local: c, hdc: mapping[c] || c }));
-        // กรอง: ใช้เฉพาะ column ปลายทางที่ HDC มีจริงๆ (กัน Unknown column) — ไม่ ALTER สร้างตามชื่อ mapping อัตโนมัติ
-        const syncableCols = colPairs.filter(p => remoteColSetAfter.has(p.hdc));
-        const skippedCols = colPairs.filter(p => !remoteColSetAfter.has(p.hdc)).map(p => p.local);
+        const colPairs = eligibleCols.map(c => ({ local: c, khd: mapping[c] || c }));
+        // กรอง: ใช้เฉพาะ column ปลายทางที่ KHD มีจริงๆ (กัน Unknown column) — ไม่ ALTER สร้างตามชื่อ mapping อัตโนมัติ
+        const syncableCols = colPairs.filter(p => remoteColSetAfter.has(p.khd));
+        const skippedCols = colPairs.filter(p => !remoteColSetAfter.has(p.khd)).map(p => p.local);
         if (skippedCols.length > 0) {
-            console.warn('[sync-to-hdc] Skipped columns (target not in HDC):', skippedCols.join(', '));
+            console.warn('[sync-to-khd] Skipped columns (target not in KHD):', skippedCols.join(', '));
         }
 
         // === Step 5: identify JSON columns → stringify ===
@@ -11764,9 +11771,9 @@ apiRouter.post('/users/sync-to-hdc', authenticateToken, isSuperAdmin, async (req
         );
 
         // === Step 6: UPSERT batch 100 rows (เขียนลงชื่อคอลัมน์ปลายทางตาม mapping) ===
-        const colList = syncableCols.map(p => `\`${p.hdc}\``).join(', ');
+        const colList = syncableCols.map(p => `\`${p.khd}\``).join(', ');
         const placeholders = syncableCols.map(() => '?').join(', ');
-        const onDup = syncableCols.filter(p => p.hdc !== 'id').map(p => `\`${p.hdc}\`=VALUES(\`${p.hdc}\`)`).join(', ');
+        const onDup = syncableCols.filter(p => p.khd !== 'id').map(p => `\`${p.khd}\`=VALUES(\`${p.khd}\`)`).join(', ');
 
         let totalSynced = 0;
         const errors = [];
@@ -11787,9 +11794,9 @@ apiRouter.post('/users/sync-to-hdc', authenticateToken, isSuperAdmin, async (req
                     flatValues
                 );
                 totalSynced += batch.length;
-                console.log(`[sync-to-hdc] Batch ${i}: affected=${result.affectedRows}, inserted=${result.affectedRows - (result.changedRows || 0)}, updated=${result.changedRows || 0}`);
+                console.log(`[sync-to-khd] Batch ${i}: affected=${result.affectedRows}, inserted=${result.affectedRows - (result.changedRows || 0)}, updated=${result.changedRows || 0}`);
             } catch (e) {
-                console.error(`[sync-to-hdc] Batch ${i} failed:`, e.message);
+                console.error(`[sync-to-khd] Batch ${i} failed:`, e.message);
                 // เก็บ usernames ที่ fail
                 errors.push({
                     batch_start: i,
@@ -11802,7 +11809,7 @@ apiRouter.post('/users/sync-to-hdc', authenticateToken, isSuperAdmin, async (req
         }
 
         await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
-            [req.user.userId, 'USERS_SYNC_TO_HDC', 'users', JSON.stringify({ synced: totalSynced, total: localUsers.length, errors: errors.length, addedColumns }), req.ip]).catch(() => {});
+            [req.user.userId, 'USERS_SYNC_TO_KHD', 'users', JSON.stringify({ synced: totalSynced, total: localUsers.length, errors: errors.length, addedColumns }), req.ip]).catch(() => {});
 
         // === Step 7: build response ===
         const success = totalSynced === localUsers.length && errors.length === 0;
@@ -11817,10 +11824,10 @@ apiRouter.post('/users/sync-to-hdc', authenticateToken, isSuperAdmin, async (req
             message = `Sync ล้มเหลว — ไม่มีข้อมูลถูกส่ง (${errors.length} batch ผิดพลาด)`;
         }
         if (addedColumns.length > 0) {
-            message += ` | เพิ่ม column ใหม่ใน HDC: ${addedColumns.join(', ')}`;
+            message += ` | เพิ่ม column ใหม่ใน KHD: ${addedColumns.join(', ')}`;
         }
         if (skippedCols.length > 0) {
-            message += ` | ข้าม column ที่ HDC ไม่มี: ${skippedCols.join(', ')}`;
+            message += ` | ข้าม column ที่ KHD ไม่มี: ${skippedCols.join(', ')}`;
         }
         if (excludedCols.length > 0) {
             message += ` | ไม่ sync (ตั้งค่าไว้): ${excludedCols.join(', ')}`;
@@ -11841,26 +11848,26 @@ apiRouter.post('/users/sync-to-hdc', authenticateToken, isSuperAdmin, async (req
             alter_errors: alterErrors
         });
     } catch (e) {
-        console.error('[sync-to-hdc] Fatal error:', e);
+        console.error('[sync-to-khd] Fatal error:', e);
         res.status(500).json({ success: false, message: e.message, code: e.code });
     }
 });
 
-// GET /users/structure-compare — SHOW COLUMNS diff เฉพาะตาราง users ระหว่าง Local กับ HDC (รายงานอย่างเดียว ไม่แก้โครงสร้าง HDC อัตโนมัติ)
+// GET /users/structure-compare — SHOW COLUMNS diff เฉพาะตาราง users ระหว่าง Local กับ KHD (รายงานอย่างเดียว ไม่แก้โครงสร้าง KHD อัตโนมัติ)
 apiRouter.get('/users/structure-compare', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
-    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (HDC)' });
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (KHD)' });
     try {
         const [localColsRaw] = await db.query('SHOW COLUMNS FROM users');
         let remoteColsRaw = [];
-        try { const [rc] = await remoteDb.query('SHOW COLUMNS FROM users'); remoteColsRaw = rc; } catch (e) { /* ตาราง users ไม่มีใน HDC */ }
+        try { const [rc] = await remoteDb.query('SHOW COLUMNS FROM users'); remoteColsRaw = rc; } catch (e) { /* ตาราง users ไม่มีใน KHD */ }
         const local_columns = localColsRaw.map(c => ({ field: c.Field, type: c.Type, nullable: c.Null, key: c.Key, default: c.Default }));
         const remote_columns = remoteColsRaw.map(c => ({ field: c.Field, type: c.Type, nullable: c.Null, key: c.Key, default: c.Default }));
         const diff = diffTableColumns(local_columns, remote_columns);
         res.json({
             success: true,
             local_db: process.env.DB_NAME || 'khups_kpi_db',
-            remote_db: process.env.HDC_DB_NAME || 'hdc',
+            remote_db: process.env.KHD_DB_NAME || 'hdc',
             local_columns, remote_columns, diff,
             status: diff.length === 0 ? 'match' : 'different'
         });
@@ -11901,11 +11908,11 @@ apiRouter.get('/env-config', authenticateToken, isSuperAdmin, async (req, res) =
             { key: 'APP_URL', group: 'app', label: 'Application URL (Frontend)', sensitive: false },
             { key: 'SECRET_KEY', group: 'app', label: 'JWT Secret Key', sensitive: true },
             { key: 'PORT', group: 'app', label: 'Backend Port', sensitive: false },
-            { key: 'HDC_DB_HOST', group: 'hdc', label: 'HDC Database Host', sensitive: false },
-            { key: 'HDC_DB_PORT', group: 'hdc', label: 'HDC Database Port', sensitive: false },
-            { key: 'HDC_DB_NAME', group: 'hdc', label: 'HDC Database Name', sensitive: false },
-            { key: 'HDC_DB_USER', group: 'hdc', label: 'HDC Database User', sensitive: false },
-            { key: 'HDC_DB_PASSWORD', group: 'hdc', label: 'HDC Database Password', sensitive: true },
+            { key: 'KHD_DB_HOST', group: 'khd', label: 'KHD Database Host', sensitive: false },
+            { key: 'KHD_DB_PORT', group: 'khd', label: 'KHD Database Port', sensitive: false },
+            { key: 'KHD_DB_NAME', group: 'khd', label: 'KHD Database Name', sensitive: false },
+            { key: 'KHD_DB_USER', group: 'khd', label: 'KHD Database User', sensitive: false },
+            { key: 'KHD_DB_PASSWORD', group: 'khd', label: 'KHD Database Password', sensitive: true },
         ];
 
         // ดึงค่าจาก system_settings (DB override)

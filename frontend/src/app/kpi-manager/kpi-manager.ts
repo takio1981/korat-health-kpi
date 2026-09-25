@@ -28,16 +28,16 @@ export class KpiManagerComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild(ExportKpiComponent) exportCmp?: ExportKpiComponent;
 
   // === Wizard state — 2 ขั้น (Report Compare ย้ายไป kpi-manage แล้ว)
-  //   ขั้น 1: ส่งออกข้อมูล KPI ↔ HDC (DB Compare) — sync structure 2 ทิศทาง
-  //   ขั้น 2: Export ข้อมูล KPI ลงตารางรายตัวชี้วัด — export data + sync HDC + schedule
+  //   ขั้น 1: ส่งออกข้อมูล KPI ↔ KHD (DB Compare) — sync structure 2 ทิศทาง
+  //   ขั้น 2: Export ข้อมูล KPI ลงตารางรายตัวชี้วัด — export data + sync KHD + schedule
   currentStep: WizardStep = 1;
   showWorkflowGuide: boolean = false;
 
-  // ข้อมูล HDC สำหรับส่งจาก DB Compare → Form Builder (embedded)
-  hdcColumnsForForm: any[] = [];
-  hdcTableName: string = '';
-  hdcIndicatorName: string = '';
-  hdcTrigger: number = 0;
+  // ข้อมูล KHD สำหรับส่งจาก DB Compare → Form Builder (embedded)
+  khdColumnsForForm: any[] = [];
+  khdTableName: string = '';
+  khdIndicatorName: string = '';
+  khdTrigger: number = 0;
 
   ngOnInit() {
     // เดิม hardcode เช็ค role !== 'super_admin' ที่นี่ ซ้ำซ้อนกับ pageAccessGuard ที่ route และขัดกับ
@@ -118,17 +118,17 @@ export class KpiManagerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   // === DB Compare → Form Builder (embedded) ===
-  onCreateFormFromHDC(data: { table: string, name: string, columns: any[] }) {
-    this.hdcTableName = data.table;
-    this.hdcIndicatorName = data.name;
-    this.hdcColumnsForForm = data.columns;
-    this.hdcTrigger++;
+  onCreateFormFromKhd(data: { table: string, name: string, columns: any[] }) {
+    this.khdTableName = data.table;
+    this.khdIndicatorName = data.name;
+    this.khdColumnsForForm = data.columns;
+    this.khdTrigger++;
     this.cdr.detectChanges();
   }
 
-  clearHdcColumns() {
-    this.hdcColumnsForForm = [];
-    this.hdcTableName = '';
-    this.hdcIndicatorName = '';
+  clearKhdColumns() {
+    this.khdColumnsForForm = [];
+    this.khdTableName = '';
+    this.khdIndicatorName = '';
   }
 }

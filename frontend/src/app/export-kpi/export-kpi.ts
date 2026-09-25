@@ -56,7 +56,7 @@ export class ExportKpiComponent implements OnInit {
   exportLoading: boolean = false;
   exportResult: any = null;
 
-  // Sync to HDC
+  // Sync to KHD
   showSyncGuide: boolean = true;
   showSyncModal: boolean = false;
   syncPreviewData: any[] = [];
@@ -82,7 +82,7 @@ export class ExportKpiComponent implements OnInit {
     year_bh: '',
     indicator_scope: 'changes_only',
     indicator_ids: [] as number[],
-    auto_sync_hdc: false,
+    auto_sync_khd: false,
     notify_email: true,
     notify_telegram: false,
     notify_line: false
@@ -547,8 +547,8 @@ export class ExportKpiComponent implements OnInit {
     });
   }
 
-  // === Sync to HDC ===
-  openSyncToHdc() {
+  // === Sync to KHD ===
+  openSyncToKhd() {
     this.syncLoading = true;
     this.showSyncModal = true;
     this.syncPreviewData = [];
@@ -559,7 +559,7 @@ export class ExportKpiComponent implements OnInit {
     this.syncDeptFilter = '';
     this.cdr.detectChanges();
 
-    this.authService.syncToHdcPreview().subscribe({
+    this.authService.syncToKhdPreview().subscribe({
       next: (res: any) => {
         this.syncLoading = false;
         if (res.success) {
@@ -653,16 +653,16 @@ export class ExportKpiComponent implements OnInit {
     this.syncDeptFilter = '';
   }
 
-  executeSyncToHdc() {
+  executeSyncToKhd() {
     if (this.syncSelectedTables.size === 0) { Swal.fire('แจ้งเตือน', 'กรุณาเลือกตารางอย่างน้อย 1 รายการ', 'warning'); return; }
     const tables = this.syncPreviewData
       .filter((t: any) => this.syncSelectedTables.has(t.table))
       .map((t: any) => ({ table: t.table, sync_columns: t.sync_columns }));
 
     Swal.fire({
-      title: 'ยืนยันส่งข้อมูลเข้า HDC',
-      html: `<p class="text-sm">ส่ง <b>${tables.length}</b> ตาราง เข้า HDC?</p>
-             <p class="text-xs text-teal-600 mt-2"><i class="fas fa-info-circle mr-1"></i>ระบบจะอัปเดตเฉพาะข้อมูลที่ตรง key — ข้อมูลเดิมใน HDC ที่ไม่ซ้ำจะยังคงอยู่</p>`,
+      title: 'ยืนยันส่งข้อมูลเข้า KHD',
+      html: `<p class="text-sm">ส่ง <b>${tables.length}</b> ตาราง เข้า KHD?</p>
+             <p class="text-xs text-teal-600 mt-2"><i class="fas fa-info-circle mr-1"></i>ระบบจะอัปเดตเฉพาะข้อมูลที่ตรง key — ข้อมูลเดิมใน KHD ที่ไม่ซ้ำจะยังคงอยู่</p>`,
       icon: 'question', showCancelButton: true, confirmButtonColor: '#0d9488',
       confirmButtonText: '<i class="fas fa-upload mr-1"></i> ส่งข้อมูล', cancelButtonText: 'ยกเลิก'
     }).then(r => {
@@ -670,7 +670,7 @@ export class ExportKpiComponent implements OnInit {
         this.syncLoading = true;
         this.cdr.detectChanges();
         Swal.fire({ title: 'กำลังส่งข้อมูล...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        this.authService.syncToHdcExecute(tables).subscribe({
+        this.authService.syncToKhdExecute(tables).subscribe({
           next: (res: any) => {
             this.syncLoading = false;
             this.showSyncModal = false;
@@ -742,7 +742,7 @@ export class ExportKpiComponent implements OnInit {
       year_bh: this.exportYear,
       indicator_scope: 'changes_only',
       indicator_ids: [],
-      auto_sync_hdc: false,
+      auto_sync_khd: false,
       notify_email: true,
       notify_telegram: false,
       notify_line: false
@@ -762,7 +762,7 @@ export class ExportKpiComponent implements OnInit {
       year_bh: s.year_bh || '',
       indicator_scope: scope,
       indicator_ids: [...(s.indicator_ids_arr || [])],
-      auto_sync_hdc: !!s.auto_sync_hdc,
+      auto_sync_khd: !!s.auto_sync_khd,
       notify_email: !!s.notify_email,
       notify_telegram: !!s.notify_telegram,
       notify_line: !!s.notify_line
@@ -794,7 +794,7 @@ export class ExportKpiComponent implements OnInit {
       year_bh: f.year_bh || null,
       indicator_scope: f.indicator_scope,
       indicator_ids: f.indicator_scope === 'selected' ? (f.indicator_ids || []) : null,
-      auto_sync_hdc: f.auto_sync_hdc,
+      auto_sync_khd: f.auto_sync_khd,
       notify_email: f.notify_email,
       notify_telegram: f.notify_telegram,
       notify_line: f.notify_line
@@ -842,7 +842,7 @@ export class ExportKpiComponent implements OnInit {
             const sm = r.summary || {};
             const syncBlock = r.sync
               ? `<hr class="my-2"/>
-                 <p class="font-bold text-teal-700"><i class="fas fa-cloud-upload-alt mr-1"></i>Sync ไปยัง HDC</p>
+                 <p class="font-bold text-teal-700"><i class="fas fa-cloud-upload-alt mr-1"></i>Sync ไปยัง KHD</p>
                  <p>สำเร็จ: ${r.sync.summary.success}/${r.sync.summary.total} ตาราง (${r.sync.summary.rows} rows)</p>
                  ${r.sync.summary.error > 0 ? `<p class="text-red-600">ผิดพลาด: ${r.sync.summary.error}</p>` : ''}`
               : '';

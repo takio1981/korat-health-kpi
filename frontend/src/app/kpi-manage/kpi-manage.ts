@@ -85,20 +85,20 @@ export class KpiManageComponent implements OnInit {
   // เก็บ required_off_types ใน modal เป็น array ของ code (ตอนเปิด modal แปลงจาก JSON string)
   selectedOffTypes: string[] = [];
 
-  // === HDC Compare (ย้ายจาก kpi-manager Step 1) ===
-  // ใช้ table_process เป็น key เพราะ HDC ไม่มี local.id
-  hdcCompareMap: Map<string, any> = new Map();
-  hdcCompareSummary: any = null;     // { total, match, different, missing_local, missing_remote, hdc_inactive, suggest_disable }
-  hdcCompareLoading: boolean = false;
-  hdcCompareLastRun: Date | null = null;
-  // filter เพิ่มสำหรับ indicators tab — กรองตามสถานะ compare กับ HDC
-  filterHdcStatus: string = '';      // '' | 'match' | 'different' | 'missing_remote' | 'not_compared' | 'inactive'
-  // filter ตามสถานะการบันทึกผลงาน (ใช้ร่วมกับ filterHdcStatus ได้ — คนละมิติกัน)
+  // === KHD Compare (ย้ายจาก kpi-manager Step 1) ===
+  // ใช้ table_process เป็น key เพราะ KHD ไม่มี local.id
+  khdCompareMap: Map<string, any> = new Map();
+  khdCompareSummary: any = null;     // { total, match, different, missing_local, missing_remote, khd_inactive, suggest_disable }
+  khdCompareLoading: boolean = false;
+  khdCompareLastRun: Date | null = null;
+  // filter เพิ่มสำหรับ indicators tab — กรองตามสถานะ compare กับ KHD
+  filterKhdStatus: string = '';      // '' | 'match' | 'different' | 'missing_remote' | 'not_compared' | 'inactive'
+  // filter ตามสถานะการบันทึกผลงาน (ใช้ร่วมกับ filterKhdStatus ได้ — คนละมิติกัน)
   filterResultStatus: string = '';   // '' | 'has_results' | 'no_results'
-  hdcAddModal: { open: boolean; item: any; deptId: number|null; mainIndicatorId: number|null } = {
+  khdAddModal: { open: boolean; item: any; deptId: number|null; mainIndicatorId: number|null } = {
     open: false, item: null, deptId: null, mainIndicatorId: null
   };
-  hdcAddLoading: boolean = false;
+  khdAddLoading: boolean = false;
 
   // ยุทธศาสตร์ compare
   stratCompareLoading = false;
@@ -108,15 +108,15 @@ export class KpiManageComponent implements OnInit {
   deptCompareLoading = false;
   deptCompareSummary: any = null;
   deptCompareItems: any[] = [];
-  // HDC compare filter (ใช้ร่วมทุก tab — reset เมื่อ switch tab)
-  hdcCompareFilter = '';
+  // KHD compare filter (ใช้ร่วมทุก tab — reset เมื่อ switch tab)
+  khdCompareFilter = '';
   // หมวดหมู่หลัก compare
   mainIndCompareLoading = false;
   mainIndCompareSummary: any = null;
   mainIndCompareItems: any[] = [];
   mainIndCompareSource = '';
-  // modal เพิ่มหมวดหมู่หลักจาก HDC
-  mainIndAddModal: { open: boolean; hdc_name: string; yutId: number|null } = { open: false, hdc_name: '', yutId: null };
+  // modal เพิ่มหมวดหมู่หลักจาก KHD
+  mainIndAddModal: { open: boolean; khd_name: string; yutId: number|null } = { open: false, khd_name: '', yutId: null };
   mainIndAddLoading = false;
   // หน่วยบริการ compare
   hospCompareLoading = false;
@@ -124,7 +124,7 @@ export class KpiManageComponent implements OnInit {
   hospCompareItems: any[] = [];
   hospCompareError = '';
 
-  // modal เพิ่มจาก HDC (ใช้ร่วมกัน ยุทธศาสตร์ + หน่วยงาน)
+  // modal เพิ่มจาก KHD (ใช้ร่วมกัน ยุทธศาสตร์ + หน่วยงาน)
   simpleAddModal: { open: boolean; tab: string; itemName: string; deptCode: string } = { open: false, tab: '', itemName: '', deptCode: '' };
   simpleAddLoading = false;
   // modal เพิ่มหน่วยบริการ
@@ -226,7 +226,7 @@ export class KpiManageComponent implements OnInit {
     });
   }
 
-  // เลื่อนหน้าจอไปยัง section ที่ระบุ (ใช้กับชิปสรุป "HDC มีแต่ยังไม่มีใน Local")
+  // เลื่อนหน้าจอไปยัง section ที่ระบุ (ใช้กับชิปสรุป "KHD มีแต่ยังไม่มีใน Local")
   scrollToSection(id: string) {
     const el = document.getElementById(id);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -256,9 +256,9 @@ export class KpiManageComponent implements OnInit {
     return `${sym ? sym + ' ' : ''}${pct}%`;
   }
 
-  // เกณฑ์ของ HDC (จาก getHdcData) — เทียบคู่กับ getCriteriaText(item) ของ Local
-  getHdcCriteriaText(hdc: any): string {
-    return this.getCriteriaText({ criterion: hdc?.hdc_target_percentage, target_condition: hdc?.hdc_target_condition });
+  // เกณฑ์ของ KHD (จาก getKhdData) — เทียบคู่กับ getCriteriaText(item) ของ Local
+  getKhdCriteriaText(khd: any): string {
+    return this.getCriteriaText({ criterion: khd?.khd_target_percentage, target_condition: khd?.khd_target_condition });
   }
 
   // ดึงประเภทตัวชี้วัด (R9, MOPH, SSJ, RMW, Other) — badge สีต่างกัน
@@ -535,13 +535,13 @@ export class KpiManageComponent implements OnInit {
         if (!matchSearch) return false;
         if (this.filterMainIndicator && String(i.main_indicator_id) !== this.filterMainIndicator) return false;
         if (this.filterDept && String(i.dept_id) !== this.filterDept) return false;
-        // HDC compare filter
-        if (this.filterHdcStatus) {
-          const cmp = this.getHdcCompareStatus(i);
-          if (this.filterHdcStatus === 'inactive') {
-            const hdc = this.hdcCompareMap.get(i.table_process || '');
-            if (!(hdc && (hdc.hdc_is_active === 0 || hdc.hdc_is_active === '0'))) return false;
-          } else if (cmp !== this.filterHdcStatus) {
+        // KHD compare filter
+        if (this.filterKhdStatus) {
+          const cmp = this.getKhdCompareStatus(i);
+          if (this.filterKhdStatus === 'inactive') {
+            const khd = this.khdCompareMap.get(i.table_process || '');
+            if (!(khd && (khd.khd_is_active === 0 || khd.khd_is_active === '0'))) return false;
+          } else if (cmp !== this.filterKhdStatus) {
             return false;
           }
         }
@@ -554,10 +554,10 @@ export class KpiManageComponent implements OnInit {
       this.filteredMainIndicators = this.mainIndicators.filter(i => {
         if (!matchActive(i)) return false;
         if (search && !(i.main_indicator_name && i.main_indicator_name.toLowerCase().includes(search))) return false;
-        if (this.hdcCompareFilter && this.mainIndCompareSummary) {
+        if (this.khdCompareFilter && this.mainIndCompareSummary) {
           const cmp = this.mainIndCompareItems.find(c => c.local_id === i.id);
-          const status = cmp ? cmp.status : (this.mainIndCompareSource === 'hdc_table' ? 'missing_remote' : 'local_only');
-          if (status !== this.hdcCompareFilter) return false;
+          const status = cmp ? cmp.status : (this.mainIndCompareSource === 'khd_table' ? 'missing_remote' : 'local_only');
+          if (status !== this.khdCompareFilter) return false;
         }
         return true;
       });
@@ -565,10 +565,10 @@ export class KpiManageComponent implements OnInit {
       this.filteredStrategies = this.strategies.filter(s => {
         if (!matchActive(s)) return false;
         if (search && !(s.yut_name && s.yut_name.toLowerCase().includes(search))) return false;
-        if (this.hdcCompareFilter && this.stratCompareSummary) {
+        if (this.khdCompareFilter && this.stratCompareSummary) {
           const cmp = this.stratCompareItems.find(c => c.local_id === s.id);
           const status = cmp ? cmp.status : 'missing_remote';
-          if (status !== this.hdcCompareFilter) return false;
+          if (status !== this.khdCompareFilter) return false;
         }
         return true;
       });
@@ -576,10 +576,10 @@ export class KpiManageComponent implements OnInit {
       this.filteredDepartments = this.departments.filter(d => {
         if (!matchActive(d)) return false;
         if (search && !((d.dept_name && d.dept_name.toLowerCase().includes(search)) || (d.dept_code && d.dept_code.toLowerCase().includes(search)))) return false;
-        if (this.hdcCompareFilter && this.deptCompareSummary) {
+        if (this.khdCompareFilter && this.deptCompareSummary) {
           const cmp = this.deptCompareItems.find(c => c.local_id === d.id);
           const status = cmp ? cmp.status : 'missing_remote';
-          if (status !== this.hdcCompareFilter) return false;
+          if (status !== this.khdCompareFilter) return false;
         }
         return true;
       });
@@ -588,10 +588,10 @@ export class KpiManageComponent implements OnInit {
         if (this.hospFilterDistid && String(h.distid) !== this.hospFilterDistid) return false;
         if (this.hospFilterHostype && String(h.hostype) !== this.hospFilterHostype) return false;
         if (search && !((h.hosname && h.hosname.toLowerCase().includes(search)) || (h.hoscode && String(h.hoscode).toLowerCase().includes(search)))) return false;
-        if (this.hdcCompareFilter && this.hospCompareSummary) {
+        if (this.khdCompareFilter && this.hospCompareSummary) {
           const cmp = this.hospCompareItems.find(c => String(c.hoscode).trim() === String(h.hoscode).trim());
           const status = cmp ? cmp.status : 'missing_remote';
-          if (status !== this.hdcCompareFilter) return false;
+          if (status !== this.khdCompareFilter) return false;
         }
         return true;
       });
@@ -626,7 +626,7 @@ export class KpiManageComponent implements OnInit {
     this.filterDept = '';
     this.hospFilterDistid = '';
     this.hospFilterHostype = '';
-    this.hdcCompareFilter = '';
+    this.khdCompareFilter = '';
     this.applyFilter();
   }
 
@@ -901,86 +901,86 @@ export class KpiManageComponent implements OnInit {
   }
 
   // ============================================================
-  // HDC Compare — ระบบเทียบชื่อตัวชี้วัด/สถานะกับ HDC (ย้ายจาก kpi-manager)
+  // KHD Compare — ระบบเทียบชื่อตัวชี้วัด/สถานะกับ KHD (ย้ายจาก kpi-manager)
   // ============================================================
 
   /** เรียก /report-compare แล้ว build map by table_process */
-  runHdcCompare() {
+  runKhdCompare() {
     if (!this.isSuperAdmin) {
       Swal.fire('แจ้งเตือน', 'เฉพาะ super_admin', 'warning');
       return;
     }
-    this.hdcCompareLoading = true;
+    this.khdCompareLoading = true;
     this.cdr.detectChanges();
     this.authService.reportCompare().subscribe({
       next: (res: any) => {
-        this.hdcCompareLoading = false;
+        this.khdCompareLoading = false;
         if (res.success) {
-          this.hdcCompareMap.clear();
+          this.khdCompareMap.clear();
           for (const it of (res.items || [])) {
-            if (it.table_process) this.hdcCompareMap.set(it.table_process, it);
+            if (it.table_process) this.khdCompareMap.set(it.table_process, it);
           }
-          this.hdcCompareSummary = res.summary;
-          this.hdcCompareLastRun = new Date();
+          this.khdCompareSummary = res.summary;
+          this.khdCompareLastRun = new Date();
           this.applyFilter();
           this.cdr.detectChanges();
         }
       },
       error: (err: any) => {
-        this.hdcCompareLoading = false;
-        Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถเทียบกับ HDC ได้ (ตรวจ Remote DB)', 'error');
+        this.khdCompareLoading = false;
+        Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถเทียบกับ KHD ได้ (ตรวจ Remote DB)', 'error');
       }
     });
   }
 
   /** สถานะ compare ของ indicator แต่ละตัว — ใช้กับ badge + filter */
-  getHdcCompareStatus(item: any): 'not_compared' | 'match' | 'different' | 'missing_remote' {
-    if (!this.hdcCompareMap.size) return 'not_compared';
-    const hdc = item.table_process ? this.hdcCompareMap.get(item.table_process) : null;
-    if (!hdc) return 'missing_remote';
-    return hdc.status === 'match' ? 'match' : (hdc.status === 'different' ? 'different' : 'missing_remote');
+  getKhdCompareStatus(item: any): 'not_compared' | 'match' | 'different' | 'missing_remote' {
+    if (!this.khdCompareMap.size) return 'not_compared';
+    const khd = item.table_process ? this.khdCompareMap.get(item.table_process) : null;
+    if (!khd) return 'missing_remote';
+    return khd.status === 'match' ? 'match' : (khd.status === 'different' ? 'different' : 'missing_remote');
   }
 
-  /** ข้อมูล HDC ดิบของ indicator (ใช้แสดง diff inline) */
-  getHdcData(item: any): any | null {
-    return item.table_process ? (this.hdcCompareMap.get(item.table_process) || null) : null;
+  /** ข้อมูล KHD ดิบของ indicator (ใช้แสดง diff inline) */
+  getKhdData(item: any): any | null {
+    return item.table_process ? (this.khdCompareMap.get(item.table_process) || null) : null;
   }
 
-  /** Sync ชื่อจาก HDC → Local 1 ตัว (POST /report-compare/sync ด้วย hdc_report_id เดียว) */
-  syncSingleNameFromHdc(item: any) {
-    const hdc = this.getHdcData(item);
-    if (!hdc || !hdc.hdc_report_id) {
-      Swal.fire('แจ้งเตือน', 'ไม่พบ HDC report — กดเทียบกับ HDC ก่อน', 'info');
+  /** Sync ชื่อจาก KHD → Local 1 ตัว (POST /report-compare/sync ด้วย khd_report_id เดียว) */
+  syncSingleNameFromKhd(item: any) {
+    const khd = this.getKhdData(item);
+    if (!khd || !khd.khd_report_id) {
+      Swal.fire('แจ้งเตือน', 'ไม่พบ KHD report — กดเทียบกับ KHD ก่อน', 'info');
       return;
     }
-    if (hdc.status !== 'different') {
-      Swal.fire('แจ้งเตือน', 'ตัวชี้วัดนี้ตรงกับ HDC อยู่แล้ว', 'info');
+    if (khd.status !== 'different') {
+      Swal.fire('แจ้งเตือน', 'ตัวชี้วัดนี้ตรงกับ KHD อยู่แล้ว', 'info');
       return;
     }
     Swal.fire({
-      title: 'Sync ชื่อจาก HDC',
+      title: 'Sync ชื่อจาก KHD',
       html: `<div class="text-left text-sm space-y-2">
-        <p>เปลี่ยนชื่อตัวชี้วัด Local ให้ตรงกับ HDC:</p>
+        <p>เปลี่ยนชื่อตัวชี้วัด Local ให้ตรงกับ KHD:</p>
         <div class="bg-rose-50 border border-rose-200 rounded p-2 text-xs">
           <p class="text-rose-700 font-bold">ปัจจุบัน (Local):</p>
           <p class="text-gray-700">${item.kpi_indicators_name}</p>
         </div>
         <div class="text-center text-gray-400"><i class="fas fa-arrow-down"></i></div>
         <div class="bg-emerald-50 border border-emerald-200 rounded p-2 text-xs">
-          <p class="text-emerald-700 font-bold">ใหม่ (จาก HDC):</p>
-          <p class="text-gray-700">${hdc.hdc_name}</p>
+          <p class="text-emerald-700 font-bold">ใหม่ (จาก KHD):</p>
+          <p class="text-gray-700">${khd.khd_name}</p>
         </div>
       </div>`,
       icon: 'question', showCancelButton: true, confirmButtonColor: '#10b981',
       confirmButtonText: '<i class="fas fa-sync mr-1"></i> Sync', cancelButtonText: 'ยกเลิก'
     }).then(r => {
       if (!r.isConfirmed) return;
-      this.authService.reportCompareSync([hdc.hdc_report_id]).subscribe({
+      this.authService.reportCompareSync([khd.khd_report_id]).subscribe({
         next: (res: any) => {
           if (res.success) {
             Swal.fire({ icon: 'success', title: 'Sync สำเร็จ', text: res.message, timer: 2000 });
             this.loadAllData();
-            this.runHdcCompare();
+            this.runKhdCompare();
           }
         },
         error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'Sync ไม่ได้', 'error')
@@ -997,10 +997,10 @@ export class KpiManageComponent implements OnInit {
         if (res.success) {
           item.upload_excel = res.upload_excel;
           // ถ้ามี compare data — อัพเดท suggest_disable ด้วย
-          const hdc = this.getHdcData(item);
-          if (hdc) {
-            hdc.local_upload_excel = res.upload_excel;
-            hdc.suggest_disable_upload = (hdc.hdc_is_active === 0 || hdc.hdc_is_active === '0') && !res.upload_excel;
+          const khd = this.getKhdData(item);
+          if (khd) {
+            khd.local_upload_excel = res.upload_excel;
+            khd.suggest_disable_upload = (khd.khd_is_active === 0 || khd.khd_is_active === '0') && !res.upload_excel;
           }
           this.cdr.detectChanges();
         }
@@ -1011,25 +1011,25 @@ export class KpiManageComponent implements OnInit {
 
   /**
    * นับ Local-centric counts สำหรับ chips —
-   * backend summary นับ HDC-centric (ถ้า HDC มีแถวซ้ำ tp เดียวกัน จะนับซ้ำ) ทำให้เลขชิป ≠ จำนวนที่ filter ตารางได้
+   * backend summary นับ KHD-centric (ถ้า KHD มีแถวซ้ำ tp เดียวกัน จะนับซ้ำ) ทำให้เลขชิป ≠ จำนวนที่ filter ตารางได้
    * ตัวนี้ iterate this.indicators (ที่ table แสดงจริง) — ตรงกันการนับ
    */
-  get hdcCounts() {
+  get khdCounts() {
     const counts = { match: 0, different: 0, missing_remote: 0, inactive: 0, total: 0 };
-    if (!this.hdcCompareMap.size) return counts;
+    if (!this.khdCompareMap.size) return counts;
     for (const i of this.indicators) {
       counts.total++;
-      const cmp = this.getHdcCompareStatus(i);
+      const cmp = this.getKhdCompareStatus(i);
       if (cmp === 'match') counts.match++;
       else if (cmp === 'different') counts.different++;
       else if (cmp === 'missing_remote') counts.missing_remote++;
-      const hdc = this.getHdcData(i);
-      if (hdc && (hdc.hdc_is_active === 0 || hdc.hdc_is_active === '0')) counts.inactive++;
+      const khd = this.getKhdData(i);
+      if (khd && (khd.khd_is_active === 0 || khd.khd_is_active === '0')) counts.inactive++;
     }
     return counts;
   }
 
-  // นับจำนวนตัวชี้วัดที่มี/ยังไม่มีผลงาน — ไม่ต้องรอ compare กับ HDC ก่อน (result_count มาจาก GET /indicators โดยตรง)
+  // นับจำนวนตัวชี้วัดที่มี/ยังไม่มีผลงาน — ไม่ต้องรอ compare กับ KHD ก่อน (result_count มาจาก GET /indicators โดยตรง)
   get resultStatusCounts() {
     const counts = { has: 0, no: 0 };
     for (const i of this.indicators) {
@@ -1038,17 +1038,17 @@ export class KpiManageComponent implements OnInit {
     return counts;
   }
 
-  /** indicator ที่ HDC inactive แต่ Local upload_excel = 0 — ใช้กับ banner + bulk action */
-  get hdcInactiveSuggestItems(): any[] {
+  /** indicator ที่ KHD inactive แต่ Local upload_excel = 0 — ใช้กับ banner + bulk action */
+  get khdInactiveSuggestItems(): any[] {
     return this.indicators.filter(i => {
-      const hdc = this.getHdcData(i);
-      return !!(hdc && hdc.suggest_disable_upload);
+      const khd = this.getKhdData(i);
+      return !!(khd && khd.suggest_disable_upload);
     });
   }
 
-  get hdcMissingLocalItems(): any[] {
+  get khdMissingLocalItems(): any[] {
     const result: any[] = [];
-    this.hdcCompareMap.forEach((val) => {
+    this.khdCompareMap.forEach((val) => {
       if (val.status === 'missing_local') result.push(val);
     });
     return result;
@@ -1078,7 +1078,7 @@ export class KpiManageComponent implements OnInit {
     this.authService.reportCompareStrategies().subscribe({
       next: (res: any) => {
         this.stratCompareLoading = false;
-        if (res.success) { this.stratCompareSummary = res.summary; this.stratCompareItems = res.items; this.hdcCompareFilter = ''; this.applyFilter(); }
+        if (res.success) { this.stratCompareSummary = res.summary; this.stratCompareItems = res.items; this.khdCompareFilter = ''; this.applyFilter(); }
         else Swal.fire('ผิดพลาด', res.message, 'error');
         this.cdr.detectChanges();
       },
@@ -1092,7 +1092,7 @@ export class KpiManageComponent implements OnInit {
     this.authService.reportCompareDepartments().subscribe({
       next: (res: any) => {
         this.deptCompareLoading = false;
-        if (res.success) { this.deptCompareSummary = res.summary; this.deptCompareItems = res.items; this.hdcCompareFilter = ''; this.applyFilter(); }
+        if (res.success) { this.deptCompareSummary = res.summary; this.deptCompareItems = res.items; this.khdCompareFilter = ''; this.applyFilter(); }
         else Swal.fire('ผิดพลาด', res.message, 'error');
         this.cdr.detectChanges();
       },
@@ -1106,7 +1106,7 @@ export class KpiManageComponent implements OnInit {
     this.authService.reportCompareMainIndicators().subscribe({
       next: (res: any) => {
         this.mainIndCompareLoading = false;
-        if (res.success) { this.mainIndCompareSummary = res.summary; this.mainIndCompareItems = res.items; this.mainIndCompareSource = res.source || ''; this.hdcCompareFilter = ''; this.applyFilter(); }
+        if (res.success) { this.mainIndCompareSummary = res.summary; this.mainIndCompareItems = res.items; this.mainIndCompareSource = res.source || ''; this.khdCompareFilter = ''; this.applyFilter(); }
         else Swal.fire('ผิดพลาด', res.message, 'error');
         this.cdr.detectChanges();
       },
@@ -1121,7 +1121,7 @@ export class KpiManageComponent implements OnInit {
     this.authService.reportCompareHospitals().subscribe({
       next: (res: any) => {
         this.hospCompareLoading = false;
-        if (res.success) { this.hospCompareSummary = res.summary; this.hospCompareItems = res.items; this.hdcCompareFilter = ''; this.applyFilter(); }
+        if (res.success) { this.hospCompareSummary = res.summary; this.hospCompareItems = res.items; this.khdCompareFilter = ''; this.applyFilter(); }
         else { this.hospCompareError = res.message; }
         this.cdr.detectChanges();
       },
@@ -1181,14 +1181,14 @@ export class KpiManageComponent implements OnInit {
   }
 
   openMainIndAdd(item: any) {
-    this.mainIndAddModal = { open: true, hdc_name: item.hdc_name, yutId: null };
+    this.mainIndAddModal = { open: true, khd_name: item.khd_name, yutId: null };
   }
 
   confirmMainIndAdd() {
     const m = this.mainIndAddModal;
-    if (!m.hdc_name?.trim()) return;
+    if (!m.khd_name?.trim()) return;
     this.mainIndAddLoading = true;
-    this.authService.reportCompareAddMainIndicator(m.hdc_name, m.yutId).subscribe({
+    this.authService.reportCompareAddMainIndicator(m.khd_name, m.yutId).subscribe({
       next: (res: any) => {
         this.mainIndAddLoading = false;
         if (res.success) {
@@ -1202,28 +1202,28 @@ export class KpiManageComponent implements OnInit {
     });
   }
 
-  openAddFromHdc(item: any) {
-    this.hdcAddModal = { open: true, item, deptId: null, mainIndicatorId: null };
+  openAddFromKhd(item: any) {
+    this.khdAddModal = { open: true, item, deptId: null, mainIndicatorId: null };
   }
 
-  confirmAddFromHdc() {
-    const m = this.hdcAddModal;
-    if (!m.item?.hdc_report_id) return;
-    this.hdcAddLoading = true;
-    this.authService.reportCompareAddFromHdc(m.item.hdc_report_id, m.deptId, m.mainIndicatorId).subscribe({
+  confirmAddFromKhd() {
+    const m = this.khdAddModal;
+    if (!m.item?.khd_report_id) return;
+    this.khdAddLoading = true;
+    this.authService.reportCompareAddFromKhd(m.item.khd_report_id, m.deptId, m.mainIndicatorId).subscribe({
       next: (res: any) => {
-        this.hdcAddLoading = false;
+        this.khdAddLoading = false;
         if (res.success) {
-          this.hdcAddModal.open = false;
+          this.khdAddModal.open = false;
           Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2000, showConfirmButton: false });
           this.loadAllData();
-          this.runHdcCompare();
+          this.runKhdCompare();
         } else {
           Swal.fire('ผิดพลาด', res.message, 'error');
         }
       },
       error: (err: any) => {
-        this.hdcAddLoading = false;
+        this.khdAddLoading = false;
         Swal.fire('ผิดพลาด', err.error?.message || 'เกิดข้อผิดพลาด', 'error');
       }
     });
@@ -1266,8 +1266,8 @@ export class KpiManageComponent implements OnInit {
       { key: 'other',               desc: 'ตัวชี้วัดอื่นๆ (1=ใช่, 0=ไม่ใช่)', example: '0' },
       { key: 'evaluation_mode',     desc: 'โหมดประเมิน: any_one=เฉพาะบางประเภท / all_required=ทุกประเภทบังคับ', example: 'any_one' },
       { key: 'required_off_types',  desc: 'รหัสหน่วยบริการ คั่นด้วย , เช่น 05,06,07 (ใช้เมื่อ evaluation_mode=any_one เท่านั้น)', example: '05,06,07' },
-      { key: 'description',         desc: 'รายละเอียดเพิ่มเติม (ไม่จำเป็น)', example: 'ตรวจสอบจาก HDC ทุกเดือน' },
-      { key: 'criterion',           desc: 'เกณฑ์ % (จับคู่กับ target_condition เพื่อเทียบกับ HDC) — คนละอันกับ target_percentage/เป้าหมาย', example: '80' },
+      { key: 'description',         desc: 'รายละเอียดเพิ่มเติม (ไม่จำเป็น)', example: 'ตรวจสอบจาก KHD ทุกเดือน' },
+      { key: 'criterion',           desc: 'เกณฑ์ % (จับคู่กับ target_condition เพื่อเทียบกับ KHD) — คนละอันกับ target_percentage/เป้าหมาย', example: '80' },
     ];
 
     const wb = XLSX.utils.book_new();
@@ -1419,14 +1419,14 @@ export class KpiManageComponent implements OnInit {
     });
   }
 
-  bulkDisableHdcInactive() {
-    const items = this.hdcInactiveSuggestItems;
+  bulkDisableKhdInactive() {
+    const items = this.khdInactiveSuggestItems;
     if (items.length === 0) { Swal.fire('แจ้งเตือน', 'ไม่มีรายการที่ต้องปิด', 'info'); return; }
     const ids = items.map(i => i.id);
     Swal.fire({
       title: 'ปิดส่งออกอัตโนมัติ',
       html: `<p class="text-sm">ตั้ง <code>upload_excel = 1</code> ให้ <b>${ids.length}</b> ตัวชี้วัด</p>
-             <p class="text-xs text-gray-500 mt-2">HDC report เหล่านี้อยู่สถานะ inactive — ระบบจะไม่ export อัตโนมัติ</p>`,
+             <p class="text-xs text-gray-500 mt-2">KHD report เหล่านี้อยู่สถานะ inactive — ระบบจะไม่ export อัตโนมัติ</p>`,
       icon: 'warning', showCancelButton: true, confirmButtonColor: '#dc2626',
       confirmButtonText: '<i class="fas fa-toggle-off mr-1"></i> ปิดทั้งหมด', cancelButtonText: 'ยกเลิก'
     }).then(r => {
@@ -1436,7 +1436,7 @@ export class KpiManageComponent implements OnInit {
           if (res.success) {
             Swal.fire({ icon: 'success', title: 'สำเร็จ', text: `ปิดแล้ว ${res.affected} ตัวชี้วัด`, timer: 2000 });
             this.loadAllData();
-            this.runHdcCompare();
+            this.runKhdCompare();
           }
         },
         error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถปิดได้', 'error')

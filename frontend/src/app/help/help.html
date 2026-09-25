@@ -617,7 +617,7 @@
         </div>
         <p class="text-xs text-gray-500 mb-3">หน้านี้แสดง Flowchart แบบ interactive อธิบายขั้นตอนการทำงานของ 12 ระบบย่อย ใช้เพื่อศึกษา/อ้างอิงขั้นตอนการทำงานของระบบ ไม่ใช่หน้าที่ต้องกรอกหรือบันทึกข้อมูลใดๆ — ทุก role เข้าดูได้</p>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-list mr-1 text-slate-500"></i><b>เมนูซ้าย (จอใหญ่) / dropdown (มือถือ):</b> เลือกดูระบบย่อยที่ต้องการ — Login, ลงทะเบียน, บันทึก KPI, จัดการตัวชี้วัด, ตั้งค่าปีงบ, กราฟ&amp;รายงาน, จัดการผู้ใช้, Export&amp;HDC, แจ้งเตือน, ตั้งค่าระบบ, ข้อเสนอแนะ, ตัวชี้วัดย่อย</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-list mr-1 text-slate-500"></i><b>เมนูซ้าย (จอใหญ่) / dropdown (มือถือ):</b> เลือกดูระบบย่อยที่ต้องการ — Login, ลงทะเบียน, บันทึก KPI, จัดการตัวชี้วัด, ตั้งค่าปีงบ, กราฟ&amp;รายงาน, จัดการผู้ใช้, Export&amp;KHD, แจ้งเตือน, ตั้งค่าระบบ, ข้อเสนอแนะ, ตัวชี้วัดย่อย</div>
           <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-layer-group mr-1 text-slate-500"></i><b>แท็บย่อย (subflow):</b> บางระบบมีหลายวิธี เช่น ระบบ Login แยก 3 แท็บ — Username/Password, ThaID, ProviderID</div>
           <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-shapes mr-1 text-slate-500"></i><b>สัญลักษณ์มาตรฐาน:</b> เริ่ม/จบ, กระบวนการ, จุดตัดสินใจ, ฐานข้อมูล — มี Legend อธิบายด้านล่างไดอะแกรมทุกหน้า</div>
           <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-info-circle mr-1 text-slate-500"></i><b>หมายเหตุ:</b> แต่ละระบบมีกล่องสรุปจุดสำคัญ/ข้อควรระวังทางเทคนิคกำกับท้ายไดอะแกรม</div>
@@ -671,38 +671,38 @@
           <div class="bg-amber-50 rounded-lg p-2 border border-amber-200"><i class="fas fa-lock text-amber-600 mr-1"></i><b>โหมดปิดปรับปรุง</b><p class="text-[10px] text-gray-400 mt-0.5">เปิด/ปิดระบบ Maintenance</p></div>
           <div class="bg-emerald-50 rounded-lg p-2 border border-emerald-200"><i class="fas fa-toggle-on text-emerald-600 mr-1"></i><b>เปิดใช้งานทั้งหมด</b><p class="text-[10px] text-gray-400 mt-0.5">เปิดทุก account (ยกเว้น super_admin)</p></div>
           <div class="bg-red-50 rounded-lg p-2 border border-red-200"><i class="fas fa-toggle-off text-red-500 mr-1"></i><b>ปิดใช้งานทั้งหมด</b><p class="text-[10px] text-gray-400 mt-0.5">ปิดทุก account</p></div>
-          <div class="bg-blue-50 rounded-lg p-2 border border-blue-200"><i class="fas fa-cloud-upload-alt text-blue-600 mr-1"></i><b>Data Sync</b><p class="text-[10px] text-gray-400 mt-0.5">Sync users → HDC (super_admin)</p></div>
+          <div class="bg-blue-50 rounded-lg p-2 border border-blue-200"><i class="fas fa-cloud-upload-alt text-blue-600 mr-1"></i><b>Data Sync</b><p class="text-[10px] text-gray-400 mt-0.5">Sync users → KHD (super_admin)</p></div>
           <div class="bg-green-50 rounded-lg p-2 border border-green-200"><i class="fas fa-user-plus text-green-600 mr-1"></i><b>เพิ่มผู้ใช้งาน</b><p class="text-[10px] text-gray-400 mt-0.5">Validation เหมือนหน้า Register</p></div>
         </div>
 
         <!-- Data Synchronization -->
         <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
-          <h4 class="font-bold text-blue-800 text-sm mb-2"><i class="fas fa-cloud-upload-alt mr-2"></i>Data Synchronization — Users Local ↔ HDC</h4>
+          <h4 class="font-bold text-blue-800 text-sm mb-2"><i class="fas fa-cloud-upload-alt mr-2"></i>Data Synchronization — Users Local ↔ KHD</h4>
           <p class="text-xs text-gray-600 mb-2">กดปุ่ม <b>"Data Synchronization"</b> (สีน้ำเงิน) ใน toolbar (เฉพาะ super_admin) — Modal มี 3 แท็บ:</p>
           <div class="space-y-2">
             <div>
               <p class="text-xs font-bold text-gray-700"><i class="fas fa-exchange-alt mr-1 text-blue-500"></i>แท็บ 1 — เปรียบเทียบข้อมูล</p>
               <ol class="list-decimal ml-5 text-xs text-gray-600 space-y-1">
-                <li>เปรียบเทียบ users Local vs HDC ทันที → แสดง 4 cards:
+                <li>เปรียบเทียบ users Local vs KHD ทันที → แสดง 4 cards:
                   <span class="text-green-600">ตรงกัน</span> |
                   <span class="text-amber-600">ต่างกัน</span> |
                   <span class="text-blue-600">เฉพาะ Local</span> |
-                  <span class="text-gray-500">เฉพาะ HDC</span>
+                  <span class="text-gray-500">เฉพาะ KHD</span>
                 </li>
-                <li>แถวที่ "ต่างกัน" กดเข้าไปดูรายละเอียดได้ว่าฟิลด์ไหนต่างกันบ้าง (เช่น <code>role: user_hos → admin_hos</code>) เทียบค่า Local กับ HDC ตรงๆ</li>
-                <li>Default เลือก users ที่ "ต่างกัน" + "เฉพาะ Local" → ปรับเลือกเองได้ → กด <b>"Sync → HDC"</b> UPSERT เข้า HDC</li>
+                <li>แถวที่ "ต่างกัน" กดเข้าไปดูรายละเอียดได้ว่าฟิลด์ไหนต่างกันบ้าง (เช่น <code>role: user_hos → admin_hos</code>) เทียบค่า Local กับ KHD ตรงๆ</li>
+                <li>Default เลือก users ที่ "ต่างกัน" + "เฉพาะ Local" → ปรับเลือกเองได้ → กด <b>"Sync → KHD"</b> UPSERT เข้า KHD</li>
               </ol>
             </div>
             <div>
               <p class="text-xs font-bold text-gray-700"><i class="fas fa-columns mr-1 text-indigo-500"></i>แท็บ 2 — ตรวจสอบโครงสร้างตาราง</p>
-              <p class="text-xs text-gray-600 ml-1">ตรวจสอบว่าคอลัมน์ของตาราง <code>users</code> ระหว่าง Local กับ HDC ตรงกันไหม (ชื่อ/type) — ถ้าไม่ตรงจะแสดงเป็นรายการสีต่างๆ แต่ <b>ระบบจะไม่แก้ไขโครงสร้าง HDC ให้อัตโนมัติ</b> (HDC ใช้ร่วมกับระบบอื่นด้วย) ถ้าต้องการแก้ให้ไปตั้งค่าที่แท็บ 3</p>
+              <p class="text-xs text-gray-600 ml-1">ตรวจสอบว่าคอลัมน์ของตาราง <code>users</code> ระหว่าง Local กับ KHD ตรงกันไหม (ชื่อ/type) — ถ้าไม่ตรงจะแสดงเป็นรายการสีต่างๆ แต่ <b>ระบบจะไม่แก้ไขโครงสร้าง KHD ให้อัตโนมัติ</b> (KHD ใช้ร่วมกับระบบอื่นด้วย) ถ้าต้องการแก้ให้ไปตั้งค่าที่แท็บ 3</p>
             </div>
             <div>
               <p class="text-xs font-bold text-gray-700"><i class="fas fa-cog mr-1 text-purple-500"></i>แท็บ 3 — ตั้งค่า Mapping</p>
-              <p class="text-xs text-gray-600 ml-1">จับคู่ชื่อคอลัมน์ Local ↔ HDC ที่ไม่ตรงกัน (เช่น <code>cid</code> ของ Local ควรไปลง <code>cid_hash</code> ของ HDC) และเลือกคอลัมน์ที่ไม่ต้องการ sync/เปรียบเทียบเลยได้ (ค่าเริ่มต้นไม่เทียบคอลัมน์ session เช่น last_seen_at เพราะเปลี่ยนตลอดเวลา ทำให้ผลเปรียบเทียบไม่นิ่ง)</p>
+              <p class="text-xs text-gray-600 ml-1">จับคู่ชื่อคอลัมน์ Local ↔ KHD ที่ไม่ตรงกัน (เช่น <code>cid</code> ของ Local ควรไปลง <code>cid_hash</code> ของ KHD) และเลือกคอลัมน์ที่ไม่ต้องการ sync/เปรียบเทียบเลยได้ (ค่าเริ่มต้นไม่เทียบคอลัมน์ session เช่น last_seen_at เพราะเปลี่ยนตลอดเวลา ทำให้ผลเปรียบเทียบไม่นิ่ง)</p>
             </div>
           </div>
-          <div class="mt-2 text-[11px] text-blue-700"><i class="fas fa-shield-alt mr-1"></i>ระบบสร้างตาราง users ใน HDC อัตโนมัติถ้ายังไม่มี + log ลง system_logs (USERS_SYNC_TO_HDC, USERS_SYNC_MAPPING_UPDATE)</div>
+          <div class="mt-2 text-[11px] text-blue-700"><i class="fas fa-shield-alt mr-1"></i>ระบบสร้างตาราง users ใน KHD อัตโนมัติถ้ายังไม่มี + log ลง system_logs (USERS_SYNC_TO_KHD, USERS_SYNC_MAPPING_UPDATE)</div>
         </div>
 
         <!-- ตัวกรอง -->
@@ -808,12 +808,12 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
           <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-plus mr-1 text-green-500"></i><b>เพิ่มข้อมูล:</b> เปิด modal CRUD ตามแท็บที่เลือก พร้อม toggle เปิด/ปิดใช้งาน (is_active) ต่อรายการ</div>
           <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-file-excel mr-1 text-green-600"></i><b>นำเข้า Excel</b> (super_admin, เฉพาะแท็บตัวชี้วัด): Bulk Import 2 ขั้น — preview ตรวจ error รายแถว/คอลัมน์ก่อนนำเข้าจริง</div>
-          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-exchange-alt mr-1 text-blue-500"></i><b>เทียบกับ HDC</b> (super_admin, ทุกแท็บ): เปรียบเทียบชื่อ/สถานะกับ HDC ภายนอก แสดงสรุปตรงกัน/ต่างกัน/ไม่มีใน HDC/ไม่มีใน Local เพื่อช่วย sync</div>
+          <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-exchange-alt mr-1 text-blue-500"></i><b>เทียบกับ KHD</b> (super_admin, ทุกแท็บ): เปรียบเทียบชื่อ/สถานะกับ KHD ภายนอก แสดงสรุปตรงกัน/ต่างกัน/ไม่มีใน KHD/ไม่มีใน Local เพื่อช่วย sync</div>
           <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-clipboard-list mr-1 text-purple-500"></i><b>ไอคอนตัวชี้วัดย่อย:</b> เปิด modal จัดการ sub-indicators ต่อตัวชี้วัด</div>
           <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-copy mr-1 text-cyan-500"></i><b>คัดลอกไปปีใหม่</b> (super_admin): clone ตัวชี้วัดไปปีงบประมาณถัดไป</div>
           <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-wpforms mr-1 text-indigo-500"></i><b>Form Builder ฝังในหน้า:</b> สร้าง/แก้ไข schema ฟอร์มบันทึกผลงานแบบ dynamic จากไอคอนในแถวตัวชี้วัด</div>
         </div>
-        <p class="text-xs text-gray-500 mt-3"><i class="fas fa-search mr-1"></i>มีระบบค้นหา + filter สถานะเปิด/ปิดใช้งาน + filter ตามผลเทียบ HDC + filter ตามสถานะมีผลงานหรือยัง</p>
+        <p class="text-xs text-gray-500 mt-3"><i class="fas fa-search mr-1"></i>มีระบบค้นหา + filter สถานะเปิด/ปิดใช้งาน + filter ตามผลเทียบ KHD + filter ตามสถานะมีผลงานหรือยัง</p>
       </section>
 
       <!-- ==================== 10. ตั้งค่าระบบ ==================== -->
@@ -1253,73 +1253,73 @@
         </div>
       </section>
 
-      <!-- ==================== 11.5 จัดการตัวชี้วัด — HDC Compare + upload_excel ==================== -->
+      <!-- ==================== 11.5 จัดการตัวชี้วัด — KHD Compare + upload_excel ==================== -->
       <section *ngIf="canSeeSection('users') || canSeeSection('kpi-manager')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center"><i class="fas fa-exchange-alt text-teal-600"></i></div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">11.5 จัดการตัวชี้วัด — เทียบกับ HDC + upload_excel</h2>
-            <p class="text-xs text-gray-400">หน้า "จัดการตัวชี้วัด" — ทุก tab มีปุ่ม "เทียบกับ HDC" พร้อม filter และเพิ่มข้อมูลจาก HDC</p>
+            <h2 class="text-xl font-bold text-gray-800">11.5 จัดการตัวชี้วัด — เทียบกับ KHD + upload_excel</h2>
+            <p class="text-xs text-gray-400">หน้า "จัดการตัวชี้วัด" — ทุก tab มีปุ่ม "เทียบกับ KHD" พร้อม filter และเพิ่มข้อมูลจาก KHD</p>
           </div>
         </div>
 
         <!-- หลักการ filter chips -->
         <div class="bg-teal-50 border border-teal-200 rounded-xl p-4 mb-4">
-          <h4 class="font-bold text-teal-800 text-sm mb-2"><i class="fas fa-filter mr-2"></i>การทำงานของ Chips กรองผลเทียบ HDC (ทุก Tab)</h4>
+          <h4 class="font-bold text-teal-800 text-sm mb-2"><i class="fas fa-filter mr-2"></i>การทำงานของ Chips กรองผลเทียบ KHD (ทุก Tab)</h4>
           <ul class="list-disc ml-5 text-xs text-gray-600 space-y-1">
-            <li>กดปุ่ม <b>"เทียบกับ HDC"</b> ในแต่ละ tab → ระบบดึงข้อมูลจาก HDC แล้วแสดง <b>chips สรุปผล</b> ด้านบนตาราง</li>
+            <li>กดปุ่ม <b>"เทียบกับ KHD"</b> ในแต่ละ tab → ระบบดึงข้อมูลจาก KHD แล้วแสดง <b>chips สรุปผล</b> ด้านบนตาราง</li>
             <li>chips เหล่านั้น <b>คลิกได้</b> — กดเพื่อ <b>กรองแถวในตาราง</b> ให้แสดงเฉพาะสถานะนั้น | กดซ้ำ = ยกเลิกกรอง</li>
             <li>ปุ่ม <b>"ทั้งหมด"</b> (สีเขียว) = แสดงทุกแถว (ยกเลิก filter)</li>
             <li>chip ที่ active จะเปลี่ยนเป็นสีเข้ม + มี ring เพื่อบ่งบอกสถานะ</li>
-            <li>chip <span class="text-cyan-700 font-bold">"HDC มีแต่ยังไม่มีใน Local (N)"</span> — เป็น badge ไม่ใช่ปุ่ม เพราะรายการเหล่านั้น<b>ไม่อยู่ในตาราง Local</b> → ดูได้ที่ส่วน "Missing" ด้านล่างตาราง</li>
+            <li>chip <span class="text-cyan-700 font-bold">"KHD มีแต่ยังไม่มีใน Local (N)"</span> — เป็น badge ไม่ใช่ปุ่ม เพราะรายการเหล่านั้น<b>ไม่อยู่ในตาราง Local</b> → ดูได้ที่ส่วน "Missing" ด้านล่างตาราง</li>
           </ul>
         </div>
 
         <!-- Tab: ตัวชี้วัด -->
         <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4">
-          <h4 class="font-bold text-emerald-800 text-sm mb-2"><i class="fas fa-list-check mr-2"></i>Tab "ตัวชี้วัด" — เปรียบเทียบ HDC ↔ Local</h4>
+          <h4 class="font-bold text-emerald-800 text-sm mb-2"><i class="fas fa-list-check mr-2"></i>Tab "ตัวชี้วัด" — เปรียบเทียบ KHD ↔ Local</h4>
           <ol class="list-decimal ml-5 text-xs text-gray-600 space-y-1">
             <li>ใช้ <b>table_process</b> เป็น key เทียบ <code>kpi_indicators</code> Local กับ <code>hdc.reports</code></li>
             <li>Chips กรองได้ 4 สถานะ:
               <ul class="list-disc ml-4 mt-1 space-y-0.5">
                 <li><span class="text-emerald-700 font-bold">ตรงกัน</span> — table_process + ชื่อตรงกัน</li>
                 <li><span class="text-amber-700 font-bold">ชื่อต่างกัน</span> — table_process ตรง แต่ชื่อไม่ตรง — ดู inline diff + กดปุ่ม <i class="fas fa-sync text-teal-600 mx-0.5"></i> Sync ชื่อ</li>
-                <li><span class="text-purple-700 font-bold">ไม่มีใน HDC</span> — Local มีแต่ HDC ไม่มี</li>
-                <li><span class="text-rose-700 font-bold">HDC inactive</span> — HDC ปิด is_active=0 → ควรตั้ง upload_excel=1</li>
+                <li><span class="text-purple-700 font-bold">ไม่มีใน KHD</span> — Local มีแต่ KHD ไม่มี</li>
+                <li><span class="text-rose-700 font-bold">KHD inactive</span> — KHD ปิด is_active=0 → ควรตั้ง upload_excel=1</li>
               </ul>
             </li>
-            <li>ถ้ามี HDC inactive — banner <b>"ปิด upload_excel ทั้ง N ตัว"</b> แสดงขึ้นมา → กด bulk ครั้งเดียว</li>
-            <li>ส่วน <b class="text-cyan-700">"HDC มีแต่ยังไม่มีใน Local"</b> ด้านล่าง → กด <b>"เพิ่มเข้าระบบ"</b> → modal เลือก <b>หน่วยงาน</b> + <b>หมวดหมู่หลัก</b></li>
+            <li>ถ้ามี KHD inactive — banner <b>"ปิด upload_excel ทั้ง N ตัว"</b> แสดงขึ้นมา → กด bulk ครั้งเดียว</li>
+            <li>ส่วน <b class="text-cyan-700">"KHD มีแต่ยังไม่มีใน Local"</b> ด้านล่าง → กด <b>"เพิ่มเข้าระบบ"</b> → modal เลือก <b>หน่วยงาน</b> + <b>หมวดหมู่หลัก</b></li>
           </ol>
         </div>
 
         <!-- Tab: ยุทธศาสตร์ + หน่วยงาน -->
         <div class="bg-purple-50 border border-purple-200 rounded-xl p-4 mb-4">
-          <h4 class="font-bold text-purple-800 text-sm mb-2"><i class="fas fa-sitemap mr-2"></i>Tab "ยุทธศาสตร์" และ "หน่วยงาน" — เปรียบเทียบ HDC ↔ Local</h4>
+          <h4 class="font-bold text-purple-800 text-sm mb-2"><i class="fas fa-sitemap mr-2"></i>Tab "ยุทธศาสตร์" และ "หน่วยงาน" — เปรียบเทียบ KHD ↔ Local</h4>
           <p class="text-xs text-gray-600 mb-2">ดึงข้อมูลจาก field <code>main_yut</code> / <code>dept</code> ใน <code>hdc.reports</code> เทียบกับตาราง <code>main_yut</code> / <code>departments</code> ของ Local โดยใช้ <b>ชื่อ (text match)</b></p>
           <ul class="list-disc ml-5 text-xs text-gray-600 space-y-1">
-            <li>Chips กรองได้ 2 สถานะ: <span class="text-emerald-700 font-bold">ตรงกัน</span> / <span class="text-purple-700 font-bold">ไม่มีใน HDC</span></li>
-            <li>ส่วน <b class="text-cyan-700">"HDC มีแต่ยังไม่มีใน Local"</b> ด้านล่าง → กด <b>"เพิ่มเข้าระบบ"</b> → modal ยืนยันชื่อ (หน่วยงานมีช่อง "รหัสหน่วยงาน" เพิ่มเติม)</li>
+            <li>Chips กรองได้ 2 สถานะ: <span class="text-emerald-700 font-bold">ตรงกัน</span> / <span class="text-purple-700 font-bold">ไม่มีใน KHD</span></li>
+            <li>ส่วน <b class="text-cyan-700">"KHD มีแต่ยังไม่มีใน Local"</b> ด้านล่าง → กด <b>"เพิ่มเข้าระบบ"</b> → modal ยืนยันชื่อ (หน่วยงานมีช่อง "รหัสหน่วยงาน" เพิ่มเติม)</li>
           </ul>
         </div>
 
         <!-- Tab: หมวดหมู่หลัก -->
         <div class="bg-teal-50 border border-teal-200 rounded-xl p-4 mb-4">
-          <h4 class="font-bold text-teal-800 text-sm mb-2"><i class="fas fa-layer-group mr-2"></i>Tab "หมวดหมู่หลัก" — เปรียบเทียบ HDC ↔ Local</h4>
-          <p class="text-xs text-gray-600 mb-1">มี 2 โหมดขึ้นอยู่กับว่า HDC มีตาราง <code>kpi_main_indicators</code> หรือไม่:</p>
+          <h4 class="font-bold text-teal-800 text-sm mb-2"><i class="fas fa-layer-group mr-2"></i>Tab "หมวดหมู่หลัก" — เปรียบเทียบ KHD ↔ Local</h4>
+          <p class="text-xs text-gray-600 mb-1">มี 2 โหมดขึ้นอยู่กับว่า KHD มีตาราง <code>kpi_main_indicators</code> หรือไม่:</p>
           <div class="space-y-2 text-xs text-gray-600">
             <div class="bg-white rounded-lg p-2 border border-teal-200">
-              <b class="text-teal-700">โหมด "HDC Table"</b> — HDC มีตาราง kpi_main_indicators:
+              <b class="text-teal-700">โหมด "KHD Table"</b> — KHD มีตาราง kpi_main_indicators:
               <ul class="list-disc ml-4 mt-1 space-y-0.5">
-                <li>เทียบชื่อตรงๆ — chips <span class="text-emerald-700 font-bold">ตรงกัน</span> / <span class="text-purple-700 font-bold">ไม่มีใน HDC</span> (กรองตารางได้)</li>
-                <li>ส่วน <b class="text-cyan-700">"HDC มีแต่ยังไม่มีใน Local"</b> → กด <b>"เพิ่มเข้าระบบ"</b> → modal เลือก <b>ยุทธศาสตร์</b> ที่จะเชื่อม</li>
+                <li>เทียบชื่อตรงๆ — chips <span class="text-emerald-700 font-bold">ตรงกัน</span> / <span class="text-purple-700 font-bold">ไม่มีใน KHD</span> (กรองตารางได้)</li>
+                <li>ส่วน <b class="text-cyan-700">"KHD มีแต่ยังไม่มีใน Local"</b> → กด <b>"เพิ่มเข้าระบบ"</b> → modal เลือก <b>ยุทธศาสตร์</b> ที่จะเชื่อม</li>
               </ul>
             </div>
             <div class="bg-white rounded-lg p-2 border border-gray-200">
-              <b class="text-gray-600">โหมด "Coverage Fallback"</b> — HDC ไม่มีตาราง kpi_main_indicators:
+              <b class="text-gray-600">โหมด "Coverage Fallback"</b> — KHD ไม่มีตาราง kpi_main_indicators:
               <ul class="list-disc ml-4 mt-1 space-y-0.5">
-                <li>วิเคราะห์จาก table_process ใน HDC reports → นับว่าหมวดหมู่ไหนมีตัวชี้วัดเชื่อมกับ HDC</li>
-                <li>Chips: <span class="text-emerald-700 font-bold">มีตัวชี้วัดใน HDC</span> / <span class="text-gray-600 font-bold">ไม่มีใน HDC</span> (กรองตารางได้)</li>
+                <li>วิเคราะห์จาก table_process ใน KHD reports → นับว่าหมวดหมู่ไหนมีตัวชี้วัดเชื่อมกับ KHD</li>
+                <li>Chips: <span class="text-emerald-700 font-bold">มีตัวชี้วัดใน KHD</span> / <span class="text-gray-600 font-bold">ไม่มีใน KHD</span> (กรองตารางได้)</li>
               </ul>
             </div>
           </div>
@@ -1327,23 +1327,23 @@
 
         <!-- Tab: หน่วยบริการ -->
         <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-4">
-          <h4 class="font-bold text-indigo-800 text-sm mb-2"><i class="fas fa-hospital mr-2"></i>Tab "หน่วยบริการ" — เปรียบเทียบ HDC ↔ Local + CRUD</h4>
-          <p class="text-xs text-gray-600 mb-2">ดึงจาก HDC <code>chospital</code> (ถ้ามี) เทียบกับ Local <code>chospital</code> โดยใช้ <b>hoscode</b> เป็น key</p>
+          <h4 class="font-bold text-indigo-800 text-sm mb-2"><i class="fas fa-hospital mr-2"></i>Tab "หน่วยบริการ" — เปรียบเทียบ KHD ↔ Local + CRUD</h4>
+          <p class="text-xs text-gray-600 mb-2">ดึงจาก KHD <code>chospital</code> (ถ้ามี) เทียบกับ Local <code>chospital</code> โดยใช้ <b>hoscode</b> เป็น key</p>
           <ul class="list-disc ml-5 text-xs text-gray-600 space-y-1">
-            <li>Chips กรองได้ 3 สถานะ: <span class="text-emerald-700 font-bold">ตรงกัน</span> / <span class="text-amber-700 font-bold">ชื่อต่างกัน</span> / <span class="text-purple-700 font-bold">ไม่มีใน HDC</span></li>
-            <li>ส่วน <b class="text-cyan-700">"HDC มีแต่ยังไม่มีใน Local"</b> + <b class="text-amber-700">"ชื่อต่างกัน"</b> → กด <b>"เพิ่มเข้าระบบ"</b> สำหรับ hoscode ที่หายไป</li>
-            <li>ถ้า HDC ไม่มีตาราง chospital — แสดง error สีแดงแทน chips</li>
+            <li>Chips กรองได้ 3 สถานะ: <span class="text-emerald-700 font-bold">ตรงกัน</span> / <span class="text-amber-700 font-bold">ชื่อต่างกัน</span> / <span class="text-purple-700 font-bold">ไม่มีใน KHD</span></li>
+            <li>ส่วน <b class="text-cyan-700">"KHD มีแต่ยังไม่มีใน Local"</b> + <b class="text-amber-700">"ชื่อต่างกัน"</b> → กด <b>"เพิ่มเข้าระบบ"</b> สำหรับ hoscode ที่หายไป</li>
+            <li>ถ้า KHD ไม่มีตาราง chospital — แสดง error สีแดงแทน chips</li>
             <li>CRUD ปกติ: เพิ่ม/แก้/ลบ hospcode + filter อำเภอ + ประเภท | DELETE ตรวจ users + kpi_results ก่อน</li>
           </ul>
         </div>
 
         <!-- table_process side-by-side -->
         <div class="bg-cyan-50 border border-cyan-200 rounded-xl p-4 mb-4">
-          <h4 class="font-bold text-cyan-800 text-sm mb-2"><i class="fas fa-eye mr-2"></i>แสดง table_process Local + HDC ใต้ชื่อตัวชี้วัด</h4>
+          <h4 class="font-bold text-cyan-800 text-sm mb-2"><i class="fas fa-eye mr-2"></i>แสดง table_process Local + KHD ใต้ชื่อตัวชี้วัด</h4>
           <p class="text-xs text-gray-600 mb-2">สำหรับ <b>super_admin</b> — ใต้ชื่อตัวชี้วัดในตารางจะมี 2 badge:</p>
           <div class="flex flex-wrap gap-2 text-[11px] mb-2">
             <span class="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md"><b>Local:</b> kpi_tab_001</span>
-            <span class="bg-purple-100 text-purple-800 px-2 py-0.5 rounded-md"><b>HDC:</b> kpi_tab_001</span>
+            <span class="bg-purple-100 text-purple-800 px-2 py-0.5 rounded-md"><b>KHD:</b> kpi_tab_001</span>
           </div>
           <p class="text-[11px] text-gray-500"><i class="fas fa-info-circle mr-1"></i>ใช้ยืนยันด้วยตาว่าทั้ง 2 ฐานข้อมูลใช้ตารางเดียวกัน — ถ้า code ไม่ตรงให้แก้ก่อน Export</p>
         </div>
@@ -1351,11 +1351,11 @@
         <!-- upload_excel toggle -->
         <div class="bg-orange-50 border border-orange-200 rounded-xl p-4">
           <h4 class="font-bold text-orange-800 text-sm mb-2"><i class="fas fa-file-excel mr-2"></i>upload_excel — ตัวชี้วัดที่ "อัปโหลด Excel มือเอง"</h4>
-          <p class="text-xs text-gray-600 mb-2">ใช้กรณีที่ HDC report ปิดไปแล้ว หรือต้องการ override ไม่ให้ระบบ export อัตโนมัติ</p>
+          <p class="text-xs text-gray-600 mb-2">ใช้กรณีที่ KHD report ปิดไปแล้ว หรือต้องการ override ไม่ให้ระบบ export อัตโนมัติ</p>
           <ul class="list-disc ml-5 text-xs text-gray-600 space-y-1">
             <li>คอลัมน์ <b>"upload_excel"</b> ในตารางตัวชี้วัด — toggle เปิด/ปิด (สีฟ้า)</li>
             <li><b>0 (default)</b> — ส่งออกอัตโนมัติได้ผ่าน Export pipeline</li>
-            <li><b>1</b> — ข้าม Export pipeline ทั้งหมด (manual + scheduler) — ต้องอัปโหลด Excel เข้า HDC เอง</li>
+            <li><b>1</b> — ข้าม Export pipeline ทั้งหมด (manual + scheduler) — ต้องอัปโหลด Excel เข้า KHD เอง</li>
             <li>Endpoints: <code>PUT /indicators/:id/upload-excel</code> (toggle 1 ตัว) + <code>POST /indicators/bulk-upload-excel</code> (batch)</li>
           </ul>
         </div>
@@ -1494,12 +1494,12 @@
             <h4 class="font-bold text-indigo-800 text-sm mb-2"><i class="fas fa-route mr-2"></i>Workflow 2 ขั้นตอน (เรียงลำดับ)</h4>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
               <div class="bg-white/70 rounded-lg p-2 border border-indigo-200">
-                <p class="font-bold text-indigo-700"><span class="inline-flex items-center justify-center w-5 h-5 bg-indigo-600 text-white rounded-full text-[10px] mr-1">1</span> ส่งออกข้อมูล KPI ↔ HDC</p>
+                <p class="font-bold text-indigo-700"><span class="inline-flex items-center justify-center w-5 h-5 bg-indigo-600 text-white rounded-full text-[10px] mr-1">1</span> ส่งออกข้อมูล KPI ↔ KHD</p>
                 <p class="text-gray-600 mt-0.5">เทียบโครงสร้างตาราง 2 ทาง + ลิงก์ไป Form Builder — DB Compare</p>
               </div>
               <div class="bg-white/70 rounded-lg p-2 border border-emerald-200">
                 <p class="font-bold text-emerald-700"><span class="inline-flex items-center justify-center w-5 h-5 bg-emerald-600 text-white rounded-full text-[10px] mr-1">2</span> Export ลงตารางรายตัวชี้วัด</p>
-                <p class="text-gray-600 mt-0.5">Export data + ส่งเข้า HDC + Scheduler อัตโนมัติ</p>
+                <p class="text-gray-600 mt-0.5">Export data + ส่งเข้า KHD + Scheduler อัตโนมัติ</p>
               </div>
             </div>
             <p class="text-[10px] text-gray-500 mt-2"><i class="fas fa-info-circle mr-1"></i>แนะนำลำดับ 1 → 2 ในครั้งแรก หลังจากนั้นข้ามไปขั้น 2 ได้เลย — กด Stepper ด้านบน</p>
@@ -1513,22 +1513,22 @@
 
           <!-- ขั้น 1 -->
           <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
-            <h4 class="font-bold text-indigo-800 mb-2"><i class="fas fa-database mr-2"></i>ขั้น 1: ส่งออกข้อมูล KPI ↔ HDC (DB Compare — Schema)</h4>
+            <h4 class="font-bold text-indigo-800 mb-2"><i class="fas fa-database mr-2"></i>ขั้น 1: ส่งออกข้อมูล KPI ↔ KHD (DB Compare — Schema)</h4>
             <ol class="list-decimal ml-5 text-sm text-gray-600 space-y-1">
-              <li>กดปุ่ม <b>"เปรียบเทียบ Structure"</b> → ระบบเชื่อมต่อ HDC แล้วเปรียบเทียบโครงสร้างตาราง</li>
-              <li>ดูสรุป: ตรงกัน / ต่างกัน / ไม่มีใน Local / ไม่มีใน HDC</li>
-              <li>เลือกตาราง (หรือใช้ <b>"เลือก Missing Local"</b> / <b>"เลือก Missing HDC"</b> / <b>"เลือก Different"</b>)</li>
-              <li><b class="text-blue-600"><i class="fas fa-cloud-download-alt mr-1"></i>HDC → Local:</b> กด <b>"สร้าง Local"</b> / <b>"Sync จาก HDC"</b></li>
-              <li><b class="text-purple-600"><i class="fas fa-cloud-upload-alt mr-1"></i>Local → HDC:</b> กด <b>"สร้าง HDC"</b> / <b>"Sync → HDC"</b> <span class="text-[10px] text-red-500">(ต้องมีสิทธิ์ write ใน HDC)</span></li>
-              <li>กดปุ่ม <b>"สร้างฟอร์มจาก HDC"</b> → ส่ง columns ไป Tab 2 เพื่อสร้างแบบฟอร์ม</li>
+              <li>กดปุ่ม <b>"เปรียบเทียบ Structure"</b> → ระบบเชื่อมต่อ KHD แล้วเปรียบเทียบโครงสร้างตาราง</li>
+              <li>ดูสรุป: ตรงกัน / ต่างกัน / ไม่มีใน Local / ไม่มีใน KHD</li>
+              <li>เลือกตาราง (หรือใช้ <b>"เลือก Missing Local"</b> / <b>"เลือก Missing KHD"</b> / <b>"เลือก Different"</b>)</li>
+              <li><b class="text-blue-600"><i class="fas fa-cloud-download-alt mr-1"></i>KHD → Local:</b> กด <b>"สร้าง Local"</b> / <b>"Sync จาก KHD"</b></li>
+              <li><b class="text-purple-600"><i class="fas fa-cloud-upload-alt mr-1"></i>Local → KHD:</b> กด <b>"สร้าง KHD"</b> / <b>"Sync → KHD"</b> <span class="text-[10px] text-red-500">(ต้องมีสิทธิ์ write ใน KHD)</span></li>
+              <li>กดปุ่ม <b>"สร้างฟอร์มจาก KHD"</b> → ส่ง columns ไป Tab 2 เพื่อสร้างแบบฟอร์ม</li>
             </ol>
           </div>
           <!-- Form Builder (sub-tool of ขั้น 1) -->
           <div class="bg-purple-50 border border-purple-200 rounded-xl p-4">
-            <h4 class="font-bold text-purple-800 mb-2"><i class="fas fa-wpforms mr-2"></i>ขั้น 1 (ต่อ): สร้างแบบฟอร์ม KPI จาก HDC</h4>
+            <h4 class="font-bold text-purple-800 mb-2"><i class="fas fa-wpforms mr-2"></i>ขั้น 1 (ต่อ): สร้างแบบฟอร์ม KPI จาก KHD</h4>
             <ol class="list-decimal ml-5 text-sm text-gray-600 space-y-1">
               <li>เลือกตัวชี้วัดที่มี <b>table_process</b> → กดปุ่ม <b>"สร้าง"</b></li>
-              <li>ถ้ามาจาก DB Compare → เลือก HDC fields ใน panel → กด <b>"เพิ่ม N ฟิลด์"</b></li>
+              <li>ถ้ามาจาก DB Compare → เลือก KHD fields ใน panel → กด <b>"เพิ่ม N ฟิลด์"</b></li>
               <li>สลับ toggle <b>"ฟิลด์เริ่มต้น"</b> ตามต้องการ (id, hospcode, year_bh, ...)</li>
               <li>กำหนดชื่อ, ประเภท, บังคับกรอก → เลือกฟิลด์แสดงใน Dashboard → กด <b>"บันทึกและสร้างตาราง"</b></li>
             </ol>
@@ -1550,11 +1550,11 @@
               <li>ดู 6 Card สรุป: ทั้งหมด | <b class="text-orange-600">ตัวชี้วัดที่เพิ่ม/แก้ไข</b> | <b class="text-rose-600">จำนวนข้อมูลที่เปลี่ยนแปลง</b> | ล่าสุดแล้ว | ไม่มีข้อมูล | ยังไม่ตรวจ</li>
               <li>กรองตามหมวดหมู่ / หน่วยงาน / สถานะ → เลือก checkbox ตัวชี้วัดที่ต้องการ</li>
               <li>กดปุ่ม <b>"ส่งออกข้อมูล"</b> → สร้าง/อัปเดตตาราง MySQL ใน Local DB (target + actual_value รายเดือน + form fields)</li>
-              <li>กดปุ่ม <b>"ส่งข้อมูลเข้า HDC"</b> (สีเขียวเข้ม) → Modal ตรวจสอบตาราง → เลือก → UPSERT เข้า HDC</li>
+              <li>กดปุ่ม <b>"ส่งข้อมูลเข้า KHD"</b> (สีเขียวเข้ม) → Modal ตรวจสอบตาราง → เลือก → UPSERT เข้า KHD</li>
               <li>กดปุ่ม <b>"ตารางเวลา Export อัตโนมัติ"</b> (ไล่สีม่วง-คราม) → Modal ตั้งค่า schedule อัตโนมัติ</li>
             </ol>
             <div class="mt-2 bg-green-100 rounded-lg p-2 text-xs text-green-700">
-              <i class="fas fa-shield-alt mr-1"></i>ใช้ <b>INSERT ... ON DUPLICATE KEY UPDATE</b> — อัปเดตเฉพาะ key ที่ตรงกัน ข้อมูลเดิมใน HDC ที่ไม่ซ้ำยังคงอยู่
+              <i class="fas fa-shield-alt mr-1"></i>ใช้ <b>INSERT ... ON DUPLICATE KEY UPDATE</b> — อัปเดตเฉพาะ key ที่ตรงกัน ข้อมูลเดิมใน KHD ที่ไม่ซ้ำยังคงอยู่
             </div>
             <div class="mt-2 bg-blue-100 rounded-lg p-2 text-xs text-blue-700">
               <i class="fas fa-bolt mr-1"></i><b>Content-based diff:</b> ระบบเปรียบเทียบค่า target, result, m10-m09, form fields ทีละคอลัมน์ — ถ้าค่าเหมือนเดิมจะข้าม (ไม่เปลี่ยนแปลง)
@@ -1587,7 +1587,7 @@
           <!-- ขั้น 2.1: Schedule -->
           <div class="bg-gradient-to-r from-purple-50 to-indigo-50 border border-indigo-200 rounded-xl p-4">
             <h4 class="font-bold text-indigo-800 mb-2"><i class="fas fa-clock mr-2"></i>ขั้น 2 (ต่อ): ตารางเวลา Export อัตโนมัติ (Scheduler)</h4>
-            <p class="text-xs text-gray-600 mb-2">ตั้งค่าให้ระบบ export + sync HDC อัตโนมัติตามวัน-เวลาที่กำหนด พร้อมส่งรายงานสรุป</p>
+            <p class="text-xs text-gray-600 mb-2">ตั้งค่าให้ระบบ export + sync KHD อัตโนมัติตามวัน-เวลาที่กำหนด พร้อมส่งรายงานสรุป</p>
             <ol class="list-decimal ml-5 text-sm text-gray-600 space-y-1">
               <li>กดปุ่ม <b>"ตารางเวลา Export อัตโนมัติ"</b> → Modal แสดงรายการ schedule + ปุ่ม "+ เพิ่ม Schedule"</li>
               <li>กรอก: ชื่อ, เปิดใช้งาน, เวลา (HH:MM), ปีงบฯ, เลือกวัน จ.-อา.</li>
@@ -1598,13 +1598,13 @@
                   <li><b>เฉพาะที่เลือก</b> — ใช้รายการ checkbox จากตารางด้านบน</li>
                 </ul>
               </li>
-              <li>(ตัวเลือก) เปิด <b class="text-teal-700">"ส่งข้อมูลเข้า HDC อัตโนมัติ"</b> → หลัง export เสร็จจะ UPSERT เข้า HDC ทันที (ไม่ต้องรออนุมัติ)</li>
+              <li>(ตัวเลือก) เปิด <b class="text-teal-700">"ส่งข้อมูลเข้า KHD อัตโนมัติ"</b> → หลัง export เสร็จจะ UPSERT เข้า KHD ทันที (ไม่ต้องรออนุมัติ)</li>
               <li>เลือกช่องแจ้งเตือน: <b>ส่ง Email</b> / <b>ส่ง Telegram</b> / <b>ส่ง LINE Group</b> (recipients/token ดึงจากหน้าตั้งค่าระบบ)</li>
               <li>กด <b>บันทึก</b> → schedule รันที่ backend ทุกๆ 1 นาที — ถ้าตรงวัน+เวลาจะเริ่ม export</li>
               <li>ปุ่มในแต่ละแถว: <b class="text-teal-700">▶ รันตอนนี้</b> | <b class="text-gray-700">⏱ ประวัติ</b> | <b class="text-amber-700">✎ แก้ไข</b> | <b class="text-red-700">🗑 ลบ</b></li>
             </ol>
             <div class="mt-2 bg-amber-100 rounded-lg p-2 text-xs text-amber-700">
-              <i class="fas fa-exclamation-triangle mr-1"></i><b>คำเตือน:</b> เปิด "Auto Sync HDC" = ข้อมูลถูกส่งโดยไม่ผ่านการตรวจสอบ — ใช้เมื่อมั่นใจในคุณภาพข้อมูลเท่านั้น
+              <i class="fas fa-exclamation-triangle mr-1"></i><b>คำเตือน:</b> เปิด "Auto Sync KHD" = ข้อมูลถูกส่งโดยไม่ผ่านการตรวจสอบ — ใช้เมื่อมั่นใจในคุณภาพข้อมูลเท่านั้น
             </div>
             <div class="mt-2 bg-blue-100 rounded-lg p-2 text-xs text-blue-700">
               <i class="fas fa-envelope mr-1"></i><b>Email/Telegram/LINE:</b> ดึง recipients/token จาก <b>หน้าตั้งค่าระบบ</b> (keys: <code>admin_emails</code>, <code>telegram_chat_id</code>, <code>telegram_bot_token</code>, <code>line_channel_token</code>, <code>line_group_id</code>) — schedule เลือกแค่เปิด/ปิดส่ง
@@ -2034,7 +2034,7 @@
           <ul class="list-disc ml-5 text-xs text-gray-700 space-y-1.5">
             <li><b>ปุ่ม "ลบ" ทุกจุดในระบบยังคงจำกัดเฉพาะ Super Admin เสมอ ไม่มีข้อยกเว้น</b> — ไม่มีในตาราง "สิทธิ์เพิ่ม/แก้ไขข้อมูล" เลย</li>
             <li>หน้า <b>"จัดการตัวชี้วัด"</b> — ตาราง "สิทธิ์เข้าหน้า" ด้านบนเปิดให้ใช้ได้แค่ฟีเจอร์ "เพิ่มตัวชี้วัดจำนวนมาก" ส่วนการเพิ่ม/แก้ไขตัวชี้วัด/หมวดหมู่/หน่วยงาน/หน่วยบริการทีละรายการ ต้องเปิดที่ตาราง "สิทธิ์เพิ่ม/แก้ไขข้อมูล" แยกต่างหาก — Form Builder ยังคงจำกัดเฉพาะ super_admin เหมือนเดิมเสมอ</li>
-            <li>หน้า <b>"จัดการผู้ใช้งาน"</b> — ตาราง "สิทธิ์เพิ่ม/แก้ไขข้อมูล" ควบคุมเฉพาะเพิ่มผู้ใช้ใหม่/แก้ไขข้อมูลผู้ใช้/รีเซ็ตรหัสผ่าน — ส่วนอนุมัติ/ตีกลับผู้ใช้ใหม่ ตั้งค่าสิทธิ์แก้ไขข้อมูล และ sync ข้อมูลไป HDC ยังคงจำกัดเฉพาะที่กำหนดไว้เดิมเสมอ (ไม่มีในตารางนี้)</li>
+            <li>หน้า <b>"จัดการผู้ใช้งาน"</b> — ตาราง "สิทธิ์เพิ่ม/แก้ไขข้อมูล" ควบคุมเฉพาะเพิ่มผู้ใช้ใหม่/แก้ไขข้อมูลผู้ใช้/รีเซ็ตรหัสผ่าน — ส่วนอนุมัติ/ตีกลับผู้ใช้ใหม่ ตั้งค่าสิทธิ์แก้ไขข้อมูล และ sync ข้อมูลไป KHD ยังคงจำกัดเฉพาะที่กำหนดไว้เดิมเสมอ (ไม่มีในตารางนี้)</li>
             <li>ค่าเริ่มต้นของทุก Role/หน้า/สิทธิ์ ตรงกับพฤติกรรมเดิมของระบบก่อนมีฟีเจอร์นี้ทุกประการ — ไม่กระทบผู้ใช้งานเดิมจนกว่า super_admin จะปรับแก้เอง</li>
           </ul>
         </div>
@@ -2107,7 +2107,7 @@
           </div>
           <div class="bg-gray-50 rounded-xl p-4">
             <p class="text-sm font-bold text-gray-800">ถาม: "จัดการข้อมูล KPI" มี Tab อะไรบ้าง?</p>
-            <p class="text-xs text-gray-600 mt-1">ตอบ: 4 Tab — 1) DB Compare (เปรียบเทียบ structure + Sync 2 ทิศทาง HDC↔Local) 2) สร้างแบบฟอร์ม (Form Builder) 3) Export ข้อมูล 4) Report Compare (เทียบ reports HDC กับ kpi_indicators)</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: 4 Tab — 1) DB Compare (เปรียบเทียบ structure + Sync 2 ทิศทาง KHD↔Local) 2) สร้างแบบฟอร์ม (Form Builder) 3) Export ข้อมูล 4) Report Compare (เทียบ reports KHD กับ kpi_indicators)</p>
           </div>
           <div class="bg-gray-50 rounded-xl p-4">
             <p class="text-sm font-bold text-gray-800">ถาม: ทำไม Login แล้วได้รับ Email แจ้งเตือน?</p>
@@ -2126,8 +2126,8 @@
             <p class="text-xs text-gray-600 mt-1">ตอบ: เรียงตามประเภทหน่วยบริการ (รพ. → สสอ. → รพ.สต. → ศูนย์สุขภาพ) แล้วตามชื่อ</p>
           </div>
           <div class="bg-gray-50 rounded-xl p-4">
-            <p class="text-sm font-bold text-gray-800">ถาม: "ส่งข้อมูลเข้า HDC" ทำงานอย่างไร?</p>
-            <p class="text-xs text-gray-600 mt-1">ตอบ: ระบบใช้ UPSERT (INSERT ... ON DUPLICATE KEY UPDATE) อัปเดตเฉพาะข้อมูลที่ key ตรงกัน ข้อมูลเดิมใน HDC ที่ไม่ซ้ำจะยังคงอยู่ ไม่ถูกลบ</p>
+            <p class="text-sm font-bold text-gray-800">ถาม: "ส่งข้อมูลเข้า KHD" ทำงานอย่างไร?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: ระบบใช้ UPSERT (INSERT ... ON DUPLICATE KEY UPDATE) อัปเดตเฉพาะข้อมูลที่ key ตรงกัน ข้อมูลเดิมใน KHD ที่ไม่ซ้ำจะยังคงอยู่ ไม่ถูกลบ</p>
           </div>
           <div class="bg-gray-50 rounded-xl p-4">
             <p class="text-sm font-bold text-gray-800">ถาม: "ล้างข้อมูลผลงาน" ลบอะไรบ้าง?</p>

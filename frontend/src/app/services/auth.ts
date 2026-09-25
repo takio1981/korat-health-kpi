@@ -544,7 +544,7 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     return this.http.post(`${this.apiUrl}/env-config`, { settings }, { headers });
   }
 
-  // === DB Compare (HDC) ===
+  // === DB Compare (KHD) ===
   dbCompare(): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
@@ -565,10 +565,10 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.post(`${this.apiUrl}/db-compare/create-remote`, { tables }, { headers });
   }
-  dbCompareSyncToHDC(tables: string[]): Observable<any> {
+  dbCompareSyncToKhd(tables: string[]): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.post(`${this.apiUrl}/db-compare/sync-to-hdc`, { tables }, { headers });
+    return this.http.post(`${this.apiUrl}/db-compare/sync-to-khd`, { tables }, { headers });
   }
 
   reportCompare(): Observable<any> {
@@ -576,15 +576,15 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.get(`${this.apiUrl}/report-compare`, { headers });
   }
-  reportCompareSync(hdc_report_ids: number[]): Observable<any> {
+  reportCompareSync(khd_report_ids: number[]): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.post(`${this.apiUrl}/report-compare/sync`, { hdc_report_ids }, { headers });
+    return this.http.post(`${this.apiUrl}/report-compare/sync`, { khd_report_ids }, { headers });
   }
-  reportCompareAddFromHdc(hdc_report_id: number, dept_id: number|null, main_indicator_id: number|null): Observable<any> {
+  reportCompareAddFromKhd(khd_report_id: number, dept_id: number|null, main_indicator_id: number|null): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.post(`${this.apiUrl}/report-compare/add-from-hdc`, { hdc_report_id, dept_id, main_indicator_id }, { headers });
+    return this.http.post(`${this.apiUrl}/report-compare/add-from-khd`, { khd_report_id, dept_id, main_indicator_id }, { headers });
   }
   reportCompareStrategies(): Observable<any> {
     const token = localStorage.getItem('kpi_token');
@@ -622,10 +622,10 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     return this.http.post(`${this.apiUrl}/report-compare/add-hospital`, { hoscode }, { headers });
   }
 
-  reportCompareAddMainIndicator(hdc_name: string, yut_id: number|null): Observable<any> {
+  reportCompareAddMainIndicator(khd_name: string, yut_id: number|null): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.post(`${this.apiUrl}/report-compare/add-main-indicator`, { hdc_name, yut_id }, { headers });
+    return this.http.post(`${this.apiUrl}/report-compare/add-main-indicator`, { khd_name, yut_id }, { headers });
   }
 
   testTelegram(token: string, chatId: string): Observable<any> {
@@ -926,16 +926,16 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     return this.http.post(`${this.apiUrl}/announcements/${id}/send-email`, data, { headers });
   }
 
-  // Users Data Sync (Local ↔ HDC)
+  // Users Data Sync (Local ↔ KHD)
   usersSyncCompare(): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.get(`${this.apiUrl}/users/sync-compare`, { headers });
   }
-  usersSyncToHDC(usernames?: string[]): Observable<any> {
+  usersSyncToKhd(usernames?: string[]): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.post(`${this.apiUrl}/users/sync-to-hdc`, { usernames }, { headers });
+    return this.http.post(`${this.apiUrl}/users/sync-to-khd`, { usernames }, { headers });
   }
   getUsersStructureCompare(): Observable<any> {
     const token = localStorage.getItem('kpi_token');
@@ -1201,16 +1201,16 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     return this.http.get(`${this.apiUrl}/export-schedules/${id}/logs`, { headers });
   }
 
-  syncToHdcPreview(): Observable<any> {
+  syncToKhdPreview(): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.post(`${this.apiUrl}/sync-to-hdc/preview`, {}, { headers });
+    return this.http.post(`${this.apiUrl}/sync-to-khd/preview`, {}, { headers });
   }
 
-  syncToHdcExecute(tables: any[]): Observable<any> {
+  syncToKhdExecute(tables: any[]): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.post(`${this.apiUrl}/sync-to-hdc/execute`, { tables }, { headers });
+    return this.http.post(`${this.apiUrl}/sync-to-khd/execute`, { tables }, { headers });
   }
 
   // === KPI Summary (fast) ===

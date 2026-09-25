@@ -917,7 +917,7 @@
     <div class="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-blue-700 to-blue-600 rounded-t-2xl">
       <div>
         <h3 class="text-lg font-bold text-white"><i class="fas fa-cloud-upload-alt mr-2"></i>Data Synchronization — Users</h3>
-        <p class="text-blue-200 text-xs mt-0.5">เปรียบเทียบและ sync users Local ↔ HDC</p>
+        <p class="text-blue-200 text-xs mt-0.5">เปรียบเทียบและ sync users Local ↔ KHD</p>
       </div>
       <button (click)="closeSyncModal()" class="text-white/70 hover:text-white"><i class="fas fa-times text-xl"></i></button>
     </div>
@@ -963,9 +963,9 @@
             <p class="text-2xl font-bold text-blue-600">{{ syncResult.summary.local_only }}</p>
             <p class="text-[10px] text-blue-700 font-bold"><i class="fas fa-arrow-up mr-1"></i>เฉพาะ Local</p>
           </div>
-          <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 text-center cursor-pointer hover:shadow-md" (click)="toggleSyncFilter('hdc_only')" [class.ring-2]="syncFilter === 'hdc_only'">
-            <p class="text-2xl font-bold text-gray-500">{{ syncResult.summary.hdc_only }}</p>
-            <p class="text-[10px] text-gray-600 font-bold"><i class="fas fa-arrow-down mr-1"></i>เฉพาะ HDC</p>
+          <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 text-center cursor-pointer hover:shadow-md" (click)="toggleSyncFilter('khd_only')" [class.ring-2]="syncFilter === 'khd_only'">
+            <p class="text-2xl font-bold text-gray-500">{{ syncResult.summary.khd_only }}</p>
+            <p class="text-[10px] text-gray-600 font-bold"><i class="fas fa-arrow-down mr-1"></i>เฉพาะ KHD</p>
           </div>
         </div>
 
@@ -1003,7 +1003,7 @@
               <ng-container *ngFor="let u of syncListFiltered">
                 <tr class="hover:bg-gray-50" [class.bg-blue-50]="syncSelected.has(u.username)">
                   <td class="px-3 py-2 text-center">
-                    <input type="checkbox" [checked]="syncSelected.has(u.username)" (change)="toggleSyncUser(u.username)" [disabled]="u._syncStatus === 'hdc_only'">
+                    <input type="checkbox" [checked]="syncSelected.has(u.username)" (change)="toggleSyncUser(u.username)" [disabled]="u._syncStatus === 'khd_only'">
                   </td>
                   <td class="px-3 py-2 font-mono font-bold text-gray-800">{{ u.username }}</td>
                   <td class="px-3 py-2 text-gray-600">{{ u.firstname }} {{ u.lastname }}</td>
@@ -1016,7 +1016,7 @@
                       ต่างกัน ({{ u._diff?.length || 0 }}) <i class="fas ml-1" [ngClass]="expandedSyncUser === u.username ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
                     </button>
                     <span *ngIf="u._syncStatus === 'local_only'" class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px] font-bold">เฉพาะ Local</span>
-                    <span *ngIf="u._syncStatus === 'hdc_only'" class="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[10px] font-bold">เฉพาะ HDC</span>
+                    <span *ngIf="u._syncStatus === 'khd_only'" class="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-[10px] font-bold">เฉพาะ KHD</span>
                   </td>
                 </tr>
                 <!-- Expandable per-field diff row -->
@@ -1024,10 +1024,10 @@
                   <td colspan="6" class="bg-amber-50/50 px-4 py-2">
                     <div class="flex flex-wrap gap-1.5">
                       <span *ngFor="let d of u._diff" class="text-[11px] bg-white border border-amber-200 rounded-lg px-2 py-1 font-mono">
-                        <b>{{ d.field }}</b><span *ngIf="d.hdc_field" class="text-gray-400"> (HDC: {{ d.hdc_field }})</span>:
+                        <b>{{ d.field }}</b><span *ngIf="d.khd_field" class="text-gray-400"> (KHD: {{ d.khd_field }})</span>:
                         <span class="text-gray-500">{{ d.local_value ?? '—' }}</span>
                         <i class="fas fa-arrow-right mx-1 text-gray-400"></i>
-                        <span class="text-amber-700 font-bold">{{ d.hdc_value ?? '—' }}</span>
+                        <span class="text-amber-700 font-bold">{{ d.khd_value ?? '—' }}</span>
                       </span>
                     </div>
                   </td>
@@ -1041,12 +1041,12 @@
         </div>
       </div>
       <div class="px-6 py-4 border-t flex justify-between items-center bg-gray-50 rounded-b-2xl">
-        <p class="text-xs text-gray-500"><i class="fas fa-info-circle mr-1"></i>UPSERT: ข้อมูลซ้ำจะถูกอัปเดต, ที่ไม่ซ้ำใน HDC ยังอยู่</p>
+        <p class="text-xs text-gray-500"><i class="fas fa-info-circle mr-1"></i>UPSERT: ข้อมูลซ้ำจะถูกอัปเดต, ที่ไม่ซ้ำใน KHD ยังอยู่</p>
         <div class="flex gap-2">
           <button (click)="closeSyncModal()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-bold">ยกเลิก</button>
           <button (click)="executeSyncUsers()" [disabled]="syncSelected.size === 0 || syncExecuting"
                   class="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl text-sm font-bold shadow">
-            <i class="fas fa-cloud-upload-alt mr-1"></i>Sync → HDC ({{ syncSelected.size }})
+            <i class="fas fa-cloud-upload-alt mr-1"></i>Sync → KHD ({{ syncSelected.size }})
           </button>
         </div>
       </div>
@@ -1067,7 +1067,7 @@
             <p class="text-lg font-bold text-green-800">{{ structureResult.local_columns.length }} columns</p>
           </div>
           <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
-            <p class="text-xs text-blue-600 font-bold mb-1"><i class="fas fa-cloud mr-1"></i>HDC ({{ structureResult.remote_db }})</p>
+            <p class="text-xs text-blue-600 font-bold mb-1"><i class="fas fa-cloud mr-1"></i>KHD ({{ structureResult.remote_db }})</p>
             <p class="text-lg font-bold text-blue-800">{{ structureResult.remote_columns.length }} columns</p>
           </div>
         </div>
@@ -1077,11 +1077,11 @@
                [ngClass]="d.issue === 'missing_in_local' ? 'border-blue-200' : d.issue === 'type_mismatch' ? 'border-amber-200' : 'border-purple-200'">
             <i class="fas" [ngClass]="d.issue === 'missing_in_local' ? 'fa-plus-circle text-blue-500' : d.issue === 'type_mismatch' ? 'fa-exchange-alt text-amber-500' : 'fa-minus-circle text-purple-500'"></i>
             <span class="font-mono font-bold">{{ d.field }}</span>
-            <span *ngIf="d.issue === 'missing_in_local'" class="text-blue-600">ไม่มีใน Local (HDC: {{ d.remote_type }})</span>
-            <span *ngIf="d.issue === 'type_mismatch'" class="text-amber-600">Type ต่างกัน — Local: {{ d.local_type }} / HDC: {{ d.remote_type }}</span>
-            <span *ngIf="d.issue === 'missing_in_remote'" class="text-purple-600">ไม่มีใน HDC (มีเฉพาะ Local)</span>
+            <span *ngIf="d.issue === 'missing_in_local'" class="text-blue-600">ไม่มีใน Local (KHD: {{ d.remote_type }})</span>
+            <span *ngIf="d.issue === 'type_mismatch'" class="text-amber-600">Type ต่างกัน — Local: {{ d.local_type }} / KHD: {{ d.remote_type }}</span>
+            <span *ngIf="d.issue === 'missing_in_remote'" class="text-purple-600">ไม่มีใน KHD (มีเฉพาะ Local)</span>
           </div>
-          <p class="text-[11px] text-gray-500 mt-2"><i class="fas fa-shield-alt mr-1"></i>ระบบจะไม่แก้ไขโครงสร้าง HDC อัตโนมัติ — ถ้าต้องการ map เช่น cid → cid_hash ให้ไปตั้งค่าที่แท็บ "ตั้งค่า Mapping"</p>
+          <p class="text-[11px] text-gray-500 mt-2"><i class="fas fa-shield-alt mr-1"></i>ระบบจะไม่แก้ไขโครงสร้าง KHD อัตโนมัติ — ถ้าต้องการ map เช่น cid → cid_hash ให้ไปตั้งค่าที่แท็บ "ตั้งค่า Mapping"</p>
         </div>
         <button (click)="loadStructureCompare()" class="mt-4 text-xs text-indigo-600 font-bold"><i class="fas fa-sync-alt mr-1"></i>ตรวจสอบใหม่</button>
       </div>
@@ -1096,7 +1096,7 @@
             <thead class="bg-gray-50 sticky top-0">
               <tr>
                 <th class="px-3 py-2 text-left">คอลัมน์ (Local)</th>
-                <th class="px-3 py-2 text-left">คอลัมน์ปลายทางใน HDC</th>
+                <th class="px-3 py-2 text-left">คอลัมน์ปลายทางใน KHD</th>
                 <th class="px-3 py-2 text-center">ไม่ต้อง sync</th>
               </tr>
             </thead>
@@ -1104,7 +1104,7 @@
               <tr *ngFor="let r of mappingRows" [class.opacity-50]="r.excluded">
                 <td class="px-3 py-2 font-mono font-bold">{{ r.field }}</td>
                 <td class="px-3 py-2">
-                  <input [(ngModel)]="r.hdc_field" [disabled]="r.excluded" [placeholder]="r.field"
+                  <input [(ngModel)]="r.khd_field" [disabled]="r.excluded" [placeholder]="r.field"
                          class="border border-gray-300 rounded-lg px-2 py-1 w-full font-mono text-xs focus:ring-2 focus:ring-purple-400 outline-none">
                 </td>
                 <td class="px-3 py-2 text-center"><input type="checkbox" [(ngModel)]="r.excluded"></td>
@@ -1112,7 +1112,7 @@
             </tbody>
           </table>
         </div>
-        <p class="text-[11px] text-gray-400 mt-2"><i class="fas fa-info-circle mr-1"></i>ว่าง = ใช้ชื่อเดิม (identity mapping) — คอลัมน์ที่ "ไม่ต้อง sync" จะไม่ถูกส่งหรือเทียบกับ HDC เลย</p>
+        <p class="text-[11px] text-gray-400 mt-2"><i class="fas fa-info-circle mr-1"></i>ว่าง = ใช้ชื่อเดิม (identity mapping) — คอลัมน์ที่ "ไม่ต้อง sync" จะไม่ถูกส่งหรือเทียบกับ KHD เลย</p>
         <div class="flex justify-end mt-4">
           <button (click)="saveSyncMapping()" [disabled]="mappingSaving" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white rounded-xl text-sm font-bold shadow">
             <i class="fas fa-save mr-1"></i>บันทึก Mapping

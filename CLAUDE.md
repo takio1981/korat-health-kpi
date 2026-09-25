@@ -15,7 +15,7 @@
 api/
   server.js          — Express 5 API ทั้งหมด (5000+ lines)
   db.js              — MySQL pool (promise-based)
-  db-remote.js       — Remote HDC DB pool
+  db-remote.js       — Remote KHD DB pool
   .env.dev           — Dev config (gitignored)
 
 frontend/src/app/
@@ -229,13 +229,13 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   - `target_percentage` VARCHAR(50) — **"เป้าหมาย"** ค่าเริ่มต้นที่ copy เข้า `kpi_results.target_value`
     (per หน่วยบริการ/เดือน/ปีงบ) ตอนตั้งค่าปีงบใหม่ (kpi-setup) หรือเพิ่ม KPI ให้หน่วยบริการ (Dashboard "Add KPI") —
     copy-then-diverge ครั้งเดียว ไม่มีความเชื่อมโยงกลับมาอีก
-  - `criterion` VARCHAR(50) — **"เกณฑ์"** จับคู่กับ `target_condition` (GTE/LTE/EQ) ใช้เทียบ "เกณฑ์ต่างกัน" กับ HDC
+  - `criterion` VARCHAR(50) — **"เกณฑ์"** จับคู่กับ `target_condition` (GTE/LTE/EQ) ใช้เทียบ "เกณฑ์ต่างกัน" กับ KHD
     (`GET /report-compare`) และแสดงผลผ่าน `criteriaText` pipe ทั่วทั้งระบบ (dashboard, report, form-builder,
     export-kpi, kpi-setup)
 - Modal เพิ่ม/แก้ไขตัวชี้วัดมี 2 กล่องแยกกันชัดเจน: "เป้าหมาย (ค่าเริ่มต้น)" (emerald, ผูก `target_percentage`)
   กับ "เกณฑ์" (amber, ผูก `criterion` + `target_condition`)
 - Migrate มาจาก conflation เดิม (ก่อนหน้านี้ทั้งสองใช้ `target_percentage` ตัวเดียวปนกัน) — มี backfill one-time
-  ตอน deploy (`UPDATE kpi_indicators SET criterion = target_percentage WHERE criterion IS NULL`) กัน HDC-compare
+  ตอน deploy (`UPDATE kpi_indicators SET criterion = target_percentage WHERE criterion IS NULL`) กัน KHD-compare
   ของตัวชี้วัดเดิมพังตอน deploy ครั้งแรก
 - CRUD `/indicators` POST/PUT/`bulk-import` รับทั้ง 2 ฟิลด์อิสระต่อกัน — audit-log diff message แยก "เป้าหมาย"
   กับ "เกณฑ์" คนละบรรทัด
@@ -313,18 +313,18 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - Modal บันทึกผลย่อย: ตาราง 12 เดือน (ไม่ใช้ dropdown) + คอลัมน์ ผลงาน + %
 - `formatNum()` helper: จำนวนเต็มไม่มีทศนิยม (70), มีเศษ 2 ตำแหน่ง (70.50)
 
-### Users Data Sync (Local ↔ HDC)
-- `GET /users/sync-compare` — เทียบ 4 สถานะ (matched/different/local_only/hdc_only) — แต่ละ user ใน `different[]`
-  แนบ `_diff: [{field, hdc_field?, local_value, hdc_value}]` (เก็บทุก field ที่ต่างกันจริง ไม่ break ที่ตัวแรก)
+### Users Data Sync (Local ↔ KHD)
+- `GET /users/sync-compare` — เทียบ 4 สถานะ (matched/different/local_only/khd_only) — แต่ละ user ใน `different[]`
+  แนบ `_diff: [{field, khd_field?, local_value, khd_value}]` (เก็บทุก field ที่ต่างกันจริง ไม่ break ที่ตัวแรก)
   พร้อม `sync_config: {exclude, mapping}` บอก context ว่ากำลังใช้ config ไหนอยู่
-- `POST /users/sync-to-hdc` — UPSERT batch 100 rows (สร้างตารางใน HDC อัตโนมัติถ้ายังไม่มี — เฉพาะทิศทาง
-  Local→HDC คอลัมน์ที่ Local มีแต่ HDC ไม่มี ยังคง auto-ALTER ADD COLUMN เหมือนเดิม) — เขียนลงคอลัมน์ปลายทางตาม
+- `POST /users/sync-to-khd` — UPSERT batch 100 rows (สร้างตารางใน KHD อัตโนมัติถ้ายังไม่มี — เฉพาะทิศทาง
+  Local→KHD คอลัมน์ที่ Local มีแต่ KHD ไม่มี ยังคง auto-ALTER ADD COLUMN เหมือนเดิม) — เขียนลงคอลัมน์ปลายทางตาม
   mapping ที่ตั้งไว้ (ถ้ามี) แทนชื่อคอลัมน์เดิม
-- `GET /users/structure-compare` (super_admin) — `SHOW COLUMNS FROM users` เทียบ local vs HDC เฉพาะตาราง
-  `users` (ใช้ helper `diffTableColumns()` ร่วมกับ `/db-compare`) — **รายงานอย่างเดียว ไม่แก้โครงสร้าง HDC
-  อัตโนมัติ** เพราะ HDC.users ถูกใช้ร่วมกับระบบอื่นจริง (พบว่ามี user มากกว่า Local หลายเท่า)
+- `GET /users/structure-compare` (super_admin) — `SHOW COLUMNS FROM users` เทียบ local vs KHD เฉพาะตาราง
+  `users` (ใช้ helper `diffTableColumns()` ร่วมกับ `/db-compare`) — **รายงานอย่างเดียว ไม่แก้โครงสร้าง KHD
+  อัตโนมัติ** เพราะ KHD.users ถูกใช้ร่วมกับระบบอื่นจริง (พบว่ามี user มากกว่า Local หลายเท่า)
 - `GET /users/sync-mapping` + `PUT /users/sync-mapping` (super_admin) — ตั้งค่า column mapping (local field ↔
-  HDC field ที่ชื่อไม่ตรงกัน) + exclude list (คอลัมน์ที่ไม่ต้อง sync/เทียบเลย) เก็บใน `system_settings` keys
+  KHD field ที่ชื่อไม่ตรงกัน) + exclude list (คอลัมน์ที่ไม่ต้อง sync/เทียบเลย) เก็บใน `system_settings` keys
   `users_sync_field_mapping` (JSON object) + `users_sync_exclude_columns` (JSON array) — default exclude
   seed คอลัมน์ session/tracking ที่เปลี่ยนตลอดเวลา (`last_seen_at`, `active_session_id`, `session_started_at`,
   `last_seen_ip`, `last_seen_ua`, `kicked_by_ip`, `kicked_by_ua`, `kicked_at`, `temp_password`,
@@ -335,7 +335,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
     จริงตอนพัฒนา แก้โดยย้าย `PUT /users/sync-mapping` มาก่อน `PUT /users/:id`)
   - `system_settings.setting_value` widen จาก `VARCHAR(255)` → `TEXT` แล้ว (migration auto-run) เพราะ JSON ของ
     exclude list เกือบเต็ม 255 ตัวอักษรตั้งแต่ default
-- Log: `USERS_SYNC_TO_HDC`, `USERS_SYNC_MAPPING_UPDATE` ใน system_logs
+- Log: `USERS_SYNC_TO_KHD`, `USERS_SYNC_MAPPING_UPDATE` ใน system_logs
 - UI: ปุ่ม "Data Synchronization" ใน user-management (เฉพาะ super_admin) → modal 3 แท็บ (ใช้ `[hidden]` ไม่ใช่
   `*ngIf` กันโหลดซ้ำ): **เปรียบเทียบข้อมูล** (ตารางเดิม + แถวขยายดู field diff รายคนได้), **ตรวจสอบโครงสร้าง
   ตาราง** (ปุ่มเทียบ SHOW COLUMNS + diff chip list สไตล์เดียวกับ `db-compare.html`), **ตั้งค่า Mapping** (ตาราง
@@ -394,7 +394,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
     `authenticateToken` กลาง (ก่อน session check) + OR เพิ่มใน `isAdmin`/`isAnyAdmin`/`isSuperAdmin` (ให้ role ที่ถูก
     เปิดสิทธิ์เพิ่มผ่านหน้านี้ ผ่าน middleware เดิมได้จริง ไม่ใช่แค่ผ่าน authenticateToken แล้วโดน middleware เดิมเตะออก)
   - **ห้าม map ด้วย prefix กว้างๆ กับ endpoint ที่มี authorization หลายระดับปนกันใต้ path เดียวกัน** (over-grant risk) —
-    เช่น `/users` มีทั้ง isAnyAdmin (จัดการทั่วไป) + isAdmin (approve/reject) + isSuperAdmin (permissions/sync-to-hdc)
+    เช่น `/users` มีทั้ง isAnyAdmin (จัดการทั่วไป) + isAdmin (approve/reject) + isSuperAdmin (permissions/sync-to-khd)
     ปนกัน, `/indicators`+`/departments`+`/hospitals`+... มีทั้ง GET เปิดให้ทุก role (dropdown ใช้ร่วมทั้งระบบ) และ
     POST/PUT/DELETE ที่ isSuperAdmin — ต้องใช้ exact/regex เฉพาะจุด ดู comment เหนือ `PAGE_ACCESS_RULES` ในโค้ดก่อนเพิ่ม
     endpoint ใหม่เข้ากลุ่มเดิมเสมอ
@@ -409,7 +409,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
     เพราะ prefix rule `/users` กว้างครอบคลุมทุก method) — แต่ POST/PUT เหล่านั้นเปลี่ยนมาใช้
     `requireAction('users','add'|'edit')` แทน `isAnyAdmin` เดิมแล้ว ทำให้ต้องผ่าน **สองชั้น**: มี page access
     `users` (จาก authenticateToken กลาง) **และ** มี action access `add`/`edit` (จาก middleware บน endpoint เอง) —
-    approve/reject/toggle-active/basic (isAdmin เดิม) และ bulk-toggle-active/permissions/sync-compare/sync-to-hdc
+    approve/reject/toggle-active/basic (isAdmin เดิม) และ bulk-toggle-active/permissions/sync-compare/sync-to-khd
     (isSuperAdmin เดิม) ไม่รวมอยู่ในระบบ action ใหม่เลย (ยัง hardcode ตามเดิมเสมอ — เป็น action คนละระดับ ไม่ใช่แค่
     "เพิ่ม/แก้ไขข้อมูลทั่วไป") แต่ยังคงต้องมี page access `users` อยู่ดี (ผ่าน prefix rule เดิม)
   - Endpoint ที่เปิดให้ทุก role ใช้ร่วมกันข้ามหน้า (เช่น `/users/change-password`, `/notifications/unread-count`,
@@ -486,15 +486,15 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   - กดแล้ว confirm dialog แสดง IP + เวลา + เตือน "logout ภายใน ~30 วินาที"
   - log: `admin_force_logout` ใน system_logs
 
-### Sync to HDC
-- Core function: `performSyncToHdc(tables, userId)` — UPSERT local export tables → HDC
+### Sync to KHD
+- Core function: `performSyncToKhd(tables, userId)` — UPSERT local export tables → KHD
 - ถ้า `sync_columns` ไม่ส่งมา → auto-detect common columns ระหว่าง local กับ remote
-- HTTP: `POST /sync-to-hdc/preview` + `/sync-to-hdc/execute`
+- HTTP: `POST /sync-to-khd/preview` + `/sync-to-khd/execute`
 - ใช้ `INSERT ... ON DUPLICATE KEY UPDATE` (ไม่ลบข้อมูลเดิม)
-- Log: `SYNC_TO_HDC` ใน system_logs
+- Log: `SYNC_TO_KHD` ใน system_logs
 
 ### Export Scheduler (ตารางเวลา Export อัตโนมัติ)
-- ตาราง `export_schedules` — metadata schedule (name, days_of_week, time_of_day, indicator_scope, auto_sync_hdc, notify_email/telegram)
+- ตาราง `export_schedules` — metadata schedule (name, days_of_week, time_of_day, indicator_scope, auto_sync_khd, notify_email/telegram)
 - ตาราง `export_schedule_logs` — บันทึกการรันแต่ละครั้ง (status, inserted, updated_count, unchanged, duration_ms, error_msg)
 - `startExportScheduler()` — ยิง `check()` immediate ตอน startup + `setInterval(30000)` ทุก 30 วินาที
   - **Match 2-minute window** — `time_of_day IN (hhmm_now, hhmm_prev_minute)` กัน drift จาก timing ของ setInterval
@@ -504,7 +504,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   - `'changes_only'` (default/แนะนำ) — เรียก `checkKpiChanges()` ก่อน → export เฉพาะ `status === 'has_changes'`
   - `'all'` — export ทุกตัวชี้วัด
   - `'selected'` — ใช้ `indicator_ids` ที่เก็บไว้ (JSON array)
-- `auto_sync_hdc` — ถ้า `=1` → หลัง export สำเร็จเรียก `performSyncToHdc()` ต่อทันที → รวมผลใน notification
+- `auto_sync_khd` — ถ้า `=1` → หลัง export สำเร็จเรียก `performSyncToKhd()` ต่อทันที → รวมผลใน notification
 - Notification recipients: ดึงจาก `system_settings` (keys: `admin_emails`, `telegram_chat_id`, `telegram_bot_token`) ผ่าน `getNotifSettings()` helper
 - CRUD: `GET/POST/PUT/DELETE /export-schedules` + `/run-now` + `/logs` (super_admin)
 - UI: ปุ่ม gradient ม่วง-คราม "ตารางเวลา Export อัตโนมัติ" ใน export-kpi → modal รายการ + modal เพิ่ม/แก้
@@ -545,7 +545,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - `currentStep: 1 | 2 | 3` + step completion auto-detect จาก ViewChild `compareResult` / `exportResult`
 - Sub-components ใช้ `[hidden]="currentStep !== N"` (ไม่ destroy เพื่อ keep state)
 - ปิด `showGuide` ภายใน sub-components ผ่าน `AfterViewInit` — ใช้ unified guide ที่ kpi-manager
-- Form Builder embed (รับ `createFormEvent` จาก DB Compare) — modal เปิดเมื่อกด "สร้างฟอร์มจาก HDC"
+- Form Builder embed (รับ `createFormEvent` จาก DB Compare) — modal เปิดเมื่อกด "สร้างฟอร์มจาก KHD"
 
 ### Form Builder (kpi-manage)
 - ปุ่ม `fa-clipboard-list` (สีม่วง) ในคอลัมน์ "จัดการ" ของแต่ละ indicator (super_admin)
@@ -604,7 +604,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - GET/POST/PUT/DELETE + noun (เช่น `/kpi-results`, `/users/:id`, `/feedback`)
 - Nested: `/feedback/:id/replies`
 - Action: `/bulk-add-kpi`, `/unlock-kpi-all`, `/refresh-summary`
-- DB Compare (2 ทิศทาง): `/db-compare/create-local`, `/db-compare/sync-data` (HDC→Local), `/db-compare/create-remote`, `/db-compare/sync-to-hdc` (Local→HDC)
+- DB Compare (2 ทิศทาง): `/db-compare/create-local`, `/db-compare/sync-data` (KHD→Local), `/db-compare/create-remote`, `/db-compare/sync-to-khd` (Local→KHD)
 
 ### Database
 - Table: `snake_case` (เช่น `kpi_results`, `kpi_main_indicators`)
@@ -732,7 +732,7 @@ docker builder prune -af
 |-------|---------|-------------|
 | users | ผู้ใช้งาน | id, username, role, dept_id, hospcode, is_approved, approved_by, last_seen_at, last_seen_ip, last_seen_ua, **active_session_id**, **session_started_at** |
 | departments | หน่วยงาน | id, dept_name, dept_code |
-| kpi_indicators | ตัวชี้วัด | id, kpi_indicators_name, main_indicator_id, dept_id, table_process, target_percentage (เป้าหมาย), criterion (เกณฑ์), target_condition, is_cumulative, r9, moph, ssj, rmw, other, evaluation_mode ('any_one'\|'all_required'), required_off_types (JSON array ของ hostypecode) |
+| kpi_indicators | ตัวชี้วัด | id, kpi_indicators_name, main_indicator_id, dept_id, table_process, target_percentage (เป้าหมาย), criterion (เกณฑ์), target_condition, is_cumulative, r9, moph, ssj, rmw, other, evaluation_mode ('any_one'\|'all_required'), required_off_types (JSON array ของ hostypecode), **khd_fiscal_year** (เดิมชื่อ hdc_fiscal_year — audit only, ปีงบฯ ที่ criterion/target_condition อ้างอิงจาก KHD ล่าสุด) |
 | kpi_main_indicators | หมวดหมู่หลัก | id, main_indicator_name, yut_id |
 | main_yut | ยุทธศาสตร์ | id, yut_name |
 | kpi_results | ผลงาน KPI | id, indicator_id, year_bh, hospcode, month_bh, target_value, actual_value, status, is_locked |
@@ -747,6 +747,6 @@ docker builder prune -af
 | feedback_replies | ตอบกลับกระทู้ | id, post_id, user_id, message |
 | system_settings | ตั้งค่าระบบ | setting_key, setting_value |
 | system_announcements | ประกาศระบบ | id, title, content_html, bg_color, text_color, blink_enabled, show_on_header, show_on_login, is_active |
-| export_schedules | ตารางเวลา Export อัตโนมัติ | id, name, is_enabled, days_of_week, time_of_day, year_bh, indicator_scope, indicator_ids, auto_sync_hdc, notify_email, notify_telegram, last_run_at, last_status |
+| export_schedules | ตารางเวลา Export อัตโนมัติ | id, name, is_enabled, days_of_week, time_of_day, year_bh, indicator_scope, indicator_ids, auto_sync_khd, notify_email, notify_telegram, last_run_at, last_status |
 | export_schedule_logs | ประวัติการรัน schedule | id, schedule_id, run_at, status, inserted, updated_count, unchanged, tables_count, duration_ms, notified_email, notified_telegram, error_msg |
 | role_page_access | สิทธิ์การเข้าถึงหน้าต่อ role (super_admin ตั้งค่าได้) | id, role, page_key, is_enabled (UNIQUE role+page_key) |

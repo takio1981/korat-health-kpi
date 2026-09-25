@@ -7,15 +7,15 @@
       {{ showGuide ? 'ซ่อนคำแนะนำ' : 'คำแนะนำขั้นตอน' }}
     </button>
     <div *ngIf="showGuide" class="mt-3 bg-indigo-50 border border-indigo-200 rounded-xl p-4">
-      <h4 class="font-bold text-indigo-800 text-sm mb-3"><i class="fas fa-list-ol mr-2"></i>ขั้นตอนการเปรียบเทียบ Structure กับ HDC</h4>
+      <h4 class="font-bold text-indigo-800 text-sm mb-3"><i class="fas fa-list-ol mr-2"></i>ขั้นตอนการเปรียบเทียบ Structure กับ KHD</h4>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
         <div class="flex items-start gap-3">
           <span class="flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold shrink-0">1</span>
-          <div><p class="font-bold text-gray-800">เปรียบเทียบ Structure</p><p class="text-xs text-gray-500">กดปุ่ม "เปรียบเทียบ Structure" เพื่อเชื่อมต่อ HDC และตรวจสอบโครงสร้างตาราง</p></div>
+          <div><p class="font-bold text-gray-800">เปรียบเทียบ Structure</p><p class="text-xs text-gray-500">กดปุ่ม "เปรียบเทียบ Structure" เพื่อเชื่อมต่อ KHD และตรวจสอบโครงสร้างตาราง</p></div>
         </div>
         <div class="flex items-start gap-3">
           <span class="flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold shrink-0">2</span>
-          <div><p class="font-bold text-gray-800">ดูผลเปรียบเทียบ</p><p class="text-xs text-gray-500">ดูสรุป: ตรงกัน / ต่างกัน / ไม่มีใน Local / ไม่มีใน HDC → กดขยายดูรายละเอียดแต่ละตาราง</p></div>
+          <div><p class="font-bold text-gray-800">ดูผลเปรียบเทียบ</p><p class="text-xs text-gray-500">ดูสรุป: ตรงกัน / ต่างกัน / ไม่มีใน Local / ไม่มีใน KHD → กดขยายดูรายละเอียดแต่ละตาราง</p></div>
         </div>
         <div class="flex items-start gap-3">
           <span class="flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold shrink-0">3</span>
@@ -23,11 +23,11 @@
         </div>
         <div class="flex items-start gap-3">
           <span class="flex items-center justify-center w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold shrink-0">4</span>
-          <div><p class="font-bold text-gray-800">ดำเนินการ 2 ทิศทาง</p><p class="text-xs text-gray-500"><b class="text-blue-600">HDC → Local:</b> "สร้าง Local" / "Sync จาก HDC" | <b class="text-purple-600">Local → HDC:</b> "สร้าง HDC" / "Sync → HDC" (ต้องมีสิทธิ์ write ใน HDC)</p></div>
+          <div><p class="font-bold text-gray-800">ดำเนินการ 2 ทิศทาง</p><p class="text-xs text-gray-500"><b class="text-blue-600">KHD → Local:</b> "สร้าง Local" / "Sync จาก KHD" | <b class="text-purple-600">Local → KHD:</b> "สร้าง KHD" / "Sync → KHD" (ต้องมีสิทธิ์ write ใน KHD)</p></div>
         </div>
         <div class="flex items-start gap-3">
           <span class="flex items-center justify-center w-7 h-7 rounded-full bg-purple-600 text-white text-xs font-bold shrink-0">5</span>
-          <div><p class="font-bold text-gray-800">สร้างฟอร์มจาก HDC (ตัวเลือก)</p><p class="text-xs text-gray-500">กดขยายตาราง → กดปุ่ม "สร้างฟอร์มจาก HDC" → ส่ง columns ไป Tab สร้างแบบฟอร์ม</p></div>
+          <div><p class="font-bold text-gray-800">สร้างฟอร์มจาก KHD (ตัวเลือก)</p><p class="text-xs text-gray-500">กดขยายตาราง → กดปุ่ม "สร้างฟอร์มจาก KHD" → ส่ง columns ไป Tab สร้างแบบฟอร์ม</p></div>
         </div>
       </div>
     </div>
@@ -73,7 +73,7 @@
       </div>
       <div class="bg-purple-50 rounded-xl border border-purple-200 p-3 text-center cursor-pointer hover:shadow-md transition-all" (click)="filterStatus = filterStatus === 'missing_remote' ? '' : 'missing_remote'">
         <p class="text-2xl font-bold text-purple-600">{{ compareResult.summary.missing_remote }}</p>
-        <p class="text-[10px] text-purple-700 font-bold"><i class="fas fa-arrow-up mr-1"></i>ไม่มีใน HDC</p>
+        <p class="text-[10px] text-purple-700 font-bold"><i class="fas fa-arrow-up mr-1"></i>ไม่มีใน KHD</p>
       </div>
       <div class="bg-gray-50 rounded-xl border border-gray-200 p-3 text-center cursor-pointer hover:shadow-md transition-all" (click)="filterStatus = filterStatus === 'missing_both' ? '' : 'missing_both'">
         <p class="text-2xl font-bold text-gray-500">{{ compareResult.summary.missing_both }}</p>
@@ -85,7 +85,7 @@
     <div class="flex flex-wrap items-center gap-3 mb-4 text-xs">
       <span class="bg-green-100 text-green-800 px-3 py-1.5 rounded-full font-bold"><i class="fas fa-server mr-1"></i>Local: {{ compareResult.local_db }}</span>
       <i class="fas fa-exchange-alt text-gray-400"></i>
-      <span class="bg-blue-100 text-blue-800 px-3 py-1.5 rounded-full font-bold"><i class="fas fa-cloud mr-1"></i>HDC: {{ compareResult.remote_db }}</span>
+      <span class="bg-blue-100 text-blue-800 px-3 py-1.5 rounded-full font-bold"><i class="fas fa-cloud mr-1"></i>KHD: {{ compareResult.remote_db }}</span>
     </div>
 
     <!-- ตัวกรองรายการ (เหมือน Phase B) -->
@@ -134,7 +134,7 @@
         <button (click)="selectAll()" class="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-bold text-gray-600"><i class="fas fa-check-double mr-1"></i>เลือกทั้งหมด</button>
         <button (click)="selectNone()" class="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-bold text-gray-600"><i class="fas fa-times mr-1"></i>ยกเลิก</button>
         <button (click)="selectByStatus('missing_local')" class="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 rounded-lg text-xs font-bold text-blue-700"><i class="fas fa-arrow-down mr-1"></i>เลือก Missing Local</button>
-        <button (click)="selectByStatus('missing_remote')" class="px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 rounded-lg text-xs font-bold text-purple-700"><i class="fas fa-arrow-up mr-1"></i>เลือก Missing HDC</button>
+        <button (click)="selectByStatus('missing_remote')" class="px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 rounded-lg text-xs font-bold text-purple-700"><i class="fas fa-arrow-up mr-1"></i>เลือก Missing KHD</button>
         <button (click)="selectByStatus('different')" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 rounded-lg text-xs font-bold text-amber-700"><i class="fas fa-exclamation-triangle mr-1"></i>เลือก Different</button>
       </div>
       <span class="text-xs text-gray-500 ml-auto">เลือก: <b>{{ selectedTables.size }}</b></span>
@@ -166,7 +166,7 @@
           <!-- Row counts -->
           <div class="hidden sm:flex gap-4 text-xs text-gray-500 shrink-0">
             <span title="Local rows"><i class="fas fa-server text-green-500 mr-1"></i>{{ t.local?.row_count || 0 }}</span>
-            <span title="HDC rows"><i class="fas fa-cloud text-blue-500 mr-1"></i>{{ t.remote?.row_count || 0 }}</span>
+            <span title="KHD rows"><i class="fas fa-cloud text-blue-500 mr-1"></i>{{ t.remote?.row_count || 0 }}</span>
           </div>
 
           <!-- Expand icon -->
@@ -184,7 +184,7 @@
               <p class="text-[10px] text-green-600">{{ t.local?.columns?.length || 0 }} columns</p>
             </div>
             <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
-              <p class="text-xs text-blue-600 font-bold mb-1"><i class="fas fa-cloud mr-1"></i>HDC ({{ compareResult.remote_db }})</p>
+              <p class="text-xs text-blue-600 font-bold mb-1"><i class="fas fa-cloud mr-1"></i>KHD ({{ compareResult.remote_db }})</p>
               <p class="text-lg font-bold text-blue-800">{{ t.remote?.exists ? t.remote.row_count + ' rows' : 'ไม่มีตาราง' }}</p>
               <p class="text-[10px] text-blue-600">{{ t.remote?.columns?.length || 0 }} columns</p>
             </div>
@@ -199,16 +199,16 @@
                 <i class="fas"
                    [ngClass]="d.issue === 'missing_in_local' ? 'fa-plus-circle text-blue-500' : d.issue === 'type_mismatch' ? 'fa-exchange-alt text-amber-500' : 'fa-minus-circle text-purple-500'"></i>
                 <span class="font-mono font-bold">{{ d.field }}</span>
-                <span *ngIf="d.issue === 'missing_in_local'" class="text-blue-600">ไม่มีใน Local (HDC: {{ d.remote_type }})</span>
-                <span *ngIf="d.issue === 'type_mismatch'" class="text-amber-600">Type ต่างกัน — Local: {{ d.local_type }} / HDC: {{ d.remote_type }}</span>
-                <span *ngIf="d.issue === 'missing_in_remote'" class="text-purple-600">ไม่มีใน HDC (มีเฉพาะ Local)</span>
+                <span *ngIf="d.issue === 'missing_in_local'" class="text-blue-600">ไม่มีใน Local (KHD: {{ d.remote_type }})</span>
+                <span *ngIf="d.issue === 'type_mismatch'" class="text-amber-600">Type ต่างกัน — Local: {{ d.local_type }} / KHD: {{ d.remote_type }}</span>
+                <span *ngIf="d.issue === 'missing_in_remote'" class="text-purple-600">ไม่มีใน KHD (มีเฉพาะ Local)</span>
               </div>
             </div>
           </div>
 
           <!-- Column list -->
           <div *ngIf="t.remote?.columns?.length > 0">
-            <p class="text-xs font-bold text-gray-700 mb-2"><i class="fas fa-columns text-gray-500 mr-1"></i>Columns ใน HDC ({{ t.remote.columns.length }})</p>
+            <p class="text-xs font-bold text-gray-700 mb-2"><i class="fas fa-columns text-gray-500 mr-1"></i>Columns ใน KHD ({{ t.remote.columns.length }})</p>
             <div class="flex flex-wrap gap-1">
               <span *ngFor="let col of t.remote.columns"
                     class="px-2 py-0.5 rounded text-[10px] font-mono"
@@ -216,10 +216,10 @@
                 {{ col.field }} <span class="opacity-60">({{ col.type }})</span>
               </span>
             </div>
-            <!-- สร้างฟอร์มจาก HDC -->
+            <!-- สร้างฟอร์มจาก KHD -->
             <button (click)="emitCreateForm(t); $event.stopPropagation()"
                     class="mt-3 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs shadow-md transition-all">
-              <i class="fas fa-wpforms mr-1"></i>สร้างฟอร์มจาก HDC
+              <i class="fas fa-wpforms mr-1"></i>สร้างฟอร์มจาก KHD
             </button>
           </div>
         </div>
@@ -239,22 +239,22 @@
         <i class="fas fa-check-square mr-1"></i>เลือกแล้ว {{ selectedTables.size }} ตาราง
       </span>
       <div class="flex flex-wrap gap-2">
-        <!-- Local actions (HDC → Local) -->
+        <!-- Local actions (KHD → Local) -->
         <div class="flex gap-1 pr-2 border-r border-gray-200">
-          <button (click)="createLocal()" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-md transition-all" title="สร้าง/แก้ไขตารางใน Local ให้ตรงกับ HDC">
+          <button (click)="createLocal()" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-md transition-all" title="สร้าง/แก้ไขตารางใน Local ให้ตรงกับ KHD">
             <i class="fas fa-hammer mr-1"></i>สร้าง Local
           </button>
-          <button (click)="syncData()" class="px-3 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-xs shadow-md transition-all" title="ดึงข้อมูลจาก HDC มาใส่ Local">
-            <i class="fas fa-cloud-download-alt mr-1"></i>Sync จาก HDC
+          <button (click)="syncData()" class="px-3 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-xs shadow-md transition-all" title="ดึงข้อมูลจาก KHD มาใส่ Local">
+            <i class="fas fa-cloud-download-alt mr-1"></i>Sync จาก KHD
           </button>
         </div>
-        <!-- HDC actions (Local → HDC) -->
+        <!-- KHD actions (Local → KHD) -->
         <div class="flex gap-1 pr-2 border-r border-gray-200">
-          <button (click)="createRemote()" class="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs shadow-md transition-all" title="สร้าง/แก้ไขตารางใน HDC ให้ตรงกับ Local">
-            <i class="fas fa-hammer mr-1"></i>สร้าง HDC
+          <button (click)="createRemote()" class="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs shadow-md transition-all" title="สร้าง/แก้ไขตารางใน KHD ให้ตรงกับ Local">
+            <i class="fas fa-hammer mr-1"></i>สร้าง KHD
           </button>
-          <button (click)="syncToHDC()" class="px-3 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs shadow-md transition-all" title="ส่งข้อมูลจาก Local ไป HDC">
-            <i class="fas fa-cloud-upload-alt mr-1"></i>Sync → HDC
+          <button (click)="syncToKhd()" class="px-3 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs shadow-md transition-all" title="ส่งข้อมูลจาก Local ไป KHD">
+            <i class="fas fa-cloud-upload-alt mr-1"></i>Sync → KHD
           </button>
         </div>
         <button (click)="selectNone()" class="px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-600 font-bold rounded-xl text-xs transition-all">
@@ -270,7 +270,7 @@
       <i class="fas fa-database text-indigo-500 text-3xl"></i>
     </div>
     <h3 class="text-lg font-bold text-gray-700 mb-2">เปรียบเทียบโครงสร้างฐานข้อมูล</h3>
-    <p class="text-sm text-gray-400 mb-6 max-w-md mx-auto">ตรวจสอบว่าตาราง table_process ใน Local DB มีโครงสร้างตรงกับ Data KPI Dashboard (HDC) หรือไม่</p>
+    <p class="text-sm text-gray-400 mb-6 max-w-md mx-auto">ตรวจสอบว่าตาราง table_process ใน Local DB มีโครงสร้างตรงกับ Data KPI Dashboard (KHD) หรือไม่</p>
     <button (click)="runCompare()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg transition-all">
       <i class="fas fa-search mr-2"></i>เริ่มเปรียบเทียบ
     </button>

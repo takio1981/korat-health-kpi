@@ -62,7 +62,7 @@ export class ReportCompareComponent implements OnInit {
       },
       error: (err: any) => {
         this.isLoading = false;
-        Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถเชื่อมต่อ HDC ได้', 'error');
+        Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถเชื่อมต่อ KHD ได้', 'error');
       }
     });
   }
@@ -72,7 +72,7 @@ export class ReportCompareComponent implements OnInit {
     return this.compareResult.items.filter((item: any) => {
       const matchStatus = !this.filterStatus || item.status === this.filterStatus;
       const matchSearch = !this.searchTerm ||
-        (item.hdc_name || '').toLowerCase().includes(this.searchTerm.toLowerCase()) ||
+        (item.khd_name || '').toLowerCase().includes(this.searchTerm.toLowerCase()) ||
         (item.local_name || '').toLowerCase().includes(this.searchTerm.toLowerCase()) ||
         (item.table_process || '').toLowerCase().includes(this.searchTerm.toLowerCase()) ||
         (item.report_code || '').toLowerCase().includes(this.searchTerm.toLowerCase());
@@ -89,10 +89,10 @@ export class ReportCompareComponent implements OnInit {
     this.selectedItems.has(id) ? this.selectedItems.delete(id) : this.selectedItems.add(id);
   }
 
-  selectAll() { this.filteredItems.forEach(t => this.selectedItems.add(t.hdc_report_id || t.local_id)); }
+  selectAll() { this.filteredItems.forEach(t => this.selectedItems.add(t.khd_report_id || t.local_id)); }
   selectNone() { this.selectedItems.clear(); }
   selectByStatus(status: string) {
-    this.filteredItems.filter(t => t.status === status).forEach(t => this.selectedItems.add(t.hdc_report_id || t.local_id));
+    this.filteredItems.filter(t => t.status === status).forEach(t => this.selectedItems.add(t.khd_report_id || t.local_id));
   }
 
   getStatusBadge(status: string) {
@@ -100,24 +100,24 @@ export class ReportCompareComponent implements OnInit {
       case 'match': return { text: 'ตรงกัน', bg: 'bg-green-100 text-green-800', icon: 'fa-check-circle text-green-500' };
       case 'different': return { text: 'ข้อมูลต่างกัน', bg: 'bg-amber-100 text-amber-800', icon: 'fa-exclamation-triangle text-amber-500' };
       case 'missing_local': return { text: 'ไม่มีใน Local', bg: 'bg-blue-100 text-blue-800', icon: 'fa-arrow-down text-blue-500' };
-      case 'missing_remote': return { text: 'ไม่มีใน HDC', bg: 'bg-purple-100 text-purple-800', icon: 'fa-arrow-up text-purple-500' };
+      case 'missing_remote': return { text: 'ไม่มีใน KHD', bg: 'bg-purple-100 text-purple-800', icon: 'fa-arrow-up text-purple-500' };
       default: return { text: status, bg: 'bg-gray-100 text-gray-600', icon: 'fa-question text-gray-400' };
     }
   }
 
-  // === HDC inactive — ปุ่ม "ปิด upload_excel ทั้งหมดที่ HDC inactive" ===
+  // === KHD inactive — ปุ่ม "ปิด upload_excel ทั้งหมดที่ KHD inactive" ===
   get suggestDisableItems(): any[] {
     return (this.compareResult?.items || []).filter((i: any) => i.suggest_disable_upload);
   }
 
   bulkDisableSuggested() {
     const items = this.suggestDisableItems;
-    if (items.length === 0) { Swal.fire('แจ้งเตือน', 'ไม่มีรายการที่ต้องปิด (HDC inactive แต่ Local ยังเปิดส่งออก)', 'info'); return; }
+    if (items.length === 0) { Swal.fire('แจ้งเตือน', 'ไม่มีรายการที่ต้องปิด (KHD inactive แต่ Local ยังเปิดส่งออก)', 'info'); return; }
     const ids = items.map(i => i.local_id).filter(Boolean);
     Swal.fire({
       title: 'ปิดส่งออกอัตโนมัติ',
       html: `<p class="text-sm">ตั้งค่า <code>upload_excel = 1</code> ให้ <b>${ids.length}</b> ตัวชี้วัด</p>
-             <p class="text-xs text-gray-500 mt-2">ตัวเหล่านี้ HDC report อยู่สถานะ <b>inactive</b> — ระบบจะไม่ส่งออกจาก export-kpi-tables ตามแนะนำ</p>
+             <p class="text-xs text-gray-500 mt-2">ตัวเหล่านี้ KHD report อยู่สถานะ <b>inactive</b> — ระบบจะไม่ส่งออกจาก export-kpi-tables ตามแนะนำ</p>
              <p class="text-xs text-amber-600 mt-2"><i class="fas fa-info-circle mr-1"></i>กลับมาเปิดได้ที่ kpi-manage ทีหลัง</p>`,
       icon: 'warning', showCancelButton: true, confirmButtonColor: '#dc2626',
       confirmButtonText: '<i class="fas fa-toggle-off mr-1"></i> ปิดทั้งหมด',
@@ -142,7 +142,7 @@ export class ReportCompareComponent implements OnInit {
       next: (res: any) => {
         if (res.success) {
           item.local_upload_excel = res.upload_excel;
-          item.suggest_disable_upload = (item.hdc_is_active === 0 || item.hdc_is_active === '0') && !res.upload_excel;
+          item.suggest_disable_upload = (item.khd_is_active === 0 || item.khd_is_active === '0') && !res.upload_excel;
           this.cdr.detectChanges();
         }
       },
@@ -153,12 +153,12 @@ export class ReportCompareComponent implements OnInit {
   syncSelected() {
     const ids = [...this.selectedItems];
     if (ids.length === 0) { Swal.fire('แจ้งเตือน', 'กรุณาเลือกรายการอย่างน้อย 1 รายการ', 'warning'); return; }
-    const items = this.compareResult.items.filter((i: any) => ids.includes(i.hdc_report_id || i.local_id));
+    const items = this.compareResult.items.filter((i: any) => ids.includes(i.khd_report_id || i.local_id));
     const syncableItems = items.filter((i: any) => i.status === 'missing_local' || i.status === 'different');
     if (syncableItems.length === 0) { Swal.fire('แจ้งเตือน', 'ไม่มีรายการที่ต้อง Sync (เฉพาะ "ไม่มีใน Local" หรือ "ข้อมูลต่างกัน")', 'info'); return; }
     Swal.fire({
       title: 'ยืนยัน Sync ข้อมูล',
-      html: `<p>Sync <b>${syncableItems.length}</b> รายการจาก HDC มาใส่ Local</p>
+      html: `<p>Sync <b>${syncableItems.length}</b> รายการจาก KHD มาใส่ Local</p>
              <p class="text-xs text-amber-600 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>รายการที่มีอยู่แล้วจะถูกอัปเดต</p>`,
       icon: 'question', showCancelButton: true, confirmButtonColor: '#16a34a',
       confirmButtonText: '<i class="fas fa-sync mr-1"></i> Sync ข้อมูล', cancelButtonText: 'ยกเลิก'
@@ -166,8 +166,8 @@ export class ReportCompareComponent implements OnInit {
       if (!r.isConfirmed) return;
       this.isSyncing = true;
       Swal.fire({ title: 'กำลัง Sync...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-      const hdcIds = syncableItems.map((i: any) => i.hdc_report_id).filter(Boolean);
-      this.authService.reportCompareSync(hdcIds).subscribe({
+      const khdIds = syncableItems.map((i: any) => i.khd_report_id).filter(Boolean);
+      this.authService.reportCompareSync(khdIds).subscribe({
         next: (res: any) => {
           this.isSyncing = false;
           if (res.success) {

@@ -6,7 +6,7 @@
       <div>
         <h2 class="text-xl font-bold flex items-center gap-2">
           <i class="fas fa-layer-group"></i>
-          ระบบจัดการข้อมูล KPI ↔ HDC
+          ระบบจัดการข้อมูล KPI ↔ KHD
         </h2>
         <p class="text-xs text-white/85 mt-1">ขั้น 1: เทียบโครงสร้างตาราง → ขั้น 2: Export ข้อมูล <span class="text-white/70">(เทียบชื่อตัวชี้วัดย้ายไปหน้า "จัดการตัวชี้วัด" แล้ว)</span></p>
       </div>
@@ -33,7 +33,7 @@
       </h4>
       <p class="text-xs text-teal-700 leading-relaxed">
         ไปที่หน้า <b><a routerLink="/kpi-manage" class="text-teal-700 underline hover:text-teal-900">จัดการตัวชี้วัด</a></b> → กดปุ่ม
-        <span class="px-2 py-0.5 bg-teal-600 text-white rounded font-bold text-[10px]">เทียบกับ HDC</span> เพื่อตรวจสอบชื่อ + สถานะ
+        <span class="px-2 py-0.5 bg-teal-600 text-white rounded font-bold text-[10px]">เทียบกับ KHD</span> เพื่อตรวจสอบชื่อ + สถานะ
         <code class="bg-white px-1 rounded text-[10px]">is_active</code> + <code class="bg-white px-1 rounded text-[10px]">upload_excel</code> ก่อนเริ่ม workflow ที่นี่
       </p>
     </div>
@@ -43,10 +43,10 @@
       <div class="border-2 border-indigo-200 bg-indigo-50 rounded-xl p-3">
         <div class="flex items-center gap-2 mb-2">
           <span class="w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center">1</span>
-          <p class="font-bold text-indigo-800 text-sm">ส่งออกข้อมูล KPI ↔ HDC</p>
+          <p class="font-bold text-indigo-800 text-sm">ส่งออกข้อมูล KPI ↔ KHD</p>
         </div>
-        <p class="text-xs text-indigo-700 leading-relaxed">เทียบ <b>โครงสร้างตาราง (Schema)</b> ระหว่าง Local กับ HDC — สร้าง/sync columns ทั้ง 2 ทิศทาง</p>
-        <p class="text-[10px] text-indigo-600 mt-2"><b>ทิศทาง:</b> 2 ทาง (HDC ↔ Local) • <b>ความถี่:</b> เมื่อ schema เปลี่ยน</p>
+        <p class="text-xs text-indigo-700 leading-relaxed">เทียบ <b>โครงสร้างตาราง (Schema)</b> ระหว่าง Local กับ KHD — สร้าง/sync columns ทั้ง 2 ทิศทาง</p>
+        <p class="text-[10px] text-indigo-600 mt-2"><b>ทิศทาง:</b> 2 ทาง (KHD ↔ Local) • <b>ความถี่:</b> เมื่อ schema เปลี่ยน</p>
       </div>
 
       <div class="border-2 border-emerald-200 bg-emerald-50 rounded-xl p-3">
@@ -54,8 +54,8 @@
           <span class="w-7 h-7 rounded-full bg-emerald-600 text-white text-xs font-bold flex items-center justify-center">2</span>
           <p class="font-bold text-emerald-800 text-sm">Export ข้อมูล KPI ลงตารางรายตัวชี้วัด</p>
         </div>
-        <p class="text-xs text-emerald-700 leading-relaxed">ตรวจสอบ → ส่งออก local → ส่งเข้า HDC → ตั้งตารางเวลาอัตโนมัติ</p>
-        <p class="text-[10px] text-emerald-600 mt-2"><b>ทิศทาง:</b> Local → HDC • <b>ความถี่:</b> รายเดือน / Schedule</p>
+        <p class="text-xs text-emerald-700 leading-relaxed">ตรวจสอบ → ส่งออก local → ส่งเข้า KHD → ตั้งตารางเวลาอัตโนมัติ</p>
+        <p class="text-[10px] text-emerald-600 mt-2"><b>ทิศทาง:</b> Local → KHD • <b>ความถี่:</b> รายเดือน / Schedule</p>
       </div>
     </div>
 
@@ -64,8 +64,8 @@
       <p class="font-bold mb-1.5"><i class="fas fa-lightbulb mr-1"></i>เคล็ดลับการใช้งาน</p>
       <ul class="list-disc ml-5 space-y-0.5 text-amber-700">
         <li>เทียบชื่อ + ตั้ง upload_excel ที่หน้า <b>จัดการตัวชี้วัด</b> ก่อน → แล้วจึงมาทำ Schema + Export ที่นี่</li>
-        <li>ขั้น 1 → กดปุ่ม "สร้างฟอร์ม" บน HDC column เพื่อสร้าง dynamic form อัตโนมัติ</li>
-        <li>ขั้น 2 → ตั้ง <b>Scheduler</b> เพื่อให้ระบบ Export + Sync HDC ตามวันเวลาที่กำหนด</li>
+        <li>ขั้น 1 → กดปุ่ม "สร้างฟอร์ม" บน KHD column เพื่อสร้าง dynamic form อัตโนมัติ</li>
+        <li>ขั้น 2 → ตั้ง <b>Scheduler</b> เพื่อให้ระบบ Export + Sync KHD ตามวันเวลาที่กำหนด</li>
       </ul>
     </div>
   </div>
@@ -86,7 +86,7 @@
             <i *ngIf="step1Done" class="fas fa-check"></i>
             <span *ngIf="!step1Done">1</span>
           </span>
-          <span class="font-bold text-sm" [ngClass]="currentStep === 1 ? 'text-indigo-800' : 'text-gray-700'">ส่งออกข้อมูล KPI ↔ HDC</span>
+          <span class="font-bold text-sm" [ngClass]="currentStep === 1 ? 'text-indigo-800' : 'text-gray-700'">ส่งออกข้อมูล KPI ↔ KHD</span>
           <i *ngIf="currentStep === 1" class="fas fa-angle-double-right text-indigo-500 ml-auto"></i>
         </div>
         <p class="text-[10px] sm:text-xs text-gray-500 leading-tight" [ngClass]="currentStep === 1 ? 'text-indigo-700' : ''">{{ step1Summary }}</p>
@@ -127,7 +127,7 @@
         <div>
           <p class="text-xs text-gray-400 font-bold uppercase tracking-wide">ขั้นที่ {{ currentStep }} จาก 2</p>
           <h3 class="text-base font-bold text-gray-800">
-            <span *ngIf="currentStep === 1">ส่งออกข้อมูล KPI ↔ HDC — Schema (โครงสร้างตาราง)</span>
+            <span *ngIf="currentStep === 1">ส่งออกข้อมูล KPI ↔ KHD — Schema (โครงสร้างตาราง)</span>
             <span *ngIf="currentStep === 2">Export ข้อมูล KPI ลงตารางรายตัวชี้วัด</span>
           </h3>
         </div>
@@ -136,10 +136,10 @@
       <!-- Step description badge -->
       <div class="hidden sm:block">
         <span *ngIf="currentStep === 1" class="text-xs px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-full font-bold">
-          <i class="fas fa-arrows-alt-h mr-1"></i>Schema 2 ทาง (HDC ↔ Local)
+          <i class="fas fa-arrows-alt-h mr-1"></i>Schema 2 ทาง (KHD ↔ Local)
         </span>
         <span *ngIf="currentStep === 2" class="text-xs px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-full font-bold">
-          <i class="fas fa-arrow-up mr-1"></i>Data Local → HDC + Schedule
+          <i class="fas fa-arrow-up mr-1"></i>Data Local → KHD + Schedule
         </span>
       </div>
     </div>
@@ -151,11 +151,11 @@
           <i class="fas fa-database text-lg"></i>
         </div>
         <div class="flex-1 min-w-0">
-          <h4 class="text-sm font-bold text-indigo-900">เทียบโครงสร้างตาราง — Local ↔ HDC</h4>
+          <h4 class="text-sm font-bold text-indigo-900">เทียบโครงสร้างตาราง — Local ↔ KHD</h4>
           <p class="text-xs text-indigo-700 mt-1 leading-relaxed">ทำงานกับ <b>โครงสร้างตาราง (columns)</b> 2 ทิศทาง — สร้าง/แก้ schema ให้พร้อมก่อนส่งข้อมูล (ทำครั้งเดียวตอน setup หรือเมื่อ schema เปลี่ยน)</p>
           <div class="mt-2 flex flex-wrap items-center gap-1 text-[10px]">
             <span class="px-2 py-0.5 bg-white text-indigo-700 border border-indigo-300 rounded-full font-bold">
-              <i class="fas fa-arrows-alt-h mr-1"></i>2 ทาง: HDC ↔ Local
+              <i class="fas fa-arrows-alt-h mr-1"></i>2 ทาง: KHD ↔ Local
             </span>
             <span class="px-2 py-0.5 bg-white text-indigo-700 border border-indigo-300 rounded-full font-bold">
               <i class="fas fa-wpforms mr-1"></i>ลิงก์ไป Form Builder
@@ -163,7 +163,7 @@
           </div>
         </div>
       </div>
-      <app-db-compare (createFormEvent)="onCreateFormFromHDC($event)"></app-db-compare>
+      <app-db-compare (createFormEvent)="onCreateFormFromKhd($event)"></app-db-compare>
     </div>
 
     <!-- Step 2: Export KPI ลงตารางรายตัวชี้วัด -->
@@ -174,10 +174,10 @@
         </div>
         <div class="flex-1 min-w-0">
           <h4 class="text-sm font-bold text-emerald-900">Export ข้อมูล KPI ลงตารางรายตัวชี้วัด</h4>
-          <p class="text-xs text-emerald-700 mt-1 leading-relaxed">ทำงานกับ <b>ข้อมูล (rows)</b> 1 ทาง — ตรวจสอบการเปลี่ยนแปลง → ส่งออกลงตาราง local → ส่งเข้า HDC → ตั้งตารางเวลาอัตโนมัติ</p>
+          <p class="text-xs text-emerald-700 mt-1 leading-relaxed">ทำงานกับ <b>ข้อมูล (rows)</b> 1 ทาง — ตรวจสอบการเปลี่ยนแปลง → ส่งออกลงตาราง local → ส่งเข้า KHD → ตั้งตารางเวลาอัตโนมัติ</p>
           <div class="mt-2 flex flex-wrap items-center gap-1 text-[10px]">
             <span class="px-2 py-0.5 bg-white text-emerald-700 border border-emerald-300 rounded-full font-bold">
-              <i class="fas fa-arrow-up mr-1"></i>1 ทาง: Local → HDC
+              <i class="fas fa-arrow-up mr-1"></i>1 ทาง: Local → KHD
             </span>
             <span class="px-2 py-0.5 bg-white text-emerald-700 border border-emerald-300 rounded-full font-bold">
               <i class="fas fa-clock mr-1"></i>Scheduler อัตโนมัติได้
@@ -223,8 +223,8 @@
 
   <!-- ========== Form Builder (embedded — modal เปิดเมื่อ DB Compare ส่ง createFormEvent) ========== -->
   <app-form-builder #formBuilder [embedded]="true"
-                    [hdcColumns]="hdcColumnsForForm"
-                    [hdcTableName]="hdcTableName"
-                    [hdcTrigger]="hdcTrigger"></app-form-builder>
+                    [khdColumns]="khdColumnsForForm"
+                    [khdTableName]="khdTableName"
+                    [khdTrigger]="khdTrigger"></app-form-builder>
 
 </div>

@@ -6,8 +6,8 @@ import { AuthService } from '../services/auth';
 import { ToastService } from '../services/toast.service';
 import Swal from 'sweetalert2';
 
-interface UsersFieldDiff { field: string; hdc_field?: string; local_value: any; hdc_value: any; }
-interface UsersSyncMappingRow { field: string; hdc_field: string; excluded: boolean; }
+interface UsersFieldDiff { field: string; khd_field?: string; local_value: any; khd_value: any; }
+interface UsersSyncMappingRow { field: string; khd_field: string; excluded: boolean; }
 
 @Component({
   selector: 'app-user-management',
@@ -91,7 +91,7 @@ export class UserManagementComponent implements OnInit {
   activeDrillValue: string = '';
 
   // สิทธิ์เพิ่ม/แก้ไขผู้ใช้งาน — ตั้งค่าได้จากหน้า "สิทธิ์การเข้าถึงหน้า" (super_admin) แยกจาก isAdmin/isSuperAdmin เดิม
-  // ไม่ครอบคลุม: อนุมัติ/ตีกลับ/ตั้งค่าสิทธิ์แก้ไขข้อมูล/sync HDC (ยังคง hardcode admin_ssj+super_admin หรือ super_admin ตามเดิม)
+  // ไม่ครอบคลุม: อนุมัติ/ตีกลับ/ตั้งค่าสิทธิ์แก้ไขข้อมูล/sync KHD (ยังคง hardcode admin_ssj+super_admin หรือ super_admin ตามเดิม)
   canAddData: boolean = false;
   canEditData: boolean = false;
 
@@ -1023,7 +1023,7 @@ export class UserManagementComponent implements OnInit {
     });
   }
 
-  // === Data Synchronization — Users ↔ HDC ===
+  // === Data Synchronization — Users ↔ KHD ===
   showSyncModal: boolean = false;
   syncLoading: boolean = false;
   syncExecuting: boolean = false;
@@ -1082,7 +1082,7 @@ export class UserManagementComponent implements OnInit {
             ...(res.matched || []).map((u: any) => ({ ...u, _syncStatus: 'matched' })),
             ...(res.different || []).map((u: any) => ({ ...u, _syncStatus: 'different' })),
             ...(res.local_only || []).map((u: any) => ({ ...u, _syncStatus: 'local_only' })),
-            ...(res.hdc_only || []).map((u: any) => ({ ...u, _syncStatus: 'hdc_only' }))
+            ...(res.khd_only || []).map((u: any) => ({ ...u, _syncStatus: 'khd_only' }))
           ];
           for (const u of this._syncAllList) {
             if (u._syncStatus === 'different' || u._syncStatus === 'local_only') this.syncSelected.add(u.username);
@@ -1122,7 +1122,7 @@ export class UserManagementComponent implements OnInit {
         if (res.success) {
           this.mappingRows = res.columns.map((f: string) => ({
             field: f,
-            hdc_field: res.mapping[f] || '',
+            khd_field: res.mapping[f] || '',
             excluded: res.exclude.includes(f)
           }));
         } else {
@@ -1141,7 +1141,7 @@ export class UserManagementComponent implements OnInit {
     const exclude = this.mappingRows.filter(r => r.excluded).map(r => r.field);
     const mapping: Record<string, string> = {};
     for (const r of this.mappingRows) {
-      const t = (r.hdc_field || '').trim();
+      const t = (r.khd_field || '').trim();
       if (t && t !== r.field) mapping[r.field] = t;
     }
     this.mappingSaving = true;
@@ -1340,12 +1340,12 @@ export class UserManagementComponent implements OnInit {
   }
 
   isSyncAllSelected(): boolean {
-    const syncable = this.syncListFiltered.filter(u => u._syncStatus !== 'hdc_only');
+    const syncable = this.syncListFiltered.filter(u => u._syncStatus !== 'khd_only');
     return syncable.length > 0 && syncable.every(u => this.syncSelected.has(u.username));
   }
 
   toggleSyncAll() {
-    const syncable = this.syncListFiltered.filter(u => u._syncStatus !== 'hdc_only');
+    const syncable = this.syncListFiltered.filter(u => u._syncStatus !== 'khd_only');
     if (this.isSyncAllSelected()) syncable.forEach(u => this.syncSelected.delete(u.username));
     else syncable.forEach(u => this.syncSelected.add(u.username));
   }
@@ -1354,19 +1354,19 @@ export class UserManagementComponent implements OnInit {
     const usernames = [...this.syncSelected];
     if (usernames.length === 0) return;
     Swal.fire({
-      title: 'ยืนยัน Sync → HDC',
-      html: `<p>ส่งข้อมูล users <b>${usernames.length}</b> คนไปยัง HDC</p>
+      title: 'ยืนยัน Sync → KHD',
+      html: `<p>ส่งข้อมูล users <b>${usernames.length}</b> คนไปยัง KHD</p>
              <p class="text-xs text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>ส่งทุกคอลัมน์รวม password_hash, cid</p>`,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#2563eb',
-      confirmButtonText: '<i class="fas fa-cloud-upload-alt mr-1"></i> Sync → HDC',
+      confirmButtonText: '<i class="fas fa-cloud-upload-alt mr-1"></i> Sync → KHD',
       cancelButtonText: 'ยกเลิก'
     }).then(r => {
       if (!r.isConfirmed) return;
       this.syncExecuting = true;
       Swal.fire({ title: 'กำลัง Sync...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-      this.authService.usersSyncToHDC(usernames).subscribe({
+      this.authService.usersSyncToKhd(usernames).subscribe({
         next: (res: any) => {
           this.syncExecuting = false;
           const synced = res.synced || 0;
@@ -1381,8 +1381,8 @@ export class UserManagementComponent implements OnInit {
           let html = `<div class="text-left">
             <p><b>ส่งสำเร็จ:</b> <span class="text-green-600">${synced}</span> / ${total} คน</p>
             ${failed > 0 ? `<p class="text-red-600"><b>ล้มเหลว:</b> ${failed} คน</p>` : ''}
-            ${added ? `<p class="text-xs text-emerald-600 mt-2"><i class="fas fa-plus-circle mr-1"></i>เพิ่ม column ใหม่ใน HDC: <code class="bg-emerald-50 px-1 rounded">${added}</code></p>` : ''}
-            ${skipped ? `<p class="text-xs text-amber-600 mt-1"><i class="fas fa-exclamation-triangle mr-1"></i>ข้าม column ที่ HDC ไม่มี: <code class="bg-amber-50 px-1 rounded">${skipped}</code></p>` : ''}
+            ${added ? `<p class="text-xs text-emerald-600 mt-2"><i class="fas fa-plus-circle mr-1"></i>เพิ่ม column ใหม่ใน KHD: <code class="bg-emerald-50 px-1 rounded">${added}</code></p>` : ''}
+            ${skipped ? `<p class="text-xs text-amber-600 mt-1"><i class="fas fa-exclamation-triangle mr-1"></i>ข้าม column ที่ KHD ไม่มี: <code class="bg-amber-50 px-1 rounded">${skipped}</code></p>` : ''}
             ${errSamples ? `<div class="text-xs text-red-700 mt-2 bg-red-50 border border-red-200 rounded p-2"><b>รายละเอียดข้อผิดพลาด (สูงสุด 3):</b><ul class="ml-4 mt-1 list-disc">${errSamples}</ul></div>` : ''}
           </div>`;
           if (partial) {

@@ -179,30 +179,30 @@
             </div>
           </div>
 
-          <!-- HDC Fields Selection (แสดงเมื่อมี columns จาก DB Compare) -->
-          @if (hdcColumns.length > 0) {
+          <!-- KHD Fields Selection (แสดงเมื่อมี columns จาก DB Compare) -->
+          @if (khdColumns.length > 0) {
             <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
               <div class="flex items-center justify-between mb-3">
                 <div>
                   <h4 class="text-sm font-bold text-indigo-800 flex items-center gap-2">
-                    <i class="fas fa-cloud-download-alt"></i>เลือก Fields จาก HDC
+                    <i class="fas fa-cloud-download-alt"></i>เลือก Fields จาก KHD
                   </h4>
-                  <p class="text-[10px] text-indigo-600 mt-0.5">ตาราง: <b class="font-mono">{{ hdcTableName }}</b></p>
+                  <p class="text-[10px] text-indigo-600 mt-0.5">ตาราง: <b class="font-mono">{{ khdTableName }}</b></p>
                 </div>
                 <div class="flex items-center gap-3">
                   <label class="flex items-center gap-1.5 text-xs text-indigo-700 cursor-pointer hover:text-indigo-900">
-                    <input type="checkbox" [checked]="isAllHdcSelected()" (change)="toggleSelectAllHdc($event)" class="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-400">
+                    <input type="checkbox" [checked]="isAllKhdSelected()" (change)="toggleSelectAllKhd($event)" class="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-400">
                     เลือกทั้งหมด
                   </label>
-                  <button (click)="applyHdcFields()"
-                          [disabled]="getSelectedHdcCount() === 0"
+                  <button (click)="applyKhdFields()"
+                          [disabled]="getSelectedKhdCount() === 0"
                           class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed">
-                    <i class="fas fa-arrow-down mr-1"></i>เพิ่ม {{ getSelectedHdcCount() }} ฟิลด์
+                    <i class="fas fa-arrow-down mr-1"></i>เพิ่ม {{ getSelectedKhdCount() }} ฟิลด์
                   </button>
                 </div>
               </div>
               <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto">
-                @for (col of hdcColumns; track col.field) {
+                @for (col of khdColumns; track col.field) {
                   <label class="flex items-center gap-2 bg-white rounded-lg px-3 py-2 border cursor-pointer hover:border-indigo-400 transition-all"
                          [ngClass]="col._selected ? 'border-indigo-400 ring-2 ring-indigo-200' : 'border-gray-200'">
                     <input type="checkbox" [(ngModel)]="col._selected" class="h-4 w-4 rounded text-indigo-600 focus:ring-indigo-400">

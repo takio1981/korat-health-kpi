@@ -111,7 +111,7 @@ export class DbCompareComponent implements OnInit {
       case 'match': return { text: 'ตรงกัน', bg: 'bg-green-100 text-green-800', icon: 'fa-check-circle text-green-500' };
       case 'different': return { text: 'ต่างกัน', bg: 'bg-amber-100 text-amber-800', icon: 'fa-exclamation-triangle text-amber-500' };
       case 'missing_local': return { text: 'ไม่มีใน Local', bg: 'bg-blue-100 text-blue-800', icon: 'fa-arrow-down text-blue-500' };
-      case 'missing_remote': return { text: 'ไม่มีใน HDC', bg: 'bg-purple-100 text-purple-800', icon: 'fa-arrow-up text-purple-500' };
+      case 'missing_remote': return { text: 'ไม่มีใน KHD', bg: 'bg-purple-100 text-purple-800', icon: 'fa-arrow-up text-purple-500' };
       case 'missing_both': return { text: 'ไม่มีทั้งสอง', bg: 'bg-gray-100 text-gray-600', icon: 'fa-ban text-gray-400' };
       default: return { text: status, bg: 'bg-gray-100 text-gray-600', icon: 'fa-question text-gray-400' };
     }
@@ -122,7 +122,7 @@ export class DbCompareComponent implements OnInit {
     if (tables.length === 0) { Swal.fire('แจ้งเตือน', 'กรุณาเลือกตารางอย่างน้อย 1 ตาราง', 'warning'); return; }
     Swal.fire({
       title: 'ยืนยันสร้าง/แก้ไข',
-      html: `<p>สร้าง/แก้ไข <b>${tables.length}</b> ตารางใน Local DB ให้ตรงกับ HDC</p>`,
+      html: `<p>สร้าง/แก้ไข <b>${tables.length}</b> ตารางใน Local DB ให้ตรงกับ KHD</p>`,
       icon: 'question', showCancelButton: true, confirmButtonColor: '#2563eb',
       confirmButtonText: '<i class="fas fa-hammer mr-1"></i> สร้าง/แก้ไข', cancelButtonText: 'ยกเลิก'
     }).then((r) => {
@@ -140,7 +140,7 @@ export class DbCompareComponent implements OnInit {
 
   emitCreateForm(t: any) {
     if (!t.remote?.columns || t.remote.columns.length === 0) {
-      Swal.fire('แจ้งเตือน', 'ตารางนี้ไม่มี columns จาก HDC', 'warning');
+      Swal.fire('แจ้งเตือน', 'ตารางนี้ไม่มี columns จาก KHD', 'warning');
       return;
     }
     this.createFormEvent.emit({
@@ -155,7 +155,7 @@ export class DbCompareComponent implements OnInit {
     if (tables.length === 0) { Swal.fire('แจ้งเตือน', 'กรุณาเลือกตารางอย่างน้อย 1 ตาราง', 'warning'); return; }
     Swal.fire({
       title: 'ยืนยัน Sync ข้อมูล',
-      html: `<p>ดึงข้อมูลจาก HDC มาใส่ Local <b>${tables.length}</b> ตาราง</p><p class="text-xs text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>ข้อมูลเดิมที่มี key ซ้ำจะถูกเขียนทับ</p>`,
+      html: `<p>ดึงข้อมูลจาก KHD มาใส่ Local <b>${tables.length}</b> ตาราง</p><p class="text-xs text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>ข้อมูลเดิมที่มี key ซ้ำจะถูกเขียนทับ</p>`,
       icon: 'warning', showCancelButton: true, confirmButtonColor: '#16a34a',
       confirmButtonText: '<i class="fas fa-sync mr-1"></i> Sync ข้อมูล', cancelButtonText: 'ยกเลิก'
     }).then((r) => {
@@ -176,43 +176,43 @@ export class DbCompareComponent implements OnInit {
     const tables = [...this.selectedTables];
     if (tables.length === 0) { Swal.fire('แจ้งเตือน', 'กรุณาเลือกตารางอย่างน้อย 1 ตาราง', 'warning'); return; }
     Swal.fire({
-      title: 'ยืนยันสร้าง/แก้ไขใน HDC',
-      html: `<p>สร้าง/แก้ไข <b>${tables.length}</b> ตารางใน HDC ให้ตรงกับ Local</p><p class="text-xs text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>ต้องมีสิทธิ์ write ใน HDC — ตรวจสอบให้ดีก่อนยืนยัน</p>`,
+      title: 'ยืนยันสร้าง/แก้ไขใน KHD',
+      html: `<p>สร้าง/แก้ไข <b>${tables.length}</b> ตารางใน KHD ให้ตรงกับ Local</p><p class="text-xs text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>ต้องมีสิทธิ์ write ใน KHD — ตรวจสอบให้ดีก่อนยืนยัน</p>`,
       icon: 'warning', showCancelButton: true, confirmButtonColor: '#7c3aed',
-      confirmButtonText: '<i class="fas fa-hammer mr-1"></i> สร้างใน HDC', cancelButtonText: 'ยกเลิก'
+      confirmButtonText: '<i class="fas fa-hammer mr-1"></i> สร้างใน KHD', cancelButtonText: 'ยกเลิก'
     }).then((r) => {
       if (!r.isConfirmed) return;
-      Swal.fire({ title: 'กำลังสร้างใน HDC...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      Swal.fire({ title: 'กำลังสร้างใน KHD...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
       this.authService.dbCompareCreateRemote(tables).subscribe({
         next: (res: any) => {
           const errDetail = res.errors?.length ? `<br><div class="text-xs mt-2 text-red-500">${res.errors.map((e: any) => `${e.table}: ${e.error}`).join('<br>')}</div>` : '';
           Swal.fire({ icon: 'success', title: 'สำเร็จ', html: `${res.message}${errDetail}`, timer: 4000 });
           this.runCompare();
         },
-        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถสร้างใน HDC ได้', 'error')
+        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถสร้างใน KHD ได้', 'error')
       });
     });
   }
 
-  syncToHDC() {
+  syncToKhd() {
     const tables = [...this.selectedTables];
     if (tables.length === 0) { Swal.fire('แจ้งเตือน', 'กรุณาเลือกตารางอย่างน้อย 1 ตาราง', 'warning'); return; }
     Swal.fire({
-      title: 'ยืนยัน Sync → HDC',
-      html: `<p>ส่งข้อมูลจาก Local ไปยัง HDC <b>${tables.length}</b> ตาราง</p><p class="text-xs text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>ข้อมูลใน HDC ที่ key ซ้ำจะถูกเขียนทับ — ต้องมีสิทธิ์ write ใน HDC</p>`,
+      title: 'ยืนยัน Sync → KHD',
+      html: `<p>ส่งข้อมูลจาก Local ไปยัง KHD <b>${tables.length}</b> ตาราง</p><p class="text-xs text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>ข้อมูลใน KHD ที่ key ซ้ำจะถูกเขียนทับ — ต้องมีสิทธิ์ write ใน KHD</p>`,
       icon: 'warning', showCancelButton: true, confirmButtonColor: '#dc2626',
-      confirmButtonText: '<i class="fas fa-cloud-upload-alt mr-1"></i> Sync → HDC', cancelButtonText: 'ยกเลิก'
+      confirmButtonText: '<i class="fas fa-cloud-upload-alt mr-1"></i> Sync → KHD', cancelButtonText: 'ยกเลิก'
     }).then((r) => {
       if (!r.isConfirmed) return;
-      Swal.fire({ title: 'กำลัง Sync ไป HDC...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-      this.authService.dbCompareSyncToHDC(tables).subscribe({
+      Swal.fire({ title: 'กำลัง Sync ไป KHD...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      this.authService.dbCompareSyncToKhd(tables).subscribe({
         next: (res: any) => {
           const detail = res.synced?.map((s: any) => `${s.table}: ${s.rows} rows`).join('<br>') || '';
           const errDetail = res.errors?.length ? `<br><div class="text-xs mt-2 text-red-500">${res.errors.map((e: any) => `${e.table}: ${e.error}`).join('<br>')}</div>` : '';
-          Swal.fire({ icon: 'success', title: 'Sync → HDC สำเร็จ', html: `${res.message}<br><div class="text-xs mt-2 text-gray-500">${detail}</div>${errDetail}` });
+          Swal.fire({ icon: 'success', title: 'Sync → KHD สำเร็จ', html: `${res.message}<br><div class="text-xs mt-2 text-gray-500">${detail}</div>${errDetail}` });
           this.runCompare();
         },
-        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถ Sync ไป HDC ได้', 'error')
+        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถ Sync ไป KHD ได้', 'error')
       });
     });
   }

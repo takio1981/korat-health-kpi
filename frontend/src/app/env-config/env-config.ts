@@ -28,7 +28,7 @@ export class EnvConfigComponent implements OnInit {
     { id: 'email', label: 'Email SMTP', icon: 'fa-envelope', color: 'amber' },
     { id: 'notification', label: 'แจ้งเตือน', icon: 'fa-bell', color: 'blue' },
     { id: 'app', label: 'แอปพลิเคชัน', icon: 'fa-cog', color: 'purple' },
-    { id: 'hdc', label: 'HDC Database', icon: 'fa-cloud', color: 'teal' }
+    { id: 'khd', label: 'KHD Database', icon: 'fa-cloud', color: 'teal' }
   ];
 
   ngOnInit() {

@@ -28,9 +28,9 @@ export class FormBuilderComponent implements OnInit, OnChanges {
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
 
-  @Input() hdcColumns: any[] = [];
-  @Input() hdcTableName: string = '';
-  @Input() hdcTrigger: number = 0;
+  @Input() khdColumns: any[] = [];
+  @Input() khdTableName: string = '';
+  @Input() khdTrigger: number = 0;
   // เมื่อ embedded=true จะซ่อน UI หลัก (header + ตารางตัวชี้วัด + tips) แสดงเฉพาะ modal เพื่อใช้ในหน้า kpi-manage
   @Input() embedded: boolean = false;
 
@@ -76,8 +76,8 @@ export class FormBuilderComponent implements OnInit, OnChanges {
   }
 
   ngOnChanges(changes: SimpleChanges) {
-    if (changes['hdcTrigger'] && this.hdcTableName) {
-      this.tryAutoOpenIndicator(this.hdcTableName);
+    if (changes['khdTrigger'] && this.khdTableName) {
+      this.tryAutoOpenIndicator(this.khdTableName);
     }
   }
 
@@ -101,7 +101,7 @@ export class FormBuilderComponent implements OnInit, OnChanges {
         if (res.success) {
           this.allIndicators = res.data;
           this.applyFilter();
-          // ถ้ามี pending auto-open จาก HDC → เปิดเลย
+          // ถ้ามี pending auto-open จาก KHD → เปิดเลย
           if (this.pendingAutoOpen) {
             const tableName = this.pendingAutoOpen;
             this.pendingAutoOpen = '';
@@ -286,8 +286,8 @@ export class FormBuilderComponent implements OnInit, OnChanges {
         if (res.success) {
           Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2000, showConfirmButton: false });
           this.showBuilderModal = false;
-          // เคลียร์ HDC data
-          this.hdcColumns.forEach(c => c._selected = false);
+          // เคลียร์ KHD data
+          this.khdColumns.forEach(c => c._selected = false);
           this.includeDefaultFields = true;
           this.loadIndicators();
         } else {
@@ -332,21 +332,21 @@ export class FormBuilderComponent implements OnInit, OnChanges {
     this.showPreviewModal = true;
   }
 
-  isAllHdcSelected(): boolean {
-    return this.hdcColumns.length > 0 && this.hdcColumns.every(c => c._selected);
+  isAllKhdSelected(): boolean {
+    return this.khdColumns.length > 0 && this.khdColumns.every(c => c._selected);
   }
 
-  toggleSelectAllHdc(event: Event) {
+  toggleSelectAllKhd(event: Event) {
     const checked = (event.target as HTMLInputElement).checked;
-    this.hdcColumns.forEach(c => c._selected = checked);
+    this.khdColumns.forEach(c => c._selected = checked);
   }
 
-  getSelectedHdcCount(): number {
-    return this.hdcColumns.filter(c => c._selected).length;
+  getSelectedKhdCount(): number {
+    return this.khdColumns.filter(c => c._selected).length;
   }
 
-  applyHdcFields() {
-    const selected = this.hdcColumns.filter(c => c._selected);
+  applyKhdFields() {
+    const selected = this.khdColumns.filter(c => c._selected);
     if (selected.length === 0) return;
     // ลบ field เปล่าที่ยังไม่ได้กรอก
     this.fields = this.fields.filter(f => f.field_name.trim());
@@ -356,7 +356,7 @@ export class FormBuilderComponent implements OnInit, OnChanges {
         this.fields.push({
           field_name: col.field,
           field_label: col.field,
-          field_type: this.mapHdcType(col.type),
+          field_type: this.mapKhdType(col.type),
           field_options: [],
           is_required: false,
           sort_order: this.fields.length,
@@ -367,7 +367,7 @@ export class FormBuilderComponent implements OnInit, OnChanges {
     this.cdr.detectChanges();
   }
 
-  mapHdcType(dbType: string): 'text' | 'number' | 'textarea' | 'select' | 'date' | 'checkbox' {
+  mapKhdType(dbType: string): 'text' | 'number' | 'textarea' | 'select' | 'date' | 'checkbox' {
     if (!dbType) return 'text';
     const t = dbType.toLowerCase();
     if (t.includes('int') || t.includes('decimal') || t.includes('float') || t.includes('double')) return 'number';

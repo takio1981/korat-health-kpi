@@ -4,6 +4,43 @@
 
 ---
 
+## 2569-09-25 — เปลี่ยนชื่อการเชื่อมต่อฐานข้อมูล "HDC" เป็น "KHD" ทั้งระบบ
+
+### คำขอ
+ต้องการแก้ไขชื่อการเชื่อมต่อฐานข้อมูล HDC ทั้งหมด ให้ใช้ชื่อ KHD แทน ทุกหน้า ทุกขั้นตอนที่มีในระบบ
+
+### ขอบเขตที่ตรวจสอบก่อนแก้ (2 จุดเสี่ยงกว่าปกติ)
+1. **Environment variables** (`HDC_DB_HOST/PORT/NAME/USER/PASSWORD`) — ตรวจพบว่าการเชื่อมต่อ HDC ที่ใช้งานจริง
+   ไม่ได้มาจาก `.env` เลย แต่มาจาก 3 แถว override ใน `system_settings` (ตั้งผ่านหน้า Environment Config) —
+   ต้อง migrate ข้อมูล 3 แถวนี้ไปพร้อมกัน (`UPDATE system_settings SET setting_key = REPLACE(setting_key, 'HDC',
+   'KHD') WHERE setting_key LIKE 'env_HDC%'`) ไม่งั้นการเชื่อมต่อจริงจะขาดหายทันทีที่เปลี่ยนชื่อ env var ในโค้ด
+2. **คอลัมน์ฐานข้อมูลถาวร 2 ตัว**: `kpi_indicators.hdc_fiscal_year`, `export_schedules.auto_sync_hdc` — ใช้
+   `ALTER TABLE ... CHANGE COLUMN` (ไม่ใช่ ADD COLUMN) เพื่อ rename แบบรักษาข้อมูลเดิมไว้ครบ
+
+### ข้อยกเว้นที่ตั้งใจไม่แก้ (ยังคงคำว่า "HDC" ไว้ตามเดิม)
+- `settings.html:249` — ข้อความ "บริการของ MOPH — สำหรับบุคลากรในระบบ HDC" หมายถึงระบบ HDC จริงของกระทรวง
+  สาธารณสุข (ข้อเท็จจริงภายนอก ไม่ใช่ชื่อฟีเจอร์ของเรา)
+- `help.html` 2 จุด (`hdc.reports`) — ชื่อตารางจริงบนฐานข้อมูลภายนอกที่เราไม่ได้เป็นเจ้าของ
+- ค่า fallback literal `'hdc'` ใน `db-remote.js`/`server.js` (ชื่อ schema จริงบนเซิร์ฟเวอร์ 192.168.88.203)
+- `changelog.ts` entries เดิมและ fix-log.md เดิม (บันทึกประวัติ ห้ามแก้ย้อนหลัง) + `chospital.hdc_regist`
+  (dead column ไม่มีการอ้างอิงในโค้ด) + `table_process` seed values ที่ลงท้าย `_hdc`
+
+### วิธีแก้
+Bulk rename `HDC`→`KHD`, `Hdc`→`Khd`, `hdc`→`khd` ทั่วทั้ง backend (`api/server.js` ~403 จุด, `api/db-remote.js`)
+และ frontend (19 ไฟล์ ~90 identifier + UI text) พร้อมแก้ camelCase ให้สม่ำเสมอ (`syncToHDC`→`syncToKhd` ฯลฯ) —
+เพิ่ม migration `CHANGE COLUMN` สำหรับ 2 คอลัมน์ข้างต้น + migration UPDATE สำหรับ `system_settings` override —
+อัปเดต `CLAUDE.md` ให้ตรงกับโค้ดจริง
+
+### ไฟล์ที่แก้ไข
+- Backend: `api/server.js`, `api/db-remote.js`, `api/.env.dev`, `api/.env.dev.example`, `.env.example`,
+  `docker-compose.yml`
+- Frontend: `services/auth.ts`, `kpi-manage.ts`/`.html`, `help.html`, `report-compare.ts`/`.html`,
+  `export-kpi.ts`/`.html`, `db-compare.ts`/`.html`, `kpi-manager.ts`/`.html`, `user-management.ts`/`.html`,
+  `form-builder.ts`/`.html`, `env-config.ts`, `sop.ts`, `role-page-access.html`, `changelog.ts` (entry ใหม่)
+- Docs: `CLAUDE.md`
+
+---
+
 ## 2569-09-25 — แยก "เป้าหมาย" ออกจาก "เกณฑ์" ในตัวชี้วัด + เพิ่ม badge "สะสม" แทนข้อความแจ้งเตือน static
 
 ### คำขอ
