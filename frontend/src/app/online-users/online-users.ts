@@ -62,9 +62,10 @@ export class OnlineUsersComponent implements OnInit, OnDestroy {
   };
 
   ngOnInit() {
-    const role = this.authService.getUserRole();
-    if (role !== 'super_admin') {
-      Swal.fire('Access Denied', 'เฉพาะ super_admin เท่านั้น', 'error');
+    // เดิม hardcode เช็ค role !== 'super_admin' ที่นี่ ซ้ำซ้อนกับ pageAccessGuard ที่ route และขัดกับ
+    // ระบบ Role × Page Access — ใช้ canAccessPage() แทนให้ตรงกับ guard
+    if (!this.authService.canAccessPage('online-users')) {
+      Swal.fire('Access Denied', 'เฉพาะผู้มีสิทธิ์เข้าถึงหน้านี้เท่านั้น', 'error');
       this.router.navigate(['/dashboard']);
       return;
     }

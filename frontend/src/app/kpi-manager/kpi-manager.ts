@@ -40,8 +40,10 @@ export class KpiManagerComponent implements OnInit, AfterViewInit, OnDestroy {
   hdcTrigger: number = 0;
 
   ngOnInit() {
-    if (this.authService.getUserRole() !== 'super_admin') {
-      Swal.fire('Access Denied', 'super_admin เท่านั้น', 'error');
+    // เดิม hardcode เช็ค role !== 'super_admin' ที่นี่ ซ้ำซ้อนกับ pageAccessGuard ที่ route และขัดกับ
+    // ระบบ Role × Page Access — ใช้ canAccessPage() แทนให้ตรงกับ guard
+    if (!this.authService.canAccessPage('kpi-manager')) {
+      Swal.fire('Access Denied', 'ไม่มีสิทธิ์เข้าถึงหน้านี้', 'error');
       this.router.navigate(['/dashboard']);
     }
   }

@@ -103,8 +103,9 @@ export class ExportKpiComponent implements OnInit {
   logsScheduleName: string = '';
 
   ngOnInit() {
-    const role = this.authService.getUserRole();
-    if (role !== 'super_admin') {
+    // เดิม hardcode เช็ค role !== 'super_admin' ที่นี่ — component นี้ embed อยู่ใน kpi-manager
+    // (pageKey 'kpi-manager' เดียวกัน) ใช้ canAccessPage() แทนให้ตรงกับ guard ของหน้าแม่
+    if (!this.authService.canAccessPage('kpi-manager')) {
       Swal.fire('Access Denied', 'คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'error');
       this.router.navigate(['/dashboard']);
       return;

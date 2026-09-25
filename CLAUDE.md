@@ -351,11 +351,20 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
     ปนกัน, `/indicators`+`/departments`+`/hospitals`+... มีทั้ง GET เปิดให้ทุก role (dropdown ใช้ร่วมทั้งระบบ) และ
     POST/PUT/DELETE ที่ isSuperAdmin — ต้องใช้ exact/regex เฉพาะจุด ดู comment เหนือ `PAGE_ACCESS_RULES` ในโค้ดก่อนเพิ่ม
     endpoint ใหม่เข้ากลุ่มเดิมเสมอ
-  - **ข้อจำกัดที่ตั้งใจ (ไม่ครอบคลุมทั้งหน้า):** pageKey `kpi-manage` ครอบคลุมเฉพาะ `/bulk-add-kpi*` (isAdmin เดิม) —
-    การแก้ไข/ลบตัวชี้วัด/หมวดหมู่/หน่วยงาน/หน่วยบริการ/Form Builder ยังคง hardcode `isSuperAdmin` เสมอ (ตรงกับที่
-    `kpi-manage.html` เองก็ซ่อนปุ่มเหล่านี้จาก admin_ssj ด้วย `*ngIf="isSuperAdmin"` อยู่แล้ว) — pageKey `users`
-    ครอบคลุมเฉพาะ endpoint ที่เดิมเป็น isAnyAdmin — approve/reject/toggle-active/basic (isAdmin เดิม) และ
-    bulk-toggle-active/permissions/sync-compare/sync-to-hdc (isSuperAdmin เดิม) ไม่รวมอยู่ในระบบนี้
+  - **ข้อจำกัดที่ตั้งใจ (ไม่ครอบคลุมทั้งหน้า):** pageKey `kpi-manage` ผ่าน `PAGE_ACCESS_RULES` ครอบคลุมเฉพาะ
+    `/bulk-add-kpi*` (isAdmin เดิม) — endpoint แก้ไข/ลบตัวชี้วัด/หมวดหมู่/หน่วยงาน/หน่วยบริการ **ไม่ได้ map ใน
+    `PAGE_ACCESS_RULES` เลย** (`resolvePageKeyFromPath` คืน `null`) แต่ POST/PUT (add/edit) ของกลุ่มนี้ถูกคุมแยกโดย
+    `requireAction('kpi-manage', 'add'|'edit')` แทนที่ `isSuperAdmin` เดิมตรงๆ (ดูระบบ Role × Action Access ด้านล่าง
+    — เป็นเช็คอิสระ ไม่ผูกกับ hasPageAccess) DELETE ทุกตัวยังคง hardcode `isSuperAdmin` เสมอ, Form Builder
+    (`/form-schemas` POST/DELETE, GET all-indicators) ก็ยังคง hardcode `isSuperAdmin` เสมอเช่นกัน (ตรงกับที่
+    `kpi-manage.html` ซ่อนปุ่มนี้จาก admin_ssj ด้วย `*ngIf="isSuperAdmin"` อยู่แล้ว) — pageKey `users` ผ่าน
+    `PAGE_ACCESS_RULES` ครอบคลุม endpoint GET (list/stats/pending-count) **และ** POST/PUT (add/edit ผู้ใช้ทั่วไป,
+    เพราะ prefix rule `/users` กว้างครอบคลุมทุก method) — แต่ POST/PUT เหล่านั้นเปลี่ยนมาใช้
+    `requireAction('users','add'|'edit')` แทน `isAnyAdmin` เดิมแล้ว ทำให้ต้องผ่าน **สองชั้น**: มี page access
+    `users` (จาก authenticateToken กลาง) **และ** มี action access `add`/`edit` (จาก middleware บน endpoint เอง) —
+    approve/reject/toggle-active/basic (isAdmin เดิม) และ bulk-toggle-active/permissions/sync-compare/sync-to-hdc
+    (isSuperAdmin เดิม) ไม่รวมอยู่ในระบบ action ใหม่เลย (ยัง hardcode ตามเดิมเสมอ — เป็น action คนละระดับ ไม่ใช่แค่
+    "เพิ่ม/แก้ไขข้อมูลทั่วไป") แต่ยังคงต้องมี page access `users` อยู่ดี (ผ่าน prefix rule เดิม)
   - Endpoint ที่เปิดให้ทุก role ใช้ร่วมกันข้ามหน้า (เช่น `/users/change-password`, `/notifications/unread-count`,
     `/notifications/pending-kpi`) ถูก exclude ออกจากระบบนี้โดยเจตนา (`pageKey: null` ใน rule หรือไม่มี rule เลย)
   - `_rolePageAccessCache` (Map, role → Set<pageKey>) โหลดตอน startup + reload ทุกครั้งที่ `PUT /role-page-access`
@@ -370,6 +379,48 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
     (wrapper ใน `layout.ts` เรียก `authService.canAccessPage()`) แทนเช็ค role ตรงๆ ทุกจุด
 - API: `GET /my-page-access` (ทุก role, คืน `{pageKey: boolean}` ของ role ตัวเอง), `GET /role-page-access` +
   `PUT /role-page-access` (super_admin เท่านั้น, จัดการทั้งเมทริกซ์)
+- **⚠️ ห้าม hardcode เช็ค role ตรงๆ ใน `ngOnInit()` ของ component หน้าใหม่เด็ดขาด** (เช่น
+  `if (role !== 'super_admin') { ...; router.navigate(['/dashboard']); }`) — ให้ใช้
+  `if (!this.authService.canAccessPage('pageKey')) { ... }` แทนเสมอ ต่อให้ route มี `pageAccessGuard` อยู่แล้วก็ตาม
+  (เพราะ sub-component ที่ embed อยู่ในหน้าอื่น เช่น `export-kpi`/`env-config` ไม่ได้ผ่าน route guard ของตัวเอง
+  ต้องเช็คเองด้วย `canAccessPage()` ของ pageKey หน้าแม่) — **พบบั๊กนี้จริงจาก 9 component** (`announcements`,
+  `settings`, `online-users`, `kpi-manager`, `kpi-setup`, `audit-log`, `kpi-manage`, `export-kpi`, `env-config`)
+  ที่เขียนไว้ตั้งแต่ก่อนมีระบบนี้ — ทำให้ต่อให้ Super Admin เปิดสิทธิ์หน้าให้ role อื่นผ่าน `/role-page-access` แล้ว
+  ก็ยังโดนเตะออกอยู่ดีเพราะ component เช็ค hardcode ซ้ำอีกชั้น (แก้ไขและทดสอบยืนยันแล้วว่าใช้งานได้จริงทุกจุด)
+- เช่นเดียวกัน **ห้าม hardcode ปุ่ม "เพิ่ม"/"แก้ไข" ไว้เป็นปุ่มที่ไม่มี `*ngIf` ใดๆ เลย** ในหน้าที่ผ่าน route guard
+  แบบ all-or-nothing มาก่อน (เช่น `announcements.html` เดิมไม่มี `*ngIf` บนปุ่มเพิ่ม/แก้ไข/ลบเลยสักปุ่ม เพราะพึ่งพา
+  การบล็อกทั้งหน้าที่ `ngOnInit` อย่างเดียว) — เมื่อเปิดหน้าให้ role อื่นเข้าถึงได้ ต้องเพิ่ม `*ngIf` ที่ระดับปุ่มด้วย
+  เสมอ ไม่ใช่แค่ที่ระดับหน้า (ปุ่ม "ลบ" ต้องเป็น `*ngIf="isSuperAdmin"` เสมอ ไม่มีข้อยกเว้น)
+
+### Role × Action Access (Dynamic — สิทธิ์ "เพิ่ม"/"แก้ไข" ข้อมูล แยกจากสิทธิ์เข้าหน้า)
+- ส่วนขยายของ Role × Page Access ด้านบน — คนละมิติ คนละตารางฐานข้อมูล ตั้งใจให้เป็น**เช็คอิสระ ไม่ผูกกับ
+  hasPageAccess** เพราะ endpoint เดิมหลายจุด bundle อ่าน+เขียนไว้ใต้ pageKey เดียว (เช่น `/users`) การผูกซ้อนกัน
+  จะยุ่งยากเกินจำเป็น — ระบบนี้แค่เพิ่มเงื่อนไข "เขียนได้ไหม" อีกชั้นบน endpoint ที่เป็น POST (add) / PUT (edit)
+  เท่านั้น — **DELETE ยังคง hardcode `isSuperAdmin` เสมอทุกจุดตามกติกาเดิมของทั้งระบบ ไม่มีข้อยกเว้น**
+  (ปุ่มลบ = super_admin เท่านั้นเสมอ)
+- ครอบคลุมแค่ 3 หน้าที่มี CRUD จริงและปลอดภัยพอจะแยกระดับ: `kpi-manage` (indicators/main-indicators/main-yut/
+  sub-indicators/departments/hospitals/form-schemas — ไม่รวม Form Builder), `users` (add user + PUT
+  แก้ไขข้อมูลผู้ใช้ทั่วไป/reset-password — ไม่รวม approve/reject/permissions/sync), `announcements`
+  (add/edit/activate — ไม่รวม send-email)
+- **ไม่รวม `dashboard`/`kpi-setup`** — endpoint หลัก (`/update-kpi`) ใช้ `authenticateToken` ตรงๆ ไม่ผ่าน
+  middleware กลางที่ไหนเลย (route handler ประกาศแบบ `apiRouter.post('/update-kpi', async (req,res)=>{...})`
+  ไม่มี `isXxx` middleware ใดๆ ต่อท้าย) และ dashboard มี per-user permission (`can_edit_actual`/`can_edit_target`
+  ในตาราง `users`, เช็คผ่าน `getPermsForUser()`) อยู่แล้วซึ่งเป็นกลไกคนละชั้น เสี่ยงเกินไปที่จะแตะในรอบนี้
+- ตาราง `role_action_access` (role, page_key, action ENUM('add','edit'), is_enabled) UNIQUE(role, page_key, action)
+  — auto-seed ให้ตรงกับ middleware เดิมของแต่ละ endpoint เป๊ะ (ดู `ACTION_ACCESS_DEFAULT_ENABLED` ในโค้ด)
+- Backend: `requireAction(pageKey, action)` factory (`role==='super_admin' || hasActionAccess(...)`) ใช้แทนที่
+  `isAdmin`/`isAnyAdmin`/`isSuperAdmin` เดิม**ตรงๆ** บน endpoint ที่เลือกไว้ (ไม่ใช่ OR เพิ่มแบบ page access — คือ
+  การแทนที่ทั้งหมด) — `_roleActionAccessCache` (Map, role → Map<pageKey, Set<action>>) โหลดตอน startup + reload
+  ทุกครั้งที่ `PUT /role-action-access`
+- Frontend: `AuthService.canPerformAction(pageKey, action)` อ่านจาก `localStorage['kpi_action_access']` (set โดย
+  `saveUser()` ผ่าน `GET /my-action-access`, fail-open เหมือน `canAccessPage()`) — หน้า `kpi-manage`/`users`/
+  `announcements` มี `canAddData`/`canEditData` เป็น component property เรียก `canPerformAction()` ใน `ngOnInit`
+  ใช้ gate ปุ่ม "เพิ่ม"/"แก้ไข" แทน `isSuperAdmin` เดิม (ปุ่ม "ลบ" ไม่แตะ ยังคง `isSuperAdmin` เสมอ)
+- UI จัดการ: ตารางที่ 2 ในหน้า `/role-page-access` เดียวกัน (ไม่แยกหน้า) — แถว = "หน้า — เพิ่ม/แก้ไข" (6 แถว: 3 หน้า
+  × 2 action), คอลัมน์ = role — component/service เดียวกัน แค่เพิ่ม method `loadActions()`/`saveActions()` แยกจาก
+  `load()`/`save()` เดิม เพราะเป็นคนละ API/ตาราง
+- API: `GET /my-action-access` (ทุก role), `GET /role-action-access` + `PUT /role-action-access` (super_admin
+  เท่านั้น)
 
 ### Single Session Enforcement (กัน login ซ้อน)
 - ตาราง `users` เพิ่ม 2 คอลัมน์: `active_session_id` VARCHAR(64) + `session_started_at` DATETIME + index `idx_active_session`
@@ -625,6 +676,8 @@ docker builder prune -af
 - ❌ Export แยก hasForm path (ไม่ส่ง m10-m09) — ตารางต้องมีเดือนเสมอ + form fields เพิ่มเติม
 - ❌ เพิ่ม route ใหม่ใน app.routes.ts โดยไม่ใส่ `data.pageKey` + `pageAccessGuard` (ระบบ Role × Page Access จะไม่ครอบคลุมหน้านั้น)
 - ❌ Map endpoint ใหม่เข้า `PAGE_ACCESS_RULES` ด้วย prefix กว้างๆ โดยไม่เช็คก่อนว่า path นั้นมี middleware ระดับต่างกันปนกันหรือไม่ (over-grant) — ดูส่วน "Role × Page Access" ก่อนเสมอ
+- ❌ เขียน hardcode เช็ค role ตรงๆ ใน `ngOnInit()` ของ component หน้าใหม่ (เช่น `if (role !== 'super_admin') {...}`) — ใช้ `authService.canAccessPage('pageKey')` เสมอ แม้ route จะมี `pageAccessGuard` แล้วก็ตาม (sub-component ที่ embed ในหน้าอื่นไม่ผ่าน route guard ของตัวเอง)
+- ❌ ปล่อยปุ่ม "เพิ่ม"/"แก้ไข" ไว้แบบไม่มี `*ngIf` เลยในหน้าที่เดิมพึ่งพา route guard แบบ all-or-nothing — ต้องเพิ่ม `*ngIf="canPerformAction('pageKey','add'|'edit')"` ที่ระดับปุ่มเองเสมอเมื่อหน้านั้นอาจถูกเปิดให้ role อื่นเข้าถึง
 
 ## 12. Key Tables
 

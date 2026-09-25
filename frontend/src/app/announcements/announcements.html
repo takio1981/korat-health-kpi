@@ -5,7 +5,7 @@
         <h3 class="text-base sm:text-lg font-bold text-gray-800"><i class="fas fa-bullhorn mr-2 text-red-500"></i>จัดการประกาศระบบ</h3>
         <p class="text-[11px] sm:text-xs text-gray-400 mt-1">แสดงบน Dashboard header + SweetAlert ตอน login (เฉพาะประกาศที่ active 1 รายการ)</p>
       </div>
-      <button (click)="openCreate()" class="w-full sm:w-auto shrink-0 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-sm shadow">
+      <button *ngIf="canAddData" (click)="openCreate()" class="w-full sm:w-auto shrink-0 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-sm shadow">
         <i class="fas fa-plus mr-1"></i>เพิ่มประกาศ
       </button>
     </div>
@@ -33,16 +33,16 @@
             </p>
           </div>
           <div class="grid grid-cols-2 sm:flex sm:flex-wrap gap-1 shrink-0">
-            <button *ngIf="!a.is_active" (click)="activate(a)" class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold" title="เปิดใช้งาน">
+            <button *ngIf="!a.is_active && canEditData" (click)="activate(a)" class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold" title="เปิดใช้งาน">
               <i class="fas fa-check"></i><span class="ml-1">Activate</span>
             </button>
             <button (click)="openEmailModal(a)" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold" title="ส่งเข้าอีเมล">
               <i class="fas fa-paper-plane"></i><span class="ml-1">ส่งอีเมล</span>
             </button>
-            <button (click)="openEdit(a)" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold" title="แก้ไข">
+            <button *ngIf="canEditData" (click)="openEdit(a)" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold" title="แก้ไข">
               <i class="fas fa-edit"></i><span class="ml-1 sm:hidden">แก้ไข</span>
             </button>
-            <button (click)="remove(a)" class="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs font-bold" title="ลบ">
+            <button *ngIf="isSuperAdmin" (click)="remove(a)" class="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs font-bold" title="ลบ">
               <i class="fas fa-trash"></i><span class="ml-1 sm:hidden">ลบ</span>
             </button>
           </div>

@@ -67,6 +67,7 @@ export class AuthService {
   saveUser(user: any) {
     localStorage.setItem('kpi_user', JSON.stringify(user));
     this.refreshPageAccessCache();
+    this.refreshActionAccessCache();
   }
 
   // === Role × Page Access — cache สิทธิ์การเข้าถึงหน้าของ role ปัจจุบัน (โหลดหลัง login ทุกช่องทาง) ===
@@ -76,6 +77,46 @@ export class AuthService {
       next: (res: any) => { if (res?.success) localStorage.setItem('kpi_page_access', JSON.stringify(res.access)); },
       error: () => {} // เงียบไว้ — canAccessPage() fail-open ถ้ายังไม่มี cache กันบล็อกผิดพลาดช่วงรอ fetch
     });
+  }
+
+  // === Role × Action Access — cache สิทธิ์ "เพิ่ม"/"แก้ไข" ของ role ปัจจุบัน (คนละมิติกับสิทธิ์เข้าหน้า) ===
+  private refreshActionAccessCache() {
+    if (this.getUserRole() === 'super_admin') { localStorage.removeItem('kpi_action_access'); return; }
+    this.getMyActionAccess().subscribe({
+      next: (res: any) => { if (res?.success) localStorage.setItem('kpi_action_access', JSON.stringify(res.access)); },
+      error: () => {}
+    });
+  }
+
+  getMyActionAccess(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/my-action-access`, { headers });
+  }
+
+  getRoleActionAccess(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/role-action-access`, { headers });
+  }
+
+  saveRoleActionAccess(items: { role: string; page_key: string; action: string; is_enabled: boolean }[]): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/role-action-access`, { items }, { headers });
+  }
+
+  // true = role ปัจจุบัน "เพิ่ม"/"แก้ไข" ข้อมูลในหน้านี้ได้ — super_admin ผ่านเสมอ, หน้าที่ไม่อยู่ใน matrix (ไม่มี add/edit
+  // ให้ควบคุม) หรือยังไม่มี cache = fail-open เหมือน canAccessPage (backend เป็นด่านตัดสินจริงเสมอ)
+  canPerformAction(pageKey: string, action: 'add' | 'edit'): boolean {
+    if (this.getUserRole() === 'super_admin') return true;
+    try {
+      const raw = localStorage.getItem('kpi_action_access');
+      if (!raw) return true;
+      const map = JSON.parse(raw);
+      if (!map[pageKey]) return true; // หน้านี้ไม่อยู่ใน matrix เลย — ไม่ถูกควบคุมด้วยระบบนี้
+      return map[pageKey][action] !== false;
+    } catch { return true; }
   }
 
   getMyPageAccess(): Observable<any> {
@@ -191,6 +232,7 @@ export class AuthService {
     localStorage.removeItem('kpi_token');
     localStorage.removeItem('kpi_user');
     localStorage.removeItem('kpi_page_access');
+    localStorage.removeItem('kpi_action_access');
   }
 
   // 3. ฟังก์ชันเช็คว่าล็อกอินอยู่หรือไม่ (เช็คว่ามี Token ไหม)

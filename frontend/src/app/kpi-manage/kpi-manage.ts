@@ -141,11 +141,20 @@ export class KpiManageComponent implements OnInit {
     return this.importRows.filter((_, i) => !errorRows.has(i));
   }
 
+  // สิทธิ์เพิ่ม/แก้ไขข้อมูล — ตั้งค่าได้จากหน้า "สิทธิ์การเข้าถึงหน้า" (super_admin) แยกจาก isSuperAdmin เดิม
+  // (canPerformAction คืน true เสมอถ้า role เป็น super_admin อยู่แล้ว ไม่ต้อง OR isSuperAdmin ซ้ำ)
+  canAddData: boolean = false;
+  canEditData: boolean = false;
+
   ngOnInit() {
     const role = this.authService.getUserRole();
     this.isAdmin = role === 'admin_ssj' || role === 'super_admin';
     this.isSuperAdmin = role === 'super_admin';
-    if (!this.isAdmin) {
+    this.canAddData = this.authService.canPerformAction('kpi-manage', 'add');
+    this.canEditData = this.authService.canPerformAction('kpi-manage', 'edit');
+    // เดิม hardcode เช็ค isAdmin ตรงๆ ที่นี่ ซ้ำซ้อนกับ pageAccessGuard ที่ route และขัดกับระบบ
+    // Role × Page Access — ใช้ canAccessPage() แทนให้ตรงกับ guard
+    if (!this.authService.canAccessPage('kpi-manage')) {
       this.router.navigate(['/dashboard']);
       return;
     }

@@ -50,13 +50,24 @@ export class AnnouncementsComponent implements OnInit {
   bgColors = ['#dc2626', '#ea580c', '#d97706', '#16a34a', '#2563eb', '#7c3aed', '#0f172a'];
   textColors = ['#ffffff', '#fde68a', '#000000', '#fef3c7'];
 
+  // สิทธิ์เพิ่ม/แก้ไขประกาศ — ตั้งค่าได้จากหน้า "สิทธิ์การเข้าถึงหน้า" (super_admin) แยกจากสิทธิ์เข้าหน้า
+  // ปุ่ม "ลบ" ยังคง hardcode super_admin เท่านั้นเสมอ (ไม่มีในระบบ add/edit นี้)
+  canAddData: boolean = false;
+  canEditData: boolean = false;
+  isSuperAdmin: boolean = false;
+
   ngOnInit() {
-    const role = this.authService.getUserRole();
-    if (role !== 'super_admin') {
-      Swal.fire('Access Denied', 'เฉพาะ super_admin', 'error');
+    this.isSuperAdmin = this.authService.getUserRole() === 'super_admin';
+    // เดิม hardcode เช็ค role !== 'super_admin' ตรงๆ ที่นี่ ซ้ำซ้อนกับ pageAccessGuard ที่ route
+    // และขัดกับระบบ Role × Page Access ใหม่ (ต่อให้ super_admin เปิดสิทธิ์หน้านี้ให้ role อื่นผ่าน
+    // guard แล้ว ก็ยังโดนเตะออกอยู่ดีเพราะเช็คซ้ำที่นี่) — ใช้ canAccessPage() แทนให้ตรงกับ guard
+    if (!this.authService.canAccessPage('announcements')) {
+      Swal.fire('Access Denied', 'ไม่มีสิทธิ์เข้าถึงหน้านี้', 'error');
       this.router.navigate(['/dashboard']);
       return;
     }
+    this.canAddData = this.authService.canPerformAction('announcements', 'add');
+    this.canEditData = this.authService.canPerformAction('announcements', 'edit');
     this.loadList();
   }
 

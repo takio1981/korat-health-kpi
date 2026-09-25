@@ -87,10 +87,17 @@ export class UserManagementComponent implements OnInit {
   activeDrillType: string = '';
   activeDrillValue: string = '';
 
+  // สิทธิ์เพิ่ม/แก้ไขผู้ใช้งาน — ตั้งค่าได้จากหน้า "สิทธิ์การเข้าถึงหน้า" (super_admin) แยกจาก isAdmin/isSuperAdmin เดิม
+  // ไม่ครอบคลุม: อนุมัติ/ตีกลับ/ตั้งค่าสิทธิ์แก้ไขข้อมูล/sync HDC (ยังคง hardcode admin_ssj+super_admin หรือ super_admin ตามเดิม)
+  canAddData: boolean = false;
+  canEditData: boolean = false;
+
   ngOnInit() {
     const role = this.authService.getUserRole();
     this.isAdmin = ['admin_hos', 'admin_sso', 'admin_cup', 'admin_ssj', 'super_admin'].includes(role);
     this.isSuperAdmin = role === 'super_admin';
+    this.canAddData = this.authService.canPerformAction('users', 'add');
+    this.canEditData = this.authService.canPerformAction('users', 'edit');
     this.loggedInUser = this.authService.getUser();
 
     // อ่าน query param ?status=pending จาก URL (เช่น navigate มาจากหน้าแจ้งเตือน)

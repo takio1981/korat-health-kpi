@@ -723,6 +723,75 @@ function resolvePageKeyFromPath(method, path) {
     return null; // ไม่พบ mapping — endpoint นี้ไม่ถูกควบคุมด้วยระบบสิทธิ์หน้า (คงพฤติกรรมเดิม)
 }
 
+// ============================================================================
+// === Role × Action Access — สิทธิ์ "เพิ่ม"/"แก้ไข" ข้อมูลแยกต่างหากจากสิทธิ์เข้าหน้า ===
+// ============================================================================
+// เป็นคนละมิติกับ role_page_access (การเข้าหน้า/เห็นเมนู) โดยตั้งใจ — independent เช็คเอง
+// ไม่ผูกกับ hasPageAccess เลย เพราะบาง endpoint เดิม bundle ทั้งอ่าน+เขียนไว้ใต้ pageKey เดียว
+// (เช่น /users) ถ้าผูกซ้อนกันจะยุ่งยากเกินจำเป็น — ระบบนี้แค่เพิ่มเงื่อนไข "เขียนได้ไหม" อีกชั้น
+// บน endpoint ที่เป็น POST (add) / PUT (edit) เท่านั้น — DELETE ยังคง hardcode isSuperAdmin
+// เสมอทุกจุดตามกติกาเดิมของระบบ (ปุ่มลบ = super_admin เท่านั้น ไม่มีข้อยกเว้น)
+//
+// ขอบเขตที่ตั้งใจไม่ครอบคลุม (เก็บพฤติกรรมเดิมไว้ hardcode เหมือนเดิมทุกจุด — เหตุผลดูแต่ละจุด):
+// - users: approve/reject/toggle-active/basic (isAdmin เดิม, เข้มกว่า isAnyAdmin ของ view) และ
+//   permissions/bulk-toggle-active/sync-compare/sync-to-hdc (isSuperAdmin เดิม) — เป็น action
+//   คนละระดับกับ "แก้ไขข้อมูลผู้ใช้ทั่วไป" (อนุมัติ/สิทธิ์พิเศษ/sync ข้ามระบบ) ไม่ใช่ "เพิ่ม/แก้ไข" ตรงๆ
+// - kpi-manage: GET .../result-summary, GET /form-schemas/all-indicators เป็น read ไม่ใช่เขียน
+// - announcements: POST .../send-email เป็น action แจ้งเตือน ไม่ใช่เพิ่ม/แก้ไขข้อมูลประกาศ
+// - dashboard/kpi-setup: ไม่รวมในรอบนี้ — endpoint หลัก (/update-kpi) ใช้ authenticateToken
+//   ตรงๆ ไม่ผ่าน middleware กลาง + มี per-user permission (can_edit_actual/can_edit_target ใน
+//   ตาราง users) อยู่แล้วซึ่งเป็นกลไกคนละชั้น เสี่ยงเกินไปที่จะแตะในรอบนี้
+const ACTION_ACCESS_ROLES = PAGE_ACCESS_ROLES; // 8 role เดียวกัน (ไม่รวม super_admin)
+const ACTION_ACCESS_PAGES = [
+    { key: 'kpi-manage', label: 'จัดการตัวชี้วัด' },
+    { key: 'users', label: 'จัดการผู้ใช้งาน' },
+    { key: 'announcements', label: 'ประกาศระบบ' },
+];
+const ACTION_TYPES = ['add', 'edit'];
+// ค่าเริ่มต้น — ตรงกับ middleware เดิมของแต่ละ endpoint เป๊ะ (ดู comment เหนือ endpoint ที่แก้แต่ละจุด)
+const ACTION_ACCESS_DEFAULT_ENABLED = {
+    'kpi-manage:add': [],  // เดิม isSuperAdmin ล้วน — admin_ssj เองก็ทำไม่ได้ (kpi-manage.html ซ่อนปุ่มด้วย *ngIf="isSuperAdmin")
+    'kpi-manage:edit': [],
+    'users:add': ['admin_ssj', 'admin_cup', 'admin_hos', 'admin_sso'],  // เดิม isAnyAdmin
+    'users:edit': ['admin_ssj', 'admin_cup', 'admin_hos', 'admin_sso'], // เดิม isAnyAdmin (PUT /users/:id, reset-password)
+    'announcements:add': [],  // เดิม isSuperAdmin ล้วน
+    'announcements:edit': [],
+};
+
+const _roleActionAccessCache = new Map(); // role -> Map<pageKey, Set<action>>
+async function loadRoleActionAccessCache() {
+    try {
+        const [rows] = await db.query('SELECT role, page_key, action FROM role_action_access WHERE is_enabled = 1');
+        const next = new Map();
+        for (const r of rows) {
+            if (!next.has(r.role)) next.set(r.role, new Map());
+            const pageMap = next.get(r.role);
+            if (!pageMap.has(r.page_key)) pageMap.set(r.page_key, new Set());
+            pageMap.get(r.page_key).add(r.action);
+        }
+        _roleActionAccessCache.clear();
+        for (const [k, v] of next) _roleActionAccessCache.set(k, v);
+    } catch (e) {
+        console.error('❌ loadRoleActionAccessCache failed:', e.message);
+    }
+}
+function hasActionAccess(role, pageKey, action) {
+    if (role === 'super_admin') return true;
+    if (!pageKey || !action) return false;
+    const pageMap = _roleActionAccessCache.get(role);
+    const set = pageMap && pageMap.get(pageKey);
+    return !!(set && set.has(action));
+}
+// Middleware factory — ใช้แทน isAdmin/isAnyAdmin/isSuperAdmin เดิมตรงๆ บน endpoint เพิ่ม/แก้ไขที่เลือกไว้
+function requireAction(pageKey, action) {
+    const actionLabel = action === 'add' ? 'เพิ่ม' : 'แก้ไข';
+    return (req, res, next) => {
+        const role = req.user?.role;
+        if (role && hasActionAccess(role, pageKey, action)) return next();
+        res.status(403).json({ success: false, message: `ไม่มีสิทธิ์${actionLabel}ข้อมูลในหน้านี้` });
+    };
+}
+
 const authenticateToken = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -3739,7 +3808,7 @@ apiRouter.get('/form-schemas/all-indicators', authenticateToken, isSuperAdmin, a
 });
 
 // POST /form-schemas — สร้าง/อัปเดต schema + CREATE TABLE ในฐานข้อมูล
-apiRouter.post('/form-schemas', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/form-schemas', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
     const { indicator_id, form_title, form_description, fields, schema_id, actual_value_field, include_default_fields } = req.body;
     const withDefaults = include_default_fields !== false; // default true
     if (!indicator_id || !form_title || !Array.isArray(fields) || fields.length === 0) {
@@ -4774,7 +4843,7 @@ apiRouter.get('/hospitals', authenticateToken, async (req, res) => {
 
 // === Hospitals CRUD (super_admin) ===
 // POST /hospitals — create
-apiRouter.post('/hospitals', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/hospitals', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
     const { hoscode, hosname, hostype, provcode, distcode } = req.body;
     if (!hoscode || !hosname) return res.status(400).json({ success: false, message: 'กรุณากรอก hoscode + hosname' });
     if (!/^[0-9A-Za-z_-]{1,20}$/.test(String(hoscode))) return res.status(400).json({ success: false, message: 'hoscode ไม่ถูกต้อง (สูงสุด 20 ตัวอักษร a-z, 0-9, _, -)' });
@@ -4793,7 +4862,7 @@ apiRouter.post('/hospitals', authenticateToken, isSuperAdmin, async (req, res) =
 });
 
 // PUT /hospitals/:hoscode — update
-apiRouter.put('/hospitals/:hoscode', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.put('/hospitals/:hoscode', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     const { hoscode } = req.params;
     const { hosname, hostype, provcode, distcode } = req.body;
     if (!hosname) return res.status(400).json({ success: false, message: 'กรุณากรอก hosname' });
@@ -4852,7 +4921,7 @@ apiRouter.get('/districts', authenticateToken, async (req, res) => {
     }
 });
 
-apiRouter.post('/users', authenticateToken, isAnyAdmin, async (req, res) => {
+apiRouter.post('/users', authenticateToken, requireAction('users', 'add'), async (req, res) => {
     const { username, password, role, dept_id, firstname, lastname, hospcode, phone, email, cid } = req.body;
     const user = req.user;
     const isCentralAdmin = ROLE_ADMIN_CENTRAL.includes(user.role);
@@ -5022,7 +5091,7 @@ apiRouter.put('/users/bulk-toggle-active', authenticateToken, isSuperAdmin, asyn
     }
 });
 
-apiRouter.put('/users/:id', authenticateToken, isAnyAdmin, async (req, res) => {
+apiRouter.put('/users/:id', authenticateToken, requireAction('users', 'edit'), async (req, res) => {
     const userId = req.params.id;
     const { username, password, role, dept_id, firstname, lastname, hospcode, phone, email, cid } = req.body;
     const user = req.user;
@@ -5126,7 +5195,7 @@ apiRouter.delete('/users/:id', authenticateToken, isAnyAdmin, async (req, res) =
     }
 });
 
-apiRouter.put('/users/:id/reset-password', authenticateToken, isAnyAdmin, async (req, res) => {
+apiRouter.put('/users/:id/reset-password', authenticateToken, requireAction('users', 'edit'), async (req, res) => {
     const userId = req.params.id;
     const user = req.user;
     // ตรวจสอบสิทธิ์ตามขอบเขต
@@ -5513,6 +5582,69 @@ apiRouter.put('/role-page-access', authenticateToken, isSuperAdmin, async (req, 
     }
 });
 
+// GET /my-action-access — สิทธิ์ "เพิ่ม"/"แก้ไข" ของ role ปัจจุบัน (ทุก role ใช้ได้)
+apiRouter.get('/my-action-access', authenticateToken, async (req, res) => {
+    const role = req.user.role;
+    const access = {};
+    for (const page of ACTION_ACCESS_PAGES) {
+        access[page.key] = {};
+        for (const action of ACTION_TYPES) access[page.key][action] = hasActionAccess(role, page.key, action);
+    }
+    res.json({ success: true, role, access });
+});
+
+// GET /role-action-access — เมทริกซ์เต็ม (super_admin เท่านั้น)
+apiRouter.get('/role-action-access', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT role, page_key, action, is_enabled FROM role_action_access');
+        res.json({
+            success: true,
+            roles: ACTION_ACCESS_ROLES,
+            pages: ACTION_ACCESS_PAGES,
+            actions: ACTION_TYPES,
+            data: rows
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// PUT /role-action-access — บันทึกทั้งเมทริกซ์ (super_admin เท่านั้น)
+apiRouter.put('/role-action-access', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { items } = req.body; // [{ role, page_key, action, is_enabled }]
+    if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ success: false, message: 'ไม่มีข้อมูลที่จะบันทึก' });
+    }
+    const validPageKeys = new Set(ACTION_ACCESS_PAGES.map(p => p.key));
+    const validRoles = new Set(ACTION_ACCESS_ROLES);
+    const validActions = new Set(ACTION_TYPES);
+    const clean = [];
+    for (const it of items) {
+        const role = String(it.role || '');
+        const pageKey = String(it.page_key || '');
+        const action = String(it.action || '');
+        if (!validRoles.has(role) || !validPageKeys.has(pageKey) || !validActions.has(action)) continue;
+        clean.push([role, pageKey, action, it.is_enabled ? 1 : 0]);
+    }
+    if (clean.length === 0) return res.status(400).json({ success: false, message: 'ไม่มีข้อมูลที่ถูกต้อง' });
+
+    try {
+        await db.query(
+            `INSERT INTO role_action_access (role, page_key, action, is_enabled) VALUES ?
+             ON DUPLICATE KEY UPDATE is_enabled = VALUES(is_enabled)`,
+            [clean]
+        );
+        await loadRoleActionAccessCache();
+        await db.query(
+            'INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?,?,?,?,?)',
+            [req.user.userId || null, 'UPDATE', 'role_action_access', JSON.stringify({ count: clean.length }), (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim().slice(0, 64)]
+        ).catch(() => {});
+        res.json({ success: true, message: `บันทึกสิทธิ์เพิ่ม/แก้ไขข้อมูล ${clean.length} รายการสำเร็จ` });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 // --- CRUD Main Yut (ยุทธศาสตร์) ---
 apiRouter.get('/main-yut', authenticateToken, async (req, res) => {
     try {
@@ -5523,7 +5655,7 @@ apiRouter.get('/main-yut', authenticateToken, async (req, res) => {
     }
 });
 
-apiRouter.post('/main-yut', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/main-yut', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
     const { yut_name, yut_code, description, sort_order } = req.body;
     if (!yut_name) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อยุทธศาสตร์' });
     try {
@@ -5537,7 +5669,7 @@ apiRouter.post('/main-yut', authenticateToken, isSuperAdmin, async (req, res) =>
     }
 });
 
-apiRouter.put('/main-yut/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.put('/main-yut/:id', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     const { yut_name, yut_code, description, sort_order, is_active } = req.body;
     if (!yut_name) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อยุทธศาสตร์' });
     try {
@@ -5575,7 +5707,7 @@ apiRouter.get('/main-indicators', authenticateToken, async (req, res) => {
     }
 });
 
-apiRouter.post('/main-indicators', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/main-indicators', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
     const name = req.body.main_indicator_name || req.body.indicator_name;
     const { yut_id, main_indicator_code, description, sort_order } = req.body;
     if (!name) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อหมวดหมู่หลัก' });
@@ -5590,7 +5722,7 @@ apiRouter.post('/main-indicators', authenticateToken, isSuperAdmin, async (req, 
     }
 });
 
-apiRouter.put('/main-indicators/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.put('/main-indicators/:id', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     const name = req.body.main_indicator_name || req.body.indicator_name;
     const { yut_id, main_indicator_code, description, sort_order, is_active } = req.body;
     if (!name) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อหมวดหมู่หลัก' });
@@ -5673,7 +5805,7 @@ const _actorLabel = async (userId) => {
     } catch (_) { return `user_id ${userId}`; }
 };
 
-apiRouter.post('/indicators/bulk-import', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/indicators/bulk-import', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
     const { rows } = req.body;
     if (!Array.isArray(rows) || rows.length === 0)
         return res.status(400).json({ success: false, message: 'ไม่มีข้อมูลสำหรับนำเข้า' });
@@ -5705,7 +5837,7 @@ apiRouter.post('/indicators/bulk-import', authenticateToken, isSuperAdmin, async
     res.json({ success: true, inserted, errors, results });
 });
 
-apiRouter.post('/indicators', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/indicators', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
     const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export } = req.body;
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
         return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
@@ -5733,7 +5865,7 @@ apiRouter.post('/indicators', authenticateToken, isSuperAdmin, async (req, res) 
     }
 });
 
-apiRouter.put('/indicators/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.put('/indicators/:id', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, weight, kpi_indicators_code, is_active, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export } = req.body;
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
         return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
@@ -5847,7 +5979,7 @@ apiRouter.get('/sub-indicators', authenticateToken, async (req, res) => {
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-apiRouter.post('/sub-indicators', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/sub-indicators', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
     try {
         const { indicator_id, sub_indicator_name, sub_indicator_code, target_percentage, weight, description, sort_order } = req.body;
         if (!indicator_id || !sub_indicator_name) return res.status(400).json({ success: false, message: 'indicator_id + sub_indicator_name required' });
@@ -5860,7 +5992,7 @@ apiRouter.post('/sub-indicators', authenticateToken, isSuperAdmin, async (req, r
 });
 
 // POST /sub-indicators/bulk-import — นำเข้าตัวชี้วัดย่อยหลายรายการจาก Excel (scoped ต่อ indicator_id เดียว)
-apiRouter.post('/sub-indicators/bulk-import', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/sub-indicators/bulk-import', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
     const { indicator_id, rows } = req.body;
     if (!indicator_id) return res.status(400).json({ success: false, message: 'ไม่พบ indicator_id' });
     if (!Array.isArray(rows) || rows.length === 0)
@@ -5886,7 +6018,7 @@ apiRouter.post('/sub-indicators/bulk-import', authenticateToken, isSuperAdmin, a
     res.json({ success: true, inserted, errors, results });
 });
 
-apiRouter.put('/sub-indicators/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.put('/sub-indicators/:id', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     try {
         const { sub_indicator_name, sub_indicator_code, target_percentage, weight, description, sort_order, is_active } = req.body;
         await db.query(
@@ -5904,7 +6036,7 @@ apiRouter.delete('/sub-indicators/:id', authenticateToken, isSuperAdmin, async (
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-apiRouter.put('/sub-indicators/:id/toggle-active', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.put('/sub-indicators/:id/toggle-active', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     try {
         const { is_active } = req.body;
         await db.query('UPDATE kpi_sub_indicators SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, req.params.id]);
@@ -6036,7 +6168,7 @@ apiRouter.delete('/sub-results/:id', authenticateToken, isSuperAdmin, async (req
 });
 
 // --- Toggle is_active สำหรับ Master Data ทั้ง 4 ตาราง ---
-apiRouter.put('/indicators/:id/toggle-active', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.put('/indicators/:id/toggle-active', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     try {
         const { is_active } = req.body;
         await db.query('UPDATE kpi_indicators SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, req.params.id]);
@@ -6046,7 +6178,7 @@ apiRouter.put('/indicators/:id/toggle-active', authenticateToken, isSuperAdmin, 
     }
 });
 
-apiRouter.put('/main-indicators/:id/toggle-active', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.put('/main-indicators/:id/toggle-active', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     try {
         const { is_active } = req.body;
         await db.query('UPDATE kpi_main_indicators SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, req.params.id]);
@@ -6056,7 +6188,7 @@ apiRouter.put('/main-indicators/:id/toggle-active', authenticateToken, isSuperAd
     }
 });
 
-apiRouter.put('/main-yut/:id/toggle-active', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.put('/main-yut/:id/toggle-active', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     try {
         const { is_active } = req.body;
         await db.query('UPDATE main_yut SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, req.params.id]);
@@ -6066,7 +6198,7 @@ apiRouter.put('/main-yut/:id/toggle-active', authenticateToken, isSuperAdmin, as
     }
 });
 
-apiRouter.put('/departments/:id/toggle-active', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.put('/departments/:id/toggle-active', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     try {
         const { is_active } = req.body;
         await db.query('UPDATE departments SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, req.params.id]);
@@ -6765,7 +6897,7 @@ apiRouter.get('/notifications/pending-kpi', authenticateToken, isAdmin, async (r
         res.status(500).json({ success: false, message: error.message });
     }
 });
-apiRouter.post('/departments', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/departments', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
     const { dept_code, dept_name, description, sort_order } = req.body;
     if (!dept_name) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อหน่วยงาน' });
     try {
@@ -6779,7 +6911,7 @@ apiRouter.post('/departments', authenticateToken, isSuperAdmin, async (req, res)
     }
 });
 
-apiRouter.put('/departments/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.put('/departments/:id', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     const { dept_code, dept_name, description, sort_order, is_active } = req.body;
     if (!dept_name) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อหน่วยงาน' });
     try {
@@ -6813,7 +6945,7 @@ apiRouter.get('/announcements', authenticateToken, isSuperAdmin, async (req, res
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-apiRouter.post('/announcements', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/announcements', authenticateToken, requireAction('announcements', 'add'), async (req, res) => {
     try {
         const { title, content_html, content_text, bg_color, text_color, blink_enabled, show_on_header, show_on_login, is_active } = req.body;
         if (!content_html) return res.status(400).json({ success: false, message: 'กรุณากรอกข้อความ' });
@@ -6831,7 +6963,7 @@ apiRouter.post('/announcements', authenticateToken, isSuperAdmin, async (req, re
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-apiRouter.put('/announcements/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.put('/announcements/:id', authenticateToken, requireAction('announcements', 'edit'), async (req, res) => {
     try {
         const { title, content_html, content_text, bg_color, text_color, blink_enabled, show_on_header, show_on_login, is_active } = req.body;
         if (!content_html) return res.status(400).json({ success: false, message: 'กรุณากรอกข้อความ' });
@@ -6854,7 +6986,7 @@ apiRouter.delete('/announcements/:id', authenticateToken, isSuperAdmin, async (r
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-apiRouter.put('/announcements/:id/activate', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.put('/announcements/:id/activate', authenticateToken, requireAction('announcements', 'edit'), async (req, res) => {
     try {
         await db.query('UPDATE system_announcements SET is_active = 0');
         await db.query('UPDATE system_announcements SET is_active = 1 WHERE id = ?', [req.params.id]);
@@ -10013,6 +10145,44 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
     }
 })();
 
+// ========== Auto-create + seed role_action_access (สิทธิ์ "เพิ่ม"/"แก้ไข" แยกจากสิทธิ์เข้าหน้า) ==========
+(async () => {
+    try {
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS role_action_access (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                role VARCHAR(20) NOT NULL,
+                page_key VARCHAR(40) NOT NULL,
+                action ENUM('add','edit') NOT NULL,
+                is_enabled TINYINT(1) NOT NULL DEFAULT 0,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uk_role_page_action (role, page_key, action)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+        const [existingRows] = await db.query('SELECT role, page_key, action FROM role_action_access');
+        const existingSet = new Set(existingRows.map(r => `${r.role}::${r.page_key}::${r.action}`));
+        const toInsert = [];
+        for (const page of ACTION_ACCESS_PAGES) {
+            for (const action of ACTION_TYPES) {
+                const enabledRoles = new Set(ACTION_ACCESS_DEFAULT_ENABLED[`${page.key}:${action}`] || []);
+                for (const role of ACTION_ACCESS_ROLES) {
+                    const k = `${role}::${page.key}::${action}`;
+                    if (existingSet.has(k)) continue;
+                    toInsert.push([role, page.key, action, enabledRoles.has(role) ? 1 : 0]);
+                }
+            }
+        }
+        if (toInsert.length > 0) {
+            await db.query('INSERT INTO role_action_access (role, page_key, action, is_enabled) VALUES ?', [toInsert]);
+            console.log(`✅ role_action_access: seeded ${toInsert.length} แถวเริ่มต้น`);
+        }
+        await loadRoleActionAccessCache();
+        console.log('✅ role_action_access cache พร้อมใช้งาน');
+    } catch (err) {
+        console.error('⚠️ role_action_access setup error:', err.message);
+    }
+})();
+
 // ========== Auto-create SSO Audit tables ==========
 (async () => {
     try {
@@ -10550,7 +10720,7 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
 });
 
 // PUT /indicators/:id/upload-excel — toggle upload_excel (0=auto export, 1=skip)
-apiRouter.put('/indicators/:id/upload-excel', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.put('/indicators/:id/upload-excel', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     try {
         const id = Number(req.params.id);
         const v = req.body?.upload_excel;
@@ -10574,7 +10744,7 @@ apiRouter.put('/indicators/:id/upload-excel', authenticateToken, isSuperAdmin, a
 });
 
 // POST /indicators/bulk-upload-excel — set upload_excel แบบ batch (ใช้ตอน "ปิดทั้งหมดที่ HDC inactive")
-apiRouter.post('/indicators/bulk-upload-excel', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/indicators/bulk-upload-excel', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
     try {
         const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(x => Number(x)).filter(Number.isFinite) : [];
         const v = req.body?.upload_excel;

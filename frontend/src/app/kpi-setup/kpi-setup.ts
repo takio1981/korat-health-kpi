@@ -39,7 +39,10 @@ export class KpiSetupComponent implements OnInit {
     this.isSuperAdmin = role === 'super_admin';
     this.loggedInUser = this.authService.getUser();
 
-    if (!this.isAdmin) {
+    // เดิม hardcode เช็ค isAdmin ตรงๆ ที่นี่ ซ้ำซ้อนกับ pageAccessGuard ที่ route และขัดกับระบบ
+    // Role × Page Access — ใช้ canAccessPage() แทนให้ตรงกับ guard (isAdmin/isSuperAdmin ยังเก็บไว้
+    // ใช้ในส่วนอื่นของ component เหมือนเดิม เช่น การล็อค dept dropdown ด้านล่าง)
+    if (!this.authService.canAccessPage('kpi-setup')) {
       Swal.fire({
         title: 'Access Denied',
         text: 'คุณไม่มีสิทธิ์เข้าถึงหน้านี้',

@@ -32,7 +32,9 @@ export class EnvConfigComponent implements OnInit {
   ];
 
   ngOnInit() {
-    if (this.authService.getUserRole() !== 'super_admin') {
+    // เดิม hardcode เช็ค role !== 'super_admin' ที่นี่ — component นี้ embed อยู่ใน settings
+    // (pageKey 'settings' เดียวกัน) ใช้ canAccessPage() แทนให้ตรงกับ guard ของหน้าแม่
+    if (!this.authService.canAccessPage('settings')) {
       this.router.navigate(['/dashboard']);
       return;
     }

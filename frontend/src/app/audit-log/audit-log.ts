@@ -44,7 +44,9 @@ export class AuditLogComponent implements OnInit {
     const role = this.authService.getUserRole();
     this.isAdmin = role === 'admin_ssj' || role === 'super_admin';
     this.isSuperAdmin = role === 'super_admin';
-    if (!this.isSuperAdmin) {
+    // เดิม hardcode เช็ค isSuperAdmin ตรงๆ ที่นี่ ซ้ำซ้อนกับ pageAccessGuard ที่ route และขัดกับระบบ
+    // Role × Page Access — ใช้ canAccessPage() แทนให้ตรงกับ guard
+    if (!this.authService.canAccessPage('audit-logs')) {
       Swal.fire('Access Denied', 'คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'error');
       this.router.navigate(['/dashboard']);
       return;

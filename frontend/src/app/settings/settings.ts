@@ -101,7 +101,10 @@ export class SettingsComponent implements OnInit {
     this.isAdmin = role === 'admin_ssj' || role === 'super_admin';
     this.isSuperAdmin = role === 'super_admin';
 
-    if (!this.isSuperAdmin) {
+    // เดิม hardcode เช็ค isSuperAdmin ตรงๆ ที่นี่ ซ้ำซ้อนกับ pageAccessGuard ที่ route และขัดกับระบบ
+    // Role × Page Access — ถ้า super_admin เปิดสิทธิ์หน้านี้ให้ role อื่นผ่าน guard แล้ว ก็ยังโดนเตะออก
+    // อยู่ดีเพราะเช็คซ้ำที่นี่ ใช้ canAccessPage() แทนให้ตรงกับ guard
+    if (!this.authService.canAccessPage('settings')) {
       Swal.fire('Access Denied', 'คุณไม่มีสิทธิ์เข้าถึงหน้านี้', 'error');
       this.router.navigate(['/dashboard']);
       return;

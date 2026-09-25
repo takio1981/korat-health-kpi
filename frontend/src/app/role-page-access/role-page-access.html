@@ -102,4 +102,67 @@
       </div>
     </div>
   </div>
+
+  <!-- สิทธิ์เพิ่ม/แก้ไขข้อมูล — คนละมิติกับสิทธิ์เข้าหน้าด้านบน เฉพาะหน้าที่มีข้อมูลให้จัดการจริง -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mt-4">
+    <div class="p-4 sm:p-6 border-b border-gray-100">
+      <h3 class="text-base sm:text-lg font-bold text-gray-800">
+        <i class="fas fa-pen-to-square mr-2 text-amber-500"></i>สิทธิ์เพิ่ม / แก้ไขข้อมูล
+      </h3>
+      <p class="text-[11px] sm:text-xs text-gray-400 mt-1">
+        แยกจากสิทธิ์เข้าหน้าด้านบน — ควบคุมเฉพาะการ "เพิ่ม" และ "แก้ไข" ข้อมูล เฉพาะหน้าที่มีข้อมูลให้จัดการจริง
+        (หน้าอื่นเป็นแค่ดู/เมนูตัวเลือก ไม่มีข้อมูลให้เพิ่ม/แก้ไข)
+      </p>
+      <p class="text-[11px] text-amber-600 mt-1"><i class="fas fa-lock mr-1"></i>สิทธิ์ "ลบ" ยังคงจำกัดเฉพาะ Super Admin เสมอ ไม่มีในตารางนี้</p>
+    </div>
+
+    <div *ngIf="isActionLoading" class="flex items-center justify-center py-12">
+      <div class="text-center">
+        <div class="animate-spin rounded-full h-10 w-10 border-4 border-amber-200 border-t-amber-600 mx-auto mb-3"></div>
+        <p class="text-gray-500 text-sm">กำลังโหลดข้อมูล...</p>
+      </div>
+    </div>
+
+    <div *ngIf="!isActionLoading" class="p-4 sm:p-6">
+      <div class="flex justify-end mb-3">
+        <button (click)="saveActions()" [disabled]="isActionSaving"
+                class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-md transition-all disabled:opacity-50">
+          <i class="fas" [ngClass]="isActionSaving ? 'fa-spinner fa-spin' : 'fa-save'"></i>
+          <span class="ml-1">{{ isActionSaving ? 'กำลังบันทึก...' : 'บันทึกสิทธิ์เพิ่ม/แก้ไข' }}</span>
+        </button>
+      </div>
+      <div class="overflow-auto card-scroll border border-gray-200 rounded-xl" style="max-height: calc(100vh - 320px);">
+        <table class="w-full text-xs min-w-[900px]">
+          <thead class="sticky top-0 z-20 shadow-md">
+            <tr>
+              <th class="sticky left-0 z-30 bg-amber-600 text-white px-3 py-3 text-left min-w-[220px]">หน้า / สิทธิ์</th>
+              <th *ngFor="let role of actionRoles" class="bg-amber-600 text-white px-2 py-3 text-center min-w-[90px]" [title]="roleLabels[role] || role">
+                <span class="font-mono">{{ role }}</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100 bg-white">
+            <ng-container *ngFor="let page of actionPages">
+              <tr *ngFor="let action of actionTypes" class="hover:bg-amber-50/30 transition-all">
+                <td class="sticky left-0 z-10 bg-white px-3 py-2.5 font-bold text-gray-700 border-r border-gray-100">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="truncate">{{ page.label }} — {{ actionLabels[action] }}</span>
+                    <button (click)="toggleAllForActionRow(page.key, action)"
+                            class="text-gray-300 hover:text-amber-600 transition-colors shrink-0" title="เลือก/ยกเลิกทั้งหมดสำหรับแถวนี้">
+                      <i class="fas" [ngClass]="isAllOnForActionRow(page.key, action) ? 'fa-check-square text-amber-500' : 'fa-square'"></i>
+                    </button>
+                  </div>
+                  <span class="text-[9px] text-gray-400 font-mono">{{ page.key }}:{{ action }}</span>
+                </td>
+                <td *ngFor="let role of actionRoles" class="px-2 py-2.5 text-center">
+                  <input type="checkbox" [checked]="actionMatrix[page.key]?.[action]?.[role]" (change)="toggleAction(page.key, action, role)"
+                         class="rounded text-amber-600 focus:ring-amber-400 h-4 w-4 cursor-pointer">
+                </td>
+              </tr>
+            </ng-container>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 </div>

@@ -92,12 +92,12 @@
             <i class="fas" [ngClass]="hospCompareLoading ? 'fa-spinner fa-spin' : 'fa-exchange-alt'"></i>
             <span class="ml-2">{{ hospCompareLoading ? 'กำลังเทียบ...' : (hospCompareSummary ? 'เทียบ HDC อีกครั้ง' : 'เทียบกับ HDC') }}</span>
           </button>
-          <button *ngIf="activeTab === 'indicators' && isSuperAdmin"
+          <button *ngIf="activeTab === 'indicators' && canAddData"
                   (click)="openImportModal()"
                   class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold whitespace-nowrap">
             <i class="fas fa-file-excel mr-2"></i> นำเข้า Excel
           </button>
-          <button (click)="openModal()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold whitespace-nowrap"><i class="fas fa-plus mr-2"></i> เพิ่มข้อมูล</button>
+          <button *ngIf="canAddData" (click)="openModal()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold whitespace-nowrap"><i class="fas fa-plus mr-2"></i> เพิ่มข้อมูล</button>
         </div>
       </div>
 
@@ -360,8 +360,8 @@
               <button *ngIf="activeTab === 'indicators' && isSuperAdmin" (click)="openFormBuilder(item)" class="text-purple-600 text-sm" title="สร้าง/แก้ไขแบบฟอร์ม">
                 <i class="fas fa-clipboard-list"></i>
               </button>
-              <button (click)="openModal(item)" class="text-yellow-500 text-sm"><i class="fas fa-edit"></i></button>
-              <button *ngIf="activeTab === 'indicators' && isSuperAdmin" (click)="cloneItem(item)" class="text-cyan-600 text-sm" title="คัดลอกไปปีใหม่"><i class="fas fa-copy"></i></button>
+              <button *ngIf="canEditData" (click)="openModal(item)" class="text-yellow-500 text-sm"><i class="fas fa-edit"></i></button>
+              <button *ngIf="activeTab === 'indicators' && canAddData" (click)="cloneItem(item)" class="text-cyan-600 text-sm" title="คัดลอกไปปีใหม่"><i class="fas fa-copy"></i></button>
               <button *ngIf="isSuperAdmin" (click)="deleteItem(activeTab === 'hospitals' ? item.hoscode : item.id)" class="text-red-500 text-sm"><i class="fas fa-trash"></i></button>
             </div>
           </div>
@@ -378,7 +378,7 @@
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'indicators'">หมวดหมู่หลัก</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'indicators'">หน่วยงาน</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-32" *ngIf="activeTab === 'indicators' && hdcCompareSummary" title="สถานะเทียบกับ HDC">HDC ↔ Local</th>
-              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-24" *ngIf="activeTab === 'indicators' && isSuperAdmin" title="0=ส่งออกอัตโนมัติ, 1=ข้าม">upload_excel</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-24" *ngIf="activeTab === 'indicators' && canEditData" title="0=ส่งออกอัตโนมัติ, 1=ข้าม">upload_excel</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'main-indicators'">ชื่อหมวดหมู่หลัก</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'main-indicators'">ยุทธศาสตร์</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-32" *ngIf="activeTab === 'main-indicators' && mainIndCompareSummary">HDC Coverage</th>
@@ -520,7 +520,7 @@
                   </div>
                 </td>
                 <!-- upload_excel toggle -->
-                <td class="px-4 py-3 text-center" *ngIf="isSuperAdmin">
+                <td class="px-4 py-3 text-center" *ngIf="canEditData">
                   <button (click)="toggleUploadExcel(item)" class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
                           [ngClass]="(item.upload_excel === 1 || item.upload_excel === '1') ? 'bg-rose-500' : 'bg-emerald-500'"
                           [title]="(item.upload_excel === 1 || item.upload_excel === '1') ? '1 = ข้าม export (อัปโหลด Excel เอง)' : '0 = ส่งออกอัตโนมัติ'">
@@ -596,8 +596,8 @@
                 <button *ngIf="activeTab === 'indicators' && isSuperAdmin" (click)="openFormBuilder(item)" class="text-purple-600 hover:text-purple-800" title="สร้าง/แก้ไขแบบฟอร์ม">
                   <i class="fas fa-clipboard-list"></i>
                 </button>
-                <button (click)="openModal(item)" class="text-yellow-500 hover:text-yellow-600"><i class="fas fa-edit"></i></button>
-                <button *ngIf="activeTab === 'indicators' && isSuperAdmin" (click)="cloneItem(item)" class="text-cyan-600 hover:text-cyan-800" title="คัดลอกไปปีใหม่"><i class="fas fa-copy"></i></button>
+                <button *ngIf="canEditData" (click)="openModal(item)" class="text-yellow-500 hover:text-yellow-600"><i class="fas fa-edit"></i></button>
+                <button *ngIf="activeTab === 'indicators' && canAddData" (click)="cloneItem(item)" class="text-cyan-600 hover:text-cyan-800" title="คัดลอกไปปีใหม่"><i class="fas fa-copy"></i></button>
                 <button *ngIf="isSuperAdmin" (click)="deleteItem(activeTab === 'hospitals' ? item.hoscode : item.id)" class="text-red-500 hover:text-red-600"><i class="fas fa-trash"></i></button>
               </td>
             </tr>
@@ -616,12 +616,12 @@
         <table class="w-full text-xs">
           <thead class="bg-cyan-100/60 text-cyan-800"><tr>
             <th class="px-3 py-2 text-left font-bold">ชื่อหมวดหมู่หลัก (HDC)</th>
-            <th class="px-3 py-2 text-center font-bold" *ngIf="isSuperAdmin">จัดการ</th>
+            <th class="px-3 py-2 text-center font-bold" *ngIf="canAddData">จัดการ</th>
           </tr></thead>
           <tbody>
             <tr *ngFor="let item of mainIndMissingLocalItems" class="border-t border-cyan-100 hover:bg-cyan-50/50">
               <td class="px-3 py-2 text-gray-800 font-medium">{{ item.hdc_name }}</td>
-              <td class="px-3 py-2 text-center" *ngIf="isSuperAdmin">
+              <td class="px-3 py-2 text-center" *ngIf="canAddData">
                 <button (click)="openMainIndAdd(item)"
                         class="inline-flex items-center gap-1 px-2.5 py-1 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-xs font-bold transition-colors">
                   <i class="fas fa-plus text-[10px]"></i>เพิ่มเข้าระบบ
@@ -643,12 +643,12 @@
         <table class="w-full text-xs">
           <thead class="bg-cyan-100/60 text-cyan-800"><tr>
             <th class="px-3 py-2 text-left font-bold">ชื่อยุทธศาสตร์ (HDC)</th>
-            <th class="px-3 py-2 text-center font-bold" *ngIf="isSuperAdmin">จัดการ</th>
+            <th class="px-3 py-2 text-center font-bold" *ngIf="canAddData">จัดการ</th>
           </tr></thead>
           <tbody>
             <tr *ngFor="let item of stratMissingLocalItems" class="border-t border-cyan-100 hover:bg-cyan-50/50">
               <td class="px-3 py-2 text-gray-800 font-medium">{{ item.hdc_yut_name }}</td>
-              <td class="px-3 py-2 text-center" *ngIf="isSuperAdmin">
+              <td class="px-3 py-2 text-center" *ngIf="canAddData">
                 <button (click)="openSimpleAdd('strategies', item.hdc_yut_name)"
                         class="inline-flex items-center gap-1 px-2.5 py-1 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-xs font-bold transition-colors">
                   <i class="fas fa-plus text-[10px]"></i>เพิ่มเข้าระบบ
@@ -670,12 +670,12 @@
         <table class="w-full text-xs">
           <thead class="bg-cyan-100/60 text-cyan-800"><tr>
             <th class="px-3 py-2 text-left font-bold">ชื่อหน่วยงาน (HDC)</th>
-            <th class="px-3 py-2 text-center font-bold" *ngIf="isSuperAdmin">จัดการ</th>
+            <th class="px-3 py-2 text-center font-bold" *ngIf="canAddData">จัดการ</th>
           </tr></thead>
           <tbody>
             <tr *ngFor="let item of deptMissingLocalItems" class="border-t border-cyan-100 hover:bg-cyan-50/50">
               <td class="px-3 py-2 text-gray-800 font-medium">{{ item.hdc_dept_name }}</td>
-              <td class="px-3 py-2 text-center" *ngIf="isSuperAdmin">
+              <td class="px-3 py-2 text-center" *ngIf="canAddData">
                 <button (click)="openSimpleAdd('departments', item.hdc_dept_name)"
                         class="inline-flex items-center gap-1 px-2.5 py-1 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-xs font-bold transition-colors">
                   <i class="fas fa-plus text-[10px]"></i>เพิ่มเข้าระบบ
@@ -705,7 +705,7 @@
               <th class="px-3 py-2 text-left font-bold">ชื่อ (HDC)</th>
               <th class="px-3 py-2 text-left font-bold">ชื่อ (Local)</th>
               <th class="px-3 py-2 text-center font-bold">สถานะ</th>
-              <th class="px-3 py-2 text-center font-bold" *ngIf="isSuperAdmin">จัดการ</th>
+              <th class="px-3 py-2 text-center font-bold" *ngIf="canAddData">จัดการ</th>
             </tr></thead>
             <tbody>
               <ng-container *ngFor="let item of hospCompareItems">
@@ -718,7 +718,7 @@
                     <span *ngIf="item.status === 'missing_local'" class="px-1.5 py-0.5 rounded-full font-bold bg-cyan-100 text-cyan-700 text-[10px]">ยังไม่มี</span>
                     <span *ngIf="item.status === 'different'" class="px-1.5 py-0.5 rounded-full font-bold bg-amber-100 text-amber-700 text-[10px]">ชื่อต่างกัน</span>
                   </td>
-                  <td class="px-3 py-2 text-center" *ngIf="isSuperAdmin">
+                  <td class="px-3 py-2 text-center" *ngIf="canAddData">
                     <button *ngIf="item.status === 'missing_local'" (click)="openHospAdd(item)"
                             class="inline-flex items-center gap-1 px-2.5 py-1 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-xs font-bold transition-colors">
                       <i class="fas fa-plus text-[10px]"></i>เพิ่มเข้าระบบ
@@ -749,7 +749,7 @@
                 <th class="px-3 py-2 text-left font-bold">หน่วยงาน (HDC)</th>
                 <th class="px-3 py-2 text-left font-bold">หมวด/ยุทธศาสตร์ (HDC)</th>
                 <th class="px-3 py-2 text-center font-bold">สถานะ HDC</th>
-                <th class="px-3 py-2 text-center font-bold" *ngIf="isSuperAdmin">จัดการ</th>
+                <th class="px-3 py-2 text-center font-bold" *ngIf="canAddData">จัดการ</th>
               </tr>
             </thead>
             <tbody>
@@ -764,7 +764,7 @@
                     {{ item.hdc_is_active == 1 ? 'active' : 'inactive' }}
                   </span>
                 </td>
-                <td class="px-3 py-2 text-center" *ngIf="isSuperAdmin">
+                <td class="px-3 py-2 text-center" *ngIf="canAddData">
                   <button (click)="openAddFromHdc(item)"
                           class="inline-flex items-center gap-1 px-2.5 py-1 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg text-xs font-bold transition-colors shadow-sm">
                     <i class="fas fa-plus text-[10px]"></i>เพิ่มเข้าระบบ
@@ -932,7 +932,7 @@
     </div>
     <div class="p-6">
       <!-- ปุ่มเพิ่ม -->
-      <div *ngIf="isSuperAdmin && !showSubForm" class="mb-4 flex flex-wrap gap-2">
+      <div *ngIf="canAddData && !showSubForm" class="mb-4 flex flex-wrap gap-2">
         <button (click)="openSubForm()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow">
           <i class="fas fa-plus mr-1"></i>เพิ่มตัวชี้วัดย่อย
         </button>
@@ -999,14 +999,14 @@
               <td class="px-3 py-2 text-right text-gray-600">{{ s.target_percentage || '-' }}</td>
               <td class="px-3 py-2 text-right text-gray-600">{{ s.weight }}</td>
               <td class="px-3 py-2 text-center">
-                <button (click)="toggleSubActive(s)" class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
+                <button (click)="toggleSubActive(s)" [disabled]="!canEditData" class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         [ngClass]="s.is_active === 1 || s.is_active === '1' ? 'bg-green-500' : 'bg-gray-300'">
                   <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform"
                         [ngClass]="s.is_active === 1 || s.is_active === '1' ? 'translate-x-4' : 'translate-x-0.5'"></span>
                 </button>
               </td>
               <td class="px-3 py-2 text-right space-x-2">
-                <button (click)="openSubForm(s)" class="text-yellow-500"><i class="fas fa-edit"></i></button>
+                <button *ngIf="canEditData" (click)="openSubForm(s)" class="text-yellow-500"><i class="fas fa-edit"></i></button>
                 <button *ngIf="isSuperAdmin" (click)="deleteSub(s.id)" class="text-red-500"><i class="fas fa-trash"></i></button>
               </td>
             </tr>

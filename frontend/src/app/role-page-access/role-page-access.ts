@@ -35,8 +35,19 @@ export class RolePageAccessComponent implements OnInit {
     user_ssj: 'user_ssj — ผู้ใช้งาน สสจ.',
   };
 
+  // === สิทธิ์ "เพิ่ม"/"แก้ไข" ข้อมูล — คนละมิติ คนละตารางฐานข้อมูลกับสิทธิ์เข้าหน้าด้านบน ===
+  isActionLoading = false;
+  isActionSaving = false;
+  actionRoles: string[] = [];
+  actionPages: { key: string; label: string }[] = [];
+  actionTypes: string[] = [];
+  actionLabels: { [k: string]: string } = { add: 'เพิ่ม', edit: 'แก้ไข' };
+  // actionMatrix[pageKey][action][role] = boolean
+  actionMatrix: { [pageKey: string]: { [action: string]: { [role: string]: boolean } } } = {};
+
   ngOnInit() {
     this.load();
+    this.loadActions();
   }
 
   load() {
@@ -65,6 +76,86 @@ export class RolePageAccessComponent implements OnInit {
         this.cdr.detectChanges();
         Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถโหลดข้อมูลได้', 'error');
       }
+    });
+  }
+
+  loadActions() {
+    this.isActionLoading = true;
+    this.authService.getRoleActionAccess().subscribe({
+      next: (res: any) => {
+        this.isActionLoading = false;
+        if (res.success) {
+          this.actionRoles = res.roles;
+          this.actionPages = res.pages;
+          this.actionTypes = res.actions;
+          const m: { [pageKey: string]: { [action: string]: { [role: string]: boolean } } } = {};
+          for (const p of this.actionPages) {
+            m[p.key] = {};
+            for (const a of this.actionTypes) {
+              m[p.key][a] = {};
+              for (const r of this.actionRoles) m[p.key][a][r] = false;
+            }
+          }
+          for (const row of res.data) {
+            if (!m[row.page_key]) m[row.page_key] = {};
+            if (!m[row.page_key][row.action]) m[row.page_key][row.action] = {};
+            m[row.page_key][row.action][row.role] = !!row.is_enabled;
+          }
+          this.actionMatrix = m;
+        }
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.isActionLoading = false;
+        this.cdr.detectChanges();
+        Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถโหลดสิทธิ์เพิ่ม/แก้ไขข้อมูลได้', 'error');
+      }
+    });
+  }
+
+  toggleAction(pageKey: string, action: string, role: string) {
+    this.actionMatrix[pageKey][action][role] = !this.actionMatrix[pageKey][action][role];
+  }
+
+  toggleAllForActionRow(pageKey: string, action: string) {
+    const allOn = this.actionRoles.every(r => this.actionMatrix[pageKey]?.[action]?.[r]);
+    this.actionRoles.forEach(r => this.actionMatrix[pageKey][action][r] = !allOn);
+  }
+
+  isAllOnForActionRow(pageKey: string, action: string): boolean {
+    return this.actionRoles.every(r => this.actionMatrix[pageKey]?.[action]?.[r]);
+  }
+
+  saveActions() {
+    Swal.fire({
+      title: 'ยืนยันบันทึกสิทธิ์เพิ่ม/แก้ไขข้อมูล',
+      html: '<p class="text-sm text-gray-600">การเปลี่ยนแปลงจะมีผลทันทีกับผู้ใช้งานที่ login อยู่ในระบบ<br><span class="text-amber-600 text-xs"><i class="fas fa-info-circle mr-1"></i>สิทธิ์ "ลบ" ยังคงจำกัดเฉพาะ Super Admin เสมอ ไม่มีในตารางนี้</span></p>',
+      icon: 'question', showCancelButton: true, confirmButtonColor: '#4f46e5',
+      confirmButtonText: '<i class="fas fa-save mr-1"></i>บันทึก', cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      const items: { role: string; page_key: string; action: string; is_enabled: boolean }[] = [];
+      for (const page of this.actionPages) {
+        for (const action of this.actionTypes) {
+          for (const role of this.actionRoles) {
+            items.push({ role, page_key: page.key, action, is_enabled: !!this.actionMatrix[page.key]?.[action]?.[role] });
+          }
+        }
+      }
+      this.isActionSaving = true;
+      this.cdr.detectChanges();
+      this.authService.saveRoleActionAccess(items).subscribe({
+        next: (res: any) => {
+          this.isActionSaving = false;
+          this.cdr.detectChanges();
+          Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ', text: res.message, timer: 2000, showConfirmButton: false });
+        },
+        error: (err: any) => {
+          this.isActionSaving = false;
+          this.cdr.detectChanges();
+          Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถบันทึกได้', 'error');
+        }
+      });
     });
   }
 
