@@ -42,6 +42,9 @@ export class KpiManageComponent implements OnInit {
   hospFilterHostype: string = '';
   searchTerm: string = '';
   filterActive: string = ''; // '' = ทั้งหมด, '1' = เปิดใช้งาน, '0' = ปิดใช้งาน
+  // Extra indicators filter — หมวดหมู่หลัก + หน่วยงาน (ค่าเป็น string ของ id เพื่อ match [value] ของ <select>)
+  filterMainIndicator: string = '';
+  filterDept: string = '';
 
   // Modal
   showModal: boolean = false;
@@ -530,6 +533,8 @@ export class KpiManageComponent implements OnInit {
         const matchSearch = (i.kpi_indicators_name && i.kpi_indicators_name.toLowerCase().includes(search))
           || (i.kpi_indicators_code && i.kpi_indicators_code.toLowerCase().includes(search));
         if (!matchSearch) return false;
+        if (this.filterMainIndicator && String(i.main_indicator_id) !== this.filterMainIndicator) return false;
+        if (this.filterDept && String(i.dept_id) !== this.filterDept) return false;
         // HDC compare filter
         if (this.filterHdcStatus) {
           const cmp = this.getHdcCompareStatus(i);
@@ -594,10 +599,31 @@ export class KpiManageComponent implements OnInit {
     this.cdr.detectChanges();
   }
 
+  // รายการที่กำลังแสดงผลตาม activeTab ปัจจุบัน — ใช้แทนการเขียน ternary ซ้ำในเทมเพลต
+  get currentList(): any[] {
+    switch (this.activeTab) {
+      case 'indicators': return this.filteredIndicators;
+      case 'main-indicators': return this.filteredMainIndicators;
+      case 'strategies': return this.filteredStrategies;
+      case 'departments': return this.filteredDepartments;
+      default: return this.filteredHospitals;
+    }
+  }
+
+  // ใช้ตัดสินข้อความ empty-state: "ไม่พบข้อมูลที่ค้นหา" (มีตัวกรองอยู่) vs "ยังไม่มีข้อมูล" (list ว่างจริงๆ)
+  hasActiveFilter(): boolean {
+    if (this.searchTerm) return true;
+    if (this.activeTab === 'indicators') return !!(this.filterActive || this.filterMainIndicator || this.filterDept);
+    if (this.activeTab === 'hospitals') return !!(this.hospFilterDistid || this.hospFilterHostype);
+    return !!this.filterActive;
+  }
+
   switchTab(tab: string) {
     this.activeTab = tab;
     this.searchTerm = '';
     this.filterActive = '';
+    this.filterMainIndicator = '';
+    this.filterDept = '';
     this.hospFilterDistid = '';
     this.hospFilterHostype = '';
     this.hdcCompareFilter = '';
