@@ -35,9 +35,14 @@ export class LayoutComponent implements OnInit, OnDestroy {
 
   openCommandPalette() { this.commandPalette?.show(); }
 
-  isSidebarOpen: boolean = window.innerWidth >= 1024; // desktop เปิด, mobile ซ่อน
+  isSidebarOpen: boolean = window.innerWidth >= 1024; // desktop เปิด/ปิด sidebar เท่านั้น — ไม่เกี่ยวกับเมนู slide มือถือ
   isSidebarCollapsed: boolean = false; // desktop icon-only mode
-  private _prevSidebarOpen: boolean = true; // เก็บค่าเดิมก่อนเข้า focus mode
+  // เมนู slide มือถือ — ตัวแปรแยกจาก isSidebarOpen โดยตั้งใจ (เดิมใช้ isSidebarOpen ตัวเดียวกันทั้ง desktop
+  // sidebar และ mobile slide menu ทำให้ focus mode ซึ่งบันทึก/คืนค่า isSidebarOpen สำหรับ desktop เผลอไปแตะ
+  // สถานะเมนู slide มือถือด้วย — บางจังหวะ (เช่น exit focus mode ขณะจอมือถือ) ทำให้เมนูเปิดเอง/ปิดค้างโดยไม่ตรงกับ
+  // ที่ผู้ใช้กดปุ่มแฮมเบอร์เกอร์จริง แยกตัวแปรนี้ออกมาให้ toggleSidebar()/closeSidebar()/NavigationEnd ควบคุมเองล้วนๆ
+  isMobileMenuOpen: boolean = false;
+  private _prevSidebarOpen: boolean = true; // เก็บค่าเดิมก่อนเข้า focus mode (desktop เท่านั้น)
   private _prevSidebarCollapsed: boolean = false;
   isFocusMode: boolean = false;
   isLoading: boolean = false;
@@ -119,7 +124,9 @@ export class LayoutComponent implements OnInit, OnDestroy {
       this.cdr.detectChanges();
     });
 
-    // Subscribe focus mode → ปิด sidebar อัตโนมัติเมื่อผู้ใช้ต้องการพื้นที่เต็ม (edit/delete KPI)
+    // Subscribe focus mode → ปิด desktop sidebar อัตโนมัติเมื่อผู้ใช้ต้องการพื้นที่เต็ม (edit/delete KPI)
+    // แตะแค่ isSidebarOpen/isSidebarCollapsed (desktop) เท่านั้น — ไม่แตะ isMobileMenuOpen เด็ดขาด
+    // (เมนู slide มือถือต้องคุมด้วยปุ่มแฮมเบอร์เกอร์/นำทางเท่านั้น กันเมนูเปิดเอง/ปิดค้างตอน exit focus mode)
     this.authService.focusMode$.subscribe(focus => {
       if (focus && !this.isFocusMode) {
         this._prevSidebarOpen = this.isSidebarOpen;
@@ -134,10 +141,10 @@ export class LayoutComponent implements OnInit, OnDestroy {
       this.cdr.detectChanges();
     });
 
-    // Auto-close sidebar on route change (mobile เท่านั้น, desktop เปิดค้างไว้)
+    // Auto-close เมนู slide มือถือ on route change (mobile เท่านั้น, desktop sidebar เปิดค้างไว้)
     this.router.events.pipe(filter(e => e instanceof NavigationEnd)).subscribe(() => {
       if (window.innerWidth < 1024) {
-        this.isSidebarOpen = false;
+        this.isMobileMenuOpen = false;
         this.cdr.detectChanges();
       }
     });
@@ -331,7 +338,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   }
 
   closeSidebar() {
-    this.isSidebarOpen = false;
+    this.isMobileMenuOpen = false;
   }
 
   toggleSidebar() {
@@ -339,8 +346,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
       // Desktop: toggle icon-only mode (ไม่ซ่อนทั้งหมด)
       this.isSidebarCollapsed = !this.isSidebarCollapsed;
     } else {
-      // Mobile: toggle dropdown
-      this.isSidebarOpen = !this.isSidebarOpen;
+      // Mobile: toggle เมนู slide
+      this.isMobileMenuOpen = !this.isMobileMenuOpen;
     }
   }
 
