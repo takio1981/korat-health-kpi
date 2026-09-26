@@ -263,7 +263,11 @@
 
     <div class="flex-1 flex flex-col overflow-hidden min-w-0">
 
-      <header class="h-16 bg-white/65 backdrop-blur-xl shadow-md flex items-center justify-between px-3 sm:px-6 z-[65] relative border-b border-white/60">
+      <!-- z-index ปกติ = z-40 (เดิม) — ยกเป็น z-[65] เฉพาะตอนเมนู slide มือถือเปิดอยู่เท่านั้น (ต้องสูงกว่า
+           backdrop มืด z-[60] ให้ยังกดปิดเมนูได้) ถ้ายก z-[65] ค้างตลอดเวลาแบบเดิม จะไปทับ modal ทั่วทั้งระบบที่ใช้
+           z-50 (เช่น modal เพิ่ม/แก้ไขตัวชี้วัดใน kpi-manage) ทำให้ modal โผล่มาไม่ครบ ส่วนบนโดน header บังอยู่ -->
+      <header class="h-16 bg-white/65 backdrop-blur-xl shadow-md flex items-center justify-between px-3 sm:px-6 relative border-b border-white/60"
+              [ngClass]="isMobileMenuOpen ? 'z-[65]' : 'z-40'">
         <div class="flex items-center shrink-0 min-w-0">
           <button (click)="toggleSidebar()" class="text-green-800 hover:text-green-600 focus:outline-none mr-2 sm:mr-4 shrink-0">
             <i class="fas fa-bars text-xl"></i>
