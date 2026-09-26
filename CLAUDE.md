@@ -540,9 +540,10 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - รวมเป็นหน้าเดียว (/charts) → 2 tabs: กราฟและสถิติ / รายงานสรุปผล
 - ใช้ `[hidden]` เก็บ state ทั้ง 2 view (ไม่ destroy component)
 
-### kpi-manager (Wizard 3 ขั้นตอน)
-- รวม Report Compare / DB Compare / Export ในหน้าเดียว — wizard UI 3 ขั้น (free navigation)
-- `currentStep: 1 | 2 | 3` + step completion auto-detect จาก ViewChild `compareResult` / `exportResult`
+### kpi-manager (Wizard 2 ขั้นตอน)
+- รวม DB Compare / Export ในหน้าเดียว — wizard UI 2 ขั้น (free navigation) — **Report Compare ย้ายไปอยู่ใน
+  kpi-manage แล้ว** (ปุ่ม "เทียบกับ KHD" ต่อแท็บ แทนที่จะเป็น step แยกใน wizard นี้)
+- `currentStep: 1 | 2` + step completion auto-detect จาก ViewChild `compareResult` / `exportResult`
 - Sub-components ใช้ `[hidden]="currentStep !== N"` (ไม่ destroy เพื่อ keep state)
 - ปิด `showGuide` ภายใน sub-components ผ่าน `AfterViewInit` — ใช้ unified guide ที่ kpi-manager
 - Form Builder embed (รับ `createFormEvent` จาก DB Compare) — modal เปิดเมื่อกด "สร้างฟอร์มจาก KHD"

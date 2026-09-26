@@ -813,6 +813,18 @@
           <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-copy mr-1 text-cyan-500"></i><b>คัดลอกไปปีใหม่</b> (super_admin): clone ตัวชี้วัดไปปีงบประมาณถัดไป</div>
           <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-wpforms mr-1 text-indigo-500"></i><b>Form Builder ฝังในหน้า:</b> สร้าง/แก้ไข schema ฟอร์มบันทึกผลงานแบบ dynamic จากไอคอนในแถวตัวชี้วัด</div>
         </div>
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mt-3 text-xs text-amber-800">
+          <i class="fas fa-bullseye mr-1"></i><b>"เป้าหมาย" vs "เกณฑ์" — คนละความหมาย ห้ามสลับกัน:</b> Modal เพิ่ม/แก้ไขตัวชี้วัดมี 2 กล่องแยกกันชัดเจน —
+          <b class="text-emerald-700">"เป้าหมาย (ค่าเริ่มต้น)"</b> (กล่องสีเขียว) คือค่าที่จะถูกคัดลอกเข้าเป็นเป้าหมายของแต่ละหน่วยบริการ
+          ตอนตั้งค่าปีงบใหม่หรือกด "เพิ่ม KPI" ให้หน่วยบริการ — คัดลอกครั้งเดียว แก้ค่านี้ภายหลังไม่มีผลย้อนกลับไปยังหน่วยบริการที่มีอยู่แล้ว
+          ส่วน <b class="text-amber-700">"เกณฑ์"</b> (กล่องสีเหลือง คู่กับเงื่อนไข ≥ / ≤ / =) ใช้เทียบ "เกณฑ์ต่างกัน" กับ KHD และแสดงผลทั่วทั้งระบบ
+          (Dashboard / รายงาน / Form Builder / Export)
+        </div>
+        <div class="bg-violet-50 border border-violet-200 rounded-xl p-3 mt-2 text-xs text-violet-800">
+          <i class="fas fa-layer-group mr-1"></i><b>ตัวชี้วัดสะสม:</b> checkbox ในกล่อง "เกณฑ์" — เมื่อเปิดใช้งาน หน้า "บันทึกผลงานตัวชี้วัด" จะแสดง
+          badge <b>"สะสม"</b> สีม่วงต่อชื่อตัวชี้วัดนั้น และผลงานล่าสุดจะคำนวณจากผลรวมทุกเดือนที่มีค่าตั้งแต่ ต.ค. ถึงเดือนปัจจุบัน
+          (ไม่ใช่ค่าเดือนล่าสุดตามปกติ) — ใช้กับตัวชี้วัดที่นับสะสม เช่น จำนวนรายสะสม
+        </div>
         <p class="text-xs text-gray-500 mt-3"><i class="fas fa-search mr-1"></i>มีระบบค้นหา + filter สถานะเปิด/ปิดใช้งาน + filter ตามผลเทียบ KHD + filter ตามสถานะมีผลงานหรือยัง</p>
       </section>
 
@@ -2106,8 +2118,8 @@
             <p class="text-xs text-gray-600 mt-1">ตอบ: แสดงเมื่อระบบอยู่ในช่วงทดสอบ เมื่อ Deploy จริงจะถูกนำออก</p>
           </div>
           <div class="bg-gray-50 rounded-xl p-4">
-            <p class="text-sm font-bold text-gray-800">ถาม: "จัดการข้อมูล KPI" มี Tab อะไรบ้าง?</p>
-            <p class="text-xs text-gray-600 mt-1">ตอบ: 4 Tab — 1) DB Compare (เปรียบเทียบ structure + Sync 2 ทิศทาง KHD↔Local) 2) สร้างแบบฟอร์ม (Form Builder) 3) Export ข้อมูล 4) Report Compare (เทียบ reports KHD กับ kpi_indicators)</p>
+            <p class="text-sm font-bold text-gray-800">ถาม: "จัดการข้อมูล KPI" มีขั้นตอนอะไรบ้าง?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: Wizard 2 ขั้นตอน — 1) DB Compare (เปรียบเทียบ structure + Sync 2 ทิศทาง KHD↔Local + สร้างแบบฟอร์มจาก Form Builder ฝังในหน้า) 2) Export ข้อมูล (ส่งออกลงตารางรายตัวชี้วัด + Sync + ตารางเวลาอัตโนมัติ) — ส่วน Report Compare (เทียบ reports KHD กับ kpi_indicators) ย้ายไปอยู่ในหน้า "จัดการตัวชี้วัด" แล้ว (ปุ่ม "เทียบกับ KHD" ในแต่ละแท็บ)</p>
           </div>
           <div class="bg-gray-50 rounded-xl p-4">
             <p class="text-sm font-bold text-gray-800">ถาม: ทำไม Login แล้วได้รับ Email แจ้งเตือน?</p>
