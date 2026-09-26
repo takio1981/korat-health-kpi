@@ -4,6 +4,41 @@
 
 ---
 
+## 2569-09-26 — ตรวจสอบส่งข้อความ LINE ไม่สำเร็จ + ปรับข้อความ error ให้แม่นยำ
+
+### คำขอ
+ต้องการให้ตรวจสอบการส่งข้อความผ่านทาง Line ไม่สามารถส่งได้ มีแจ้งเตือน error ผิดพลาด ส่งไม่สำเร็จ
+ตรวจสอบ Channel Access Token และ Group ID
+
+### สาเหตุที่ยืนยันจากการทดสอบเรียก LINE Messaging API ตรงด้วยค่าจริงในระบบ
+- **Channel Access Token ใช้งานได้ปกติ** — เรียก `GET /v2/bot/info` สำเร็จ (HTTP 200) ยืนยันเป็น bot จริง
+- **Group ID / User ID ที่ตั้งไว้ถูกต้องตามรูปแบบ** — LINE API ไม่ปฏิเสธค่าที่ส่งไป
+- **สาเหตุจริง: บัญชี LINE Official Account ใช้โควตาข้อความรายเดือนหมดแล้ว** — เรียก
+  `GET /v2/bot/message/quota` ได้ limit = 300 ข้อความ/เดือน (แผนฟรี) และ
+  `GET /v2/bot/message/quota/consumption` ได้ totalUsage = 300/300 (เต็มพอดี) ทำให้ push จริงได้ HTTP 429
+  `"You have reached your monthly limit."` จาก LINE โดยตรง
+- ข้อความ error เดิมในระบบ ("ตรวจสอบ Channel Access Token และ Group ID") ใช้ข้อความเดียวกันทุกกรณีความ
+  ล้มเหลว ไม่ว่าสาเหตุจริงจะเป็นอะไร ทำให้ผู้ใช้เข้าใจผิดว่าเป็นปัญหาการตั้งค่า ทั้งที่ทั้ง 2 ค่าถูกต้องอยู่แล้ว
+
+### วิธีแก้ (ไม่ใช่การแก้ที่ระบบ — ต้องแก้ที่บัญชี LINE เอง)
+1. **สิ่งที่ผู้ใช้ต้องทำเอง**: รอโควตารีเซ็ตต้นเดือนถัดไป หรืออัปเกรดแผน LINE Official Account เป็นแบบเสียเงิน
+   ผ่าน LINE Official Account Manager (manager.line.biz) เพื่อเพิ่มโควตา
+2. **ปรับปรุงโค้ดเพิ่มเติมตามที่ผู้ใช้ขอ**: เพิ่มฟังก์ชัน `describeLineError(status, rawBody)` แปล error จาก
+   LINE Messaging API เป็นข้อความที่ตรงสาเหตุจริง (429=โควตาเต็ม, 401=token หมดอายุ, 403=ถูกบล็อก,
+   400=ID ผิด/ยังไม่ Add friend) — เปลี่ยน `sendLineDirect()` ให้คืนค่า `{ ok, status, error }` แทน boolean
+   เปล่าๆ เดิม (จุด fire-and-forget อย่าง `notifyLineAction`/`sendLineToUser` ไม่ได้อ่านค่านี้อยู่แล้วจึงไม่กระทบ)
+   แล้วส่งข้อความที่แม่นยำนี้กลับไปที่ 3 endpoint ที่ผู้ใช้เห็นผลโดยตรง: `POST /test-line` (ตั้งค่าระบบ),
+   `POST /me/line/test` (ทดสอบ LINE ส่วนตัว), `POST /admin/users/:id/line/test` (แอดมินทดสอบให้ผู้ใช้)
+3. ทดสอบยืนยันผ่าน endpoint จริงด้วยค่า credential จริงในระบบ (ที่ยังติดโควตาเต็มอยู่) ได้ข้อความใหม่ถูกต้อง:
+   "โควตาข้อความ LINE ของเดือนนี้เต็มแล้ว (LINE Official Account แผนฟรีจำกัดจำนวนข้อความ/เดือน) —
+   รอรีเซ็ตต้นเดือนถัดไป หรืออัปเกรดแผนที่ LINE Official Account Manager (manager.line.biz)"
+
+### ไฟล์ที่แก้ไข
+- `api/server.js` (เฉพาะฟังก์ชัน LINE notification — ไม่กระทบ Telegram/Email)
+- `frontend/src/app/changelog/changelog.ts` (entry ใหม่)
+
+---
+
 ## 2569-09-26 — แก้เมนู slide มือถือบางหน้าบางครั้งกดแฮมเบอร์เกอร์แล้วไม่ขึ้นเมนู
 
 ### คำขอ

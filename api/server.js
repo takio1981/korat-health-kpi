@@ -99,12 +99,30 @@ const sendTelegramDirect = async (botToken, chatId, message) => {
     }
 };
 
+// แปล error จาก LINE Messaging API ให้เป็นข้อความที่ตรงสาเหตุจริง — เดิมทุก endpoint ที่ทดสอบส่ง LINE
+// ขึ้นข้อความเดียวกันหมด ("ตรวจสอบ Channel Access Token และ Group ID") ไม่ว่าสาเหตุจริงจะเป็นอะไร ทำให้
+// ผู้ใช้เข้าใจผิดว่า token/group id ผิด ทั้งที่บางครั้งสาเหตุจริงคือโควตาเต็ม (429), token หมดอายุ (401),
+// หรือ user ยังไม่ได้ add friend bot (400) ซึ่งแก้กันคนละทาง
+function describeLineError(status, rawBody) {
+    let lineMsg = '';
+    try { lineMsg = JSON.parse(rawBody || '{}')?.message || ''; } catch (e) {}
+    if (status === 429) return 'โควตาข้อความ LINE ของเดือนนี้เต็มแล้ว (LINE Official Account แผนฟรีจำกัดจำนวนข้อความ/เดือน) — รอรีเซ็ตต้นเดือนถัดไป หรืออัปเกรดแผนที่ LINE Official Account Manager (manager.line.biz)';
+    if (status === 401) return 'Channel Access Token ไม่ถูกต้องหรือหมดอายุ — ออก token ใหม่ที่ LINE Developers Console แล้วอัปเดตที่ Settings';
+    if (status === 403) return 'ไม่มีสิทธิ์ส่งหา ID นี้ — ผู้รับอาจบล็อกบอทไว้';
+    if (status === 400) return `Group ID/User ID ไม่ถูกต้อง หรือบอทไม่ได้อยู่ในกลุ่ม/ยังไม่ถูก Add friend${lineMsg ? ' (LINE แจ้งว่า: ' + lineMsg + ')' : ''}`;
+    if (lineMsg) return `ส่งไม่สำเร็จ: ${lineMsg} (HTTP ${status ?? '-'})`;
+    return 'ส่งไม่สำเร็จ — ไม่ทราบสาเหตุ (ดู server log)';
+}
+
 // === LINE Messaging API Notification ===
 // ใช้ Channel Access Token (long-lived) + Group/User ID
 // สร้าง bot ที่ developers.line.biz/console → เชิญ bot เข้า group → ดึง groupId จาก webhook event
 // LINE limit text message 5000 chars/message, push API rate 1000 msg/min ต่อ channel
+// คืนค่าเป็น { ok, status, error } เสมอ (ไม่ใช่ boolean เปล่าๆ เหมือนเดิม) เพื่อให้ endpoint ที่แสดงผลให้
+// ผู้ใช้เห็น (test-line, me/line/test ฯลฯ) ส่งสาเหตุจริงกลับไปได้ — จุดที่ fire-and-forget (notifyLineAction,
+// sendLineToUser) ไม่ได้อ่านค่านี้อยู่แล้วจึงไม่กระทบ
 const sendLineDirect = async (channelToken, groupId, message) => {
-    if (!channelToken || !groupId) return false;
+    if (!channelToken || !groupId) return { ok: false, status: null, error: 'ไม่ได้ตั้งค่า Channel Access Token หรือ Group/User ID' };
     try {
         // LINE strip HTML tag — ส่งเป็น plain text เท่านั้น
         const plain = String(message).replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').slice(0, 4900);
@@ -119,26 +137,27 @@ const sendLineDirect = async (channelToken, groupId, message) => {
                 messages: [{ type: 'text', text: plain }]
             })
         });
-        if (res.ok) { console.log('[LINE] Message sent to', groupId.slice(0, 8) + '...'); return true; }
+        if (res.ok) { console.log('[LINE] Message sent to', groupId.slice(0, 8) + '...'); return { ok: true, status: res.status, error: null }; }
         const errBody = await res.text();
         console.error('[LINE] Failed:', res.status, errBody.slice(0, 200));
-        return false;
+        return { ok: false, status: res.status, error: describeLineError(res.status, errBody) };
     } catch (err) {
         console.error('[LINE] Error:', err.message);
-        return false;
+        return { ok: false, status: null, error: 'เชื่อมต่อ LINE API ไม่ได้: ' + err.message };
     }
 };
 
 // ส่ง LINE หลาย group ในครั้งเดียว — รับ comma-separated group IDs
+// lastError เก็บสาเหตุของความล้มเหลวครั้งล่าสุด (ถ้ามี) ให้ caller ที่ต้องแสดงผลผู้ใช้นำไปใช้ได้
 const sendLineMulticast = async (channelToken, groupIdsStr, message) => {
-    if (!channelToken || !groupIdsStr) return { sent: 0, failed: 0 };
+    if (!channelToken || !groupIdsStr) return { sent: 0, failed: 0, lastError: 'ไม่ได้ตั้งค่า Channel Access Token หรือ Group ID' };
     const groupIds = String(groupIdsStr).split(',').map(s => s.trim()).filter(Boolean);
-    let sent = 0, failed = 0;
+    let sent = 0, failed = 0, lastError = null;
     for (const gid of groupIds) {
-        const ok = await sendLineDirect(channelToken, gid, message);
-        if (ok) sent++; else failed++;
+        const r = await sendLineDirect(channelToken, gid, message);
+        if (r.ok) sent++; else { failed++; lastError = r.error; }
     }
-    return { sent, failed };
+    return { sent, failed, lastError };
 };
 
 // === Admin Action LINE Notification — fire-and-forget + category toggle ===
@@ -11976,7 +11995,7 @@ apiRouter.post('/test-line', authenticateToken, isSuperAdmin, async (req, res) =
     res.json({
         success: ok,
         sent: r.sent, failed: r.failed,
-        message: ok ? `ส่ง LINE สำเร็จ ${r.sent}/${groupIds.length} group` : 'ส่งไม่สำเร็จ ตรวจสอบ Channel Access Token และ Group ID'
+        message: ok ? `ส่ง LINE สำเร็จ ${r.sent}/${groupIds.length} group` : (r.lastError || 'ส่งไม่สำเร็จ ตรวจสอบ Channel Access Token และ Group ID')
     });
 });
 
@@ -12034,10 +12053,10 @@ apiRouter.post('/me/line/test', authenticateToken, async (req, res) => {
         const ns = await getNotifSettings();
         if (!ns.lineToken) return res.status(400).json({ success: false, message: 'ระบบยังไม่ได้ตั้ง Channel Access Token (super_admin ต้องตั้งที่ Settings)' });
         const msg = `🔔 ทดสอบการแจ้งเตือนส่วนตัว\nสวัสดี คุณ${rows[0].firstname} ${rows[0].lastname}\n✅ การเชื่อมต่อ LINE สำเร็จ! ระบบจะส่งแจ้งเตือนเข้าที่ LINE นี้`;
-        const ok = await sendLineDirect(ns.lineToken, rows[0].line_user_id, msg);
+        const r = await sendLineDirect(ns.lineToken, rows[0].line_user_id, msg);
         res.json({
-            success: ok,
-            message: ok ? 'ส่ง LINE ทดสอบสำเร็จ — กรุณาตรวจสอบ LINE' : 'ส่งไม่สำเร็จ — ตรวจว่าคุณ Add friend bot แล้วและ userId ถูกต้อง'
+            success: r.ok,
+            message: r.ok ? 'ส่ง LINE ทดสอบสำเร็จ — กรุณาตรวจสอบ LINE' : (r.error || 'ส่งไม่สำเร็จ — ตรวจว่าคุณ Add friend bot แล้วและ userId ถูกต้อง')
         });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
@@ -12297,8 +12316,8 @@ apiRouter.post('/admin/users/:id/line/test', authenticateToken, isSuperAdmin, as
         const ns = await getNotifSettings();
         if (!ns.lineToken) return res.status(400).json({ success: false, message: 'ระบบยังไม่ตั้ง Channel Access Token' });
         const msg = `🔔 ทดสอบการแจ้งเตือนจาก super_admin\nสวัสดี คุณ${rows[0].firstname} ${rows[0].lastname}\n✅ การเชื่อมต่อ LINE สำเร็จ`;
-        const ok = await sendLineDirect(ns.lineToken, rows[0].line_user_id, msg);
-        res.json({ success: ok, message: ok ? 'ส่งสำเร็จ' : 'ส่งไม่สำเร็จ — userId อาจไม่ได้ Add friend bot' });
+        const r = await sendLineDirect(ns.lineToken, rows[0].line_user_id, msg);
+        res.json({ success: r.ok, message: r.ok ? 'ส่งสำเร็จ' : (r.error || 'ส่งไม่สำเร็จ — userId อาจไม่ได้ Add friend bot') });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
