@@ -571,10 +571,11 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     return this.http.post(`${this.apiUrl}/db-compare/sync-to-khd`, { tables }, { headers });
   }
 
-  reportCompare(): Observable<any> {
+  reportCompare(year_bh?: string): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.get(`${this.apiUrl}/report-compare`, { headers });
+    const url = year_bh ? `${this.apiUrl}/report-compare?year_bh=${encodeURIComponent(year_bh)}` : `${this.apiUrl}/report-compare`;
+    return this.http.get(url, { headers });
   }
   reportCompareSync(khd_report_ids: number[]): Observable<any> {
     const token = localStorage.getItem('kpi_token');

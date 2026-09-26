@@ -389,9 +389,9 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   Super Admin เปิด/ปิดการเข้าถึงแต่ละหน้าของระบบ แยกตาม role ได้ทั้ง 8 role (ไม่รวม super_admin ซึ่งเข้าได้ทุกหน้าเสมอ)
 - ตาราง `role_page_access` (role, page_key, is_enabled) UNIQUE(role, page_key) — auto-seed ตอน startup ให้ตรงกับ
   พฤติกรรม route guard/middleware **เดิม** เป๊ะ (ไม่เปลี่ยนพฤติกรรมจนกว่า super_admin จะแก้เอง)
-- `pageKey` ต้องตรงกับ `route.data['pageKey']` ใน `app.routes.ts` เสมอ (19 หน้า: dashboard, charts, notifications, sop,
+- `pageKey` ต้องตรงกับ `route.data['pageKey']` ใน `app.routes.ts` เสมอ (20 หน้า: dashboard, charts, notifications, sop,
   feedback, help, changelog, users, kpi-manage, kpi-setup, audit-logs, kpi-manager, settings, announcements,
-  online-users, backup-manager, kpi-audit-digest, error-logs, sso-logs)
+  online-users, backup-manager, kpi-audit-digest, error-logs, sso-logs, kpi-results-manage)
 - **Backend enforcement** (`api/server.js`):
   - `PAGE_ACCESS_RULES` (exact/regex/prefix ผสมกัน) + `resolvePageKeyFromPath(method, path)` → เช็คใน
     `authenticateToken` กลาง (ก่อน session check) + OR เพิ่มใน `isAdmin`/`isAnyAdmin`/`isSuperAdmin` (ให้ role ที่ถูก
@@ -488,6 +488,56 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   - ปุ่ม fa-sign-out-alt สีม่วง (mobile + desktop) — `*ngIf="isSuperAdmin && user.active_session_id"`
   - กดแล้ว confirm dialog แสดง IP + เวลา + เตือน "logout ภายใน ~30 วินาที"
   - log: `admin_force_logout` ใน system_logs
+
+### Report Compare — เทียบตัวชี้วัดกับ KHD (`GET /report-compare`)
+- **แหล่งข้อมูลบน remote KHD**: ตาราง `reports` (พหูพจน์ — ไม่ใช่ `report` เอกพจน์) เป็นตารางหลักเก็บรายละเอียด
+  ตัวชี้วัดทั้งหมด มีคอลัมน์ `report_id, report_name, report_code, dept, main_yut, table_process, data_source
+  ENUM('hdc','excel'), target_percentage, target_condition, is_active` — query เฉพาะ `data_source = 'excel'`
+  (ตัวชี้วัดที่ใช้งานจริงในระบบนี้) `AND LENGTH(report_code) = LENGTH(table_process)` (heuristic กันแถวผิดปกติ)
+- **ตาราง `report_fiscal_year_config`** (คอลัมน์: `report_id, fiscal_year INT, target_percentage,
+  target_condition, is_active`) เป็น**ตาราง override ต่อปีงบ** join กับ `reports` ผ่าน `report_id` (join ใน
+  โค้ด ผ่าน `Map`, ไม่ใช่ SQL JOIN) — ใช้ค่าจากตารางนี้ก่อนเสมอถ้ามีแถวของปีงบที่กำลังเทียบ (`fyConfig`) ไม่งั้น
+  fallback ไปที่ค่า default ใน `reports` (ฟังก์ชัน `getEffectiveKhdCriteria()`)
+- **⚠️ `reports.is_active` กับ `report_fiscal_year_config.is_active` เป็นคนละค่ากัน** (ยืนยันจริงจาก remote DB
+  ว่ามีบางตัวชี้วัดที่ 2 ค่านี้ต่างกันจริงระหว่างปีงบ) — ต้องใช้ `effectiveIsActive = fyConfig?.is_active ??
+  khd.is_active` (ของปีงบที่กำลังเทียบก่อนเสมอ) ในการคำนวณ badge "HDC inactive"/`suggest_disable_upload` **ห้าม
+  ใช้ `khd.is_active` (ค่า base จาก `reports`) ตรงๆ เด็ดขาด** — เคยเป็นบั๊กมาก่อน (แก้แล้ว)
+- **เลือกปีงบที่จะเทียบได้** — `year_bh` query param (default = ปีงบปัจจุบันตามวันที่ถ้าไม่ส่งมา) — Frontend
+  (`kpi-manage.ts` dropdown `khdCompareYear`, options = ปีปัจจุบัน±1) ส่ง param นี้ตอนกด "เทียบกับ KHD"/"เทียบ
+  KHD อีกครั้ง" — badge เกณฑ์แสดง `(ปีงบ N)` กำกับเมื่อค่ามาจาก `report_fiscal_year_config` ของปีนั้นจริง
+  (`khd_fiscal_year` field ใน response, ผ่าน `getKhdCriteriaText()`)
+- Join กับ local ผ่าน `table_process` (key เดียวกันทั้ง 2 ทาง) — คืน field `khd_*` (`khd_report_id, khd_name,
+  khd_dept, khd_main_yut, khd_is_active, khd_data_source, khd_target_percentage, khd_target_condition,
+  khd_criteria_source, khd_fiscal_year`) คู่กับ `local_*` ต่อ item
+- Endpoint ย่อยอื่นที่เกี่ยวข้อง (ทั้งหมด query `reports` ตรงๆ กรอง `data_source='excel'`): `POST
+  /report-compare/sync` (sync ชื่อ/table_process/code/data_source เข้า local — **ไม่แตะ**
+  target_percentage/target_condition/criterion), `POST /report-compare/add-from-khd` (เพิ่มตัวชี้วัดใหม่จาก
+  KHD), `GET /report-compare/strategies|departments|main-indicators|hospitals` (เทียบ main_yut/dept/table_process
+  แบบ text match + `chospital` แยกจาก reports)
+
+### จัดการข้อมูลผลงานตัวชี้วัด (`/kpi-results-manage`, super_admin เท่านั้น)
+- หน้า View + Bulk Delete ข้อมูล `kpi_results` ที่บันทึกแล้ว — คนละหน้ากับ Dashboard's Delete Mode (ซึ่งเปิดให้
+  `isAdmin` และลบทั้งปีของ indicator+hospcode เดียว) — หน้านี้ลบละเอียดระดับ**รายระเบียนจริง** (`kpi_results.id`
+  ตรงๆ, 1 แถว = 1 ตัวชี้วัด×1 หน่วยบริการ×1 เดือน)
+- Filter 2 กลุ่มอิสระต่อกัน (เลือกอย่างน้อย 1 กลุ่มเสมอ — **บังคับ ไม่งั้น backend ปฏิเสธด้วย 400** กัน query
+  ทั้งตาราง): `date_from`/`date_to` (กรอง `created_at`) และ `year_bh`+`month_from`/`month_to` (ช่วงเดือนตามปีงบ
+  ต.ค.-ก.ย. — แปลงเป็นลำดับปีงบผ่าน `fiscalMonthOrdinal()` ก่อนสร้าง `month_bh IN (...)` list เพื่อรองรับช่วงที่
+  ข้ามปีปฏิทิน เช่น พ.ย.-ก.พ.)
+- **⚠️ ห้าม JOIN `chospital` ตรงๆ ในคิวรีนี้** — พบบั๊ก schema เดิม (มีมาก่อนงานนี้ ไม่เกี่ยวกับโค้ดใหม่):
+  `kpi_results.hospcode` เป็น `varchar(5) utf8mb4_unicode_ci` แต่ `chospital.hoscode` เป็น `char(5)
+  utf8mb3_general_ci` — ชนิด/charset/collation ไม่ตรงกันทั้ง 3 อย่าง ทำให้ MySQL ใช้ index ของ chospital ไม่ได้เลย
+  (แม้ hoscode เป็น PRIMARY KEY) กลายเป็น full scan บนตาราง `kpi_results` ที่มีจริง ~5 แสนแถว (วัดจริงช้ากว่า
+  30 วินาที) — แก้โดย query ชื่อหน่วยบริการแยกต่างหาก เฉพาะ hoscode ที่อยู่ในหน้านั้นๆ (≤ limit ต่อหน้า) แล้ว
+  merge ใน JS แทน
+- Index ที่ต้องมี (auto-migration): `idx_kpi_results_created_at (created_at)`,
+  `idx_kpi_results_year_created (year_bh, created_at)` — จำเป็นมาก ไม่งั้น `ORDER BY created_at` filesort ทั้งตาราง
+- `POST /kpi-results/manage/bulk-delete` (body `{ ids: number[] }`, **hardcode `isSuperAdmin` เสมอ ไม่เข้า
+  `PAGE_ACCESS_RULES` เด็ดขาด** ตามกฎ DELETE ทั้งระบบ) — ลบ `kpi_results` ตาม id, ลบ `kpi_sub_results` ที่ตรง
+  `(indicator_id, year_bh, hospcode, month_bh)` เป๊ะของแต่ละแถว แล้วเรียก `refreshKpiSummaryForIndicatorYears()`
+  (DELETE + INSERT ใหม่จาก `kpi_results` ที่เหลือจริง + finalize last_actual ซ้ำ ใช้ SQL เดียวกับ
+  `/refresh-summary/batch`+`/finalize` แต่ scope เฉพาะ indicator_id+year_bh ที่กระทบ) — **ไม่ลบ dynamic `form_*`
+  tables ตามไปด้วย** (known gap เดิมของระบบ ไม่ใช่ regression ใหม่)
+- Log: `BULK_DELETE_KPI_MANAGE` ใน system_logs
 
 ### Sync to KHD
 - Core function: `performSyncToKhd(tables, userId)` — UPSERT local export tables → KHD

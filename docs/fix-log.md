@@ -4,6 +4,72 @@
 
 ---
 
+## 2569-09-26 — ตรวจสอบตรรกะเทียบ KHD (report_fiscal_year_config) + เพิ่มหน้าจัดการข้อมูลผลงานตัวชี้วัด
+
+### คำขอ
+ต้องการให้ตรวจสอบขั้นตอนการตรวจสอบตัวชี้วัด เปรียบเทียบระหว่าง KHD กับ local khupskpi โดยยึดข้อมูลตัวชี้วัดจาก
+KHD ตาราง report_fiscal_year_config (fiscal_year กำหนดปีงบ, is_active กำหนดสถานะ) ผูกกับตาราง report ผ่าน
+report_id, กรอง data_source = excel เท่านั้น — และต้องการหน้าจัดการข้อมูลผลงานตัวชี้วัดที่บันทึกแล้ว (CRUD
+เฉพาะ super_admin, ดึงช่วงวันที่, เลือกลบได้ทั้งหมด/ทีละรายการ) พร้อมคู่มือละเอียด
+
+### สาเหตุที่ยืนยันจากการอ่านโค้ดจริง + query remote KHD จริง
+- ตรรกะที่อธิบายมา**มีอยู่แล้วเกือบทั้งหมด**ใน `GET /report-compare` (ไม่ใช่ฟีเจอร์ใหม่) — query `reports`
+  (พหูพจน์ ไม่ใช่ `report` เอกพจน์ — ไม่มีตารางชื่อนี้บน remote จริง) กรอง `data_source='excel'` แล้ว join
+  `report_fiscal_year_config` ด้วย `report_id` ถูกต้องแล้ว
+- **พบบั๊กจริง 1 จุด**: ใช้ `reports.is_active` (ค่าทั่วไป ไม่ผูกปี) แทนที่จะเป็น
+  `report_fiscal_year_config.is_active` (ค่าเฉพาะปีงบที่กำลังเทียบ) ในการคำนวณ badge "HDC inactive" และ
+  คำแนะนำปิด upload_excel — ยืนยันด้วย query จริงบน remote ว่ามี **6 รายการที่ 2 ค่านี้ต่างกันจริง** (ไม่ใช่
+  ทฤษฎี) จาก data_source='excel' ปีงบ 2569+2570 รวม 237 รายการ
+- **frontend ไม่เคยส่ง year_bh ไปที่ backend เลย** — เทียบกับ KHD ได้แค่ปีงบ "ปัจจุบัน" ตามวันที่เท่านั้น ทั้งที่
+  remote มีข้อมูลจริงทั้งปี 2569 (274 แถว) และ 2570 (76 แถว) แล้ว
+
+### วิธีแก้ — ส่วนที่ 1 (แก้บั๊ก + เพิ่มตัวเลือกปีงบ)
+- `api/server.js` `GET /report-compare`: เพิ่ม `effectiveIsActive` (ใช้ fyConfig.is_active ก่อนเสมอถ้ามี ไม่งั้น
+  fallback ไป reports.is_active) แทน `khd.is_active` ตรงๆ ทุกจุดที่ตัดสิน active/inactive
+- `frontend/src/app/services/auth.ts` `reportCompare(year_bh?)` — เพิ่ม optional param ส่งเป็น query string
+- `frontend/src/app/kpi-manage/kpi-manage.ts`/`.html` — เพิ่ม dropdown เลือกปีงบ (`khdCompareYear`) ข้างปุ่ม
+  "เทียบกับ KHD" + แสดง `(ปีงบ N)` กำกับ badge เกณฑ์เมื่อมาจาก fiscal_year_config จริง
+- ทดสอบยืนยันด้วยข้อมูลจริงทั้ง 6 รายการที่เคย mismatch — ตอนนี้ผลลัพธ์ถูกต้องตรงกับ fiscal_year_config ของแต่
+  ละปีงบแล้ว (ทดสอบผ่าน API ตรงๆ และผ่าน UI จริงด้วย Playwright)
+
+### วิธีแก้ — ส่วนที่ 2 (หน้าใหม่ "จัดการข้อมูลผลงานตัวชี้วัด")
+- Route ใหม่ `/kpi-results-manage` (super_admin เท่านั้น, ผ่าน `pageAccessGuard` ปกติ + seed
+  `role_page_access` default ปิดทุก role ยกเว้น super_admin) — component ใหม่ `kpi-results-manage/`
+- `GET /kpi-results/manage` — filter 2 กลุ่มอิสระ (`date_from`/`date_to` บน created_at, `year_bh`+
+  `month_from`/`month_to` บนปีงบ) **บังคับเลือกอย่างน้อย 1 กลุ่มเสมอ** (backend ปฏิเสธด้วย 400 ถ้าไม่กรองอะไร
+  เลย) — กัน query ทั้งตาราง `kpi_results` (มีจริง ~494,066 แถว) โดยไม่มีเงื่อนไข ซึ่งช้ามากโดยธรรมชาติ (ORDER
+  BY + LIMIT ไม่มี WHERE ทำให้ MySQL optimizer เลือก full scan เอง)
+- **พบบั๊ก schema เดิมระหว่าง implement** (มีมาก่อนงานนี้ ไม่เกี่ยวกับโค้ดใหม่): `kpi_results.hospcode` เป็น
+  `varchar(5) utf8mb4_unicode_ci` แต่ `chospital.hoscode` เป็น `char(5) utf8mb3_general_ci` — ชนิด/charset/
+  collation ไม่ตรงกันทั้ง 3 อย่าง ทำให้ MySQL ใช้ index ของ chospital ไม่ได้เลยเวลา JOIN (แม้ hoscode เป็น
+  PRIMARY KEY) กลายเป็น full scan ทุกครั้ง วัดจริงช้ากว่า 30 วินาที — แก้โดยไม่ JOIN chospital ตรงในคิวรีหลัก
+  แต่ query ชื่อหน่วยบริการแยกเฉพาะ hoscode ที่อยู่ในหน้านั้นๆ มา merge ใน JS แทน (ไม่แตะ schema เดิม เพราะเสี่ยง
+  กว้างเกินไปสำหรับงานนี้)
+- เพิ่ม index `idx_kpi_results_created_at` + `idx_kpi_results_year_created (year_bh, created_at)` (auto-migration)
+- `POST /kpi-results/manage/bulk-delete` — ลบตาม `kpi_results.id` ตรงๆ (ละเอียดระดับ 1 เดือน/1 แถว ต่างจาก
+  endpoint bulk-delete เดิมที่ลบทั้งปี) hardcode `isSuperAdmin` เสมอ (ไม่เข้าระบบ Role×Page Access ตามกฎ DELETE
+  ของระบบ) — ลบ kpi_sub_results ที่ตรงเดือนเดียวกัน + เรียก `refreshKpiSummaryForIndicatorYears()` re-aggregate
+  kpi_summary ใหม่เฉพาะ indicator+year ที่กระทบ (ไม่ใช่ลบทั้งแถวทิ้งเหมือน endpoint เดิม เพราะลบแค่บางเดือน
+  เดือนอื่นในปีเดียวกันอาจยังมีข้อมูลอยู่)
+- ทดสอบยืนยันครบ: backend ปฏิเสธ role อื่นที่ไม่ใช่ super_admin ด้วย 403 ทั้ง GET และ DELETE, UI ทำงานถูกต้อง
+  ผ่าน Playwright จริง (filter, เลือกทั้งหมด/ทีละรายการ, ลบสำเร็จพร้อม log audit)
+
+### เอกสารที่อัปเดต
+- `help.html`/`help.ts` — section 23 ใหม่ "จัดการข้อมูลผลงานตัวชี้วัด" (คู่มือละเอียดครบตามที่ขอ)
+- `sop.ts` — ผังใหม่ "ระบบจัดการข้อมูลผลงานตัวชี้วัด" + module tile ใน overview (14→15 ระบบ)
+- `CLAUDE.md` — เพิ่ม section "Report Compare — เทียบตัวชี้วัดกับ KHD" (ละเอียดกว่าเดิมมาก) และ "จัดการข้อมูล
+  ผลงานตัวชี้วัด" ใหม่ทั้งคู่ + อัปเดตจำนวนหน้าใน Role×Page Access (19→20)
+
+### ไฟล์ที่แก้ไข
+- `api/server.js` (fix is_active + endpoint ใหม่ 2 ตัว + index migration ใหม่ 2 ตัว)
+- `frontend/src/app/services/auth.ts`, `frontend/src/app/kpi-manage/kpi-manage.ts`/`.html`
+- `frontend/src/app/kpi-results-manage/` (ใหม่ทั้งหมด), `frontend/src/app/app.routes.ts`,
+  `frontend/src/app/layout/layout.html`
+- `frontend/src/app/help/help.ts`/`.html`, `frontend/src/app/sop/sop.ts`, `CLAUDE.md`
+- `frontend/src/app/changelog/changelog.ts` (entry ใหม่)
+
+---
+
 ## 2569-09-26 — ตรวจสอบส่งข้อความ LINE ไม่สำเร็จ + ปรับข้อความ error ให้แม่นยำ
 
 ### คำขอ

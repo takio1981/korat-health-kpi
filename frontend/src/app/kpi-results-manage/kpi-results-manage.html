@@ -1,0 +1,135 @@
+<div class="p-6">
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100">
+    <div class="px-4 md:px-6 py-4 border-b border-gray-100 flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center">
+        <i class="fas fa-broom text-red-600"></i>
+      </div>
+      <div>
+        <h4 class="text-lg font-bold text-gray-800">จัดการข้อมูลผลงานตัวชี้วัด</h4>
+        <p class="text-xs text-gray-500">ดู + ลบข้อมูลผลงานตัวชี้วัดที่บันทึกแล้ว — super_admin เท่านั้น</p>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="p-4 md:p-6 border-b border-gray-100 bg-gray-50/50">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="text-xs font-bold text-gray-500 mb-1 block"><i class="fas fa-calendar-day mr-1"></i>ช่วงวันที่บันทึก/แก้ไขจริง (created_at)</label>
+          <div class="flex gap-2">
+            <input type="date" [(ngModel)]="dateFrom" name="dateFrom"
+              class="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-red-300 outline-none bg-white" placeholder="จากวันที่">
+            <input type="date" [(ngModel)]="dateTo" name="dateTo"
+              class="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-red-300 outline-none bg-white" placeholder="ถึงวันที่">
+          </div>
+        </div>
+        <div>
+          <label class="text-xs font-bold text-gray-500 mb-1 block"><i class="fas fa-calendar-alt mr-1"></i>ช่วงปีงบ/เดือนของผลงาน</label>
+          <div class="flex gap-2">
+            <select [(ngModel)]="yearBh" name="yearBh" class="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:ring-2 focus:ring-red-300 outline-none">
+              <option value="">ทุกปีงบ</option>
+              <option *ngFor="let y of yearOptions" [value]="y">ปีงบ {{ y }}</option>
+            </select>
+            <select [(ngModel)]="monthFrom" name="monthFrom" class="px-2 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:ring-2 focus:ring-red-300 outline-none">
+              <option [ngValue]="null">เดือนเริ่ม</option>
+              <option *ngFor="let m of months" [ngValue]="m.value">{{ m.label }}</option>
+            </select>
+            <select [(ngModel)]="monthTo" name="monthTo" class="px-2 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:ring-2 focus:ring-red-300 outline-none">
+              <option [ngValue]="null">เดือนสิ้นสุด</option>
+              <option *ngFor="let m of months" [ngValue]="m.value">{{ m.label }}</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-3">
+        <button (click)="applyFilters()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold shadow-md transition-colors">
+          <i class="fas fa-search mr-1"></i> ค้นหา
+        </button>
+        <button (click)="clearFilters()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-bold transition-colors">
+          <i class="fas fa-times mr-1"></i> ล้างตัวกรอง
+        </button>
+      </div>
+    </div>
+
+    <!-- Empty-state: ยังไม่กดค้นหา -->
+    <div *ngIf="!hasSearched" class="p-10 text-center text-gray-400">
+      <i class="fas fa-filter text-3xl mb-3"></i>
+      <p class="text-sm">กรุณาเลือกช่วงวันที่ หรือ ปีงบ แล้วกดปุ่ม "ค้นหา" เพื่อโหลดข้อมูล</p>
+    </div>
+
+    <ng-container *ngIf="hasSearched">
+      <!-- Selection toolbar -->
+      <div *ngIf="data.length > 0" class="px-4 md:px-6 py-2 bg-red-50 border-b border-red-200 flex flex-wrap items-center gap-3 text-xs">
+        <label class="flex items-center gap-2 cursor-pointer text-red-700 font-bold">
+          <input type="checkbox" [checked]="isAllSelected" [indeterminate]="isPartialSelected" (change)="toggleSelectAll()" class="rounded text-red-600 focus:ring-red-400">
+          เลือกทั้งหมดในหน้านี้
+        </label>
+        <span class="text-red-600">เลือกแล้ว <b>{{ selectedIds.size }}</b> รายการ</span>
+        <button (click)="confirmBulkDelete()" [disabled]="selectedIds.size === 0"
+          class="ml-auto px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white rounded-lg text-xs font-bold transition-colors">
+          <i class="fas fa-trash-alt mr-1"></i> ลบที่เลือก ({{ selectedIds.size }})
+        </button>
+      </div>
+
+      <div class="overflow-auto card-scroll" style="max-height: calc(100vh - 420px)">
+        <table class="w-full text-sm min-w-[900px]">
+          <thead class="bg-gray-100 sticky top-0 z-10 shadow-sm">
+            <tr class="text-left text-gray-600">
+              <th class="px-3 py-2 w-10"></th>
+              <th class="px-3 py-2">ตัวชี้วัด</th>
+              <th class="px-3 py-2">หน่วยบริการ</th>
+              <th class="px-3 py-2 text-center">ปีงบ</th>
+              <th class="px-3 py-2 text-center">เดือน</th>
+              <th class="px-3 py-2 text-right">เป้าหมาย</th>
+              <th class="px-3 py-2 text-right">ผลงาน</th>
+              <th class="px-3 py-2 text-center">สถานะ</th>
+              <th class="px-3 py-2">วันที่บันทึก</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of data" class="border-b border-gray-100 hover:bg-gray-50" [ngClass]="{'bg-red-50/50': selectedIds.has(row.id)}">
+              <td class="px-3 py-2 text-center">
+                <input type="checkbox" [checked]="selectedIds.has(row.id)" (change)="toggleSelect(row.id)" class="rounded text-red-600 focus:ring-red-400">
+              </td>
+              <td class="px-3 py-2">
+                <div class="font-medium text-gray-800">{{ row.kpi_indicators_name }}</div>
+                <div class="text-[10px] text-gray-400">{{ row.dept_name }}</div>
+              </td>
+              <td class="px-3 py-2 text-gray-600">{{ row.hosname || row.hospcode }}</td>
+              <td class="px-3 py-2 text-center">{{ row.year_bh }}</td>
+              <td class="px-3 py-2 text-center">{{ monthLabel(row.month_bh) }}</td>
+              <td class="px-3 py-2 text-right">{{ row.target_value || '-' }}</td>
+              <td class="px-3 py-2 text-right">{{ row.actual_value || '-' }}</td>
+              <td class="px-3 py-2 text-center">
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold" [ngClass]="statusBadge(row.status)">{{ row.status }}</span>
+              </td>
+              <td class="px-3 py-2 text-gray-500 text-xs">{{ row.created_at | date:'d MMM yyyy HH:mm' }}</td>
+            </tr>
+            <tr *ngIf="!loading && data.length === 0">
+              <td colspan="9" class="text-center text-gray-400 py-8">ไม่พบข้อมูลตามตัวกรองที่เลือก</td>
+            </tr>
+            <tr *ngIf="loading">
+              <td colspan="9" class="text-center text-gray-400 py-8"><i class="fas fa-spinner fa-spin mr-2"></i>กำลังโหลด...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div *ngIf="pages > 1" class="p-4 flex items-center justify-between border-t border-gray-100">
+        <p class="text-sm text-gray-500">ทั้งหมด {{ total | number }} รายการ | หน้า {{ page }}/{{ pages }}</p>
+        <div class="flex gap-1">
+          <button (click)="goPage(page-1)" [disabled]="page<=1" class="px-3 py-1.5 rounded-lg border text-sm disabled:opacity-40 hover:bg-gray-50 transition-colors">
+            <i class="fas fa-chevron-left"></i>
+          </button>
+          <ng-container *ngFor="let p of pagesArray()">
+            <button *ngIf="p>0" (click)="goPage(p)" [ngClass]="p===page ? 'bg-red-600 text-white border-red-600' : 'border hover:bg-gray-50'" class="w-9 py-1.5 rounded-lg text-sm transition-colors">{{ p }}</button>
+            <span *ngIf="p<0" class="px-2 py-1.5 text-gray-400 text-sm">…</span>
+          </ng-container>
+          <button (click)="goPage(page+1)" [disabled]="page>=pages" class="px-3 py-1.5 rounded-lg border text-sm disabled:opacity-40 hover:bg-gray-50 transition-colors">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+        </div>
+      </div>
+    </ng-container>
+  </div>
+</div>

@@ -23,6 +23,7 @@ import { SsoLogsComponent } from './sso-logs/sso-logs';
 import { SsoCallbackComponent } from './sso-callback/sso-callback';
 import { SopComponent } from './sop/sop';
 import { RolePageAccessComponent } from './role-page-access/role-page-access';
+import { KpiResultsManageComponent } from './kpi-results-manage/kpi-results-manage';
 import { authGuard } from './guards/auth-guard';
 import { superAdminGuard } from './guards/super-admin-guard';
 import { pageAccessGuard } from './guards/page-access-guard';
@@ -48,6 +49,7 @@ export const routes: Routes = [
       { path: 'kpi-manager', component: KpiManagerComponent, canActivate: [pageAccessGuard], data: { title: 'จัดการข้อมูล KPI', pageKey: 'kpi-manager' } },
       { path: 'settings', component: SettingsComponent, canActivate: [pageAccessGuard], data: { title: 'ตั้งค่าระบบ', pageKey: 'settings' } },
       { path: 'role-page-access', component: RolePageAccessComponent, canActivate: [superAdminGuard], data: { title: 'สิทธิ์การเข้าถึงหน้า' } },
+      { path: 'kpi-results-manage', component: KpiResultsManageComponent, canActivate: [pageAccessGuard], data: { title: 'จัดการข้อมูลผลงานตัวชี้วัด', pageKey: 'kpi-results-manage' } },
       { path: 'announcements', component: AnnouncementsComponent, canActivate: [pageAccessGuard], data: { title: 'ประกาศระบบ', pageKey: 'announcements' } },
       { path: 'online-users', component: OnlineUsersComponent, canActivate: [pageAccessGuard], data: { title: 'ผู้ใช้งานออนไลน์', pageKey: 'online-users' } },
       { path: 'backup-manager', component: BackupManagerComponent, canActivate: [pageAccessGuard], data: { title: 'สำรอง & กู้คืนฐานข้อมูล', pageKey: 'backup-manager' } },

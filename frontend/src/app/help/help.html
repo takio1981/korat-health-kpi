@@ -2035,7 +2035,7 @@
         </div>
         <p class="text-sm text-gray-600 mb-4">เปิด/ปิดการเข้าถึงแต่ละหน้าของระบบ แยกตาม Role ได้ทั้ง 8 Role (admin_ssj, admin_cup, admin_hos, admin_sso, user_cup, user_hos, user_sso, user_ssj) — <b>super_admin เข้าได้ทุกหน้าเสมอ</b> ไม่แสดงในตารางและปิดไม่ได้ (กันตั้งค่าผิดพลาดจนเข้าระบบไม่ได้)</p>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-          <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-3"><p class="text-sm font-bold text-indigo-800"><i class="fas fa-table mr-2"></i>ตารางสิทธิ์ (Matrix)</p><p class="text-xs text-gray-500">แถว = หน้าในระบบ (19 หน้า) / คอลัมน์ = Role — ติ๊ก = เข้าได้</p></div>
+          <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-3"><p class="text-sm font-bold text-indigo-800"><i class="fas fa-table mr-2"></i>ตารางสิทธิ์ (Matrix)</p><p class="text-xs text-gray-500">แถว = หน้าในระบบ (20 หน้า) / คอลัมน์ = Role — ติ๊ก = เข้าได้</p></div>
           <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3"><p class="text-sm font-bold text-emerald-800"><i class="fas fa-check-double mr-2"></i>เลือกทั้งหมด</p><p class="text-xs text-gray-500">ปุ่ม "ทั้งหมด" ที่หัวคอลัมน์ (ทีละ Role) หรือไอคอนหน้าแถว (ทีละหน้า)</p></div>
           <div class="bg-amber-50 border border-amber-200 rounded-xl p-3"><p class="text-sm font-bold text-amber-800"><i class="fas fa-bolt mr-2"></i>มีผลทันที</p><p class="text-xs text-gray-500">กด "บันทึก" แล้วมีผลกับผู้ใช้ที่ login อยู่ในระบบทันที</p></div>
           <div class="bg-rose-50 border border-rose-200 rounded-xl p-3"><p class="text-sm font-bold text-rose-800"><i class="fas fa-shield-alt mr-2"></i>ควบคุมจริง ไม่ใช่แค่ซ่อนเมนู</p><p class="text-xs text-gray-500">ครอบคลุมทั้งเมนูที่เห็นและสิทธิ์เรียกใช้งาน API จริง</p></div>
@@ -2052,12 +2052,66 @@
         </div>
       </section>
 
-      <!-- ==================== 23. FAQ ==================== -->
+      <!-- ==================== 23. จัดการข้อมูลผลงานตัวชี้วัด ==================== -->
+      <section id="section-kpi-results-manage" *ngIf="canSeeSection('kpi-results-manage')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center"><i class="fas fa-broom text-red-600"></i></div>
+          <div>
+            <h2 class="text-xl font-bold text-gray-800">23. จัดการข้อมูลผลงานตัวชี้วัด</h2>
+            <p class="text-xs text-gray-400">super_admin เท่านั้น</p>
+          </div>
+        </div>
+        <p class="text-sm text-gray-600 mb-4">
+          เครื่องมือดู + ลบข้อมูลผลงานตัวชี้วัด (<code>kpi_results</code>) ที่บันทึกไว้แล้วในระบบ แบบไม่ต้องเข้าไปที่หน้า
+          "บันทึกผลงานตัวชี้วัด" ทีละตัวชี้วัด/ทีละหน่วยบริการ — เหมาะสำหรับกรณีต้องล้างข้อมูลทดสอบ ข้อมูลที่คีย์ผิดจำนวนมาก
+          หรือข้อมูลเก่าที่ไม่ต้องการเก็บไว้แล้ว ระบบนี้มีข้อมูลจริงจำนวนมาก (หลายแสนแถว) จึง<b>บังคับให้เลือกตัวกรองก่อนค้นหาเสมอ</b>
+          ไม่สามารถกดค้นหาแบบไม่กรองอะไรเลยได้
+        </p>
+
+        <h4 class="font-bold text-gray-700 text-sm mb-2"><i class="fas fa-list-ol mr-2 text-red-500"></i>ขั้นตอนการใช้งาน</h4>
+        <ol class="list-decimal ml-5 text-sm text-gray-700 space-y-2 mb-4">
+          <li>
+            <b>เลือกตัวกรองอย่างน้อย 1 กลุ่ม</b> — มี 2 กลุ่มอิสระต่อกัน เลือกกลุ่มใดกลุ่มหนึ่ง หรือทั้งคู่พร้อมกันก็ได้ (ระบบจะกรองแบบ "และ" ทั้งสองเงื่อนไข):
+            <ul class="list-disc ml-5 mt-1 space-y-1 text-xs text-gray-600">
+              <li><b>ช่วงวันที่บันทึก/แก้ไขจริง</b> — กรองจากวันที่ระบบบันทึกแถวนั้นจริง (<code>created_at</code>) ใส่ "จากวันที่" หรือ "ถึงวันที่" อย่างใดอย่างหนึ่งหรือทั้งคู่ก็ได้</li>
+              <li><b>ช่วงปีงบ/เดือนของผลงาน</b> — เลือก "ปีงบ" (พ.ศ.) และ/หรือช่วง "เดือนเริ่ม–เดือนสิ้นสุด" ตามปีงบประมาณ (ต.ค.–ก.ย.) — ถ้าเลือกแค่ปีงบไม่เลือกเดือน จะกรองทั้งปีงบนั้น</li>
+            </ul>
+          </li>
+          <li>กดปุ่ม <b>"ค้นหา"</b> — ระบบจะขึ้นข้อความเตือนถ้ายังไม่เลือกตัวกรองเลย</li>
+          <li>ตรวจสอบรายการในตาราง — แต่ละแถวแสดง ตัวชี้วัด, หน่วยงาน, หน่วยบริการ, ปีงบ, เดือน, เป้าหมาย, ผลงาน, สถานะ, วันที่บันทึก</li>
+          <li>
+            <b>เลือกรายการที่ต้องการลบ</b> — ติ๊ก checkbox หน้าแถวทีละรายการ หรือกด <b>"เลือกทั้งหมดในหน้านี้"</b>
+            เพื่อเลือกทุกแถวที่แสดงอยู่ในหน้าปัจจุบัน (ไม่รวมหน้าอื่นที่ยังไม่ได้เปิดดู — ถ้าต้องการลบหลายหน้า ต้องเลือก+ลบทีละหน้า)
+          </li>
+          <li>
+            กดปุ่ม <b>"ลบที่เลือก (N)"</b> — ระบบจะแสดงกล่องยืนยันพร้อมตัวอย่างรายการที่จะลบ (สูงสุด 10 รายการแรก) และคำเตือนว่า
+            <b class="text-red-600">ลบถาวร ไม่สามารถกู้คืนได้</b> — กด "ลบถาวร" เพื่อยืนยันจริง
+          </li>
+        </ol>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+          <div class="bg-blue-50 border border-blue-200 rounded-xl p-3"><p class="text-sm font-bold text-blue-800"><i class="fas fa-layer-group mr-2"></i>ความละเอียดการลบ</p><p class="text-xs text-gray-500">ลบทีละ "รายการ" จริง (1 แถว = 1 ตัวชี้วัด × 1 หน่วยบริการ × 1 เดือน) ไม่ใช่ลบทั้งปีทีเดียวเหมือนโหมดลบใน Dashboard</p></div>
+          <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3"><p class="text-sm font-bold text-emerald-800"><i class="fas fa-sync-alt mr-2"></i>ล้างข้อมูลที่เกี่ยวข้องให้อัตโนมัติ</p><p class="text-xs text-gray-500">ลบ <code>kpi_sub_results</code> ของเดือนเดียวกันให้ด้วย + คำนวณ <code>kpi_summary</code> ใหม่ทันทีให้ตรงกับข้อมูลที่เหลือจริง</p></div>
+        </div>
+
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-3">
+          <h4 class="font-bold text-amber-800 text-sm mb-2"><i class="fas fa-exclamation-triangle mr-2"></i>ข้อจำกัด/สิ่งที่ควรทราบก่อนใช้งาน</h4>
+          <ul class="list-disc ml-5 text-xs text-gray-700 space-y-1.5">
+            <li><b>ลบถาวร ไม่มีถังขยะ ไม่มีปุ่ม Undo</b> — ตรวจสอบรายการในกล่องยืนยันให้ดีก่อนกดลบทุกครั้ง</li>
+            <li>ถ้าตัวชี้วัดใช้ <b>Form Builder</b> (บันทึกผ่านฟอร์ม dynamic ไม่ใช่ 12 ช่องเดือนปกติ) ข้อมูลในตาราง <code>form_*</code>
+              ที่เกี่ยวข้อง <b>จะไม่ถูกลบตามไปด้วย</b> — ต้องไปลบที่หน้า "สร้างแบบฟอร์ม" (Form Builder) แยกต่างหากถ้าต้องการล้างข้อมูลนั้นด้วย</li>
+            <li>เพื่อป้องกันการโหลดข้อมูลทั้งระบบพร้อมกัน (มีหลายแสนแถว) <b>ต้องเลือกตัวกรองก่อนค้นหาเสมอ</b> — ปุ่มค้นหาจะไม่ทำงานถ้าไม่เลือกอะไรเลย</li>
+            <li>สิทธิ์นี้จำกัดเฉพาะ super_admin เท่านั้น เข้มงวดกว่าโหมดแก้ไข/ลบข้อมูลในหน้า Dashboard ปกติ (ซึ่ง admin_ssj ก็ทำได้)</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ==================== 24. FAQ ==================== -->
       <section id="section-faq" *ngIf="canSeeSection('faq')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-pink-100 flex items-center justify-center"><i class="fas fa-question-circle text-pink-600"></i></div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">23. คำถามที่พบบ่อย (FAQ)</h2>
+            <h2 class="text-xl font-bold text-gray-800">24. คำถามที่พบบ่อย (FAQ)</h2>
           </div>
         </div>
         <div class="space-y-3">

@@ -38,7 +38,7 @@ const ACTOR: Record<string, { fill: string; border: string; dot: string; text: s
 const SYSTEMS: SopSystem[] = [
 {
   id:'overview', icon:'🗺️', title:'ภาพรวมระบบ', sub:'System Overview', overview: true,
-  desc:'ภาพรวมความเชื่อมโยงของ 14 ระบบหลัก และทิศทางการไหลของข้อมูลระหว่างระบบ',
+  desc:'ภาพรวมความเชื่อมโยงของ 15 ระบบหลัก และทิศทางการไหลของข้อมูลระหว่างระบบ',
   actors: [],
   modules: [
     {id:'auth',    icon:'🔐', title:'ระบบ Login',      desc:'Authentication / SSO'},
@@ -55,6 +55,7 @@ const SYSTEMS: SopSystem[] = [
     {id:'settings',icon:'🛠️', title:'ตั้งค่าระบบ',    desc:'System Settings & SSO'},
     {id:'feedback',icon:'💬', title:'ข้อเสนอแนะ',      desc:'Feedback Board'},
     {id:'sub',     icon:'🔢', title:'ตัวชี้วัดย่อย',   desc:'Sub-indicators & AVG'},
+    {id:'resultsmanage', icon:'🧹', title:'จัดการข้อมูลผลงาน', desc:'Bulk Delete kpi_results'},
   ],
 },{
   id:'auth', icon:'🔐', title:'ระบบเข้าสู่ระบบ', sub:'Authentication',
@@ -492,6 +493,45 @@ const SYSTEMS: SopSystem[] = [
     {f:'n6',t:'ok'},
   ],
   notes:['Throttle ผ่าน _lastSeenCache Map (กัน DB overload ทุก request)','สถานะ dot: เขียว <60s / เหลือง <300s / ส้ม <900s / เทา >900s'],
+},{
+  id:'resultsmanage', icon:'🧹', title:'ระบบจัดการข้อมูลผลงานตัวชี้วัด', sub:'Bulk Delete kpi_results',
+  desc:'View + Bulk Delete รายระเบียน (1 แถว = 1 ตัวชี้วัด×1 หน่วยบริการ×1 เดือน) — super_admin เท่านั้น บังคับเลือกตัวกรองก่อนค้นหาเสมอ',
+  actors:['Super Admin','Backend API','ฐานข้อมูล'],
+  nodes:[
+    {id:'s',  r:0,c:0,t:'start',   l:'เปิด /kpi-results-manage\n(super_admin)'},
+    {id:'d1', r:0,c:1,t:'decision',l:'เลือกตัวกรอง\nอย่างน้อย 1 กลุ่ม?'},
+    {id:'e1', r:2,c:1,t:'end',     l:'แจ้งเตือน\n"กรุณาเลือกตัวกรอง"'},
+    {id:'n1', r:0,c:2,t:'process', l:'GET /kpi-results/manage\ndate_from/to หรือ year_bh+month'},
+    {id:'n2', r:1,c:2,t:'db',      l:'kpi_results JOIN kpi_indicators\n(ไม่ join chospital ตรง — บั๊ก collation เดิม)'},
+    {id:'n3', r:0,c:3,t:'process', l:'เติมชื่อหน่วยบริการแยก\n(hoscode ในหน้านี้เท่านั้น)'},
+    {id:'n4', r:0,c:4,t:'process', l:'ติ๊กเลือก checkbox\nทีละแถว/เลือกทั้งหมดในหน้า'},
+    {id:'n5', r:0,c:5,t:'process', l:'ยืนยัน Swal\n"ลบถาวร ไม่มี Undo"'},
+    {id:'n6', r:0,c:6,t:'process', l:'POST /kpi-results/manage\n/bulk-delete { ids }'},
+    {id:'n7', r:1,c:6,t:'db',      l:'DELETE kpi_results\n+ kpi_sub_results (เดือนตรงกัน)'},
+    {id:'n8', r:2,c:6,t:'process', l:'refreshKpiSummary\nForIndicatorYears()'},
+    {id:'n9', r:3,c:6,t:'db',      l:'DELETE+INSERT kpi_summary\nเฉพาะ indicator+year ที่กระทบ'},
+    {id:'ok', r:0,c:7,t:'end',     l:'ลบสำเร็จ\n+ log system_logs'},
+  ],
+  edges:[
+    {f:'s', t:'d1'},
+    {f:'d1',t:'e1',x:'bottom',n:'top',l:'ไม่เลือก'},
+    {f:'d1',t:'n1',l:'เลือกแล้ว'},
+    {f:'n1',t:'n2',x:'bottom',n:'top'},
+    {f:'n2',t:'n3',x:'top',n:'bottom'},
+    {f:'n3',t:'n4'},
+    {f:'n4',t:'n5'},
+    {f:'n5',t:'n6'},
+    {f:'n6',t:'n7',x:'bottom',n:'top'},
+    {f:'n7',t:'n8',x:'bottom',n:'top'},
+    {f:'n8',t:'n9',x:'bottom',n:'top'},
+    {f:'n9',t:'ok',x:'right',n:'bottom',v:'hv'},
+  ],
+  notes:[
+    'ความละเอียดการลบ = รายระเบียนจริง (id ตรงๆ) ไม่ใช่ทั้งปีเหมือนโหมดลบใน Dashboard (isAdmin) เดิม',
+    'kpi_summary เป็น aggregate รายปี (1 แถว = 12 เดือน) — ลบบางเดือนต้อง re-aggregate ใหม่ทั้งแถว ไม่ใช่ลบทิ้งเฉยๆ',
+    'Known gap: ไม่ลบ dynamic form_* tables (ข้อมูลจาก Form Builder) ตามไปด้วย — ต้องลบแยกที่ Form Builder เอง',
+    'บังคับ filter ก่อนค้นหาเสมอ เพราะ kpi_results มีข้อมูลจริงหลายแสนแถว — ORDER BY+LIMIT ไม่มี WHERE จะช้ามาก',
+  ],
 },{
   id:'export', icon:'💾', title:'ระบบ Export & Sync KHD', sub:'KPI Manager Wizard',
   desc:'Wizard 2 ขั้น: DB Compare (Schema + Form Builder) → Export Tables + Sync + Scheduler อัตโนมัติ',

@@ -91,6 +91,13 @@ export class KpiManageComponent implements OnInit {
   khdCompareSummary: any = null;     // { total, match, different, missing_local, missing_remote, khd_inactive, suggest_disable }
   khdCompareLoading: boolean = false;
   khdCompareLastRun: Date | null = null;
+  // ปีงบที่ใช้เทียบเกณฑ์กับ KHD (report_fiscal_year_config.fiscal_year) — เดิม frontend ไม่เคยส่งปีงบไปเลย
+  // ทำให้เทียบได้แค่ปีงบ "ปัจจุบัน" ตามวันที่เท่านั้น ทั้งที่ remote มีข้อมูลมากกว่า 1 ปีงบพร้อมกันจริง (เช่น 2569+2570)
+  khdCompareYear: string = String(new Date().getFullYear() + 543 + (new Date().getMonth() >= 9 ? 1 : 0));
+  khdCompareYearOptions: string[] = (() => {
+    const fy = new Date().getFullYear() + 543 + (new Date().getMonth() >= 9 ? 1 : 0);
+    return [String(fy + 1), String(fy), String(fy - 1)];
+  })();
   // filter เพิ่มสำหรับ indicators tab — กรองตามสถานะ compare กับ KHD
   filterKhdStatus: string = '';      // '' | 'match' | 'different' | 'missing_remote' | 'not_compared' | 'inactive'
   // filter ตามสถานะการบันทึกผลงาน (ใช้ร่วมกับ filterKhdStatus ได้ — คนละมิติกัน)
@@ -258,7 +265,10 @@ export class KpiManageComponent implements OnInit {
 
   // เกณฑ์ของ KHD (จาก getKhdData) — เทียบคู่กับ getCriteriaText(item) ของ Local
   getKhdCriteriaText(khd: any): string {
-    return this.getCriteriaText({ criterion: khd?.khd_target_percentage, target_condition: khd?.khd_target_condition });
+    const text = this.getCriteriaText({ criterion: khd?.khd_target_percentage, target_condition: khd?.khd_target_condition });
+    // khd_fiscal_year มีค่าเมื่อเกณฑ์มาจาก report_fiscal_year_config ปีงบที่กำลังเทียบโดยตรง (ไม่ใช่ fallback จาก reports)
+    // แสดงกำกับไว้กันสับสนว่าเกณฑ์นี้อ้างอิงปีไหน เพราะกดเปลี่ยน dropdown ปีงบแล้วค่าอาจไม่เหมือนเดิม
+    return khd?.khd_fiscal_year ? `${text} (ปีงบ ${khd.khd_fiscal_year})` : text;
   }
 
   // ดึงประเภทตัวชี้วัด (R9, MOPH, SSJ, RMW, Other) — badge สีต่างกัน
@@ -912,7 +922,7 @@ export class KpiManageComponent implements OnInit {
     }
     this.khdCompareLoading = true;
     this.cdr.detectChanges();
-    this.authService.reportCompare().subscribe({
+    this.authService.reportCompare(this.khdCompareYear).subscribe({
       next: (res: any) => {
         this.khdCompareLoading = false;
         if (res.success) {

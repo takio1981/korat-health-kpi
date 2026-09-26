@@ -58,6 +58,7 @@
         <a *ngIf="canAccess('error-logs')" routerLink="/error-logs" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-bug text-base mr-3 min-w-[20px]"></i>Error Logs</a>
         <a *ngIf="canAccess('settings')" routerLink="/settings" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-sliders-h text-base mr-3 min-w-[20px]"></i>ตั้งค่าระบบ</a>
         <a *ngIf="isSuperAdmin" routerLink="/role-page-access" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-user-lock text-base mr-3 min-w-[20px]"></i>สิทธิ์การเข้าถึงหน้า</a>
+        <a *ngIf="canAccess('kpi-results-manage')" routerLink="/kpi-results-manage" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-broom text-base mr-3 min-w-[20px]"></i>จัดการข้อมูลผลงานตัวชี้วัด</a>
       </nav>
     </div>
 
@@ -230,6 +231,14 @@
            [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
           <i class="fas fa-user-lock text-lg min-w-[24px]" [ngClass]="isSidebarCollapsed ? 'text-center' : 'mr-3'"></i>
           <span *ngIf="!isSidebarCollapsed" class="truncate">สิทธิ์การเข้าถึงหน้า</span>
+        </a>
+        <!-- จัดการข้อมูลผลงานตัวชี้วัด -->
+        <a *ngIf="canAccess('kpi-results-manage')" routerLink="/kpi-results-manage" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
+           [title]="isSidebarCollapsed ? 'จัดการข้อมูลผลงานตัวชี้วัด' : ''"
+           class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
+           [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
+          <i class="fas fa-broom text-lg min-w-[24px]" [ngClass]="isSidebarCollapsed ? 'text-center' : 'mr-3'"></i>
+          <span *ngIf="!isSidebarCollapsed" class="truncate">จัดการข้อมูลผลงานตัวชี้วัด</span>
         </a>
       </nav>
 

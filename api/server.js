@@ -618,6 +618,7 @@ const PAGE_ACCESS_PAGES = [
     { key: 'kpi-audit-digest', label: 'แจ้งเตือนการบันทึก KPI' },
     { key: 'error-logs', label: 'Error Logs' },
     { key: 'sso-logs', label: 'SSO Audit Logs' },
+    { key: 'kpi-results-manage', label: 'จัดการข้อมูลผลงานตัวชี้วัด' },
 ];
 // ค่าเริ่มต้น (seed ครั้งแรกเท่านั้น) — สะท้อนพฤติกรรมเดิมของระบบก่อนมี feature นี้ทุกประการ
 // (route guard เดิมใน app.routes.ts + isAdmin/isAnyAdmin/isSuperAdmin เดิมในแต่ละ endpoint)
@@ -644,6 +645,7 @@ const PAGE_ACCESS_DEFAULT_ENABLED = {
     'kpi-audit-digest': [],
     'error-logs': [],
     'sso-logs': [],
+    'kpi-results-manage': [], // super_admin เท่านั้น (ตามที่ผู้ใช้ระบุไว้ชัดเจน) — หน้าใหม่จึงเริ่มปิดสำหรับ role อื่นทั้งหมด
 };
 
 // Cache ในหน่วยความจำ — role -> Set<pageKey ที่เปิดใช้งาน> โหลดตอน startup + reload เมื่อมีการบันทึกค่าใหม่
@@ -691,6 +693,9 @@ const PAGE_ACCESS_RULES = [
 
     // หน้าเปิดทั่วไป — gate เฉพาะ endpoint หลักที่อ่านข้อมูลของหน้านั้นโดยตรง (ปลอดภัย ไม่กระทบ endpoint ย่อยที่ใช้ร่วมกันข้ามหน้า เช่น notifications/unread-count)
     { method: 'GET', path: '/kpi-results', pageKey: 'dashboard' },
+    // จัดการข้อมูลผลงานตัวชี้วัด — เฉพาะ GET (list) เข้าระบบนี้ได้ ส่วน bulk-delete hardcode isSuperAdmin ตรงๆ
+    // เสมอ (ตามกฎ DELETE ทุกตัวของระบบ) ไม่เข้า PAGE_ACCESS_RULES เด็ดขาด กันเปิดสิทธิ์ลบผ่านการตั้งค่านี้
+    { method: 'GET', path: '/kpi-results/manage', pageKey: 'kpi-results-manage' },
     { method: 'GET', path: '/kpi-setup-check', pageKey: 'kpi-setup' },
     { method: 'GET', path: '/notifications', pageKey: 'notifications' },
     { method: 'GET', path: '/feedback', pageKey: 'feedback' },
@@ -3451,6 +3456,235 @@ apiRouter.post('/kpi-results/bulk-delete', authenticateToken, isSuperAdmin, asyn
         await connection.rollback();
         res.status(500).json({ success: false, message: e.message });
     } finally { connection.release(); }
+});
+
+// ========== จัดการข้อมูลผลงานตัวชี้วัด (super_admin) — View + Bulk Delete รายระเบียน ==========
+// คนละ endpoint กับ /kpi-results/bulk-delete เดิม (ซึ่งลบทั้งปีของ indicator+hospcode เดียว) — หน้านี้
+// ต้องการลบละเอียดถึงระดับ "รายการเดียว" (1 แถว = 1 เดือนจริง) จึงลบด้วย kpi_results.id ตรงๆ
+
+// month_bh encoding ที่ระบบใช้จริงทั้งระบบ: 10,11,12,1,2,...,9 (เลขเดือนปฏิทินจริง, ปีงบเริ่ม ต.ค.=10)
+// แปลงเป็นลำดับปีงบ (ต.ค.=1 ... ก.ย.=12) เพื่อใช้เทียบช่วงเดือนที่ผู้ใช้เลือกแบบข้ามปีปฏิทินได้ถูกต้อง
+function fiscalMonthOrdinal(monthBh) {
+    const m = Number(monthBh);
+    return m >= 10 ? m - 9 : m + 3;
+}
+// คืนรายการ month_bh ทั้งหมดที่อยู่ในช่วงปีงบ [monthFrom, monthTo] (รับค่าเป็น month_bh ปฏิทินทั้งคู่)
+function monthBhRangeList(monthFrom, monthTo) {
+    const allMonths = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    const fromOrd = fiscalMonthOrdinal(monthFrom);
+    const toOrd = fiscalMonthOrdinal(monthTo);
+    return allMonths.filter(m => {
+        const ord = fiscalMonthOrdinal(m);
+        return ord >= fromOrd && ord <= toOrd;
+    });
+}
+
+// Re-aggregate kpi_summary เฉพาะ (indicator_id, year_bh) ที่ได้รับผลกระทบหลังลบ kpi_results บางรายการ —
+// ลบแถว summary เดิมทิ้งแล้วคำนวณใหม่จาก kpi_results ที่เหลืออยู่จริง (ไม่ใช่ลบทั้งแถวทิ้งเฉยๆ เหมือน
+// /kpi-results/bulk-delete เดิม เพราะ endpoint นั้นลบทั้งปีอยู่แล้วจึงลบทั้งแถว summary ได้ตรงๆ แต่ที่นี่ลบแค่
+// บางเดือน เดือนอื่นในปีเดียวกันของ indicator+hospcode นั้นอาจยังมีข้อมูลอยู่) — ใช้ SQL เดียวกับ
+// /refresh-summary/batch + /refresh-summary/finalize เป๊ะ แค่ scope แคบลงเฉพาะ indicator_id+year_bh ที่กระทบ
+async function refreshKpiSummaryForIndicatorYears(connection, pairs) {
+    for (const p of pairs) {
+        await connection.query('DELETE FROM kpi_summary WHERE indicator_id = ? AND year_bh = ?', [p.indicator_id, p.year_bh]);
+        await connection.query(`
+            INSERT INTO kpi_summary (indicator_id, year_bh, hospcode, main_indicator_name, kpi_indicators_name,
+                dept_id, dept_name, hosname, distid, hostype, distname, table_process, target_value,
+                oct, nov, dece, jan, feb, mar, apr, may, jun, jul, aug, sep,
+                pending_count, indicator_status, is_locked, updated_at)
+            SELECT
+                i.id, r.year_bh, r.hospcode,
+                IFNULL(mi.main_indicator_name, 'ยังไม่กำหนด'),
+                i.kpi_indicators_name, i.dept_id, d.dept_name, h.hosname, h.distid, h.hostype, dist.distname, i.table_process,
+                MAX(r.target_value),
+                MAX(CASE WHEN r.month_bh=10 THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=11 THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=12 THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=1  THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=2  THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=3  THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=4  THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=5  THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=6  THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=7  THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=8  THEN r.actual_value END),
+                MAX(CASE WHEN r.month_bh=9  THEN r.actual_value END),
+                SUM(CASE WHEN r.status='Pending' THEN 1 ELSE 0 END),
+                MAX(r.status),
+                MAX(CASE WHEN r.is_locked=1 THEN 1 ELSE 0 END),
+                NOW()
+            FROM kpi_results r
+            JOIN kpi_indicators i ON r.indicator_id = i.id
+            LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
+            LEFT JOIN departments d ON d.id = i.dept_id
+            LEFT JOIN chospital h ON r.hospcode = h.hoscode
+            LEFT JOIN co_district dist ON dist.distid = h.distid
+            WHERE r.indicator_id = ? AND r.year_bh = ?
+            GROUP BY i.id, r.year_bh, r.hospcode
+            HAVING MAX(CASE WHEN r.actual_value IS NOT NULL AND r.actual_value != '' AND r.actual_value != '0' THEN 1 ELSE 0 END) = 1
+        `, [p.indicator_id, p.year_bh]);
+        await connection.query(`
+            UPDATE kpi_summary s
+            JOIN kpi_indicators i ON i.id = s.indicator_id AND (i.is_cumulative = 0 OR i.is_cumulative IS NULL)
+            SET s.last_actual = COALESCE(
+                NULLIF(s.sep,''), NULLIF(s.aug,''), NULLIF(s.jul,''), NULLIF(s.jun,''),
+                NULLIF(s.may,''), NULLIF(s.apr,''), NULLIF(s.mar,''), NULLIF(s.feb,''),
+                NULLIF(s.jan,''), NULLIF(s.dece,''), NULLIF(s.nov,''), NULLIF(s.oct,'')
+            )
+            WHERE s.indicator_id = ? AND s.year_bh = ?
+        `, [p.indicator_id, p.year_bh]);
+        await connection.query(`
+            UPDATE kpi_summary s
+            JOIN kpi_indicators i ON i.id = s.indicator_id AND i.is_cumulative = 1
+            SET s.last_actual = CASE
+                WHEN NULLIF(s.oct,'') IS NULL AND NULLIF(s.nov,'') IS NULL AND NULLIF(s.dece,'') IS NULL AND NULLIF(s.jan,'') IS NULL
+                 AND NULLIF(s.feb,'') IS NULL AND NULLIF(s.mar,'') IS NULL AND NULLIF(s.apr,'') IS NULL AND NULLIF(s.may,'') IS NULL
+                 AND NULLIF(s.jun,'') IS NULL AND NULLIF(s.jul,'') IS NULL AND NULLIF(s.aug,'') IS NULL AND NULLIF(s.sep,'') IS NULL
+                THEN NULL
+                ELSE (
+                    COALESCE(CAST(NULLIF(s.oct,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.nov,'') AS DECIMAL(20,4)),0) +
+                    COALESCE(CAST(NULLIF(s.dece,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.jan,'') AS DECIMAL(20,4)),0) +
+                    COALESCE(CAST(NULLIF(s.feb,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.mar,'') AS DECIMAL(20,4)),0) +
+                    COALESCE(CAST(NULLIF(s.apr,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.may,'') AS DECIMAL(20,4)),0) +
+                    COALESCE(CAST(NULLIF(s.jun,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.jul,'') AS DECIMAL(20,4)),0) +
+                    COALESCE(CAST(NULLIF(s.aug,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.sep,'') AS DECIMAL(20,4)),0)
+                )
+            END
+            WHERE s.indicator_id = ? AND s.year_bh = ?
+        `, [p.indicator_id, p.year_bh]);
+    }
+}
+
+// GET /kpi-results/manage — list + filter (date_from/date_to บน created_at, year_bh+month_from/month_to บนปีงบ)
+// หมายเหตุ perf (สำคัญ): kpi_results มีจริง ~494,066 แถว — คิวรีนี้ "ห้าม JOIN chospital ตรงๆ" เพราะ
+// kpi_results.hospcode (varchar utf8mb4_unicode_ci) กับ chospital.hoscode (char utf8mb3_general_ci) ชนิด/
+// charset/collation ไม่ตรงกันทั้ง 3 อย่าง (บั๊ก schema เดิมที่มีอยู่ก่อนงานนี้ ไม่ได้เกิดจากโค้ดใหม่) ทำให้ MySQL
+// ใช้ index ของ chospital ไม่ได้เลย (แม้ hoscode เป็น PRIMARY KEY) กลายเป็น full scan วัดจริงช้ากว่า 30s —
+// แก้โดย query ชื่อหน่วยบริการแยกเฉพาะ hoscode ที่อยู่ในหน้านั้นๆ (≤ limit ต่อหน้า) มา merge ใน JS แทน
+apiRouter.get('/kpi-results/manage', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const { date_from, date_to, year_bh, month_from, month_to, indicator_id, hospcode, dept_id } = req.query;
+        const page = Math.max(1, Number(req.query.page) || 1);
+        const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+        const offset = (page - 1) * limit;
+
+        // บังคับต้องมีอย่างน้อย 1 filter เสมอ — กัน query ทั้งตาราง 494K แถวโดยไม่มีเงื่อนไข (ORDER BY + LIMIT
+        // ไม่มี WHERE ทำให้ MySQL optimizer เลือก full scan เองไม่ว่าจะเพิ่ม index อะไรก็ตาม — เป็นข้อจำกัดโดย
+        // ธรรมชาติของ query แบบนี้ ไม่ใช่แค่เรื่อง index)
+        if (!date_from && !date_to && !year_bh) {
+            return res.status(400).json({ success: false, message: 'กรุณาเลือกช่วงวันที่หรือปีงบก่อนค้นหา' });
+        }
+
+        // แยก WHERE 2 ชุด — ชุดที่ join กับ kpi_indicators (ต้องใช้เมื่อกรอง dept_id) กับชุดที่ไม่ต้อง join
+        // (กรอง r.* ล้วนๆ) กัน COUNT(*) ช้าโดยไม่จำเป็นเมื่อไม่ได้กรอง dept_id
+        const where = [];
+        const params = [];
+        if (date_from) { where.push('r.created_at >= ?'); params.push(date_from + ' 00:00:00'); }
+        if (date_to) { where.push('r.created_at <= ?'); params.push(date_to + ' 23:59:59'); }
+        if (year_bh) { where.push('r.year_bh = ?'); params.push(String(year_bh)); }
+        if (month_from && month_to) {
+            const months = monthBhRangeList(month_from, month_to);
+            where.push(`r.month_bh IN (${months.map(() => '?').join(',')})`);
+            params.push(...months);
+        }
+        if (indicator_id) { where.push('r.indicator_id = ?'); params.push(Number(indicator_id)); }
+        if (hospcode) { where.push('r.hospcode = ?'); params.push(String(hospcode)); }
+        const needsIndicatorJoin = !!dept_id;
+        if (dept_id) { where.push('i.dept_id = ?'); params.push(Number(dept_id)); }
+        const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+
+        const [countRows] = await db.query(`
+            SELECT COUNT(*) AS total
+            FROM kpi_results r
+            ${needsIndicatorJoin ? 'JOIN kpi_indicators i ON r.indicator_id = i.id' : ''}
+            ${whereSql}
+        `, params);
+
+        const [rows] = await db.query(`
+            SELECT r.id, r.indicator_id, r.year_bh, r.month_bh, r.hospcode, r.target_value, r.actual_value,
+                   r.status, r.is_locked, r.created_at,
+                   i.kpi_indicators_name, i.dept_id, d.dept_name
+            FROM kpi_results r
+            JOIN kpi_indicators i ON r.indicator_id = i.id
+            LEFT JOIN departments d ON d.id = i.dept_id
+            ${whereSql}
+            ORDER BY r.created_at DESC
+            LIMIT ? OFFSET ?
+        `, [...params, limit, offset]);
+
+        // เติมชื่อหน่วยบริการแยกต่างหาก (ดู comment ด้านบน) — เฉพาะ hoscode ที่ปรากฏในหน้านี้เท่านั้น
+        const hoscodes = [...new Set(rows.map(r => r.hospcode).filter(Boolean))];
+        let hosMap = new Map();
+        if (hoscodes.length > 0) {
+            const [hosRows] = await db.query(
+                `SELECT hoscode, hosname FROM chospital WHERE hoscode IN (${hoscodes.map(() => '?').join(',')})`,
+                hoscodes
+            );
+            hosMap = new Map(hosRows.map(h => [String(h.hoscode).trim(), h.hosname]));
+        }
+        const data = rows.map(r => ({ ...r, hosname: hosMap.get(String(r.hospcode).trim()) || null }));
+
+        res.json({ success: true, data, total: countRows[0].total, page, limit });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// POST /kpi-results/manage/bulk-delete — ลบตาม kpi_results.id ตรงๆ (ละเอียดระดับ 1 เดือน/1 แถว)
+// hardcode isSuperAdmin ตรงๆ เสมอ (ไม่เข้า PAGE_ACCESS_RULES) ตามกฎ DELETE ทุกตัวของระบบ
+apiRouter.post('/kpi-results/manage/bulk-delete', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ success: false, message: 'ไม่มีรายการที่จะลบ' });
+    }
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        const idPlaceholders = ids.map(() => '?').join(',');
+        // ดึงข้อมูลแถวที่จะลบไว้ก่อน — ต้องใช้ (indicator_id, year_bh, hospcode, month_bh) ไปลบ kpi_sub_results
+        // ที่ตรงกันเป๊ะ และ (indicator_id, year_bh) ไปสั่ง refresh kpi_summary หลังลบเสร็จ
+        const [targetRows] = await connection.query(
+            `SELECT id, indicator_id, year_bh, hospcode, month_bh FROM kpi_results WHERE id IN (${idPlaceholders})`,
+            ids
+        );
+        if (targetRows.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({ success: false, message: 'ไม่พบรายการที่ระบุ' });
+        }
+
+        let deletedSub = 0;
+        for (const t of targetRows) {
+            const [subRes] = await connection.query(
+                `DELETE sr FROM kpi_sub_results sr
+                 JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
+                 WHERE si.indicator_id = ? AND sr.year_bh = ? AND sr.hospcode = ? AND sr.month_bh = ?`,
+                [t.indicator_id, t.year_bh, t.hospcode, t.month_bh]
+            );
+            deletedSub += subRes.affectedRows || 0;
+        }
+
+        const [kpiRes] = await connection.query(
+            `DELETE FROM kpi_results WHERE id IN (${idPlaceholders})`,
+            ids
+        );
+
+        // recompute kpi_summary เฉพาะ (indicator_id, year_bh) ที่ได้รับผลกระทบ (unique pairs)
+        const pairSet = new Map();
+        for (const t of targetRows) pairSet.set(`${t.indicator_id}_${t.year_bh}`, { indicator_id: t.indicator_id, year_bh: t.year_bh });
+        await refreshKpiSummaryForIndicatorYears(connection, [...pairSet.values()]);
+
+        await connection.commit();
+        await db.query(
+            'INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+            [req.user.userId, 'BULK_DELETE_KPI_MANAGE', 'kpi_results,kpi_sub_results', JSON.stringify({ count: ids.length, deletedKpi: kpiRes.affectedRows || 0, deletedSub }), req.ip]
+        ).catch(() => {});
+        res.json({ success: true, message: `ลบสำเร็จ — kpi_results ${kpiRes.affectedRows || 0}, kpi_sub_results ${deletedSub}`, deletedKpi: kpiRes.affectedRows || 0, deletedSub });
+    } catch (e) {
+        await connection.rollback();
+        res.status(500).json({ success: false, message: e.message });
+    } finally {
+        connection.release();
+    }
 });
 
 apiRouter.post('/update-kpi', async (req, res) => {
@@ -10192,6 +10426,12 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
             'CREATE INDEX IF NOT EXISTS idx_kpi_results_year ON kpi_results (year_bh)',
             'CREATE INDEX IF NOT EXISTS idx_kpi_results_month ON kpi_results (month_bh)',
             'CREATE INDEX IF NOT EXISTS idx_kpi_results_hospcode ON kpi_results (hospcode)',
+            // รองรับหน้า "จัดการข้อมูลผลงานตัวชี้วัด" ที่กรอง/เรียงตามวันที่บันทึกจริง — kpi_results มีเกือบ
+            // 5 แสนแถว ถ้าไม่มี index นี้ ORDER BY created_at DESC จะต้อง filesort ทั้งตาราง (วัดจริงช้ากว่า 10s)
+            'CREATE INDEX IF NOT EXISTS idx_kpi_results_created_at ON kpi_results (created_at)',
+            // คอมโพสิต — ให้กรอง year_bh + เรียง created_at ในคิวรีเดียวไม่ต้อง filesort (วัดจริง: ไม่มี index นี้
+            // ยังช้าอยู่แม้กรอง year_bh แล้ว เพราะ optimizer เลือกไม่ใช้ index เดี่ยวข้างบนเมื่อมี WHERE ร่วมด้วย)
+            'CREATE INDEX IF NOT EXISTS idx_kpi_results_year_created ON kpi_results (year_bh, created_at)',
             'CREATE INDEX IF NOT EXISTS idx_users_role ON users (role)',
             'CREATE INDEX IF NOT EXISTS idx_users_approved ON users (is_approved)',
             'CREATE INDEX IF NOT EXISTS idx_users_hospcode ON users (hospcode)',
@@ -10740,11 +10980,16 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
             const local = tp ? localMap.get(tp) : null;
             const fyConfig = fyConfigMap.get(khd.report_id) || null;
             const effective = getEffectiveKhdCriteria(khd, fyConfig);
+            // effectiveIsActive: ใช้ report_fiscal_year_config.is_active ของปีงบที่กำลังเทียบก่อนเสมอ (ถ้ามี override
+            // ปีนั้น) ไม่งั้น fallback ไปที่ reports.is_active (ค่าทั่วไป ไม่ผูกปี) — เดิมโค้ดใช้ khd.is_active (reports)
+            // ตรงๆ ทุกจุด ทำให้ badge "HDC inactive"/คำแนะนำปิด upload_excel ผิดพลาดเมื่อ 2 ค่านี้ไม่ตรงกัน (ยืนยันจริงว่า
+            // มีเคสแบบนี้อยู่จริงบน remote — ไม่ใช่แค่ทฤษฎี)
+            const effectiveIsActive = (fyConfig && fyConfig.is_active != null) ? fyConfig.is_active : khd.is_active;
             if (!local) {
                 items.push({
                     status: 'missing_local',
                     khd_report_id: khd.report_id, khd_name: khd.report_name, khd_dept: khd.dept, khd_main_yut: khd.main_yut,
-                    report_code: khd.report_code, table_process: tp, khd_is_active: khd.is_active,
+                    report_code: khd.report_code, table_process: tp, khd_is_active: effectiveIsActive,
                     khd_data_source: khd.data_source,
                     khd_target_percentage: effective.target_percentage, khd_target_condition: effective.target_condition,
                     khd_criteria_source: effective.source, khd_fiscal_year: fyConfig ? year_bh : null,
@@ -10755,7 +11000,7 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                     criteria_match: null,
                     suggest_disable_upload: false
                 });
-                if (khd.is_active === 0 || khd.is_active === '0') khd_inactive_count++;
+                if (effectiveIsActive === 0 || effectiveIsActive === '0') khd_inactive_count++;
                 missing_local++;
             } else {
                 const nameMatch = (khd.report_name || '').trim() === (local.kpi_indicators_name || '').trim();
@@ -10769,13 +11014,13 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                 const criteria_match = pctMatch && condMatch;
                 if (!criteria_match) criteria_different++;
 
-                const suggest = computeSuggest(khd.is_active, local.upload_excel);
+                const suggest = computeSuggest(effectiveIsActive, local.upload_excel);
                 if (suggest) suggest_disable_count++;
-                if (khd.is_active === 0 || khd.is_active === '0') khd_inactive_count++;
+                if (effectiveIsActive === 0 || effectiveIsActive === '0') khd_inactive_count++;
                 items.push({
                     status,
                     khd_report_id: khd.report_id, khd_name: khd.report_name, khd_dept: khd.dept, khd_main_yut: khd.main_yut,
-                    report_code: khd.report_code, table_process: tp, khd_is_active: khd.is_active,
+                    report_code: khd.report_code, table_process: tp, khd_is_active: effectiveIsActive,
                     khd_data_source: khd.data_source,
                     khd_target_percentage: effective.target_percentage, khd_target_condition: effective.target_condition,
                     khd_criteria_source: effective.source, khd_fiscal_year: fyConfig ? year_bh : null,
