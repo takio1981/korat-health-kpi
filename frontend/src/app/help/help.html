@@ -1265,12 +1265,12 @@
         </div>
       </section>
 
-      <!-- ==================== 11.5 จัดการตัวชี้วัด — KHD Compare + upload_excel ==================== -->
+      <!-- ==================== 11.5 จัดการตัวชี้วัด — KHD Compare + key_in ==================== -->
       <section *ngIf="canSeeSection('users') || canSeeSection('kpi-manager')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center"><i class="fas fa-exchange-alt text-teal-600"></i></div>
           <div>
-            <h2 class="text-xl font-bold text-gray-800">11.5 จัดการตัวชี้วัด — เทียบกับ KHD + upload_excel</h2>
+            <h2 class="text-xl font-bold text-gray-800">11.5 จัดการตัวชี้วัด — เทียบกับ KHD + key_in</h2>
             <p class="text-xs text-gray-400">หน้า "จัดการตัวชี้วัด" — ทุก tab มีปุ่ม "เทียบกับ KHD" พร้อม filter และเพิ่มข้อมูลจาก KHD</p>
           </div>
         </div>
@@ -1297,10 +1297,10 @@
                 <li><span class="text-emerald-700 font-bold">ตรงกัน</span> — table_process + ชื่อตรงกัน</li>
                 <li><span class="text-amber-700 font-bold">ชื่อต่างกัน</span> — table_process ตรง แต่ชื่อไม่ตรง — ดู inline diff + กดปุ่ม <i class="fas fa-sync text-teal-600 mx-0.5"></i> Sync ชื่อ</li>
                 <li><span class="text-purple-700 font-bold">ไม่มีใน KHD</span> — Local มีแต่ KHD ไม่มี</li>
-                <li><span class="text-rose-700 font-bold">KHD inactive</span> — KHD ปิด is_active=0 → ควรตั้ง upload_excel=1</li>
+                <li><span class="text-rose-700 font-bold">KHD inactive</span> — KHD ปิด is_active=0 → ควรตั้งเป็น key_in</li>
               </ul>
             </li>
-            <li>ถ้ามี KHD inactive — banner <b>"ปิด upload_excel ทั้ง N ตัว"</b> แสดงขึ้นมา → กด bulk ครั้งเดียว</li>
+            <li>ถ้ามี KHD inactive — banner <b>"ตั้งเป็น key_in ทั้ง N ตัว"</b> แสดงขึ้นมา → กด bulk ครั้งเดียว</li>
             <li>ส่วน <b class="text-cyan-700">"KHD มีแต่ยังไม่มีใน Local"</b> ด้านล่าง → กด <b>"เพิ่มเข้าระบบ"</b> → modal เลือก <b>หน่วยงาน</b> + <b>หมวดหมู่หลัก</b></li>
           </ol>
         </div>
@@ -1361,15 +1361,26 @@
         </div>
 
         <!-- upload_excel toggle -->
-        <div class="bg-orange-50 border border-orange-200 rounded-xl p-4">
-          <h4 class="font-bold text-orange-800 text-sm mb-2"><i class="fas fa-file-excel mr-2"></i>upload_excel — ตัวชี้วัดที่ "อัปโหลด Excel มือเอง"</h4>
+        <div class="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-4">
+          <h4 class="font-bold text-orange-800 text-sm mb-2"><i class="fas fa-keyboard mr-2"></i>key_in — ตัวชี้วัดที่ "คีย์ข้อมูลมือเอง"</h4>
           <p class="text-xs text-gray-600 mb-2">ใช้กรณีที่ KHD report ปิดไปแล้ว หรือต้องการ override ไม่ให้ระบบ export อัตโนมัติ</p>
           <ul class="list-disc ml-5 text-xs text-gray-600 space-y-1">
-            <li>คอลัมน์ <b>"upload_excel"</b> ในตารางตัวชี้วัด — toggle เปิด/ปิด (สีฟ้า)</li>
+            <li>คอลัมน์ <b>"key_in"</b> ในตารางตัวชี้วัด — toggle เปิด/ปิด (สีฟ้า)</li>
             <li><b>0 (default)</b> — ส่งออกอัตโนมัติได้ผ่าน Export pipeline</li>
-            <li><b>1</b> — ข้าม Export pipeline ทั้งหมด (manual + scheduler) — ต้องอัปโหลด Excel เข้า KHD เอง</li>
-            <li>Endpoints: <code>PUT /indicators/:id/upload-excel</code> (toggle 1 ตัว) + <code>POST /indicators/bulk-upload-excel</code> (batch)</li>
+            <li><b>1</b> — ข้าม Export pipeline ทั้งหมด (manual + scheduler) — ต้อง key_in เข้า KHD เอง</li>
           </ul>
+        </div>
+
+        <!-- badge แหล่งที่มา key_in / hdc / local-only + ปุ่มเชื่อมโยง KHD Link -->
+        <div class="bg-sky-50 border border-sky-200 rounded-xl p-4">
+          <h4 class="font-bold text-sky-800 text-sm mb-2"><i class="fas fa-link mr-2"></i>Badge แหล่งที่มาข้อมูล (key_in / hdc / local-only) + ปุ่ม "เชื่อมโยง KHD Link"</h4>
+          <p class="text-xs text-gray-600 mb-2">ทุกตัวชี้วัดในหน้า "จัดการตัวชี้วัด" และ Dashboard จะมี badge บอกแหล่งที่มาข้อมูลเสมอ โดยอ้างอิงจาก <code>kpi_indicators.khd_report_id</code> (link ถาวรไปยัง KHD <code>reports.report_id</code>) + <code>data_source</code>:</p>
+          <div class="flex flex-wrap gap-2 text-[11px] mb-2">
+            <span class="bg-sky-100 text-sky-800 px-2 py-0.5 rounded-md"><i class="fas fa-keyboard mr-1"></i>key_in — คีย์ข้อมูลเอง (KHD data_source = excel)</span>
+            <span class="bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-md"><i class="fas fa-server mr-1"></i>hdc — ดึงข้อมูลอัตโนมัติจาก HDC (KHD data_source = hdc)</span>
+            <span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md"><i class="fas fa-desktop mr-1"></i>local-only — ไม่พบเทียบเคียงกับ KHD</span>
+          </div>
+          <p class="text-xs text-gray-600 mb-2">ปุ่ม <b>"เชื่อมโยง KHD Link"</b> (super_admin, แท็บตัวชี้วัด) — จับคู่ <code>table_process</code> ของทุกตัวชี้วัด Local กับ KHD <code>reports</code> ทั้งหมด (ไม่จำกัดแค่ data_source=excel เหมือนปุ่ม "เทียบกับ KHD") แล้วบันทึก <code>khd_report_id</code> + <code>data_source</code> จริงถาวร ทำให้ badge ถูกต้องครบทุกตัว — กดซ้ำได้เมื่อ table_process เปลี่ยนหรือมีตัวชี้วัดใหม่</p>
         </div>
       </section>
 

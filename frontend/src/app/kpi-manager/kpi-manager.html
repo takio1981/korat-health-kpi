@@ -34,7 +34,7 @@
       <p class="text-xs text-teal-700 leading-relaxed">
         ไปที่หน้า <b><a routerLink="/kpi-manage" class="text-teal-700 underline hover:text-teal-900">จัดการตัวชี้วัด</a></b> → กดปุ่ม
         <span class="px-2 py-0.5 bg-teal-600 text-white rounded font-bold text-[10px]">เทียบกับ KHD</span> เพื่อตรวจสอบชื่อ + สถานะ
-        <code class="bg-white px-1 rounded text-[10px]">is_active</code> + <code class="bg-white px-1 rounded text-[10px]">upload_excel</code> ก่อนเริ่ม workflow ที่นี่
+        <code class="bg-white px-1 rounded text-[10px]">is_active</code> + <code class="bg-white px-1 rounded text-[10px]">key_in</code> ก่อนเริ่ม workflow ที่นี่
       </p>
     </div>
 
@@ -63,7 +63,7 @@
     <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
       <p class="font-bold mb-1.5"><i class="fas fa-lightbulb mr-1"></i>เคล็ดลับการใช้งาน</p>
       <ul class="list-disc ml-5 space-y-0.5 text-amber-700">
-        <li>เทียบชื่อ + ตั้ง upload_excel ที่หน้า <b>จัดการตัวชี้วัด</b> ก่อน → แล้วจึงมาทำ Schema + Export ที่นี่</li>
+        <li>เทียบชื่อ + ตั้ง key_in ที่หน้า <b>จัดการตัวชี้วัด</b> ก่อน → แล้วจึงมาทำ Schema + Export ที่นี่</li>
         <li>ขั้น 1 → กดปุ่ม "สร้างฟอร์ม" บน KHD column เพื่อสร้าง dynamic form อัตโนมัติ</li>
         <li>ขั้น 2 → ตั้ง <b>Scheduler</b> เพื่อให้ระบบ Export + Sync KHD ตามวันเวลาที่กำหนด</li>
       </ul>
@@ -185,8 +185,8 @@
             <span class="px-2 py-0.5 bg-white text-emerald-700 border border-emerald-300 rounded-full font-bold">
               <i class="fas fa-calendar-alt mr-1"></i>รายเดือน
             </span>
-            <span class="px-2 py-0.5 bg-white text-rose-700 border border-rose-300 rounded-full font-bold" title="ตัวชี้วัดที่ upload_excel=1 จะถูกข้าม">
-              <i class="fas fa-filter mr-1"></i>กรอง upload_excel=1
+            <span class="px-2 py-0.5 bg-white text-rose-700 border border-rose-300 rounded-full font-bold" title="ตัวชี้วัดที่เป็น key_in จะถูกข้าม">
+              <i class="fas fa-filter mr-1"></i>กรอง key_in
             </span>
           </div>
         </div>

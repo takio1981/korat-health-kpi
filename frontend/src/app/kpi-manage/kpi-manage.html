@@ -93,6 +93,13 @@
             <i class="fas" [ngClass]="khdCompareLoading ? 'fa-spinner fa-spin' : 'fa-exchange-alt'"></i>
             <span class="ml-2">{{ khdCompareLoading ? 'กำลังเทียบ...' : (khdCompareMap.size ? 'เทียบ KHD อีกครั้ง' : 'เทียบกับ KHD') }}</span>
           </button>
+          <button *ngIf="activeTab === 'indicators' && isSuperAdmin"
+                  (click)="syncKhdLink()" [disabled]="khdLinkSyncLoading"
+                  class="bg-sky-600 hover:bg-sky-700 disabled:opacity-60 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold whitespace-nowrap"
+                  title="เชื่อมโยง kpi_indicators กับ KHD reports.report_id ถาวร (ผ่าน table_process) + ดึง data_source มาแสดง badge key_in/hdc/local-only ให้ครบทุกตัวชี้วัด">
+            <i class="fas" [ngClass]="khdLinkSyncLoading ? 'fa-spinner fa-spin' : 'fa-link'"></i>
+            <span class="ml-2">{{ khdLinkSyncLoading ? 'กำลังเชื่อมโยง...' : 'เชื่อมโยง KHD Link' }}</span>
+          </button>
           <button *ngIf="activeTab === 'strategies' && isSuperAdmin"
                   (click)="runStrategyCompare()" [disabled]="stratCompareLoading"
                   class="bg-teal-600 hover:bg-teal-700 disabled:opacity-60 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold whitespace-nowrap">
@@ -294,7 +301,7 @@
           <div class="flex-1 min-w-0">
             <h4 class="text-sm font-bold text-rose-900">พบ KHD report ที่ inactive แต่ Local ยังเปิดส่งออกอัตโนมัติ</h4>
             <p class="text-xs text-rose-700 mt-1">
-              <b>{{ khdInactiveSuggestItems.length }} ตัวชี้วัด</b> — แนะนำตั้ง <code>upload_excel = 1</code> ให้สอดคล้องกับ KHD (ส่งด้วย Excel มือเอง)
+              <b>{{ khdInactiveSuggestItems.length }} ตัวชี้วัด</b> — แนะนำตั้งเป็น <code>key_in</code> ให้สอดคล้องกับ KHD (key_in เอง)
             </p>
           </div>
           <button (click)="bulkDisableKhdInactive()"
@@ -360,8 +367,8 @@
                 <span *ngIf="item.weight" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-50 border border-orange-200 text-orange-700" title="น้ำหนัก">
                   <i class="fas fa-weight-hanging text-[9px]"></i>{{ item.weight }}
                 </span>
-                <span *ngIf="item.data_source" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-700" title="data_source">
-                  <i class="fas fa-database text-[9px]"></i>{{ item.data_source }}
+                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold" [ngClass]="getSourceBadge(item).color" [title]="getSourceBadge(item).title">
+                  <i class="fas text-[9px]" [ngClass]="getSourceBadge(item).icon"></i>{{ getSourceBadge(item).label }}
                 </span>
                 <span *ngFor="let t of getIndicatorTypes(item)" class="inline-flex items-center px-1.5 py-0.5 rounded font-bold" [ngClass]="t.color" [title]="'ประเภทตัวชี้วัด: ' + t.label">
                   {{ t.label }}
@@ -411,7 +418,7 @@
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'indicators'">หมวดหมู่หลัก</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'indicators'">หน่วยงาน</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-32" *ngIf="activeTab === 'indicators' && khdCompareSummary" title="สถานะเทียบกับ KHD">KHD ↔ Local</th>
-              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-24" *ngIf="activeTab === 'indicators' && canEditData" title="0=ส่งออกอัตโนมัติ, 1=ข้าม">upload_excel</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-24" *ngIf="activeTab === 'indicators' && canEditData" title="0=ส่งออกอัตโนมัติ, 1=ข้าม (key_in เอง)">key_in</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'main-indicators'">ชื่อหมวดหมู่หลัก</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'main-indicators'">ยุทธศาสตร์</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-32" *ngIf="activeTab === 'main-indicators' && mainIndCompareSummary">KHD Coverage</th>
@@ -502,8 +509,8 @@
                     <span *ngIf="item.dept_name" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-50 border border-teal-200 text-teal-700" title="หน่วยงาน">
                       <i class="fas fa-building text-[9px]"></i>{{ item.dept_name }}
                     </span>
-                    <span *ngIf="item.data_source" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-700" title="data_source">
-                      <i class="fas fa-database text-[9px]"></i>{{ item.data_source }}
+                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold" [ngClass]="getSourceBadge(item).color" [title]="getSourceBadge(item).title">
+                      <i class="fas text-[9px]" [ngClass]="getSourceBadge(item).icon"></i>{{ getSourceBadge(item).label }}
                     </span>
                     <span *ngFor="let t of getIndicatorTypes(item)" class="inline-flex items-center px-1.5 py-0.5 rounded font-bold" [ngClass]="t.color" [title]="'ประเภทตัวชี้วัด: ' + t.label">
                       {{ t.label }}
@@ -552,7 +559,7 @@
                   <!-- KHD inactive badge -->
                   <div *ngIf="getKhdData(item)?.khd_is_active === 0 || getKhdData(item)?.khd_is_active === '0'"
                        class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700"
-                       title="KHD inactive — แนะนำตั้ง upload_excel=1">
+                       title="KHD inactive — แนะนำเปลี่ยนเป็น key_in">
                     <i class="fas fa-power-off mr-1"></i>KHD inactive
                   </div>
                   <!-- เกณฑ์ต่างกัน badge -->
@@ -566,7 +573,7 @@
                 <td class="px-4 py-3 text-center" *ngIf="canEditData">
                   <button (click)="toggleUploadExcel(item)" class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
                           [ngClass]="(item.upload_excel === 1 || item.upload_excel === '1') ? 'bg-rose-500' : 'bg-emerald-500'"
-                          [title]="(item.upload_excel === 1 || item.upload_excel === '1') ? '1 = ข้าม export (อัปโหลด Excel เอง)' : '0 = ส่งออกอัตโนมัติ'">
+                          [title]="(item.upload_excel === 1 || item.upload_excel === '1') ? '1 = ข้าม export (key_in เอง)' : '0 = ส่งออกอัตโนมัติ'">
                     <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform"
                           [ngClass]="(item.upload_excel === 1 || item.upload_excel === '1') ? 'translate-x-5' : 'translate-x-0.5'"></span>
                   </button>

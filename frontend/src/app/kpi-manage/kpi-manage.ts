@@ -90,6 +90,7 @@ export class KpiManageComponent implements OnInit {
   khdCompareMap: Map<string, any> = new Map();
   khdCompareSummary: any = null;     // { total, match, different, missing_local, missing_remote, khd_inactive, suggest_disable }
   khdCompareLoading: boolean = false;
+  khdLinkSyncLoading: boolean = false;
   khdCompareLastRun: Date | null = null;
   // ปีงบที่ใช้เทียบเกณฑ์กับ KHD (report_fiscal_year_config.fiscal_year) — เดิม frontend ไม่เคยส่งปีงบไปเลย
   // ทำให้เทียบได้แค่ปีงบ "ปัจจุบัน" ตามวันที่เท่านั้น ทั้งที่ remote มีข้อมูลมากกว่า 1 ปีงบพร้อมกันจริง (เช่น 2569+2570)
@@ -280,6 +281,18 @@ export class KpiManageComponent implements OnInit {
     if (item?.rmw && String(item.rmw).trim() && item.rmw !== '0') types.push({ type: 'rmw', color: 'bg-yellow-100 text-yellow-700', label: 'RMW' });
     if (item?.other && String(item.other).trim() && item.other !== '0') types.push({ type: 'other', color: 'bg-gray-100 text-gray-700', label: 'อื่นๆ' });
     return types;
+  }
+
+  // badge แหล่งที่มาข้อมูล — 3 สถานะ ตาม data_source/khd_report_id (link ถาวรกับ KHD reports.report_id ผ่าน table_process)
+  // key_in = KHD data_source='excel' (คีย์เอง), hdc = KHD data_source='hdc' (ดึงอัตโนมัติ), local-only = ไม่พบเทียบเคียงกับ KHD เลย
+  getSourceBadge(item: any): { label: string; icon: string; color: string; title: string } {
+    if (item?.khd_report_id && item?.data_source === 'hdc') {
+      return { label: 'hdc', icon: 'fa-server', color: 'bg-indigo-50 border-indigo-200 text-indigo-700', title: 'ข้อมูลจาก HDC (ดึงอัตโนมัติ)' };
+    }
+    if (item?.khd_report_id && item?.data_source === 'excel') {
+      return { label: 'key_in', icon: 'fa-keyboard', color: 'bg-sky-50 border-sky-200 text-sky-700', title: 'คีย์ข้อมูลเอง (key_in)' };
+    }
+    return { label: 'local-only', icon: 'fa-desktop', color: 'bg-gray-50 border-gray-200 text-gray-500', title: 'ไม่พบเทียบเคียงกับ KHD (local-only)' };
   }
 
   // ประเภทหน่วยบริการ — 'all_required' = ทุกประเภท, 'any_one' + required_off_types = รายชื่อ
@@ -943,6 +956,31 @@ export class KpiManageComponent implements OnInit {
     });
   }
 
+  /** เชื่อมโยง kpi_indicators.khd_report_id + data_source ถาวรกับ KHD reports (ทุกตัวชี้วัด ทั้ง hdc/excel/local-only) */
+  syncKhdLink() {
+    if (!this.isSuperAdmin) return;
+    this.khdLinkSyncLoading = true;
+    this.cdr.detectChanges();
+    this.authService.syncKhdLink().subscribe({
+      next: (res: any) => {
+        this.khdLinkSyncLoading = false;
+        if (res.success) {
+          Swal.fire('สำเร็จ', res.message, 'success');
+          this.authService.getIndicators().subscribe((r: any) => {
+            if (r.success) { this.indicators = r.data; this.applyFilter(); this.cdr.detectChanges(); }
+          });
+        } else {
+          Swal.fire('ผิดพลาด', res.message, 'error');
+        }
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.khdLinkSyncLoading = false;
+        Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถเชื่อมโยง KHD ได้ (ตรวจ Remote DB)', 'error');
+      }
+    });
+  }
+
   /** สถานะ compare ของ indicator แต่ละตัว — ใช้กับ badge + filter */
   getKhdCompareStatus(item: any): 'not_compared' | 'match' | 'different' | 'missing_remote' {
     if (!this.khdCompareMap.size) return 'not_compared';
@@ -1435,7 +1473,7 @@ export class KpiManageComponent implements OnInit {
     const ids = items.map(i => i.id);
     Swal.fire({
       title: 'ปิดส่งออกอัตโนมัติ',
-      html: `<p class="text-sm">ตั้ง <code>upload_excel = 1</code> ให้ <b>${ids.length}</b> ตัวชี้วัด</p>
+      html: `<p class="text-sm">ตั้งเป็น <code>key_in</code> ให้ <b>${ids.length}</b> ตัวชี้วัด</p>
              <p class="text-xs text-gray-500 mt-2">KHD report เหล่านี้อยู่สถานะ inactive — ระบบจะไม่ export อัตโนมัติ</p>`,
       icon: 'warning', showCancelButton: true, confirmButtonColor: '#dc2626',
       confirmButtonText: '<i class="fas fa-toggle-off mr-1"></i> ปิดทั้งหมด', cancelButtonText: 'ยกเลิก'

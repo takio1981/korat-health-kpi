@@ -607,6 +607,10 @@
                           <i class="fas fa-layer-group text-[8px]"></i>{{ cumBadge.label }}
                         </span>
                       </ng-container>
+                      <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap"
+                            [ngClass]="getSourceBadge(item).color" [title]="getSourceBadge(item).title">
+                        <i class="fas text-[8px]" [ngClass]="getSourceBadge(item).icon"></i>{{ getSourceBadge(item).label }}
+                      </span>
                       <h3 class="font-semibold text-gray-900 text-sm">{{ item.kpi_indicators_name }}<span *ngIf="item | criteriaText as crit" class="text-[11px] font-normal text-amber-600 ml-1">({{ crit }})</span></h3>
                     </div>
                     <p class="text-xs text-gray-600 mb-1">{{ item.main_indicator_name }}</p>
@@ -1080,6 +1084,10 @@
                           <i class="fas fa-layer-group text-[7px]"></i>{{ cumBadge.label }}
                         </span>
                       </ng-container>
+                      <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] font-bold whitespace-nowrap shrink-0 mt-0.5"
+                            [ngClass]="getSourceBadge(item).color" [title]="getSourceBadge(item).title">
+                        <i class="fas text-[7px]" [ngClass]="getSourceBadge(item).icon"></i>{{ getSourceBadge(item).label }}
+                      </span>
                       <span class="font-medium text-gray-900 whitespace-normal break-words" [title]="item.kpi_indicators_name">{{ item.kpi_indicators_name }}</span>
                       <span *ngIf="item | criteriaText as crit" class="text-[11px] font-normal text-amber-600 shrink-0">({{ crit }})</span>
                       <span *ngIf="item.table_process" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded text-[10px] font-mono whitespace-nowrap shrink-0" [title]="'table_process: ' + item.table_process">

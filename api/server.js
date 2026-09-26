@@ -3241,6 +3241,8 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 MAX(CASE WHEN r.is_locked = 1 THEN 1 ELSE 0 END) AS is_locked,
                 MIN(i.table_process) AS table_process,
                 MIN(i.criterion) AS criterion,
+                MIN(i.data_source) AS data_source,
+                MIN(i.khd_report_id) AS khd_report_id,
                 MAX(i.r9) AS r9, MAX(i.moph) AS moph, MAX(i.ssj) AS ssj, MAX(i.rmw) AS rmw, MAX(i.other) AS other,
                 MIN(i.evaluation_mode) AS evaluation_mode,
                 MIN(i.required_off_types) AS required_off_types,
@@ -10294,6 +10296,10 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
         // data_source: จาก hdc.reports.data_source ('hdc'|'excel' — ค่าจริงจากฐานข้อมูล KHD ภายนอก) — เก็บไว้อ้างอิง/กรองในอนาคต
         // ใช้ VARCHAR ไม่ใช่ ENUM — กัน KHD เพิ่มค่าใหม่แล้ว local ตามไม่ทัน (evaluation_mode/target_condition ก็ใช้ VARCHAR ด้วยเหตุผลเดียวกัน)
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS data_source VARCHAR(10) NULL COMMENT 'จาก hdc.reports.data_source: hdc|excel'`); } catch(e) {}
+        // khd_report_id: link ถาวรไปยัง KHD reports.report_id (แยกจาก kpi_indicators_id เดิมซึ่งเป็น "รหัสอ้างอิง" ที่ admin กรอกเอง ไม่เกี่ยวกับ KHD)
+        // match ผ่าน table_process (heuristic เดียวกับ /report-compare) — เก็บไว้กันต้องเทียบใหม่ทุกครั้ง + ใช้เป็น source of truth ของ data_source
+        try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS khd_report_id INT NULL COMMENT 'FK ไปยัง KHD reports.report_id (persistent link ผ่าน table_process)'`); } catch(e) {}
+        try { await db.query(`ALTER TABLE kpi_indicators ADD INDEX idx_khd_report_id (khd_report_id)`); } catch(e) {}
         // khd_fiscal_year: ปีงบฯ (พ.ศ.) ที่ค่า target_percentage/target_condition ปัจจุบันอ้างอิงมาจาก KHD ล่าสุด — audit only ไม่ใช่ FK
         // เดิมชื่อ hdc_fiscal_year (ส่วนหนึ่งของการเปลี่ยนชื่อการเชื่อมต่อ HDC → KHD ทั้งระบบ) — rename คอลัมน์เดิมก่อนกันข้อมูลหาย
         try { await db.query(`ALTER TABLE kpi_indicators CHANGE COLUMN hdc_fiscal_year khd_fiscal_year VARCHAR(10) NULL COMMENT 'ปีงบฯ ที่ใช้อ้างอิง target_percentage/target_condition ล่าสุดจาก KHD (audit only)'`); } catch(e) {}
@@ -10938,11 +10944,11 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
         const fyConfigMap = new Map();
         fyRows.forEach(r => fyConfigMap.set(r.report_id, r));
 
-        // ดึง kpi_indicators จาก Local (เพิ่ม dept_id, main_indicator_id, upload_excel, เกณฑ์ + data_source เพื่อ frontend)
+        // ดึง kpi_indicators จาก Local (เพิ่ม dept_id, main_indicator_id, upload_excel, เกณฑ์ + data_source/khd_report_id เพื่อ frontend)
         const [localRows] = await db.query(`
             SELECT i.id, i.kpi_indicators_name, i.table_process, i.kpi_indicators_code, i.is_active,
                    i.dept_id, i.main_indicator_id, i.upload_excel,
-                   i.criterion, i.target_condition, i.data_source,
+                   i.criterion, i.target_condition, i.data_source, i.khd_report_id,
                    d.dept_name, mi.main_indicator_name
             FROM kpi_indicators i
             LEFT JOIN departments d ON i.dept_id = d.id
@@ -11137,17 +11143,17 @@ apiRouter.post('/report-compare/sync', authenticateToken, isSuperAdmin, async (r
             // ตรวจสอบว่ามีอยู่แล้วหรือไม่ (โดย table_process)
             const [existing] = await db.query('SELECT id, kpi_indicators_name FROM kpi_indicators WHERE table_process = ?', [khd.table_process]);
             if (existing.length > 0) {
-                // อัปเดตชื่อ + report_code + data_source (ไม่แตะ target_percentage/target_condition — local อาจตั้งค่าเองไว้)
+                // อัปเดตชื่อ + report_code + data_source + khd_report_id (ไม่แตะ target_percentage/target_condition — local อาจตั้งค่าเองไว้)
                 await db.query(
-                    'UPDATE kpi_indicators SET kpi_indicators_name = ?, kpi_indicators_code = ?, data_source = ? WHERE table_process = ?',
-                    [khd.report_name, khd.report_code || null, khd.data_source || null, khd.table_process]
+                    'UPDATE kpi_indicators SET kpi_indicators_name = ?, kpi_indicators_code = ?, data_source = ?, khd_report_id = ? WHERE table_process = ?',
+                    [khd.report_name, khd.report_code || null, khd.data_source || null, khd.report_id, khd.table_process]
                 );
                 updated++;
             } else {
                 // สร้างใหม่
                 await db.query(
-                    'INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_code, data_source) VALUES (?, ?, ?, ?)',
-                    [khd.report_name, khd.table_process, khd.report_code || null, khd.data_source || null]
+                    'INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_code, data_source, khd_report_id) VALUES (?, ?, ?, ?, ?)',
+                    [khd.report_name, khd.table_process, khd.report_code || null, khd.data_source || null, khd.report_id]
                 );
                 inserted++;
             }
@@ -11180,8 +11186,8 @@ apiRouter.post('/report-compare/add-from-khd', authenticateToken, isSuperAdmin, 
         const [existing] = await db.query('SELECT id FROM kpi_indicators WHERE table_process = ?', [khd.table_process]);
         if (existing.length) return res.status(409).json({ success: false, message: 'มีตัวชี้วัดนี้ในระบบแล้ว (table_process ซ้ำ)' });
         const [ins] = await db.query(
-            'INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_code, dept_id, main_indicator_id, is_active, data_source) VALUES (?, ?, ?, ?, ?, 1, ?)',
-            [khd.report_name, khd.table_process, khd.report_code || null, dept_id || null, main_indicator_id || null, khd.data_source || null]
+            'INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_code, dept_id, main_indicator_id, is_active, data_source, khd_report_id) VALUES (?, ?, ?, ?, ?, 1, ?, ?)',
+            [khd.report_name, khd.table_process, khd.report_code || null, dept_id || null, main_indicator_id || null, khd.data_source || null, khd.report_id]
         );
         await db.query(
             'INSERT INTO system_logs (user_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
@@ -11189,6 +11195,51 @@ apiRouter.post('/report-compare/add-from-khd', authenticateToken, isSuperAdmin, 
              JSON.stringify({ khd_report_id, table_process: khd.table_process, dept_id: dept_id || null, main_indicator_id: main_indicator_id || null }), req.ip]
         );
         res.json({ success: true, message: `เพิ่ม "${khd.report_name}" เข้าระบบเรียบร้อย`, id: ins.insertId });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// POST /report-compare/sync-khd-link — Backfill ถาวร: link kpi_indicators.khd_report_id + data_source จาก KHD reports ทั้งหมด
+// (ทั้ง hdc และ excel ไม่กรองเหมือน /report-compare หลัก เพราะต้องการ data_source จริงของทุกตัวชี้วัด ไม่ใช่แค่ตัวที่จะ sync เข้าระบบ)
+// ใช้ heuristic เดียวกับ /report-compare (LENGTH(report_code)=LENGTH(table_process)) กันคู่ table_process ซ้ำที่ report_code สั้นกว่าปกติ (ข้อมูลคุณภาพต่ำใน KHD)
+// เรียงตาม report_id ASC แล้วให้ตัวหลังทับตัวก่อนใน map — เมื่อ table_process ชนกันหลายตัว (พบจริง 12/172 แถว เป็น "พี่น้อง" conceptually ใกล้กันแต่ report_id ต่างกัน)
+// จะได้ report_id ล่าสุด/มากสุด ซึ่งไม่กระทบความถูกต้องของ badge (data_source ของคู่ที่ชนกันเป็น 'excel' เหมือนกันทุกคู่จากการตรวจสอบจริง)
+apiRouter.post('/report-compare/sync-khd-link', authenticateToken, isSuperAdmin, async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
+    try {
+        const [khdRows] = await remoteDb.query(`
+            SELECT report_id, table_process, data_source
+            FROM reports
+            WHERE table_process IS NOT NULL AND table_process != ''
+            AND LENGTH(report_code) = LENGTH(table_process)
+            ORDER BY report_id
+        `);
+        const khdMap = new Map();
+        khdRows.forEach(r => { khdMap.set(r.table_process.trim(), r); });
+
+        const [localRows] = await db.query('SELECT id, table_process FROM kpi_indicators');
+        let matched = 0, localOnly = 0;
+        const dsCounts = {};
+        for (const local of localRows) {
+            const key = local.table_process ? local.table_process.trim() : '';
+            const khd = key ? khdMap.get(key) : null;
+            if (khd) {
+                await db.query('UPDATE kpi_indicators SET khd_report_id = ?, data_source = ? WHERE id = ?', [khd.report_id, khd.data_source, local.id]);
+                matched++;
+                dsCounts[khd.data_source] = (dsCounts[khd.data_source] || 0) + 1;
+            } else {
+                // ไม่พบเทียบเคียง — reset ให้ตรงความจริง (local-only) กันค่าเก่าค้างจาก sync ครั้งก่อนที่ table_process เปลี่ยนไปแล้ว
+                await db.query('UPDATE kpi_indicators SET khd_report_id = NULL, data_source = NULL WHERE id = ?', [local.id]);
+                localOnly++;
+            }
+        }
+        await db.query(
+            'INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+            [req.user.userId, 'SYNC_KHD_LINK', 'kpi_indicators', JSON.stringify({ matched, localOnly, dsCounts }), req.ip]
+        );
+        res.json({ success: true, message: `เชื่อมโยง KHD สำเร็จ — จับคู่ได้ ${matched} ตัวชี้วัด (key_in ${dsCounts.excel || 0}, hdc ${dsCounts.hdc || 0}), local-only ${localOnly} ตัวชี้วัด`, matched, localOnly, dsCounts });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }

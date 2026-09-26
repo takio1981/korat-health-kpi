@@ -577,6 +577,11 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     const url = year_bh ? `${this.apiUrl}/report-compare?year_bh=${encodeURIComponent(year_bh)}` : `${this.apiUrl}/report-compare`;
     return this.http.get(url, { headers });
   }
+  syncKhdLink(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/report-compare/sync-khd-link`, {}, { headers });
+  }
   reportCompareSync(khd_report_ids: number[]): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

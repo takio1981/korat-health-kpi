@@ -4,6 +4,63 @@
 
 ---
 
+## 2569-09-26 — เปลี่ยนคำ upload_excel→key_in + เพิ่ม badge แหล่งที่มาข้อมูล + link ถาวรกับ KHD reports.report_id
+
+### คำขอ
+ต้องการเปลี่ยนข้อความ "upload_excel" หรือ "excel" ให้ใช้คำว่า "key_in" แทนทั้งหมด และช่วยเพิ่ม icon
+"key_in" หรือ "hdc" ในตัวชี้วัดทุกตัวด้วย และต้องการใส่ข้อมูล data_source จากตาราง reports บน KHD มาไว้ที่
+khups_kpi_db ตาราง kpi_indicators โดยใช้ kpi_indicators_id เชื่อมกับ report_id ใน KHD ให้ถูกต้องสมบูรณ์
+
+### ประเด็นที่ต้องยืนยันกับผู้ใช้ก่อนแก้ (พบจากการตรวจโค้ด/ข้อมูลจริง)
+1. **ขอบเขตการเปลี่ยนคำ** — ผู้ใช้ยืนยันว่าต้องการแค่เปลี่ยน**ข้อความที่แสดงผล** (label/banner/tooltip) ไม่ต้อง
+   เปลี่ยนชื่อ column `upload_excel`, API field, หรือ route path ในฐานข้อมูล/backend
+2. **`kpi_indicators_id` ที่ผู้ใช้ระบุให้ใช้เชื่อม report_id — ตรวจพบว่าเป็น column ที่มีข้อมูลจริงอยู่แล้ว
+   166/172 แถว** (ค่าเช่น "11","12","118" — เป็น "รหัสอ้างอิง" ที่ admin กรอกเองในฟอร์ม kpi-manage มาก่อนแล้ว
+   ไม่เกี่ยวกับ KHD เลย) ถ้าใช้ column นี้เก็บ report_id จริงจะทับข้อมูลอ้างอิงเดิมของ admin ทั้งหมดโดยไม่ตั้งใจ —
+   ผู้ใช้ยืนยันให้เพิ่ม column ใหม่ `khd_report_id` แทน ไม่แตะ `kpi_indicators_id` เดิม
+3. **สถานะ badge สำหรับตัวชี้วัดที่ไม่พบเทียบเคียงกับ KHD เลย** — ผู้ใช้ยืนยันให้ใช้คำว่า "local-only" (เพิ่มจาก
+   เดิมที่มีแค่ 2 สถานะ key_in/hdc)
+
+### สิ่งที่ทำ
+1. **Rename ข้อความ UI** — `kpi-manage.html/.ts`, `kpi-manager.html`, `help.html`: เปลี่ยนข้อความ
+   "upload_excel"/"Excel มือเอง" เป็น "key_in" ทุกจุดที่แสดงผลจริง (คอลัมน์ตาราง, banner, tooltip, SweetAlert)
+   — ไม่แตะ column/API/route เดิม
+2. **เพิ่ม `kpi_indicators.khd_report_id` INT NULL** (auto-migration ใหม่ใน server.js) — link ถาวรไปยัง KHD
+   `reports.report_id`
+3. **`POST /report-compare/sync-khd-link`** (super_admin, ปุ่ม "เชื่อมโยง KHD Link" ในหน้าจัดการตัวชี้วัด) —
+   backfill `khd_report_id` + `data_source` ให้ทุกตัวชี้วัด โดย query KHD `reports` **ทั้งหมด** (ไม่กรอง
+   data_source='excel' เหมือน endpoint เทียบหลัก เพราะต้องการค่าจริงทั้ง hdc/excel) matching ผ่าน table_process
+   heuristic เดียวกับที่ระบบใช้อยู่แล้ว (`LENGTH(report_code)=LENGTH(table_process)`)
+   - รันจริงกับข้อมูล dev แล้ว: จับคู่ได้ 148/172 (key_in 148, hdc 0), local-only 24 ตัวชี้วัด — ยืนยันแล้วว่า
+     `kpi_indicators_id` เดิม (166 แถวมีค่า) ไม่ถูกแตะต้องเลย
+   - `POST /report-compare/sync` และ `/report-compare/add-from-khd` เขียน `khd_report_id` ควบคู่ไปด้วยเสมอ
+     กันข้อมูลหลุดตามหลังตอน sync ทีละตัวผ่าน workflow ปกติ
+4. **Badge 3 สถานะ** (key_in / hdc / local-only) — `getSourceBadge()` ใน `dashboard.ts` + `kpi-manage.ts` คำนวณ
+   จาก `khd_report_id`+`data_source` ล้วนๆ (ไม่มี endpoint แยก) แสดงไม่มีเงื่อนไขในทุกแถวของ dashboard (col-2 ถัด
+   จาก badge "สะสม") และ kpi-manage แท็บตัวชี้วัด — เพิ่ม `MIN(i.data_source)`/`MIN(i.khd_report_id)` เข้า SQL
+   หลักของ `GET /kpi-results` (dashboard) ด้วย
+
+### ทดสอบยืนยัน
+- `node --check api/server.js`, `npx tsc --noEmit`, `ng build --base-href /khupskpi/` ผ่านทั้งหมด
+- รัน `POST /report-compare/sync-khd-link` จริงกับ dev DB แล้วตรวจ DB โดยตรง: 148 key_in / 0 hdc / 24 local-only
+  ครบ 172 แถว, `kpi_indicators_id` ยังคงมีค่าเดิม 166 แถวไม่เปลี่ยนแปลง
+- Playwright screenshot หน้า kpi-manage (badge key_in สีฟ้าแสดงถูกต้องทุกแถว + ปุ่ม "เชื่อมโยง KHD Link" + คอลัมน์
+  หัวตาราง "KEY_IN") และหน้า dashboard (กรองด้วยตัวชี้วัดที่มีข้อมูลจริง → badge key_in แสดงถูกต้องทุกแถว)
+- เรียก `GET /kpi-results` ตรงผ่าน curl ยืนยัน payload มี `data_source`/`khd_report_id` ถูกต้องตรงกับ DB
+
+### ไฟล์ที่แก้ไข
+- `api/server.js` — migration `khd_report_id`, endpoint `POST /report-compare/sync-khd-link`, แก้
+  `/report-compare/sync`+`/add-from-khd` ให้เขียน `khd_report_id`, เพิ่ม SELECT ใน `GET /kpi-results` (dashboard)
+- `frontend/src/app/dashboard/dashboard.ts`/`.html` — `getSourceBadge()` + badge ใน col-2 (mobile + desktop)
+- `frontend/src/app/kpi-manage/kpi-manage.ts`/`.html` — `getSourceBadge()`, badge แทนที่ของเดิม, ปุ่ม/handler
+  "เชื่อมโยง KHD Link", rename ข้อความ upload_excel→key_in
+- `frontend/src/app/kpi-manager/kpi-manager.html`, `frontend/src/app/help/help.html` — rename ข้อความ +
+  เอกสารส่วนใหม่อธิบาย badge/ปุ่มเชื่อมโยง
+- `frontend/src/app/services/auth.ts` — `syncKhdLink()`
+- `CLAUDE.md`, `frontend/src/app/changelog/changelog.ts`, `docs/fix-log.md`
+
+---
+
 ## 2569-09-26 — แก้ regression: header ทับ modal ทั่วทั้งระบบ (ผลข้างเคียงจากการแก้เมนู slide มือถือ)
 
 ### คำขอ

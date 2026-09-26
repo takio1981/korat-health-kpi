@@ -3205,6 +3205,18 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     return { label: 'สะสม', title: 'ผลงานเดือนล่าสุด = ผลรวมสะสมตั้งแต่ตุลาคมถึงเดือนนี้', color: 'bg-violet-100 text-violet-700 border border-violet-200' };
   }
 
+  // badge แหล่งที่มาข้อมูล — 3 สถานะ ตาม kpi_indicators.data_source/khd_report_id (link ถาวรกับ KHD reports.report_id ผ่าน table_process)
+  // key_in = KHD data_source='excel' (คีย์เอง), hdc = KHD data_source='hdc' (ดึงอัตโนมัติ), local-only = ไม่พบเทียบเคียงกับ KHD เลย
+  getSourceBadge(item: any): { label: string; icon: string; color: string; title: string } {
+    if (item?.khd_report_id && item?.data_source === 'hdc') {
+      return { label: 'hdc', icon: 'fa-server', color: 'bg-indigo-100 text-indigo-700 border border-indigo-200', title: 'ข้อมูลจาก HDC (ดึงอัตโนมัติ)' };
+    }
+    if (item?.khd_report_id && item?.data_source === 'excel') {
+      return { label: 'key_in', icon: 'fa-keyboard', color: 'bg-sky-100 text-sky-700 border border-sky-200', title: 'คีย์ข้อมูลเอง (key_in)' };
+    }
+    return { label: 'local-only', icon: 'fa-desktop', color: 'bg-gray-100 text-gray-500 border border-gray-200', title: 'ไม่พบเทียบเคียงกับ KHD (local-only)' };
+  }
+
   // ดึงประเภทตัวชี้วัด (R9, MOPH, SSJ, RMW, Other)
   getIndicatorTypes(item: any): Array<{type: string, color: string, label: string}> {
     const types: Array<{type: string, color: string, label: string}> = [];

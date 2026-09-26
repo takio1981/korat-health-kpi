@@ -515,6 +515,33 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   KHD), `GET /report-compare/strategies|departments|main-indicators|hospitals` (เทียบ main_yut/dept/table_process
   แบบ text match + `chospital` แยกจาก reports)
 
+### KHD Link ถาวร + Badge แหล่งที่มาข้อมูล (key_in / hdc / local-only)
+- `kpi_indicators.khd_report_id` INT NULL — link **ถาวร** ไปยัง KHD `reports.report_id` (แยกจาก
+  `kpi_indicators_id` เดิมซึ่งเป็น "รหัสอ้างอิง" ที่ admin กรอกเองอิสระ ไม่เกี่ยวกับ KHD — **ห้ามใช้ column นั้น
+  เก็บ report_id เด็ดขาด** เคยพิจารณาแล้วพบว่ามีข้อมูลจริง 166/172 แถวอยู่ก่อนแล้ว การใช้ซ้ำจะทับข้อมูลเดิม)
+- `POST /report-compare/sync-khd-link` (super_admin) — backfill/re-sync `khd_report_id` + `data_source`
+  ให้ตรงกับ KHD reports ปัจจุบันของ**ทุกตัวชี้วัด** (ไม่กรอง data_source เหมือน `/report-compare` หลัก เพราะ
+  ต้องการค่าจริงทั้ง `hdc` และ `excel`) — matching ผ่าน `table_process` heuristic เดียวกับ `/report-compare`
+  (`LENGTH(report_code)=LENGTH(table_process)`, เรียง `report_id ASC` แล้วให้ตัวหลังทับตัวก่อนในกรณีชนกัน)
+  ตัวที่ไม่พบเทียบเคียงจะถูก reset เป็น `khd_report_id=NULL, data_source=NULL` (local-only) กันค่าเก่าค้าง —
+  ปุ่ม "เชื่อมโยง KHD Link" ในหน้าจัดการตัวชี้วัด tab ตัวชี้วัด (super_admin)
+- `POST /report-compare/sync` และ `POST /report-compare/add-from-khd` เขียน `khd_report_id` ควบคู่กับ
+  `data_source` ไปด้วยเสมอ (ไม่ใช่แค่ backfill endpoint) กัน link หลุดตามหลังเมื่อ sync ทีละตัวผ่าน workflow ปกติ
+- **Badge 3 สถานะ** — คำนวณฝั่ง frontend ล้วนๆ จาก `khd_report_id` + `data_source` (ไม่มี endpoint แยก):
+  `getSourceBadge(item)` ใน `dashboard.ts` และ `kpi-manage.ts` (โค้ดเหมือนกัน คนละไฟล์) —
+  `khd_report_id` มีค่า + `data_source='excel'` → **key_in** (sky, `fa-keyboard`) |
+  `khd_report_id` มีค่า + `data_source='hdc'` → **hdc** (indigo, `fa-server`) |
+  ไม่มี `khd_report_id` → **local-only** (gray, `fa-desktop`) — แสดงไม่มีเงื่อนไข (`*ngIf`) ให้ครบทุกตัวชี้วัดเสมอ
+  ตามที่ผู้ใช้ต้องการ ("ทุกตัว") ใน dashboard col-2 (ถัดจาก badge "สะสม") และ kpi-manage แท็บตัวชี้วัด
+- Dashboard SQL (`GET /kpi-results`) เพิ่ม `MIN(i.data_source) AS data_source, MIN(i.khd_report_id) AS
+  khd_report_id` เข้า GROUP BY query หลัก — ต้องคงรูปแบบ `MIN(i.xxx)` เดียวกับคอลัมน์อื่นของ `kpi_indicators`
+  ใน query นี้ (functionally dependent on `i.id` อยู่แล้วจาก GROUP BY)
+- คำว่า "upload_excel"/"Excel" ที่เป็น**ข้อความแสดงผล** (label, banner, tooltip) เปลี่ยนเป็น "key_in" ทั่วระบบแล้ว
+  (kpi-manage, kpi-manager, help) — **column `upload_excel` ในฐานข้อมูล, API field name, route path
+  (`/indicators/:id/upload-excel`) ไม่เปลี่ยน** (ตั้งใจ — ผู้ใช้ยืนยันแล้วว่าต้องการแค่เปลี่ยนข้อความที่แสดงผล
+  ไม่ใช่โครงสร้างข้อมูล/API) — อย่าสับสนกับ badge แหล่งที่มาข้อมูลด้านบนซึ่งเป็นคนละกลไกกัน (`upload_excel` คุม
+  auto-export pipeline, badge แค่แสดงผล data_source อย่างเดียว)
+
 ### จัดการข้อมูลผลงานตัวชี้วัด (`/kpi-results-manage`, super_admin เท่านั้น)
 - หน้า View + Bulk Delete ข้อมูล `kpi_results` ที่บันทึกแล้ว — คนละหน้ากับ Dashboard's Delete Mode (ซึ่งเปิดให้
   `isAdmin` และลบทั้งปีของ indicator+hospcode เดียว) — หน้านี้ลบละเอียดระดับ**รายระเบียนจริง** (`kpi_results.id`
