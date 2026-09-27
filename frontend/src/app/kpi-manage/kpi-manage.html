@@ -10,9 +10,8 @@
     </div>
 
     <div class="p-6">
-      <!-- Search + Status Filter + Add Button -->
-      <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-3 mb-4">
-        <div class="flex gap-3 flex-1 flex-wrap items-end">
+      <!-- Row 1: ค้นหา + ตัวกรองทั้งหมด (แยกออกจากปุ่ม กันแบ่งครึ่งแถวตอนพื้นที่ไม่พอ) -->
+      <div class="flex flex-wrap items-end gap-3 mb-3">
           <div class="relative w-full md:w-64">
             <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">ค้นหา</label>
             <input type="text" [(ngModel)]="searchTerm" (input)="applyFilter()"
@@ -47,24 +46,6 @@
               </select>
             </div>
           </ng-container>
-          <!-- Status Filter — ซ่อนสำหรับ hospitals (ไม่มี is_active) -->
-          <div *ngIf="activeTab !== 'hospitals'" class="flex gap-1">
-            <button (click)="filterActive = ''; applyFilter()"
-                    [ngClass]="filterActive === '' ? 'bg-gray-700 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
-                    class="px-3 py-2 rounded-lg text-xs font-bold transition-all">
-              ทั้งหมด
-            </button>
-            <button (click)="filterActive = '1'; applyFilter()"
-                    [ngClass]="filterActive === '1' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
-                    class="px-3 py-2 rounded-lg text-xs font-bold transition-all">
-              <i class="fas fa-check-circle mr-1"></i>เปิด ({{ getActiveCount() }})
-            </button>
-            <button (click)="filterActive = '0'; applyFilter()"
-                    [ngClass]="filterActive === '0' ? 'bg-red-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
-                    class="px-3 py-2 rounded-lg text-xs font-bold transition-all">
-              <i class="fas fa-times-circle mr-1"></i>ปิด ({{ getInactiveCount() }})
-            </button>
-          </div>
           <!-- Hospital filter row: อำเภอ + ประเภท -->
           <ng-container *ngIf="activeTab === 'hospitals'">
             <div class="relative w-40 sm:w-48">
@@ -87,6 +68,27 @@
               <i class="fas fa-hospital mr-1"></i>{{ filteredHospitals.length }} / {{ hospitals.length }} แห่ง
             </span>
           </ng-container>
+      </div>
+
+      <!-- Row 2: สถานะ (เปิด/ปิด) + ปุ่มจัดการ (เทียบ KHD / นำเข้า / เพิ่มข้อมูล) -->
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-3 mb-4">
+        <!-- Status Filter — ซ่อนสำหรับ hospitals (ไม่มี is_active) -->
+        <div *ngIf="activeTab !== 'hospitals'" class="flex gap-1">
+          <button (click)="filterActive = ''; applyFilter()"
+                  [ngClass]="filterActive === '' ? 'bg-gray-700 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
+                  class="px-3 py-2 rounded-lg text-xs font-bold transition-all">
+            ทั้งหมด
+          </button>
+          <button (click)="filterActive = '1'; applyFilter()"
+                  [ngClass]="filterActive === '1' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
+                  class="px-3 py-2 rounded-lg text-xs font-bold transition-all">
+            <i class="fas fa-check-circle mr-1"></i>เปิด ({{ getActiveCount() }})
+          </button>
+          <button (click)="filterActive = '0'; applyFilter()"
+                  [ngClass]="filterActive === '0' ? 'bg-red-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
+                  class="px-3 py-2 rounded-lg text-xs font-bold transition-all">
+            <i class="fas fa-times-circle mr-1"></i>ปิด ({{ getInactiveCount() }})
+          </button>
         </div>
         <div class="flex gap-2 flex-wrap">
           <select *ngIf="activeTab === 'indicators' && isSuperAdmin"
