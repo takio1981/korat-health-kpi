@@ -542,6 +542,25 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   ไม่ใช่โครงสร้างข้อมูล/API) — อย่าสับสนกับ badge แหล่งที่มาข้อมูลด้านบนซึ่งเป็นคนละกลไกกัน (`upload_excel` คุม
   auto-export pipeline, badge แค่แสดงผล data_source อย่างเดียว)
 
+### Filter + Badge ปีงบประมาณ (khd_fiscal_year) — หน้าจัดการตัวชี้วัด
+- `kpi_indicators.khd_fiscal_year` VARCHAR(50) (ขยายจาก VARCHAR(10) เดิม) — เก็บเป็น **comma-list** ของทุกปีงบที่
+  พบใน KHD `report_fiscal_year_config` ของ `report_id` นั้น เช่น `"2569,2570"` (ไม่ใช่ปีเดียวแบบเดิมที่ column นี้
+  ถูกออกแบบไว้ตอนแรก — เดิมมีไว้เป็น "audit only" บอกว่าเกณฑ์ปัจจุบันอ้างอิงปีไหนตอนเทียบ KHD ครั้งล่าสุด แต่ไม่เคย
+  มีโค้ดจุดไหน UPDATE ค่านี้จริงเลยจนถึงตอนนี้ — ต้องรองรับทั้ง 2 การใช้งาน (audit เดิม + filter/badge ใหม่) จึง
+  เก็บเป็น list ไม่ใช่ปีเดียว เพราะ 1 report_id มักมีมากกว่า 1 แถวใน `report_fiscal_year_config` จริง (พบปี 2569
+  และ 2570 พร้อมกัน)
+- **Backfill/populate**: `POST /report-compare/sync-khd-link` (ปุ่ม "เชื่อมโยง KHD Link") ดึง `report_id,
+  fiscal_year` จาก `report_fiscal_year_config` ทั้งหมด (ไม่กรอง `is_active` — ค่านี้แค่บอกว่า KHD เคย/กำลังมี
+  config ปีงบนี้ให้ตัวชี้วัดนี้ ไม่ใช่สถานะ active ซึ่งมี badge "HDC inactive" แยกต่างหากอยู่แล้วใน `/report-compare`
+  หลัก) group เป็น comma-list ต่อ `report_id` แล้วเขียนคู่กับ `khd_report_id`/`data_source` ในการ backfill รอบ
+  เดียวกัน — ตัวที่ไม่พบเทียบเคียง (local-only) ถูก reset เป็น `khd_fiscal_year=NULL` ด้วยเช่นกัน
+- **Frontend** (`kpi-manage.ts`): `getFiscalYears(item)` แปลง comma-list → array, `fiscalYearOptions` getter
+  สร้าง dropdown options จากปีที่พบจริงในข้อมูลที่โหลดมา (ไม่ hardcode ปี), `getFiscalYearBadge(item)` คืน badge
+  เสมอทุกแถว (ไม่มีข้อมูล → "ไม่ระบุปีงบ" สีเทา) — `filterFiscalYear` เช็คด้วย `includes()` บน array ที่ split แล้ว
+  (ไม่ใช่ string equality ตรงๆ เพราะ 1 ตัวชี้วัดอาจอยู่ได้หลายปีพร้อมกัน)
+- Filter dropdown "ปีงบประมาณ" อยู่แถวเดียวกับ หมวดหมู่หลัก/หน่วยงาน ในแท็บตัวชี้วัด, badge อยู่ในกลุ่มเดียวกับ
+  badge แหล่งที่มาข้อมูล (key_in/hdc/local-only) ทั้ง mobile + desktop view
+
 ### จัดการข้อมูลผลงานตัวชี้วัด (`/kpi-results-manage`, super_admin เท่านั้น)
 - หน้า View + Bulk Delete ข้อมูล `kpi_results` ที่บันทึกแล้ว — คนละหน้ากับ Dashboard's Delete Mode (ซึ่งเปิดให้
   `isAdmin` และลบทั้งปีของ indicator+hospcode เดียว) — หน้านี้ลบละเอียดระดับ**รายระเบียนจริง** (`kpi_results.id`

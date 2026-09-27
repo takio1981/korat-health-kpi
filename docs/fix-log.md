@@ -4,6 +4,49 @@
 
 ---
 
+## 2569-09-27 — เพิ่มตัวกรอง+badge ปีงบประมาณ (khd_fiscal_year) จาก KHD report_fiscal_year_config
+
+### คำขอ
+ต้องการให้ปรับหน้าจัดการตัวชี้วัด ให้กรอง ปีงบประมาณ ได้ด้วย ซึ่งตัวชี้วัดแต่ละข้อ ต้องมีป้าย icon ปีงบประมาณ
+กำกับด้วย ตรวจสอบตาราง kpi_indicators แล้ว field khd_fiscal_year ไม่มีข้อมูลปีงบประมาณกำกับเลย ให้ดึงข้อมูล
+จากตาราง report_fiscal_year_config จาก KHD มาใส่ให้ถูกต้อง
+
+### สิ่งที่ตรวจพบ
+- `khd_fiscal_year` เป็น column ที่มีอยู่แล้ว (เดิมออกแบบไว้เป็น "audit only" บอกว่าเกณฑ์ที่ใช้อยู่อ้างอิงปีไหน)
+  แต่ตรวจโค้ดพบว่า**ไม่เคยมีจุดไหน UPDATE ค่านี้เข้า DB จริงเลย** — มีแค่ใช้เป็นชื่อ field ชั่วคราวใน response ของ
+  `GET /report-compare` เท่านั้น จึงว่างเปล่าทั้ง 172 แถวตรงตามที่ผู้ใช้แจ้ง
+- KHD `report_fiscal_year_config` มีได้หลายแถวต่อ `report_id` เดียว (คนละปีงบ เช่น 2569 และ 2570 พร้อมกันจริง) —
+  ถ้าเก็บได้แค่ปีเดียวตามที่ column ออกแบบไว้เดิม (VARCHAR(10)) การกรอง/badge จะไม่ถูกต้องสมบูรณ์สำหรับตัวชี้วัด
+  ที่มีมากกว่า 1 ปีงบ จึงขยาย column เป็น VARCHAR(50) เก็บเป็น comma-list แทน
+
+### สิ่งที่ทำ
+1. ขยาย `kpi_indicators.khd_fiscal_year` จาก `VARCHAR(10)` → `VARCHAR(50)` (auto-migration)
+2. ต่อยอด endpoint เดิม `POST /report-compare/sync-khd-link` ให้ดึง `report_id, fiscal_year` จาก KHD
+   `report_fiscal_year_config` ทั้งหมดเพิ่ม แล้วเขียนเป็น comma-list ลง `khd_fiscal_year` คู่กับ `khd_report_id`/
+   `data_source` ในการ backfill รอบเดียวกัน (ปุ่ม "เชื่อมโยง KHD Link" เดิม ไม่ต้องเพิ่มปุ่มใหม่)
+3. หน้าจัดการตัวชี้วัด (แท็บตัวชี้วัด): เพิ่ม dropdown กรอง "ปีงบประมาณ" (สร้าง options จากปีที่พบจริงในข้อมูลที่
+   โหลดมา ไม่ hardcode) + badge ปีงบประมาณกำกับทุกแถวเสมอ (ไม่มีข้อมูล → "ไม่ระบุปีงบ" สีเทา)
+
+### ⚠️ หมายเหตุสำคัญ — ยังไม่ได้รันจริงกับข้อมูล เพราะ KHD DB ไม่ตอบสนอง
+Remote KHD (`192.168.88.203:3306`) เกิด `connect ETIMEDOUT` ระหว่างพัฒนาฟีเจอร์นี้ (ลองซ้ำหลายครั้งทั้งผ่าน
+สคริปต์ตรงและผ่าน dev server ยังไม่หาย) — เขียนโค้ด + build + type-check ผ่านหมดแล้ว และยืนยันด้วย Playwright ว่า
+UI (dropdown + badge "ไม่ระบุปีงบ" fallback) แสดงผลถูกต้องตามที่ออกแบบไว้ แต่**ยังไม่ได้กดปุ่ม "เชื่อมโยง KHD Link"
+จริงเพื่อ backfill ข้อมูลปีงบ** เพราะเชื่อมต่อ KHD ไม่ได้ในขณะพัฒนา ต้องกดปุ่มนี้อีกครั้งเมื่อ KHD กลับมาออนไลน์
+
+### ทดสอบยืนยัน
+- `node --check api/server.js`, `npx tsc --noEmit`, `ng build --base-href /khupskpi/` ผ่านทั้งหมด
+- ยืนยัน ALTER TABLE ขยาย column สำเร็จจริงบน dev DB (`SHOW COLUMNS` คืน `varchar(50)`)
+- Playwright screenshot หน้าจัดการตัวชี้วัด — dropdown "ปีงบประมาณ" + badge "ไม่ระบุปีงบ" แสดงถูกต้องทุกแถว (ตรงกับ
+  สภาพข้อมูลจริงตอนนี้ที่ยังไม่มี khd_fiscal_year เลย)
+
+### ไฟล์ที่แก้ไข
+- `api/server.js` — migration ขยาย `khd_fiscal_year`, ต่อยอด `POST /report-compare/sync-khd-link`
+- `frontend/src/app/kpi-manage/kpi-manage.ts`/`.html` — filter dropdown + `getFiscalYears()`/
+  `fiscalYearOptions`/`getFiscalYearBadge()` + badge ในทั้ง mobile/desktop view
+- `CLAUDE.md`, `frontend/src/app/changelog/changelog.ts`, `docs/fix-log.md`
+
+---
+
 ## 2569-09-26 — เปลี่ยนคำ upload_excel→key_in + เพิ่ม badge แหล่งที่มาข้อมูล + link ถาวรกับ KHD reports.report_id
 
 ### คำขอ

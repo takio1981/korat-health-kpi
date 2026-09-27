@@ -37,6 +37,15 @@
                 <option *ngFor="let d of departments" [value]="d.id">{{ d.dept_name }}</option>
               </select>
             </div>
+            <div class="relative w-40 sm:w-48">
+              <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">ปีงบประมาณ</label>
+              <select [(ngModel)]="filterFiscalYear" (change)="applyFilter()"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none truncate"
+                      title="กรองจาก KHD report_fiscal_year_config (khd_fiscal_year) — กด 'เชื่อมโยง KHD Link' ก่อนถ้ายังไม่มีตัวเลือก">
+                <option value="">ทุกปีงบ</option>
+                <option *ngFor="let y of fiscalYearOptions" [value]="y">ปีงบ {{ y }}</option>
+              </select>
+            </div>
           </ng-container>
           <!-- Status Filter — ซ่อนสำหรับ hospitals (ไม่มี is_active) -->
           <div *ngIf="activeTab !== 'hospitals'" class="flex gap-1">
@@ -96,7 +105,7 @@
           <button *ngIf="activeTab === 'indicators' && isSuperAdmin"
                   (click)="syncKhdLink()" [disabled]="khdLinkSyncLoading"
                   class="bg-sky-600 hover:bg-sky-700 disabled:opacity-60 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold whitespace-nowrap"
-                  title="เชื่อมโยง kpi_indicators กับ KHD reports.report_id ถาวร (ผ่าน table_process) + ดึง data_source มาแสดง badge key_in/hdc/local-only ให้ครบทุกตัวชี้วัด">
+                  title="เชื่อมโยง kpi_indicators กับ KHD reports.report_id ถาวร (ผ่าน table_process) + ดึง data_source มาแสดง badge key_in/hdc/local-only + ดึงปีงบประมาณจาก report_fiscal_year_config มาแสดง badge/ตัวกรองปีงบ ให้ครบทุกตัวชี้วัด">
             <i class="fas" [ngClass]="khdLinkSyncLoading ? 'fa-spinner fa-spin' : 'fa-link'"></i>
             <span class="ml-2">{{ khdLinkSyncLoading ? 'กำลังเชื่อมโยง...' : 'เชื่อมโยง KHD Link' }}</span>
           </button>
@@ -370,6 +379,9 @@
                 <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold" [ngClass]="getSourceBadge(item).color" [title]="getSourceBadge(item).title">
                   <i class="fas text-[9px]" [ngClass]="getSourceBadge(item).icon"></i>{{ getSourceBadge(item).label }}
                 </span>
+                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold" [ngClass]="getFiscalYearBadge(item).color" [title]="getFiscalYearBadge(item).title">
+                  <i class="fas fa-calendar-alt text-[9px]"></i>{{ getFiscalYearBadge(item).label }}
+                </span>
                 <span *ngFor="let t of getIndicatorTypes(item)" class="inline-flex items-center px-1.5 py-0.5 rounded font-bold" [ngClass]="t.color" [title]="'ประเภทตัวชี้วัด: ' + t.label">
                   {{ t.label }}
                 </span>
@@ -511,6 +523,9 @@
                     </span>
                     <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold" [ngClass]="getSourceBadge(item).color" [title]="getSourceBadge(item).title">
                       <i class="fas text-[9px]" [ngClass]="getSourceBadge(item).icon"></i>{{ getSourceBadge(item).label }}
+                    </span>
+                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold" [ngClass]="getFiscalYearBadge(item).color" [title]="getFiscalYearBadge(item).title">
+                      <i class="fas fa-calendar-alt text-[9px]"></i>{{ getFiscalYearBadge(item).label }}
                     </span>
                     <span *ngFor="let t of getIndicatorTypes(item)" class="inline-flex items-center px-1.5 py-0.5 rounded font-bold" [ngClass]="t.color" [title]="'ประเภทตัวชี้วัด: ' + t.label">
                       {{ t.label }}

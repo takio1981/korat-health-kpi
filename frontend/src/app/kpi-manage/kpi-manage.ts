@@ -45,6 +45,8 @@ export class KpiManageComponent implements OnInit {
   // Extra indicators filter — หมวดหมู่หลัก + หน่วยงาน (ค่าเป็น string ของ id เพื่อ match [value] ของ <select>)
   filterMainIndicator: string = '';
   filterDept: string = '';
+  // กรองปีงบประมาณ — ค่าเดียวจาก dropdown, match กับ khd_fiscal_year ของแต่ละตัวชี้วัด (comma-list เช่น "2569,2570")
+  filterFiscalYear: string = '';
 
   // Modal
   showModal: boolean = false;
@@ -281,6 +283,29 @@ export class KpiManageComponent implements OnInit {
     if (item?.rmw && String(item.rmw).trim() && item.rmw !== '0') types.push({ type: 'rmw', color: 'bg-yellow-100 text-yellow-700', label: 'RMW' });
     if (item?.other && String(item.other).trim() && item.other !== '0') types.push({ type: 'other', color: 'bg-gray-100 text-gray-700', label: 'อื่นๆ' });
     return types;
+  }
+
+  // แปลง khd_fiscal_year (comma-list เช่น "2569,2570") เป็น array — ใช้ทั้งกรองและแสดง badge
+  getFiscalYears(item: any): string[] {
+    if (!item?.khd_fiscal_year) return [];
+    return String(item.khd_fiscal_year).split(',').map((y: string) => y.trim()).filter(Boolean);
+  }
+
+  // รายการปีงบทั้งหมดที่พบจริงในตัวชี้วัดที่โหลดมา (สำหรับ dropdown กรอง) — เรียงปีล่าสุดก่อน
+  get fiscalYearOptions(): string[] {
+    const set = new Set<string>();
+    for (const i of this.indicators) { for (const y of this.getFiscalYears(i)) set.add(y); }
+    return Array.from(set).sort((a, b) => Number(b) - Number(a));
+  }
+
+  // badge ปีงบประมาณ — จาก khd_fiscal_year (ดึงจาก KHD report_fiscal_year_config) แสดงทุกตัวชี้วัดเสมอ
+  // (ไม่พบข้อมูล = "ไม่ระบุปีงบ" เทา — ตัวชี้วัดที่ไม่ได้ผูกกับ KHD หรือยังไม่เคยกด "เชื่อมโยง KHD Link")
+  getFiscalYearBadge(item: any): { label: string; title: string; color: string } {
+    const years = this.getFiscalYears(item);
+    if (years.length === 0) {
+      return { label: 'ไม่ระบุปีงบ', title: 'ไม่พบข้อมูลปีงบประมาณจาก KHD — ลองกด "เชื่อมโยง KHD Link"', color: 'bg-gray-50 border-gray-200 text-gray-500' };
+    }
+    return { label: `ปีงบ ${years.join(', ')}`, title: `พบใน KHD report_fiscal_year_config ปีงบ: ${years.join(', ')}`, color: 'bg-teal-50 border-teal-200 text-teal-700' };
   }
 
   // badge แหล่งที่มาข้อมูล — 3 สถานะ ตาม data_source/khd_report_id (link ถาวรกับ KHD reports.report_id ผ่าน table_process)
@@ -558,6 +583,7 @@ export class KpiManageComponent implements OnInit {
         if (!matchSearch) return false;
         if (this.filterMainIndicator && String(i.main_indicator_id) !== this.filterMainIndicator) return false;
         if (this.filterDept && String(i.dept_id) !== this.filterDept) return false;
+        if (this.filterFiscalYear && !this.getFiscalYears(i).includes(this.filterFiscalYear)) return false;
         // KHD compare filter
         if (this.filterKhdStatus) {
           const cmp = this.getKhdCompareStatus(i);
@@ -636,7 +662,7 @@ export class KpiManageComponent implements OnInit {
   // ใช้ตัดสินข้อความ empty-state: "ไม่พบข้อมูลที่ค้นหา" (มีตัวกรองอยู่) vs "ยังไม่มีข้อมูล" (list ว่างจริงๆ)
   hasActiveFilter(): boolean {
     if (this.searchTerm) return true;
-    if (this.activeTab === 'indicators') return !!(this.filterActive || this.filterMainIndicator || this.filterDept);
+    if (this.activeTab === 'indicators') return !!(this.filterActive || this.filterMainIndicator || this.filterDept || this.filterFiscalYear);
     if (this.activeTab === 'hospitals') return !!(this.hospFilterDistid || this.hospFilterHostype);
     return !!this.filterActive;
   }
@@ -647,6 +673,7 @@ export class KpiManageComponent implements OnInit {
     this.filterActive = '';
     this.filterMainIndicator = '';
     this.filterDept = '';
+    this.filterFiscalYear = '';
     this.hospFilterDistid = '';
     this.hospFilterHostype = '';
     this.khdCompareFilter = '';

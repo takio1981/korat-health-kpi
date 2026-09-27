@@ -18,6 +18,13 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.09.27.a',
+      date: '27 กันยายน 2569 (build a)',
+      changes: [
+        { type: 'feature', text: 'เพิ่มตัวกรอง "ปีงบประมาณ" ในหน้าจัดการตัวชี้วัด (แท็บตัวชี้วัด) + badge ปีงบประมาณกำกับทุกตัวชี้วัด ดึงข้อมูลจริงจากตาราง report_fiscal_year_config บน KHD ผ่านปุ่ม "เชื่อมโยง KHD Link" เดิม (รองรับตัวชี้วัดที่มีมากกว่า 1 ปีงบพร้อมกัน เช่น 2569 และ 2570)' }
+      ]
+    },
+    {
       version: '2569.09.26.g',
       date: '26 กันยายน 2569 (build g)',
       changes: [

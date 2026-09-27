@@ -10304,6 +10304,9 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
         // เดิมชื่อ hdc_fiscal_year (ส่วนหนึ่งของการเปลี่ยนชื่อการเชื่อมต่อ HDC → KHD ทั้งระบบ) — rename คอลัมน์เดิมก่อนกันข้อมูลหาย
         try { await db.query(`ALTER TABLE kpi_indicators CHANGE COLUMN hdc_fiscal_year khd_fiscal_year VARCHAR(10) NULL COMMENT 'ปีงบฯ ที่ใช้อ้างอิง target_percentage/target_condition ล่าสุดจาก KHD (audit only)'`); } catch(e) {}
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS khd_fiscal_year VARCHAR(10) NULL COMMENT 'ปีงบฯ ที่ใช้อ้างอิง target_percentage/target_condition ล่าสุดจาก KHD (audit only)'`); } catch(e) {}
+        // ขยายจาก VARCHAR(10) — ใช้เก็บ comma-list ของทุกปีงบที่พบใน KHD report_fiscal_year_config ของ report_id นี้
+        // (เช่น "2569,2570") ไม่ใช่แค่ปีเดียวอีกต่อไป เพื่อรองรับ filter+badge ปีงบประมาณในหน้าจัดการตัวชี้วัด
+        try { await db.query(`ALTER TABLE kpi_indicators MODIFY COLUMN khd_fiscal_year VARCHAR(50) NULL COMMENT 'Comma-list ปีงบฯ ที่พบใน KHD report_fiscal_year_config (เช่น 2569,2570)'`); } catch(e) {}
         // Migrate ข้อมูล override เดิมใน system_settings (env_HDC_DB_* -> env_KHD_DB_*) ที่ admin เคยตั้งค่าผ่านหน้า Environment Config
         // กันการเชื่อมต่อ KHD ที่ใช้งานจริงอยู่ขาดหาย — idempotent เพราะรันซ้ำแล้วไม่มีแถว env_HDC% เหลือให้ match
         try { await db.query(`UPDATE system_settings SET setting_key = REPLACE(setting_key, 'HDC', 'KHD') WHERE setting_key LIKE 'env_HDC%'`); } catch(e) {}
@@ -11200,11 +11203,13 @@ apiRouter.post('/report-compare/add-from-khd', authenticateToken, isSuperAdmin, 
     }
 });
 
-// POST /report-compare/sync-khd-link — Backfill ถาวร: link kpi_indicators.khd_report_id + data_source จาก KHD reports ทั้งหมด
+// POST /report-compare/sync-khd-link — Backfill ถาวร: link kpi_indicators.khd_report_id + data_source + khd_fiscal_year จาก KHD
 // (ทั้ง hdc และ excel ไม่กรองเหมือน /report-compare หลัก เพราะต้องการ data_source จริงของทุกตัวชี้วัด ไม่ใช่แค่ตัวที่จะ sync เข้าระบบ)
 // ใช้ heuristic เดียวกับ /report-compare (LENGTH(report_code)=LENGTH(table_process)) กันคู่ table_process ซ้ำที่ report_code สั้นกว่าปกติ (ข้อมูลคุณภาพต่ำใน KHD)
 // เรียงตาม report_id ASC แล้วให้ตัวหลังทับตัวก่อนใน map — เมื่อ table_process ชนกันหลายตัว (พบจริง 12/172 แถว เป็น "พี่น้อง" conceptually ใกล้กันแต่ report_id ต่างกัน)
 // จะได้ report_id ล่าสุด/มากสุด ซึ่งไม่กระทบความถูกต้องของ badge (data_source ของคู่ที่ชนกันเป็น 'excel' เหมือนกันทุกคู่จากการตรวจสอบจริง)
+// khd_fiscal_year เก็บเป็น comma-list ของทุกปีงบที่พบใน report_fiscal_year_config ของ report_id นั้น (ไม่กรอง is_active — แค่บอกว่า
+// KHD เคย/กำลังกำหนดค่าปีงบนี้ไว้ให้ตัวชี้วัดนี้ ใช้สำหรับ filter+badge ปีงบประมาณ ไม่ใช่สถานะ active/inactive ซึ่งมี badge แยกอยู่แล้ว)
 apiRouter.post('/report-compare/sync-khd-link', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
     if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
@@ -11219,27 +11224,38 @@ apiRouter.post('/report-compare/sync-khd-link', authenticateToken, isSuperAdmin,
         const khdMap = new Map();
         khdRows.forEach(r => { khdMap.set(r.table_process.trim(), r); });
 
+        const [fyRows] = await remoteDb.query(`SELECT DISTINCT report_id, fiscal_year FROM report_fiscal_year_config ORDER BY report_id, fiscal_year`);
+        const fyMap = new Map(); // report_id -> "2569,2570"
+        fyRows.forEach(r => {
+            const list = fyMap.get(r.report_id) || [];
+            list.push(String(r.fiscal_year));
+            fyMap.set(r.report_id, list);
+        });
+
         const [localRows] = await db.query('SELECT id, table_process FROM kpi_indicators');
-        let matched = 0, localOnly = 0;
+        let matched = 0, localOnly = 0, withFiscalYear = 0;
         const dsCounts = {};
         for (const local of localRows) {
             const key = local.table_process ? local.table_process.trim() : '';
             const khd = key ? khdMap.get(key) : null;
             if (khd) {
-                await db.query('UPDATE kpi_indicators SET khd_report_id = ?, data_source = ? WHERE id = ?', [khd.report_id, khd.data_source, local.id]);
+                const fyList = fyMap.get(khd.report_id) || null;
+                const khdFiscalYear = fyList ? fyList.join(',') : null;
+                if (khdFiscalYear) withFiscalYear++;
+                await db.query('UPDATE kpi_indicators SET khd_report_id = ?, data_source = ?, khd_fiscal_year = ? WHERE id = ?', [khd.report_id, khd.data_source, khdFiscalYear, local.id]);
                 matched++;
                 dsCounts[khd.data_source] = (dsCounts[khd.data_source] || 0) + 1;
             } else {
                 // ไม่พบเทียบเคียง — reset ให้ตรงความจริง (local-only) กันค่าเก่าค้างจาก sync ครั้งก่อนที่ table_process เปลี่ยนไปแล้ว
-                await db.query('UPDATE kpi_indicators SET khd_report_id = NULL, data_source = NULL WHERE id = ?', [local.id]);
+                await db.query('UPDATE kpi_indicators SET khd_report_id = NULL, data_source = NULL, khd_fiscal_year = NULL WHERE id = ?', [local.id]);
                 localOnly++;
             }
         }
         await db.query(
             'INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
-            [req.user.userId, 'SYNC_KHD_LINK', 'kpi_indicators', JSON.stringify({ matched, localOnly, dsCounts }), req.ip]
+            [req.user.userId, 'SYNC_KHD_LINK', 'kpi_indicators', JSON.stringify({ matched, localOnly, withFiscalYear, dsCounts }), req.ip]
         );
-        res.json({ success: true, message: `เชื่อมโยง KHD สำเร็จ — จับคู่ได้ ${matched} ตัวชี้วัด (key_in ${dsCounts.excel || 0}, hdc ${dsCounts.hdc || 0}), local-only ${localOnly} ตัวชี้วัด`, matched, localOnly, dsCounts });
+        res.json({ success: true, message: `เชื่อมโยง KHD สำเร็จ — จับคู่ได้ ${matched} ตัวชี้วัด (key_in ${dsCounts.excel || 0}, hdc ${dsCounts.hdc || 0}, มีปีงบ ${withFiscalYear} ตัว), local-only ${localOnly} ตัวชี้วัด`, matched, localOnly, withFiscalYear, dsCounts });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
