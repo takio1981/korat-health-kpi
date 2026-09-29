@@ -68,29 +68,29 @@
               <i class="fas fa-hospital mr-1"></i>{{ filteredHospitals.length }} / {{ hospitals.length }} แห่ง
             </span>
           </ng-container>
+          <!-- Status Filter — ซ่อนสำหรับ hospitals (ไม่มี is_active) — จัดเป็นตัวกรองสุดท้ายในแถวเดียวกับตัวกรองอื่น -->
+          <div *ngIf="activeTab !== 'hospitals'" class="flex gap-1">
+            <button (click)="filterActive = ''; applyFilter()"
+                    [ngClass]="filterActive === '' ? 'bg-gray-700 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
+                    class="px-3 py-2 rounded-lg text-xs font-bold transition-all">
+              ทั้งหมด
+            </button>
+            <button (click)="filterActive = '1'; applyFilter()"
+                    [ngClass]="filterActive === '1' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
+                    class="px-3 py-2 rounded-lg text-xs font-bold transition-all">
+              <i class="fas fa-check-circle mr-1"></i>เปิด ({{ getActiveCount() }})
+            </button>
+            <button (click)="filterActive = '0'; applyFilter()"
+                    [ngClass]="filterActive === '0' ? 'bg-red-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
+                    class="px-3 py-2 rounded-lg text-xs font-bold transition-all">
+              <i class="fas fa-times-circle mr-1"></i>ปิด ({{ getInactiveCount() }})
+            </button>
+          </div>
       </div>
 
-      <!-- Row 2: สถานะ (เปิด/ปิด) + ปุ่มจัดการ (เทียบ KHD / นำเข้า / เพิ่มข้อมูล) -->
-      <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-3 mb-4">
-        <!-- Status Filter — ซ่อนสำหรับ hospitals (ไม่มี is_active) -->
-        <div *ngIf="activeTab !== 'hospitals'" class="flex gap-1">
-          <button (click)="filterActive = ''; applyFilter()"
-                  [ngClass]="filterActive === '' ? 'bg-gray-700 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
-                  class="px-3 py-2 rounded-lg text-xs font-bold transition-all">
-            ทั้งหมด
-          </button>
-          <button (click)="filterActive = '1'; applyFilter()"
-                  [ngClass]="filterActive === '1' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
-                  class="px-3 py-2 rounded-lg text-xs font-bold transition-all">
-            <i class="fas fa-check-circle mr-1"></i>เปิด ({{ getActiveCount() }})
-          </button>
-          <button (click)="filterActive = '0'; applyFilter()"
-                  [ngClass]="filterActive === '0' ? 'bg-red-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
-                  class="px-3 py-2 rounded-lg text-xs font-bold transition-all">
-            <i class="fas fa-times-circle mr-1"></i>ปิด ({{ getInactiveCount() }})
-          </button>
-        </div>
-        <div class="flex gap-2 flex-wrap items-end">
+      <!-- Row 2: ปุ่มจัดการทั้งหมด ชิดขวา แยกกลุ่มชัดเจนด้วยเส้นคั่น — กลุ่ม KHD (เทียบ/เชื่อมโยง) | กลุ่มข้อมูล (นำเข้า/เพิ่ม) -->
+      <div class="flex justify-end">
+        <div class="flex flex-wrap items-end gap-2 mb-4">
           <div *ngIf="activeTab === 'indicators' && isSuperAdmin" class="relative">
             <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">ปีงบเทียบ KHD</label>
             <select [(ngModel)]="khdCompareYear"
@@ -137,6 +137,7 @@
             <i class="fas" [ngClass]="hospCompareLoading ? 'fa-spinner fa-spin' : 'fa-exchange-alt'"></i>
             <span class="ml-2">{{ hospCompareLoading ? 'กำลังเทียบ...' : (hospCompareSummary ? 'เทียบ KHD อีกครั้ง' : 'เทียบกับ KHD') }}</span>
           </button>
+          <div *ngIf="canAddData" class="w-px h-8 bg-gray-200 mx-1 hidden sm:block"></div>
           <button *ngIf="activeTab === 'indicators' && canAddData"
                   (click)="openImportModal()"
                   class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold whitespace-nowrap">
