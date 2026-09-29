@@ -944,17 +944,14 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
 
     if (!this._filterListsLoaded) {
       this._filterListsLoaded = true;
+      // Backend (/departments, /hospitals, /districts) กรองรายการตาม role scope ให้แล้ว (dept/hospcode/อำเภอ ตัวเอง
+      // สำหรับ role ที่ scope แบบนั้น — ดู ROLE_SCOPE_OWN_DEPT/ROLE_SCOPE_HOSPCODE/ROLE_SCOPE_DISTRICT ใน server.js)
+      // ฝั่งนี้แค่ auto-select ให้อัตโนมัติเมื่อเหลือตัวเลือกเดียว (แปลว่าถูกล็อคจริง) — ไม่ hardcode รายชื่อ role ซ้ำที่นี่
+      // กันปัญหาเดิมที่ลืมเพิ่ม role ใหม่ (เช่น user_hos/user_sso/user_cup) ตอนแก้จุดเดียวแต่อีกจุดไม่ได้แก้ตาม
       this.authService.getDepartments().subscribe(res => {
         if (res.success) {
-          const role = this.authService.getUserRole();
-          const userDeptName = this.currentUser?.dept_name;
-          // admin_ssj / user_ssj → ล็อคเฉพาะ dept ตัวเอง
-          if (['admin_ssj', 'user_ssj'].includes(role) && userDeptName) {
-            this.deptNames = [userDeptName];
-            this.selectedDept = userDeptName;
-          } else {
-            this.deptNames = res.data.map((d: any) => d.dept_name);
-          }
+          this.deptNames = res.data.map((d: any) => d.dept_name);
+          if (this.deptNames.length === 1) this.selectedDept = this.deptNames[0];
           this.cdr.detectChanges();
         }
       });
@@ -962,6 +959,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         if (res.success) {
           this._allHospitals = res.data;
           this.hospitalNames = res.data.map((h: any) => h.hosname).filter(Boolean).sort();
+          if (this.hospitalNames.length === 1) this.selectedHospital = this.hospitalNames[0];
           this.cdr.detectChanges();
         }
       });
@@ -969,6 +967,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         if (res.success) {
           this._allDistricts = res.data;
           this.districtNames = res.data.map((d: any) => d.distname).filter(Boolean).sort();
+          if (this.districtNames.length === 1) this.selectedDistrict = this.districtNames[0];
           this.cdr.detectChanges();
         }
       });
@@ -1223,19 +1222,16 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     this.selectedTypes = [];
     this.selectedHosTypes = [];
     this.selectedIndicatorOffTypes = [];
-    // admin_ssj / user_ssj → ล็อค dept ไว้
-    const role = this.authService.getUserRole();
-    if (['admin_ssj', 'user_ssj'].includes(role) && this.currentUser?.dept_name) {
-      this.selectedDepts = [this.currentUser.dept_name];
-    } else {
-      this.selectedDepts = [];
-    }
-    // reset cascade lists กลับเป็นทั้งหมด
+    // reset cascade lists กลับเป็น "ทั้งหมดเท่าที่ backend scope ให้ตาม role" (ดู extractFilterLists())
     this.districtNames = this._allDistricts.map((d: any) => d.distname).filter(Boolean).sort();
     this.hospitalNames = this._allHospitals.map((h: any) => h.hosname).filter(Boolean).sort();
     this.hosTypeList = this._allHosTypes;
     this.indicatorNames = Array.from(new Set<string>(this._allIndicators.map((i: any) => i.kpi_indicators_name)));
     this.mainCategories = Array.from(new Set<string>(this._allIndicators.map((i: any) => i.main_indicator_name).filter(Boolean)));
+    // auto-select กลับเมื่อเหลือตัวเลือกเดียว (role ถูกล็อคจาก backend) — ไม่ hardcode รายชื่อ role ซ้ำที่นี่
+    this.selectedDepts = this.deptNames.length === 1 ? [this.deptNames[0]] : [];
+    this.selectedDistricts = this.districtNames.length === 1 ? [this.districtNames[0]] : [];
+    this.selectedHospitals = this.hospitalNames.length === 1 ? [this.hospitalNames[0]] : [];
     // เคลียร์ข้อมูล → กลับหน้า "กรุณาเลือกตัวกรอง"
     this.kpiData = [];
     this.filteredData = [];

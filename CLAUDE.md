@@ -629,6 +629,23 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - **admin_ssj / user_ssj**: ล็อค dropdown หน่วยงาน เห็นเฉพาะ dept ตัวเอง
 - **admin_ssj / super_admin**: ไม่โหลดข้อมูล dashboard อัตโนมัติ ต้องกด "ค้นหา"
 
+### Role-based Scoping ของรายการตัวกรอง (dept/hospcode/อำเภอ ตัวเอง) — Backend เป็นหลัก
+- Endpoint ที่คืนรายการให้ dropdown ใช้ร่วมกันทั้งระบบ (`GET /departments`, `/hospitals`, `/hostype`, `/districts`,
+  `/indicators`) **ต้องกรองตาม role scope เสมอ** — ห้ามคืนรายการทั้งหมดแบบไม่กรองอีก (เคยเป็นบั๊กมาก่อน: 4
+  endpoint แรกไม่กรองอะไรเลย, `/indicators` กรองด้วย `user.deptId != null` ตรงๆ ทำให้ `admin_cup`/`admin_hos`/
+  `admin_sso` ที่บังเอิญมี `dept_id` ติดตัวอยู่ในฐานข้อมูล — แม้ scope จริงคือ "ทุก dept" — โดนจำกัดผิดๆ)
+- Role constants ใน `api/server.js` ที่ใช้กำหนด scope (ต้องตรงกับตาราง Role System ด้านบนเป๊ะ — แก้ตารางต้องแก้ตรงนี้ด้วย):
+  - `ROLE_SCOPE_OWN_DEPT` = `['admin_ssj','user_ssj','user_hos','user_sso','user_cup','user']` — เห็นเฉพาะ dept ตัวเอง
+  - `ROLE_SCOPE_HOSPCODE` = `['user','user_hos','user_sso','admin_hos','admin_sso','user_ssj']` — เห็นเฉพาะ hoscode ตัวเอง (1 หน่วยบริการ)
+  - `ROLE_SCOPE_DISTRICT` = `['user_cup','admin_cup']` — เห็นทุกหน่วยบริการในอำเภอตัวเอง (ผ่าน `getDistrictId(hospcode)` → `chospital.distid`)
+  - role ที่ไม่อยู่ใน constant ไหนเลย (`super_admin`, `admin_ssj` สำหรับ hospcode/อำเภอ, `admin_cup`/`admin_hos`/`admin_sso` สำหรับ dept) เห็น "ทุก" ตามที่ตาราง Role System กำหนด แม้ user record จะมี `dept_id`/`hospcode` ติดตัวอยู่ก็ตาม
+  - **ห้ามเช็คแค่ `user.deptId != null`/`user.hospcode` เฉยๆ โดยไม่เช็ค role ก่อนเด็ดขาด** — ต้องเช็คผ่าน constant ทั้ง 3 นี้เท่านั้น กันบั๊กแบบเดียวกันเกิดซ้ำ
+- Frontend (`dashboard.ts` `extractFilterLists()`/`clearFilters()`) **ไม่ hardcode รายชื่อ role ซ้ำอีก** — แค่
+  auto-select ตัวกรองให้อัตโนมัติเมื่อรายการที่ backend กรองมาให้เหลือตัวเลือกเดียว (`if (list.length === 1) selected = list[0]`)
+  — เป็นสัญญาณว่า role นั้นถูกล็อคจริงจาก backend แล้ว ไม่ต้องเดา/จำ role list ฝั่ง frontend อีกชั้น (เดิมมี logic
+  ซ้ำ 2 จุดที่ไม่ sync กัน ทำให้ลืมเพิ่ม role ใหม่ในจุดหนึ่งแต่อีกจุดไม่ลืม)
+- `getDistrictId(hospcode)` ใช้ `SELECT distid FROM chospital` ตรงๆ (ไม่ `CONCAT(provcode,distcode)` เอง — ตรงตามกฎ chospital ด้านบน)
+
 ### Profile Dropdown
 - อยู่ที่ avatar มุมขวาบน Header
 - มี: ข้อมูลโปรไฟล์ + ข้อเสนอแนะ + คู่มือ + ประวัติอัปเดต + เปลี่ยนรหัสผ่าน + ออกจากระบบ

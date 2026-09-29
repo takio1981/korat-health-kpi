@@ -4,6 +4,64 @@
 
 ---
 
+## 2569-09-29 — แก้บั๊ก role ไม่เห็นเฉพาะขอบเขตตัวเอง (ตัวกรองสถานที่ + ตัวชี้วัด, หน้าบันทึกผลงานตัวชี้วัด)
+
+### คำขอ
+ต้องการให้ช่วยเช็ค role user รพ.,รพ.สต.,CUP,SSJ ในส่วนของตัวกรอง สถานที่ และตัวชี้วัด หน้าบันทึกผลงานตัวชี้วัด
+ทำไมถึงไม่เห็นเฉพาะกลุ่มงานตัวเอง ต้องการให้ช่วยแก้ไขให้ถูกต้องด้วย
+
+### สาเหตุที่ยืนยันจากการอ่านโค้ด + ทดสอบจริงด้วยบัญชีทุก role
+1. **Endpoint ที่ dashboard ใช้ดึงรายการ dropdown ตัวกรอง (`GET /departments`, `/hospitals`, `/hostype`,
+   `/districts`) ไม่มีการกรองตาม role เลยสักจุดเดียว** — คืนรายการทั้งจังหวัดให้ทุก role เหมือนกันหมด (1021
+   หน่วยบริการ, 32 อำเภอ, 17 หน่วยงาน ไม่ว่าจะ login ด้วย role ไหน) มีแค่ dashboard.ts (frontend) ที่ล็อค dept
+   ให้ `admin_ssj`/`user_ssj` เท่านั้น — **role อื่นที่ scope ควรถูกล็อคเหมือนกันตามตาราง Role System
+   (`admin_hos`/`admin_sso`/`user_hos`/`user_sso`: hospcode ตัวเอง, `admin_cup`/`user_cup`: อำเภอตัวเอง,
+   `user_ssj`: hospcode ตัวเองด้วย) ไม่เคยถูก implement เลย**
+2. **`GET /indicators` กรองด้วย `user.deptId != null` ตรงๆ โดยไม่เช็ค role ก่อน** — ยืนยันจากข้อมูลจริงว่า
+   `admin_cup` 11/20 บัญชี และ `admin_hos`/`admin_sso` ทุกบัญชี มี `dept_id` ติดตัวอยู่ในฐานข้อมูล **ทั้งที่ scope
+   จริงคือ "ทุก dept"** ทำให้บัญชีเหล่านี้โดนจำกัดเห็นแค่ตัวชี้วัดของ dept ตัวเองผิดๆ (ทดสอบยืนยัน: ก่อนแก้
+   `admin_cup`/`admin_hos`/`admin_sso` เห็นตัวชี้วัดแค่บางส่วน ทั้งที่ควรเห็นครบ 172 ตัว)
+
+### วิธีแก้
+1. เพิ่ม role constants ใน `api/server.js`: `ROLE_SCOPE_OWN_DEPT` (dept ตัวเอง), เพิ่ม `user_ssj` เข้า
+   `ROLE_SCOPE_HOSPCODE` เดิม (hospcode ตัวเอง) — ให้ตรงกับตาราง Role System ใน CLAUDE.md เป๊ะ
+2. แก้ `GET /departments` — กรองเหลือ dept ตัวเองสำหรับ `ROLE_SCOPE_OWN_DEPT`
+3. แก้ `GET /hospitals` + `GET /hostype` — กรองเหลือ hoscode ตัวเองสำหรับ `ROLE_SCOPE_HOSPCODE`, กรองเหลือทุก
+   หน่วยบริการในอำเภอตัวเองสำหรับ `ROLE_SCOPE_DISTRICT` (ผ่าน `getDistrictId()`)
+4. แก้ `GET /districts` — กรองเหลืออำเภอตัวเองสำหรับ `ROLE_SCOPE_DISTRICT`
+5. แก้ `GET /indicators` — เปลี่ยนเงื่อนไขจาก `user.deptId != null` เป็น `ROLE_SCOPE_OWN_DEPT.includes(user.role)
+   && user.deptId != null`
+6. แก้ `getDistrictId()` helper ให้ใช้ `chospital.distid` ตรงๆ แทน `CONCAT(provcode,distcode)` เอง (ตรงตามกฎ
+   chospital ใน CLAUDE.md)
+7. ปรับ `dashboard.ts` (`extractFilterLists()`/`clearFilters()`) — ลบ hardcode รายชื่อ role ที่ไม่ครบ (ลืม
+   user_hos/user_sso/user_cup) ออก เปลี่ยนเป็น auto-select ตัวกรองเมื่อรายการที่ backend กรองมาให้เหลือตัวเลือก
+   เดียว — กันปัญหา "แก้จุดหนึ่งแต่ลืมอีกจุด" แบบที่เจอมาแล้วซ้ำๆ ในโค้ดเดิม
+
+### ทดสอบยืนยัน (curl จริงด้วย JWT ของบัญชีจริงทุก role ที่เกี่ยวข้อง)
+เทียบผลก่อน/หลังแก้ ทุก role ตรงกับตาราง Role System ใน CLAUDE.md 100%:
+- `admin_cup`: depts=17 (ทุก dept ✅), hospitals=35 (เฉพาะอำเภอตัวเอง "ด่านขุนทด" ✅), districts=1 (ล็อคอำเภอตัวเอง
+  ✅), indicators=172 (ทุกตัว ✅ — **แก้บั๊กจากที่เคยเห็นน้อยกว่านี้**)
+- `admin_hos`/`admin_sso`: depts=17 (ทุก dept ✅), hospitals=1 (ล็อค hoscode ตัวเอง ✅), indicators=172 (ทุกตัว ✅
+  — **แก้บั๊ก**)
+- `admin_ssj`: depts=1 (ล็อค dept ตัวเอง ✅ เหมือนเดิม), hospitals=1021 (ทุกหน่วยบริการ ✅), indicators=35
+  (ตาม dept ✅ เหมือนเดิม)
+- `user_hos`/`user_sso`/`user_ssj`: depts=1 (ล็อค dept ตัวเอง ✅ — `user_sso` เพิ่งถูกล็อคถูกครั้งแรก), hospitals=1
+  (ล็อค hoscode ตัวเอง ✅ — `user_ssj` เพิ่งถูกล็อคถูกครั้งแรก)
+- `super_admin`: ไม่กระทบเลย เห็นครบทุกอย่างเหมือนเดิม (17/1021/32/14/172)
+- Playwright: dashboard เป็น `user_hos` → "หน่วยบริการ"+"หน่วยงาน" auto-select ถูกต้องเป็นของตัวเอง / เป็น
+  `admin_cup` → "อำเภอ" auto-select เป็น "ด่านขุนทด" ถูกต้อง, ค้นหาได้ข้อมูลจริง 500 รายการ
+- Spot-check `kpi-manage` (หน้าอื่นที่ใช้ endpoint เดียวกัน) เป็น `admin_ssj` — ยังทำงานปกติ ไม่กระทบ
+  (เห็น 35 ตัวชี้วัดของ dept ตัวเองเหมือนเดิม)
+- `node --check`, `npx tsc --noEmit`, `ng build --base-href /khupskpi/` ผ่านทั้งหมด
+
+### ไฟล์ที่แก้ไข
+- `api/server.js` — role constants, `getDistrictId()`, endpoints `/departments`, `/hospitals`, `/hostype`,
+  `/districts`, `/indicators`
+- `frontend/src/app/dashboard/dashboard.ts` — `extractFilterLists()`, `clearFilters()`
+- `CLAUDE.md`, `frontend/src/app/changelog/changelog.ts`, `docs/fix-log.md`
+
+---
+
 ## 2569-09-27 — เพิ่มตัวกรอง+badge ปีงบประมาณ (khd_fiscal_year) จาก KHD report_fiscal_year_config
 
 ### คำขอ

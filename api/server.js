@@ -912,12 +912,15 @@ const ROLE_ADMIN_ALL = ['admin_hos', 'admin_sso', 'admin_cup', 'admin_ssj', 'sup
 const ROLE_ADMIN_CENTRAL = ['admin_ssj', 'super_admin'];
 const ROLE_ADMIN_LOCAL = ['admin_hos', 'admin_sso', 'admin_cup']; // admin ระดับพื้นที่
 const ROLE_SCOPE_DISTRICT = ['user_cup', 'admin_cup']; // เห็นทุก hospcode ในอำเภอ
-const ROLE_SCOPE_HOSPCODE = ['user', 'user_hos', 'user_sso', 'admin_hos', 'admin_sso']; // เห็นเฉพาะ hospcode ตัวเอง (รวม 'user' เดิม)
+const ROLE_SCOPE_HOSPCODE = ['user', 'user_hos', 'user_sso', 'admin_hos', 'admin_sso', 'user_ssj']; // เห็นเฉพาะ hospcode ตัวเอง (รวม 'user' เดิม) — user_ssj ก็ hospcode ตัวเองเหมือนกัน (ตาราง Role System ใน CLAUDE.md)
+// เห็นเฉพาะ dept ตัวเอง (ตรงข้ามกับ admin_cup/admin_hos/admin_sso ที่เห็น "ทุก dept" แม้จะมี dept_id ติดตัวอยู่ก็ตาม)
+// ใช้แยกจาก ROLE_SCOPE_HOSPCODE เพราะ admin_hos/admin_sso อยู่ใน HOSPCODE (ล็อค hospcode) แต่ไม่ล็อค dept
+const ROLE_SCOPE_OWN_DEPT = ['admin_ssj', 'user_ssj', 'user_hos', 'user_sso', 'user_cup', 'user'];
 
-// Helper: ดึง distid ของ hospcode
+// Helper: ดึง distid ของ hospcode — ใช้ h.distid (pre-computed) เสมอ ไม่ CONCAT(provcode,distcode) เอง (ดู CLAUDE.md เรื่อง chospital)
 const getDistrictId = async (hospcode) => {
     if (!hospcode) return null;
-    const [rows] = await db.query('SELECT CONCAT(provcode, distcode) AS distid FROM chospital WHERE hoscode = ?', [hospcode]);
+    const [rows] = await db.query('SELECT distid FROM chospital WHERE hoscode = ?', [hospcode]);
     return rows.length > 0 ? rows[0].distid : null;
 };
 
@@ -5090,25 +5093,47 @@ apiRouter.get('/online-users', authenticateToken, isSuperAdmin, async (req, res)
     }
 });
 
+// GET /departments — กรองเหลือเฉพาะ dept ตัวเองสำหรับ role ที่ scope คือ "dept ตัวเอง" (ROLE_SCOPE_OWN_DEPT)
+// role อื่น (super_admin, admin_cup, admin_hos, admin_sso) เห็น "ทุก dept" แม้จะมี dept_id ติดตัวอยู่ก็ตาม (ตาราง Role System ใน CLAUDE.md)
 apiRouter.get('/departments', authenticateToken, async (req, res) => {
     try {
-        const [depts] = await db.query('SELECT * FROM departments ORDER BY dept_name');
+        const user = req.user;
+        let where = '';
+        const params = [];
+        if (ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null) {
+            where = 'WHERE id = ?';
+            params.push(user.deptId);
+        }
+        const [depts] = await db.query(`SELECT * FROM departments ${where} ORDER BY dept_name`, params);
         res.json({ success: true, data: depts });
     } catch (error) {
         res.status(500).json({ success: false });
     }
 });
 
+// GET /hospitals — กรองตาม role scope: ROLE_SCOPE_HOSPCODE เห็นเฉพาะ hoscode ตัวเอง, ROLE_SCOPE_DISTRICT เห็นทุก hoscode ในอำเภอตัวเอง
+// role อื่น (super_admin, admin_ssj) เห็นทุกหน่วยบริการ (ตาราง Role System ใน CLAUDE.md — admin_ssj scope คือ "ทุก hospcode")
 apiRouter.get('/hospitals', authenticateToken, async (req, res) => {
     try {
+        const user = req.user;
+        let where = '';
+        const params = [];
+        if (ROLE_SCOPE_HOSPCODE.includes(user.role) && user.hospcode) {
+            where = 'WHERE h.hoscode = ?';
+            params.push(user.hospcode);
+        } else if (ROLE_SCOPE_DISTRICT.includes(user.role) && user.hospcode) {
+            const distid = await getDistrictId(user.hospcode);
+            if (distid) { where = 'WHERE h.distid = ?'; params.push(distid); }
+        }
         const [hospitals] = await db.query(`
             SELECT h.hoscode, h.hosname, h.hostype, h.provcode, h.distcode, h.distid,
                    t.hostypename, d.distname
               FROM chospital h
          LEFT JOIN chostype t ON t.hostypecode = h.hostype
          LEFT JOIN co_district d ON d.distid = h.distid
+              ${where}
           ORDER BY FIELD(h.hostype,'05','06','07','18'), h.hosname
-        `);
+        `, params);
         res.json({ success: true, data: hospitals });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -5170,25 +5195,44 @@ apiRouter.delete('/hospitals/:hoscode', authenticateToken, isSuperAdmin, async (
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
+// GET /hostype — นับจำนวนหน่วยบริการเฉพาะในขอบเขตของ role (เหมือน /hospitals) กันนับรวมหน่วยบริการนอกขอบเขต
 apiRouter.get('/hostype', authenticateToken, async (req, res) => {
     try {
+        const user = req.user;
+        let hospJoinWhere = '';
+        const params = [];
+        if (ROLE_SCOPE_HOSPCODE.includes(user.role) && user.hospcode) {
+            hospJoinWhere = 'AND h.hoscode = ?';
+            params.push(user.hospcode);
+        } else if (ROLE_SCOPE_DISTRICT.includes(user.role) && user.hospcode) {
+            const distid = await getDistrictId(user.hospcode);
+            if (distid) { hospJoinWhere = 'AND h.distid = ?'; params.push(distid); }
+        }
         const [rows] = await db.query(`
             SELECT t.hostypecode, t.hostypename, COUNT(h.hoscode) AS hospital_count
             FROM chostype t
-            LEFT JOIN chospital h ON h.hostype = t.hostypecode
+            LEFT JOIN chospital h ON h.hostype = t.hostypecode ${hospJoinWhere}
             GROUP BY t.hostypecode, t.hostypename
             HAVING hospital_count > 0
             ORDER BY t.hostypecode
-        `);
+        `, params);
         res.json({ success: true, data: rows });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
+// GET /districts — ROLE_SCOPE_DISTRICT (admin_cup/user_cup) เห็นเฉพาะอำเภอตัวเอง, role อื่นเห็นทุกอำเภอ
 apiRouter.get('/districts', authenticateToken, async (req, res) => {
     try {
-        const [districts] = await db.query('SELECT distid, distname FROM co_district WHERE distid LIKE ? ORDER BY distname', ['30%']);
+        const user = req.user;
+        let where = 'WHERE distid LIKE ?';
+        const params = ['30%'];
+        if (ROLE_SCOPE_DISTRICT.includes(user.role) && user.hospcode) {
+            const distid = await getDistrictId(user.hospcode);
+            if (distid) { where = 'WHERE distid = ?'; params[0] = distid; }
+        }
+        const [districts] = await db.query(`SELECT distid, distname FROM co_district ${where} ORDER BY distname`, params);
         res.json({ success: true, data: districts });
     } catch (error) {
         res.status(500).json({ success: false });
@@ -6063,8 +6107,10 @@ apiRouter.get('/indicators', authenticateToken, async (req, res) => {
         const user = req.user;
         let whereClause = '';
         const params = [];
-        // กรองตาม dept ของ user (ยกเว้น super_admin เห็นทั้งหมด)
-        if (user.role !== 'super_admin' && user.deptId != null) {
+        // กรองตาม dept ของ user — เฉพาะ role ที่ scope คือ "dept ตัวเอง" (ROLE_SCOPE_OWN_DEPT)
+        // เดิมกรองด้วย user.deptId != null ตรงๆ ทำให้ admin_cup/admin_hos/admin_sso (scope "ทุก dept") โดนจำกัดผิดๆ
+        // เวลาบัญชีของ role เหล่านั้นบังเอิญมี dept_id ติดตัวอยู่ (พบจริงจากข้อมูล — admin_cup 11/20 บัญชีมี dept_id)
+        if (ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null) {
             whereClause = 'WHERE i.dept_id = ?';
             params.push(user.deptId);
         }
