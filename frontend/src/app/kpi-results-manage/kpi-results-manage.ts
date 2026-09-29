@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
+import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import Swal from 'sweetalert2';
 
 // month_bh encoding ที่ระบบใช้จริงทั้งระบบ: 10,11,12,1,2,...,9 (ปีงบเริ่ม ต.ค.=10) — เรียงตามปีงบ (ต.ค. ก่อน)
@@ -26,7 +27,7 @@ export class KpiResultsManageComponent implements OnInit {
 
   readonly months = FISCAL_MONTHS;
   readonly yearOptions: string[] = (() => {
-    const fy = new Date().getFullYear() + 543 + (new Date().getMonth() >= 9 ? 1 : 0);
+    const fy = getCurrentFiscalYear();
     return [String(fy + 1), String(fy), String(fy - 1), String(fy - 2), String(fy - 3)];
   })();
 

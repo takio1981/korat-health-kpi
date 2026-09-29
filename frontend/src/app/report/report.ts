@@ -7,6 +7,7 @@ import { FormsModule } from '@angular/forms';
 import { SkeletonTableComponent } from '../shared/skeleton-table/skeleton-table';
 import { ToastService } from '../services/toast.service';
 import { CriteriaTextPipe } from '../shared/criteria-text.pipe';
+import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -153,10 +154,10 @@ export class ReportComponent implements OnInit {
   }
 
   setDefaultYear() {
-    const currentYear = (new Date().getFullYear() + 543).toString();
-    if (this.filterYears.includes('2569')) {
-      this.selectedYear = '2569';
-    } else if (this.filterYears.includes(currentYear)) {
+    // ลำดับการเลือก: ปีงบประมาณปัจจุบัน (คำนวณจากวันที่จริง ต.ค.-ก.ย.) -> ปีล่าสุดที่มีข้อมูล
+    // เดิม hardcode '2569' ตรงๆ ทำให้ค้างที่ปีเดิมตลอดไปไม่ขยับตามปีงบจริง — ห้าม hardcode ปีซ้ำอีก
+    const currentYear = String(getCurrentFiscalYear());
+    if (this.filterYears.includes(currentYear)) {
       this.selectedYear = currentYear;
     } else if (this.filterYears.length > 0) {
       this.selectedYear = this.filterYears[0];

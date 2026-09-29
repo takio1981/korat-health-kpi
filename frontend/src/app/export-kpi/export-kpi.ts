@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { CriteriaTextPipe } from '../shared/criteria-text.pipe';
+import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -111,9 +112,7 @@ export class ExportKpiComponent implements OnInit {
       return;
     }
 
-    const now = new Date();
-    const thaiYear = now.getFullYear() + 543;
-    const currentFiscalYear = now.getMonth() >= 9 ? thaiYear + 1 : thaiYear;
+    const currentFiscalYear = getCurrentFiscalYear();
     this.exportYear = currentFiscalYear.toString();
     for (let y = currentFiscalYear + 1; y >= currentFiscalYear - 3; y--) {
       this.yearOptions.push(y.toString());

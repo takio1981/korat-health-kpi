@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { FormBuilderComponent } from '../form-builder/form-builder';
+import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
 
@@ -96,9 +97,9 @@ export class KpiManageComponent implements OnInit {
   khdCompareLastRun: Date | null = null;
   // ปีงบที่ใช้เทียบเกณฑ์กับ KHD (report_fiscal_year_config.fiscal_year) — เดิม frontend ไม่เคยส่งปีงบไปเลย
   // ทำให้เทียบได้แค่ปีงบ "ปัจจุบัน" ตามวันที่เท่านั้น ทั้งที่ remote มีข้อมูลมากกว่า 1 ปีงบพร้อมกันจริง (เช่น 2569+2570)
-  khdCompareYear: string = String(new Date().getFullYear() + 543 + (new Date().getMonth() >= 9 ? 1 : 0));
+  khdCompareYear: string = String(getCurrentFiscalYear());
   khdCompareYearOptions: string[] = (() => {
-    const fy = new Date().getFullYear() + 543 + (new Date().getMonth() >= 9 ? 1 : 0);
+    const fy = getCurrentFiscalYear();
     return [String(fy + 1), String(fy), String(fy - 1)];
   })();
   // filter เพิ่มสำหรับ indicators tab — กรองตามสถานะ compare กับ KHD

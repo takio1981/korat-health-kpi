@@ -4,6 +4,47 @@
 
 ---
 
+## 2569-09-29 — รวม logic คำนวณปีงบประมาณปัจจุบัน/ถัดไปทั้งระบบเป็นจุดเดียว (fiscal-year.util.ts)
+
+### คำขอ
+ต้องการเพิ่มการเลือกปีงบประมาณ ให้เลือกปีงบประมาณเริ่มต้นตามวันที่ปัจจุบัน คือ 1 ต.ค. 2569 - 30 กันยายน 2570 เป็น
+ปีงบประมาณ 2570 และใช้ logic นี้กับปีงบประมาณต่อไปด้วย
+
+### สิ่งที่ตรวจพบ
+ไล่ดูทุกจุดที่คำนวณ "ปีงบประมาณปัจจุบัน" ในฝั่ง frontend พบว่า **มีสูตรคำนวณแยกกันอิสระถึง 8 จุด ใน 7 ไฟล์**
+ไม่ตรงกันหมด:
+- `chart.ts` / `report.ts` (`setDefaultYear()`) — **hardcode `'2569'` ตรงๆ** เป็นค่า preference อันดับแรกเสมอ
+  (ถ้ามีข้อมูลปี 2569 อยู่ในระบบก็จะเลือกปีนี้ตลอดไปไม่ว่าจะผ่านไปกี่ปีก็ตาม) — จะเริ่มแสดงผลผิดทันทีที่ปีงบ 2570
+  เริ่มมีข้อมูลจริงในอีก 2 วันข้างหน้า (1 ต.ค. 2569) แต่หน้ารายงาน/กราฟจะยังค้างแสดงปี 2569 เป็นค่าเริ่มต้นต่อไป
+  เรื่อยๆ จนกว่าจะมีคนแก้โค้ด hardcode ใหม่ทุกปี
+- `kpi-setup.ts` — ใช้สูตร `getFullYear()+543+1` ตรงๆ ไม่ผ่านการคำนวณปีงบก่อน ทำให้ช่วง **ต.ค.-ธ.ค. ของทุกปี**
+  ได้ผลลัพธ์เป็นปีงบปัจจุบัน (ซ้ำ) แทนที่จะเป็นปีงบถัดไปที่ควรเป็น default สำหรับหน้า "สร้าง KPI ปีงบใหม่"
+- `kpi-manage.ts`, `dashboard.ts` (2 จุด), `export-kpi.ts`, `kpi-results-manage.ts` — คำนวณถูกต้องอยู่แล้ว (ใช้
+  `getMonth() >= 9 ? +1 : +0`) แต่เขียนซ้ำแยกกันคนละจุด เสี่ยงพลาด/ไม่ sync กันในอนาคต
+
+### สิ่งที่ทำ
+สร้าง `frontend/src/app/shared/fiscal-year.util.ts` — `getCurrentFiscalYear(date?)` / `getNextFiscalYear(date?)`
+จุดเดียวทั้งระบบ แล้ว refactor ทุกจุดที่เคยคำนวณเองให้เรียกใช้แทน:
+- `chart.ts`, `report.ts` — ลบ hardcode `'2569'` ออก ใช้ `getCurrentFiscalYear()` เป็น preference อันดับแรกแทน
+  (ยังคง fallback ไปปีล่าสุดที่มีข้อมูลจริงเหมือนเดิมถ้าปีงบปัจจุบันยังไม่มีข้อมูล)
+- `kpi-setup.ts` — เปลี่ยนเป็น `getNextFiscalYear()` แก้บั๊กช่วง ต.ค.-ธ.ค.
+- `kpi-manage.ts`, `dashboard.ts` (x2), `export-kpi.ts`, `kpi-results-manage.ts` — เปลี่ยนมาเรียก util แทนสูตรเดิม
+  (ผลลัพธ์เหมือนเดิมทุกจุด แค่รวมจุดคำนวณให้เหลือที่เดียว กันดริฟท์ในอนาคต)
+
+### ทดสอบยืนยัน (วันที่จริงตอนทดสอบ: 29 ก.ย. 2569 — 2 วันก่อนปีงบ 2570 เริ่ม)
+- Playwright: `kpi-setup` (สร้าง KPI ปีงบใหม่) → default = **2570** (ปีงบถัดไป ถูกต้อง)
+- Playwright: `kpi-manage` ปุ่มเทียบกับ KHD → default = **2569** (ปีงบปัจจุบัน ถูกต้อง)
+- `npx tsc --noEmit`, `ng build --base-href /khupskpi/` ผ่านทั้งหมด
+
+### ไฟล์ที่แก้ไข
+- `frontend/src/app/shared/fiscal-year.util.ts` (ใหม่)
+- `frontend/src/app/chart/chart.ts`, `frontend/src/app/report/report.ts`, `frontend/src/app/kpi-setup/kpi-setup.ts`,
+  `frontend/src/app/kpi-manage/kpi-manage.ts`, `frontend/src/app/dashboard/dashboard.ts`,
+  `frontend/src/app/export-kpi/export-kpi.ts`, `frontend/src/app/kpi-results-manage/kpi-results-manage.ts`
+- `CLAUDE.md`, `frontend/src/app/changelog/changelog.ts`, `docs/fix-log.md`
+
+---
+
 ## 2569-09-29 — เพิ่มตัวชี้วัดจาก KHD หลายตัวพร้อมกัน (checkbox) + เลือกปีงบประมาณดึงเกณฑ์อัตโนมัติ
 
 ### คำขอ

@@ -9,6 +9,7 @@ import Swal from 'sweetalert2';
 import { HttpErrorResponse } from '@angular/common/http';
 import { InitScrollLeftDirective } from './init-scroll-left.directive';
 import { CriteriaTextPipe } from '../shared/criteria-text.pipe';
+import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 
 @Component({
   selector: 'app-dashboard',
@@ -928,18 +929,13 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   setDefaultYear() {
-    const today = new Date();
-    let year = today.getFullYear();
-    if (today.getMonth() >= 9) {
-      year += 1;
-    }
-    this.selectedYear = (year + 543).toString();
+    this.selectedYear = String(getCurrentFiscalYear());
   }
 
   private _filterListsLoaded = false;
 
   extractFilterLists() {
-    const currentBhYear = new Date().getFullYear() + 543 + (new Date().getMonth() >= 9 ? 1 : 0);
+    const currentBhYear = getCurrentFiscalYear();
     this.filterYears = [currentBhYear + 1, currentBhYear, currentBhYear - 1, currentBhYear - 2].map(String);
 
     if (!this._filterListsLoaded) {
@@ -3916,7 +3912,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     this.dynamicMonthlyOriginal = {};
     this.dynamicEditMode = false;
     // สร้าง availableYears (ปีงบฯ ± 2 ปีปัจจุบัน)
-    const currentYear = new Date().getFullYear() + 543;
+    const currentYear = getCurrentFiscalYear();
     this.availableYears = [
       String(currentYear + 1), String(currentYear), String(currentYear - 1), String(currentYear - 2)
     ];

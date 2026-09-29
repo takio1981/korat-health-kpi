@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { CriteriaTextPipe } from '../shared/criteria-text.pipe';
+import { getNextFiscalYear } from '../shared/fiscal-year.util';
 import Swal from 'sweetalert2';
 
 @Component({
@@ -54,7 +55,10 @@ export class KpiSetupComponent implements OnInit {
       return;
     }
 
-    this.selectedYear = (new Date().getFullYear() + 543 + 1).toString();
+    // เดิมใช้ getFullYear()+543+1 ตรงๆ ไม่คำนึงเดือน ทำให้ช่วง ต.ค.-ธ.ค. ของทุกปี default ผิดเป็นปีงบปัจจุบัน
+    // แทนที่จะเป็นปีงบถัดไปที่ควรตั้งค่าใหม่ (getCurrentFiscalYear ผ่านช่วง ต.ค.-ธ.ค. ขยับ +1 ไปแล้วในตัว
+    // การ +1 ซ้ำแบบเดิมจึงกลายเป็นปีงบปัจจุบันแทนที่จะเป็นปีงบถัดไป)
+    this.selectedYear = String(getNextFiscalYear());
 
     // admin_ssj: ล็อค dept_id เป็นหน่วยงานของตัวเอง
     if (!this.isSuperAdmin && this.loggedInUser?.dept_id) {
