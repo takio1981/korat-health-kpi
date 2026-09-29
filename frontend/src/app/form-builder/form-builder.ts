@@ -72,7 +72,9 @@ export class FormBuilderComponent implements OnInit, OnChanges {
 
   ngOnInit() {
     this.isSuperAdmin = this.authService.getUserRole() === 'super_admin';
-    this.loadIndicators();
+    // Component นี้ฝังอยู่ใน kpi-manage/kpi-manager แบบไม่มี *ngIf (ทุก role โดน instantiate เสมอ แค่ปุ่มเปิดถูกซ่อน)
+    // GET /form-schemas/all-indicators hardcode isSuperAdmin — ยิงเฉพาะตอนเป็น super_admin กันยิง request ที่รู้อยู่แล้วว่าโดน 403 ทุกครั้ง
+    if (this.isSuperAdmin) this.loadIndicators();
   }
 
   ngOnChanges(changes: SimpleChanges) {

@@ -18,6 +18,13 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.09.29.c',
+      date: '29 กันยายน 2569 (build c)',
+      changes: [
+        { type: 'fix', text: 'แก้ Form Builder ยิง request GET /form-schemas/all-indicators (เฉพาะ super_admin) ทุกครั้งที่เปิดหน้าจัดการตัวชี้วัด/จัดการข้อมูล KPI แม้ login ด้วย role อื่นที่ไม่ใช่ super_admin ก็ตาม ทำให้เห็น error 403 ที่ console โดยไม่จำเป็น — ตอนนี้ยิง request เฉพาะตอนเป็น super_admin เท่านั้น' }
+      ]
+    },
+    {
       version: '2569.09.29.b',
       date: '29 กันยายน 2569 (build b)',
       changes: [

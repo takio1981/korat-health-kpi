@@ -4,6 +4,35 @@
 
 ---
 
+## 2569-09-29 — แก้ Form Builder ยิง request 403 โดยไม่จำเป็นสำหรับ role ที่ไม่ใช่ super_admin
+
+### คำขอ
+รายงาน error จาก browser console: `form-builder.ts:98 GET http://localhost:3700/khupskpi/api/form-schemas/all-indicators 403 (Forbidden)`
+
+### สาเหตุ
+`GET /form-schemas/all-indicators` hardcode `isSuperAdmin` (ตั้งใจ ตรงตาม CLAUDE.md — Form Builder เป็นฟีเจอร์
+เฉพาะ super_admin) — **403 เองไม่ใช่บั๊ก** แต่ตัว request ไม่ควรถูกยิงเลยถ้าไม่ใช่ super_admin ตั้งแต่แรก
+ตรวจโค้ดพบว่า `<app-form-builder>` ถูกฝังแบบไม่มี `*ngIf` ทั้งใน `kpi-manage.html` และ `kpi-manager.html` (มีแค่
+ปุ่ม "เปิด" ที่ถูกซ่อนจาก role อื่นด้วย `*ngIf="isSuperAdmin"` แต่ตัว component เองถูก instantiate เสมอ) —
+`ngOnInit()` เดิมเรียก `loadIndicators()` แบบไม่มีเงื่อนไข ทำให้ **ทุก role ที่เข้าหน้าจัดการตัวชี้วัด/จัดการ
+ข้อมูล KPI โดนยิง request นี้แล้วเจอ 403 เสมอ** แม้จะไม่มีทางเปิด Form Builder ได้อยู่แล้วก็ตาม
+
+### วิธีแก้
+`frontend/src/app/form-builder/form-builder.ts` `ngOnInit()` — เรียก `loadIndicators()` เฉพาะเมื่อ
+`this.isSuperAdmin === true` เท่านั้น
+
+### ทดสอบยืนยัน
+- Playwright ดักฟัง network response: login เป็น `admin_ssj` เข้าหน้าจัดการตัวชี้วัด → **ไม่มี** request ไปยัง
+  `/form-schemas/all-indicators` เลย (เดิมมีแล้วได้ 403)
+- login เป็น `super_admin` เข้าหน้าเดียวกัน → ยังยิง request ตามปกติ ได้ `200 OK` เหมือนเดิม (ไม่กระทบฟีเจอร์จริง)
+- `npx tsc --noEmit`, `ng build --base-href /khupskpi/` ผ่านทั้งหมด
+
+### ไฟล์ที่แก้ไข
+- `frontend/src/app/form-builder/form-builder.ts`
+- `frontend/src/app/changelog/changelog.ts`, `docs/fix-log.md`
+
+---
+
 ## 2569-09-29 — แก้บั๊ก role ไม่เห็นเฉพาะขอบเขตตัวเอง (ตัวกรองสถานที่ + ตัวชี้วัด, หน้าบันทึกผลงานตัวชี้วัด)
 
 ### คำขอ
