@@ -4,6 +4,44 @@
 
 ---
 
+## 2569-09-29 — เพิ่มตัวชี้วัดจาก KHD หลายตัวพร้อมกัน (checkbox) + เลือกปีงบประมาณดึงเกณฑ์อัตโนมัติ
+
+### คำขอ
+ต้องการปรับการเปรียบเทียบตัวชี้วัดจาก KHD ที่ยังไม่มีในระบบ (33 รายการ) ให้เลือก checkbox หน้าข้อตัวชี้วัด หรือ
+เลือกทั้งหมด เพื่อเพิ่มได้ และให้สามารถเลือกได้ว่าจะเพิ่มตัวชี้วัดในปีงบประมาณอะไรได้ด้วย
+
+### สิ่งที่ทำ
+1. **Backend** — เพิ่ม `POST /report-compare/bulk-add-from-khd` (super_admin) รับ `khd_report_ids[]` +
+   `dept_id`/`main_indicator_id`/`year_bh` ร่วมกันทุกตัวที่เลือก — วนเพิ่มทีละตัว ข้ามตัวที่ไม่มี table_process
+   หรือมีอยู่แล้ว (นับ skipped พร้อมเหตุผล ไม่ error ทั้ง batch)
+2. เพิ่ม helper `getKhdEffectiveCriteriaFor()` — ดึง `target_percentage`/`target_condition` จาก KHD
+   `report_fiscal_year_config` ของปีงบที่เลือกก่อนเสมอ (ถ้ามี) ไม่งั้น fallback ไปที่ค่า default ใน `reports` —
+   ใช้ทั้งใน endpoint เดิม (`/report-compare/add-from-khd`, ขยายให้รับ `year_bh` เพิ่ม) และ endpoint ใหม่ —
+   **เดิม endpoint เพิ่มตัวชี้วัดจาก KHD ไม่เคยตั้งเกณฑ์ให้เลยแม้แต่ตัวเดียว** ต้องมาตั้งเองทีหลังทุกครั้ง
+3. **Frontend** — ตาราง "ตัวชี้วัดจาก KHD ที่ยังไม่มีในระบบ" เพิ่ม checkbox ต่อแถว + checkbox "เลือกทั้งหมด" ที่
+   หัวตาราง (indeterminate state เมื่อเลือกบางส่วน) + ปุ่ม "เพิ่มที่เลือก (N)" เปิด modal ใหม่ให้ตั้งหน่วยงาน/
+   หมวดหมู่หลัก/ปีงบประมาณร่วมกันทุกตัว — เพิ่ม dropdown "ปีงบประมาณ" ในโมดัล "เพิ่มเข้าระบบ" เดิม (ทีละตัว) ด้วย
+   เพื่อความสอดคล้องกัน
+
+### ทดสอบยืนยัน (ผ่าน UI จริง ไม่ใช่แค่ mock)
+- เลือก checkbox 2 รายการ (`excellence_indicator_2_1`, `excellence_indicator_2_2`) → เปิด modal → เลือกปีงบ
+  2570 → กด "เพิ่ม 2 รายการ" → สำเร็จ, รายการหายจากตาราง "ยังไม่มีในระบบ" (34 → 32)
+- ตรวจ DB โดยตรงหลังเพิ่ม: ทั้ง 2 แถวมี `khd_fiscal_year='2570'`, `criterion`/`target_condition` ตรงกับค่าจริงใน
+  KHD `report_fiscal_year_config` ของปี 2570 เป๊ะ (ไม่ใช่ค่า default จาก `reports`) — ยืนยันว่าดึงเกณฑ์ตามปีที่
+  เลือกถูกต้องจริง ไม่ใช่แค่ค่าเริ่มต้น
+- `node --check`, `npx tsc --noEmit`, `ng build --base-href /khupskpi/` ผ่านทั้งหมด
+
+### ไฟล์ที่แก้ไข
+- `api/server.js` — `getKhdEffectiveCriteriaFor()`, ขยาย `POST /report-compare/add-from-khd`, เพิ่ม
+  `POST /report-compare/bulk-add-from-khd`
+- `frontend/src/app/services/auth.ts` — `reportCompareAddFromKhd()` (เพิ่ม year_bh),
+  `reportCompareBulkAddFromKhd()`
+- `frontend/src/app/kpi-manage/kpi-manage.ts`/`.html` — checkbox selection state, bulk modal,
+  `openBulkAddFromKhd()`/`confirmBulkAddFromKhd()`
+- `CLAUDE.md`, `frontend/src/app/changelog/changelog.ts`, `docs/fix-log.md`
+
+---
+
 ## 2569-09-29 — แก้ Form Builder ยิง request 403 โดยไม่จำเป็นสำหรับ role ที่ไม่ใช่ super_admin
 
 ### คำขอ

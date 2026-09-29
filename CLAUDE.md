@@ -511,9 +511,26 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   khd_criteria_source, khd_fiscal_year`) คู่กับ `local_*` ต่อ item
 - Endpoint ย่อยอื่นที่เกี่ยวข้อง (ทั้งหมด query `reports` ตรงๆ กรอง `data_source='excel'`): `POST
   /report-compare/sync` (sync ชื่อ/table_process/code/data_source เข้า local — **ไม่แตะ**
-  target_percentage/target_condition/criterion), `POST /report-compare/add-from-khd` (เพิ่มตัวชี้วัดใหม่จาก
-  KHD), `GET /report-compare/strategies|departments|main-indicators|hospitals` (เทียบ main_yut/dept/table_process
-  แบบ text match + `chospital` แยกจาก reports)
+  target_percentage/target_condition/criterion), `POST /report-compare/add-from-khd` +
+  `POST /report-compare/bulk-add-from-khd` (เพิ่มตัวชี้วัดใหม่จาก KHD ทีละตัว/หลายตัวพร้อมกัน — ดูหัวข้อ
+  "เพิ่มตัวชี้วัดจาก KHD" ด้านล่าง), `GET /report-compare/strategies|departments|main-indicators|hospitals`
+  (เทียบ main_yut/dept/table_process แบบ text match + `chospital` แยกจาก reports)
+
+### เพิ่มตัวชี้วัดจาก KHD (ทีละตัว + หลายตัวพร้อมกัน) — ตาราง "KHD มีแต่ยังไม่มีใน Local"
+- `POST /report-compare/add-from-khd` (ทีละตัว, ปุ่ม "เพิ่มเข้าระบบ" ต่อแถว) และ `POST
+  /report-compare/bulk-add-from-khd` (หลายตัวพร้อมกัน, checkbox + ปุ่ม "เพิ่มที่เลือก") — ทั้งคู่รับ `year_bh`
+  เพิ่มเติม (optional) เพื่อดึง `target_percentage`/`target_condition` จาก KHD `report_fiscal_year_config` ของปี
+  นั้นมาตั้งเป็น `criterion`/`target_condition`/`khd_fiscal_year` ทันทีตอนสร้าง (เดิมไม่เคยตั้งเลย ต้องมาแก้เอง
+  ทีหลังเสมอ) — ใช้ helper ร่วม `getKhdEffectiveCriteriaFor()` (ตรรกะเดียวกับ `getEffectiveKhdCriteria()` ใน
+  `GET /report-compare` แต่ดึงทีละ/หลาย report_id แทนที่จะดึงทั้งหมดมา build map) — ถ้าไม่พบ config ของปีนั้น
+  fallback ไปใช้ค่า default จาก `reports` เอง (`khd_fiscal_year` จะเป็น `null` ในกรณีนี้ ไม่ใช่ปีที่เลือก)
+- Bulk endpoint: `dept_id`/`main_indicator_id`/`year_bh` ใช้ค่าเดียวกันกับทุกตัวที่เลือก (แก้แยกทีละตัวได้ภายหลัง
+  ในตารางปกติ) — ข้ามรายการที่ไม่มี `table_process` หรือมี `table_process` ซ้ำกับที่มีอยู่แล้ว (นับเป็น `skipped`
+  พร้อมเหตุผล ไม่ error ทั้ง batch)
+- Frontend (`kpi-manage.ts`): `khdMissingLocalSelected: Set<number>` (key = `khd_report_id`) — checkbox ต่อแถว +
+  "เลือกทั้งหมด" (แสดง indeterminate state เมื่อเลือกบางส่วน, pattern เดียวกับ `export-kpi.ts`
+  `isAllSyncSelected`/`isPartialSyncSelected`) — clear selection อัตโนมัติทุกครั้งที่ `runKhdCompare()` reload
+  รายการใหม่ (กัน selection ค้างอ้างอิงรายการที่ถูกเพิ่มไปแล้ว/หายไป)
 
 ### KHD Link ถาวร + Badge แหล่งที่มาข้อมูล (key_in / hdc / local-only)
 - `kpi_indicators.khd_report_id` INT NULL — link **ถาวร** ไปยัง KHD `reports.report_id` (แยกจาก

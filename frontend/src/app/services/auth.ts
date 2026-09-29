@@ -587,10 +587,15 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.post(`${this.apiUrl}/report-compare/sync`, { khd_report_ids }, { headers });
   }
-  reportCompareAddFromKhd(khd_report_id: number, dept_id: number|null, main_indicator_id: number|null): Observable<any> {
+  reportCompareAddFromKhd(khd_report_id: number, dept_id: number|null, main_indicator_id: number|null, year_bh: string|null = null): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.post(`${this.apiUrl}/report-compare/add-from-khd`, { khd_report_id, dept_id, main_indicator_id }, { headers });
+    return this.http.post(`${this.apiUrl}/report-compare/add-from-khd`, { khd_report_id, dept_id, main_indicator_id, year_bh }, { headers });
+  }
+  reportCompareBulkAddFromKhd(khd_report_ids: number[], dept_id: number|null, main_indicator_id: number|null, year_bh: string|null = null): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/report-compare/bulk-add-from-khd`, { khd_report_ids, dept_id, main_indicator_id, year_bh }, { headers });
   }
   reportCompareStrategies(): Observable<any> {
     const token = localStorage.getItem('kpi_token');

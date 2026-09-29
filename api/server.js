@@ -11219,14 +11219,29 @@ apiRouter.post('/report-compare/sync', authenticateToken, isSuperAdmin, async (r
 });
 
 // POST /report-compare/add-from-khd — เพิ่มตัวชี้วัดจาก KHD เข้า Local พร้อม dept_id + main_indicator_id
+// Helper: ดึงเกณฑ์ effective (target_percentage/target_condition) ของ report_id หนึ่งตัว สำหรับปีงบที่ระบุ
+// ใช้ report_fiscal_year_config ของปีนั้นก่อนเสมอถ้ามี ไม่งั้น fallback ไปที่ reports (ค่า default) — ตรรกะเดียวกับ
+// getEffectiveKhdCriteria ใน GET /report-compare (คนละจุดเพราะ endpoint นี้ดึงทีละ/หลาย report_id ไม่ใช่ทั้งหมด)
+async function getKhdEffectiveCriteriaFor(remoteDb, reportId, targetPercentage, targetCondition, yearBh) {
+    if (!yearBh) return { target_percentage: targetPercentage, target_condition: targetCondition, khd_fiscal_year: null };
+    const [fyRows] = await remoteDb.query(
+        'SELECT target_percentage, target_condition FROM report_fiscal_year_config WHERE report_id = ? AND fiscal_year = ?',
+        [reportId, yearBh]
+    );
+    if (fyRows.length && fyRows[0].target_percentage != null) {
+        return { target_percentage: fyRows[0].target_percentage, target_condition: fyRows[0].target_condition, khd_fiscal_year: yearBh };
+    }
+    return { target_percentage: targetPercentage, target_condition: targetCondition, khd_fiscal_year: null };
+}
+
 apiRouter.post('/report-compare/add-from-khd', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
     if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
-    const { khd_report_id, dept_id, main_indicator_id } = req.body;
+    const { khd_report_id, dept_id, main_indicator_id, year_bh } = req.body;
     if (!khd_report_id) return res.status(400).json({ success: false, message: 'กรุณาระบุ khd_report_id' });
     try {
         const [khdRows] = await remoteDb.query(
-            'SELECT report_id, report_name, report_code, table_process, data_source FROM reports WHERE report_id = ?',
+            'SELECT report_id, report_name, report_code, table_process, data_source, target_percentage, target_condition FROM reports WHERE report_id = ?',
             [khd_report_id]
         );
         if (!khdRows.length) return res.status(404).json({ success: false, message: 'ไม่พบรายการนี้ใน KHD' });
@@ -11234,16 +11249,65 @@ apiRouter.post('/report-compare/add-from-khd', authenticateToken, isSuperAdmin, 
         if (!khd.table_process) return res.status(400).json({ success: false, message: 'รายการ KHD นี้ไม่มี table_process' });
         const [existing] = await db.query('SELECT id FROM kpi_indicators WHERE table_process = ?', [khd.table_process]);
         if (existing.length) return res.status(409).json({ success: false, message: 'มีตัวชี้วัดนี้ในระบบแล้ว (table_process ซ้ำ)' });
+        const effective = await getKhdEffectiveCriteriaFor(remoteDb, khd.report_id, khd.target_percentage, khd.target_condition, year_bh);
         const [ins] = await db.query(
-            'INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_code, dept_id, main_indicator_id, is_active, data_source, khd_report_id) VALUES (?, ?, ?, ?, ?, 1, ?, ?)',
-            [khd.report_name, khd.table_process, khd.report_code || null, dept_id || null, main_indicator_id || null, khd.data_source || null, khd.report_id]
+            `INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_code, dept_id, main_indicator_id, is_active,
+                data_source, khd_report_id, criterion, target_condition, khd_fiscal_year)
+             VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
+            [khd.report_name, khd.table_process, khd.report_code || null, dept_id || null, main_indicator_id || null,
+             khd.data_source || null, khd.report_id, effective.target_percentage || null, effective.target_condition || null, effective.khd_fiscal_year]
         );
         await db.query(
             'INSERT INTO system_logs (user_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
             [req.user.userId, 'ADD_FROM_KHD', 'kpi_indicators', ins.insertId,
-             JSON.stringify({ khd_report_id, table_process: khd.table_process, dept_id: dept_id || null, main_indicator_id: main_indicator_id || null }), req.ip]
+             JSON.stringify({ khd_report_id, table_process: khd.table_process, dept_id: dept_id || null, main_indicator_id: main_indicator_id || null, year_bh: year_bh || null }), req.ip]
         );
         res.json({ success: true, message: `เพิ่ม "${khd.report_name}" เข้าระบบเรียบร้อย`, id: ins.insertId });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// POST /report-compare/bulk-add-from-khd — เพิ่มตัวชี้วัดจาก KHD หลายตัวพร้อมกัน (checkbox เลือกจากตาราง "ยังไม่มีในระบบ")
+// dept_id/main_indicator_id/year_bh ใช้ค่าเดียวกันกับทุกตัวที่เลือก (แก้แยกทีละตัวได้ภายหลังเหมือนเดิม)
+apiRouter.post('/report-compare/bulk-add-from-khd', authenticateToken, isSuperAdmin, async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
+    const { khd_report_ids, dept_id, main_indicator_id, year_bh } = req.body;
+    if (!Array.isArray(khd_report_ids) || khd_report_ids.length === 0) {
+        return res.status(400).json({ success: false, message: 'กรุณาเลือกตัวชี้วัดที่ต้องการเพิ่มอย่างน้อย 1 รายการ' });
+    }
+    try {
+        const [khdRows] = await remoteDb.query(
+            'SELECT report_id, report_name, report_code, table_process, data_source, target_percentage, target_condition FROM reports WHERE report_id IN (?)',
+            [khd_report_ids]
+        );
+        let inserted = 0, skipped = 0;
+        const skippedNames = [];
+        for (const khd of khdRows) {
+            if (!khd.table_process) { skipped++; skippedNames.push(khd.report_name + ' (ไม่มี table_process)'); continue; }
+            const [existing] = await db.query('SELECT id FROM kpi_indicators WHERE table_process = ?', [khd.table_process]);
+            if (existing.length) { skipped++; skippedNames.push(khd.report_name + ' (มีอยู่แล้ว)'); continue; }
+            const effective = await getKhdEffectiveCriteriaFor(remoteDb, khd.report_id, khd.target_percentage, khd.target_condition, year_bh);
+            await db.query(
+                `INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_code, dept_id, main_indicator_id, is_active,
+                    data_source, khd_report_id, criterion, target_condition, khd_fiscal_year)
+                 VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
+                [khd.report_name, khd.table_process, khd.report_code || null, dept_id || null, main_indicator_id || null,
+                 khd.data_source || null, khd.report_id, effective.target_percentage || null, effective.target_condition || null, effective.khd_fiscal_year]
+            );
+            inserted++;
+        }
+        await db.query(
+            'INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+            [req.user.userId, 'BULK_ADD_FROM_KHD', 'kpi_indicators',
+             JSON.stringify({ requested: khd_report_ids.length, inserted, skipped, dept_id: dept_id || null, main_indicator_id: main_indicator_id || null, year_bh: year_bh || null }), req.ip]
+        );
+        res.json({
+            success: true,
+            message: `เพิ่มสำเร็จ ${inserted} รายการ${skipped > 0 ? `, ข้าม ${skipped} รายการ` : ''}`,
+            inserted, skipped, skippedNames
+        });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }

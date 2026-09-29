@@ -105,10 +105,16 @@ export class KpiManageComponent implements OnInit {
   filterKhdStatus: string = '';      // '' | 'match' | 'different' | 'missing_remote' | 'not_compared' | 'inactive'
   // filter ตามสถานะการบันทึกผลงาน (ใช้ร่วมกับ filterKhdStatus ได้ — คนละมิติกัน)
   filterResultStatus: string = '';   // '' | 'has_results' | 'no_results'
-  khdAddModal: { open: boolean; item: any; deptId: number|null; mainIndicatorId: number|null } = {
-    open: false, item: null, deptId: null, mainIndicatorId: null
+  khdAddModal: { open: boolean; item: any; deptId: number|null; mainIndicatorId: number|null; yearBh: string } = {
+    open: false, item: null, deptId: null, mainIndicatorId: null, yearBh: this.khdCompareYear
   };
   khdAddLoading: boolean = false;
+  // เลือก checkbox หลายตัวจากตาราง "KHD มีแต่ยังไม่มีใน Local" — key คือ khd_report_id
+  khdMissingLocalSelected: Set<number> = new Set();
+  khdBulkAddModal: { open: boolean; deptId: number|null; mainIndicatorId: number|null; yearBh: string } = {
+    open: false, deptId: null, mainIndicatorId: null, yearBh: this.khdCompareYear
+  };
+  khdBulkAddLoading: boolean = false;
 
   // ยุทธศาสตร์ compare
   stratCompareLoading = false;
@@ -972,6 +978,7 @@ export class KpiManageComponent implements OnInit {
           }
           this.khdCompareSummary = res.summary;
           this.khdCompareLastRun = new Date();
+          this.khdMissingLocalSelected.clear();
           this.applyFilter();
           this.cdr.detectChanges();
         }
@@ -1278,14 +1285,14 @@ export class KpiManageComponent implements OnInit {
   }
 
   openAddFromKhd(item: any) {
-    this.khdAddModal = { open: true, item, deptId: null, mainIndicatorId: null };
+    this.khdAddModal = { open: true, item, deptId: null, mainIndicatorId: null, yearBh: this.khdCompareYear };
   }
 
   confirmAddFromKhd() {
     const m = this.khdAddModal;
     if (!m.item?.khd_report_id) return;
     this.khdAddLoading = true;
-    this.authService.reportCompareAddFromKhd(m.item.khd_report_id, m.deptId, m.mainIndicatorId).subscribe({
+    this.authService.reportCompareAddFromKhd(m.item.khd_report_id, m.deptId, m.mainIndicatorId, m.yearBh).subscribe({
       next: (res: any) => {
         this.khdAddLoading = false;
         if (res.success) {
@@ -1299,6 +1306,61 @@ export class KpiManageComponent implements OnInit {
       },
       error: (err: any) => {
         this.khdAddLoading = false;
+        Swal.fire('ผิดพลาด', err.error?.message || 'เกิดข้อผิดพลาด', 'error');
+      }
+    });
+  }
+
+  // === Checkbox เลือกหลายตัวจากตาราง "KHD มีแต่ยังไม่มีใน Local" + เพิ่มเข้าระบบทีเดียว ===
+  toggleMissingLocalSelect(item: any) {
+    const id = item.khd_report_id;
+    if (this.khdMissingLocalSelected.has(id)) this.khdMissingLocalSelected.delete(id);
+    else this.khdMissingLocalSelected.add(id);
+  }
+
+  toggleMissingLocalSelectAll() {
+    if (this.isMissingLocalAllSelected) {
+      this.khdMissingLocalSelected.clear();
+    } else {
+      this.khdMissingLocalSelected = new Set(this.khdMissingLocalItems.map(i => i.khd_report_id));
+    }
+  }
+
+  get isMissingLocalAllSelected(): boolean {
+    const items = this.khdMissingLocalItems;
+    return items.length > 0 && items.every(i => this.khdMissingLocalSelected.has(i.khd_report_id));
+  }
+
+  get isMissingLocalPartialSelected(): boolean {
+    return this.khdMissingLocalSelected.size > 0 && !this.isMissingLocalAllSelected;
+  }
+
+  openBulkAddFromKhd() {
+    if (this.khdMissingLocalSelected.size === 0) return;
+    this.khdBulkAddModal = { open: true, deptId: null, mainIndicatorId: null, yearBh: this.khdCompareYear };
+  }
+
+  confirmBulkAddFromKhd() {
+    const ids = Array.from(this.khdMissingLocalSelected);
+    if (ids.length === 0) return;
+    const m = this.khdBulkAddModal;
+    this.khdBulkAddLoading = true;
+    this.authService.reportCompareBulkAddFromKhd(ids, m.deptId, m.mainIndicatorId, m.yearBh).subscribe({
+      next: (res: any) => {
+        this.khdBulkAddLoading = false;
+        if (res.success) {
+          this.khdBulkAddModal.open = false;
+          this.khdMissingLocalSelected.clear();
+          const skippedText = res.skipped > 0 ? `<p class="text-xs text-amber-600 mt-2">ข้าม ${res.skipped} รายการ: ${(res.skippedNames || []).join(', ')}</p>` : '';
+          Swal.fire({ icon: 'success', title: 'สำเร็จ', html: `<p>${res.message}</p>${skippedText}` });
+          this.loadAllData();
+          this.runKhdCompare();
+        } else {
+          Swal.fire('ผิดพลาด', res.message, 'error');
+        }
+      },
+      error: (err: any) => {
+        this.khdBulkAddLoading = false;
         Swal.fire('ผิดพลาด', err.error?.message || 'เกิดข้อผิดพลาด', 'error');
       }
     });
