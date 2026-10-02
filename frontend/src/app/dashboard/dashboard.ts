@@ -775,7 +775,9 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
           });
 
           this.filteredData = res.data;
-          this.setDefaultYear();
+          // คงปีงบที่ผู้ใช้เลือกไว้ — เดิม reset เป็นปีงบปัจจุบันทุกครั้ง ทำให้ค้นหาปีย้อนหลังแล้ว
+          // applyFilters() กรอง matchYear ทิ้งหมดจนแสดง 0 รายการ ทั้งที่ backend คืนข้อมูลมาแล้ว
+          if (!this.selectedYear) this.setDefaultYear();
           this.extractFilterLists();
 
           // ตั้ง filter เริ่มต้นตาม role ของผู้ใช้ (เฉพาะครั้งแรก)

@@ -860,3 +860,31 @@ notification ประเภทอื่นอีกกว่า 15 จุด (K
 ### Deploy
 Build + redeploy ทั้ง backend และ frontend Docker container เรียบร้อย (`docker compose build --no-cache` +
 `docker compose up -d` ทั้ง 2 service) ยืนยัน healthy ทั้งคู่ก่อน push ขึ้น GitHub
+
+---
+
+## 2569-10-02 — หน้าบันทึกผลงานตัวชี้วัด: ค้นหาปีงบย้อนหลังแล้วแสดง 0 รายการ
+
+### อาการ
+เลือกตัวกรองปีงบประมาณ 2569 (ปีงบที่ผ่านมา) + อำเภอ แล้วกด "ค้นหา" — backend คืนข้อมูลมาครบ (ยืนยันจาก
+network: `GET /kpi-results?year=2569&district=...` คืน 500 แถว) แต่ตารางแสดง "แสดง 0 รายการ" และ dropdown
+ปีงบเด้งกลับเป็น 2570 เอง — พบระหว่างถ่ายภาพหน้าจอประกอบคู่มือในเล่มผลงาน (ปีงบ 2570 เพิ่งเริ่ม 1 ต.ค. 2569
+จึงยังไม่มีข้อมูล ทำให้ผู้ใช้ที่ต้องการดูข้อมูลปี 2569 ดูไม่ได้เลยทุกคน)
+
+### สาเหตุ
+`loadKpiData()` ใน `dashboard.ts` เรียก `setDefaultYear()` ทุกครั้งหลังโหลดสำเร็จ → `selectedYear` ถูกเขียนทับ
+เป็นปีงบปัจจุบัน → `applyFilters()` เทียบ `item.year_bh === selectedYear` ไม่ตรง → กรองทิ้งหมด
+
+### วิธีแก้
+เปลี่ยนเป็น `if (!this.selectedYear) this.setDefaultYear();` — ตั้งค่าเริ่มต้นเฉพาะตอนยังไม่ได้เลือกปี
+(สอดคล้องกับจุดอื่นในไฟล์เดียวกันที่ใช้ guard แบบนี้อยู่แล้ว)
+
+### ทดสอบ
+dev server (ng serve) — ค้นหาปีงบ 2569 อำเภอโนนสูง แสดงข้อมูลครบ ปีงบไม่เด้งกลับ (ตรวจด้วย Playwright)
+
+### ไฟล์ที่แก้ไข
+- `frontend/src/app/dashboard/dashboard.ts`
+- `frontend/src/app/changelog/changelog.ts` — เพิ่ม entry `2569.10.02.a`
+
+### Deploy
+ยังไม่ได้ build/deploy Docker
