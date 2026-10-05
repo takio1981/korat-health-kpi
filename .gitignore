@@ -54,3 +54,7 @@ __screenshots__/
 # System files
 .DS_Store
 Thumbs.db
+
+# เล่มผลงานวิชาการ — เก็บในเครื่องเท่านั้น (repo เป็นสาธารณะ เนื้อหามีข้อมูลส่วนบุคคลของผู้จัดทำ)
+docs/khupskpi-book/
+docs/ชำนาญการ.docx

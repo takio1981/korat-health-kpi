@@ -899,6 +899,8 @@ docker builder prune -af
 ทดสอบผ่านเท่านั้น ห้ามใส่ฟีเจอร์ที่ยังไม่ได้ทดสอบลงเล่ม)
 
 - **Source อยู่ที่ `docs/khupskpi-book/`** (Node.js + `docx` + `sharp`) — ห้ามแก้ไฟล์ `.docx` ด้วยมือ ให้แก้ที่ source แล้ว build ใหม่
+- **⚠️ เก็บในเครื่องเท่านั้น ห้าม commit/push เด็ดขาด** — ทั้ง `docs/khupskpi-book/` และ `docs/ชำนาญการ.docx` อยู่ใน `.gitignore`
+  (repo บน GitHub เป็นสาธารณะ และเล่มมีข้อมูลส่วนบุคคลของผู้จัดทำ — ผู้ใช้ตัดสินใจแล้ว) ห้ามใช้ `git add -f` กับ path เหล่านี้
   - `chapter1.js`–`chapter5.js`, `references.js`, `appendix.js` — เนื้อหาบทที่ 1–5 / บรรณานุกรม / ภาคผนวก
   - `manual.js` — ภาคผนวก ก คู่มือการใช้งานรายเมนู (ขั้นตอน + ภาพหน้าจอใน `man/*.jpg` + ผังงาน)
   - `menu-flows.js` (+ `menu-flow-svg.js`) — ผังงานรายเมนู สัญลักษณ์มาตรฐาน ISO 5807 → `flow/*.png`
