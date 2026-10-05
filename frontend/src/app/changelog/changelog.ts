@@ -18,6 +18,13 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.10.05.a',
+      date: '5 ตุลาคม 2569 (build a)',
+      changes: [
+        { type: 'improve', text: 'หน้าต่าง "เพิ่มตัวชี้วัด" (หน้าบันทึกผลงานตัวชี้วัด) แสดงป้าย table_process (ไอคอนตาราง สีเหลือง) ใต้ชื่อตัวชี้วัดทุกรายการ — ช่วยแยกตัวชี้วัดที่ชื่อคล้ายกันได้ชัดเจน ตัวที่ยังไม่กำหนด table_process แสดงป้ายสีเทา' }
+      ]
+    },
+    {
       version: '2569.10.02.a',
       date: '2 ตุลาคม 2569 (build a)',
       changes: [

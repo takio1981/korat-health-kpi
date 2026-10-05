@@ -1485,7 +1485,16 @@
               <input type="checkbox" [checked]="isAddKpiSelected(item)" (change)="toggleAddKpi(item)" class="rounded text-purple-600 focus:ring-purple-400">
             </td>
             <td class="px-3 py-2 text-gray-600">{{ item.main_indicator_name }}</td>
-            <td class="px-3 py-2 font-medium text-gray-900">{{ item.kpi_indicators_name }}<span *ngIf="item | criteriaText as crit" class="text-[10px] font-normal text-amber-600 ml-1">({{ crit }})</span></td>
+            <td class="px-3 py-2 font-medium text-gray-900">{{ item.kpi_indicators_name }}<span *ngIf="item | criteriaText as crit" class="text-[10px] font-normal text-amber-600 ml-1">({{ crit }})</span>
+              <div class="mt-1">
+                <span *ngIf="item.table_process" class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded text-[10px] font-mono whitespace-nowrap" [title]="'table_process: ' + item.table_process">
+                  <i class="fas fa-table text-[9px]"></i>{{ item.table_process }}
+                </span>
+                <span *ngIf="!item.table_process" class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-gray-50 text-gray-400 border border-gray-200 rounded text-[10px] whitespace-nowrap" title="ตัวชี้วัดนี้ยังไม่ได้กำหนด table_process">
+                  <i class="fas fa-table text-[9px]"></i>ไม่มี table_process
+                </span>
+              </div>
+            </td>
             <td class="px-3 py-2 text-gray-600">{{ item.dept_name }}</td>
             <td class="px-2 py-2 text-center text-gray-500 font-medium">{{ item.year_bh }}</td>
             <td class="px-2 py-2">

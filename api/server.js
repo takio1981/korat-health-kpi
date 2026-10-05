@@ -4532,6 +4532,7 @@ apiRouter.get('/kpi-template', authenticateToken, async (req, res) => {
                 i.target_percentage,
                 i.target_condition,
                 i.criterion,
+                i.table_process,
                 d.dept_name
             FROM kpi_indicators i
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
