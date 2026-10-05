@@ -5949,6 +5949,39 @@ apiRouter.get('/my-action-access', authenticateToken, async (req, res) => {
     res.json({ success: true, role, access });
 });
 
+// ========== ค่าการแสดงผลส่วนตัวของผู้ใช้ (UI preferences) ==========
+// เก็บค่าต่อบัญชีผู้ใช้ (ใช้ได้ทุกเครื่องที่ login บัญชีเดียวกัน) เช่น คอลัมน์ที่แสดงในหน้าบันทึกผลงานตัวชี้วัด
+// pref_key จำกัดเป็น whitelist กันเขียนค่าอะไรก็ได้ลงตาราง — ใช้ได้ทุก role (ไม่ map ใน PAGE_ACCESS_RULES)
+const UI_PREF_KEYS = ['dashboard_columns'];
+
+apiRouter.get('/my-ui-prefs/:key', authenticateToken, async (req, res) => {
+    try {
+        if (!UI_PREF_KEYS.includes(req.params.key)) return res.status(400).json({ success: false, message: 'pref_key ไม่ถูกต้อง' });
+        const [rows] = await db.query('SELECT pref_value FROM user_ui_prefs WHERE user_id = ? AND pref_key = ?', [req.user.userId, req.params.key]);
+        let value = null;
+        if (rows.length > 0) { try { value = JSON.parse(rows[0].pref_value); } catch (e) { value = null; } }
+        res.json({ success: true, data: value });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+apiRouter.put('/my-ui-prefs/:key', authenticateToken, async (req, res) => {
+    try {
+        if (!UI_PREF_KEYS.includes(req.params.key)) return res.status(400).json({ success: false, message: 'pref_key ไม่ถูกต้อง' });
+        const json = JSON.stringify(req.body?.value ?? null);
+        if (json.length > 5000) return res.status(400).json({ success: false, message: 'ข้อมูลมีขนาดใหญ่เกินไป' });
+        await db.query(
+            `INSERT INTO user_ui_prefs (user_id, pref_key, pref_value) VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE pref_value = VALUES(pref_value)`,
+            [req.user.userId, req.params.key, json]
+        );
+        res.json({ success: true, message: 'บันทึกการตั้งค่าเรียบร้อย' });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 // GET /role-action-access — เมทริกซ์เต็ม (super_admin เท่านั้น)
 apiRouter.get('/role-action-access', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
@@ -10543,6 +10576,25 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
         console.log('✅ role_page_access cache พร้อมใช้งาน');
     } catch (err) {
         console.error('⚠️ role_page_access setup error:', err.message);
+    }
+})();
+
+// ========== Auto-create user_ui_prefs (ค่าการแสดงผลส่วนตัวต่อบัญชีผู้ใช้) ==========
+(async () => {
+    try {
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS user_ui_prefs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                pref_key VARCHAR(50) NOT NULL,
+                pref_value TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uk_user_pref (user_id, pref_key),
+                CONSTRAINT fk_user_ui_prefs_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+    } catch (err) {
+        console.error('⚠️ user_ui_prefs setup error:', err.message);
     }
 })();
 

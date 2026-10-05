@@ -506,6 +506,17 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     return this.http.get(`${this.apiUrl}/system-logs`, { headers });
   }
 
+  // ค่าการแสดงผลส่วนตัวต่อบัญชีผู้ใช้ (เช่น คอลัมน์ที่แสดงในหน้าบันทึกผลงาน)
+  getUiPref(key: string): Observable<any> {
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${localStorage.getItem('kpi_token')}` });
+    return this.http.get(`${this.apiUrl}/my-ui-prefs/${key}`, { headers });
+  }
+
+  saveUiPref(key: string, value: any): Observable<any> {
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${localStorage.getItem('kpi_token')}` });
+    return this.http.put(`${this.apiUrl}/my-ui-prefs/${key}`, { value }, { headers });
+  }
+
   getKpiTemplate(): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({

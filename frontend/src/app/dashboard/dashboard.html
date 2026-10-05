@@ -116,6 +116,45 @@
               <i class="fas" [ngClass]="showGuide ? 'fa-chevron-up' : 'fa-question-circle'"></i>
               {{ showGuide ? 'ซ่อนคำแนะนำ' : 'คำแนะนำ' }}
             </button>
+            <!-- เลือกคอลัมน์ที่แสดงในตาราง (desktop) — จำตามบัญชีผู้ใช้ -->
+            <div class="relative column-menu-container hidden lg:block">
+              <button (click)="showColumnMenu = !showColumnMenu"
+                      class="px-3 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold rounded-lg text-xs border border-sky-200 transition-all flex items-center gap-1"
+                      title="เลือกคอลัมน์ที่ต้องการแสดงในตาราง">
+                <i class="fas fa-columns"></i> คอลัมน์
+                <span *ngIf="hiddenColumnCount > 0" class="px-1.5 bg-sky-600 text-white rounded-full text-[9px]">ซ่อน {{ hiddenColumnCount }}</span>
+                <i class="fas fa-chevron-down ml-0.5 text-[10px]"></i>
+              </button>
+              <div *ngIf="showColumnMenu" class="absolute z-50 top-full left-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden">
+                <div class="px-3 py-2 border-b bg-sky-50 flex items-center justify-between">
+                  <span class="text-xs font-bold text-sky-700"><i class="fas fa-columns mr-1"></i>คอลัมน์ที่แสดง</span>
+                  <button (click)="resetColumns()" class="px-2 py-0.5 bg-gray-200 hover:bg-gray-300 text-gray-700 text-[10px] rounded font-bold">แสดงทั้งหมด</button>
+                </div>
+                <div class="p-2 grid grid-cols-2 gap-x-2 gap-y-1">
+                  <label class="col-span-2 flex items-center gap-2 px-1 py-0.5 text-xs text-gray-400" title="แสดงเสมอ">
+                    <input type="checkbox" checked disabled class="rounded"> ชื่อตัวชี้วัด (แสดงเสมอ)
+                  </label>
+                  <label *ngFor="let c of COLUMN_OPTIONS" class="flex items-center gap-2 px-1 py-0.5 text-xs text-gray-700 hover:bg-sky-50 rounded cursor-pointer">
+                    <input type="checkbox" [checked]="colVisible[c.key]" (change)="toggleColumn(c.key)" class="rounded text-sky-600"> {{ c.label }}
+                  </label>
+                </div>
+                <div class="px-3 py-1.5 border-t bg-gray-50 flex items-center justify-between">
+                  <span class="text-[11px] font-bold text-gray-600">เดือน</span>
+                  <div class="flex gap-1">
+                    <button (click)="setAllMonths(true)" class="px-2 py-0.5 bg-sky-100 hover:bg-sky-200 text-sky-700 text-[10px] rounded font-bold">ทุกเดือน</button>
+                    <button (click)="setAllMonths(false)" class="px-2 py-0.5 bg-gray-200 hover:bg-gray-300 text-gray-700 text-[10px] rounded font-bold">ซ่อนทุกเดือน</button>
+                  </div>
+                </div>
+                <div class="p-2 grid grid-cols-4 gap-1">
+                  <label *ngFor="let m of FISCAL_MONTHS" class="flex items-center gap-1 px-1 py-0.5 text-xs text-gray-700 hover:bg-sky-50 rounded cursor-pointer">
+                    <input type="checkbox" [checked]="colVisible[m.key]" (change)="toggleColumn(m.key)" class="rounded text-sky-600"> {{ m.name }}
+                  </label>
+                </div>
+                <div class="px-3 py-1.5 border-t text-[10px] text-gray-400">
+                  บันทึกตามบัญชีผู้ใช้อัตโนมัติ — ใช้ได้ทุกเครื่องที่เข้าสู่ระบบ
+                </div>
+              </div>
+            </div>
             <!-- Saved Views (Filter Preset) — ย้ายมาต่อท้าย "คำแนะนำ" ให้อยู่แถวบนสุดเสมอ (ไม่ถูกซ่อนเมื่อพับตัวกรอง) -->
             <div class="relative saved-views-container">
               <button (click)="toggleSavedViewsDropdown($event)"
@@ -663,9 +702,17 @@
                       {{ month.name }}
                       <i *ngIf="item.is_locked" class="fas fa-lock text-amber-500 text-[9px]" title="ล็อค — แก้ไขไม่ได้"></i>
                     </div>
-                    <input *ngIf="!item.is_locked && canEditActual" type="text" [(ngModel)]="item[month.key]" (ngModelChange)="onValueChange(item, month.key)"
-                           class="w-full border border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:border-green-500 hover:border-green-400 transition-colors"
-                           [ngClass]="isModified(item, month.key) ? 'bg-orange-200 font-bold text-red-600 ring-2 ring-orange-400' : 'bg-white'">
+                    <div *ngIf="!item.is_locked && canEditActual" class="flex items-center gap-0.5">
+                      <input type="text" [(ngModel)]="item[month.key]" (ngModelChange)="onValueChange(item, month.key)"
+                             class="w-full min-w-0 border border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:border-green-500 hover:border-green-400 transition-colors"
+                             [ngClass]="isModified(item, month.key) ? 'bg-orange-200 font-bold text-red-600 ring-2 ring-orange-400' : (isPendingValue(item[month.key]) ? 'bg-amber-100 text-amber-700 text-[9px] font-bold' : 'bg-white')">
+                      <button type="button" (click)="togglePending(item, month.key)"
+                              class="shrink-0 w-6 h-6 rounded flex items-center justify-center text-[10px]"
+                              [ngClass]="isPendingValue(item[month.key]) ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-400'"
+                              [title]="isPendingValue(item[month.key]) ? 'ยกเลิก รอดำเนินการ' : 'ตั้งเป็น รอดำเนินการ'">
+                        <i class="fas fa-hourglass-half"></i>
+                      </button>
+                    </div>
                     <span *ngIf="item.is_locked || !canEditActual" class="block font-bold text-gray-600">{{ (item[month.key] && item[month.key] !== '0') ? item[month.key] : '-' }}</span>
                   </div>
                 </div>
@@ -678,9 +725,10 @@
                   <div class="flex gap-2 text-xs px-1" style="width: max-content;">
                     <div *ngFor="let month of FISCAL_MONTHS"
                          class="w-[62px] shrink-0 text-center p-1 rounded"
-                         [ngClass]="(item[month.key] && item[month.key] !== '0') ? 'bg-green-100 font-bold text-gray-900' : 'text-gray-400 bg-white border border-gray-100'">
+                         [ngClass]="isPendingValue(item[month.key]) ? 'bg-amber-100 font-bold text-amber-700 border border-amber-300' : (item[month.key] && item[month.key] !== '0') ? 'bg-green-100 font-bold text-gray-900' : 'text-gray-400 bg-white border border-gray-100'">
                       <div class="text-gray-600 mb-1">{{ month.name }}</div>
-                      <div>{{ (item[month.key] && item[month.key] !== '0') ? item[month.key] : '-' }}</div>
+                      <div *ngIf="isPendingValue(item[month.key])" class="text-[9px] leading-tight"><i class="fas fa-hourglass-half text-[8px]"></i> รอดำเนินการ</div>
+                      <div *ngIf="!isPendingValue(item[month.key])">{{ (item[month.key] && item[month.key] !== '0') ? item[month.key] : '-' }}</div>
                     </div>
                   </div>
                 </div>
@@ -808,7 +856,7 @@
                 <th *ngIf="isDeleteMode" class="px-2 py-3 bg-red-700 text-center w-8" title="เลือกทั้งหมด">
                   <input type="checkbox" [checked]="deleteAllChecked" (change)="toggleDeleteAll()" class="rounded text-red-400 focus:ring-red-400">
                 </th>
-                <th class="px-2 py-3 frozen col-1 bg-green-700 relative overflow-hidden select-none cursor-pointer"
+                <th *ngIf="colVisible['main']" class="px-2 py-3 frozen col-1 bg-green-700 relative overflow-hidden select-none cursor-pointer"
                     (click)="toggleSort('main_indicator_name')">
                   <div class="flex items-center justify-between gap-1">
                     <span>หมวดหมู่หลัก</span>
@@ -817,7 +865,7 @@
                   </div>
                   <span class="col-resize-handle" (click)="$event.stopPropagation()" (mousedown)="startResize($event,'col1')"></span>
                 </th>
-                <th class="px-2 py-3 frozen col-2 bg-green-700 text-center border-r border-green-600">จัดการ</th>
+                <th *ngIf="colVisible['actions']" class="px-2 py-3 frozen col-2 bg-green-700 text-center border-r border-green-600">จัดการ</th>
                 <th class="px-2 py-3 frozen col-3 bg-green-700 border-r border-green-600 relative overflow-hidden select-none cursor-pointer"
                     (click)="toggleSort('kpi_indicators_name')">
                   <div class="flex items-center justify-between gap-1">
@@ -827,8 +875,8 @@
                   </div>
                   <span class="col-resize-handle" (click)="$event.stopPropagation()" (mousedown)="startResize($event,'col2')"></span>
                 </th>
-                <th class="px-2 py-3 frozen col-4 bg-green-700 text-center border-r border-green-600" title="เกณฑ์มาตรฐานของตัวชี้วัด (จากการตั้งค่าตัวชี้วัด)">เกณฑ์</th>
-                <th class="px-2 py-3 frozen col-5 bg-green-700 border-r border-green-600 relative overflow-hidden select-none cursor-pointer"
+                <th *ngIf="colVisible['criteria']" class="px-2 py-3 frozen col-4 bg-green-700 text-center border-r border-green-600" title="เกณฑ์มาตรฐานของตัวชี้วัด (จากการตั้งค่าตัวชี้วัด)">เกณฑ์</th>
+                <th *ngIf="colVisible['hospital']" class="px-2 py-3 frozen col-5 bg-green-700 border-r border-green-600 relative overflow-hidden select-none cursor-pointer"
                     (click)="toggleSort('hosname')">
                   <div class="flex items-center justify-between gap-1">
                     <span>หน่วยบริการ</span>
@@ -837,21 +885,21 @@
                   </div>
                   <span class="col-resize-handle" (click)="$event.stopPropagation()" (mousedown)="startResize($event,'col4')"></span>
                 </th>
-                <th class="px-2 py-3 frozen col-6 bg-green-700 border-r border-green-600 text-right select-none cursor-pointer" (click)="toggleSort('target_value')">
+                <th *ngIf="colVisible['target']" class="px-2 py-3 frozen col-6 bg-green-700 border-r border-green-600 text-right select-none cursor-pointer" (click)="toggleSort('target_value')">
                   <div class="flex items-center justify-end gap-1">
                     <span>เป้าหมาย</span>
                     <i class="fas text-[10px] shrink-0"
                        [ngClass]="sortField==='target_value' ? (sortDir==='asc' ? 'fa-sort-up text-yellow-300' : 'fa-sort-down text-yellow-300') : 'fa-sort text-white/40'"></i>
                   </div>
                 </th>
-                <th class="px-2 py-3 frozen col-7 bg-green-700 border-r border-green-600 text-right select-none cursor-pointer" (click)="toggleSort('last_actual')">
+                <th *ngIf="colVisible['lastActual']" class="px-2 py-3 frozen col-7 bg-green-700 border-r border-green-600 text-right select-none cursor-pointer" (click)="toggleSort('last_actual')">
                   <div class="flex items-center justify-end gap-1">
                     <span>ผลงานล่าสุด</span>
                     <i class="fas text-[10px] shrink-0"
                        [ngClass]="sortField==='last_actual' ? (sortDir==='asc' ? 'fa-sort-up text-yellow-300' : 'fa-sort-down text-yellow-300') : 'fa-sort text-white/40'"></i>
                   </div>
                 </th>
-                <th class="px-2 py-3 frozen col-8 bg-green-700 text-center border-r border-green-600 select-none cursor-pointer" (click)="toggleSort('_pct')">
+                <th *ngIf="colVisible['pct']" class="px-2 py-3 frozen col-8 bg-green-700 text-center border-r border-green-600 select-none cursor-pointer" (click)="toggleSort('_pct')">
                   <div class="flex items-center justify-center gap-1">
                     <span>ร้อยละ</span>
                     <i class="fas text-[10px] shrink-0"
@@ -859,8 +907,8 @@
                   </div>
                 </th>
                 <!-- Scrollable monthly columns -->
-                <th class="px-2 py-3 text-center border-x border-green-600 bg-green-700 month-col" *ngFor="let m of ['ต.ค.','พ.ย.','ธ.ค.','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.']; let last = last" [class.rounded-tr-xl]="last">
-                  {{m}}
+                <th class="px-2 py-3 text-center border-x border-green-600 bg-green-700 month-col" *ngFor="let vm of visibleMonths; let last = last" [class.rounded-tr-xl]="last">
+                  {{vm.name}}
                 </th>
               </tr>
             </thead>
@@ -881,7 +929,7 @@
                 </td>
 
                 <!-- Col 1: หมวดหมู่หลัก (with rowSpan) -->
-                <td *ngIf="item.rowSpan > 0"
+                <td *ngIf="item.rowSpan > 0 && colVisible['main']"
                     [attr.rowspan]="item.rowSpan"
                     class="px-3 py-2 frozen col-1 bg-green-50 border-r border-gray-100 align-top rowspan-cell">
                   <div class="mt-1 sticky top-10 font-bold text-green-800 whitespace-normal break-words" [title]="item.main_indicator_name">
@@ -890,7 +938,7 @@
                 </td>
 
                 <!-- Col: จัดการ (action icons — แนวตั้ง) -->
-                <td class="px-1 py-2 frozen col-2 bg-white border-r border-gray-100">
+                <td *ngIf="colVisible['actions']" class="px-1 py-2 frozen col-2 bg-white border-r border-gray-100">
                   <div class="flex flex-col items-center gap-0.5">
                       <button *ngIf="(isAdmin || isSuperAdmin) && (item.indicator_status === 'pending' || item.indicator_status === 'Pending')"
                               (click)="approveKpi(item)"
@@ -1103,12 +1151,12 @@
                 </td>
 
                 <!-- Col 4: เกณฑ์ (criterion จาก kpi_indicators) — frozen -->
-                <td class="px-1 py-2 frozen col-4 bg-white border-r border-gray-100 text-gray-600 text-center text-xs font-bold">
+                <td *ngIf="colVisible['criteria']" class="px-1 py-2 frozen col-4 bg-white border-r border-gray-100 text-gray-600 text-center text-xs font-bold">
                   {{ item.criterion != null && item.criterion !== '' ? item.criterion + '%' : '-' }}
                 </td>
 
                 <!-- Col 5: หน่วยบริการ (+ ประเภทย่อ + อำเภอบรรทัด 2) — frozen -->
-                <td class="px-3 py-2 frozen col-5 bg-white border-r border-gray-100 text-gray-600 text-xs">
+                <td *ngIf="colVisible['hospital']" class="px-3 py-2 frozen col-5 bg-white border-r border-gray-100 text-gray-600 text-xs">
                   <div class="flex items-center gap-1 flex-wrap">
                     <span class="break-words">{{ item.hosname || '-' }}</span>
                     <span *ngIf="item.hostype" class="px-1.5 py-0.5 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded text-[10px] font-bold whitespace-nowrap shrink-0"
@@ -1120,7 +1168,7 @@
                 </td>
 
                 <!-- Col 6: เป้าหมาย -->
-                <td class="px-1 py-2 frozen col-6 bg-amber-50 font-bold text-gray-800 text-right whitespace-nowrap border-r border-gray-100">
+                <td *ngIf="colVisible['target']" class="px-1 py-2 frozen col-6 bg-amber-50 font-bold text-gray-800 text-right whitespace-nowrap border-r border-gray-100">
                   <span *ngIf="!canShowTargetInput(item)">{{ item.target_value || '-' }}</span>
                   <input *ngIf="canShowTargetInput(item)" type="text" [(ngModel)]="item.target_value"
                          class="w-20 border border-amber-200 rounded px-1 py-1 text-right text-xs focus:ring-1 focus:ring-orange-500 outline-none bg-orange-50 hover:border-orange-400 transition-all"
@@ -1128,28 +1176,39 @@
                 </td>
 
                 <!-- Col 7: ผลงานล่าสุด -->
-                <td class="px-2 py-2 frozen col-7 bg-blue-50 font-bold text-right whitespace-nowrap border-r border-gray-100"
+                <td *ngIf="colVisible['lastActual']" class="px-2 py-2 frozen col-7 bg-blue-50 font-bold text-right whitespace-nowrap border-r border-gray-100"
                   [ngClass]="isTargetMet(item) ? 'text-blue-600' : 'text-red-600'">
                   {{ item.last_actual || '-' }}
                 </td>
 
                 <!-- Col 8: ร้อยละ (last frozen) -->
-                <td class="px-2 py-2 frozen col-8 bg-gray-50 font-bold border-r border-gray-100 text-center whitespace-nowrap"
+                <td *ngIf="colVisible['pct']" class="px-2 py-2 frozen col-8 bg-gray-50 font-bold border-r border-gray-100 text-center whitespace-nowrap"
                   [ngClass]="isTargetMet(item) ? 'text-green-600' : 'text-red-600'">
                   {{ calcPercent(item) | number:'1.2-2' }}%
                 </td>
 
                 <!-- Scrollable monthly columns -->
-                <td *ngFor="let m of ['oct','nov','dece','jan','feb','mar','apr','may','jun','jul','aug','sep']"
+                <td *ngFor="let m of visibleMonthKeys"
                     class="px-1 py-2 text-center border-x group whitespace-nowrap month-col relative"
-                    [ngClass]="hasFormData(item, m) ? 'bg-purple-50/60 text-gray-900 font-bold' : (item[m] && item[m] !== '0') ? 'bg-green-100/40 text-gray-900 font-bold' : 'text-gray-300'">
+                    [ngClass]="hasFormData(item, m) ? 'bg-purple-50/60 text-gray-900 font-bold' : isPendingValue(item[m]) ? 'bg-amber-50' : (item[m] && item[m] !== '0') ? 'bg-green-100/40 text-gray-900 font-bold' : 'text-gray-300'">
                   <span *ngIf="(!isEditing && !isSingleEditing(item)) || item.is_locked || !canEditActual">
-                    {{ (item[m] && item[m] !== '0') ? item[m] : '-' }}
+                    <span *ngIf="isPendingValue(item[m])" class="inline-flex items-center gap-0.5 px-1 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded text-[9px] font-bold" title="รอดำเนินการ">
+                      <i class="fas fa-hourglass-half text-[8px]"></i>รอดำเนินการ
+                    </span>
+                    <ng-container *ngIf="!isPendingValue(item[m])">{{ (item[m] && item[m] !== '0') ? item[m] : '-' }}</ng-container>
                     <i *ngIf="hasFormData(item, m)" class="fas fa-clipboard-check text-purple-400 text-[8px] ml-0.5" title="ข้อมูลจากแบบฟอร์ม"></i>
                   </span>
-                  <input *ngIf="(isEditing || isSingleEditing(item)) && !item.is_locked && canEditActual" type="text" [(ngModel)]="item[m]" (ngModelChange)="onValueChange(item, m)"
-                         class="w-full border border-green-200 rounded px-1 py-1 text-center text-xs focus:ring-1 focus:ring-green-500 outline-none hover:border-green-400 transition-all bg-white/80 group-hover:bg-white"
-                         [ngClass]="isModified(item, m) ? '!bg-orange-200 !text-red-600 ring-2 ring-orange-400 font-bold' : ''">
+                  <div *ngIf="(isEditing || isSingleEditing(item)) && !item.is_locked && canEditActual" class="flex items-center gap-0.5">
+                    <input type="text" [(ngModel)]="item[m]" (ngModelChange)="onValueChange(item, m)"
+                           class="w-full min-w-0 border border-green-200 rounded px-1 py-1 text-center text-xs focus:ring-1 focus:ring-green-500 outline-none hover:border-green-400 transition-all bg-white/80 group-hover:bg-white"
+                           [ngClass]="isModified(item, m) ? '!bg-orange-200 !text-red-600 ring-2 ring-orange-400 font-bold' : (isPendingValue(item[m]) ? '!bg-amber-100 !text-amber-700 !text-[9px] font-bold' : '')">
+                    <button type="button" (click)="togglePending(item, m)"
+                            class="shrink-0 w-5 h-5 rounded flex items-center justify-center text-[9px] transition-colors"
+                            [ngClass]="isPendingValue(item[m]) ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-gray-100 text-gray-400 hover:bg-amber-100 hover:text-amber-600'"
+                            [title]="isPendingValue(item[m]) ? 'ยกเลิก รอดำเนินการ' : 'ตั้งเป็น รอดำเนินการ'">
+                      <i class="fas fa-hourglass-half"></i>
+                    </button>
+                  </div>
                 </td>
               </tr>
             </tbody>

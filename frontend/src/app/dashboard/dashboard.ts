@@ -40,21 +40,115 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     this.applyFilters();
   }
 
+  // === เลือกคอลัมน์ที่แสดง (จำตามบัญชีผู้ใช้ ผ่าน /my-ui-prefs/dashboard_columns) ===
+  // "ชื่อตัวชี้วัด" ไม่อยู่ในรายการ — แสดงเสมอเพื่อให้รู้ว่าแต่ละแถวคือตัวชี้วัดใด
+  readonly COLUMN_OPTIONS: { key: string; label: string }[] = [
+    { key: 'main', label: 'หมวดหมู่หลัก' },
+    { key: 'actions', label: 'จัดการ' },
+    { key: 'criteria', label: 'เกณฑ์' },
+    { key: 'hospital', label: 'หน่วยบริการ' },
+    { key: 'target', label: 'เป้าหมาย' },
+    { key: 'lastActual', label: 'ผลงานล่าสุด' },
+    { key: 'pct', label: 'ร้อยละ' },
+  ];
+  colVisible: Record<string, boolean> = this.defaultColVisible();
+  showColumnMenu = false;
+
+  private defaultColVisible(): Record<string, boolean> {
+    const v: Record<string, boolean> = {};
+    this.COLUMN_OPTIONS.forEach(c => v[c.key] = true);
+    ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'].forEach(m => v[m] = true);
+    return v;
+  }
+
+  get visibleMonths(): { key: string; name: string }[] {
+    return this.FISCAL_MONTHS.filter(m => this.colVisible[m.key]);
+  }
+
+  get visibleMonthKeys(): string[] {
+    return this.visibleMonths.map(m => m.key);
+  }
+
+  get hiddenColumnCount(): number {
+    return Object.values(this.colVisible).filter(x => !x).length;
+  }
+
+  private loadColumnPrefs() {
+    this.authService.getUiPref('dashboard_columns').subscribe({
+      next: (res) => {
+        if (res?.success && res.data && typeof res.data === 'object') {
+          // merge กับค่าเริ่มต้น — คอลัมน์ใหม่ที่เพิ่มภายหลังจะแสดงเป็นค่าเริ่มต้น
+          const merged = this.defaultColVisible();
+          Object.keys(merged).forEach(k => { if (typeof res.data[k] === 'boolean') merged[k] = res.data[k]; });
+          this.colVisible = merged;
+          this.cdr.detectChanges();
+          this.setCssVars();
+        }
+      },
+      error: () => {} // โหลดไม่ได้ → ใช้ค่าเริ่มต้น (แสดงทุกคอลัมน์)
+    });
+  }
+
+  toggleColumn(key: string) {
+    this.colVisible = { ...this.colVisible, [key]: !this.colVisible[key] };
+    this.onColumnsChanged();
+  }
+
+  setAllMonths(show: boolean) {
+    const next = { ...this.colVisible };
+    this.FISCAL_MONTHS.forEach(m => next[m.key] = show);
+    this.colVisible = next;
+    this.onColumnsChanged();
+  }
+
+  resetColumns() {
+    this.colVisible = this.defaultColVisible();
+    this.onColumnsChanged();
+  }
+
+  private _saveColumnsTimer: any = null;
+  private onColumnsChanged() {
+    this.cdr.detectChanges();
+    this.setCssVars();
+    // หน่วงการบันทึก — ติ๊กหลายช่องติดกันจะยิง API ครั้งเดียว
+    clearTimeout(this._saveColumnsTimer);
+    this._saveColumnsTimer = setTimeout(() => {
+      this.authService.saveUiPref('dashboard_columns', this.colVisible).subscribe({
+        error: (err) => Swal.fire({ toast: true, position: 'top-end', icon: 'error', timer: 3000, showConfirmButton: false,
+          title: err.error?.message || 'บันทึกการตั้งค่าคอลัมน์ไม่สำเร็จ' })
+      });
+    }, 600);
+  }
+
+  // === ค่า "รอดำเนินการ" ในช่องผลงานรายเดือน (เก็บเป็นข้อความใน actual_value) ===
+  readonly PENDING_TEXT = 'รอดำเนินการ';
+
+  isPendingValue(v: any): boolean {
+    return String(v ?? '').trim() === this.PENDING_TEXT;
+  }
+
+  togglePending(item: any, month: string) {
+    item[month] = this.isPendingValue(item[month]) ? '' : this.PENDING_TEXT;
+    this.onValueChange(item, month);
+  }
+
   // === Column Resize ===
   colWidths: Record<string, number> = { col1: 180, col2: 280, col4: 220 };
   private _resizeState: { col: string; startX: number; startW: number } | null = null;
 
   // ความกว้างคงที่ของคอลัมน์ที่ไม่ resize: จัดการ(64) เกณฑ์(64) เป้าหมาย(90) ผลงานล่าสุด(90) ร้อยละ(80)
+  // คอลัมน์ที่ซ่อนอยู่นับความกว้างเป็น 0 — ตำแหน่ง left ของคอลัมน์ frozen ถัดไปจึงเลื่อนชิดกันพอดี
   private setCssVars() {
     const wrapper = this.el.nativeElement.querySelector('.kpi-table-wrapper');
     if (!wrapper) return;
-    const c1 = this.colWidths['col1'];       // หมวดหมู่หลัก
-    const c2 = 64;                            // จัดการ (fixed)
-    const c3 = this.colWidths['col2'];       // ชื่อตัวชี้วัด
-    const c4 = 64;                            // เกณฑ์ (fixed)
-    const c5 = this.colWidths['col4'];       // หน่วยบริการ
-    const c6 = 90;                            // เป้าหมาย (fixed)
-    const c7 = 90;                            // ผลงานล่าสุด (fixed)
+    const v = this.colVisible;
+    const c1 = v['main'] ? this.colWidths['col1'] : 0;     // หมวดหมู่หลัก
+    const c2 = v['actions'] ? 64 : 0;                       // จัดการ (fixed)
+    const c3 = this.colWidths['col2'];                      // ชื่อตัวชี้วัด (แสดงเสมอ)
+    const c4 = v['criteria'] ? 64 : 0;                      // เกณฑ์ (fixed)
+    const c5 = v['hospital'] ? this.colWidths['col4'] : 0; // หน่วยบริการ
+    const c6 = v['target'] ? 90 : 0;                        // เป้าหมาย (fixed)
+    const c7 = v['lastActual'] ? 90 : 0;                    // ผลงานล่าสุด (fixed)
     wrapper.style.setProperty('--col1-w', c1 + 'px');
     wrapper.style.setProperty('--col3-w', c3 + 'px');
     wrapper.style.setProperty('--col5-w', c5 + 'px');
@@ -152,6 +246,10 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   // ปิด dropdown "จัดการตัวชี้วัด" เมื่อคลิกนอกกรอบ
   @HostListener('document:click', ['$event'])
   onDocumentClickManageMenu(event: MouseEvent) {
+    if (this.showColumnMenu) {
+      const colMenu = this.el.nativeElement.querySelector('.column-menu-container');
+      if (colMenu && !colMenu.contains(event.target as Node)) this.showColumnMenu = false;
+    }
     if (!this.showManageMenu) return;
     const container = this.el.nativeElement.querySelector('.manage-menu-container');
     if (container && !container.contains(event.target as Node)) {
@@ -447,6 +545,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   ngOnInit() {
     this.handleSsoCallback();
     this.currentUser = this.authService.getUser();
+    if (this.authService.isLoggedIn()) this.loadColumnPrefs();
     const role = this.authService.getUserRole();
     this.isAdmin = ['admin_ssj', 'super_admin'].includes(role);      // admin ส่วนกลาง
     this.isSuperAdmin = role === 'super_admin';
@@ -2879,8 +2978,10 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   getDesktopMonthScroll(visibleCount: number = 3, cellWidth: number = 75): number {
     let lastIdx = -1;
     for (const item of this.pagedData) {
-      for (let i = 0; i < this.FISCAL_MONTHS.length; i++) {
-        if (i > lastIdx && this.hasMonthData(item[this.FISCAL_MONTHS[i].key])) lastIdx = i;
+      // นับตามเดือนที่แสดงอยู่จริง (ผู้ใช้อาจซ่อนบางเดือนไว้)
+      const months = this.visibleMonths;
+      for (let i = 0; i < months.length; i++) {
+        if (i > lastIdx && this.hasMonthData(item[months[i].key])) lastIdx = i;
       }
     }
     if (lastIdx < 0) return 0; // ไม่มีข้อมูลเลย → เริ่มจาก ต.ค.
