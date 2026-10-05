@@ -842,6 +842,7 @@ docker builder prune -af
 - ใช้ `Swal.fire()` สำหรับ dialog ทุกที่ (ไม่ใช่ alert/confirm)
 - เพิ่มคำแนะนำขั้นตอน (ซ่อนได้) ในหน้าที่ซับซ้อน
 - อัปเดต help.html + changelog.ts ทุกครั้งที่เพิ่มฟีเจอร์
+- อัปเดตเล่มผลงาน `docs/ชำนาญการ.docx` ทุกครั้งที่แก้ไข/เพิ่มฟีเจอร์ **และทดสอบความถูกต้องเรียบร้อยแล้ว** (ดูหัวข้อ 13)
 
 ### DON'T
 - ❌ สร้าง NgModule — ใช้ standalone component เท่านั้น
@@ -890,3 +891,39 @@ docker builder prune -af
 | export_schedules | ตารางเวลา Export อัตโนมัติ | id, name, is_enabled, days_of_week, time_of_day, year_bh, indicator_scope, indicator_ids, auto_sync_khd, notify_email, notify_telegram, last_run_at, last_status |
 | export_schedule_logs | ประวัติการรัน schedule | id, schedule_id, run_at, status, inserted, updated_count, unchanged, tables_count, duration_ms, notified_email, notified_telegram, error_msg |
 | role_page_access | สิทธิ์การเข้าถึงหน้าต่อ role (super_admin ตั้งค่าได้) | id, role, page_key, is_enabled (UNIQUE role+page_key) |
+
+## 13. เล่มผลงานวิชาการ (docs/ชำนาญการ.docx) — ต้องปรับให้สอดคล้องกับระบบเสมอ
+
+เล่มผลงานประกอบการประเมินเพื่อแต่งตั้งนักวิชาการคอมพิวเตอร์ชำนาญการ อธิบายระบบนี้ทั้งระบบ
+— **ทุกครั้งที่แก้ไขบั๊กหรือเพิ่ม/ปรับฟีเจอร์ และทดสอบความถูกต้องผ่านแล้ว ต้องปรับเนื้อหาในเล่มให้สอดคล้องด้วยเสมอ** (ทำหลัง
+ทดสอบผ่านเท่านั้น ห้ามใส่ฟีเจอร์ที่ยังไม่ได้ทดสอบลงเล่ม)
+
+- **Source อยู่ที่ `docs/khupskpi-book/`** (Node.js + `docx` + `sharp`) — ห้ามแก้ไฟล์ `.docx` ด้วยมือ ให้แก้ที่ source แล้ว build ใหม่
+  - `chapter1.js`–`chapter5.js`, `references.js`, `appendix.js` — เนื้อหาบทที่ 1–5 / บรรณานุกรม / ภาคผนวก
+  - `manual.js` — ภาคผนวก ก คู่มือการใช้งานรายเมนู (ขั้นตอน + ภาพหน้าจอใน `man/*.jpg` + ผังงาน)
+  - `menu-flows.js` (+ `menu-flow-svg.js`) — ผังงานรายเมนู สัญลักษณ์มาตรฐาน ISO 5807 → `flow/*.png`
+  - `erd-svg.js`, `flowchart-svg.js`, `gen-charts.js` (+ `chart-svg.js`) — ER Diagram / Flowchart หลัก / กราฟ
+  - `build.js` — ปก สารบัญ รายการตาราง/ภาพ (ต้องแก้ชื่อตาราง/ภาพที่นี่ด้วยเมื่อเพิ่ม/เปลี่ยน) | `assemble.js` — ประกอบเล่ม
+- **สิ่งที่ต้องปรับตามประเภทการเปลี่ยนแปลง:**
+  - ทุกครั้ง: เพิ่มแถวในตาราง "ตัวอย่างรอบการปรับปรุงระบบ" (หัวข้อ 4.5 ใน `chapter4.js`) — วันที่ / ปัญหาที่พบ / ผลการแก้ไข
+  - ฟีเจอร์/ขั้นตอนการใช้งานเปลี่ยน: ปรับขั้นตอนใน `manual.js` + ผังงานใน `menu-flows.js` ของเมนูนั้น + ภาพหน้าจอ (ถ้า UI เปลี่ยน)
+  - ตาราง/คอลัมน์ฐานข้อมูลใหม่: ปรับพจนานุกรมข้อมูล (3.3.5) และ ER Diagram (`erd-svg.js` + ตารางความสัมพันธ์ 3.3.4) ถ้าเป็นตารางหลัก
+  - ตัวเลขสถิติ (หัวข้อ 4.2, จำนวน commits ในบทที่ 1/3/4, กราฟ commits รายเดือน): ดึงค่าจริงจากฐานข้อมูลและ `git log` ใหม่ทุกครั้ง
+    ห้ามประมาณเอง — แก้ทุกจุดที่อ้างถึงตัวเลขเดียวกันให้ตรงกัน (ค้นด้วย grep ก่อนเสมอ)
+  - ระยะเวลาดำเนินการ (ตาราง 1.3 ใน `chapter1.js`) เมื่อขึ้นเดือนใหม่
+- **ภาพหน้าจอ:** ถ่ายด้วย Playwright จาก dev server (`localhost:4500`) ต้องใช้บัญชีทดสอบชั่วคราวในฐานข้อมูล —
+  **ต้องขออนุญาตผู้ใช้ก่อนสร้างบัญชีทุกครั้ง** และลบบัญชีทิ้งทันทีหลังถ่ายเสร็จ ห้ามกดบันทึกข้อมูลผลงานจริงระหว่างถ่าย
+  ภาพเก็บเป็น JPEG กว้าง 1400px ใน `man/` (ชื่อไฟล์อ้างใน `manual.js` เป็น `.png` — `shot()` แปลงเป็น `.jpg` ให้เอง)
+- **เลขตาราง/ภาพ:** บทหลักใช้ "ตารางที่ N / ภาพที่ N" (เพิ่มกลางเล่มต้องเลื่อนเลขถัดไปทั้งหมด + แก้ข้อความที่อ้างอิง + `build.js`)
+  ภาคผนวก ก ใช้ "ภาพ ก-N" นับอัตโนมัติ — เพิ่มได้โดยไม่กระทบเลขภาพบทหลัก
+- **ขั้นตอน build:**
+  ```bash
+  cd docs/khupskpi-book
+  npm ci                 # ครั้งแรก
+  node menu-flows.js     # ถ้าแก้ผังงานรายเมนู
+  node gen-charts.js     # ถ้าแก้กราฟ (erd-svg.js / flowchart-svg.js รันแยกเมื่อแก้)
+  node assemble.js       # → ชำนาญการ-khupskpi.docx
+  ```
+  จากนั้นเปิดด้วย Word (COM ผ่าน PowerShell) สั่ง `Fields.Update()` + `TablesOfContents.Update()` + บันทึก เพื่ออัปเดตสารบัญ/
+  เลขหน้า แล้ว export PDF ตรวจหน้าที่แก้ด้วยตา ก่อน copy ทับ `docs/ชำนาญการ.docx` — ปิด WINWORD.EXE ที่ค้างก่อน build เสมอ
+  (ไฟล์ถูกล็อคถ้ายังเปิดอยู่)
