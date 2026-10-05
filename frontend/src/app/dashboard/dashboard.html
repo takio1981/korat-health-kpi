@@ -1199,9 +1199,14 @@
                     <i *ngIf="hasFormData(item, m)" class="fas fa-clipboard-check text-purple-400 text-[8px] ml-0.5" title="ข้อมูลจากแบบฟอร์ม"></i>
                   </span>
                   <div *ngIf="(isEditing || isSingleEditing(item)) && !item.is_locked && canEditActual" class="flex items-center gap-0.5">
-                    <input type="text" [(ngModel)]="item[m]" (ngModelChange)="onValueChange(item, m)"
+                    <!-- ช่องเดือนแคบ — ค่า "รอดำเนินการ" แสดงเป็นป้าย 2 บรรทัดแทน input (กด ⏳ อีกครั้งเพื่อล้างแล้วกรอกค่าใหม่) -->
+                    <span *ngIf="isPendingValue(item[m])"
+                          class="flex-1 min-w-0 px-0.5 py-0.5 rounded border text-[9px] leading-tight font-bold text-center whitespace-normal"
+                          [ngClass]="isModified(item, m) ? 'bg-orange-200 text-red-600 border-orange-400 ring-2 ring-orange-400' : 'bg-amber-100 text-amber-700 border-amber-300'"
+                          title="รอดำเนินการ — กด ⏳ เพื่อล้างค่า">รอ<br>ดำเนินการ</span>
+                    <input *ngIf="!isPendingValue(item[m])" type="text" [(ngModel)]="item[m]" (ngModelChange)="onValueChange(item, m)"
                            class="w-full min-w-0 border border-green-200 rounded px-1 py-1 text-center text-xs focus:ring-1 focus:ring-green-500 outline-none hover:border-green-400 transition-all bg-white/80 group-hover:bg-white"
-                           [ngClass]="isModified(item, m) ? '!bg-orange-200 !text-red-600 ring-2 ring-orange-400 font-bold' : (isPendingValue(item[m]) ? '!bg-amber-100 !text-amber-700 !text-[9px] font-bold' : '')">
+                           [ngClass]="isModified(item, m) ? '!bg-orange-200 !text-red-600 ring-2 ring-orange-400 font-bold' : ''">
                     <button type="button" (click)="togglePending(item, m)"
                             class="shrink-0 w-5 h-5 rounded flex items-center justify-center text-[9px] transition-colors"
                             [ngClass]="isPendingValue(item[m]) ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-gray-100 text-gray-400 hover:bg-amber-100 hover:text-amber-600'"

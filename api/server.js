@@ -5954,9 +5954,30 @@ apiRouter.get('/my-action-access', authenticateToken, async (req, res) => {
 // pref_key จำกัดเป็น whitelist กันเขียนค่าอะไรก็ได้ลงตาราง — ใช้ได้ทุก role (ไม่ map ใน PAGE_ACCESS_RULES)
 const UI_PREF_KEYS = ['dashboard_columns'];
 
+// สร้างตารางแบบ lazy — เรียกทั้งตอน startup และก่อนใช้ใน endpoint (ครั้งแรกเท่านั้น)
+// กันกรณี migration ตอน startup ไม่ได้รัน/ล้มเหลวเงียบๆ แล้ว endpoint ตอบ 500 "Table doesn't exist"
+let _uiPrefsTableReady = null;
+function ensureUiPrefsTable() {
+    if (!_uiPrefsTableReady) {
+        _uiPrefsTableReady = db.query(`
+            CREATE TABLE IF NOT EXISTS user_ui_prefs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                pref_key VARCHAR(50) NOT NULL,
+                pref_value TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uk_user_pref (user_id, pref_key),
+                CONSTRAINT fk_user_ui_prefs_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `).catch(err => { _uiPrefsTableReady = null; throw err; }); // ล้มเหลว → ให้ลองใหม่ครั้งถัดไป
+    }
+    return _uiPrefsTableReady;
+}
+
 apiRouter.get('/my-ui-prefs/:key', authenticateToken, async (req, res) => {
     try {
         if (!UI_PREF_KEYS.includes(req.params.key)) return res.status(400).json({ success: false, message: 'pref_key ไม่ถูกต้อง' });
+        await ensureUiPrefsTable();
         const [rows] = await db.query('SELECT pref_value FROM user_ui_prefs WHERE user_id = ? AND pref_key = ?', [req.user.userId, req.params.key]);
         let value = null;
         if (rows.length > 0) { try { value = JSON.parse(rows[0].pref_value); } catch (e) { value = null; } }
@@ -5969,6 +5990,7 @@ apiRouter.get('/my-ui-prefs/:key', authenticateToken, async (req, res) => {
 apiRouter.put('/my-ui-prefs/:key', authenticateToken, async (req, res) => {
     try {
         if (!UI_PREF_KEYS.includes(req.params.key)) return res.status(400).json({ success: false, message: 'pref_key ไม่ถูกต้อง' });
+        await ensureUiPrefsTable();
         const json = JSON.stringify(req.body?.value ?? null);
         if (json.length > 5000) return res.status(400).json({ success: false, message: 'ข้อมูลมีขนาดใหญ่เกินไป' });
         await db.query(
@@ -10580,23 +10602,7 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
 })();
 
 // ========== Auto-create user_ui_prefs (ค่าการแสดงผลส่วนตัวต่อบัญชีผู้ใช้) ==========
-(async () => {
-    try {
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS user_ui_prefs (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                user_id INT NOT NULL,
-                pref_key VARCHAR(50) NOT NULL,
-                pref_value TEXT,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                UNIQUE KEY uk_user_pref (user_id, pref_key),
-                CONSTRAINT fk_user_ui_prefs_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-        `);
-    } catch (err) {
-        console.error('⚠️ user_ui_prefs setup error:', err.message);
-    }
-})();
+ensureUiPrefsTable().catch(err => console.error('⚠️ user_ui_prefs setup error:', err.message));
 
 // ========== Auto-create + seed role_action_access (สิทธิ์ "เพิ่ม"/"แก้ไข" แยกจากสิทธิ์เข้าหน้า) ==========
 (async () => {
