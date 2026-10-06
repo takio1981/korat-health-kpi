@@ -399,19 +399,20 @@ async function captureError(payload) {
         const fingerprint = crypto.createHash('sha1').update(`${source}|${firstLine}`).digest('hex').slice(0, 16);
 
         // INSERT...ON DUPLICATE: ถ้า fingerprint เคยมีแล้ว → count++, อัพเดท last_seen
-        const isNew = await new Promise((resolve) => {
-            db.query(
+        // db เป็น promise pool (db.js export pool.promise()) — ห้ามส่ง callback: callback จะไม่ถูกเรียกเลย
+        // ทำให้ Promise ค้างตลอดไป (เคยเป็นบั๊กจริง: /errors/report ไม่ตอบกลับ + ไม่เคยส่ง alert Telegram/LINE)
+        let isNew = false;
+        try {
+            const [result] = await db.query(
                 `INSERT INTO error_logs (source, severity, fingerprint, message, stack, url, user_id, username, user_agent, ip_address, extra)
                  VALUES (?,?,?,?,?,?,?,?,?,?,?)
                  ON DUPLICATE KEY UPDATE count = count + 1, last_seen = CURRENT_TIMESTAMP,
                    severity = VALUES(severity), message = VALUES(message)`,
-                [source, severity, fingerprint, message, stack, url, userId, username, ua, ip, extra],
-                (err, result) => {
-                    // result.affectedRows === 1 = INSERT, 2 = UPDATE (mysql convention)
-                    resolve(!err && result && result.affectedRows === 1);
-                }
+                [source, severity, fingerprint, message, stack, url, userId, username, ua, ip, extra]
             );
-        }).catch(() => false);
+            // affectedRows === 1 = INSERT ใหม่, 2 = UPDATE แถวเดิม (mysql convention)
+            isNew = result.affectedRows === 1;
+        } catch (_) { isNew = false; }
 
         // === Throttled alert ===
         // alert เฉพาะ: ใหม่ครั้งแรก หรือ severity=fatal และไม่เกิน cooldown
@@ -3692,7 +3693,9 @@ apiRouter.post('/kpi-results/manage/bulk-delete', authenticateToken, isSuperAdmi
     }
 });
 
-apiRouter.post('/update-kpi', async (req, res) => {
+// authenticateToken: เดิม route นี้ verify JWT เองอย่างเดียว ข้ามการตรวจ single session — ผู้ใช้ที่ถูกบังคับ logout
+// หรือ login ซ้อนจากเครื่องอื่นแล้ว ยังบันทึกผลงานด้วย token เก่าได้จนหมดอายุ (8 ชม.) — ต้องผ่าน middleware กลางเสมอ
+apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
     let updates = req.body;
     if (req.body && req.body.updates && Array.isArray(req.body.updates)) {
         updates = req.body.updates;
@@ -3703,17 +3706,7 @@ apiRouter.post('/update-kpi', async (req, res) => {
     //        undefined/default = Dashboard ปกติ (ข้าม row ที่ค่า 0 ทั้งหมด)
     const saveMode = req.body.mode || 'default';
 
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-
-    if (!token) return res.status(401).json({ success: false, message: 'กรุณาเข้าสู่ระบบ' });
-
-    let user;
-    try {
-        user = jwt.verify(token, SECRET_KEY);
-    } catch (err) {
-        return res.status(403).json({ success: false, message: 'Token ไม่ถูกต้อง' });
-    }
+    const user = req.user; // ผ่าน authenticateToken แล้ว (JWT + single session)
 
     const hospcodeToSave = (ROLE_ADMIN_ALL.includes(user.role) && targetHospcode) ? targetHospcode : user.hospcode;
 
@@ -6771,7 +6764,9 @@ apiRouter.get('/data-entry-lock', authenticateToken, async (req, res) => {
             effectiveEnd = d.toISOString().split('T')[0];
         }
 
-        const inDateRange = startDate && effectiveEnd && today >= startDate && today <= effectiveEnd;
+        // !! บังคับเป็น boolean — เดิมถ้าไม่ได้ตั้ง startDate นิพจน์ && คืนค่า '' (string ว่าง) ทำให้ API ส่ง is_locked: ''
+        // แทน false → หน้าบันทึกผลงานของ user ทั่วไปเกิด NG0100 (ค่าเปลี่ยนจาก false เป็น '' ระหว่าง change detection)
+        const inDateRange = !!(startDate && effectiveEnd && today >= startDate && today <= effectiveEnd);
         const isLocked = manualLock || inDateRange;
 
         let lockReason = '';

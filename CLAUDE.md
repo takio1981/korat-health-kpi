@@ -636,8 +636,8 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 | Role | ขอบเขต | เห็นปุ่มลบ | เมนูพิเศษ |
 |------|--------|-----------|-----------|
 | super_admin | ทั้งหมด | ✅ | ทุกเมนู |
-| admin_ssj | dept ตัวเอง, ทุก hospcode (ล็อค dept dropdown) | ❌ | จัดการตัวชี้วัด, kpi-setup |
-| admin_cup | อำเภอตัวเอง, ทุก dept | ❌ | kpi-setup |
+| admin_ssj | dept ตัวเอง, ทุก hospcode (ล็อค dept dropdown) | ❌ | จัดการตัวชี้วัด (kpi-setup: ปิดเป็นค่าเริ่มต้น — เปิดได้ที่ /role-page-access) |
+| admin_cup | อำเภอตัวเอง, ทุก dept | ❌ | - (kpi-setup: ปิดเป็นค่าเริ่มต้น — เปิดได้ที่ /role-page-access) |
 | admin_hos | hospcode ตัวเอง, ทุก dept | ❌ | - |
 | admin_sso | hospcode ตัวเอง, ทุก dept | ❌ | - |
 | user_cup | อำเภอตัวเอง, dept ตัวเอง | ❌ | - |
@@ -787,6 +787,25 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - ✅ Helmet headers ทุก request
 - ✅ CORS enabled
 - ✅ JWT expiry 8 ชั่วโมง
+
+## 9.5 Automated Tests (ต้องผ่านทั้งหมดก่อน commit ทุกครั้ง)
+
+- **API (Jest + supertest)** — `cd api && npm test` — 5 ไฟล์ใน `api/tests/` (login, permissions, error-monitoring,
+  session, data-entry-lock)
+  - **ต้องรันบน database ทดสอบแยก `khups_kpi_test_db` เท่านั้น** ผ่านไฟล์ `api/.env.test` (copy จาก `.env.dev` แล้วเปลี่ยน
+    `DB_NAME=khups_kpi_test_db`, gitignore แล้ว) — `tests/setup.js` **ปฏิเสธการรัน** ถ้า DB_NAME ไม่มีคำว่า "test"
+    เพราะ tests ลบข้อมูล (users ขึ้นต้น `test_`, `error_logs` ทั้งหมด) — ห้ามแก้ guard นี้ออกเด็ดขาด
+  - สร้าง test DB: `mysqldump --no-data khups_kpi_db` → import เข้า `khups_kpi_test_db` + copy ข้อมูลอ้างอิง (departments,
+    chospital, co_district, chostype, main_yut, kpi_main_indicators, kpi_indicators, kpi_sub_indicators, system_settings,
+    role_page_access, role_action_access) — **ห้าม copy users / kpi_results จริง**
+  - `api/node_modules` ต้องติดตั้ง devDependencies ด้วย (`npm install`) — build.bat รัน `npm install --production` ก่อน
+    docker build ซึ่งตัด dev deps ออกให้เอง
+- **Frontend (Vitest ผ่าน `ng test`)** — `cd frontend && npx ng test --watch=false` — spec ใช้ `testProviders` จาก
+  `src/app/testing/test-providers.ts` (HttpClientTesting + Router + Toastr) เสมอ — มี regression test ของบั๊กจริง
+  (ปีงบเด้งกลับ, ปีงบ ต.ค., รอดำเนินการ, เลือกคอลัมน์) ใน `dashboard.spec.ts` / `fiscal-year.util.spec.ts`
+- แก้บั๊กใหม่ → **เพิ่ม regression test ทุกครั้ง** และยืนยันว่า test fail กับโค้ดเดิมก่อนแก้จริง (ไม่ใช่ test ที่ผ่านเสมอ)
+- `db` (db.js) เป็น **promise pool** — ใช้ `const [rows] = await db.query(...)` เท่านั้น **ห้ามส่ง callback** เข้า db.query
+  (callback จะไม่ถูกเรียกเลย → Promise ค้างตลอดไป — เคยเป็นบั๊กจริงที่ทำให้ `/errors/report` ค้างและไม่เคยส่ง alert)
 
 ## 10. Docker & Deploy
 

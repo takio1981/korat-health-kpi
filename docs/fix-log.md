@@ -912,3 +912,40 @@ admin_cup → 144 ตัวชี้วัด / 16 หน่วยงาน (ท
 ### ไฟล์ที่แก้ไข
 - `api/server.js` — `/kpi-template`
 - `frontend/src/app/changelog/changelog.ts` — entry `2569.10.06.a`
+
+---
+
+## 2569-10-06 — ตรวจสอบบั๊กและทดสอบทั้งระบบ (ชุดทดสอบอัตโนมัติ + ทดสอบหน้าจอจริงทุกหน้า × 3 role)
+
+### บั๊กที่พบและแก้ไข
+1. **[ความปลอดภัย] `/update-kpi` ข้ามการตรวจ single session** — route verify JWT เองอย่างเดียว ไม่ผ่าน
+   `authenticateToken` → ผู้ใช้ที่ session ถูกยกเลิก (ถูกบังคับ logout / login ซ้อนเครื่องอื่น) ยังบันทึกผลงานได้จน token
+   หมดอายุ (8 ชม.) — แก้: เพิ่ม `authenticateToken` + ใช้ `req.user`
+2. **`captureError` ค้างตลอดไป** — เรียก `db.query(sql, params, callback)` แต่ `db` เป็น promise pool → callback ไม่ถูก
+   เรียกเลย → `POST /errors/report` ไม่ตอบกลับ + alert Telegram/LINE ของ error ใหม่ไม่เคยถูกส่ง (INSERT ยังทำงาน จึงไม่มีใคร
+   สังเกต) — แก้: `const [result] = await db.query(...)`
+3. **`/data-entry-lock` คืน `is_locked: ''`** เมื่อไม่ได้ตั้งวันเริ่มล็อค (`startDate && ...` คืนค่า string ว่าง) → หน้า
+   dashboard ของผู้ใช้ทั่วไปเกิด NG0100 ExpressionChangedAfterItHasBeenChecked (พบจาก smoke test role user_hos) —
+   แก้: `!!(...)` ใน API + `=== true` ใน `dashboard.ts` `isEntryLocked`
+
+### ปัญหาของชุดทดสอบเอง (แก้แล้ว)
+- ไม่มี `.env.test` → `npm test` จะรันบน DB จริงและลบ `error_logs` ทั้งหมด — สร้าง `khups_kpi_test_db` แยก + `.env.test`
+  และให้ `tests/setup.js` **throw** ถ้า DB_NAME ไม่ใช่ test (เดิมแค่ warn)
+- `cleanupTestUsers` ลบแค่ `test_user_%` แต่ test สร้าง `test_admin_cup_perm` ฯลฯ → ชน UNIQUE รอบถัดไป — แก้เป็น `test\_%`
+- `jest.config.js` ใช้ key ผิด `setupFilesAfterEach` (ไม่มีจริง) → `setupFiles`
+- Frontend spec 11 ไฟล์เป็น stub ของ Angular CLI ที่ import ชื่อ class ผิด (`Dashboard` แทน `DashboardComponent`) —
+  **ไม่เคย compile ได้เลย** — เขียนใหม่ + เพิ่ม `testing/test-providers.ts` + regression tests
+
+### ผลการทดสอบ
+- API: **23/23 ผ่าน** (5 ไฟล์ — เพิ่ม `session.test.js` (รวมบันทึกผลงานจริงพร้อมค่า "รอดำเนินการ" ลง test DB),
+  `data-entry-lock.test.js`)
+- Frontend unit: **25/25 ผ่าน** (12 ไฟล์)
+- Regression test ยืนยันแล้วว่า **fail กับโค้ดก่อนแก้** (ปีงบเด้งกลับ, single session)
+- Smoke test หน้าจอจริง: 21 หน้า × 3 role (super_admin / admin_ssj / user_hos) รัน 2 รอบ — **0 console error,
+  0 API error** — หน้า dashboard E2E 17/17 ผ่าน
+- บัญชีทดสอบและ error log ที่เกิดจากการทดสอบลบแล้วทั้งหมด
+
+### ข้อสังเกต (ไม่ใช่บั๊ก — ไม่ได้แก้)
+- `kpi-setup` ปิดสำหรับ admin_ssj/admin_cup เป็นค่าเริ่มต้น (ตรงกับ route guard เดิม = super_admin) — ตาราง Role System
+  ใน CLAUDE.md เขียนไม่ตรง แก้เอกสารแล้ว
+- `/public/kpi-results`, `/public/dashboard-stats` ไม่ต้อง login (ตั้งใจ ใช้กับหน้าสาธารณะ) — เป็นการตัดสินใจเชิงนโยบาย

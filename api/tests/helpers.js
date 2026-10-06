@@ -39,7 +39,10 @@ async function ensureTestUser(db, opts = {}) {
     return { id: r.insertId, username, password: opts.password || 'TestPass123!' };
 }
 
-async function cleanupTestUsers(db, prefix = 'test_user_') {
+// ลบผู้ใช้ทดสอบทุกตัวที่ขึ้นต้นด้วย test_ (เทสแต่ละไฟล์ตั้งชื่อต่างกัน เช่น test_admin_cup_perm, test_sa_errlog)
+// — เดิมลบแค่ test_user_% ทำให้ผู้ใช้ที่ค้างจากรอบก่อนชน UNIQUE username ในรอบถัดไป
+// ปลอดภัยเพราะ setup.js บังคับให้รันบน database ทดสอบเท่านั้น
+async function cleanupTestUsers(db, prefix = 'test\\_') {   // \\_ = ขีดล่างตัวอักษรจริงใน LIKE (ไม่ใช่ wildcard)
     await db.query('DELETE FROM users WHERE username LIKE ?', [prefix + '%']);
 }
 

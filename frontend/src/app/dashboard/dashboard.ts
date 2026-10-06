@@ -609,7 +609,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   // admin ทุกระดับไม่ถูกล็อค, user ถูกล็อคเมื่อเปิดล็อค
   get isEntryLocked(): boolean {
     if (this.isAdmin || this.isLocalAdmin) return false;
-    return this.dataEntryLock.is_locked;
+    return this.dataEntryLock.is_locked === true; // ป้องกันค่าที่ไม่ใช่ boolean จาก API (เคยได้ '' แล้วเกิด NG0100)
   }
 
   // แก้ไขเป้าหมายได้เมื่อ: role มีสิทธิ์ (can_edit_target) + ไม่ถูก global lock

@@ -18,13 +18,12 @@ const path = require('path');
 const envPath = path.join(__dirname, '..', '.env.test');
 if (fs.existsSync(envPath)) {
     require('dotenv').config({ path: envPath });
-} else {
-    // fallback: warn ถ้า DB_NAME ยังเป็น production
-    if (!process.env.DB_NAME || !process.env.DB_NAME.includes('test')) {
-        console.warn('\n⚠️  WARNING: no .env.test found and DB_NAME does not contain "test"');
-        console.warn(`   Current DB_NAME=${process.env.DB_NAME || '(unset)'}`);
-        console.warn('   Tests will use this DB — กดหยุดทันทีถ้าเป็น production!\n');
-    }
+}
+// บังคับใช้ database ทดสอบเท่านั้น — tests ลบข้อมูล (users ขึ้นต้น test_, error_logs ทั้งหมด) ห้ามรันบน DB จริงเด็ดขาด
+// (เดิมแค่ warn แล้วรันต่อ → ถ้าไม่มี .env.test จะลบ error_logs จริงทั้งหมดทิ้ง)
+if (!process.env.DB_NAME || !process.env.DB_NAME.includes('test')) {
+    throw new Error(`ปฏิเสธการรัน tests: DB_NAME="${process.env.DB_NAME || '(unset)'}" ไม่ใช่ database ทดสอบ — ` +
+        'สร้าง api/.env.test โดยตั้ง DB_NAME=khups_kpi_test_db (ดูวิธีสร้าง DB ด้านบนของไฟล์นี้)');
 }
 process.env.NODE_ENV = 'test';
 process.env.SECRET_KEY = process.env.SECRET_KEY || 'test-secret-key-for-jest';

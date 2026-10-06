@@ -1,20 +1,19 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { KpiManageComponent } from './kpi-manage';
+import { testProviders } from '../testing/test-providers';
 
-import { KpiManage } from './kpi-manage';
-
-describe('KpiManage', () => {
-  let component: KpiManage;
-  let fixture: ComponentFixture<KpiManage>;
+describe('KpiManageComponent', () => {
+  let component: KpiManageComponent;
+  let fixture: ComponentFixture<KpiManageComponent>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [KpiManage]
-    })
-    .compileComponents();
+      imports: [KpiManageComponent],
+      providers: testProviders,
+    }).compileComponents();
 
-    fixture = TestBed.createComponent(KpiManage);
+    fixture = TestBed.createComponent(KpiManageComponent);
     component = fixture.componentInstance;
-    await fixture.whenStable();
   });
 
   it('should create', () => {

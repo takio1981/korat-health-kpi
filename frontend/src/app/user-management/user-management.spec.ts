@@ -1,20 +1,19 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { UserManagementComponent } from './user-management';
+import { testProviders } from '../testing/test-providers';
 
-import { UserManagement } from './user-management';
-
-describe('UserManagement', () => {
-  let component: UserManagement;
-  let fixture: ComponentFixture<UserManagement>;
+describe('UserManagementComponent', () => {
+  let component: UserManagementComponent;
+  let fixture: ComponentFixture<UserManagementComponent>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [UserManagement]
-    })
-    .compileComponents();
+      imports: [UserManagementComponent],
+      providers: testProviders,
+    }).compileComponents();
 
-    fixture = TestBed.createComponent(UserManagement);
+    fixture = TestBed.createComponent(UserManagementComponent);
     component = fixture.componentInstance;
-    await fixture.whenStable();
   });
 
   it('should create', () => {
