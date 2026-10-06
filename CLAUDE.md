@@ -798,6 +798,11 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 | MySQL | 3306 | 3306 |
 
 ### Build & Deploy
+
+**`node_modules` ไม่อยู่ใน git** (`.gitignore` = `node_modules/` ทุกระดับ — เอาออกจาก git เมื่อ 6 ต.ค. 2569) — clone ใหม่ต้องรัน
+`npm ci` ใน `api/` และ `frontend/` ก่อน build เสมอ (`build.bat` รัน `npm install --production` ใน api ให้แล้ว) — ห้าม
+`git add -f` node_modules กลับเข้า repo (`api/Dockerfile` ใช้ `COPY node_modules/` จาก host ที่ติดตั้งไว้แล้ว ไม่ใช่จาก git)
+
 ```bash
 # Dev
 ./dev.bat
