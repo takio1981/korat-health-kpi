@@ -888,3 +888,27 @@ dev server (ng serve) — ค้นหาปีงบ 2569 อำเภอโน
 
 ### Deploy
 ยังไม่ได้ build/deploy Docker
+
+---
+
+## 2569-10-06 — หน้าต่าง "เพิ่มตัวชี้วัด": admin_cup/hos/sso เห็นตัวชี้วัดแค่หน่วยงานตัวเอง
+
+### อาการ
+ผู้ดูแลระดับพื้นที่ (admin_cup, admin_hos, admin_sso) ที่บัญชีมี `dept_id` ติดอยู่ เปิดหน้าต่าง "เพิ่มตัวชี้วัด"
+ในหน้าบันทึกผลงานแล้วเห็นตัวชี้วัดเฉพาะหน่วยงานตัวเอง ทั้งที่ scope ตามตาราง Role System คือ "ทุก dept"
+
+### สาเหตุ
+`GET /kpi-template` กรองด้วย `user.role !== 'super_admin' && user.deptId != null` — เช็คแค่ว่ามี dept_id
+โดยไม่ดู role (ขัดกติกา CLAUDE.md ส่วน Role-based Scoping)
+
+### วิธีแก้
+เปลี่ยนเป็น `ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null` — pattern เดียวกับ endpoint อื่นที่ถูกต้อง
+
+### ทดสอบ
+บัญชีทดสอบชั่วคราว dept_id=8 ทั้งคู่ เรียก `/kpi-template` จริงบน dev API:
+admin_cup → 144 ตัวชี้วัด / 16 หน่วยงาน (ทั้งหมดที่เปิดใช้งาน) | user_hos → 29 ตัวชี้วัด / 1 หน่วยงาน (ของตัวเอง)
+ลบบัญชีทดสอบทันทีหลังทดสอบ
+
+### ไฟล์ที่แก้ไข
+- `api/server.js` — `/kpi-template`
+- `frontend/src/app/changelog/changelog.ts` — entry `2569.10.06.a`

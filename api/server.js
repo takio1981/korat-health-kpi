@@ -4518,8 +4518,9 @@ apiRouter.get('/kpi-template', authenticateToken, async (req, res) => {
         const user = req.user;
         let deptFilter = '';
         const params = [];
-        // กรองตาม dept ของ user (ยกเว้น super_admin เห็นทั้งหมด)
-        if (user.role !== 'super_admin' && user.deptId != null) {
+        // กรองตาม dept เฉพาะ role ที่ scope = หน่วยงานตัวเอง (ROLE_SCOPE_OWN_DEPT) — admin_cup/hos/sso เห็นทุกหน่วยงาน
+        // แม้บัญชีจะมี dept_id ติดอยู่ก็ตาม (ตาราง Role System ใน CLAUDE.md)
+        if (ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null) {
             deptFilter = 'AND i.dept_id = ?';
             params.push(user.deptId);
         }
