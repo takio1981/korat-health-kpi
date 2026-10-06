@@ -88,13 +88,16 @@ res.status(500).json({ success: false, message: e.message });
 ```
 
 ### Dept Filtering (สำคัญมาก)
-ทุก endpoint ที่ดึงข้อมูลตัวชี้วัดต้องกรอง dept_id ตาม role:
+ทุก endpoint ที่ดึงข้อมูลตัวชี้วัดต้องกรอง dept_id ตาม role — **เช็ค role ผ่าน `ROLE_SCOPE_OWN_DEPT` ก่อนเสมอ**
+(admin_cup/admin_hos/admin_sso เห็นทุก dept แม้บัญชีมี dept_id ติดอยู่ — ดู "Role-based Scoping" ในหัวข้อ 6):
 ```javascript
-if (user.role !== 'super_admin' && user.deptId != null) {
+if (ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null) {
     whereClause = 'WHERE i.dept_id = ?';
     params.push(user.deptId);
 }
 ```
+❌ ห้ามใช้ `if (user.role !== 'super_admin' && user.deptId != null)` — ตัวอย่างนี้เคยอยู่ในไฟล์นี้และเป็นต้นเหตุบั๊กสิทธิ์จริง
+(`/indicators`, `/kpi-template` จำกัด admin ระดับพื้นที่ผิดๆ — แก้แล้ว 6 ต.ค. 2569)
 
 ### Auto-Migration Pattern
 เพิ่ม migration ใน section `✅ Auto-create tables` ของ server.js:
@@ -253,8 +256,8 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - `is_cumulative` TINYINT(1) DEFAULT 0 ใน `kpi_indicators` — 1 = `last_actual` คำนวณจาก **SUM ทุกเดือนที่มีค่า
   ในปีงบ** แทน "ค่าเดือนล่าสุดที่คีย์" ปกติ — ใช้กับตัวชี้วัดนับสะสม (เช่น จำนวนราย/ครั้งสะสม)
 - Toggle: checkbox ในกล่อง "เกณฑ์" ของ modal kpi-manage
-- คำนวณฝั่ง client: `dashboard.ts` `onValueChange()` | ฝั่ง backend: `kpi_summary` refresh และ
-  `GET /public/kpi-results`
+- คำนวณฝั่ง client: `dashboard.ts` `onValueChange()` | ฝั่ง backend: `kpi_summary` refresh
+  (`GET /public/kpi-results` ที่เคยคำนวณซ้ำถูกลบแล้ว — ไม่มี endpoint ข้อมูลผลงานแบบไม่ต้อง login อีก)
 - Dashboard badge "สะสม" (violet, `fa-layer-group`) ใน col-2 ชื่อตัวชี้วัด — `getCumulativeBadge()` ใน
   `dashboard.ts` — แทนที่ข้อความแจ้งเตือน static เดิมที่เหมารวมทุกแถวโดยไม่ตรงกับความจริงเสมอไป
 
@@ -458,10 +461,12 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   sub-indicators/departments/hospitals/form-schemas — ไม่รวม Form Builder), `users` (add user + PUT
   แก้ไขข้อมูลผู้ใช้ทั่วไป/reset-password — ไม่รวม approve/reject/permissions/sync), `announcements`
   (add/edit/activate — ไม่รวม send-email)
-- **ไม่รวม `dashboard`/`kpi-setup`** — endpoint หลัก (`/update-kpi`) ใช้ `authenticateToken` ตรงๆ ไม่ผ่าน
-  middleware กลางที่ไหนเลย (route handler ประกาศแบบ `apiRouter.post('/update-kpi', async (req,res)=>{...})`
-  ไม่มี `isXxx` middleware ใดๆ ต่อท้าย) และ dashboard มี per-user permission (`can_edit_actual`/`can_edit_target`
-  ในตาราง `users`, เช็คผ่าน `getPermsForUser()`) อยู่แล้วซึ่งเป็นกลไกคนละชั้น เสี่ยงเกินไปที่จะแตะในรอบนี้
+- **ไม่รวม `dashboard`/`kpi-setup`** — endpoint หลัก (`/update-kpi`) ผ่านแค่ `authenticateToken` (JWT + single
+  session + page access) ไม่มี `isXxx`/`requireAction` ต่อท้าย และ dashboard มี per-user permission
+  (`can_edit_actual`/`can_edit_target` ในตาราง `users`, เช็คผ่าน `getPermsForUser()`) อยู่แล้วซึ่งเป็นกลไกคนละชั้น
+  — ⚠️ เดิม (ก่อน 6 ต.ค. 2569) route นี้ verify JWT เองโดยไม่ผ่าน `authenticateToken` เลย ทำให้ข้ามการตรวจ single
+  session (ผู้ใช้ที่ถูกบังคับ logout ยังบันทึกผลงานได้) — แก้แล้ว + มี test `api/tests/session.test.js` คุมไว้
+  **ห้าม verify JWT เองใน route ใดอีก ใช้ `authenticateToken` เสมอ**
 - ตาราง `role_action_access` (role, page_key, action ENUM('add','edit'), is_enabled) UNIQUE(role, page_key, action)
   — auto-seed ให้ตรงกับ middleware เดิมของแต่ละ endpoint เป๊ะ (ดู `ACTION_ACCESS_DEFAULT_ENABLED` ในโค้ด)
 - Backend: `requireAction(pageKey, action)` factory (`role==='super_admin' || hasActionAccess(...)`) ใช้แทนที่

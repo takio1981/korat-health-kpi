@@ -3054,92 +3054,9 @@ apiRouter.get('/public/districts', async (req, res) => {
     }
 });
 
-// === Public KPI endpoints (ไม่ต้อง login) ===
-apiRouter.get('/public/kpi-results', async (req, res) => {
-    try {
-        const sql = `
-            SELECT
-                if(mi.main_indicator_name IS NULL,'ยังไม่กำหนด',mi.main_indicator_name) main_indicator_name,
-                i.kpi_indicators_name,
-                r.year_bh,
-                i.id AS indicator_id,
-                d.dept_name,
-                MAX(r.target_value) AS target_value,
-                MAX(CASE WHEN r.month_bh = 10 THEN r.actual_value ELSE NULL END) AS oct,
-                MAX(CASE WHEN r.month_bh = 11 THEN r.actual_value ELSE NULL END) AS nov,
-                MAX(CASE WHEN r.month_bh = 12 THEN r.actual_value ELSE NULL END) AS dece,
-                MAX(CASE WHEN r.month_bh = 1  THEN r.actual_value ELSE NULL END) AS jan,
-                MAX(CASE WHEN r.month_bh = 2  THEN r.actual_value ELSE NULL END) AS feb,
-                MAX(CASE WHEN r.month_bh = 3  THEN r.actual_value ELSE NULL END) AS mar,
-                MAX(CASE WHEN r.month_bh = 4  THEN r.actual_value ELSE NULL END) AS apr,
-                MAX(CASE WHEN r.month_bh = 5  THEN r.actual_value ELSE NULL END) AS may,
-                MAX(CASE WHEN r.month_bh = 6  THEN r.actual_value ELSE NULL END) AS jun,
-                MAX(CASE WHEN r.month_bh = 7  THEN r.actual_value ELSE NULL END) AS jul,
-                MAX(CASE WHEN r.month_bh = 8  THEN r.actual_value ELSE NULL END) AS aug,
-                MAX(CASE WHEN r.month_bh = 9  THEN r.actual_value ELSE NULL END) AS sep,
-                CASE WHEN MAX(i.is_cumulative) = 1 THEN (
-                    CASE WHEN SUM(CASE WHEN r.actual_value REGEXP '^-?[0-9]+(\\.[0-9]+)?$' THEN 1 ELSE 0 END) = 0 THEN NULL
-                         ELSE SUM(CASE WHEN r.actual_value REGEXP '^-?[0-9]+(\\.[0-9]+)?$' THEN CAST(r.actual_value AS DECIMAL(20,4)) ELSE 0 END)
-                    END
-                ) ELSE (
-                    COALESCE(
-                        MAX(CASE WHEN r.month_bh=9  AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
-                        MAX(CASE WHEN r.month_bh=8  AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
-                        MAX(CASE WHEN r.month_bh=7  AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
-                        MAX(CASE WHEN r.month_bh=6  AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
-                        MAX(CASE WHEN r.month_bh=5  AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
-                        MAX(CASE WHEN r.month_bh=4  AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
-                        MAX(CASE WHEN r.month_bh=3  AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
-                        MAX(CASE WHEN r.month_bh=2  AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
-                        MAX(CASE WHEN r.month_bh=1  AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
-                        MAX(CASE WHEN r.month_bh=12 AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
-                        MAX(CASE WHEN r.month_bh=11 AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END),
-                        MAX(CASE WHEN r.month_bh=10 AND r.actual_value IS NOT NULL AND TRIM(r.actual_value)!='' AND TRIM(r.actual_value)!='0' THEN r.actual_value END)
-                    )
-                ) END AS last_actual,
-                r.hospcode, h.hosname, dist.distname
-            FROM kpi_results r
-            LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
-            LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
-            LEFT JOIN departments d ON d.id = i.dept_id
-            LEFT JOIN chospital h ON r.hospcode = h.hoscode
-            LEFT JOIN co_district dist ON dist.distid = h.distid
-            GROUP BY mi.main_indicator_name, i.kpi_indicators_name, i.id, d.dept_name, r.year_bh, r.hospcode, h.hosname, dist.distname
-            ORDER BY r.year_bh DESC, mi.main_indicator_name, i.kpi_indicators_name, i.id`;
-        const [rows] = await db.query(sql);
-        res.json({ success: true, data: rows });
-    } catch (error) {
-        res.status(500).json({ success: false });
-    }
-});
-
-apiRouter.get('/public/dashboard-stats', async (req, res) => {
-    try {
-        const year = req.query.year || (new Date().getFullYear() + 543).toString();
-        const [kpiRows] = await db.query(
-            `SELECT r.indicator_id, SUM(r.target_value) as total_target, SUM(r.actual_value) as total_actual
-             FROM kpi_results r WHERE r.year_bh = ? GROUP BY r.indicator_id`,
-            [year]
-        );
-        let passedCount = 0;
-        kpiRows.forEach(row => {
-            if (Number(row.total_target) > 0 && Number(row.total_actual) >= Number(row.total_target)) passedCount++;
-        });
-        const successRate = kpiRows.length > 0 ? ((passedCount / kpiRows.length) * 100).toFixed(1) : 0;
-
-        const [[{ recorded_count }]] = await db.query(
-            `SELECT COUNT(DISTINCT i.dept_id) as recorded_count FROM kpi_results r
-             JOIN kpi_indicators i ON r.indicator_id = i.id WHERE r.year_bh = ?`, [year]);
-        const [[{ total_depts }]] = await db.query(
-            `SELECT COUNT(*) as total_depts FROM departments`);
-        const [[{ pending_count }]] = await db.query(
-            `SELECT COUNT(*) as pending_count FROM kpi_results WHERE year_bh = ? AND status = 'Pending'`, [year]);
-
-        res.json({ success: true, data: { successRate, recordedCount: recorded_count, totalDepts: total_depts, pendingCount: pending_count, rank: 0, totalHospitals: 0 } });
-    } catch (error) {
-        res.status(500).json({ success: false });
-    }
-});
+// /public/kpi-results และ /public/dashboard-stats ถูกลบแล้ว (7 ต.ค. 2569) — เดิมเปิดให้ดูผลงานทุกหน่วยบริการ
+// โดยไม่ต้อง login และไม่ผ่าน rate limit (query ทั้งตาราง kpi_results ทุกครั้ง) — ผู้ใช้ยืนยันว่าไม่ต้องการหน้าสาธารณะ
+// ห้ามเพิ่ม endpoint ข้อมูลผลงานแบบไม่ต้อง login กลับมาอีก
 
 // ใช้ apiLimiter กับ Route ที่เหลือทั้งหมด (ป้องกันการยิง API รัวๆ)
 apiRouter.use(apiLimiter);

@@ -76,27 +76,22 @@ export class ChartComponent implements OnInit {
   };
   private animationTimer: any;
   isLoading: boolean = true;
-  isPublicView: boolean = false;
+  // หน้านี้ต้อง login เสมอ (route อยู่ใต้ authGuard) — โหมดดูสาธารณะ (isPublicView + /public/kpi-results)
+  // ถูกเอาออกแล้วเมื่อ 7 ต.ค. 2569 ตามที่ผู้ใช้ยืนยันว่าไม่ต้องการเปิดข้อมูลผลงานให้ดูโดยไม่ login
 
   ngOnInit() {
-    this.isPublicView = !this.authService.isLoggedIn();
-    if (!this.isPublicView) {
-      // logged in: ถ้าเปิด root path ให้ redirect ไป dashboard
-      const currentUrl = this.router.url;
-      if (currentUrl === '/' || currentUrl === '') {
-        this.router.navigate(['/dashboard']);
-        return;
-      }
+    // ถ้าเปิด root path ให้ redirect ไป dashboard
+    const currentUrl = this.router.url;
+    if (currentUrl === '/' || currentUrl === '') {
+      this.router.navigate(['/dashboard']);
+      return;
     }
     this.loadKpiData();
   }
 
   loadKpiData() {
     this.isLoading = true;
-    const source$ = this.isPublicView
-      ? this.authService.getPublicKpiResults()
-      : this.authService.getKpiSummary(this.selectedYear ? { year: this.selectedYear } : {});
-    source$.subscribe({
+    this.authService.getKpiSummary(this.selectedYear ? { year: this.selectedYear } : {}).subscribe({
       next: (res) => {
         if (res && res.success) {
           this.kpiData = res.data;
@@ -132,10 +127,7 @@ export class ChartComponent implements OnInit {
 
   loadDashboardStats() {
     if (!this.selectedYear) return;
-    const stats$ = this.isPublicView
-      ? this.authService.getPublicDashboardStats(this.selectedYear)
-      : this.authService.getDashboardStats(this.selectedYear);
-    stats$.subscribe({
+    this.authService.getDashboardStats(this.selectedYear).subscribe({
       next: (res) => {
         if (res && res.success) {
           this.animateStats(res.data);

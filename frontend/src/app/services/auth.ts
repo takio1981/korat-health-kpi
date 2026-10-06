@@ -51,12 +51,6 @@ export class AuthService {
   getPublicDistricts(): Observable<any> {
     return this.http.get(`${this.apiUrl}/public/districts`);
   }
-  getPublicKpiResults(): Observable<any> {
-    return this.http.get(`${this.apiUrl}/public/kpi-results`);
-  }
-  getPublicDashboardStats(year: string): Observable<any> {
-    return this.http.get(`${this.apiUrl}/public/dashboard-stats?year=${year}`);
-  }
 
   // 1. ฟังก์ชันบันทึก Token เมื่อล็อกอินสำเร็จ
   saveToken(token: string) {

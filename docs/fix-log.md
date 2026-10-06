@@ -4,6 +4,122 @@
 
 ---
 
+## 2569-10-07 — ปิดช่องทางดูข้อมูลผลงานโดยไม่ต้องเข้าสู่ระบบ + จัดระเบียบเอกสาร/repo
+
+### ปัญหา
+`GET /public/kpi-results` และ `GET /public/dashboard-stats` คืนผลงานตัวชี้วัดของ**ทุกหน่วยบริการ** (ชื่อ รพ.,
+อำเภอ, ผลงานรายเดือน) ให้ใครก็ได้โดยไม่ต้อง login — ประกาศไว้ก่อน `apiRouter.use(apiLimiter)` จึงไม่ถูกจำกัดจำนวนครั้ง
+และ `/public/kpi-results` query ทั้งตาราง `kpi_results` (~5 แสนแถว) ไม่มีเงื่อนไขทุกครั้ง (ทั้งข้อมูลรั่ว + เสี่ยง DoS)
+— ฝั่งหน้าเว็บโหมดดูสาธารณะ (`isPublicView` ใน chart) เข้าไม่ถึงอยู่แล้วเพราะ `/charts` อยู่ใต้ `authGuard`
+(dead code) แต่ API ยังเปิดอยู่
+
+### วิธีแก้ (ผู้ใช้ยืนยันว่าไม่ต้องการเปิดหน้าสาธารณะ)
+- ลบ 2 endpoint ออกจาก `api/server.js` + ลบ `getPublicKpiResults()`/`getPublicDashboardStats()` ใน `auth.ts`
+  + ลบโหมด `isPublicView` และ public header ใน `chart.ts`/`chart.html`
+- **คงไว้:** `/public/departments|hospitals|districts` (หน้าลงทะเบียนใช้ก่อน login — ข้อมูลอ้างอิงเท่านั้น) และ
+  `/help-public` (คู่มือการใช้งาน)
+
+### อื่นๆ
+- CLAUDE.md: แก้ตัวอย่างโค้ด "Dept Filtering" ที่ใช้รูปแบบต้นเหตุบั๊กสิทธิ์ (`role !== 'super_admin' && deptId`) →
+  `ROLE_SCOPE_OWN_DEPT` + แก้คำอธิบาย `/update-kpi` ที่ล้าสมัยหลังแก้ช่องโหว่ single session
+- เอา `frontend/dist` (8 ไฟล์ที่ค้าง track ก่อนมีกฎ gitignore) ออกจาก git — ไฟล์ในเครื่องไม่ถูกลบ
+
+### ทดสอบ
+- เพิ่ม `api/tests/public-endpoints.test.js` — endpoint ที่ปิดต้องคืน 404 / endpoint ลงทะเบียนยังใช้ได้ — ยืนยันแล้วว่า
+  fail กับโค้ดเดิม (2 failed)
+- API **27/27 ผ่าน** | Frontend unit **25/25 ผ่าน** | `ng build` ผ่าน
+
+---
+
+## 2569-10-06 — ตรวจสอบบั๊กและทดสอบทั้งระบบ (ชุดทดสอบอัตโนมัติ + ทดสอบหน้าจอจริงทุกหน้า × 3 role)
+
+### บั๊กที่พบและแก้ไข
+1. **[ความปลอดภัย] `/update-kpi` ข้ามการตรวจ single session** — route verify JWT เองอย่างเดียว ไม่ผ่าน
+   `authenticateToken` → ผู้ใช้ที่ session ถูกยกเลิก (ถูกบังคับ logout / login ซ้อนเครื่องอื่น) ยังบันทึกผลงานได้จน token
+   หมดอายุ (8 ชม.) — แก้: เพิ่ม `authenticateToken` + ใช้ `req.user`
+2. **`captureError` ค้างตลอดไป** — เรียก `db.query(sql, params, callback)` แต่ `db` เป็น promise pool → callback ไม่ถูก
+   เรียกเลย → `POST /errors/report` ไม่ตอบกลับ + alert Telegram/LINE ของ error ใหม่ไม่เคยถูกส่ง (INSERT ยังทำงาน จึงไม่มีใคร
+   สังเกต) — แก้: `const [result] = await db.query(...)`
+3. **`/data-entry-lock` คืน `is_locked: ''`** เมื่อไม่ได้ตั้งวันเริ่มล็อค (`startDate && ...` คืนค่า string ว่าง) → หน้า
+   dashboard ของผู้ใช้ทั่วไปเกิด NG0100 ExpressionChangedAfterItHasBeenChecked (พบจาก smoke test role user_hos) —
+   แก้: `!!(...)` ใน API + `=== true` ใน `dashboard.ts` `isEntryLocked`
+
+### ปัญหาของชุดทดสอบเอง (แก้แล้ว)
+- ไม่มี `.env.test` → `npm test` จะรันบน DB จริงและลบ `error_logs` ทั้งหมด — สร้าง `khups_kpi_test_db` แยก + `.env.test`
+  และให้ `tests/setup.js` **throw** ถ้า DB_NAME ไม่ใช่ test (เดิมแค่ warn)
+- `cleanupTestUsers` ลบแค่ `test_user_%` แต่ test สร้าง `test_admin_cup_perm` ฯลฯ → ชน UNIQUE รอบถัดไป — แก้เป็น `test\_%`
+- `jest.config.js` ใช้ key ผิด `setupFilesAfterEach` (ไม่มีจริง) → `setupFiles`
+- Frontend spec 11 ไฟล์เป็น stub ของ Angular CLI ที่ import ชื่อ class ผิด (`Dashboard` แทน `DashboardComponent`) —
+  **ไม่เคย compile ได้เลย** — เขียนใหม่ + เพิ่ม `testing/test-providers.ts` + regression tests
+
+### ผลการทดสอบ
+- API: **23/23 ผ่าน** (5 ไฟล์ — เพิ่ม `session.test.js` (รวมบันทึกผลงานจริงพร้อมค่า "รอดำเนินการ" ลง test DB),
+  `data-entry-lock.test.js`)
+- Frontend unit: **25/25 ผ่าน** (12 ไฟล์)
+- Regression test ยืนยันแล้วว่า **fail กับโค้ดก่อนแก้** (ปีงบเด้งกลับ, single session)
+- Smoke test หน้าจอจริง: 21 หน้า × 3 role (super_admin / admin_ssj / user_hos) รัน 2 รอบ — **0 console error,
+  0 API error** — หน้า dashboard E2E 17/17 ผ่าน
+- บัญชีทดสอบและ error log ที่เกิดจากการทดสอบลบแล้วทั้งหมด
+
+### ข้อสังเกต (ไม่ใช่บั๊ก — ไม่ได้แก้)
+- `kpi-setup` ปิดสำหรับ admin_ssj/admin_cup เป็นค่าเริ่มต้น (ตรงกับ route guard เดิม = super_admin) — ตาราง Role System
+  ใน CLAUDE.md เขียนไม่ตรง แก้เอกสารแล้ว
+- `/public/kpi-results`, `/public/dashboard-stats` ไม่ต้อง login (ตั้งใจ ใช้กับหน้าสาธารณะ) — เป็นการตัดสินใจเชิงนโยบาย
+
+---
+
+## 2569-10-06 — หน้าต่าง "เพิ่มตัวชี้วัด": admin_cup/hos/sso เห็นตัวชี้วัดแค่หน่วยงานตัวเอง
+
+### อาการ
+ผู้ดูแลระดับพื้นที่ (admin_cup, admin_hos, admin_sso) ที่บัญชีมี `dept_id` ติดอยู่ เปิดหน้าต่าง "เพิ่มตัวชี้วัด"
+ในหน้าบันทึกผลงานแล้วเห็นตัวชี้วัดเฉพาะหน่วยงานตัวเอง ทั้งที่ scope ตามตาราง Role System คือ "ทุก dept"
+
+### สาเหตุ
+`GET /kpi-template` กรองด้วย `user.role !== 'super_admin' && user.deptId != null` — เช็คแค่ว่ามี dept_id
+โดยไม่ดู role (ขัดกติกา CLAUDE.md ส่วน Role-based Scoping)
+
+### วิธีแก้
+เปลี่ยนเป็น `ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null` — pattern เดียวกับ endpoint อื่นที่ถูกต้อง
+
+### ทดสอบ
+บัญชีทดสอบชั่วคราว dept_id=8 ทั้งคู่ เรียก `/kpi-template` จริงบน dev API:
+admin_cup → 144 ตัวชี้วัด / 16 หน่วยงาน (ทั้งหมดที่เปิดใช้งาน) | user_hos → 29 ตัวชี้วัด / 1 หน่วยงาน (ของตัวเอง)
+ลบบัญชีทดสอบทันทีหลังทดสอบ
+
+### ไฟล์ที่แก้ไข
+- `api/server.js` — `/kpi-template`
+- `frontend/src/app/changelog/changelog.ts` — entry `2569.10.06.a`
+
+---
+
+## 2569-10-02 — หน้าบันทึกผลงานตัวชี้วัด: ค้นหาปีงบย้อนหลังแล้วแสดง 0 รายการ
+
+### อาการ
+เลือกตัวกรองปีงบประมาณ 2569 (ปีงบที่ผ่านมา) + อำเภอ แล้วกด "ค้นหา" — backend คืนข้อมูลมาครบ (ยืนยันจาก
+network: `GET /kpi-results?year=2569&district=...` คืน 500 แถว) แต่ตารางแสดง "แสดง 0 รายการ" และ dropdown
+ปีงบเด้งกลับเป็น 2570 เอง — พบระหว่างถ่ายภาพหน้าจอประกอบคู่มือในเล่มผลงาน (ปีงบ 2570 เพิ่งเริ่ม 1 ต.ค. 2569
+จึงยังไม่มีข้อมูล ทำให้ผู้ใช้ที่ต้องการดูข้อมูลปี 2569 ดูไม่ได้เลยทุกคน)
+
+### สาเหตุ
+`loadKpiData()` ใน `dashboard.ts` เรียก `setDefaultYear()` ทุกครั้งหลังโหลดสำเร็จ → `selectedYear` ถูกเขียนทับ
+เป็นปีงบปัจจุบัน → `applyFilters()` เทียบ `item.year_bh === selectedYear` ไม่ตรง → กรองทิ้งหมด
+
+### วิธีแก้
+เปลี่ยนเป็น `if (!this.selectedYear) this.setDefaultYear();` — ตั้งค่าเริ่มต้นเฉพาะตอนยังไม่ได้เลือกปี
+(สอดคล้องกับจุดอื่นในไฟล์เดียวกันที่ใช้ guard แบบนี้อยู่แล้ว)
+
+### ทดสอบ
+dev server (ng serve) — ค้นหาปีงบ 2569 อำเภอโนนสูง แสดงข้อมูลครบ ปีงบไม่เด้งกลับ (ตรวจด้วย Playwright)
+
+### ไฟล์ที่แก้ไข
+- `frontend/src/app/dashboard/dashboard.ts`
+- `frontend/src/app/changelog/changelog.ts` — เพิ่ม entry `2569.10.02.a`
+
+### Deploy
+ยังไม่ได้ build/deploy Docker
+
+---
+
 ## 2569-09-29 — รวม logic คำนวณปีงบประมาณปัจจุบัน/ถัดไปทั้งระบบเป็นจุดเดียว (fiscal-year.util.ts)
 
 ### คำขอ
@@ -860,92 +976,3 @@ notification ประเภทอื่นอีกกว่า 15 จุด (K
 ### Deploy
 Build + redeploy ทั้ง backend และ frontend Docker container เรียบร้อย (`docker compose build --no-cache` +
 `docker compose up -d` ทั้ง 2 service) ยืนยัน healthy ทั้งคู่ก่อน push ขึ้น GitHub
-
----
-
-## 2569-10-02 — หน้าบันทึกผลงานตัวชี้วัด: ค้นหาปีงบย้อนหลังแล้วแสดง 0 รายการ
-
-### อาการ
-เลือกตัวกรองปีงบประมาณ 2569 (ปีงบที่ผ่านมา) + อำเภอ แล้วกด "ค้นหา" — backend คืนข้อมูลมาครบ (ยืนยันจาก
-network: `GET /kpi-results?year=2569&district=...` คืน 500 แถว) แต่ตารางแสดง "แสดง 0 รายการ" และ dropdown
-ปีงบเด้งกลับเป็น 2570 เอง — พบระหว่างถ่ายภาพหน้าจอประกอบคู่มือในเล่มผลงาน (ปีงบ 2570 เพิ่งเริ่ม 1 ต.ค. 2569
-จึงยังไม่มีข้อมูล ทำให้ผู้ใช้ที่ต้องการดูข้อมูลปี 2569 ดูไม่ได้เลยทุกคน)
-
-### สาเหตุ
-`loadKpiData()` ใน `dashboard.ts` เรียก `setDefaultYear()` ทุกครั้งหลังโหลดสำเร็จ → `selectedYear` ถูกเขียนทับ
-เป็นปีงบปัจจุบัน → `applyFilters()` เทียบ `item.year_bh === selectedYear` ไม่ตรง → กรองทิ้งหมด
-
-### วิธีแก้
-เปลี่ยนเป็น `if (!this.selectedYear) this.setDefaultYear();` — ตั้งค่าเริ่มต้นเฉพาะตอนยังไม่ได้เลือกปี
-(สอดคล้องกับจุดอื่นในไฟล์เดียวกันที่ใช้ guard แบบนี้อยู่แล้ว)
-
-### ทดสอบ
-dev server (ng serve) — ค้นหาปีงบ 2569 อำเภอโนนสูง แสดงข้อมูลครบ ปีงบไม่เด้งกลับ (ตรวจด้วย Playwright)
-
-### ไฟล์ที่แก้ไข
-- `frontend/src/app/dashboard/dashboard.ts`
-- `frontend/src/app/changelog/changelog.ts` — เพิ่ม entry `2569.10.02.a`
-
-### Deploy
-ยังไม่ได้ build/deploy Docker
-
----
-
-## 2569-10-06 — หน้าต่าง "เพิ่มตัวชี้วัด": admin_cup/hos/sso เห็นตัวชี้วัดแค่หน่วยงานตัวเอง
-
-### อาการ
-ผู้ดูแลระดับพื้นที่ (admin_cup, admin_hos, admin_sso) ที่บัญชีมี `dept_id` ติดอยู่ เปิดหน้าต่าง "เพิ่มตัวชี้วัด"
-ในหน้าบันทึกผลงานแล้วเห็นตัวชี้วัดเฉพาะหน่วยงานตัวเอง ทั้งที่ scope ตามตาราง Role System คือ "ทุก dept"
-
-### สาเหตุ
-`GET /kpi-template` กรองด้วย `user.role !== 'super_admin' && user.deptId != null` — เช็คแค่ว่ามี dept_id
-โดยไม่ดู role (ขัดกติกา CLAUDE.md ส่วน Role-based Scoping)
-
-### วิธีแก้
-เปลี่ยนเป็น `ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null` — pattern เดียวกับ endpoint อื่นที่ถูกต้อง
-
-### ทดสอบ
-บัญชีทดสอบชั่วคราว dept_id=8 ทั้งคู่ เรียก `/kpi-template` จริงบน dev API:
-admin_cup → 144 ตัวชี้วัด / 16 หน่วยงาน (ทั้งหมดที่เปิดใช้งาน) | user_hos → 29 ตัวชี้วัด / 1 หน่วยงาน (ของตัวเอง)
-ลบบัญชีทดสอบทันทีหลังทดสอบ
-
-### ไฟล์ที่แก้ไข
-- `api/server.js` — `/kpi-template`
-- `frontend/src/app/changelog/changelog.ts` — entry `2569.10.06.a`
-
----
-
-## 2569-10-06 — ตรวจสอบบั๊กและทดสอบทั้งระบบ (ชุดทดสอบอัตโนมัติ + ทดสอบหน้าจอจริงทุกหน้า × 3 role)
-
-### บั๊กที่พบและแก้ไข
-1. **[ความปลอดภัย] `/update-kpi` ข้ามการตรวจ single session** — route verify JWT เองอย่างเดียว ไม่ผ่าน
-   `authenticateToken` → ผู้ใช้ที่ session ถูกยกเลิก (ถูกบังคับ logout / login ซ้อนเครื่องอื่น) ยังบันทึกผลงานได้จน token
-   หมดอายุ (8 ชม.) — แก้: เพิ่ม `authenticateToken` + ใช้ `req.user`
-2. **`captureError` ค้างตลอดไป** — เรียก `db.query(sql, params, callback)` แต่ `db` เป็น promise pool → callback ไม่ถูก
-   เรียกเลย → `POST /errors/report` ไม่ตอบกลับ + alert Telegram/LINE ของ error ใหม่ไม่เคยถูกส่ง (INSERT ยังทำงาน จึงไม่มีใคร
-   สังเกต) — แก้: `const [result] = await db.query(...)`
-3. **`/data-entry-lock` คืน `is_locked: ''`** เมื่อไม่ได้ตั้งวันเริ่มล็อค (`startDate && ...` คืนค่า string ว่าง) → หน้า
-   dashboard ของผู้ใช้ทั่วไปเกิด NG0100 ExpressionChangedAfterItHasBeenChecked (พบจาก smoke test role user_hos) —
-   แก้: `!!(...)` ใน API + `=== true` ใน `dashboard.ts` `isEntryLocked`
-
-### ปัญหาของชุดทดสอบเอง (แก้แล้ว)
-- ไม่มี `.env.test` → `npm test` จะรันบน DB จริงและลบ `error_logs` ทั้งหมด — สร้าง `khups_kpi_test_db` แยก + `.env.test`
-  และให้ `tests/setup.js` **throw** ถ้า DB_NAME ไม่ใช่ test (เดิมแค่ warn)
-- `cleanupTestUsers` ลบแค่ `test_user_%` แต่ test สร้าง `test_admin_cup_perm` ฯลฯ → ชน UNIQUE รอบถัดไป — แก้เป็น `test\_%`
-- `jest.config.js` ใช้ key ผิด `setupFilesAfterEach` (ไม่มีจริง) → `setupFiles`
-- Frontend spec 11 ไฟล์เป็น stub ของ Angular CLI ที่ import ชื่อ class ผิด (`Dashboard` แทน `DashboardComponent`) —
-  **ไม่เคย compile ได้เลย** — เขียนใหม่ + เพิ่ม `testing/test-providers.ts` + regression tests
-
-### ผลการทดสอบ
-- API: **23/23 ผ่าน** (5 ไฟล์ — เพิ่ม `session.test.js` (รวมบันทึกผลงานจริงพร้อมค่า "รอดำเนินการ" ลง test DB),
-  `data-entry-lock.test.js`)
-- Frontend unit: **25/25 ผ่าน** (12 ไฟล์)
-- Regression test ยืนยันแล้วว่า **fail กับโค้ดก่อนแก้** (ปีงบเด้งกลับ, single session)
-- Smoke test หน้าจอจริง: 21 หน้า × 3 role (super_admin / admin_ssj / user_hos) รัน 2 รอบ — **0 console error,
-  0 API error** — หน้า dashboard E2E 17/17 ผ่าน
-- บัญชีทดสอบและ error log ที่เกิดจากการทดสอบลบแล้วทั้งหมด
-
-### ข้อสังเกต (ไม่ใช่บั๊ก — ไม่ได้แก้)
-- `kpi-setup` ปิดสำหรับ admin_ssj/admin_cup เป็นค่าเริ่มต้น (ตรงกับ route guard เดิม = super_admin) — ตาราง Role System
-  ใน CLAUDE.md เขียนไม่ตรง แก้เอกสารแล้ว
-- `/public/kpi-results`, `/public/dashboard-stats` ไม่ต้อง login (ตั้งใจ ใช้กับหน้าสาธารณะ) — เป็นการตัดสินใจเชิงนโยบาย
