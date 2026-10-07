@@ -1072,6 +1072,9 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     return this.http.get(`${this.apiUrl}/users/pending-count`, { headers });
   }
   refreshPendingUsers() {
+    // role ที่ถูกปิดสิทธิ์หน้า "จัดการผู้ใช้งาน" (ตั้งที่ /role-page-access) ไม่ต้องเรียก API — backend ตอบ 403
+    // ทุกหน้า (layout เรียกตอนโหลดทุกครั้ง) และเมนูนั้นถูกซ่อนอยู่แล้ว badge จึงไม่มีความหมาย
+    if (!this.canAccessPage('users')) { this._pendingUsers$.next(0); return; }
     this.getPendingUsersCount().subscribe({
       next: (res: any) => { if (res.success) this._pendingUsers$.next(res.count || 0); }
     });

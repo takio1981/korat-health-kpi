@@ -10,6 +10,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { InitScrollLeftDirective } from './init-scroll-left.directive';
 import { CriteriaTextPipe } from '../shared/criteria-text.pipe';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
+import { activeFormula, validateFormula, evaluateFormula } from '../shared/kpi-formula';
 
 @Component({
   selector: 'app-dashboard',
@@ -2771,7 +2772,13 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         const v = sum[monthMap[k]];
         if (v != null) item[k] = this.formatNum(v);
       }
-      if (sum.last_actual != null) {
+      const formula = activeFormula(item);
+      if (formula && !validateFormula(formula)) {
+        // ตัวชี้วัดที่ตั้งสูตร: ผลงาน = สูตรบนค่าเฉลี่ยรายเดือนจาก sub (แทนค่าเดือนล่าสุดของ AVG)
+        const val = evaluateFormula(formula, item, item.target_value);
+        item.last_actual = val ?? '';
+        item.total_actual = val === null ? 0 : parseFloat(val) || 0;
+      } else if (sum.last_actual != null) {
         item.last_actual = this.formatNum(sum.last_actual);
         item.total_actual = parseFloat(sum.last_actual) || 0;
       }
@@ -3216,7 +3223,11 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   onValueChange(item: any, month: string) {
     const fiscalOrder = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
     let lastActual = '';
-    if (Number(item.is_cumulative) === 1) {
+    const formula = activeFormula(item);
+    if (formula && !validateFormula(formula)) {
+      // ตัวชี้วัดที่ตั้งสูตรคำนวณผลงาน — evaluator เดียวกับ backend (ผลตรงกับ kpi_summary/Export)
+      lastActual = evaluateFormula(formula, item, item.target_value) ?? '';
+    } else if (Number(item.is_cumulative) === 1) {
       // ตัวชี้วัดสะสม: รวมค่าตัวเลขทุกเดือนที่มีข้อมูล
       const nums = fiscalOrder.map(m => parseFloat(item[m])).filter(n => !isNaN(n));
       lastActual = nums.length > 0 ? String(nums.reduce((s, n) => s + n, 0)) : '';
@@ -3295,9 +3306,14 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   // badge "สะสม" — is_cumulative=1 → ผลงานล่าสุดคำนวณจาก SUM ทุกเดือนในปีงบ แทนค่าเดือนล่าสุด
-  getCumulativeBadge(item: any): { label: string; title: string; color: string } | null {
+  getCumulativeBadge(item: any): { label: string; title: string; color: string; icon: string } | null {
+    const formula = activeFormula(item);
+    if (formula) {
+      // มีสูตร → แสดง badge "สูตร" แทน "สะสม" (สูตรมีลำดับความสำคัญเหนือ is_cumulative)
+      return { label: 'สูตร', title: `ผลงานคำนวณตามสูตร: ${formula}`, color: 'bg-fuchsia-100 text-fuchsia-700 border border-fuchsia-200', icon: 'fa-calculator' };
+    }
     if (Number(item?.is_cumulative) !== 1) return null;
-    return { label: 'สะสม', title: 'ผลงานเดือนล่าสุด = ผลรวมสะสมตั้งแต่ตุลาคมถึงเดือนนี้', color: 'bg-violet-100 text-violet-700 border border-violet-200' };
+    return { label: 'สะสม', title: 'ผลงานเดือนล่าสุด = ผลรวมสะสมตั้งแต่ตุลาคมถึงเดือนนี้', color: 'bg-violet-100 text-violet-700 border border-violet-200', icon: 'fa-layer-group' };
   }
 
   // badge แหล่งที่มาข้อมูล — 3 สถานะ ตาม kpi_indicators.data_source/khd_report_id (link ถาวรกับ KHD reports.report_id ผ่าน table_process)

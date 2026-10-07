@@ -49,6 +49,7 @@ process.on('uncaughtException', (err) => {
 const express = require('express');
 const cors = require('cors');
 const db = require('./db');
+const kpiFormula = require('./kpi-formula'); // สูตรคำนวณผลงานเฉพาะตัวชี้วัด (result_formula)
 const { getRemotePool } = require('./db-remote');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -3168,6 +3169,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 MIN(i.evaluation_mode) AS evaluation_mode,
                 MIN(i.required_off_types) AS required_off_types,
                 MAX(i.is_cumulative) AS is_cumulative,
+                MIN(i.result_formula) AS result_formula,
                 r.hospcode,
                 MIN(h.hosname) AS hosname,
                 MIN(h.hostype) AS hostype,
@@ -3192,8 +3194,12 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         const monthKeys = ['oct','nov','dece','jan','feb','mar','apr','may','jun','jul','aug','sep'];
         for (const row of rows) {
             const isCumulative = Number(row.is_cumulative) === 1;
+            const formula = kpiFormula.activeFormula(row);
             let lastVal = null;
-            if (isCumulative) {
+            if (formula && !kpiFormula.validateFormula(formula)) {
+                // ตัวชี้วัดที่ตั้งสูตรคำนวณผลงาน — ใช้สูตรแทน is_cumulative / ค่าเดือนล่าสุด
+                lastVal = kpiFormula.evaluateFormula(formula, row, row.target_value);
+            } else if (isCumulative) {
                 // ตัวชี้วัดสะสม: รวมค่าตัวเลขทุกเดือนที่มีข้อมูล (ไม่ sum ถ้าไม่มีเดือนไหนมีค่าเลย → คง null)
                 const numericVals = monthKeys.map(k => row[k]).filter(v => v != null && String(v).trim() !== '' && !isNaN(parseFloat(v)));
                 lastVal = numericVals.length > 0 ? String(numericVals.reduce((s, v) => s + parseFloat(v), 0)) : null;
@@ -3475,7 +3481,36 @@ async function refreshKpiSummaryForIndicatorYears(connection, pairs) {
             END
             WHERE s.indicator_id = ? AND s.year_bh = ?
         `, [p.indicator_id, p.year_bh]);
+        await applyFormulaToSummary(connection, { indicatorId: p.indicator_id, yearBh: p.year_bh });
     }
+}
+
+// คำนวณ kpi_summary.last_actual ใหม่ด้วยสูตร (result_formula) — เฉพาะตัวชี้วัดที่ตั้งสูตรไว้
+// เรียกหลัง UPDATE last_actual แบบ SQL เดิม (ค่าเดือนล่าสุด / สะสม) เพื่อทับค่าเฉพาะตัวชี้วัดที่มีสูตร
+// สูตรคำนวณใน SQL ไม่ได้ (เป็นภาษาของเราเอง) จึงคำนวณใน JS ด้วย kpi-formula.js ตัวเดียวกับทุกจุดในระบบ
+// opts: { indicatorId?, yearBh? } — ไม่ระบุ = ทุกตัวชี้วัดที่มีสูตร / ทุกปีงบ
+async function applyFormulaToSummary(conn, opts = {}) {
+    const where = ["result_formula IS NOT NULL", "TRIM(result_formula) <> ''"];
+    const params = [];
+    if (opts.indicatorId) { where.push('id = ?'); params.push(opts.indicatorId); }
+    const [inds] = await conn.query(`SELECT id, result_formula FROM kpi_indicators WHERE ${where.join(' AND ')}`, params);
+    let updated = 0;
+    for (const ind of inds) {
+        const formula = kpiFormula.activeFormula(ind);
+        if (!formula || kpiFormula.validateFormula(formula)) continue; // สูตรผิด (ไม่ควรเกิด — validate ตอนบันทึกแล้ว) → คงค่าเดิม
+        const sp = [ind.id];
+        let yw = '';
+        if (opts.yearBh) { yw = 'AND year_bh = ?'; sp.push(opts.yearBh); }
+        const [rows] = await conn.query(
+            `SELECT id, target_value, oct, nov, dece, jan, feb, mar, apr, may, jun, jul, aug, sep
+             FROM kpi_summary WHERE indicator_id = ? ${yw}`, sp);
+        for (const r of rows) {
+            const val = kpiFormula.evaluateFormula(formula, r, r.target_value);
+            await conn.query('UPDATE kpi_summary SET last_actual = ? WHERE id = ?', [val, r.id]);
+            updated++;
+        }
+    }
+    return updated;
 }
 
 // GET /kpi-results/manage — list + filter (date_from/date_to บน created_at, year_bh+month_from/month_to บนปีงบ)
@@ -6129,18 +6164,30 @@ const _actorLabel = async (userId) => {
     } catch (_) { return `user_id ${userId}`; }
 };
 
+// รับค่า result_formula จาก request → { value: string|null, error: string|null }
+// ว่าง/ไม่ส่ง = null (ใช้วิธีเดิม) | สูตรผิด = error ภาษาไทยจาก kpi-formula.js (ห้ามบันทึกสูตรที่คำนวณไม่ได้)
+function parseFormulaInput(raw) {
+    if (raw === undefined || raw === null) return { value: null, error: null };
+    const s = String(raw).trim();
+    if (!s) return { value: null, error: null };
+    const err = kpiFormula.validateFormula(s);
+    return err ? { value: null, error: `สูตรคำนวณผลงานไม่ถูกต้อง: ${err}` } : { value: s, error: null };
+}
+
 apiRouter.post('/indicators/bulk-import', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
     const { rows } = req.body;
     if (!Array.isArray(rows) || rows.length === 0)
         return res.status(400).json({ success: false, message: 'ไม่มีข้อมูลสำหรับนำเข้า' });
     const results = [];
     for (const row of rows) {
-        const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, criterion, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export } = row;
+        const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, criterion, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export, result_formula } = row;
+        const formula = parseFormulaInput(result_formula);
+        if (formula.error) { results.push({ name: kpi_indicators_name, status: 'error', message: formula.error }); continue; }
         try {
             const [r] = await db.query(
-                `INSERT INTO kpi_indicators (kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, criterion, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, criterion || null, weight || null, kpi_indicators_code || null, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), is_cumulative ? 1 : 0, use_sub_indicator_export ? 1 : 0]
+                `INSERT INTO kpi_indicators (kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, criterion, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export, result_formula)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, criterion || null, weight || null, kpi_indicators_code || null, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), is_cumulative ? 1 : 0, use_sub_indicator_export ? 1 : 0, formula.value]
             );
             results.push({ name: kpi_indicators_name, status: 'success', id: r.insertId });
         } catch (e) {
@@ -6162,15 +6209,17 @@ apiRouter.post('/indicators/bulk-import', authenticateToken, requireAction('kpi-
 });
 
 apiRouter.post('/indicators', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
-    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, criterion, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export } = req.body;
+    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, criterion, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export, result_formula } = req.body;
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
         return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
     }
+    const formula = parseFormulaInput(result_formula);
+    if (formula.error) return res.status(400).json({ success: false, message: formula.error });
     try {
         const [r] = await db.query(
-            `INSERT INTO kpi_indicators (kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, criterion, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, criterion || null, weight || null, kpi_indicators_code || null, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), is_cumulative ? 1 : 0, use_sub_indicator_export ? 1 : 0]
+            `INSERT INTO kpi_indicators (kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, criterion, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export, result_formula)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, criterion || null, weight || null, kpi_indicators_code || null, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), is_cumulative ? 1 : 0, use_sub_indicator_export ? 1 : 0, formula.value]
         );
         // LINE notify: created
         try {
@@ -6190,15 +6239,18 @@ apiRouter.post('/indicators', authenticateToken, requireAction('kpi-manage', 'ad
 });
 
 apiRouter.put('/indicators/:id', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
-    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, criterion, weight, kpi_indicators_code, is_active, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export } = req.body;
+    const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, criterion, weight, kpi_indicators_code, is_active, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export, result_formula } = req.body;
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
         return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
     }
+    const formula = parseFormulaInput(result_formula);
+    if (formula.error) return res.status(400).json({ success: false, message: formula.error });
     try {
         // ดึง old row เพื่อหาว่าฟิลด์ไหนเปลี่ยน (diff สั้นๆ)
         let diff = '';
+        let calcChanged = false; // สูตร/สะสม เปลี่ยน → ต้องคำนวณ kpi_summary ใหม่
         try {
-            const [oldRow] = await db.query('SELECT kpi_indicators_name, is_active, table_process, target_percentage, criterion FROM kpi_indicators WHERE id = ?', [req.params.id]);
+            const [oldRow] = await db.query('SELECT kpi_indicators_name, is_active, table_process, target_percentage, criterion, is_cumulative, result_formula FROM kpi_indicators WHERE id = ?', [req.params.id]);
             if (oldRow[0]) {
                 const o = oldRow[0];
                 const changes = [];
@@ -6207,14 +6259,30 @@ apiRouter.put('/indicators/:id', authenticateToken, requireAction('kpi-manage', 
                 if ((o.table_process || '') !== (table_process || '')) changes.push('table_process');
                 if (String(o.target_percentage || '') !== String(target_percentage || '')) changes.push('เป้าหมาย');
                 if (String(o.criterion || '') !== String(criterion || '')) changes.push('เกณฑ์');
+                if ((o.result_formula || '') !== (formula.value || '')) {
+                    changes.push(formula.value ? `สูตรคำนวณผลงาน→${formula.value}` : 'ยกเลิกสูตรคำนวณผลงาน');
+                    calcChanged = true;
+                }
+                if (Number(o.is_cumulative || 0) !== (is_cumulative ? 1 : 0)) calcChanged = true;
                 if (changes.length > 0) diff = `\n📝 เปลี่ยน: ${changes.join(', ')}`;
             }
         } catch (_) {}
 
         await db.query(
-            `UPDATE kpi_indicators SET kpi_indicators_name=?, kpi_indicators_id=?, main_indicator_id=?, dept_id=?, target_percentage=?, target_condition=?, criterion=?, weight=?, kpi_indicators_code=?, is_active=?, table_process=?, description=?, r9=?, moph=?, ssj=?, rmw=?, other=?, evaluation_mode=?, required_off_types=?, is_cumulative=?, use_sub_indicator_export=? WHERE id=?`,
-            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, criterion || null, weight || null, kpi_indicators_code || null, is_active ? 1 : 0, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), is_cumulative ? 1 : 0, use_sub_indicator_export ? 1 : 0, req.params.id]
+            `UPDATE kpi_indicators SET kpi_indicators_name=?, kpi_indicators_id=?, main_indicator_id=?, dept_id=?, target_percentage=?, target_condition=?, criterion=?, weight=?, kpi_indicators_code=?, is_active=?, table_process=?, description=?, r9=?, moph=?, ssj=?, rmw=?, other=?, evaluation_mode=?, required_off_types=?, is_cumulative=?, use_sub_indicator_export=?, result_formula=? WHERE id=?`,
+            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, criterion || null, weight || null, kpi_indicators_code || null, is_active ? 1 : 0, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), is_cumulative ? 1 : 0, use_sub_indicator_export ? 1 : 0, formula.value, req.params.id]
         );
+
+        // วิธีคำนวณผลงานเปลี่ยน → คำนวณ kpi_summary ของตัวชี้วัดนี้ใหม่ทุกปีงบทันที ให้กราฟ/รายงานตรงกับหน้าบันทึกผลงาน
+        // (ไม่ต้องรอผู้ดูแลกด "อัปเดต Summary") — ทำนอก transaction หลัก ล้มเหลวไม่กระทบการบันทึกตัวชี้วัด
+        if (calcChanged) {
+            try {
+                const [years] = await db.query('SELECT DISTINCT year_bh FROM kpi_summary WHERE indicator_id = ?', [req.params.id]);
+                if (years.length > 0) {
+                    await refreshKpiSummaryForIndicatorYears(db, years.map(y => ({ indicator_id: Number(req.params.id), year_bh: y.year_bh })));
+                }
+            } catch (e) { console.error('[indicators PUT] refresh kpi_summary failed:', e.message); }
+        }
         // LINE notify: updated
         try {
             const actor = await _actorLabel(req.user.userId);
@@ -7433,7 +7501,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
     try {
         // กรอง upload_excel != 1 (ตัวที่ตั้งเป็น "อัปโหลด Excel เอง" ข้ามทั้งใน check และ export)
         // ดึง evaluation_mode/required_off_types ด้วย เพื่อคำนวณขอบเขตหน่วยบริการเหมือน performKpiExport
-        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, use_sub_indicator_export, evaluation_mode, required_off_types FROM kpi_indicators
+        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, use_sub_indicator_export, evaluation_mode, required_off_types FROM kpi_indicators
             WHERE table_process IS NOT NULL AND table_process != ''
             AND (upload_excel IS NULL OR upload_excel = 0)`;
         let indicatorParams = [];
@@ -7696,9 +7764,12 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                 // ไม่ข้าม hospcode ที่ยังไม่มีผลงานแล้ว — ต้องนับเป็น new/unchanged ด้วย (mirror performKpiExport)
                 const target = emptyToNull(d.target);
                 const monthValues = months.map(m => emptyToNull(d[m]));
-                // result: ตัวชี้วัดสะสม → รวมทุกเดือน, ปกติ → ค่าเดือนล่าสุดที่คีย์ (ก.ย.→ต.ค.) — เหมือน performKpiExport
+                // result: มีสูตร → ตามสูตร, ตัวชี้วัดสะสม → รวมทุกเดือน, ปกติ → ค่าเดือนล่าสุดที่คีย์ (ก.ย.→ต.ค.) — เหมือน performKpiExport
                 let resultVal;
-                if (Number(indicator.is_cumulative) === 1) {
+                const formula = kpiFormula.activeFormula(indicator);
+                if (formula && !kpiFormula.validateFormula(formula)) {
+                    resultVal = kpiFormula.evaluateFormula(formula, d, target);
+                } else if (Number(indicator.is_cumulative) === 1) {
                     const numericVals = monthValues.filter(v => v !== null && v !== undefined && !isNaN(parseFloat(v)));
                     resultVal = numericVals.length > 0 ? numericVals.reduce((s, v) => s + parseFloat(v), 0) : null;
                 } else {
@@ -7777,7 +7848,7 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
         // 1. Get indicators with valid table_process
         //    — กรอง upload_excel != 1 (ตัวที่ตั้งเป็น "อัปโหลดเอง" ข้ามไป)
         //    — ดึง evaluation_mode/required_off_types ด้วย เพื่อคำนวณขอบเขตหน่วยบริการที่ต้อง export (ดู resolveIndicatorHostypes)
-        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, use_sub_indicator_export, evaluation_mode, required_off_types FROM kpi_indicators
+        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, use_sub_indicator_export, evaluation_mode, required_off_types FROM kpi_indicators
             WHERE is_active = 1 AND (upload_excel IS NULL OR upload_excel = 0)
             AND table_process IS NOT NULL AND table_process != ''`;
         let indicatorParams = [];
@@ -8250,9 +8321,13 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                     const target = emptyToNull(d.target);
                     const dynValues = dynFieldKeys.map(k => emptyToNull(d['_dyn_' + k]));
                     const monthValues = months.map(m => emptyToNull(d[m]));
-                    // result: ตัวชี้วัดสะสม → รวมทุกเดือน, ปกติ → ค่าล่าสุดที่คีย์ (เดือนท้ายสุดตามปีงบ: ก.ย.→ต.ค.)
+                    // result: มีสูตร → ตามสูตร, ตัวชี้วัดสะสม → รวมทุกเดือน, ปกติ → ค่าล่าสุดที่คีย์ (เดือนท้ายสุดตามปีงบ: ก.ย.→ต.ค.)
+                    // ⚠️ ต้องตรงกับ checkKpiChanges เสมอ
                     let resultVal;
-                    if (Number(indicator.is_cumulative) === 1) {
+                    const formula = kpiFormula.activeFormula(indicator);
+                    if (formula && !kpiFormula.validateFormula(formula)) {
+                        resultVal = kpiFormula.evaluateFormula(formula, d, target);
+                    } else if (Number(indicator.is_cumulative) === 1) {
                         const numericVals = monthValues.filter(v => v !== null && v !== undefined && !isNaN(parseFloat(v)));
                         resultVal = numericVals.length > 0 ? numericVals.reduce((s, v) => s + parseFloat(v), 0) : null;
                     } else {
@@ -8919,6 +8994,9 @@ apiRouter.post('/refresh-summary/finalize', authenticateToken, isSuperAdmin, asy
             END
             WHERE 1=1 ${yearWhere}
         `, yearParams);
+
+        // ตัวชี้วัดที่ตั้งสูตรคำนวณผลงาน: ทับ last_actual ด้วยผลจากสูตร (ต้องอยู่หลัง 2 UPDATE ด้านบนเสมอ)
+        await applyFormulaToSummary(db, { yearBh: year || undefined });
 
         const [formSchemas] = await db.query('SELECT indicator_id FROM kpi_form_schemas WHERE is_active = 1');
         if (formSchemas.length > 0) {
@@ -10327,6 +10405,8 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
         try { await db.query(`UPDATE system_settings SET setting_key = REPLACE(setting_key, 'HDC', 'KHD') WHERE setting_key LIKE 'env_HDC%'`); } catch(e) {}
         // is_cumulative: 1 = ผลงานสะสมทุกเดือนในปีงบ (SUM) แทนค่าเดือนล่าสุด — ใช้กับตัวชี้วัดนับสะสม เช่น จำนวนราย/ครั้งสะสม
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS is_cumulative TINYINT(1) DEFAULT 0 COMMENT 'สะสมทุกเดือนในปีงบ (SUM) แทนค่าเดือนล่าสุด'`); } catch(e) {}
+        // result_formula: สูตรคำนวณผลงานเฉพาะตัวชี้วัด (api/kpi-formula.js) — มีค่าแล้วใช้แทน is_cumulative/ค่าเดือนล่าสุด
+        try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS result_formula VARCHAR(500) NULL COMMENT 'สูตรคำนวณผลงาน เช่น AVG(ALL) — ว่าง = วิธีเดิม'`); } catch(e) {}
         // criterion: "เกณฑ์" แยกออกจาก target_percentage ("เป้าหมาย") — เดิมทั้งสองความหมายใช้ target_percentage
         // ตัวเดียวปนกัน (เกณฑ์เทียบ KHD vs ค่าเริ่มต้นที่ copy เข้า kpi_results.target_value) ทำให้แก้ไขอย่างใดอย่างหนึ่ง
         // กระทบอีกอย่างโดยไม่ตั้งใจ — แยกเป็นคอลัมน์ใหม่ ก๊อปปี้ค่าที่เคย "เป็นเกณฑ์" อยู่แล้วมาไว้ที่นี่ครั้งเดียว (backfill)

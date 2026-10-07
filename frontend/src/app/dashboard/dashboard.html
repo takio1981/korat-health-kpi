@@ -643,7 +643,7 @@
                       <ng-container *ngIf="getCumulativeBadge(item) as cumBadge">
                         <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap"
                               [ngClass]="cumBadge.color" [title]="cumBadge.title">
-                          <i class="fas fa-layer-group text-[8px]"></i>{{ cumBadge.label }}
+                          <i class="fas text-[8px]" [ngClass]="cumBadge.icon"></i>{{ cumBadge.label }}
                         </span>
                       </ng-container>
                       <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap"
@@ -1129,7 +1129,7 @@
                       <ng-container *ngIf="getCumulativeBadge(item) as cumBadge">
                         <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] font-bold whitespace-nowrap shrink-0 mt-0.5"
                               [ngClass]="cumBadge.color" [title]="cumBadge.title">
-                          <i class="fas fa-layer-group text-[7px]"></i>{{ cumBadge.label }}
+                          <i class="fas text-[7px]" [ngClass]="cumBadge.icon"></i>{{ cumBadge.label }}
                         </span>
                       </ng-container>
                       <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] font-bold whitespace-nowrap shrink-0 mt-0.5"

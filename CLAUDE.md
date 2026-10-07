@@ -261,6 +261,28 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - Dashboard badge "สะสม" (violet, `fa-layer-group`) ใน col-2 ชื่อตัวชี้วัด — `getCumulativeBadge()` ใน
   `dashboard.ts` — แทนที่ข้อความแจ้งเตือน static เดิมที่เหมารวมทุกแถวโดยไม่ตรงกับความจริงเสมอไป
 
+### สูตรคำนวณผลงานเฉพาะตัวชี้วัด (result_formula)
+- `kpi_indicators.result_formula` VARCHAR(500) NULL — มีค่า = "ผลงาน" (last_actual / export `result`) คำนวณตามสูตร
+  **มีลำดับเหนือ `is_cumulative`** | NULL/ว่าง = วิธีเดิมทุกอย่าง (ไม่กระทบตัวชี้วัดเดิม) — ร้อยละ/ผ่านเกณฑ์ยังคิด
+  `ผลงาน ÷ เป้าหมาย` เหมือนเดิม (สูตรคำนวณ "ผลงาน" เท่านั้น ไม่ใช่ร้อยละ — ผู้ใช้เลือกแบบนี้)
+- ภาษาสูตร: ตัวแปร `m10…m09` (`m1`–`m9` ย่อได้) + `target`, ฟังก์ชัน `SUM AVG MAX MIN COUNT LAST` (อาร์กิวเมนต์ = รายการเดือน
+  หรือ `ALL`), `+ - * /` วงเล็บ ตัวเลข — ค่าว่าง/ข้อความ = ไม่มีค่า (ฟังก์ชันข้าม, อ้างตรงในนิพจน์ → null), หารศูนย์ → null,
+  ผลปัด 2 ตำแหน่งเป็น string
+- **Evaluator 2 สำเนาที่ต้องตรงกันทุกบรรทัด:** `api/kpi-formula.js` (CommonJS) + `frontend/src/app/shared/kpi-formula.ts` —
+  parser เขียนเอง **ห้ามใช้ `eval`/`new Function` เด็ดขาด** (สูตรมาจากผู้ใช้) — fixture ร่วม
+  `api/tests/fixtures/formula-cases.json` = `frontend/src/app/shared/kpi-formula.cases.json` (jest บังคับให้ไฟล์ตรงกันทุกตัวอักษร)
+  แก้ตรรกะ → แก้ทั้ง 2 สำเนา + เพิ่มเคสใน fixture ทั้ง 2 ไฟล์
+- จุดที่ใช้สูตร (ทุกจุดที่เคยมี branch `is_cumulative`): `GET /kpi-results`, `performKpiExport` + `checkKpiChanges` (ต้องตรงกัน),
+  kpi_summary ผ่าน `applyFormulaToSummary()` (เรียกท้าย `/refresh-summary/finalize` และ `refreshKpiSummaryForIndicatorYears()`
+  หลัง UPDATE SQL เดิม — สูตรคำนวณใน SQL ไม่ได้), dashboard `onValueChange()` + `applySubSummaryToKpiData()`
+- `/indicators` POST/PUT/bulk-import ตรวจสูตรด้วย `parseFormulaInput()` → **400 ถ้าผิด** (ห้ามบันทึกสูตรที่คำนวณไม่ได้) —
+  PUT ที่สูตร/สะสมเปลี่ยน → `refreshKpiSummaryForIndicatorYears()` ของตัวชี้วัดนั้นทุกปีที่มีใน kpi_summary ทันที
+- ไม่ใช้กับ: คอลัมน์ข้อย่อยในโหมด `use_sub_indicator_export`, kpi-setup (แสดงผลรวม 12 เดือนตามออกแบบเดิม)
+- UI: กล่องสีม่วงในกล่อง "เกณฑ์" ของ modal kpi-manage (ปุ่มแทรก, ตรวจสูตรทันที, ทดลองคำนวณ, มีสูตร → checkbox สะสม disabled)
+  — dashboard badge "สูตร" (fuchsia, `fa-calculator`, tooltip = สูตร) ผ่าน `getCumulativeBadge()` (คืน `icon` แล้ว)
+- Tests: `api/tests/kpi-formula.test.js` (unit), `api/tests/result-formula.test.js` (integration — รอ migration ด้วย
+  `waitForColumn` เพราะ ALTER อยู่ท้าย chain startup), `frontend/src/app/shared/kpi-formula.spec.ts`, `dashboard.spec.ts`
+
 ### kpi-manage Hospitals tab
 - 5 tabs: ตัวชี้วัด / หมวดหมู่หลัก / ยุทธศาสตร์ / หน่วยงาน / **หน่วยบริการ**
 - CRUD endpoints `/hospitals` (super_admin): GET/POST/PUT/DELETE
@@ -795,8 +817,10 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 
 ## 9.5 Automated Tests (ต้องผ่านทั้งหมดก่อน commit ทุกครั้ง)
 
-- **API (Jest + supertest)** — `cd api && npm test` — 5 ไฟล์ใน `api/tests/` (login, permissions, error-monitoring,
-  session, data-entry-lock)
+- **API (Jest + supertest)** — `cd api && npm test` — ไฟล์ใน `api/tests/` (login, permissions, error-monitoring,
+  session, data-entry-lock, public-endpoints, kpi-formula, result-formula)
+  - ⚠️ `build.bat` ตัด devDependencies ออก (`npm install --production`) — ก่อนรัน test ต้อง `npm install` และหลังรันเสร็จ
+    ถ้ากำลังจะ deploy ให้ `npm prune --omit=dev` คืนสภาพ (api/node_modules ถูก COPY เข้า Docker image ตรงๆ)
   - **ต้องรันบน database ทดสอบแยก `khups_kpi_test_db` เท่านั้น** ผ่านไฟล์ `api/.env.test` (copy จาก `.env.dev` แล้วเปลี่ยน
     `DB_NAME=khups_kpi_test_db`, gitignore แล้ว) — `tests/setup.js` **ปฏิเสธการรัน** ถ้า DB_NAME ไม่มีคำว่า "test"
     เพราะ tests ลบข้อมูล (users ขึ้นต้น `test_`, `error_logs` ทั้งหมด) — ห้ามแก้ guard นี้ออกเด็ดขาด

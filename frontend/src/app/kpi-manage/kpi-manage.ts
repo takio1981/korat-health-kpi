@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { FormBuilderComponent } from '../form-builder/form-builder';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
+import { validateFormula, evaluateFormula, FORMULA_FUNCTIONS } from '../shared/kpi-formula';
 import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
 
@@ -687,7 +688,60 @@ export class KpiManageComponent implements OnInit {
     this.applyFilter();
   }
 
+  // === สูตรคำนวณผลงานเฉพาะตัวชี้วัด (result_formula) — ใช้ evaluator เดียวกับ dashboard (shared/kpi-formula.ts)
+  //     ซึ่งตรงกับ backend (api/kpi-formula.js) ทุกเคส ผลทดลองคำนวณในหน้านี้จึงตรงกับที่ระบบคำนวณจริง
+  readonly FORMULA_MONTHS: { v: string; l: string }[] = [
+    { v: 'm10', l: 'ต.ค.' }, { v: 'm11', l: 'พ.ย.' }, { v: 'm12', l: 'ธ.ค.' }, { v: 'm01', l: 'ม.ค.' },
+    { v: 'm02', l: 'ก.พ.' }, { v: 'm03', l: 'มี.ค.' }, { v: 'm04', l: 'เม.ย.' }, { v: 'm05', l: 'พ.ค.' },
+    { v: 'm06', l: 'มิ.ย.' }, { v: 'm07', l: 'ก.ค.' }, { v: 'm08', l: 'ส.ค.' }, { v: 'm09', l: 'ก.ย.' },
+  ];
+  readonly FORMULA_FUNCTIONS = FORMULA_FUNCTIONS;
+  readonly FORMULA_EXAMPLES: { f: string; d: string }[] = [
+    { f: 'AVG(ALL)', d: 'ค่าเฉลี่ยทุกเดือนที่มีผลงาน' },
+    { f: 'SUM(ALL)', d: 'ผลรวมทุกเดือน' },
+    { f: 'MAX(ALL)', d: 'ค่าสูงสุด' },
+    { f: '(m10+m11+m12)/3', d: 'เฉลี่ยไตรมาส 1' },
+    { f: 'SUM(m10,m11,m12)', d: 'รวมไตรมาส 1' },
+  ];
+  formulaTestMonths: Record<string, string> = {};
+  formulaTestTarget = '';
+
+  get hasFormula(): boolean {
+    return !!String(this.currentItem?.result_formula || '').trim();
+  }
+
+  // null = สูตรถูกต้องหรือไม่ได้ตั้งสูตร
+  get formulaError(): string | null {
+    const f = String(this.currentItem?.result_formula || '').trim();
+    return f ? validateFormula(f) : null;
+  }
+
+  get formulaTestResult(): { value: string | null; pct: number | null } | null {
+    const f = String(this.currentItem?.result_formula || '').trim();
+    if (!f || this.formulaError) return null;
+    const value = evaluateFormula(f, this.formulaTestMonths, this.formulaTestTarget);
+    const t = parseFloat(this.formulaTestTarget);
+    const v = value === null ? NaN : parseFloat(value);
+    return { value, pct: !isNaN(t) && t !== 0 && !isNaN(v) ? Math.round((v / t) * 10000) / 100 : null };
+  }
+
+  // แทรกตัวแปร/ฟังก์ชันที่ตำแหน่งเคอร์เซอร์ในช่องสูตร
+  insertFormulaToken(token: string, input: HTMLInputElement) {
+    const cur = String(this.currentItem.result_formula || '');
+    const start = input.selectionStart ?? cur.length;
+    const end = input.selectionEnd ?? cur.length;
+    const text = FORMULA_FUNCTIONS.includes(token) ? `${token}(ALL)` : token;
+    this.currentItem.result_formula = cur.slice(0, start) + text + cur.slice(end);
+    setTimeout(() => {
+      input.focus();
+      const pos = start + text.length;
+      input.setSelectionRange(pos, pos);
+    });
+  }
+
   openModal(item: any = null) {
+    this.formulaTestMonths = {};
+    this.formulaTestTarget = String(item?.target_percentage ?? '');
     this.isEditMode = !!item;
     if (item) {
       const src = { ...item };
@@ -701,6 +755,7 @@ export class KpiManageComponent implements OnInit {
         src.other = Number(src.other) === 1;
         src.is_cumulative = Number(src.is_cumulative) === 1;
         src.use_sub_indicator_export = Number(src.use_sub_indicator_export) === 1;
+        src.result_formula = src.result_formula || '';
         src.evaluation_mode = src.evaluation_mode || 'any_one';
         this.selectedOffTypes = this.parseOffTypes(src.required_off_types);
         // auto-set yut_id จาก main_indicator ที่เลือก
@@ -712,7 +767,7 @@ export class KpiManageComponent implements OnInit {
       if (this.activeTab === 'indicators') {
         this.selectedYutInModal = null;
         this.selectedOffTypes = [];
-        this.currentItem = { ...baseDefaults, r9: false, moph: false, ssj: false, rmw: false, other: false, is_cumulative: false, use_sub_indicator_export: false, weight: 1, target_condition: 'GTE', evaluation_mode: 'any_one' };
+        this.currentItem = { ...baseDefaults, r9: false, moph: false, ssj: false, rmw: false, other: false, is_cumulative: false, use_sub_indicator_export: false, result_formula: '', weight: 1, target_condition: 'GTE', evaluation_mode: 'any_one' };
       } else {
         this.currentItem = { ...baseDefaults };
       }
@@ -763,8 +818,14 @@ export class KpiManageComponent implements OnInit {
     const id = this.currentItem.id;
 
     if (this.activeTab === 'indicators') {
+      // สูตรคำนวณผลงานผิด → ไม่ส่งไป backend (backend ก็ปฏิเสธด้วย 400 อยู่แล้ว แต่แจ้งตรงนี้ชัดกว่า)
+      if (this.formulaError) {
+        Swal.fire('สูตรคำนวณผลงานไม่ถูกต้อง', this.formulaError, 'warning');
+        return;
+      }
       // Serialize evaluation_mode + required_off_types (เฉพาะ any_one)
       const payload = { ...this.currentItem };
+      payload.result_formula = String(payload.result_formula || '').trim() || null;
       payload.required_off_types = payload.evaluation_mode === 'any_one' && this.selectedOffTypes.length > 0
         ? this.selectedOffTypes
         : null;

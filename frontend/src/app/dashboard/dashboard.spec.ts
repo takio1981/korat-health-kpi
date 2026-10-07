@@ -66,6 +66,28 @@ describe('DashboardComponent', () => {
     expect(component.isPendingValue(' รอดำเนินการ ')).toBe(true);
   });
 
+  // สูตรคำนวณผลงานเฉพาะตัวชี้วัด (7 ต.ค. 2569)
+  it('ตัวชี้วัดที่มีสูตร: แก้ค่ารายเดือนแล้วผลงานคำนวณตามสูตร (ไม่ใช่ค่าเดือนล่าสุด)', () => {
+    const item = row('2569', { result_formula: 'AVG(ALL)', oct: '10', nov: '20' });
+    item.dece = '30';
+    component.onValueChange(item, 'dece');
+    expect(item.last_actual).toBe('20');
+  });
+
+  it('สูตรมีลำดับเหนือ is_cumulative และแสดง badge "สูตร"', () => {
+    const item = row('2569', { result_formula: 'MAX(ALL)', is_cumulative: 1, oct: '10', nov: '50', dece: '20' });
+    component.onValueChange(item, 'dece');
+    expect(item.last_actual).toBe('50');
+    expect(component.getCumulativeBadge(item)?.label).toBe('สูตร');
+  });
+
+  it('ไม่มีสูตร: ผลงาน = ค่าเดือนล่าสุดเหมือนเดิม', () => {
+    const item = row('2569', { oct: '10', nov: '20', dece: '30' });
+    component.onValueChange(item, 'dece');
+    expect(item.last_actual).toBe('30');
+    expect(component.getCumulativeBadge(item)).toBeNull();
+  });
+
   // เลือกคอลัมน์ที่แสดง (5 ต.ค. 2569)
   it('ค่าเริ่มต้นแสดงทุกคอลัมน์และครบ 12 เดือน', () => {
     expect(component.hiddenColumnCount).toBe(0);

@@ -4,6 +4,29 @@
 
 ---
 
+## 2569-10-07 — ฟีเจอร์สูตรคำนวณผลงานเฉพาะตัวชี้วัด + แก้ 403 /users/pending-count
+
+### ฟีเจอร์: สูตรคำนวณผลงาน (result_formula)
+ผู้ใช้ต้องการกำหนดวิธีคิด "ผลงาน" รายตัวชี้วัดเอง (เดิมมีแค่ค่าเดือนล่าสุด หรือผลรวมแบบ is_cumulative) — ผู้ใช้เลือก:
+สูตรคำนวณ "ผลงาน" (ร้อยละยังคิดผลงาน ÷ เป้าหมาย), มีผลทั้งระบบ, พิมพ์สูตรเอง + ปุ่มช่วย
+- Evaluator เขียนเอง (ไม่ใช้ eval) 2 สำเนา `api/kpi-formula.js` + `frontend/src/app/shared/kpi-formula.ts` ใช้ fixture ร่วม
+  25 เคสถูก + 13 เคสผิด (รวมชื่อต้องห้าม `process`, `constructor`, SQL) — jest บังคับให้ fixture 2 ไฟล์ตรงกัน
+- เสียบทุกจุดที่เคยคำนวณ is_cumulative: dashboard, GET /kpi-results, kpi_summary (applyFormulaToSummary), Export + checkKpiChanges
+- /indicators ตรวจสูตร → 400 ถ้าผิด; แก้สูตร → kpi_summary ของตัวชี้วัดนั้นคำนวณใหม่อัตโนมัติ
+
+### บั๊กที่พบระหว่างทดสอบ: `/users/pending-count` 403 ทุกหน้า
+เมื่อ 06:31 วันนี้หน้า "จัดการผู้ใช้งาน" ถูกปิดสิทธิ์สำหรับ admin ทั้ง 4 role (ตั้งค่าผ่าน /role-page-access) — layout ยังเรียก
+`/users/pending-count` (badge ผู้ใช้รออนุมัติ) ทุกหน้าโดยไม่เช็คสิทธิ์ → 403 + console error ทุกหน้า — แก้ที่
+`AuthService.refreshPendingUsers()` จุดเดียว: ไม่มีสิทธิ์หน้า `users` → badge = 0 ไม่เรียก API (+ regression test ใน auth.spec.ts
+ยืนยันแล้วว่า fail กับโค้ดเดิม)
+
+### ทดสอบ
+- API **73/73** (8 ไฟล์) | Frontend **67/67** (13 ไฟล์) | `ng build` ผ่าน — integration test ของสูตร fail กับโค้ดเดิม (4 failed)
+- หน้าจอจริง: กล่องสูตรใน modal 11/11 (ไม่กดบันทึกตัวชี้วัดจริง — ยืนยันไม่มี request POST/PUT) + smoke ทุกหน้า × 3 role = 0 error
+- บัญชีทดสอบ/error log ที่เกิดจากการทดสอบลบแล้ว ไม่มีตัวชี้วัดจริงถูกตั้งสูตร (0 แถว) — api/node_modules prune คืนสภาพ production
+
+---
+
 ## 2569-10-07 — ปิดช่องทางดูข้อมูลผลงานโดยไม่ต้องเข้าสู่ระบบ + จัดระเบียบเอกสาร/repo
 
 ### ปัญหา
