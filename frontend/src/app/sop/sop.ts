@@ -315,14 +315,14 @@ const SYSTEMS: SopSystem[] = [
   subflows:[
     { id:'chart', title:'กราฟและสถิติ', nodes:[
       {id:'s',  r:0,c:0,t:'start',   l:'Tab กราฟและสถิติ'},
-      {id:'n1', r:0,c:1,t:'process', l:'ตั้งค่า Filters\nปีงบ, ตัวชี้วัด, อำเภอ'},
-      {id:'n2', r:1,c:1,t:'process', l:'GET /kpi-summary\n(role-filtered)'},
+      {id:'n1', r:0,c:1,t:'process', l:'ตั้งค่า Filters 7 มิติ\nปี ยุทธฯ หมวด หน่วยงาน\nตัวชี้วัด อำเภอ ประเภท'},
+      {id:'n2', r:1,c:1,t:'process', l:'GET /report/chart-stats\n(role-filtered, SQL aggregate)'},
       {id:'n3', r:2,c:1,t:'db',      l:'kpi_summary\ncomposite index'},
       {id:'d1', r:1,c:2,t:'decision',l:'ข้อมูล\nทันสมัย?'},
       {id:'n4', r:1,c:3,t:'process', l:'POST /refresh-summary\n(super_admin)'},
       {id:'nr', r:2,c:3,t:'db',      l:'Batch 50 indicators\nprepare→batch→finalize'},
-      {id:'n5', r:0,c:4,t:'process', l:'Render 4 Chart Types\nBar/Line/Radar/Gauge'},
-      {id:'n6', r:0,c:5,t:'process', l:'Click → Drill Down\nhospcode detail'},
+      {id:'n5', r:0,c:4,t:'process', l:'Render 7 หมวดกราฟ\nภาพรวม ยุทธฯ หมวด หน่วยงาน\nตัวชี้วัด รายเดือน พื้นที่'},
+      {id:'n6', r:0,c:5,t:'process', l:'คลิกแท่ง/การ์ด\n→ กรองเจาะลึก'},
       {id:'ok', r:0,c:6,t:'end',     l:'กราฟ Interactive'},
     ], edges:[
       {f:'s', t:'n1'},

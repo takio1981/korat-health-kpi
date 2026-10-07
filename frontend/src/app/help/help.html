@@ -522,12 +522,20 @@
             <p class="text-xs text-gray-400">รวม 2 ส่วน — Tab "กราฟและสถิติ" + Tab "รายงานสรุปผล" ในหน้าเดียว</p>
           </div>
         </div>
-        <p class="text-xs text-gray-500 mb-3">ทุกกราฟแสดงความกว้าง 100% เต็มจอ</p>
+        <div class="bg-sky-50 border border-sky-200 rounded-xl p-4 mb-3 text-xs text-sky-900">
+          <b><i class="fas fa-calculator mr-1"></i>หลักการคำนวณ (ทุกกราฟ):</b> นับเป็น <b>"คู่" (ตัวชี้วัด × หน่วยบริการ)</b> — คู่ที่ <b>ผ่านเกณฑ์</b>
+          คือมีเป้าหมาย &gt; 0 และผลงานล่าสุด ≥ เป้าหมาย · <b>ร้อยละผ่านเกณฑ์</b> = คู่ที่ผ่าน ÷ คู่ที่มีเป้าหมาย × 100
+          (เกณฑ์เดียวกับการ์ด "ร้อยละความสำเร็จ KPI" และรายงานสรุปผล — ไม่รวมค่าดิบข้ามตัวชี้วัดเพราะหน่วยนับต่างกัน)
+          · ใช้ข้อมูลทั้งหมดตามสิทธิ์ของผู้ใช้ เฉพาะตัวชี้วัดที่เปิดใช้งาน
+        </div>
+        <p class="text-xs text-gray-500 mb-3"><b>ตัวกรอง 7 มิติ:</b> ปีงบประมาณ · ยุทธศาสตร์ · หมวดหมู่หลัก (ตามยุทธศาสตร์) · หน่วยงาน · ตัวชี้วัด (ตามหมวดหมู่/หน่วยงาน) · อำเภอ · ประเภทหน่วยบริการ
+          — <b>คลิกแท่งกราฟ/การ์ดอำเภอ/แถวตารางเพื่อกรองเจาะลึก</b> และกด ✕ บนป้ายตัวกรองเพื่อเอาออก</p>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-chart-bar text-blue-500 text-lg mr-2"></i><b class="text-sm">กราฟแท่งนอน %ผลงาน</b><p class="text-xs text-gray-500 mt-1">แสดง %ผลงาน/เป้าหมาย แยกสี: <span class="text-green-600">เขียว ≥80%</span> / <span class="text-amber-600">เหลือง 50-79%</span> / <span class="text-red-600">แดง &lt;50%</span> + เส้นประเป้าหมาย 80%</p></div>
-          <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-chart-area text-green-500 text-lg mr-2"></i><b class="text-sm">กราฟ Area แนวโน้ม</b><p class="text-xs text-gray-500 mt-1">แนวโน้มผลงานรายเดือน (ต.ค.-ก.ย.) + เส้นเฉลี่ยเป้าหมาย พร้อม gradient fill</p></div>
-          <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-map-marked-alt text-teal-500 text-lg mr-2"></i><b class="text-sm">แผนที่อำเภอ</b><p class="text-xs text-gray-500 mt-1">ผลงานรายอำเภอ สี 3 ระดับ: เขียว ≥80% / เหลือง 50-79% / แดง &lt;50%</p></div>
-          <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-circle-notch text-purple-500 text-lg mr-2"></i><b class="text-sm">Donut Chart สัดส่วน</b><p class="text-xs text-gray-500 mt-1">สัดส่วนผลงานแยกตามหน่วยงาน แสดงผลงานรวมตรงกลาง</p></div>
+          <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-chart-pie text-emerald-500 text-lg mr-2"></i><b class="text-sm">1. ภาพรวม</b><p class="text-xs text-gray-500 mt-1">ตัวเลขสรุป (ตัวชี้วัด, หน่วยบริการ, คู่, ผ่าน/มีเป้าหมาย, ร้อยละ, รอตรวจสอบ) + โดนัทสถานะ ผ่าน/ไม่ผ่าน/ไม่มีเป้าหมาย + วงแหวนร้อยละ + การกระจายของตัวชี้วัดตามช่วงร้อยละ (0–49 / 50–79 / 80–99 / 100%)</p></div>
+          <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-sitemap text-indigo-500 text-lg mr-2"></i><b class="text-sm">2–4. ยุทธศาสตร์ / หมวดหมู่หลัก / หน่วยงาน</b><p class="text-xs text-gray-500 mt-1">แต่ละมิติมี 2 กราฟ: แท่งนอนร้อยละผ่านเกณฑ์ (สี <span class="text-green-600">≥80%</span> / <span class="text-amber-600">50–79%</span> / <span class="text-red-600">&lt;50%</span> + เส้นเกณฑ์ 80%) และแท่งซ้อนจำนวนคู่ ผ่าน/ไม่ผ่าน/ไม่มีเป้าหมาย</p></div>
+          <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-list-ol text-blue-500 text-lg mr-2"></i><b class="text-sm">5. ตัวชี้วัด</b><p class="text-xs text-gray-500 mt-1">แท่งนอนร้อยละผ่านเกณฑ์ทุกตัวชี้วัด สลับดู ทั้งหมด / 10 อันดับสูงสุด / 10 อันดับต่ำสุด + ค้นหาชื่อ + ตารางรายละเอียด (หน่วยบริการ, มีเป้าหมาย, ผ่าน, ไม่ผ่าน, ร้อยละ) เรียงได้ทุกคอลัมน์</p></div>
+          <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-chart-line text-green-500 text-lg mr-2"></i><b class="text-sm">6. รายเดือน</b><p class="text-xs text-gray-500 mt-1">แท่ง = จำนวนคู่ที่มีผลงานแต่ละเดือน, เส้น = ร้อยละผ่านเกณฑ์รายเดือน (ไม่รวมตัวชี้วัดสะสม/มีสูตร) + แผนที่ความร้อน หมวดหมู่ × เดือน และ หน่วยงาน × เดือน (สลับดูร้อยละผ่านเกณฑ์/ร้อยละมีผลงาน)</p></div>
+          <div class="bg-gray-50 rounded-xl p-4 border md:col-span-2"><i class="fas fa-map-marked-alt text-teal-500 text-lg mr-2"></i><b class="text-sm">7. พื้นที่และประเภทหน่วยบริการ</b><p class="text-xs text-gray-500 mt-1">แผนที่การ์ดรายอำเภอ (ตัวเลข = คู่ผ่าน/คู่มีเป้าหมาย) + กราฟร้อยละรายอำเภอ + กราฟร้อยละตามประเภทหน่วยบริการ (รพศ./รพท./รพช./รพ.สต. ฯลฯ)</p></div>
         </div>
 
         <!-- District map detail -->
@@ -538,7 +546,7 @@
             <div class="flex items-center gap-1.5"><span class="w-4 h-4 rounded bg-yellow-400 inline-block"></span><b>50-79%</b> ปานกลาง</div>
             <div class="flex items-center gap-1.5"><span class="w-4 h-4 rounded bg-red-500 inline-block"></span><b>&lt;50%</b> ต้องปรับปรุง</div>
           </div>
-          <p class="text-xs text-teal-700">แต่ละอำเภอแสดงเป็น card พร้อมวงกลมเปอร์เซ็นต์ เรียงจากมากไปน้อย hover ดูรายละเอียดเป้าหมาย/ผลงาน เปลี่ยนตามตัวกรองที่เลือก</p>
+          <p class="text-xs text-teal-700">แต่ละอำเภอแสดงเป็น card พร้อมวงกลมร้อยละผ่านเกณฑ์ เรียงจากมากไปน้อย ตัวเลขใต้ชื่อ = คู่ผ่าน/คู่มีเป้าหมาย คลิกเพื่อกรองเฉพาะอำเภอนั้น</p>
         </div>
 
         <!-- Rank calculation -->

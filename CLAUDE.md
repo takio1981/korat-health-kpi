@@ -717,6 +717,17 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 ### Chart + Report
 - รวมเป็นหน้าเดียว (/charts) → 2 tabs: กราฟและสถิติ / รายงานสรุปผล
 - ใช้ `[hidden]` เก็บ state ทั้ง 2 view (ไม่ destroy component)
+- **แท็บกราฟใช้ `GET /report/chart-stats` เท่านั้น** (ไม่ใช่ `/kpi-summary` ที่ LIMIT 500 — เดิมกราฟคำนวณจาก 500 แถวแรก
+  และ SUM ค่าดิบต่างหน่วยนับข้ามตัวชี้วัด ผิดทั้งคู่ แก้แล้ว 7 ต.ค. 2569) — aggregate ใน SQL ทุกมิติในคำขอเดียว: overall,
+  by_yut/by_main/by_dept/by_indicator/by_district/by_hostype, monthly, heatmap_main/heatmap_dept, distribution + options
+  (ตัวเลือก dropdown ตามขอบเขต role+ปี) — scope เหมือน `/report/by-indicator` (`chartScopeClauses()`) + `i.is_active = 1`
+- **เกณฑ์เดียวทั้งระบบ:** นับ "คู่" (ตัวชี้วัด × หน่วยบริการ) ผ่าน = target > 0 และ last_actual ≥ target, ร้อยละ = ผ่าน ÷ มีเป้าหมาย
+  (ต้องตรงกับการ์ด `/dashboard-stats` — E2E ยืนยันแล้ว) — ร้อยละรายเดือนไม่รวมตัวชี้วัดสะสม/มีสูตร (ค่ารายเดือนไม่ใช่ผลงาน ณ เดือนนั้น)
+- ⚠️ ห้ามใส่ `?` ใน regex/ข้อความ SQL ที่ส่งผ่าน `db.query(sql, params)` — mysql2 ตีความ `?` ทุกตัวเป็น placeholder แม้อยู่ใน
+  string literal (ใช้ `{0,1}` แทน `?` ใน REGEXP)
+- Frontend: options ของกราฟสร้างใน `chart/chart-builders.ts` (ฟังก์ชันล้วน มี unit test) + แสดงผ่าน `shared/apex-box.ts`
+  (bind options object เดียว) — ชื่อยาวใช้ `wrapLabel()` ตัดหลายบรรทัด ไม่ตัดท้ายทิ้ง (ชื่อหมวดหมู่หลายตัวขึ้นต้นเหมือนกัน)
+- Test: `api/tests/chart-stats.test.js`, `frontend/src/app/chart/chart.spec.ts`
 
 ### kpi-manager (Wizard 2 ขั้นตอน)
 - รวม DB Compare / Export ในหน้าเดียว — wizard UI 2 ขั้น (free navigation) — **Report Compare ย้ายไปอยู่ใน

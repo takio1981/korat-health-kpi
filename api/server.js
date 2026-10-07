@@ -9354,6 +9354,180 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
     }
 });
 
+// ========== กราฟและสถิติ (หน้า /charts แท็บกราฟ) ==========
+// รวมผลทุกมิติใน SQL จาก kpi_summary ทั้งหมด (ไม่จำกัด 500 แถวแบบ /kpi-summary เดิม) — ใช้เกณฑ์ "ผ่าน" เดียวกับการ์ดสถิติ
+// และรายงาน 4 แถบ: คู่ (ตัวชี้วัด × หน่วยบริการ) ที่มีเป้าหมาย > 0 และผลงานล่าสุด (last_actual) ≥ เป้าหมาย
+// ร้อยละ = ผ่าน ÷ มีเป้าหมาย × 100 (นับเป็นคู่ ไม่ SUM ค่าดิบข้ามตัวชี้วัด เพราะหน่วยนับต่างกัน)
+const CHART_MONTHS = [
+    ['oct', 'ต.ค.'], ['nov', 'พ.ย.'], ['dece', 'ธ.ค.'], ['jan', 'ม.ค.'], ['feb', 'ก.พ.'], ['mar', 'มี.ค.'],
+    ['apr', 'เม.ย.'], ['may', 'พ.ค.'], ['jun', 'มิ.ย.'], ['jul', 'ก.ค.'], ['aug', 'ส.ค.'], ['sep', 'ก.ย.']
+];
+const _cT = "CAST(NULLIF(TRIM(s.target_value),'') AS DECIMAL(20,4))";
+const _cA = "CAST(NULLIF(TRIM(s.last_actual),'') AS DECIMAL(20,4))";
+// ห้ามใช้ "?" ใน regex — mysql2 ตีความ ? ทุกตัวเป็น placeholder แม้อยู่ใน string literal ของ SQL
+const _cNum = (col) => `TRIM(${col}) REGEXP '^-{0,1}[0-9]+([.][0-9]+){0,1}$'`;
+const CHART_METRICS_SQL = `
+    COUNT(*) AS pairs,
+    COUNT(DISTINCT s.indicator_id) AS indicator_count,
+    COUNT(DISTINCT s.hospcode) AS hospital_count,
+    SUM(CASE WHEN ${_cT} > 0 THEN 1 ELSE 0 END) AS with_target,
+    SUM(CASE WHEN ${_cT} > 0 AND ${_cNum('s.last_actual')} AND ${_cA} >= ${_cT} THEN 1 ELSE 0 END) AS passed,
+    SUM(CASE WHEN NULLIF(TRIM(s.last_actual),'') IS NOT NULL THEN 1 ELSE 0 END) AS recorded,
+    SUM(CASE WHEN COALESCE(s.pending_count,0) > 0 THEN 1 ELSE 0 END) AS pending_pairs`;
+// รายเดือน: recorded = มีค่าในเดือนนั้น | eligible/passed = เทียบค่าเดือนนั้นกับเป้าหมาย เฉพาะตัวชี้วัดแบบปกติ
+// (ไม่รวมตัวชี้วัดสะสม/มีสูตร เพราะค่ารายเดือนของตัวชี้วัดเหล่านั้นไม่ใช่ "ผลงาน ณ เดือนนั้น")
+const _cNormal = "(COALESCE(i.is_cumulative,0) = 0 AND (i.result_formula IS NULL OR TRIM(i.result_formula) = ''))";
+const CHART_MONTHLY_SQL = CHART_MONTHS.map(([m]) => `
+    SUM(CASE WHEN NULLIF(TRIM(s.${m}),'') IS NOT NULL THEN 1 ELSE 0 END) AS rec_${m},
+    SUM(CASE WHEN ${_cNormal} AND ${_cT} > 0 AND ${_cNum('s.' + m)} THEN 1 ELSE 0 END) AS elig_${m},
+    SUM(CASE WHEN ${_cNormal} AND ${_cT} > 0 AND ${_cNum('s.' + m)} AND CAST(TRIM(s.${m}) AS DECIMAL(20,4)) >= ${_cT} THEN 1 ELSE 0 END) AS pass_${m}`).join(',');
+
+function chartPct(n, d) { return Number(d) > 0 ? Math.round(Number(n) / Number(d) * 10000) / 100 : 0; }
+function chartRow(r) {
+    const o = { ...r };
+    for (const k of ['pairs', 'indicator_count', 'hospital_count', 'with_target', 'passed', 'recorded', 'pending_pairs']) o[k] = Number(r[k] || 0);
+    o.not_passed = o.with_target - o.passed;
+    o.no_target = o.pairs - o.with_target;
+    o.achievement_pct = chartPct(o.passed, o.with_target);
+    o.recording_pct = chartPct(o.recorded, o.pairs);
+    return o;
+}
+function chartMonthly(r) {
+    return CHART_MONTHS.map(([m, label]) => {
+        const rec = Number(r[`rec_${m}`] || 0), elig = Number(r[`elig_${m}`] || 0), pass = Number(r[`pass_${m}`] || 0);
+        return { month: m, label, recorded: rec, eligible: elig, passed: pass, pass_pct: chartPct(pass, elig), recording_pct: chartPct(rec, Number(r.pairs || 0)) };
+    });
+}
+
+// ขอบเขตตาม role บน kpi_summary (เหมือน /report/by-indicator ทุกประการ)
+async function chartScopeClauses(user) {
+    const c = [], p = [];
+    if (user.role === 'super_admin') {
+        // เห็นทั้งหมด
+    } else if (user.role === 'admin_ssj') {
+        if (user.deptId != null) { c.push('s.dept_id = ?'); p.push(user.deptId); }
+    } else if (user.role === 'admin_cup') {
+        const d = await getDistrictId(user.hospcode);
+        if (d) { c.push('s.distid = ?'); p.push(d); } else if (user.hospcode) { c.push('s.hospcode = ?'); p.push(user.hospcode); }
+    } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
+        if (user.hospcode) { c.push('s.hospcode = ?'); p.push(user.hospcode); }
+    } else if (user.role === 'user_cup') {
+        const d = await getDistrictId(user.hospcode);
+        if (d) { c.push('s.distid = ?'); p.push(d); }
+        if (user.deptId != null) { c.push('s.dept_id = ?'); p.push(user.deptId); }
+    } else {
+        if (user.hospcode) { c.push('s.hospcode = ?'); p.push(user.hospcode); }
+        if (user.deptId != null) { c.push('s.dept_id = ?'); p.push(user.deptId); }
+    }
+    c.push('i.is_active = 1'); // เฉพาะตัวชี้วัดที่เปิดใช้งาน
+    return { c, p };
+}
+
+const CHART_FROM_SQL = `
+    FROM kpi_summary s
+    JOIN kpi_indicators i ON i.id = s.indicator_id
+    LEFT JOIN kpi_main_indicators mi ON mi.id = i.main_indicator_id
+    LEFT JOIN main_yut y ON y.id = mi.yut_id`;
+
+apiRouter.get('/report/chart-stats', authenticateToken, async (req, res) => {
+    try {
+        const user = req.user;
+        const { year_bh, yut_id, main_id, dept_id, indicator_id, distid, hostype } = req.query;
+        const scope = await chartScopeClauses(user);
+
+        // ปีงบที่มีข้อมูล (ตามขอบเขต role) — ใช้เป็นตัวเลือกปี
+        const [yearRows] = await db.query(
+            `SELECT DISTINCT s.year_bh ${CHART_FROM_SQL} WHERE ${scope.c.join(' AND ')} ORDER BY s.year_bh DESC`, scope.p);
+        const years = yearRows.map(r => String(r.year_bh));
+        const year = year_bh ? String(year_bh) : (years[0] || '');
+
+        // ตัวเลือก dropdown — ขอบเขต role + ปี (ไม่ขึ้นกับตัวกรองอื่น)
+        const baseC = [...scope.c, 's.year_bh = ?'], baseP = [...scope.p, year];
+        const [optRows] = await db.query(`
+            SELECT DISTINCT y.id AS yut_id, y.yut_name, mi.id AS main_id, mi.main_indicator_name,
+                   s.dept_id, s.dept_name, s.indicator_id, i.kpi_indicators_name, s.distid, s.distname, s.hostype
+            ${CHART_FROM_SQL} WHERE ${baseC.join(' AND ')}`, baseP);
+
+        // ตัวกรองที่ผู้ใช้เลือก
+        const c = [...baseC], p = [...baseP];
+        const eqFilter = (col, v, num) => {
+            if (v === undefined || v === null || v === '') return;
+            if (num && !/^\d+$/.test(String(v))) { c.push('1 = 0'); return; } // id ไม่ใช่ตัวเลข → ไม่มีข้อมูล
+            c.push(`${col} = ?`); p.push(num ? Number(v) : String(v));
+        };
+        if (yut_id === '0') c.push('y.id IS NULL'); else eqFilter('y.id', yut_id, true);
+        if (main_id === '0') c.push('mi.id IS NULL'); else eqFilter('mi.id', main_id, true);
+        if (dept_id === '0') c.push('s.dept_id IS NULL'); else eqFilter('s.dept_id', dept_id, true);
+        eqFilter('s.indicator_id', indicator_id, true);
+        eqFilter('s.distid', distid, false);
+        eqFilter('s.hostype', hostype, false);
+        const where = 'WHERE ' + c.join(' AND ');
+
+        const groupQuery = (keySql, nameSql, extra = '') => db.query(`
+            SELECT ${keySql} AS gkey, ${nameSql} AS gname ${extra}, ${CHART_METRICS_SQL}
+            ${CHART_FROM_SQL} ${where} GROUP BY ${keySql}`, p);
+
+        const [[overallRows], [yutRows], [mainRows], [deptRows], [indRows], [distRows], [hostypeRows], [mainMonthRows], [deptMonthRows], [hostypeNames]] = await Promise.all([
+            db.query(`SELECT ${CHART_METRICS_SQL}, ${CHART_MONTHLY_SQL} ${CHART_FROM_SQL} ${where}`, p),
+            groupQuery('COALESCE(y.id, 0)', "COALESCE(MAX(y.yut_name), 'ไม่ระบุยุทธศาสตร์')"),
+            groupQuery('COALESCE(mi.id, 0)', "COALESCE(MAX(mi.main_indicator_name), 'ไม่ระบุหมวดหมู่')", ", MAX(y.yut_name) AS yut_name"),
+            groupQuery('COALESCE(s.dept_id, 0)', "COALESCE(MAX(s.dept_name), 'ไม่ระบุหน่วยงาน')"),
+            groupQuery('s.indicator_id', 'MAX(i.kpi_indicators_name)',
+                ", MAX(mi.main_indicator_name) AS main_indicator_name, MAX(s.dept_name) AS dept_name, MAX(i.criterion) AS criterion, MAX(i.target_condition) AS target_condition"),
+            groupQuery("COALESCE(s.distid, '')", "COALESCE(MAX(s.distname), 'ไม่ระบุอำเภอ')"),
+            groupQuery("COALESCE(s.hostype, '')", "MAX(s.hostype)"),
+            db.query(`SELECT COALESCE(mi.id, 0) AS gkey, COALESCE(MAX(mi.main_indicator_name), 'ไม่ระบุหมวดหมู่') AS gname, COUNT(*) AS pairs, ${CHART_MONTHLY_SQL}
+                      ${CHART_FROM_SQL} ${where} GROUP BY COALESCE(mi.id, 0)`, p),
+            db.query(`SELECT COALESCE(s.dept_id, 0) AS gkey, COALESCE(MAX(s.dept_name), 'ไม่ระบุหน่วยงาน') AS gname, COUNT(*) AS pairs, ${CHART_MONTHLY_SQL}
+                      ${CHART_FROM_SQL} ${where} GROUP BY COALESCE(s.dept_id, 0)`, p),
+            // ชื่อประเภทหน่วยบริการแยก query (chostype คนละ collation กับ kpi_summary — ไม่ JOIN ตรง)
+            db.query('SELECT hostypecode, hostypename FROM chostype'),
+        ]);
+
+        const typeName = new Map(hostypeNames.map(h => [String(h.hostypecode), h.hostypename]));
+        const byPct = (a, b) => b.achievement_pct - a.achievement_pct || b.with_target - a.with_target || String(a.gname).localeCompare(String(b.gname), 'th');
+        const mapGroup = (rows) => rows.map(chartRow).sort(byPct);
+        const overall = chartRow(overallRows[0] || {});
+
+        // การกระจายของตัวชี้วัดตามช่วงร้อยละผ่านเกณฑ์ (เฉพาะตัวที่มีเป้าหมาย)
+        const byIndicator = mapGroup(indRows);
+        const buckets = [
+            { key: 'b0', label: '0–49%', min: 0, max: 50 }, { key: 'b50', label: '50–79%', min: 50, max: 80 },
+            { key: 'b80', label: '80–99%', min: 80, max: 100 }, { key: 'b100', label: '100%', min: 100, max: Infinity }
+        ].map(b => ({ ...b, count: byIndicator.filter(r => r.with_target > 0 && r.achievement_pct >= b.min && r.achievement_pct < b.max).length }));
+        buckets.forEach(b => { delete b.min; delete b.max; });
+
+        const uniq = (arr, key) => [...new Map(arr.filter(r => r[key] != null).map(r => [r[key], r])).values()];
+        res.json({
+            success: true,
+            year_bh: year,
+            options: {
+                years,
+                yuts: uniq(optRows, 'yut_id').map(r => ({ id: r.yut_id, name: r.yut_name })).sort((a, b) => a.id - b.id),
+                mains: uniq(optRows, 'main_id').map(r => ({ id: r.main_id, name: r.main_indicator_name, yut_id: r.yut_id })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'th')),
+                depts: uniq(optRows, 'dept_id').map(r => ({ id: r.dept_id, name: r.dept_name })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'th')),
+                indicators: uniq(optRows, 'indicator_id').map(r => ({ id: r.indicator_id, name: r.kpi_indicators_name, main_id: r.main_id, dept_id: r.dept_id })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'th')),
+                districts: uniq(optRows, 'distid').map(r => ({ id: r.distid, name: r.distname })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'th')),
+                hostypes: uniq(optRows, 'hostype').map(r => ({ id: r.hostype, name: typeName.get(String(r.hostype)) || r.hostype })).sort((a, b) => String(a.id).localeCompare(String(b.id))),
+            },
+            overall,
+            monthly: chartMonthly(overallRows[0] || {}),
+            by_yut: mapGroup(yutRows),
+            by_main: mapGroup(mainRows),
+            by_dept: mapGroup(deptRows),
+            by_indicator: byIndicator,
+            by_district: mapGroup(distRows),
+            by_hostype: mapGroup(hostypeRows).map(r => ({ ...r, gname: typeName.get(String(r.gkey)) || (r.gkey ? `ประเภท ${r.gkey}` : 'ไม่ระบุประเภท') })),
+            heatmap_main: mainMonthRows.map(r => ({ gkey: r.gkey, gname: r.gname, months: chartMonthly(r) })),
+            heatmap_dept: deptMonthRows.map(r => ({ gkey: r.gkey, gname: r.gname, months: chartMonthly(r) })),
+            distribution: buckets,
+        });
+    } catch (error) {
+        console.error('Report chart-stats error:', error);
+        res.status(500).json({ success: false, message: 'ไม่สามารถดึงข้อมูลกราฟได้' });
+    }
+});
+
 // รายงาน: สถานะการบันทึก (Monitor) — ดูว่าตัวชี้วัดใดมีการบันทึก/ไม่ได้บันทึก คิดเป็น %
 //   - total_hospitals  = จำนวน hospcode ที่อยู่ใน kpi_results (มี target หรือ actual ใดๆ) ของตัวชี้วัดนั้น
 //   - recorded_hospitals = จำนวน hospcode ที่มี actual_value ในเดือนใดๆ (ไม่ว่า target จะตั้งหรือไม่)

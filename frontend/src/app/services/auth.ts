@@ -1123,6 +1123,14 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     return this.http.get(`${this.apiUrl}/report/by-year${queryStr ? '?' + queryStr : ''}`, { headers });
   }
 
+  // กราฟและสถิติ: ผลรวมทุกมิติ (ยุทธศาสตร์/หมวดหมู่/หน่วยงาน/ตัวชี้วัด/อำเภอ/ประเภท/รายเดือน) คำนวณที่ backend
+  getReportChartStats(params: any = {}): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const queryStr = new URLSearchParams(params).toString();
+    return this.http.get(`${this.apiUrl}/report/chart-stats${queryStr ? '?' + queryStr : ''}`, { headers });
+  }
+
   getReportRecordingStatus(params: any = {}): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

@@ -18,252 +18,281 @@
       </div>
 
       <!-- ===== Chart View ===== -->
-      <div [hidden]="activeView !== 'chart'" class="overflow-y-auto card-scroll" style="max-height: calc(100vh - 200px);">
+      <div [hidden]="activeView !== 'chart'" class="overflow-y-auto card-scroll relative" style="max-height: calc(100vh - 200px);">
 
-      <!-- Loading Spinner Overlay -->
-      <div *ngIf="isLoading" class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm transition-opacity duration-300">
-        <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-green-600 mb-4"></div>
-        <p class="text-green-800 font-bold text-lg animate-pulse">กำลังโหลดข้อมูล...</p>
+      <!-- Loading -->
+      <div *ngIf="isLoading" class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm min-h-[300px]">
+        <div class="animate-spin rounded-full h-14 w-14 border-t-4 border-b-4 border-green-600 mb-3"></div>
+        <p class="text-green-800 font-bold animate-pulse">กำลังประมวลผลกราฟ...</p>
       </div>
 
       <!-- Stats Cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
-        <div class="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl shadow-lg p-4 sm:p-6 flex items-center transform hover:-translate-y-1 transition-all duration-300">
-          <div class="p-3 sm:p-4 rounded-full bg-white/20 text-white mr-3 sm:mr-4 backdrop-blur-sm flex-shrink-0">
-            <i class="fas fa-check-circle text-lg sm:text-2xl"></i>
-          </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6">
+        <div class="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl shadow-lg p-4 sm:p-5 flex items-center">
+          <div class="p-3 rounded-full bg-white/20 text-white mr-3 flex-shrink-0"><i class="fas fa-check-circle text-xl"></i></div>
           <div class="min-w-0">
             <p class="text-xs sm:text-sm font-medium text-emerald-100">ร้อยละความสำเร็จ KPI</p>
             <p class="text-xl sm:text-3xl font-bold text-white">{{ stats.successRate }}%</p>
-            <p class="text-[10px] text-emerald-200 mt-0.5 leading-tight">= ตัวชี้วัดที่บรรลุเป้าหมาย ÷ ทั้งหมด × 100</p>
+            <p class="text-[10px] text-emerald-200 mt-0.5 leading-tight">ผ่านเกณฑ์ ÷ มีเป้าหมาย × 100 (ทั้งปีงบ ตามสิทธิ์)</p>
           </div>
         </div>
-
-        <div class="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-lg p-4 sm:p-6 flex items-center transform hover:-translate-y-1 transition-all duration-300">
-          <div class="p-3 sm:p-4 rounded-full bg-white/20 text-white mr-3 sm:mr-4 backdrop-blur-sm flex-shrink-0">
-            <i class="fas fa-layer-group text-lg sm:text-2xl"></i>
-          </div>
+        <div class="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-lg p-4 sm:p-5 flex items-center">
+          <div class="p-3 rounded-full bg-white/20 text-white mr-3 flex-shrink-0"><i class="fas fa-layer-group text-xl"></i></div>
           <div class="min-w-0">
             <p class="text-xs sm:text-sm font-medium text-blue-100">กลุ่มงานที่บันทึกแล้ว</p>
-            <p class="text-xl sm:text-3xl font-bold text-white">{{ stats.recordedCount }} <span class="text-sm sm:text-lg font-normal text-blue-200">/ {{ stats.totalDepts }}</span></p>
+            <p class="text-xl sm:text-3xl font-bold text-white">{{ stats.recordedCount }} <span class="text-sm font-normal text-blue-200">/ {{ stats.totalDepts }}</span></p>
             <p class="text-[10px] text-blue-200 mt-0.5 leading-tight">กลุ่มงานที่มีผลงานบันทึก / ทั้งหมด</p>
           </div>
         </div>
-
-        <div class="bg-gradient-to-br from-orange-400 to-red-500 rounded-2xl shadow-lg p-4 sm:p-6 flex items-center transform hover:-translate-y-1 transition-all duration-300">
-          <div class="p-3 sm:p-4 rounded-full bg-white/20 text-white mr-3 sm:mr-4 backdrop-blur-sm flex-shrink-0">
-            <i class="fas fa-clock text-lg sm:text-2xl"></i>
-          </div>
+        <div class="bg-gradient-to-br from-orange-400 to-red-500 rounded-2xl shadow-lg p-4 sm:p-5 flex items-center">
+          <div class="p-3 rounded-full bg-white/20 text-white mr-3 flex-shrink-0"><i class="fas fa-clock text-xl"></i></div>
           <div class="min-w-0">
             <p class="text-xs sm:text-sm font-medium text-orange-100">รอการตรวจสอบ</p>
-            <p class="text-xl sm:text-3xl font-bold text-white">{{ stats.pendingCount }} <span class="text-xs sm:text-sm font-normal text-orange-200">รายการ</span></p>
+            <p class="text-xl sm:text-3xl font-bold text-white">{{ stats.pendingCount }} <span class="text-xs font-normal text-orange-200">รายการ</span></p>
             <p class="text-[10px] text-orange-200 mt-0.5 leading-tight">รายการที่ส่งแล้ว ยังรอ admin ตรวจสอบ</p>
           </div>
         </div>
-
-        <div class="bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl shadow-lg p-4 sm:p-6 flex items-center transform hover:-translate-y-1 transition-all duration-300">
-          <div class="p-3 sm:p-4 rounded-full bg-white/20 text-white mr-3 sm:mr-4 backdrop-blur-sm flex-shrink-0">
-            <i class="fas fa-trophy text-lg sm:text-2xl"></i>
-          </div>
+        <div class="bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl shadow-lg p-4 sm:p-5 flex items-center">
+          <div class="p-3 rounded-full bg-white/20 text-white mr-3 flex-shrink-0"><i class="fas fa-trophy text-xl"></i></div>
           <div class="min-w-0">
             <p class="text-xs sm:text-sm font-medium text-purple-100">อันดับผลงานระดับจังหวัด</p>
-            <p *ngIf="stats.rank > 0" class="text-xl sm:text-3xl font-bold text-white">อันดับ {{ stats.rank }} <span class="text-xs sm:text-sm font-normal text-purple-200">/ {{ stats.totalHospitals }} หน่วยบริการ</span></p>
-            <p *ngIf="!stats.rank" class="text-xl sm:text-3xl font-bold text-white/70">- <span class="text-xs sm:text-sm font-normal text-purple-200">ยังไม่มีข้อมูล</span></p>
-            <p class="text-[10px] text-purple-200 mt-0.5 leading-tight">จัดอันดับตาม % KPI ที่บรรลุเป้าหมายสูงสุด</p>
+            <p *ngIf="stats.rank > 0" class="text-xl sm:text-3xl font-bold text-white">อันดับ {{ stats.rank }} <span class="text-xs font-normal text-purple-200">/ {{ stats.totalHospitals }}</span></p>
+            <p *ngIf="!stats.rank" class="text-xl sm:text-3xl font-bold text-white/70">- <span class="text-xs font-normal text-purple-200">ยังไม่มีข้อมูล</span></p>
+            <p class="text-[10px] text-purple-200 mt-0.5 leading-tight">จัดอันดับตาม % KPI ที่บรรลุเป้าหมาย</p>
           </div>
         </div>
       </div>
 
-      <!-- Filters Section -->
-      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-6 mb-6 sm:mb-8">
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
-            <div>
-                <label class="block text-xs font-bold text-gray-500 mb-2 uppercase">หมวดหมู่หลัก</label>
-                <select [(ngModel)]="selectedMain" (change)="applyFilters()" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm">
-                    <option value="">ทั้งหมด</option>
-                    <option *ngFor="let cat of mainCategories" [value]="cat">{{ cat }}</option>
-                </select>
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-gray-500 mb-2 uppercase">เลือกตัวชี้วัด</label>
-                <select [(ngModel)]="selectedIndicator" (change)="applyFilters()" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm">
-                    <option value="">ทั้งหมด</option>
-                    <option *ngFor="let name of indicatorNames" [value]="name">{{ name }}</option>
-                </select>
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-gray-500 mb-2 uppercase">เลือกหน่วยงาน</label>
-                <select [(ngModel)]="selectedDept" (change)="applyFilters()" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm">
-                    <option value="">ทั้งหมด</option>
-                    <option *ngFor="let name of deptNames" [value]="name">{{ name }}</option>
-                </select>
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-gray-500 mb-2 uppercase">เลือกปี</label>
-                <select [(ngModel)]="selectedYear" (change)="applyFilters()" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm">
-                    <option value="">ทั้งหมด</option>
-                    <option *ngFor="let name of filterYears" [value]="name">{{ name }}</option>
-                </select>
-            </div>
-             <div class="flex items-end">
-                <button (click)="selectedMain=''; selectedIndicator=''; selectedDept=''; selectedYear=''; applyFilters()"
-                        class="w-full py-2.5 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl text-sm transition-colors shadow-lg transform hover:-translate-y-0.5">
-                  <i class="fas fa-times-circle mr-2"></i> ล้างตัวกรอง
-                </button>
-            </div>
+      <!-- Filters -->
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5 mb-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1">ปีงบประมาณ</label>
+            <select [(ngModel)]="selectedYear" (change)="onFilterChange('selectedYear')" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none">
+              <option *ngFor="let y of options.years" [value]="y">{{ y }}</option>
+              <option *ngIf="!options.years.length" [value]="selectedYear">{{ selectedYear }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1">ยุทธศาสตร์</label>
+            <select [(ngModel)]="selectedYut" (change)="onFilterChange('selectedYut')" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none">
+              <option value="">ทั้งหมด</option>
+              <option *ngFor="let o of options.yuts" [value]="o.id">{{ o.name }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1">หมวดหมู่หลัก</label>
+            <select [(ngModel)]="selectedMain" (change)="onFilterChange('selectedMain')" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none">
+              <option value="">ทั้งหมด</option>
+              <option *ngFor="let o of mainOptions" [value]="o.id">{{ o.name }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1">หน่วยงาน</label>
+            <select [(ngModel)]="selectedDept" (change)="onFilterChange('selectedDept')" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none">
+              <option value="">ทั้งหมด</option>
+              <option *ngFor="let o of options.depts" [value]="o.id">{{ o.name }}</option>
+            </select>
+          </div>
+          <div class="xl:col-span-2">
+            <label class="block text-xs font-bold text-gray-500 mb-1">ตัวชี้วัด</label>
+            <select [(ngModel)]="selectedIndicator" (change)="onFilterChange('selectedIndicator')" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none">
+              <option value="">ทั้งหมด ({{ indicatorOptions.length }})</option>
+              <option *ngFor="let o of indicatorOptions" [value]="o.id">{{ o.name }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1">อำเภอ</label>
+            <select [(ngModel)]="selectedDistrict" (change)="onFilterChange('selectedDistrict')" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none">
+              <option value="">ทั้งหมด</option>
+              <option *ngFor="let o of options.districts" [value]="o.id">{{ o.name }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1">ประเภทหน่วยบริการ</label>
+            <select [(ngModel)]="selectedHostype" (change)="onFilterChange('selectedHostype')" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none">
+              <option value="">ทั้งหมด</option>
+              <option *ngFor="let o of options.hostypes" [value]="o.id">{{ o.name }}</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 mt-3">
+          <span *ngFor="let c of activeFilterChips" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-50 border border-green-200 text-xs text-green-800">
+            <b>{{ c.label }}:</b> <span class="max-w-[260px] truncate">{{ c.value }}</span>
+            <button (click)="removeChip(c.key)" class="ml-1 text-green-600 hover:text-red-600" title="เอาตัวกรองนี้ออก"><i class="fas fa-times"></i></button>
+          </span>
+          <button *ngIf="activeFilterChips.length" (click)="clearFilters()" class="px-3 py-1 rounded-full bg-red-500 hover:bg-red-600 text-white text-xs font-bold">
+            <i class="fas fa-times-circle mr-1"></i>ล้างตัวกรองทั้งหมด
+          </button>
+          <span class="text-xs text-gray-400 ml-auto"><i class="fas fa-hand-pointer mr-1"></i>คลิกแท่งกราฟเพื่อกรองเจาะลึกได้</span>
         </div>
       </div>
 
-      <!-- Data scope notice -->
-      <div *ngIf="!isLoading && filteredData.length > 0" class="mb-5 flex items-center gap-2 text-xs text-slate-500 bg-slate-50 rounded-xl px-4 py-2.5 border border-slate-100">
-        <i class="fas fa-database text-slate-400 flex-shrink-0"></i>
+      <!-- Method note -->
+      <div class="mb-6 flex items-start gap-2 text-xs text-slate-600 bg-sky-50 rounded-xl px-4 py-3 border border-sky-100">
+        <i class="fas fa-circle-info text-sky-500 mt-0.5 flex-shrink-0"></i>
         <span>
-          แสดงข้อมูล <b class="text-slate-700">{{ filteredData.length }}</b> รายการ
-          <ng-container *ngIf="selectedYear"> · ปีงบ <b class="text-slate-700">{{ selectedYear }}</b></ng-container>
-          <ng-container *ngIf="selectedMain"> · หมวด <b class="text-slate-700">{{ selectedMain }}</b></ng-container>
-          <ng-container *ngIf="selectedIndicator"> · ตัวชี้วัด <b class="text-slate-700">{{ selectedIndicator }}</b></ng-container>
-          <ng-container *ngIf="selectedDept"> · กลุ่มงาน <b class="text-slate-700">{{ selectedDept }}</b></ng-container>
-          <span class="ml-1 text-slate-400">· ข้อมูลจาก kpi_summary (last_actual)</span>
-          <span *ngIf="!selectedIndicator" class="ml-2 text-amber-500"><i class="fas fa-triangle-exclamation mr-0.5"></i>กราฟรวม SUM ตัวชี้วัดหลายประเภท — กรอง "เลือกตัวชี้วัด" หรือ "หมวดหมู่" เพื่อความแม่นยำ</span>
+          <b>หลักการคำนวณ:</b> นับเป็น <b>"คู่" (ตัวชี้วัด × หน่วยบริการ)</b> — คู่ที่ <b>ผ่านเกณฑ์</b> คือมีเป้าหมาย &gt; 0 และผลงานล่าสุด ≥ เป้าหมาย
+          · <b>ร้อยละผ่านเกณฑ์</b> = คู่ที่ผ่าน ÷ คู่ที่มีเป้าหมาย × 100 (ไม่รวมค่าดิบข้ามตัวชี้วัด เพราะหน่วยนับต่างกัน)
+          · ข้อมูลจากตารางสรุปผล (kpi_summary) ทั้งหมดตามสิทธิ์ของผู้ใช้ · เฉพาะตัวชี้วัดที่เปิดใช้งาน
+          · สีเขียว ≥ 80% · สีเหลือง 50–79% · สีแดง &lt; 50%
         </span>
       </div>
 
-        <!-- Bar Chart (Full Width) -->
-      <div *ngIf="!isLoading" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
-        <div class="flex items-start gap-2 text-xs text-gray-500 bg-gray-50 rounded-xl px-3 py-2.5 mb-4 border border-gray-100">
-          <i class="fas fa-circle-info text-blue-400 mt-0.5 flex-shrink-0"></i>
-          <span>
-            <b>วิธีคำนวณ:</b> สำหรับแต่ละหมวดหมู่ นำ <b>ผลรวม last_actual</b> ÷ <b>ผลรวม target_value</b> × 100
-            · แถบสีเขียว = บรรลุ ≥80% | สีเหลือง = 50–79% | สีแดง = &lt;50% · เส้นประ = เกณฑ์ 80%
-          </span>
-        </div>
-        <apx-chart
-          [series]="barChartOptions.series"
-          [chart]="barChartOptions.chart"
-          [dataLabels]="barChartOptions.dataLabels"
-          [plotOptions]="barChartOptions.plotOptions"
-          [yaxis]="barChartOptions.yaxis"
-          [legend]="barChartOptions.legend"
-          [fill]="barChartOptions.fill"
-          [stroke]="barChartOptions.stroke"
-          [tooltip]="barChartOptions.tooltip"
-          [xaxis]="barChartOptions.xaxis"
-          [colors]="barChartOptions.colors"
-          [title]="barChartOptions.title"
-        ></apx-chart>
+      <div *ngIf="loadError" class="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm"><i class="fas fa-triangle-exclamation mr-1"></i>{{ loadError }}</div>
+
+      <ng-container *ngIf="data">
+
+      <!-- ===== 1. ภาพรวม ===== -->
+      <h2 class="text-base font-bold text-gray-700 mb-3 flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-green-600 text-white text-xs flex items-center justify-center">1</span>ภาพรวมปีงบประมาณ {{ data.year_bh }}</h2>
+      <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-4">
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-3"><p class="text-[11px] text-gray-500">ตัวชี้วัด</p><p class="text-xl font-bold text-gray-800">{{ data.overall.indicator_count | number }}</p></div>
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-3"><p class="text-[11px] text-gray-500">หน่วยบริการ</p><p class="text-xl font-bold text-gray-800">{{ data.overall.hospital_count | number }}</p></div>
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-3"><p class="text-[11px] text-gray-500">คู่ทั้งหมด</p><p class="text-xl font-bold text-gray-800">{{ data.overall.pairs | number }}</p></div>
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-3"><p class="text-[11px] text-gray-500">ผ่านเกณฑ์ / มีเป้าหมาย</p><p class="text-xl font-bold text-emerald-700">{{ data.overall.passed | number }} <span class="text-sm text-gray-400">/ {{ data.overall.with_target | number }}</span></p></div>
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-3"><p class="text-[11px] text-gray-500">ร้อยละผ่านเกณฑ์</p><p class="text-xl font-bold" [style.color]="getDistrictColor(data.overall.achievement_pct)">{{ data.overall.achievement_pct }}%</p></div>
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-3"><p class="text-[11px] text-gray-500">คู่ที่รอตรวจสอบ</p><p class="text-xl font-bold text-orange-600">{{ data.overall.pending_pairs | number }}</p></div>
       </div>
-      <!-- Line Chart (Full Width) -->
-      <div *ngIf="!isLoading" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6 sm:mb-8">
-        <div class="flex items-start gap-2 text-xs text-gray-500 bg-gray-50 rounded-xl px-3 py-2.5 mb-4 border border-gray-100">
-          <i class="fas fa-circle-info text-blue-400 mt-0.5 flex-shrink-0"></i>
-          <span>
-            <b>วิธีคำนวณ:</b> <b>ผลรวม actual_value</b> รายเดือน (ต.ค.–ก.ย.) ของตัวชี้วัดทั้งหมดที่อยู่ในตัวกรอง
-            · <span class="text-yellow-600 font-medium">เส้นประสีเหลือง</span> = ค่าเฉลี่ยเป้าหมาย (SUM target_value ÷ 12)
-            · เดือนที่ไม่มีข้อมูลจะไม่แสดงค่า
-          </span>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><app-apex-box [options]="donutChart"></app-apex-box></div>
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><app-apex-box [options]="radialChart"></app-apex-box></div>
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+          <app-apex-box [options]="distributionChart"></app-apex-box>
+          <p class="text-[11px] text-gray-500 mt-1">นับตัวชี้วัดตามร้อยละคู่ที่ผ่านเกณฑ์ของตัวชี้วัดนั้น (เฉพาะตัวที่มีเป้าหมาย)</p>
         </div>
-        <apx-chart
-          [series]="trendChartOptions.series"
-          [chart]="trendChartOptions.chart"
-          [xaxis]="trendChartOptions.xaxis"
-          [yaxis]="trendChartOptions.yaxis"
-          [dataLabels]="trendChartOptions.dataLabels"
-          [tooltip]="trendChartOptions.tooltip"
-          [stroke]="trendChartOptions.stroke"
-          [colors]="trendChartOptions.colors"
-          [labels]="trendChartOptions.labels"
-          [title]="trendChartOptions.title"
-        ></apx-chart>
       </div>
 
-      <div *ngIf="!isLoading" class="grid grid-cols-1 gap-4 sm:gap-6 mb-6 sm:mb-8">
-        <!-- แผนที่ผลงาน KPI รายอำเภอ (Full Width) -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <h3 class="text-lg font-bold text-gray-800 mb-1">
-            <i class="fas fa-map-marked-alt text-green-600 mr-2"></i>แผนที่ผลงาน KPI รายอำเภอ — จ.นครราชสีมา
-          </h3>
-          <div class="flex items-start gap-2 text-xs text-gray-500 bg-gray-50 rounded-xl px-3 py-2.5 mb-4 border border-gray-100">
-            <i class="fas fa-circle-info text-blue-400 mt-0.5 flex-shrink-0"></i>
-            <span>
-              <b>วิธีคำนวณ:</b> <b>SUM(actual)</b> ÷ <b>SUM(target)</b> × 100 รวมทุกตัวชี้วัดในแต่ละอำเภอ ตามตัวกรองที่เลือก
-              · ตัวเลขใต้วงกลม = ผลรวม actual / ผลรวม target (raw values)
-              · hover เพื่อดูชื่ออำเภอ, ค่า actual, และ target
-            </span>
-          </div>
+      <!-- ===== 2. ยุทธศาสตร์ ===== -->
+      <h2 class="text-base font-bold text-gray-700 mb-3 flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-green-600 text-white text-xs flex items-center justify-center">2</span>แยกตามยุทธศาสตร์ ({{ data.by_yut.length }})</h2>
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-8">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><app-apex-box [options]="yutPctChart"></app-apex-box></div>
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><app-apex-box [options]="yutStackChart"></app-apex-box></div>
+      </div>
 
-          <!-- Legend -->
-          <div class="flex items-center gap-4 mb-4 text-xs font-bold">
-            <span class="flex items-center gap-1"><span class="w-4 h-4 rounded bg-green-500 inline-block"></span> ≥80% (บรรลุ)</span>
-            <span class="flex items-center gap-1"><span class="w-4 h-4 rounded bg-yellow-400 inline-block"></span> 50-79% (ปานกลาง)</span>
-            <span class="flex items-center gap-1"><span class="w-4 h-4 rounded bg-red-500 inline-block"></span> <50% (ต้องปรับปรุง)</span>
-          </div>
+      <!-- ===== 3. หมวดหมู่หลัก ===== -->
+      <h2 class="text-base font-bold text-gray-700 mb-3 flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-green-600 text-white text-xs flex items-center justify-center">3</span>แยกตามหมวดหมู่หลัก ({{ data.by_main.length }})</h2>
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-8">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><app-apex-box [options]="mainPctChart"></app-apex-box></div>
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><app-apex-box [options]="mainStackChart"></app-apex-box></div>
+      </div>
 
-          <!-- District Grid Map -->
-          <div *ngIf="districtMapData.length > 0" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2">
-            <div *ngFor="let dist of districtMapData"
-                 class="relative rounded-xl border-2 p-2 text-center transition-all hover:shadow-lg hover:scale-105 cursor-default"
-                 [ngClass]="getDistrictBg(dist.pct)"
-                 [title]="dist.name + ' — เป้าหมาย: ' + dist.target + ' / ผลงาน: ' + dist.actual">
-              <!-- วงกลมเปอร์เซ็นต์ -->
-              <div class="mx-auto w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md mb-1"
-                   [style.background]="getDistrictColor(dist.pct)">
-                {{ dist.pct | number:'1.0-0' }}%
-              </div>
-              <p class="text-xs font-bold leading-tight whitespace-normal break-words">{{ dist.name }}</p>
-              <p class="text-[10px] opacity-70">{{ dist.actual | number:'1.0-0' }}/{{ dist.target | number:'1.0-0' }}</p>
-            </div>
-          </div>
+      <!-- ===== 4. หน่วยงาน ===== -->
+      <h2 class="text-base font-bold text-gray-700 mb-3 flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-green-600 text-white text-xs flex items-center justify-center">4</span>แยกตามหน่วยงาน ({{ data.by_dept.length }})</h2>
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-8">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><app-apex-box [options]="deptPctChart"></app-apex-box></div>
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><app-apex-box [options]="deptStackChart"></app-apex-box></div>
+      </div>
 
-          <!-- Empty state -->
-          <div *ngIf="districtMapData.length === 0" class="flex flex-col items-center justify-center py-16 text-gray-400">
-            <i class="fas fa-map text-4xl mb-3"></i>
-            <p class="text-sm font-bold">ไม่มีข้อมูลอำเภอสำหรับตัวกรองที่เลือก</p>
+      <!-- ===== 5. ตัวชี้วัด ===== -->
+      <h2 class="text-base font-bold text-gray-700 mb-3 flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-green-600 text-white text-xs flex items-center justify-center">5</span>แยกตามตัวชี้วัด ({{ data.by_indicator.length }})</h2>
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-4">
+        <div class="flex flex-wrap items-center gap-2 mb-3">
+          <div class="flex gap-1 bg-gray-100 p-1 rounded-lg">
+            <button (click)="setIndicatorView('all')" class="px-3 py-1.5 rounded-md text-xs font-bold" [ngClass]="indicatorView === 'all' ? 'bg-white text-green-700 shadow-sm' : 'text-gray-500'">ทั้งหมด</button>
+            <button (click)="setIndicatorView('top')" class="px-3 py-1.5 rounded-md text-xs font-bold" [ngClass]="indicatorView === 'top' ? 'bg-white text-green-700 shadow-sm' : 'text-gray-500'">10 อันดับสูงสุด</button>
+            <button (click)="setIndicatorView('bottom')" class="px-3 py-1.5 rounded-md text-xs font-bold" [ngClass]="indicatorView === 'bottom' ? 'bg-white text-red-700 shadow-sm' : 'text-gray-500'">10 อันดับต่ำสุด</button>
           </div>
-
-          <!-- สรุปจำนวน -->
-          <div *ngIf="districtMapData.length > 0" class="mt-4 pt-3 border-t border-gray-100 flex flex-wrap gap-3 text-xs font-bold">
-            <span class="px-3 py-1 rounded-full bg-gray-100 text-gray-600">
-              <i class="fas fa-map-marker-alt mr-1"></i>ทั้งหมด {{ districtMapData.length }} อำเภอ
-            </span>
-            <span class="px-3 py-1 rounded-full bg-green-100 text-green-700">
-              <i class="fas fa-check-circle mr-1"></i>บรรลุ (≥80%) {{ countDistricts('green') }} อำเภอ
-            </span>
-            <span class="px-3 py-1 rounded-full bg-yellow-100 text-yellow-700">
-              <i class="fas fa-exclamation-circle mr-1"></i>ปานกลาง (50-79%) {{ countDistricts('yellow') }} อำเภอ
-            </span>
-            <span class="px-3 py-1 rounded-full bg-red-100 text-red-700">
-              <i class="fas fa-times-circle mr-1"></i>ต้องปรับปรุง (<50%) {{ countDistricts('red') }} อำเภอ
-            </span>
+          <div class="relative flex-1 min-w-[200px] max-w-sm">
+            <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+            <input [(ngModel)]="indicatorSearch" (ngModelChange)="onIndicatorSearch()" placeholder="ค้นหาชื่อตัวชี้วัด..." class="w-full pl-8 pr-3 py-1.5 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-green-500">
           </div>
+          <span class="text-xs text-gray-500">แสดง {{ indicatorRows.length }} ตัวชี้วัดที่มีเป้าหมาย</span>
         </div>
-
-        <!-- กราฟวงกลม (Full Width) -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <div class="flex items-start gap-2 text-xs text-gray-500 bg-gray-50 rounded-xl px-3 py-2.5 mb-4 border border-gray-100">
-            <i class="fas fa-circle-info text-blue-400 mt-0.5 flex-shrink-0"></i>
-            <span>
-              <b>วิธีคำนวณ:</b> <b>ผลรวม last_actual</b> ต่อกลุ่มงาน
-              · <b>หมายเหตุ:</b> % ในกราฟวงกลมคือ <i>สัดส่วนของผลรวมทั้งหมด</i> ไม่ใช่อัตราความสำเร็จ —
-              กรอง "เลือกหน่วยงาน" หรือ "เลือกตัวชี้วัด" เพื่อดูเฉพาะกลุ่มที่ต้องการ
-            </span>
-          </div>
-          <apx-chart *ngIf="pieChartOptions.series && pieChartOptions.series.length > 0"
-            [series]="pieChartOptions.series"
-            [chart]="pieChartOptions.chart"
-            [labels]="pieChartOptions.labels"
-            [dataLabels]="pieChartOptions.dataLabels"
-            [tooltip]="pieChartOptions.tooltip"
-            [plotOptions]="pieChartOptions.plotOptions"
-            [legend]="pieChartOptions.legend"
-            [responsive]="pieChartOptions.responsive"
-            [title]="pieChartOptions.title"
-          ></apx-chart>
-          <div *ngIf="!pieChartOptions.series || pieChartOptions.series.length === 0" class="flex flex-col items-center justify-center py-16 text-gray-400">
-            <i class="fas fa-chart-pie text-4xl mb-3"></i>
-            <p class="text-sm font-bold">ไม่มีข้อมูลที่เป็นตัวเลขสำหรับแสดงกราฟวงกลม</p>
-          </div>
+        <app-apex-box [options]="indicatorChart"></app-apex-box>
+      </div>
+      <!-- ตารางรายละเอียดรายตัวชี้วัด -->
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-8 overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-100 text-sm font-bold text-gray-700"><i class="fas fa-table mr-1 text-green-600"></i>ตารางรายละเอียดรายตัวชี้วัด (คลิกหัวคอลัมน์เพื่อเรียง)</div>
+        <div class="overflow-auto card-scroll" style="max-height: 480px;">
+          <table class="w-full text-xs min-w-[900px]">
+            <thead class="bg-green-50 text-green-900 sticky top-0 z-10 shadow-sm">
+              <tr>
+                <th class="px-3 py-2 text-left cursor-pointer" (click)="sortTable('gname')">ตัวชี้วัด</th>
+                <th class="px-3 py-2 text-left cursor-pointer" (click)="sortTable('main_indicator_name')">หมวดหมู่หลัก</th>
+                <th class="px-3 py-2 text-left cursor-pointer" (click)="sortTable('dept_name')">หน่วยงาน</th>
+                <th class="px-3 py-2 text-right cursor-pointer" (click)="sortTable('hospital_count')">หน่วยบริการ</th>
+                <th class="px-3 py-2 text-right cursor-pointer" (click)="sortTable('with_target')">มีเป้าหมาย</th>
+                <th class="px-3 py-2 text-right cursor-pointer" (click)="sortTable('passed')">ผ่าน</th>
+                <th class="px-3 py-2 text-right cursor-pointer" (click)="sortTable('not_passed')">ไม่ผ่าน</th>
+                <th class="px-3 py-2 text-right cursor-pointer" (click)="sortTable('no_target')">ไม่มีเป้าหมาย</th>
+                <th class="px-3 py-2 text-right cursor-pointer" (click)="sortTable('achievement_pct')">ร้อยละผ่าน</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let r of tableRows" class="border-t border-gray-100 hover:bg-green-50/40 cursor-pointer" (click)="drillDown('selectedIndicator', '' + r.gkey)" title="คลิกเพื่อกรองเฉพาะตัวชี้วัดนี้">
+                <td class="px-3 py-2 font-medium text-gray-800">{{ r.gname }}</td>
+                <td class="px-3 py-2 text-gray-600">{{ r['main_indicator_name'] || '-' }}</td>
+                <td class="px-3 py-2 text-gray-600">{{ r['dept_name'] || '-' }}</td>
+                <td class="px-3 py-2 text-right">{{ r.hospital_count | number }}</td>
+                <td class="px-3 py-2 text-right">{{ r.with_target | number }}</td>
+                <td class="px-3 py-2 text-right text-emerald-700 font-bold">{{ r.passed | number }}</td>
+                <td class="px-3 py-2 text-right text-red-600">{{ r.not_passed | number }}</td>
+                <td class="px-3 py-2 text-right text-gray-400">{{ r.no_target | number }}</td>
+                <td class="px-3 py-2 text-right"><span *ngIf="r.with_target > 0" class="px-2 py-0.5 rounded-full font-bold" [ngClass]="pctClass(r.achievement_pct)">{{ r.achievement_pct }}%</span><span *ngIf="!r.with_target" class="text-gray-400">ไม่มีเป้าหมาย</span></td>
+              </tr>
+              <tr *ngIf="!tableRows.length"><td colspan="9" class="px-3 py-8 text-center text-gray-400">ไม่มีข้อมูล</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
+
+      <!-- ===== 6. รายเดือน ===== -->
+      <h2 class="text-base font-bold text-gray-700 mb-3 flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-green-600 text-white text-xs flex items-center justify-center">6</span>แนวโน้มรายเดือน</h2>
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-4">
+        <app-apex-box [options]="monthlyChart"></app-apex-box>
+        <p class="text-[11px] text-gray-500 mt-1">
+          แท่ง = จำนวนคู่ที่มีผลงานในเดือนนั้น · เส้น = ร้อยละผ่านเกณฑ์ของค่ารายเดือน (ค่าเดือนนั้น ≥ เป้าหมาย)
+          — <b>ไม่รวมตัวชี้วัดสะสมและตัวชี้วัดที่มีสูตรคำนวณ</b> ในเส้นร้อยละ เพราะค่ารายเดือนของตัวชี้วัดเหล่านั้นไม่ใช่ผลงาน ณ เดือนนั้น
+        </p>
+      </div>
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-8">
+        <div class="flex flex-wrap items-center gap-2 mb-3">
+          <span class="text-sm font-bold text-gray-700"><i class="fas fa-th mr-1 text-green-600"></i>แผนที่ความร้อนรายเดือน</span>
+          <div class="flex gap-1 bg-gray-100 p-1 rounded-lg">
+            <button (click)="setHeatMetric('pass')" class="px-3 py-1.5 rounded-md text-xs font-bold" [ngClass]="heatMetric === 'pass' ? 'bg-white text-green-700 shadow-sm' : 'text-gray-500'">ร้อยละผ่านเกณฑ์</button>
+            <button (click)="setHeatMetric('record')" class="px-3 py-1.5 rounded-md text-xs font-bold" [ngClass]="heatMetric === 'record' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500'">ร้อยละมีผลงาน</button>
+          </div>
+          <span class="text-[11px] text-gray-500">ช่องสีเทา "–" = ไม่มีข้อมูลในเดือนนั้น</span>
+        </div>
+        <div class="grid grid-cols-1 2xl:grid-cols-2 gap-4">
+          <app-apex-box [options]="heatMainChart"></app-apex-box>
+          <app-apex-box [options]="heatDeptChart"></app-apex-box>
+        </div>
+      </div>
+
+      <!-- ===== 7. พื้นที่ ===== -->
+      <h2 class="text-base font-bold text-gray-700 mb-3 flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-green-600 text-white text-xs flex items-center justify-center">7</span>แยกตามพื้นที่และประเภทหน่วยบริการ</h2>
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
+        <h3 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-map-marked-alt text-green-600 mr-2"></i>แผนที่ผลงานรายอำเภอ — จ.นครราชสีมา</h3>
+        <div class="flex flex-wrap items-center gap-4 mb-3 text-xs font-bold">
+          <span class="flex items-center gap-1"><span class="w-4 h-4 rounded bg-green-500 inline-block"></span> ≥80%</span>
+          <span class="flex items-center gap-1"><span class="w-4 h-4 rounded bg-yellow-400 inline-block"></span> 50-79%</span>
+          <span class="flex items-center gap-1"><span class="w-4 h-4 rounded bg-red-500 inline-block"></span> &lt;50%</span>
+          <span class="text-gray-400 font-normal">ตัวเลข = คู่ผ่าน / คู่มีเป้าหมาย · คลิกเพื่อกรองอำเภอ</span>
+        </div>
+        <div *ngIf="districtMapData.length > 0" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2">
+          <button *ngFor="let dist of districtMapData" (click)="drillDown('selectedDistrict', dist.id)"
+               class="relative rounded-xl border-2 p-2 text-center transition-all hover:shadow-lg hover:scale-105"
+               [ngClass]="getDistrictBg(dist.pct)" [title]="dist.name + ' — ผ่าน ' + dist.passed + ' / ' + dist.total + ' คู่'">
+            <div class="mx-auto w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md mb-1" [style.background]="getDistrictColor(dist.pct)">{{ dist.pct | number:'1.0-0' }}%</div>
+            <p class="text-xs font-bold leading-tight whitespace-normal break-words">{{ dist.name }}</p>
+            <p class="text-[10px] opacity-70">{{ dist.passed | number }}/{{ dist.total | number }}</p>
+          </button>
+        </div>
+        <div *ngIf="districtMapData.length === 0" class="py-10 text-center text-gray-400 text-sm">ไม่มีข้อมูลอำเภอสำหรับตัวกรองที่เลือก</div>
+        <div *ngIf="districtMapData.length > 0" class="mt-4 pt-3 border-t border-gray-100 flex flex-wrap gap-2 text-xs font-bold">
+          <span class="px-3 py-1 rounded-full bg-gray-100 text-gray-600">ทั้งหมด {{ districtMapData.length }} อำเภอ</span>
+          <span class="px-3 py-1 rounded-full bg-green-100 text-green-700">≥80% {{ countDistricts('green') }}</span>
+          <span class="px-3 py-1 rounded-full bg-yellow-100 text-yellow-700">50-79% {{ countDistricts('yellow') }}</span>
+          <span class="px-3 py-1 rounded-full bg-red-100 text-red-700">&lt;50% {{ countDistricts('red') }}</span>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-8">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><app-apex-box [options]="districtChart"></app-apex-box></div>
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><app-apex-box [options]="hostypeChart"></app-apex-box></div>
+      </div>
+
+      </ng-container>
 
       </div><!-- end chart view -->
 </div>

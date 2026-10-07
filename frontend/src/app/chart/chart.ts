@@ -1,422 +1,292 @@
-import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth';
-import { NgApexchartsModule, ApexOptions } from "ng-apexcharts";
 import { FormsModule } from '@angular/forms';
 import { ReportComponent } from '../report/report';
+import { ApexBoxComponent } from '../shared/apex-box';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
-import Swal from 'sweetalert2';
+import {
+  ChartGroupRow, ChartMonthRow, buildPctBar, buildStatusStack, buildOverallDonut, buildOverallRadial,
+  buildMonthlyCombo, buildHeatmap, buildDistribution, pctColor
+} from './chart-builders';
+
+type FilterKey = 'selectedYut' | 'selectedMain' | 'selectedDept' | 'selectedIndicator' | 'selectedDistrict' | 'selectedHostype';
 
 @Component({
   selector: 'app-chart',
   standalone: true,
-  imports: [CommonModule, RouterModule, NgApexchartsModule, FormsModule, ReportComponent],
+  imports: [CommonModule, RouterModule, FormsModule, ReportComponent, ApexBoxComponent],
   templateUrl: './chart.html'
 })
-export class ChartComponent implements OnInit {
+export class ChartComponent implements OnInit, OnDestroy {
   private authService = inject(AuthService);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
 
-  kpiData: any[] = [];
-  filteredData: any[] = []; // เก็บข้อมูลที่ผ่านการกรองแล้ว
-
-  // ตัวแปรสำหรับตัวกรอง
-  selectedMain: string = '';
-  selectedIndicator: string = '';
-  selectedDept: string = '';
-  selectedYear: string = '';
-
-  // รายการใน Dropdown
-  mainCategories: string[] = [];
-  indicatorNames: string[] = [];
-  deptNames: string[] = [];
-  filterYears: string[] = [];
-
   activeView: 'chart' | 'report' = 'chart';
+  isLoading = true;
+  loadError = '';
 
-  // ตัวแปร Config สำหรับ ApexCharts
-  public barChartOptions: Partial<ApexOptions> | any = {
-    series: [],
-    chart: {
-      type: "bar",
-      height: 450,
-      fontFamily: 'Sarabun, sans-serif'
-    }
-  };
-  public trendChartOptions: Partial<ApexOptions> | any = {
-    series: [],
-    chart: {
-      type: "line",
-      height: 350,
-      fontFamily: 'Sarabun, sans-serif'
-    }
-  };
-  public pieChartOptions: Partial<ApexOptions> | any = {
-    series: [],
-    chart: {
-      type: "pie",
-      height: 350,
-      fontFamily: 'Sarabun, sans-serif'
-    }
-  };
+  // ตัวกรอง (ค่า = id จาก /report/chart-stats options; '0' = "ไม่ระบุ")
+  selectedYear = '';
+  selectedYut = '';
+  selectedMain = '';
+  selectedDept = '';
+  selectedIndicator = '';
+  selectedDistrict = '';
+  selectedHostype = '';
 
-  // ตัวแปรสำหรับแผนที่อำเภอ
+  options: any = { years: [], yuts: [], mains: [], depts: [], indicators: [], districts: [], hostypes: [] };
+  data: any = null; // ผลดิบจาก API
+
+  // options ของแต่ละกราฟ
+  donutChart: any = {}; radialChart: any = {};
+  yutPctChart: any = {}; yutStackChart: any = {};
+  mainPctChart: any = {}; mainStackChart: any = {};
+  deptPctChart: any = {}; deptStackChart: any = {};
+  indicatorChart: any = {}; distributionChart: any = {};
+  monthlyChart: any = {};
+  heatMainChart: any = {}; heatDeptChart: any = {};
+  districtChart: any = {}; hostypeChart: any = {};
+
+  heatMetric: 'pass' | 'record' = 'pass';
+  indicatorView: 'all' | 'top' | 'bottom' = 'all';
+  indicatorSearch = '';
+  tableSort: { key: string; dir: 1 | -1 } = { key: 'achievement_pct', dir: -1 };
   districtMapData: any[] = [];
 
-  // ตัวแปรสำหรับ Stats
-  stats: any = {
-    successRate: 0,
-    recordedCount: 0,
-    totalDepts: 0,
-    pendingCount: 0,
-    rank: 0,
-    totalHospitals: 0
-  };
+  // การ์ดสถิติ (GET /dashboard-stats เดิม)
+  stats: any = { successRate: 0, recordedCount: 0, totalDepts: 0, pendingCount: 0, rank: 0, totalHospitals: 0 };
   private animationTimer: any;
-  isLoading: boolean = true;
-  // หน้านี้ต้อง login เสมอ (route อยู่ใต้ authGuard) — โหมดดูสาธารณะ (isPublicView + /public/kpi-results)
-  // ถูกเอาออกแล้วเมื่อ 7 ต.ค. 2569 ตามที่ผู้ใช้ยืนยันว่าไม่ต้องการเปิดข้อมูลผลงานให้ดูโดยไม่ login
+  private reqSeq = 0;
 
   ngOnInit() {
-    // ถ้าเปิด root path ให้ redirect ไป dashboard
     const currentUrl = this.router.url;
-    if (currentUrl === '/' || currentUrl === '') {
-      this.router.navigate(['/dashboard']);
-      return;
-    }
-    this.loadKpiData();
+    if (currentUrl === '/' || currentUrl === '') { this.router.navigate(['/dashboard']); return; }
+    this.selectedYear = String(getCurrentFiscalYear());
+    this.loadChartStats(true);
   }
 
-  loadKpiData() {
+  ngOnDestroy() {
+    if (this.animationTimer) clearInterval(this.animationTimer);
+  }
+
+  private buildParams(): any {
+    const p: any = {};
+    if (this.selectedYear) p.year_bh = this.selectedYear;
+    if (this.selectedYut) p.yut_id = this.selectedYut;
+    if (this.selectedMain) p.main_id = this.selectedMain;
+    if (this.selectedDept) p.dept_id = this.selectedDept;
+    if (this.selectedIndicator) p.indicator_id = this.selectedIndicator;
+    if (this.selectedDistrict) p.distid = this.selectedDistrict;
+    if (this.selectedHostype) p.hostype = this.selectedHostype;
+    return p;
+  }
+
+  // first = โหลดครั้งแรก: ถ้าปีงบปัจจุบันยังไม่มีข้อมูล ให้ถอยไปปีล่าสุดที่มีข้อมูล
+  loadChartStats(first = false) {
+    const seq = ++this.reqSeq;
     this.isLoading = true;
-    this.authService.getKpiSummary(this.selectedYear ? { year: this.selectedYear } : {}).subscribe({
+    this.loadError = '';
+    this.authService.getReportChartStats(this.buildParams()).subscribe({
       next: (res) => {
-        if (res && res.success) {
-          this.kpiData = res.data;
-          // แปลงข้อมูล (รองรับทั้งตัวเลขและข้อความ)
-          this.kpiData.forEach(item => {
-            item.target_value = item.target_value != null ? String(item.target_value) : '';
-            item.last_actual = String(item.last_actual ?? '');
-            item.total_actual = parseFloat(item.last_actual) || 0;
-            item.target_num = parseFloat(item.target_value) || 0;
-            item.year_bh = String(item.year_bh);
-            ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'].forEach(m => {
-              item[m + '_raw'] = item[m] != null ? String(item[m]) : '';
-              item[m] = parseFloat(item[m]) || 0;
-            });
-          });
-          
-          this.filteredData = [...this.kpiData]; // เริ่มต้นให้ข้อมูลแสดงทั้งหมด
-          this.extractFilterLists();
-          this.setDefaultYear();
-          this.applyFilters(); // กรองและวาดกราฟครั้งแรก
-          this.loadDashboardStats(); // โหลดข้อมูลสถิติ
+        if (seq !== this.reqSeq) return; // ผลของคำขอเก่าที่ช้ากว่า — ทิ้ง
+        if (res?.success) {
+          this.options = res.options;
+          if (first && res.options.years.length && !res.options.years.includes(this.selectedYear)) {
+            this.selectedYear = res.options.years[0];
+            this.loadChartStats();
+            return;
+          }
+          this.data = res;
+          this.buildCharts();
+          this.loadDashboardStats();
         }
-        this.isLoading = false; // ย้ายมาปิด Loading ตรงนี้ หลังจากเตรียมข้อมูลกราฟเสร็จแล้ว
-        this.cdr.detectChanges(); // สั่งอัปเดตหน้าจอทันที
+        this.isLoading = false;
+        this.cdr.detectChanges();
       },
       error: (err) => {
+        if (seq !== this.reqSeq) return;
         this.isLoading = false;
-        console.error('Error loading KPI:', err);
-        this.cdr.detectChanges(); // สั่งอัปเดตหน้าจอแม้เกิดข้อผิดพลาด
+        this.loadError = err.error?.message || 'ไม่สามารถโหลดข้อมูลกราฟได้';
+        this.cdr.detectChanges();
       }
     });
   }
 
+  buildCharts() {
+    const d = this.data;
+    if (!d) return;
+    const pick = (key: FilterKey, field: string) => (row: ChartGroupRow) => this.drillDown(key, String(row[field]));
+    this.donutChart = buildOverallDonut(d.overall);
+    this.radialChart = buildOverallRadial(d.overall);
+    this.yutPctChart = buildPctBar(d.by_yut, 'ร้อยละผ่านเกณฑ์ แยกตามยุทธศาสตร์', pick('selectedYut', 'gkey'));
+    this.yutStackChart = buildStatusStack(d.by_yut, 'จำนวนคู่ผ่าน/ไม่ผ่านเกณฑ์ แยกตามยุทธศาสตร์', false, pick('selectedYut', 'gkey'));
+    this.mainPctChart = buildPctBar(d.by_main, 'ร้อยละผ่านเกณฑ์ แยกตามหมวดหมู่หลัก', pick('selectedMain', 'gkey'));
+    this.mainStackChart = buildStatusStack(d.by_main, 'จำนวนคู่ผ่าน/ไม่ผ่านเกณฑ์ แยกตามหมวดหมู่หลัก', true, pick('selectedMain', 'gkey'));
+    this.deptPctChart = buildPctBar(d.by_dept, 'ร้อยละผ่านเกณฑ์ แยกตามหน่วยงาน', pick('selectedDept', 'gkey'));
+    this.deptStackChart = buildStatusStack(d.by_dept, 'จำนวนคู่ผ่าน/ไม่ผ่านเกณฑ์ แยกตามหน่วยงาน', true, pick('selectedDept', 'gkey'));
+    this.distributionChart = buildDistribution(d.distribution);
+    this.monthlyChart = buildMonthlyCombo(d.monthly);
+    this.districtChart = buildPctBar(d.by_district, 'ร้อยละผ่านเกณฑ์ แยกตามอำเภอ', pick('selectedDistrict', 'gkey'));
+    this.hostypeChart = buildPctBar(d.by_hostype, 'ร้อยละผ่านเกณฑ์ แยกตามประเภทหน่วยบริการ', pick('selectedHostype', 'gkey'));
+    this.districtMapData = (d.by_district as ChartGroupRow[])
+      .filter(r => r.gkey && r.with_target > 0)
+      .map(r => ({ id: r.gkey, name: r.gname, pct: r.achievement_pct, passed: r.passed, total: r.with_target }));
+    this.buildHeatmaps();
+    this.buildIndicatorChart();
+  }
+
+  buildHeatmaps() {
+    if (!this.data) return;
+    const label = this.heatMetric === 'pass' ? 'ร้อยละผ่านเกณฑ์รายเดือน' : 'ร้อยละคู่ที่มีผลงานรายเดือน';
+    this.heatMainChart = buildHeatmap(this.data.heatmap_main, `${label} — หมวดหมู่หลัก × เดือน`, this.heatMetric);
+    this.heatDeptChart = buildHeatmap(this.data.heatmap_dept, `${label} — หน่วยงาน × เดือน`, this.heatMetric);
+  }
+
+  setHeatMetric(m: 'pass' | 'record') {
+    this.heatMetric = m;
+    this.buildHeatmaps();
+    this.cdr.detectChanges();
+  }
+
+  get indicatorRows(): ChartGroupRow[] {
+    if (!this.data) return [];
+    const q = this.indicatorSearch.trim().toLowerCase();
+    let rows: ChartGroupRow[] = this.data.by_indicator.filter((r: ChartGroupRow) => r.with_target > 0);
+    if (q) rows = rows.filter(r => String(r.gname).toLowerCase().includes(q));
+    if (this.indicatorView === 'top') rows = rows.slice(0, 10);
+    if (this.indicatorView === 'bottom') rows = [...rows].sort((a, b) => a.achievement_pct - b.achievement_pct || b.with_target - a.with_target).slice(0, 10);
+    return rows;
+  }
+
+  buildIndicatorChart() {
+    const titles = { all: 'ร้อยละผ่านเกณฑ์ รายตัวชี้วัด (ทั้งหมด)', top: 'ตัวชี้วัด 10 อันดับผลสำเร็จสูงสุด', bottom: 'ตัวชี้วัด 10 อันดับที่ต้องเร่งรัด (ต่ำสุด)' };
+    this.indicatorChart = buildPctBar(this.indicatorRows, titles[this.indicatorView], (row) => this.drillDown('selectedIndicator', String(row.gkey)));
+  }
+
+  setIndicatorView(v: 'all' | 'top' | 'bottom') {
+    this.indicatorView = v;
+    this.buildIndicatorChart();
+    this.cdr.detectChanges();
+  }
+
+  onIndicatorSearch() {
+    this.buildIndicatorChart();
+    this.cdr.detectChanges();
+  }
+
+  // ตารางรายละเอียดรายตัวชี้วัด (รวมตัวที่ไม่มีเป้าหมาย)
+  get tableRows(): ChartGroupRow[] {
+    if (!this.data) return [];
+    const q = this.indicatorSearch.trim().toLowerCase();
+    const rows: ChartGroupRow[] = this.data.by_indicator.filter((r: ChartGroupRow) => !q || String(r.gname).toLowerCase().includes(q));
+    const { key, dir } = this.tableSort;
+    return [...rows].sort((a, b) => {
+      const va = a[key], vb = b[key];
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
+      return String(va ?? '').localeCompare(String(vb ?? ''), 'th') * dir;
+    });
+  }
+
+  sortTable(key: string) {
+    this.tableSort = this.tableSort.key === key ? { key, dir: (this.tableSort.dir * -1) as 1 | -1 } : { key, dir: key === 'gname' ? 1 : -1 };
+  }
+
+  // คลิกแท่งกราฟ → กรองเจาะลึก
+  drillDown(key: FilterKey, value: string) {
+    (this as any)[key] = value;
+    if (key === 'selectedYut') { this.selectedMain = ''; this.selectedIndicator = ''; }
+    if (key === 'selectedMain' || key === 'selectedDept') this.selectedIndicator = '';
+    this.loadChartStats();
+  }
+
+  // ตัวเลือกแบบลำดับขั้น: หมวดหมู่ตามยุทธศาสตร์, ตัวชี้วัดตามหมวดหมู่/หน่วยงาน
+  get mainOptions(): any[] {
+    return this.options.mains.filter((m: any) => !this.selectedYut || String(m.yut_id ?? '0') === this.selectedYut);
+  }
+  get indicatorOptions(): any[] {
+    return this.options.indicators.filter((i: any) =>
+      (!this.selectedMain || String(i.main_id ?? '0') === this.selectedMain) &&
+      (!this.selectedDept || String(i.dept_id ?? '0') === this.selectedDept));
+  }
+
+  onFilterChange(changed?: FilterKey | 'selectedYear') {
+    if (changed === 'selectedYut') { this.selectedMain = ''; this.selectedIndicator = ''; }
+    if (changed === 'selectedMain' || changed === 'selectedDept') this.selectedIndicator = '';
+    this.loadChartStats();
+  }
+
+  clearFilters() {
+    this.selectedYut = this.selectedMain = this.selectedDept = this.selectedIndicator = this.selectedDistrict = this.selectedHostype = '';
+    this.indicatorSearch = '';
+    this.loadChartStats();
+  }
+
+  get activeFilterChips(): { key: FilterKey; label: string; value: string }[] {
+    const name = (list: any[], id: string) => list.find((x: any) => String(x.id ?? '0') === id)?.name || (id === '0' ? 'ไม่ระบุ' : id);
+    const chips: { key: FilterKey; label: string; value: string }[] = [];
+    if (this.selectedYut) chips.push({ key: 'selectedYut', label: 'ยุทธศาสตร์', value: name(this.options.yuts, this.selectedYut) });
+    if (this.selectedMain) chips.push({ key: 'selectedMain', label: 'หมวดหมู่', value: name(this.options.mains, this.selectedMain) });
+    if (this.selectedDept) chips.push({ key: 'selectedDept', label: 'หน่วยงาน', value: name(this.options.depts, this.selectedDept) });
+    if (this.selectedIndicator) chips.push({ key: 'selectedIndicator', label: 'ตัวชี้วัด', value: name(this.options.indicators, this.selectedIndicator) });
+    if (this.selectedDistrict) chips.push({ key: 'selectedDistrict', label: 'อำเภอ', value: name(this.options.districts, this.selectedDistrict) });
+    if (this.selectedHostype) chips.push({ key: 'selectedHostype', label: 'ประเภท', value: name(this.options.hostypes, this.selectedHostype) });
+    return chips;
+  }
+
+  removeChip(key: FilterKey) {
+    (this as any)[key] = '';
+    this.onFilterChange(key);
+  }
+
+  // === การ์ดสถิติ (ตามปีงบที่เลือก) ===
   loadDashboardStats() {
     if (!this.selectedYear) return;
     this.authService.getDashboardStats(this.selectedYear).subscribe({
-      next: (res) => {
-        if (res && res.success) {
-          this.animateStats(res.data);
-        }
-      },
+      next: (res) => { if (res?.success) this.animateStats(res.data); },
       error: (err) => console.error('Error loading stats:', err)
     });
   }
 
   animateStats(target: any) {
     if (this.animationTimer) clearInterval(this.animationTimer);
-
-    const duration = 1500;
-    const steps = 60;
-    const interval = duration / steps;
-
-    const start = {
-      successRate: Number(this.stats.successRate) || 0,
-      recordedCount: Number(this.stats.recordedCount) || 0,
-      totalDepts: Number(this.stats.totalDepts) || 0,
-      pendingCount: Number(this.stats.pendingCount) || 0,
-      rank: Number(this.stats.rank) || 0,
-      totalHospitals: Number(this.stats.totalHospitals) || 0
-    };
-
-    const end = target;
-    let currentStep = 0;
-
+    const steps = 60, interval = 1500 / steps;
+    const keys = ['successRate', 'recordedCount', 'totalDepts', 'pendingCount', 'rank', 'totalHospitals'];
+    const start: any = {};
+    keys.forEach(k => start[k] = Number(this.stats[k]) || 0);
+    let step = 0;
     this.animationTimer = setInterval(() => {
-      currentStep++;
-      const progress = currentStep / steps;
-      const ease = 1 - Math.pow(1 - progress, 4);
-
-      this.stats.successRate = (start.successRate + (Number(end.successRate) - start.successRate) * ease).toFixed(1);
-      this.stats.recordedCount = Math.round(start.recordedCount + (Number(end.recordedCount) - start.recordedCount) * ease);
-      this.stats.totalDepts = Math.round(start.totalDepts + (Number(end.totalDepts) - start.totalDepts) * ease);
-      this.stats.pendingCount = Math.round(start.pendingCount + (Number(end.pendingCount) - start.pendingCount) * ease);
-      this.stats.rank = Math.round(start.rank + (Number(end.rank) - start.rank) * ease);
-      this.stats.totalHospitals = Math.round(start.totalHospitals + (Number(end.totalHospitals) - start.totalHospitals) * ease);
-
-      if (currentStep >= steps) {
-        clearInterval(this.animationTimer);
-        this.stats = end;
-      }
+      step++;
+      const ease = 1 - Math.pow(1 - step / steps, 4);
+      keys.forEach(k => {
+        const v = start[k] + (Number(target[k]) - start[k]) * ease;
+        this.stats[k] = k === 'successRate' ? v.toFixed(1) : Math.round(v);
+      });
+      if (step >= steps) { clearInterval(this.animationTimer); this.stats = target; }
       this.cdr.detectChanges();
     }, interval);
   }
 
-  extractFilterLists() {
-    this.mainCategories = [...new Set(this.kpiData.map(item => item.main_indicator_name))];
-    this.indicatorNames = [...new Set(this.kpiData.map(item => item.kpi_indicators_name))];
-    this.deptNames = [...new Set(this.kpiData.map(item => item.dept_name))];
-    this.filterYears = [...new Set(this.kpiData.map(item => item.year_bh))].sort().reverse();
-  }
-
-  setDefaultYear() {
-    // ลำดับการเลือก: ปีงบประมาณปัจจุบัน (คำนวณจากวันที่จริง ต.ค.-ก.ย.) -> ปีล่าสุดที่มีข้อมูล
-    // เดิม hardcode '2569' ตรงๆ ทำให้ค้างที่ปีเดิมตลอดไปไม่ขยับตามปีงบจริง — ห้าม hardcode ปีซ้ำอีก
-    const currentYear = String(getCurrentFiscalYear());
-    if (this.filterYears.includes(currentYear)) {
-      this.selectedYear = currentYear;
-    } else if (this.filterYears.length > 0) {
-      this.selectedYear = this.filterYears[0];
-    } else {
-      this.selectedYear = '';
-    }
-  }
-
-  applyFilters() {
-    this.filteredData = this.kpiData.filter(item => {
-      const matchMain = this.selectedMain === '' || item.main_indicator_name === this.selectedMain;
-      const matchIndicator = this.selectedIndicator === '' || item.kpi_indicators_name === this.selectedIndicator;
-      const matchDept = this.selectedDept === '' || item.dept_name === this.selectedDept;
-      const matchYear = this.selectedYear === '' || item.year_bh === this.selectedYear;
-      
-      return matchMain && matchIndicator && matchDept && matchYear;
-    });
-    
-    // อัปเดตกราฟด้วยข้อมูลที่กรองแล้ว
-    this.updateChart();
-    this.updateDistrictMap();
-    this.loadDashboardStats(); // อัปเดต Stats เมื่อมีการกรอง (ถ้าต้องการให้ Stats เปลี่ยนตามปีที่เลือก)
-    this.cdr.detectChanges(); // บังคับอัปเดตหน้าจอทันทีหลังจากคำนวณกราฟเสร็จ
-  }
-
-  updateChart() {
-    // 1. เตรียมข้อมูลสำหรับกราฟ (Group by Main Category)
-    const categoryData: any = {};
-    
-    // ใช้ filteredData แทน kpiData
-    this.filteredData.forEach(item => {
-      const key = item.main_indicator_name || 'อื่นๆ';
-      if (!categoryData[key]) {
-        categoryData[key] = { target: 0, actual: 0 };
-      }
-      categoryData[key].target += item.target_num;
-      categoryData[key].actual += item.total_actual;
-    });
-
-    const labels = Object.keys(categoryData);
-    const targets = labels.map(l => categoryData[l].target);
-    const actuals = labels.map(l => categoryData[l].actual);
-
-    // 1. Bar Chart Config (เป้าหมาย VS ผลงาน)
-    // คำนวณ % ผลงาน/เป้าหมาย
-    const pctData = labels.map((_: any, i: number) => {
-      const t = targets[i] || 0;
-      const a = actuals[i] || 0;
-      return t > 0 ? Math.round((a / t) * 100) : 0;
-    });
-
-    this.barChartOptions = {
-      series: [
-        { name: "% ผลงาน/เป้าหมาย", data: pctData },
-      ],
-      chart: {
-        type: "bar",
-        height: Math.max(450, labels.length * 40),
-        fontFamily: 'Sarabun, sans-serif',
-        toolbar: { show: true }
-      },
-      plotOptions: {
-        bar: {
-          horizontal: true,
-          barHeight: "65%",
-          borderRadius: 4,
-          dataLabels: { position: 'top' },
-          colors: {
-            ranges: [
-              { from: 0, to: 49.99, color: '#ef4444' },
-              { from: 50, to: 79.99, color: '#f59e0b' },
-              { from: 80, to: 200, color: '#10b981' }
-            ]
-          }
-        }
-      },
-      dataLabels: {
-        enabled: true,
-        formatter: function(val: any) { return val + '%'; },
-        offsetX: 20,
-        style: { fontSize: '11px', fontWeight: 'bold' }
-      },
-      stroke: { show: false },
-      xaxis: {
-        categories: labels,
-        max: 120,
-        labels: { formatter: (val: any) => val + '%' },
-        title: { text: '% ผลงาน/เป้าหมาย' }
-      },
-      yaxis: { labels: { style: { fontSize: '11px' }, maxWidth: 250 } },
-      fill: { opacity: 1 },
-      colors: ['#10b981'],
-      title: { text: 'เปรียบเทียบ % ผลงาน/เป้าหมาย (แยกตามหมวดหมู่)', align: 'left' },
-      tooltip: {
-        custom: function({ series, seriesIndex, dataPointIndex, w }: any) {
-          const name = w.globals.labels[dataPointIndex];
-          const pct = series[seriesIndex][dataPointIndex];
-          return `<div style="padding:8px 12px"><b>${name}</b><br>ผลงาน: <b>${pct}%</b></div>`;
-        }
-      },
-      annotations: {
-        xaxis: [{ x: 80, borderColor: '#16a34a', strokeDashArray: 4, label: { text: 'เป้าหมาย 80%', style: { color: '#16a34a', fontSize: '11px' } } }]
-      }
-    };
-
-    // กราฟเส้น
-    const months = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
-    const monthLabels = ['ต.ค.', 'พ.ย.', 'ธ.ค.', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.'];
-    
-    const monthlyActuals = months.map(m => this.filteredData.reduce((sum, item) => sum + (item[m] || 0), 0));
-    const totalTarget = this.filteredData.reduce((sum, item) => sum + item.target_num, 0);
-    const avgTarget = totalTarget / 12;
-    const targetLine = new Array(12).fill(avgTarget);
-
-    // 2. Line Chart Config (แนวโน้มรายเดือน)
-    this.trendChartOptions = {
-      series: [
-        { name: "ผลงานรายเดือน", data: monthlyActuals },
-        { name: "ค่าเฉลี่ยเป้าหมาย", data: targetLine }
-      ],
-      chart: { type: "area", height: 400, fontFamily: 'Sarabun, sans-serif', toolbar: { show: true } },
-      fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05, stops: [0, 100] } },
-      stroke: { width: [4, 2], curve: 'smooth', dashArray: [0, 5] },
-      labels: monthLabels,
-      colors: ['#10b981', '#fbbf24'],
-      title: { text: 'แนวโน้มผลงานรายเดือน (ต.ค. - ก.ย.)', align: 'left' },
-      dataLabels: { // เพิ่มการแสดงตัวเลขบนกราฟและปรับทศนิยม 2 ตำแหน่ง
-        enabled: true,
-        formatter: function (val: any) {
-          return Number(val).toFixed(2);
-        }
-      },
-      tooltip: { // ปรับ Tooltip เป็น 2 ตำแหน่ง
-        y: { formatter: function(val: any) { return Number(val).toFixed(2); } }
-      },
-      yaxis: { // ปรับแกน Y เป็น 2 ตำแหน่ง
-        labels: { formatter: (val: number) => Number(val).toFixed(2) }
-      }
-    };
-
-    // กราฟวงกลม (Pie Chart) แสดงสัดส่วนตามหน่วยงาน
-    const deptData: any = {};
-    this.filteredData.forEach(item => {
-      const key = item.dept_name || 'ไม่ระบุ';
-      if (!deptData[key]) deptData[key] = 0;
-      deptData[key] += item.total_actual;
-    });
-
-    // กรองเฉพาะ dept ที่มีค่า > 0 (Pie ไม่แสดง 0)
-    const pieLabels = Object.keys(deptData).filter(k => deptData[k] > 0);
-    const pieValues = pieLabels.map(k => deptData[k]);
-
-    // 3. Pie Chart Config (สัดส่วนหน่วยงาน)
-    this.pieChartOptions = {
-      series: pieValues,
-      chart: { type: "donut", height: 400, fontFamily: 'Sarabun, sans-serif' },
-      labels: pieLabels,
-      title: { text: 'สัดส่วนผลงานแยกตามหน่วยงาน', align: 'left' },
-      plotOptions: {
-        pie: {
-          donut: {
-            size: '55%',
-            labels: {
-              show: true,
-              name: { show: true, fontSize: '14px', fontWeight: 'bold' },
-              value: { show: true, fontSize: '16px', formatter: (val: any) => Number(val).toFixed(2) },
-              total: { show: true, label: 'ผลงานรวม', fontSize: '13px', formatter: (w: any) => w.globals.seriesTotals.reduce((a: number, b: number) => a + b, 0).toFixed(2) }
-            }
-          }
-        }
-      },
-      legend: { position: 'bottom', fontSize: '12px' },
-      tooltip: {
-        y: { formatter: function(val: any) { return Number(val).toFixed(2); } }
-      },
-      dataLabels: {
-        enabled: true,
-        formatter: function (val: any) { return val.toFixed(1) + "%"; },
-        style: { fontSize: '11px' }
-      },
-      responsive: [{
-        breakpoint: 640,
-        options: {
-          chart: { height: 350 },
-          legend: { position: "bottom" }
-        }
-      }]
-    };
-  }
-
-  updateDistrictMap() {
-    // สร้างข้อมูลรายอำเภอจาก filteredData (ใช้ distname จาก kpiData)
-    const distMap: any = {};
-    this.filteredData.forEach(item => {
-      const key = item.distname || 'ไม่ระบุ';
-      if (!distMap[key]) distMap[key] = { target: 0, actual: 0 };
-      distMap[key].target += item.target_num || 0;
-      distMap[key].actual += item.total_actual || 0;
-    });
-
-    this.districtMapData = Object.keys(distMap)
-      .filter(k => k !== 'ไม่ระบุ')
-      .map(name => {
-        const d = distMap[name];
-        const pct = d.target > 0 ? Math.round((d.actual / d.target) * 10000) / 100 : 0;
-        return { name, target: d.target, actual: d.actual, pct };
-      })
-      .sort((a, b) => b.pct - a.pct);
-  }
-
-  getDistrictColor(pct: number): string {
-    if (pct >= 80) return '#16a34a'; // เขียว
-    if (pct >= 50) return '#eab308'; // เหลือง
-    return '#dc2626'; // แดง
-  }
-
-  countDistricts(level: string): number {
-    if (level === 'green') return this.districtMapData.filter((d: any) => d.pct >= 80).length;
-    if (level === 'yellow') return this.districtMapData.filter((d: any) => d.pct >= 50 && d.pct < 80).length;
-    return this.districtMapData.filter((d: any) => d.pct < 50).length;
-  }
-
+  // === แผนที่อำเภอ ===
+  getDistrictColor(pct: number): string { return pctColor(pct); }
   getDistrictBg(pct: number): string {
     if (pct >= 80) return 'bg-green-100 border-green-400 text-green-800';
     if (pct >= 50) return 'bg-yellow-100 border-yellow-400 text-yellow-800';
     return 'bg-red-100 border-red-400 text-red-800';
   }
-
-  goBack() {
-    this.router.navigate(['/dashboard']);
+  countDistricts(level: string): number {
+    if (level === 'green') return this.districtMapData.filter(d => d.pct >= 80).length;
+    if (level === 'yellow') return this.districtMapData.filter(d => d.pct >= 50 && d.pct < 80).length;
+    return this.districtMapData.filter(d => d.pct < 50).length;
   }
+
+  pctClass(p: number): string {
+    if (p >= 80) return 'text-emerald-700 bg-emerald-50';
+    if (p >= 50) return 'text-amber-700 bg-amber-50';
+    return 'text-red-700 bg-red-50';
+  }
+
+  goBack() { this.router.navigate(['/dashboard']); }
 }
