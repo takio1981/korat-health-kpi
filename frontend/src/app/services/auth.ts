@@ -820,10 +820,12 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
   }
 
   // KPI Indicators
-  getIndicators(): Observable<any> {
+  // ค่าเริ่มต้นได้เฉพาะตัวชี้วัดที่เปิดใช้งาน — includeInactive=true ใช้เฉพาะหน้าจัดการตัวชี้วัด (เห็นทุกตัว)
+  getIndicators(includeInactive = false): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.get(`${this.apiUrl}/indicators`, { headers });
+    const qs = includeInactive ? '?include_inactive=1' : '';
+    return this.http.get(`${this.apiUrl}/indicators${qs}`, { headers });
   }
   createIndicator(data: any): Observable<any> {
     const token = localStorage.getItem('kpi_token');

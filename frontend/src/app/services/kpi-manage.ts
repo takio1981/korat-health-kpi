@@ -78,7 +78,7 @@ export class KpiManageComponent implements OnInit {
   }
 
   loadAllData() {
-    this.authService.getIndicators().subscribe(res => { 
+    this.authService.getIndicators(true).subscribe(res => { 
       if(res.success) { 
         this.indicators = res.data; 
         this.filteredIndicators = [...this.indicators]; // แสดงข้อมูลทันที

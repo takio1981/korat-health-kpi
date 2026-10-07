@@ -183,7 +183,7 @@ export class KpiManageComponent implements OnInit {
   }
 
   loadAllData() {
-    this.authService.getIndicators().subscribe(res => {
+    this.authService.getIndicators(true).subscribe(res => {
       if(res.success) {
         this.indicators = res.data;
         this.filteredIndicators = [...this.indicators];
@@ -1062,7 +1062,7 @@ export class KpiManageComponent implements OnInit {
         this.khdLinkSyncLoading = false;
         if (res.success) {
           Swal.fire('สำเร็จ', res.message, 'success');
-          this.authService.getIndicators().subscribe((r: any) => {
+          this.authService.getIndicators(true).subscribe((r: any) => {
             if (r.success) { this.indicators = r.data; this.applyFilter(); this.cdr.detectChanges(); }
           });
         } else {
@@ -1440,7 +1440,7 @@ export class KpiManageComponent implements OnInit {
   closeImportModal() {
     this.showImportModal = false;
     if (this.importResult && this.importResult.inserted > 0) {
-      this.authService.getIndicators().subscribe(r => {
+      this.authService.getIndicators(true).subscribe(r => {
         if (r.success) { this.indicators = r.data; this.applyFilter(); }
         this.cdr.detectChanges();
       });

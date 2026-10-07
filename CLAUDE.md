@@ -99,6 +99,18 @@ if (ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null) {
 ❌ ห้ามใช้ `if (user.role !== 'super_admin' && user.deptId != null)` — ตัวอย่างนี้เคยอยู่ในไฟล์นี้และเป็นต้นเหตุบั๊กสิทธิ์จริง
 (`/indicators`, `/kpi-template` จำกัด admin ระดับพื้นที่ผิดๆ — แก้แล้ว 6 ต.ค. 2569)
 
+### แสดงเฉพาะตัวชี้วัดที่เปิดใช้งาน (is_active = 1) — สำคัญ
+ทุก endpoint ที่แสดงตัวชี้วัด/ผลงานให้ผู้ใช้ (dashboard, dropdown, กราฟ, รายงาน 4 แถบ + สถานะการบันทึก, dashboard-stats,
+notifications/pending-kpi, kpi-setup-check, exportable-indicators/checkKpiChanges/performKpiExport) **ต้องกรองเฉพาะตัวชี้วัด
+ที่เปิดใช้งาน** — ใช้ `i.is_active = 1` เมื่อ JOIN `kpi_indicators i` อยู่แล้ว หรือ helper `activeIndicatorSql('s.indicator_id')`
+(subquery) กับ `kpi_summary`/`kpi_results` ที่ไม่ได้ JOIN — **กรองตอนอ่าน ห้ามลบ/ไม่สร้างแถวใน kpi_summary** (เปิดกลับต้อง
+เห็นข้อมูลเดิมทันทีโดยไม่ต้อง refresh)
+- `GET /indicators` ค่าเริ่มต้น active เท่านั้น — `?include_inactive=1` คืนทุกตัว (เฉพาะ role ที่มีสิทธิ์หน้า `kpi-manage`)
+  ใช้ใน `kpi-manage` ผ่าน `authService.getIndicators(true)` เท่านั้น
+- ข้อยกเว้น (แสดงทุกตัวโดยตั้งใจ — ผู้ใช้ยืนยันแล้ว): หน้าจัดการตัวชี้วัด, `/kpi-results/manage`, `/db-compare`,
+  `/report-compare*`, `/admin/export-debug`, และประวัติ (`/kpi-replies`, notifications, audit logs, kpi-audit digest)
+- Test: `api/tests/active-indicators.test.js`
+
 ### Auto-Migration Pattern
 เพิ่ม migration ใน section `✅ Auto-create tables` ของ server.js:
 ```javascript

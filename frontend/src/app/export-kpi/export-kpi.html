@@ -221,7 +221,7 @@
       <!-- ตัวกรอง -->
       <div class="mb-4">
         <div class="text-xs font-bold text-gray-500 mb-2">ตัวกรองรายการ</div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label class="block text-xs font-bold text-gray-600 mb-1"><i class="fas fa-layer-group me-1 text-purple-500"></i>หมวดหมู่หลัก</label>
             <select [(ngModel)]="filterMainIndicator" (ngModelChange)="onFilterChange()"
@@ -242,15 +242,7 @@
               }
             </select>
           </div>
-          <div>
-            <label class="block text-xs font-bold text-gray-600 mb-1"><i class="fas fa-toggle-on me-1 text-yellow-500"></i>สถานะ</label>
-            <select [(ngModel)]="filterStatus" (ngModelChange)="onFilterChange()"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
-              <option value="">ทั้งหมด</option>
-              <option value="active">เปิดใช้งาน</option>
-              <option value="inactive">ปิดใช้งาน</option>
-            </select>
-          </div>
+          <!-- ไม่มีตัวกรองสถานะแล้ว: รายการ Export แสดงเฉพาะตัวชี้วัดที่เปิดใช้งาน (backend กรอง is_active = 1) -->
           <div class="flex items-end">
             <button (click)="clearFilters()"
                     class="w-full px-3 py-2 border border-gray-300 hover:bg-gray-50 text-gray-600 text-sm rounded-lg transition-colors">

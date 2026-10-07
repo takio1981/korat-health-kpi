@@ -4,6 +4,30 @@
 
 ---
 
+## 2569-10-07 — แสดงเฉพาะตัวชี้วัดที่เปิดใช้งาน (is_active = 1) ทุกหน้า ยกเว้นหน้าจัดการตัวชี้วัด
+
+### ปัญหา
+ตัวชี้วัดที่ถูกปิดใช้งานในหน้าจัดการตัวชี้วัดยังแสดงในหน้าบันทึกผลงาน, dropdown ตัวกรอง, กราฟ, รายงาน 4 แถบ, สถานะการบันทึก,
+การ์ดสถิติ/อันดับ, badge รอตรวจสอบ, kpi-setup และรายการ Export (ข้อมูลใน dev DB: ปิดอยู่ 30/174 ตัว — 3 ตัวมีผลงาน 5,424 แถว)
+— `kpi_summary` ไม่มีคอลัมน์ is_active และ `GET /indicators` ใช้ร่วมทั้ง kpi-manage กับ dropdown โดยไม่กรองเลย
+
+### วิธีแก้
+- Backend: helper `activeIndicatorSql(col)` + `i.is_active = 1` ใน `/kpi-results`, `/kpi-setup-check`, `/dashboard-stats`
+  (การ์ด 1-4), `/kpi-summary`, `/report/by-indicator|by-hospital|by-district|by-year`, `/report/recording-status*`,
+  `/report/recording-missing/by-hospital`, `/notifications/pending-kpi`, `/exportable-indicators`, `checkKpiChanges`
+  — กรองตอนอ่าน (ไม่แตะ kpi_summary) → เปิด/ปิดมีผลทันที เปิดกลับเห็นข้อมูลเดิมครบ
+- `GET /indicators` ค่าเริ่มต้น active เท่านั้น / `?include_inactive=1` (เฉพาะ role ที่เข้า kpi-manage ได้) → kpi-manage ใช้
+  `getIndicators(true)`
+- Export: เอาตัวกรอง "สถานะ" ออก (รายการมีแต่ตัวที่เปิดแล้ว ตรงกับ performKpiExport ที่กรองอยู่เดิม)
+- ข้อยกเว้นตามที่ผู้ใช้เลือก: kpi-results-manage, db-compare, report-compare, export-debug และประวัติ (kpi-replies,
+  notifications, audit log, digest) แสดงทั้งหมดเหมือนเดิม
+
+### ทดสอบ
+- `api/tests/active-indicators.test.js` 13 รายการ — ยืนยันแล้วว่า **fail 11 รายการกับโค้ดเดิม** (2 ที่ผ่านคือข้อยกเว้นที่ต้องเห็นทุกตัว)
+- API **87/87**, Frontend **69/69** (เพิ่ม test `getIndicators(true)`), `ng build` ผ่าน, `node dist/server.js` รันได้ (200)
+
+---
+
 ## 2569-10-07 — Deploy ล้มเหลว: container backend unhealthy "Cannot find module './kpi-formula'"
 
 ### อาการ

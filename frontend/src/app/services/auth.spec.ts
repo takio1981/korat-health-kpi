@@ -33,6 +33,15 @@ describe('AuthService', () => {
     http.expectOne(r => r.url.includes('/users/pending-count'));
   });
 
+  // 7 ต.ค. 2569: dropdown ทั่วระบบได้เฉพาะตัวชี้วัดที่เปิดใช้งาน — เฉพาะหน้าจัดการตัวชี้วัดขอทุกตัว
+  it('getIndicators ขอทุกตัว (include_inactive=1) เฉพาะเมื่อสั่ง', () => {
+    const http = TestBed.inject(HttpTestingController);
+    service.getIndicators().subscribe();
+    http.expectOne(r => r.url.endsWith('/indicators'));
+    service.getIndicators(true).subscribe();
+    http.expectOne(r => r.url.endsWith('/indicators?include_inactive=1'));
+  });
+
   it('canAccessPage อ่านค่าจาก cache เมื่อมี', () => {
     localStorage.setItem('kpi_page_access', JSON.stringify({ dashboard: true, settings: false }));
     expect(service.canAccessPage('dashboard')).toBe(true);

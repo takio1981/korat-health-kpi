@@ -921,6 +921,13 @@ const ROLE_SCOPE_HOSPCODE = ['user', 'user_hos', 'user_sso', 'admin_hos', 'admin
 // ใช้แยกจาก ROLE_SCOPE_HOSPCODE เพราะ admin_hos/admin_sso อยู่ใน HOSPCODE (ล็อค hospcode) แต่ไม่ล็อค dept
 const ROLE_SCOPE_OWN_DEPT = ['admin_ssj', 'user_ssj', 'user_hos', 'user_sso', 'user_cup', 'user'];
 
+// === แสดงเฉพาะตัวชี้วัดที่เปิดใช้งาน (is_active = 1) ===
+// ทุก endpoint ที่แสดงตัวชี้วัด/ผลงานให้ผู้ใช้ทั่วไป (dashboard, กราฟ, รายงาน, สถิติ, export) ต้องต่อเงื่อนไขนี้
+// ยกเว้น: หน้าจัดการตัวชี้วัด (GET /indicators?include_inactive=1), เครื่องมือจัดการข้อมูล (kpi-results/manage,
+// db-compare, report-compare, export-debug) และประวัติ (kpi-replies, audit logs, digest)
+// กรองตอน "อ่าน" (ไม่ใช่ตอนสร้าง kpi_summary) → เปิด/ปิดตัวชี้วัดแล้วมีผลทันทีโดยไม่ต้อง refresh summary
+const activeIndicatorSql = (col) => `${col} IN (SELECT id FROM kpi_indicators WHERE is_active = 1)`;
+
 // Helper: ดึง distid ของ hospcode — ใช้ h.distid (pre-computed) เสมอ ไม่ CONCAT(provcode,distcode) เอง (ดู CLAUDE.md เรื่อง chospital)
 const getDistrictId = async (hospcode) => {
     if (!hospcode) return null;
@@ -3111,6 +3118,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
             if (list.length === 1) { extraConditions.push(`${column} = ?`); params.push(list[0]); }
             else { extraConditions.push(`${column} IN (${list.map(() => '?').join(',')})`); params.push(...list); }
         };
+        extraConditions.push('i.is_active = 1'); // แสดงเฉพาะตัวชี้วัดที่เปิดใช้งาน
         if (req.query.year) { extraConditions.push('r.year_bh = ?'); params.push(req.query.year); }
         addMultiFilter('r.hospcode', req.query.hospcode);
         addMultiFilter('d.dept_name', req.query.dept);
@@ -4518,7 +4526,7 @@ apiRouter.get('/kpi-setup-check', authenticateToken, async (req, res) => {
                 SUM(r.actual_value) AS total_score
             FROM kpi_results r
             LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
-            WHERE r.hospcode = ? AND r.year_bh = ? ${deptFilter}
+            WHERE r.hospcode = ? AND r.year_bh = ? AND ${activeIndicatorSql('r.indicator_id')} ${deptFilter}
         `, params);
 
         const data = rows[0] || { total_existing: 0, scored_indicators: 0, total_score: 0 };
@@ -4571,7 +4579,7 @@ apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
         // ใช้ kpi_summary (มี last_actual = ค่าเดือนล่าสุดที่คีย์) — ไม่ใช่ SUM ทั้งปี
         // นับ % ของ (indicator × hospcode) ที่ "ผ่านเกณฑ์" คือ last_actual >= target_value (target > 0)
         // role-based filter — ใช้ s.* (kpi_summary มี dept_id, distid อยู่แล้ว)
-        const summaryWhereClauses = ['s.year_bh = ?'];
+        const summaryWhereClauses = ['s.year_bh = ?', activeIndicatorSql('s.indicator_id')];
         const summaryParams = [year];
         if (user.role === 'super_admin') {
             // เห็นทั้งหมด
@@ -4612,7 +4620,7 @@ apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
             FROM kpi_results r
             JOIN kpi_indicators i ON r.indicator_id = i.id
             ${hosJoin}
-            WHERE r.year_bh = ?
+            WHERE r.year_bh = ? AND i.is_active = 1
               AND r.actual_value IS NOT NULL AND r.actual_value != ''
               AND i.dept_id IS NOT NULL
               ${whereClause}
@@ -4625,7 +4633,7 @@ apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
             JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
             JOIN kpi_indicators i ON si.indicator_id = i.id
             ${needsHosJoin ? 'LEFT JOIN chospital h ON sr.hospcode = h.hoscode' : ''}
-            WHERE sr.year_bh = ?
+            WHERE sr.year_bh = ? AND i.is_active = 1
               AND sr.actual_value IS NOT NULL AND sr.actual_value != ''
               AND i.dept_id IS NOT NULL
               ${whereClause.replace(/r\.hospcode/g, 'sr.hospcode')}
@@ -4648,7 +4656,7 @@ apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
             FROM kpi_results r
             LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
             ${hosJoin}
-            WHERE r.status = 'Pending' AND r.year_bh = ?
+            WHERE r.status = 'Pending' AND r.year_bh = ? AND ${activeIndicatorSql('r.indicator_id')}
               AND r.actual_value IS NOT NULL AND r.actual_value != ''
               ${whereClause}
         `;
@@ -4673,7 +4681,7 @@ apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
                             / SUM(CASE WHEN CAST(NULLIF(s.target_value,'') AS DECIMAL(20,4)) > 0 THEN 1 ELSE 0 END) * 100, 2)
                     END AS success_pct
                 FROM kpi_summary s
-                WHERE s.year_bh = ?
+                WHERE s.year_bh = ? AND ${activeIndicatorSql('s.indicator_id')}
                 GROUP BY s.hospcode
                 HAVING total_with_target > 0
                 ORDER BY success_pct DESC, total_with_target DESC
@@ -6114,10 +6122,16 @@ apiRouter.get('/indicators', authenticateToken, async (req, res) => {
         // กรองตาม dept ของ user — เฉพาะ role ที่ scope คือ "dept ตัวเอง" (ROLE_SCOPE_OWN_DEPT)
         // เดิมกรองด้วย user.deptId != null ตรงๆ ทำให้ admin_cup/admin_hos/admin_sso (scope "ทุก dept") โดนจำกัดผิดๆ
         // เวลาบัญชีของ role เหล่านั้นบังเอิญมี dept_id ติดตัวอยู่ (พบจริงจากข้อมูล — admin_cup 11/20 บัญชีมี dept_id)
+        const conds = [];
         if (ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null) {
-            whereClause = 'WHERE i.dept_id = ?';
+            conds.push('i.dept_id = ?');
             params.push(user.deptId);
         }
+        // ค่าเริ่มต้น: เฉพาะตัวชี้วัดที่เปิดใช้งาน (dropdown ทั่วระบบ) — ?include_inactive=1 ให้หน้าจัดการตัวชี้วัดเห็นทุกตัว
+        // (เฉพาะ role ที่เข้าหน้า kpi-manage ได้ — role อื่นส่งมาก็ได้แค่ตัวที่เปิดใช้งาน)
+        const includeInactive = String(req.query.include_inactive || '') === '1' && hasPageAccess(user.role, 'kpi-manage');
+        if (!includeInactive) conds.push('i.is_active = 1');
+        if (conds.length) whereClause = 'WHERE ' + conds.join(' AND ');
         const [rows] = await db.query(`
             SELECT i.*, mi.main_indicator_name, mi.yut_id, my.yut_name, d.dept_name,
                    COALESCE(rc.cnt, 0) + COALESCE(src.cnt, 0) AS result_count
@@ -7260,7 +7274,7 @@ apiRouter.get('/notifications/pending-kpi', authenticateToken, isAdmin, async (r
         if (today.getMonth() >= 9) fyYear += 1; // เดือน ต.ค. ขึ้นปีใหม่
         const currentFY = (fyYear + 543).toString();
 
-        let whereClause = "WHERE r.status = 'Pending' AND r.year_bh = ?";
+        let whereClause = `WHERE r.status = 'Pending' AND r.year_bh = ? AND ${activeIndicatorSql('r.indicator_id')}`;
         let params = [currentFY];
 
         // admin: เฉพาะหน่วยงานตัวเอง (ทุก hospcode)
@@ -7486,7 +7500,7 @@ apiRouter.get('/exportable-indicators', authenticateToken, isSuperAdmin, async (
              FROM kpi_indicators i
              LEFT JOIN departments d ON i.dept_id = d.id
              LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
-             WHERE i.table_process IS NOT NULL AND i.table_process != ''
+             WHERE i.table_process IS NOT NULL AND i.table_process != '' AND i.is_active = 1
              ORDER BY i.id`
         );
         res.json({ success: true, data: rows });
@@ -7504,7 +7518,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
         // กรอง upload_excel != 1 (ตัวที่ตั้งเป็น "อัปโหลด Excel เอง" ข้ามทั้งใน check และ export)
         // ดึง evaluation_mode/required_off_types ด้วย เพื่อคำนวณขอบเขตหน่วยบริการเหมือน performKpiExport
         let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, use_sub_indicator_export, evaluation_mode, required_off_types FROM kpi_indicators
-            WHERE table_process IS NOT NULL AND table_process != ''
+            WHERE table_process IS NOT NULL AND table_process != '' AND is_active = 1
             AND (upload_excel IS NULL OR upload_excel = 0)`;
         let indicatorParams = [];
         if (indicator_ids && indicator_ids !== 'all' && Array.isArray(indicator_ids) && indicator_ids.length > 0) {
@@ -9025,6 +9039,7 @@ apiRouter.get('/kpi-summary', authenticateToken, async (req, res) => {
         if (req.query.district) { conditions.push('s.distname = ?'); params.push(req.query.district); }
         if (req.query.indicator) { conditions.push('s.kpi_indicators_name = ?'); params.push(req.query.indicator); }
         if (req.query.main) { conditions.push('s.main_indicator_name = ?'); params.push(req.query.main); }
+        conditions.push(activeIndicatorSql('s.indicator_id')); // เฉพาะตัวชี้วัดที่เปิดใช้งาน
 
         // Role-based filter
         if (user.role === 'admin_ssj' && user.deptId != null) {
@@ -9076,6 +9091,7 @@ apiRouter.get('/report/by-indicator', authenticateToken, async (req, res) => {
         if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
         if (distid) { whereClauses.push('s.distid = ?'); params.push(distid); }
         if (hostype) { whereClauses.push('s.hostype = ?'); params.push(hostype); }
+        whereClauses.push(activeIndicatorSql('s.indicator_id')); // เฉพาะตัวชี้วัดที่เปิดใช้งาน
 
         const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
         const sql = `
@@ -9162,6 +9178,7 @@ apiRouter.get('/report/by-hospital', authenticateToken, async (req, res) => {
         if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
         if (distid) { whereClauses.push('s.distid = ?'); params.push(distid); }
         if (hostype) { whereClauses.push('s.hostype = ?'); params.push(hostype); }
+        whereClauses.push(activeIndicatorSql('s.indicator_id')); // เฉพาะตัวชี้วัดที่เปิดใช้งาน
 
         const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
         const sql = `
@@ -9233,6 +9250,7 @@ apiRouter.get('/report/by-district', authenticateToken, async (req, res) => {
         if (year_bh) { whereClauses.push('s.year_bh = ?'); params.push(year_bh); }
         if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
         if (hostype) { whereClauses.push('s.hostype = ?'); params.push(hostype); }
+        whereClauses.push(activeIndicatorSql('s.indicator_id')); // เฉพาะตัวชี้วัดที่เปิดใช้งาน
 
         const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
         const sql = `
@@ -9299,6 +9317,7 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
         if (distid) { whereClauses.push('s.distid = ?'); params.push(distid); }
         if (hostype) { whereClauses.push('s.hostype = ?'); params.push(hostype); }
+        whereClauses.push(activeIndicatorSql('s.indicator_id')); // เฉพาะตัวชี้วัดที่เปิดใช้งาน
 
         const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
         const sql = `
@@ -9347,7 +9366,7 @@ apiRouter.get('/report/recording-status', authenticateToken, async (req, res) =>
             return res.status(400).json({ success: false, message: 'ต้องระบุปีงบประมาณ' });
         }
 
-        let indicatorWhere = ['r.year_bh = ?'];
+        let indicatorWhere = ['r.year_bh = ?', 'i.is_active = 1'];
         let params = [year_bh];
 
         // Role-based scope (เทียบกับ kpi_indicators i, kpi_results r)
@@ -9452,7 +9471,7 @@ apiRouter.get('/report/recording-status/by-hospital', authenticateToken, async (
             return res.status(400).json({ success: false, message: 'ต้องระบุปีงบประมาณ' });
         }
 
-        let whereClauses = ['r.year_bh = ?'];
+        let whereClauses = ['r.year_bh = ?', 'i.is_active = 1'];
         let params = [year_bh];
 
         // Role-based scope (เดียวกับ /report/recording-status)
@@ -9551,7 +9570,7 @@ apiRouter.get('/report/recording-missing/by-hospital/:hospcode', authenticateTok
             return res.status(400).json({ success: false, message: 'ต้องระบุปีงบประมาณ + hospcode' });
         }
 
-        let whereClauses = ['r.year_bh = ?', 'r.hospcode = ?'];
+        let whereClauses = ['r.year_bh = ?', 'r.hospcode = ?', 'i.is_active = 1'];
         let params = [year_bh, hospcode];
 
         // Role-based scope — ผู้ใช้ที่ไม่ใช่ super_admin/admin_ssj ต้องดูเฉพาะ hospcode ตัวเอง
