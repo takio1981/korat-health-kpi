@@ -4,6 +4,32 @@
 
 ---
 
+## 2569-10-07 — Deploy ล้มเหลว: container backend unhealthy "Cannot find module './kpi-formula'"
+
+### อาการ
+`build.bat` → `docker compose up` แล้ว `khups_kpi_backend` unhealthy (`dependency failed to start`) — log:
+`Error: Cannot find module './kpi-formula'` จาก `/app/dist/server.js:52`
+
+### สาเหตุ
+ฟีเจอร์สูตรคำนวณผลงานเพิ่มไฟล์ `api/kpi-formula.js` แต่ `"build"` script ใน `api/package.json` copy เข้า `dist/` เป็น**รายการไฟล์
+ตายตัว** (server.js, db.js, db-remote.js) — ไม่มีไฟล์ใหม่ → image ไม่มีไฟล์นี้ — ชุดทดสอบทั้งหมดรันจาก `api/` ตรงๆ จึงผ่านหมด
+ไม่เคยลองรันจาก `dist/` (ความผิดพลาดของการทดสอบรอบก่อน)
+ผลข้างเคียงใน log: `[captureError] failed: Cannot access 'crypto' before initialization` — uncaughtException เกิดก่อนบรรทัด
+`const crypto = require('crypto')` ทำงาน (TDZ) → error ตอน startup ไม่ถูกบันทึกลง Error Logs
+
+### วิธีแก้
+- เพิ่ม `kpi-formula.js` ในรายการ build script
+- `captureError` ใช้ `require('crypto')` ภายในฟังก์ชันเอง ไม่พึ่ง const ระดับไฟล์
+- เพิ่ม `api/tests/build.test.js` — ไล่ทุก `require('./xxx')` จาก server.js แล้ว fail ถ้าไฟล์ไม่อยู่ใน build list (ยืนยันแล้วว่า fail กับ
+  build script เดิม: "server.js → kpi-formula.js")
+- CLAUDE.md หัวข้อ 10: เพิ่มกฎ "ไฟล์ .js ใหม่ใน api/ ต้องเพิ่มใน build script"
+
+### ทดสอบ
+- `npm run build` → `dist/` มี kpi-formula.js → รัน `node dist/server.js` แยกพอร์ต 3799 → `/status` 200, ไม่มี module error
+- API **74/74** ผ่าน
+
+---
+
 ## 2569-10-07 — ฟีเจอร์สูตรคำนวณผลงานเฉพาะตัวชี้วัด + แก้ 403 /users/pending-count
 
 ### ฟีเจอร์: สูตรคำนวณผลงาน (result_formula)

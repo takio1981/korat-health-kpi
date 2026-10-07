@@ -397,7 +397,9 @@ async function captureError(payload) {
 
         // fingerprint = SHA-1(source + first line of message)
         const firstLine = message.split('\n')[0].slice(0, 200);
-        const fingerprint = crypto.createHash('sha1').update(`${source}|${firstLine}`).digest('hex').slice(0, 16);
+        // require ตรงนี้ (ไม่ใช้ const crypto ระดับไฟล์) — captureError ถูกเรียกจาก uncaughtException ได้ตั้งแต่ก่อน
+        // บรรทัด `const crypto = require('crypto')` ทำงาน (เช่น require module หายตอน startup) → TDZ error ทำให้ log หาย
+        const fingerprint = require('crypto').createHash('sha1').update(`${source}|${firstLine}`).digest('hex').slice(0, 16);
 
         // INSERT...ON DUPLICATE: ถ้า fingerprint เคยมีแล้ว → count++, อัพเดท last_seen
         // db เป็น promise pool (db.js export pool.promise()) — ห้ามส่ง callback: callback จะไม่ถูกเรียกเลย

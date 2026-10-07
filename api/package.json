@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node dist/server.js",
     "dev": "npx nodemon server.js",
-    "build": "node -e \"const{mkdirSync,copyFileSync}=require('fs');mkdirSync('dist',{recursive:true});['server.js','db.js','db-remote.js'].forEach(f=>copyFileSync(f,'dist/'+f));console.log('API build complete');\"",
+    "build": "node -e \"const{mkdirSync,copyFileSync}=require('fs');mkdirSync('dist',{recursive:true});['server.js','db.js','db-remote.js','kpi-formula.js'].forEach(f=>copyFileSync(f,'dist/'+f));console.log('API build complete');\"",
     "test": "cross-env NODE_ENV=test jest --runInBand --testTimeout=20000",
     "test:watch": "cross-env NODE_ENV=test jest --watch --runInBand",
     "audit": "npm audit --omit=dev",

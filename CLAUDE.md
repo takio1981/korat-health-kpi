@@ -864,6 +864,10 @@ build.bat
 `ng build` ที่อยู่ใน `dist/kpi-web/browser/`) — ทั้งสองเป็นไฟล์ **pre-built ที่ต้องเตรียมเองก่อน**
 `docker compose up -d --build` เสมอ ไม่งั้น Docker จะใช้ `dist/` เก่าที่ค้างจากรอบก่อนหน้าเงียบๆ
 โดยไม่มี error ใดๆ (container ขึ้น "Healthy" ปกติ แต่โค้ดที่รันจริงเป็นของเก่า):
+**⚠️ เพิ่มไฟล์ .js ใหม่ใน `api/` ที่ server.js `require('./xxx')` → ต้องเพิ่มชื่อไฟล์ในรายการ copy ของ `"build"` script ใน
+`api/package.json` ด้วยเสมอ** (ปัจจุบัน: server.js, db.js, db-remote.js, kpi-formula.js) — ไม่งั้น Docker image ไม่มีไฟล์นั้น →
+container backend crash `Cannot find module` (unhealthy) ตอน deploy ทั้งที่ test ผ่านหมด (test รันจาก `api/` ตรงๆ) — เกิดจริงแล้ว
+7 ต.ค. 2569 กับ `kpi-formula.js` — มี `api/tests/build.test.js` คุมไว้ (fail ถ้า require local ไฟล์ที่ไม่อยู่ใน build list)
 ```bash
 # 1) Backend — แค่ copy ไฟล์ (api/package.json "build" script)
 cd api && npm run build && cd ..
