@@ -5,7 +5,7 @@ import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { FormBuilderComponent } from '../form-builder/form-builder';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
-import { validateFormula, evaluateFormula, FORMULA_FUNCTIONS } from '../shared/kpi-formula';
+import { validateFormula, evaluateFormula, usesPrevYear, FORMULA_FUNCTIONS } from '../shared/kpi-formula';
 import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
 
@@ -702,9 +702,21 @@ export class KpiManageComponent implements OnInit {
     { f: 'MAX(ALL)', d: 'ค่าสูงสุด' },
     { f: '(m10+m11+m12)/3', d: 'เฉลี่ยไตรมาส 1' },
     { f: 'SUM(m10,m11,m12)', d: 'รวมไตรมาส 1' },
+    { f: '(LAST(ALL) - prev_result) / prev_result * 100', d: 'ร้อยละการเปลี่ยนแปลงเทียบผลงานปีงบที่แล้ว' },
+    { f: 'SUM(ALL) + SUM(PREV_ALL)', d: 'ผลรวมสะสมต่อเนื่อง 2 ปีงบ' },
+    { f: 'LAST(ALL) - LAST(PREV_ALL)', d: 'ผลต่างจากค่าเดือนล่าสุดของปีที่แล้ว' },
   ];
   formulaTestMonths: Record<string, string> = {};
   formulaTestTarget = '';
+  // ข้อมูลปีงบที่แล้วสำหรับทดลองคำนวณ (แสดงเฉพาะเมื่อสูตรอ้าง prev_* / PREV_ALL)
+  formulaTestPrevMonths: Record<string, string> = {};
+  formulaTestPrevTarget = '';
+  formulaTestPrevResult = '';
+
+  get formulaUsesPrev(): boolean {
+    const f = String(this.currentItem?.result_formula || '').trim();
+    return !!f && !this.formulaError && usesPrevYear(f);
+  }
 
   get hasFormula(): boolean {
     return !!String(this.currentItem?.result_formula || '').trim();
@@ -719,7 +731,9 @@ export class KpiManageComponent implements OnInit {
   get formulaTestResult(): { value: string | null; pct: number | null } | null {
     const f = String(this.currentItem?.result_formula || '').trim();
     if (!f || this.formulaError) return null;
-    const value = evaluateFormula(f, this.formulaTestMonths, this.formulaTestTarget);
+    const value = evaluateFormula(f, this.formulaTestMonths, this.formulaTestTarget, {
+      months: this.formulaTestPrevMonths, target: this.formulaTestPrevTarget, result: this.formulaTestPrevResult,
+    });
     const t = parseFloat(this.formulaTestTarget);
     const v = value === null ? NaN : parseFloat(value);
     return { value, pct: !isNaN(t) && t !== 0 && !isNaN(v) ? Math.round((v / t) * 10000) / 100 : null };
@@ -730,6 +744,7 @@ export class KpiManageComponent implements OnInit {
     const cur = String(this.currentItem.result_formula || '');
     const start = input.selectionStart ?? cur.length;
     const end = input.selectionEnd ?? cur.length;
+    // ปุ่มฟังก์ชันแทรกพร้อม (ALL) — ปุ่ม "PREV_ALL" แทรกเฉพาะคำ (ใช้เป็นอาร์กิวเมนต์ของฟังก์ชัน)
     const text = FORMULA_FUNCTIONS.includes(token) ? `${token}(ALL)` : token;
     this.currentItem.result_formula = cur.slice(0, start) + text + cur.slice(end);
     setTimeout(() => {
@@ -742,6 +757,9 @@ export class KpiManageComponent implements OnInit {
   openModal(item: any = null) {
     this.formulaTestMonths = {};
     this.formulaTestTarget = String(item?.target_percentage ?? '');
+    this.formulaTestPrevMonths = {};
+    this.formulaTestPrevTarget = '';
+    this.formulaTestPrevResult = '';
     this.isEditMode = !!item;
     if (item) {
       const src = { ...item };

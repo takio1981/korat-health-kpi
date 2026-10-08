@@ -4,7 +4,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { evaluateFormula, validateFormula, activeFormula } = require('../kpi-formula');
+const { evaluateFormula, validateFormula, activeFormula, usesPrevYear } = require('../kpi-formula');
 
 const fixturePath = path.join(__dirname, 'fixtures', 'formula-cases.json');
 const cases = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
@@ -12,8 +12,18 @@ const cases = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
 describe('evaluateFormula — สูตรที่ถูกต้อง', () => {
     test.each(cases.valid.map(c => [c.name, c]))('%s', (_n, c) => {
         expect(validateFormula(c.formula)).toBeNull();
-        expect(evaluateFormula(c.formula, c.months, c.target)).toBe(c.expect);
+        expect(evaluateFormula(c.formula, c.months, c.target, c.prev)).toBe(c.expect);
     });
+});
+
+test('usesPrevYear: ตรวจว่าสูตรอ้างข้อมูลปีงบที่แล้วหรือไม่ (ใช้ตัดสินว่าต้องโหลดข้อมูลปีที่แล้ว)', () => {
+    expect(usesPrevYear('AVG(ALL)')).toBe(false);
+    expect(usesPrevYear('m10 + target')).toBe(false);
+    expect(usesPrevYear('LAST(ALL) - prev_result')).toBe(true);
+    expect(usesPrevYear('-(prev_target)')).toBe(true);
+    expect(usesPrevYear('SUM(m10, prev_m1)')).toBe(true);
+    expect(usesPrevYear('AVG(PREV_ALL)')).toBe(true);
+    expect(usesPrevYear('สูตรผิด(')).toBe(false);
 });
 
 describe('validateFormula — สูตรที่ผิดต้องถูกปฏิเสธพร้อมข้อความ', () => {

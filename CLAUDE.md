@@ -280,6 +280,15 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - ภาษาสูตร: ตัวแปร `m10…m09` (`m1`–`m9` ย่อได้) + `target`, ฟังก์ชัน `SUM AVG MAX MIN COUNT LAST` (อาร์กิวเมนต์ = รายการเดือน
   หรือ `ALL`), `+ - * /` วงเล็บ ตัวเลข — ค่าว่าง/ข้อความ = ไม่มีค่า (ฟังก์ชันข้าม, อ้างตรงในนิพจน์ → null), หารศูนย์ → null,
   ผลปัด 2 ตำแหน่งเป็น string
+- **ข้อมูลปีงบที่แล้ว (เพิ่ม 8 ต.ค. 2569):** `prev_m10…prev_m09`, `prev_target`, `prev_result`, `PREV_ALL` (ในฟังก์ชัน, ผสมเดือนปีนี้ได้
+  เช่น `SUM(m10, prev_m10)`) — `evaluateFormula(formula, months, target, prev)` โดย prev = `{ months, target, result }` ของคู่
+  ตัวชี้วัด×หน่วยบริการเดียวกันปี `year_bh - 1` โหลดด้วย `loadPrevYearData()` (server.js) **เฉพาะสูตรที่ `usesPrevYear()` เป็นจริง**
+  - `prev_result` = ผลงานปีที่แล้ว **แบบพื้นฐาน** (ค่าเดือนล่าสุดที่บันทึก หรือผลรวมถ้า is_cumulative) คำนวณจาก `kpi_results` ตรงๆ
+    — ⚠️ **ห้ามเปลี่ยนไปใช้ `kpi_summary.last_actual` ของปีที่แล้ว**: สูตรที่อ้างปีที่แล้วเอง (เช่น อัตราเพิ่มขึ้น) จะต้องย้อนปีก่อนหน้า
+    เป็นทอดๆ → ปีแรกว่างแล้วลามว่างทุกปี + หน้าบันทึกผลงานกับ summary ไม่ตรงกัน (ลองแล้วพังจริงตอนพัฒนา)
+  - `GET /kpi-results` แนบ `row.prev_year` ให้ frontend (dashboard ส่งต่อเข้า `evaluateFormula` ตอนแก้ไขค่า + แสดงใน tooltip badge "สูตร")
+  - `refreshKpiSummaryForIndicatorYears()` คำนวณสูตรของปี Y+1 ใหม่ด้วยเสมอเมื่อปี Y ถูก refresh (ตัวชี้วัดที่สูตรอ้างปีที่แล้ว)
+  - Test: `api/tests/prev-year-formula.test.js` + fixture ร่วม (เคส `prev`)
 - **Evaluator 2 สำเนาที่ต้องตรงกันทุกบรรทัด:** `api/kpi-formula.js` (CommonJS) + `frontend/src/app/shared/kpi-formula.ts` —
   parser เขียนเอง **ห้ามใช้ `eval`/`new Function` เด็ดขาด** (สูตรมาจากผู้ใช้) — fixture ร่วม
   `api/tests/fixtures/formula-cases.json` = `frontend/src/app/shared/kpi-formula.cases.json` (jest บังคับให้ไฟล์ตรงกันทุกตัวอักษร)
@@ -855,6 +864,9 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - **Frontend (Vitest ผ่าน `ng test`)** — `cd frontend && npx ng test --watch=false` — spec ใช้ `testProviders` จาก
   `src/app/testing/test-providers.ts` (HttpClientTesting + Router + Toastr) เสมอ — มี regression test ของบั๊กจริง
   (ปีงบเด้งกลับ, ปีงบ ต.ค., รอดำเนินการ, เลือกคอลัมน์) ใน `dashboard.spec.ts` / `fiscal-year.util.spec.ts`
+- Integration test ที่ใช้ transaction (ลบ/refresh summary ฯลฯ) ต้อง `await migrationsReady` (export จาก server.js) ใน `beforeAll`
+  ก่อนเริ่ม — migration ตอน startup (ALTER TABLE) ยังรันอยู่ระหว่าง test แรกๆ ทำให้เกิด MDL deadlock แบบสุ่ม ("Deadlock found when
+  trying to get lock" แต่ไม่ปรากฏใน SHOW ENGINE INNODB STATUS)
 - แก้บั๊กใหม่ → **เพิ่ม regression test ทุกครั้ง** และยืนยันว่า test fail กับโค้ดเดิมก่อนแก้จริง (ไม่ใช่ test ที่ผ่านเสมอ)
 - `db` (db.js) เป็น **promise pool** — ใช้ `const [rows] = await db.query(...)` เท่านั้น **ห้ามส่ง callback** เข้า db.query
   (callback จะไม่ถูกเรียกเลย → Promise ค้างตลอดไป — เคยเป็นบั๊กจริงที่ทำให้ `/errors/report` ค้างและไม่เคยส่ง alert)

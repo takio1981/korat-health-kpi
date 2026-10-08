@@ -3,7 +3,10 @@
  *
  * ภาษาสูตรเล็กๆ ที่ parse เอง — **ห้ามใช้ eval / new Function เด็ดขาด** (สูตรมาจากผู้ใช้)
  *   ตัวแปร:   m10 m11 m12 m01 … m09 (ต.ค.–ก.ย.), target (เป้าหมาย)
- *   ฟังก์ชัน:  SUM AVG MAX MIN COUNT LAST — อาร์กิวเมนต์เป็นรายการเดือน หรือ ALL (12 เดือน)
+ *   ปีงบที่แล้ว: prev_m10 … prev_m09 (ผลงานรายเดือนปีงบก่อนหน้า), prev_target (เป้าหมายปีที่แล้ว),
+ *              prev_result (ผลงานปีที่แล้วแบบพื้นฐาน = ค่าเดือนล่าสุดที่บันทึก หรือผลรวมถ้าเป็นตัวชี้วัดสะสม —\n *              ไม่ใช้ผลตามสูตรของปีที่แล้ว เพื่อไม่ให้ต้องย้อนเป็นทอดๆ; ต้องการวิธีอื่นใช้ฟังก์ชันกับ PREV_ALL)
+ *   ฟังก์ชัน:  SUM AVG MAX MIN COUNT LAST — อาร์กิวเมนต์เป็นรายการเดือน (ปีนี้และ/หรือปีที่แล้ว ผสมกันได้)
+ *              หรือ ALL (12 เดือนปีนี้) / PREV_ALL (12 เดือนปีที่แล้ว)
  *   ตัวดำเนินการ: + - * /  วงเล็บ  ตัวเลข
  * ค่าว่าง/ข้อความ (เช่น "รอดำเนินการ") = ไม่มีค่า: ฟังก์ชันข้ามไป, อ้างตรงในนิพจน์ → ผลเป็น null
  * หารศูนย์ → null | ผลลัพธ์ปัด 2 ตำแหน่ง คืนเป็น string (เหมือน last_actual เดิม) หรือ null ถ้าคำนวณไม่ได้
@@ -13,6 +16,8 @@
  */
 
 const FISCAL_MONTH_VARS = ['m10', 'm11', 'm12', 'm01', 'm02', 'm03', 'm04', 'm05', 'm06', 'm07', 'm08', 'm09'];
+const PREV_MONTH_VARS = FISCAL_MONTH_VARS.map(m => 'prev_' + m);
+const PREV_SCALARS = ['prev_target', 'prev_result'];
 const MONTH_NAME_TO_VAR = {
     oct: 'm10', nov: 'm11', dece: 'm12', dec: 'm12', jan: 'm01', feb: 'm02', mar: 'm03',
     apr: 'm04', may: 'm05', jun: 'm06', jul: 'm07', aug: 'm08', sep: 'm09'
@@ -56,11 +61,13 @@ function tokenize(src) {
 /** แปลงชื่อเป็นตัวแปรที่อนุญาต (ไม่สนตัวพิมพ์เล็กใหญ่) — คืน null ถ้าไม่ใช่ตัวแปร */
 function normalizeVar(name) {
     const n = name.toLowerCase();
-    if (n === 'target') return 'target';
-    if (FISCAL_MONTH_VARS.includes(n)) return n;
+    if (n === 'target' || PREV_SCALARS.includes(n)) return n;
+    if (FISCAL_MONTH_VARS.includes(n) || PREV_MONTH_VARS.includes(n)) return n;
     if (/^m[1-9]$/.test(n)) return 'm0' + n[1]; // m1..m9 → m01..m09
+    if (/^prev_m[1-9]$/.test(n)) return 'prev_m0' + n[6]; // prev_m1..prev_m9 → prev_m01..prev_m09
     return null;
 }
+const isMonthVar = (v) => FISCAL_MONTH_VARS.includes(v) || PREV_MONTH_VARS.includes(v);
 
 /** parse สูตร → AST — throw Error (isFormulaError) พร้อมข้อความภาษาไทยถ้าสูตรผิด */
 function parseFormula(src) {
@@ -110,15 +117,16 @@ function parseFormula(src) {
             if (FUNCTIONS.includes(upper)) {
                 expect('(', `ฟังก์ชัน ${upper} ต้องตามด้วยวงเล็บ เช่น ${upper}(ALL)`);
                 const months = [];
-                if (peek().type === 'name' && peek().value.toUpperCase() === 'ALL') {
+                const allKw = peek().type === 'name' ? peek().value.toUpperCase() : '';
+                if (allKw === 'ALL' || allKw === 'PREV_ALL') {
                     next();
-                    months.push(...FISCAL_MONTH_VARS);
+                    months.push(...(allKw === 'ALL' ? FISCAL_MONTH_VARS : PREV_MONTH_VARS));
                 } else {
                     do {
                         const a = next();
                         const v = a.type === 'name' ? normalizeVar(a.value) : null;
-                        if (!v || v === 'target') {
-                            throw formulaError(`อาร์กิวเมนต์ของ ${upper} ต้องเป็นเดือน (m10–m09) หรือ ALL`, a.pos);
+                        if (!v || !isMonthVar(v)) {
+                            throw formulaError(`อาร์กิวเมนต์ของ ${upper} ต้องเป็นเดือน (m10–m09, prev_m10–prev_m09) หรือ ALL / PREV_ALL`, a.pos);
                         }
                         months.push(v);
                     } while (peek().type === ',' && next());
@@ -126,9 +134,9 @@ function parseFormula(src) {
                 expect(')', `ขาดวงเล็บปิดของ ${upper}`);
                 return { type: 'fn', name: upper, months };
             }
-            if (upper === 'ALL') throw formulaError('ALL ใช้ได้เฉพาะในฟังก์ชัน เช่น SUM(ALL)', t.pos);
+            if (upper === 'ALL' || upper === 'PREV_ALL') throw formulaError(`${upper} ใช้ได้เฉพาะในฟังก์ชัน เช่น SUM(${upper})`, t.pos);
             const v = normalizeVar(t.value);
-            if (!v) throw formulaError(`ไม่รู้จัก "${t.value}" (ใช้ได้: m10–m09, target, ${FUNCTIONS.join('/')})`, t.pos);
+            if (!v) throw formulaError(`ไม่รู้จัก "${t.value}" (ใช้ได้: m10–m09, target, prev_m10–prev_m09, prev_target, prev_result, ${FUNCTIONS.join('/')})`, t.pos);
             return { type: 'var', name: v };
         }
         if (t.type === 'end') throw formulaError('สูตรไม่สมบูรณ์', t.pos);
@@ -151,7 +159,11 @@ function toNumber(v) {
 function evalNode(node, ctx) {
     switch (node.type) {
         case 'num': return node.value;
-        case 'var': return node.name === 'target' ? ctx.target : ctx.months[node.name];
+        case 'var':
+            if (node.name === 'target') return ctx.target;
+            if (node.name === 'prev_target') return ctx.prevTarget;
+            if (node.name === 'prev_result') return ctx.prevResult;
+            return ctx.months[node.name];
         case 'neg': { const v = evalNode(node.arg, ctx); return v === null ? null : -v; }
         case 'bin': {
             const a = evalNode(node.left, ctx), b = evalNode(node.right, ctx);
@@ -175,14 +187,15 @@ function evalNode(node, ctx) {
     return null;
 }
 
-/** รับเดือนได้หลายรูปแบบ: { oct, nov, dece, … } หรือ { m10, m11, … } → { m10: number|null, … } */
-function normalizeMonths(input) {
+/** รับเดือนได้หลายรูปแบบ: { oct, nov, dece, … } หรือ { m10, m11, … } → { m10: number|null, … }
+ *  prefix = 'prev_' สำหรับข้อมูลปีงบที่แล้ว → { prev_m10: …, … } */
+function normalizeMonths(input, prefix = '') {
     const out = {};
-    for (const v of FISCAL_MONTH_VARS) out[v] = null;
+    for (const v of FISCAL_MONTH_VARS) out[prefix + v] = null;
     if (!input) return out;
     for (const [k, val] of Object.entries(input)) {
         const key = MONTH_NAME_TO_VAR[k] || normalizeVar(k);
-        if (key && key !== 'target') out[key] = toNumber(val);
+        if (key && FISCAL_MONTH_VARS.includes(key)) out[prefix + key] = toNumber(val);
     }
     return out;
 }
@@ -194,18 +207,46 @@ function formatResult(n) {
 }
 
 const _astCache = new Map();
-/**
- * คำนวณผลงานตามสูตร — คืน string (ผลงาน) หรือ null (คำนวณไม่ได้)
- * สูตรผิดจะ throw (validate ตอนบันทึกตัวชี้วัดแล้ว ปกติจึงไม่เกิด)
- */
-function evaluateFormula(formula, months, target) {
+function getAst(formula) {
     let ast = _astCache.get(formula);
     if (!ast) {
         ast = parseFormula(formula);
         if (_astCache.size > 500) _astCache.clear();
         _astCache.set(formula, ast);
     }
-    return formatResult(evalNode(ast, { months: normalizeMonths(months), target: toNumber(target) }));
+    return ast;
+}
+
+/**
+ * คำนวณผลงานตามสูตร — คืน string (ผลงาน) หรือ null (คำนวณไม่ได้)
+ * prev (ไม่บังคับ) = ข้อมูลปีงบที่แล้วของคู่ตัวชี้วัด×หน่วยบริการเดียวกัน { months, target, result }
+ *   ไม่ส่ง/ไม่มีข้อมูล → ตัวแปร prev_* เป็น "ไม่มีค่า" (เหมือนเดือนว่าง)
+ * สูตรผิดจะ throw (validate ตอนบันทึกตัวชี้วัดแล้ว ปกติจึงไม่เกิด)
+ */
+function evaluateFormula(formula, months, target, prev) {
+    const ast = getAst(formula);
+    const ctx = {
+        months: { ...normalizeMonths(months), ...normalizeMonths(prev && prev.months, 'prev_') },
+        target: toNumber(target),
+        prevTarget: toNumber(prev && prev.target),
+        prevResult: toNumber(prev && prev.result),
+    };
+    return formatResult(evalNode(ast, ctx));
+}
+
+/** สูตรอ้างข้อมูลปีงบที่แล้ว (prev_* / PREV_ALL) หรือไม่ — ใช้ตัดสินว่าต้องโหลดข้อมูลปีที่แล้วหรือเปล่า */
+function usesPrevYear(formula) {
+    let ast;
+    try { ast = getAst(formula); } catch (e) { return false; }
+    const walk = (n) => {
+        if (!n) return false;
+        if (n.type === 'var') return n.name.startsWith('prev_');
+        if (n.type === 'fn') return n.months.some(m => m.startsWith('prev_'));
+        if (n.type === 'neg') return walk(n.arg);
+        if (n.type === 'bin') return walk(n.left) || walk(n.right);
+        return false;
+    };
+    return walk(ast);
 }
 
 /** ตรวจสูตร — คืน null ถ้าถูกต้อง หรือข้อความผิดพลาดภาษาไทย */
@@ -220,6 +261,6 @@ function activeFormula(indicator) {
 }
 
 module.exports = {
-    FISCAL_MONTH_VARS, FUNCTIONS, MAX_FORMULA_LENGTH,
-    parseFormula, evaluateFormula, validateFormula, activeFormula, normalizeMonths
+    FISCAL_MONTH_VARS, PREV_MONTH_VARS, FUNCTIONS, MAX_FORMULA_LENGTH,
+    parseFormula, evaluateFormula, validateFormula, activeFormula, normalizeMonths, usesPrevYear
 };

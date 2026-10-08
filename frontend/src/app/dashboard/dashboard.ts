@@ -2775,7 +2775,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       const formula = activeFormula(item);
       if (formula && !validateFormula(formula)) {
         // ตัวชี้วัดที่ตั้งสูตร: ผลงาน = สูตรบนค่าเฉลี่ยรายเดือนจาก sub (แทนค่าเดือนล่าสุดของ AVG)
-        const val = evaluateFormula(formula, item, item.target_value);
+        const val = evaluateFormula(formula, item, item.target_value, item.prev_year);
         item.last_actual = val ?? '';
         item.total_actual = val === null ? 0 : parseFloat(val) || 0;
       } else if (sum.last_actual != null) {
@@ -3226,7 +3226,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     const formula = activeFormula(item);
     if (formula && !validateFormula(formula)) {
       // ตัวชี้วัดที่ตั้งสูตรคำนวณผลงาน — evaluator เดียวกับ backend (ผลตรงกับ kpi_summary/Export)
-      lastActual = evaluateFormula(formula, item, item.target_value) ?? '';
+      lastActual = evaluateFormula(formula, item, item.target_value, item.prev_year) ?? '';
     } else if (Number(item.is_cumulative) === 1) {
       // ตัวชี้วัดสะสม: รวมค่าตัวเลขทุกเดือนที่มีข้อมูล
       const nums = fiscalOrder.map(m => parseFloat(item[m])).filter(n => !isNaN(n));
@@ -3310,7 +3310,15 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     const formula = activeFormula(item);
     if (formula) {
       // มีสูตร → แสดง badge "สูตร" แทน "สะสม" (สูตรมีลำดับความสำคัญเหนือ is_cumulative)
-      return { label: 'สูตร', title: `ผลงานคำนวณตามสูตร: ${formula}`, color: 'bg-fuchsia-100 text-fuchsia-700 border border-fuchsia-200', icon: 'fa-calculator' };
+      // สูตรอ้างปีงบที่แล้ว → บอกปีและผลงานปีที่แล้วที่ใช้คำนวณ (backend แนบมาใน prev_year)
+      let title = `ผลงานคำนวณตามสูตร: ${formula}`;
+      const prev = item?.prev_year;
+      if (prev) {
+        title += prev.result != null && String(prev.result).trim() !== ''
+          ? `\nใช้ข้อมูลปีงบ ${prev.year_bh}: ผลงานปีที่แล้ว = ${prev.result}`
+          : `\nสูตรอ้างข้อมูลปีงบ ${prev.year_bh} แต่ยังไม่มีผลงานของปีนั้น`;
+      }
+      return { label: 'สูตร', title, color: 'bg-fuchsia-100 text-fuchsia-700 border border-fuchsia-200', icon: 'fa-calculator' };
     }
     if (Number(item?.is_cumulative) !== 1) return null;
     return { label: 'สะสม', title: 'ผลงานเดือนล่าสุด = ผลรวมสะสมตั้งแต่ตุลาคมถึงเดือนนี้', color: 'bg-violet-100 text-violet-700 border border-violet-200', icon: 'fa-layer-group' };

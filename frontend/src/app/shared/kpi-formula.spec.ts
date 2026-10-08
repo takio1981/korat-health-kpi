@@ -1,4 +1,4 @@
-import { evaluateFormula, validateFormula, activeFormula } from './kpi-formula';
+import { evaluateFormula, validateFormula, activeFormula, usesPrevYear } from './kpi-formula';
 import cases from './kpi-formula.cases.json';
 
 // fixture เดียวกับ backend (api/tests/fixtures/formula-cases.json) — ผลต้องตรงกันทุกเคส
@@ -6,9 +6,16 @@ describe('kpi-formula (frontend) — สูตรที่ถูกต้อง'
   for (const c of (cases as any).valid) {
     it(c.name, () => {
       expect(validateFormula(c.formula)).toBeNull();
-      expect(evaluateFormula(c.formula, c.months, c.target)).toBe(c.expect);
+      expect(evaluateFormula(c.formula, c.months, c.target, c.prev)).toBe(c.expect);
     });
   }
+});
+
+it('usesPrevYear ตรงกับ backend', () => {
+  expect(usesPrevYear('AVG(ALL)')).toBe(false);
+  expect(usesPrevYear('LAST(ALL) - prev_result')).toBe(true);
+  expect(usesPrevYear('SUM(m10, prev_m1)')).toBe(true);
+  expect(usesPrevYear('AVG(PREV_ALL)')).toBe(true);
 });
 
 describe('kpi-formula (frontend) — สูตรที่ผิดต้องถูกปฏิเสธ', () => {

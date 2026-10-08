@@ -3199,6 +3199,19 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         `;
         const [rows] = await db.query(sql, params);
 
+        // === ข้อมูลปีงบที่แล้ว เฉพาะแถวที่สูตรอ้าง prev_* (โหลดเป็นชุดต่อปีงบ ไม่ใช่ทีละแถว) ===
+        const prevRowsByYear = new Map();
+        for (const row of rows) {
+            const f = kpiFormula.activeFormula(row);
+            if (!f || kpiFormula.validateFormula(f) || !kpiFormula.usesPrevYear(f)) continue;
+            if (!prevRowsByYear.has(row.year_bh)) prevRowsByYear.set(row.year_bh, []);
+            prevRowsByYear.get(row.year_bh).push(row);
+        }
+        const prevByYear = new Map();
+        for (const [yb, list] of prevRowsByYear) {
+            prevByYear.set(yb, await loadPrevYearData(db, list.map(r => r.indicator_id), yb, list.map(r => r.hospcode)));
+        }
+
         // === คำนวณ last_actual + appeal + has_form ฝั่ง JS (เร็วกว่า subquery) ===
         const monthOrder = [10,11,12,1,2,3,4,5,6,7,8,9];
         const monthKeys = ['oct','nov','dece','jan','feb','mar','apr','may','jun','jul','aug','sep'];
@@ -3208,7 +3221,11 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
             let lastVal = null;
             if (formula && !kpiFormula.validateFormula(formula)) {
                 // ตัวชี้วัดที่ตั้งสูตรคำนวณผลงาน — ใช้สูตรแทน is_cumulative / ค่าเดือนล่าสุด
-                lastVal = kpiFormula.evaluateFormula(formula, row, row.target_value);
+                // สูตรอ้างปีที่แล้ว → แนบ prev_year ให้ frontend คำนวณซ้ำได้ตรงกันตอนแก้ไขค่า (โหมดแก้ไข)
+                const pm = prevByYear.get(row.year_bh);
+                const prev = pm ? (pm.get(`${row.indicator_id}|${String(row.hospcode).trim()}`) || { year_bh: String(parseInt(row.year_bh, 10) - 1), months: null, target: null, result: null }) : undefined;
+                if (prev) row.prev_year = prev;
+                lastVal = kpiFormula.evaluateFormula(formula, row, row.target_value, prev);
             } else if (isCumulative) {
                 // ตัวชี้วัดสะสม: รวมค่าตัวเลขทุกเดือนที่มีข้อมูล (ไม่ sum ถ้าไม่มีเดือนไหนมีค่าเลย → คง null)
                 const numericVals = monthKeys.map(k => row[k]).filter(v => v != null && String(v).trim() !== '' && !isNaN(parseFloat(v)));
@@ -3424,6 +3441,24 @@ function monthBhRangeList(monthFrom, monthTo) {
 // บางเดือน เดือนอื่นในปีเดียวกันของ indicator+hospcode นั้นอาจยังมีข้อมูลอยู่) — ใช้ SQL เดียวกับ
 // /refresh-summary/batch + /refresh-summary/finalize เป๊ะ แค่ scope แคบลงเฉพาะ indicator_id+year_bh ที่กระทบ
 async function refreshKpiSummaryForIndicatorYears(connection, pairs) {
+    pairs = [...pairs].sort((a, b) => Number(a.indicator_id) - Number(b.indicator_id) || String(a.year_bh).localeCompare(String(b.year_bh)));
+    await refreshSummaryPairs(connection, pairs);
+    // ข้อมูลปี Y-1 เปลี่ยน → ผลงานปี Y ของตัวชี้วัดที่สูตรอ้างข้อมูลปีที่แล้วต้องคำนวณใหม่ด้วย (เฉพาะสูตร ไม่ต้องสร้างแถวใหม่)
+    const done = new Set(pairs.map(p => `${p.indicator_id}|${p.year_bh}`));
+    const ids = [...new Set(pairs.map(p => Number(p.indicator_id)))];
+    if (!ids.length) return;
+    const [inds] = await connection.query('SELECT id, result_formula FROM kpi_indicators WHERE id IN (?)', [ids]);
+    const prevIds = new Set(inds.filter(i => { const f = kpiFormula.activeFormula(i); return f && kpiFormula.usesPrevYear(f); }).map(i => Number(i.id)));
+    for (const p of pairs) {
+        if (!prevIds.has(Number(p.indicator_id))) continue;
+        const nextYear = String(parseInt(p.year_bh, 10) + 1);
+        if (done.has(`${p.indicator_id}|${nextYear}`)) continue;
+        done.add(`${p.indicator_id}|${nextYear}`);
+        await applyFormulaToSummary(connection, { indicatorId: p.indicator_id, yearBh: nextYear });
+    }
+}
+
+async function refreshSummaryPairs(connection, pairs) {
     for (const p of pairs) {
         await connection.query('DELETE FROM kpi_summary WHERE indicator_id = ? AND year_bh = ?', [p.indicator_id, p.year_bh]);
         await connection.query(`
@@ -3495,6 +3530,52 @@ async function refreshKpiSummaryForIndicatorYears(connection, pairs) {
     }
 }
 
+// === ข้อมูลปีงบที่แล้วสำหรับสูตรที่อ้าง prev_m10..prev_m09 / prev_target / prev_result / PREV_ALL ===
+// - ผลงานรายเดือน + เป้าหมาย: จาก kpi_results ของปีงบ (year_bh - 1) — แหล่งข้อมูลจริง
+// - prev_result: ผลงานปีที่แล้ว "แบบพื้นฐาน" = ค่าเดือนล่าสุดที่บันทึก (หรือผลรวมถ้าตั้งเป็นตัวชี้วัดสะสม) คำนวณจาก
+//   kpi_results ตรงๆ — ⚠️ ห้ามใช้ kpi_summary.last_actual ของปีที่แล้ว: ถ้าสูตรอ้างปีที่แล้วเอง (เช่น อัตราเพิ่มขึ้น)
+//   ผลของปีที่แล้วต้องใช้ปีก่อนหน้านั้นอีกเป็นทอดๆ → ปีแรกเป็น null แล้วลามว่างทุกปีถัดไป (พบตอนทดสอบ 8 ต.ค. 2569)
+//   ต้องการวิธีอื่นให้ใช้ฟังก์ชันกับ PREV_ALL ในสูตรเอง เช่น AVG(PREV_ALL)
+// คืน Map key `${indicator_id}|${hospcode}` → { year_bh, months: {oct..sep}, target, result }
+const PREV_MONTH_KEYS = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
+const PREV_MONTH_NUMS = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+function defaultLastActual(monthsObj, isCumulative) {
+    const vals = PREV_MONTH_KEYS.map(k => monthsObj[k]);
+    if (isCumulative) {
+        const nums = vals.filter(v => v != null && String(v).trim() !== '' && !isNaN(parseFloat(v)));
+        return nums.length ? String(nums.reduce((s, v) => s + parseFloat(v), 0)) : null;
+    }
+    for (let i = vals.length - 1; i >= 0; i--) {
+        const v = vals[i];
+        if (v != null && String(v).trim() !== '' && String(v).trim() !== '0') return v;
+    }
+    return null;
+}
+async function loadPrevYearData(conn, indicatorIds, yearBh, hospcodes) {
+    const map = new Map();
+    const y = parseInt(yearBh, 10);
+    const ids = [...new Set((indicatorIds || []).map(Number).filter(Boolean))];
+    if (!ids.length || !Number.isFinite(y)) return map;
+    const prevYear = String(y - 1);
+    const params = [prevYear, ids];
+    let hw = '';
+    const hcs = [...new Set((hospcodes || []).map(h => String(h).trim()).filter(Boolean))];
+    if (hcs.length) { hw = 'AND hospcode IN (?)'; params.push(hcs); }
+    const monthCols = PREV_MONTH_KEYS.map((k, i) => `MAX(CASE WHEN month_bh = ${PREV_MONTH_NUMS[i]} THEN actual_value END) AS ${k}`).join(', ');
+    const [rows] = await conn.query(
+        `SELECT indicator_id, hospcode, MAX(target_value) AS target, ${monthCols}
+         FROM kpi_results WHERE year_bh = ? AND indicator_id IN (?) ${hw} GROUP BY indicator_id, hospcode`, params);
+    const [inds] = await conn.query('SELECT id, is_cumulative FROM kpi_indicators WHERE id IN (?)', [ids]);
+    const cum = new Map(inds.map(i => [Number(i.id), Number(i.is_cumulative) === 1]));
+    for (const r of rows) {
+        const key = `${r.indicator_id}|${String(r.hospcode).trim()}`;
+        const months = {};
+        for (const k of PREV_MONTH_KEYS) months[k] = r[k];
+        map.set(key, { year_bh: prevYear, months, target: r.target, result: defaultLastActual(months, cum.get(Number(r.indicator_id))) });
+    }
+    return map;
+}
+
 // คำนวณ kpi_summary.last_actual ใหม่ด้วยสูตร (result_formula) — เฉพาะตัวชี้วัดที่ตั้งสูตรไว้
 // เรียกหลัง UPDATE last_actual แบบ SQL เดิม (ค่าเดือนล่าสุด / สะสม) เพื่อทับค่าเฉพาะตัวชี้วัดที่มีสูตร
 // สูตรคำนวณใน SQL ไม่ได้ (เป็นภาษาของเราเอง) จึงคำนวณใน JS ด้วย kpi-formula.js ตัวเดียวกับทุกจุดในระบบ
@@ -3511,11 +3592,19 @@ async function applyFormulaToSummary(conn, opts = {}) {
         const sp = [ind.id];
         let yw = '';
         if (opts.yearBh) { yw = 'AND year_bh = ?'; sp.push(opts.yearBh); }
+        // ข้อมูลปีที่แล้วโหลดจาก kpi_results (ไม่ขึ้นกับ summary ปีที่แล้ว) — เรียงปีไว้เพื่อโหลดครั้งเดียวต่อปี
         const [rows] = await conn.query(
-            `SELECT id, target_value, oct, nov, dece, jan, feb, mar, apr, may, jun, jul, aug, sep
-             FROM kpi_summary WHERE indicator_id = ? ${yw}`, sp);
+            `SELECT id, year_bh, hospcode, target_value, oct, nov, dece, jan, feb, mar, apr, may, jun, jul, aug, sep
+             FROM kpi_summary WHERE indicator_id = ? ${yw} ORDER BY year_bh ASC`, sp);
+        const needPrev = kpiFormula.usesPrevYear(formula);
+        let prevMap = null, prevFor = null;
         for (const r of rows) {
-            const val = kpiFormula.evaluateFormula(formula, r, r.target_value);
+            if (needPrev && prevFor !== r.year_bh) {
+                prevMap = await loadPrevYearData(conn, [ind.id], r.year_bh);
+                prevFor = r.year_bh;
+            }
+            const prev = needPrev ? prevMap.get(`${ind.id}|${String(r.hospcode).trim()}`) : undefined;
+            const val = kpiFormula.evaluateFormula(formula, r, r.target_value, prev);
             await conn.query('UPDATE kpi_summary SET last_actual = ? WHERE id = ?', [val, r.id]);
             updated++;
         }
@@ -7776,6 +7865,10 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                 return String(na) === String(nb);
             };
             let newCount = 0, changedCount = 0, unchangedCount = 0;
+            // สูตรอ้างข้อมูลปีงบที่แล้ว → โหลดครั้งเดียวต่อตัวชี้วัด (เหมือน performKpiExport)
+            const _f = kpiFormula.activeFormula(indicator);
+            const prevMap = _f && !kpiFormula.validateFormula(_f) && kpiFormula.usesPrevYear(_f)
+                ? await loadPrevYearData(db, [indicator.id], year_bh) : null;
             for (const [hc, d] of dataMap) {
                 // ไม่ข้าม hospcode ที่ยังไม่มีผลงานแล้ว — ต้องนับเป็น new/unchanged ด้วย (mirror performKpiExport)
                 const target = emptyToNull(d.target);
@@ -7784,7 +7877,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                 let resultVal;
                 const formula = kpiFormula.activeFormula(indicator);
                 if (formula && !kpiFormula.validateFormula(formula)) {
-                    resultVal = kpiFormula.evaluateFormula(formula, d, target);
+                    resultVal = kpiFormula.evaluateFormula(formula, d, target, prevMap ? prevMap.get(`${indicator.id}|${String(hc).trim()}`) : undefined);
                 } else if (Number(indicator.is_cumulative) === 1) {
                     const numericVals = monthValues.filter(v => v !== null && v !== undefined && !isNaN(parseFloat(v)));
                     resultVal = numericVals.length > 0 ? numericVals.reduce((s, v) => s + parseFloat(v), 0) : null;
@@ -8329,6 +8422,10 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                 };
 
                 let noDataCount = 0;
+                // สูตรอ้างข้อมูลปีงบที่แล้ว → โหลดครั้งเดียวต่อตัวชี้วัด (⚠️ ต้องตรงกับ checkKpiChanges)
+                const _f = kpiFormula.activeFormula(indicator);
+                const prevMap = _f && !kpiFormula.validateFormula(_f) && kpiFormula.usesPrevYear(_f)
+                    ? await loadPrevYearData(db, [indicator.id], year_bh) : null;
 
                 for (const [hc, d] of dataMap) {
                     // ไม่ข้ามแถวที่ยังไม่มีผลงานแล้ว (ต้อง export ครบทุกหน่วยบริการในขอบเขต) — นับไว้รายงานเฉยๆ
@@ -8342,7 +8439,7 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                     let resultVal;
                     const formula = kpiFormula.activeFormula(indicator);
                     if (formula && !kpiFormula.validateFormula(formula)) {
-                        resultVal = kpiFormula.evaluateFormula(formula, d, target);
+                        resultVal = kpiFormula.evaluateFormula(formula, d, target, prevMap ? prevMap.get(`${indicator.id}|${String(hc).trim()}`) : undefined);
                     } else if (Number(indicator.is_cumulative) === 1) {
                         const numericVals = monthValues.filter(v => v !== null && v !== undefined && !isNaN(parseFloat(v)));
                         resultVal = numericVals.length > 0 ? numericVals.reduce((s, v) => s + parseFloat(v), 0) : null;
@@ -9987,7 +10084,9 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
 });
 
 // ========== Auto-create tables for Approval & Notification system ==========
-(async () => {
+// เก็บ promise ไว้ (export เป็น migrationsReady) — tests ต้องรอให้ migration ชุดหลักเสร็จก่อนเริ่ม ไม่งั้น ALTER TABLE ที่ยัง
+// รันอยู่ชนกับ transaction ของ test เป็น MDL deadlock แบบสุ่ม ("Deadlock found when trying to get lock" — พบ 8 ต.ค. 2569)
+const migrationsReady = (async () => {
     try {
         await db.query(`
             CREATE TABLE IF NOT EXISTS login_logs (
@@ -15841,4 +15940,4 @@ if (require.main === module) {
         startSessionCleanupJob();
     });
 }
-module.exports = { app, captureError };
+module.exports = { app, captureError, migrationsReady };

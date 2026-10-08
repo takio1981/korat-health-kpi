@@ -21,11 +21,21 @@
     { "name": "ข้อความ รอดำเนินการ ข้ามไปในฟังก์ชัน", "formula": "AVG(ALL)", "months": { "oct": "รอดำเนินการ", "nov": "50" }, "target": "", "expect": "50" },
     { "name": "อ้างเดือนว่างตรงๆ → ไม่มีผลงาน", "formula": "m10 + m11", "months": { "oct": "5" }, "target": "", "expect": null },
     { "name": "อ้างเดือนที่เป็นข้อความตรงๆ → ไม่มีผลงาน", "formula": "m10 * 1", "months": { "oct": "รอดำเนินการ" }, "target": "", "expect": null },
-    { "name": "ไม่มีเดือนใดมีค่า → ไม่มีผลงาน", "formula": "AVG(ALL)", "months": {}, "target": "", "expect": null },
-    { "name": "COUNT ไม่มีค่าเลย = 0", "formula": "COUNT(ALL)", "months": {}, "target": "", "expect": "0" },
+    { "name": "ไม่มีเดือนใดมีค่า → ไม่มีผลงาน", "formula": "AVG(ALL)", "months": { }, "target": "", "expect": null },
+    { "name": "COUNT ไม่มีค่าเลย = 0", "formula": "COUNT(ALL)", "months": { }, "target": "", "expect": "0" },
     { "name": "หารศูนย์ → ไม่มีผลงาน", "formula": "m10 / m11", "months": { "oct": "5", "nov": "0" }, "target": "", "expect": null },
     { "name": "เป้าหมายว่าง → ไม่มีผลงาน", "formula": "m10 / target", "months": { "oct": "5" }, "target": "", "expect": null },
-    { "name": "ค่าคงที่", "formula": "100", "months": {}, "target": "", "expect": "100" }
+    { "name": "ค่าคงที่", "formula": "100", "months": { }, "target": "", "expect": "100" },
+    { "name": "prev_result ร้อยละการเปลี่ยนแปลงจากปีที่แล้ว", "formula": "(LAST(ALL) - prev_result) / prev_result * 100", "months": { "oct": "60" }, "target": "", "prev": { "result": "50" }, "expect": "20" },
+    { "name": "AVG(PREV_ALL) เฉลี่ยทุกเดือนปีที่แล้ว", "formula": "AVG(PREV_ALL)", "months": { }, "target": "", "prev": { "months": { "oct": "10", "nov": "30", "dece": "รอดำเนินการ" }}, "expect": "20" },
+    { "name": "ผสมเดือนปีนี้กับปีที่แล้วในฟังก์ชันเดียว", "formula": "SUM(m10, prev_m10)", "months": { "oct": "5" }, "target": "", "prev": { "months": { "oct": "7" }}, "expect": "12" },
+    { "name": "prev_m1 เขียนย่อ = prev_m01 และรับ prev เป็นคีย์ m10", "formula": "prev_m1 + prev_m10", "months": { }, "target": "", "prev": { "months": { "jan": "2", "m10": "3" }}, "expect": "5" },
+    { "name": "prev_target เป้าหมายปีที่แล้ว", "formula": "LAST(ALL) / prev_target * 100", "months": { "oct": "45" }, "target": "", "prev": { "target": "90" }, "expect": "50" },
+    { "name": "สะสมต่อเนื่อง 2 ปี", "formula": "SUM(ALL) + SUM(PREV_ALL)", "months": { "oct": "1", "nov": "2" }, "target": "", "prev": { "months": { "sep": "10" }}, "expect": "13" },
+    { "name": "ไม่มีข้อมูลปีที่แล้ว → อ้างตรงเป็นไม่มีค่า", "formula": "LAST(ALL) - prev_result", "months": { "oct": "5" }, "target": "", "expect": null },
+    { "name": "ไม่มีข้อมูลปีที่แล้ว → ฟังก์ชันข้าม (COUNT = 0)", "formula": "COUNT(PREV_ALL)", "months": { "oct": "5" }, "target": "", "expect": "0" },
+    { "name": "ตัวพิมพ์ใหญ่ PREV_RESULT / prev_all ใช้ได้", "formula": "PREV_RESULT + MAX(prev_all)", "months": { }, "target": "", "prev": { "result": "1", "months": { "oct": "4" }}, "expect": "5" },
+    { "name": "ข้อมูลปีที่แล้วไม่ปนกับเดือนปีนี้ (ALL ไม่รวมปีที่แล้ว)", "formula": "SUM(ALL)", "months": { "oct": "1" }, "target": "", "prev": { "months": { "oct": "100" }}, "expect": "1" }
   ],
   "invalid": [
     { "name": "สูตรว่าง", "formula": "   " },
@@ -40,6 +50,10 @@
     { "name": "สูตรไม่จบ", "formula": "m10 +" },
     { "name": "ส่วนเกินท้ายสูตร", "formula": "m10 m11" },
     { "name": "ตัวเลขผิดรูป", "formula": "1.2.3" },
-    { "name": "string literal", "formula": "'abc'" }
+    { "name": "string literal", "formula": "'abc'" },
+    { "name": "PREV_ALL นอกฟังก์ชัน", "formula": "PREV_ALL + 1" },
+    { "name": "prev_target ในฟังก์ชัน", "formula": "SUM(prev_target)" },
+    { "name": "prev_m13 ไม่มีเดือนนี้", "formula": "prev_m13 + 1" },
+    { "name": "prev_ เปล่า", "formula": "prev_ * 2" }
   ]
 }

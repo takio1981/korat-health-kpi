@@ -60,8 +60,10 @@ async function waitForColumn(table, column, timeoutMs = 90000) {
 }
 
 beforeAll(async () => {
-    ({ app } = require('../server'));
+    let migrationsReady;
+    ({ app, migrationsReady } = require('../server'));
     db = require('../db');
+    await migrationsReady; // รอ migration ชุดหลักเสร็จทั้งหมด (กัน MDL deadlock กับ ALTER TABLE ที่ยังรันอยู่)
     await waitForColumn('kpi_indicators', 'result_formula');
     await cleanupTestUsers(db);
     const [[d]] = await db.query('SELECT id FROM departments ORDER BY id LIMIT 1');

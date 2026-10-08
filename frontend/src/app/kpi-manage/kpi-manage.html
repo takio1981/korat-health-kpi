@@ -1460,6 +1460,18 @@
               <button type="button" (click)="insertFormulaToken('target', formulaInput)"
                       class="px-1.5 py-0.5 text-[10px] rounded bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-700 font-bold" title="target">เป้าหมาย</button>
             </div>
+            <!-- ข้อมูลปีงบประมาณที่แล้ว (คู่ตัวชี้วัด × หน่วยบริการเดียวกัน) -->
+            <div class="flex flex-wrap items-center gap-1 mt-1">
+              <span class="text-[10px] font-bold text-amber-700 mr-0.5"><i class="fas fa-history mr-0.5"></i>ปีงบที่แล้ว:</span>
+              <button *ngFor="let m of FORMULA_MONTHS" type="button" (click)="insertFormulaToken('prev_' + m.v, formulaInput)"
+                      class="px-1.5 py-0.5 text-[10px] rounded bg-amber-50 border border-amber-300 hover:bg-amber-100 text-amber-800" [title]="'prev_' + m.v">{{ m.l }}</button>
+              <button type="button" (click)="insertFormulaToken('prev_target', formulaInput)"
+                      class="px-1.5 py-0.5 text-[10px] rounded bg-amber-50 border border-amber-400 hover:bg-amber-100 text-amber-800 font-bold" title="prev_target">เป้าหมายปีที่แล้ว</button>
+              <button type="button" (click)="insertFormulaToken('prev_result', formulaInput)"
+                      class="px-1.5 py-0.5 text-[10px] rounded bg-amber-500 hover:bg-amber-600 text-white font-bold" title="prev_result">ผลงานปีที่แล้ว</button>
+              <button type="button" (click)="insertFormulaToken('PREV_ALL', formulaInput)"
+                      class="px-1.5 py-0.5 text-[10px] rounded bg-amber-100 border border-amber-400 hover:bg-amber-200 text-amber-900 font-bold font-mono" title="ใช้ในฟังก์ชัน เช่น AVG(PREV_ALL)">PREV_ALL</button>
+            </div>
             <div class="flex flex-wrap gap-1 mt-1">
               <button *ngFor="let fn of FORMULA_FUNCTIONS" type="button" (click)="insertFormulaToken(fn, formulaInput)"
                       class="px-1.5 py-0.5 text-[10px] rounded bg-violet-600 hover:bg-violet-700 text-white font-bold font-mono">{{ fn }}</button>
@@ -1474,6 +1486,12 @@
                 ฟังก์ชัน SUM/AVG/MAX/MIN/COUNT/LAST ใช้กับรายการเดือน เช่น <code>SUM(m10,m11)</code> หรือ <code>ALL</code> (12 เดือน) —
                 เดือนที่ว่างหรือเป็นข้อความ (เช่น "รอดำเนินการ") จะถูกข้าม; ถ้าอ้างเดือนที่ว่างตรงๆ ในการบวก/ลบ/คูณ/หาร หรือหารด้วยศูนย์ ผลงานจะว่าง
               </div>
+              <div class="mt-1 text-amber-800">
+                <b>ข้อมูลปีงบประมาณที่แล้ว</b> (หน่วยบริการเดียวกัน): <code>prev_m10</code>–<code>prev_m09</code> ผลงานรายเดือน,
+                <code>prev_target</code> เป้าหมาย, <code>prev_result</code> ผลงานปีที่แล้ว (ค่าเดือนล่าสุดที่บันทึก หรือผลรวมถ้าเป็นตัวชี้วัดสะสม) และ <code>PREV_ALL</code>
+                ใช้ในฟังก์ชัน เช่น <code>AVG(PREV_ALL)</code> หรือผสมกับปีนี้ <code>SUM(m10, prev_m10)</code> — หน่วยบริการที่ไม่มีข้อมูลปีที่แล้ว
+                ค่าเหล่านี้จะว่าง
+              </div>
             </div>
 
             <!-- ทดลองคำนวณ — ไม่บันทึกข้อมูลใดๆ -->
@@ -1483,6 +1501,21 @@
                 <div *ngFor="let m of FORMULA_MONTHS">
                   <div class="text-[9px] text-gray-500 text-center">{{ m.l }}</div>
                   <input type="text" [(ngModel)]="formulaTestMonths[m.v]" class="w-full px-1 py-0.5 border rounded text-[11px] text-center bg-white">
+                </div>
+              </div>
+              <div *ngIf="formulaUsesPrev" class="mt-2 p-2 rounded bg-amber-50 border border-amber-200">
+                <div class="text-[10px] font-bold text-amber-800 mb-1"><i class="fas fa-history mr-1"></i>ข้อมูลปีงบประมาณที่แล้ว</div>
+                <div class="grid grid-cols-6 sm:grid-cols-12 gap-1">
+                  <div *ngFor="let m of FORMULA_MONTHS">
+                    <div class="text-[9px] text-amber-700 text-center">{{ m.l }}</div>
+                    <input type="text" [(ngModel)]="formulaTestPrevMonths[m.v]" class="w-full px-1 py-0.5 border border-amber-200 rounded text-[11px] text-center bg-white">
+                  </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 mt-1 text-xs">
+                  <span class="text-amber-800">เป้าหมายปีที่แล้ว</span>
+                  <input type="text" [(ngModel)]="formulaTestPrevTarget" class="w-20 px-2 py-0.5 border border-amber-200 rounded text-xs text-center bg-white">
+                  <span class="text-amber-800">ผลงานปีที่แล้ว</span>
+                  <input type="text" [(ngModel)]="formulaTestPrevResult" class="w-20 px-2 py-0.5 border border-amber-200 rounded text-xs text-center bg-white">
                 </div>
               </div>
               <div class="flex flex-wrap items-center gap-2 mt-2 text-xs">
