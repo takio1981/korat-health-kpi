@@ -3252,6 +3252,19 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
 // Helper: หน่วยบริการ (hostype) ที่ใช้ได้กับตัวชี้วัด — อ้างอิง evaluation_mode/required_off_types
 // 'any_one' + required_off_types มีค่า → เฉพาะประเภทที่ระบุ, กรณีอื่น (all_required/ว่าง/parse ไม่ได้) → ชุดเดิมทั้งหมด (backward compat)
 const ALL_BULK_HOSTYPES = ['05', '06', '07', '18'];
+// ตัวชี้วัดใช้กับหน่วยบริการประเภทนี้ได้หรือไม่ — ตามค่าที่ตั้งไว้ในตัวชี้วัด (evaluation_mode/required_off_types)
+// 'any_one' + มีรายการประเภท → เฉพาะประเภทที่ระบุ | กรณีอื่น (all_required / ไม่ได้ตั้ง) → ทุกประเภท
+// ใช้กับการ "เพิ่มตัวชี้วัดให้หน่วยบริการ" (GET /kpi-template, /update-kpi โหมด setup_insert_new) — ต้องตรงกับ
+// indicatorAllowsHostype() ใน frontend/src/app/shared/indicator-scope.ts
+const indicatorAllowsHostype = (ind, hostype) => {
+    if (ind && ind.evaluation_mode === 'any_one' && ind.required_off_types) {
+        try {
+            const codes = JSON.parse(ind.required_off_types);
+            if (Array.isArray(codes) && codes.length > 0) return codes.map(String).includes(String(hostype));
+        } catch (_) {}
+    }
+    return true;
+};
 const resolveIndicatorHostypes = (ind) => {
     if (ind.evaluation_mode === 'any_one' && ind.required_off_types) {
         try {
@@ -3660,7 +3673,7 @@ apiRouter.get('/kpi-results/manage', authenticateToken, isSuperAdmin, async (req
         const [rows] = await db.query(`
             SELECT r.id, r.indicator_id, r.year_bh, r.month_bh, r.hospcode, r.target_value, r.actual_value,
                    r.status, r.is_locked, r.created_at,
-                   i.kpi_indicators_name, i.dept_id, d.dept_name
+                   i.kpi_indicators_name, i.result_formula, i.dept_id, d.dept_name
             FROM kpi_results r
             JOIN kpi_indicators i ON r.indicator_id = i.id
             LEFT JOIN departments d ON d.id = i.dept_id
@@ -3871,15 +3884,33 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
             }
 
             // กรองเฉพาะ indicator ที่ยังไม่มีข้อมูล
-            const newUpdates = updates.filter(row => {
+            const notExisting = updates.filter(row => {
                 const hc = (ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
                 const key = `${row.indicator_id}_${row.year_bh}_${hc}`;
                 return !existingKeys.has(key);
             });
+            // ข้ามคู่ที่ประเภทหน่วยบริการไม่อยู่ในประเภทที่ตั้งไว้ของตัวชี้วัด (any_one + required_off_types)
+            let newUpdates = notExisting;
+            if (notExisting.length > 0) {
+                const rowHc = (row) => (ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
+                const indIds = [...new Set(notExisting.map(r => Number(r.indicator_id)).filter(Boolean))];
+                const hcs = [...new Set(notExisting.map(rowHc).filter(Boolean).map(String))];
+                if (indIds.length > 0 && hcs.length > 0) {
+                    const [indRows] = await connection.query('SELECT id, evaluation_mode, required_off_types FROM kpi_indicators WHERE id IN (?)', [indIds]);
+                    const [hosRows] = await connection.query('SELECT hoscode, hostype FROM chospital WHERE hoscode IN (?)', [hcs]);
+                    const indMap = new Map(indRows.map(i => [Number(i.id), i]));
+                    const typeMap = new Map(hosRows.map(h => [String(h.hoscode).trim(), h.hostype]));
+                    newUpdates = notExisting.filter(row => {
+                        const ht = typeMap.get(String(rowHc(row)).trim());
+                        return !ht || indicatorAllowsHostype(indMap.get(Number(row.indicator_id)), ht);
+                    });
+                }
+            }
+            const skippedType = notExisting.length - newUpdates.length;
 
             if (newUpdates.length === 0) {
                 await connection.commit();
-                return res.json({ success: true, message: 'ไม่มีตัวชี้วัดใหม่ที่ต้องเพิ่ม (ทั้งหมดมีอยู่แล้ว)', skipped: updates.length });
+                return res.json({ success: true, message: skippedType > 0 ? 'ไม่มีตัวชี้วัดใหม่ที่ต้องเพิ่ม (มีอยู่แล้ว หรือไม่ตรงประเภทหน่วยบริการที่ตั้งไว้)' : 'ไม่มีตัวชี้วัดใหม่ที่ต้องเพิ่ม (ทั้งหมดมีอยู่แล้ว)', inserted: 0, skipped: updates.length - skippedType, skipped_type: skippedType });
             }
 
             // INSERT เฉพาะ indicator ใหม่ (รวม 0 ด้วย)
@@ -3919,7 +3950,8 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
                 success: true,
                 message: `เพิ่มตัวชี้วัดใหม่ ${newUpdates.length} รายการ (ข้าม ${updates.length - newUpdates.length} รายการที่มีอยู่แล้ว)`,
                 inserted: newUpdates.length,
-                skipped: updates.length - newUpdates.length
+                skipped: updates.length - newUpdates.length - skippedType,
+                skipped_type: skippedType
             });
         }
 
@@ -4114,7 +4146,7 @@ apiRouter.get('/form-schemas/indicator/:indicator_id', authenticateToken, async 
 apiRouter.get('/form-schemas/all-indicators', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
         const [rows] = await db.query(`
-            SELECT i.id, i.kpi_indicators_name, i.table_process, i.criterion, i.target_condition, d.dept_name,
+            SELECT i.id, i.kpi_indicators_name, i.table_process, i.criterion, i.target_condition, i.result_formula, d.dept_name,
                    fs.id AS schema_id, fs.form_title, fs.is_active AS schema_active,
                    (SELECT COUNT(*) FROM kpi_form_fields ff WHERE ff.schema_id = fs.id) AS field_count
             FROM kpi_indicators i
@@ -4578,6 +4610,10 @@ apiRouter.get('/kpi-template', authenticateToken, async (req, res) => {
                 i.target_condition,
                 i.criterion,
                 i.table_process,
+                i.evaluation_mode,
+                i.required_off_types,
+                i.result_formula,
+                i.is_cumulative,
                 d.dept_name
             FROM kpi_indicators i
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
@@ -4585,7 +4621,12 @@ apiRouter.get('/kpi-template', authenticateToken, async (req, res) => {
             WHERE i.is_active = 1 ${deptFilter}
             ORDER BY mi.main_indicator_name DESC, i.kpi_indicators_name DESC, d.dept_name DESC
         `;
-        const [rows] = await db.query(sql, params);
+        let [rows] = await db.query(sql, params);
+        // ผู้ใช้ที่ผูกกับหน่วยบริการเดียว (ROLE_SCOPE_HOSPCODE): แสดงเฉพาะตัวชี้วัดที่ตั้งไว้ให้ใช้กับประเภทหน่วยบริการของตน
+        if (ROLE_SCOPE_HOSPCODE.includes(user.role) && user.hospcode) {
+            const [[h]] = await db.query('SELECT hostype FROM chospital WHERE hoscode = ?', [user.hospcode]);
+            if (h && h.hostype) rows = rows.filter(r => indicatorAllowsHostype(r, h.hostype));
+        }
         res.json({ success: true, data: rows });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Error fetching template' });
@@ -6313,6 +6354,40 @@ apiRouter.post('/indicators/bulk-import', authenticateToken, requireAction('kpi-
     res.json({ success: true, inserted, errors, results });
 });
 
+// แนะนำรหัสสำหรับตัวชี้วัดใหม่ — ผู้ใช้ไม่ต้องคิดรหัสเอง (11 ต.ค. 2569)
+//   ชื่อตาราง (table_process) = kpi_<หน่วยงาน>_<ลำดับ 3 หลัก> เช่น kpi_dh_001 — <หน่วยงาน> = รหัสย่อหน่วยงานถ้าเป็น a-z/0-9 (dh, ncd, ems)
+//   ไม่งั้นใช้ d<id 2 หลัก> (เช่น d07) / ไม่เลือกหน่วยงาน = gen — ลำดับ = เลขถัดจากค่าสูงสุดที่มีอยู่ของ prefix เดียวกัน (ไม่ซ้ำ)
+//   รหัสตัวชี้วัด (kpi_indicators_code) = ชื่อตารางแบบใช้ขีดกลาง (ตามรูปแบบข้อมูลเดิม เช่น excellence-indicator-1-1)
+//   รหัสอ้างอิง (kpi_indicators_id) ไม่สร้างให้ — ในข้อมูลจริงคือเลขรายงานของ KHD ใช้เฉพาะตัวชี้วัดที่มาจาก KHD
+async function suggestIndicatorCodes(conn, deptId) {
+    let key = 'gen';
+    if (deptId) {
+        const [dRows] = await conn.query('SELECT id, dept_code FROM departments WHERE id = ?', [deptId]);
+        if (dRows[0]) {
+            const c = String(dRows[0].dept_code || '').trim().toLowerCase();
+            key = /^[a-z][a-z0-9]{0,9}$/.test(c) ? c : 'd' + String(dRows[0].id).padStart(2, '0');
+        }
+    }
+    const prefix = `kpi_${key}_`;
+    const [rows] = await conn.query('SELECT table_process FROM kpi_indicators WHERE table_process LIKE ?', [prefix.replace(/_/g, '\\_') + '%']);
+    let max = 0;
+    for (const r of rows) {
+        const m = String(r.table_process).slice(prefix.length).match(/^(\d+)$/);
+        if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    const table_process = prefix + String(max + 1).padStart(3, '0');
+    return { table_process, kpi_indicators_code: table_process.replace(/_/g, '-') };
+}
+
+apiRouter.get('/indicators/suggest-code', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
+    try {
+        const deptId = req.query.dept_id ? Number(req.query.dept_id) : null;
+        res.json({ success: true, data: await suggestIndicatorCodes(db, Number.isFinite(deptId) ? deptId : null) });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 apiRouter.post('/indicators', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
     const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, criterion, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export, result_formula } = req.body;
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
@@ -6321,10 +6396,18 @@ apiRouter.post('/indicators', authenticateToken, requireAction('kpi-manage', 'ad
     const formula = parseFormulaInput(result_formula);
     if (formula.error) return res.status(400).json({ success: false, message: formula.error });
     try {
+        // ไม่ได้กรอกชื่อตาราง → ระบบสร้างรหัสให้อัตโนมัติ (รหัสตัวชี้วัดสร้างตามถ้าไม่ได้กรอก)
+        let tpFinal = table_process && String(table_process).trim() ? String(table_process).trim() : null;
+        let codeFinal = kpi_indicators_code && String(kpi_indicators_code).trim() ? String(kpi_indicators_code).trim() : null;
+        if (!tpFinal) {
+            const sug = await suggestIndicatorCodes(db, dept_id || null);
+            tpFinal = sug.table_process;
+        }
+        if (!codeFinal) codeFinal = tpFinal.replace(/_/g, '-');
         const [r] = await db.query(
             `INSERT INTO kpi_indicators (kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, criterion, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export, result_formula)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, criterion || null, weight || null, kpi_indicators_code || null, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), is_cumulative ? 1 : 0, use_sub_indicator_export ? 1 : 0, formula.value]
+            [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, criterion || null, weight || null, codeFinal, tpFinal, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), is_cumulative ? 1 : 0, use_sub_indicator_export ? 1 : 0, formula.value]
         );
         // LINE notify: created
         try {
@@ -6334,10 +6417,10 @@ apiRouter.post('/indicators', authenticateToken, requireAction('kpi-manage', 'ad
                 `👤 ${actor}\n` +
                 `🆔 ID: ${r.insertId}\n` +
                 `📌 ${kpi_indicators_name}` +
-                (table_process ? `\n🔑 table_process: ${table_process}` : '')
+                `\n🔑 table_process: ${tpFinal}`
             );
         } catch (_) {}
-        res.json({ success: true, message: 'Created successfully', id: r.insertId });
+        res.json({ success: true, message: 'Created successfully', id: r.insertId, table_process: tpFinal, kpi_indicators_code: codeFinal });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -7609,7 +7692,7 @@ apiRouter.get('/exportable-indicators', authenticateToken, isSuperAdmin, async (
         // คืน upload_excel ด้วย — UI export-kpi จะใช้กรอง/แสดง badge
         const [rows] = await db.query(
             `SELECT i.id, i.kpi_indicators_name, i.table_process, i.dept_id, i.main_indicator_id, i.is_active,
-                    i.upload_excel, i.criterion, i.target_condition,
+                    i.upload_excel, i.criterion, i.target_condition, i.result_formula,
                     d.dept_name, mi.main_indicator_name
              FROM kpi_indicators i
              LEFT JOIN departments d ON i.dept_id = d.id
@@ -9176,6 +9259,7 @@ apiRouter.get('/report/by-indicator', authenticateToken, async (req, res) => {
                 MAX(s.main_indicator_name) AS main_indicator_name,
                 MAX(s.dept_name) AS dept_name,
                 MAX(i.criterion) AS ind_criterion,
+                MAX(i.result_formula) AS result_formula,
                 MAX(i.target_condition) AS ind_target_condition,
                 s.year_bh,
                 MAX(CAST(s.target_value AS DECIMAL(20,4))) AS target_value,
@@ -9548,7 +9632,7 @@ apiRouter.get('/report/chart-stats', authenticateToken, async (req, res) => {
             groupQuery('COALESCE(mi.id, 0)', "COALESCE(MAX(mi.main_indicator_name), 'ไม่ระบุหมวดหมู่')", ", MAX(y.yut_name) AS yut_name"),
             groupQuery('COALESCE(s.dept_id, 0)', "COALESCE(MAX(s.dept_name), 'ไม่ระบุหน่วยงาน')"),
             groupQuery('s.indicator_id', 'MAX(i.kpi_indicators_name)',
-                ", MAX(mi.main_indicator_name) AS main_indicator_name, MAX(s.dept_name) AS dept_name, MAX(i.criterion) AS criterion, MAX(i.target_condition) AS target_condition"),
+                ", MAX(mi.main_indicator_name) AS main_indicator_name, MAX(s.dept_name) AS dept_name, MAX(i.criterion) AS criterion, MAX(i.target_condition) AS target_condition, MAX(i.result_formula) AS result_formula"),
             groupQuery("COALESCE(s.distid, '')", "COALESCE(MAX(s.distname), 'ไม่ระบุอำเภอ')"),
             groupQuery("COALESCE(s.hostype, '')", "MAX(s.hostype)"),
             db.query(`SELECT COALESCE(mi.id, 0) AS gkey, COALESCE(MAX(mi.main_indicator_name), 'ไม่ระบุหมวดหมู่') AS gname, COUNT(*) AS pairs, ${CHART_MONTHLY_SQL}
@@ -9661,6 +9745,7 @@ apiRouter.get('/report/recording-status', authenticateToken, async (req, res) =>
                 i.kpi_indicators_name,
                 i.criterion,
                 i.target_condition,
+                i.result_formula,
                 mi.main_indicator_name,
                 d.dept_name,
                 hr.year_bh,
@@ -9846,6 +9931,7 @@ apiRouter.get('/report/recording-missing/by-hospital/:hospcode', authenticateTok
                 i.kpi_indicators_name,
                 i.criterion,
                 i.target_condition,
+                i.result_formula,
                 mi.main_indicator_name,
                 d.dept_name,
                 r.target_value,
@@ -10039,6 +10125,7 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
             SELECT
                 i.id AS indicator_id,
                 i.kpi_indicators_name,
+                i.result_formula,
                 mi.main_indicator_name,
                 IFNULL(ist.total_hosp, 0) AS total_hospitals,
                 IFNULL(ist.recorded_hosp, 0) AS recorded_hospitals,

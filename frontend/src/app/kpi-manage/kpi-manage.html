@@ -336,7 +336,7 @@
              [ngClass]="{'opacity-50': activeTab !== 'hospitals' && (item.is_active === 0 || item.is_active === '0')}">
           <div class="flex items-start justify-between gap-2">
             <div class="flex-1 min-w-0">
-              <p class="font-bold text-gray-900 text-sm whitespace-normal break-words" *ngIf="activeTab === 'indicators'">{{ item.kpi_indicators_name }}</p>
+              <p class="font-bold text-gray-900 text-sm whitespace-normal break-words" *ngIf="activeTab === 'indicators'">{{ item.kpi_indicators_name }}<app-formula-badge class="ml-1" [formula]="item.result_formula"></app-formula-badge></p>
               <!-- Mobile: table_process Local + KHD -->
               <div *ngIf="activeTab === 'indicators'" class="flex flex-wrap gap-1 mt-1 text-[10px]">
                 <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-700 font-mono">
@@ -466,7 +466,7 @@
 
               <ng-container *ngIf="activeTab === 'indicators'">
                 <td class="px-4 py-3 font-medium text-gray-900">
-                  {{ item.kpi_indicators_name }}
+                  {{ item.kpi_indicators_name }}<app-formula-badge class="ml-1" [formula]="item.result_formula"></app-formula-badge>
 
                   <!-- table_process: Local + KHD side-by-side สำหรับ super_admin ตรวจสอบ -->
                   <div class="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
@@ -1348,23 +1348,6 @@
     <div class="space-y-3">
       <!-- Fields for Indicators -->
       <ng-container *ngIf="activeTab === 'indicators'">
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div class="sm:col-span-1">
-            <label class="block text-xs font-bold text-gray-600 mb-1">รหัสอ้างอิง <span class="text-gray-400 font-normal">(เช่น 1901)</span></label>
-            <input type="text" [(ngModel)]="currentItem.kpi_indicators_id" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm">
-          </div>
-          <div class="sm:col-span-1">
-            <label class="block text-xs font-bold text-gray-600 mb-1">รหัสตัวชี้วัด</label>
-            <input type="text" [(ngModel)]="currentItem.kpi_indicators_code" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm">
-          </div>
-          <div class="sm:col-span-1">
-            <label class="block text-xs font-bold text-gray-600 mb-1">ใช้งาน</label>
-            <select [(ngModel)]="currentItem.is_active" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm">
-              <option [ngValue]="1">เปิด</option>
-              <option [ngValue]="0">ปิด</option>
-            </select>
-          </div>
-        </div>
         <div>
           <label class="block text-xs font-bold text-gray-600 mb-1">ชื่อตัวชี้วัด <span class="text-red-500">*</span></label>
           <textarea [(ngModel)]="currentItem.kpi_indicators_name" rows="2" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm"></textarea>
@@ -1386,7 +1369,7 @@
           </div>
           <div>
             <label class="block text-xs font-bold text-gray-600 mb-1">หน่วยงาน</label>
-            <select [(ngModel)]="currentItem.dept_id" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm">
+            <select [(ngModel)]="currentItem.dept_id" (change)="onDeptChangeInModal()" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm">
               <option [ngValue]="null">-- ไม่ระบุ --</option>
               <option *ngFor="let d of departments" [ngValue]="d.id">{{ d.dept_name }}</option>
             </select>
@@ -1532,17 +1515,77 @@
             <span class="font-bold text-gray-700">ส่งออกผลงานจากตัวชี้วัดย่อย (แต่ละข้อย่อย = 1 คอลัมน์ แทนคอลัมน์รายเดือน)</span>
           </label>
         </div>
-        <div>
-          <label class="block text-xs font-bold text-gray-600 mb-1">
-            ชื่อตาราง (table_process)
-            <span class="text-xs text-gray-400 font-normal ml-1">a-z, 0-9, _ เท่านั้น</span>
-          </label>
-          <input type="text" [(ngModel)]="currentItem.table_process"
-                 class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-400 font-mono text-sm"
-                 [ngClass]="currentItem.table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(currentItem.table_process) ? 'border-red-400 bg-red-50' : ''"
-                 placeholder="เช่น kpi_tb_001">
-          <p *ngIf="currentItem.table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(currentItem.table_process)"
-             class="text-red-500 text-xs mt-0.5">ใช้ a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร</p>
+        <!-- รหัสของตัวชี้วัด — เพิ่มใหม่: ระบบสร้างให้อัตโนมัติ ผู้ใช้ไม่ต้องคิดรหัสเอง (กด "กำหนดเอง" เมื่อต้องการแก้) -->
+        <div class="border border-sky-200 rounded-xl p-3 bg-sky-50/40">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs font-bold text-gray-700"><i class="fas fa-barcode text-sky-600 mr-1"></i>รหัสของตัวชี้วัด</span>
+            <span *ngIf="!isEditMode && codeAuto" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
+              <i class="fas fa-magic text-[9px]"></i>ระบบสร้างให้อัตโนมัติ
+            </span>
+            <span *ngIf="!isEditMode && !codeAuto" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 text-[10px] font-bold">
+              <i class="fas fa-pen text-[9px]"></i>กำหนดเอง
+            </span>
+            <button type="button" (click)="showCodeFields = !showCodeFields" class="ml-auto text-[11px] font-bold text-sky-700 hover:text-sky-900">
+              <i class="fas mr-1" [ngClass]="showCodeFields ? 'fa-chevron-up' : 'fa-pen'"></i>{{ showCodeFields ? 'ซ่อนช่องกรอก' : (isEditMode ? 'แก้ไขรหัส' : 'กำหนดเอง') }}
+            </button>
+          </div>
+          <p *ngIf="!isEditMode && codeAuto" class="text-[11px] text-gray-500 mt-1">
+            ไม่ต้องกรอก — ระบบตั้งรหัสให้ตามหน่วยงานที่เลือกและลำดับถัดไปที่ยังไม่ถูกใช้ (รหัสจริงยืนยันตอนกดบันทึก)
+          </p>
+          <div class="flex flex-wrap items-center gap-1.5 mt-2">
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-mono" title="ชื่อตาราง (table_process)">
+              <i class="fas fa-table text-[9px]"></i>{{ currentItem.table_process || (codeSuggestLoading ? 'กำลังสร้าง...' : '—') }}
+            </span>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white text-gray-600 border border-gray-200 text-[11px] font-mono" title="รหัสตัวชี้วัด">
+              <i class="fas fa-hashtag text-[9px]"></i>{{ currentItem.kpi_indicators_code || '—' }}
+            </span>
+            <span *ngIf="currentItem.kpi_indicators_id" class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white text-gray-600 border border-gray-200 text-[11px] font-mono" title="รหัสอ้างอิง">
+              <i class="fas fa-link text-[9px]"></i>{{ currentItem.kpi_indicators_id }}
+            </span>
+          </div>
+          <p *ngIf="tableProcessDuplicateName as dupName" class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 mt-2">
+            <i class="fas fa-exclamation-triangle mr-1"></i>ชื่อตารางนี้ซ้ำกับตัวชี้วัด "{{ dupName }}" — ข้อมูลส่งออกจะลงตารางเดียวกัน ควรใช้ชื่อที่ไม่ซ้ำ
+          </p>
+          <div *ngIf="showCodeFields" class="mt-3 space-y-2.5 border-t border-sky-200 pt-3">
+            <div>
+              <label class="block text-xs font-bold text-gray-600 mb-0.5">
+                ชื่อตาราง (table_process)
+                <span class="text-xs text-gray-400 font-normal ml-1">a-z, 0-9, _ เท่านั้น</span>
+              </label>
+              <p class="text-[11px] text-gray-500 mb-1">ชื่อตารางที่ใช้เก็บ/ส่งออกผลงานของตัวชี้วัดนี้ไปยัง KHD และใช้จับคู่กับตัวชี้วัดใน KHD — ไม่ควรซ้ำกับตัวชี้วัดอื่น</p>
+              <input type="text" [(ngModel)]="currentItem.table_process" (ngModelChange)="onCodeManualEdit()"
+                     class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-400 font-mono text-sm"
+                     [ngClass]="currentItem.table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(currentItem.table_process) ? 'border-red-400 bg-red-50' : ''"
+                     placeholder="เช่น kpi_ncd_001">
+              <p *ngIf="currentItem.table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(currentItem.table_process)"
+                 class="text-red-500 text-xs mt-0.5">ใช้ a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร</p>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-bold text-gray-600 mb-0.5">รหัสตัวชี้วัด</label>
+                <p class="text-[11px] text-gray-500 mb-1">รหัสสั้นสำหรับอ้างอิง/ค้นหา — ปกติใช้ชื่อตารางแบบขีดกลาง</p>
+                <input type="text" [(ngModel)]="currentItem.kpi_indicators_code" (ngModelChange)="onCodeManualEdit()" placeholder="เช่น kpi-ncd-001"
+                       class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 font-mono text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-gray-600 mb-0.5">รหัสอ้างอิง <span class="text-gray-400 font-normal">(ไม่บังคับ)</span></label>
+                <p class="text-[11px] text-gray-500 mb-1">เลขรายงานของตัวชี้วัดนี้ในระบบ KHD (เช่น 1901) — เว้นว่างได้ถ้าไม่ได้มาจาก KHD</p>
+                <input type="text" [(ngModel)]="currentItem.kpi_indicators_id" placeholder="เว้นว่างได้"
+                       class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm">
+              </div>
+            </div>
+            <button *ngIf="!isEditMode && !codeAuto" type="button" (click)="useSuggestedCodes()"
+                    class="text-[11px] font-bold text-emerald-700 hover:text-emerald-900">
+              <i class="fas fa-magic mr-1"></i>กลับไปใช้รหัสที่ระบบสร้างให้
+            </button>
+          </div>
+        </div>
+        <div class="sm:w-1/3">
+          <label class="block text-xs font-bold text-gray-600 mb-1">ใช้งาน</label>
+          <select [(ngModel)]="currentItem.is_active" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm">
+            <option [ngValue]="1">เปิด</option>
+            <option [ngValue]="0">ปิด</option>
+          </select>
         </div>
         <div>
           <label class="block text-xs font-bold text-gray-600 mb-1">ประเภทตัวชี้วัด (เลือกได้มากกว่า 1)</label>

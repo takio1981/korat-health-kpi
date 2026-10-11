@@ -5,6 +5,7 @@ import { RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { CriteriaTextPipe } from '../shared/criteria-text.pipe';
 import Swal from 'sweetalert2';
+import { FormulaBadgeComponent } from '../shared/formula-badge';
 
 interface FormField {
   id?: number;
@@ -21,7 +22,7 @@ interface FormField {
 @Component({
   selector: 'app-form-builder',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, CriteriaTextPipe],
+  imports: [CommonModule, FormsModule, RouterModule, CriteriaTextPipe, FormulaBadgeComponent],
   templateUrl: './form-builder.html'
 })
 export class FormBuilderComponent implements OnInit, OnChanges {

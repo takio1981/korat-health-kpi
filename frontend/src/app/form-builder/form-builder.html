@@ -48,7 +48,7 @@
               @for (ind of filteredIndicators; track ind.id) {
                 <tr class="hover:bg-green-50/30 transition-colors">
                   <td class="px-4 py-3 font-medium text-gray-800">
-                    <span class="whitespace-normal break-words">{{ ind.kpi_indicators_name }}</span>
+                    <span class="whitespace-normal break-words">{{ ind.kpi_indicators_name }}</span><app-formula-badge class="ml-1" [formula]="ind.result_formula"></app-formula-badge>
                     @if (ind | criteriaText; as crit) {
                       <span class="text-xs font-normal text-amber-600 ml-1">({{ crit }})</span>
                     }

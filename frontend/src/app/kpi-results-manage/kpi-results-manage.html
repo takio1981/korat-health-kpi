@@ -91,7 +91,7 @@
                 <input type="checkbox" [checked]="selectedIds.has(row.id)" (change)="toggleSelect(row.id)" class="rounded text-red-600 focus:ring-red-400">
               </td>
               <td class="px-3 py-2">
-                <div class="font-medium text-gray-800">{{ row.kpi_indicators_name }}</div>
+                <div class="font-medium text-gray-800">{{ row.kpi_indicators_name }}<app-formula-badge class="ml-1" [formula]="row.result_formula"></app-formula-badge></div>
                 <div class="text-[10px] text-gray-400">{{ row.dept_name }}</div>
               </td>
               <td class="px-3 py-2 text-gray-600">{{ row.hosname || row.hospcode }}</td>

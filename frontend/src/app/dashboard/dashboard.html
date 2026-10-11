@@ -643,7 +643,7 @@
                       <ng-container *ngIf="getCumulativeBadge(item) as cumBadge">
                         <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap"
                               [ngClass]="cumBadge.color" [title]="cumBadge.title">
-                          <i class="fas text-[8px]" [ngClass]="cumBadge.icon"></i>{{ cumBadge.label }}
+                          <i class="fas text-[8px]" [ngClass]="cumBadge.icon"></i>{{ cumBadge.label }}<span *ngIf="cumBadge.formula" class="font-mono font-normal truncate max-w-[180px]">: {{ cumBadge.formula }}</span>
                         </span>
                       </ng-container>
                       <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap"
@@ -1129,7 +1129,7 @@
                       <ng-container *ngIf="getCumulativeBadge(item) as cumBadge">
                         <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] font-bold whitespace-nowrap shrink-0 mt-0.5"
                               [ngClass]="cumBadge.color" [title]="cumBadge.title">
-                          <i class="fas text-[7px]" [ngClass]="cumBadge.icon"></i>{{ cumBadge.label }}
+                          <i class="fas text-[7px]" [ngClass]="cumBadge.icon"></i>{{ cumBadge.label }}<span *ngIf="cumBadge.formula" class="font-mono font-normal truncate max-w-[220px]">: {{ cumBadge.formula }}</span>
                         </span>
                       </ng-container>
                       <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] font-bold whitespace-nowrap shrink-0 mt-0.5"
@@ -1330,8 +1330,17 @@
 <div *ngIf="showAddModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
   <div class="bg-white rounded-2xl shadow-2xl w-full max-w-6xl p-6 transform transition-all scale-100 overflow-y-auto max-h-[90vh]">
     <div class="flex justify-between items-center mb-4">
-      <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-plus-circle text-green-500 mr-2"></i>เพิ่มตัวชี้วัด</h3>
+      <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-plus-circle text-green-500 mr-2"></i>เพิ่มตัวชี้วัดให้หน่วยบริการ</h3>
       <button (click)="closeAddModal()" class="text-gray-400 hover:text-gray-600 text-xl"><i class="fas fa-times"></i></button>
+    </div>
+    <!-- ขั้นตอนย่อ -->
+    <div class="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
+      <span><b class="text-purple-700">1</b> ค้นหาและติ๊กเลือกตัวชี้วัดในตาราง</span>
+      <i class="fas fa-angle-right text-gray-300"></i>
+      <span *ngIf="isAdmin || isLocalAdmin"><b class="text-green-700">2</b> เลือกหน่วยบริการปลายทาง (แสดงเฉพาะประเภทที่ตั้งไว้ของตัวชี้วัดที่เลือก)</span>
+      <span *ngIf="!isAdmin && !isLocalAdmin"><b class="text-green-700">2</b> ตรวจสอบ/แก้ไขเป้าหมาย</span>
+      <i class="fas fa-angle-right text-gray-300"></i>
+      <span><b class="text-green-700">3</b> กดบันทึก — ผลงานรายเดือนบันทึกภายหลังได้ในตารางหลัก</span>
     </div>
     <div class="mb-4 flex flex-wrap items-end gap-3">
       <div class="space-y-1">
@@ -1384,7 +1393,7 @@
                 <button type="button" (click)="addKpiOpenDropdown = ''" class="px-2 py-0.5 bg-teal-500 text-white rounded font-bold">ตกลง</button>
               </div>
               <div class="overflow-y-auto flex-1">
-                <label *ngFor="let ht of hosTypeList" class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
+                <label *ngFor="let ht of addKpiHosTypeOptions" class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
                   <input type="checkbox" [checked]="isAddKpiFilterSel(addKpiSelHosTypes, ht.hostypecode)"
                          (change)="toggleAddKpiFilter(addKpiSelHosTypes, ht.hostypecode); onAddKpiHosTypeChange()" class="rounded text-teal-600">
                   <span>{{ ht.hostypename }}</span>
@@ -1506,6 +1515,28 @@
       <span class="text-green-600">(ตัวชี้วัดที่มีอยู่แล้วในแต่ละหน่วยบริการจะถูกข้ามอัตโนมัติ)</span>
     </div>
 
+    <!-- ขอบเขตประเภทหน่วยบริการของตัวชี้วัดที่เลือก -->
+    <div *ngIf="addKpiAllowedHostypes as allowedTypes" class="mb-3 px-3 py-2 bg-cyan-50 border border-cyan-200 rounded-xl text-xs text-cyan-800">
+      <i class="fas fa-hospital mr-1"></i>ตัวชี้วัดที่เลือกกำหนดไว้สำหรับ: <b>{{ addKpiAllowedHostypeNames() }}</b>
+      <span class="text-cyan-600">— รายการหน่วยบริการและตัวกรองประเภทแสดงเฉพาะประเภทนี้ ({{ addKpiFilteredHospitals.length }} แห่ง)</span>
+    </div>
+
+    <!-- ค้นหาตัวชี้วัด + แสดงช่องผลงานรายเดือน -->
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <div class="relative flex-1 min-w-[220px]">
+        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+        <input type="text" [(ngModel)]="addKpiSearch" placeholder="ค้นหาตัวชี้วัด (ชื่อ / หมวดหมู่ / หน่วยงาน / ชื่อตาราง)"
+               class="w-full pl-8 pr-8 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-green-500">
+        <button *ngIf="addKpiSearch" type="button" (click)="addKpiSearch = ''" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600" title="ล้างคำค้น">
+          <i class="fas fa-times-circle"></i>
+        </button>
+      </div>
+      <label class="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded-lg text-xs font-bold text-gray-600 cursor-pointer hover:bg-gray-50">
+        <input type="checkbox" [(ngModel)]="addKpiShowMonths" class="rounded text-green-600">
+        กรอกผลงานรายเดือนไปพร้อมกัน
+      </label>
+    </div>
+
     <!-- สรุปจำนวน + ตัวกรอง + ปุ่ม Reset -->
     <div *ngIf="addKpiTotalTemplateCount > 0" class="flex flex-wrap items-center justify-between gap-2 mb-3 px-1">
       <div class="flex flex-wrap items-center gap-2 text-xs">
@@ -1517,6 +1548,9 @@
         </span>
         <span class="px-2.5 py-1 bg-green-100 text-green-700 rounded-lg font-bold">
           <i class="fas fa-plus-circle mr-1"></i>ยังไม่มี: {{ newKpiList.length }}
+        </span>
+        <span *ngIf="addKpiTypeHiddenCount > 0" class="px-2.5 py-1 bg-cyan-100 text-cyan-700 rounded-lg font-bold" title="ตัวชี้วัดที่ไม่ได้ตั้งไว้สำหรับประเภทของหน่วยบริการที่เลือก จึงไม่แสดงในรายการ">
+          <i class="fas fa-hospital mr-1"></i>ไม่ตรงประเภทหน่วยบริการ: {{ addKpiTypeHiddenCount }}
         </span>
         <span class="px-2.5 py-1 bg-purple-100 text-purple-700 rounded-lg font-bold">
           <i class="fas fa-check-square mr-1"></i>เลือก: {{ addKpiSelectedIds.size }} / {{ filteredNewKpiList.length }}
@@ -1537,8 +1571,10 @@
             <th class="px-3 py-2 font-bold">ชื่อตัวชี้วัด</th>
             <th class="px-3 py-2 font-bold">หน่วยงาน</th>
             <th class="px-2 py-2 font-bold text-center">ปีงบฯ</th>
-            <th class="px-3 py-2 font-bold text-right">เป้าหมาย</th>
-            <th class="px-2 py-2 font-bold text-center" *ngFor="let m of ['ต.ค.','พ.ย.','ธ.ค.','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.']">{{ m }}</th>
+            <th class="px-3 py-2 font-bold text-right w-28">เป้าหมาย</th>
+            <ng-container *ngIf="addKpiShowMonths">
+              <th class="px-2 py-2 font-bold text-center" *ngFor="let m of ['ต.ค.','พ.ย.','ธ.ค.','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.']">{{ m }}</th>
+            </ng-container>
             <th class="px-1 py-2 font-bold text-center w-8"></th>
           </tr>
         </thead>
@@ -1549,8 +1585,13 @@
               <input type="checkbox" [checked]="isAddKpiSelected(item)" (change)="toggleAddKpi(item)" class="rounded text-purple-600 focus:ring-purple-400">
             </td>
             <td class="px-3 py-2 text-gray-600">{{ item.main_indicator_name }}</td>
-            <td class="px-3 py-2 font-medium text-gray-900">{{ item.kpi_indicators_name }}<span *ngIf="item | criteriaText as crit" class="text-[10px] font-normal text-amber-600 ml-1">({{ crit }})</span>
-              <div class="mt-1">
+            <td class="px-3 py-2 font-medium text-gray-900">{{ item.kpi_indicators_name }}<span *ngIf="item | criteriaText as crit" class="text-[10px] font-normal text-amber-600 ml-1">({{ crit }})</span><app-formula-badge class="ml-1" [formula]="item.result_formula"></app-formula-badge>
+              <div class="mt-1 flex flex-wrap items-center gap-1">
+                <ng-container *ngIf="getIndicatorOffTypeBadge(item) as offBadge">
+                  <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold whitespace-nowrap" [ngClass]="offBadge.color" [title]="offBadge.title">
+                    <i class="fas fa-hospital text-[9px]"></i>{{ offBadge.label }}
+                  </span>
+                </ng-container>
                 <span *ngIf="item.table_process" class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded text-[10px] font-mono whitespace-nowrap" [title]="'table_process: ' + item.table_process">
                   <i class="fas fa-table text-[9px]"></i>{{ item.table_process }}
                 </span>
@@ -1566,11 +1607,13 @@
                      class="w-full border rounded px-1 py-1 text-right text-xs focus:outline-none focus:border-green-500 transition-colors"
                      [ngClass]="isAddKpiModified(item, 'target_value') ? 'bg-yellow-200 !text-red-600 font-bold border-orange-400' : 'border-gray-300'">
             </td>
-            <td class="px-1 py-2" *ngFor="let m of ['oct','nov','dece','jan','feb','mar','apr','may','jun','jul','aug','sep']">
-              <input type="text" [(ngModel)]="item[m]" (ngModelChange)="onValueChange(item, m)"
-                     class="w-full border rounded px-1 py-1 text-center text-xs focus:outline-none focus:border-green-500 transition-colors"
-                     [ngClass]="isAddKpiModified(item, m) ? 'bg-yellow-200 !text-red-600 font-bold border-orange-400' : 'border-gray-300'">
-            </td>
+            <ng-container *ngIf="addKpiShowMonths">
+              <td class="px-1 py-2" *ngFor="let m of ['oct','nov','dece','jan','feb','mar','apr','may','jun','jul','aug','sep']">
+                <input type="text" [(ngModel)]="item[m]" (ngModelChange)="onValueChange(item, m)"
+                       class="w-full border rounded px-1 py-1 text-center text-xs focus:outline-none focus:border-green-500 transition-colors"
+                       [ngClass]="isAddKpiModified(item, m) ? 'bg-yellow-200 !text-red-600 font-bold border-orange-400' : 'border-gray-300'">
+              </td>
+            </ng-container>
             <td class="px-1 py-2 text-center">
               <button *ngIf="isAddKpiRowModified(item)" (click)="undoAddKpiRow(item)"
                       class="text-gray-400 hover:text-orange-600 transition-colors" title="คืนค่าเดิมแถวนี้">
@@ -1581,7 +1624,7 @@
           <tr *ngIf="filteredNewKpiList.length === 0">
             <td colspan="19" class="px-6 py-8 text-center text-gray-400">
               <ng-container *ngIf="newKpiList.length === 0">ไม่มีตัวชี้วัดที่สามารถเพิ่มได้สำหรับปีงบประมาณนี้ (อาจมีครบแล้ว หรือลองปรับตัวกรองหน่วยงาน)</ng-container>
-              <ng-container *ngIf="newKpiList.length > 0 && filteredNewKpiList.length === 0">ไม่พบรายการในหมวดหมู่ที่เลือก — ลองเปลี่ยนตัวกรอง</ng-container>
+              <ng-container *ngIf="newKpiList.length > 0 && filteredNewKpiList.length === 0">ไม่พบรายการตามคำค้น/หมวดหมู่ที่เลือก — ลองเปลี่ยนตัวกรอง</ng-container>
             </td>
           </tr>
         </tbody>

@@ -220,7 +220,7 @@
             </thead>
             <tbody>
               <tr *ngFor="let r of tableRows" class="border-t border-gray-100 hover:bg-green-50/40 cursor-pointer" (click)="drillDown('selectedIndicator', '' + r.gkey)" title="คลิกเพื่อกรองเฉพาะตัวชี้วัดนี้">
-                <td class="px-3 py-2 font-medium text-gray-800">{{ r.gname }}</td>
+                <td class="px-3 py-2 font-medium text-gray-800">{{ r.gname }}<app-formula-badge class="ml-1" [formula]="r['result_formula']"></app-formula-badge></td>
                 <td class="px-3 py-2 text-gray-600">{{ r['main_indicator_name'] || '-' }}</td>
                 <td class="px-3 py-2 text-gray-600">{{ r['dept_name'] || '-' }}</td>
                 <td class="px-3 py-2 text-right">{{ r.hospital_count | number }}</td>

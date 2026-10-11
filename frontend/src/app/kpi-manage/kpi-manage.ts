@@ -8,11 +8,12 @@ import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import { validateFormula, evaluateFormula, usesPrevYear, FORMULA_FUNCTIONS } from '../shared/kpi-formula';
 import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
+import { FormulaBadgeComponent } from '../shared/formula-badge';
 
 @Component({
   selector: 'app-kpi-manage',
   standalone: true,
-  imports: [CommonModule, FormsModule, FormBuilderComponent],
+  imports: [CommonModule, FormsModule, FormBuilderComponent, FormulaBadgeComponent],
   templateUrl: './kpi-manage.html'
 })
 export class KpiManageComponent implements OnInit {
@@ -754,7 +755,54 @@ export class KpiManageComponent implements OnInit {
     });
   }
 
+  // รหัสของตัวชี้วัด (modal เพิ่ม/แก้ไข): เพิ่มใหม่ = ระบบสร้างให้อัตโนมัติ (codeAuto) จนกว่าผู้ใช้จะพิมพ์แก้เอง
+  codeAuto = false;
+  showCodeFields = false;
+  codeSuggestLoading = false;
+
+  // ชื่อตัวชี้วัดอื่นที่ใช้ชื่อตาราง (table_process) เดียวกับที่กรอกอยู่ — null = ไม่ซ้ำ (เตือนเฉยๆ ไม่บล็อก: ข้อมูลเดิมมีที่ตั้งใจใช้ร่วมกัน)
+  get tableProcessDuplicateName(): string | null {
+    const tp = String(this.currentItem?.table_process || '').trim().toLowerCase();
+    if (!tp || this.activeTab !== 'indicators') return null;
+    const dup = this.indicators.find((i: any) =>
+      String(i.table_process || '').trim().toLowerCase() === tp && Number(i.id) !== Number(this.currentItem?.id));
+    return dup ? String(dup.kpi_indicators_name || '') : null;
+  }
+
+  // ขอรหัสที่ระบบแนะนำ (ตามหน่วยงานที่เลือก) มาแสดงตัวอย่าง — รหัสจริงสร้างที่ backend ตอนบันทึกอีกครั้ง (กันชนกัน)
+  refreshSuggestedCodes() {
+    if (this.isEditMode || !this.codeAuto || this.activeTab !== 'indicators') return;
+    this.codeSuggestLoading = true;
+    this.authService.suggestIndicatorCode(this.currentItem?.dept_id ?? null).subscribe({
+      next: (res: any) => {
+        this.codeSuggestLoading = false;
+        if (res?.success && this.showModal && this.codeAuto && !this.isEditMode) {
+          this.currentItem.table_process = res.data.table_process;
+          this.currentItem.kpi_indicators_code = res.data.kpi_indicators_code;
+        }
+        this.cdr.detectChanges();
+      },
+      error: () => { this.codeSuggestLoading = false; this.cdr.detectChanges(); }
+    });
+  }
+
+  onDeptChangeInModal() {
+    this.refreshSuggestedCodes();
+  }
+
+  onCodeManualEdit() {
+    this.codeAuto = false;
+  }
+
+  useSuggestedCodes() {
+    this.codeAuto = true;
+    this.refreshSuggestedCodes();
+  }
+
   openModal(item: any = null) {
+    this.codeAuto = !item && this.activeTab === 'indicators';
+    this.showCodeFields = false;
+    this.codeSuggestLoading = false;
     this.formulaTestMonths = {};
     this.formulaTestTarget = String(item?.target_percentage ?? '');
     this.formulaTestPrevMonths = {};
@@ -792,6 +840,7 @@ export class KpiManageComponent implements OnInit {
     }
     this.rebuildMainForModal();
     this.showModal = true;
+    this.refreshSuggestedCodes();
   }
 
   // คัดลอกตัวชี้วัดไปปีใหม่ — เปิด modal พร้อม pre-fill ข้อมูลเดิม แต่บันทึกเป็นแถวใหม่ (กันย้อนเปลี่ยนชื่อของปีเก่า)
@@ -801,6 +850,7 @@ export class KpiManageComponent implements OnInit {
     delete this.currentItem.id;        // ตัด id ออก กัน saveItem() หลุดไปอัปเดตแถวเดิม
     this.currentItem.kpi_indicators_name = (item.kpi_indicators_name || '') + ' (คัดลอก)'; // ชื่อชั่วคราว — ต้องแก้ก่อนบันทึก
     this._cloneSourceId = item.id;
+    this.showCodeFields = true;
   }
 
   // เมื่อเลือกยุทธศาสตร์ → กรอง main_indicators dropdown
@@ -847,6 +897,11 @@ export class KpiManageComponent implements OnInit {
       payload.required_off_types = payload.evaluation_mode === 'any_one' && this.selectedOffTypes.length > 0
         ? this.selectedOffTypes
         : null;
+      // รหัสอัตโนมัติ: ส่งค่าว่างให้ backend สร้างรหัสจริงตอนบันทึก (ค่าที่แสดงเป็นเพียงตัวอย่าง อาจมีคนอื่นใช้ลำดับนั้นไปก่อน)
+      if (!this.isEditMode && this.codeAuto) {
+        payload.table_process = '';
+        payload.kpi_indicators_code = '';
+      }
       observable = this.isEditMode ? this.authService.updateIndicator(id, payload) : this.authService.createIndicator(payload);
     } else if (this.activeTab === 'main-indicators') {
       observable = this.isEditMode ? this.authService.updateMainIndicator(id, this.currentItem) : this.authService.createMainIndicator(this.currentItem);
@@ -892,7 +947,7 @@ export class KpiManageComponent implements OnInit {
                 }
               });
             } else {
-              Swal.fire('สำเร็จ', 'บันทึกข้อมูลเรียบร้อย', 'success');
+              Swal.fire('สำเร็จ', res.table_process ? `บันทึกข้อมูลเรียบร้อย (ชื่อตาราง: ${res.table_process})` : 'บันทึกข้อมูลเรียบร้อย', 'success');
             }
           }
           this.cdr.detectChanges();

@@ -11,11 +11,13 @@ import { InitScrollLeftDirective } from './init-scroll-left.directive';
 import { CriteriaTextPipe } from '../shared/criteria-text.pipe';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import { activeFormula, validateFormula, evaluateFormula } from '../shared/kpi-formula';
+import { FormulaBadgeComponent } from '../shared/formula-badge';
+import { indicatorAllowsHostype, unionHostypes } from '../shared/indicator-scope';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, NgApexchartsModule, InitScrollLeftDirective, CriteriaTextPipe],
+  imports: [CommonModule, FormsModule, RouterModule, NgApexchartsModule, InitScrollLeftDirective, CriteriaTextPipe, FormulaBadgeComponent],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css'
 })
@@ -2134,6 +2136,13 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   openAddModal() {
+    this._addKpiTemplate = null;
+    this.newKpiList = [];
+    this.addKpiSelectedIds = new Set<number>();
+    this.addKpiSelMains = [];
+    this.addKpiSearch = '';
+    this.addKpiShowMonths = false;
+    this._addKpiDefaultAll = !(this.isAdmin || this.isLocalAdmin);
     this.calculateAddKpiYears();
     if (this.addKpiYears.includes(this.selectedYear)) {
       this.addKpiSelectedYear = this.selectedYear;
@@ -2241,7 +2250,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   addKpiHosTypeLabel(): string {
     if (this.addKpiSelHosTypes.length === 0) return 'ประเภท: ทั้งหมด';
     if (this.addKpiSelHosTypes.length === 1) {
-      const ht = (this.hosTypeList || []).find((x: any) => x.hostypecode === this.addKpiSelHosTypes[0]);
+      const ht = this.addKpiAllHosTypes.find((x: any) => x.hostypecode === this.addKpiSelHosTypes[0]);
       return ht?.hostypename || this.addKpiSelHosTypes[0];
     }
     return `ประเภท: ${this.addKpiSelHosTypes.length} รายการ`;
@@ -2306,11 +2315,55 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private rebuildAddKpiHospitals() {
     let filtered = this.addKpiHospitalList;
+    // ประเภทหน่วยบริการที่ตั้งไว้ของตัวชี้วัดที่เลือก (null = ไม่จำกัด) — รายการหน่วยบริการ/ตัวกรองประเภทต้องตรงกับค่านี้
+    const allowed = this.addKpiAllowedHostypes;
+    if (allowed) {
+      this.addKpiSelHosTypes = this.addKpiSelHosTypes.filter(c => allowed.includes(String(c)));
+      filtered = filtered.filter((h: any) => !h.hostype || allowed.includes(String(h.hostype)));
+    }
     if (this.addKpiSelDistricts.length) filtered = filtered.filter((h: any) => this.addKpiSelDistricts.includes(h.distid));
     if (this.addKpiSelHosTypes.length) filtered = filtered.filter((h: any) => this.addKpiSelHosTypes.includes(h.hostype));
     this.addKpiFilteredHospitals = filtered;
     // เอา target ที่ไม่อยู่ใน filtered ออก (กันค้าง)
     this.addKpiSelHospcodes = this.addKpiSelHospcodes.filter(hc => filtered.some((h: any) => h.hoscode === hc));
+  }
+
+  // ---- เพิ่มตัวชี้วัดให้หน่วยบริการ: ค้นหา / ช่องรายเดือน / ขอบเขตประเภทหน่วยบริการของตัวชี้วัดที่เลือก ----
+  addKpiSearch = '';
+  addKpiShowMonths = false;          // ซ่อนช่องผลงาน 12 เดือนเป็นค่าเริ่มต้น (ส่วนใหญ่เพิ่มตัวชี้วัดก่อน แล้วบันทึกผลงานทีหลัง)
+  addKpiTypeHiddenCount = 0;         // ตัวชี้วัดที่ซ่อนเพราะไม่ได้ตั้งไว้สำหรับประเภทของหน่วยบริการที่เลือก
+  private _addKpiTemplate: any[] | null = null;
+  private _addKpiDefaultAll = false; // ผู้ใช้ทั่วไป (หน่วยบริการเดียว): เลือกทุกตัวให้ตอนเปิดครั้งแรก
+
+  get addKpiAllHosTypes(): any[] {
+    return (this._allHosTypes && this._allHosTypes.length) ? this._allHosTypes : (this.hosTypeList || []);
+  }
+  get addKpiSelectedItems(): any[] {
+    return this.newKpiList.filter((i: any) => this.addKpiSelectedIds.has(Number(i.indicator_id)));
+  }
+  /** ประเภทหน่วยบริการ (รวม) ที่ตัวชี้วัดที่เลือกตั้งไว้ — null = ไม่จำกัด (ยังไม่เลือก หรือมีตัวที่ใช้ได้ทุกประเภท) */
+  get addKpiAllowedHostypes(): string[] | null {
+    if (!(this.isAdmin || this.isLocalAdmin)) return null;
+    return unionHostypes(this.addKpiSelectedItems);
+  }
+  get addKpiHosTypeOptions(): any[] {
+    const allowed = this.addKpiAllowedHostypes;
+    return allowed ? (this.hosTypeList || []).filter((ht: any) => allowed.includes(String(ht.hostypecode))) : (this.hosTypeList || []);
+  }
+  addKpiAllowedHostypeNames(): string {
+    const allowed = this.addKpiAllowedHostypes || [];
+    return allowed.map(c => this.addKpiAllHosTypes.find((ht: any) => String(ht.hostypecode) === c)?.hostypename || c).join(', ');
+  }
+  addKpiHostypeOf(hoscode: string): string {
+    const h = (this.addKpiHospitalList || []).find((x: any) => x.hoscode === hoscode);
+    return h?.hostype ? String(h.hostype) : '';
+  }
+  // เลือก/ยกเลิกตัวชี้วัด → ปรับรายการหน่วยบริการให้ตรงประเภทที่ตั้งไว้ แล้วสร้างรายการตัวชี้วัดใหม่ (เป้าหมายอาจเปลี่ยน)
+  private onAddKpiSelectionChange() {
+    if (!(this.isAdmin || this.isLocalAdmin)) return;
+    const before = this.addKpiSelHospcodes.length;
+    this.rebuildAddKpiHospitals();
+    if (this.addKpiSelHospcodes.length !== before && this._addKpiTemplate) this.buildAddKpiList(this._addKpiTemplate);
   }
 
   // หน่วยบริการปลายทางทั้งหมด — admin = ที่เลือก, user = ของตัวเอง
@@ -2334,9 +2387,12 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   loadAddKpiList() {
-    const targets = this.addKpiTargetHospcodes;
-    // hospcode อ้างอิงสำหรับเช็ค "มีอยู่แล้ว" — ใช้ได้เมื่อเลือกหน่วยบริการเดียว
-    const singleTarget = targets.length === 1 ? targets[0] : '';
+    if (this._addKpiTemplate) {
+      this.buildAddKpiList(this._addKpiTemplate);
+      this.showAddModal = true;
+      this.cdr.detectChanges();
+      return;
+    }
     Swal.fire({
       title: 'กำลังโหลดข้อมูล...',
       allowOutsideClick: false,
@@ -2345,53 +2401,8 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     this.authService.getKpiTemplate().subscribe({
       next: (res) => {
         if (res.success) {
-          // existingIds — เช็คเฉพาะกรณีเลือกหน่วยบริการเดียว (หลายหน่วย backend skip ให้เอง)
-          const existingIds = new Set(
-            this.kpiData
-              .filter(k => {
-                const yearMatch = String(k.year_bh) === String(this.addKpiSelectedYear);
-                if ((this.isAdmin || this.isLocalAdmin)) {
-                  return singleTarget ? (yearMatch && k.hospcode === singleTarget) : false;
-                }
-                return yearMatch; // Non-admin: server already filters by hospcode
-              })
-              .map(k => Number(k.indicator_id))
-          );
-
-          // กรองตัวชี้วัดตามหน่วยงาน (multi-select)
-          let allForDept = res.data;
-          if (this.isAdmin || this.isLocalAdmin) {
-            if (this.addKpiSelDepts.length > 0) {
-              allForDept = allForDept.filter((item: any) => this.addKpiSelDepts.includes(String(item.dept_id)));
-            }
-          } else if (this.currentUser?.dept_name) {
-            // user ทั่วไป → กรองตาม dept ตัวเอง
-            allForDept = allForDept.filter((item: any) => item.dept_name === this.currentUser.dept_name);
-          }
-
-          // คำนวณจำนวนทั้งหมด vs มีอยู่แล้ว vs ยังไม่มี
-          this.addKpiTotalTemplateCount = allForDept.length;
-          // ถ้าเลือกหน่วยบริการเดียว → ตัดที่มีอยู่แล้วออก / หลายหน่วย → แสดงทั้งหมด
-          const available = (singleTarget || (!this.isAdmin && !this.isLocalAdmin))
-            ? allForDept.filter((item: any) => !existingIds.has(Number(item.indicator_id)))
-            : allForDept;
-          this.addKpiExistingCount = this.addKpiTotalTemplateCount - available.length;
-
-          this.newKpiList = available.map((item: any) => ({
-            ...item,
-            year_bh: this.addKpiSelectedYear,
-            hospcode: singleTarget,
-            target_value: item.target_percentage != null ? String(item.target_percentage) : '',
-            oct: '', nov: '', dece: '', jan: '', feb: '', mar: '',
-            apr: '', may: '', jun: '', jul: '', aug: '', sep: '',
-            total_actual: 0,
-            last_actual: '',
-            _original: { target_value: '', oct: '', nov: '', dece: '', jan: '', feb: '', mar: '', apr: '', may: '', jun: '', jul: '', aug: '', sep: '' }
-          }));
-          // สร้างรายการหมวดหมู่หลักสำหรับ filter + default เลือกทุกรายการ
-          this.addKpiMainList = Array.from(new Set<string>(this.newKpiList.map((i: any) => i.main_indicator_name).filter(Boolean))).sort();
-          this.addKpiSelectedIds = new Set(this.newKpiList.map((i: any) => Number(i.indicator_id)));
-          this.addKpiSelMains = [];   // ว่าง = แสดงทุกหมวดหมู่
+          this._addKpiTemplate = res.data || [];
+          this.buildAddKpiList(this._addKpiTemplate!);
           Swal.close();
           if (!this.showAddModal) {
             setTimeout(() => {
@@ -2412,17 +2423,98 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
+  // สร้างรายการตัวชี้วัดที่เพิ่มได้ จากแม่แบบ + ตัวกรองปัจจุบัน — คงค่าที่กรอกไว้/รายการที่ติ๊กไว้เดิม
+  private buildAddKpiList(template: any[]) {
+    const adminMode = this.isAdmin || this.isLocalAdmin;
+    const targets = this.addKpiTargetHospcodes;
+    // hospcode อ้างอิงสำหรับเช็ค "มีอยู่แล้ว" — ใช้ได้เมื่อเลือกหน่วยบริการเดียว
+    const singleTarget = targets.length === 1 ? targets[0] : '';
+    // existingIds — เช็คเฉพาะกรณีเลือกหน่วยบริการเดียว (หลายหน่วย backend skip ให้เอง)
+    const existingIds = new Set(
+      this.kpiData
+        .filter(k => {
+          const yearMatch = String(k.year_bh) === String(this.addKpiSelectedYear);
+          if (adminMode) return singleTarget ? (yearMatch && k.hospcode === singleTarget) : false;
+          return yearMatch; // Non-admin: server already filters by hospcode
+        })
+        .map(k => Number(k.indicator_id))
+    );
+
+    // กรองตัวชี้วัดตามหน่วยงาน (multi-select)
+    let allForDept = template;
+    if (adminMode) {
+      if (this.addKpiSelDepts.length > 0) {
+        allForDept = allForDept.filter((item: any) => this.addKpiSelDepts.includes(String(item.dept_id)));
+      }
+    } else if (this.currentUser?.dept_name) {
+      // user ทั่วไป → กรองตาม dept ตัวเอง
+      allForDept = allForDept.filter((item: any) => item.dept_name === this.currentUser.dept_name);
+    }
+
+    // เลือกหน่วยบริการแล้ว → ซ่อนตัวชี้วัดที่ไม่ได้ตั้งไว้สำหรับประเภทของหน่วยบริการที่เลือกเลยสักแห่ง (ตัวที่ติ๊กไว้แล้วไม่ซ่อน)
+    const targetTypes = adminMode ? Array.from(new Set(targets.map(hc => this.addKpiHostypeOf(hc)).filter(Boolean))) : [];
+    const typeOk = targetTypes.length
+      ? allForDept.filter((item: any) => this.addKpiSelectedIds.has(Number(item.indicator_id)) || targetTypes.some(t => indicatorAllowsHostype(item, t)))
+      : allForDept;
+    this.addKpiTypeHiddenCount = allForDept.length - typeOk.length;
+
+    // คำนวณจำนวนทั้งหมด vs มีอยู่แล้ว vs ยังไม่มี
+    this.addKpiTotalTemplateCount = allForDept.length;
+    // ถ้าเลือกหน่วยบริการเดียว → ตัดที่มีอยู่แล้วออก / หลายหน่วย → แสดงทั้งหมด
+    const available = (singleTarget || !adminMode)
+      ? typeOk.filter((item: any) => !existingIds.has(Number(item.indicator_id)))
+      : typeOk;
+    this.addKpiExistingCount = typeOk.length - available.length;
+
+    const valueFields = ['target_value', 'oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'total_actual', 'last_actual'];
+    const prevRows = new Map<number, any>(this.newKpiList.map((i: any) => [Number(i.indicator_id), i]));
+    this.newKpiList = available.map((item: any) => {
+      const row: any = {
+        ...item,
+        year_bh: this.addKpiSelectedYear,
+        hospcode: singleTarget,
+        target_value: item.target_percentage != null ? String(item.target_percentage) : '',
+        oct: '', nov: '', dece: '', jan: '', feb: '', mar: '',
+        apr: '', may: '', jun: '', jul: '', aug: '', sep: '',
+        total_actual: 0,
+        last_actual: '',
+        _original: { target_value: '', oct: '', nov: '', dece: '', jan: '', feb: '', mar: '', apr: '', may: '', jun: '', jul: '', aug: '', sep: '' }
+      };
+      const prev = prevRows.get(Number(item.indicator_id));
+      if (prev) valueFields.forEach(f => row[f] = prev[f]);   // คงค่าที่ผู้ใช้กรอกไว้ก่อนเปลี่ยนตัวกรอง
+      return row;
+    });
+    // รายการหมวดหมู่หลักสำหรับ filter
+    this.addKpiMainList = Array.from(new Set<string>(this.newKpiList.map((i: any) => i.main_indicator_name).filter(Boolean))).sort();
+    this.addKpiSelMains = this.addKpiSelMains.filter(m => this.addKpiMainList.includes(m));   // ว่าง = แสดงทุกหมวดหมู่
+    // การเลือก: admin เริ่มจากไม่เลือก (เลือกเฉพาะที่ต้องการ) / ผู้ใช้หน่วยบริการเดียว เลือกทุกตัวให้ตอนเปิดครั้งแรก — หลังจากนั้นคงที่ติ๊กไว้
+    const ids = new Set<number>(this.newKpiList.map((i: any) => Number(i.indicator_id)));
+    if (this._addKpiDefaultAll) {
+      this.addKpiSelectedIds = ids;
+      this._addKpiDefaultAll = false;
+    } else {
+      this.addKpiSelectedIds = new Set<number>(Array.from(this.addKpiSelectedIds).filter(id => ids.has(id)));
+    }
+  }
+
   closeAddModal() {
     this.showAddModal = false;
     this.addKpiOpenDropdown = '';
     this.addKpiSelMains = [];
+    this.addKpiSearch = '';
     this.cdr.detectChanges();
   }
 
   // === Add-KPI filter + selection helpers ===
   get filteredNewKpiList(): any[] {
-    if (this.addKpiSelMains.length === 0) return this.newKpiList;
-    return this.newKpiList.filter((i: any) => this.addKpiSelMains.includes(i.main_indicator_name));
+    let list = this.newKpiList;
+    if (this.addKpiSelMains.length > 0) list = list.filter((i: any) => this.addKpiSelMains.includes(i.main_indicator_name));
+    const q = String(this.addKpiSearch || '').trim().toLowerCase();
+    if (q) {
+      list = list.filter((i: any) => [i.kpi_indicators_name, i.main_indicator_name, i.dept_name, i.table_process]
+        .some(v => String(v ?? '').toLowerCase().includes(q)));
+    }
+    return list;
   }
 
   // === Category multi-filter (dropdown checkbox) ===
@@ -2448,6 +2540,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     const id = Number(item.indicator_id);
     if (this.addKpiSelectedIds.has(id)) this.addKpiSelectedIds.delete(id);
     else this.addKpiSelectedIds.add(id);
+    this.onAddKpiSelectionChange();
   }
 
   isAllAddKpiSelected(): boolean {
@@ -2459,6 +2552,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     const visible = this.filteredNewKpiList;
     if (this.isAllAddKpiSelected()) visible.forEach((i: any) => this.addKpiSelectedIds.delete(Number(i.indicator_id)));
     else visible.forEach((i: any) => this.addKpiSelectedIds.add(Number(i.indicator_id)));
+    this.onAddKpiSelectionChange();
   }
 
   saveNewKpis() {
@@ -2481,6 +2575,19 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       return months.some(m => { const v = String(item[m] ?? '').trim(); return v && v !== '0'; });
     });
 
+    // จับคู่ตัวชี้วัด × หน่วยบริการ เฉพาะคู่ที่ประเภทหน่วยบริการตรงกับที่ตั้งไว้ในตัวชี้วัด (backend ตรวจซ้ำอีกชั้น)
+    const adminMode = this.isAdmin || this.isLocalAdmin;
+    const jobs = targets.map(hc => ({
+      hc,
+      items: adminMode ? selected.filter((i: any) => indicatorAllowsHostype(i, this.addKpiHostypeOf(hc))) : selected
+    }));
+    const pairCount = jobs.reduce((n, j) => n + j.items.length, 0);
+    const mismatched = targets.length * selected.length - pairCount;
+    if (pairCount === 0) {
+      Swal.fire('แจ้งเตือน', 'ตัวชี้วัดที่เลือกไม่ได้กำหนดไว้สำหรับประเภทของหน่วยบริการที่เลือก', 'warning');
+      return;
+    }
+
     // ชื่อหน่วยบริการปลายทาง (สำหรับแสดงใน confirm)
     const targetNames = targets.map(hc => {
       const h = (this.addKpiHospitalList || []).find((x: any) => x.hoscode === hc);
@@ -2497,6 +2604,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         <p class="text-gray-500 text-xs mt-1">ปีงบประมาณ: <b>${this.addKpiSelectedYear}</b></p>
         <p class="text-gray-600 mt-2 font-semibold">หน่วยบริการปลายทาง: ${targets.length} แห่ง</p>
         <div class="text-xs text-gray-500 mt-1 max-h-32 overflow-auto bg-gray-50 rounded p-2">${targetListHtml}</div>
+        ${mismatched > 0 ? `<p class="text-[11px] text-cyan-700 bg-cyan-50 border border-cyan-200 rounded p-1.5 mt-2">ข้าม <b>${mismatched.toLocaleString()}</b> คู่ ที่ประเภทหน่วยบริการไม่ตรงกับที่ตั้งไว้ในตัวชี้วัด (บันทึกจริง ${pairCount.toLocaleString()} คู่)</p>` : ''}
         <p class="text-[11px] text-gray-400 mt-2">* ตัวชี้วัดที่มีอยู่แล้วในแต่ละหน่วยบริการจะถูกข้ามอัตโนมัติ</p>
       </div>`,
       icon: 'question',
@@ -2506,12 +2614,13 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       cancelButtonText: 'ยกเลิก'
     }).then((result) => {
       if (result.isConfirmed) {
-        this.executeAddKpiSaveMulti(targets, selected);
+        this.executeAddKpiSaveMulti(jobs.filter(j => j.items.length > 0), mismatched);
       }
     });
   }
 
-  private executeAddKpiSaveMulti(targets: string[], selected: any[]) {
+  private executeAddKpiSaveMulti(jobs: { hc: string; items: any[] }[], skippedTypePairs = 0) {
+    const targets = jobs.map(j => j.hc);
     Swal.fire({
       title: 'กำลังบันทึกข้อมูล...',
       html: `<div class="text-sm text-gray-600">บันทึกไปยัง <b>${targets.length}</b> หน่วยบริการ</div>`,
@@ -2519,7 +2628,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       didOpen: () => Swal.showLoading()
     });
 
-    const dataToSave = selected.map((item: any) => ({
+    const toPayload = (items: any[]) => items.map((item: any) => ({
         indicator_id: item.indicator_id,
         year_bh: this.addKpiSelectedYear,
         target_value: String(item.target_value ?? '').trim(),
@@ -2528,6 +2637,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         apr: String(item.apr ?? '').trim(), may: String(item.may ?? '').trim(), jun: String(item.jun ?? '').trim(),
         jul: String(item.jul ?? '').trim(), aug: String(item.aug ?? '').trim(), sep: String(item.sep ?? '').trim()
       }));
+    let totalSkippedType = skippedTypePairs;
 
     // บันทึกทีละหน่วยบริการแบบ sequential (กัน DB pool/lock ตึง)
     let totalInserted = 0, totalSkipped = 0, failCount = 0;
@@ -2539,6 +2649,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         let msg = `เพิ่มตัวชี้วัดสำเร็จ ${okCount}/${targets.length} หน่วยบริการ`;
         if (totalInserted) msg += ` — เพิ่มใหม่รวม ${totalInserted} รายการ`;
         if (totalSkipped) msg += ` (ข้ามที่มีอยู่แล้ว ${totalSkipped})`;
+        if (totalSkippedType) msg += ` (ข้ามที่ไม่ตรงประเภทหน่วยบริการ ${totalSkippedType})`;
         if (failCount > 0) {
           Swal.fire('เสร็จสิ้น (มีบางส่วนผิดพลาด)', msg + `<br><span class="text-red-600 text-xs">ล้มเหลว ${failCount} แห่ง: ${errors.slice(0,3).join(', ')}</span>`, 'warning');
         } else {
@@ -2550,10 +2661,11 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         return;
       }
       const hc = targets[idx];
-      this.authService.updateKpiResults(dataToSave, hc, 'setup_insert_new').subscribe({
+      this.authService.updateKpiResults(toPayload(jobs[idx].items), hc, 'setup_insert_new').subscribe({
         next: (res) => {
           if (res.inserted !== undefined) totalInserted += Number(res.inserted) || 0;
           if (res.skipped !== undefined) totalSkipped += Number(res.skipped) || 0;
+          if (res.skipped_type !== undefined) totalSkippedType += Number(res.skipped_type) || 0;
           saveOne(idx + 1);
         },
         error: (err) => {
@@ -3312,7 +3424,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   // badge "สะสม" — is_cumulative=1 → ผลงานล่าสุดคำนวณจาก SUM ทุกเดือนในปีงบ แทนค่าเดือนล่าสุด
-  getCumulativeBadge(item: any): { label: string; title: string; color: string; icon: string } | null {
+  getCumulativeBadge(item: any): { label: string; title: string; color: string; icon: string; formula?: string } | null {
     const formula = activeFormula(item);
     if (formula) {
       // มีสูตร → แสดง badge "สูตร" แทน "สะสม" (สูตรมีลำดับความสำคัญเหนือ is_cumulative)
@@ -3324,7 +3436,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
           ? `\nใช้ข้อมูลปีงบ ${prev.year_bh}: ผลงานปีที่แล้ว = ${prev.result}`
           : `\nสูตรอ้างข้อมูลปีงบ ${prev.year_bh} แต่ยังไม่มีผลงานของปีนั้น`;
       }
-      return { label: 'สูตร', title, color: 'bg-fuchsia-100 text-fuchsia-700 border border-fuchsia-200', icon: 'fa-calculator' };
+      return { label: 'สูตร', title, color: 'bg-fuchsia-100 text-fuchsia-700 border border-fuchsia-200', icon: 'fa-calculator', formula };
     }
     if (Number(item?.is_cumulative) !== 1) return null;
     return { label: 'สะสม', title: 'ผลงานเดือนล่าสุด = ผลรวมสะสมตั้งแต่ตุลาคมถึงเดือนนี้', color: 'bg-violet-100 text-violet-700 border border-violet-200', icon: 'fa-layer-group' };

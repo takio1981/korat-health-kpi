@@ -6,11 +6,12 @@ import { AuthService } from '../services/auth';
 import { CriteriaTextPipe } from '../shared/criteria-text.pipe';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import Swal from 'sweetalert2';
+import { FormulaBadgeComponent } from '../shared/formula-badge';
 
 @Component({
   selector: 'app-export-kpi',
   standalone: true,
-  imports: [CommonModule, FormsModule, CriteriaTextPipe],
+  imports: [CommonModule, FormsModule, CriteriaTextPipe, FormulaBadgeComponent],
   templateUrl: './export-kpi.html'
 })
 export class ExportKpiComponent implements OnInit {

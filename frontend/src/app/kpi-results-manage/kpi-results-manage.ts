@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import Swal from 'sweetalert2';
+import { FormulaBadgeComponent } from '../shared/formula-badge';
 
 // month_bh encoding ที่ระบบใช้จริงทั้งระบบ: 10,11,12,1,2,...,9 (ปีงบเริ่ม ต.ค.=10) — เรียงตามปีงบ (ต.ค. ก่อน)
 const FISCAL_MONTHS = [
@@ -17,7 +18,7 @@ const FISCAL_MONTHS = [
 @Component({
   selector: 'app-kpi-results-manage',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, FormulaBadgeComponent],
   templateUrl: './kpi-results-manage.html'
 })
 export class KpiResultsManageComponent implements OnInit {

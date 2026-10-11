@@ -30,6 +30,9 @@ describe('DashboardComponent', () => {
     http = TestBed.inject(HttpTestingController);
   });
 
+  // การตั้งค่าคอลัมน์หน่วงการบันทึกด้วย timer — ล้างทิ้งหลังแต่ละ test กันยิง API หลัง TestBed ถูกทำลาย
+  afterEach(() => clearTimeout((component as any)._saveColumnsTimer));
+
   it('should create', () => {
     expect(component).toBeTruthy();
   });
@@ -132,5 +135,110 @@ describe('DashboardComponent', () => {
   it('ยังไม่มีข้อย่อยใดบันทึกเลย → ผลงานแสดง "-" (ไม่ใช่ 0)', () => {
     component.subResultList = [{ _target: '100', _actuals: {} }, { _target: '100', _actuals: {} }];
     expect(component.getSubModalAverage().avgActual).toBe('-');
+  });
+
+  // ---- เพิ่มตัวชี้วัดให้หน่วยบริการ (11 ต.ค. 2569) ----
+  describe('หน้าต่างเพิ่มตัวชี้วัดให้หน่วยบริการ', () => {
+    const tpl = (id: number, extra: any = {}) => ({
+      indicator_id: id, kpi_indicators_name: 'ตัวชี้วัด ' + id, main_indicator_name: 'หมวด ก', dept_id: 1, dept_name: 'กลุ่มงาน ก',
+      target_percentage: '80', table_process: 'kpi_t_' + id, ...extra,
+    });
+    const item = (id: number) => component.newKpiList.find((i: any) => Number(i.indicator_id) === id);
+
+    beforeEach(() => {
+      fixture.detectChanges();
+      component.isAdmin = true;
+      component.isLocalAdmin = false;
+      component.kpiData = [];
+      component.hosTypeList = component._allHosTypes = [
+        { hostypecode: '07', hostypename: 'โรงพยาบาลชุมชน' }, { hostypecode: '18', hostypename: 'รพ.สต.' },
+      ];
+      component.addKpiHospitalList = [
+        { hoscode: 'A', hosname: 'รพ.ก', hostype: '07', distid: '3001' },
+        { hoscode: 'B', hosname: 'รพ.สต.ข', hostype: '18', distid: '3001' },
+        { hoscode: 'C', hosname: 'รพ.สต.ค', hostype: '18', distid: '3002' },
+      ];
+      component.addKpiFilteredHospitals = [...component.addKpiHospitalList];
+      component.addKpiSelHospcodes = [];
+      component.addKpiSelHosTypes = [];
+      component.addKpiSelDistricts = [];
+      component.addKpiSelDepts = [];
+      component.addKpiSelectedYear = '2570';
+      component.addKpiSelectedIds = new Set<number>();
+      component.newKpiList = [];
+      (component as any)._addKpiDefaultAll = false;
+      (component as any)._addKpiTemplate = [
+        tpl(1, { evaluation_mode: 'any_one', required_off_types: '["18"]', result_formula: 'SUM(ALL)' }),
+        tpl(2, { evaluation_mode: 'all_required' }),
+        tpl(3, { evaluation_mode: 'any_one', required_off_types: '["07"]', kpi_indicators_name: 'อัตราการคัดกรอง' }),
+      ];
+      component.showAddModal = true;
+      component.loadAddKpiList();
+    });
+
+    // เดิม: เปิดมาติ๊กทุกตัวให้ → ผู้ดูแลกดบันทึกแล้วเพิ่มทุกตัวชี้วัดให้ทุกหน่วยบริการโดยไม่ตั้งใจ
+    it('ผู้ดูแล: เริ่มจากไม่เลือกตัวชี้วัดใด และยังไม่จำกัดประเภทหน่วยบริการ', () => {
+      expect(component.newKpiList.length).toBe(3);
+      expect(component.addKpiSelectedIds.size).toBe(0);
+      expect(component.addKpiAllowedHostypes).toBeNull();
+      expect(component.addKpiHosTypeOptions.length).toBe(2);
+    });
+
+    // เดิม: รายการหน่วยบริการไม่สนใจประเภทที่ตั้งไว้ในตัวชี้วัด — เลือก รพ. ให้ตัวชี้วัดของ รพ.สต. ได้
+    it('เลือกตัวชี้วัด → รายการหน่วยบริการ/ตัวกรองประเภทเหลือเฉพาะประเภทที่ตั้งไว้ และตัดหน่วยบริการที่ไม่ตรงออกจากที่เลือก', () => {
+      component.addKpiSelHospcodes = ['A', 'B'];
+      component.toggleAddKpi(item(1));
+      expect(component.addKpiAllowedHostypes).toEqual(['18']);
+      expect(component.addKpiFilteredHospitals.map((h: any) => h.hoscode)).toEqual(['B', 'C']);
+      expect(component.addKpiSelHospcodes).toEqual(['B']);
+      expect(component.addKpiHosTypeOptions.map((h: any) => h.hostypecode)).toEqual(['18']);
+      expect(component.addKpiAllowedHostypeNames()).toBe('รพ.สต.');
+
+      // เลือกเพิ่มตัวที่ใช้ได้ทุกประเภท → กลับมาไม่จำกัด
+      component.toggleAddKpi(item(2));
+      expect(component.addKpiAllowedHostypes).toBeNull();
+      expect(component.addKpiFilteredHospitals.length).toBe(3);
+    });
+
+    it('เลือกหน่วยบริการก่อน → ซ่อนตัวชี้วัดที่ไม่ได้ตั้งไว้สำหรับประเภทของหน่วยบริการนั้น', () => {
+      component.addKpiSelHospcodes = ['A'];   // รพช. (07)
+      component.onAddKpiHospitalChange();
+      expect(component.newKpiList.map((i: any) => i.indicator_id)).toEqual([2, 3]);
+      expect(component.addKpiTypeHiddenCount).toBe(1);
+    });
+
+    it('เปลี่ยนตัวกรองแล้วคงค่าที่กรอกและรายการที่ติ๊กไว้ + ค้นหาตัวชี้วัดได้', () => {
+      component.toggleAddKpi(item(2));
+      item(2).target_value = '55';
+      component.addKpiSelHospcodes = ['B', 'C'];
+      component.onAddKpiHospitalChange();
+      expect(item(2).target_value).toBe('55');          // เดิม: โหลดใหม่แล้วค่ากลับเป็น 80
+      expect(component.isAddKpiSelected(item(2))).toBe(true);
+
+      component.addKpiSelHospcodes = [];
+      component.onAddKpiHospitalChange();
+      component.addKpiSearch = 'คัดกรอง';
+      expect(component.filteredNewKpiList.map((i: any) => i.indicator_id)).toEqual([3]);
+      component.addKpiSearch = 'KPI_T_1';
+      expect(component.filteredNewKpiList.map((i: any) => i.indicator_id)).toEqual([1]);
+    });
+
+    it('แสดงป้ายสูตรในรายการ และซ่อนช่องผลงานรายเดือนเป็นค่าเริ่มต้น', () => {
+      fixture.detectChanges();
+      const title = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('h3')).find(h => (h.textContent || '').includes('เพิ่มตัวชี้วัดให้หน่วยบริการ'))!;
+      const el = title.closest('.fixed') as HTMLElement;   // เฉพาะหน้าต่างเพิ่มตัวชี้วัด (ตารางหลักมีหัวเดือนอยู่แล้ว)
+      expect(el.querySelector('app-formula-badge i.fa-calculator')).toBeTruthy();
+      expect(el.textContent).toContain('SUM(ALL)');
+      expect(el.textContent).not.toContain('ต.ค.');
+      component.addKpiShowMonths = true;
+      (component as any).cdr.detectChanges();
+      expect(el.textContent).toContain('ต.ค.');
+    });
+  });
+
+  it('ป้าย "สูตร" ในตารางหลักแนบตัวสูตรไว้แสดงต่อท้าย', () => {
+    const badge = component.getCumulativeBadge({ result_formula: 'SUM(ALL)' });
+    expect(badge?.formula).toBe('SUM(ALL)');
+    expect(component.getCumulativeBadge({ is_cumulative: 1 })?.formula).toBeUndefined();
   });
 });

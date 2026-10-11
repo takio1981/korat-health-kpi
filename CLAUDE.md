@@ -264,6 +264,40 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - CRUD `/indicators` POST/PUT/`bulk-import` รับทั้ง 2 ฟิลด์อิสระต่อกัน — audit-log diff message แยก "เป้าหมาย"
   กับ "เกณฑ์" คนละบรรทัด
 
+### รหัสของตัวชี้วัดสร้างอัตโนมัติ (เพิ่ม 11 ต.ค. 2569)
+- ผู้ใช้ไม่ต้องคิดรหัสเองตอนเพิ่มตัวชี้วัด — `suggestIndicatorCodes(conn, deptId)` (server.js) คืน
+  `table_process = kpi_<key>_<ลำดับ 3 หลัก>` โดย `<key>` = `departments.dept_code` ตัวพิมพ์เล็กถ้าเข้า `/^[a-z][a-z0-9]{0,9}$/` (ncd, ems, dh)
+  ไม่งั้น `d<id 2 หลัก>` (dept_code ส่วนใหญ่เป็นภาษาไทย), ไม่เลือกหน่วยงาน = `gen` — ลำดับ = ค่าสูงสุดของ prefix เดียวกัน + 1
+  และ `kpi_indicators_code` = table_process แบบขีดกลาง (ตามรูปแบบข้อมูลเดิม)
+- `GET /indicators/suggest-code?dept_id=` (requireAction kpi-manage/add) ใช้แสดงตัวอย่างใน modal เท่านั้น — **รหัสจริงสร้างที่
+  `POST /indicators`** เมื่อ `table_process` ว่าง (frontend ส่งค่าว่างเมื่ออยู่โหมดอัตโนมัติ `codeAuto` กันลำดับชนกันระหว่างผู้ใช้ 2 คน)
+  response คืน `table_process` + `kpi_indicators_code` ที่ใช้จริง — กรอกเองมา = ใช้ค่าที่กรอก ไม่ทับ
+- `kpi_indicators_id` ("รหัสอ้างอิง") **ไม่สร้างให้** — ข้อมูลจริงคือเลขรายงานของ KHD (ตรงกับ `khd_report_id` 134/174 ตัว) ใช้เฉพาะตัวที่มาจาก KHD
+- ชื่อตารางซ้ำ = **เตือนเฉยๆ ไม่บล็อก** (`tableProcessDuplicateName` ใน kpi-manage.ts) — มีข้อมูลเดิมที่ใช้ตารางร่วมกันโดยตั้งใจ (คัดลอกข้ามปี)
+  และปุ่ม "คัดลอก" คงรหัสของตัวต้นทางไว้ (ไม่เข้าโหมดอัตโนมัติ)
+- Test: `api/tests/indicator-codes-scope.test.js`, `kpi-manage.spec.ts`
+
+### เพิ่มตัวชี้วัดให้หน่วยบริการ ต้องตรงประเภทหน่วยบริการที่ตั้งไว้ (เพิ่ม 11 ต.ค. 2569)
+- กฎเดียว 2 สำเนาที่ต้องตรงกัน: `indicatorAllowsHostype(ind, hostype)` ใน `api/server.js` กับ
+  `frontend/src/app/shared/indicator-scope.ts` — `evaluation_mode='any_one'` + `required_off_types` มีรายการ → เฉพาะประเภทนั้น,
+  กรณีอื่น (all_required / ไม่ได้ตั้ง / JSON เสีย) → ทุกประเภท
+- Backend เป็นด่านจริง: `/update-kpi` โหมด `setup_insert_new` ข้ามคู่ตัวชี้วัด×หน่วยบริการที่ประเภทไม่ตรง (นับใน `skipped_type` แยกจาก
+  `skipped` = มีอยู่แล้ว) | `GET /kpi-template` คืน `evaluation_mode, required_off_types, result_formula, is_cumulative` และกรองตามประเภท
+  หน่วยบริการของผู้ใช้ใน `ROLE_SCOPE_HOSPCODE`
+- Dashboard modal (`dashboard.ts`): `addKpiAllowedHostypes` (= `unionHostypes()` ของตัวที่ติ๊ก, null = ไม่จำกัด) จำกัดรายการหน่วยบริการ +
+  ตัวกรองประเภทใน `rebuildAddKpiHospitals()`; `buildAddKpiList()` ซ่อนตัวชี้วัดที่ไม่ตรงประเภทของหน่วยบริการที่เลือก (ตัวที่ติ๊กไว้แล้วไม่ซ่อน —
+  กันตัวที่เพิ่งติ๊กหายเอง), คงค่าที่กรอก/รายการที่ติ๊กเมื่อเปลี่ยนตัวกรอง, แม่แบบโหลดครั้งเดียวต่อการเปิด modal (`_addKpiTemplate`)
+  — ผู้ดูแล (isAdmin/isLocalAdmin) เริ่มจาก**ไม่เลือกตัวใด** (เดิมเลือกทุกตัว เสี่ยงเพิ่มทุกตัวให้ทุกหน่วยโดยไม่ตั้งใจ)
+- ⚠️ โหมดอื่นของ `/update-kpi` และ `/bulk-add-kpi` ไม่ได้ใช้กฎนี้ (`/bulk-add-kpi` มี `resolveIndicatorHostypes()` ของตัวเองอยู่แล้ว)
+
+### ป้ายสูตรในทุกหน้าที่มีรายชื่อตัวชี้วัด
+- `<app-formula-badge [formula]="x.result_formula">` (`frontend/src/app/shared/formula-badge.ts`) — ไอคอน `fa-calculator` + ตัวสูตร
+  (fuchsia, ตัดด้วย truncate + title = สูตรเต็ม), ไม่มีสูตร = ไม่แสดง — ใช้ใน dashboard (modal เพิ่มตัวชี้วัด), kpi-manage, chart,
+  report ทุกแถบ, export-kpi, form-builder, kpi-setup, kpi-results-manage | ตารางหลักของ dashboard ใช้ badge "สูตร" เดิม
+  (`getCumulativeBadge()` คืน `formula` เพิ่ม → แสดง "สูตร: <ตัวสูตร>")
+- **endpoint ใหม่ที่คืนรายชื่อตัวชี้วัดต้อง SELECT `result_formula` มาด้วยเสมอ** (ใน GROUP BY ใช้ `MAX(i.result_formula)`) และหน้าใหม่ที่แสดง
+  ชื่อตัวชี้วัดต้องใส่ `<app-formula-badge>` ต่อท้ายชื่อ
+
 ### ตัวชี้วัดสะสม (is_cumulative)
 - `is_cumulative` TINYINT(1) DEFAULT 0 ใน `kpi_indicators` — 1 = `last_actual` คำนวณจาก **SUM ทุกเดือนที่มีค่า
   ในปีงบ** แทน "ค่าเดือนล่าสุดที่คีย์" ปกติ — ใช้กับตัวชี้วัดนับสะสม (เช่น จำนวนราย/ครั้งสะสม)

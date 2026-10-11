@@ -9,11 +9,12 @@ import { ToastService } from '../services/toast.service';
 import { CriteriaTextPipe } from '../shared/criteria-text.pipe';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import Swal from 'sweetalert2';
+import { FormulaBadgeComponent } from '../shared/formula-badge';
 
 @Component({
   selector: 'app-report',
   standalone: true,
-  imports: [CommonModule, RouterModule, NgApexchartsModule, FormsModule, SkeletonTableComponent, CriteriaTextPipe],
+  imports: [CommonModule, RouterModule, NgApexchartsModule, FormsModule, SkeletonTableComponent, CriteriaTextPipe, FormulaBadgeComponent],
   templateUrl: './report.html',
   styleUrl: './report.css'
 })

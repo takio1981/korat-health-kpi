@@ -827,6 +827,13 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     const qs = includeInactive ? '?include_inactive=1' : '';
     return this.http.get(`${this.apiUrl}/indicators${qs}`, { headers });
   }
+  // รหัสที่ระบบแนะนำสำหรับตัวชี้วัดใหม่ (ชื่อตาราง + รหัสตัวชี้วัด) ตามหน่วยงานที่เลือก
+  suggestIndicatorCode(deptId: number | null): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const qs = deptId ? `?dept_id=${deptId}` : '';
+    return this.http.get(`${this.apiUrl}/indicators/suggest-code${qs}`, { headers });
+  }
   createIndicator(data: any): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

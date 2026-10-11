@@ -6,6 +6,7 @@ import { FormsModule } from '@angular/forms';
 import { ReportComponent } from '../report/report';
 import { ApexBoxComponent } from '../shared/apex-box';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
+import { FormulaBadgeComponent } from '../shared/formula-badge';
 import {
   ChartGroupRow, ChartMonthRow, buildPctBar, buildStatusStack, buildOverallDonut, buildOverallRadial,
   buildMonthlyCombo, buildHeatmap, buildDistribution, pctColor
@@ -16,7 +17,7 @@ type FilterKey = 'selectedYut' | 'selectedMain' | 'selectedDept' | 'selectedIndi
 @Component({
   selector: 'app-chart',
   standalone: true,
-  imports: [CommonModule, RouterModule, FormsModule, ReportComponent, ApexBoxComponent],
+  imports: [CommonModule, RouterModule, FormsModule, ReportComponent, ApexBoxComponent, FormulaBadgeComponent],
   templateUrl: './chart.html'
 })
 export class ChartComponent implements OnInit, OnDestroy {
