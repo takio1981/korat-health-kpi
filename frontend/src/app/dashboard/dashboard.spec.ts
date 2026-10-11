@@ -208,6 +208,14 @@ describe('DashboardComponent', () => {
     });
 
     it('เปลี่ยนตัวกรองแล้วคงค่าที่กรอกและรายการที่ติ๊กไว้ + ค้นหาตัวชี้วัดได้', () => {
+      // เป้าหมายเริ่มต้นจากตัวชี้วัดไม่นับว่า "ถูกแก้" (เดิมทุกแถวขึ้นไฮไลต์สีเหลืองตั้งแต่เปิด) — แก้แล้วจึงไฮไลต์ และคืนค่าได้
+      expect(item(2).target_value).toBe('80');
+      expect(component.isAddKpiModified(item(2), 'target_value')).toBe(false);
+      item(2).target_value = '70';
+      expect(component.isAddKpiRowModified(item(2))).toBe(true);
+      component.undoAddKpiRow(item(2));
+      expect(item(2).target_value).toBe('80');
+
       component.toggleAddKpi(item(2));
       item(2).target_value = '55';
       component.addKpiSelHospcodes = ['B', 'C'];

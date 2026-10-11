@@ -2469,16 +2469,19 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     const valueFields = ['target_value', 'oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'total_actual', 'last_actual'];
     const prevRows = new Map<number, any>(this.newKpiList.map((i: any) => [Number(i.indicator_id), i]));
     this.newKpiList = available.map((item: any) => {
+      // ค่าเริ่มต้นของเป้าหมาย = เป้าหมายที่ตั้งไว้ในตัวชี้วัด — เก็บใน _original ด้วย เพื่อไฮไลต์เฉพาะช่องที่ผู้ใช้แก้จริง
+      // (เดิม _original.target_value = '' ทำให้ทุกแถวขึ้นสีเหลืองเหมือนถูกแก้ทั้งที่ยังไม่ได้แตะ)
+      const defaultTarget = item.target_percentage != null ? String(item.target_percentage) : '';
       const row: any = {
         ...item,
         year_bh: this.addKpiSelectedYear,
         hospcode: singleTarget,
-        target_value: item.target_percentage != null ? String(item.target_percentage) : '',
+        target_value: defaultTarget,
         oct: '', nov: '', dece: '', jan: '', feb: '', mar: '',
         apr: '', may: '', jun: '', jul: '', aug: '', sep: '',
         total_actual: 0,
         last_actual: '',
-        _original: { target_value: '', oct: '', nov: '', dece: '', jan: '', feb: '', mar: '', apr: '', may: '', jun: '', jul: '', aug: '', sep: '' }
+        _original: { target_value: defaultTarget, oct: '', nov: '', dece: '', jan: '', feb: '', mar: '', apr: '', may: '', jun: '', jul: '', aug: '', sep: '' }
       };
       const prev = prevRows.get(Number(item.indicator_id));
       if (prev) valueFields.forEach(f => row[f] = prev[f]);   // คงค่าที่ผู้ใช้กรอกไว้ก่อนเปลี่ยนตัวกรอง
@@ -2704,7 +2707,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   resetAddKpi() {
     Swal.fire({
       title: 'คืนค่าเริ่มต้น',
-      text: 'ต้องการคืนค่าข้อมูลทั้งหมดเป็น 0 ใช่หรือไม่?',
+      text: 'ต้องการคืนค่าที่แก้ไขทั้งหมดกลับเป็นค่าเริ่มต้น (เป้าหมายตามที่ตั้งไว้ในตัวชี้วัด และล้างผลงานรายเดือน) ใช่หรือไม่?',
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#f59e0b',
