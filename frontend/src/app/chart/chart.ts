@@ -96,6 +96,9 @@ export class ChartComponent implements OnInit, OnDestroy {
           this.options = res.options;
           if (first && res.options.years.length && !res.options.years.includes(this.selectedYear)) {
             this.selectedYear = res.options.years[0];
+            // แจ้ง change detection ทันทีที่เปลี่ยนปี — ไม่งั้นค่าที่ผูกกับ template เปลี่ยนโดยไม่มีการวาดใหม่ (NG0100 แบบสุ่มในโหมด dev
+            // พบจากการทดสอบหน้าจอจริง 11 ต.ค. 2569 เมื่อปีงบปัจจุบัน 2570 ยังไม่มีข้อมูล)
+            this.cdr.detectChanges();
             this.loadChartStats();
             return;
           }

@@ -94,6 +94,16 @@ describe('ChartComponent', () => {
     expect(component.data.year_bh).toBe('2569');
   });
 
+  // Regression (11 ต.ค. 2569): ถอยปีงบแล้วไม่แจ้ง change detection → NG0100 แบบสุ่มบนหน้าจอจริง
+  it('ถอยไปปีล่าสุดแล้ว template ต้องถูกวาดใหม่ทันที (ไม่ค้างค่าปีเดิม)', () => {
+    component.selectedYear = '2599';
+    fixture.detectChanges();
+    component.loadChartStats(true);
+    http.expectOne(r => r.url.includes('/report/chart-stats') && r.url.includes('year_bh=2599')).flush(response(['2569']));
+    expect(component.selectedYear).toBe('2569');
+    expect(() => fixture.checkNoChanges()).not.toThrow();
+  });
+
   it('ส่งตัวกรองทุกมิติไปที่ API และเปลี่ยนยุทธศาสตร์แล้วล้างหมวดหมู่/ตัวชี้วัด', () => {
     component.selectedYear = '2569';
     component.selectedMain = '1'; component.selectedIndicator = '5';
