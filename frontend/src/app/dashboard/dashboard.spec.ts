@@ -110,4 +110,27 @@ describe('DashboardComponent', () => {
     expect(component.visibleMonthKeys.length).toBe(0);
     expect(component.colVisible['target']).toBe(true);
   });
+
+  // Regression (11 ต.ค. 2569): ผลงานจากตัวชี้วัดย่อยต้องหารด้วยจำนวนข้อย่อยทั้งหมด (ข้อที่ไม่ได้บันทึก = 0)
+  // เดิมหารเฉพาะข้อที่มีการบันทึก → บันทึก 2 จาก 3 ข้อ (90, 60) ได้ 75 แทน 50
+  it('สรุปในหน้าต่างบันทึกผลงานย่อย หารด้วยจำนวนข้อย่อยทั้งหมด', () => {
+    component.subResultList = [
+      { _target: '100', _actuals: { 10: '90', 11: '' } },
+      { _target: '80', _actuals: { 10: '60', 11: '' } },
+      { _target: '60', _actuals: { 10: '', 11: '' } },
+    ];
+    const sum = component.getSubModalAverage();
+    expect(sum.avgActual).toBe('50');
+    expect(sum.avgTarget).toBe('80');
+    expect(sum.avgPct).toBe('62.50');
+
+    // เดือนล่าสุดที่มีข้อใดข้อหนึ่งบันทึก = เดือนที่ใช้ และยังหารด้วย 3
+    component.subResultList[2]._actuals[11] = '30';
+    expect(component.getSubModalAverage().avgActual).toBe('10');
+  });
+
+  it('ยังไม่มีข้อย่อยใดบันทึกเลย → ผลงานแสดง "-" (ไม่ใช่ 0)', () => {
+    component.subResultList = [{ _target: '100', _actuals: {} }, { _target: '100', _actuals: {} }];
+    expect(component.getSubModalAverage().avgActual).toBe('-');
+  });
 });

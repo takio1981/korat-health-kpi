@@ -356,8 +356,15 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - `kpi_sub_results` — ผลงานย่อย per hospcode×month (UNIQUE: sub+year+hospcode+month)
 - CRUD endpoints: `/sub-indicators` (GET/POST/PUT/DELETE/toggle-active)
 - Result: `GET /sub-results` / `POST /sub-results/upsert` / `DELETE`
-- **Aggregate endpoint**: `GET /sub-results/summary` — **AVG** ต่อ indicator (หารด้วยจำนวน sub)
-  - Return: avg_target, m10-m09 (ต่อเดือน), sub_count
+- **Aggregate**: `loadSubAggregates(conn, {indicatorId, yearBh, hospcode})` (server.js) — ใช้ร่วมทุกจุด: `GET /sub-results/summary`,
+  `performKpiExport`, `checkKpiChanges` (ทั้งโหมดปกติและ `use_sub_indicator_export`) — **ห้ามเขียน SQL AVG แยกเองอีก**
+  - ค่ารายเดือน (m10–m09) = **ผลรวมผลงานข้อย่อย ÷ จำนวนตัวชี้วัดย่อยที่เปิดใช้งานทั้งหมด** (แก้ 11 ต.ค. 2569 ตามที่ผู้ใช้ขอ: ข้อที่ไม่ได้
+    บันทึก = 0 โดยไม่ต้องบันทึก 0 เอง — เดิมใช้ SQL AVG หารเฉพาะข้อที่มีการบันทึก ผลงานสูงเกินจริงเมื่อบันทึกไม่ครบ)
+  - เดือนที่ไม่มีข้อใดบันทึกเลย = null (ห้ามเป็น 0 — ไม่งั้นเดือนในอนาคตเป็น 0 ทั้งหมดและ "เดือนล่าสุด" ผิด) / นับเฉพาะข้อย่อย is_active = 1
+    / ค่าที่ไม่ใช่ตัวเลขไม่นับเป็นผลงาน
+  - avg_target = เฉลี่ยเป้าหมายของข้อย่อยที่มีเป้าหมาย (เป้าหมายที่บันทึกเดือน ต.ค. → ไม่มีใช้ `kpi_sub_indicators.target_percentage`
+    เหมือนที่ modal แสดง) — sub_count = จำนวนข้อย่อยที่เปิดใช้งาน
+  - Frontend `getSubModalAverage()` (การ์ดสรุปใน modal) ใช้ตรรกะเดียวกัน — Test: `api/tests/sub-average.test.js`, `dashboard.spec.ts`
 - Dashboard main row: merge sub summary → override target_value + monthly + last_actual
   - `_mainOriginal` เก็บ raw values ก่อน override
   - `_fromSubSummary` flag = true เมื่อถูก override

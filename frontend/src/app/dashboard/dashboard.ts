@@ -2765,7 +2765,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
           mar: item.mar, apr: item.apr, may: item.may, jun: item.jun, jul: item.jul, aug: item.aug, sep: item.sep
         };
       }
-      // override ด้วยค่าเฉลี่ยจาก sub (หารด้วยจำนวน sub) — format จำนวนเต็ม/2 ทศนิยม
+      // override ด้วยค่าเฉลี่ยจาก sub (ผลรวม ÷ จำนวนข้อย่อยที่เปิดใช้งานทั้งหมด — ข้อที่ไม่ได้บันทึก = 0) — format จำนวนเต็ม/2 ทศนิยม
       if (sum.avg_target != null) item.target_value = this.formatNum(sum.avg_target);
       const monthMap: any = { oct:'m10', nov:'m11', dece:'m12', jan:'m01', feb:'m02', mar:'m03', apr:'m04', may:'m05', jun:'m06', jul:'m07', aug:'m08', sep:'m09' };
       for (const k of Object.keys(monthMap)) {
@@ -2908,17 +2908,23 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       return { avgTarget: '-', avgActual: '-', avgPct: '-', count: 0, metPct: 0 };
     }
     const targets: number[] = [];
-    const actuals: number[] = [];
     for (const s of this.subResultList) {
       const t = parseFloat(String(s._target ?? ''));
       if (isFinite(t) && t !== 0) targets.push(t);
-      const actStr = this.getSubLastActual(s);
-      const a = parseFloat(actStr);
-      if (isFinite(a)) actuals.push(a);
     }
     const avg = (arr: number[]) => arr.length ? arr.reduce((x, y) => x + y, 0) / arr.length : NaN;
     const at = avg(targets);
-    const aa = avg(actuals);
+    // ผลงาน = ค่าเดือนล่าสุดที่มีการบันทึก โดยค่าของเดือน = ผลรวมทุกข้อย่อย ÷ จำนวนข้อย่อยทั้งหมด
+    // (ข้อที่ไม่ได้บันทึกในเดือนนั้นนับเป็น 0) — ต้องตรงกับ loadSubAggregates() ฝั่ง backend
+    let aa = NaN;
+    for (const m of [...this.subMonthColumns].reverse()) {
+      let sum = 0, has = false;
+      for (const s of this.subResultList) {
+        const raw = String(s._actuals?.[m] ?? '').trim();
+        if (/^-?(\d+(\.\d+)?|\.\d+)$/.test(raw)) { sum += parseFloat(raw); has = true; }
+      }
+      if (has) { aa = sum / this.subResultList.length; break; }
+    }
     const pct = (isFinite(at) && at > 0 && isFinite(aa)) ? (aa / at) * 100 : NaN;
     return {
       avgTarget: isFinite(at) ? this.formatNum(at) : '-',

@@ -704,7 +704,7 @@ const SYSTEMS: SopSystem[] = [
     {id:'n4', r:1,c:2,t:'process', l:'Modal: 12 เดือน\n× N sub (ตาราง)'},
     {id:'n5', r:2,c:2,t:'process', l:'POST /sub-results/upsert\n(UNIQUE constraint)'},
     {id:'n6', r:3,c:2,t:'db',      l:'kpi_sub_results\nsub+year+hospcode+month'},
-    {id:'n7', r:2,c:3,t:'process', l:'GET /sub-results/summary\nAVG per indicator/month'},
+    {id:'n7', r:2,c:3,t:'process', l:'GET /sub-results/summary\nผลรวม ÷ จำนวนข้อย่อยทั้งหมด'},
     {id:'n8', r:1,c:3,t:'process', l:'applySubSummaryToKpiData()\noverride main row display'},
     {id:'n9', r:0,c:3,t:'process', l:'Dashboard row\nแสดง AVG target/actual'},
     {id:'ok', r:0,c:4,t:'end',     l:'Export merge\n(sub AVG → empty slots)'},

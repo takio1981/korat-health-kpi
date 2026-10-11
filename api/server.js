@@ -6562,44 +6562,69 @@ apiRouter.get('/sub-results', authenticateToken, async (req, res) => {
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-// GET /sub-results/summary — aggregate ต่อ indicator + hospcode (รวม monthly breakdown)
+// ผลงานตัวชี้วัดหลักจากตัวชี้วัดย่อย — ใช้ร่วมทุกจุด (หน้าบันทึกผลงาน, Export, ตรวจการเปลี่ยนแปลงก่อน Export)
+// หลักการ (11 ต.ค. 2569): ค่ารายเดือน = ผลรวมผลงานของข้อย่อยในเดือนนั้น ÷ "จำนวนตัวชี้วัดย่อยที่เปิดใช้งานทั้งหมด"
+//   → ข้อย่อยที่ไม่ได้บันทึกในเดือนนั้นนับเป็น 0 โดยอัตโนมัติ ผู้ใช้ไม่ต้องบันทึก 0 เอง
+//   (เดิมใช้ SQL AVG ซึ่งหารด้วยจำนวนข้อที่ "มีการบันทึก" เท่านั้น ทำให้ผลงานสูงเกินจริงเมื่อบันทึกไม่ครบทุกข้อ)
+//   เดือนที่ไม่มีข้อย่อยใดบันทึกเลย = null (ไม่ใช่ 0) เพื่อไม่ให้เดือนในอนาคตกลายเป็น 0 ทั้งหมด
+//   นับ/รวมเฉพาะข้อย่อยที่เปิดใช้งาน (is_active = 1) — ตรงกับรายการที่หน้าต่างบันทึกผลงานย่อยแสดง
+// avg_target = เฉลี่ยเป้าหมายของข้อย่อยที่มีเป้าหมาย (เป้าหมายที่บันทึกในเดือน ต.ค. ถ้าไม่มีใช้ค่าตั้งต้นของข้อย่อย — เหมือนที่หน้าต่างแสดง)
+const SUB_AGG_MONTH_KEYS = { 10: 'm10', 11: 'm11', 12: 'm12', 1: 'm01', 2: 'm02', 3: 'm03', 4: 'm04', 5: 'm05', 6: 'm06', 7: 'm07', 8: 'm08', 9: 'm09' };
+function subAggNum(v) {
+    if (v === null || v === undefined) return null;
+    const t = String(v).trim();
+    return /^-?(\d+(\.\d+)?|\.\d+)$/.test(t) ? parseFloat(t) : null;
+}
+async function loadSubAggregates(conn, { indicatorId, yearBh, hospcode } = {}) {
+    const sw = ['is_active = 1'], sp = [];
+    if (indicatorId) { sw.push('indicator_id = ?'); sp.push(indicatorId); }
+    const [subs] = await conn.query(`SELECT id, indicator_id, target_percentage FROM kpi_sub_indicators WHERE ${sw.join(' AND ')}`, sp);
+    if (subs.length === 0) return [];
+    const subsByInd = new Map();
+    for (const su of subs) {
+        if (!subsByInd.has(su.indicator_id)) subsByInd.set(su.indicator_id, []);
+        subsByInd.get(su.indicator_id).push(su);
+    }
+    const w = ['si.is_active = 1'], p = [];
+    if (indicatorId) { w.push('si.indicator_id = ?'); p.push(indicatorId); }
+    if (yearBh) { w.push('sr.year_bh = ?'); p.push(yearBh); }
+    if (hospcode) { w.push('sr.hospcode = ?'); p.push(hospcode); }
+    const [rows] = await conn.query(`
+        SELECT si.indicator_id, sr.sub_indicator_id, sr.hospcode, sr.year_bh, sr.month_bh, sr.target_value, sr.actual_value
+        FROM kpi_sub_results sr
+        JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
+        WHERE ${w.join(' AND ')}`, p);
+    const groups = new Map();
+    for (const r of rows) {
+        const hc = r.hospcode != null ? String(r.hospcode).trim() : '';
+        const mk = SUB_AGG_MONTH_KEYS[Number(r.month_bh)];
+        if (!hc || !mk) continue;
+        const key = `${r.indicator_id}|${hc}|${r.year_bh}`;
+        if (!groups.has(key)) groups.set(key, { indicator_id: r.indicator_id, hospcode: hc, year_bh: r.year_bh, sum: {}, target: new Map() });
+        const g = groups.get(key);
+        const a = subAggNum(r.actual_value);
+        if (a !== null) g.sum[mk] = (g.sum[mk] || 0) + a;
+        if (Number(r.month_bh) === 10) { const t = subAggNum(r.target_value); if (t !== null) g.target.set(r.sub_indicator_id, t); }
+    }
+    const round4 = (n) => Math.round(n * 10000) / 10000;
+    const out = [];
+    for (const g of groups.values()) {
+        const indSubs = subsByInd.get(g.indicator_id) || [];
+        const subCount = indSubs.length;
+        const row = { indicator_id: g.indicator_id, hospcode: g.hospcode, year_bh: g.year_bh, sub_count: subCount };
+        for (const mk of Object.values(SUB_AGG_MONTH_KEYS)) row[mk] = (g.sum[mk] !== undefined && subCount > 0) ? round4(g.sum[mk] / subCount) : null;
+        const targets = indSubs.map(su => g.target.has(su.id) ? g.target.get(su.id) : subAggNum(su.target_percentage)).filter(t => t !== null && t !== 0);
+        row.avg_target = targets.length > 0 ? round4(targets.reduce((x, y) => x + y, 0) / targets.length) : null;
+        out.push(row);
+    }
+    return out;
+}
+
+// GET /sub-results/summary — aggregate ต่อ indicator + hospcode (รวม monthly breakdown) — ดู loadSubAggregates()
 apiRouter.get('/sub-results/summary', authenticateToken, async (req, res) => {
     try {
         const { year_bh, hospcode } = req.query;
-        const conditions = [], params = [];
-        if (year_bh) { conditions.push('sr.year_bh = ?'); params.push(year_bh); }
-        if (hospcode) { conditions.push('sr.hospcode = ?'); params.push(hospcode); }
-        const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
-
-        // Aggregate ต่อ (indicator_id, hospcode, year_bh):
-        // - sub_count: จำนวน sub_indicator ที่เกี่ยวข้อง
-        // - avg_target: AVG target ของแต่ละ sub (หารด้วยจำนวน sub ที่มีค่า)
-        // - m10..m09: AVG actual_value ของ sub แต่ละเดือน (หารด้วยจำนวน sub)
-        const [rows] = await db.query(`
-            SELECT
-                si.indicator_id,
-                sr.hospcode,
-                sr.year_bh,
-                COUNT(DISTINCT si.id) AS sub_count,
-                AVG(CASE WHEN sr.month_bh = 10 THEN CAST(NULLIF(sr.target_value,'') AS DECIMAL(20,4)) END) AS avg_target,
-                AVG(CASE WHEN sr.month_bh = 10 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m10,
-                AVG(CASE WHEN sr.month_bh = 11 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m11,
-                AVG(CASE WHEN sr.month_bh = 12 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m12,
-                AVG(CASE WHEN sr.month_bh = 1  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m01,
-                AVG(CASE WHEN sr.month_bh = 2  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m02,
-                AVG(CASE WHEN sr.month_bh = 3  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m03,
-                AVG(CASE WHEN sr.month_bh = 4  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m04,
-                AVG(CASE WHEN sr.month_bh = 5  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m05,
-                AVG(CASE WHEN sr.month_bh = 6  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m06,
-                AVG(CASE WHEN sr.month_bh = 7  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m07,
-                AVG(CASE WHEN sr.month_bh = 8  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m08,
-                AVG(CASE WHEN sr.month_bh = 9  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m09
-            FROM kpi_sub_results sr
-            JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
-            ${where}
-            GROUP BY si.indicator_id, sr.hospcode, sr.year_bh
-        `, params);
-
+        const rows = await loadSubAggregates(db, { yearBh: year_bh, hospcode });
         res.json({ success: true, data: rows });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
@@ -7709,14 +7734,10 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                 };
                 for (const [, entry] of dataMapSub) {
                     const numericVals = subCols.map(c => entry[c.colName]).filter(v => v !== null && v !== undefined && !isNaN(parseFloat(v))).map(v => parseFloat(v));
-                    entry._avgResult = numericVals.length > 0 ? fmtSub(numericVals.reduce((s, v) => s + v, 0) / numericVals.length) : null;
+                    // หารด้วยจำนวนข้อย่อยทั้งหมด (ข้อที่ไม่ได้บันทึก = 0) — ต้องตรงกับ performKpiExport และ loadSubAggregates()
+                    entry._avgResult = numericVals.length > 0 ? fmtSub(numericVals.reduce((s, v) => s + v, 0) / subCols.length) : null;
                 }
-                const [subTargetRows] = await db.query(
-                    `SELECT hospcode, AVG(CAST(NULLIF(target_value,'') AS DECIMAL(20,4))) AS avg_target
-                     FROM kpi_sub_results WHERE sub_indicator_id IN (${subInds.map(() => '?').join(',')}) AND year_bh = ? AND month_bh = 10
-                     GROUP BY hospcode`,
-                    [...subInds.map(s => s.id), year_bh]
-                );
+                const subTargetRows = await loadSubAggregates(db, { indicatorId: indicator.id, yearBh: year_bh });
                 const targetByHospcodeSub = new Map(subTargetRows.map(r => [String(r.hospcode).trim(), fmtSub(r.avg_target)]));
 
                 const subColNames = subCols.map(c => c.colName);
@@ -7794,26 +7815,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
 
             // เติมค่า AVG จาก kpi_sub_results (เฉพาะ slot ที่ kpi_results ยังไม่มีข้อมูล)
             try {
-                const [subAgg] = await db.query(`
-                    SELECT sr.hospcode,
-                        AVG(CASE WHEN sr.month_bh = 10 THEN CAST(NULLIF(sr.target_value,'') AS DECIMAL(20,4)) END) AS avg_target,
-                        AVG(CASE WHEN sr.month_bh = 10 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m10,
-                        AVG(CASE WHEN sr.month_bh = 11 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m11,
-                        AVG(CASE WHEN sr.month_bh = 12 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m12,
-                        AVG(CASE WHEN sr.month_bh = 1  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m01,
-                        AVG(CASE WHEN sr.month_bh = 2  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m02,
-                        AVG(CASE WHEN sr.month_bh = 3  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m03,
-                        AVG(CASE WHEN sr.month_bh = 4  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m04,
-                        AVG(CASE WHEN sr.month_bh = 5  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m05,
-                        AVG(CASE WHEN sr.month_bh = 6  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m06,
-                        AVG(CASE WHEN sr.month_bh = 7  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m07,
-                        AVG(CASE WHEN sr.month_bh = 8  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m08,
-                        AVG(CASE WHEN sr.month_bh = 9  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m09
-                    FROM kpi_sub_results sr
-                    JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
-                    WHERE si.indicator_id = ? AND sr.year_bh = ?
-                    GROUP BY sr.hospcode
-                `, [indicator.id, year_bh]);
+                const subAgg = await loadSubAggregates(db, { indicatorId: indicator.id, yearBh: year_bh });
                 const fmt = (v) => {
                     if (v === null || v === undefined) return null;
                     const n = parseFloat(v);
@@ -8127,14 +8129,10 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                             .map(c => entry[c.colName])
                             .filter(v => v !== null && v !== undefined && !isNaN(parseFloat(v)))
                             .map(v => parseFloat(v));
-                        entry._avgResult = numericVals.length > 0 ? fmtNum(numericVals.reduce((s, v) => s + v, 0) / numericVals.length) : null;
+                        // หารด้วยจำนวนข้อย่อยทั้งหมด (ข้อที่ไม่ได้บันทึก = 0) — ⚠️ ต้องตรงกับ checkKpiChanges และ loadSubAggregates()
+                        entry._avgResult = numericVals.length > 0 ? fmtNum(numericVals.reduce((s, v) => s + v, 0) / subCols.length) : null;
                     }
-                    const [subTargetRows] = await conn.query(
-                        `SELECT hospcode, AVG(CAST(NULLIF(target_value,'') AS DECIMAL(20,4))) AS avg_target
-                         FROM kpi_sub_results WHERE sub_indicator_id IN (${subInds.map(() => '?').join(',')}) AND year_bh = ? AND month_bh = 10
-                         GROUP BY hospcode`,
-                        [...subInds.map(s => s.id), year_bh]
-                    );
+                    const subTargetRows = await loadSubAggregates(conn, { indicatorId: indicator.id, yearBh: year_bh });
                     const targetByHospcode = new Map(subTargetRows.map(r => [String(r.hospcode).trim(), fmtNum(r.avg_target)]));
 
                     const hasActualDataSub = (entry) => subCols.some(c => entry[c.colName] !== null && entry[c.colName] !== undefined && entry[c.colName] !== '');
@@ -8283,27 +8281,7 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                 // หลักการเดียวกับ /sub-results/summary — AVG actual_value ของ sub แต่ละเดือน + AVG target ของเดือน 10
                 // ถ้า kpi_results มีค่าอยู่แล้ว → ไม่ override (kpi_results มี priority สูงกว่า)
                 try {
-                    const [subAgg] = await conn.query(`
-                        SELECT
-                            sr.hospcode,
-                            AVG(CASE WHEN sr.month_bh = 10 THEN CAST(NULLIF(sr.target_value,'') AS DECIMAL(20,4)) END) AS avg_target,
-                            AVG(CASE WHEN sr.month_bh = 10 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m10,
-                            AVG(CASE WHEN sr.month_bh = 11 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m11,
-                            AVG(CASE WHEN sr.month_bh = 12 THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m12,
-                            AVG(CASE WHEN sr.month_bh = 1  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m01,
-                            AVG(CASE WHEN sr.month_bh = 2  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m02,
-                            AVG(CASE WHEN sr.month_bh = 3  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m03,
-                            AVG(CASE WHEN sr.month_bh = 4  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m04,
-                            AVG(CASE WHEN sr.month_bh = 5  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m05,
-                            AVG(CASE WHEN sr.month_bh = 6  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m06,
-                            AVG(CASE WHEN sr.month_bh = 7  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m07,
-                            AVG(CASE WHEN sr.month_bh = 8  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m08,
-                            AVG(CASE WHEN sr.month_bh = 9  THEN CAST(NULLIF(sr.actual_value,'') AS DECIMAL(20,4)) END) AS m09
-                        FROM kpi_sub_results sr
-                        JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
-                        WHERE si.indicator_id = ? AND sr.year_bh = ?
-                        GROUP BY sr.hospcode
-                    `, [indicator.id, year_bh]);
+                    const subAgg = await loadSubAggregates(conn, { indicatorId: indicator.id, yearBh: year_bh });
 
                     const fmtNum = (v) => {
                         if (v === null || v === undefined) return null;

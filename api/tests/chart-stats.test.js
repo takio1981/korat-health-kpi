@@ -35,7 +35,9 @@ async function addSummary(indicatorId, hospcode, target, last, months = {}) {
 let yutId, mainX, mainY, ind1, ind2, ind3, indCum, indOff;
 
 beforeAll(async () => {
-    ({ app } = require('../server'));
+    let migrationsReady;
+    ({ app, migrationsReady } = require('../server'));
+    await migrationsReady; // รอ migration ตอน startup เสร็จก่อน (กันล้มแบบสุ่มจาก ALTER TABLE ที่ยังรันอยู่)
     db = require('../db');
     await cleanupTestUsers(db);
     const [[d]] = await db.query('SELECT id FROM departments ORDER BY id LIMIT 1');
