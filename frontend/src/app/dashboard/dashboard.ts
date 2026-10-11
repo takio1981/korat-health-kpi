@@ -13,6 +13,8 @@ import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import { activeFormula, validateFormula, evaluateFormula } from '../shared/kpi-formula';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { indicatorAllowsHostype, unionHostypes } from '../shared/indicator-scope';
+import { EXCEL_MONTHS, ChangePlan, EditPerms, buildTemplateAoa, parseImportAoa, planImport, parseClipboardGrid, isMultiCell, planPaste, applyCellChanges, itemKey } from '../shared/kpi-excel';
+import { Anomaly, detectAnomaly } from '../shared/anomaly';
 
 @Component({
   selector: 'app-dashboard',
@@ -1493,9 +1495,11 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
           Object.assign(item, item._mainOriginal);
           item._fromSubSummary = false;
         }
+        item._anomaly = null;
         item._original = { ...item };
       });
       this.isEditing = true;
+      this.loadPrevYearMonths();
       this.authService.setFocusMode(true);
       Swal.fire({
         icon: 'info',
@@ -1649,9 +1653,22 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
            </div>`
         : '';
 
+      // ค่าที่อาจผิดปกติ (เตือนเท่านั้น — ผู้ใช้ยืนยันบันทึกได้)
+      const anomalies = this.anomalyList.filter(a => changedItems.includes(a.item));
+      const escA = (v: any) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as any)[c]);
+      const anomalySection = anomalies.length === 0 ? '' : `
+        <div id="swal-anomaly-box" style="margin-bottom:10px;padding:10px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px">
+          <div style="font-weight:700;color:#b91c1c;margin-bottom:4px"><i class="fas fa-exclamation-triangle"></i> พบค่าที่อาจผิดปกติ ${anomalies.length} ช่อง — กรุณาตรวจสอบก่อนบันทึก</div>
+          <ul style="list-style:disc;margin-left:18px;font-size:12px;color:#7f1d1d;max-height:110px;overflow-y:auto">
+            ${anomalies.slice(0, 20).map(a => `<li><b>${escA(a.item.kpi_indicators_name)}</b>${a.item.hosname ? ' (' + escA(a.item.hosname) + ')' : ''} ${a.monthName} = <b>${escA(a.value)}</b> : ${escA(a.message)}</li>`).join('')}
+            ${anomalies.length > 20 ? `<li>… และอีก ${anomalies.length - 20} ช่อง</li>` : ''}
+          </ul>
+        </div>`;
+
       Swal.fire({
         title: 'ยืนยันการบันทึก',
         html: `<div style="text-align:left;font-size:13px">
+                ${anomalySection}
                 <p style="margin-bottom:8px;font-weight:700;color:#374151">
                   พบการเปลี่ยนแปลง <span style="color:#4f46e5">${rows.length}</span> รายการ จาก ${cleanData.length} ตัวชี้วัด
                 </p>
@@ -3319,6 +3336,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         if (item._original) {
           Object.assign(item, item._original);
         }
+        item._anomaly = null;
       });
       this.cdr.detectChanges();
     };
@@ -3360,6 +3378,206 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     item.last_actual = lastActual;
     item.total_actual = parseFloat(lastActual) || 0;
+    this.refreshAnomalies(item);
+  }
+
+  // =====================================================================================================
+  // เตือนค่าที่อาจผิดปกติ (เช่น พิมพ์ 850 แทน 85) — เตือนเท่านั้น ไม่ห้ามบันทึก | ตรรกะอยู่ใน shared/anomaly.ts
+  // ตรวจเฉพาะช่องที่ถูกแก้ในรอบนี้ (ต่างจาก _original) เทียบกับเดือนอื่นของแถวเดียวกัน → ปีงบที่แล้ว → เป้าหมาย
+  // =====================================================================================================
+  /** ผลงานรายเดือนของปีงบที่แล้ว — key = itemKey(ตัวชี้วัด, หน่วยบริการ, ปีงบของแถวปัจจุบัน) */
+  prevYearMonths = new Map<string, any>();
+
+  /** โหลดผลงานปีงบที่แล้ว (จาก kpi_summary ตามขอบเขตสิทธิ์) ของแถวที่แสดงอยู่ — เรียกตอนเข้าโหมดแก้ไข */
+  loadPrevYearMonths() {
+    this.prevYearMonths = new Map<string, any>();
+    const years = Array.from(new Set(this.filteredData.map(i => String(i.year_bh ?? '')).filter(y => /^\d{4}$/.test(y)))).slice(0, 3);
+    const hospcodes = Array.from(new Set(this.filteredData.map(i => String(i.hospcode ?? '').trim()).filter(Boolean)));
+    for (const year of years) {
+      // หน่วยบริการจำนวนมาก (ผู้ดูแลดูทั้งจังหวัด) → ไม่ส่งรายการ ให้ backend คืนตามขอบเขตสิทธิ์ทั้งหมด
+      this.authService.getPrevYearMonths(year, hospcodes.length <= 100 ? hospcodes : []).subscribe({
+        next: (res: any) => {
+          if (!res?.success) return;
+          for (const r of res.data || []) this.prevYearMonths.set(itemKey(r.indicator_id, r.hospcode, year), r);
+          // แถวที่ถูกแก้ไปแล้วก่อนข้อมูลมาถึง → ตรวจซ้ำด้วยข้อมูลอ้างอิงที่ครบขึ้น
+          this.filteredData.forEach(item => { if (item._anomaly !== undefined && this.isRowModified(item)) this.refreshAnomalies(item); });
+          this.cdr.detectChanges();
+        },
+        error: () => { /* ไม่มีข้อมูลอ้างอิงปีที่แล้ว — ยังเตือนจากเดือนอื่น/เป้าหมายได้ */ }
+      });
+    }
+  }
+
+  private isRowModified(item: any): boolean {
+    if (!item?._original) return false;
+    return EXCEL_MONTHS.some(m => String(item[m.key] ?? '') !== String(item._original[m.key] ?? ''));
+  }
+
+  private refreshAnomalies(item: any) {
+    if (!item || !item._original) return;
+    const keys = EXCEL_MONTHS.map(m => m.key);
+    const prev = this.prevYearMonths.get(itemKey(item.indicator_id, item.hospcode, item.year_bh));
+    const found: Record<string, Anomaly> = {};
+    for (const m of keys) {
+      if (String(item[m] ?? '') === String(item._original[m] ?? '')) continue;
+      const a = detectAnomaly(item[m], {
+        others: keys.filter(k => k !== m).map(k => item[k]),
+        prevSame: prev ? prev[m] : null,
+        prevAll: prev ? keys.map(k => prev[k]) : [],
+        target: item.target_value,
+      });
+      if (a) found[m] = a;
+    }
+    item._anomaly = Object.keys(found).length > 0 ? found : null;
+  }
+
+  /** รายการช่องที่ถูกเตือนในตารางที่แก้ไขอยู่ (ใช้แสดงจำนวนบนแถบเครื่องมือและในหน้ายืนยันการบันทึก) */
+  get anomalyList(): { item: any; month: string; monthName: string; value: string; message: string }[] {
+    const out: { item: any; month: string; monthName: string; value: string; message: string }[] = [];
+    for (const item of this.filteredData) {
+      if (!item._anomaly) continue;
+      for (const m of EXCEL_MONTHS) {
+        const a: Anomaly | undefined = item._anomaly[m.key];
+        if (a) out.push({ item, month: m.key, monthName: m.label, value: String(item[m.key] ?? ''), message: a.message });
+      }
+    }
+    return out;
+  }
+  get anomalyCount(): number {
+    let n = 0;
+    for (const item of this.filteredData) if (item._anomaly) n += Object.keys(item._anomaly).length;
+    return n;
+  }
+
+  // =====================================================================================================
+  // นำเข้า / วางผลงานจาก Excel (โหมดแก้ไข) — เติมค่าลงตารางให้ตรวจก่อน แล้วผู้ใช้กด "บันทึก" เองตามขั้นตอนปกติ
+  // (สิทธิ์/การล็อค/การยืนยัน ใช้เส้นทางบันทึกเดิมทั้งหมด) | ตรรกะอยู่ใน shared/kpi-excel.ts
+  // =====================================================================================================
+  get editPerms(): EditPerms {
+    return { canEditActual: this.canEditActual, canEditTarget: this.canEditTarget };
+  }
+
+  /** ดาวน์โหลดแบบฟอร์ม Excel ของแถวที่แสดงอยู่ (พร้อมค่าปัจจุบัน) — กรอกแล้วนำเข้ากลับได้ */
+  downloadExcelTemplate() {
+    const items = this.filteredData;
+    if (!items.length) { this.toast.warning('ไม่มีรายการในตาราง — ค้นหาข้อมูลก่อนดาวน์โหลดแบบฟอร์ม'); return; }
+    import('xlsx').then(XLSX => {
+      const aoa = buildTemplateAoa(items);
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 11 }, { wch: 30 }, { wch: 55 }, { wch: 28 }, { wch: 22 }, { wch: 10 }, ...EXCEL_MONTHS.map(() => ({ wch: 8 }))];
+      ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: aoa[1].length - 1 } }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'ผลงาน');
+      const hos = new Set(items.map(i => String(i.hospcode)));
+      XLSX.writeFile(wb, `KPI_บันทึกผลงาน_${this.selectedYear || 'all'}_${hos.size === 1 ? Array.from(hos)[0] : hos.size + 'หน่วย'}.xlsx`);
+    });
+  }
+
+  /** เลือกไฟล์ Excel/CSV → อ่านแผ่นงานแรก → importAoa() */
+  onExcelFileSelected(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const file = input?.files?.[0];
+    if (input) input.value = '';              // เลือกไฟล์เดิมซ้ำได้
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { Swal.fire('ไฟล์ใหญ่เกินไป', 'รองรับไฟล์ไม่เกิน 10 MB', 'warning'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      import('xlsx').then(XLSX => {
+        try {
+          const wb = XLSX.read(new Uint8Array(reader.result as ArrayBuffer), { type: 'array' });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          this.importAoa(XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' }) as any[][], file.name);
+        } catch (e: any) {
+          Swal.fire('อ่านไฟล์ไม่ได้', 'ไฟล์ไม่ใช่ Excel/CSV ที่ถูกต้อง หรือไฟล์เสียหาย', 'error');
+        }
+      });
+    };
+    reader.onerror = () => Swal.fire('อ่านไฟล์ไม่ได้', 'ไม่สามารถเปิดไฟล์ที่เลือก', 'error');
+    reader.readAsArrayBuffer(file);
+  }
+
+  /** สรุปสิ่งที่จะเปลี่ยนจากไฟล์ให้ผู้ใช้ยืนยัน แล้วเติมลงตาราง (ยังไม่บันทึก) */
+  importAoa(aoa: any[][], fileName = '') {
+    if (!this.isEditing) return;
+    const parsed = parseImportAoa(aoa);
+    if (parsed.error) { Swal.fire('นำเข้าไม่ได้', parsed.error, 'error'); return; }
+    const plan = planImport(parsed.rows, this.filteredData, this.editPerms);
+    const html = this.buildImportPreviewHtml(plan, parsed.rows.length, fileName);
+    if (plan.changes.length === 0) {
+      Swal.fire({ icon: 'info', title: 'ไม่มีค่าที่ต้องเปลี่ยน', html, confirmButtonText: 'ตกลง', width: 720 });
+      return;
+    }
+    Swal.fire({
+      title: 'ตรวจสอบก่อนนำเข้า', html, icon: 'question', width: 780,
+      showCancelButton: true, confirmButtonColor: '#10b981',
+      confirmButtonText: `<i class="fas fa-file-import mr-1"></i> เติมลงตาราง ${plan.changes.length.toLocaleString()} ช่อง`, cancelButtonText: 'ยกเลิก'
+    }).then(r => { if (r.isConfirmed) this.applyChangePlan(plan, 'นำเข้า'); });
+  }
+
+  /** HTML สรุปผลการอ่านไฟล์ (แยกเป็นฟังก์ชันเพื่อทดสอบได้โดยไม่ต้องเปิดหน้าต่าง) */
+  buildImportPreviewHtml(plan: ChangePlan, fileRows: number, fileName = ''): string {
+    const esc = (v: any) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as any)[c]);
+    const label = (f: string) => f === 'target_value' ? 'เป้าหมาย' : (EXCEL_MONTHS.find(m => m.key === f)?.label || f);
+    const line = (n: number, text: string, color: string) => n > 0 ? `<li style="color:${color}">${text} <b>${n.toLocaleString()}</b></li>` : '';
+    const rows = plan.changes.slice(0, 30).map(c => `<tr>
+        <td style="padding:5px 8px;border-bottom:1px solid #e5e7eb">${esc(c.item.kpi_indicators_name)}<div style="color:#9ca3af;font-size:10px">${esc(c.item.hosname || c.item.hospcode)}</div></td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${label(c.field)}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e5e7eb;text-align:center;color:#6b7280">${esc(c.oldVal) || '—'}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:700">${esc(c.newVal)}</td>
+      </tr>`).join('');
+    const table = plan.changes.length === 0 ? '' : `
+      <div style="max-height:240px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:10px;margin-top:8px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;background:white">
+          <thead style="position:sticky;top:0;background:#f3f4f6"><tr>
+            <th style="padding:6px 8px;text-align:left">ตัวชี้วัด / หน่วยบริการ</th><th style="padding:6px 8px">ช่อง</th>
+            <th style="padding:6px 8px">ค่าเดิม</th><th style="padding:6px 8px">ค่าใหม่</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      ${plan.changes.length > 30 ? `<p style="font-size:11px;color:#6b7280;margin-top:4px">แสดง 30 จาก ${plan.changes.length.toLocaleString()} ช่อง — ทุกช่องที่เปลี่ยนจะเป็นสีส้มในตารางให้ตรวจอีกครั้ง</p>` : ''}`;
+    return `<div style="text-align:left;font-size:13px">
+      ${fileName ? `<p style="color:#6b7280;font-size:12px;margin-bottom:6px"><i class="fas fa-file-excel" style="color:#16a34a"></i> ${esc(fileName)} — ${fileRows.toLocaleString()} แถว</p>` : ''}
+      <ul style="list-style:disc;margin-left:18px;line-height:1.7">
+        <li style="color:#047857">ช่องที่จะเปลี่ยนค่า <b>${plan.changes.length.toLocaleString()}</b></li>
+        ${line(plan.same, 'ค่าเท่าเดิม (ไม่เปลี่ยน)', '#6b7280')}
+        ${line(plan.locked, 'ข้าม — แถวถูกล็อค', '#b45309')}
+        ${line(plan.noPerm, 'ข้าม — ไม่มีสิทธิ์แก้ไขช่องนั้น', '#b45309')}
+        ${line(plan.tooLong, 'ข้าม — ข้อความยาวเกิน 100 ตัวอักษร', '#b45309')}
+        ${line(plan.unmatchedRows.length, 'ข้าม — แถวในไฟล์ที่ไม่ตรงกับรายการในตารางที่แสดงอยู่', '#b91c1c')}
+        ${line(plan.duplicateRows.length, 'ข้าม — แถวซ้ำในไฟล์ (ใช้แถวแรก)', '#b45309')}
+      </ul>
+      ${plan.unmatchedRows.length ? `<p style="font-size:11px;color:#b91c1c;margin-top:2px">แถวที่ไม่ตรง: ${plan.unmatchedRows.slice(0, 15).join(', ')}${plan.unmatchedRows.length > 15 ? ' …' : ''} — ตรวจปีงบประมาณ/ตัวกรองของตาราง หรือดาวน์โหลดแบบฟอร์มใหม่</p>` : ''}
+      ${table}
+      <p style="margin-top:10px;font-size:12px;color:#6b7280">ช่องว่างในไฟล์ไม่ทับค่าเดิม • ข้อมูลจะถูก<b>เติมลงตารางเท่านั้น ยังไม่บันทึก</b> — ตรวจแล้วกดปุ่ม "บันทึก"</p>
+    </div>`;
+  }
+
+  /** เติมค่าตามแผน + คำนวณผลงานล่าสุด/คำเตือนของแถวที่ถูกแก้ + แจ้งผล */
+  applyChangePlan(plan: ChangePlan, verb: string) {
+    const touched = applyCellChanges(plan.changes);
+    touched.forEach(item => this.onValueChange(item, 'oct'));
+    this.cdr.detectChanges();
+    const skipped = plan.locked + plan.noPerm + plan.tooLong + plan.overflow;
+    const warn = this.anomalyCount;
+    let msg = `${verb}แล้ว ${plan.changes.length.toLocaleString()} ช่อง ใน ${touched.length.toLocaleString()} รายการ`;
+    if (skipped > 0) msg += ` (ข้าม ${skipped.toLocaleString()} ช่องที่ล็อค/ไม่มีสิทธิ์/เกินตาราง)`;
+    if (plan.changes.length === 0) { this.toast.warning(skipped > 0 ? `ไม่มีช่องที่${verb}ได้ — ข้าม ${skipped.toLocaleString()} ช่องที่ล็อค/ไม่มีสิทธิ์/เกินตาราง` : `ไม่มีค่าที่ต้องเปลี่ยน`); return; }
+    if (warn > 0) this.toast.warning(`${msg} — พบค่าที่อาจผิดปกติ ${warn} ช่อง (สีแดง) กรุณาตรวจสอบก่อนบันทึก`);
+    else this.toast.success(`${msg} — ตรวจสอบแล้วกด "บันทึก"`);
+  }
+
+  /** วางหลายช่องที่คัดลอกจาก Excel ลงตารางแก้ไข เริ่มจากช่องที่วาง ไล่ลงและไปทางขวา (วางช่องเดียว = พฤติกรรมปกติของเบราว์เซอร์) */
+  onCellPaste(ev: ClipboardEvent, item: any, field: string) {
+    if (!this.isEditing) return;
+    const grid = parseClipboardGrid(ev.clipboardData?.getData('text/plain') ?? '');
+    if (!isMultiCell(grid)) return;
+    ev.preventDefault();
+    const rows = this.filteredData;
+    // คอลัมน์ที่แก้ไขได้ตามลำดับที่แสดง: เป้าหมาย → เดือนที่แสดงอยู่ (ข้ามคอลัมน์ผลงานล่าสุด/ร้อยละ ที่คั่นกลางบนจอ)
+    const fields = [...(this.colVisible['target'] ? ['target_value'] : []), ...this.visibleMonthKeys];
+    const startRow = rows.indexOf(item), startCol = fields.indexOf(field);
+    if (startRow < 0 || startCol < 0) return;
+    this.applyChangePlan(planPaste(grid, rows, startRow, fields.slice(startCol), this.editPerms), 'วาง');
   }
 
   calcPercent(item: any): number {
@@ -3910,6 +4128,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   // === แก้ไขเฉพาะข้อ (จากอุทธรณ์ที่ได้รับอนุมัติ) ===
 
   startEditSingle(item: any) {
+    item._anomaly = null;
     item._original = { ...item };
     this.editingSingleItem = item;
     Swal.fire({ icon: 'info', title: 'แก้ไขข้อที่อุทธรณ์', text: `กำลังแก้ไข: ${item.kpi_indicators_name}`, timer: 1500, showConfirmButton: false });
@@ -3926,6 +4145,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.editingSingleItem && this.editingSingleItem._original) {
       const orig = this.editingSingleItem._original;
       Object.assign(this.editingSingleItem, orig);
+      this.editingSingleItem._anomaly = null;
     }
     this.editingSingleItem = null;
   }

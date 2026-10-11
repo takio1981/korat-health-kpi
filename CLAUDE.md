@@ -298,6 +298,33 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - **endpoint ใหม่ที่คืนรายชื่อตัวชี้วัดต้อง SELECT `result_formula` มาด้วยเสมอ** (ใน GROUP BY ใช้ `MAX(i.result_formula)`) และหน้าใหม่ที่แสดง
   ชื่อตัวชี้วัดต้องใส่ `<app-formula-badge>` ต่อท้ายชื่อ
 
+### นำเข้า/วางผลงานจาก Excel (dashboard โหมดแก้ไข — เพิ่ม 11 ต.ค. 2569)
+- ปุ่ม "แบบฟอร์ม Excel" (`downloadExcelTemplate()`) / "นำเข้า Excel" (`onExcelFileSelected()` → `importAoa()`) / วางหลายช่อง (`onCellPaste()`
+  บน input เป้าหมาย + เดือนของตาราง desktop) — ตรรกะทั้งหมดเป็นฟังก์ชันล้วนใน `frontend/src/app/shared/kpi-excel.ts`
+  (`buildTemplateAoa`, `parseImportAoa`, `planImport`, `parseClipboardGrid`, `planPaste`, `applyCellChanges`)
+- **หลักการ: เติมค่าลง `filteredData` เท่านั้น ไม่เรียก API บันทึกเอง** — ผู้ใช้ตรวจ (ช่องสีส้ม) แล้วกด "บันทึก" ผ่าน `saveKpiData()` เดิม
+  สิทธิ์/การล็อค/หน้ายืนยัน/การตอบกลับ จึงเป็นเส้นทางเดียวกับการพิมพ์เองทุกประการ — **ห้ามเพิ่ม endpoint นำเข้าที่บันทึกตรง** (จะข้ามการตรวจของ `/update-kpi`)
+- กติกา: จับคู่แถวด้วย `indicator_id | hospcode | ปีงบประมาณ` (`itemKey()`) | ช่องว่าง = ไม่เปลี่ยนค่าเดิม | ค่าเท่าเดิมไม่นับ (เช็คก่อนเหตุผลอื่น
+  ไม่งั้นแถวล็อคที่ไม่ได้แก้ในไฟล์จะถูกนับว่า "ข้าม") | ข้าม: `is_locked`, ไม่มีสิทธิ์ (`canEditActual`/`canEditTarget`), ยาวเกิน 100 ตัวอักษร
+  | รหัสหน่วยบริการที่ Excel ตัดเลข 0 นำหน้า → เติมกลับ 5 หลัก | คอลัมน์ที่วางได้ = เป้าหมาย → เดือนที่แสดงอยู่ (ข้ามคอลัมน์ผลงานล่าสุด/ร้อยละ)
+- วางช่องเดียว หรือไม่ได้อยู่โหมดแก้ไข (`isEditing`) → ไม่ `preventDefault` ปล่อยให้เบราว์เซอร์วางตามปกติ
+- Test: `shared/kpi-excel.spec.ts` (เขียน-อ่านไฟล์ .xlsx จริง), `dashboard.spec.ts` — ⚠️ spec ห้ามเรียกเส้นทางที่เปิด `Swal.fire` แบบมี icon
+  (jsdom ไม่มี `window.matchMedia`) จึงแยก `buildImportPreviewHtml()`/`applyChangePlan()` ออกมาให้ทดสอบได้
+
+### เตือนค่าที่อาจผิดปกติตอนบันทึกผลงาน (เพิ่ม 11 ต.ค. 2569)
+- `frontend/src/app/shared/anomaly.ts` `detectAnomaly(value, { others, prevSame, prevAll, target })` — สถิติอย่างง่าย ไม่ใช้ AI, **เตือนเท่านั้น ไม่ห้ามบันทึก**
+  - ลำดับอ้างอิง (ใช้ชุดแรกที่มี): เดือนอื่นของแถวเดียวกัน → ปีงบที่แล้ว (เดือนเดียวกัน → ค่ากลางทั้งปี) → เป้าหมาย (เกิน 10 เท่า)
+  - เทียบเดือนอื่น: เตือนเมื่อค่านั้นต่างจากเดือนอื่น **เกินครึ่ง** ≥ 5 เท่า (`ANOMALY_RATIO`) — ⚠️ **ห้ามเปลี่ยนกลับไปเทียบค่ากลางของเดือนอื่นตรงๆ**:
+    แถวที่มีค่าน้อย (85, 88, 850) ค่ากลางของ "เดือนอื่น" ของค่าปกติถูกค่าผิดดึงไป → 85/88 ถูกเตือนไปด้วย (พบจริงตอนทดสอบหน้าจอ)
+  - ไม่เตือน: ค่าว่าง/ข้อความ ("รอดำเนินการ"), ค่า 0, ค่าเล็กทั้งคู่ (< 10) | ค่าติดลบเตือนเสมอ | เกณฑ์ตั้งสูงโดยเจตนา (เตือนบ่อย = ผู้ใช้เลิกสนใจ)
+- Dashboard: `refreshAnomalies(item)` เรียกท้าย `onValueChange()` — ตรวจ**เฉพาะช่องที่ต่างจาก `_original`** (ไม่เตือนค่าเดิมย้อนหลัง) เก็บใน
+  `item._anomaly[month]` (ล้างใน `toggleEditMode`/`resetData`/แก้ไขรายข้อ), `anomalyCount`/`anomalyList` ใช้กับแถบเครื่องมือและกล่องสีแดง
+  ในหน้ายืนยันของ `saveKpiData()`
+- ข้อมูลปีงบที่แล้ว: `GET /kpi-summary/prev-year-months?year_bh=&hospcodes=` (อ่านอย่างเดียว, ขอบเขต `chartScopeClauses()` เดียวกับรายงาน, จาก
+  `kpi_summary` ปี `year_bh - 1`) โหลดใน `loadPrevYearMonths()` ตอนเข้าโหมดแก้ไข → `prevYearMonths` (Map key = `itemKey`) — ข้อมูลมาถึงทีหลัง
+  จะตรวจแถวที่แก้ไปแล้วซ้ำให้เอง
+- Test: `shared/anomaly.spec.ts`, `dashboard.spec.ts`, `api/tests/prev-year-months.test.js`
+
 ### ตัวชี้วัดสะสม (is_cumulative)
 - `is_cumulative` TINYINT(1) DEFAULT 0 ใน `kpi_indicators` — 1 = `last_actual` คำนวณจาก **SUM ทุกเดือนที่มีค่า
   ในปีงบ** แทน "ค่าเดือนล่าสุดที่คีย์" ปกติ — ใช้กับตัวชี้วัดนับสะสม (เช่น จำนวนราย/ครั้งสะสม)
@@ -778,6 +805,15 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - Frontend: options ของกราฟสร้างใน `chart/chart-builders.ts` (ฟังก์ชันล้วน มี unit test) + แสดงผ่าน `shared/apex-box.ts`
   (bind options object เดียว) — ชื่อยาวใช้ `wrapLabel()` ตัดหลายบรรทัด ไม่ตัดท้ายทิ้ง (ชื่อหมวดหมู่หลายตัวขึ้นต้นเหมือนกัน)
 - Test: `api/tests/chart-stats.test.js`, `frontend/src/app/chart/chart.spec.ts`
+- **แผนที่ผลงานรายอำเภอ (เพิ่ม 11 ต.ค. 2569):** `<app-district-map [data] [selected] (pick)>` (`shared/district-map.ts`) วาด SVG choropleth จาก
+  `shared/korat-district-shapes.ts` (32 อำเภอ, `distid` ตรงกับ `co_district.distid`, พิกัดฉายลง viewBox แล้ว ~59 KB) — **ไม่ใช้ Leaflet/แผนที่ฐานภายนอก
+  โดยเจตนา** (ใช้ได้ในเครือข่ายภายใน ไม่ต้องแก้ CSP ไม่มี dependency ใหม่) ระบายสีจาก `districtMapData` (= `by_district` ที่ `with_target > 0`)
+  เกณฑ์สีเดียวกับ `pctColor()` เทา = ไม่มีข้อมูลในขอบเขต/ตัวกรอง — คลิก → `onMapPick()` (กรองอำเภอ / คลิกซ้ำยกเลิก), `districtView: 'map' | 'cards'`
+  สลับกับการ์ดรายอำเภอเดิม
+  - ไฟล์รูปร่าง**สร้างด้วย `frontend/tools/build-district-map.js` ห้ามแก้ด้วยมือ** — ที่มา: geoBoundaries gbOpen THA ADM2 (กรมแผนที่ทหาร / OCHA ROAP,
+    CC BY 3.0 IGO) + ทะเบียนชื่อ/รหัสอำเภอของ HDX; จับคู่ด้วย "ชื่ออังกฤษตรงกัน + รูปร่างครอบจุดกึ่งกลางอำเภอ" (ชื่ออำเภอซ้ำข้ามจังหวัดได้
+    และการคัดด้วยจุดกึ่งกลางอยู่ในขอบเขตจังหวัดอย่างเดียวผิด — เคยได้ อ.เนินสง่า จ.ชัยภูมิ แทน อ.เทพารักษ์) — ต้องคงข้อความที่มา (attribution) ใต้แผนที่ไว้เสมอ
+  - Test: `shared/district-map.spec.ts`, `chart.spec.ts`
 
 ### kpi-manager (Wizard 2 ขั้นตอน)
 - รวม DB Compare / Export ในหน้าเดียว — wizard UI 2 ขั้น (free navigation) — **Report Compare ย้ายไปอยู่ใน
@@ -909,6 +945,19 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   ก่อนเริ่ม — migration ตอน startup (ALTER TABLE) ยังรันอยู่ระหว่าง test แรกๆ ทำให้เกิด MDL deadlock แบบสุ่ม ("Deadlock found when
   trying to get lock" แต่ไม่ปรากฏใน SHOW ENGINE INNODB STATUS)
 - แก้บั๊กใหม่ → **เพิ่ม regression test ทุกครั้ง** และยืนยันว่า test fail กับโค้ดเดิมก่อนแก้จริง (ไม่ใช่ test ที่ผ่านเสมอ)
+- **CI (GitHub Actions — `.github/workflows/ci.yml`, เพิ่ม 11 ต.ค. 2569):** รันทุก push เข้า `main` และทุก Pull Request — 2 งาน:
+  `api` (Jest บน service container `mariadb:10.11`) และ `frontend` (`ng test` + `ng build`) — ไม่ deploy ไม่ใช้ secret
+  - ฐานข้อมูลของ CI สร้างจากศูนย์ด้วย `node api/tests/ci/load-ci-db.js` = `api/tests/ci/schema.sql` (โครงสร้างตารางหลัก ไม่มีข้อมูล) +
+    `seed.sql` (ข้อมูลอ้างอิงขั้นต่ำ: อำเภอ, ประเภทสถานบริการ, หน่วยบริการ 116 แห่ง, หน่วยงาน, ตัวชี้วัดตัวอย่างสังเคราะห์) — ที่เหลือมาจาก auto-migration
+    ตอน `require('../server')` — ใช้สคริปต์เดียวกันนี้เตรียม test DB บนเครื่องใหม่ได้ (ทำงานเฉพาะฐานข้อมูลว่างที่ชื่อมีคำว่า "test")
+  - ⚠️ **repo เป็นสาธารณะ: ห้ามใส่ users / kpi_results / login_logs / system_settings ที่มีค่าจริงลง `seed.sql`** (system_settings ในเครื่องมี
+    รหัสผ่าน SMTP/โทเคน) — ชุดทดสอบต้องสร้างข้อมูลของตัวเองและลบทิ้งเอง ไม่พึ่งข้อมูลจริงในฐานข้อมูล
+  - เพิ่มตารางใหม่ที่**ไม่มี** `CREATE TABLE IF NOT EXISTS` ใน server.js → ต้องเพิ่มใน `schema.sql` ด้วย (คอลัมน์ใหม่ผ่าน auto-migration ไม่ต้อง)
+  - frontend ติดตั้งด้วย `npm ci --legacy-peer-deps` — `package-lock.json` ปัจจุบันมี `@angular/animations` 21.2 คู่กับ `@angular/core` 21.1
+    (peer ไม่ตรง) `npm ci` เฉยๆ จะ ERESOLVE — เครื่องใหม่ก็ต้องใช้ flag นี้จนกว่าจะปรับรุ่น Angular ให้ตรงกัน
+  - ทดสอบ workflow บนเครื่องได้ด้วย container ชั่วคราว: `docker run -d --name khups_ci_verify -e MARIADB_ROOT_PASSWORD=ci_root_pw -p 33106:3306
+    mariadb:10.11` แล้วตั้ง `DB_HOST=127.0.0.1 DB_PORT=33106 DB_USER=root DB_PASSWORD=ci_root_pw DB_NAME=khups_kpi_test_db` รัน loader + `npm test`
+    (ตัวแปรใน shell ชนะค่าใน `.env.test`) เสร็จแล้ว `docker rm -f khups_ci_verify`
 - `db` (db.js) เป็น **promise pool** — ใช้ `const [rows] = await db.query(...)` เท่านั้น **ห้ามส่ง callback** เข้า db.query
   (callback จะไม่ถูกเรียกเลย → Promise ค้างตลอดไป — เคยเป็นบั๊กจริงที่ทำให้ `/errors/report` ค้างและไม่เคยส่ง alert)
 
@@ -924,7 +973,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 ### Build & Deploy
 
 **`node_modules` ไม่อยู่ใน git** (`.gitignore` = `node_modules/` ทุกระดับ — เอาออกจาก git เมื่อ 6 ต.ค. 2569) — clone ใหม่ต้องรัน
-`npm ci` ใน `api/` และ `frontend/` ก่อน build เสมอ (`build.bat` รัน `npm install --production` ใน api ให้แล้ว) — ห้าม
+`npm ci` ใน `api/` และ `npm ci --legacy-peer-deps` ใน `frontend/` (ดูเหตุผลในหัวข้อ CI ของ 9.5) ก่อน build เสมอ (`build.bat` รัน `npm install --production` ใน api ให้แล้ว) — ห้าม
 `git add -f` node_modules กลับเข้า repo (`api/Dockerfile` ใช้ `COPY node_modules/` จาก host ที่ติดตั้งไว้แล้ว ไม่ใช่จาก git)
 
 ```bash

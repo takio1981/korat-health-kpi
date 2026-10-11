@@ -7,6 +7,7 @@ import { ReportComponent } from '../report/report';
 import { ApexBoxComponent } from '../shared/apex-box';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
+import { DistrictMapComponent } from '../shared/district-map';
 import {
   ChartGroupRow, ChartMonthRow, buildPctBar, buildStatusStack, buildOverallDonut, buildOverallRadial,
   buildMonthlyCombo, buildHeatmap, buildDistribution, pctColor
@@ -17,7 +18,7 @@ type FilterKey = 'selectedYut' | 'selectedMain' | 'selectedDept' | 'selectedIndi
 @Component({
   selector: 'app-chart',
   standalone: true,
-  imports: [CommonModule, RouterModule, FormsModule, ReportComponent, ApexBoxComponent, FormulaBadgeComponent],
+  imports: [CommonModule, RouterModule, FormsModule, ReportComponent, ApexBoxComponent, FormulaBadgeComponent, DistrictMapComponent],
   templateUrl: './chart.html'
 })
 export class ChartComponent implements OnInit, OnDestroy {
@@ -56,6 +57,8 @@ export class ChartComponent implements OnInit, OnDestroy {
   indicatorSearch = '';
   tableSort: { key: string; dir: 1 | -1 } = { key: 'achievement_pct', dir: -1 };
   districtMapData: any[] = [];
+  /** มุมมองของการ์ด "ผลงานรายอำเภอ": แผนที่จริง (ค่าเริ่มต้น) หรือการ์ดรายอำเภอ (อ่านง่ายบนจอเล็ก) */
+  districtView: 'map' | 'cards' = 'map';
 
   // การ์ดสถิติ (GET /dashboard-stats เดิม)
   stats: any = { successRate: 0, recordedCount: 0, totalDepts: 0, pendingCount: 0, rank: 0, totalHospitals: 0 };
@@ -199,6 +202,11 @@ export class ChartComponent implements OnInit, OnDestroy {
   }
 
   // คลิกแท่งกราฟ → กรองเจาะลึก
+  /** คลิกอำเภอบนแผนที่: กรองอำเภอนั้น — คลิกอำเภอที่กรองอยู่อีกครั้ง = ยกเลิกการกรอง */
+  onMapPick(distid: string) {
+    this.drillDown('selectedDistrict', String(this.selectedDistrict) === String(distid) ? '' : String(distid));
+  }
+
   drillDown(key: FilterKey, value: string) {
     (this as any)[key] = value;
     if (key === 'selectedYut') { this.selectedMain = ''; this.selectedIndicator = ''; }

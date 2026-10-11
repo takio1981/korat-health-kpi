@@ -1250,6 +1250,15 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
   }
 
   // === KPI Summary (fast) ===
+  // ผลงานรายเดือนของปีงบที่แล้ว (ตามขอบเขตสิทธิ์) — ใช้อ้างอิงเตือนค่าผิดปกติตอนบันทึกผลงาน
+  getPrevYearMonths(yearBh: string, hospcodes: string[] = []): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    const p = new URLSearchParams({ year_bh: String(yearBh) });
+    if (hospcodes.length > 0) p.set('hospcodes', hospcodes.join(','));
+    return this.http.get(`${this.apiUrl}/kpi-summary/prev-year-months?${p.toString()}`, { headers });
+  }
+
   getKpiSummary(filters?: any): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

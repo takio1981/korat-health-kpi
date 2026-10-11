@@ -9185,6 +9185,28 @@ apiRouter.post('/refresh-summary/finalize', authenticateToken, isSuperAdmin, asy
 });
 
 // GET /kpi-summary — ดึงข้อมูลจาก summary table (เร็วมาก ไม่ต้อง JOIN)
+// ผลงานรายเดือนของปีงบที่แล้ว (year_bh - 1) จาก kpi_summary ตามขอบเขตสิทธิ์เดียวกับรายงาน (chartScopeClauses)
+// ใช้เป็นค่าอ้างอิง "เตือนค่าที่อาจผิดปกติ" ตอนบันทึกผลงานในหน้า dashboard (frontend/src/app/shared/anomaly.ts) — อ่านอย่างเดียว
+// hospcodes (ไม่บังคับ, คั่นด้วยจุลภาค ≤ 300) = จำกัดเฉพาะหน่วยบริการที่แสดงอยู่ในตาราง
+apiRouter.get('/kpi-summary/prev-year-months', authenticateToken, async (req, res) => {
+    try {
+        const year = String(req.query.year_bh || '').trim();
+        if (!/^\d{4}$/.test(year)) return res.status(400).json({ success: false, message: 'กรุณาระบุปีงบประมาณ (year_bh) เป็นตัวเลข 4 หลัก' });
+        const prevYear = String(Number(year) - 1);
+        const scope = await chartScopeClauses(req.user);
+        const c = [...scope.c, 's.year_bh = ?'], p = [...scope.p, prevYear];
+        const hospcodes = String(req.query.hospcodes || '').split(',').map(h => h.trim()).filter(h => /^[0-9A-Za-z]{1,20}$/.test(h)).slice(0, 300);
+        if (hospcodes.length > 0) { c.push('s.hospcode IN (?)'); p.push(hospcodes); }
+        const [rows] = await db.query(
+            `SELECT s.indicator_id, s.hospcode, s.oct, s.nov, s.dece, s.jan, s.feb, s.mar, s.apr, s.may, s.jun, s.jul, s.aug, s.sep
+             FROM kpi_summary s JOIN kpi_indicators i ON i.id = s.indicator_id
+             WHERE ${c.join(' AND ')} LIMIT 20000`, p);
+        res.json({ success: true, year_bh: prevYear, data: rows });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 apiRouter.get('/kpi-summary', authenticateToken, async (req, res) => {
     try {
         const user = req.user;

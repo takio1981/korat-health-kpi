@@ -130,4 +130,38 @@ describe('ChartComponent', () => {
     reqs[0].flush(response(['2569'], { year_bh: 'เก่า' }));
     expect(component.data.year_bh).toBe('ใหม่');
   });
+
+  // แผนที่รายอำเภอ (11 ต.ค. 2569): เดิมการ์ด "แผนที่ผลงานรายอำเภอ" เป็นเพียงตารางการ์ด ไม่มีรูปร่างพื้นที่จริง
+  it('แผนที่รายอำเภอ: ระบายสีจากข้อมูลรายอำเภอของ API และคลิกอำเภอ = กรอง / คลิกซ้ำ = ยกเลิก', () => {
+    component.selectedYear = '2569';
+    component.loadChartStats();
+    http.expectOne(r => r.url.includes('/report/chart-stats')).flush(response(['2569'], {
+      by_district: [row('3001', 'เมืองนครราชสีมา', 10, 9), row('3021', 'ปากช่อง', 10, 2), row('3002', 'ครบุรี', 0, 0, 3)],
+    }));
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelectorAll('app-district-map g.district path').length).toBe(32);
+    const fill = (id: string) => el.querySelector('app-district-map g.district[data-distid="' + id + '"] path')!.getAttribute('fill');
+    expect(fill('3001')).toBe(pctColor(90));
+    expect(fill('3021')).toBe(pctColor(20));
+    expect(fill('3002')).not.toBe(pctColor(0));          // ไม่มีเป้าหมาย → สีเทา (ไม่ใช่แดง 0%)
+
+    component.onMapPick('3021');
+    expect(component.selectedDistrict).toBe('3021');
+    expect(http.expectOne(r => r.url.includes('/report/chart-stats')).request.url).toContain('distid=3021');
+    component.onMapPick('3021');
+    expect(component.selectedDistrict).toBe('');
+    expect(http.expectOne(r => r.url.includes('/report/chart-stats')).request.url).not.toContain('distid');
+  });
+
+  it('สลับมุมมองการ์ดรายอำเภอได้ (มุมมองเดิมยังอยู่)', () => {
+    component.selectedYear = '2569';
+    component.loadChartStats();
+    http.expectOne(r => r.url.includes('/report/chart-stats')).flush(response(['2569'], { by_district: [row('3001', 'เมืองนครราชสีมา', 10, 9)] }));
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('app-district-map')).toBeTruthy();
+    component.districtView = 'cards';
+    (component as any).cdr.detectChanges();
+    expect(el.querySelector('app-district-map')).toBeNull();
+    expect(el.textContent).toContain('ทั้งหมด 1 อำเภอ');
+  });
 });

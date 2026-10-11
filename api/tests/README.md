@@ -28,6 +28,13 @@ MYSQLDUMP_BIN=C:\Program Files\MariaDB 10.11\bin\mysqldump.exe
 BACKUP_DIR=d:\it-ssjnma-project\korat-health-kpi\backups-test
 ```
 
+### ทางเลือก: สร้าง test database จากศูนย์ด้วยไฟล์ใน repo (ใช้กับเครื่องใหม่ / CI)
+```bash
+# ฐานข้อมูลต้องว่าง และชื่อต้องมีคำว่า "test" — โหลด tests/ci/schema.sql + seed.sql (ไม่มีข้อมูลจริง)
+DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=root DB_PASSWORD=... DB_NAME=khups_kpi_test_db node tests/ci/load-ci-db.js
+```
+GitHub Actions (`.github/workflows/ci.yml`) ใช้วิธีนี้กับ MariaDB 10.11 ทุกครั้งที่ push / เปิด Pull Request
+
 ### 3. รันทุก test
 ```bash
 cd api

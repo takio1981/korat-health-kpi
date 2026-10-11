@@ -263,7 +263,20 @@
       <!-- ===== 7. พื้นที่ ===== -->
       <h2 class="text-base font-bold text-gray-700 mb-3 flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-green-600 text-white text-xs flex items-center justify-center">7</span>แยกตามพื้นที่และประเภทหน่วยบริการ</h2>
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
-        <h3 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-map-marked-alt text-green-600 mr-2"></i>แผนที่ผลงานรายอำเภอ — จ.นครราชสีมา</h3>
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h3 class="text-sm font-bold text-gray-800"><i class="fas fa-map-marked-alt text-green-600 mr-2"></i>แผนที่ผลงานรายอำเภอ — จ.นครราชสีมา</h3>
+          <div class="inline-flex rounded-lg border border-gray-200 overflow-hidden text-xs font-bold">
+            <button type="button" (click)="districtView = 'map'" class="px-3 py-1.5 transition-colors" [ngClass]="districtView === 'map' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'">
+              <i class="fas fa-map mr-1"></i>แผนที่
+            </button>
+            <button type="button" (click)="districtView = 'cards'" class="px-3 py-1.5 transition-colors border-l border-gray-200" [ngClass]="districtView === 'cards' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'">
+              <i class="fas fa-th mr-1"></i>การ์ด
+            </button>
+          </div>
+        </div>
+        <!-- มุมมองแผนที่: ขอบเขตอำเภอจริง ระบายสีตามร้อยละผ่านเกณฑ์ (เกณฑ์เดียวกับกราฟทั้งหน้า) -->
+        <app-district-map *ngIf="districtView === 'map'" [data]="districtMapData" [selected]="selectedDistrict" (pick)="onMapPick($event)"></app-district-map>
+        <ng-container *ngIf="districtView === 'cards'">
         <div class="flex flex-wrap items-center gap-4 mb-3 text-xs font-bold">
           <span class="flex items-center gap-1"><span class="w-4 h-4 rounded bg-green-500 inline-block"></span> ≥80%</span>
           <span class="flex items-center gap-1"><span class="w-4 h-4 rounded bg-yellow-400 inline-block"></span> 50-79%</span>
@@ -286,6 +299,7 @@
           <span class="px-3 py-1 rounded-full bg-yellow-100 text-yellow-700">50-79% {{ countDistricts('yellow') }}</span>
           <span class="px-3 py-1 rounded-full bg-red-100 text-red-700">&lt;50% {{ countDistricts('red') }}</span>
         </div>
+        </ng-container>
       </div>
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-8">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><app-apex-box [options]="districtChart"></app-apex-box></div>

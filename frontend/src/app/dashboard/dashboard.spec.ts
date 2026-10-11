@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { DashboardComponent } from './dashboard';
 import { testProviders } from '../testing/test-providers';
+import { parseImportAoa, planImport, buildTemplateAoa } from '../shared/kpi-excel';
 
 function row(year: string, extra: any = {}) {
   return {
@@ -248,5 +249,159 @@ describe('DashboardComponent', () => {
     const badge = component.getCumulativeBadge({ result_formula: 'SUM(ALL)' });
     expect(badge?.formula).toBe('SUM(ALL)');
     expect(component.getCumulativeBadge({ is_cumulative: 1 })?.formula).toBeUndefined();
+  });
+
+  // ---- นำเข้า/วางจาก Excel และเตือนค่าผิดปกติ (โหมดแก้ไข) — 11 ต.ค. 2569 ----
+  describe('นำเข้า/วางจาก Excel และเตือนค่าผิดปกติ', () => {
+    const paste = (text: string) => {
+      let prevented = false;
+      const ev: any = { clipboardData: { getData: () => text }, preventDefault: () => { prevented = true; } };
+      return { ev, wasPrevented: () => prevented };
+    };
+    const editRow = (id: number, extra: any = {}) => {
+      const it: any = row('2570', { indicator_id: id, hospcode: '10871', is_locked: 0, kpi_indicators_name: 'ตัวชี้วัด ' + id, ...extra });
+      it._original = { ...it };
+      return it;
+    };
+
+    beforeEach(() => {
+      fixture.detectChanges();
+      component.isSuperAdmin = true;             // มีสิทธิ์แก้ทั้งเป้าหมายและผลงาน
+      component.isEditing = true;
+      component.selectedYear = '2570';
+      component.filteredData = [editRow(1, { oct: '85', nov: '88' }), editRow(2, { is_locked: 1 }), editRow(3)];
+      component.prevYearMonths = new Map<string, any>();
+    });
+
+    it('วางหลายช่องจาก Excel: เติมไล่ลง/ไปทางขวาจากช่องที่วาง ข้ามแถวล็อค และคำนวณผลงานล่าสุดใหม่', () => {
+      const [a, b, c] = component.filteredData;
+      const p = paste('90\t91\r\n20\t21\r\n30\t31\r\n');
+      component.onCellPaste(p.ev, a, 'dece');
+      expect(p.wasPrevented()).toBe(true);
+      expect([a.dece, a.jan]).toEqual(['90', '91']);
+      expect([b.dece, b.jan]).toEqual(['', '']);          // แถวล็อค — ไม่ถูกแก้
+      expect([c.dece, c.jan]).toEqual(['30', '31']);
+      expect(a.last_actual).toBe('91');                   // ผลงานล่าสุด = เดือนล่าสุดที่มีค่า
+      expect(component.isModified(c, 'jan')).toBe(true);
+    });
+
+    it('วางที่ช่องเป้าหมาย: คอลัมน์ถัดไปคือเดือนแรกที่แสดงอยู่ (ข้ามคอลัมน์ผลงานล่าสุด/ร้อยละ และเดือนที่ซ่อน)', () => {
+      const c = component.filteredData[2];
+      component.colVisible = { ...component.colVisible, oct: false };
+      component.onCellPaste(paste('70\t11\t12').ev, c, 'target_value');
+      expect(c.target_value).toBe('70');
+      expect([c.oct, c.nov, c.dece]).toEqual(['', '11', '12']);
+    });
+
+    it('วางช่องเดียว หรือไม่ได้อยู่โหมดแก้ไข → ปล่อยให้เบราว์เซอร์วางตามปกติ', () => {
+      const a = component.filteredData[0];
+      const one = paste('99');
+      component.onCellPaste(one.ev, a, 'dece');
+      expect(one.wasPrevented()).toBe(false);
+      expect(a.dece).toBe('');
+      component.isEditing = false;
+      const multi = paste('1\t2');
+      component.onCellPaste(multi.ev, a, 'dece');
+      expect(multi.wasPrevented()).toBe(false);
+      expect(a.dece).toBe('');
+    });
+
+    it('นำเข้าไฟล์: เติมเฉพาะแถวที่ตรงกับตารางและไม่ล็อค — สรุปก่อนนำเข้าบอกจำนวนที่เปลี่ยน/ข้าม', () => {
+      const aoa = buildTemplateAoa(component.filteredData) as any[][];
+      aoa[2][10] = 95;                 // แถวตัวชี้วัด 1: ธ.ค. = 95
+      aoa[3][8] = 50;                  // แถวตัวชี้วัด 2 (ล็อค): ต.ค. = 50
+      aoa[4][7] = 60;                  // แถวตัวชี้วัด 3: เป้าหมาย 80 → 60
+      aoa.push([999, '10871', '2570', '', 'ไม่มีในตาราง', '', '', '', 5]);
+      const parsed = parseImportAoa(aoa);
+      const plan = planImport(parsed.rows, component.filteredData, component.editPerms);
+      const html = component.buildImportPreviewHtml(plan, parsed.rows.length, 'ทดสอบ.xlsx');
+      expect(html).toContain('ช่องที่จะเปลี่ยนค่า <b>2</b>');
+      expect(html).toContain('แถวถูกล็อค <b>1</b>');
+      expect(html).toContain('ไม่ตรงกับรายการในตารางที่แสดงอยู่ <b>1</b>');
+      expect(html).toContain('ยังไม่บันทึก');
+
+      component.applyChangePlan(plan, 'นำเข้า');
+      const [a, b, c] = component.filteredData;
+      expect(a.dece).toBe('95');
+      expect(b.oct).toBe('');
+      expect(c.target_value).toBe('60');
+      expect(a.oct).toBe('85');        // ค่าเดิมในไฟล์เท่าเดิม — ไม่ถูกนับว่าเปลี่ยน
+      expect(component.isModified(a, 'oct')).toBe(false);
+    });
+
+    it('ไม่ได้อยู่โหมดแก้ไข → การนำเข้าไม่เปลี่ยนข้อมูลในตาราง', () => {
+      component.isEditing = false;
+      component.importAoa(buildTemplateAoa([{ ...component.filteredData[0], dece: '77' }]) as any[][]);
+      expect(component.filteredData[0].dece).toBe('');
+    });
+
+    it('พิมพ์ค่าเกินหลัก (850 ขณะเดือนอื่น 85, 88) → เตือนในช่องนั้น และหายเมื่อแก้กลับ/คืนค่า', () => {
+      const a = component.filteredData[0];
+      a.dece = '850';
+      component.onValueChange(a, 'dece');
+      expect(a._anomaly?.dece?.kind).toBe('high');
+      expect(component.anomalyCount).toBe(1);
+      expect(component.anomalyList[0]).toMatchObject({ month: 'dece', monthName: 'ธ.ค.', value: '850' });
+
+      a.dece = '90';
+      component.onValueChange(a, 'dece');
+      expect(a._anomaly).toBeNull();
+      expect(component.anomalyCount).toBe(0);
+
+      a.dece = '850';
+      component.onValueChange(a, 'dece');
+      component.resetData(false);
+      expect(a.dece).toBe('');
+      expect(component.anomalyCount).toBe(0);
+    });
+
+    it('ค่าเดิมที่มีอยู่ก่อนแก้ไขไม่ถูกเตือนย้อนหลัง (เตือนเฉพาะช่องที่แก้ในรอบนี้)', () => {
+      const odd = editRow(9, { oct: '85', nov: '900', dece: '88' });
+      component.filteredData = [odd];
+      odd.jan = '90';
+      component.onValueChange(odd, 'jan');
+      expect(odd._anomaly).toBeNull();                  // พ.ย. = 900 เป็นค่าเดิม ไม่ได้แก้ในรอบนี้ จึงไม่ถูกเตือน
+    });
+
+    it('เข้าโหมดแก้ไข: ขอผลงานปีงบที่แล้วของหน่วยบริการที่แสดงอยู่ — ระหว่างรอใช้เป้าหมายเป็นค่าอ้างอิง', () => {
+      const c = component.filteredData[2];
+      component.loadPrevYearMonths();
+      const req = http.expectOne(r => r.url.includes('/kpi-summary/prev-year-months'));
+      expect(req.request.url).toContain('year_bh=2570');
+      expect(req.request.url).toContain('hospcodes=10871');
+      c.oct = '500';
+      component.onValueChange(c, 'oct');
+      expect(c._anomaly).toBeNull();                    // เป้าหมาย 80: 500 ยังไม่ถึง 10 เท่า
+      c.oct = '800';
+      component.onValueChange(c, 'oct');
+      expect(c._anomaly?.oct?.basis).toBe('target');    // 10 เท่าของเป้าหมาย
+    });
+
+    it('ข้อมูลปีงบที่แล้วมาถึงหลังพิมพ์ → ตรวจซ้ำและเตือน', () => {
+      const c = component.filteredData[2];
+      c.target_value = '';
+      c._original = { ...c };
+      component.loadPrevYearMonths();
+      const req = http.expectOne(r => r.url.includes('/kpi-summary/prev-year-months'));
+      c.oct = '750';
+      component.onValueChange(c, 'oct');
+      expect(c._anomaly).toBeNull();                    // ไม่มีเดือนอื่น ไม่มีเป้าหมาย ยังไม่มีข้อมูลปีที่แล้ว
+      req.flush({ success: true, year_bh: '2569', data: [{ indicator_id: 3, hospcode: '10871', oct: '75', nov: '80' }] });
+      expect(c._anomaly?.oct?.basis).toBe('prev-month');
+      expect(c._anomaly?.oct?.message).toContain('เดือนเดียวกันของปีงบที่แล้ว');
+    });
+
+    it('แสดงปุ่ม Excel และไอคอนเตือนในตารางโหมดแก้ไข', () => {
+      const a = component.filteredData[0];
+      component.kpiData = component.filteredData;
+      a.dece = '850';
+      component.onValueChange(a, 'dece');
+      (component as any).cdr.detectChanges();
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.textContent).toContain('แบบฟอร์ม Excel');
+      expect(el.textContent).toContain('นำเข้า Excel');
+      expect(el.textContent).toContain('ค่าอาจผิดปกติ 1 ช่อง');
+      expect(el.querySelector('input[type=file][accept*=".xlsx"]')).toBeTruthy();
+    });
   });
 });

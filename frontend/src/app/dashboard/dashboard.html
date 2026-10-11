@@ -66,7 +66,24 @@
               <button (click)="toggleEditMode()" class="flex-1 md:flex-none px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-xl shadow-md transition-all text-xs font-bold flex items-center justify-center gap-2">
                 <i class="fas fa-times"></i> ยกเลิก
               </button>
+              <!-- นำเข้า/วางจาก Excel — เติมค่าลงตารางให้ตรวจก่อน แล้วกด "บันทึก" ตามปกติ -->
+              <button (click)="downloadExcelTemplate()" class="flex-1 md:flex-none px-3 py-2 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 rounded-xl shadow-sm transition-all text-xs font-bold flex items-center justify-center gap-2"
+                      title="ดาวน์โหลดรายการในตารางเป็นไฟล์ Excel (พร้อมค่าปัจจุบัน) เพื่อกรอกแล้วนำเข้ากลับ">
+                <i class="fas fa-file-download"></i> แบบฟอร์ม Excel
+              </button>
+              <button (click)="excelInput.click()" class="flex-1 md:flex-none px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md transition-all text-xs font-bold flex items-center justify-center gap-2"
+                      title="เลือกไฟล์ Excel ที่กรอกแล้ว — ระบบแสดงสรุปให้ตรวจก่อนเติมลงตาราง (ยังไม่บันทึก)">
+                <i class="fas fa-file-import"></i> นำเข้า Excel
+              </button>
+              <input #excelInput type="file" accept=".xlsx,.xls,.csv" class="hidden" (change)="onExcelFileSelected($event)">
+              <span *ngIf="anomalyCount > 0" class="flex-1 md:flex-none px-3 py-2 bg-red-50 text-red-700 border border-red-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
+                    title="ช่องสีแดงในตาราง = ค่าต่างจากเดือนอื่น/ปีงบที่แล้ว/เป้าหมายมากผิดปกติ — ชี้ที่ไอคอนเตือนในช่องเพื่อดูเหตุผล (เตือนเท่านั้น ยังบันทึกได้)">
+                <i class="fas fa-exclamation-triangle"></i> ค่าอาจผิดปกติ {{ anomalyCount }} ช่อง
+              </span>
             </div>
+            <p *ngIf="isEditing" class="hidden lg:block w-full text-[11px] text-gray-500">
+              <i class="fas fa-lightbulb text-amber-500 mr-1"></i>คัดลอกหลายช่องจาก Excel แล้ว<b>วาง (Ctrl+V)</b> ในช่องเป้าหมายหรือช่องเดือนได้เลย — ระบบเติมไล่ลงและไปทางขวาจากช่องที่วาง (ช่องว่างไม่ทับค่าเดิม)
+            </p>
 
             <button *ngIf="(isAdmin || isSuperAdmin) && selectedStatus === 'pending' && !isReviewMode" (click)="approveAll()" class="w-full md:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center justify-center gap-2">
               <i class="fas fa-check-double"></i> อนุมัติทั้งหมด ({{ filteredData.length }})
@@ -705,7 +722,7 @@
                     <div *ngIf="!item.is_locked && canEditActual" class="flex items-center gap-0.5">
                       <input type="text" [(ngModel)]="item[month.key]" (ngModelChange)="onValueChange(item, month.key)"
                              class="w-full min-w-0 border border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:border-green-500 hover:border-green-400 transition-colors"
-                             [ngClass]="isModified(item, month.key) ? 'bg-orange-200 font-bold text-red-600 ring-2 ring-orange-400' : (isPendingValue(item[month.key]) ? 'bg-amber-100 text-amber-700 text-[9px] font-bold' : 'bg-white')">
+                             [ngClass]="item._anomaly?.[month.key] ? 'bg-red-100 font-bold text-red-700 ring-2 ring-red-500' : (isModified(item, month.key) ? 'bg-orange-200 font-bold text-red-600 ring-2 ring-orange-400' : (isPendingValue(item[month.key]) ? 'bg-amber-100 text-amber-700 text-[9px] font-bold' : 'bg-white'))">
                       <button type="button" (click)="togglePending(item, month.key)"
                               class="shrink-0 w-6 h-6 rounded flex items-center justify-center text-[10px]"
                               [ngClass]="isPendingValue(item[month.key]) ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-400'"
@@ -713,6 +730,7 @@
                         <i class="fas fa-hourglass-half"></i>
                       </button>
                     </div>
+                    <p *ngIf="item._anomaly?.[month.key] as an" class="mt-0.5 text-[9px] leading-tight text-red-600 text-left"><i class="fas fa-exclamation-triangle mr-0.5"></i>{{ an.message }}</p>
                     <span *ngIf="item.is_locked || !canEditActual" class="block font-bold text-gray-600">{{ (item[month.key] && item[month.key] !== '0') ? item[month.key] : '-' }}</span>
                   </div>
                 </div>
@@ -1170,7 +1188,7 @@
                 <!-- Col 6: เป้าหมาย -->
                 <td *ngIf="colVisible['target']" class="px-1 py-2 frozen col-6 bg-amber-50 font-bold text-gray-800 text-right whitespace-nowrap border-r border-gray-100">
                   <span *ngIf="!canShowTargetInput(item)">{{ item.target_value || '-' }}</span>
-                  <input *ngIf="canShowTargetInput(item)" type="text" [(ngModel)]="item.target_value"
+                  <input *ngIf="canShowTargetInput(item)" type="text" [(ngModel)]="item.target_value" (paste)="onCellPaste($event, item, 'target_value')"
                          class="w-20 border border-amber-200 rounded px-1 py-1 text-right text-xs focus:ring-1 focus:ring-orange-500 outline-none bg-orange-50 hover:border-orange-400 transition-all"
                          [ngClass]="isModified(item, 'target_value') || isEditingTarget(item) ? '!bg-orange-100 !text-orange-700 ring-2 ring-orange-400 font-bold' : ''">
                 </td>
@@ -1204,9 +1222,11 @@
                           class="flex-1 min-w-0 px-0.5 py-0.5 rounded border text-[9px] leading-tight font-bold text-center whitespace-normal"
                           [ngClass]="isModified(item, m) ? 'bg-orange-200 text-red-600 border-orange-400 ring-2 ring-orange-400' : 'bg-amber-100 text-amber-700 border-amber-300'"
                           title="รอดำเนินการ — กด ⏳ เพื่อล้างค่า">รอ<br>ดำเนินการ</span>
-                    <input *ngIf="!isPendingValue(item[m])" type="text" [(ngModel)]="item[m]" (ngModelChange)="onValueChange(item, m)"
+                    <input *ngIf="!isPendingValue(item[m])" type="text" [(ngModel)]="item[m]" (ngModelChange)="onValueChange(item, m)" (paste)="onCellPaste($event, item, m)"
                            class="w-full min-w-0 border border-green-200 rounded px-1 py-1 text-center text-xs focus:ring-1 focus:ring-green-500 outline-none hover:border-green-400 transition-all bg-white/80 group-hover:bg-white"
-                           [ngClass]="isModified(item, m) ? '!bg-orange-200 !text-red-600 ring-2 ring-orange-400 font-bold' : ''">
+                           [ngClass]="item._anomaly?.[m] ? '!bg-red-100 !text-red-700 ring-2 ring-red-500 font-bold' : (isModified(item, m) ? '!bg-orange-200 !text-red-600 ring-2 ring-orange-400 font-bold' : '')"
+                           [title]="item._anomaly?.[m] ? 'ค่าอาจผิดปกติ: ' + item._anomaly[m].message : ''">
+                    <i *ngIf="item._anomaly?.[m] as an" class="fas fa-exclamation-triangle text-red-500 text-[10px] shrink-0" [title]="'ค่าอาจผิดปกติ: ' + an.message"></i>
                     <button type="button" (click)="togglePending(item, m)"
                             class="shrink-0 w-5 h-5 rounded flex items-center justify-center text-[9px] transition-colors"
                             [ngClass]="isPendingValue(item[m]) ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-gray-100 text-gray-400 hover:bg-amber-100 hover:text-amber-600'"
