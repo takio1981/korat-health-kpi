@@ -410,7 +410,7 @@ const SYSTEMS: SopSystem[] = [
     {f:'n5b',t:'ok',x:'right',n:'left',v:'hv'},
     {f:'n5c',t:'ok',x:'top',n:'bottom',v:'hvh'},
   ],
-  notes:['Force Logout → ผู้ถูก logout จะถูกตัด session ใน ~30 วินาที (session cache TTL)','Sync users to KHD: 3 แท็บ — เปรียบเทียบข้อมูล (4 สถานะ) / ตรวจโครงสร้างตาราง (รายงานอย่างเดียว) / ตั้งค่า Mapping คอลัมน์+exclude list'],
+  notes:['ลบผู้ใช้: ถ้าผู้ใช้เป็นเจ้าของผลงาน (kpi_results.user_id) ลบไม่ได้ — DELETE /users/:id ตอบ 400 code USER_HAS_KPI_RESULTS และ FK เป็น ON DELETE RESTRICT (เดิม CASCADE ทำให้ผลงานหายตามบัญชี) → ให้ปิดการใช้งานบัญชีแทน','Force Logout → ผู้ถูก logout จะถูกตัด session ใน ~30 วินาที (session cache TTL)','Sync users to KHD: 3 แท็บ — เปรียบเทียบข้อมูล (4 สถานะ) / ตรวจโครงสร้างตาราง (รายงานอย่างเดียว) / ตั้งค่า Mapping คอลัมน์+exclude list'],
 },{
   id:'roleaccess', icon:'🔑', title:'ระบบสิทธิ์การเข้าถึง', sub:'Role × Page/Action Access',
   desc:'Super Admin กำหนดสิทธิ์เข้าถึงหน้า (8 role × 19 หน้า) + สิทธิ์เพิ่ม/แก้ไขข้อมูล (8 role × 3 หน้า × 2 action) แบบไดนามิก ไม่ต้องแก้โค้ด',

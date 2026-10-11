@@ -190,7 +190,7 @@ kpi_indicators.dept_id → departments.id (FK, INT, ON DELETE SET NULL)
 kpi_indicators.main_indicator_id → kpi_main_indicators.id (FK, INT, ON DELETE SET NULL)
 kpi_main_indicators.yut_id → main_yut.id (FK, ON DELETE SET NULL)
 kpi_results.indicator_id → kpi_indicators.id (FK)
-kpi_results.user_id → users.id (FK)
+kpi_results.user_id → users.id (FK, ON DELETE RESTRICT — ลบผู้ใช้ที่มีผลงานไม่ได้; เดิม CASCADE ดูหัวข้อ 9.4)
 users.dept_id → departments.id (FK)
 ```
 
@@ -928,9 +928,15 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 
 - `.env.dev` (backend พอร์ต 3700) และ container production (`khups_kpi_backend`, พอร์ต 8830) ใช้ฐานข้อมูล**เดียวกัน** (`khups_kpi_db` บนเครื่องนี้)
   — ไม่มี "ฐาน dev" แยก ทุกอย่างที่ทำผ่าน dev server หรือสคริปต์ที่โหลด `.env.dev` กระทบข้อมูลจริงทันที
-- `kpi_results.user_id → users.id` เป็น **ON DELETE CASCADE**: `DELETE FROM users` ลบผลงานทุกแถวที่ผู้ใช้นั้นเป็นเจ้าของ โดยไม่มี log ระดับแอป
+- `kpi_results.user_id → users.id` **เดิมเป็น ON DELETE CASCADE** (`DELETE FROM users` ลบผลงานทุกแถวที่ผู้ใช้นั้นเป็นเจ้าของ โดยไม่มี log ระดับแอป)
+  — **แก้เป็น ON DELETE RESTRICT แล้ว** (constraint `fk_kpi_results_user`, auto-migration ท้าย `migrationsReady`) และ `DELETE /users/:id` ตรวจ
+  `countUserKpiResults()` ก่อน → 400 `code: 'USER_HAS_KPI_RESULTS'` (ข้อความให้ "ปิดการใช้งาน" แทน); การลงทะเบียนซ้ำหลังถูกปฏิเสธก็ไม่ลบบัญชีเดิมที่มีผลงาน
+  — **ห้ามเปลี่ยน FK นี้กลับเป็น CASCADE/SET NULL** | Test: `api/tests/user-delete-guard.test.js` | `cleanupTestUsers()` ในชุดทดสอบลบผลงานของผู้ใช้ทดสอบก่อนลบผู้ใช้
+  (`kpi_results.indicator_id → kpi_indicators` ยังเป็น CASCADE — `DELETE /indicators/:id` ตรวจผลงานก่อนลบอยู่แล้ว)
 - **เหตุการณ์จริง 11 ต.ค. 2569:** บัญชีทดสอบชั่วคราวที่สร้างด้วย INSERT ตรง (รหัสอัตโนมัติ) ได้รหัสซ้ำกับ `user_id` ของแถวผลงานเก่าที่เจ้าของเดิมไม่มีอยู่แล้ว
   (แถวกำพร้า) → ลบบัญชีทดสอบ = ลบผลงานเก่า ~17,400 แถว (มีผลงาน ~3,300 ช่อง) — ดู `docs/fix-log.md`
+  — กู้คืนแล้ว 781 คู่ (9,350 แถว) จากสำเนาใน `kpi_summary` ด้วยความเห็นชอบของผู้ใช้ (เจ้าของแถว = super_admin, log `RECOVER_KPI_RESULTS`,
+  รหัสแถวที่เพิ่มอยู่ใน `backups/rescue-2026-10-11/recovered-ids.json`) ส่วนแถวที่มีแต่เป้าหมาย ~8,000 แถวไม่มีสำเนา (สร้างใหม่ได้ด้วย "เพิ่ม KPI ทุกหน่วยบริการ")
 - **กฎ:**
   - ❌ ห้าม INSERT/DELETE แถวใน `users` ของ `khups_kpi_db` เพื่อทดสอบ/ถ่ายภาพหน้าจอ ไม่ว่าจะได้รับอนุญาตให้ "สร้างบัญชีทดสอบ" หรือไม่ —
     ต้องอธิบายความเสี่ยงนี้และเสนอทางเลือกด้านล่างแทน
@@ -938,7 +944,8 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
     ตาม `api/tests/ci/load-ci-db.js`) บนพอร์ตอื่น + frontend ที่ชี้ไป backend ตัวนั้น — ห้ามชี้ `localhost:3700`
   - ✅ ถ้าจำเป็นต้องดูข้อมูลจริงบนหน้าจอ ให้ใช้บัญชีที่ผู้ใช้จัดให้ (ไม่สร้าง/ไม่ลบ) และทำเฉพาะการอ่าน
   - ✅ ก่อน/หลังงานใดที่แตะฐานข้อมูลจริง ให้นับแถว `kpi_results` (ทั้งหมด + ที่มีผลงาน) เทียบกัน — "ไม่มีคำขอ POST/PUT/DELETE" ไม่พอ
-  - ⚠️ ห้าม refresh `kpi_summary` ถ้ายังมีคู่ใน `kpi_summary` ที่ไม่มีแถวใน `kpi_results` และยังไม่ได้กู้/สำรอง (summary อาจเป็นสำเนาเดียวของข้อมูลที่หาย)
+  - ⚠️ ก่อน refresh `kpi_summary` ถ้าพบคู่ใน `kpi_summary` ที่ไม่มีแถวใน `kpi_results` ให้หยุดและสำรอง summary ก่อน (อาจเป็นสำเนาเดียวของข้อมูลที่หาย —
+    เหตุการณ์ 11 ต.ค. กู้ได้เพราะ summary ยังไม่ถูกสร้างใหม่)
 
 ## 9.5 Automated Tests (ต้องผ่านทั้งหมดก่อน commit ทุกครั้ง)
 

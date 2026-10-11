@@ -2905,7 +2905,10 @@ apiRouter.post('/register', loginIpLimiter, loginLimiter, async (req, res) => {
         const [existingCid] = await db.query('SELECT id, is_approved FROM users WHERE cid = ?', [hashedCidCheck]);
         if (existingCid.length > 0) {
             if (existingCid[0].is_approved === -1) {
-                // ถูกปฏิเสธ → ลบ account เก่าแล้วให้สมัครใหม่ได้
+                // ถูกปฏิเสธ → ลบ account เก่าแล้วให้สมัครใหม่ได้ (ยกเว้นบัญชีที่เคยบันทึกผลงานไว้ — ห้ามลบ ผลงานจะหาย)
+                if (await countUserKpiResults(existingCid[0].id) > 0) {
+                    return res.status(400).json({ success: false, message: 'บัญชีเดิมของท่านมีผลงานที่บันทึกไว้ในระบบ ไม่สามารถลงทะเบียนใหม่ทับได้ กรุณาติดต่อผู้ดูแลระบบ' });
+                }
                 await db.query('DELETE FROM users WHERE id = ?', [existingCid[0].id]);
                 await cleanupPendingApprovalNotifications(existingCid[0].id);
             } else {
@@ -2937,7 +2940,10 @@ apiRouter.post('/register', loginIpLimiter, loginLimiter, async (req, res) => {
         const [existing] = await db.query('SELECT id, is_approved FROM users WHERE username = ?', [username]);
         if (existing.length > 0) {
             if (existing[0].is_approved === -1) {
-                // ถูกปฏิเสธ → ลบ account เก่า
+                // ถูกปฏิเสธ → ลบ account เก่า (ยกเว้นบัญชีที่เคยบันทึกผลงานไว้ — ห้ามลบ ผลงานจะหาย)
+                if (await countUserKpiResults(existing[0].id) > 0) {
+                    return res.status(400).json({ success: false, message: 'ชื่อผู้ใช้งานนี้มีผลงานที่บันทึกไว้ในระบบ ไม่สามารถลงทะเบียนใหม่ทับได้ กรุณาติดต่อผู้ดูแลระบบ' });
+                }
                 await db.query('DELETE FROM users WHERE id = ?', [existing[0].id]);
                 await cleanupPendingApprovalNotifications(existing[0].id);
             } else {
@@ -5603,6 +5609,16 @@ apiRouter.put('/users/:id', authenticateToken, requireAction('users', 'edit'), a
     }
 });
 
+// ห้ามลบผู้ใช้ที่เป็นเจ้าของผลงาน (kpi_results.user_id) — การลบผู้ใช้ต้องไม่ทำให้ผลงานหาย (11 ต.ค. 2569)
+// เดิม FK เป็น ON DELETE CASCADE: ลบผู้ใช้ = ลบผลงานทุกแถวของผู้ใช้นั้นแบบเงียบๆ → เปลี่ยนเป็น RESTRICT ใน auto-migration แล้ว
+// และตรวจที่นี่ก่อนเพื่อให้ได้ข้อความที่เข้าใจได้ (ไม่ใช่ข้อผิดพลาดจากฐานข้อมูล) — ให้ "ปิดการใช้งาน" บัญชีแทนการลบ
+async function countUserKpiResults(userId) {
+    const [[r]] = await db.query('SELECT COUNT(*) AS n FROM kpi_results WHERE user_id = ?', [userId]);
+    return Number(r.n) || 0;
+}
+const userHasResultsMessage = (n) =>
+    `ลบไม่ได้: ผู้ใช้นี้เป็นเจ้าของผลงานที่บันทึกไว้ ${Number(n).toLocaleString('en-US')} ระเบียน — การลบบัญชีจะทำให้ผลงานหาย กรุณา "ปิดการใช้งาน" บัญชีแทน`;
+
 apiRouter.delete('/users/:id', authenticateToken, isAnyAdmin, async (req, res) => {
     const userId = req.params.id;
     const user = req.user;
@@ -5625,6 +5641,11 @@ apiRouter.delete('/users/:id', authenticateToken, isAnyAdmin, async (req, res) =
             return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์ลบผู้ใช้งาน' });
         }
 
+        const ownedResults = await countUserKpiResults(userId);
+        if (ownedResults > 0) {
+            return res.status(400).json({ success: false, code: 'USER_HAS_KPI_RESULTS', kpi_results: ownedResults, message: userHasResultsMessage(ownedResults) });
+        }
+
         await db.query('DELETE FROM users WHERE id = ?', [userId]);
         await cleanupPendingApprovalNotifications(userId);
         await db.query(
@@ -5633,7 +5654,11 @@ apiRouter.delete('/users/:id', authenticateToken, isAnyAdmin, async (req, res) =
         );
         res.json({ success: true, message: 'Deleted' });
     } catch (error) {
-        res.status(500).json({ success: false });
+        // ฐานข้อมูลปฏิเสธเพราะยังมีข้อมูลอ้างอิงผู้ใช้นี้ (FK RESTRICT) — ไม่ใช่ข้อผิดพลาดของระบบ
+        if (error && (error.code === 'ER_ROW_IS_REFERENCED_2' || error.code === 'ER_ROW_IS_REFERENCED')) {
+            return res.status(400).json({ success: false, code: 'USER_HAS_KPI_RESULTS', message: 'ลบไม่ได้: ยังมีข้อมูลผลงานที่อ้างอิงผู้ใช้นี้ กรุณา "ปิดการใช้งาน" บัญชีแทน' });
+        }
+        res.status(500).json({ success: false, message: 'ไม่สามารถลบผู้ใช้งานได้' });
     }
 });
 
@@ -10931,6 +10956,23 @@ const migrationsReady = (async () => {
         ];
         for (const idx of indexes) {
             try { await db.query(idx); } catch (e) { /* index อาจมีอยู่แล้ว */ }
+        }
+
+        // ลบผู้ใช้ต้องไม่ลบผลงาน: FK kpi_results.user_id → users เปลี่ยนจาก ON DELETE CASCADE เป็น RESTRICT (11 ต.ค. 2569)
+        // เหตุการณ์จริง: ลบบัญชีผู้ใช้แล้วผลงาน ~17,400 แถวที่ user_id ตรงกันถูกลบตามโดยไม่มี log — ดู docs/fix-log.md และ CLAUDE.md หัวข้อ 9.4
+        // (ฐานข้อมูลต้องไม่มีแถวที่ user_id ไม่มีใน users ก่อน — ถ้ามี ALTER จะล้มเหลวและคง FK เดิมไว้ พร้อมแจ้งใน log)
+        try {
+            const [cascadeFks] = await db.query(
+                `SELECT CONSTRAINT_NAME AS name FROM information_schema.REFERENTIAL_CONSTRAINTS
+                 WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'kpi_results' AND REFERENCED_TABLE_NAME = 'users'
+                   AND DELETE_RULE IN ('CASCADE', 'SET NULL')`);
+            for (const fk of cascadeFks) {
+                await db.query(`ALTER TABLE kpi_results DROP FOREIGN KEY \`${fk.name}\`,
+                                ADD CONSTRAINT fk_kpi_results_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE RESTRICT`);
+                console.log(`✅ kpi_results.${fk.name}: ON DELETE CASCADE → RESTRICT (fk_kpi_results_user) — ลบผู้ใช้ไม่ลบผลงานอีกต่อไป`);
+            }
+        } catch (e) {
+            console.error('⚠️ เปลี่ยน FK kpi_results.user_id เป็น RESTRICT ไม่สำเร็จ (ยังเป็น CASCADE — ห้ามลบผู้ใช้จนกว่าจะแก้):', e.message);
         }
 
         console.log('✅ login_logs, system_logs, notifications, rejection & appeal tables + indexes ready');

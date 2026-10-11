@@ -43,6 +43,8 @@ async function ensureTestUser(db, opts = {}) {
 // — เดิมลบแค่ test_user_% ทำให้ผู้ใช้ที่ค้างจากรอบก่อนชน UNIQUE username ในรอบถัดไป
 // ปลอดภัยเพราะ setup.js บังคับให้รันบน database ทดสอบเท่านั้น
 async function cleanupTestUsers(db, prefix = 'test\\_') {   // \\_ = ขีดล่างตัวอักษรจริงใน LIKE (ไม่ใช่ wildcard)
+    // FK kpi_results.user_id → users เป็น RESTRICT (ลบผู้ใช้ที่มีผลงานไม่ได้) — ลบผลงานของผู้ใช้ทดสอบก่อนเสมอ
+    await db.query('DELETE r FROM kpi_results r JOIN users u ON u.id = r.user_id WHERE u.username LIKE ?', [prefix + '%']);
     await db.query('DELETE FROM users WHERE username LIKE ?', [prefix + '%']);
 }
 

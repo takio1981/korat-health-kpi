@@ -697,7 +697,8 @@ export class UserManagementComponent implements OnInit {
               this.loadUsers();
             }
           },
-          error: () => Swal.fire('ผิดพลาด', 'ไม่สามารถลบผู้ใช้งานได้', 'error')
+          // ผู้ใช้ที่มีผลงานบันทึกไว้ลบไม่ได้ (backend ตอบ 400 พร้อมเหตุผล) — แสดงเหตุผลให้ผู้ดูแลเห็น ไม่ใช่ข้อความทั่วไป
+          error: (err) => Swal.fire(err.error?.code === 'USER_HAS_KPI_RESULTS' ? 'ลบไม่ได้' : 'ผิดพลาด', err.error?.message || 'ไม่สามารถลบผู้ใช้งานได้', err.error?.code === 'USER_HAS_KPI_RESULTS' ? 'warning' : 'error')
         });
       }
     });
