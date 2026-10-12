@@ -437,6 +437,11 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   - `applySubSummaryToKpiData()` early-return ถ้า `isEditing === true`
   - ออกจากโหมด edit + save success → call `applySubSummaryToKpiData()` ใหม่เพื่อแสดง AVG
 - Modal บันทึกผลย่อย: ตาราง 12 เดือน (ไม่ใช้ dropdown) + คอลัมน์ ผลงาน + %
+- **นำเข้า Excel ใน modal บันทึกผลย่อย (12 ต.ค. 2569):** ปุ่ม "แบบฟอร์ม Excel" (`downloadSubExcelTemplate()`) / "นำเข้า Excel" เฉพาะ `subEditMode`
+  (`onSubExcelFileSelected()` → `importSubAoa()`) — ตรรกะเป็นฟังก์ชันล้วนใน `frontend/src/app/shared/kpi-sub-excel.ts` (`buildSubTemplateAoa`,
+  `parseSubImportAoa`, `planSubImport`, `applySubChanges`) — หลักการเดียวกับการนำเข้าของตารางหลัก: **เติมค่าลง `subResultList` เท่านั้น ไม่เรียก API เอง**
+  ผู้ใช้กด "บันทึกทั้งหมด" ผ่าน `saveSubResults()` เดิม (การล็อคตรวจที่ `/sub-results/upsert`) — จับคู่แถวด้วย `sub_indicator_id`, แถวที่ hospcode/ปีงบ
+  ไม่ตรงกับ modal = ไม่นำเข้า (กันไฟล์ของหน่วยบริการอื่นทับ), ช่องว่าง = ไม่เปลี่ยนค่าเดิม, ค่า 0 นำเข้าได้ — Test: `shared/kpi-sub-excel.spec.ts`, `dashboard.spec.ts`
 - `formatNum()` helper: จำนวนเต็มไม่มีทศนิยม (70), มีเศษ 2 ตำแหน่ง (70.50)
 
 ### Users Data Sync (Local ↔ KHD)

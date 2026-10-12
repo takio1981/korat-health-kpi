@@ -15,6 +15,7 @@ import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { indicatorAllowsHostype, unionHostypes } from '../shared/indicator-scope';
 import { EXCEL_MONTHS, ChangePlan, EditPerms, buildTemplateAoa, parseImportAoa, planImport, parseClipboardGrid, isMultiCell, planPaste, applyCellChanges, itemKey } from '../shared/kpi-excel';
 import { Anomaly, detectAnomaly } from '../shared/anomaly';
+import { SUB_EXCEL_MONTHS, SubChangePlan, buildSubTemplateAoa, parseSubImportAoa, planSubImport, applySubChanges, subFieldLabel } from '../shared/kpi-sub-excel';
 
 @Component({
   selector: 'app-dashboard',
@@ -3181,6 +3182,110 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     const target = parseFloat(sub?._target);
     if (!isFinite(actual) || !isFinite(target) || target === 0) return '';
     return this.formatNum((actual / target) * 100);
+  }
+
+  // ===== นำเข้าผลงานตัวชี้วัดย่อยจาก Excel (12 ต.ค. 2569) — ตรรกะอยู่ใน shared/kpi-sub-excel.ts =====
+  // เติมค่าลงตารางในหน้าต่างเท่านั้น ผู้ใช้ตรวจแล้วกด "บันทึกทั้งหมด" ผ่าน saveSubResults() เดิม (สิทธิ์/การล็อคตรวจที่ /sub-results/upsert)
+
+  /** ดาวน์โหลดแบบฟอร์ม Excel ของข้อย่อยในหน้าต่างนี้ (พร้อมค่าปัจจุบัน) */
+  downloadSubExcelTemplate() {
+    const ctx = this.subResultContext;
+    if (!ctx || !this.subResultList.length) { this.toast.warning('ไม่มีตัวชี้วัดย่อยให้ดาวน์โหลดแบบฟอร์ม'); return; }
+    import('xlsx').then(XLSX => {
+      const aoa = buildSubTemplateAoa(this.subResultList, ctx);
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = [{ wch: 16 }, { wch: 10 }, { wch: 11 }, { wch: 12 }, { wch: 55 }, { wch: 10 }, ...SUB_EXCEL_MONTHS.map(() => ({ wch: 8 }))];
+      const last = aoa[2].length - 1;
+      ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: last } }, { s: { r: 1, c: 0 }, e: { r: 1, c: last } }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'ผลงานย่อย');
+      XLSX.writeFile(wb, `KPI_ผลงานตัวชี้วัดย่อย_${ctx.indicator_id}_${ctx.hospcode}_${ctx.year_bh}.xlsx`);
+    });
+  }
+
+  /** เลือกไฟล์ Excel/CSV → อ่านแผ่นงานแรก → importSubAoa() */
+  onSubExcelFileSelected(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const file = input?.files?.[0];
+    if (input) input.value = '';              // เลือกไฟล์เดิมซ้ำได้
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { Swal.fire('ไฟล์ใหญ่เกินไป', 'รองรับไฟล์ไม่เกิน 10 MB', 'warning'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      import('xlsx').then(XLSX => {
+        try {
+          const wb = XLSX.read(new Uint8Array(reader.result as ArrayBuffer), { type: 'array' });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          this.importSubAoa(XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' }) as any[][], file.name);
+        } catch (e: any) {
+          Swal.fire('อ่านไฟล์ไม่ได้', 'ไฟล์ไม่ใช่ Excel/CSV ที่ถูกต้อง หรือไฟล์เสียหาย', 'error');
+        }
+      });
+    };
+    reader.onerror = () => Swal.fire('อ่านไฟล์ไม่ได้', 'ไม่สามารถเปิดไฟล์ที่เลือก', 'error');
+    reader.readAsArrayBuffer(file);
+  }
+
+  /** สรุปสิ่งที่จะเปลี่ยนจากไฟล์ให้ผู้ใช้ยืนยัน แล้วเติมลงตารางในหน้าต่าง (ยังไม่บันทึก) */
+  importSubAoa(aoa: any[][], fileName = '') {
+    const ctx = this.subResultContext;
+    if (!this.subEditMode || !ctx) return;
+    const parsed = parseSubImportAoa(aoa);
+    if (parsed.error) { Swal.fire('นำเข้าไม่ได้', parsed.error, 'error'); return; }
+    const plan = planSubImport(parsed.rows, this.subResultList, ctx);
+    const html = this.buildSubImportPreviewHtml(plan, parsed.rows.length, fileName);
+    if (plan.changes.length === 0) {
+      Swal.fire({ icon: 'info', title: 'ไม่มีค่าที่ต้องเปลี่ยน', html, confirmButtonText: 'ตกลง', width: 720 });
+      return;
+    }
+    Swal.fire({
+      title: 'ตรวจสอบก่อนนำเข้า', html, icon: 'question', width: 780,
+      showCancelButton: true, confirmButtonColor: '#10b981',
+      confirmButtonText: `<i class="fas fa-file-import mr-1"></i> เติมลงตาราง ${plan.changes.length.toLocaleString()} ช่อง`, cancelButtonText: 'ยกเลิก'
+    }).then(r => { if (r.isConfirmed) this.applySubImportPlan(plan); });
+  }
+
+  /** HTML สรุปผลการอ่านไฟล์ (แยกเป็นฟังก์ชันเพื่อทดสอบได้โดยไม่ต้องเปิดหน้าต่าง) */
+  buildSubImportPreviewHtml(plan: SubChangePlan, fileRows: number, fileName = ''): string {
+    const esc = (v: any) => this.escHtml(String(v ?? ''));
+    const line = (n: number, text: string, color: string) => n > 0 ? `<li style="color:${color}">${text} <b>${n.toLocaleString()}</b></li>` : '';
+    const rows = plan.changes.slice(0, 30).map(c => `<tr>
+        <td style="padding:5px 8px;border-bottom:1px solid #e5e7eb">${esc(c.sub.sub_indicator_name)}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${subFieldLabel(c.field)}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e5e7eb;text-align:center;color:#6b7280">${esc(c.oldVal) || '—'}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:700">${esc(c.newVal)}</td>
+      </tr>`).join('');
+    const table = plan.changes.length === 0 ? '' : `
+      <div style="max-height:240px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:10px;margin-top:8px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;background:white">
+          <thead style="position:sticky;top:0;background:#f3f4f6"><tr>
+            <th style="padding:6px 8px;text-align:left">ตัวชี้วัดย่อย</th><th style="padding:6px 8px">ช่อง</th>
+            <th style="padding:6px 8px">ค่าเดิม</th><th style="padding:6px 8px">ค่าใหม่</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      ${plan.changes.length > 30 ? `<p style="font-size:11px;color:#6b7280;margin-top:4px">แสดง 30 จาก ${plan.changes.length.toLocaleString()} ช่อง</p>` : ''}`;
+    return `<div style="text-align:left;font-size:13px">
+      ${fileName ? `<p style="color:#6b7280;font-size:12px;margin-bottom:6px"><i class="fas fa-file-excel" style="color:#16a34a"></i> ${esc(fileName)} — ${fileRows.toLocaleString()} แถว</p>` : ''}
+      <ul style="list-style:disc;margin-left:18px;line-height:1.7">
+        <li style="color:#047857">ช่องที่จะเปลี่ยนค่า <b>${plan.changes.length.toLocaleString()}</b></li>
+        ${line(plan.same, 'ค่าเท่าเดิม (ไม่เปลี่ยน)', '#6b7280')}
+        ${line(plan.tooLong, 'ข้าม — ข้อความยาวเกิน 100 ตัวอักษร', '#b45309')}
+        ${line(plan.unmatchedRows.length, 'ข้าม — แถวที่ไม่ใช่ข้อย่อยของตัวชี้วัดนี้ หรือเป็นของหน่วยบริการ/ปีงบประมาณอื่น', '#b91c1c')}
+        ${line(plan.duplicateRows.length, 'ข้าม — แถวซ้ำในไฟล์ (ใช้แถวแรก)', '#b45309')}
+      </ul>
+      ${plan.unmatchedRows.length ? `<p style="font-size:11px;color:#b91c1c;margin-top:2px">แถวที่ไม่ตรง: ${plan.unmatchedRows.slice(0, 15).join(', ')}${plan.unmatchedRows.length > 15 ? ' …' : ''} — ตรวจว่าเป็นไฟล์ของตัวชี้วัด หน่วยบริการ และปีงบประมาณเดียวกับหน้าต่างนี้</p>` : ''}
+      ${table}
+      <p style="margin-top:10px;font-size:12px;color:#6b7280">ช่องว่างในไฟล์ไม่ทับค่าเดิม • ข้อมูลจะถูก<b>เติมลงตารางเท่านั้น ยังไม่บันทึก</b> — ตรวจสอบแล้วกด "บันทึกทั้งหมด"</p>
+    </div>`;
+  }
+
+  /** เติมค่าตามแผนลงตารางในหน้าต่าง (การ์ดสรุป/แถวผลงานรวมรายเดือนคำนวณใหม่เอง) + แจ้งผล */
+  applySubImportPlan(plan: SubChangePlan) {
+    const touched = applySubChanges(plan.changes);
+    this.cdr.detectChanges();
+    if (plan.changes.length === 0) { this.toast.warning('ไม่มีช่องที่นำเข้าได้'); return; }
+    this.toast.success(`นำเข้าแล้ว ${plan.changes.length.toLocaleString()} ช่อง ใน ${touched.toLocaleString()} ข้อย่อย — ตรวจสอบแล้วกด "บันทึกทั้งหมด"`);
   }
 
   // สำหรับเก็บค่าเดิมตอนโหลด — ใช้ตรวจว่าเปลี่ยนไหมก่อนบันทึก

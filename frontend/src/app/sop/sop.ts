@@ -702,7 +702,7 @@ const SYSTEMS: SopSystem[] = [
     {id:'n2', r:3,c:0,t:'db',      l:'kpi_sub_indicators\n(FK → kpi_indicators)'},
     {id:'n3', r:1,c:1,t:'start',   l:'Dashboard\n→ กด Sub icon'},
     {id:'n4', r:1,c:2,t:'process', l:'Modal: 12 เดือน\n× N sub (ตาราง)'},
-    {id:'n5', r:2,c:2,t:'process', l:'POST /sub-results/upsert\n(UNIQUE constraint)'},
+    {id:'n5', r:2,c:2,t:'process', l:'POST /sub-results/upsert\n(พิมพ์เอง หรือ นำเข้า Excel → บันทึกทั้งหมด)'},
     {id:'n6', r:3,c:2,t:'db',      l:'kpi_sub_results\nsub+year+hospcode+month'},
     {id:'n7', r:2,c:3,t:'process', l:'GET /sub-results/summary\nผลงานล่าสุดของแต่ละข้อ ÷ จำนวนข้อย่อยทั้งหมด'},
     {id:'n8', r:1,c:3,t:'process', l:'applySubSummaryToKpiData()\noverride main row display'},

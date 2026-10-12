@@ -3,6 +3,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { DashboardComponent } from './dashboard';
 import { testProviders } from '../testing/test-providers';
 import { parseImportAoa, planImport, buildTemplateAoa } from '../shared/kpi-excel';
+import { parseSubImportAoa, planSubImport } from '../shared/kpi-sub-excel';
 
 function row(year: string, extra: any = {}) {
   return {
@@ -156,6 +157,45 @@ describe('DashboardComponent', () => {
   it('ยังไม่มีข้อย่อยใดบันทึกเลย → ผลงานแสดง "-" (ไม่ใช่ 0)', () => {
     component.subResultList = [{ _target: '100', _actuals: {} }, { _target: '100', _actuals: {} }];
     expect(component.getSubModalAverage().avgActual).toBe('-');
+  });
+
+  // ---- นำเข้าผลงานตัวชี้วัดย่อยจาก Excel (12 ต.ค. 2569) ----
+  describe('นำเข้า Excel ในหน้าต่างบันทึกผลงานตัวชี้วัดย่อย', () => {
+    const HEAD = ['sub_indicator_id', 'hospcode', 'ปีงบประมาณ', 'รหัส', 'ตัวชี้วัดย่อย', 'เป้าหมาย', 'ต.ค.', 'พ.ย.'];
+    beforeEach(() => {
+      component.subResultContext = { indicator_id: 9, indicator_name: 'หลัก', hospcode: '00123', hosname: 'รพ.ก', year_bh: '2570' };
+      component.subResultList = [
+        { id: 1, sub_indicator_name: 'ข้อ <1>', _target: '100', _actuals: { 10: '90' } },
+        { id: 2, sub_indicator_name: 'ข้อ 2', _target: '100', _actuals: {} },
+        { id: 3, sub_indicator_name: 'ข้อ 3', _target: '100', _actuals: {} },
+      ];
+    });
+
+    it('ไม่อยู่ในโหมดแก้ไข → ไม่นำเข้า', () => {
+      component.subEditMode = false;
+      component.importSubAoa([HEAD, [2, '00123', '2570', '', '', '', '', 60]]);
+      expect(component.subResultList[1]._actuals[11]).toBeUndefined();
+    });
+
+    it('เติมเฉพาะช่องที่กรอก แล้วผลงานรวมรายเดือนใช้ผลงานล่าสุดของแต่ละข้อ', () => {
+      const parsed = parseSubImportAoa([HEAD, [1, '00123', '2570', '', '', '', '', ''], [2, '00123', '2570', '', '', '', '', 60], [99, '00123', '2570', '', '', '', 5, 5]]);
+      const p = planSubImport(parsed.rows, component.subResultList, component.subResultContext);
+      const html = component.buildSubImportPreviewHtml(p, parsed.rows.length, 'a.xlsx');
+      expect(html).toContain('ข้อ 2');
+      expect(html).toContain('พ.ย.');
+      expect(html).toContain('ข้าม — แถวที่ไม่ใช่ข้อย่อยของตัวชี้วัดนี้');
+      component.applySubImportPlan(p);
+      expect(component.subResultList[1]._actuals[11]).toBe('60');
+      expect(component.subResultList[0]._actuals[10]).toBe('90');           // ช่องว่างในไฟล์ไม่ทับค่าเดิม
+      expect(component.getSubMonthAggregate(11)).toBe('50');                 // (90 ยกมา + 60 + 0) / 3
+    });
+
+    it('ชื่อข้อย่อยในหน้าสรุปถูก escape (กัน HTML แทรก)', () => {
+      const p = planSubImport(parseSubImportAoa([HEAD, [1, '00123', '2570', '', '', '', 95, '']]).rows, component.subResultList, component.subResultContext);
+      const html = component.buildSubImportPreviewHtml(p, 1);
+      expect(html).toContain('ข้อ &lt;1&gt;');
+      expect(html).not.toContain('ข้อ <1>');
+    });
   });
 
   // ---- เพิ่มตัวชี้วัดให้หน่วยบริการ (11 ต.ค. 2569) ----
