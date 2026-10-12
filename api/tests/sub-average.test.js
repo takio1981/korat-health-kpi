@@ -76,7 +76,24 @@ describe('ผลงานจากตัวชี้วัดย่อย ÷ จ
 
     test('✅ บันทึกข้อเดียวในเดือนถัดไป → หารด้วย 3 เช่นกัน', async () => {
         await save(subs.c, hospA, 11, '30', null);
-        expect(Number((await summary(hospA)).m11)).toBe(10);
+        // (12 ต.ค. 2569) ข้อ a, b ไม่ได้บันทึกเดือน พ.ย. → ใช้ผลงานล่าสุดของแต่ละข้อ (90, 60): (90 + 60 + 30) / 3 — เดิมได้ 10
+        expect(Number((await summary(hospA)).m11)).toBe(60);
+    });
+
+    // Regression (12 ต.ค. 2569): ไม่ต้องบันทึกครบทุกข้อทุกเดือน — ข้อที่ผ่านแล้วไม่ต้องบันทึกซ้ำ
+    test('✅ ยกยอดผลงานล่าสุดของแต่ละข้อ: บันทึกเฉพาะข้อที่เปลี่ยน เดือนที่ไม่มีการบันทึกยังว่าง', async () => {
+        await save(subs.b, hospA, 1, '80', null);           // ข้าม ธ.ค. — บันทึกเฉพาะข้อ b ในเดือน ม.ค.
+        const s = await summary(hospA);
+        expect(s.m12).toBeNull();
+        expect(Number(s.m01)).toBe(66.6667);                 // (90 + 80 + 30) / 3
+        expect(Number(s.m10)).toBe(50);                      // เดือนก่อนหน้าไม่เปลี่ยน (ไม่ยกยอดย้อนหลัง)
+    });
+
+    test('✅ บันทึก 0 = ผลงานของข้อนั้นเป็น 0 จริง (ทับค่าที่ยกยอดมา) ทั้งแบบข้อความและตัวเลข', async () => {
+        await save(subs.a, hospA, 2, '0', null);
+        expect(Number((await summary(hospA)).m02)).toBe(36.6667);   // (0 + 80 + 30) / 3
+        await save(subs.b, hospA, 3, 0, null);                       // ตัวเลข 0 — เดิมถูกเก็บเป็นค่าว่าง
+        expect(Number((await summary(hospA)).m03)).toBe(10);         // (0 + 0 + 30) / 3
     });
 
     test('✅ บันทึก 0 เองกับไม่บันทึก ให้ผลเท่ากัน', async () => {

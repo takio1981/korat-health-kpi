@@ -3046,16 +3046,11 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     const avg = (arr: number[]) => arr.length ? arr.reduce((x, y) => x + y, 0) / arr.length : NaN;
     const at = avg(targets);
-    // ผลงาน = ค่าเดือนล่าสุดที่มีการบันทึก โดยค่าของเดือน = ผลรวมทุกข้อย่อย ÷ จำนวนข้อย่อยทั้งหมด
-    // (ข้อที่ไม่ได้บันทึกในเดือนนั้นนับเป็น 0) — ต้องตรงกับ loadSubAggregates() ฝั่ง backend
+    // ผลงาน = ค่าของเดือนล่าสุดที่มีการบันทึก (ดู getSubMonthlyAggregates) — ต้องตรงกับ loadSubAggregates() ฝั่ง backend
     let aa = NaN;
+    const monthly = this.getSubMonthlyAggregates();
     for (const m of [...this.subMonthColumns].reverse()) {
-      let sum = 0, has = false;
-      for (const s of this.subResultList) {
-        const raw = String(s._actuals?.[m] ?? '').trim();
-        if (/^-?(\d+(\.\d+)?|\.\d+)$/.test(raw)) { sum += parseFloat(raw); has = true; }
-      }
-      if (has) { aa = sum / this.subResultList.length; break; }
+      if (monthly[m] !== null && monthly[m] !== undefined) { aa = monthly[m] as number; break; }
     }
     const pct = (isFinite(at) && at > 0 && isFinite(aa)) ? (aa / at) * 100 : NaN;
     return {
@@ -3065,6 +3060,32 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       count: this.subResultList.length,
       metPct: isFinite(pct) ? pct : 0,
     };
+  }
+
+  // ผลงานรวมรายเดือนของตัวชี้วัดหลักจากข้อย่อย = ผลรวม "ผลงานล่าสุดของแต่ละข้อ ณ เดือนนั้น" ÷ จำนวนข้อย่อยทั้งหมด
+  // ข้อที่ไม่ได้บันทึกในเดือนนั้นใช้ค่าล่าสุดของเดือนก่อนหน้า (ยังไม่เคยบันทึก = 0) → ข้อที่ผ่านแล้วไม่ต้องบันทึกซ้ำ
+  // เดือนที่ไม่มีข้อใดบันทึกเลย = null — ต้องตรงกับ loadSubAggregates() ฝั่ง backend
+  getSubMonthlyAggregates(): { [month: number]: number | null } {
+    const out: { [month: number]: number | null } = {};
+    const list = this.subResultList || [];
+    const latest = new Map<number, number>();
+    for (const m of this.subMonthColumns) {
+      let has = false;
+      list.forEach((s: any, idx: number) => {
+        const raw = String(s._actuals?.[m] ?? '').trim();
+        if (/^-?(\d+(\.\d+)?|\.\d+)$/.test(raw)) { latest.set(idx, parseFloat(raw)); has = true; }
+      });
+      if (!has || list.length === 0) { out[m] = null; continue; }
+      let sum = 0;
+      latest.forEach(v => sum += v);
+      out[m] = sum / list.length;
+    }
+    return out;
+  }
+
+  getSubMonthAggregate(m: number): string {
+    const v = this.getSubMonthlyAggregates()[m];
+    return v === null || v === undefined ? '' : this.formatNum(v);
   }
 
   // ลำดับเดือนตามปีงบประมาณ ต.ค.→ก.ย.

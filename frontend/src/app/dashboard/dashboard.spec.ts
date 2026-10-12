@@ -130,7 +130,27 @@ describe('DashboardComponent', () => {
 
     // เดือนล่าสุดที่มีข้อใดข้อหนึ่งบันทึก = เดือนที่ใช้ และยังหารด้วย 3
     component.subResultList[2]._actuals[11] = '30';
-    expect(component.getSubModalAverage().avgActual).toBe('10');
+    // (12 ต.ค. 2569) ข้อที่ไม่ได้กรอกในเดือนนั้นใช้ผลงานล่าสุดของข้อนั้น: (90 + 60 + 30) / 3 = 60 — เดิมได้ 10
+    expect(component.getSubModalAverage().avgActual).toBe('60');
+  });
+
+  // Regression (12 ต.ค. 2569): ไม่ต้องกรอกครบทุกข้อทุกเดือน — ข้อที่ผ่านแล้วใช้ผลงานล่าสุดของข้อนั้นไปคำนวณ
+  it('ผลงานรวมรายเดือนยกยอดผลงานล่าสุดของแต่ละข้อย่อย', () => {
+    component.subResultList = [
+      { _target: '100', _actuals: { 10: '100' } },            // ผ่านตั้งแต่ ต.ค. ไม่กรอกอีก
+      { _target: '100', _actuals: { 10: '40', 12: '70' } },    // กรอกเฉพาะเดือนที่ค่าเปลี่ยน
+      { _target: '100', _actuals: { 12: '0', 1: 'รอดำเนินการ' } },
+    ];
+    const m = component.getSubMonthlyAggregates();
+    expect(m[10]).toBeCloseTo(140 / 3, 6);
+    expect(m[11]).toBeNull();                 // ไม่มีข้อใดกรอกเลย = ว่าง (ไม่ใช่ยกยอดทั้งเดือน)
+    expect(m[12]).toBeCloseTo(170 / 3, 6);    // 100 (ยกยอด) + 70 + 0
+    expect(m[1]).toBeNull();                  // ข้อความไม่นับเป็นการบันทึกผลงาน
+    expect(component.getSubMonthAggregate(12)).toBe('56.67');
+    expect(component.getSubModalAverage().avgActual).toBe('56.67');
+    // กรอก 0 = ผลงานของข้อนั้นเป็น 0 จริง (ทับค่าที่ยกยอดมา)
+    component.subResultList[0]._actuals[1] = '0';
+    expect(component.getSubMonthlyAggregates()[1]).toBeCloseTo(70 / 3, 6);
   });
 
   it('ยังไม่มีข้อย่อยใดบันทึกเลย → ผลงานแสดง "-" (ไม่ใช่ 0)', () => {

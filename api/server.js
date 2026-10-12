@@ -6675,9 +6675,12 @@ apiRouter.get('/sub-results', authenticateToken, async (req, res) => {
 //   → ข้อย่อยที่ไม่ได้บันทึกในเดือนนั้นนับเป็น 0 โดยอัตโนมัติ ผู้ใช้ไม่ต้องบันทึก 0 เอง
 //   (เดิมใช้ SQL AVG ซึ่งหารด้วยจำนวนข้อที่ "มีการบันทึก" เท่านั้น ทำให้ผลงานสูงเกินจริงเมื่อบันทึกไม่ครบทุกข้อ)
 //   เดือนที่ไม่มีข้อย่อยใดบันทึกเลย = null (ไม่ใช่ 0) เพื่อไม่ให้เดือนในอนาคตกลายเป็น 0 ทั้งหมด
+// ยกยอดผลงานล่าสุดของแต่ละข้อ (12 ต.ค. 2569 — ผู้ใช้ขอ): ข้อที่ไม่ได้บันทึกในเดือนนั้นใช้ "ผลงานล่าสุดของข้อนั้นจากเดือนก่อนหน้าในปีงบเดียวกัน"
+//   (ยังไม่เคยบันทึกเลย = 0) → ข้อที่ผ่านแล้วไม่ต้องบันทึกซ้ำทุกเดือน บันทึกเฉพาะข้อที่ยังไม่ผ่าน/ค่าเปลี่ยน — ต้องการให้ข้อใดเป็น 0 ต้องบันทึก 0
 //   นับ/รวมเฉพาะข้อย่อยที่เปิดใช้งาน (is_active = 1) — ตรงกับรายการที่หน้าต่างบันทึกผลงานย่อยแสดง
 // avg_target = เฉลี่ยเป้าหมายของข้อย่อยที่มีเป้าหมาย (เป้าหมายที่บันทึกในเดือน ต.ค. ถ้าไม่มีใช้ค่าตั้งต้นของข้อย่อย — เหมือนที่หน้าต่างแสดง)
 const SUB_AGG_MONTH_KEYS = { 10: 'm10', 11: 'm11', 12: 'm12', 1: 'm01', 2: 'm02', 3: 'm03', 4: 'm04', 5: 'm05', 6: 'm06', 7: 'm07', 8: 'm08', 9: 'm09' };
+const SUB_AGG_FISCAL_ORDER = ['m10', 'm11', 'm12', 'm01', 'm02', 'm03', 'm04', 'm05', 'm06', 'm07', 'm08', 'm09'];
 function subAggNum(v) {
     if (v === null || v === undefined) return null;
     const t = String(v).trim();
@@ -6708,10 +6711,10 @@ async function loadSubAggregates(conn, { indicatorId, yearBh, hospcode } = {}) {
         const mk = SUB_AGG_MONTH_KEYS[Number(r.month_bh)];
         if (!hc || !mk) continue;
         const key = `${r.indicator_id}|${hc}|${r.year_bh}`;
-        if (!groups.has(key)) groups.set(key, { indicator_id: r.indicator_id, hospcode: hc, year_bh: r.year_bh, sum: {}, target: new Map() });
+        if (!groups.has(key)) groups.set(key, { indicator_id: r.indicator_id, hospcode: hc, year_bh: r.year_bh, vals: {}, target: new Map() });
         const g = groups.get(key);
         const a = subAggNum(r.actual_value);
-        if (a !== null) g.sum[mk] = (g.sum[mk] || 0) + a;
+        if (a !== null) (g.vals[mk] || (g.vals[mk] = new Map())).set(r.sub_indicator_id, a);
         if (Number(r.month_bh) === 10) { const t = subAggNum(r.target_value); if (t !== null) g.target.set(r.sub_indicator_id, t); }
     }
     const round4 = (n) => Math.round(n * 10000) / 10000;
@@ -6720,7 +6723,16 @@ async function loadSubAggregates(conn, { indicatorId, yearBh, hospcode } = {}) {
         const indSubs = subsByInd.get(g.indicator_id) || [];
         const subCount = indSubs.length;
         const row = { indicator_id: g.indicator_id, hospcode: g.hospcode, year_bh: g.year_bh, sub_count: subCount };
-        for (const mk of Object.values(SUB_AGG_MONTH_KEYS)) row[mk] = (g.sum[mk] !== undefined && subCount > 0) ? round4(g.sum[mk] / subCount) : null;
+        // ไล่ตามลำดับปีงบ (ต.ค. → ก.ย.) เก็บผลงานล่าสุดของแต่ละข้อไว้ยกยอดไปเดือนถัดไป
+        const latest = new Map();
+        for (const mk of SUB_AGG_FISCAL_ORDER) {
+            const monthVals = g.vals[mk];
+            if (!monthVals || subCount === 0) { row[mk] = null; continue; }
+            for (const [sid, v] of monthVals) latest.set(sid, v);
+            let sum = 0;
+            for (const v of latest.values()) sum += v;
+            row[mk] = round4(sum / subCount);
+        }
         const targets = indSubs.map(su => g.target.has(su.id) ? g.target.get(su.id) : subAggNum(su.target_percentage)).filter(t => t !== null && t !== 0);
         row.avg_target = targets.length > 0 ? round4(targets.reduce((x, y) => x + y, 0) / targets.length) : null;
         out.push(row);
@@ -6757,7 +6769,7 @@ apiRouter.post('/sub-results/upsert', authenticateToken, async (req, res) => {
             `INSERT INTO kpi_sub_results (sub_indicator_id, year_bh, hospcode, month_bh, target_value, actual_value, status, user_id)
              VALUES (?,?,?,?,?,?,?,?)
              ON DUPLICATE KEY UPDATE target_value=VALUES(target_value), actual_value=VALUES(actual_value), status=VALUES(status), user_id=VALUES(user_id)`,
-            [sub_indicator_id, year_bh, hospcode, month_bh, target_value || null, actual_value || null, status || 'Pending', req.user.userId]
+            [sub_indicator_id, year_bh, hospcode, month_bh, target_value || null, (actual_value === 0 || actual_value) ? actual_value : null, status || 'Pending', req.user.userId]
         );
 
         // === KPI Save Audit (fire-and-forget) ===

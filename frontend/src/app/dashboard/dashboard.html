@@ -2104,9 +2104,19 @@
               </td>
             </tr>
           </tbody>
+          <!-- ผลงานรวมรายเดือน = ผลงานล่าสุดของแต่ละข้อ ณ เดือนนั้น ÷ จำนวนข้อทั้งหมด -->
+          <tfoot *ngIf="subResultList.length > 0">
+            <tr class="bg-emerald-50 border-t-2 border-emerald-200 font-bold text-emerald-800">
+              <td [attr.colspan]="4 + (subDeleteMode ? 1 : 0)" class="px-2 py-1.5 text-right text-xs">
+                <i class="fas fa-calculator mr-1"></i>ผลงานรวมรายเดือน (÷ {{ subResultList.length }} ข้อ)
+              </td>
+              <td *ngFor="let m of subMonthColumns" class="px-1 py-1.5 text-center text-xs">{{ getSubMonthAggregate(m) || '-' }}</td>
+            </tr>
+          </tfoot>
         </table>
       </div>
       <p class="text-[11px] text-gray-400 mt-2"><i class="fas fa-info-circle mr-1"></i>กรอกเป้าหมายและผลงานรายเดือน → กด "บันทึกทั้งหมด" (ระบบจะส่งเฉพาะเซลล์ที่เปลี่ยนแปลง)</p>
+      <p class="text-[11px] text-emerald-700 mt-1"><i class="fas fa-lightbulb mr-1"></i>ไม่ต้องกรอกครบทุกข้อในแต่ละเดือน — ข้อที่ผ่านแล้วไม่ต้องกรอกซ้ำ ระบบนำผลงานล่าสุดของแต่ละข้อมาคำนวณผลงานรวมให้ กรอกเฉพาะข้อที่ยังไม่ผ่านหรือค่าเปลี่ยน (ต้องการให้ข้อใดเป็น 0 ให้กรอก 0)</p>
     </div>
     <div class="px-6 py-4 border-t flex flex-wrap justify-between items-center gap-2 bg-gray-50 rounded-b-2xl">
       <span class="text-xs text-gray-500">
