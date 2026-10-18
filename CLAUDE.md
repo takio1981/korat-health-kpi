@@ -465,7 +465,15 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   (`toggleHier()` โหลดแบบ lazy ต่อ indicator|hospcode|ปีงบ) แถวลูกเรียงใต้แถวหลัก (`hierRows()`), **rowspan ของหมวดหมู่หลักต้องรวมแถวลูก** (`hierRowSpan(all, i)`),
   แก้ไขเฉพาะระดับกรอกเอง (`canEditHierRow()`), บันทึกด้วยปุ่ม "บันทึก" เดิม (`saveKpiData()` รวม `collectHierChanges()` ในหน้ายืนยัน → `saveHierChanges()` ก่อนแถวหลัก)
   — ตรรกะแถวลูกเป็นฟังก์ชันล้วน `buildHierRows()`/`recomputeHierRows()` (export จาก dashboard.ts) — หน้าต่างบันทึกผลงานย่อยเดิม: ข้อ auto อ่านอย่างเดียว ค่ามาจากกิจกรรม
-- นอกขอบเขต: กราฟ/รายงาน (`kpi_summary` สร้างจาก `kpi_results` เท่านั้น — ช่องว่างเดิม), `weight` ยังไม่ใช้คำนวณ, มุมมองการ์ดมือถือ (ใช้หน้าต่างบันทึกผลงานย่อยเดิม)
+- **กราฟ/รายงาน (`kpi_summary`) อ่านผลงานจากข้อย่อย/กิจกรรมด้วย** (18 ต.ค. 2569): `mergeSubIntoSummary()` นำค่ารายเดือน/เป้าหมายจาก `loadSubAggregates()`
+  ทับช่องที่ข้อย่อยมีค่า (ช่องที่ไม่มีคงค่าจาก `kpi_results` — กติกาเดียวกับ `applySubSummaryToKpiData()` หน้าบันทึกผลงาน) และสร้างแถวให้คู่ที่ไม่มีใน `kpi_results`
+  (สถานะ/ล็อคจากผลงานย่อย/กิจกรรม) เฉพาะหลักแบบ auto — เรียกใน `refreshSummaryPairs()` (ก่อน `recomputeSummaryLastActual()`) และ `/refresh-summary/batch`
+  (`/refresh-summary/prepare` รวมตัวชี้วัดที่มีผลงานเฉพาะข้อย่อย/กิจกรรม) — บันทึกผลงานข้อย่อย/กิจกรรม (`/hierarchy-results/save`, `/sub-results/upsert`)
+  เรียก `refreshSummaryAfterSubSave()` (refresh เฉพาะตัวชี้วัด×ปีงบ แบบ fire-and-forget) — `/dashboard-stats` นับกลุ่มงานที่บันทึก + คู่รอตรวจสอบจากข้อย่อย/กิจกรรมด้วย
+  (เดิมคำนวณ `recordedCount` รวมข้อย่อยแล้วแต่ส่งค่าจาก kpi_results — แก้แล้ว)
+- นอกขอบเขต: `weight` ยังไม่ใช้คำนวณ, มุมมองการ์ดมือถือ (ใช้หน้าต่างบันทึกผลงานย่อยเดิม)
+- ทดสอบหน้าจอ (18 ต.ค. 2569): backend ชุดที่ 2 พอร์ต 3710 ชี้ `khups_kpi_test_db` + บล็อกการเชื่อมต่อออกนอกเครื่อง (ฐานทดสอบมีโทเคน LINE/Telegram/SMTP จริง)
+  + Playwright เปลี่ยนคำขอ :3700 → :3710 — ⚠️ อย่ารัน `npm test` ระหว่างทดสอบหน้าจอ: `cleanupTestUsers()` ลบผู้ใช้ `test_*` ทุกคนในฐานทดสอบ (รวมบัญชี `test_e2e_*`)
 - Test: `api/tests/hierarchy.test.js`, `api/tests/kpi-rollup.test.js`, `shared/kpi-rollup.spec.ts`, `dashboard.spec.ts`, `kpi-manage.spec.ts`
 
 ### Users Data Sync (Local ↔ KHD)

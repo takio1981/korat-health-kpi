@@ -55,7 +55,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+    await new Promise(r => setTimeout(r, 1500)); // ให้ refresh summary แบบ fire-and-forget หลังบันทึกทำงานจบก่อนล้างข้อมูล
     for (const id of [indId, ind2Id].filter(Boolean)) {
+        await db.query('DELETE FROM kpi_summary WHERE indicator_id = ?', [id]);
         await db.query('DELETE FROM kpi_results WHERE indicator_id = ?', [id]);
         await db.query('DELETE FROM kpi_sub_indicators WHERE indicator_id = ?', [id]); // CASCADE → ผลงานย่อย/กิจกรรม/ผลงานกิจกรรม
         await db.query('DELETE FROM kpi_indicators WHERE id = ?', [id]);
@@ -147,6 +149,69 @@ describe('บันทึกและคำนวณ 3 ระดับ', () => {
         expect(r.body.data.subs.map(x => x.id)).toEqual([ids.subAuto, ids.subManual, ids.subAutoEmpty]);
         const chk = r.body.data.activities.find(a => a.id === ids.actChk);
         expect(chk.months).toEqual({ 10: '1', 11: '0' });
+    });
+});
+
+// กราฟ/รายงานอ่าน kpi_summary — ต้องรวมผลงานจากข้อย่อย/กิจกรรม (ตัวชี้วัดที่ไม่มี kpi_results เลย)
+describe('กราฟ/รายงาน (kpi_summary) อ่านผลงานจากข้อย่อย/กิจกรรม', () => {
+    const summaryRow = async (indicatorId = indId) => (await db.query(
+        'SELECT * FROM kpi_summary WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?', [indicatorId, YEAR, hospA]))[0][0];
+
+    test('✅ อัปเดต Summary (prepare → batch → finalize) สร้างแถวจากข้อย่อย/กิจกรรม และไม่สร้างให้หลักแบบกรอกเอง', async () => {
+        const prep = await as(saToken, request(app).post(api('/refresh-summary/prepare'))).send({ year_bh: YEAR });
+        expect(prep.status).toBe(200);
+        expect(prep.body.indicator_ids).toEqual(expect.arrayContaining([indId, ind2Id]));
+        const batch = await as(saToken, request(app).post(api('/refresh-summary/batch'))).send({ indicator_ids: [indId, ind2Id], year_bh: YEAR });
+        expect(batch.status).toBe(200);
+        expect((await as(saToken, request(app).post(api('/refresh-summary/finalize'))).send({ year_bh: YEAR })).status).toBe(200);
+        const row = await summaryRow();
+        // ต.ค. = (90 + 60 + 30) / 3, พ.ย. = (40 + 60 + 30) / 3, เป้าหมาย = เฉลี่ยเป้าหมายข้อย่อยที่มี (100)
+        expect(row.oct).toBe('60');
+        expect(row.nov).toBe('43.33');
+        expect(row.dece).toBeNull();
+        expect(row.target_value).toBe('100');
+        expect(row.last_actual).toBe('43.33');
+        expect(row.indicator_status).toBe('Pending');
+        expect(await summaryRow(ind2Id)).toBeUndefined();   // หลักแบบกรอกเอง ไม่มี kpi_results → ไม่ขึ้นรายงาน
+        const rep = await as(saToken, request(app).get(api(`/report/by-indicator?year_bh=${YEAR}`)));
+        expect(rep.status).toBe(200);
+        expect(JSON.stringify(rep.body)).toContain('test_hier_ind');
+    });
+
+    test('✅ บันทึกกิจกรรมแล้วรายงานอัปเดตเองทันที (ไม่ต้องกดอัปเดต Summary)', async () => {
+        const r = await save(userToken, { hospcode: hospA, activity: [{ activity_id: ids.actNum, month_bh: 12, actual_value: '100' }] });
+        expect(r.status).toBe(200);
+        // ข้อ 1.1 ธ.ค. = (100 + 0) / 2 = 50 → หลัก = (50 + 60 + 30) / 3 = 46.67
+        let row;
+        for (let k = 0; k < 40; k++) {
+            row = await summaryRow();
+            if (row && row.dece) break;
+            await new Promise(res => setTimeout(res, 100));
+        }
+        expect(row.dece).toBe('46.67');
+        expect(row.last_actual).toBe('46.67');
+    });
+
+    test('✅ ช่องที่ข้อย่อยไม่มีค่า คงค่าจากผลงานหลัก (kpi_results)', async () => {
+        const [[sa]] = await db.query("SELECT id FROM users WHERE username = 'test_hier_sa'");
+        await db.query("INSERT INTO kpi_results (indicator_id, year_bh, hospcode, month_bh, target_value, actual_value, user_id, status) VALUES (?,?,?,?,?,?,?,'Pending')",
+            [indId, YEAR, hospA, 9, '100', '77', sa.id]);
+        const { refreshKpiSummaryForIndicatorYears } = require('../server');
+        await refreshKpiSummaryForIndicatorYears(db, [{ indicator_id: indId, year_bh: YEAR }]);
+        const row = await summaryRow();
+        expect(row.sep).toBe('77');
+        expect(row.oct).toBe('60');
+        expect(row.last_actual).toBe('77');
+        await db.query('DELETE FROM kpi_results WHERE indicator_id = ? AND month_bh = 9', [indId]);
+    });
+
+    // Regression (18 ต.ค. 2569): การ์ด "กลุ่มงานที่บันทึกแล้ว" คำนวณรวมข้อย่อยแล้วแต่ส่งค่าจาก kpi_results อย่างเดียว → 0
+    //   และ "รอตรวจสอบ" ไม่นับคู่ที่บันทึกผลงานที่ข้อย่อย/กิจกรรม
+    test('✅ การ์ดหน้าแรก: นับกลุ่มงานที่บันทึกแล้วและคู่ที่รอตรวจสอบจากข้อย่อย/กิจกรรม', async () => {
+        const r = await as(saToken, request(app).get(api(`/dashboard-stats?year=${YEAR}`)));
+        expect(r.status).toBe(200);
+        expect(r.body.data.recordedCount).toBe(1);
+        expect(r.body.data.pendingCount).toBe(2); // ตัวชี้วัดหลัก auto + ตัวชี้วัดหลักแบบกรอกเอง (มีผลงานข้อย่อยรอตรวจ)
     });
 });
 

@@ -3465,6 +3465,115 @@ function monthBhRangeList(monthFrom, monthTo) {
     });
 }
 
+// ===== ผลงานจากตัวชี้วัดย่อย/กิจกรรม → kpi_summary (ตัวชี้วัด 3 ระดับ — 18 ต.ค. 2569) =====
+// กราฟ/รายงานทั้ง 4 แถบ + การ์ดหน้าแรกอ่าน kpi_summary ซึ่งเดิมสร้างจาก kpi_results เท่านั้น → ตัวชี้วัดที่บันทึกผลงานที่ข้อย่อย/กิจกรรม
+// ไม่ขึ้นในรายงานเลย — ฟังก์ชันนี้นำค่ารายเดือน/เป้าหมายจาก loadSubAggregates() (กติกาเดียวกับหน้าบันทึกผลงาน applySubSummaryToKpiData)
+// ไปทับช่องที่ข้อย่อยมีค่า (ช่องที่ข้อย่อยไม่มีค่าคงค่าจาก kpi_results) และสร้างแถวใหม่ให้คู่ที่ไม่มีใน kpi_results
+// เฉพาะตัวชี้วัดหลักแบบ 'auto' (แบบ 'manual' = ผลงานหลักกรอกเอง ข้อย่อยแสดงประกอบเท่านั้น) — ผู้เรียกต้องคำนวณ last_actual ต่อเอง
+const SUMMARY_SUB_MONTHS = [['oct', 'm10'], ['nov', 'm11'], ['dece', 'm12'], ['jan', 'm01'], ['feb', 'm02'], ['mar', 'm03'],
+    ['apr', 'm04'], ['may', 'm05'], ['jun', 'm06'], ['jul', 'm07'], ['aug', 'm08'], ['sep', 'm09']];
+const fmtSummaryNum = (v) => (v === null || v === undefined || !isFinite(Number(v))) ? null
+    : (Number.isInteger(Number(v)) ? String(Number(v)) : Number(v).toFixed(2));
+async function mergeSubIntoSummary(conn, { indicatorIds, yearBh } = {}) {
+    const w = ['si.is_active = 1', "i.sub_rollup_mode <> 'manual'"], p = [];
+    if (indicatorIds) {
+        const ids = [...new Set(indicatorIds.map(Number).filter(Boolean))];
+        if (!ids.length) return 0;
+        w.push('si.indicator_id IN (?)'); p.push(ids);
+    }
+    const [cand] = await conn.query(
+        `SELECT DISTINCT si.indicator_id FROM kpi_sub_indicators si JOIN kpi_indicators i ON i.id = si.indicator_id WHERE ${w.join(' AND ')}`, p);
+    let merged = 0;
+    for (const { indicator_id } of cand) {
+        const rows = (await loadSubAggregates(conn, { indicatorId: indicator_id, yearBh })).filter(r => r.sub_rollup_mode !== 'manual');
+        for (const r of rows) {
+            const vals = SUMMARY_SUB_MONTHS.map(([, mk]) => fmtSummaryNum(r[mk]));
+            if (vals.every(v => v === null)) continue; // ข้อย่อยยังไม่มีผลงาน — ไม่สร้าง/ไม่แตะแถว (เหมือน HAVING ของ kpi_results)
+            const target = fmtSummaryNum(r.avg_target);
+            const [ex] = await conn.query('SELECT id FROM kpi_summary WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?',
+                [indicator_id, r.year_bh, r.hospcode]);
+            if (ex.length) {
+                const sets = SUMMARY_SUB_MONTHS.map(([col]) => `${col} = COALESCE(?, ${col})`).join(', ');
+                await conn.query(`UPDATE kpi_summary SET ${sets}, target_value = COALESCE(?, target_value), updated_at = NOW() WHERE id = ?`,
+                    [...vals, target, ex[0].id]);
+            } else {
+                // สถานะ/ล็อคของคู่ที่มีเฉพาะผลงานย่อย — จากผลงานข้อย่อยและกิจกรรม (cascade จากการอนุมัติตัวชี้วัดหลัก)
+                const [[st]] = await conn.query(`
+                    SELECT MAX(x.status) AS status, MAX(x.is_locked) AS is_locked, SUM(x.status = 'Pending') AS pending
+                    FROM (
+                        SELECT sr.status, sr.is_locked FROM kpi_sub_results sr JOIN kpi_sub_indicators si ON si.id = sr.sub_indicator_id
+                        WHERE si.indicator_id = ? AND sr.year_bh = ? AND sr.hospcode = ?
+                        UNION ALL
+                        SELECT ar.status, ar.is_locked FROM kpi_activity_results ar JOIN kpi_sub_activities a ON a.id = ar.activity_id
+                        JOIN kpi_sub_indicators si ON si.id = a.sub_indicator_id
+                        WHERE si.indicator_id = ? AND ar.year_bh = ? AND ar.hospcode = ?
+                    ) x`, [indicator_id, r.year_bh, r.hospcode, indicator_id, r.year_bh, r.hospcode]);
+                await conn.query(`
+                    INSERT INTO kpi_summary (indicator_id, year_bh, hospcode, main_indicator_name, kpi_indicators_name,
+                        dept_id, dept_name, hosname, distid, hostype, distname, table_process, target_value,
+                        oct, nov, dece, jan, feb, mar, apr, may, jun, jul, aug, sep,
+                        pending_count, indicator_status, is_locked, updated_at)
+                    SELECT i.id, ?, ?, IFNULL(mi.main_indicator_name, 'ยังไม่กำหนด'), i.kpi_indicators_name, i.dept_id, d.dept_name,
+                        h.hosname, h.distid, h.hostype, dist.distname, i.table_process, ?,
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, NOW()
+                    FROM kpi_indicators i
+                    LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
+                    LEFT JOIN departments d ON d.id = i.dept_id
+                    LEFT JOIN chospital h ON h.hoscode = ?
+                    LEFT JOIN co_district dist ON dist.distid = h.distid
+                    WHERE i.id = ?`,
+                    [r.year_bh, r.hospcode, target, ...vals, Number(st?.pending || 0), st?.status || 'Pending', Number(st?.is_locked || 0) ? 1 : 0,
+                     r.hospcode, indicator_id]);
+            }
+            merged++;
+        }
+    }
+    return merged;
+}
+
+// last_actual ของ kpi_summary (ค่าเดือนล่าสุด / ผลรวมถ้าสะสม) — SQL เดียวกับ /refresh-summary/finalize, ขอบเขตตาม indicator+ปี
+async function recomputeSummaryLastActual(conn, indicatorId, yearBh) {
+    await conn.query(`
+        UPDATE kpi_summary s
+        JOIN kpi_indicators i ON i.id = s.indicator_id AND (i.is_cumulative = 0 OR i.is_cumulative IS NULL)
+        SET s.last_actual = COALESCE(
+            NULLIF(s.sep,''), NULLIF(s.aug,''), NULLIF(s.jul,''), NULLIF(s.jun,''),
+            NULLIF(s.may,''), NULLIF(s.apr,''), NULLIF(s.mar,''), NULLIF(s.feb,''),
+            NULLIF(s.jan,''), NULLIF(s.dece,''), NULLIF(s.nov,''), NULLIF(s.oct,'')
+        )
+        WHERE s.indicator_id = ? AND s.year_bh = ?
+    `, [indicatorId, yearBh]);
+    await conn.query(`
+        UPDATE kpi_summary s
+        JOIN kpi_indicators i ON i.id = s.indicator_id AND i.is_cumulative = 1
+        SET s.last_actual = CASE
+            WHEN NULLIF(s.oct,'') IS NULL AND NULLIF(s.nov,'') IS NULL AND NULLIF(s.dece,'') IS NULL AND NULLIF(s.jan,'') IS NULL
+             AND NULLIF(s.feb,'') IS NULL AND NULLIF(s.mar,'') IS NULL AND NULLIF(s.apr,'') IS NULL AND NULLIF(s.may,'') IS NULL
+             AND NULLIF(s.jun,'') IS NULL AND NULLIF(s.jul,'') IS NULL AND NULLIF(s.aug,'') IS NULL AND NULLIF(s.sep,'') IS NULL
+            THEN NULL
+            ELSE (
+                COALESCE(CAST(NULLIF(s.oct,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.nov,'') AS DECIMAL(20,4)),0) +
+                COALESCE(CAST(NULLIF(s.dece,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.jan,'') AS DECIMAL(20,4)),0) +
+                COALESCE(CAST(NULLIF(s.feb,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.mar,'') AS DECIMAL(20,4)),0) +
+                COALESCE(CAST(NULLIF(s.apr,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.may,'') AS DECIMAL(20,4)),0) +
+                COALESCE(CAST(NULLIF(s.jun,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.jul,'') AS DECIMAL(20,4)),0) +
+                COALESCE(CAST(NULLIF(s.aug,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.sep,'') AS DECIMAL(20,4)),0)
+            )
+        END
+        WHERE s.indicator_id = ? AND s.year_bh = ?
+    `, [indicatorId, yearBh]);
+}
+
+// หลังบันทึกผลงานข้อย่อย/กิจกรรม → สร้าง summary ของตัวชี้วัดนั้น (ปีงบนั้น) ใหม่ทันที ให้กราฟ/รายงานเห็นผลโดยไม่ต้องรอ "อัปเดต Summary"
+// fire-and-forget: ล้มเหลวไม่กระทบการบันทึก (บันทึกลง console)
+function refreshSummaryAfterSubSave(pairs) {
+    const uniq = [...new Map(pairs.filter(x => x.indicator_id && x.year_bh).map(x => [`${x.indicator_id}|${x.year_bh}`, x])).values()];
+    if (!uniq.length) return;
+    refreshKpiSummaryForIndicatorYears(db, uniq)
+        .catch(e => console.error('[sub-save] refresh kpi_summary failed:', e.message));
+}
+
 // Re-aggregate kpi_summary เฉพาะ (indicator_id, year_bh) ที่ได้รับผลกระทบหลังลบ kpi_results บางรายการ —
 // ลบแถว summary เดิมทิ้งแล้วคำนวณใหม่จาก kpi_results ที่เหลืออยู่จริง (ไม่ใช่ลบทั้งแถวทิ้งเฉยๆ เหมือน
 // /kpi-results/bulk-delete เดิม เพราะ endpoint นั้นลบทั้งปีอยู่แล้วจึงลบทั้งแถว summary ได้ตรงๆ แต่ที่นี่ลบแค่
@@ -3527,35 +3636,9 @@ async function refreshSummaryPairs(connection, pairs) {
             GROUP BY i.id, r.year_bh, r.hospcode
             HAVING MAX(CASE WHEN r.actual_value IS NOT NULL AND r.actual_value != '' AND r.actual_value != '0' THEN 1 ELSE 0 END) = 1
         `, [p.indicator_id, p.year_bh]);
-        await connection.query(`
-            UPDATE kpi_summary s
-            JOIN kpi_indicators i ON i.id = s.indicator_id AND (i.is_cumulative = 0 OR i.is_cumulative IS NULL)
-            SET s.last_actual = COALESCE(
-                NULLIF(s.sep,''), NULLIF(s.aug,''), NULLIF(s.jul,''), NULLIF(s.jun,''),
-                NULLIF(s.may,''), NULLIF(s.apr,''), NULLIF(s.mar,''), NULLIF(s.feb,''),
-                NULLIF(s.jan,''), NULLIF(s.dece,''), NULLIF(s.nov,''), NULLIF(s.oct,'')
-            )
-            WHERE s.indicator_id = ? AND s.year_bh = ?
-        `, [p.indicator_id, p.year_bh]);
-        await connection.query(`
-            UPDATE kpi_summary s
-            JOIN kpi_indicators i ON i.id = s.indicator_id AND i.is_cumulative = 1
-            SET s.last_actual = CASE
-                WHEN NULLIF(s.oct,'') IS NULL AND NULLIF(s.nov,'') IS NULL AND NULLIF(s.dece,'') IS NULL AND NULLIF(s.jan,'') IS NULL
-                 AND NULLIF(s.feb,'') IS NULL AND NULLIF(s.mar,'') IS NULL AND NULLIF(s.apr,'') IS NULL AND NULLIF(s.may,'') IS NULL
-                 AND NULLIF(s.jun,'') IS NULL AND NULLIF(s.jul,'') IS NULL AND NULLIF(s.aug,'') IS NULL AND NULLIF(s.sep,'') IS NULL
-                THEN NULL
-                ELSE (
-                    COALESCE(CAST(NULLIF(s.oct,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.nov,'') AS DECIMAL(20,4)),0) +
-                    COALESCE(CAST(NULLIF(s.dece,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.jan,'') AS DECIMAL(20,4)),0) +
-                    COALESCE(CAST(NULLIF(s.feb,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.mar,'') AS DECIMAL(20,4)),0) +
-                    COALESCE(CAST(NULLIF(s.apr,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.may,'') AS DECIMAL(20,4)),0) +
-                    COALESCE(CAST(NULLIF(s.jun,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.jul,'') AS DECIMAL(20,4)),0) +
-                    COALESCE(CAST(NULLIF(s.aug,'') AS DECIMAL(20,4)),0) + COALESCE(CAST(NULLIF(s.sep,'') AS DECIMAL(20,4)),0)
-                )
-            END
-            WHERE s.indicator_id = ? AND s.year_bh = ?
-        `, [p.indicator_id, p.year_bh]);
+        // ผลงานจากตัวชี้วัดย่อย/กิจกรรม (ตัวชี้วัด 3 ระดับ) — ก่อนคำนวณ last_actual
+        await mergeSubIntoSummary(connection, { indicatorIds: [p.indicator_id], yearBh: p.year_bh });
+        await recomputeSummaryLastActual(connection, p.indicator_id, p.year_bh);
         await applyFormulaToSummary(connection, { indicatorId: p.indicator_id, yearBh: p.year_bh });
     }
 }
@@ -4794,8 +4877,21 @@ apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
               ${whereClause.replace(/r\.hospcode/g, 'sr.hospcode')}
         `;
         const [subRecRows] = await db.query(subRecordedSql, queryParams).catch(() => [[{ recorded_sub: 0 }]]);
-        // รวม dept_id จากทั้ง 2 source — ใช้ Math.max ป้องกันนับซ้ำ (อาจมี dept ที่มีทั้งใน results และ sub_results)
-        const recordedCount = Math.max(Number(recordedRows[0]?.recorded_count || 0), Number(subRecRows[0]?.recorded_sub || 0));
+        // ผลงานกิจกรรม (ตัวชี้วัด 3 ระดับ)
+        const [actRecRows] = await db.query(`
+            SELECT COUNT(DISTINCT i.dept_id) AS recorded_act
+            FROM kpi_activity_results ar
+            JOIN kpi_sub_activities a ON a.id = ar.activity_id
+            JOIN kpi_sub_indicators si ON a.sub_indicator_id = si.id
+            JOIN kpi_indicators i ON si.indicator_id = i.id
+            ${needsHosJoin ? 'LEFT JOIN chospital h ON ar.hospcode = h.hoscode' : ''}
+            WHERE ar.year_bh = ? AND i.is_active = 1
+              AND ar.actual_value IS NOT NULL AND ar.actual_value != ''
+              AND i.dept_id IS NOT NULL
+              ${whereClause.replace(/r\.hospcode/g, 'ar.hospcode')}
+        `, queryParams).catch(() => [[{ recorded_act: 0 }]]);
+        // รวม dept_id จากทุก source — ใช้ Math.max ป้องกันนับซ้ำ (อาจมี dept ที่มีทั้งใน results และ sub_results)
+        const recordedCount = Math.max(Number(recordedRows[0]?.recorded_count || 0), Number(subRecRows[0]?.recorded_sub || 0), Number(actRecRows[0]?.recorded_act || 0));
 
         // totalDepts: นับ dept ที่มี active indicator ในปีนี้ (consistent กับ scope)
         const [totalDeptRows] = await db.query(`
@@ -4806,16 +4902,38 @@ apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
 
         // === Card 3: รอการตรวจสอบ ===
         // นับ distinct (indicator, hospcode) ที่มี Pending row พร้อม actual_value (มีผลงานจริงรอ approve)
+        // + คู่ที่บันทึกผลงานที่ข้อย่อย/กิจกรรม (ตัวชี้วัด 3 ระดับ — แถวผลงานหลักอาจว่าง) — alias ตารางผลงานเป็น r ทุกส่วน ใช้ whereClause ชุดเดียวกัน
         const pendingSql = `
-            SELECT COUNT(DISTINCT CONCAT(r.indicator_id, '|', r.hospcode)) AS pending_count
-            FROM kpi_results r
-            LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
-            ${hosJoin}
-            WHERE r.status = 'Pending' AND r.year_bh = ? AND ${activeIndicatorSql('r.indicator_id')}
-              AND r.actual_value IS NOT NULL AND r.actual_value != ''
-              ${whereClause}
+            SELECT COUNT(DISTINCT x.k) AS pending_count FROM (
+                SELECT CONCAT(r.indicator_id, '|', r.hospcode) AS k
+                FROM kpi_results r
+                LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
+                ${hosJoin}
+                WHERE r.status = 'Pending' AND r.year_bh = ? AND ${activeIndicatorSql('r.indicator_id')}
+                  AND r.actual_value IS NOT NULL AND r.actual_value != ''
+                  ${whereClause}
+                UNION ALL
+                SELECT CONCAT(i.id, '|', r.hospcode)
+                FROM kpi_sub_results r
+                JOIN kpi_sub_indicators si ON si.id = r.sub_indicator_id
+                JOIN kpi_indicators i ON i.id = si.indicator_id
+                ${hosJoin}
+                WHERE r.status = 'Pending' AND r.year_bh = ? AND i.is_active = 1
+                  AND r.actual_value IS NOT NULL AND r.actual_value != ''
+                  ${whereClause}
+                UNION ALL
+                SELECT CONCAT(i.id, '|', r.hospcode)
+                FROM kpi_activity_results r
+                JOIN kpi_sub_activities a ON a.id = r.activity_id
+                JOIN kpi_sub_indicators si ON si.id = a.sub_indicator_id
+                JOIN kpi_indicators i ON i.id = si.indicator_id
+                ${hosJoin}
+                WHERE r.status = 'Pending' AND r.year_bh = ? AND i.is_active = 1
+                  AND r.actual_value IS NOT NULL AND r.actual_value != ''
+                  ${whereClause}
+            ) x
         `;
-        const [pendingRows] = await db.query(pendingSql, queryParams);
+        const [pendingRows] = await db.query(pendingSql, [...queryParams, ...queryParams, ...queryParams]);
 
         // === Card 4: อันดับผลงานระดับจังหวัด ===
         // ใช้ kpi_summary.last_actual (ค่าเดือนล่าสุด) — ไม่ใช่ raw actual_value ของแต่ละเดือน
@@ -4850,7 +4968,7 @@ apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
             success: true,
             data: {
                 successRate,
-                recordedCount: recordedRows[0].recorded_count || 0,
+                recordedCount, // เดิมส่งค่าจาก kpi_results อย่างเดียว ทั้งที่คำนวณรวมข้อย่อย/กิจกรรมไว้แล้ว — แก้ 18 ต.ค. 2569
                 totalDepts: totalDeptRows[0].total || 0,
                 pendingCount: pendingRows[0].pending_count || 0,
                 rank,
@@ -6953,6 +7071,7 @@ apiRouter.post('/hierarchy-results/save', authenticateToken, async (req, res) =>
                 }
             } catch (e) { console.warn('[KPI Audit] hierarchy log error:', e.message); }
         })();
+        refreshSummaryAfterSubSave(indicatorIds.map(id => ({ indicator_id: id, year_bh })));
         res.json({ success: true, message: 'บันทึกสำเร็จ', saved: subItems.length + actItems.length });
     } catch (e) {
         await conn.rollback();
@@ -7188,6 +7307,9 @@ apiRouter.post('/sub-results/upsert', authenticateToken, async (req, res) => {
                 });
             } catch (e) { console.warn('[KPI Audit] sub-results log error:', e.message); }
         })();
+        db.query('SELECT indicator_id FROM kpi_sub_indicators WHERE id = ?', [sub_indicator_id])
+            .then(([r]) => r[0] && refreshSummaryAfterSubSave([{ indicator_id: r[0].indicator_id, year_bh }]))
+            .catch(e => console.error('[sub-results] refresh kpi_summary failed:', e.message));
 
         res.json({ success: true, message: 'บันทึกสำเร็จ' });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -9483,7 +9605,15 @@ apiRouter.post('/refresh-summary/prepare', authenticateToken, isSuperAdmin, asyn
             `SELECT DISTINCT indicator_id FROM kpi_results WHERE 1=1 ${yearFilter}`,
             yearParams
         );
-        const allIds = indRows.map(r => r.indicator_id);
+        // ตัวชี้วัดที่มีผลงานเฉพาะข้อย่อย/กิจกรรม (ตัวชี้วัด 3 ระดับ) ต้องอยู่ในรายการ batch ด้วย
+        const [subIndRows] = await db.query(
+            `SELECT DISTINCT si.indicator_id FROM kpi_sub_results sr JOIN kpi_sub_indicators si ON si.id = sr.sub_indicator_id WHERE 1=1 ${yearFilter.replace('year_bh', 'sr.year_bh')}
+             UNION
+             SELECT DISTINCT si.indicator_id FROM kpi_activity_results ar JOIN kpi_sub_activities a ON a.id = ar.activity_id
+             JOIN kpi_sub_indicators si ON si.id = a.sub_indicator_id WHERE 1=1 ${yearFilter.replace('year_bh', 'ar.year_bh')}`,
+            [...yearParams, ...yearParams]
+        );
+        const allIds = [...new Set([...indRows, ...subIndRows].map(r => Number(r.indicator_id)))];
         res.json({ success: true, indicator_ids: allIds, total: allIds.length });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
@@ -9537,8 +9667,10 @@ apiRouter.post('/refresh-summary/batch', authenticateToken, isSuperAdmin, async 
             GROUP BY i.id, r.year_bh, r.hospcode
             HAVING MAX(CASE WHEN r.actual_value IS NOT NULL AND r.actual_value != '' AND r.actual_value != '0' THEN 1 ELSE 0 END) = 1
         `, [...indicator_ids, ...yearParams]);
+        // ผลงานจากตัวชี้วัดย่อย/กิจกรรม (ตัวชี้วัด 3 ระดับ) — last_actual คำนวณใน /refresh-summary/finalize
+        const merged = await mergeSubIntoSummary(db, { indicatorIds: indicator_ids, yearBh: year_bh || undefined });
 
-        res.json({ success: true, inserted: result.affectedRows || 0 });
+        res.json({ success: true, inserted: result.affectedRows || 0, merged_from_sub: merged });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
@@ -16503,4 +16635,4 @@ if (require.main === module) {
         startSessionCleanupJob();
     });
 }
-module.exports = { app, captureError, migrationsReady, loadSubAggregates, loadSubExportMonthMap };
+module.exports = { app, captureError, migrationsReady, loadSubAggregates, loadSubExportMonthMap, refreshKpiSummaryForIndicatorYears };

@@ -1755,7 +1755,10 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         html: `<div style="text-align:left;font-size:13px">
                 ${anomalySection}
                 <p style="margin-bottom:8px;font-weight:700;color:#374151">
-                  พบการเปลี่ยนแปลง <span style="color:#4f46e5">${rows.length}</span> รายการ จาก ${cleanData.length} ตัวชี้วัด
+                  พบการเปลี่ยนแปลง <span style="color:#4f46e5">${rows.length}</span> รายการ จาก ${new Set([
+                    ...cleanData.map(d => `${d.indicator_id}|${d.hospcode}|${d.year_bh}`),
+                    ...hierChanges.map(c => c.key),
+                  ]).size} ตัวชี้วัด
                 </p>
                 ${summaryTable}
                 ${replySection}
