@@ -1100,6 +1100,17 @@
             <input type="text" [(ngModel)]="subCurrent.sub_indicator_name" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
           </div>
           <div>
+            <label class="text-xs font-bold text-gray-600">เลขข้อ <span class="font-normal text-gray-400">(ว่าง = ลำดับอัตโนมัติ)</span></label>
+            <input type="text" maxlength="20" [(ngModel)]="subCurrent.item_no" placeholder="เช่น 1.1" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+          </div>
+          <div>
+            <label class="text-xs font-bold text-gray-600">ผลงานของข้อนี้</label>
+            <select [(ngModel)]="subCurrent.rollup_mode" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+              <option value="manual">กรอกเอง</option>
+              <option value="auto">คำนวณจากกิจกรรม (เฉลี่ยกิจกรรม)</option>
+            </select>
+          </div>
+          <div>
             <label class="text-xs font-bold text-gray-600">รหัส</label>
             <input type="text" [(ngModel)]="subCurrent.sub_indicator_code" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
           </div>
@@ -1132,8 +1143,9 @@
         <table class="w-full text-sm">
           <thead class="bg-gray-50 text-xs">
             <tr>
-              <th class="px-3 py-2 text-left">#</th>
+              <th class="px-3 py-2 text-left">ข้อ</th>
               <th class="px-3 py-2 text-left">ชื่อตัวชี้วัดย่อย</th>
+              <th class="px-3 py-2 text-left">ผลงาน / กิจกรรม</th>
               <th class="px-3 py-2 text-left">รหัส</th>
               <th class="px-3 py-2 text-right">เป้าหมาย</th>
               <th class="px-3 py-2 text-right">น้ำหนัก</th>
@@ -1144,8 +1156,19 @@
           <tbody class="divide-y divide-gray-100">
             <tr *ngFor="let s of subList; let i = index" class="hover:bg-gray-50"
                 [ngClass]="{'opacity-50': s.is_active === 0 || s.is_active === '0'}">
-              <td class="px-3 py-2 text-gray-400 text-xs">{{ i + 1 }}</td>
+              <td class="px-3 py-2 text-gray-500 text-xs font-bold whitespace-nowrap">{{ subNo(s, i) }}</td>
               <td class="px-3 py-2 font-medium text-gray-900">{{ s.sub_indicator_name }}</td>
+              <td class="px-3 py-2 whitespace-nowrap">
+                <span *ngIf="s.rollup_mode === 'auto'" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 text-[10px] font-bold" title="ผลงานของข้อนี้คำนวณจากกิจกรรม">
+                  <i class="fas fa-calculator text-[9px]"></i>จากกิจกรรม
+                </span>
+                <span *ngIf="s.rollup_mode !== 'auto'" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-bold">
+                  <i class="fas fa-keyboard text-[9px]"></i>กรอกเอง
+                </span>
+                <button (click)="openActModal(s, i)" class="ml-1 px-2 py-0.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-bold border border-indigo-200" title="จัดการกิจกรรมของข้อนี้">
+                  <i class="fas fa-tasks mr-1"></i>กิจกรรม ({{ s.activity_count || 0 }})
+                </button>
+              </td>
               <td class="px-3 py-2 text-gray-600 text-xs">{{ s.sub_indicator_code || '-' }}</td>
               <td class="px-3 py-2 text-right text-gray-600">{{ s.target_percentage || '-' }}</td>
               <td class="px-3 py-2 text-right text-gray-600">{{ s.weight }}</td>
@@ -1162,8 +1185,121 @@
               </td>
             </tr>
             <tr *ngIf="subList.length === 0">
-              <td colspan="7" class="px-3 py-10 text-center text-gray-400 text-sm">
+              <td colspan="8" class="px-3 py-10 text-center text-gray-400 text-sm">
                 <i class="fas fa-inbox text-3xl mb-2 block"></i>ยังไม่มีตัวชี้วัดย่อย
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal กิจกรรมของตัวชี้วัดย่อย (ตัวชี้วัด 3 ระดับ: หลัก → ย่อย → กิจกรรม) -->
+<div *ngIf="showActModal" class="fixed inset-0 z-[60] flex items-start justify-center bg-black/40 backdrop-blur-sm overflow-y-auto py-6 px-2">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl my-auto">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-violet-700 to-indigo-600 rounded-t-2xl">
+      <div class="min-w-0">
+        <h3 class="text-lg font-bold text-white"><i class="fas fa-tasks mr-2"></i>กิจกรรมของข้อ {{ actParentNo }}</h3>
+        <p class="text-indigo-100 text-xs mt-0.5 truncate">{{ actParentSub?.sub_indicator_name }}</p>
+      </div>
+      <button (click)="closeActModal()" class="text-white/70 hover:text-white"><i class="fas fa-times text-xl"></i></button>
+    </div>
+    <div class="p-6 space-y-4">
+      <div class="text-xs rounded-xl p-3 border"
+           [ngClass]="actParentSub?.rollup_mode === 'auto' ? 'bg-violet-50 border-violet-200 text-violet-800' : 'bg-amber-50 border-amber-200 text-amber-800'">
+        <ng-container *ngIf="actParentSub?.rollup_mode === 'auto'">
+          <i class="fas fa-calculator mr-1"></i>ผลงานของข้อนี้ = <b>ค่าเฉลี่ยของกิจกรรมที่เปิดใช้งาน</b> (กิจกรรมแบบ "ทำแล้ว" = 100, "ยังไม่ทำ" = 0;
+          กิจกรรมที่ไม่ได้บันทึกในเดือนนั้นใช้ค่าล่าสุดของเดือนก่อน) — ผู้บันทึกกรอกที่กิจกรรม ไม่ต้องกรอกที่ข้อนี้
+        </ng-container>
+        <ng-container *ngIf="actParentSub?.rollup_mode !== 'auto'">
+          <i class="fas fa-info-circle mr-1"></i>ข้อนี้ตั้งเป็น <b>"กรอกเอง"</b> — กิจกรรมใช้บันทึกประกอบเท่านั้น ไม่นำไปคำนวณผลงานของข้อนี้
+          (เปลี่ยนเป็น "คำนวณจากกิจกรรม" ได้ที่ปุ่มแก้ไขข้อย่อย)
+        </ng-container>
+      </div>
+
+      <div *ngIf="canAddData && !showActForm">
+        <button (click)="openActForm()" class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-bold shadow">
+          <i class="fas fa-plus mr-1"></i>เพิ่มกิจกรรม
+        </button>
+      </div>
+
+      <div *ngIf="showActForm" class="bg-violet-50 border border-violet-200 rounded-xl p-4 space-y-3">
+        <h4 class="font-bold text-violet-800 text-sm">{{ isActEdit ? 'แก้ไข' : 'เพิ่ม' }}กิจกรรม</h4>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="sm:col-span-2">
+            <label class="text-xs font-bold text-gray-600">ชื่อกิจกรรม <span class="text-red-500">*</span></label>
+            <input type="text" [(ngModel)]="actCurrent.activity_name" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 outline-none">
+          </div>
+          <div>
+            <label class="text-xs font-bold text-gray-600">เลขข้อ <span class="font-normal text-gray-400">(ว่าง = {{ actParentNo }}.ลำดับ)</span></label>
+            <input type="text" maxlength="20" [(ngModel)]="actCurrent.item_no" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 outline-none">
+          </div>
+          <div>
+            <label class="text-xs font-bold text-gray-600">วิธีบันทึกผลงาน</label>
+            <select [(ngModel)]="actCurrent.value_type" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 outline-none">
+              <option value="number">ตัวเลข (กรอกผลงานรายเดือน)</option>
+              <option value="check">ทำแล้ว / ยังไม่ทำ (ติ๊กรายเดือน)</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs font-bold text-gray-600">รหัส</label>
+            <input type="text" [(ngModel)]="actCurrent.activity_code" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 outline-none">
+          </div>
+          <div>
+            <label class="text-xs font-bold text-gray-600">ค่าเป้าหมาย</label>
+            <input type="text" [(ngModel)]="actCurrent.target_percentage" [disabled]="actCurrent.value_type === 'check'" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 outline-none disabled:bg-gray-100">
+          </div>
+          <div>
+            <label class="text-xs font-bold text-gray-600">ลำดับ</label>
+            <input type="number" [(ngModel)]="actCurrent.sort_order" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-violet-500 outline-none">
+          </div>
+        </div>
+        <div class="flex gap-2 justify-end">
+          <button (click)="showActForm = false" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-bold">ยกเลิก</button>
+          <button (click)="saveAct()" class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-bold shadow">
+            <i class="fas fa-save mr-1"></i>บันทึก
+          </button>
+        </div>
+      </div>
+
+      <div class="border border-gray-200 rounded-xl overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-xs">
+            <tr>
+              <th class="px-3 py-2 text-left">ข้อ</th>
+              <th class="px-3 py-2 text-left">ชื่อกิจกรรม</th>
+              <th class="px-3 py-2 text-left">วิธีบันทึก</th>
+              <th class="px-3 py-2 text-right">เป้าหมาย</th>
+              <th class="px-3 py-2 text-center">สถานะ</th>
+              <th class="px-3 py-2 text-right">จัดการ</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <tr *ngFor="let a of actList; let i = index" class="hover:bg-gray-50" [ngClass]="{'opacity-50': +a.is_active !== 1}">
+              <td class="px-3 py-2 text-gray-500 text-xs font-bold whitespace-nowrap">{{ actNo(a, i) }}</td>
+              <td class="px-3 py-2 font-medium text-gray-900">{{ a.activity_name }}</td>
+              <td class="px-3 py-2 text-xs whitespace-nowrap">
+                <span *ngIf="a.value_type === 'check'" class="text-emerald-700"><i class="fas fa-check-square mr-1"></i>ทำแล้ว/ยังไม่ทำ</span>
+                <span *ngIf="a.value_type !== 'check'" class="text-sky-700"><i class="fas fa-hashtag mr-1"></i>ตัวเลข</span>
+              </td>
+              <td class="px-3 py-2 text-right text-gray-600">{{ a.value_type === 'check' ? '-' : (a.target_percentage || '-') }}</td>
+              <td class="px-3 py-2 text-center">
+                <button (click)="toggleActActive(a)" [disabled]="!canEditData" class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        [ngClass]="+a.is_active === 1 ? 'bg-green-500' : 'bg-gray-300'">
+                  <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform"
+                        [ngClass]="+a.is_active === 1 ? 'translate-x-4' : 'translate-x-0.5'"></span>
+                </button>
+              </td>
+              <td class="px-3 py-2 text-right space-x-2 whitespace-nowrap">
+                <button *ngIf="canEditData" (click)="openActForm(a)" class="text-yellow-500"><i class="fas fa-edit"></i></button>
+                <button *ngIf="isSuperAdmin" (click)="deleteAct(a.id)" class="text-red-500"><i class="fas fa-trash"></i></button>
+              </td>
+            </tr>
+            <tr *ngIf="actList.length === 0">
+              <td colspan="6" class="px-3 py-8 text-center text-gray-400 text-sm">
+                <i class="fas fa-inbox text-3xl mb-2 block"></i>ยังไม่มีกิจกรรม
               </td>
             </tr>
           </tbody>
@@ -1353,6 +1489,10 @@
           <textarea [(ngModel)]="currentItem.kpi_indicators_name" rows="2" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm"></textarea>
         </div>
         <div>
+          <label class="block text-xs font-bold text-gray-600 mb-1">เลขข้อ <span class="text-gray-400 font-normal">(ไม่จำเป็น เช่น 1 — ตัวชี้วัดย่อยแสดงเป็น 1.1, 1.2 และกิจกรรมเป็น 1.1.1 อัตโนมัติ)</span></label>
+          <input type="text" maxlength="20" [(ngModel)]="currentItem.item_no" placeholder="เช่น 1" class="w-40 px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm">
+        </div>
+        <div>
           <label class="block text-xs font-bold text-gray-600 mb-1">ยุทธศาสตร์ <span class="text-gray-400 font-normal">(กรองหมวดหมู่หลัก)</span></label>
           <select [(ngModel)]="selectedYutInModal" (change)="onYutChangeInModal()" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm">
             <option [ngValue]="null">-- ไม่ระบุ --</option>
@@ -1514,6 +1654,16 @@
             <input type="checkbox" [(ngModel)]="currentItem.use_sub_indicator_export" class="rounded text-amber-600">
             <span class="font-bold text-gray-700">ส่งออกผลงานจากตัวชี้วัดย่อย (แต่ละข้อย่อย = 1 คอลัมน์ แทนคอลัมน์รายเดือน)</span>
           </label>
+          <!-- ตัวชี้วัด 3 ระดับ: ผลงานหลักคำนวณจากข้อย่อย (ค่าตั้งต้น = พฤติกรรมเดิม) หรือกรอกเอง (ข้อย่อยแสดงประกอบเท่านั้น) -->
+          <div class="mt-2 text-xs">
+            <span class="font-bold text-gray-700 mr-2"><i class="fas fa-sitemap text-indigo-500 mr-1"></i>ผลงานตัวชี้วัดหลัก (เมื่อมีตัวชี้วัดย่อย):</span>
+            <label class="inline-flex items-center gap-1 mr-3 cursor-pointer">
+              <input type="radio" name="subRollupMode" value="auto" [(ngModel)]="currentItem.sub_rollup_mode"> คำนวณจากตัวชี้วัดย่อย
+            </label>
+            <label class="inline-flex items-center gap-1 cursor-pointer">
+              <input type="radio" name="subRollupMode" value="manual" [(ngModel)]="currentItem.sub_rollup_mode"> กรอกเอง
+            </label>
+          </div>
         </div>
         <!-- รหัสของตัวชี้วัด — เพิ่มใหม่: ระบบสร้างให้อัตโนมัติ ผู้ใช้ไม่ต้องคิดรหัสเอง (กด "กำหนดเอง" เมื่อต้องการแก้) -->
         <div class="border border-sky-200 rounded-xl p-3 bg-sky-50/40">

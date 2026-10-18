@@ -932,7 +932,8 @@
             </thead>
 
             <tbody class="divide-y divide-gray-100 bg-white">
-              <tr *ngFor="let item of pagedData; let i = index" class="hover:bg-green-50/30 transition-all duration-150 text-xs">
+              <ng-container *ngFor="let item of pagedData; let i = index; let all = ngForOf">
+              <tr class="hover:bg-green-50/30 transition-all duration-150 text-xs">
 
                 <!-- Review checkbox -->
                 <td *ngIf="isReviewMode" class="px-2 py-2 text-center">
@@ -948,7 +949,7 @@
 
                 <!-- Col 1: หมวดหมู่หลัก (with rowSpan) -->
                 <td *ngIf="item.rowSpan > 0 && colVisible['main']"
-                    [attr.rowspan]="item.rowSpan"
+                    [attr.rowspan]="hierRowSpan(all, i)"
                     class="px-3 py-2 frozen col-1 bg-green-50 border-r border-gray-100 align-top rowspan-cell">
                   <div class="mt-1 sticky top-10 font-bold text-green-800 whitespace-normal break-words" [title]="item.main_indicator_name">
                     {{ item.main_indicator_name }}
@@ -1100,6 +1101,13 @@
                 <!-- Col 3: ชื่อตัวชี้วัด -->
                 <td class="px-3 py-2 frozen col-3 bg-white border-r border-gray-100">
                   <div class="flex items-start gap-1.5 min-w-0 flex-wrap">
+                      <!-- ตัวชี้วัด 3 ระดับ: ขยายดู/บันทึกข้อย่อย (1.1) และกิจกรรม (1.1.1) ในตารางนี้ -->
+                      <button *ngIf="getSubCount(item.indicator_id) > 0" type="button" (click)="toggleHier(item)"
+                              class="shrink-0 w-5 h-5 -ml-1 rounded flex items-center justify-center text-indigo-600 hover:bg-indigo-100 transition-colors"
+                              [title]="isHierExpanded(item) ? 'ซ่อนตัวชี้วัดย่อย' : 'แสดงตัวชี้วัดย่อย/กิจกรรม (' + getSubCount(item.indicator_id) + ' ข้อ)'">
+                        <i class="fas text-[10px]" [ngClass]="hierLoading.has(hierKey(item)) ? 'fa-spinner fa-spin' : (isHierExpanded(item) ? 'fa-chevron-down' : 'fa-chevron-right')"></i>
+                      </button>
+                      <span *ngIf="item.item_no" class="shrink-0 mt-0.5 px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 text-[10px] font-bold border border-indigo-200" title="เลขข้อ">{{ item.item_no }}</span>
                       <i *ngIf="isTargetMet(item)" class="fas fa-check-circle text-green-500 mt-0.5 shrink-0 text-xs"></i>
                       <i *ngIf="!isTargetMet(item)" class="fas fa-times-circle text-red-500 mt-0.5 shrink-0 text-xs"></i>
                       <!-- สถานะ (merged เข้า col ชื่อตัวชี้วัด) -->
@@ -1236,6 +1244,64 @@
                   </div>
                 </td>
               </tr>
+
+              <!-- แถวลูก: ข้อย่อย (1.1) และกิจกรรม (1.1.1) — กรอกได้เฉพาะระดับ "กรอกเอง" ระดับที่คำนวณแสดงสีเทา + ไอคอนเครื่องคิดเลข -->
+              <tr *ngFor="let ch of hierRows(item)" class="text-xs"
+                  [ngClass]="ch.level === 1 ? 'bg-indigo-50/40' : 'bg-violet-50/30'">
+                <td *ngIf="isReviewMode" class="px-2 py-1"></td>
+                <td *ngIf="isDeleteMode" class="px-2 py-1 bg-red-50"></td>
+                <td *ngIf="colVisible['actions']" class="px-1 py-1 frozen col-2 border-r border-gray-100"
+                    [ngClass]="ch.level === 1 ? 'bg-indigo-50' : 'bg-violet-50'"></td>
+                <td class="py-1 pr-2 frozen col-3 border-r border-gray-100" [ngClass]="ch.level === 1 ? 'bg-indigo-50 pl-6' : 'bg-violet-50 pl-11'">
+                  <div class="flex items-start gap-1.5 min-w-0">
+                    <i class="fas text-[9px] mt-1 shrink-0" [ngClass]="ch.level === 1 ? 'fa-level-up-alt fa-rotate-90 text-indigo-400' : 'fa-angle-right text-violet-400'"></i>
+                    <span class="shrink-0 px-1 py-0.5 rounded text-[10px] font-bold"
+                          [ngClass]="ch.level === 1 ? 'bg-indigo-100 text-indigo-700' : 'bg-violet-100 text-violet-700'">{{ ch.no }}</span>
+                    <span class="whitespace-normal break-words" [ngClass]="ch.level === 1 ? 'font-semibold text-gray-800' : 'text-gray-700'">{{ ch.name }}</span>
+                    <span *ngIf="ch.auto" class="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 text-[9px] font-bold" title="ผลงานคำนวณจากกิจกรรมอัตโนมัติ (เฉลี่ยกิจกรรม)">
+                      <i class="fas fa-calculator text-[8px]"></i>จากกิจกรรม
+                    </span>
+                    <span *ngIf="ch.valueType === 'check'" class="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[9px] font-bold" title="กดช่องเดือนเพื่อเลือก ทำแล้ว / ยังไม่ทำ">
+                      <i class="fas fa-check-square text-[8px]"></i>ทำแล้ว/ยังไม่ทำ
+                    </span>
+                    <i *ngIf="ch.locked" class="fas fa-lock text-gray-400 text-[9px] mt-1 shrink-0" title="ล็อค"></i>
+                  </div>
+                </td>
+                <td *ngIf="colVisible['criteria']" class="px-1 py-1 frozen col-4 bg-white border-r border-gray-100"></td>
+                <td *ngIf="colVisible['hospital']" class="px-3 py-1 frozen col-5 bg-white border-r border-gray-100"></td>
+                <td *ngIf="colVisible['target']" class="px-1 py-1 frozen col-6 bg-amber-50/60 text-gray-600 text-right whitespace-nowrap border-r border-gray-100">{{ ch.target || '-' }}</td>
+                <td *ngIf="colVisible['lastActual']" class="px-2 py-1 frozen col-7 bg-blue-50/60 text-right whitespace-nowrap border-r border-gray-100"
+                    [ngClass]="ch.auto ? 'text-gray-500' : 'text-blue-700 font-semibold'">{{ hierLastValue(ch) || '-' }}</td>
+                <td *ngIf="colVisible['pct']" class="px-2 py-1 frozen col-8 bg-gray-50 text-center whitespace-nowrap border-r border-gray-100 text-gray-600">
+                  {{ hierPct(ch) ? hierPct(ch) + '%' : '-' }}
+                </td>
+                <td *ngFor="let m of visibleMonthKeys" class="px-1 py-1 text-center border-x whitespace-nowrap month-col">
+                  <!-- ระดับที่คำนวณ: แสดงค่าอย่างเดียว (คำนวณใหม่ทันทีเมื่อกรอกกิจกรรม) -->
+                  <span *ngIf="ch.auto" class="text-gray-500 italic" title="คำนวณจากกิจกรรม">
+                    {{ ch.months[m] || '-' }}
+                  </span>
+                  <ng-container *ngIf="!ch.auto">
+                    <!-- กิจกรรมแบบทำแล้ว/ยังไม่ทำ: ปุ่มกดวน ว่าง → ทำแล้ว → ยังไม่ทำ -->
+                    <button *ngIf="ch.valueType === 'check'" type="button" (click)="cycleHierCheck(item, ch, m)"
+                            [disabled]="!canEditHierRow(item, ch)"
+                            class="w-7 h-6 rounded text-[11px] font-bold transition-colors disabled:cursor-default"
+                            [ngClass]="(ch.months[m] === '1' ? 'bg-emerald-100 text-emerald-700' : ch.months[m] === '0' ? 'bg-red-100 text-red-600' : 'text-gray-300')
+                                       + (isHierModified(ch, m) ? ' ring-2 ring-orange-400' : '') + (canEditHierRow(item, ch) ? ' border border-gray-200 hover:bg-white' : '')"
+                            [title]="ch.months[m] === '1' ? 'ทำแล้ว' : ch.months[m] === '0' ? 'ยังไม่ทำ' : 'ยังไม่บันทึก'">
+                      <i *ngIf="ch.months[m] === '1'" class="fas fa-check"></i>
+                      <i *ngIf="ch.months[m] === '0'" class="fas fa-times"></i>
+                      <span *ngIf="ch.months[m] !== '1' && ch.months[m] !== '0'">-</span>
+                    </button>
+                    <ng-container *ngIf="ch.valueType !== 'check'">
+                      <input *ngIf="canEditHierRow(item, ch)" type="text" maxlength="100" [(ngModel)]="ch.months[m]" (ngModelChange)="onHierChange(item)"
+                             class="w-full min-w-0 border border-indigo-200 rounded px-1 py-0.5 text-center text-xs focus:ring-1 focus:ring-indigo-500 outline-none bg-white"
+                             [ngClass]="isHierModified(ch, m) ? '!bg-orange-200 !text-red-600 ring-2 ring-orange-400 font-bold' : ''">
+                      <span *ngIf="!canEditHierRow(item, ch)" [ngClass]="ch.months[m] ? 'text-gray-800' : 'text-gray-300'">{{ ch.months[m] || '-' }}</span>
+                    </ng-container>
+                  </ng-container>
+                </td>
+              </tr>
+              </ng-container>
             </tbody>
           </table>
         </div>
@@ -2087,6 +2153,7 @@
                   [style.left]="subDeleteMode ? '40px' : '0'">
                 <p class="font-medium text-gray-900 text-xs leading-tight">{{ s.sub_indicator_name }}</p>
                 <p class="text-[10px] text-gray-400">{{ s.sub_indicator_code || '-' }}</p>
+                <p *ngIf="s._auto" class="text-[10px] text-violet-600 font-bold" title="บันทึกที่กิจกรรม: กด ▶ ที่แถวตัวชี้วัดในตารางหลัก"><i class="fas fa-calculator mr-0.5"></i>คำนวณจากกิจกรรม</p>
               </td>
               <td class="px-0.5 py-1">
                 <input type="text" [(ngModel)]="s._target"
@@ -2106,7 +2173,7 @@
               </td>
               <td *ngFor="let m of subMonthColumns" class="px-0.5 py-1">
                 <input type="text" [(ngModel)]="s._actuals[m]"
-                       [readonly]="!subEditMode"
+                       [readonly]="!subEditMode || s._auto"
                        class="w-full px-1 py-0.5 border rounded text-center text-xs"
                        [ngClass]="subEditMode
                           ? 'border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-400 ' + (s._actuals[m] ? 'bg-indigo-50' : '')

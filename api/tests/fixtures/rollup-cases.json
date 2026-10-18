@@ -1,0 +1,46 @@
+{
+  "activity": [
+    { "name": "ตัวเลข", "type": "number", "raw": "75", "expected": 75 },
+    { "name": "ตัวเลขทศนิยม", "type": "number", "raw": " 12.5 ", "expected": 12.5 },
+    { "name": "ตัวเลข 0", "type": "number", "raw": "0", "expected": 0 },
+    { "name": "ตัวเลขว่าง", "type": "number", "raw": "", "expected": null },
+    { "name": "ตัวเลขเป็นข้อความ", "type": "number", "raw": "รอดำเนินการ", "expected": null },
+    { "name": "ทำแล้ว", "type": "check", "raw": "1", "expected": 100 },
+    { "name": "ยังไม่ทำ", "type": "check", "raw": "0", "expected": 0 },
+    { "name": "ทำแล้ว (true)", "type": "check", "raw": "true", "expected": 100 },
+    { "name": "ทำแล้วว่าง", "type": "check", "raw": null, "expected": null },
+    { "name": "ทำแล้วค่าอื่น", "type": "check", "raw": "5", "expected": null }
+  ],
+  "rollup": [
+    {
+      "name": "หารด้วยจำนวนทั้งหมด (ข้อที่ไม่บันทึก = 0)",
+      "count": 3,
+      "months": { "m10": { "a": 90, "b": 60 } },
+      "expected": { "m10": 50, "m11": null, "m12": null, "m01": null, "m02": null, "m03": null, "m04": null, "m05": null, "m06": null, "m07": null, "m08": null, "m09": null }
+    },
+    {
+      "name": "ยกยอดค่าล่าสุดของแต่ละข้อ",
+      "count": 2,
+      "months": { "m10": { "a": 100 }, "m11": { "b": 50 }, "m01": { "a": 0 } },
+      "expected": { "m10": 50, "m11": 75, "m12": null, "m01": 25, "m02": null, "m03": null, "m04": null, "m05": null, "m06": null, "m07": null, "m08": null, "m09": null }
+    },
+    {
+      "name": "ค่าไม่ใช่ตัวเลขไม่นับและไม่ทำให้เดือนนั้นมีค่า",
+      "count": 2,
+      "months": { "m10": { "a": "x" }, "m11": { "a": "40", "b": "" } },
+      "expected": { "m10": null, "m11": 20, "m12": null, "m01": null, "m02": null, "m03": null, "m04": null, "m05": null, "m06": null, "m07": null, "m08": null, "m09": null }
+    },
+    {
+      "name": "ปัด 4 ตำแหน่ง",
+      "count": 3,
+      "months": { "m09": { "a": 100 } },
+      "expected": { "m10": null, "m11": null, "m12": null, "m01": null, "m02": null, "m03": null, "m04": null, "m05": null, "m06": null, "m07": null, "m08": null, "m09": 33.3333 }
+    },
+    {
+      "name": "ไม่มีรายการลูก",
+      "count": 0,
+      "months": { "m10": { "a": 100 } },
+      "expected": { "m10": null, "m11": null, "m12": null, "m01": null, "m02": null, "m03": null, "m04": null, "m05": null, "m06": null, "m07": null, "m08": null, "m09": null }
+    }
+  ]
+}

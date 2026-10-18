@@ -4,6 +4,7 @@ import { DashboardComponent } from './dashboard';
 import { testProviders } from '../testing/test-providers';
 import { parseImportAoa, planImport, buildTemplateAoa } from '../shared/kpi-excel';
 import { parseSubImportAoa, planSubImport } from '../shared/kpi-sub-excel';
+import { buildHierRows, recomputeHierRows } from './dashboard';
 
 function row(year: string, extra: any = {}) {
   return {
@@ -462,6 +463,100 @@ describe('DashboardComponent', () => {
       expect(el.textContent).toContain('นำเข้า Excel');
       expect(el.textContent).toContain('ค่าอาจผิดปกติ 1 ช่อง');
       expect(el.querySelector('input[type=file][accept*=".xlsx"]')).toBeTruthy();
+    });
+  });
+
+  // ---- ตัวชี้วัด 3 ระดับ (18 ต.ค. 2569): แถวลูกข้อย่อย 1.1 / กิจกรรม 1.1.1 ----
+  describe('ตัวชี้วัด 3 ระดับ (แถวลูกในตาราง)', () => {
+    const hierData = () => ({
+      item_no: '1', sub_rollup_mode: 'auto',
+      subs: [
+        { id: 11, sub_indicator_name: 'ข้อย่อยจากกิจกรรม', item_no: null, rollup_mode: 'auto', target: null, target_percentage: '100', months: { 10: '999' }, locked: false },
+        { id: 12, sub_indicator_name: 'ข้อย่อยกรอกเอง', item_no: '1.9', rollup_mode: 'manual', target: '80', months: { 10: '60' }, locked: false },
+      ],
+      activities: [
+        { id: 101, sub_indicator_id: 11, activity_name: 'กิจกรรมตัวเลข', item_no: null, value_type: 'number', months: { 10: '80' }, locked: false },
+        { id: 102, sub_indicator_id: 11, activity_name: 'กิจกรรมทำแล้ว', item_no: null, value_type: 'check', months: { 10: '1', 11: '0' }, locked: false },
+      ],
+    });
+
+    it('สร้างแถวลูกพร้อมเลขข้อ และข้อย่อย auto คำนวณจากกิจกรรม (ไม่ใช้ค่าที่กรอกเองเดิม)', () => {
+      const rows = buildHierRows(hierData(), '1');
+      expect(rows.map(r => r.no)).toEqual(['1.1', '1.1.1', '1.1.2', '1.9']);
+      const auto = rows[0];
+      expect(auto.auto).toBe(true);
+      expect(auto.months['oct']).toBe('90');   // (80 + 100) / 2
+      expect(auto.months['nov']).toBe('40');   // (80 ยกยอด + 0) / 2
+      expect(auto.months['dece']).toBe('');
+      expect(rows[3].auto).toBe(false);
+      expect(rows[3].months['oct']).toBe('60');
+    });
+
+    it('กรอกกิจกรรม → ข้อย่อยคำนวณใหม่ทันที และนับเป็นช่องที่แก้ไข (ข้อ auto ไม่นับ)', () => {
+      const item = row('2570', { indicator_id: 5, sub_rollup_mode: 'auto' });
+      component.filteredData = [item];
+      const key = component.hierKey(item);
+      const rows = buildHierRows(hierData(), '1');
+      component.hierData.set(key, rows);
+      rows[2].months['dece'] = '1';
+      recomputeHierRows(rows);
+      expect(rows[0].months['dece']).toBe('90'); // (80 + 100) / 2
+      const changes = component.collectHierChanges();
+      expect(changes.length).toBe(1);
+      expect(changes[0].row.id).toBe(102);
+      expect(changes[0].newVal).toBe('1');
+      component.restoreHier();
+      expect(rows[2].months['dece']).toBe('');
+      expect(component.collectHierChanges().length).toBe(0);
+    });
+
+    it('ช่องกิจกรรม/ข้อ auto แก้ได้ตามสิทธิ์: ข้อ auto และแถวที่ล็อคแก้ไม่ได้', () => {
+      const item = row('2570');
+      const rows = buildHierRows(hierData(), '1');
+      component.isEditing = true;
+      component.myPerms = { ...component.myPerms, can_edit_actual: true };
+      expect(component.canEditHierRow(item, rows[0])).toBe(false);  // คำนวณจากกิจกรรม
+      expect(component.canEditHierRow(item, rows[1])).toBe(true);
+      rows[1].locked = true;
+      expect(component.canEditHierRow(item, rows[1])).toBe(false);
+      expect(component.canEditHierRow({ ...item, is_locked: 1 }, rows[3])).toBe(false);
+    });
+
+    it('กดช่องทำแล้ววน ว่าง → ทำแล้ว → ยังไม่ทำ → ว่าง', () => {
+      const item = row('2570');
+      component.filteredData = [item];
+      const rows = buildHierRows(hierData(), '1');
+      component.hierData.set(component.hierKey(item), rows);
+      component.isEditing = true;
+      component.myPerms = { ...component.myPerms, can_edit_actual: true };
+      const chk = rows[2];
+      component.cycleHierCheck(item, chk, 'jan');
+      expect(chk.months['jan']).toBe('1');
+      component.cycleHierCheck(item, chk, 'jan');
+      expect(chk.months['jan']).toBe('0');
+      component.cycleHierCheck(item, chk, 'jan');
+      expect(chk.months['jan']).toBe('');
+    });
+
+    it('rowspan ของหมวดหมู่หลักรวมแถวลูกที่ขยายอยู่', () => {
+      const a = row('2570', { indicator_id: 1, rowSpan: 2 });
+      const b = row('2570', { indicator_id: 2, rowSpan: 0 });
+      component.hierData.set(component.hierKey(b), buildHierRows(hierData(), ''));
+      expect(component.hierRowSpan([a, b], 0)).toBe(2);
+      component.hierExpanded.add(component.hierKey(b));
+      expect(component.hierRowSpan([a, b], 0)).toBe(6);
+    });
+
+    it('ตัวชี้วัดหลักแบบกรอกเอง: ไม่นำค่าจากข้อย่อยมาทับแถวหลัก', () => {
+      const manual = row('2570', { indicator_id: 7, oct: '55' });
+      const auto = row('2570', { indicator_id: 8, oct: '55' });
+      component.kpiData = [manual, auto];
+      component.filteredData = [manual, auto];
+      component.subSummaryMap.set('7|10871|2570', { sub_rollup_mode: 'manual', m10: 90, avg_target: 100, last_actual: 90 });
+      component.subSummaryMap.set('8|10871|2570', { sub_rollup_mode: 'auto', m10: 90, avg_target: 100, last_actual: 90 });
+      component.applySubSummaryToKpiData();
+      expect(manual.oct).toBe('55');
+      expect(auto.oct).toBe('90');
     });
   });
 });

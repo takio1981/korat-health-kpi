@@ -914,6 +914,33 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     return this.http.post(`${this.apiUrl}/sub-results/upsert`, data, { headers });
   }
 
+  // ตัวชี้วัด 3 ระดับ — กิจกรรมใต้ตัวชี้วัดย่อย (CRUD) + ผลงานข้อย่อย/กิจกรรมของ 1 แถวในหน้าบันทึกผลงาน
+  private authHeaders(): HttpHeaders {
+    return new HttpHeaders({ 'Authorization': `Bearer ${localStorage.getItem('kpi_token')}` });
+  }
+  getSubActivities(sub_indicator_id: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}/sub-activities?sub_indicator_id=${sub_indicator_id}`, { headers: this.authHeaders() });
+  }
+  createSubActivity(data: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}/sub-activities`, data, { headers: this.authHeaders() });
+  }
+  updateSubActivity(id: number, data: any): Observable<any> {
+    return this.http.put(`${this.apiUrl}/sub-activities/${id}`, data, { headers: this.authHeaders() });
+  }
+  toggleSubActivityActive(id: number, isActive: boolean): Observable<any> {
+    return this.http.put(`${this.apiUrl}/sub-activities/${id}/toggle-active`, { is_active: isActive }, { headers: this.authHeaders() });
+  }
+  deleteSubActivity(id: number): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/sub-activities/${id}`, { headers: this.authHeaders() });
+  }
+  getHierarchyResults(indicator_id: number, year_bh: string, hospcode: string): Observable<any> {
+    const qs = new URLSearchParams({ indicator_id: String(indicator_id), year_bh, hospcode }).toString();
+    return this.http.get(`${this.apiUrl}/hierarchy-results?${qs}`, { headers: this.authHeaders() });
+  }
+  saveHierarchyResults(data: { year_bh: string; hospcode: string; sub?: any[]; activity?: any[] }): Observable<any> {
+    return this.http.post(`${this.apiUrl}/hierarchy-results/save`, data, { headers: this.authHeaders() });
+  }
+
   // System Announcements
   getActiveAnnouncement(): Observable<any> {
     const token = localStorage.getItem('kpi_token');

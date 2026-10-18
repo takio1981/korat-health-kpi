@@ -6,6 +6,7 @@ import { AuthService } from '../services/auth';
 import { FormBuilderComponent } from '../form-builder/form-builder';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import { validateFormula, evaluateFormula, usesPrevYear, FORMULA_FUNCTIONS } from '../shared/kpi-formula';
+import { itemNumber } from '../shared/kpi-rollup';
 import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
@@ -396,7 +397,9 @@ export class KpiManageComponent implements OnInit {
 
   openSubForm(item: any = null) {
     this.isSubEdit = !!item;
-    this.subCurrent = item ? { ...item } : { indicator_id: this.subParentIndicator.id, weight: 1 };
+    this.subCurrent = item
+      ? { ...item, rollup_mode: item.rollup_mode === 'auto' ? 'auto' : 'manual', item_no: item.item_no || '' }
+      : { indicator_id: this.subParentIndicator.id, weight: 1, rollup_mode: 'manual', item_no: '' };
     this.showSubForm = true;
   }
 
@@ -444,6 +447,93 @@ export class KpiManageComponent implements OnInit {
     const newStatus = !item.is_active || item.is_active === 0;
     this.authService.toggleSubIndicatorActive(item.id, newStatus).subscribe({
       next: (res: any) => { if (res.success) { item.is_active = newStatus ? 1 : 0; this.cdr.detectChanges(); } }
+    });
+  }
+
+  // === ตัวชี้วัด 3 ระดับ: เลขข้อ + กิจกรรมใต้ตัวชี้วัดย่อย (หลัก 1 → ย่อย 1.1 → กิจกรรม 1.1.1) ===
+  showActModal = false;
+  showActForm = false;
+  isActEdit = false;
+  actParentSub: any = null;
+  actParentNo = '';
+  actList: any[] = [];
+  actCurrent: any = {};
+
+  subNo(s: any, i: number): string {
+    return itemNumber(s?.item_no, this.subParentIndicator?.item_no, i);
+  }
+
+  actNo(a: any, i: number): string {
+    return itemNumber(a?.item_no, this.actParentNo, i);
+  }
+
+  openActModal(sub: any, index: number) {
+    this.actParentSub = sub;
+    this.actParentNo = this.subNo(sub, index);
+    this.showActModal = true;
+    this.showActForm = false;
+    this.actList = [];
+    this.loadActList();
+  }
+
+  closeActModal() {
+    this.showActModal = false;
+    this.actParentSub = null;
+    if (this.subParentIndicator) this.loadSubList(this.subParentIndicator.id); // จำนวนกิจกรรมในรายการข้อย่อย
+  }
+
+  loadActList() {
+    if (!this.actParentSub) return;
+    this.authService.getSubActivities(this.actParentSub.id).subscribe({
+      next: (res: any) => { if (res.success) { this.actList = res.data; this.cdr.detectChanges(); } },
+      error: (e: any) => Swal.fire('ผิดพลาด', e.error?.message || 'โหลดกิจกรรมไม่สำเร็จ', 'error')
+    });
+  }
+
+  openActForm(item: any = null) {
+    this.isActEdit = !!item;
+    this.actCurrent = item ? { ...item } : { sub_indicator_id: this.actParentSub.id, value_type: 'number', sort_order: this.actList.length + 1, is_active: 1 };
+    this.showActForm = true;
+  }
+
+  saveAct() {
+    if (!String(this.actCurrent.activity_name || '').trim()) {
+      Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกชื่อกิจกรรม', 'warning');
+      return;
+    }
+    const obs = this.isActEdit
+      ? this.authService.updateSubActivity(this.actCurrent.id, this.actCurrent)
+      : this.authService.createSubActivity(this.actCurrent);
+    obs.subscribe({
+      next: (res: any) => {
+        if (res.success) {
+          Swal.fire({ icon: 'success', title: 'สำเร็จ', timer: 1500, showConfirmButton: false });
+          this.showActForm = false;
+          this.loadActList();
+        }
+      },
+      error: (e: any) => Swal.fire('ผิดพลาด', e.error?.message || 'ไม่สามารถบันทึกได้', 'error')
+    });
+  }
+
+  toggleActActive(item: any) {
+    const newStatus = !(Number(item.is_active) === 1);
+    this.authService.toggleSubActivityActive(item.id, newStatus).subscribe({
+      next: (res: any) => { if (res.success) { item.is_active = newStatus ? 1 : 0; this.cdr.detectChanges(); } }
+    });
+  }
+
+  deleteAct(id: number) {
+    Swal.fire({
+      title: 'ยืนยันลบกิจกรรม', icon: 'warning',
+      showCancelButton: true, confirmButtonColor: '#d33',
+      confirmButtonText: 'ลบ', cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      this.authService.deleteSubActivity(id).subscribe({
+        next: (res: any) => { if (res.success) this.loadActList(); },
+        error: (e: any) => Swal.fire('ลบไม่ได้', e.error?.message || 'เกิดข้อผิดพลาด', 'error')
+      });
     });
   }
 
@@ -823,6 +913,8 @@ export class KpiManageComponent implements OnInit {
         src.use_sub_indicator_export = Number(src.use_sub_indicator_export) === 1;
         src.result_formula = src.result_formula || '';
         src.evaluation_mode = src.evaluation_mode || 'any_one';
+        src.sub_rollup_mode = src.sub_rollup_mode === 'manual' ? 'manual' : 'auto';
+        src.item_no = src.item_no || '';
         this.selectedOffTypes = this.parseOffTypes(src.required_off_types);
         // auto-set yut_id จาก main_indicator ที่เลือก
         this.selectedYutInModal = src.yut_id ? Number(src.yut_id) : null;
@@ -833,7 +925,7 @@ export class KpiManageComponent implements OnInit {
       if (this.activeTab === 'indicators') {
         this.selectedYutInModal = null;
         this.selectedOffTypes = [];
-        this.currentItem = { ...baseDefaults, r9: false, moph: false, ssj: false, rmw: false, other: false, is_cumulative: false, use_sub_indicator_export: false, result_formula: '', weight: 1, target_condition: 'GTE', evaluation_mode: 'any_one' };
+        this.currentItem = { ...baseDefaults, r9: false, moph: false, ssj: false, rmw: false, other: false, is_cumulative: false, use_sub_indicator_export: false, result_formula: '', weight: 1, target_condition: 'GTE', evaluation_mode: 'any_one', sub_rollup_mode: 'auto', item_no: '' };
       } else {
         this.currentItem = { ...baseDefaults };
       }

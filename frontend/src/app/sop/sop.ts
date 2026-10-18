@@ -721,7 +721,7 @@ const SYSTEMS: SopSystem[] = [
     {f:'n9',t:'ok'},
     {f:'n2',t:'n4',x:'left',n:'bottom',v:'hv'},
   ],
-  notes:['applySubSummaryToKpiData() early-return เมื่อ isEditing=true (ป้องกัน override ค่า user กด แก้ไข)','_mainOriginal เก็บค่าจริง | _fromSubSummary=true หมายถึงถูก override ด้วย AVG'],
+  notes:['applySubSummaryToKpiData() early-return เมื่อ isEditing=true (ป้องกัน override ค่า user กด แก้ไข)','_mainOriginal เก็บค่าจริง | _fromSubSummary=true หมายถึงถูก override ด้วย AVG','ตัวชี้วัด 3 ระดับ (18 ต.ค. 2569): กิจกรรม kpi_sub_activities ใต้ข้อย่อย → ข้อย่อย rollup_mode=auto คำนวณจากกิจกรรม (loadEffectiveSubMonthly) | หลัก sub_rollup_mode=manual ไม่ถูก override','Dashboard กด ▶ ขยายแถวลูก (GET /hierarchy-results) → บันทึกด้วยปุ่มเดิม → POST /hierarchy-results/save (ตรวจขอบเขต/ล็อค/ปิดการคีย์ ใน transaction เดียว)'],
 }];
 
 // ── Component ───────────────────────────────────────────────────────────────

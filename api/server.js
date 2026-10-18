@@ -50,6 +50,7 @@ const express = require('express');
 const cors = require('cors');
 const db = require('./db');
 const kpiFormula = require('./kpi-formula'); // สูตรคำนวณผลงานเฉพาะตัวชี้วัด (result_formula)
+const kpiRollup = require('./kpi-rollup'); // ผลงานระดับบนจากระดับล่าง (ตัวชี้วัด 3 ระดับ: หลัก → ย่อย → กิจกรรม)
 const { getRemotePool } = require('./db-remote');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -3181,6 +3182,8 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 MIN(i.criterion) AS criterion,
                 MIN(i.data_source) AS data_source,
                 MIN(i.khd_report_id) AS khd_report_id,
+                MIN(i.item_no) AS item_no,
+                MIN(i.sub_rollup_mode) AS sub_rollup_mode,
                 MAX(i.r9) AS r9, MAX(i.moph) AS moph, MAX(i.ssj) AS ssj, MAX(i.rmw) AS rmw, MAX(i.other) AS other,
                 MIN(i.evaluation_mode) AS evaluation_mode,
                 MIN(i.required_off_types) AS required_off_types,
@@ -3406,6 +3409,14 @@ apiRouter.post('/kpi-results/bulk-delete', authenticateToken, isSuperAdmin, asyn
                 [indicator_id, year_bh, hospcode]
             );
             deletedSub += subRes.affectedRows || 0;
+            const [actRes] = await connection.query(
+                `DELETE ar FROM kpi_activity_results ar
+                 JOIN kpi_sub_activities a ON ar.activity_id = a.id
+                 JOIN kpi_sub_indicators si ON a.sub_indicator_id = si.id
+                 WHERE si.indicator_id = ? AND ar.year_bh = ? AND ar.hospcode = ?`,
+                [indicator_id, year_bh, hospcode]
+            );
+            deletedSub += actRes.affectedRows || 0;
             // ลบ kpi_results
             const [kpiRes] = await connection.query(
                 'DELETE FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?',
@@ -3737,6 +3748,14 @@ apiRouter.post('/kpi-results/manage/bulk-delete', authenticateToken, isSuperAdmi
                 [t.indicator_id, t.year_bh, t.hospcode, t.month_bh]
             );
             deletedSub += subRes.affectedRows || 0;
+            const [actRes] = await connection.query(
+                `DELETE ar FROM kpi_activity_results ar
+                 JOIN kpi_sub_activities a ON ar.activity_id = a.id
+                 JOIN kpi_sub_indicators si ON a.sub_indicator_id = si.id
+                 WHERE si.indicator_id = ? AND ar.year_bh = ? AND ar.hospcode = ? AND ar.month_bh = ?`,
+                [t.indicator_id, t.year_bh, t.hospcode, t.month_bh]
+            );
+            deletedSub += actRes.affectedRows || 0;
         }
 
         const [kpiRes] = await connection.query(
@@ -6445,6 +6464,7 @@ apiRouter.post('/indicators', authenticateToken, requireAction('kpi-manage', 'ad
                 `\n🔑 table_process: ${tpFinal}`
             );
         } catch (_) {}
+        await saveHierarchyFields(db, 'kpi_indicators', r.insertId, req.body);
         res.json({ success: true, message: 'Created successfully', id: r.insertId, table_process: tpFinal, kpi_indicators_code: codeFinal });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -6485,6 +6505,7 @@ apiRouter.put('/indicators/:id', authenticateToken, requireAction('kpi-manage', 
             `UPDATE kpi_indicators SET kpi_indicators_name=?, kpi_indicators_id=?, main_indicator_id=?, dept_id=?, target_percentage=?, target_condition=?, criterion=?, weight=?, kpi_indicators_code=?, is_active=?, table_process=?, description=?, r9=?, moph=?, ssj=?, rmw=?, other=?, evaluation_mode=?, required_off_types=?, is_cumulative=?, use_sub_indicator_export=?, result_formula=? WHERE id=?`,
             [kpi_indicators_name, kpi_indicators_id || null, main_indicator_id || null, dept_id || null, target_percentage || null, target_condition || null, criterion || null, weight || null, kpi_indicators_code || null, is_active ? 1 : 0, table_process || null, description || null, r9 ? 1 : 0, moph ? 1 : 0, ssj ? 1 : 0, rmw ? 1 : 0, other ? 1 : 0, normalizeEvalMode(evaluation_mode), normalizeOffTypes(required_off_types), is_cumulative ? 1 : 0, use_sub_indicator_export ? 1 : 0, formula.value, req.params.id]
         );
+        await saveHierarchyFields(db, 'kpi_indicators', req.params.id, req.body);
 
         // วิธีคำนวณผลงานเปลี่ยน → คำนวณ kpi_summary ของตัวชี้วัดนี้ใหม่ทุกปีงบทันที ให้กราฟ/รายงานตรงกับหน้าบันทึกผลงาน
         // (ไม่ต้องรอผู้ดูแลกด "อัปเดต Summary") — ทำนอก transaction หลัก ล้มเหลวไม่กระทบการบันทึกตัวชี้วัด
@@ -6527,7 +6548,14 @@ apiRouter.delete('/indicators/:id', authenticateToken, isSuperAdmin, async (req,
              WHERE si.indicator_id = ? AND sr.actual_value IS NOT NULL AND sr.actual_value != ''`,
             [id]
         );
-        const totalResults = results[0].cnt + subResults[0].cnt;
+        const [actResults] = await db.query(
+            `SELECT COUNT(*) AS cnt FROM kpi_activity_results ar
+             JOIN kpi_sub_activities a ON ar.activity_id = a.id
+             JOIN kpi_sub_indicators si ON a.sub_indicator_id = si.id
+             WHERE si.indicator_id = ? AND ar.actual_value IS NOT NULL AND ar.actual_value != ''`,
+            [id]
+        );
+        const totalResults = results[0].cnt + subResults[0].cnt + actResults[0].cnt;
         if (totalResults > 0) {
             return res.status(400).json({ success: false, message: `ไม่สามารถลบได้: มีผลงานบันทึกแล้ว ${totalResults} รายการ กรุณา "ปิดใช้งาน" แทนการลบ` });
         }
@@ -6575,7 +6603,9 @@ apiRouter.get('/indicators/:id/result-summary', authenticateToken, isSuperAdmin,
 apiRouter.get('/sub-indicators', authenticateToken, async (req, res) => {
     try {
         const { indicator_id } = req.query;
-        let sql = `SELECT si.*, i.kpi_indicators_name FROM kpi_sub_indicators si
+        let sql = `SELECT si.*, i.kpi_indicators_name,
+                   (SELECT COUNT(*) FROM kpi_sub_activities a WHERE a.sub_indicator_id = si.id AND a.is_active = 1) AS activity_count
+                   FROM kpi_sub_indicators si
                    LEFT JOIN kpi_indicators i ON si.indicator_id = i.id`;
         const params = [];
         if (indicator_id) { sql += ' WHERE si.indicator_id = ?'; params.push(indicator_id); }
@@ -6593,6 +6623,7 @@ apiRouter.post('/sub-indicators', authenticateToken, requireAction('kpi-manage',
             `INSERT INTO kpi_sub_indicators (indicator_id, sub_indicator_name, sub_indicator_code, target_percentage, weight, description, sort_order) VALUES (?,?,?,?,?,?,?)`,
             [indicator_id, sub_indicator_name, sub_indicator_code || null, target_percentage || null, weight || 1, description || null, sort_order || 0]
         );
+        await saveHierarchyFields(db, 'kpi_sub_indicators', r.insertId, req.body);
         res.json({ success: true, id: r.insertId, message: 'เพิ่มตัวชี้วัดย่อยสำเร็จ' });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
@@ -6631,6 +6662,7 @@ apiRouter.put('/sub-indicators/:id', authenticateToken, requireAction('kpi-manag
             `UPDATE kpi_sub_indicators SET sub_indicator_name=?, sub_indicator_code=?, target_percentage=?, weight=?, description=?, sort_order=?, is_active=? WHERE id=?`,
             [sub_indicator_name, sub_indicator_code || null, target_percentage || null, weight || 1, description || null, sort_order || 0, is_active ? 1 : 0, req.params.id]
         );
+        await saveHierarchyFields(db, 'kpi_sub_indicators', req.params.id, req.body);
         res.json({ success: true, message: 'แก้ไขสำเร็จ' });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
@@ -6648,6 +6680,286 @@ apiRouter.put('/sub-indicators/:id/toggle-active', authenticateToken, requireAct
         await db.query('UPDATE kpi_sub_indicators SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, req.params.id]);
         res.json({ success: true, message: is_active ? 'เปิดใช้งานแล้ว' : 'ปิดใช้งานแล้ว' });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// ========== ตัวชี้วัด 3 ระดับ (18 ต.ค. 2569): หลัก 1 → ย่อย 1.1 → กิจกรรม 1.1.1 ==========
+// item_no = เลขข้อที่แสดง (ว่าง = หน้าจอสร้างจากลำดับ), sub_rollup_mode (ตัวชี้วัดหลัก) / rollup_mode (ข้อย่อย) = 'auto' | 'manual'
+// อัปเดตเฉพาะฟิลด์ที่ส่งมา — ผู้เรียกเดิม (KHD sync, คัดลอก, นำเข้า) ที่ไม่ส่งฟิลด์เหล่านี้ไม่ถูกเปลี่ยนค่า
+async function saveHierarchyFields(conn, table, id, body) {
+    const sets = [], params = [];
+    if (body && body.item_no !== undefined) {
+        sets.push('item_no = ?');
+        params.push(String(body.item_no || '').trim().slice(0, 20) || null);
+    }
+    const modeKey = table === 'kpi_indicators' ? 'sub_rollup_mode' : 'rollup_mode';
+    if (body && body[modeKey] !== undefined) {
+        sets.push(`${modeKey} = ?`);
+        params.push(body[modeKey] === 'auto' ? 'auto' : 'manual');
+    }
+    if (sets.length === 0) return;
+    await conn.query(`UPDATE ${table} SET ${sets.join(', ')} WHERE id = ?`, [...params, id]);
+}
+
+// --- CRUD กิจกรรม (สิทธิ์เดียวกับตัวชี้วัดย่อย: เพิ่ม/แก้ไขตาม requireAction, ลบ = super_admin เท่านั้น) ---
+const normalizeActivityType = (t) => (t === 'check' ? 'check' : 'number');
+apiRouter.get('/sub-activities', authenticateToken, async (req, res) => {
+    try {
+        const { sub_indicator_id, indicator_id } = req.query;
+        const conds = [], params = [];
+        if (sub_indicator_id) { conds.push('a.sub_indicator_id = ?'); params.push(sub_indicator_id); }
+        if (indicator_id) { conds.push('si.indicator_id = ?'); params.push(indicator_id); }
+        const [rows] = await db.query(
+            `SELECT a.*, si.indicator_id, si.sub_indicator_name FROM kpi_sub_activities a
+             JOIN kpi_sub_indicators si ON a.sub_indicator_id = si.id
+             ${conds.length ? 'WHERE ' + conds.join(' AND ') : ''}
+             ORDER BY a.sub_indicator_id, a.sort_order, a.id`, params);
+        res.json({ success: true, data: rows });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.post('/sub-activities', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
+    try {
+        const { sub_indicator_id, activity_name, activity_code, item_no, value_type, target_percentage, sort_order } = req.body;
+        if (!sub_indicator_id || !activity_name || !String(activity_name).trim()) {
+            return res.status(400).json({ success: false, message: 'กรุณาระบุตัวชี้วัดย่อยและชื่อกิจกรรม' });
+        }
+        const [si] = await db.query('SELECT id FROM kpi_sub_indicators WHERE id = ?', [sub_indicator_id]);
+        if (si.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบตัวชี้วัดย่อย' });
+        const [r] = await db.query(
+            `INSERT INTO kpi_sub_activities (sub_indicator_id, activity_name, activity_code, item_no, value_type, target_percentage, sort_order)
+             VALUES (?,?,?,?,?,?,?)`,
+            [sub_indicator_id, String(activity_name).trim(), activity_code || null, String(item_no || '').trim().slice(0, 20) || null,
+             normalizeActivityType(value_type), target_percentage || null, Number(sort_order) || 0]);
+        res.json({ success: true, id: r.insertId, message: 'เพิ่มกิจกรรมสำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.put('/sub-activities/:id', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
+    try {
+        const { activity_name, activity_code, item_no, value_type, target_percentage, sort_order, is_active } = req.body;
+        if (!activity_name || !String(activity_name).trim()) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อกิจกรรม' });
+        await db.query(
+            `UPDATE kpi_sub_activities SET activity_name=?, activity_code=?, item_no=?, value_type=?, target_percentage=?, sort_order=?, is_active=? WHERE id=?`,
+            [String(activity_name).trim(), activity_code || null, String(item_no || '').trim().slice(0, 20) || null,
+             normalizeActivityType(value_type), target_percentage || null, Number(sort_order) || 0, is_active === undefined || is_active ? 1 : 0, req.params.id]);
+        res.json({ success: true, message: 'แก้ไขสำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.put('/sub-activities/:id/toggle-active', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
+    try {
+        const { is_active } = req.body;
+        await db.query('UPDATE kpi_sub_activities SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, req.params.id]);
+        res.json({ success: true, message: is_active ? 'เปิดใช้งานแล้ว' : 'ปิดใช้งานแล้ว' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.delete('/sub-activities/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [[cnt]] = await db.query("SELECT COUNT(*) AS cnt FROM kpi_activity_results WHERE activity_id = ? AND actual_value IS NOT NULL AND actual_value != ''", [req.params.id]);
+        if (cnt.cnt > 0) {
+            return res.status(400).json({ success: false, message: `ไม่สามารถลบได้: มีผลงานบันทึกแล้ว ${cnt.cnt} รายการ กรุณา "ปิดใช้งาน" แทนการลบ` });
+        }
+        await db.query('DELETE FROM kpi_sub_activities WHERE id = ?', [req.params.id]);
+        res.json({ success: true, message: 'ลบสำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// ขอบเขตหน่วยบริการตามบทบาท (ROLE_SCOPE_HOSPCODE = หน่วยบริการตัวเอง, ROLE_SCOPE_DISTRICT = อำเภอตัวเอง, อื่นๆ = ทุกหน่วย)
+async function canAccessHospcode(user, hospcode) {
+    if (!hospcode) return false;
+    if (ROLE_SCOPE_HOSPCODE.includes(user.role)) return String(user.hospcode || '') === String(hospcode);
+    if (ROLE_SCOPE_DISTRICT.includes(user.role)) {
+        const [mine, target] = await Promise.all([getDistrictId(user.hospcode), getDistrictId(hospcode)]);
+        return !!mine && mine === target;
+    }
+    return true;
+}
+
+// สถานะ "ล็อคการคีย์ข้อมูล" ของระบบ (ตั้งค่าที่หน้า settings) — ใช้ร่วม GET /data-entry-lock และการบันทึกผลงานระดับย่อย/กิจกรรม
+async function getDataEntryLockState() {
+    const keys = ['data_entry_locked', 'data_entry_lock_start', 'data_entry_lock_end', 'data_entry_lock_days'];
+    const [rows] = await db.query('SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN (?)', [keys]);
+    const st = {};
+    for (const r of rows) st[r.setting_key] = r.setting_value;
+    const manualLock = st.data_entry_locked === 'true';
+    const startDate = st.data_entry_lock_start || '';
+    let effectiveEnd = st.data_entry_lock_end || '';
+    const lockDays = parseInt(st.data_entry_lock_days) || 0;
+    if (startDate && lockDays > 0) {
+        const d = new Date(startDate);
+        d.setDate(d.getDate() + lockDays);
+        effectiveEnd = d.toISOString().split('T')[0];
+    }
+    const today = new Date().toISOString().split('T')[0];
+    return manualLock || !!(startDate && effectiveEnd && today >= startDate && today <= effectiveEnd);
+}
+
+// GET /hierarchy-results?indicator_id=&year_bh=&hospcode= — โครงสร้างข้อย่อย + กิจกรรม + ผลงานรายเดือนของ 1 แถวในหน้าบันทึกผลงาน
+// (โหลดเมื่อผู้ใช้กดขยายแถว) — หน้าจอคำนวณค่าระดับบนเองด้วย shared/kpi-rollup.ts (กติกาเดียวกับ backend)
+apiRouter.get('/hierarchy-results', authenticateToken, async (req, res) => {
+    try {
+        const { indicator_id, year_bh, hospcode } = req.query;
+        if (!indicator_id || !year_bh || !hospcode) return res.status(400).json({ success: false, message: 'ต้องระบุ indicator_id, year_bh, hospcode' });
+        if (!(await canAccessHospcode(req.user, hospcode))) return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์ดูข้อมูลหน่วยบริการนี้' });
+        const [[ind]] = await db.query('SELECT id, item_no, sub_rollup_mode FROM kpi_indicators WHERE id = ?', [indicator_id]);
+        if (!ind) return res.status(404).json({ success: false, message: 'ไม่พบตัวชี้วัด' });
+        const [subs] = await db.query(
+            `SELECT id, sub_indicator_name, sub_indicator_code, item_no, rollup_mode, target_percentage, sort_order
+             FROM kpi_sub_indicators WHERE indicator_id = ? AND is_active = 1 ORDER BY sort_order, id`, [indicator_id]);
+        const subIds = subs.map(x => x.id);
+        let acts = [], subRes = [], actRes = [];
+        if (subIds.length > 0) {
+            [acts] = await db.query(
+                `SELECT id, sub_indicator_id, activity_name, activity_code, item_no, value_type, target_percentage, sort_order
+                 FROM kpi_sub_activities WHERE sub_indicator_id IN (?) AND is_active = 1 ORDER BY sort_order, id`, [subIds]);
+            [subRes] = await db.query(
+                'SELECT sub_indicator_id, month_bh, target_value, actual_value, is_locked FROM kpi_sub_results WHERE sub_indicator_id IN (?) AND year_bh = ? AND hospcode = ?',
+                [subIds, year_bh, hospcode]);
+            if (acts.length > 0) {
+                [actRes] = await db.query(
+                    'SELECT activity_id, month_bh, target_value, actual_value, is_locked FROM kpi_activity_results WHERE activity_id IN (?) AND year_bh = ? AND hospcode = ?',
+                    [acts.map(a => a.id), year_bh, hospcode]);
+            }
+        }
+        const pack = (rows, idKey) => {
+            const m = new Map();
+            for (const r of rows) {
+                if (!m.has(r[idKey])) m.set(r[idKey], { months: {}, target: null, locked: false });
+                const e = m.get(r[idKey]);
+                e.months[Number(r.month_bh)] = r.actual_value != null ? String(r.actual_value) : '';
+                if (Number(r.month_bh) === 10 && r.target_value != null && r.target_value !== '') e.target = String(r.target_value);
+                if (Number(r.is_locked) === 1) e.locked = true;
+            }
+            return m;
+        };
+        const subMap = pack(subRes, 'sub_indicator_id'), actMap = pack(actRes, 'activity_id');
+        const empty = { months: {}, target: null, locked: false };
+        res.json({
+            success: true,
+            data: {
+                indicator_id: ind.id, item_no: ind.item_no, sub_rollup_mode: ind.sub_rollup_mode || 'auto',
+                subs: subs.map(x => ({ ...x, rollup_mode: x.rollup_mode || 'manual', ...(subMap.get(x.id) || empty) })),
+                activities: acts.map(a => ({ ...a, ...(actMap.get(a.id) || empty) })),
+            }
+        });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// POST /hierarchy-results/save — บันทึกผลงานข้อย่อย + กิจกรรม ของ 1 หน่วยบริการ × 1 ปีงบ ในคราวเดียว (transaction)
+// body: { year_bh, hospcode, sub: [{ sub_indicator_id, month_bh, actual_value, target_value? }], activity: [{ activity_id, month_bh, actual_value, target_value? }] }
+// ตรวจ: ขอบเขตหน่วยบริการ, ล็อคการคีย์ของระบบ (user ทั่วไป), ล็อคจากการอนุมัติ (super_admin ข้ามได้), สิทธิ์แก้ผลงาน/เป้าหมายรายบุคคล,
+//       ห้ามกรอกข้อย่อยที่ "คำนวณจากกิจกรรม" (มีกิจกรรมเปิดใช้งานอยู่) — ค่า 0 เก็บเป็น '0', ค่าว่าง = ลบค่าเดิม (NULL)
+apiRouter.post('/hierarchy-results/save', authenticateToken, async (req, res) => {
+    const user = req.user;
+    const { year_bh, hospcode } = req.body || {};
+    const subItems = Array.isArray(req.body?.sub) ? req.body.sub : [];
+    const actItems = Array.isArray(req.body?.activity) ? req.body.activity : [];
+    if (!year_bh || !hospcode) return res.status(400).json({ success: false, message: 'ต้องระบุ year_bh และ hospcode' });
+    if (subItems.length + actItems.length === 0) return res.status(400).json({ success: false, message: 'ไม่มีข้อมูลที่ต้องบันทึก' });
+    const validMonth = (m) => Number.isInteger(Number(m)) && Number(m) >= 1 && Number(m) <= 12;
+    const norm = (v) => (v === 0 || (v !== null && v !== undefined && String(v).trim() !== '')) ? String(v).trim() : null;
+    for (const it of [...subItems, ...actItems]) {
+        if (!validMonth(it.month_bh)) return res.status(400).json({ success: false, message: 'เดือนไม่ถูกต้อง' });
+        for (const k of ['actual_value', 'target_value']) {
+            const v = norm(it[k]);
+            if (v !== null && v.length > 100) return res.status(400).json({ success: false, message: 'ค่าที่บันทึกยาวเกิน 100 ตัวอักษร' });
+        }
+    }
+    try {
+        if (!(await canAccessHospcode(user, hospcode))) return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์บันทึกข้อมูลหน่วยบริการนี้' });
+        if (!ROLE_ADMIN_ALL.includes(user.role) && await getDataEntryLockState()) {
+            return res.status(403).json({ success: false, message: 'ระบบปิดการคีย์ข้อมูลชั่วคราว' });
+        }
+    } catch (e) { return res.status(500).json({ success: false, message: e.message }); }
+
+    const conn = await db.getConnection();
+    try {
+        await conn.beginTransaction();
+        // ข้อมูลข้อย่อย/กิจกรรมที่อ้างถึง → ตัวชี้วัดหลักที่เกี่ยวข้อง
+        const subIds = [...new Set(subItems.map(x => Number(x.sub_indicator_id)))];
+        const actIds = [...new Set(actItems.map(x => Number(x.activity_id)))];
+        const [subRows] = subIds.length ? await conn.query('SELECT id, indicator_id, rollup_mode FROM kpi_sub_indicators WHERE id IN (?)', [subIds]) : [[]];
+        const [actRows] = actIds.length ? await conn.query(
+            `SELECT a.id, a.value_type, si.indicator_id, si.id AS sub_indicator_id FROM kpi_sub_activities a
+             JOIN kpi_sub_indicators si ON a.sub_indicator_id = si.id WHERE a.id IN (?)`, [actIds]) : [[]];
+        if (subRows.length !== subIds.length || actRows.length !== actIds.length) throw Object.assign(new Error('ไม่พบตัวชี้วัดย่อยหรือกิจกรรมที่ระบุ'), { status: 404 });
+        const subById = new Map(subRows.map(r => [r.id, r]));
+        const actById = new Map(actRows.map(r => [r.id, r]));
+
+        // ข้อย่อยที่คำนวณจากกิจกรรม (auto + มีกิจกรรมเปิดใช้งาน) กรอกเองไม่ได้
+        const autoSubIds = subRows.filter(r => r.rollup_mode === 'auto').map(r => r.id);
+        if (autoSubIds.length) {
+            const [withActs] = await conn.query('SELECT DISTINCT sub_indicator_id FROM kpi_sub_activities WHERE is_active = 1 AND sub_indicator_id IN (?)', [autoSubIds]);
+            if (withActs.length) throw Object.assign(new Error('ตัวชี้วัดย่อยนี้คำนวณผลงานจากกิจกรรม — กรุณาบันทึกที่กิจกรรมแทน'), { status: 400 });
+        }
+
+        const indicatorIds = [...new Set([...subRows.map(r => r.indicator_id), ...actRows.map(r => r.indicator_id)])];
+        // user ทั่วไปบันทึกได้เฉพาะตัวชี้วัดของหน่วยงานตัวเอง (เหมือน /update-kpi)
+        if (!ROLE_ADMIN_ALL.includes(user.role)) {
+            const [allowed] = await conn.query('SELECT id FROM kpi_indicators WHERE id IN (?) AND dept_id = ?', [indicatorIds, user.deptId]);
+            if (allowed.length !== indicatorIds.length) throw Object.assign(new Error('ไม่มีสิทธิ์แก้ไขข้อมูลหน่วยงานอื่น'), { status: 403 });
+        }
+        // ล็อคจากการอนุมัติ — ตัวชี้วัดหลักที่ล็อคแล้ว ข้อย่อย/กิจกรรมของมันแก้ไม่ได้ (super_admin ข้ามได้)
+        if (user.role !== 'super_admin') {
+            const [locked] = await conn.query(
+                'SELECT DISTINCT indicator_id FROM kpi_results WHERE indicator_id IN (?) AND year_bh = ? AND hospcode = ? AND is_locked = 1',
+                [indicatorIds, year_bh, hospcode]);
+            const [subLocked] = subIds.length ? await conn.query(
+                'SELECT COUNT(*) AS cnt FROM kpi_sub_results WHERE sub_indicator_id IN (?) AND year_bh = ? AND hospcode = ? AND is_locked = 1',
+                [subIds, year_bh, hospcode]) : [[{ cnt: 0 }]];
+            const [actLocked] = actIds.length ? await conn.query(
+                'SELECT COUNT(*) AS cnt FROM kpi_activity_results WHERE activity_id IN (?) AND year_bh = ? AND hospcode = ? AND is_locked = 1',
+                [actIds, year_bh, hospcode]) : [[{ cnt: 0 }]];
+            if (locked.length || subLocked[0].cnt > 0 || actLocked[0].cnt > 0) {
+                throw Object.assign(new Error('ไม่สามารถแก้ไขได้ ตัวชี้วัดนี้ถูกล็อคอยู่ (ได้รับการอนุมัติแล้ว)'), { status: 403 });
+            }
+        }
+        const perms = await getPermsForUser(user.userId, user.role);
+
+        const upsert = async (table, idCol, id, it, valueType) => {
+            let actual = norm(it.actual_value);
+            if (valueType === 'check' && actual !== null) actual = kpiRollup.activityValue('check', actual) === 100 ? '1' : '0';
+            const hasTarget = it.target_value !== undefined;
+            const target = norm(it.target_value);
+            const [ex] = await conn.query(`SELECT target_value, actual_value FROM ${table} WHERE ${idCol} = ? AND year_bh = ? AND hospcode = ? AND month_bh = ?`,
+                [id, year_bh, hospcode, Number(it.month_bh)]);
+            const old = ex[0] || {};
+            // ไม่มีสิทธิ์แก้ผลงาน/เป้าหมาย → คงค่าเดิม (เหมือน /update-kpi)
+            const finalActual = perms.can_edit_actual ? actual : (old.actual_value ?? null);
+            const finalTarget = (hasTarget && perms.can_edit_target) ? target : (old.target_value ?? null);
+            await conn.query(
+                `INSERT INTO ${table} (${idCol}, year_bh, hospcode, month_bh, target_value, actual_value, status, user_id)
+                 VALUES (?,?,?,?,?,?, 'Pending', ?)
+                 ON DUPLICATE KEY UPDATE target_value = VALUES(target_value), actual_value = VALUES(actual_value), user_id = VALUES(user_id)`,
+                [id, year_bh, hospcode, Number(it.month_bh), finalTarget, finalActual, user.userId]);
+        };
+        for (const it of subItems) await upsert('kpi_sub_results', 'sub_indicator_id', Number(it.sub_indicator_id), it, 'number');
+        for (const it of actItems) await upsert('kpi_activity_results', 'activity_id', Number(it.activity_id), it, actById.get(Number(it.activity_id)).value_type);
+        await conn.commit();
+
+        (async () => {
+            try {
+                const userInfo = await getUserAuditInfo(user.userId);
+                for (const indId of indicatorIds) {
+                    const nSub = subItems.filter(x => subById.get(Number(x.sub_indicator_id)).indicator_id === indId).length;
+                    const nAct = actItems.filter(x => actById.get(Number(x.activity_id)).indicator_id === indId).length;
+                    await logKpiSaveAudit({
+                        ...(userInfo || { user_id: user.userId, username: user.username }),
+                        hospcode, action_type: 'hierarchy_results', indicator_id: indId, year_bh,
+                        row_count: nSub + nAct, summary: `ข้อย่อย ${nSub} ช่อง, กิจกรรม ${nAct} ช่อง`,
+                        ip_address: (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim().slice(0, 64)
+                    });
+                }
+            } catch (e) { console.warn('[KPI Audit] hierarchy log error:', e.message); }
+        })();
+        res.json({ success: true, message: 'บันทึกสำเร็จ', saved: subItems.length + actItems.length });
+    } catch (e) {
+        await conn.rollback();
+        res.status(e.status || 500).json({ success: false, message: e.message });
+    } finally {
+        conn.release();
+    }
 });
 
 // ========== KPI Sub-Results (บันทึกผลงานย่อย) ==========
@@ -6686,58 +6998,131 @@ function subAggNum(v) {
     const t = String(v).trim();
     return /^-?(\d+(\.\d+)?|\.\d+)$/.test(t) ? parseFloat(t) : null;
 }
-async function loadSubAggregates(conn, { indicatorId, yearBh, hospcode } = {}) {
+// ค่ารายเดือน "ที่มีผล" ของตัวชี้วัดย่อยแต่ละข้อ × หน่วยบริการ × ปีงบ (ตัวชี้วัด 3 ระดับ — 18 ต.ค. 2569)
+//   ข้อย่อยกรอกเอง (rollup_mode='manual' — ค่าตั้งต้น) หรือ 'auto' ที่ยังไม่มีกิจกรรมเปิดใช้งาน = ค่าใน kpi_sub_results (เหมือนเดิม)
+//   ข้อย่อย 'auto' ที่มีกิจกรรม = kpiRollup.rollupMonthly() ของกิจกรรม (แบบทำแล้ว/ยังไม่ทำ = 100/0)
+// คืน { subs, entries } — entry = { indicator_id, sub_indicator_id, hospcode, year_bh, months: {mk: number|null}, raw: {mk: string|null}, target10 }
+//   raw = ค่าที่ใช้ส่งออกรายข้อ (ข้อกรอกเอง = ข้อความเดิมทุกตัวอักษร กัน export เห็นว่า "เปลี่ยน" ทั้งที่ไม่ได้แก้)
+// ใช้ร่วม: loadSubAggregates() (ผลงานหลัก), คอลัมน์รายข้อของ performKpiExport/checkKpiChanges (use_sub_indicator_export)
+async function loadEffectiveSubMonthly(conn, { indicatorId, yearBh, hospcode } = {}) {
     const sw = ['is_active = 1'], sp = [];
     if (indicatorId) { sw.push('indicator_id = ?'); sp.push(indicatorId); }
-    const [subs] = await conn.query(`SELECT id, indicator_id, target_percentage FROM kpi_sub_indicators WHERE ${sw.join(' AND ')}`, sp);
+    const [subs] = await conn.query(`SELECT id, indicator_id, target_percentage, rollup_mode FROM kpi_sub_indicators WHERE ${sw.join(' AND ')}`, sp);
+    if (subs.length === 0) return { subs, entries: [] };
+    const subById = new Map(subs.map(su => [su.id, su]));
+    const entries = new Map();
+    const entryOf = (subId, hc, year) => {
+        const key = `${subId}|${hc}|${year}`;
+        if (!entries.has(key)) {
+            entries.set(key, { indicator_id: subById.get(subId).indicator_id, sub_indicator_id: subId, hospcode: hc, year_bh: year, months: {}, raw: {}, target10: null });
+        }
+        return entries.get(key);
+    };
+
+    // กิจกรรมของข้อย่อยแบบ auto
+    const autoIds = subs.filter(su => su.rollup_mode === 'auto').map(su => su.id);
+    const actsBySub = new Map(), actById = new Map();
+    if (autoIds.length > 0) {
+        const [acts] = await conn.query('SELECT id, sub_indicator_id, value_type FROM kpi_sub_activities WHERE is_active = 1 AND sub_indicator_id IN (?)', [autoIds]);
+        for (const ac of acts) {
+            actById.set(ac.id, ac);
+            if (!actsBySub.has(ac.sub_indicator_id)) actsBySub.set(ac.sub_indicator_id, []);
+            actsBySub.get(ac.sub_indicator_id).push(ac);
+        }
+    }
+    const rolled = (subId) => actsBySub.has(subId);
+
+    const w = ['si.is_active = 1'], p = [];
+    if (indicatorId) { w.push('si.indicator_id = ?'); p.push(indicatorId); }
+    if (yearBh) { w.push('sr.year_bh = ?'); p.push(yearBh); }
+    if (hospcode) { w.push('sr.hospcode = ?'); p.push(hospcode); }
+    const [rows] = await conn.query(`
+        SELECT sr.sub_indicator_id, sr.hospcode, sr.year_bh, sr.month_bh, sr.target_value, sr.actual_value
+        FROM kpi_sub_results sr
+        JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
+        WHERE ${w.join(' AND ')}`, p);
+    for (const r of rows) {
+        const hc = r.hospcode != null ? String(r.hospcode).trim() : '';
+        const mk = SUB_AGG_MONTH_KEYS[Number(r.month_bh)];
+        if (!hc || !mk || !subById.has(r.sub_indicator_id)) continue;
+        const e = entryOf(r.sub_indicator_id, hc, r.year_bh);
+        if (Number(r.month_bh) === 10) e.target10 = subAggNum(r.target_value);
+        if (rolled(r.sub_indicator_id)) continue;
+        e.months[mk] = subAggNum(r.actual_value);
+        e.raw[mk] = (r.actual_value != null && r.actual_value !== '') ? String(r.actual_value) : null;
+    }
+
+    if (actById.size > 0) {
+        const aw = ['ar.activity_id IN (?)'], ap = [[...actById.keys()]];
+        if (yearBh) { aw.push('ar.year_bh = ?'); ap.push(yearBh); }
+        if (hospcode) { aw.push('ar.hospcode = ?'); ap.push(hospcode); }
+        const [arows] = await conn.query(`SELECT ar.activity_id, ar.hospcode, ar.year_bh, ar.month_bh, ar.actual_value FROM kpi_activity_results ar WHERE ${aw.join(' AND ')}`, ap);
+        const groups = new Map();
+        for (const r of arows) {
+            const hc = r.hospcode != null ? String(r.hospcode).trim() : '';
+            const mk = SUB_AGG_MONTH_KEYS[Number(r.month_bh)];
+            const ac = actById.get(r.activity_id);
+            if (!hc || !mk || !ac) continue;
+            const key = `${ac.sub_indicator_id}|${hc}|${r.year_bh}`;
+            if (!groups.has(key)) groups.set(key, { subId: ac.sub_indicator_id, hc, year: r.year_bh, vals: {} });
+            const v = kpiRollup.activityValue(ac.value_type, r.actual_value);
+            if (v !== null) (groups.get(key).vals[mk] || (groups.get(key).vals[mk] = {}))[r.activity_id] = v;
+        }
+        for (const g of groups.values()) {
+            const e = entryOf(g.subId, g.hc, g.year);
+            e.months = kpiRollup.rollupMonthly(actsBySub.get(g.subId).length, g.vals);
+            for (const mk of SUB_AGG_FISCAL_ORDER) e.raw[mk] = e.months[mk] === null ? null : String(e.months[mk]);
+        }
+    }
+    return { subs, entries: [...entries.values()] };
+}
+
+async function loadSubAggregates(conn, { indicatorId, yearBh, hospcode } = {}) {
+    const { subs, entries } = await loadEffectiveSubMonthly(conn, { indicatorId, yearBh, hospcode });
     if (subs.length === 0) return [];
     const subsByInd = new Map();
     for (const su of subs) {
         if (!subsByInd.has(su.indicator_id)) subsByInd.set(su.indicator_id, []);
         subsByInd.get(su.indicator_id).push(su);
     }
-    const w = ['si.is_active = 1'], p = [];
-    if (indicatorId) { w.push('si.indicator_id = ?'); p.push(indicatorId); }
-    if (yearBh) { w.push('sr.year_bh = ?'); p.push(yearBh); }
-    if (hospcode) { w.push('sr.hospcode = ?'); p.push(hospcode); }
-    const [rows] = await conn.query(`
-        SELECT si.indicator_id, sr.sub_indicator_id, sr.hospcode, sr.year_bh, sr.month_bh, sr.target_value, sr.actual_value
-        FROM kpi_sub_results sr
-        JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
-        WHERE ${w.join(' AND ')}`, p);
+    // โหมดของตัวชี้วัดหลัก — 'manual' = กรอกผลงานหลักเอง (ผู้เรียกต้องไม่นำค่าจากข้อย่อยไปทับ)
+    const [inds] = await conn.query('SELECT id, sub_rollup_mode FROM kpi_indicators WHERE id IN (?)', [[...subsByInd.keys()]]);
+    const modeById = new Map(inds.map(i => [i.id, i.sub_rollup_mode || 'auto']));
     const groups = new Map();
-    for (const r of rows) {
-        const hc = r.hospcode != null ? String(r.hospcode).trim() : '';
-        const mk = SUB_AGG_MONTH_KEYS[Number(r.month_bh)];
-        if (!hc || !mk) continue;
-        const key = `${r.indicator_id}|${hc}|${r.year_bh}`;
-        if (!groups.has(key)) groups.set(key, { indicator_id: r.indicator_id, hospcode: hc, year_bh: r.year_bh, vals: {}, target: new Map() });
+    for (const e of entries) {
+        const key = `${e.indicator_id}|${e.hospcode}|${e.year_bh}`;
+        if (!groups.has(key)) groups.set(key, { indicator_id: e.indicator_id, hospcode: e.hospcode, year_bh: e.year_bh, vals: {}, target: new Map() });
         const g = groups.get(key);
-        const a = subAggNum(r.actual_value);
-        if (a !== null) (g.vals[mk] || (g.vals[mk] = new Map())).set(r.sub_indicator_id, a);
-        if (Number(r.month_bh) === 10) { const t = subAggNum(r.target_value); if (t !== null) g.target.set(r.sub_indicator_id, t); }
+        for (const mk of SUB_AGG_FISCAL_ORDER) {
+            const v = e.months[mk];
+            if (v !== null && v !== undefined) (g.vals[mk] || (g.vals[mk] = {}))[e.sub_indicator_id] = v;
+        }
+        if (e.target10 !== null) g.target.set(e.sub_indicator_id, e.target10);
     }
     const round4 = (n) => Math.round(n * 10000) / 10000;
     const out = [];
     for (const g of groups.values()) {
         const indSubs = subsByInd.get(g.indicator_id) || [];
         const subCount = indSubs.length;
-        const row = { indicator_id: g.indicator_id, hospcode: g.hospcode, year_bh: g.year_bh, sub_count: subCount };
-        // ไล่ตามลำดับปีงบ (ต.ค. → ก.ย.) เก็บผลงานล่าสุดของแต่ละข้อไว้ยกยอดไปเดือนถัดไป
-        const latest = new Map();
-        for (const mk of SUB_AGG_FISCAL_ORDER) {
-            const monthVals = g.vals[mk];
-            if (!monthVals || subCount === 0) { row[mk] = null; continue; }
-            for (const [sid, v] of monthVals) latest.set(sid, v);
-            let sum = 0;
-            for (const v of latest.values()) sum += v;
-            row[mk] = round4(sum / subCount);
-        }
+        const row = { indicator_id: g.indicator_id, hospcode: g.hospcode, year_bh: g.year_bh, sub_count: subCount,
+            sub_rollup_mode: modeById.get(g.indicator_id) || 'auto', ...kpiRollup.rollupMonthly(subCount, g.vals) };
         const targets = indSubs.map(su => g.target.has(su.id) ? g.target.get(su.id) : subAggNum(su.target_percentage)).filter(t => t !== null && t !== 0);
         row.avg_target = targets.length > 0 ? round4(targets.reduce((x, y) => x + y, 0) / targets.length) : null;
         out.push(row);
     }
     return out;
+}
+
+// คอลัมน์รายข้อของการส่งออกแบบ use_sub_indicator_export: Map "<sub_id>_<hospcode>" → { m10: string|null, ... } (ค่าที่มีผล)
+async function loadSubExportMonthMap(conn, indicatorId, yearBh) {
+    const { entries } = await loadEffectiveSubMonthly(conn, { indicatorId, yearBh });
+    const map = new Map();
+    for (const e of entries) {
+        const m = {};
+        for (const mk of SUB_AGG_FISCAL_ORDER) if (mk in e.raw) m[mk] = e.raw[mk];
+        map.set(`${e.sub_indicator_id}_${e.hospcode}`, m);
+    }
+    return map;
 }
 
 // GET /sub-results/summary — aggregate ต่อ indicator + hospcode (รวม monthly breakdown) — ดู loadSubAggregates()
@@ -6755,6 +7140,11 @@ apiRouter.post('/sub-results/upsert', authenticateToken, async (req, res) => {
         if (!sub_indicator_id || !year_bh || !hospcode || !month_bh) {
             return res.status(400).json({ success: false, message: 'sub_indicator_id, year_bh, hospcode, month_bh required' });
         }
+        // ข้อย่อยที่คำนวณจากกิจกรรม (ตัวชี้วัด 3 ระดับ) กรอกเองไม่ได้ — บันทึกที่กิจกรรมแทน
+        const [[autoSub]] = await db.query(
+            "SELECT COUNT(*) AS cnt FROM kpi_sub_indicators si JOIN kpi_sub_activities a ON a.sub_indicator_id = si.id AND a.is_active = 1 WHERE si.id = ? AND si.rollup_mode = 'auto'",
+            [sub_indicator_id]);
+        if (autoSub.cnt > 0) return res.status(400).json({ success: false, message: 'ตัวชี้วัดย่อยนี้คำนวณผลงานจากกิจกรรม — กรุณาบันทึกที่กิจกรรมแทน' });
         // ตรวจสอบล็อค (super_admin ข้ามได้) — mirror /update-kpi (ล็อคจะถูก cascade มาจากตัวชี้วัดหลักตอนอนุมัติ)
         if (req.user.role !== 'super_admin') {
             const [lockedRows] = await db.query(
@@ -6862,6 +7252,15 @@ async function cascadeSubResultsStatus(dbOrConn, indicator_id, year_bh, hospcode
     const params = [status, is_locked, indicator_id, year_bh];
     if (hospcode) { sql += ' AND sr.hospcode = ?'; params.push(hospcode); }
     await dbOrConn.query(sql, params);
+    // ระดับกิจกรรม (ตัวชี้วัด 3 ระดับ) — mirror เหมือนข้อย่อย
+    let asql = `UPDATE kpi_activity_results ar
+               JOIN kpi_sub_activities a ON ar.activity_id = a.id
+               JOIN kpi_sub_indicators si ON a.sub_indicator_id = si.id
+               SET ar.status = ?, ar.is_locked = ?
+               WHERE si.indicator_id = ? AND ar.year_bh = ?`;
+    const aparams = [status, is_locked, indicator_id, year_bh];
+    if (hospcode) { asql += ' AND ar.hospcode = ?'; aparams.push(hospcode); }
+    await dbOrConn.query(asql, aparams);
 }
 
 apiRouter.post('/approve-kpi', authenticateToken, isAdmin, async (req, res) => {
@@ -6962,6 +7361,10 @@ apiRouter.post('/unlock-kpi-all', authenticateToken, isSuperAdmin, async (req, r
         // Cascade ไปตัวชี้วัดย่อยทั้งหมดที่ล็อคอยู่ในปีนี้ (ไม่กรอง indicator — unlock ทั้งปี)
         await db.query(
             "UPDATE kpi_sub_results SET is_locked = 0, status = 'Pending' WHERE year_bh = ? AND is_locked = 1",
+            [year_bh]
+        );
+        await db.query(
+            "UPDATE kpi_activity_results SET is_locked = 0, status = 'Pending' WHERE year_bh = ? AND is_locked = 1",
             [year_bh]
         );
         await db.query(
@@ -7152,6 +7555,12 @@ apiRouter.post('/appeal-kpi', authenticateToken, async (req, res) => {
         await db.query(
             `UPDATE kpi_sub_results sr JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
              SET sr.status = 'Appeal' WHERE si.indicator_id = ? AND sr.year_bh = ? AND sr.hospcode = ?`,
+            [indicator_id, year_bh, hospcode]
+        );
+        await db.query(
+            `UPDATE kpi_activity_results ar JOIN kpi_sub_activities a ON ar.activity_id = a.id
+             JOIN kpi_sub_indicators si ON a.sub_indicator_id = si.id
+             SET ar.status = 'Appeal' WHERE si.indicator_id = ? AND ar.year_bh = ? AND ar.hospcode = ?`,
             [indicator_id, year_bh, hospcode]
         );
 
@@ -7800,25 +8209,9 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                     return { ...si, colName: name };
                 });
 
-                const [subResultRows] = await db.query(
-                    `SELECT sub_indicator_id, hospcode, month_bh, actual_value FROM kpi_sub_results
-                     WHERE sub_indicator_id IN (${subInds.map(() => '?').join(',')}) AND year_bh = ?`,
-                    [...subInds.map(s => s.id), year_bh]
-                );
-                // ไม่ early-exit ที่ไม่มีผลงานอีกต่อไป — ต้องตรวจครบทุกหน่วยบริการในขอบเขต (scopeHospcodes)
-                // ด้วยเสมอ เพื่อให้ scheduler เห็นว่ามีแถวใหม่ (ที่ยังว่าง) ต้อง export
-
-                const bySubHospcode = new Map();
-                for (const row of subResultRows) {
-                    const hc = row.hospcode != null ? String(row.hospcode).trim() : '';
-                    if (!hc) continue;
-                    const key = `${row.sub_indicator_id}_${hc}`;
-                    if (!bySubHospcode.has(key)) bySubHospcode.set(key, {});
-                    const entry = bySubHospcode.get(key);
-                    const mKey = 'm' + String(row.month_bh).padStart(2, '0');
-                    const actualVal = row.actual_value;
-                    entry[mKey] = (actualVal != null && actualVal !== '') ? String(actualVal) : null;
-                }
+                // ค่ารายเดือนที่มีผลของแต่ละข้อ (ข้อย่อยที่คำนวณจากกิจกรรม = ค่าจากกิจกรรม) — ตรงกับ loadSubAggregates() เสมอ
+                const bySubHospcode = await loadSubExportMonthMap(db, indicator.id, year_bh);
+                const subResultRows = [...bySubHospcode.keys()].map(k => ({ hospcode: k.slice(k.indexOf('_') + 1) }));
 
                 const isCumulativeSub = Number(indicator.is_cumulative) === 1;
                 const computeResultValueSub = (monthVals) => {
@@ -7935,7 +8328,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
 
             // เติมค่า AVG จาก kpi_sub_results (เฉพาะ slot ที่ kpi_results ยังไม่มีข้อมูล)
             try {
-                const subAgg = await loadSubAggregates(db, { indicatorId: indicator.id, yearBh: year_bh });
+                const subAgg = (await loadSubAggregates(db, { indicatorId: indicator.id, yearBh: year_bh })).filter(r => r.sub_rollup_mode !== 'manual'); // หลักแบบกรอกเอง = ไม่นำค่าข้อย่อยมาเติม
                 const fmt = (v) => {
                     if (v === null || v === undefined) return null;
                     const n = parseFloat(v);
@@ -8188,24 +8581,9 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                     }
 
                     // ดึงผลงานย่อยทั้งหมดของปีนี้ สำหรับข้อย่อยที่ active
-                    const [subResultRows] = await conn.query(
-                        `SELECT sub_indicator_id, hospcode, month_bh, actual_value FROM kpi_sub_results
-                         WHERE sub_indicator_id IN (${subInds.map(() => '?').join(',')}) AND year_bh = ?`,
-                        [...subInds.map(s => s.id), year_bh]
-                    );
-
-                    // จัดกลุ่มเป็น (sub_indicator_id, hospcode) -> เดือน -> ค่า
-                    const bySubHospcode = new Map();
-                    for (const row of subResultRows) {
-                        const hc = row.hospcode != null ? String(row.hospcode).trim() : '';
-                        if (!hc) continue;
-                        const key = `${row.sub_indicator_id}_${hc}`;
-                        if (!bySubHospcode.has(key)) bySubHospcode.set(key, {});
-                        const entry = bySubHospcode.get(key);
-                        const mKey = 'm' + String(row.month_bh).padStart(2, '0');
-                        const actualVal = row.actual_value;
-                        entry[mKey] = (actualVal != null && actualVal !== '') ? String(actualVal) : null;
-                    }
+                    // ค่ารายเดือนที่มีผลของแต่ละข้อ (ข้อย่อยที่คำนวณจากกิจกรรม = ค่าจากกิจกรรม) — ตรงกับ loadSubAggregates() เสมอ
+                    const bySubHospcode = await loadSubExportMonthMap(conn, indicator.id, year_bh);
+                    const subResultRows = [...bySubHospcode.keys()].map(k => ({ hospcode: k.slice(k.indexOf('_') + 1) }));
 
                     // result ต่อข้อย่อย: is_cumulative ของตัวชี้วัดหลัก → SUM ทุกเดือน, ปกติ → ค่าล่าสุดที่คีย์ (เหมือน logic เดิมบรรทัด ~7265-7274)
                     const isCumulative = Number(indicator.is_cumulative) === 1;
@@ -8401,7 +8779,7 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                 // หลักการเดียวกับ /sub-results/summary — AVG actual_value ของ sub แต่ละเดือน + AVG target ของเดือน 10
                 // ถ้า kpi_results มีค่าอยู่แล้ว → ไม่ override (kpi_results มี priority สูงกว่า)
                 try {
-                    const subAgg = await loadSubAggregates(conn, { indicatorId: indicator.id, yearBh: year_bh });
+                    const subAgg = (await loadSubAggregates(conn, { indicatorId: indicator.id, yearBh: year_bh })).filter(r => r.sub_rollup_mode !== 'manual'); // หลักแบบกรอกเอง = ไม่นำค่าข้อย่อยมาเติม
 
                     const fmtNum = (v) => {
                         if (v === null || v === undefined) return null;
@@ -10652,6 +11030,50 @@ const migrationsReady = (async () => {
             `);
             try { await db.query('ALTER TABLE kpi_sub_results ADD CONSTRAINT fk_sub_result FOREIGN KEY (sub_indicator_id) REFERENCES kpi_sub_indicators(id) ON DELETE CASCADE'); } catch(e) {}
         } catch (e) {}
+
+        // ========== ตัวชี้วัด 3 ระดับ (18 ต.ค. 2569): กิจกรรมใต้ตัวชี้วัดย่อย + โหมดคำนวณจากระดับล่าง ==========
+        // ค่าตั้งต้นทุกคอลัมน์ = พฤติกรรมเดิม: ข้อย่อยกรอกเอง (manual), ตัวชี้วัดหลักคำนวณจากข้อย่อย (auto)
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS kpi_sub_activities (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    sub_indicator_id INT NOT NULL,
+                    activity_name VARCHAR(500) NOT NULL,
+                    activity_code VARCHAR(100),
+                    item_no VARCHAR(20),
+                    value_type ENUM('number','check') DEFAULT 'number',
+                    target_percentage VARCHAR(100),
+                    sort_order INT DEFAULT 0,
+                    is_active TINYINT(1) DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX idx_sub (sub_indicator_id),
+                    CONSTRAINT fk_activity_sub FOREIGN KEY (sub_indicator_id) REFERENCES kpi_sub_indicators(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS kpi_activity_results (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    activity_id INT NOT NULL,
+                    year_bh VARCHAR(10) NOT NULL,
+                    hospcode VARCHAR(20) NOT NULL,
+                    month_bh INT NOT NULL,
+                    target_value VARCHAR(100),
+                    actual_value VARCHAR(100),
+                    status VARCHAR(20) DEFAULT 'Pending',
+                    user_id INT,
+                    is_locked TINYINT(1) DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uk_act_year_hos_month (activity_id, year_bh, hospcode, month_bh),
+                    INDEX idx_year_hos (year_bh, hospcode),
+                    CONSTRAINT fk_activity_result FOREIGN KEY (activity_id) REFERENCES kpi_sub_activities(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+        } catch (e) { console.error('❌ kpi_sub_activities/kpi_activity_results:', e.message); }
+        try { await db.query("ALTER TABLE kpi_sub_indicators ADD COLUMN rollup_mode VARCHAR(10) NOT NULL DEFAULT 'manual'"); } catch (e) {}
+        try { await db.query('ALTER TABLE kpi_sub_indicators ADD COLUMN item_no VARCHAR(20) NULL'); } catch (e) {}
+        try { await db.query("ALTER TABLE kpi_indicators ADD COLUMN sub_rollup_mode VARCHAR(10) NOT NULL DEFAULT 'auto'"); } catch (e) {}
+        try { await db.query('ALTER TABLE kpi_indicators ADD COLUMN item_no VARCHAR(20) NULL'); } catch (e) {}
 
         // แก้ kpi_indicators.dept_id + main_indicator_id จาก VARCHAR → INT (ถ้ายังเป็น VARCHAR)
         try {
@@ -16081,4 +16503,4 @@ if (require.main === module) {
         startSessionCleanupJob();
     });
 }
-module.exports = { app, captureError, migrationsReady };
+module.exports = { app, captureError, migrationsReady, loadSubAggregates, loadSubExportMonthMap };

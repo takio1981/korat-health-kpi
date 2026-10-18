@@ -444,6 +444,30 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   ไม่ตรงกับ modal = ไม่นำเข้า (กันไฟล์ของหน่วยบริการอื่นทับ), ช่องว่าง = ไม่เปลี่ยนค่าเดิม, ค่า 0 นำเข้าได้ — Test: `shared/kpi-sub-excel.spec.ts`, `dashboard.spec.ts`
 - `formatNum()` helper: จำนวนเต็มไม่มีทศนิยม (70), มีเศษ 2 ตำแหน่ง (70.50)
 
+### ตัวชี้วัด 3 ระดับ: หลัก 1 → ย่อย 1.1 → กิจกรรม 1.1.1 (เพิ่ม 18 ต.ค. 2569)
+- ต่อจากของเดิม: หลัก = `kpi_indicators`, ย่อย = `kpi_sub_indicators`, **กิจกรรม** = ตารางใหม่ `kpi_sub_activities` (FK → ข้อย่อย CASCADE,
+  `value_type` ENUM('number','check'), `item_no`) + ผลงาน `kpi_activity_results` (โครงเดียวกับ `kpi_sub_results`, UNIQUE activity+year+hospcode+month,
+  แบบ check เก็บ `'1'`/`'0'`) — สร้างด้วย `CREATE TABLE IF NOT EXISTS` ใน server.js (ไม่ต้องเพิ่มใน `schema.sql`)
+- โหมดคำนวณ **ค่าตั้งต้น = พฤติกรรมเดิมทุกประการ**: `kpi_indicators.sub_rollup_mode` ('auto' = หลักคำนวณจากข้อย่อย / 'manual' = กรอกเอง ข้อย่อยแสดงประกอบ),
+  `kpi_sub_indicators.rollup_mode` ('manual' = กรอกเอง / 'auto' = คำนวณจากกิจกรรม — auto ที่ยังไม่มีกิจกรรมเปิดใช้งาน = ใช้ค่าที่กรอกเอง), `item_no` VARCHAR(20)
+  ทั้ง 3 ระดับ (ว่าง = `itemNumber()` สร้างจากเลขแม่ + ลำดับ) — `/indicators` และ `/sub-indicators` POST/PUT ผ่าน `saveHierarchyFields()` **อัปเดตเฉพาะเมื่อส่งฟิลด์มา**
+  (ผู้เรียกเดิม เช่น KHD sync/นำเข้า ไม่เปลี่ยนค่า)
+- การคำนวณ: `api/kpi-rollup.js` = `frontend/src/app/shared/kpi-rollup.ts` (**2 สำเนาต้องตรงกัน** + fixture ร่วม `api/tests/fixtures/rollup-cases.json` =
+  `shared/kpi-rollup.cases.json` jest บังคับตรงกัน) — `rollupMonthly()` กติกาเดียวกับข้อย่อย→หลัก (ยกยอด, ÷ จำนวนทั้งหมด, เดือนว่าง = null), `activityValue()` check = 100/0
+  - Backend: `loadEffectiveSubMonthly()` (ค่ารายเดือนที่มีผลของแต่ละข้อย่อย) ใช้ร่วม `loadSubAggregates()` และคอลัมน์รายข้อของ Export (`loadSubExportMonthMap()`
+    ใน `performKpiExport`/`checkKpiChanges` — ข้อกรอกเองส่งข้อความเดิมทุกตัวอักษร กันตาราง export เห็นว่า "เปลี่ยน") — **ห้ามอ่าน `kpi_sub_results` ตรงเพื่อคำนวณผลงานหลักอีก**
+  - `loadSubAggregates()` คืน `sub_rollup_mode` — Export merge และ `applySubSummaryToKpiData()` **ข้ามตัวชี้วัดหลักแบบ 'manual'**
+- Endpoints: `/sub-activities` CRUD (`requireAction('kpi-manage', add|edit)`, DELETE = `isSuperAdmin` + บล็อคถ้ามีผลงาน), `GET /hierarchy-results`
+  (โครงสร้าง+ผลงาน 1 แถว, ตรวจขอบเขตหน่วยบริการ `canAccessHospcode()`), `POST /hierarchy-results/save` (transaction: ขอบเขตหน่วยบริการ, ปิดการคีย์ของระบบ
+  `getDataEntryLockState()` สำหรับ role ที่ไม่ใช่ admin, dept ตัวเองสำหรับ user, ล็อคจากการอนุมัติ, สิทธิ์ `can_edit_actual/target`, **ห้ามกรอกข้อย่อยที่คำนวณจากกิจกรรม**
+  — `/sub-results/upsert` เดิมก็ปฏิเสธข้อนั้นด้วย) — cascade อนุมัติ/ส่งกลับ/ปลดล็อค/อุทธรณ์/ปลดล็อคทั้งปี, bulk delete 2 จุด และ delete guard ของ `/indicators/:id` ครอบคลุมกิจกรรมแล้ว
+- Frontend: kpi-manage (เลขข้อ + โหมดหลักใน modal ตัวชี้วัด, โหมด/เลขข้อในฟอร์มข้อย่อย, modal กิจกรรม `openActModal()`) — dashboard ตาราง desktop: ปุ่ม ▶ ใน col-3
+  (`toggleHier()` โหลดแบบ lazy ต่อ indicator|hospcode|ปีงบ) แถวลูกเรียงใต้แถวหลัก (`hierRows()`), **rowspan ของหมวดหมู่หลักต้องรวมแถวลูก** (`hierRowSpan(all, i)`),
+  แก้ไขเฉพาะระดับกรอกเอง (`canEditHierRow()`), บันทึกด้วยปุ่ม "บันทึก" เดิม (`saveKpiData()` รวม `collectHierChanges()` ในหน้ายืนยัน → `saveHierChanges()` ก่อนแถวหลัก)
+  — ตรรกะแถวลูกเป็นฟังก์ชันล้วน `buildHierRows()`/`recomputeHierRows()` (export จาก dashboard.ts) — หน้าต่างบันทึกผลงานย่อยเดิม: ข้อ auto อ่านอย่างเดียว ค่ามาจากกิจกรรม
+- นอกขอบเขต: กราฟ/รายงาน (`kpi_summary` สร้างจาก `kpi_results` เท่านั้น — ช่องว่างเดิม), `weight` ยังไม่ใช้คำนวณ, มุมมองการ์ดมือถือ (ใช้หน้าต่างบันทึกผลงานย่อยเดิม)
+- Test: `api/tests/hierarchy.test.js`, `api/tests/kpi-rollup.test.js`, `shared/kpi-rollup.spec.ts`, `dashboard.spec.ts`, `kpi-manage.spec.ts`
+
 ### Users Data Sync (Local ↔ KHD)
 - `GET /users/sync-compare` — เทียบ 4 สถานะ (matched/different/local_only/khd_only) — แต่ละ user ใน `different[]`
   แนบ `_diff: [{field, khd_field?, local_value, khd_value}]` (เก็บทุก field ที่ต่างกันจริง ไม่ break ที่ตัวแรก)
@@ -1021,7 +1045,7 @@ build.bat
 `docker compose up -d --build` เสมอ ไม่งั้น Docker จะใช้ `dist/` เก่าที่ค้างจากรอบก่อนหน้าเงียบๆ
 โดยไม่มี error ใดๆ (container ขึ้น "Healthy" ปกติ แต่โค้ดที่รันจริงเป็นของเก่า):
 **⚠️ เพิ่มไฟล์ .js ใหม่ใน `api/` ที่ server.js `require('./xxx')` → ต้องเพิ่มชื่อไฟล์ในรายการ copy ของ `"build"` script ใน
-`api/package.json` ด้วยเสมอ** (ปัจจุบัน: server.js, db.js, db-remote.js, kpi-formula.js) — ไม่งั้น Docker image ไม่มีไฟล์นั้น →
+`api/package.json` ด้วยเสมอ** (ปัจจุบัน: server.js, db.js, db-remote.js, kpi-formula.js, kpi-rollup.js) — ไม่งั้น Docker image ไม่มีไฟล์นั้น →
 container backend crash `Cannot find module` (unhealthy) ตอน deploy ทั้งที่ test ผ่านหมด (test รันจาก `api/` ตรงๆ) — เกิดจริงแล้ว
 7 ต.ค. 2569 กับ `kpi-formula.js` — มี `api/tests/build.test.js` คุมไว้ (fail ถ้า require local ไฟล์ที่ไม่อยู่ใน build list)
 ```bash

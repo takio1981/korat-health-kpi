@@ -86,4 +86,40 @@ describe('KpiManageComponent', () => {
       expect(component.tableProcessDuplicateName).toBeNull();
     });
   });
+
+  // ---- ตัวชี้วัด 3 ระดับ (18 ต.ค. 2569): เลขข้อ + กิจกรรมใต้ตัวชี้วัดย่อย ----
+  describe('กิจกรรมของตัวชี้วัดย่อย', () => {
+    let http: HttpTestingController;
+    beforeEach(() => { http = TestBed.inject(HttpTestingController); });
+
+    it('เลขข้อ: ข้อย่อยต่อจากเลขข้อหลัก กิจกรรมต่อจากเลขข้อย่อย (กำหนดเองได้)', () => {
+      component.subParentIndicator = { id: 1, item_no: '2' };
+      expect(component.subNo({}, 0)).toBe('2.1');
+      expect(component.subNo({ item_no: '2.9' }, 1)).toBe('2.9');
+      component.openActModal({ id: 5, item_no: null }, 2);
+      http.expectOne(r => r.url.includes('/sub-activities?sub_indicator_id=5')).flush({ success: true, data: [] });
+      expect(component.actParentNo).toBe('2.3');
+      expect(component.actNo({}, 0)).toBe('2.3.1');
+    });
+
+    it('ฟอร์มกิจกรรมใหม่ตั้งต้นเป็นแบบตัวเลข และส่งข้อมูลที่กรอกไปบันทึก', () => {
+      component.subParentIndicator = { id: 1 };
+      component.openActModal({ id: 5 }, 0);
+      http.expectOne(r => r.url.includes('/sub-activities')).flush({ success: true, data: [{ id: 1 }] });
+      component.openActForm();
+      expect(component.actCurrent).toEqual(expect.objectContaining({ sub_indicator_id: 5, value_type: 'number', sort_order: 2 }));
+      component.actCurrent.activity_name = 'จัดประชุม';
+      component.saveAct();
+      const req = http.expectOne(r => r.method === 'POST' && r.url.includes('/sub-activities'));
+      expect(req.request.body.activity_name).toBe('จัดประชุม');
+    });
+
+    it('ฟอร์มข้อย่อยตั้งต้นเป็น "กรอกเอง" (พฤติกรรมเดิม)', () => {
+      component.subParentIndicator = { id: 1 };
+      component.openSubForm();
+      expect(component.subCurrent.rollup_mode).toBe('manual');
+      component.openSubForm({ id: 3, rollup_mode: 'auto' });
+      expect(component.subCurrent.rollup_mode).toBe('auto');
+    });
+  });
 });

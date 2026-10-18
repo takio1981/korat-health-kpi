@@ -16,6 +16,77 @@ import { indicatorAllowsHostype, unionHostypes } from '../shared/indicator-scope
 import { EXCEL_MONTHS, ChangePlan, EditPerms, buildTemplateAoa, parseImportAoa, planImport, parseClipboardGrid, isMultiCell, planPaste, applyCellChanges, itemKey } from '../shared/kpi-excel';
 import { Anomaly, detectAnomaly } from '../shared/anomaly';
 import { SUB_EXCEL_MONTHS, SubChangePlan, buildSubTemplateAoa, parseSubImportAoa, planSubImport, applySubChanges, subFieldLabel } from '../shared/kpi-sub-excel';
+import { activityValue, rollupMonthly, itemNumber } from '../shared/kpi-rollup';
+
+// ตัวชี้วัด 3 ระดับ — แถวลูกใต้แถวตัวชี้วัดหลักในตารางบันทึกผลงาน (ข้อย่อย 1.1 / กิจกรรม 1.1.1)
+export interface HierRow {
+  kind: 'sub' | 'activity';
+  id: number;
+  subId: number;            // ข้อย่อยของแถวนี้ (แถวกิจกรรม = ข้อย่อยแม่)
+  level: 1 | 2;
+  no: string;
+  name: string;
+  valueType: 'number' | 'check';
+  auto: boolean;            // ข้อย่อยที่คำนวณจากกิจกรรม (มีกิจกรรมเปิดใช้งาน) — กรอกเองไม่ได้
+  target: string;
+  locked: boolean;
+  months: { [k: string]: string };   // oct … sep
+  _orig: { [k: string]: string };
+}
+// เดือนตามปีงบ: คีย์ในตาราง ↔ เลขเดือน ↔ คีย์ของ kpi-rollup
+export const HIER_MONTHS: { key: string; m: number; mk: string }[] = [
+  { key: 'oct', m: 10, mk: 'm10' }, { key: 'nov', m: 11, mk: 'm11' }, { key: 'dece', m: 12, mk: 'm12' },
+  { key: 'jan', m: 1, mk: 'm01' }, { key: 'feb', m: 2, mk: 'm02' }, { key: 'mar', m: 3, mk: 'm03' },
+  { key: 'apr', m: 4, mk: 'm04' }, { key: 'may', m: 5, mk: 'm05' }, { key: 'jun', m: 6, mk: 'm06' },
+  { key: 'jul', m: 7, mk: 'm07' }, { key: 'aug', m: 8, mk: 'm08' }, { key: 'sep', m: 9, mk: 'm09' },
+];
+
+// แปลงข้อมูลจาก GET /hierarchy-results เป็นแถวลูก (เรียงข้อย่อย → กิจกรรมของข้อนั้น) แล้วคำนวณข้อย่อยแบบ auto — ฟังก์ชันล้วน (ทดสอบได้)
+export function buildHierRows(data: any, parentNo: string): HierRow[] {
+  const rows: HierRow[] = [];
+  const acts: any[] = data?.activities || [];
+  (data?.subs || []).forEach((s: any, si: number) => {
+    const subNo = itemNumber(s.item_no, parentNo, si);
+    const subActs = acts.filter(a => Number(a.sub_indicator_id) === Number(s.id));
+    const toMonths = (src: any) => {
+      const o: { [k: string]: string } = {};
+      for (const hm of HIER_MONTHS) o[hm.key] = src?.months?.[hm.m] ?? '';
+      return o;
+    };
+    const sm = toMonths(s);
+    rows.push({ kind: 'sub', id: Number(s.id), subId: Number(s.id), level: 1, no: subNo, name: s.sub_indicator_name, valueType: 'number',
+      auto: s.rollup_mode === 'auto' && subActs.length > 0, target: s.target ?? s.target_percentage ?? '', locked: !!s.locked,
+      months: sm, _orig: { ...sm } });
+    subActs.forEach((a: any, ai: number) => {
+      const am = toMonths(a);
+      rows.push({ kind: 'activity', id: Number(a.id), subId: Number(s.id), level: 2, no: itemNumber(a.item_no, subNo, ai), name: a.activity_name,
+        valueType: a.value_type === 'check' ? 'check' : 'number', auto: false, target: a.value_type === 'check' ? '' : (a.target ?? a.target_percentage ?? ''),
+        locked: !!a.locked, months: am, _orig: { ...am } });
+    });
+  });
+  recomputeHierRows(rows);
+  return rows;
+}
+
+// ข้อย่อยแบบ auto = rollupMonthly ของกิจกรรม (ทำแล้ว = 100 / ยังไม่ทำ = 0) — กติกาเดียวกับ backend loadEffectiveSubMonthly()
+export function recomputeHierRows(rows: HierRow[]) {
+  for (const sub of rows) {
+    if (sub.kind !== 'sub' || !sub.auto) continue;
+    const acts = rows.filter(r => r.kind === 'activity' && r.subId === sub.id);
+    const vals: { [mk: string]: { [id: string]: number | null } } = {};
+    for (const hm of HIER_MONTHS) {
+      for (const a of acts) {
+        const v = activityValue(a.valueType, a.months[hm.key]);
+        if (v !== null) (vals[hm.mk] || (vals[hm.mk] = {}))[a.id] = v;
+      }
+    }
+    const out = rollupMonthly(acts.length, vals);
+    for (const hm of HIER_MONTHS) {
+      const v = out[hm.mk];
+      sub.months[hm.key] = v === null ? '' : (Number.isInteger(v) ? String(v) : v.toFixed(2));
+    }
+  }
+}
 
 @Component({
   selector: 'app-dashboard',
@@ -1512,6 +1583,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       });
     } else {
       this.resetData(false);
+      this.restoreHier();
       this.isEditing = false;
       this.authService.setFocusMode(this.isDeleteMode);
       // ออกจากโหมดแก้ไข → re-apply sub summary AVG กลับขึ้นจอ
@@ -1530,8 +1602,10 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       if (String(item.target_value ?? '') !== String(item._original.target_value ?? '')) return true;
       return months.some(m => String(item[m] ?? '') !== String(item._original[m] ?? ''));
     });
+    // ช่องที่แก้ไขในแถวลูก (ข้อย่อย/กิจกรรม — ตัวชี้วัด 3 ระดับ) บันทึกพร้อมกันด้วยปุ่มเดียวกัน
+    const hierChanges = this.collectHierChanges();
 
-    if (changedItems.length === 0) {
+    if (changedItems.length === 0 && hierChanges.length === 0) {
       Swal.fire({ icon: 'info', title: 'ไม่มีข้อมูลที่เปลี่ยนแปลง', text: 'ไม่พบรายการที่มีการแก้ไข', confirmButtonText: 'ตกลง' });
       return;
     }
@@ -1602,6 +1676,16 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
             </tr>`);
           }
         }
+      }
+      for (const c of hierChanges) {
+        const label = `${this.escHtml(c.row.no)} ${this.escHtml(c.row.name)}${c.item.hosname ? ' (' + this.escHtml(c.item.hosname) + ')' : ''}`;
+        rows.push(`<tr>
+          <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#4338ca">${c.row.kind === 'activity' ? '↳ ' : '▸ '}${label}</td>
+          <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${monthNames[c.m]}</td>
+          <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${fmt(this.hierDisplay(c.row, c.oldVal))}</td>
+          <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:700">${fmt(this.hierDisplay(c.row, c.newVal))}</td>
+          <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${c.row.valueType === 'check' ? '' : statusBadge(c.oldVal, c.newVal)}</td>
+        </tr>`);
       }
 
       const summaryTable = `
@@ -1703,20 +1787,34 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       }).then((result) => {
         if (result.isConfirmed) {
           const replyInfo = result.value;
-          if (replyInfo && replyInfo.wantReply) {
-            this.saveDataWithReply(cleanData, resubmitItems, replyInfo.replyMessage);
-          } else {
-            if (hasResubmitItems) {
-              const resubmitIds = new Set(resubmitItems.map(r => `${r.indicator_id}_${r.year_bh}_${r.hospcode}`));
-              cleanData.forEach((item: any) => {
-                const key = `${item.indicator_id}_${item.year_bh}_${item.hospcode}`;
-                if (resubmitIds.has(key)) {
-                  item.preserve_status = 'Resubmit';
-                }
-              });
+          const runMain = () => {
+            if (replyInfo && replyInfo.wantReply) {
+              this.saveDataWithReply(cleanData, resubmitItems, replyInfo.replyMessage);
+            } else {
+              if (hasResubmitItems) {
+                const resubmitIds = new Set(resubmitItems.map(r => `${r.indicator_id}_${r.year_bh}_${r.hospcode}`));
+                cleanData.forEach((item: any) => {
+                  const key = `${item.indicator_id}_${item.year_bh}_${item.hospcode}`;
+                  if (resubmitIds.has(key)) {
+                    item.preserve_status = 'Resubmit';
+                  }
+                });
+              }
+              this.saveDataToBackend(cleanData, false);
             }
-            this.saveDataToBackend(cleanData, false);
-          }
+          };
+          if (hierChanges.length === 0) { runMain(); return; }
+          // บันทึกแถวลูกก่อน (ตรวจล็อค/สิทธิ์ที่ backend) แล้วค่อยบันทึกแถวหลักตามเดิม
+          Swal.fire({ title: 'กำลังบันทึกข้อมูล...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+          this.saveHierChanges(hierChanges).then(ok => {
+            if (!ok) return;
+            if (cleanData.length > 0) { runMain(); return; }
+            Swal.fire('สำเร็จ', 'บันทึกผลงานตัวชี้วัดย่อย/กิจกรรมเรียบร้อยแล้ว', 'success');
+            this.isEditing = false;
+            this.authService.setFocusMode(this.isDeleteMode);
+            this.reloadExpandedHier();
+            this.loadKpiData(true);
+          });
         }
       });
     };
@@ -1818,6 +1916,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       next: (res) => {
         Swal.fire('สำเร็จ', isNew ? 'เพิ่มตัวชี้วัดเรียบร้อยแล้ว' : 'บันทึกผล KPI เรียบร้อยแล้ว', 'success');
         this.isEditing = false;
+        this.reloadExpandedHier();
         this.authService.setFocusMode(this.isDeleteMode);
         this.showAddModal = false;
         this.loadKpiData();
@@ -2890,6 +2989,8 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     for (const item of this.kpiData) {
       const sum = this.getSubSummary(item);
       if (!sum) continue;
+      // ตัวชี้วัดหลักแบบ "กรอกเอง" (ตัวชี้วัด 3 ระดับ) — ข้อย่อยแสดงประกอบเท่านั้น ไม่นำค่ามาทับแถวหลัก
+      if (sum.sub_rollup_mode === 'manual') continue;
       // เก็บ original ไว้สำรองก่อน override (เผื่อ reset)
       if (!item._mainOriginal) {
         item._mainOriginal = {
@@ -2923,6 +3024,158 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
 
   getSubCount(indicatorId: number): number {
     return this.subIndicatorCountMap.get(indicatorId) || 0;
+  }
+
+  // ===== ตัวชี้วัด 3 ระดับ: แถวลูกในตารางบันทึกผลงาน (กด ▶ ที่แถวหลักเพื่อขยายข้อย่อย 1.1 / กิจกรรม 1.1.1) =====
+  hierExpanded = new Set<string>();
+  hierData = new Map<string, HierRow[]>();
+  hierLoading = new Set<string>();
+  readonly HIER_MONTH_NAME: { [k: string]: string } = {
+    oct: 'ต.ค.', nov: 'พ.ย.', dece: 'ธ.ค.', jan: 'ม.ค.', feb: 'ก.พ.', mar: 'มี.ค.',
+    apr: 'เม.ย.', may: 'พ.ค.', jun: 'มิ.ย.', jul: 'ก.ค.', aug: 'ส.ค.', sep: 'ก.ย.'
+  };
+
+  hierKey(item: any): string {
+    return `${item.indicator_id}|${item.hospcode}|${item.year_bh || this.selectedYear}`;
+  }
+
+  isHierExpanded(item: any): boolean {
+    return this.hierExpanded.has(this.hierKey(item));
+  }
+
+  hierRows(item: any): HierRow[] {
+    return this.isHierExpanded(item) ? (this.hierData.get(this.hierKey(item)) || []) : [];
+  }
+
+  // จำนวนแถวรวมแถวลูกที่ขยายอยู่ — ใช้กับ rowspan ของคอลัมน์หมวดหมู่หลัก (ครอบแถวลูกด้วย ไม่งั้นตารางเลื่อน)
+  hierRowSpan(list: any[], index: number): number {
+    const item = list[index];
+    let span = item?.rowSpan || 0;
+    for (let j = index; j < index + (item?.rowSpan || 0) && j < list.length; j++) span += this.hierRows(list[j]).length;
+    return span;
+  }
+
+  toggleHier(item: any) {
+    const key = this.hierKey(item);
+    if (this.hierExpanded.has(key)) { this.hierExpanded.delete(key); this.cdr.detectChanges(); return; }
+    this.hierExpanded.add(key);
+    if (!this.hierData.has(key)) this.loadHier(key, item.item_no);
+    this.cdr.detectChanges();
+  }
+
+  loadHier(key: string, parentNo: string = '') {
+    const [indicatorId, hospcode, year] = key.split('|');
+    this.hierLoading.add(key);
+    this.authService.getHierarchyResults(Number(indicatorId), year, hospcode).subscribe({
+      next: (res: any) => {
+        this.hierLoading.delete(key);
+        if (res.success) this.hierData.set(key, buildHierRows(res.data, res.data.item_no || parentNo || ''));
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.hierLoading.delete(key);
+        this.hierExpanded.delete(key);
+        Swal.fire('ผิดพลาด', err.error?.message || 'โหลดตัวชี้วัดย่อยไม่สำเร็จ', 'error');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  // โหลดแถวลูกที่ขยายอยู่ใหม่ทั้งหมด (หลังบันทึก)
+  reloadExpandedHier() {
+    this.hierData.clear();
+    for (const key of this.hierExpanded) this.loadHier(key);
+  }
+
+  canEditHierRow(item: any, row: HierRow): boolean {
+    return this.isEditing && !item.is_locked && this.canEditActual && !row.locked && !row.auto && !this.isEntryLocked;
+  }
+
+  onHierChange(item: any) {
+    const rows = this.hierData.get(this.hierKey(item));
+    if (rows) recomputeHierRows(rows);
+  }
+
+  // กิจกรรมแบบทำแล้ว/ยังไม่ทำ: กดวน ว่าง → ทำแล้ว (1) → ยังไม่ทำ (0) → ว่าง
+  cycleHierCheck(item: any, row: HierRow, m: string) {
+    if (!this.canEditHierRow(item, row)) return;
+    const v = String(row.months[m] ?? '');
+    row.months[m] = v === '1' ? '0' : v === '0' ? '' : '1';
+    this.onHierChange(item);
+  }
+
+  isHierModified(row: HierRow, m: string): boolean {
+    return !row.auto && String(row.months[m] ?? '') !== String(row._orig[m] ?? '');
+  }
+
+  hierLastValue(row: HierRow): string {
+    for (let i = HIER_MONTHS.length - 1; i >= 0; i--) {
+      const v = String(row.months[HIER_MONTHS[i].key] ?? '').trim();
+      if (v !== '') return row.valueType === 'check' ? (v === '1' ? 'ทำแล้ว' : 'ยังไม่ทำ') : v;
+    }
+    return '';
+  }
+
+  hierPct(row: HierRow): string {
+    const t = parseFloat(row.target);
+    const last = this.hierLastValue(row);
+    const v = parseFloat(last);
+    if (row.valueType === 'check' || !(t > 0) || isNaN(v)) return '';
+    return (v / t * 100).toFixed(2);
+  }
+
+  // ช่องที่แก้ไขในแถวลูกทั้งหมด → รายการสำหรับหน้ายืนยัน + payload ของ POST /hierarchy-results/save
+  collectHierChanges(): { key: string; item: any; row: HierRow; m: string; oldVal: string; newVal: string }[] {
+    const out: { key: string; item: any; row: HierRow; m: string; oldVal: string; newVal: string }[] = [];
+    for (const item of this.filteredData) {
+      const key = this.hierKey(item);
+      const rows = this.hierData.get(key);
+      if (!rows) continue;
+      for (const row of rows) {
+        if (row.auto) continue;
+        for (const hm of HIER_MONTHS) {
+          if (this.isHierModified(row, hm.key)) {
+            out.push({ key, item, row, m: hm.key, oldVal: String(row._orig[hm.key] ?? ''), newVal: String(row.months[hm.key] ?? '') });
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  hierDisplay(row: HierRow, v: string): string {
+    if (row.valueType !== 'check') return v;
+    return v === '1' ? 'ทำแล้ว' : v === '0' ? 'ยังไม่ทำ' : '';
+  }
+
+  // บันทึกช่องที่แก้ไขของแถวลูก แยกตามหน่วยบริการ × ปีงบ — คืน true เมื่อสำเร็จทั้งหมด
+  async saveHierChanges(changes: { key: string; item: any; row: HierRow; m: string; newVal: string }[]): Promise<boolean> {
+    const groups = new Map<string, { year_bh: string; hospcode: string; sub: any[]; activity: any[] }>();
+    for (const c of changes) {
+      const [, hospcode, year] = c.key.split('|');
+      const gk = `${hospcode}|${year}`;
+      if (!groups.has(gk)) groups.set(gk, { year_bh: year, hospcode, sub: [], activity: [] });
+      const month_bh = HIER_MONTHS.find(h => h.key === c.m)!.m;
+      const g = groups.get(gk)!;
+      if (c.row.kind === 'sub') g.sub.push({ sub_indicator_id: c.row.id, month_bh, actual_value: c.newVal });
+      else g.activity.push({ activity_id: c.row.id, month_bh, actual_value: c.newVal });
+    }
+    try {
+      for (const g of groups.values()) {
+        await new Promise<void>((resolve, reject) => this.authService.saveHierarchyResults(g).subscribe({ next: () => resolve(), error: (e: any) => reject(e) }));
+      }
+      return true;
+    } catch (e: any) {
+      Swal.fire('บันทึกตัวชี้วัดย่อย/กิจกรรมไม่สำเร็จ', e?.error?.message || e?.message || 'เกิดข้อผิดพลาด', 'error');
+      return false;
+    }
+  }
+
+  restoreHier() {
+    for (const rows of this.hierData.values()) {
+      for (const r of rows) if (!r.auto) r.months = { ...r._orig };
+      recomputeHierRows(rows);
+    }
   }
 
   openSubResultModal(item: any) {
@@ -3317,9 +3570,25 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
               actual: row?.actual_value ?? ''
             });
           }
-          return { ...s, _target, _actuals: monthActuals };
+          // ข้อย่อยที่คำนวณจากกิจกรรม (ตัวชี้วัด 3 ระดับ) — อ่านอย่างเดียวในหน้าต่างนี้ ค่าเติมจากกิจกรรมด้านล่าง
+          const _auto = s.rollup_mode === 'auto' && Number(s.activity_count) > 0;
+          return { ...s, _target, _actuals: monthActuals, _auto };
         });
         this.cdr.detectChanges();
+        if (this.subResultList.some((s: any) => s._auto)) {
+          this.authService.getHierarchyResults(ctx.indicator_id, ctx.year_bh, ctx.hospcode).subscribe({
+            next: (r3: any) => {
+              if (!r3.success || this.subResultContext !== ctx) return;
+              const rows = buildHierRows(r3.data, '');
+              for (const s of this.subResultList) {
+                const hr = s._auto ? rows.find(r => r.kind === 'sub' && r.id === Number(s.id)) : null;
+                if (!hr) continue;
+                for (const hm of HIER_MONTHS) s._actuals[hm.m] = hr.months[hm.key];
+              }
+              this.cdr.detectChanges();
+            }
+          });
+        }
       });
     });
   }
@@ -3333,6 +3602,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     const changes: Change[] = [];
 
     for (const s of this.subResultList) {
+      if (s._auto) continue; // คำนวณจากกิจกรรม — ไม่บันทึกจากหน้าต่างนี้ (backend ก็ปฏิเสธ)
       for (const m of this.subMonthColumns) {
         const actualNew = (s._actuals[m] ?? '').toString().trim();
         const orig = this._subOriginal.get(`${s.id}_${m}`) || { target: '', actual: '' };
@@ -3464,6 +3734,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         }
         item._anomaly = null;
       });
+      this.restoreHier();
       this.cdr.detectChanges();
     };
     if (confirm) {
