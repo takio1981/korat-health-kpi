@@ -2650,6 +2650,16 @@ apiRouter.get('/admin/export-debug', authenticateToken, async (req, res) => {
                 exportData = { table: tp, rows };
             } catch (e) { exportData = { table: tp, error: e.message }; }
         }
+        // 6. ตารางรายละเอียดข้อย่อย/กิจกรรม (Export 3 ระดับ) — ถ้ามี
+        let itemsData = null;
+        const itemsName = tp && /^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(tp) ? itemsTableName(tp) : null;
+        if (itemsName) {
+            try {
+                const w = hospcode ? 'WHERE byear=? AND hospcode=?' : 'WHERE byear=?';
+                const [rows] = await db.query(`SELECT * FROM \`${itemsName}\` ${w} ORDER BY hospcode, item_level, item_no LIMIT 100`, hospcode ? [year_bh, hospcode] : [year_bh]);
+                itemsData = { table: itemsName, rows };
+            } catch (e) { itemsData = { table: itemsName, error: e.code === 'ER_NO_SUCH_TABLE' ? 'ยังไม่มีตาราง (ยังไม่เปิด/ยังไม่ส่งออก)' : e.message }; }
+        }
 
         res.json({
             success: true,
@@ -2666,7 +2676,8 @@ apiRouter.get('/admin/export-debug', authenticateToken, async (req, res) => {
             kpi_sub_results: { count: subResults.length, rows: subResults },
             form_table: formData,
             schemas: { count: schemas.length, list: schemas, active_fields: schemaFields },
-            export_table: exportData
+            export_table: exportData,
+            items_table: itemsData
         });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
@@ -6814,6 +6825,10 @@ async function saveHierarchyFields(conn, table, id, body) {
         sets.push(`${modeKey} = ?`);
         params.push(body[modeKey] === 'auto' ? 'auto' : 'manual');
     }
+    if (table === 'kpi_indicators' && body && body.export_items !== undefined) {
+        sets.push('export_items = ?');
+        params.push(body.export_items === true || Number(body.export_items) === 1 ? 1 : 0);
+    }
     if (sets.length === 0) return;
     await conn.query(`UPDATE ${table} SET ${sets.join(', ')} WHERE id = ?`, [...params, id]);
 }
@@ -7242,6 +7257,144 @@ async function loadSubExportMonthMap(conn, indicatorId, yearBh) {
         map.set(`${e.sub_indicator_id}_${e.hospcode}`, m);
     }
     return map;
+}
+
+// ===== Export 3 ระดับ (18 ต.ค. 2569): ตาราง <table_process>_items — 1 แถว = หน่วยบริการ × ปีงบ × ข้อย่อย/กิจกรรม =====
+// ตารางหลัก <table_process> ไม่เปลี่ยน (KHD ไม่กระทบ — Sync ส่งเฉพาะตารางชื่อ table_process) ตารางนี้เก็บในระบบเท่านั้น
+// ค่าข้อย่อย = loadEffectiveSubMonthly() (ข้อ auto = จากกิจกรรม) | กิจกรรมทำแล้ว/ยังไม่ทำ = 100 / 0 | เลขข้อ = kpiRollup.itemNumber()
+// result = กติกาเดียวกับคอลัมน์รายข้อเดิม (is_cumulative ของตัวชี้วัดหลัก → ผลรวม, ปกติ → ค่าเดือนล่าสุดที่บันทึก)
+const ITEM_MONTHS = SUB_AGG_FISCAL_ORDER;
+const ITEM_DATA_COLS = ['item_no', 'parent_no', 'item_name', 'value_type', 'calc_mode', 'target', 'result', ...ITEM_MONTHS];
+const itemsTableName = (tableName) => (tableName.length <= 58 ? `${tableName}_items` : null);
+const itemNull = (v) => (v === null || v === undefined || String(v).trim() === '' ? null : String(v).trim());
+function itemSame(a, b) {
+    const na = itemNull(a), nb = itemNull(b);
+    if (na === null || nb === null) return na === nb;
+    const fa = parseFloat(na), fb = parseFloat(nb);
+    if (/^-?(\d+(\.\d+)?|\.\d+)$/.test(na) && /^-?(\d+(\.\d+)?|\.\d+)$/.test(nb)) return fa === fb;
+    return na === nb;
+}
+function itemResult(monthVals, isCumulative) {
+    if (isCumulative) {
+        const nums = monthVals.filter(v => v !== null && !isNaN(parseFloat(v)));
+        if (!nums.length) return null;
+        const t = nums.reduce((x, v) => x + parseFloat(v), 0);
+        return Number.isInteger(t) ? String(t) : String(Math.round(t * 10000) / 10000);
+    }
+    for (let i = monthVals.length - 1; i >= 0; i--) if (monthVals[i] !== null) return monthVals[i];
+    return null;
+}
+async function ensureItemsTable(conn, name) {
+    await conn.query(`CREATE TABLE IF NOT EXISTS \`${name}\` (
+        hospcode VARCHAR(5) NOT NULL, byear VARCHAR(4) NOT NULL, item_level TINYINT NOT NULL, item_id INT NOT NULL,
+        item_no VARCHAR(20) DEFAULT NULL, parent_no VARCHAR(20) DEFAULT NULL, item_name VARCHAR(500) DEFAULT NULL,
+        value_type VARCHAR(10) DEFAULT NULL, calc_mode VARCHAR(10) DEFAULT NULL, target VARCHAR(100) DEFAULT NULL, result VARCHAR(100) DEFAULT NULL,
+        ${ITEM_MONTHS.map(m => `${m} VARCHAR(100) DEFAULT NULL`).join(', ')},
+        create_date DATETIME DEFAULT CURRENT_TIMESTAMP, update_date DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (hospcode, byear, item_level, item_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+}
+// แถวที่ควรมีในตาราง items ของตัวชี้วัด × ปีงบ — [{ key, hospcode, item_level, item_id, data: {col: value} }]
+async function buildItemExportRows(conn, indicator, yearBh) {
+    const [subs] = await conn.query(
+        'SELECT id, sub_indicator_name, item_no, rollup_mode, target_percentage FROM kpi_sub_indicators WHERE indicator_id = ? AND is_active = 1 ORDER BY sort_order, id',
+        [indicator.id]);
+    if (!subs.length) return [];
+    const subIds = subs.map(x => x.id);
+    const [acts] = await conn.query(
+        'SELECT id, sub_indicator_id, activity_name, item_no, value_type, target_percentage FROM kpi_sub_activities WHERE is_active = 1 AND sub_indicator_id IN (?) ORDER BY sort_order, id',
+        [subIds]);
+    const subMonths = await loadSubExportMonthMap(conn, indicator.id, yearBh);
+    const [subTargets] = await conn.query(
+        'SELECT sub_indicator_id, hospcode, target_value FROM kpi_sub_results WHERE sub_indicator_id IN (?) AND year_bh = ? AND month_bh = 10', [subIds, yearBh]);
+    const subTarget = new Map(subTargets.map(r => [`${r.sub_indicator_id}_${String(r.hospcode).trim()}`, itemNull(r.target_value)]));
+    const actRes = new Map();
+    const hospcodes = new Set();
+    if (acts.length) {
+        const [rows] = await conn.query(
+            'SELECT activity_id, hospcode, month_bh, target_value, actual_value FROM kpi_activity_results WHERE activity_id IN (?) AND year_bh = ?',
+            [acts.map(a => a.id), yearBh]);
+        for (const r of rows) {
+            const hc = String(r.hospcode || '').trim();
+            const mk = SUB_AGG_MONTH_KEYS[Number(r.month_bh)];
+            if (!hc || !mk) continue;
+            hospcodes.add(hc);
+            const k = `${r.activity_id}_${hc}`;
+            if (!actRes.has(k)) actRes.set(k, { months: {}, target: null });
+            const e = actRes.get(k);
+            e.months[mk] = r.actual_value;
+            if (Number(r.month_bh) === 10) e.target = itemNull(r.target_value);
+        }
+    }
+    for (const k of subMonths.keys()) hospcodes.add(k.slice(k.indexOf('_') + 1));
+    for (const k of subTarget.keys()) hospcodes.add(k.slice(k.indexOf('_') + 1));
+    const isCum = Number(indicator.is_cumulative) === 1;
+    const out = [];
+    for (const hc of [...hospcodes].filter(Boolean).sort()) {
+        subs.forEach((su, si) => {
+            const no = kpiRollup.itemNumber(su.item_no, indicator.item_no, si);
+            const subActs = acts.filter(a => a.sub_indicator_id === su.id);
+            const m = subMonths.get(`${su.id}_${hc}`) || {};
+            const vals = ITEM_MONTHS.map(mk => itemNull(m[mk]));
+            const data = { item_no: no, parent_no: itemNull(indicator.item_no), item_name: su.sub_indicator_name, value_type: 'sub',
+                calc_mode: su.rollup_mode === 'auto' && subActs.length > 0 ? 'auto' : 'manual',
+                target: subTarget.get(`${su.id}_${hc}`) ?? itemNull(su.target_percentage), result: itemResult(vals, isCum) };
+            ITEM_MONTHS.forEach((mk, i) => { data[mk] = vals[i]; });
+            out.push({ key: `${hc}|2|${su.id}`, hospcode: hc, item_level: 2, item_id: su.id, data });
+            subActs.forEach((a, ai) => {
+                const isCheck = a.value_type === 'check';
+                const e = actRes.get(`${a.id}_${hc}`) || { months: {}, target: null };
+                const avals = ITEM_MONTHS.map(mk => {
+                    if (!isCheck) return itemNull(e.months[mk]);
+                    const v = kpiRollup.activityValue('check', e.months[mk]);
+                    return v === null ? null : String(v);
+                });
+                const ad = { item_no: kpiRollup.itemNumber(a.item_no, no, ai), parent_no: no, item_name: a.activity_name,
+                    value_type: isCheck ? 'check' : 'number', calc_mode: null,
+                    target: isCheck ? null : (e.target ?? itemNull(a.target_percentage)), result: itemResult(avals, isCum) };
+                ITEM_MONTHS.forEach((mk, i) => { ad[mk] = avals[i]; });
+                out.push({ key: `${hc}|3|${a.id}`, hospcode: hc, item_level: 3, item_id: a.id, data: ad });
+            });
+        });
+    }
+    return out;
+}
+// เทียบกับข้อมูลในตาราง items (ปีงบเดียวกัน) แบบเนื้อหา — คืนแถวที่ต้องเขียน/ลบ + จำนวน
+async function diffItemsTable(conn, name, yearBh, rows) {
+    const existing = new Map();
+    try {
+        const [ex] = await conn.query(`SELECT * FROM \`${name}\` WHERE byear = ?`, [yearBh]);
+        for (const r of ex) existing.set(`${String(r.hospcode).trim()}|${r.item_level}|${r.item_id}`, r);
+    } catch (e) { if (e.code !== 'ER_NO_SUCH_TABLE') throw e; }
+    const upserts = [];
+    let inserted = 0, updated = 0, unchanged = 0;
+    for (const r of rows) {
+        const old = existing.get(r.key);
+        if (!old) { inserted++; upserts.push(r); continue; }
+        if (ITEM_DATA_COLS.every(c => itemSame(old[c], r.data[c]))) unchanged++;
+        else { updated++; upserts.push(r); }
+    }
+    const keep = new Set(rows.map(r => r.key));
+    const removedKeys = [...existing.keys()].filter(k => !keep.has(k));
+    return { upserts, removedKeys, inserted, updated, unchanged, removed: removedKeys.length };
+}
+// เขียนตาราง items ของตัวชี้วัด × ปีงบ (ตารางต้องถูกสร้างก่อนเริ่ม transaction ด้วย ensureItemsTable — DDL ทำให้ transaction commit เอง)
+async function writeItemsTable(conn, indicator, yearBh, name) {
+    const rows = await buildItemExportRows(conn, indicator, yearBh);
+    const d = await diffItemsTable(conn, name, yearBh, rows);
+    const cols = ['hospcode', 'byear', 'item_level', 'item_id', ...ITEM_DATA_COLS];
+    const onDup = ITEM_DATA_COLS.map(c => `${c}=VALUES(${c})`).join(', ');
+    for (let i = 0; i < d.upserts.length; i += 100) {
+        const batch = d.upserts.slice(i, i + 100);
+        await conn.query(
+            `INSERT INTO \`${name}\` (${cols.join(', ')}) VALUES ${batch.map(() => '(' + cols.map(() => '?').join(',') + ')').join(',')} ON DUPLICATE KEY UPDATE ${onDup}`,
+            batch.flatMap(r => [r.hospcode, yearBh, r.item_level, r.item_id, ...ITEM_DATA_COLS.map(c => r.data[c] ?? null)]));
+    }
+    for (const k of d.removedKeys) {
+        const [hc, lv, id] = k.split('|');
+        await conn.query(`DELETE FROM \`${name}\` WHERE hospcode = ? AND byear = ? AND item_level = ? AND item_id = ?`, [hc, yearBh, Number(lv), Number(id)]);
+    }
+    return { table: name, rows: rows.length, inserted: d.inserted, updated: d.updated, unchanged: d.unchanged, removed: d.removed };
 }
 
 // GET /sub-results/summary — aggregate ต่อ indicator + hospcode (รวม monthly breakdown) — ดู loadSubAggregates()
@@ -8260,7 +8413,7 @@ apiRouter.get('/exportable-indicators', authenticateToken, isSuperAdmin, async (
         // คืน upload_excel ด้วย — UI export-kpi จะใช้กรอง/แสดง badge
         const [rows] = await db.query(
             `SELECT i.id, i.kpi_indicators_name, i.table_process, i.dept_id, i.main_indicator_id, i.is_active,
-                    i.upload_excel, i.criterion, i.target_condition, i.result_formula,
+                    i.upload_excel, i.criterion, i.target_condition, i.result_formula, i.export_items,
                     d.dept_name, mi.main_indicator_name
              FROM kpi_indicators i
              LEFT JOIN departments d ON i.dept_id = d.id
@@ -8282,7 +8435,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
     try {
         // กรอง upload_excel != 1 (ตัวที่ตั้งเป็น "อัปโหลด Excel เอง" ข้ามทั้งใน check และ export)
         // ดึง evaluation_mode/required_off_types ด้วย เพื่อคำนวณขอบเขตหน่วยบริการเหมือน performKpiExport
-        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, use_sub_indicator_export, evaluation_mode, required_off_types FROM kpi_indicators
+        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, use_sub_indicator_export, evaluation_mode, required_off_types, item_no, export_items FROM kpi_indicators
             WHERE table_process IS NOT NULL AND table_process != '' AND is_active = 1
             AND (upload_excel IS NULL OR upload_excel = 0)`;
         let indicatorParams = [];
@@ -8549,6 +8702,18 @@ async function checkKpiChanges(year_bh, indicator_ids) {
             });
         }
 
+        // ตารางรายละเอียดข้อย่อย/กิจกรรม (Export 3 ระดับ) — มีการเปลี่ยนแปลงเฉพาะในตารางนี้ก็ถือว่า has_changes
+        for (const r of results) {
+            const ind = indicators.find(i => i.id === r.id);
+            if (!ind || Number(ind.export_items) !== 1 || r.status === 'invalid_name') continue;
+            const name = itemsTableName(ind.table_process.trim().replace(/-/g, '_'));
+            if (!name) continue;
+            const rows = await buildItemExportRows(db, ind, year_bh);
+            const d = await diffItemsTable(db, name, year_bh, rows);
+            r.items = { table: name, new_count: d.inserted, changed_count: d.updated, unchanged_count: d.unchanged, removed_count: d.removed };
+            if (d.inserted + d.updated + d.removed > 0) r.status = 'has_changes';
+        }
+
         const totalWithData = results.filter(r => r.has_data).length;
         const totalChanges = results.filter(r => r.status === 'has_changes').length;
         const totalUpToDate = results.filter(r => r.status === 'up_to_date').length;
@@ -8594,7 +8759,7 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
         // 1. Get indicators with valid table_process
         //    — กรอง upload_excel != 1 (ตัวที่ตั้งเป็น "อัปโหลดเอง" ข้ามไป)
         //    — ดึง evaluation_mode/required_off_types ด้วย เพื่อคำนวณขอบเขตหน่วยบริการที่ต้อง export (ดู resolveIndicatorHostypes)
-        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, use_sub_indicator_export, evaluation_mode, required_off_types FROM kpi_indicators
+        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, use_sub_indicator_export, evaluation_mode, required_off_types, item_no, export_items FROM kpi_indicators
             WHERE is_active = 1 AND (upload_excel IS NULL OR upload_excel = 0)
             AND table_process IS NOT NULL AND table_process != ''`;
         let indicatorParams = [];
@@ -8661,6 +8826,14 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                 .filter(h => allowedHostypes.has(String(h.hostype)))
                 .map(h => String(h.hoscode).trim())
                 .filter(Boolean);
+
+            // ตารางรายละเอียดข้อย่อย/กิจกรรม (Export 3 ระดับ) — สร้างก่อนเริ่ม transaction (DDL commit เอง)
+            let itemsTable = null, itemsSkip = null;
+            if (Number(indicator.export_items) === 1) {
+                itemsTable = itemsTableName(tableName);
+                if (itemsTable) await ensureItemsTable(conn, itemsTable);
+                else itemsSkip = { skipped: 'ชื่อตารางยาวเกิน 58 ตัวอักษร — สร้างตาราง _items ไม่ได้' };
+            }
 
             await conn.beginTransaction();
             try {
@@ -8811,6 +8984,7 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                         }
                     }
 
+                    const itemsStat = itemsTable ? await writeItemsTable(conn, indicator, year_bh, itemsTable) : itemsSkip;
                     await conn.commit();
                     created.push({
                         table: tableName,
@@ -8820,7 +8994,8 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                         updated: updatedCount,
                         unchanged: unchangedCount,
                         no_data: noDataCount,
-                        sub_columns: subColNames
+                        sub_columns: subColNames,
+                        ...(itemsStat ? { items: itemsStat } : {})
                     });
                     continue;
                 }
@@ -9080,6 +9255,7 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                     }
                 }
 
+                const itemsStat = itemsTable ? await writeItemsTable(conn, indicator, year_bh, itemsTable) : itemsSkip;
                 await conn.commit();
                 created.push({
                     table: tableName,
@@ -9088,7 +9264,8 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                     inserted: insertedCount,
                     updated: updatedCount,
                     unchanged: unchangedCount,
-                    no_data: noDataCount
+                    no_data: noDataCount,
+                    ...(itemsStat ? { items: itemsStat } : {})
                 });
             } catch (tableErr) {
                 await conn.rollback();
@@ -11206,6 +11383,8 @@ const migrationsReady = (async () => {
         try { await db.query('ALTER TABLE kpi_sub_indicators ADD COLUMN item_no VARCHAR(20) NULL'); } catch (e) {}
         try { await db.query("ALTER TABLE kpi_indicators ADD COLUMN sub_rollup_mode VARCHAR(10) NOT NULL DEFAULT 'auto'"); } catch (e) {}
         try { await db.query('ALTER TABLE kpi_indicators ADD COLUMN item_no VARCHAR(20) NULL'); } catch (e) {}
+        // ส่งออกรายละเอียดข้อย่อย/กิจกรรมเป็นตาราง <table_process>_items (ค่าตั้งต้นปิด)
+        try { await db.query('ALTER TABLE kpi_indicators ADD COLUMN export_items TINYINT(1) NOT NULL DEFAULT 0'); } catch (e) {}
 
         // แก้ kpi_indicators.dept_id + main_indicator_id จาก VARCHAR → INT (ถ้ายังเป็น VARCHAR)
         try {
@@ -14093,7 +14272,7 @@ const bkDecrypt = (ciphertext) => {
                 dept_name VARCHAR(255) NULL,
                 hospcode VARCHAR(20) NULL,
                 hospname VARCHAR(255) NULL,
-                action_type ENUM('kpi_results','dynamic_form','sub_results') NOT NULL,
+                action_type ENUM('kpi_results','dynamic_form','sub_results','hierarchy_results') NOT NULL,
                 indicator_id INT NULL,
                 indicator_name VARCHAR(500) NULL,
                 year_bh VARCHAR(10) NULL,
@@ -14109,6 +14288,9 @@ const bkDecrypt = (ciphertext) => {
                 INDEX idx_user_date (user_id, created_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         `);
+
+        // ตัวชี้วัด 3 ระดับ: บันทึกผลงานข้อย่อย/กิจกรรมผ่าน /hierarchy-results/save (18 ต.ค. 2569 — เดิมไม่มีค่านี้ใน ENUM ทำให้บันทึก audit ไม่ได้)
+        try { await db.query("ALTER TABLE kpi_save_audit MODIFY COLUMN action_type ENUM('kpi_results','dynamic_form','sub_results','hierarchy_results') NOT NULL"); } catch (e) {}
 
         // Default settings for digest
         const auditDefaults = [
@@ -16363,7 +16545,7 @@ async function runKpiAuditDigest(manual = false) {
         }
         const u = byUser.get(key);
         if (r.action_type === 'kpi_results') u.kpi_count += r.row_count || 1;
-        else if (r.action_type === 'sub_results') u.sub_count += r.row_count || 1;
+        else if (r.action_type === 'sub_results' || r.action_type === 'hierarchy_results') u.sub_count += r.row_count || 1;
         else if (r.action_type === 'dynamic_form') u.dynamic_count += r.row_count || 1;
         if (r.indicator_name) {
             const k = r.indicator_name;

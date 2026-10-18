@@ -1654,6 +1654,15 @@
             <input type="checkbox" [(ngModel)]="currentItem.use_sub_indicator_export" class="rounded text-amber-600">
             <span class="font-bold text-gray-700">ส่งออกผลงานจากตัวชี้วัดย่อย (แต่ละข้อย่อย = 1 คอลัมน์ แทนคอลัมน์รายเดือน)</span>
           </label>
+          <!-- Export 3 ระดับ: ตารางรายละเอียดแยก <table_process>_items (ตารางหลักไม่เปลี่ยน, เก็บในระบบเท่านั้น ไม่ส่ง KHD) -->
+          <label class="flex items-start gap-2 mt-2 text-xs cursor-pointer">
+            <input type="checkbox" [(ngModel)]="currentItem.export_items" class="rounded text-amber-600 mt-0.5">
+            <span>
+              <span class="font-bold text-gray-700">ส่งออกรายละเอียดตัวชี้วัดย่อย/กิจกรรม</span>
+              <span class="text-gray-500"> — สร้างตาราง <span class="font-mono">{{ (currentItem.table_process || 'table_process') }}_items</span>
+                (1 แถว = หน่วยบริการ × ข้อย่อยหรือกิจกรรม พร้อมผลงาน 12 เดือน) เก็บในระบบเท่านั้น ไม่ส่งเข้า KHD</span>
+            </span>
+          </label>
           <!-- ตัวชี้วัด 3 ระดับ: ผลงานหลักคำนวณจากข้อย่อย (ค่าตั้งต้น = พฤติกรรมเดิม) หรือกรอกเอง (ข้อย่อยแสดงประกอบเท่านั้น) -->
           <div class="mt-2 text-xs">
             <span class="font-bold text-gray-700 mr-2"><i class="fas fa-sitemap text-indigo-500 mr-1"></i>ผลงานตัวชี้วัดหลัก (เมื่อมีตัวชี้วัดย่อย):</span>

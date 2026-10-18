@@ -440,6 +440,23 @@ export class ExportKpiComponent implements OnInit {
   }
 
   // === Export ===
+  // แถวย่อยในหน้าต่างสรุปผล: ตารางรายละเอียดข้อย่อย/กิจกรรม <table_process>_items (Export 3 ระดับ)
+  itemsPopupRow(t: any, esc: (s: string) => string): string {
+    const it = t?.items;
+    if (!it) return '';
+    const cell = 'padding:3px 8px;border-bottom:1px solid #eee;font-size:10.5px';
+    if (!it.table) return `<tr><td colspan="6" style="${cell};color:#c2410c">↳ ${esc(it.skipped || 'ข้ามตารางรายละเอียด')}</td></tr>`;
+    const status = it.inserted > 0 || it.updated > 0 || it.removed > 0 ? 'อัปเดต' : 'ไม่เปลี่ยน';
+    return `<tr style="background:#eef2ff">
+      <td style="${cell};font-family:monospace;color:#4338ca">↳ ${esc(it.table)}</td>
+      <td style="${cell};text-align:center;color:#6b7280">${status}${it.removed ? ` (ลบ ${it.removed})` : ''}</td>
+      <td style="${cell};text-align:center;color:#1e40af">+${it.inserted || 0}</td>
+      <td style="${cell};text-align:center;color:#c2410c">~${it.updated || 0}</td>
+      <td style="${cell};text-align:center;color:#6b7280">=${it.unchanged || 0}</td>
+      <td style="${cell};text-align:center">${it.rows || 0}</td>
+    </tr>`;
+  }
+
   exportKpiTables() {
     if (this.selectedIndicatorIds.size === 0) {
       Swal.fire('แจ้งเตือน', 'กรุณาเลือกตัวชี้วัดอย่างน้อย 1 รายการ', 'warning');
@@ -491,7 +508,7 @@ export class ExportKpiComponent implements OnInit {
                   <td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;color:#c2410c;font-weight:700">~${t.updated || 0}</td>
                   <td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;color:#6b7280">=${t.unchanged || 0}</td>
                   <td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;font-weight:700">${total}</td>
-                </tr>`;
+                </tr>` + this.itemsPopupRow(t, escHtml);
               }).join('');
               const skippedRows = (res.skipped || []).map((s: any) =>
                 `<tr><td colspan="2" style="padding:4px 8px;border-bottom:1px solid #eee;font-family:monospace;font-size:11px;color:#9ca3af">${escHtml(s.table_process || s.name || '?')}</td>

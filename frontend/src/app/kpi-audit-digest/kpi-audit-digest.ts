@@ -126,13 +126,14 @@ export class KpiAuditDigestComponent implements OnInit {
   actionLabel(t: string): string {
     return t === 'kpi_results' ? 'บันทึกผลงาน KPI' :
            t === 'dynamic_form' ? 'บันทึก Form Builder' :
-           t === 'sub_results' ? 'บันทึกผลงานย่อย' : t;
+           t === 'sub_results' ? 'บันทึกผลงานย่อย' :
+           t === 'hierarchy_results' ? 'บันทึกผลงานข้อย่อย/กิจกรรม' : t;
   }
 
   actionColor(t: string): string {
     return t === 'kpi_results' ? 'bg-emerald-100 text-emerald-700' :
            t === 'dynamic_form' ? 'bg-purple-100 text-purple-700' :
-           t === 'sub_results' ? 'bg-blue-100 text-blue-700' :
+           t === 'sub_results' || t === 'hierarchy_results' ? 'bg-blue-100 text-blue-700' :
            'bg-gray-100 text-gray-700';
   }
 

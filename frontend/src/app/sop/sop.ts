@@ -566,7 +566,7 @@ const SYSTEMS: SopSystem[] = [
     {f:'n5',t:'n6',x:'left',n:'right',v:'hv'},
     {f:'n6',t:'ok',x:'top',n:'bottom',v:'hv'},
   ],
-  notes:['Report Compare (เทียบ + เพิ่มตัวชี้วัดจาก KHD) ย้ายไปอยู่ในหน้า "จัดการตัวชี้วัด" แล้ว (ปุ่ม "เทียบกับ KHD" ต่อแท็บ) ไม่ได้อยู่ใน Wizard นี้','Scheduler: setInterval 30s, match 2-min window, atomic lock via UPDATE last_run_at','result = last actual value (ค่าเดือนล่าสุด) ไม่ใช่ SUM | content-based diff ไม่ใช่ timestamp'],
+  notes:['Report Compare (เทียบ + เพิ่มตัวชี้วัดจาก KHD) ย้ายไปอยู่ในหน้า "จัดการตัวชี้วัด" แล้ว (ปุ่ม "เทียบกับ KHD" ต่อแท็บ) ไม่ได้อยู่ใน Wizard นี้','Scheduler: setInterval 30s, match 2-min window, atomic lock via UPDATE last_run_at','result = last actual value (ค่าเดือนล่าสุด) ไม่ใช่ SUM | content-based diff ไม่ใช่ timestamp','ตัวชี้วัดที่เปิด export_items → สร้างตาราง <table_process>_items (ข้อย่อย/กิจกรรม 1 แถวต่อหน่วยบริการ) เก็บในระบบเท่านั้น ไม่ Sync KHD'],
 },{
   id:'notif', icon:'🔔', title:'ระบบแจ้งเตือนและประกาศ', sub:'Notifications & Announcements',
   desc:'4 ช่องทาง: Local DB | LINE (group admin + personal user) | Email | Telegram — KPI events + SSO login + Announcements',

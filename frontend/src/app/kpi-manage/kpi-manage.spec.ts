@@ -122,4 +122,13 @@ describe('KpiManageComponent', () => {
       expect(component.subCurrent.rollup_mode).toBe('auto');
     });
   });
+
+  // Export 3 ระดับ (18 ต.ค. 2569): ตัวเลือกส่งออกรายละเอียด ค่าตั้งต้นปิด และแปลงค่าจากฐานข้อมูลเป็น boolean
+  it('ตัวเลือก "ส่งออกรายละเอียดตัวชี้วัดย่อย/กิจกรรม" ค่าตั้งต้นปิด และโหลดค่าเดิมได้', () => {
+    component.activeTab = 'indicators';
+    component.openModal();
+    expect(component.currentItem.export_items).toBe(false);
+    component.openModal({ id: 9, kpi_indicators_name: 'x', export_items: 1 });
+    expect(component.currentItem.export_items).toBe(true);
+  });
 });

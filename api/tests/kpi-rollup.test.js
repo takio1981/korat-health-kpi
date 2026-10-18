@@ -25,3 +25,10 @@ test('fixture ของ frontend ต้องเหมือนกับ backend
     const fe = path.join(__dirname, '..', '..', 'frontend', 'src', 'app', 'shared', 'kpi-rollup.cases.json');
     expect(fs.readFileSync(fe, 'utf8').replace(/\r\n/g, '\n')).toBe(fs.readFileSync(fixturePath, 'utf8').replace(/\r\n/g, '\n'));
 });
+
+describe('itemNumber', () => {
+    const { itemNumber } = require('../kpi-rollup');
+    test.each(cases.itemNumber.map(c => [c.name, c]))('%s', (_n, c) => {
+        expect(itemNumber(c.explicit, c.parent, c.index)).toBe(c.expected);
+    });
+});

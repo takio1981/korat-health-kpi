@@ -49,4 +49,12 @@ function rollupMonthly(childCount, monthVals) {
     return out;
 }
 
-module.exports = { ROLLUP_MONTH_KEYS, rollupNum, activityValue, rollupMonthly };
+// เลขข้อที่แสดง: กำหนดเอง (item_no) ก่อน ไม่งั้นสร้างจากเลขข้อแม่ + ลำดับ (เช่น "1" + ลำดับที่ 2 → "1.2", ไม่มีเลขแม่ → "2")
+function itemNumber(explicit, parentNo, index) {
+    const own = explicit === null || explicit === undefined ? '' : String(explicit).trim();
+    if (own) return own;
+    const parent = parentNo === null || parentNo === undefined ? '' : String(parentNo).trim();
+    return parent ? `${parent}.${index + 1}` : String(index + 1);
+}
+
+module.exports = { ROLLUP_MONTH_KEYS, rollupNum, activityValue, rollupMonthly, itemNumber };

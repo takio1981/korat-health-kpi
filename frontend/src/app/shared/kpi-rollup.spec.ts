@@ -25,3 +25,9 @@ it('itemNumber: กำหนดเองก่อน ไม่งั้นต่
   expect(itemNumber(null, '1.2', 0)).toBe('1.2.1');
   expect(itemNumber(undefined, '', 2)).toBe('3');
 });
+
+describe('kpi-rollup (frontend) — itemNumber (fixture ร่วมกับ backend)', () => {
+  for (const c of (cases as any).itemNumber) {
+    it(c.name, () => expect(itemNumber(c.explicit, c.parent, c.index)).toBe(c.expected));
+  }
+});

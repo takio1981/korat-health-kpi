@@ -506,6 +506,14 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 
 ### Export KPI Tables
 - Endpoint: `POST /export-kpi-tables` — สร้าง/อัปเดตตาราง MySQL แยกรายตัวชี้วัด
+- **Export 3 ระดับ — ตาราง `<table_process>_items` (18 ต.ค. 2569):** เปิดรายตัวชี้วัดด้วย `kpi_indicators.export_items` (ค่าตั้งต้น 0, checkbox ใน modal
+  kpi-manage ผ่าน `saveHierarchyFields()`) — 1 แถว = หน่วยบริการ × ปีงบ × ข้อย่อย (item_level 2) หรือกิจกรรม (3), PK (hospcode, byear, item_level, item_id)
+  คอลัมน์ item_no/parent_no/item_name/value_type ('sub'|'number'|'check')/calc_mode/target/result/m10…m09 — `buildItemExportRows()` ใช้
+  `loadSubExportMonthMap()` (ข้อ auto = จากกิจกรรม) กิจกรรมทำแล้ว/ยังไม่ทำ = 100/0, เลขข้อ `kpiRollup.itemNumber()` (สำเนาเดียวกับ frontend + fixture ร่วม)
+  — `writeItemsTable()` เทียบเนื้อหา (`diffItemsTable()`) UPSERT เฉพาะที่เปลี่ยน + **ลบแถวของรายการที่ปิด/ลบแล้ว (เฉพาะปีงบที่ส่งออก)** —
+  สร้างตารางด้วย `ensureItemsTable()` **ก่อน** `beginTransaction` (DDL commit เอง) — `checkKpiChanges` นับการเปลี่ยนแปลงของตารางนี้ด้วย (status has_changes)
+  — **ตารางหลักไม่เปลี่ยนคอลัมน์ และ `_items` ไม่เข้า Sync to KHD** (preview/sync ใช้เฉพาะชื่อ table_process — ผู้ใช้เลือกเก็บในระบบเท่านั้น)
+  — table_process ยาวเกิน 58 ตัวอักษร = ข้าม (แจ้งเหตุผลใน `items.skipped`) — Test: `api/tests/export-items.test.js`, `export-kpi.spec.ts`
 - Core function: `performKpiExport(year_bh, indicator_ids, userId)` — ใช้ร่วมกับ scheduler
 - **Prefilter (3 sources):** สร้างเฉพาะ indicator ที่มีข้อมูลใน source ใดsource หนึ่ง:
   1. `kpi_results` (target_value หรือ actual_value)
