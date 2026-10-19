@@ -682,6 +682,11 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   (`kpi-manage.ts` dropdown `khdCompareYear`, options = ปีปัจจุบัน±1) ส่ง param นี้ตอนกด "เทียบกับ KHD"/"เทียบ
   KHD อีกครั้ง" — badge เกณฑ์แสดง `(ปีงบ N)` กำกับเมื่อค่ามาจาก `report_fiscal_year_config` ของปีนั้นจริง
   (`khd_fiscal_year` field ใน response, ผ่าน `getKhdCriteriaText()`)
+- **ปรับเกณฑ์ให้เท่ากับ KHD (19 ต.ค. 2569):** `POST /indicators/apply-khd-criteria { ids, year_bh }` (`requireAction('kpi-manage','edit')`) —
+  **server อ่านเกณฑ์จาก KHD ใหม่เสมอ ไม่รับค่าเกณฑ์จาก client** ด้วยการจับคู่เดียวกับ `/report-compare` + `getKhdEffectiveCriteriaFor()` (ปีงบที่เลือก)
+  อัปเดตเฉพาะ `criterion` + `target_condition` (**ไม่แตะ `target_percentage`/เป้าหมาย**) ตัวเลขเก็บแบบตัดศูนย์ท้าย ("85.50" → "85.5"), KHD ไม่มีเกณฑ์/ไม่พบ = ข้าม
+  (ไม่ล้างค่าเดิม), log `APPLY_KHD_CRITERIA` (ค่าเดิม/ค่าใหม่) — UI: ปุ่ม "ใช้เกณฑ์ KHD" ในแถว + banner สีส้ม + ชิป "เกณฑ์ต่างกัน" (`filterKhdStatus = 'criteria'`)
+  — Test: `api/tests/khd-criteria.test.js` (KHD จำลอง), `kpi-manage.spec.ts`
 - Join กับ local ผ่าน `table_process` (key เดียวกันทั้ง 2 ทาง) — คืน field `khd_*` (`khd_report_id, khd_name,
   khd_dept, khd_main_yut, khd_is_active, khd_data_source, khd_target_percentage, khd_target_condition,
   khd_criteria_source, khd_fiscal_year`) คู่กับ `local_*` ต่อ item

@@ -12416,6 +12416,49 @@ apiRouter.put('/indicators/:id/upload-excel', authenticateToken, requireAction('
 });
 
 // POST /indicators/bulk-upload-excel — set upload_excel แบบ batch (ใช้ตอน "ปิดทั้งหมดที่ KHD inactive")
+// POST /indicators/apply-khd-criteria — ปรับ "เกณฑ์" (criterion + target_condition) ของตัวชี้วัดให้เท่ากับ KHD (19 ต.ค. 2569)
+// body { ids: number[], year_bh } — อ่านเกณฑ์จาก KHD ใหม่ที่ฝั่ง server เสมอ (ไม่เชื่อค่าจาก client) ด้วยการจับคู่เดียวกับ GET /report-compare
+// (table_process, data_source='excel', LENGTH(report_code)=LENGTH(table_process), report_id มากสุดชนะ) และเกณฑ์ของปีงบที่เลือก
+// (report_fiscal_year_config ก่อน แล้วจึง reports) — ไม่แตะ "เป้าหมาย" (target_percentage) และข้ามตัวที่ KHD ไม่มีเกณฑ์ (ไม่ล้างค่าเดิม)
+apiRouter.post('/indicators/apply-khd-criteria', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
+    const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.map(Number).filter(n => Number.isInteger(n) && n > 0))] : [];
+    if (ids.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตัวชี้วัด' });
+    const now = new Date();
+    const yearBh = req.body?.year_bh ? String(req.body.year_bh) : String(now.getFullYear() + 543 + (now.getMonth() >= 9 ? 1 : 0)); // ปีงบปัจจุบัน (ต.ค. ขึ้นปีใหม่)
+    const fmt = (v) => (v === null || v === undefined || String(v).trim() === '') ? null
+        : (Number.isFinite(Number(v)) ? String(Number(v)) : String(v).trim());
+    try {
+        const [locals] = await db.query('SELECT id, kpi_indicators_name, table_process, criterion, target_condition FROM kpi_indicators WHERE id IN (?)', [ids]);
+        const tps = [...new Set(locals.map(l => String(l.table_process || '').trim()).filter(Boolean))];
+        const khdByTp = new Map();
+        if (tps.length) {
+            const [khdRows] = await remoteDb.query(
+                `SELECT report_id, table_process, target_percentage, target_condition FROM reports
+                 WHERE data_source = 'excel' AND LENGTH(report_code) = LENGTH(table_process) AND table_process IN (?) ORDER BY report_id`, [tps]);
+            khdRows.forEach(r => khdByTp.set(String(r.table_process).trim(), r));
+        }
+        const updated = [], skipped = [];
+        for (const l of locals) {
+            const khd = khdByTp.get(String(l.table_process || '').trim());
+            if (!khd) { skipped.push({ id: l.id, reason: 'ไม่พบใน KHD' }); continue; }
+            const eff = await getKhdEffectiveCriteriaFor(remoteDb, khd.report_id, khd.target_percentage, khd.target_condition, yearBh);
+            const criterion = fmt(eff.target_percentage);
+            const cond = eff.target_condition ? String(eff.target_condition) : null;
+            if (criterion === null) { skipped.push({ id: l.id, reason: 'KHD ไม่มีเกณฑ์' }); continue; }
+            if (fmt(l.criterion) === criterion && String(l.target_condition || '') === String(cond || '')) { skipped.push({ id: l.id, reason: 'ตรงกันอยู่แล้ว' }); continue; }
+            await db.query('UPDATE kpi_indicators SET criterion = ?, target_condition = ? WHERE id = ?', [criterion, cond, l.id]);
+            updated.push({ id: l.id, name: l.kpi_indicators_name, before: { criterion: l.criterion, target_condition: l.target_condition }, after: { criterion, target_condition: cond } });
+        }
+        await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+            [req.user.userId, 'APPLY_KHD_CRITERIA', 'kpi_indicators', JSON.stringify({ year_bh: yearBh, updated, skipped }).slice(0, 60000), req.ip]);
+        res.json({ success: true, message: `ปรับเกณฑ์ให้เท่ากับ KHD ${updated.length} ตัวชี้วัด` + (skipped.length ? ` (ข้าม ${skipped.length})` : ''), updated, skipped, year_bh: yearBh });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 apiRouter.post('/indicators/bulk-upload-excel', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
     try {
         const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(x => Number(x)).filter(Number.isFinite) : [];

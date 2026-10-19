@@ -706,7 +706,9 @@ export class KpiManageComponent implements OnInit {
         // KHD compare filter
         if (this.filterKhdStatus) {
           const cmp = this.getKhdCompareStatus(i);
-          if (this.filterKhdStatus === 'inactive') {
+          if (this.filterKhdStatus === 'criteria') {
+            if (this.getKhdData(i)?.criteria_match !== false) return false;
+          } else if (this.filterKhdStatus === 'inactive') {
             const khd = this.khdCompareMap.get(i.table_process || '');
             if (!(khd && (khd.khd_is_active === 0 || khd.khd_is_active === '0'))) return false;
           } else if (cmp !== this.filterKhdStatus) {
@@ -1348,7 +1350,7 @@ export class KpiManageComponent implements OnInit {
    * ตัวนี้ iterate this.indicators (ที่ table แสดงจริง) — ตรงกันการนับ
    */
   get khdCounts() {
-    const counts = { match: 0, different: 0, missing_remote: 0, inactive: 0, total: 0 };
+    const counts = { match: 0, different: 0, missing_remote: 0, inactive: 0, criteria: 0, total: 0 };
     if (!this.khdCompareMap.size) return counts;
     for (const i of this.indicators) {
       counts.total++;
@@ -1358,6 +1360,7 @@ export class KpiManageComponent implements OnInit {
       else if (cmp === 'missing_remote') counts.missing_remote++;
       const khd = this.getKhdData(i);
       if (khd && (khd.khd_is_active === 0 || khd.khd_is_active === '0')) counts.inactive++;
+      if (khd?.criteria_match === false) counts.criteria++;
     }
     return counts;
   }
@@ -1953,6 +1956,39 @@ export class KpiManageComponent implements OnInit {
         Swal.fire('ผิดพลาด', err.error?.message || 'เกิดข้อผิดพลาดในการนำเข้า', 'error');
         this.cdr.detectChanges();
       }
+    });
+  }
+
+  // ===== ปรับเกณฑ์ให้เท่ากับ KHD (19 ต.ค. 2569) — เฉพาะตัวที่ผลเทียบล่าสุดบอกว่าเกณฑ์ต่างกัน; ค่าที่บันทึกจริง server อ่านจาก KHD ใหม่ =====
+  get khdCriteriaDiffItems(): any[] {
+    return this.indicators.filter(i => this.getKhdData(i)?.criteria_match === false);
+  }
+
+  applyKhdCriteria(items: any[]) {
+    if (!items.length) { Swal.fire('แจ้งเตือน', 'ไม่มีตัวชี้วัดที่เกณฑ์ต่างจาก KHD', 'info'); return; }
+    const esc = (t: any) => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as any)[c]);
+    const list = items.slice(0, 10).map(i =>
+      `<tr><td class="text-left pr-2 py-0.5">${esc(i.kpi_indicators_name)}</td><td class="whitespace-nowrap px-1 text-amber-700">${esc(this.getCriteriaText(i))}</td>` +
+      `<td class="px-1">→</td><td class="whitespace-nowrap text-orange-700 font-bold">${esc(this.getKhdCriteriaText(this.getKhdData(i)))}</td></tr>`).join('');
+    const more = items.length > 10 ? `<p class="text-xs text-gray-500 mt-1">... และอีก ${items.length - 10} ตัว</p>` : '';
+    Swal.fire({
+      title: 'ปรับเกณฑ์ให้เท่ากับ KHD',
+      html: `<p class="text-sm">ปรับ <b>เกณฑ์ + เงื่อนไข</b> ของ <b>${items.length}</b> ตัวชี้วัดให้เท่ากับ KHD ปีงบ <b>${esc(this.khdCompareYear)}</b></p>
+             <div class="max-h-60 overflow-auto mt-2"><table class="w-full text-xs">${list}</table></div>${more}
+             <p class="text-[11px] text-gray-500 mt-2">ไม่เปลี่ยน "เป้าหมาย" — ตัวที่ KHD ไม่มีเกณฑ์จะถูกข้าม</p>`,
+      icon: 'question', showCancelButton: true, confirmButtonColor: '#ea580c',
+      confirmButtonText: '<i class="fas fa-bullseye mr-1"></i> ปรับเกณฑ์', cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      this.authService.applyKhdCriteria(items.map(i => i.id), this.khdCompareYear).subscribe({
+        next: (res: any) => {
+          if (!res.success) { Swal.fire('ผิดพลาด', res.message, 'error'); return; }
+          Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2500, showConfirmButton: false });
+          this.loadAllData();
+          this.runKhdCompare();
+        },
+        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถปรับเกณฑ์ได้', 'error')
+      });
     });
   }
 

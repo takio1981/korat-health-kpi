@@ -1196,6 +1196,12 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     return this.http.put(`${this.apiUrl}/indicators/${id}/upload-excel`, { upload_excel }, { headers });
   }
 
+  // ปรับเกณฑ์ (criterion + target_condition) ให้เท่ากับ KHD ของปีงบที่เลือก — server อ่านค่าจาก KHD เอง
+  applyKhdCriteria(ids: number[], year_bh: string): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.post(`${this.apiUrl}/indicators/apply-khd-criteria`, { ids, year_bh }, { headers });
+  }
   bulkSetUploadExcel(ids: number[], upload_excel: 0 | 1): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

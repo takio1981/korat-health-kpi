@@ -184,6 +184,11 @@
                   class="px-2.5 py-1 rounded-lg font-bold transition-all">
             <i class="fas fa-power-off mr-1"></i>KHD inactive ({{ khdCounts.inactive }})
           </button>
+          <button (click)="filterKhdStatus = filterKhdStatus === 'criteria' ? '' : 'criteria'; applyFilter()"
+                  [ngClass]="filterKhdStatus === 'criteria' ? 'bg-orange-600 text-white' : 'bg-orange-50 text-orange-700 border border-orange-200'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all">
+            <i class="fas fa-bullseye mr-1"></i>เกณฑ์ต่างกัน ({{ khdCounts.criteria }})
+          </button>
           <span class="w-px h-4 bg-teal-200"></span>
           <button (click)="filterResultStatus = filterResultStatus === 'has_results' ? '' : 'has_results'; applyFilter()"
                   [ngClass]="filterResultStatus === 'has_results' ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'"
@@ -331,6 +336,29 @@
         </div>
       </div>
 
+      <!-- Banner: เกณฑ์ไม่ตรงกับ KHD -->
+      <div *ngIf="activeTab === 'indicators' && canEditData && khdCriteriaDiffItems.length > 0" class="mb-4 bg-orange-50 border-2 border-orange-200 rounded-xl p-4">
+        <div class="flex flex-wrap items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center shrink-0">
+            <i class="fas fa-bullseye text-orange-600 text-lg"></i>
+          </div>
+          <div class="flex-1 min-w-0">
+            <h4 class="text-sm font-bold text-orange-900">เกณฑ์ของตัวชี้วัดไม่ตรงกับ KHD (ปีงบ {{ khdCompareYear }})</h4>
+            <p class="text-xs text-orange-700 mt-1">
+              <b>{{ khdCriteriaDiffItems.length }} ตัวชี้วัด</b> — ปรับ "เกณฑ์ + เงื่อนไข" ให้เท่ากับ KHD ได้ทีละตัว (ปุ่ม "ใช้เกณฑ์ KHD" ในแถว) หรือทั้งหมด — ไม่เปลี่ยน "เป้าหมาย"
+            </p>
+          </div>
+          <button (click)="filterKhdStatus = 'criteria'; applyFilter()"
+                  class="shrink-0 px-3 py-2 bg-white border border-orange-300 text-orange-700 hover:bg-orange-100 rounded-xl text-sm font-bold">
+            <i class="fas fa-filter mr-1"></i>ดูรายการ
+          </button>
+          <button (click)="applyKhdCriteria(khdCriteriaDiffItems)"
+                  class="shrink-0 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-sm font-bold shadow-md transition-colors">
+            <i class="fas fa-bullseye mr-1"></i>ใช้เกณฑ์ KHD ทั้ง {{ khdCriteriaDiffItems.length }} ตัว
+          </button>
+        </div>
+      </div>
+
       <!-- === Mobile Card View === -->
       <div class="md:hidden space-y-2 p-3 overflow-y-auto card-scroll" style="max-height: calc(100vh - 320px);">
         <div *ngIf="currentList.length === 0" class="text-center py-10 text-gray-400 text-sm">
@@ -384,6 +412,7 @@
                       [title]="'KHD เกณฑ์: ' + getKhdCriteriaText(getKhdData(item))">
                   <i class="fas fa-bullseye text-[9px]"></i>KHD: {{ getKhdCriteriaText(getKhdData(item)) }}
                 </span>
+                <button *ngIf="canEditData && getKhdData(item)?.criteria_match === false" (click)="applyKhdCriteria([item])" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-600 text-white font-bold"><i class="fas fa-arrow-down text-[9px]"></i>ใช้เกณฑ์ KHD</button>
                 <span *ngIf="item.weight" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-50 border border-orange-200 text-orange-700" title="น้ำหนัก">
                   <i class="fas fa-weight-hanging text-[9px]"></i>{{ item.weight }}
                 </span>
@@ -594,6 +623,11 @@
                        title="เกณฑ์ (criterion/target_condition) ไม่ตรงกับ KHD">
                     <i class="fas fa-bullseye mr-1"></i>เกณฑ์ต่างกัน
                   </div>
+                  <button *ngIf="canEditData && getKhdData(item)?.criteria_match === false" (click)="applyKhdCriteria([item])"
+                          class="mt-1 block mx-auto px-2 py-0.5 bg-orange-600 hover:bg-orange-700 text-white rounded text-[10px] font-bold whitespace-nowrap"
+                          [title]="'ปรับเกณฑ์เป็น ' + getKhdCriteriaText(getKhdData(item))">
+                    <i class="fas fa-arrow-down mr-1"></i>ใช้เกณฑ์ KHD
+                  </button>
                 </td>
                 <!-- upload_excel toggle -->
                 <td class="px-4 py-3 text-center" *ngIf="canEditData">

@@ -87,6 +87,37 @@ describe('KpiManageComponent', () => {
     });
   });
 
+  // ---- 19 ต.ค. 2569: ปรับเกณฑ์ให้เท่ากับ KHD ----
+  describe('เกณฑ์ต่างจาก KHD', () => {
+    beforeEach(() => {
+      component.activeTab = 'indicators';
+      component.indicators = [
+        { id: 1, kpi_indicators_name: 'ก', table_process: 'tp1', is_active: 1, criterion: '70', target_condition: 'GTE' },
+        { id: 2, kpi_indicators_name: 'ข', table_process: 'tp2', is_active: 1, criterion: '80', target_condition: 'GTE' },
+      ];
+      component.khdCompareMap = new Map<string, any>([
+        ['tp1', { status: 'match', table_process: 'tp1', criteria_match: false, khd_target_percentage: '85', khd_target_condition: 'LTE', khd_fiscal_year: '2570' }],
+        ['tp2', { status: 'match', table_process: 'tp2', criteria_match: true }],
+      ]);
+    });
+
+    it('นับ/กรองเฉพาะตัวที่เกณฑ์ต่างกัน และแสดงเกณฑ์ของ KHD ที่จะใช้', () => {
+      expect(component.khdCounts.criteria).toBe(1);
+      expect(component.khdCriteriaDiffItems.map(i => i.id)).toEqual([1]);
+      component.filterKhdStatus = 'criteria';
+      component.applyFilter();
+      expect(component.filteredIndicators.map((i: any) => i.id)).toEqual([1]);
+      expect(component.getKhdCriteriaText(component.getKhdData(component.indicators[0]))).toContain('85');
+    });
+
+    it('เรียก API ด้วยรายการตัวชี้วัดและปีงบที่เทียบ', () => {
+      const http = TestBed.inject(HttpTestingController);
+      (component as any).authService.applyKhdCriteria([1], '2570').subscribe();
+      const req = http.expectOne(r => r.method === 'POST' && r.url.includes('/indicators/apply-khd-criteria'));
+      expect(req.request.body).toEqual({ ids: [1], year_bh: '2570' });
+    });
+  });
+
   // ---- 19 ต.ค. 2569: จับคู่ข้อมูล KHD (หน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์) ----
   describe('จับคู่ข้อมูล KHD', () => {
     let http: HttpTestingController;
