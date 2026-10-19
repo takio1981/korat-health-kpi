@@ -602,6 +602,17 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.post(`${this.apiUrl}/report-compare/bulk-add-from-khd`, { khd_report_ids, dept_id, main_indicator_id, year_bh }, { headers });
   }
+  // จับคู่ข้อมูล KHD ↔ Local (kind: 'dept' | 'main' | 'yut')
+  getKhdMappings(kind: string): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/khd-mappings?kind=${encodeURIComponent(kind)}`, { headers });
+  }
+  saveKhdMapping(body: { kind: string; khd_value: string; local_id?: number | null; ignore?: boolean }): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.put(`${this.apiUrl}/khd-mappings`, body, { headers });
+  }
   reportCompareStrategies(): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

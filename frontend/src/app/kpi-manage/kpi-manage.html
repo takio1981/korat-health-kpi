@@ -137,6 +137,12 @@
             <i class="fas" [ngClass]="hospCompareLoading ? 'fa-spinner fa-spin' : 'fa-exchange-alt'"></i>
             <span class="ml-2">{{ hospCompareLoading ? 'กำลังเทียบ...' : (hospCompareSummary ? 'เทียบ KHD อีกครั้ง' : 'เทียบกับ KHD') }}</span>
           </button>
+          <button *ngIf="isSuperAdmin && ['indicators','main-indicators','strategies','departments'].includes(activeTab)"
+                  (click)="openKhdMapping(activeTab === 'main-indicators' ? 'main' : activeTab === 'strategies' ? 'yut' : 'dept')"
+                  class="bg-cyan-700 hover:bg-cyan-800 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold whitespace-nowrap"
+                  title="จับคู่หน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์ ของ KHD กับข้อมูลในระบบ — ใช้ตอนเพิ่มตัวชี้วัดจาก KHD">
+            <i class="fas fa-right-left"></i><span class="ml-2">จับคู่ข้อมูล KHD</span>
+          </button>
           <div *ngIf="canAddData" class="w-px h-8 bg-gray-200 mx-1 hidden sm:block"></div>
           <button *ngIf="activeTab === 'indicators' && canAddData"
                   (click)="openImportModal()"
@@ -808,7 +814,15 @@
         <div class="bg-cyan-50 px-4 py-2.5 flex flex-wrap items-center gap-2 border-b border-cyan-200">
           <i class="fas fa-cloud-arrow-down text-cyan-600"></i>
           <span class="font-bold text-cyan-800 text-sm">ตัวชี้วัดจาก KHD ที่ยังไม่มีในระบบ ({{ khdMissingLocalItems.length }} รายการ)</span>
-          <span class="text-xs text-cyan-600 font-normal">— เลือก checkbox แล้วกด "เพิ่มที่เลือก" หรือกด "เพิ่มเข้าระบบ" ทีละตัว</span>
+          <span class="text-xs text-cyan-600 font-normal">— เลือก checkbox แล้วกด "เพิ่มที่เลือก" หรือกด "เพิ่มเข้าระบบ" ทีละตัว — หน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์ นำมาจาก KHD ตามการจับคู่</span>
+          <span *ngIf="khdMissingUnmatchedCount > 0" class="px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full text-[11px] font-bold"
+                title="ค่าใน KHD ที่ยังไม่ตรงกับข้อมูลในระบบ — กดปุ่ม จับคู่ข้อมูล KHD">
+            <i class="fas fa-triangle-exclamation mr-1"></i>ยังจับคู่ไม่ครบ {{ khdMissingUnmatchedCount }} รายการ
+          </span>
+          <button *ngIf="isSuperAdmin" (click)="openKhdMapping('yut')"
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-cyan-300 text-cyan-700 hover:bg-cyan-50 rounded-lg text-xs font-bold whitespace-nowrap">
+            <i class="fas fa-right-left text-[10px]"></i>จับคู่ข้อมูล KHD
+          </button>
           <button *ngIf="canAddData && khdMissingLocalSelected.size > 0" (click)="openBulkAddFromKhd()"
                   class="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 bg-cyan-700 hover:bg-cyan-800 text-white rounded-lg text-xs font-bold transition-colors shadow-sm whitespace-nowrap">
             <i class="fas fa-layer-group text-[10px]"></i>เพิ่มที่เลือก ({{ khdMissingLocalSelected.size }})
@@ -826,8 +840,9 @@
                 </th>
                 <th class="px-3 py-2 text-left font-bold">table_process</th>
                 <th class="px-3 py-2 text-left font-bold">ชื่อตัวชี้วัด (KHD)</th>
-                <th class="px-3 py-2 text-left font-bold">หน่วยงาน (KHD)</th>
-                <th class="px-3 py-2 text-left font-bold">หมวด/ยุทธศาสตร์ (KHD)</th>
+                <th class="px-3 py-2 text-left font-bold">หน่วยงาน <span class="font-normal">(KHD → ระบบ)</span></th>
+                <th class="px-3 py-2 text-left font-bold">หมวดหมู่หลัก <span class="font-normal">(KHD → ระบบ)</span></th>
+                <th class="px-3 py-2 text-left font-bold">ยุทธศาสตร์ <span class="font-normal">(KHD → ระบบ)</span></th>
                 <th class="px-3 py-2 text-center font-bold">สถานะ KHD</th>
                 <th class="px-3 py-2 text-center font-bold" *ngIf="canAddData">จัดการ</th>
               </tr>
@@ -842,8 +857,18 @@
                 </td>
                 <td class="px-3 py-2 font-mono text-cyan-700">{{ item.table_process }}</td>
                 <td class="px-3 py-2 text-gray-800 font-medium">{{ item.khd_name }}</td>
-                <td class="px-3 py-2 text-gray-600">{{ item.khd_dept || '-' }}</td>
-                <td class="px-3 py-2 text-gray-600">{{ item.khd_main_yut || '-' }}</td>
+                <td class="px-3 py-2 align-top">
+                  <div class="text-gray-500">{{ item.khd_dept || '-' }}</div>
+                  <div *ngIf="khdResolvedBadge(item.khd_resolved?.detail?.dept) as b" [ngClass]="b.cls" [title]="b.title"><i class="fas fa-arrow-right text-[9px] mr-1"></i>{{ b.text }}</div>
+                </td>
+                <td class="px-3 py-2 align-top max-w-[200px]">
+                  <div class="text-gray-500 break-words">{{ item.khd_main_indicator || '-' }}</div>
+                  <div *ngIf="khdResolvedBadge(item.khd_resolved?.detail?.main) as b" [ngClass]="b.cls" [title]="b.title"><i class="fas fa-arrow-right text-[9px] mr-1"></i>{{ b.text }}</div>
+                </td>
+                <td class="px-3 py-2 align-top max-w-[260px]">
+                  <div class="text-gray-500 break-words">{{ item.khd_main_yut || '-' }}</div>
+                  <div *ngIf="khdResolvedBadge(item.khd_resolved?.detail?.yut) as b" [ngClass]="b.cls" [title]="b.title"><i class="fas fa-arrow-right text-[9px] mr-1"></i>{{ b.text }}</div>
+                </td>
                 <td class="px-3 py-2 text-center">
                   <span [ngClass]="item.khd_is_active == 1 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'"
                         class="px-1.5 py-0.5 rounded-full font-bold">
@@ -970,10 +995,25 @@
         <label class="block text-xs font-bold text-gray-600 mb-1">table_process</label>
         <input [value]="khdAddModal.item?.table_process" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono bg-gray-50 text-cyan-700" readonly>
       </div>
+      <!-- ค่าที่จะได้จาก KHD (ผ่านการจับคู่) -->
+      <div class="border border-cyan-200 bg-cyan-50/50 rounded-lg p-2.5 text-xs space-y-1">
+        <p class="font-bold text-cyan-800"><i class="fas fa-cloud-arrow-down mr-1"></i>ค่าจาก KHD ที่จะใช้</p>
+        <div *ngFor="let f of [['หน่วยงาน','dept','khd_dept'],['หมวดหมู่หลัก','main','khd_main_indicator'],['ยุทธศาสตร์','yut','khd_main_yut']]" class="flex gap-2">
+          <span class="text-gray-500 w-24 shrink-0">{{ f[0] }}:</span>
+          <span class="text-gray-500 break-words">{{ khdAddModal.item?.[f[2]] || '-' }}</span>
+          <ng-container *ngIf="khdResolvedBadge(khdAddModal.item?.khd_resolved?.detail?.[f[1]]) as b">
+            <span [ngClass]="b.cls" class="whitespace-nowrap" [title]="b.title"><i class="fas fa-arrow-right text-[9px] mx-1"></i>{{ b.text }}</span>
+          </ng-container>
+        </div>
+        <p *ngIf="khdAddModal.item?.khd_resolved?.unmatched?.length" class="text-rose-600">
+          มีค่าที่ยังจับคู่ไม่ได้ — ช่องนั้นใช้ค่าที่เลือกด้านล่าง (หรือเว้นว่าง)
+          <button *ngIf="isSuperAdmin" type="button" (click)="khdAddModal.open = false; openKhdMapping(khdAddModal.item?.khd_resolved?.unmatched?.[0])" class="underline font-bold ml-1">จับคู่ข้อมูล KHD</button>
+        </p>
+      </div>
       <div>
         <label class="block text-xs font-bold text-gray-600 mb-1">
           หน่วยงาน
-          <span class="text-gray-400 font-normal ml-1">(เลือกได้ — แก้ได้ภายหลัง)</span>
+          <span class="text-gray-400 font-normal ml-1">(ใช้เมื่อ KHD ไม่มีค่าหรือยังจับคู่ไม่ได้)</span>
         </label>
         <select [(ngModel)]="khdAddModal.deptId" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
           <option [ngValue]="null">-- ไม่ระบุ --</option>
@@ -983,7 +1023,7 @@
       <div>
         <label class="block text-xs font-bold text-gray-600 mb-1">
           หมวดหมู่หลัก
-          <span class="text-gray-400 font-normal ml-1">(เลือกได้ — แก้ได้ภายหลัง)</span>
+          <span class="text-gray-400 font-normal ml-1">(ใช้เมื่อ KHD ไม่มีค่าหรือยังจับคู่ไม่ได้)</span>
         </label>
         <select [(ngModel)]="khdAddModal.mainIndicatorId" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
           <option [ngValue]="null">-- ไม่ระบุ --</option>
@@ -1024,12 +1064,13 @@
       </div>
       <h3 class="font-bold text-gray-800 text-lg">เพิ่มตัวชี้วัดจาก KHD ({{ khdMissingLocalSelected.size }} รายการ)</h3>
     </div>
-    <p class="text-xs text-gray-500 mb-3">ตั้งค่าด้านล่างจะใช้ร่วมกันกับทุกตัวชี้วัดที่เลือกไว้ — แก้ไขแยกทีละตัวได้ภายหลังในตาราง</p>
+    <p class="text-xs text-gray-500 mb-2">หน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์ นำมาจาก KHD ตามการจับคู่ของแต่ละตัวชี้วัด — ค่าด้านล่างใช้กับช่องที่ KHD ไม่มีค่าหรือยังจับคู่ไม่ได้ (แก้ไขแยกทีละตัวได้ภายหลัง)</p>
+    <p *ngIf="khdBulkSelectedUnmatchedCount > 0" class="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5 mb-3"><i class="fas fa-triangle-exclamation mr-1"></i>{{ khdBulkSelectedUnmatchedCount }} รายการที่เลือกมีค่าใน KHD ที่ยังจับคู่ไม่ได้ <button *ngIf="isSuperAdmin" type="button" (click)="khdBulkAddModal.open = false; openKhdMapping('yut')" class="underline font-bold ml-1">จับคู่ข้อมูล KHD</button></p>
     <div class="space-y-3">
       <div>
         <label class="block text-xs font-bold text-gray-600 mb-1">
           หน่วยงาน
-          <span class="text-gray-400 font-normal ml-1">(เลือกได้ — แก้ได้ภายหลัง)</span>
+          <span class="text-gray-400 font-normal ml-1">(ใช้เมื่อ KHD ไม่มีค่าหรือยังจับคู่ไม่ได้)</span>
         </label>
         <select [(ngModel)]="khdBulkAddModal.deptId" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
           <option [ngValue]="null">-- ไม่ระบุ --</option>
@@ -1039,7 +1080,7 @@
       <div>
         <label class="block text-xs font-bold text-gray-600 mb-1">
           หมวดหมู่หลัก
-          <span class="text-gray-400 font-normal ml-1">(เลือกได้ — แก้ได้ภายหลัง)</span>
+          <span class="text-gray-400 font-normal ml-1">(ใช้เมื่อ KHD ไม่มีค่าหรือยังจับคู่ไม่ได้)</span>
         </label>
         <select [(ngModel)]="khdBulkAddModal.mainIndicatorId" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
           <option [ngValue]="null">-- ไม่ระบุ --</option>
@@ -1068,6 +1109,97 @@
         เพิ่ม {{ khdMissingLocalSelected.size }} รายการ
       </button>
     </div>
+  </div>
+</div>
+
+<!-- Modal: จับคู่ข้อมูล KHD ↔ ระบบ (หน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์) -->
+<div *ngIf="khdMapOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+  <div class="bg-white rounded-2xl shadow-xl border border-cyan-200 w-full max-w-5xl mx-4 p-5 flex flex-col max-h-[90vh]">
+    <div class="flex items-center gap-2 mb-3">
+      <div class="w-9 h-9 rounded-xl bg-cyan-100 flex items-center justify-center shrink-0"><i class="fas fa-right-left text-cyan-700"></i></div>
+      <div class="flex-1">
+        <h3 class="font-bold text-gray-800 text-lg">จับคู่ข้อมูล KHD กับระบบ</h3>
+        <p class="text-xs text-gray-500">ใช้ตอนเพิ่มตัวชี้วัดจาก KHD — ค่าที่จับคู่แล้วนำมาตั้งเป็นหน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์ของตัวชี้วัดใหม่ให้อัตโนมัติ (ไม่เปลี่ยนตัวชี้วัดที่มีอยู่แล้ว)</p>
+      </div>
+      <button (click)="closeKhdMapping()" class="text-gray-400 hover:text-gray-600 text-xl" title="ปิด"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <button *ngFor="let k of khdMapKinds" (click)="loadKhdMapping(k.key)"
+              class="px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors"
+              [ngClass]="khdMapKind === k.key ? 'bg-cyan-700 text-white border-cyan-700' : 'bg-white text-cyan-700 border-cyan-200 hover:bg-cyan-50'">
+        <i class="fas mr-1" [ngClass]="k.icon"></i>{{ k.label }}
+      </button>
+      <div class="relative flex-1 min-w-[180px]">
+        <i class="fas fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+        <input [(ngModel)]="khdMapSearch" placeholder="ค้นหาค่าใน KHD / ชื่อในระบบ" class="w-full pl-7 pr-2 py-1.5 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-cyan-400">
+      </div>
+      <label class="inline-flex items-center gap-1.5 text-xs font-bold text-gray-600 cursor-pointer">
+        <input type="checkbox" [(ngModel)]="khdMapOnlyUnmatched" class="rounded text-cyan-600">เฉพาะที่ยังไม่จับคู่
+      </label>
+    </div>
+    <div *ngIf="khdMapSummary" class="flex flex-wrap gap-2 mb-2 text-[11px] font-bold">
+      <span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">ทั้งหมด {{ khdMapSummary.total }}</span>
+      <span class="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">ยังไม่จับคู่ {{ khdMapSummary.unmatched || 0 }}</span>
+      <span class="px-2 py-0.5 rounded-full bg-sky-100 text-sky-700">ตรงกันอัตโนมัติ {{ khdMapSummary.auto || 0 }}</span>
+      <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">จับคู่แล้ว {{ khdMapSummary.mapped || 0 }}</span>
+      <span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">ไม่ต้องจับคู่ {{ khdMapSummary.ignored || 0 }}</span>
+    </div>
+    <div class="overflow-auto card-scroll flex-1 border border-gray-100 rounded-xl">
+      <div *ngIf="khdMapLoading" class="p-8 text-center text-gray-400 text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>กำลังโหลดข้อมูลจาก KHD...</div>
+      <table *ngIf="!khdMapLoading" class="w-full text-xs">
+        <thead class="bg-cyan-50 text-cyan-800 sticky top-0 z-10">
+          <tr>
+            <th class="px-3 py-2 text-left font-bold">ค่าใน KHD</th>
+            <th class="px-2 py-2 text-center font-bold whitespace-nowrap" title="จำนวนตัวชี้วัดใน KHD ที่ใช้ค่านี้ / ที่ยังไม่มีในระบบ">ตัวชี้วัด (ยังไม่มีในระบบ)</th>
+            <th class="px-2 py-2 text-center font-bold">สถานะ</th>
+            <th class="px-3 py-2 text-left font-bold min-w-[260px]">ในระบบ</th>
+            <th class="px-2 py-2 text-center font-bold">จัดการ</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let item of khdMapVisibleItems" class="border-t border-gray-100 hover:bg-cyan-50/40 align-top">
+            <td class="px-3 py-2">
+              <div class="font-medium text-gray-800 break-words">{{ item.khd_value }}</div>
+              <div *ngIf="item.khd_label" class="text-[10px] text-gray-500">ชื่อใน KHD: {{ item.khd_label }}</div>
+            </td>
+            <td class="px-2 py-2 text-center text-gray-600 whitespace-nowrap">{{ item.report_count }} <span class="text-cyan-700 font-bold" *ngIf="item.missing_count">({{ item.missing_count }})</span></td>
+            <td class="px-2 py-2 text-center">
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap" [ngClass]="khdMapStatusLabel(item.resolved?.status).cls">{{ khdMapStatusLabel(item.resolved?.status).text }}</span>
+            </td>
+            <td class="px-3 py-2">
+              <select [(ngModel)]="item._pick" class="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" [disabled]="khdMapSaving === item.khd_value">
+                <option [ngValue]="null">-- เลือก{{ khdMapKind === 'dept' ? 'หน่วยงาน' : khdMapKind === 'main' ? 'หมวดหมู่หลัก' : 'ยุทธศาสตร์' }} --</option>
+                <option *ngFor="let o of khdMapOptions" [ngValue]="o.id">{{ o.name }}{{ o.code ? ' (' + o.code + ')' : '' }}</option>
+              </select>
+            </td>
+            <td class="px-2 py-2">
+              <div class="flex flex-wrap justify-center gap-1">
+                <button (click)="saveKhdMap(item, { localId: item._pick })" [disabled]="!item._pick || khdMapSaving === item.khd_value || (item.resolved?.status === 'mapped' && item._pick === item.resolved?.local_id)"
+                        class="px-2 py-1 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-40 text-white rounded text-[11px] font-bold whitespace-nowrap" title="บันทึกการจับคู่">
+                  <i class="fas" [ngClass]="khdMapSaving === item.khd_value ? 'fa-spinner fa-spin' : 'fa-check'"></i> จับคู่
+                </button>
+                <button (click)="createLocalFromKhd(item)" class="px-2 py-1 bg-white border border-cyan-300 text-cyan-700 hover:bg-cyan-50 rounded text-[11px] font-bold whitespace-nowrap" title="สร้างรายการใหม่ในระบบจากค่านี้ แล้วจับคู่">
+                  <i class="fas fa-plus"></i> สร้างใหม่
+                </button>
+                <button *ngIf="item.resolved?.status !== 'ignored'" (click)="saveKhdMap(item, { ignore: true })" class="px-2 py-1 bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 rounded text-[11px] whitespace-nowrap" title="ไม่ต้องจับคู่ — ตัวชี้วัดใหม่เว้นช่องนี้ว่าง">
+                  <i class="fas fa-ban"></i> ไม่ต้องจับคู่
+                </button>
+                <button *ngIf="item.mapping" (click)="saveKhdMap(item, {})" class="px-2 py-1 bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 rounded text-[11px] whitespace-nowrap" title="ลบการจับคู่ที่ตั้งไว้ กลับไปใช้การจับคู่อัตโนมัติ">
+                  <i class="fas fa-rotate-left"></i> ล้าง
+                </button>
+              </div>
+            </td>
+          </tr>
+          <tr *ngIf="khdMapVisibleItems.length === 0">
+            <td colspan="5" class="px-3 py-8 text-center text-gray-400">{{ khdMapOnlyUnmatched ? 'จับคู่ครบทุกค่าแล้ว (เอาเครื่องหมายออกจาก "เฉพาะที่ยังไม่จับคู่" เพื่อดูทั้งหมด)' : 'ไม่พบรายการ' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="text-[11px] text-gray-500 mt-2">
+      ลำดับการใช้: การจับคู่ที่ตั้งไว้ → ตรงกันอัตโนมัติ (หน่วยงาน: รหัสหน่วยงาน, ชื่อเทียบแบบไม่สนช่องว่าง/ตัวพิมพ์, ยุทธศาสตร์: ตัดจำนวนท้ายชื่อ เช่น "(37)") —
+      ช่องที่ยังจับคู่ไม่ได้ใช้ค่าที่เลือกในหน้าต่างเพิ่มตัวชี้วัดแทน
+    </p>
   </div>
 </div>
 
@@ -1493,7 +1625,7 @@
           <input type="text" maxlength="20" [(ngModel)]="currentItem.item_no" placeholder="เช่น 1" class="w-40 px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm">
         </div>
         <div>
-          <label class="block text-xs font-bold text-gray-600 mb-1">ยุทธศาสตร์ <span class="text-gray-400 font-normal">(กรองหมวดหมู่หลัก)</span></label>
+          <label class="block text-xs font-bold text-gray-600 mb-1">ยุทธศาสตร์ <span class="text-gray-400 font-normal">(กรองหมวดหมู่หลัก — ถ้าไม่เลือกหมวดหมู่ ตัวชี้วัดใช้ยุทธศาสตร์นี้)</span></label>
           <select [(ngModel)]="selectedYutInModal" (change)="onYutChangeInModal()" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm">
             <option [ngValue]="null">-- ไม่ระบุ --</option>
             <option *ngFor="let s of strategies" [ngValue]="s.id">{{ s.yut_name }}</option>

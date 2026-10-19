@@ -703,6 +703,18 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - Bulk endpoint: `dept_id`/`main_indicator_id`/`year_bh` ใช้ค่าเดียวกันกับทุกตัวที่เลือก (แก้แยกทีละตัวได้ภายหลัง
   ในตารางปกติ) — ข้ามรายการที่ไม่มี `table_process` หรือมี `table_process` ซ้ำกับที่มีอยู่แล้ว (นับเป็น `skipped`
   พร้อมเหตุผล ไม่ error ทั้ง batch)
+- **หน่วยงาน/หมวดหมู่หลัก/ยุทธศาสตร์จาก KHD (19 ต.ค. 2569):** ทั้ง 2 endpoint ใช้ `insertIndicatorFromKhd()` → `loadKhdResolver()` + `api/khd-mapping.js`
+  (`buildKhdResolver().resolveIndicator()`) แปลง `reports.dept` / `main_indicator` / `main_yut` (ข้อความ) เป็น `dept_id` / `main_indicator_id` /
+  `kpi_indicators.main_yut` — **ค่าจาก KHD มาก่อน** `dept_id`/`main_indicator_id` ใน body (ใช้เฉพาะช่องที่ KHD ไม่มีค่า/ยังจับคู่ไม่ได้ — ผู้ใช้เลือกแบบนี้)
+  - ลำดับจับคู่: ตาราง `khd_value_mappings` (kind dept|main|yut, `khd_key` = sha256 ของค่าที่ normalize, `local_id` NULL = "ไม่ต้องจับคู่") →
+    อัตโนมัติ: หน่วยงานเทียบ `dept_code` ก่อน (**KHD เก็บรหัสหน่วยงาน เช่น ยสต., NCD ไม่ใช่ชื่อ**) แล้วชื่อ, ยุทธศาสตร์เทียบชื่อแล้วจึงตัด "(n)" ท้ายชื่อ,
+    ต้องได้ผลเดียว (ไม่เดา) — ข้อความยุทธศาสตร์ใน KHD มีหลายรูปแบบมาก (มีจำนวนท้ายชื่อ/แท็บ/ชื่อชุดปีต่างกัน) จึงต้องมีหน้าจับคู่
+  - `GET /khd-mappings?kind=` (ค่าใน KHD + จำนวนตัวชี้วัด/ที่ยังไม่มีในระบบ + ผลจับคู่ + ตัวเลือก) / `PUT /khd-mappings` (จับคู่ / `ignore` / ไม่ส่ง = ลบ) —
+    super_admin — UI = หน้าต่างใน kpi-manage (`openKhdMapping()`, ปุ่ม "จับคู่ข้อมูล KHD") ไม่ใช่เมนูแยก (ผู้ใช้เลือก)
+  - `GET /report-compare` แนบ `khd_main_indicator` + `khd_resolved` ให้แถว missing_local | แท็บเทียบหน่วยงาน/ยุทธศาสตร์ใช้ resolver เดียวกัน (เดิมเทียบชื่อหน่วยงาน = ไม่ตรงเลย)
+  - **ยุทธศาสตร์ของตัวชี้วัด = `COALESCE(mi.yut_id, i.main_yut)`** (หมวดหมู่หลักมาก่อน) ใน `GET /indicators` และ `CHART_FROM_SQL` — modal ตัวชี้วัดส่ง
+    `main_yut` = ยุทธศาสตร์ที่เลือก (`saveHierarchyFields()` อัปเดตเมื่อส่งมา) — ⚠️ ก่อนหน้านี้ 64 ตัวชี้วัด active ที่มี main_yut แต่ไม่มีหมวดหมู่ แสดง "ไม่ระบุยุทธศาสตร์"
+  - Test: `api/tests/khd-mapping.test.js` (unit), `khd-add-mapping.test.js` (KHD จำลองด้วย `jest.mock('../db-remote')` — ห้ามเชื่อม KHD จริงใน test), `kpi-manage.spec.ts`
 - Frontend (`kpi-manage.ts`): `khdMissingLocalSelected: Set<number>` (key = `khd_report_id`) — checkbox ต่อแถว +
   "เลือกทั้งหมด" (แสดง indeterminate state เมื่อเลือกบางส่วน, pattern เดียวกับ `export-kpi.ts`
   `isAllSyncSelected`/`isPartialSyncSelected`) — clear selection อัตโนมัติทุกครั้งที่ `runKhdCompare()` reload
@@ -1067,7 +1079,7 @@ build.bat
 `docker compose up -d --build` เสมอ ไม่งั้น Docker จะใช้ `dist/` เก่าที่ค้างจากรอบก่อนหน้าเงียบๆ
 โดยไม่มี error ใดๆ (container ขึ้น "Healthy" ปกติ แต่โค้ดที่รันจริงเป็นของเก่า):
 **⚠️ เพิ่มไฟล์ .js ใหม่ใน `api/` ที่ server.js `require('./xxx')` → ต้องเพิ่มชื่อไฟล์ในรายการ copy ของ `"build"` script ใน
-`api/package.json` ด้วยเสมอ** (ปัจจุบัน: server.js, db.js, db-remote.js, kpi-formula.js, kpi-rollup.js) — ไม่งั้น Docker image ไม่มีไฟล์นั้น →
+`api/package.json` ด้วยเสมอ** (ปัจจุบัน: server.js, db.js, db-remote.js, kpi-formula.js, kpi-rollup.js, khd-mapping.js) — ไม่งั้น Docker image ไม่มีไฟล์นั้น →
 container backend crash `Cannot find module` (unhealthy) ตอน deploy ทั้งที่ test ผ่านหมด (test รันจาก `api/` ตรงๆ) — เกิดจริงแล้ว
 7 ต.ค. 2569 กับ `kpi-formula.js` — มี `api/tests/build.test.js` คุมไว้ (fail ถ้า require local ไฟล์ที่ไม่อยู่ใน build list)
 ```bash

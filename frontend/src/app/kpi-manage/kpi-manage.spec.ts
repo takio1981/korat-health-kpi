@@ -87,6 +87,66 @@ describe('KpiManageComponent', () => {
     });
   });
 
+  // ---- 19 ต.ค. 2569: จับคู่ข้อมูล KHD (หน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์) ----
+  describe('จับคู่ข้อมูล KHD', () => {
+    let http: HttpTestingController;
+    beforeEach(() => { http = TestBed.inject(HttpTestingController); component.isSuperAdmin = true; });
+
+    const items = () => [
+      { khd_value: 'NCD', report_count: 3, missing_count: 1, resolved: { status: 'auto', local_id: 6, local_name: 'กลุ่มงาน NCD' }, mapping: null },
+      { khd_value: 'ทต.', report_count: 2, missing_count: 2, resolved: { status: 'unmatched', local_id: null, local_name: null }, mapping: null },
+    ];
+
+    it('เปิดหน้าต่าง → โหลดค่าของ KHD ตามประเภท แสดงเฉพาะที่ยังไม่จับคู่เป็นค่าเริ่มต้น', () => {
+      component.openKhdMapping('dept');
+      http.expectOne(r => r.url.includes('/khd-mappings?kind=dept')).flush({ success: true, items: items(), options: [{ id: 6, name: 'กลุ่มงาน NCD' }], summary: { total: 2, unmatched: 1, auto: 1 } });
+      expect(component.khdMapOpen).toBe(true);
+      expect(component.khdMapVisibleItems.map(i => i.khd_value)).toEqual(['ทต.']);
+      component.khdMapOnlyUnmatched = false;
+      expect(component.khdMapItems.find(i => i.khd_value === 'NCD')._pick).toBe(6);   // ค่าตั้งต้นของตัวเลือก = ที่จับคู่ได้ปัจจุบัน
+      component.khdMapSearch = 'ncd';
+      expect(component.khdMapVisibleItems.map(i => i.khd_value)).toEqual(['NCD']);
+    });
+
+    it('จับคู่ / ไม่ต้องจับคู่ ส่งค่าที่ถูกต้องและอัปเดตสถานะในตารางทันที', () => {
+      component.openKhdMapping('dept');
+      http.expectOne(r => r.url.includes('/khd-mappings')).flush({ success: true, items: items(), options: [], summary: {} });
+      const row = component.khdMapItems[1];
+      component.saveKhdMap(row, { localId: 13 });
+      const req = http.expectOne(r => r.method === 'PUT' && r.url.includes('/khd-mappings'));
+      expect(req.request.body).toEqual({ kind: 'dept', khd_value: 'ทต.', local_id: 13, ignore: false });
+      req.flush({ success: true, resolved: { status: 'mapped', local_id: 13, local_name: 'กลุ่มงาน 13' } });
+      expect(row.resolved.status).toBe('mapped');
+      expect(component.khdMapSummary).toEqual(expect.objectContaining({ unmatched: 0, mapped: 1, auto: 1 }));
+
+      component.saveKhdMap(row, { ignore: true });
+      expect(http.expectOne(r => r.method === 'PUT').request.body).toEqual({ kind: 'dept', khd_value: 'ทต.', local_id: null, ignore: true });
+    });
+
+    it('ตาราง "ยังไม่มีในระบบ": นับรายการที่ยังจับคู่ไม่ครบ และป้ายแสดงค่าที่จะได้', () => {
+      component.khdCompareMap = new Map<string, any>([
+        ['a', { status: 'missing_local', khd_report_id: 1, khd_resolved: { unmatched: ['yut'] } }],
+        ['b', { status: 'missing_local', khd_report_id: 2, khd_resolved: { unmatched: [] } }],
+      ]);
+      component.khdMissingLocalSelected = new Set([2]);
+      expect(component.khdMissingUnmatchedCount).toBe(1);
+      expect(component.khdBulkSelectedUnmatchedCount).toBe(0);
+      expect(component.khdResolvedBadge({ status: 'auto', local_id: 6, local_name: 'NCD' })?.text).toBe('NCD');
+      expect(component.khdResolvedBadge({ status: 'empty', local_id: null })).toBeNull();
+      expect(component.khdResolvedBadge({ status: 'unmatched', local_id: null })?.text).toBe('ยังไม่จับคู่');
+    });
+
+    it('บันทึกตัวชี้วัด: ส่งยุทธศาสตร์ที่เลือก (main_yut) ไปด้วย', () => {
+      component.activeTab = 'indicators';
+      component.openModal({ id: 5, kpi_indicators_name: 'x', yut_id: 3, evaluation_mode: 'all_required' });
+      expect(component.selectedYutInModal).toBe(3);
+      component.saveItem();
+      const req = http.expectOne(r => r.method === 'PUT' && r.url.includes('/indicators/5'));
+      expect(req.request.body.main_yut).toBe(3);
+      expect(req.request.body.yut_id).toBeUndefined();
+    });
+  });
+
   // ---- 19 ต.ค. 2569: ปุ่ม "ไปตั้งค่า" จากหน้าต่างเพิ่มตัวชี้วัดให้หน่วยบริการ → เปิดหน้าต่างแก้ไขตัวชี้วัดนั้นทันที ----
   it('?editIndicator=<id> เปิดหน้าต่างแก้ไขตัวชี้วัดนั้นหลังโหลดรายการ (ครั้งเดียว)', () => {
     component.canEditData = true;

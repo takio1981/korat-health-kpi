@@ -1006,6 +1006,9 @@ export class KpiManageComponent implements OnInit {
       }
       // Serialize evaluation_mode + required_off_types (เฉพาะ any_one)
       const payload = { ...this.currentItem };
+      // ยุทธศาสตร์ของตัวชี้วัดโดยตรง — ใช้แสดงเมื่อไม่มีหมวดหมู่หลัก (มีหมวดหมู่ = ยุทธศาสตร์ตามหมวดหมู่)
+      payload.main_yut = this.selectedYutInModal ?? null;
+      delete payload.yut_id; delete payload.yut_name;
       payload.result_formula = String(payload.result_formula || '').trim() || null;
       payload.required_off_types = payload.evaluation_mode === 'any_one' && this.selectedOffTypes.length > 0
         ? this.selectedOffTypes
@@ -1532,6 +1535,146 @@ export class KpiManageComponent implements OnInit {
     });
   }
 
+  // ===== จับคู่ข้อมูล KHD ↔ Local (หน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์) — 19 ต.ค. 2569 =====
+  // ตัวชี้วัดที่เพิ่มจาก KHD ใช้ค่าที่จับคู่ได้ก่อนค่าที่เลือกในหน้าต่างเพิ่มเสมอ (ผู้ใช้เลือกแบบนี้)
+  readonly khdMapKinds = [
+    { key: 'dept', label: 'หน่วยงาน', icon: 'fa-building' },
+    { key: 'main', label: 'หมวดหมู่หลัก', icon: 'fa-folder-tree' },
+    { key: 'yut', label: 'ยุทธศาสตร์', icon: 'fa-chess' },
+  ];
+  khdMapOpen = false;
+  khdMapKind = 'dept';
+  khdMapLoading = false;
+  khdMapItems: any[] = [];
+  khdMapOptions: any[] = [];
+  khdMapSummary: any = null;
+  khdMapOnlyUnmatched = true;
+  khdMapSearch = '';
+  khdMapSaving = '';   // khd_value ที่กำลังบันทึก
+
+  openKhdMapping(kind: string = 'dept') {
+    if (!this.isSuperAdmin) return;
+    this.khdMapOpen = true;
+    this.loadKhdMapping(kind);
+  }
+
+  closeKhdMapping() {
+    this.khdMapOpen = false;
+    // ผลการจับคู่เปลี่ยน → โหลดตารางเทียบ KHD ใหม่ให้แถว "ยังไม่มีในระบบ" แสดงค่าที่จะได้ล่าสุด
+    if (this.khdCompareSummary) this.runKhdCompare();
+  }
+
+  loadKhdMapping(kind: string) {
+    this.khdMapKind = kind;
+    this.khdMapLoading = true;
+    this.khdMapItems = [];
+    this.authService.getKhdMappings(kind).subscribe({
+      next: (res: any) => {
+        this.khdMapLoading = false;
+        if (res.success) {
+          this.khdMapItems = (res.items || []).map((i: any) => ({ ...i, _pick: i.resolved?.local_id ?? null }));
+          this.khdMapOptions = res.options || [];
+          this.khdMapSummary = res.summary;
+        } else Swal.fire('ผิดพลาด', res.message, 'error');
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.khdMapLoading = false;
+        Swal.fire('ผิดพลาด', err.error?.message || 'เกิดข้อผิดพลาด', 'error');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  get khdMapVisibleItems(): any[] {
+    const q = this.khdMapSearch.trim().toLowerCase();
+    return this.khdMapItems.filter(i =>
+      (!this.khdMapOnlyUnmatched || i.resolved?.status === 'unmatched') &&
+      (!q || [i.khd_value, i.khd_label, i.resolved?.local_name].some(v => String(v || '').toLowerCase().includes(q))));
+  }
+
+  khdMapStatusLabel(status: string): { text: string; cls: string } {
+    switch (status) {
+      case 'mapped': return { text: 'จับคู่แล้ว', cls: 'bg-emerald-100 text-emerald-700' };
+      case 'auto': return { text: 'ตรงกันอัตโนมัติ', cls: 'bg-sky-100 text-sky-700' };
+      case 'ignored': return { text: 'ไม่ต้องจับคู่', cls: 'bg-gray-100 text-gray-500' };
+      case 'empty': return { text: 'ไม่มีค่า', cls: 'bg-gray-100 text-gray-400' };
+      default: return { text: 'ยังไม่จับคู่', cls: 'bg-rose-100 text-rose-700' };
+    }
+  }
+
+  /** บันทึกการจับคู่ 1 ค่า — localId = จับคู่, ignore = ไม่ต้องจับคู่, ไม่ส่งทั้งคู่ = กลับไปใช้การจับคู่อัตโนมัติ */
+  saveKhdMap(item: any, opts: { localId?: number | null; ignore?: boolean } = {}) {
+    this.khdMapSaving = item.khd_value;
+    this.authService.saveKhdMapping({ kind: this.khdMapKind, khd_value: item.khd_value, local_id: opts.localId ?? null, ignore: !!opts.ignore }).subscribe({
+      next: (res: any) => {
+        this.khdMapSaving = '';
+        if (res.success) {
+          item.resolved = res.resolved;
+          item._pick = res.resolved?.local_id ?? null;
+          item.mapping = (opts.localId || opts.ignore) ? { local_id: opts.localId ?? null } : null;
+          this.recountKhdMapSummary();
+        } else Swal.fire('ผิดพลาด', res.message, 'error');
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.khdMapSaving = '';
+        Swal.fire('ผิดพลาด', err.error?.message || 'เกิดข้อผิดพลาด', 'error');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  private recountKhdMapSummary() {
+    const s: any = { total: this.khdMapItems.length, unmatched: 0, auto: 0, mapped: 0, ignored: 0 };
+    this.khdMapItems.forEach(i => { s[i.resolved?.status] = (s[i.resolved?.status] || 0) + 1; });
+    this.khdMapSummary = s;
+  }
+
+  /** สร้างรายการใหม่ในระบบจากค่าของ KHD แล้วจับคู่ทันที (เมื่อไม่มีรายการเดิมที่ตรงความหมาย) */
+  createLocalFromKhd(item: any) {
+    const kind = this.khdMapKind;
+    const label = this.khdMapKinds.find(k => k.key === kind)?.label || '';
+    const suggested = kind === 'dept' ? (item.khd_label || item.khd_value) : item.khd_value;
+    Swal.fire({
+      title: `สร้าง${label}ใหม่จาก KHD`,
+      input: 'text', inputValue: suggested, inputLabel: `ชื่อ${label}`,
+      showCancelButton: true, confirmButtonColor: '#0891b2', confirmButtonText: 'สร้างและจับคู่', cancelButtonText: 'ยกเลิก',
+      inputValidator: (v: string) => (!v || !v.trim()) ? 'กรุณาระบุชื่อ' : null,
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      const name = String(r.value).trim();
+      const obs = kind === 'dept' ? this.authService.reportCompareAddDepartment(name, item.khd_value)
+        : kind === 'yut' ? this.authService.reportCompareAddStrategy(name)
+        : this.authService.reportCompareAddMainIndicator(name, null);
+      obs.subscribe({
+        next: (res: any) => {
+          if (!res.success) { Swal.fire('ผิดพลาด', res.message, 'error'); return; }
+          this.saveKhdMap(item, { localId: res.id });
+          this.loadAllData();
+          this.authService.getKhdMappings(kind).subscribe((r2: any) => { if (r2.success) { this.khdMapOptions = r2.options || []; this.cdr.detectChanges(); } });
+        },
+        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'เกิดข้อผิดพลาด', 'error')
+      });
+    });
+  }
+
+  /** ป้ายแสดงค่าที่ตัวชี้วัดจาก KHD จะได้ในระบบ (ใช้ในตาราง "ยังไม่มีในระบบ" และหน้าต่างเพิ่ม) */
+  khdResolvedBadge(r: any): { text: string; cls: string; title: string } | null {
+    if (!r || r.status === 'empty') return null;   // KHD ไม่มีค่า — ไม่ต้องแสดงลูกศร
+    if (r.local_id) return { text: r.local_name, cls: 'text-emerald-700', title: r.status === 'mapped' ? 'จับคู่ที่ตั้งไว้' : 'ตรงกันอัตโนมัติ' };
+    if (r.status === 'unmatched') return { text: 'ยังไม่จับคู่', cls: 'text-rose-600 font-bold', title: 'ตั้งค่าที่ปุ่ม "จับคู่ข้อมูล KHD"' };
+    if (r.status === 'ignored') return { text: 'ไม่ต้องจับคู่', cls: 'text-gray-400', title: '' };
+    return null;
+  }
+
+  get khdMissingUnmatchedCount(): number {
+    return this.khdMissingLocalItems.filter(i => i.khd_resolved?.unmatched?.length).length;
+  }
+  get khdBulkSelectedUnmatchedCount(): number {
+    return this.khdMissingLocalItems.filter(i => this.khdMissingLocalSelected.has(i.khd_report_id) && i.khd_resolved?.unmatched?.length).length;
+  }
+
   openAddFromKhd(item: any) {
     this.khdAddModal = { open: true, item, deptId: null, mainIndicatorId: null, yearBh: this.khdCompareYear };
   }
@@ -1545,7 +1688,12 @@ export class KpiManageComponent implements OnInit {
         this.khdAddLoading = false;
         if (res.success) {
           this.khdAddModal.open = false;
-          Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2000, showConfirmButton: false });
+          if (res.resolved?.unmatched?.length) {
+            Swal.fire({ icon: 'warning', title: 'เพิ่มแล้ว — บางค่ายังจับคู่ไม่ได้',
+              text: `${res.message} แต่หน่วยงาน/หมวดหมู่หลัก/ยุทธศาสตร์บางช่องใน KHD ยังจับคู่ไม่ได้ (ใช้ค่าที่เลือกแทนหรือเว้นว่าง) — ตรวจสอบที่ปุ่ม "จับคู่ข้อมูล KHD"` });
+          } else {
+            Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2000, showConfirmButton: false });
+          }
           this.loadAllData();
           this.runKhdCompare();
         } else {
@@ -1599,8 +1747,12 @@ export class KpiManageComponent implements OnInit {
         if (res.success) {
           this.khdBulkAddModal.open = false;
           this.khdMissingLocalSelected.clear();
-          const skippedText = res.skipped > 0 ? `<p class="text-xs text-amber-600 mt-2">ข้าม ${res.skipped} รายการ: ${(res.skippedNames || []).join(', ')}</p>` : '';
-          Swal.fire({ icon: 'success', title: 'สำเร็จ', html: `<p>${res.message}</p>${skippedText}` });
+          const esc = (t: string) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as any)[c]);
+          const skippedText = res.skipped > 0 ? `<p class="text-xs text-amber-600 mt-2">ข้าม ${res.skipped} รายการ: ${(res.skippedNames || []).map(esc).join(', ')}</p>` : '';
+          const unmatched = res.unmatchedNames || [];
+          const unmatchedText = unmatched.length > 0
+            ? `<p class="text-xs text-rose-600 mt-2">${unmatched.length} รายการมีหน่วยงาน/หมวดหมู่หลัก/ยุทธศาสตร์ใน KHD ที่ยังจับคู่ไม่ได้ (ใช้ค่าที่เลือกในหน้าต่างแทน หรือเว้นว่าง) — ตรวจสอบที่ปุ่ม "จับคู่ข้อมูล KHD"</p>` : '';
+          Swal.fire({ icon: 'success', title: 'สำเร็จ', html: `<p>${esc(res.message)}</p>${skippedText}${unmatchedText}` });
           this.loadAllData();
           this.runKhdCompare();
         } else {

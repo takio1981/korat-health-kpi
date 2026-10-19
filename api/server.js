@@ -51,6 +51,7 @@ const cors = require('cors');
 const db = require('./db');
 const kpiFormula = require('./kpi-formula'); // สูตรคำนวณผลงานเฉพาะตัวชี้วัด (result_formula)
 const kpiRollup = require('./kpi-rollup'); // ผลงานระดับบนจากระดับล่าง (ตัวชี้วัด 3 ระดับ: หลัก → ย่อย → กิจกรรม)
+const khdMapping = require('./khd-mapping'); // จับคู่หน่วยงาน/หมวดหมู่หลัก/ยุทธศาสตร์ของ KHD กับ Local
 const { getRemotePool } = require('./db-remote');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -6456,11 +6457,11 @@ apiRouter.get('/indicators', authenticateToken, async (req, res) => {
         if (!includeInactive) conds.push('i.is_active = 1');
         if (conds.length) whereClause = 'WHERE ' + conds.join(' AND ');
         const [rows] = await db.query(`
-            SELECT i.*, mi.main_indicator_name, mi.yut_id, my.yut_name, d.dept_name,
+            SELECT i.*, mi.main_indicator_name, COALESCE(mi.yut_id, i.main_yut) AS yut_id, my.yut_name, d.dept_name,
                    COALESCE(rc.cnt, 0) + COALESCE(src.cnt, 0) AS result_count
             FROM kpi_indicators i
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
-            LEFT JOIN main_yut my ON mi.yut_id = my.id
+            LEFT JOIN main_yut my ON my.id = COALESCE(mi.yut_id, i.main_yut)
             LEFT JOIN departments d ON i.dept_id = d.id
             LEFT JOIN (
                 SELECT indicator_id, COUNT(*) AS cnt FROM kpi_results
@@ -6848,6 +6849,12 @@ async function saveHierarchyFields(conn, table, id, body) {
     if (table === 'kpi_indicators' && body && body.export_items !== undefined) {
         sets.push('export_items = ?');
         params.push(body.export_items === true || Number(body.export_items) === 1 ? 1 : 0);
+    }
+    // ยุทธศาสตร์ของตัวชี้วัดโดยตรง (ใช้แสดงเมื่อไม่มีหมวดหมู่หลัก — 19 ต.ค. 2569)
+    if (table === 'kpi_indicators' && body && body.main_yut !== undefined) {
+        const y = Number(body.main_yut);
+        sets.push('main_yut = ?');
+        params.push(Number.isInteger(y) && y > 0 ? y : null);
     }
     if (sets.length === 0) return;
     await conn.query(`UPDATE ${table} SET ${sets.join(', ')} WHERE id = ?`, [...params, id]);
@@ -10352,7 +10359,7 @@ const CHART_FROM_SQL = `
     FROM kpi_summary s
     JOIN kpi_indicators i ON i.id = s.indicator_id
     LEFT JOIN kpi_main_indicators mi ON mi.id = i.main_indicator_id
-    LEFT JOIN main_yut y ON y.id = mi.yut_id`;
+    LEFT JOIN main_yut y ON y.id = COALESCE(mi.yut_id, i.main_yut)`;  // ยุทธศาสตร์: จากหมวดหมู่หลัก ถ้าไม่มีหมวดหมู่ใช้ kpi_indicators.main_yut
 
 apiRouter.get('/report/chart-stats', authenticateToken, async (req, res) => {
     try {
@@ -11380,6 +11387,19 @@ const migrationsReady = (async () => {
                     CONSTRAINT fk_activity_sub FOREIGN KEY (sub_indicator_id) REFERENCES kpi_sub_indicators(id) ON DELETE CASCADE
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             `);
+            // จับคู่ค่าข้อความของ KHD (reports.dept / main_indicator / main_yut) กับ Local — local_id NULL = ตั้งไว้ว่าไม่ต้องจับคู่ (19 ต.ค. 2569)
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS khd_value_mappings (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    kind ENUM('dept','main','yut') NOT NULL,
+                    khd_key CHAR(64) NOT NULL,
+                    khd_value VARCHAR(1000) NOT NULL,
+                    local_id INT NULL,
+                    updated_by INT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uk_kind_key (kind, khd_key)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
             await db.query(`
                 CREATE TABLE IF NOT EXISTS kpi_activity_results (
                     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -12244,6 +12264,7 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
             ORDER BY i.id
         `);
+        const khdResolver = await loadKhdResolver(db); // จับคู่หน่วยงาน/หมวดหมู่หลัก/ยุทธศาสตร์ของแถวที่ยังไม่มีใน Local
         // สร้าง map โดยใช้ table_process เป็น key
         const khdMap = new Map();
         khdRows.forEach(r => { if (r.table_process) khdMap.set(r.table_process, r); });
@@ -12284,6 +12305,8 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                 items.push({
                     status: 'missing_local',
                     khd_report_id: khd.report_id, khd_name: khd.report_name, khd_dept: khd.dept, khd_main_yut: khd.main_yut,
+                    khd_main_indicator: khd.main_indicator || null,
+                    khd_resolved: khdResolver.resolveIndicator(khd),
                     report_code: khd.report_code, table_process: tp, khd_is_active: effectiveIsActive,
                     khd_data_source: khd.data_source,
                     khd_target_percentage: effective.target_percentage, khd_target_condition: effective.target_condition,
@@ -12474,35 +12497,53 @@ async function getKhdEffectiveCriteriaFor(remoteDb, reportId, targetPercentage, 
     return { target_percentage: targetPercentage, target_condition: targetCondition, khd_fiscal_year: null };
 }
 
+// ตัวจับคู่ค่าข้อความของ KHD → Local (หน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์) — การจับคู่ที่ตั้งไว้ก่อน แล้วจึงจับคู่อัตโนมัติ (api/khd-mapping.js)
+async function loadKhdResolver(conn) {
+    const [[departments], [strategies], [mainIndicators], [mappings]] = await Promise.all([
+        conn.query('SELECT id, dept_code, dept_name FROM departments'),
+        conn.query('SELECT id, yut_name FROM main_yut'),
+        conn.query('SELECT id, main_indicator_name, yut_id FROM kpi_main_indicators'),
+        conn.query('SELECT kind, khd_key, khd_value, local_id FROM khd_value_mappings'),
+    ]);
+    return khdMapping.buildKhdResolver({ departments, strategies, mainIndicators, mappings });
+}
+
+// เพิ่มตัวชี้วัด 1 ตัวจากแถว reports ของ KHD — หน่วยงาน/หมวดหมู่หลัก/ยุทธศาสตร์ มาจาก KHD (ผ่านการจับคู่) ก่อนเสมอ
+// ค่าที่เลือกในหน้าต่าง (fallback) ใช้เฉพาะเมื่อ KHD ไม่มีค่า หรือยังจับคู่ไม่ได้ — ผู้ใช้เลือกแบบนี้ (19 ต.ค. 2569)
+async function insertIndicatorFromKhd(remoteDb, resolver, khd, fallback, yearBh) {
+    const effective = await getKhdEffectiveCriteriaFor(remoteDb, khd.report_id, khd.target_percentage, khd.target_condition, yearBh);
+    const r = resolver.resolveIndicator(khd, fallback);
+    const [ins] = await db.query(
+        `INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_code, dept_id, main_indicator_id, main_yut, is_active,
+            data_source, khd_report_id, criterion, target_condition, khd_fiscal_year)
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
+        [khd.report_name, khd.table_process, khd.report_code || null, r.dept_id, r.main_indicator_id, r.main_yut,
+         khd.data_source || null, khd.report_id, effective.target_percentage || null, effective.target_condition || null, effective.khd_fiscal_year]
+    );
+    return { id: ins.insertId, resolved: r };
+}
+const KHD_REPORT_ADD_COLS = 'report_id, report_name, report_code, table_process, data_source, target_percentage, target_condition, dept, main_yut, main_indicator';
+
 apiRouter.post('/report-compare/add-from-khd', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
     if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
     const { khd_report_id, dept_id, main_indicator_id, year_bh } = req.body;
     if (!khd_report_id) return res.status(400).json({ success: false, message: 'กรุณาระบุ khd_report_id' });
     try {
-        const [khdRows] = await remoteDb.query(
-            'SELECT report_id, report_name, report_code, table_process, data_source, target_percentage, target_condition FROM reports WHERE report_id = ?',
-            [khd_report_id]
-        );
+        const [khdRows] = await remoteDb.query(`SELECT ${KHD_REPORT_ADD_COLS} FROM reports WHERE report_id = ?`, [khd_report_id]);
         if (!khdRows.length) return res.status(404).json({ success: false, message: 'ไม่พบรายการนี้ใน KHD' });
         const khd = khdRows[0];
         if (!khd.table_process) return res.status(400).json({ success: false, message: 'รายการ KHD นี้ไม่มี table_process' });
         const [existing] = await db.query('SELECT id FROM kpi_indicators WHERE table_process = ?', [khd.table_process]);
         if (existing.length) return res.status(409).json({ success: false, message: 'มีตัวชี้วัดนี้ในระบบแล้ว (table_process ซ้ำ)' });
-        const effective = await getKhdEffectiveCriteriaFor(remoteDb, khd.report_id, khd.target_percentage, khd.target_condition, year_bh);
-        const [ins] = await db.query(
-            `INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_code, dept_id, main_indicator_id, is_active,
-                data_source, khd_report_id, criterion, target_condition, khd_fiscal_year)
-             VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
-            [khd.report_name, khd.table_process, khd.report_code || null, dept_id || null, main_indicator_id || null,
-             khd.data_source || null, khd.report_id, effective.target_percentage || null, effective.target_condition || null, effective.khd_fiscal_year]
-        );
+        const resolver = await loadKhdResolver(db);
+        const { id, resolved } = await insertIndicatorFromKhd(remoteDb, resolver, khd, { dept_id, main_indicator_id }, year_bh);
         await db.query(
             'INSERT INTO system_logs (user_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
-            [req.user.userId, 'ADD_FROM_KHD', 'kpi_indicators', ins.insertId,
-             JSON.stringify({ khd_report_id, table_process: khd.table_process, dept_id: dept_id || null, main_indicator_id: main_indicator_id || null, year_bh: year_bh || null }), req.ip]
+            [req.user.userId, 'ADD_FROM_KHD', 'kpi_indicators', id,
+             JSON.stringify({ khd_report_id, table_process: khd.table_process, dept_id: resolved.dept_id, main_indicator_id: resolved.main_indicator_id, main_yut: resolved.main_yut, unmatched: resolved.unmatched, year_bh: year_bh || null }), req.ip]
         );
-        res.json({ success: true, message: `เพิ่ม "${khd.report_name}" เข้าระบบเรียบร้อย`, id: ins.insertId });
+        res.json({ success: true, message: `เพิ่ม "${khd.report_name}" เข้าระบบเรียบร้อย`, id, resolved });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
@@ -12518,24 +12559,17 @@ apiRouter.post('/report-compare/bulk-add-from-khd', authenticateToken, isSuperAd
         return res.status(400).json({ success: false, message: 'กรุณาเลือกตัวชี้วัดที่ต้องการเพิ่มอย่างน้อย 1 รายการ' });
     }
     try {
-        const [khdRows] = await remoteDb.query(
-            'SELECT report_id, report_name, report_code, table_process, data_source, target_percentage, target_condition FROM reports WHERE report_id IN (?)',
-            [khd_report_ids]
-        );
+        const [khdRows] = await remoteDb.query(`SELECT ${KHD_REPORT_ADD_COLS} FROM reports WHERE report_id IN (?)`, [khd_report_ids]);
+        const resolver = await loadKhdResolver(db);
         let inserted = 0, skipped = 0;
         const skippedNames = [];
+        const unmatchedNames = [];   // เพิ่มแล้ว แต่ค่าบางช่องใน KHD ยังจับคู่ไม่ได้ (ช่องนั้นใช้ค่าที่เลือกในหน้าต่าง/ว่าง)
         for (const khd of khdRows) {
             if (!khd.table_process) { skipped++; skippedNames.push(khd.report_name + ' (ไม่มี table_process)'); continue; }
             const [existing] = await db.query('SELECT id FROM kpi_indicators WHERE table_process = ?', [khd.table_process]);
             if (existing.length) { skipped++; skippedNames.push(khd.report_name + ' (มีอยู่แล้ว)'); continue; }
-            const effective = await getKhdEffectiveCriteriaFor(remoteDb, khd.report_id, khd.target_percentage, khd.target_condition, year_bh);
-            await db.query(
-                `INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_code, dept_id, main_indicator_id, is_active,
-                    data_source, khd_report_id, criterion, target_condition, khd_fiscal_year)
-                 VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
-                [khd.report_name, khd.table_process, khd.report_code || null, dept_id || null, main_indicator_id || null,
-                 khd.data_source || null, khd.report_id, effective.target_percentage || null, effective.target_condition || null, effective.khd_fiscal_year]
-            );
+            const { resolved } = await insertIndicatorFromKhd(remoteDb, resolver, khd, { dept_id, main_indicator_id }, year_bh);
+            if (resolved.unmatched.length) unmatchedNames.push(khd.report_name);
             inserted++;
         }
         await db.query(
@@ -12546,7 +12580,7 @@ apiRouter.post('/report-compare/bulk-add-from-khd', authenticateToken, isSuperAd
         res.json({
             success: true,
             message: `เพิ่มสำเร็จ ${inserted} รายการ${skipped > 0 ? `, ข้าม ${skipped} รายการ` : ''}`,
-            inserted, skipped, skippedNames
+            inserted, skipped, skippedNames, unmatchedNames
         });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
@@ -12611,6 +12645,90 @@ apiRouter.post('/report-compare/sync-khd-link', authenticateToken, isSuperAdmin,
     }
 });
 
+// ========== จับคู่ข้อมูล KHD ↔ Local (หน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์) — 19 ต.ค. 2569 ==========
+// GET /khd-mappings?kind=dept|main|yut — ค่าที่พบใน KHD reports (data_source='excel') + ผลการจับคู่ปัจจุบัน + รายการของ Local ให้เลือก
+const KHD_MAP_COLUMN = { dept: 'dept', main: 'main_indicator', yut: 'main_yut' };
+apiRouter.get('/khd-mappings', authenticateToken, isSuperAdmin, async (req, res) => {
+    const kind = String(req.query.kind || '');
+    if (!khdMapping.KHD_MAP_KINDS.includes(kind)) return res.status(400).json({ success: false, message: 'kind ต้องเป็น dept, main หรือ yut' });
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
+    try {
+        const col = KHD_MAP_COLUMN[kind];
+        const [khdRows] = await remoteDb.query(
+            `SELECT ${col} AS v, table_process FROM reports
+             WHERE data_source = 'excel' AND ${col} IS NOT NULL AND TRIM(${col}) <> ''`
+        );
+        // ชื่อเต็มของรหัสหน่วยงานจากตาราง departments ของ KHD (ช่วยตัดสินใจ — ไม่บังคับมี)
+        let khdLabels = new Map();
+        if (kind === 'dept') {
+            try {
+                const [d] = await remoteDb.query('SELECT dept_code, dept_name FROM departments');
+                khdLabels = new Map(d.map(r => [khdMapping.normKhd(r.dept_code), r.dept_name]));
+            } catch (_) { /* KHD ไม่มีตาราง departments */ }
+        }
+        const [localTp] = await db.query("SELECT table_process FROM kpi_indicators WHERE table_process IS NOT NULL AND table_process <> ''");
+        const tpSet = new Set(localTp.map(r => String(r.table_process).trim()));
+        const groups = new Map();   // normKhd(ค่า) → { khd_value, report_count, missing_count }
+        for (const r of khdRows) {
+            const n = khdMapping.normKhd(r.v);
+            if (!n) continue;
+            if (!groups.has(n)) groups.set(n, { khd_value: String(r.v).replace(/[\s\u200b\u00a0]+/g, ' ').trim(), report_count: 0, missing_count: 0 });
+            const g = groups.get(n);
+            g.report_count++;
+            if (r.table_process && !tpSet.has(String(r.table_process).trim())) g.missing_count++;
+        }
+        const resolver = await loadKhdResolver(db);
+        const [maps] = await db.query('SELECT khd_key, local_id, updated_at FROM khd_value_mappings WHERE kind = ?', [kind]);
+        const mapByKey = new Map(maps.map(m => [m.khd_key, m]));
+        const items = [...groups.values()].map(g => ({
+            ...g,
+            khd_label: khdLabels.get(khdMapping.normKhd(g.khd_value)) || null,
+            resolved: resolver.resolve(kind, g.khd_value),
+            mapping: mapByKey.get(khdMapping.khdKey(g.khd_value)) || null,
+        })).sort((a, b) => b.missing_count - a.missing_count || b.report_count - a.report_count);
+        const optionSql = {
+            dept: 'SELECT id, dept_name AS name, dept_code AS code FROM departments ORDER BY dept_name',
+            main: 'SELECT mi.id, mi.main_indicator_name AS name, y.yut_name AS code FROM kpi_main_indicators mi LEFT JOIN main_yut y ON y.id = mi.yut_id ORDER BY mi.main_indicator_name',
+            yut: 'SELECT id, yut_name AS name, NULL AS code FROM main_yut ORDER BY id',
+        }[kind];
+        const [options] = await db.query(optionSql);
+        const summary = { total: items.length, unmatched: 0, auto: 0, mapped: 0, ignored: 0 };
+        items.forEach(i => { summary[i.resolved.status] = (summary[i.resolved.status] || 0) + 1; });
+        res.json({ success: true, kind, summary, items, options });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// PUT /khd-mappings — { kind, khd_value, local_id }: local_id = จับคู่, ignore = true → ไม่ต้องจับคู่ (เว้นว่าง), ทั้งคู่ไม่ส่ง = ลบการจับคู่ (กลับไปใช้อัตโนมัติ)
+apiRouter.put('/khd-mappings', authenticateToken, isSuperAdmin, async (req, res) => {
+    const { kind, khd_value, local_id, ignore } = req.body || {};
+    if (!khdMapping.KHD_MAP_KINDS.includes(kind)) return res.status(400).json({ success: false, message: 'kind ต้องเป็น dept, main หรือ yut' });
+    if (!khdMapping.normKhd(khd_value)) return res.status(400).json({ success: false, message: 'กรุณาระบุค่าจาก KHD' });
+    try {
+        const key = khdMapping.khdKey(khd_value);
+        const id = Number(local_id);
+        if (Number.isInteger(id) && id > 0) {
+            const table = { dept: 'departments', main: 'kpi_main_indicators', yut: 'main_yut' }[kind];
+            const [[row]] = await db.query(`SELECT id FROM ${table} WHERE id = ?`, [id]);
+            if (!row) return res.status(400).json({ success: false, message: 'ไม่พบรายการปลายทางในระบบ' });
+        }
+        const target = (Number.isInteger(id) && id > 0) ? id : null;
+        if (target === null && !ignore) {
+            await db.query('DELETE FROM khd_value_mappings WHERE kind = ? AND khd_key = ?', [kind, key]);
+        } else {
+            await db.query(
+                `INSERT INTO khd_value_mappings (kind, khd_key, khd_value, local_id, updated_by) VALUES (?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE khd_value = VALUES(khd_value), local_id = VALUES(local_id), updated_by = VALUES(updated_by)`,
+                [kind, key, String(khd_value).trim().slice(0, 1000), target, req.user.userId]
+            );
+        }
+        await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+            [req.user.userId, 'KHD_MAPPING_UPDATE', 'khd_value_mappings', JSON.stringify({ kind, khd_value, local_id: target, ignore: !!ignore }), req.ip]);
+        const resolver = await loadKhdResolver(db);
+        res.json({ success: true, message: 'บันทึกการจับคู่เรียบร้อย', resolved: resolver.resolve(kind, khd_value) });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
 // ========== Report Compare — Tabs (Strategies / Departments / Main-Indicators / Hospitals) ==========
 
 // GET /report-compare/strategies — เปรียบเทียบ main_yut (Local) กับ distinct main_yut text ใน KHD reports
@@ -12622,18 +12740,17 @@ apiRouter.get('/report-compare/strategies', authenticateToken, isSuperAdmin, asy
             `SELECT DISTINCT TRIM(main_yut) AS khd_yut FROM reports WHERE data_source='excel' AND main_yut IS NOT NULL AND TRIM(main_yut) != ''`
         );
         const [localRows] = await db.query('SELECT id, yut_name FROM main_yut ORDER BY yut_name');
-        const norm = s => (s || '').trim().toLowerCase();
-        const localMap = new Map(localRows.map(r => [norm(r.yut_name), r]));
-        const khdSet = new Set(khdRows.map(r => norm(r.khd_yut)));
+        const resolver = await loadKhdResolver(db);
+        const usedLocal = new Set();
         const items = [];
         let match = 0, missing_local = 0, missing_remote = 0;
         khdRows.forEach(r => {
-            const local = localMap.get(norm(r.khd_yut));
-            if (local) { items.push({ status: 'match', khd_yut_name: r.khd_yut, local_id: local.id, local_yut_name: local.yut_name }); match++; }
-            else { items.push({ status: 'missing_local', khd_yut_name: r.khd_yut, local_id: null, local_yut_name: null }); missing_local++; }
+            const m = resolver.resolve('yut', r.khd_yut);
+            if (m.local_id) { usedLocal.add(m.local_id); items.push({ status: 'match', khd_yut_name: r.khd_yut, local_id: m.local_id, local_yut_name: m.local_name, match_source: m.status }); match++; }
+            else { items.push({ status: 'missing_local', khd_yut_name: r.khd_yut, local_id: null, local_yut_name: null, match_source: m.status }); missing_local++; }
         });
         localRows.forEach(r => {
-            if (!khdSet.has(norm(r.yut_name))) { items.push({ status: 'missing_remote', khd_yut_name: null, local_id: r.id, local_yut_name: r.yut_name }); missing_remote++; }
+            if (!usedLocal.has(Number(r.id))) { items.push({ status: 'missing_remote', khd_yut_name: null, local_id: r.id, local_yut_name: r.yut_name }); missing_remote++; }
         });
         res.json({ success: true, summary: { total: items.length, match, missing_local, missing_remote }, items });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -12662,18 +12779,19 @@ apiRouter.get('/report-compare/departments', authenticateToken, isSuperAdmin, as
             `SELECT DISTINCT TRIM(dept) AS khd_dept FROM reports WHERE data_source='excel' AND dept IS NOT NULL AND TRIM(dept) != ''`
         );
         const [localRows] = await db.query('SELECT id, dept_name, dept_code FROM departments ORDER BY dept_name');
-        const norm = s => (s || '').trim().toLowerCase();
-        const localMap = new Map(localRows.map(r => [norm(r.dept_name), r]));
-        const khdSet = new Set(khdRows.map(r => norm(r.khd_dept)));
+        const resolver = await loadKhdResolver(db);
+        const byId = new Map(localRows.map(r => [Number(r.id), r]));
+        const usedLocal = new Set();
         const items = [];
         let match = 0, missing_local = 0, missing_remote = 0;
         khdRows.forEach(r => {
-            const local = localMap.get(norm(r.khd_dept));
-            if (local) { items.push({ status: 'match', khd_dept_name: r.khd_dept, local_id: local.id, local_dept_name: local.dept_name, local_dept_code: local.dept_code }); match++; }
-            else { items.push({ status: 'missing_local', khd_dept_name: r.khd_dept, local_id: null, local_dept_name: null }); missing_local++; }
+            const m = resolver.resolve('dept', r.khd_dept);
+            const local = m.local_id ? byId.get(m.local_id) : null;
+            if (local) { usedLocal.add(m.local_id); items.push({ status: 'match', khd_dept_name: r.khd_dept, local_id: local.id, local_dept_name: local.dept_name, local_dept_code: local.dept_code, match_source: m.status }); match++; }
+            else { items.push({ status: 'missing_local', khd_dept_name: r.khd_dept, local_id: null, local_dept_name: null, match_source: m.status }); missing_local++; }
         });
         localRows.forEach(r => {
-            if (!khdSet.has(norm(r.dept_name))) { items.push({ status: 'missing_remote', khd_dept_name: null, local_id: r.id, local_dept_name: r.dept_name, local_dept_code: r.dept_code }); missing_remote++; }
+            if (!usedLocal.has(Number(r.id))) { items.push({ status: 'missing_remote', khd_dept_name: null, local_id: r.id, local_dept_name: r.dept_name, local_dept_code: r.dept_code }); missing_remote++; }
         });
         res.json({ success: true, summary: { total: items.length, match, missing_local, missing_remote }, items });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
