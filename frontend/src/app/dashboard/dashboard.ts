@@ -197,11 +197,14 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     }, 600);
   }
 
-  // === ค่า "รอดำเนินการ" ในช่องผลงานรายเดือน (เก็บเป็นข้อความใน actual_value) ===
-  readonly PENDING_TEXT = 'รอดำเนินการ';
+  // === ค่า "กำลังดำเนินการ" ในช่องผลงานรายเดือน (ปุ่ม ⏳ — เก็บเป็นข้อความใน actual_value) ===
+  // เดิมใช้คำว่า "รอดำเนินการ" (เปลี่ยน 19 ต.ค. 2569 ตามที่ผู้ใช้ขอ) — ค่าเดิมยังนับเป็นสถานะเดียวกัน และ server.js แปลงข้อมูลเดิมให้ตอน startup
+  readonly PENDING_TEXT = 'กำลังดำเนินการ';
+  readonly LEGACY_PENDING_TEXT = 'รอดำเนินการ';
 
   isPendingValue(v: any): boolean {
-    return String(v ?? '').trim() === this.PENDING_TEXT;
+    const s = String(v ?? '').trim();
+    return s === this.PENDING_TEXT || s === this.LEGACY_PENDING_TEXT;
   }
 
   togglePending(item: any, month: string) {

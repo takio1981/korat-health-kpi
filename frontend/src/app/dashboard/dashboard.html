@@ -726,7 +726,7 @@
                       <button type="button" (click)="togglePending(item, month.key)"
                               class="shrink-0 w-6 h-6 rounded flex items-center justify-center text-[10px]"
                               [ngClass]="isPendingValue(item[month.key]) ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-400'"
-                              [title]="isPendingValue(item[month.key]) ? 'ยกเลิก รอดำเนินการ' : 'ตั้งเป็น รอดำเนินการ'">
+                              [title]="isPendingValue(item[month.key]) ? 'ยกเลิก กำลังดำเนินการ' : 'ตั้งเป็น กำลังดำเนินการ'">
                         <i class="fas fa-hourglass-half"></i>
                       </button>
                     </div>
@@ -745,7 +745,7 @@
                          class="w-[62px] shrink-0 text-center p-1 rounded"
                          [ngClass]="isPendingValue(item[month.key]) ? 'bg-amber-100 font-bold text-amber-700 border border-amber-300' : (item[month.key] && item[month.key] !== '0') ? 'bg-green-100 font-bold text-gray-900' : 'text-gray-400 bg-white border border-gray-100'">
                       <div class="text-gray-600 mb-1">{{ month.name }}</div>
-                      <div *ngIf="isPendingValue(item[month.key])" class="text-[9px] leading-tight"><i class="fas fa-hourglass-half text-[8px]"></i> รอดำเนินการ</div>
+                      <div *ngIf="isPendingValue(item[month.key])" class="text-[9px] leading-tight"><i class="fas fa-hourglass-half text-[8px]"></i> กำลังดำเนินการ</div>
                       <div *ngIf="!isPendingValue(item[month.key])">{{ (item[month.key] && item[month.key] !== '0') ? item[month.key] : '-' }}</div>
                     </div>
                   </div>
@@ -1218,18 +1218,18 @@
                     class="px-1 py-2 text-center border-x group whitespace-nowrap month-col relative"
                     [ngClass]="hasFormData(item, m) ? 'bg-purple-50/60 text-gray-900 font-bold' : isPendingValue(item[m]) ? 'bg-amber-50' : (item[m] && item[m] !== '0') ? 'bg-green-100/40 text-gray-900 font-bold' : 'text-gray-300'">
                   <span *ngIf="(!isEditing && !isSingleEditing(item)) || item.is_locked || !canEditActual">
-                    <span *ngIf="isPendingValue(item[m])" class="inline-flex items-center gap-0.5 px-1 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded text-[9px] font-bold" title="รอดำเนินการ">
-                      <i class="fas fa-hourglass-half text-[8px]"></i>รอดำเนินการ
+                    <span *ngIf="isPendingValue(item[m])" class="inline-flex items-center gap-0.5 px-1 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded text-[9px] font-bold" title="กำลังดำเนินการ">
+                      <i class="fas fa-hourglass-half text-[8px]"></i>กำลังดำเนินการ
                     </span>
                     <ng-container *ngIf="!isPendingValue(item[m])">{{ (item[m] && item[m] !== '0') ? item[m] : '-' }}</ng-container>
                     <i *ngIf="hasFormData(item, m)" class="fas fa-clipboard-check text-purple-400 text-[8px] ml-0.5" title="ข้อมูลจากแบบฟอร์ม"></i>
                   </span>
                   <div *ngIf="(isEditing || isSingleEditing(item)) && !item.is_locked && canEditActual" class="flex items-center gap-0.5">
-                    <!-- ช่องเดือนแคบ — ค่า "รอดำเนินการ" แสดงเป็นป้าย 2 บรรทัดแทน input (กด ⏳ อีกครั้งเพื่อล้างแล้วกรอกค่าใหม่) -->
+                    <!-- ช่องเดือนแคบ — ค่า "กำลังดำเนินการ" แสดงเป็นป้าย 2 บรรทัดแทน input (กด ⏳ อีกครั้งเพื่อล้างแล้วกรอกค่าใหม่) -->
                     <span *ngIf="isPendingValue(item[m])"
                           class="flex-1 min-w-0 px-0.5 py-0.5 rounded border text-[9px] leading-tight font-bold text-center whitespace-normal"
                           [ngClass]="isModified(item, m) ? 'bg-orange-200 text-red-600 border-orange-400 ring-2 ring-orange-400' : 'bg-amber-100 text-amber-700 border-amber-300'"
-                          title="รอดำเนินการ — กด ⏳ เพื่อล้างค่า">รอ<br>ดำเนินการ</span>
+                          title="กำลังดำเนินการ — กด ⏳ เพื่อล้างค่า">กำลัง<br>ดำเนินการ</span>
                     <input *ngIf="!isPendingValue(item[m])" type="text" [(ngModel)]="item[m]" (ngModelChange)="onValueChange(item, m)" (paste)="onCellPaste($event, item, m)"
                            class="w-full min-w-0 border border-green-200 rounded px-1 py-1 text-center text-xs focus:ring-1 focus:ring-green-500 outline-none hover:border-green-400 transition-all bg-white/80 group-hover:bg-white"
                            [ngClass]="item._anomaly?.[m] ? '!bg-red-100 !text-red-700 ring-2 ring-red-500 font-bold' : (isModified(item, m) ? '!bg-orange-200 !text-red-600 ring-2 ring-orange-400 font-bold' : '')"
@@ -1238,7 +1238,7 @@
                     <button type="button" (click)="togglePending(item, m)"
                             class="shrink-0 w-5 h-5 rounded flex items-center justify-center text-[9px] transition-colors"
                             [ngClass]="isPendingValue(item[m]) ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-gray-100 text-gray-400 hover:bg-amber-100 hover:text-amber-600'"
-                            [title]="isPendingValue(item[m]) ? 'ยกเลิก รอดำเนินการ' : 'ตั้งเป็น รอดำเนินการ'">
+                            [title]="isPendingValue(item[m]) ? 'ยกเลิก กำลังดำเนินการ' : 'ตั้งเป็น กำลังดำเนินการ'">
                       <i class="fas fa-hourglass-half"></i>
                     </button>
                   </div>

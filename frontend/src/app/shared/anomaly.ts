@@ -50,7 +50,7 @@ function compare(value: number, ref: number, basis: Anomaly['basis'], label: str
   return null;
 }
 
-/** คืนคำเตือนถ้าค่าดูผิดปกติ, null = ปกติ/ตรวจไม่ได้ (ค่าว่าง ข้อความ "รอดำเนินการ" ฯลฯ ไม่ตรวจ) */
+/** คืนคำเตือนถ้าค่าดูผิดปกติ, null = ปกติ/ตรวจไม่ได้ (ค่าว่าง ข้อความ "กำลังดำเนินการ" ฯลฯ ไม่ตรวจ) */
 export function detectAnomaly(value: any, ctx: AnomalyContext = {}): Anomaly | null {
   const v = toNumber(value);
   if (v === null) return null;

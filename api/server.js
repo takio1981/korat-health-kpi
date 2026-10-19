@@ -11604,6 +11604,10 @@ const migrationsReady = (async () => {
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS criterion VARCHAR(50) NULL COMMENT 'เกณฑ์ % (จับคู่กับ target_condition) — แยกจาก target_percentage (เป้าหมาย)'`); } catch(e) {}
         // Backfill ครั้งเดียว: idempotent ด้วย WHERE criterion IS NULL — รันซ้ำได้ทุก restart โดยไม่ทับค่าที่ admin ตั้งไว้แล้ว
         try { await db.query(`UPDATE kpi_indicators SET criterion = target_percentage WHERE criterion IS NULL AND target_percentage IS NOT NULL`); } catch(e) {}
+        // ปุ่ม ⏳ ในตารางบันทึกผลงาน: เปลี่ยนคำจาก "รอดำเนินการ" เป็น "กำลังดำเนินการ" (19 ต.ค. 2569) — แปลงข้อมูลเดิม (ตรงตัวเท่านั้น, รันซ้ำได้)
+        for (const [t, c] of [['kpi_results', 'actual_value'], ['kpi_sub_results', 'actual_value'], ['kpi_activity_results', 'actual_value'], ['kpi_summary', 'last_actual']]) {
+            try { await db.query(`UPDATE ${t} SET ${c} = 'กำลังดำเนินการ' WHERE ${c} = 'รอดำเนินการ'`); } catch (e) {}
+        }
         // use_sub_indicator_export: 1 = ตอน export ให้สร้างคอลัมน์ตามตัวชี้วัดย่อยแทนคอลัมน์รายเดือน (m10-m09)
         try { await db.query(`ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS use_sub_indicator_export TINYINT(1) DEFAULT 0 COMMENT 'ส่งออกโดยใช้ผลงานตัวชี้วัดย่อยแทนรายเดือน (1 คอลัมน์ต่อข้อย่อย)'`); } catch(e) {}
 

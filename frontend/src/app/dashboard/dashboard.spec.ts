@@ -52,24 +52,38 @@ describe('DashboardComponent', () => {
     expect(component.filteredData.length).toBe(2);
   });
 
-  // ตัวเลือก "รอดำเนินการ" รายเดือน (5 ต.ค. 2569)
-  it('togglePending ตั้งค่า/ล้างค่า "รอดำเนินการ" และคำนวณผลงานล่าสุดใหม่', () => {
+  // ตัวเลือก "กำลังดำเนินการ" รายเดือน (5 ต.ค. 2569 — เปลี่ยนคำจาก "รอดำเนินการ" 19 ต.ค. 2569)
+  it('togglePending ตั้งค่า/ล้างค่า "กำลังดำเนินการ" และคำนวณผลงานล่าสุดใหม่', () => {
     const item = row('2569', { oct: '50' });
     component.togglePending(item, 'nov');
-    expect(item.nov).toBe('รอดำเนินการ');
+    expect(item.nov).toBe('กำลังดำเนินการ');
     expect(component.isPendingValue(item.nov)).toBe(true);
-    expect(item.last_actual).toBe('รอดำเนินการ');
+    expect(item.last_actual).toBe('กำลังดำเนินการ');
 
     component.togglePending(item, 'nov');
     expect(item.nov).toBe('');
     expect(item.last_actual).toBe('50');
   });
 
-  it('isPendingValue ไม่นับค่าอื่นเป็นรอดำเนินการ', () => {
+  it('isPendingValue ไม่นับค่าอื่น — ค่าเดิม "รอดำเนินการ" ยังนับเป็นสถานะเดียวกัน และกด ⏳ ล้างได้', () => {
     expect(component.isPendingValue('50')).toBe(false);
     expect(component.isPendingValue('')).toBe(false);
     expect(component.isPendingValue(null)).toBe(false);
-    expect(component.isPendingValue(' รอดำเนินการ ')).toBe(true);
+    expect(component.isPendingValue(' กำลังดำเนินการ ')).toBe(true);
+    expect(component.isPendingValue('รอดำเนินการ')).toBe(true);
+    const item = row('2569', { oct: '50', nov: 'รอดำเนินการ' });
+    component.togglePending(item, 'nov');
+    expect(item.nov).toBe('');
+  });
+
+  it('ตารางแสดงคำว่า "กำลังดำเนินการ" ทั้งค่าใหม่และค่าเดิม', () => {
+    fixture.detectChanges();
+    component.isAdmin = false;
+    component.kpiData = component.filteredData = [row('2569', { nov: 'รอดำเนินการ', dece: 'กำลังดำเนินการ', indicator_id: 1, hospcode: '10871', kpi_indicators_name: 'x' })] as any;
+    (component as any).cdr.detectChanges();
+    const text = (fixture.nativeElement as HTMLElement).textContent || '';
+    expect(text).toContain('กำลังดำเนินการ');
+    expect(text).not.toContain('รอดำเนินการ');
   });
 
   // สูตรคำนวณผลงานเฉพาะตัวชี้วัด (7 ต.ค. 2569)

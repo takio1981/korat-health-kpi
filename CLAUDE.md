@@ -1029,7 +1029,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
     docker build ซึ่งตัด dev deps ออกให้เอง
 - **Frontend (Vitest ผ่าน `ng test`)** — `cd frontend && npx ng test --watch=false` — spec ใช้ `testProviders` จาก
   `src/app/testing/test-providers.ts` (HttpClientTesting + Router + Toastr) เสมอ — มี regression test ของบั๊กจริง
-  (ปีงบเด้งกลับ, ปีงบ ต.ค., รอดำเนินการ, เลือกคอลัมน์) ใน `dashboard.spec.ts` / `fiscal-year.util.spec.ts`
+  (ปีงบเด้งกลับ, ปีงบ ต.ค., กำลังดำเนินการ (เดิม "รอดำเนินการ"), เลือกคอลัมน์) ใน `dashboard.spec.ts` / `fiscal-year.util.spec.ts`
 - Integration test ที่ใช้ transaction (ลบ/refresh summary ฯลฯ) ต้อง `await migrationsReady` (export จาก server.js) ใน `beforeAll`
   ก่อนเริ่ม — migration ตอน startup (ALTER TABLE) ยังรันอยู่ระหว่าง test แรกๆ ทำให้เกิด MDL deadlock แบบสุ่ม ("Deadlock found when
   trying to get lock" แต่ไม่ปรากฏใน SHOW ENGINE INNODB STATUS)
