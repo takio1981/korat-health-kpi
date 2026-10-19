@@ -34,6 +34,7 @@ export class SettingsComponent implements OnInit {
   dataEntryLockStart: string = '';
   dataEntryLockEnd: string = '';
   dataEntryLockDays: number = 0;
+  hierarchyMaxLevels: number = 4;   // จำนวนระดับตัวชี้วัดสูงสุด (รวมหลักและกิจกรรม) — system_settings.kpi_hierarchy_max_levels
 
   // Target Edit Lock
   targetEditLocked: boolean = false;
@@ -200,6 +201,8 @@ export class SettingsComponent implements OnInit {
           if (entryLockStart) this.dataEntryLockStart = entryLockStart.setting_value || '';
           if (entryLockEnd) this.dataEntryLockEnd = entryLockEnd.setting_value || '';
           if (entryLockDays) this.dataEntryLockDays = parseInt(entryLockDays.setting_value, 10) || 0;
+          const maxLv = parseInt(this.settings.find(s => s.setting_key === 'kpi_hierarchy_max_levels')?.setting_value, 10);
+          this.hierarchyMaxLevels = maxLv >= 3 && maxLv <= 6 ? maxLv : 4;
           const targetEditLock = this.settings.find(s => s.setting_key === 'target_edit_locked');
           if (targetEditLock) this.targetEditLocked = targetEditLock.setting_value === 'true';
 
@@ -277,6 +280,7 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'data_entry_lock_start', setting_value: this.dataEntryLockStart },
       { setting_key: 'data_entry_lock_end', setting_value: this.dataEntryLockEnd },
       { setting_key: 'data_entry_lock_days', setting_value: this.dataEntryLockDays.toString() },
+      { setting_key: 'kpi_hierarchy_max_levels', setting_value: String(Math.min(6, Math.max(3, Number(this.hierarchyMaxLevels) || 4))) },
       { setting_key: 'target_edit_locked', setting_value: this.targetEditLocked.toString() },
       { setting_key: 'appeal_enabled', setting_value: this.appealEnabled.toString() },
       { setting_key: 'appeal_start_date', setting_value: this.appealStartDate },

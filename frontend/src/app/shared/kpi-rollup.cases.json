@@ -225,5 +225,237 @@
       "index": 0,
       "expected": "4.1"
     }
+  ],
+  "tree": [
+    {
+      "name": "4 ระดับ: กิจกรรม → ย่อยระดับ 2 → ย่อย (คำนวณขึ้นสองชั้น)",
+      "nodes": [
+        {
+          "key": "s1",
+          "parentKey": null,
+          "kind": "sub",
+          "auto": true,
+          "valueType": null
+        },
+        {
+          "key": "s11",
+          "parentKey": "s1",
+          "kind": "sub",
+          "auto": true,
+          "valueType": null
+        },
+        {
+          "key": "a1",
+          "parentKey": "s11",
+          "kind": "activity",
+          "auto": false,
+          "valueType": "number"
+        },
+        {
+          "key": "a2",
+          "parentKey": "s11",
+          "kind": "activity",
+          "auto": false,
+          "valueType": "check"
+        },
+        {
+          "key": "s12",
+          "parentKey": "s1",
+          "kind": "sub",
+          "auto": false,
+          "valueType": null
+        }
+      ],
+      "values": {
+        "a1": {
+          "m10": "80"
+        },
+        "a2": {
+          "m10": "1",
+          "m11": "0"
+        },
+        "s12": {
+          "m10": "60"
+        }
+      },
+      "expected": {
+        "s11": {
+          "m10": 90,
+          "m11": 40,
+          "m12": null
+        },
+        "s1": {
+          "m10": 75,
+          "m11": 50,
+          "m12": null
+        },
+        "a2": {
+          "m10": 100,
+          "m11": 0
+        }
+      },
+      "rolled": [
+        "s1",
+        "s11"
+      ]
+    },
+    {
+      "name": "auto ที่ไม่มีลูก = ใช้ค่าที่กรอก",
+      "nodes": [
+        {
+          "key": "s1",
+          "parentKey": null,
+          "kind": "sub",
+          "auto": true,
+          "valueType": null
+        }
+      ],
+      "values": {
+        "s1": {
+          "m10": "55"
+        }
+      },
+      "expected": {
+        "s1": {
+          "m10": 55,
+          "m11": null
+        }
+      },
+      "rolled": []
+    },
+    {
+      "name": "ลูกที่ไม่ได้ส่งมา (ปิดใช้งาน) ไม่นับ",
+      "nodes": [
+        {
+          "key": "s1",
+          "parentKey": null,
+          "kind": "sub",
+          "auto": true,
+          "valueType": null
+        },
+        {
+          "key": "a1",
+          "parentKey": "s1",
+          "kind": "activity",
+          "auto": false,
+          "valueType": "number"
+        }
+      ],
+      "values": {
+        "a1": {
+          "m10": "40"
+        },
+        "a2": {
+          "m10": "100"
+        }
+      },
+      "expected": {
+        "s1": {
+          "m10": 40
+        }
+      },
+      "rolled": [
+        "s1"
+      ]
+    },
+    {
+      "name": "ข้อย่อยมีทั้งข้อลูกและกิจกรรม",
+      "nodes": [
+        {
+          "key": "s1",
+          "parentKey": null,
+          "kind": "sub",
+          "auto": true,
+          "valueType": null
+        },
+        {
+          "key": "s11",
+          "parentKey": "s1",
+          "kind": "sub",
+          "auto": false,
+          "valueType": null
+        },
+        {
+          "key": "a1",
+          "parentKey": "s1",
+          "kind": "activity",
+          "auto": false,
+          "valueType": "check"
+        }
+      ],
+      "values": {
+        "s11": {
+          "m10": "70"
+        },
+        "a1": {
+          "m10": "1"
+        }
+      },
+      "expected": {
+        "s1": {
+          "m10": 85
+        }
+      },
+      "rolled": [
+        "s1"
+      ]
+    },
+    {
+      "name": "ค่าที่ไม่ใช่ตัวเลขไม่นับ",
+      "nodes": [
+        {
+          "key": "s1",
+          "parentKey": null,
+          "kind": "sub",
+          "auto": false,
+          "valueType": null
+        }
+      ],
+      "values": {
+        "s1": {
+          "m10": "กำลังดำเนินการ",
+          "m11": "5"
+        }
+      },
+      "expected": {
+        "s1": {
+          "m10": null,
+          "m11": 5
+        }
+      },
+      "rolled": []
+    },
+    {
+      "name": "ข้อแม่ชี้หากันเป็นวง ไม่ค้าง",
+      "nodes": [
+        {
+          "key": "x",
+          "parentKey": "y",
+          "kind": "sub",
+          "auto": true,
+          "valueType": null
+        },
+        {
+          "key": "y",
+          "parentKey": "x",
+          "kind": "sub",
+          "auto": true,
+          "valueType": null
+        }
+      ],
+      "values": {},
+      "expected": {
+        "x": {
+          "m10": null
+        },
+        "y": {
+          "m10": null
+        }
+      },
+      "rolled": [
+        "x",
+        "y"
+      ]
+    }
   ]
 }

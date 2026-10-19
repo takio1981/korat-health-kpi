@@ -26,6 +26,17 @@ test('fixture ของ frontend ต้องเหมือนกับ backend
     expect(fs.readFileSync(fe, 'utf8').replace(/\r\n/g, '\n')).toBe(fs.readFileSync(fixturePath, 'utf8').replace(/\r\n/g, '\n'));
 });
 
+describe('rollupTree (ตัวชี้วัดหลายระดับ — 19 ต.ค. 2569)', () => {
+    const { rollupTree } = require('../kpi-rollup');
+    test.each(cases.tree.map(c => [c.name, c]))('%s', (_n, c) => {
+        const r = rollupTree(c.nodes, c.values);
+        for (const [k, months] of Object.entries(c.expected)) {
+            for (const [mk, v] of Object.entries(months)) expect([k, mk, r[k].months[mk]]).toEqual([k, mk, v]);
+        }
+        expect(Object.keys(r).filter(k => r[k].rolled).sort()).toEqual([...c.rolled].sort());
+    });
+});
+
 describe('itemNumber', () => {
     const { itemNumber } = require('../kpi-rollup');
     test.each(cases.itemNumber.map(c => [c.name, c]))('%s', (_n, c) => {

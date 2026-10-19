@@ -26,4 +26,10 @@ if (!process.env.DB_NAME || !process.env.DB_NAME.includes('test')) {
         'สร้าง api/.env.test โดยตั้ง DB_NAME=khups_kpi_test_db (ดูวิธีสร้าง DB ด้านบนของไฟล์นี้)');
 }
 process.env.NODE_ENV = 'test';
+// แต่ละไฟล์ทดสอบโหลด server ใหม่ = connection pool ใหม่ และ pool ของไฟล์ก่อนหน้าไม่ถูกปิด — ค่าตั้งต้นของระบบ (limit 150, idle 30 นาน 5 นาที)
+// ทำให้ทั้งชุดเกิน max_connections (151) ของ MariaDB เป็นครั้งคราว ("Too many connections" — 19 ต.ค. 2569) ซึ่งเป็นเครื่องเดียวกับระบบจริง
+// → ตอนทดสอบใช้ pool เล็กและคืน connection ว่างเร็ว
+process.env.DB_POOL_LIMIT = process.env.DB_POOL_LIMIT || '20';
+process.env.DB_POOL_MAX_IDLE = process.env.DB_POOL_MAX_IDLE || '2';
+process.env.DB_POOL_IDLE_TIMEOUT = process.env.DB_POOL_IDLE_TIMEOUT || '2000';
 process.env.SECRET_KEY = process.env.SECRET_KEY || 'test-secret-key-for-jest';

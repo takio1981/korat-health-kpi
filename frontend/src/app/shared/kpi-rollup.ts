@@ -1,4 +1,4 @@
-// การคำนวณผลงานระดับบนจากระดับล่าง (ตัวชี้วัด 3 ระดับ: หลัก 1 → ย่อย 1.1 → กิจกรรม 1.1.1) — เพิ่ม 18 ต.ค. 2569
+// การคำนวณผลงานระดับบนจากระดับล่าง (ตัวชี้วัดหลายระดับ: หลัก 1 → ย่อย 1.1 → ย่อยระดับถัดไป 1.1.1 … → กิจกรรม) — เพิ่ม 18 ต.ค. 2569, ต้นไม้ 19 ต.ค. 2569
 // ⚠️ มี 2 สำเนาที่ต้องตรงกันทุกบรรทัด: api/kpi-rollup.js (CommonJS) + frontend/src/app/shared/kpi-rollup.ts
 //    เคสทดสอบร่วม api/tests/fixtures/rollup-cases.json = frontend/src/app/shared/kpi-rollup.cases.json (jest บังคับให้ตรงกัน)
 //
@@ -61,4 +61,62 @@ export function itemNumber(explicit: unknown, parentNo: unknown, index: number):
   if (own) return own;
   const parent = parentNo === null || parentNo === undefined ? '' : String(parentNo).trim();
   return parent ? `${parent}.${index + 1}` : String(index + 1);
+}
+
+export interface RollupNode { key: string | number; parentKey?: string | number | null; kind: 'sub' | 'activity'; auto?: boolean; valueType?: string }
+export type RollupTreeResult = { [key: string]: { rolled: boolean; months: RollupResult } };
+
+// ข้อย่อยที่ "คำนวณจากระดับล่าง" = ตั้งเป็น auto และมีรายการลูกที่เปิดใช้งาน (ข้อย่อยลูก + กิจกรรม) อย่างน้อย 1 — auto ที่ไม่มีลูก = ใช้ค่าที่กรอกเอง
+export function isRolledNode(node: RollupNode | null | undefined, childCount: number): boolean {
+  return !!node && node.kind === 'sub' && !!node.auto && childCount > 0;
+}
+
+// คำนวณค่าที่มีผลของทุกรายการในต้นไม้ (จากล่างขึ้นบน)
+//   nodes:  [{ key, parentKey (null = ระดับบนสุด), kind: 'sub'|'activity', auto, valueType }] — เฉพาะรายการที่เปิดใช้งาน
+//   values: { <key>: { m10: ค่าดิบ, ... } }
+//   คืน:    { <key>: { rolled, months: { m10: number|null, ... } } }
+//   กิจกรรม = activityValue(), ข้อย่อยกรอกเอง = ค่าที่กรอก (ตัวเลข), ข้อย่อยคำนวณ = rollupMonthly(จำนวนลูก, ค่าที่มีผลของลูก) — กันวนลูป
+export function rollupTree(nodes: RollupNode[], values: { [key: string]: { [mk: string]: unknown } } | null | undefined): RollupTreeResult {
+  const list = Array.isArray(nodes) ? nodes : [];
+  const byKey = new Map<string, RollupNode>();
+  const children = new Map<string, string[]>();
+  for (const n of list) {
+    const k = String(n.key);
+    byKey.set(k, n);
+    const p = n.parentKey === null || n.parentKey === undefined || n.parentKey === '' ? null : String(n.parentKey);
+    if (p !== null) {
+      if (!children.has(p)) children.set(p, []);
+      children.get(p)!.push(k);
+    }
+  }
+  const out: RollupTreeResult = {};
+  const visiting = new Set<string>();
+  const empty = (): RollupResult => { const m: RollupResult = {}; for (const mk of ROLLUP_MONTH_KEYS) m[mk] = null; return m; };
+  function evalNode(k: string): { rolled: boolean; months: RollupResult } {
+    if (out[k]) return out[k];
+    const n = byKey.get(k);
+    if (!n || visiting.has(k)) return { rolled: false, months: empty() };
+    visiting.add(k);
+    const kids = (children.get(k) || []).filter(c => byKey.has(c));
+    const raw: { [mk: string]: unknown } = (values && values[k]) || {};
+    let res: { rolled: boolean; months: RollupResult };
+    if (isRolledNode(n, kids.length)) {
+      const mv: MonthVals = {};
+      for (const mk of ROLLUP_MONTH_KEYS) mv[mk] = {};
+      for (const c of kids) {
+        const cm = evalNode(c).months;
+        for (const mk of ROLLUP_MONTH_KEYS) if (cm[mk] !== null) (mv[mk] as { [k: string]: unknown })[c] = cm[mk];
+      }
+      res = { rolled: true, months: rollupMonthly(kids.length, mv) };
+    } else {
+      const months: RollupResult = {};
+      for (const mk of ROLLUP_MONTH_KEYS) months[mk] = n.kind === 'activity' ? activityValue(n.valueType || 'number', raw[mk]) : rollupNum(raw[mk]);
+      res = { rolled: false, months };
+    }
+    visiting.delete(k);
+    out[k] = res;
+    return res;
+  }
+  for (const n of list) evalNode(String(n.key));
+  return out;
 }

@@ -15,7 +15,7 @@ const pool = mysql.createPool({
     waitForConnections: true,
     connectionLimit: Number(process.env.DB_POOL_LIMIT) || 150,
     maxIdle: Number(process.env.DB_POOL_MAX_IDLE) || 30,
-    idleTimeout: 300000,          // 5 นาที — ปล่อย idle เร็วกว่านี้จะ create connection ใหม่ถี่
+    idleTimeout: Number(process.env.DB_POOL_IDLE_TIMEOUT) || 300000, // 5 นาที — ปล่อย idle เร็วกว่านี้จะ create connection ใหม่ถี่ (ชุดทดสอบตั้งสั้นลง)
     queueLimit: Number(process.env.DB_POOL_QUEUE_LIMIT) || 500,
     enableKeepAlive: true,
     keepAliveInitialDelay: 10000, // keep alive ทุก 10 วินาที

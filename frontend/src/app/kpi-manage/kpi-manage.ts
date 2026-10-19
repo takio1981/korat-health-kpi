@@ -7,6 +7,7 @@ import { FormBuilderComponent } from '../form-builder/form-builder';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import { validateFormula, evaluateFormula, usesPrevYear, FORMULA_FUNCTIONS } from '../shared/kpi-formula';
 import { itemNumber } from '../shared/kpi-rollup';
+import { orderSubTree } from '../shared/sub-tree';
 import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
@@ -409,19 +410,32 @@ export class KpiManageComponent implements OnInit {
   loadSubList(indicatorId: number) {
     this.authService.getSubIndicators(indicatorId).subscribe(res => {
       if (res.success) {
-        this.subList = res.data;
+        // ข้อย่อยหลายระดับเรียงเป็นต้นไม้ (pre-order) พร้อมระดับ/เลขข้อ — 19 ต.ค. 2569
+        this.subList = orderSubTree(res.data, this.subParentIndicator?.item_no || '');
+        this.subMaxLevels = Number(res.max_levels) || 4;
         this.cdr.detectChanges();
       }
     });
   }
 
-  openSubForm(item: any = null) {
+  /** parent = ข้อย่อยแม่ (เพิ่มข้อย่อยระดับถัดไป) — ไม่ระบุ = ข้อย่อยระดับบนสุด */
+  openSubForm(item: any = null, parent: any = null) {
     this.isSubEdit = !!item;
     this.subCurrent = item
       ? { ...item, rollup_mode: item.rollup_mode === 'auto' ? 'auto' : 'manual', item_no: item.item_no || '' }
-      : { indicator_id: this.subParentIndicator.id, weight: 1, rollup_mode: 'manual', item_no: '' };
+      : { indicator_id: this.subParentIndicator.id, parent_sub_id: parent ? parent.id : null, weight: 1, rollup_mode: 'manual', item_no: '' };
+    const pid = this.subCurrent.parent_sub_id;
+    this.subFormParent = pid ? (this.subList.find((x: any) => Number(x.id) === Number(pid)) || parent) : null;
     this.showSubForm = true;
   }
+
+  // ===== ตัวชี้วัดหลายระดับ (19 ต.ค. 2569) — ระดับ: หลัก = 1, ข้อย่อยบนสุด = 2 (_level 0) …, ระดับสุดท้ายสงวนไว้ให้กิจกรรม =====
+  subMaxLevels = 4;
+  subFormParent: any = null;
+  /** ระดับจริงของข้อย่อย (หลัก = 1) */
+  subLevel(s: any): number { return Number(s?._level || 0) + 2; }
+  /** เพิ่มข้อย่อยลูกได้เมื่อระดับของข้อลูก ≤ จำนวนระดับสูงสุด − 1 (เหลือที่ให้กิจกรรม) */
+  canAddChildSub(s: any): boolean { return this.subLevel(s) + 1 <= this.subMaxLevels - 1; }
 
   saveSub() {
     if (!this.subCurrent.sub_indicator_name) {
@@ -480,16 +494,19 @@ export class KpiManageComponent implements OnInit {
   actCurrent: any = {};
 
   subNo(s: any, i: number): string {
-    return itemNumber(s?.item_no, this.subParentIndicator?.item_no, i);
+    return s?._no || itemNumber(s?.item_no, this.subParentIndicator?.item_no, i);
   }
 
+  // เลขข้อกิจกรรมต่อจากข้อย่อยลูกของข้อเดียวกัน (ข้อลูก 1..n ก่อน กิจกรรมต่อท้าย — ตรงกับตารางบันทึกผลงานและการส่งออก)
   actNo(a: any, i: number): string {
-    return itemNumber(a?.item_no, this.actParentNo, i);
+    return itemNumber(a?.item_no, this.actParentNo, this.actChildSubCount + i);
   }
+  actChildSubCount = 0;
 
   openActModal(sub: any, index: number) {
     this.actParentSub = sub;
     this.actParentNo = this.subNo(sub, index);
+    this.actChildSubCount = Number(sub?._childSubCount || 0);
     this.showActModal = true;
     this.showActForm = false;
     this.actList = [];

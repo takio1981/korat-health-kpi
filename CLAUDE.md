@@ -477,6 +477,17 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   (`/refresh-summary/prepare` รวมตัวชี้วัดที่มีผลงานเฉพาะข้อย่อย/กิจกรรม) — บันทึกผลงานข้อย่อย/กิจกรรม (`/hierarchy-results/save`, `/sub-results/upsert`)
   เรียก `refreshSummaryAfterSubSave()` (refresh เฉพาะตัวชี้วัด×ปีงบ แบบ fire-and-forget) — `/dashboard-stats` นับกลุ่มงานที่บันทึก + คู่รอตรวจสอบจากข้อย่อย/กิจกรรมด้วย
   (เดิมคำนวณ `recordedCount` รวมข้อย่อยแล้วแต่ส่งค่าจาก kpi_results — แก้แล้ว)
+- **ต้นไม้หลายระดับ (20 ต.ค. 2569 — หลัก 1 → ย่อย 1.1 → ย่อยระดับ 2 1.1.1 → กิจกรรม 1.1.1.1):** `kpi_sub_indicators.parent_sub_id` (FK ตัวเอง CASCADE)
+  — **ทุกข้อย่อยทุกระดับเก็บ `indicator_id` ของตัวชี้วัดหลัก** (การอนุมัติ/ล็อค/ลบ/สถิติที่ JOIN `si.indicator_id` จึงครอบคลุมทุกระดับ — ห้ามเปลี่ยน)
+  ระดับ: หลัก = 1, ย่อยบนสุด = 2, ลูก = พ่อ + 1, กิจกรรม = ระดับข้อแม่ + 1 — สูงสุด `system_settings.kpi_hierarchy_max_levels` (ค่าตั้งต้น 4, 3–6, หน้าตั้งค่าระบบ)
+  ข้อย่อยใหม่ ≤ max − 1, กิจกรรม ≤ max (`POST /sub-indicators` ตรวจข้อแม่ต่างตัวชี้วัด/เกินระดับ → 400; PUT ไม่เปลี่ยนข้อแม่)
+  - คำนวณ: `rollupTree(nodes, values)` + `isRolledNode()` ใน `kpi-rollup` (2 สำเนา + fixture `tree`) — "คำนวณจากระดับล่าง" = auto และมีลูกที่เปิดใช้งาน (ข้อย่อยลูก + กิจกรรม
+    รวมกัน, กันวนลูป) ใช้ทุกจุดแทนกฎ "มีกิจกรรม" เดิม: `rolledSubIds()` (save guard + `/sub-results/upsert`), `loadEffectiveSubMonthly()`, export calc_mode
+    — ข้อที่ข้อแม่ปิดใช้งาน = ซ่อนทั้งกิ่ง (`activeSubTree()`) — **ตัวชี้วัดหลัก/`avg_target`/`sub_count`/คอลัมน์รายข้อ `use_sub_indicator_export` ใช้เฉพาะข้อย่อยระดับบนสุด**
+  - เลขข้อ: ลูกที่เป็นข้อย่อยได้ลำดับ 1..n ก่อน แล้วกิจกรรมต่อลำดับ (n+1…) — `shared/sub-tree.ts` `orderSubTree()` (kpi-manage + หน้าต่างบันทึกผลงานย่อย), `buildHierRows()` (dashboard)
+  - `DELETE /sub-indicators/:id` ปฏิเสธถ้าข้อนี้/ข้อลูก/กิจกรรมใต้ลงไปมีผลงาน (เดิม CASCADE ลบผลงานเงียบๆ)
+  - `_items`: PK (hospcode, byear, **item_kind**, item_id), `item_level` = ระดับจริง — `ensureItemsTable()` ย้ายตารางเดิม (backfill item_kind จาก item_level 3 = activity)
+  - Test: `api/tests/hierarchy-tree.test.js`, `kpi-rollup.test.js` (tree), `shared/sub-tree.spec.ts`, `dashboard.spec.ts`, `kpi-manage.spec.ts`
 - นอกขอบเขต: `weight` ยังไม่ใช้คำนวณ, มุมมองการ์ดมือถือ (ใช้หน้าต่างบันทึกผลงานย่อยเดิม)
 - ทดสอบหน้าจอ (18 ต.ค. 2569): backend ชุดที่ 2 พอร์ต 3710 ชี้ `khups_kpi_test_db` + บล็อกการเชื่อมต่อออกนอกเครื่อง (ฐานทดสอบมีโทเคน LINE/Telegram/SMTP จริง)
   + Playwright เปลี่ยนคำขอ :3700 → :3710 — ⚠️ อย่ารัน `npm test` ระหว่างทดสอบหน้าจอ: `cleanupTestUsers()` ลบผู้ใช้ `test_*` ทุกคนในฐานทดสอบ (รวมบัญชี `test_e2e_*`)

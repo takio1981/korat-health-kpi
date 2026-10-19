@@ -16,18 +16,20 @@ import { indicatorTypeSetting, autoTargetHostypes, resolveAddKpiTargets, HOSTYPE
 import { EXCEL_MONTHS, ChangePlan, EditPerms, buildTemplateAoa, parseImportAoa, planImport, parseClipboardGrid, isMultiCell, planPaste, applyCellChanges, itemKey } from '../shared/kpi-excel';
 import { Anomaly, detectAnomaly } from '../shared/anomaly';
 import { SUB_EXCEL_MONTHS, SubChangePlan, buildSubTemplateAoa, parseSubImportAoa, planSubImport, applySubChanges, subFieldLabel } from '../shared/kpi-sub-excel';
-import { activityValue, rollupMonthly, itemNumber } from '../shared/kpi-rollup';
+import { activityValue, rollupMonthly, itemNumber, rollupTree, RollupNode } from '../shared/kpi-rollup';
+import { orderSubTree } from '../shared/sub-tree';
 
-// ตัวชี้วัด 3 ระดับ — แถวลูกใต้แถวตัวชี้วัดหลักในตารางบันทึกผลงาน (ข้อย่อย 1.1 / กิจกรรม 1.1.1)
+// ตัวชี้วัดหลายระดับ — แถวลูกใต้แถวตัวชี้วัดหลักในตารางบันทึกผลงาน (ข้อย่อย 1.1 / ข้อย่อยระดับถัดไป 1.1.1 … / กิจกรรม)
 export interface HierRow {
   kind: 'sub' | 'activity';
   id: number;
   subId: number;            // ข้อย่อยของแถวนี้ (แถวกิจกรรม = ข้อย่อยแม่)
-  level: 1 | 2;
+  parentSubId: number | null; // ข้อย่อยแม่ของแถวข้อย่อย (null = ระดับบนสุด) — แถวกิจกรรม = ข้อย่อยแม่
+  level: number;            // 1 = ข้อย่อยระดับบนสุด, 2 = ระดับถัดไป … (กิจกรรม = ระดับข้อแม่ + 1)
   no: string;
   name: string;
   valueType: 'number' | 'check';
-  auto: boolean;            // ข้อย่อยที่คำนวณจากกิจกรรม (มีกิจกรรมเปิดใช้งาน) — กรอกเองไม่ได้
+  auto: boolean;            // ข้อย่อยที่คำนวณจากระดับล่าง (มีข้อลูก/กิจกรรมเปิดใช้งาน) — กรอกเองไม่ได้
   target: string;
   locked: boolean;
   months: { [k: string]: string };   // oct … sep
@@ -41,49 +43,64 @@ export const HIER_MONTHS: { key: string; m: number; mk: string }[] = [
   { key: 'jul', m: 7, mk: 'm07' }, { key: 'aug', m: 8, mk: 'm08' }, { key: 'sep', m: 9, mk: 'm09' },
 ];
 
-// แปลงข้อมูลจาก GET /hierarchy-results เป็นแถวลูก (เรียงข้อย่อย → กิจกรรมของข้อนั้น) แล้วคำนวณข้อย่อยแบบ auto — ฟังก์ชันล้วน (ทดสอบได้)
+// แปลงข้อมูลจาก GET /hierarchy-results เป็นแถวลูกแบบ pre-order (ข้อย่อย → ข้อลูกของมัน … → กิจกรรมของข้อนั้น) แล้วคำนวณข้อที่คำนวณจากระดับล่าง
+// เลขข้อ: ข้อลูกใช้ลำดับ 1..n ก่อน กิจกรรมต่อท้าย (ตรงกับ backend buildItemExportRows) — ฟังก์ชันล้วน (ทดสอบได้)
 export function buildHierRows(data: any, parentNo: string): HierRow[] {
   const rows: HierRow[] = [];
+  const subs: any[] = data?.subs || [];
   const acts: any[] = data?.activities || [];
-  (data?.subs || []).forEach((s: any, si: number) => {
-    const subNo = itemNumber(s.item_no, parentNo, si);
-    const subActs = acts.filter(a => Number(a.sub_indicator_id) === Number(s.id));
-    const toMonths = (src: any) => {
-      const o: { [k: string]: string } = {};
-      for (const hm of HIER_MONTHS) o[hm.key] = src?.months?.[hm.m] ?? '';
-      return o;
-    };
-    const sm = toMonths(s);
-    rows.push({ kind: 'sub', id: Number(s.id), subId: Number(s.id), level: 1, no: subNo, name: s.sub_indicator_name, valueType: 'number',
-      auto: s.rollup_mode === 'auto' && subActs.length > 0, target: s.target ?? s.target_percentage ?? '', locked: !!s.locked,
-      months: sm, _orig: { ...sm } });
-    subActs.forEach((a: any, ai: number) => {
-      const am = toMonths(a);
-      rows.push({ kind: 'activity', id: Number(a.id), subId: Number(s.id), level: 2, no: itemNumber(a.item_no, subNo, ai), name: a.activity_name,
-        valueType: a.value_type === 'check' ? 'check' : 'number', auto: false, target: a.value_type === 'check' ? '' : (a.target ?? a.target_percentage ?? ''),
-        locked: !!a.locked, months: am, _orig: { ...am } });
+  const toMonths = (src: any) => {
+    const o: { [k: string]: string } = {};
+    for (const hm of HIER_MONTHS) o[hm.key] = src?.months?.[hm.m] ?? '';
+    return o;
+  };
+  const pid = (s: any) => (s.parent_sub_id === null || s.parent_sub_id === undefined || s.parent_sub_id === '') ? null : Number(s.parent_sub_id);
+  const childSubs = (p: number | null) => subs.filter(s => pid(s) === p);
+  const subActs = (id: number) => acts.filter(a => Number(a.sub_indicator_id) === id);
+  const walk = (p: number | null, pNo: string, level: number, seen: Set<number>) => {
+    childSubs(p).forEach((s: any, si: number) => {
+      const id = Number(s.id);
+      if (seen.has(id)) return;
+      seen.add(id);
+      const no = itemNumber(s.item_no, pNo, si);
+      const kids = childSubs(id);
+      const myActs = subActs(id);
+      const sm = toMonths(s);
+      rows.push({ kind: 'sub', id, subId: id, parentSubId: p, level, no, name: s.sub_indicator_name, valueType: 'number',
+        auto: s.rollup_mode === 'auto' && kids.length + myActs.length > 0, target: s.target ?? s.target_percentage ?? '', locked: !!s.locked,
+        months: sm, _orig: { ...sm } });
+      walk(id, no, level + 1, seen);
+      myActs.forEach((a: any, ai: number) => {
+        const am = toMonths(a);
+        rows.push({ kind: 'activity', id: Number(a.id), subId: id, parentSubId: id, level: level + 1, no: itemNumber(a.item_no, no, kids.length + ai),
+          name: a.activity_name, valueType: a.value_type === 'check' ? 'check' : 'number', auto: false,
+          target: a.value_type === 'check' ? '' : (a.target ?? a.target_percentage ?? ''), locked: !!a.locked, months: am, _orig: { ...am } });
+      });
     });
-  });
+  };
+  walk(null, parentNo, 1, new Set<number>());
   recomputeHierRows(rows);
   return rows;
 }
 
-// ข้อย่อยแบบ auto = rollupMonthly ของกิจกรรม (ทำแล้ว = 100 / ยังไม่ทำ = 0) — กติกาเดียวกับ backend loadEffectiveSubMonthly()
+// ข้อที่คำนวณจากระดับล่าง = kpiRollup.rollupTree() (กิจกรรมทำแล้ว = 100 / ยังไม่ทำ = 0) — กติกาเดียวกับ backend loadEffectiveSubMonthly()
 export function recomputeHierRows(rows: HierRow[]) {
-  for (const sub of rows) {
-    if (sub.kind !== 'sub' || !sub.auto) continue;
-    const acts = rows.filter(r => r.kind === 'activity' && r.subId === sub.id);
-    const vals: { [mk: string]: { [id: string]: number | null } } = {};
+  const nodes: RollupNode[] = rows.map(r => r.kind === 'sub'
+    ? { key: 's' + r.id, parentKey: r.parentSubId === null ? null : 's' + r.parentSubId, kind: 'sub', auto: r.auto }
+    : { key: 'a' + r.id, parentKey: 's' + r.subId, kind: 'activity', valueType: r.valueType });
+  const values: { [key: string]: { [mk: string]: unknown } } = {};
+  for (const r of rows) {
+    const v: { [mk: string]: unknown } = {};
+    for (const hm of HIER_MONTHS) v[hm.mk] = r.months[hm.key];
+    values[(r.kind === 'sub' ? 's' : 'a') + r.id] = v;
+  }
+  const tree = rollupTree(nodes, values);
+  for (const r of rows) {
+    const t = r.kind === 'sub' ? tree['s' + r.id] : null;
+    if (!t || !t.rolled) continue;
     for (const hm of HIER_MONTHS) {
-      for (const a of acts) {
-        const v = activityValue(a.valueType, a.months[hm.key]);
-        if (v !== null) (vals[hm.mk] || (vals[hm.mk] = {}))[a.id] = v;
-      }
-    }
-    const out = rollupMonthly(acts.length, vals);
-    for (const hm of HIER_MONTHS) {
-      const v = out[hm.mk];
-      sub.months[hm.key] = v === null ? '' : (Number.isInteger(v) ? String(v) : v.toFixed(2));
+      const v = t.months[hm.mk];
+      r.months[hm.key] = v === null ? '' : (Number.isInteger(v) ? String(v) : v.toFixed(2));
     }
   }
 }
@@ -3104,6 +3121,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     this.subResultContext = {
       indicator_id: item.indicator_id,
       indicator_name: item.kpi_indicators_name,
+      item_no: item.item_no || '',
       hospcode: item.hospcode,
       hosname: item.hosname,
       year_bh: item.year_bh || this.selectedYear,
@@ -3216,7 +3234,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       return { avgTarget: '-', avgActual: '-', avgPct: '-', count: 0, metPct: 0 };
     }
     const targets: number[] = [];
-    for (const s of this.subResultList) {
+    for (const s of this.subResultList.filter((x: any) => !(Number(x._level) > 0))) {
       const t = parseFloat(String(s._target ?? ''));
       if (isFinite(t) && t !== 0) targets.push(t);
     }
@@ -3243,7 +3261,8 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   // เดือนที่ไม่มีข้อใดบันทึกเลย = null — ต้องตรงกับ loadSubAggregates() ฝั่ง backend
   getSubMonthlyAggregates(): { [month: number]: number | null } {
     const out: { [month: number]: number | null } = {};
-    const list = this.subResultList || [];
+    // ผลงานหลักคิดจากข้อย่อยระดับบนสุดเท่านั้น (ข้อลูกมีผลผ่านข้อแม่ที่คำนวณจากระดับล่าง) — ตรงกับ backend loadSubAggregates()
+    const list = (this.subResultList || []).filter((s: any) => !(Number(s._level) > 0));
     const latest = new Map<number, number>();
     for (const m of this.subMonthColumns) {
       let has = false;
@@ -3472,7 +3491,8 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     this._subOriginal.clear();
     this.authService.getSubIndicators(ctx.indicator_id).subscribe((res: any) => {
       if (!res.success) return;
-      const subs = res.data.filter((s: any) => Number(s.is_active) === 1);
+      // ข้อย่อยทุกระดับเรียงเป็นต้นไม้ (ปิดข้อแม่ = ซ่อนทั้งสาย) — _level ใช้เยื้อง, ผลงานรวมคิดจากข้อระดับบนสุด
+      const subs = orderSubTree(res.data, ctx.item_no || '', true);
       this.authService.getSubResults({ indicator_id: ctx.indicator_id, year_bh: ctx.year_bh, hospcode: ctx.hospcode }).subscribe((r2: any) => {
         // pivot: key = sub_id_month → { target_value, actual_value }
         const resultMap = new Map<string, any>();
@@ -3492,8 +3512,8 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
               actual: row?.actual_value ?? ''
             });
           }
-          // ข้อย่อยที่คำนวณจากกิจกรรม (ตัวชี้วัด 3 ระดับ) — อ่านอย่างเดียวในหน้าต่างนี้ ค่าเติมจากกิจกรรมด้านล่าง
-          const _auto = s.rollup_mode === 'auto' && Number(s.activity_count) > 0;
+          // ข้อย่อยที่คำนวณจากระดับล่าง (ข้อลูก/กิจกรรม) — อ่านอย่างเดียวในหน้าต่างนี้ ค่าเติมจากการคำนวณด้านล่าง
+          const _auto = s.rollup_mode === 'auto' && Number(s.activity_count || 0) + Number(s._childSubCount || 0) > 0;
           return { ...s, _target, _actuals: monthActuals, _auto };
         });
         this.cdr.detectChanges();

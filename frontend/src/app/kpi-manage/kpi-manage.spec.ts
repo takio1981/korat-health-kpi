@@ -87,6 +87,42 @@ describe('KpiManageComponent', () => {
     });
   });
 
+  // ---- 19 ต.ค. 2569: ตัวชี้วัดหลายระดับ — หน้าต่างตัวชี้วัดย่อยเป็นต้นไม้ ----
+  describe('ตัวชี้วัดย่อยหลายระดับ', () => {
+    let http: HttpTestingController;
+    beforeEach(() => {
+      http = TestBed.inject(HttpTestingController);
+      component.subParentIndicator = { id: 7, item_no: '3' };
+      component.loadSubList(7);
+      http.expectOne(r => r.url.includes('/sub-indicators')).flush({ success: true, max_levels: 4, data: [
+        { id: 1, parent_sub_id: null, sub_indicator_name: 'ก', is_active: 1, activity_count: 0, child_count: 1 },
+        { id: 11, parent_sub_id: 1, sub_indicator_name: 'ข', is_active: 1, activity_count: 2, child_count: 0 },
+        { id: 2, parent_sub_id: null, sub_indicator_name: 'ค', is_active: 1, activity_count: 0, child_count: 0 },
+      ] });
+    });
+
+    it('เรียงเป็นต้นไม้พร้อมเลขข้อ และปุ่มเพิ่มข้อย่อยแสดงเฉพาะเมื่อยังไม่ถึงระดับสูงสุด', () => {
+      expect(component.subList.map((s: any) => s._no)).toEqual(['3.1', '3.1.1', '3.2']);
+      expect(component.subLevel(component.subList[1])).toBe(3);
+      expect(component.canAddChildSub(component.subList[0])).toBe(true);    // ข้อลูกจะอยู่ระดับ 3
+      expect(component.canAddChildSub(component.subList[1])).toBe(false);   // ระดับ 4 สงวนไว้ให้กิจกรรม
+      component.subMaxLevels = 5;
+      expect(component.canAddChildSub(component.subList[1])).toBe(true);
+    });
+
+    it('เพิ่มข้อย่อยลูก → ส่ง parent_sub_id / เลขข้อกิจกรรมต่อจากข้อลูก', () => {
+      component.openSubForm(null, component.subList[0]);
+      expect(component.subCurrent.parent_sub_id).toBe(1);
+      expect(component.subFormParent.id).toBe(1);
+      component.subCurrent.sub_indicator_name = 'ใหม่';
+      component.saveSub();
+      expect(http.expectOne(r => r.method === 'POST' && r.url.includes('/sub-indicators')).request.body.parent_sub_id).toBe(1);
+      component.openActModal(component.subList[0], 0);
+      http.expectOne(r => r.url.includes('/sub-activities')).flush({ success: true, data: [] });
+      expect(component.actNo({}, 0)).toBe('3.1.2');   // ข้อลูก 3.1.1 มาก่อน
+    });
+  });
+
   // ---- 19 ต.ค. 2569: ปรับเกณฑ์ให้เท่ากับ KHD ----
   describe('เกณฑ์ต่างจาก KHD', () => {
     beforeEach(() => {

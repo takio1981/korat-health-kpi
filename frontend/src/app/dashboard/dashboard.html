@@ -1247,19 +1247,19 @@
 
               <!-- แถวลูก: ข้อย่อย (1.1) และกิจกรรม (1.1.1) — กรอกได้เฉพาะระดับ "กรอกเอง" ระดับที่คำนวณแสดงสีเทา + ไอคอนเครื่องคิดเลข -->
               <tr *ngFor="let ch of hierRows(item)" class="text-xs"
-                  [ngClass]="ch.level === 1 ? 'bg-indigo-50/40' : 'bg-violet-50/30'">
+                  [ngClass]="ch.kind === 'sub' ? 'bg-indigo-50/40' : 'bg-violet-50/30'">
                 <td *ngIf="isReviewMode" class="px-2 py-1"></td>
                 <td *ngIf="isDeleteMode" class="px-2 py-1 bg-red-50"></td>
                 <td *ngIf="colVisible['actions']" class="px-1 py-1 frozen col-2 border-r border-gray-100"
-                    [ngClass]="ch.level === 1 ? 'bg-indigo-50' : 'bg-violet-50'"></td>
-                <td class="py-1 pr-2 frozen col-3 border-r border-gray-100" [ngClass]="ch.level === 1 ? 'bg-indigo-50 pl-6' : 'bg-violet-50 pl-11'">
+                    [ngClass]="ch.kind === 'sub' ? 'bg-indigo-50' : 'bg-violet-50'"></td>
+                <td class="py-1 pr-2 frozen col-3 border-r border-gray-100" [ngClass]="ch.kind === 'sub' ? 'bg-indigo-50' : 'bg-violet-50'" [style.padding-left.px]="10 + ch.level * 14" [title]="'ระดับที่ ' + (ch.level + 1)">
                   <div class="flex items-start gap-1.5 min-w-0">
-                    <i class="fas text-[9px] mt-1 shrink-0" [ngClass]="ch.level === 1 ? 'fa-level-up-alt fa-rotate-90 text-indigo-400' : 'fa-angle-right text-violet-400'"></i>
+                    <i class="fas text-[9px] mt-1 shrink-0" [ngClass]="ch.kind === 'sub' ? 'fa-level-up-alt fa-rotate-90 text-indigo-400' : 'fa-angle-right text-violet-400'"></i>
                     <span class="shrink-0 px-1 py-0.5 rounded text-[10px] font-bold"
-                          [ngClass]="ch.level === 1 ? 'bg-indigo-100 text-indigo-700' : 'bg-violet-100 text-violet-700'">{{ ch.no }}</span>
-                    <span class="whitespace-normal break-words" [ngClass]="ch.level === 1 ? 'font-semibold text-gray-800' : 'text-gray-700'">{{ ch.name }}</span>
-                    <span *ngIf="ch.auto" class="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 text-[9px] font-bold" title="ผลงานคำนวณจากกิจกรรมอัตโนมัติ (เฉลี่ยกิจกรรม)">
-                      <i class="fas fa-calculator text-[8px]"></i>จากกิจกรรม
+                          [ngClass]="ch.kind === 'sub' ? 'bg-indigo-100 text-indigo-700' : 'bg-violet-100 text-violet-700'">{{ ch.no }}</span>
+                    <span class="whitespace-normal break-words" [ngClass]="ch.kind === 'sub' ? 'font-semibold text-gray-800' : 'text-gray-700'">{{ ch.name }}</span>
+                    <span *ngIf="ch.auto" class="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 text-[9px] font-bold" title="ผลงานคำนวณจากระดับล่างอัตโนมัติ (เฉลี่ยข้อย่อย/กิจกรรมของข้อนี้)">
+                      <i class="fas fa-calculator text-[8px]"></i>จากระดับล่าง
                     </span>
                     <span *ngIf="ch.valueType === 'check'" class="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[9px] font-bold" title="กดช่องเดือนเพื่อเลือก ทำแล้ว / ยังไม่ทำ">
                       <i class="fas fa-check-square text-[8px]"></i>ทำแล้ว/ยังไม่ทำ
@@ -1277,7 +1277,7 @@
                 </td>
                 <td *ngFor="let m of visibleMonthKeys" class="px-1 py-1 text-center border-x whitespace-nowrap month-col">
                   <!-- ระดับที่คำนวณ: แสดงค่าอย่างเดียว (คำนวณใหม่ทันทีเมื่อกรอกกิจกรรม) -->
-                  <span *ngIf="ch.auto" class="text-gray-500 italic" title="คำนวณจากกิจกรรม">
+                  <span *ngIf="ch.auto" class="text-gray-500 italic" title="คำนวณจากระดับล่าง">
                     {{ ch.months[m] || '-' }}
                   </span>
                   <ng-container *ngIf="!ch.auto">
@@ -2121,9 +2121,9 @@
               </td>
               <td class="px-2 py-1.5 sticky bg-white z-10 border-r border-gray-200"
                   [style.left]="subDeleteMode ? '40px' : '0'">
-                <p class="font-medium text-gray-900 text-xs leading-tight">{{ s.sub_indicator_name }}</p>
+                <p class="font-medium text-gray-900 text-xs leading-tight" [style.padding-left.px]="(s._level || 0) * 12"><span *ngIf="s._level > 0" class="text-indigo-400 mr-0.5">↳</span><span class="text-indigo-600 font-bold mr-1">{{ s._no }}</span>{{ s.sub_indicator_name }}</p>
                 <p class="text-[10px] text-gray-400">{{ s.sub_indicator_code || '-' }}</p>
-                <p *ngIf="s._auto" class="text-[10px] text-violet-600 font-bold" title="บันทึกที่กิจกรรม: กด ▶ ที่แถวตัวชี้วัดในตารางหลัก"><i class="fas fa-calculator mr-0.5"></i>คำนวณจากกิจกรรม</p>
+                <p *ngIf="s._auto" class="text-[10px] text-violet-600 font-bold" title="บันทึกที่ระดับล่าง: กด ▶ ที่แถวตัวชี้วัดในตารางหลัก"><i class="fas fa-calculator mr-0.5"></i>คำนวณจากระดับล่าง</p>
               </td>
               <td class="px-0.5 py-1">
                 <input type="text" [(ngModel)]="s._target"

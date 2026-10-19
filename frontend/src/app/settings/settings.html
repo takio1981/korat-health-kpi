@@ -216,6 +216,19 @@
           <p class="mt-3 text-xs text-amber-600"><i class="fas fa-info-circle me-1"></i>user ทั่วไปและ admin_cup ไม่สามารถแก้ไขเป้าหมายได้ทุกกรณี ไม่ว่าสวิทจะเปิดหรือปิด</p>
         </div>
 
+        <!-- จำนวนระดับตัวชี้วัดสูงสุด (ตัวชี้วัดหลายระดับ — 19 ต.ค. 2569) -->
+        <div class="mt-8 pt-6 border-t border-gray-100">
+          <h3 class="text-lg font-bold text-gray-800 mb-2"><i class="fas fa-sitemap me-2 text-indigo-600"></i>จำนวนระดับตัวชี้วัดสูงสุด</h3>
+          <p class="text-xs text-gray-500 mb-3">นับรวมตัวชี้วัดหลักและกิจกรรม — ค่าตั้งต้น 4 ระดับ: หลัก 1 → ย่อย 1.1 → ย่อยระดับถัดไป 1.1.1 → กิจกรรม 1.1.1.1
+            (ระดับสุดท้ายสงวนไว้สำหรับกิจกรรม) — ลดจำนวนระดับไม่ลบข้อที่มีอยู่แล้ว แต่จะเพิ่มข้อใหม่เกินระดับไม่ได้</p>
+          <div class="flex items-center gap-3">
+            <select [(ngModel)]="hierarchyMaxLevels" name="hierarchyMaxLevels" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+              <option *ngFor="let n of [3, 4, 5, 6]" [ngValue]="n">{{ n }} ระดับ</option>
+            </select>
+            <span class="text-xs text-gray-500">ข้อย่อยได้ถึงระดับที่ {{ hierarchyMaxLevels - 1 }} — กิจกรรมอยู่ระดับที่ {{ hierarchyMaxLevels }} ได้</span>
+          </div>
+        </div>
+
         <!-- ตั้งค่าอุทธรณ์ -->
         <!-- ตั้งค่า SSO: ThaID + ProviderID -->
         <div class="mt-8 pt-6 border-t border-gray-100">

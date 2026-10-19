@@ -6749,29 +6749,100 @@ apiRouter.get('/indicators/:id/result-summary', authenticateToken, isSuperAdmin,
     }
 });
 
+// ========== ตัวชี้วัดหลายระดับแบบต้นไม้ (19 ต.ค. 2569) ==========
+// ข้อย่อยมีข้อแม่เป็นข้อย่อยได้ (kpi_sub_indicators.parent_sub_id) — ทุกข้อเก็บ indicator_id ของตัวชี้วัดหลักเสมอ จึงใช้ JOIN เดิม
+// (อนุมัติ/ล็อค/ลบ/สถิติ/refresh) ได้ทุกระดับ — ระดับ: หลัก = 1, ข้อย่อยบนสุด = 2, ข้อลูก = 3 …, กิจกรรม = ระดับข้อแม่ + 1
+// จำนวนระดับสูงสุด (รวมหลักและกิจกรรม) ตั้งที่ system_settings.kpi_hierarchy_max_levels (ค่าตั้งต้น 4, ช่วง 3–6)
+const HIERARCHY_DEFAULT_MAX_LEVELS = 4;
+async function getHierarchyMaxLevels(conn = db) {
+    try {
+        const [[r]] = await conn.query("SELECT setting_value FROM system_settings WHERE setting_key = 'kpi_hierarchy_max_levels'");
+        const n = parseInt(r && r.setting_value, 10);
+        if (n >= 3 && n <= 6) return n;
+    } catch (_) { /* ใช้ค่าตั้งต้น */ }
+    return HIERARCHY_DEFAULT_MAX_LEVELS;
+}
+// ระดับของข้อย่อยจากสายข้อแม่ (subRows = ข้อย่อยของตัวชี้วัดเดียวกัน) — กันวนลูป
+function subLevelIn(subRows, subId) {
+    const byId = new Map(subRows.map(s => [Number(s.id), s]));
+    let level = 2, cur = byId.get(Number(subId));
+    const seen = new Set();
+    while (cur && cur.parent_sub_id != null && !seen.has(Number(cur.id))) {
+        seen.add(Number(cur.id));
+        cur = byId.get(Number(cur.parent_sub_id));
+        if (cur) level++;
+    }
+    return level;
+}
+// ข้อย่อยที่ "แสดงผล/นำมาคำนวณ" = เปิดใช้งานและข้อแม่ทุกชั้นเปิดใช้งาน (ปิดข้อแม่ = ซ่อนทั้งสาย)
+function activeSubTree(subRows) {
+    const byId = new Map(subRows.map(s => [Number(s.id), s]));
+    const ok = (s, seen = new Set()) => {
+        if (!s || Number(s.is_active) !== 1 || seen.has(Number(s.id))) return false;
+        if (s.parent_sub_id == null) return true;
+        seen.add(Number(s.id));
+        return ok(byId.get(Number(s.parent_sub_id)), seen);
+    };
+    return subRows.filter(s => ok(s));
+}
+// ข้อย่อยที่คำนวณจากระดับล่าง (auto + มีข้อลูก/กิจกรรมที่เปิดใช้งาน) ในชุด ids ที่ระบุ — kpiRollup.isRolledNode()
+async function rolledSubIds(conn, ids) {
+    const list = [...new Set((ids || []).map(Number).filter(Boolean))];
+    if (!list.length) return new Set();
+    const [subs] = await conn.query('SELECT id, rollup_mode FROM kpi_sub_indicators WHERE id IN (?)', [list]);
+    const [kids] = await conn.query(
+        `SELECT parent_sub_id AS pid, COUNT(*) AS n FROM kpi_sub_indicators WHERE is_active = 1 AND parent_sub_id IN (?) GROUP BY parent_sub_id
+         UNION ALL SELECT sub_indicator_id AS pid, COUNT(*) AS n FROM kpi_sub_activities WHERE is_active = 1 AND sub_indicator_id IN (?) GROUP BY sub_indicator_id`,
+        [list, list]);
+    const count = new Map();
+    for (const k of kids) count.set(Number(k.pid), (count.get(Number(k.pid)) || 0) + Number(k.n));
+    return new Set(subs.filter(s => kpiRollup.isRolledNode({ kind: 'sub', auto: s.rollup_mode === 'auto' }, count.get(Number(s.id)) || 0)).map(s => Number(s.id)));
+}
+const ROLLED_SUB_MESSAGE = 'ตัวชี้วัดย่อยนี้คำนวณผลงานจากระดับล่าง (ข้อย่อย/กิจกรรม) — กรุณาบันทึกที่ระดับล่างแทน';
+
 // ========== KPI Sub-Indicators CRUD ==========
 apiRouter.get('/sub-indicators', authenticateToken, async (req, res) => {
     try {
         const { indicator_id } = req.query;
         let sql = `SELECT si.*, i.kpi_indicators_name,
-                   (SELECT COUNT(*) FROM kpi_sub_activities a WHERE a.sub_indicator_id = si.id AND a.is_active = 1) AS activity_count
+                   (SELECT COUNT(*) FROM kpi_sub_activities a WHERE a.sub_indicator_id = si.id AND a.is_active = 1) AS activity_count,
+                   (SELECT COUNT(*) FROM kpi_sub_indicators c WHERE c.parent_sub_id = si.id AND c.is_active = 1) AS child_count
                    FROM kpi_sub_indicators si
                    LEFT JOIN kpi_indicators i ON si.indicator_id = i.id`;
         const params = [];
         if (indicator_id) { sql += ' WHERE si.indicator_id = ?'; params.push(indicator_id); }
         sql += ' ORDER BY si.indicator_id, si.sort_order, si.id';
         const [rows] = await db.query(sql, params);
-        res.json({ success: true, data: rows });
+        const byInd = new Map();
+        for (const r of rows) { if (!byInd.has(r.indicator_id)) byInd.set(r.indicator_id, []); byInd.get(r.indicator_id).push(r); }
+        for (const r of rows) r.level = subLevelIn(byInd.get(r.indicator_id), r.id);
+        res.json({ success: true, data: rows, max_levels: await getHierarchyMaxLevels() });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
 apiRouter.post('/sub-indicators', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
     try {
-        const { indicator_id, sub_indicator_name, sub_indicator_code, target_percentage, weight, description, sort_order } = req.body;
+        let { indicator_id, sub_indicator_name, sub_indicator_code, target_percentage, weight, description, sort_order, parent_sub_id } = req.body;
+        let parentId = null;
+        if (parent_sub_id !== undefined && parent_sub_id !== null && parent_sub_id !== '') {
+            parentId = Number(parent_sub_id);
+            const [[parent]] = await db.query('SELECT id, indicator_id FROM kpi_sub_indicators WHERE id = ?', [parentId]);
+            if (!parent) return res.status(404).json({ success: false, message: 'ไม่พบตัวชี้วัดย่อยที่เป็นข้อแม่' });
+            if (indicator_id && Number(indicator_id) !== Number(parent.indicator_id)) {
+                return res.status(400).json({ success: false, message: 'ข้อแม่ต้องอยู่ในตัวชี้วัดหลักเดียวกัน' });
+            }
+            indicator_id = parent.indicator_id;
+            const [siblings] = await db.query('SELECT id, parent_sub_id FROM kpi_sub_indicators WHERE indicator_id = ?', [indicator_id]);
+            const maxLevels = await getHierarchyMaxLevels();
+            // ข้อย่อยใหม่ต้องเหลือที่ให้กิจกรรมอีก 1 ระดับ → ระดับของข้อใหม่ ≤ จำนวนระดับสูงสุด − 1
+            if (subLevelIn(siblings, parentId) + 1 > maxLevels - 1) {
+                return res.status(400).json({ success: false, message: `เพิ่มข้อย่อยได้ไม่เกิน ${maxLevels - 1} ระดับ (รวมตัวชี้วัดหลัก) — ระดับสุดท้ายสงวนไว้สำหรับกิจกรรม` });
+            }
+        }
         if (!indicator_id || !sub_indicator_name) return res.status(400).json({ success: false, message: 'indicator_id + sub_indicator_name required' });
         const [r] = await db.query(
-            `INSERT INTO kpi_sub_indicators (indicator_id, sub_indicator_name, sub_indicator_code, target_percentage, weight, description, sort_order) VALUES (?,?,?,?,?,?,?)`,
-            [indicator_id, sub_indicator_name, sub_indicator_code || null, target_percentage || null, weight || 1, description || null, sort_order || 0]
+            `INSERT INTO kpi_sub_indicators (indicator_id, parent_sub_id, sub_indicator_name, sub_indicator_code, target_percentage, weight, description, sort_order) VALUES (?,?,?,?,?,?,?,?)`,
+            [indicator_id, parentId, sub_indicator_name, sub_indicator_code || null, target_percentage || null, weight || 1, description || null, sort_order || 0]
         );
         await saveHierarchyFields(db, 'kpi_sub_indicators', r.insertId, req.body);
         res.json({ success: true, id: r.insertId, message: 'เพิ่มตัวชี้วัดย่อยสำเร็จ' });
@@ -6819,6 +6890,23 @@ apiRouter.put('/sub-indicators/:id', authenticateToken, requireAction('kpi-manag
 
 apiRouter.delete('/sub-indicators/:id', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
+        // ลบข้อย่อย = ลบข้อลูก กิจกรรม และผลงานทั้งสาย (FK CASCADE) — ต้องไม่มีผลงานบันทึกอยู่ (เดิมไม่ตรวจ ลบผลงานเงียบๆ)
+        const [[me]] = await db.query('SELECT id, indicator_id FROM kpi_sub_indicators WHERE id = ?', [req.params.id]);
+        if (!me) return res.status(404).json({ success: false, message: 'ไม่พบตัวชี้วัดย่อย' });
+        const [all] = await db.query('SELECT id, parent_sub_id FROM kpi_sub_indicators WHERE indicator_id = ?', [me.indicator_id]);
+        const ids = new Set([Number(me.id)]);
+        for (let grew = true; grew;) {
+            grew = false;
+            for (const s of all) if (s.parent_sub_id != null && ids.has(Number(s.parent_sub_id)) && !ids.has(Number(s.id))) { ids.add(Number(s.id)); grew = true; }
+        }
+        const idList = [...ids];
+        const [[c]] = await db.query(
+            `SELECT (SELECT COUNT(*) FROM kpi_sub_results WHERE sub_indicator_id IN (?) AND actual_value IS NOT NULL AND actual_value <> '')
+                  + (SELECT COUNT(*) FROM kpi_activity_results ar JOIN kpi_sub_activities a ON a.id = ar.activity_id
+                     WHERE a.sub_indicator_id IN (?) AND ar.actual_value IS NOT NULL AND ar.actual_value <> '') AS cnt`, [idList, idList]);
+        if (Number(c.cnt) > 0) {
+            return res.status(400).json({ success: false, message: `ไม่สามารถลบได้: ข้อนี้หรือระดับล่างมีผลงานบันทึกแล้ว ${c.cnt} รายการ กรุณา "ปิดใช้งาน" แทนการลบ` });
+        }
         await db.query('DELETE FROM kpi_sub_indicators WHERE id = ?', [req.params.id]);
         res.json({ success: true, message: 'ลบสำเร็จ' });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -6883,8 +6971,13 @@ apiRouter.post('/sub-activities', authenticateToken, requireAction('kpi-manage',
         if (!sub_indicator_id || !activity_name || !String(activity_name).trim()) {
             return res.status(400).json({ success: false, message: 'กรุณาระบุตัวชี้วัดย่อยและชื่อกิจกรรม' });
         }
-        const [si] = await db.query('SELECT id FROM kpi_sub_indicators WHERE id = ?', [sub_indicator_id]);
+        const [si] = await db.query('SELECT id, indicator_id FROM kpi_sub_indicators WHERE id = ?', [sub_indicator_id]);
         if (si.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบตัวชี้วัดย่อย' });
+        const [tree] = await db.query('SELECT id, parent_sub_id FROM kpi_sub_indicators WHERE indicator_id = ?', [si[0].indicator_id]);
+        const maxLevels = await getHierarchyMaxLevels();
+        if (subLevelIn(tree, sub_indicator_id) + 1 > maxLevels) {
+            return res.status(400).json({ success: false, message: `กิจกรรมต้องอยู่ไม่เกินระดับที่ ${maxLevels}` });
+        }
         const [r] = await db.query(
             `INSERT INTO kpi_sub_activities (sub_indicator_id, activity_name, activity_code, item_no, value_type, target_percentage, sort_order)
              VALUES (?,?,?,?,?,?,?)`,
@@ -6964,9 +7057,11 @@ apiRouter.get('/hierarchy-results', authenticateToken, async (req, res) => {
         if (!(await canAccessHospcode(req.user, hospcode))) return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์ดูข้อมูลหน่วยบริการนี้' });
         const [[ind]] = await db.query('SELECT id, item_no, sub_rollup_mode FROM kpi_indicators WHERE id = ?', [indicator_id]);
         if (!ind) return res.status(404).json({ success: false, message: 'ไม่พบตัวชี้วัด' });
-        const [subs] = await db.query(
-            `SELECT id, sub_indicator_name, sub_indicator_code, item_no, rollup_mode, target_percentage, sort_order
-             FROM kpi_sub_indicators WHERE indicator_id = ? AND is_active = 1 ORDER BY sort_order, id`, [indicator_id]);
+        const [allSubs] = await db.query(
+            `SELECT id, parent_sub_id, is_active, sub_indicator_name, sub_indicator_code, item_no, rollup_mode, target_percentage, sort_order
+             FROM kpi_sub_indicators WHERE indicator_id = ? ORDER BY sort_order, id`, [indicator_id]);
+        // เฉพาะข้อที่เปิดใช้งานและข้อแม่ทุกชั้นเปิดใช้งาน (ตัวชี้วัดหลายระดับ — 19 ต.ค. 2569)
+        const subs = activeSubTree(allSubs).map(({ is_active, ...rest }) => rest);
         const subIds = subs.map(x => x.id);
         let acts = [], subRes = [], actRes = [];
         if (subIds.length > 0) {
@@ -6998,7 +7093,7 @@ apiRouter.get('/hierarchy-results', authenticateToken, async (req, res) => {
         res.json({
             success: true,
             data: {
-                indicator_id: ind.id, item_no: ind.item_no, sub_rollup_mode: ind.sub_rollup_mode || 'auto',
+                indicator_id: ind.id, item_no: ind.item_no, sub_rollup_mode: ind.sub_rollup_mode || 'auto', max_levels: await getHierarchyMaxLevels(),
                 subs: subs.map(x => ({ ...x, rollup_mode: x.rollup_mode || 'manual', ...(subMap.get(x.id) || empty) })),
                 activities: acts.map(a => ({ ...a, ...(actMap.get(a.id) || empty) })),
             }
@@ -7047,12 +7142,8 @@ apiRouter.post('/hierarchy-results/save', authenticateToken, async (req, res) =>
         const subById = new Map(subRows.map(r => [r.id, r]));
         const actById = new Map(actRows.map(r => [r.id, r]));
 
-        // ข้อย่อยที่คำนวณจากกิจกรรม (auto + มีกิจกรรมเปิดใช้งาน) กรอกเองไม่ได้
-        const autoSubIds = subRows.filter(r => r.rollup_mode === 'auto').map(r => r.id);
-        if (autoSubIds.length) {
-            const [withActs] = await conn.query('SELECT DISTINCT sub_indicator_id FROM kpi_sub_activities WHERE is_active = 1 AND sub_indicator_id IN (?)', [autoSubIds]);
-            if (withActs.length) throw Object.assign(new Error('ตัวชี้วัดย่อยนี้คำนวณผลงานจากกิจกรรม — กรุณาบันทึกที่กิจกรรมแทน'), { status: 400 });
-        }
+        // ข้อย่อยที่คำนวณจากระดับล่าง (auto + มีข้อลูก/กิจกรรมเปิดใช้งาน) กรอกเองไม่ได้
+        if ((await rolledSubIds(conn, subIds)).size > 0) throw Object.assign(new Error(ROLLED_SUB_MESSAGE), { status: 400 });
 
         const indicatorIds = [...new Set([...subRows.map(r => r.indicator_id), ...actRows.map(r => r.indicator_id)])];
         // user ทั่วไปบันทึกได้เฉพาะตัวชี้วัดของหน่วยงานตัวเอง (เหมือน /update-kpi)
@@ -7166,80 +7257,97 @@ function subAggNum(v) {
 //   raw = ค่าที่ใช้ส่งออกรายข้อ (ข้อกรอกเอง = ข้อความเดิมทุกตัวอักษร กัน export เห็นว่า "เปลี่ยน" ทั้งที่ไม่ได้แก้)
 // ใช้ร่วม: loadSubAggregates() (ผลงานหลัก), คอลัมน์รายข้อของ performKpiExport/checkKpiChanges (use_sub_indicator_export)
 async function loadEffectiveSubMonthly(conn, { indicatorId, yearBh, hospcode } = {}) {
-    const sw = ['is_active = 1'], sp = [];
+    // ข้อย่อยทุกระดับ (ตัวชี้วัดหลายระดับ — 19 ต.ค. 2569): โหลดทั้งหมดแล้วคัดเฉพาะข้อที่เปิดใช้งานและข้อแม่ทุกชั้นเปิดใช้งาน
+    const sw = [], sp = [];
     if (indicatorId) { sw.push('indicator_id = ?'); sp.push(indicatorId); }
-    const [subs] = await conn.query(`SELECT id, indicator_id, target_percentage, rollup_mode FROM kpi_sub_indicators WHERE ${sw.join(' AND ')}`, sp);
+    const [allSubs] = await conn.query(
+        `SELECT id, indicator_id, parent_sub_id, is_active, target_percentage, rollup_mode FROM kpi_sub_indicators ${sw.length ? 'WHERE ' + sw.join(' AND ') : ''}`, sp);
+    const subs = activeSubTree(allSubs);
     if (subs.length === 0) return { subs, entries: [] };
-    const subById = new Map(subs.map(su => [su.id, su]));
-    const entries = new Map();
-    const entryOf = (subId, hc, year) => {
-        const key = `${subId}|${hc}|${year}`;
-        if (!entries.has(key)) {
-            entries.set(key, { indicator_id: subById.get(subId).indicator_id, sub_indicator_id: subId, hospcode: hc, year_bh: year, months: {}, raw: {}, target10: null });
-        }
-        return entries.get(key);
+    const subById = new Map(subs.map(su => [Number(su.id), su]));
+
+    // กิจกรรมที่เปิดใช้งานของข้อย่อยที่เปิดใช้งาน (ทุกระดับ)
+    const [acts] = await conn.query('SELECT id, sub_indicator_id, value_type FROM kpi_sub_activities WHERE is_active = 1 AND sub_indicator_id IN (?)', [[...subById.keys()]]);
+    const actById = new Map(acts.map(a => [Number(a.id), a]));
+
+    // โครงต้นไม้ต่อตัวชี้วัดหลัก (kpiRollup.rollupTree) — key: s<id> / a<id>
+    const nodesByInd = new Map();
+    const nodeList = (indId) => { if (!nodesByInd.has(indId)) nodesByInd.set(indId, []); return nodesByInd.get(indId); };
+    for (const su of subs) nodeList(su.indicator_id).push({ key: 's' + su.id, parentKey: su.parent_sub_id != null ? 's' + su.parent_sub_id : null, kind: 'sub', auto: su.rollup_mode === 'auto' });
+    for (const a of acts) nodeList(subById.get(Number(a.sub_indicator_id)).indicator_id).push({ key: 'a' + a.id, parentKey: 's' + a.sub_indicator_id, kind: 'activity', valueType: a.value_type });
+
+    // ค่าดิบรายเดือน แยกตาม ตัวชี้วัด × หน่วยบริการ × ปีงบ
+    const groups = new Map();
+    const groupOf = (indId, hc, year) => {
+        const key = `${indId}|${hc}|${year}`;
+        if (!groups.has(key)) groups.set(key, { indicator_id: indId, hospcode: hc, year_bh: year, values: {}, target10: new Map(), hasRows: new Set() });
+        return groups.get(key);
     };
-
-    // กิจกรรมของข้อย่อยแบบ auto
-    const autoIds = subs.filter(su => su.rollup_mode === 'auto').map(su => su.id);
-    const actsBySub = new Map(), actById = new Map();
-    if (autoIds.length > 0) {
-        const [acts] = await conn.query('SELECT id, sub_indicator_id, value_type FROM kpi_sub_activities WHERE is_active = 1 AND sub_indicator_id IN (?)', [autoIds]);
-        for (const ac of acts) {
-            actById.set(ac.id, ac);
-            if (!actsBySub.has(ac.sub_indicator_id)) actsBySub.set(ac.sub_indicator_id, []);
-            actsBySub.get(ac.sub_indicator_id).push(ac);
-        }
-    }
-    const rolled = (subId) => actsBySub.has(subId);
-
-    const w = ['si.is_active = 1'], p = [];
-    if (indicatorId) { w.push('si.indicator_id = ?'); p.push(indicatorId); }
+    const w = [], p = [];
+    w.push('sr.sub_indicator_id IN (?)'); p.push([...subById.keys()]);
     if (yearBh) { w.push('sr.year_bh = ?'); p.push(yearBh); }
     if (hospcode) { w.push('sr.hospcode = ?'); p.push(hospcode); }
     const [rows] = await conn.query(`
         SELECT sr.sub_indicator_id, sr.hospcode, sr.year_bh, sr.month_bh, sr.target_value, sr.actual_value
-        FROM kpi_sub_results sr
-        JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
-        WHERE ${w.join(' AND ')}`, p);
+        FROM kpi_sub_results sr WHERE ${w.join(' AND ')}`, p);
     for (const r of rows) {
         const hc = r.hospcode != null ? String(r.hospcode).trim() : '';
         const mk = SUB_AGG_MONTH_KEYS[Number(r.month_bh)];
-        if (!hc || !mk || !subById.has(r.sub_indicator_id)) continue;
-        const e = entryOf(r.sub_indicator_id, hc, r.year_bh);
-        if (Number(r.month_bh) === 10) e.target10 = subAggNum(r.target_value);
-        if (rolled(r.sub_indicator_id)) continue;
-        e.months[mk] = subAggNum(r.actual_value);
-        e.raw[mk] = (r.actual_value != null && r.actual_value !== '') ? String(r.actual_value) : null;
+        const su = subById.get(Number(r.sub_indicator_id));
+        if (!hc || !mk || !su) continue;
+        const g = groupOf(su.indicator_id, hc, r.year_bh);
+        const k = 's' + su.id;
+        g.hasRows.add(k);
+        if (Number(r.month_bh) === 10) g.target10.set(Number(su.id), subAggNum(r.target_value));
+        (g.values[k] || (g.values[k] = {}))[mk] = r.actual_value;
     }
-
     if (actById.size > 0) {
         const aw = ['ar.activity_id IN (?)'], ap = [[...actById.keys()]];
         if (yearBh) { aw.push('ar.year_bh = ?'); ap.push(yearBh); }
         if (hospcode) { aw.push('ar.hospcode = ?'); ap.push(hospcode); }
         const [arows] = await conn.query(`SELECT ar.activity_id, ar.hospcode, ar.year_bh, ar.month_bh, ar.actual_value FROM kpi_activity_results ar WHERE ${aw.join(' AND ')}`, ap);
-        const groups = new Map();
         for (const r of arows) {
             const hc = r.hospcode != null ? String(r.hospcode).trim() : '';
             const mk = SUB_AGG_MONTH_KEYS[Number(r.month_bh)];
-            const ac = actById.get(r.activity_id);
-            if (!hc || !mk || !ac) continue;
-            const key = `${ac.sub_indicator_id}|${hc}|${r.year_bh}`;
-            if (!groups.has(key)) groups.set(key, { subId: ac.sub_indicator_id, hc, year: r.year_bh, vals: {} });
-            const v = kpiRollup.activityValue(ac.value_type, r.actual_value);
-            if (v !== null) (groups.get(key).vals[mk] || (groups.get(key).vals[mk] = {}))[r.activity_id] = v;
-        }
-        for (const g of groups.values()) {
-            const e = entryOf(g.subId, g.hc, g.year);
-            e.months = kpiRollup.rollupMonthly(actsBySub.get(g.subId).length, g.vals);
-            for (const mk of SUB_AGG_FISCAL_ORDER) e.raw[mk] = e.months[mk] === null ? null : String(e.months[mk]);
+            const a = actById.get(Number(r.activity_id));
+            if (!hc || !mk || !a) continue;
+            const g = groupOf(subById.get(Number(a.sub_indicator_id)).indicator_id, hc, r.year_bh);
+            (g.values['a' + a.id] || (g.values['a' + a.id] = {}))[mk] = r.actual_value;
         }
     }
-    return { subs, entries: [...entries.values()] };
+
+    // คำนวณจากล่างขึ้นบนด้วยกติกาเดียวกับหน้าจอ (shared/kpi-rollup.ts)
+    const entries = [];
+    for (const g of groups.values()) {
+        const tree = kpiRollup.rollupTree(nodesByInd.get(g.indicator_id) || [], g.values);
+        for (const su of subs) {
+            if (su.indicator_id !== g.indicator_id) continue;
+            const k = 's' + su.id;
+            const t = tree[k];
+            if (!t) continue;
+            const hasValue = SUB_AGG_FISCAL_ORDER.some(mk => t.months[mk] !== null);
+            if (!g.hasRows.has(k) && !(t.rolled && hasValue)) continue;
+            const raw = {};
+            for (const mk of SUB_AGG_FISCAL_ORDER) {
+                if (t.rolled) raw[mk] = t.months[mk] === null ? null : String(t.months[mk]);
+                else {
+                    const v = g.values[k] && g.values[k][mk];
+                    if (g.values[k] && mk in g.values[k]) raw[mk] = (v != null && v !== '') ? String(v) : null;
+                }
+            }
+            entries.push({ indicator_id: g.indicator_id, sub_indicator_id: Number(su.id), parent_sub_id: su.parent_sub_id != null ? Number(su.parent_sub_id) : null,
+                hospcode: g.hospcode, year_bh: g.year_bh, months: t.months, raw, rolled: t.rolled,
+                target10: g.target10.has(Number(su.id)) ? g.target10.get(Number(su.id)) : null });
+        }
+    }
+    return { subs, entries };
 }
 
+// ผลงานตัวชี้วัดหลักจากข้อย่อย "ระดับบนสุด" (parent_sub_id = NULL) — ข้อลูกมีผลผ่านข้อแม่ที่คำนวณจากระดับล่างเท่านั้น
 async function loadSubAggregates(conn, { indicatorId, yearBh, hospcode } = {}) {
-    const { subs, entries } = await loadEffectiveSubMonthly(conn, { indicatorId, yearBh, hospcode });
+    const { subs: allSubs, entries: allEntries } = await loadEffectiveSubMonthly(conn, { indicatorId, yearBh, hospcode });
+    const subs = allSubs.filter(su => su.parent_sub_id == null);
+    const entries = allEntries.filter(e => e.parent_sub_id == null);
     if (subs.length === 0) return [];
     const subsByInd = new Map();
     for (const su of subs) {
@@ -7267,18 +7375,21 @@ async function loadSubAggregates(conn, { indicatorId, yearBh, hospcode } = {}) {
         const subCount = indSubs.length;
         const row = { indicator_id: g.indicator_id, hospcode: g.hospcode, year_bh: g.year_bh, sub_count: subCount,
             sub_rollup_mode: modeById.get(g.indicator_id) || 'auto', ...kpiRollup.rollupMonthly(subCount, g.vals) };
-        const targets = indSubs.map(su => g.target.has(su.id) ? g.target.get(su.id) : subAggNum(su.target_percentage)).filter(t => t !== null && t !== 0);
+        const targets = indSubs.map(su => g.target.has(Number(su.id)) ? g.target.get(Number(su.id)) : subAggNum(su.target_percentage)).filter(t => t !== null && t !== 0);
         row.avg_target = targets.length > 0 ? round4(targets.reduce((x, y) => x + y, 0) / targets.length) : null;
         out.push(row);
     }
     return out;
 }
 
-// คอลัมน์รายข้อของการส่งออกแบบ use_sub_indicator_export: Map "<sub_id>_<hospcode>" → { m10: string|null, ... } (ค่าที่มีผล)
-async function loadSubExportMonthMap(conn, indicatorId, yearBh) {
+// ค่าที่มีผลรายข้อย่อย: Map "<sub_id>_<hospcode>" → { m10: string|null, ... }
+//   ค่าตั้งต้น = เฉพาะข้อย่อยระดับบนสุด (คอลัมน์รายข้อของการส่งออกแบบ use_sub_indicator_export — โครงตารางเดิมไม่เปลี่ยน)
+//   allLevels = ทุกระดับ (ตารางรายละเอียด <table_process>_items)
+async function loadSubExportMonthMap(conn, indicatorId, yearBh, { allLevels = false } = {}) {
     const { entries } = await loadEffectiveSubMonthly(conn, { indicatorId, yearBh });
     const map = new Map();
     for (const e of entries) {
+        if (!allLevels && e.parent_sub_id != null) continue;
         const m = {};
         for (const mk of SUB_AGG_FISCAL_ORDER) if (mk in e.raw) m[mk] = e.raw[mk];
         map.set(`${e.sub_indicator_id}_${e.hospcode}`, m);
@@ -7291,7 +7402,7 @@ async function loadSubExportMonthMap(conn, indicatorId, yearBh) {
 // ค่าข้อย่อย = loadEffectiveSubMonthly() (ข้อ auto = จากกิจกรรม) | กิจกรรมทำแล้ว/ยังไม่ทำ = 100 / 0 | เลขข้อ = kpiRollup.itemNumber()
 // result = กติกาเดียวกับคอลัมน์รายข้อเดิม (is_cumulative ของตัวชี้วัดหลัก → ผลรวม, ปกติ → ค่าเดือนล่าสุดที่บันทึก)
 const ITEM_MONTHS = SUB_AGG_FISCAL_ORDER;
-const ITEM_DATA_COLS = ['item_no', 'parent_no', 'item_name', 'value_type', 'calc_mode', 'target', 'result', ...ITEM_MONTHS];
+const ITEM_DATA_COLS = ['item_level', 'item_no', 'parent_no', 'item_name', 'value_type', 'calc_mode', 'target', 'result', ...ITEM_MONTHS];
 const itemsTableName = (tableName) => (tableName.length <= 58 ? `${tableName}_items` : null);
 const itemNull = (v) => (v === null || v === undefined || String(v).trim() === '' ? null : String(v).trim());
 function itemSame(a, b) {
@@ -7313,25 +7424,35 @@ function itemResult(monthVals, isCumulative) {
 }
 async function ensureItemsTable(conn, name) {
     await conn.query(`CREATE TABLE IF NOT EXISTS \`${name}\` (
-        hospcode VARCHAR(5) NOT NULL, byear VARCHAR(4) NOT NULL, item_level TINYINT NOT NULL, item_id INT NOT NULL,
+        hospcode VARCHAR(5) NOT NULL, byear VARCHAR(4) NOT NULL, item_kind VARCHAR(10) NOT NULL DEFAULT 'sub', item_id INT NOT NULL, item_level TINYINT NOT NULL,
         item_no VARCHAR(20) DEFAULT NULL, parent_no VARCHAR(20) DEFAULT NULL, item_name VARCHAR(500) DEFAULT NULL,
         value_type VARCHAR(10) DEFAULT NULL, calc_mode VARCHAR(10) DEFAULT NULL, target VARCHAR(100) DEFAULT NULL, result VARCHAR(100) DEFAULT NULL,
         ${ITEM_MONTHS.map(m => `${m} VARCHAR(100) DEFAULT NULL`).join(', ')},
         create_date DATETIME DEFAULT CURRENT_TIMESTAMP, update_date DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (hospcode, byear, item_level, item_id)
+        PRIMARY KEY (hospcode, byear, item_kind, item_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    // ตารางที่สร้างก่อนรองรับหลายระดับ (คีย์เดิม hospcode, byear, item_level, item_id — ระดับ 2 = ข้อย่อย, 3 = กิจกรรม)
+    // → เพิ่ม item_kind แล้วย้ายคีย์ (ข้อย่อยระดับลึกกับกิจกรรมอยู่ระดับเดียวกันได้ และ id มาจากคนละตาราง — 19 ต.ค. 2569)
+    const [cols] = await conn.query(`SHOW COLUMNS FROM \`${name}\` LIKE 'item_kind'`);
+    if (cols.length === 0) {
+        await conn.query(`ALTER TABLE \`${name}\` ADD COLUMN item_kind VARCHAR(10) NOT NULL DEFAULT 'sub' AFTER byear`);
+        await conn.query(`UPDATE \`${name}\` SET item_kind = IF(item_level = 3, 'activity', 'sub')`);
+        await conn.query(`ALTER TABLE \`${name}\` DROP PRIMARY KEY, ADD PRIMARY KEY (hospcode, byear, item_kind, item_id)`);
+    }
 }
-// แถวที่ควรมีในตาราง items ของตัวชี้วัด × ปีงบ — [{ key, hospcode, item_level, item_id, data: {col: value} }]
+// แถวที่ควรมีในตาราง items ของตัวชี้วัด × ปีงบ — [{ key, hospcode, item_kind, item_id, item_level, data: {col: value} }]
+// เดินต้นไม้แบบ pre-order: ข้อย่อย → ข้อลูกของมัน … → กิจกรรมของข้อนั้น (ตัวชี้วัดหลายระดับ — 19 ต.ค. 2569)
 async function buildItemExportRows(conn, indicator, yearBh) {
-    const [subs] = await conn.query(
-        'SELECT id, sub_indicator_name, item_no, rollup_mode, target_percentage FROM kpi_sub_indicators WHERE indicator_id = ? AND is_active = 1 ORDER BY sort_order, id',
+    const [allSubs] = await conn.query(
+        'SELECT id, parent_sub_id, is_active, sub_indicator_name, item_no, rollup_mode, target_percentage FROM kpi_sub_indicators WHERE indicator_id = ? ORDER BY sort_order, id',
         [indicator.id]);
+    const subs = activeSubTree(allSubs);
     if (!subs.length) return [];
     const subIds = subs.map(x => x.id);
     const [acts] = await conn.query(
         'SELECT id, sub_indicator_id, activity_name, item_no, value_type, target_percentage FROM kpi_sub_activities WHERE is_active = 1 AND sub_indicator_id IN (?) ORDER BY sort_order, id',
         [subIds]);
-    const subMonths = await loadSubExportMonthMap(conn, indicator.id, yearBh);
+    const subMonths = await loadSubExportMonthMap(conn, indicator.id, yearBh, { allLevels: true });
     const [subTargets] = await conn.query(
         'SELECT sub_indicator_id, hospcode, target_value FROM kpi_sub_results WHERE sub_indicator_id IN (?) AND year_bh = ? AND month_bh = 10', [subIds, yearBh]);
     const subTarget = new Map(subTargets.map(r => [`${r.sub_indicator_id}_${String(r.hospcode).trim()}`, itemNull(r.target_value)]));
@@ -7355,34 +7476,41 @@ async function buildItemExportRows(conn, indicator, yearBh) {
     }
     for (const k of subMonths.keys()) hospcodes.add(k.slice(k.indexOf('_') + 1));
     for (const k of subTarget.keys()) hospcodes.add(k.slice(k.indexOf('_') + 1));
+    const childSubs = (pid) => subs.filter(s => (s.parent_sub_id == null ? null : Number(s.parent_sub_id)) === pid);
+    const subActs = (sid) => acts.filter(a => Number(a.sub_indicator_id) === Number(sid));
     const isCum = Number(indicator.is_cumulative) === 1;
     const out = [];
     for (const hc of [...hospcodes].filter(Boolean).sort()) {
-        subs.forEach((su, si) => {
-            const no = kpiRollup.itemNumber(su.item_no, indicator.item_no, si);
-            const subActs = acts.filter(a => a.sub_indicator_id === su.id);
-            const m = subMonths.get(`${su.id}_${hc}`) || {};
-            const vals = ITEM_MONTHS.map(mk => itemNull(m[mk]));
-            const data = { item_no: no, parent_no: itemNull(indicator.item_no), item_name: su.sub_indicator_name, value_type: 'sub',
-                calc_mode: su.rollup_mode === 'auto' && subActs.length > 0 ? 'auto' : 'manual',
-                target: subTarget.get(`${su.id}_${hc}`) ?? itemNull(su.target_percentage), result: itemResult(vals, isCum) };
-            ITEM_MONTHS.forEach((mk, i) => { data[mk] = vals[i]; });
-            out.push({ key: `${hc}|2|${su.id}`, hospcode: hc, item_level: 2, item_id: su.id, data });
-            subActs.forEach((a, ai) => {
-                const isCheck = a.value_type === 'check';
-                const e = actRes.get(`${a.id}_${hc}`) || { months: {}, target: null };
-                const avals = ITEM_MONTHS.map(mk => {
-                    if (!isCheck) return itemNull(e.months[mk]);
-                    const v = kpiRollup.activityValue('check', e.months[mk]);
-                    return v === null ? null : String(v);
+        const walk = (parentId, parentNo, level) => {
+            childSubs(parentId).forEach((su, si) => {
+                const no = kpiRollup.itemNumber(su.item_no, parentNo, si);
+                const kids = childSubs(Number(su.id)).length + subActs(su.id).length;
+                const m = subMonths.get(`${su.id}_${hc}`) || {};
+                const vals = ITEM_MONTHS.map(mk => itemNull(m[mk]));
+                const data = { item_level: level, item_no: no, parent_no: itemNull(parentNo), item_name: su.sub_indicator_name, value_type: 'sub',
+                    calc_mode: kpiRollup.isRolledNode({ kind: 'sub', auto: su.rollup_mode === 'auto' }, kids) ? 'auto' : 'manual',
+                    target: subTarget.get(`${su.id}_${hc}`) ?? itemNull(su.target_percentage), result: itemResult(vals, isCum) };
+                ITEM_MONTHS.forEach((mk, i) => { data[mk] = vals[i]; });
+                out.push({ key: `${hc}|sub|${su.id}`, hospcode: hc, item_kind: 'sub', item_id: Number(su.id), data });
+                walk(Number(su.id), no, level + 1);
+                subActs(su.id).forEach((a, ai) => {
+                    const isCheck = a.value_type === 'check';
+                    const e = actRes.get(`${a.id}_${hc}`) || { months: {}, target: null };
+                    const avals = ITEM_MONTHS.map(mk => {
+                        if (!isCheck) return itemNull(e.months[mk]);
+                        const v = kpiRollup.activityValue('check', e.months[mk]);
+                        return v === null ? null : String(v);
+                    });
+                    // เลขข้อกิจกรรมต่อจากข้อลูก (ข้อย่อยลูกใช้ลำดับ 1..n ก่อน กิจกรรมต่อท้าย) — ตรงกับหน้าจอ
+                    const ad = { item_level: level + 1, item_no: kpiRollup.itemNumber(a.item_no, no, childSubs(Number(su.id)).length + ai), parent_no: no,
+                        item_name: a.activity_name, value_type: isCheck ? 'check' : 'number', calc_mode: null,
+                        target: isCheck ? null : (e.target ?? itemNull(a.target_percentage)), result: itemResult(avals, isCum) };
+                    ITEM_MONTHS.forEach((mk, i) => { ad[mk] = avals[i]; });
+                    out.push({ key: `${hc}|activity|${a.id}`, hospcode: hc, item_kind: 'activity', item_id: Number(a.id), data: ad });
                 });
-                const ad = { item_no: kpiRollup.itemNumber(a.item_no, no, ai), parent_no: no, item_name: a.activity_name,
-                    value_type: isCheck ? 'check' : 'number', calc_mode: null,
-                    target: isCheck ? null : (e.target ?? itemNull(a.target_percentage)), result: itemResult(avals, isCum) };
-                ITEM_MONTHS.forEach((mk, i) => { ad[mk] = avals[i]; });
-                out.push({ key: `${hc}|3|${a.id}`, hospcode: hc, item_level: 3, item_id: a.id, data: ad });
             });
-        });
+        };
+        walk(null, indicator.item_no, 2);
     }
     return out;
 }
@@ -7391,7 +7519,7 @@ async function diffItemsTable(conn, name, yearBh, rows) {
     const existing = new Map();
     try {
         const [ex] = await conn.query(`SELECT * FROM \`${name}\` WHERE byear = ?`, [yearBh]);
-        for (const r of ex) existing.set(`${String(r.hospcode).trim()}|${r.item_level}|${r.item_id}`, r);
+        for (const r of ex) existing.set(`${String(r.hospcode).trim()}|${r.item_kind || (Number(r.item_level) === 3 ? 'activity' : 'sub')}|${r.item_id}`, r);
     } catch (e) { if (e.code !== 'ER_NO_SUCH_TABLE') throw e; }
     const upserts = [];
     let inserted = 0, updated = 0, unchanged = 0;
@@ -7409,17 +7537,17 @@ async function diffItemsTable(conn, name, yearBh, rows) {
 async function writeItemsTable(conn, indicator, yearBh, name) {
     const rows = await buildItemExportRows(conn, indicator, yearBh);
     const d = await diffItemsTable(conn, name, yearBh, rows);
-    const cols = ['hospcode', 'byear', 'item_level', 'item_id', ...ITEM_DATA_COLS];
+    const cols = ['hospcode', 'byear', 'item_kind', 'item_id', ...ITEM_DATA_COLS];
     const onDup = ITEM_DATA_COLS.map(c => `${c}=VALUES(${c})`).join(', ');
     for (let i = 0; i < d.upserts.length; i += 100) {
         const batch = d.upserts.slice(i, i + 100);
         await conn.query(
             `INSERT INTO \`${name}\` (${cols.join(', ')}) VALUES ${batch.map(() => '(' + cols.map(() => '?').join(',') + ')').join(',')} ON DUPLICATE KEY UPDATE ${onDup}`,
-            batch.flatMap(r => [r.hospcode, yearBh, r.item_level, r.item_id, ...ITEM_DATA_COLS.map(c => r.data[c] ?? null)]));
+            batch.flatMap(r => [r.hospcode, yearBh, r.item_kind, r.item_id, ...ITEM_DATA_COLS.map(c => r.data[c] ?? null)]));
     }
     for (const k of d.removedKeys) {
-        const [hc, lv, id] = k.split('|');
-        await conn.query(`DELETE FROM \`${name}\` WHERE hospcode = ? AND byear = ? AND item_level = ? AND item_id = ?`, [hc, yearBh, Number(lv), Number(id)]);
+        const [hc, kind, id] = k.split('|');
+        await conn.query(`DELETE FROM \`${name}\` WHERE hospcode = ? AND byear = ? AND item_kind = ? AND item_id = ?`, [hc, yearBh, kind, Number(id)]);
     }
     return { table: name, rows: rows.length, inserted: d.inserted, updated: d.updated, unchanged: d.unchanged, removed: d.removed };
 }
@@ -7439,11 +7567,8 @@ apiRouter.post('/sub-results/upsert', authenticateToken, async (req, res) => {
         if (!sub_indicator_id || !year_bh || !hospcode || !month_bh) {
             return res.status(400).json({ success: false, message: 'sub_indicator_id, year_bh, hospcode, month_bh required' });
         }
-        // ข้อย่อยที่คำนวณจากกิจกรรม (ตัวชี้วัด 3 ระดับ) กรอกเองไม่ได้ — บันทึกที่กิจกรรมแทน
-        const [[autoSub]] = await db.query(
-            "SELECT COUNT(*) AS cnt FROM kpi_sub_indicators si JOIN kpi_sub_activities a ON a.sub_indicator_id = si.id AND a.is_active = 1 WHERE si.id = ? AND si.rollup_mode = 'auto'",
-            [sub_indicator_id]);
-        if (autoSub.cnt > 0) return res.status(400).json({ success: false, message: 'ตัวชี้วัดย่อยนี้คำนวณผลงานจากกิจกรรม — กรุณาบันทึกที่กิจกรรมแทน' });
+        // ข้อย่อยที่คำนวณจากระดับล่าง (ข้อลูก/กิจกรรม) กรอกเองไม่ได้ — บันทึกที่ระดับล่างแทน
+        if ((await rolledSubIds(db, [sub_indicator_id])).size > 0) return res.status(400).json({ success: false, message: ROLLED_SUB_MESSAGE });
         // ตรวจสอบล็อค (super_admin ข้ามได้) — mirror /update-kpi (ล็อคจะถูก cascade มาจากตัวชี้วัดหลักตอนอนุมัติ)
         if (req.user.role !== 'super_admin') {
             const [lockedRows] = await db.query(
@@ -11420,6 +11545,10 @@ const migrationsReady = (async () => {
             `);
         } catch (e) { console.error('❌ kpi_sub_activities/kpi_activity_results:', e.message); }
         try { await db.query("ALTER TABLE kpi_sub_indicators ADD COLUMN rollup_mode VARCHAR(10) NOT NULL DEFAULT 'manual'"); } catch (e) {}
+        // ตัวชี้วัดหลายระดับ (19 ต.ค. 2569): ข้อย่อยมีข้อแม่เป็นข้อย่อยได้ — NULL = ข้อย่อยระดับบนสุด (ข้อมูลเดิมทั้งหมด)
+        try { await db.query('ALTER TABLE kpi_sub_indicators ADD COLUMN parent_sub_id INT NULL AFTER indicator_id'); } catch (e) {}
+        try { await db.query('ALTER TABLE kpi_sub_indicators ADD INDEX idx_parent_sub (parent_sub_id)'); } catch (e) {}
+        try { await db.query('ALTER TABLE kpi_sub_indicators ADD CONSTRAINT fk_sub_parent FOREIGN KEY (parent_sub_id) REFERENCES kpi_sub_indicators(id) ON DELETE CASCADE'); } catch (e) {}
         try { await db.query('ALTER TABLE kpi_sub_indicators ADD COLUMN item_no VARCHAR(20) NULL'); } catch (e) {}
         try { await db.query("ALTER TABLE kpi_indicators ADD COLUMN sub_rollup_mode VARCHAR(10) NOT NULL DEFAULT 'auto'"); } catch (e) {}
         try { await db.query('ALTER TABLE kpi_indicators ADD COLUMN item_no VARCHAR(20) NULL'); } catch (e) {}

@@ -528,6 +528,56 @@ describe('DashboardComponent', () => {
     });
   });
 
+  // ---- ตัวชี้วัดหลายระดับ (19 ต.ค. 2569): หลัก 5 → ย่อย 5.1 → ย่อยระดับ 2 5.1.1 → กิจกรรม 5.1.1.1 ----
+  describe('ตัวชี้วัดหลายระดับ (ต้นไม้ในตาราง)', () => {
+    const treeData = () => ({
+      item_no: '5', sub_rollup_mode: 'auto',
+      subs: [
+        { id: 1, parent_sub_id: null, sub_indicator_name: 'S1', rollup_mode: 'auto', months: { 10: '999' } },
+        { id: 2, parent_sub_id: null, sub_indicator_name: 'S2', rollup_mode: 'manual', months: { 10: '50' } },
+        { id: 11, parent_sub_id: 1, sub_indicator_name: 'S11', rollup_mode: 'auto', months: {} },
+        { id: 12, parent_sub_id: 1, sub_indicator_name: 'S12', rollup_mode: 'manual', months: { 10: '60' } },
+      ],
+      activities: [
+        { id: 101, sub_indicator_id: 11, activity_name: 'A1', value_type: 'number', months: { 10: '80' } },
+        { id: 102, sub_indicator_id: 11, activity_name: 'A2', value_type: 'check', months: { 10: '1', 11: '0' } },
+        { id: 103, sub_indicator_id: 1, activity_name: 'A-S1', value_type: 'number', months: { 10: '75' } },
+      ],
+    });
+
+    it('เรียงแบบต้นไม้ เลขข้อตามสายข้อแม่ (กิจกรรมต่อท้ายข้อลูก) และระดับตามความลึก', () => {
+      const rows = buildHierRows(treeData(), '5');
+      expect(rows.map(r => r.no)).toEqual(['5.1', '5.1.1', '5.1.1.1', '5.1.1.2', '5.1.2', '5.1.3', '5.2']);
+      expect(rows.map(r => r.level)).toEqual([1, 2, 3, 3, 2, 2, 1]);
+      expect(rows.find(r => r.no === '5.1.3')!.kind).toBe('activity');   // กิจกรรมของ S1 ต่อจากข้อลูก 5.1.1 / 5.1.2
+    });
+
+    it('คำนวณขึ้นสองชั้น: กิจกรรม → ย่อยระดับ 2 → ย่อย (ข้อที่มีลูกกรอกเองไม่ได้)', () => {
+      const rows = buildHierRows(treeData(), '5');
+      const by = (no: string) => rows.find(r => r.no === no)!;
+      expect(by('5.1.1').months['oct']).toBe('90');   // (80 + 100) / 2
+      expect(by('5.1.1').months['nov']).toBe('40');
+      expect(by('5.1').months['oct']).toBe('75');     // (90 + 60 + 75) / 3
+      expect(by('5.1').months['nov']).toBe('58.33');  // (40 + 60 + 75) / 3
+      expect([by('5.1').auto, by('5.1.1').auto, by('5.1.2').auto]).toEqual([true, true, false]);
+      // แก้ค่ากิจกรรมระดับล่างสุด → ค่าขึ้นถึงข้อบนสุดทันที
+      by('5.1.1.1').months['oct'] = '100';
+      recomputeHierRows(rows);
+      expect(by('5.1.1').months['oct']).toBe('100');
+      expect(by('5.1').months['oct']).toBe('78.33');
+    });
+
+    it('แถวที่คำนวณจากระดับล่างแก้ไขไม่ได้ ทุกระดับ', () => {
+      const item = row('2570', { indicator_id: 9 });
+      component.isEditing = true;
+      const rows = buildHierRows(treeData(), '5');
+      expect(component.canEditHierRow(item, rows[0])).toBe(false);   // 5.1 — มีข้อลูก
+      expect(component.canEditHierRow(item, rows[1])).toBe(false);   // 5.1.1 — มีกิจกรรม
+      expect(component.canEditHierRow(item, rows[2])).toBe(true);    // กิจกรรม
+      expect(component.canEditHierRow(item, rows[4])).toBe(true);    // 5.1.2 กรอกเอง
+    });
+  });
+
   // ---- ตัวชี้วัด 3 ระดับ (18 ต.ค. 2569): แถวลูกข้อย่อย 1.1 / กิจกรรม 1.1.1 ----
   describe('ตัวชี้วัด 3 ระดับ (แถวลูกในตาราง)', () => {
     const hierData = () => ({

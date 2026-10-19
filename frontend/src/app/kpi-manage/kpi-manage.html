@@ -1259,7 +1259,7 @@
       </div>
       <!-- ฟอร์มเพิ่ม/แก้ไข -->
       <div *ngIf="showSubForm" class="mb-4 bg-indigo-50 border border-indigo-200 rounded-xl p-4 space-y-3">
-        <h4 class="font-bold text-indigo-800 text-sm">{{ isSubEdit ? 'แก้ไข' : 'เพิ่ม' }}ตัวชี้วัดย่อย</h4>
+        <h4 class="font-bold text-indigo-800 text-sm">{{ isSubEdit ? 'แก้ไข' : 'เพิ่ม' }}ตัวชี้วัดย่อย<span *ngIf="subFormParent" class="font-normal text-indigo-600"> — ใต้ข้อ {{ subFormParent._no }} {{ subFormParent.sub_indicator_name }} (ระดับที่ {{ subLevel(subFormParent) + 1 }})</span></h4>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div class="sm:col-span-2">
             <label class="text-xs font-bold text-gray-600">ชื่อตัวชี้วัดย่อย <span class="text-red-500">*</span></label>
@@ -1273,7 +1273,7 @@
             <label class="text-xs font-bold text-gray-600">ผลงานของข้อนี้</label>
             <select [(ngModel)]="subCurrent.rollup_mode" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
               <option value="manual">กรอกเอง</option>
-              <option value="auto">คำนวณจากกิจกรรม (เฉลี่ยกิจกรรม)</option>
+              <option value="auto">คำนวณจากระดับล่าง (เฉลี่ยข้อย่อย/กิจกรรมของข้อนี้)</option>
             </select>
           </div>
           <div>
@@ -1322,17 +1322,20 @@
           <tbody class="divide-y divide-gray-100">
             <tr *ngFor="let s of subList; let i = index" class="hover:bg-gray-50"
                 [ngClass]="{'opacity-50': s.is_active === 0 || s.is_active === '0'}">
-              <td class="px-3 py-2 text-gray-500 text-xs font-bold whitespace-nowrap">{{ subNo(s, i) }}</td>
-              <td class="px-3 py-2 font-medium text-gray-900">{{ s.sub_indicator_name }}</td>
+              <td class="px-3 py-2 text-gray-500 text-xs font-bold whitespace-nowrap" [style.padding-left.px]="12 + (s._level || 0) * 14"><span *ngIf="s._level > 0" class="text-indigo-300 mr-0.5">↳</span>{{ subNo(s, i) }}</td>
+              <td class="px-3 py-2 font-medium text-gray-900" [style.padding-left.px]="12 + (s._level || 0) * 14">{{ s.sub_indicator_name }}<span class="ml-1 text-[10px] font-normal text-gray-400">ระดับ {{ subLevel(s) }}</span></td>
               <td class="px-3 py-2 whitespace-nowrap">
-                <span *ngIf="s.rollup_mode === 'auto'" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 text-[10px] font-bold" title="ผลงานของข้อนี้คำนวณจากกิจกรรม">
-                  <i class="fas fa-calculator text-[9px]"></i>จากกิจกรรม
+                <span *ngIf="s.rollup_mode === 'auto'" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 text-[10px] font-bold" title="ผลงานของข้อนี้คำนวณจากระดับล่าง (ข้อย่อย/กิจกรรม)">
+                  <i class="fas fa-calculator text-[9px]"></i>จากระดับล่าง
                 </span>
                 <span *ngIf="s.rollup_mode !== 'auto'" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-bold">
                   <i class="fas fa-keyboard text-[9px]"></i>กรอกเอง
                 </span>
                 <button (click)="openActModal(s, i)" class="ml-1 px-2 py-0.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-bold border border-indigo-200" title="จัดการกิจกรรมของข้อนี้">
                   <i class="fas fa-tasks mr-1"></i>กิจกรรม ({{ s.activity_count || 0 }})
+                </button>
+                <button *ngIf="canAddData && canAddChildSub(s)" (click)="openSubForm(null, s)" class="ml-1 px-2 py-0.5 rounded-lg bg-white hover:bg-indigo-50 text-indigo-700 text-[11px] font-bold border border-indigo-200" [title]="'เพิ่มข้อย่อยระดับที่ ' + (subLevel(s) + 1) + ' ใต้ข้อนี้'">
+                  <i class="fas fa-plus mr-1"></i>ข้อย่อย ({{ s.child_count || 0 }})
                 </button>
               </td>
               <td class="px-3 py-2 text-gray-600 text-xs">{{ s.sub_indicator_code || '-' }}</td>
@@ -1376,12 +1379,12 @@
       <div class="text-xs rounded-xl p-3 border"
            [ngClass]="actParentSub?.rollup_mode === 'auto' ? 'bg-violet-50 border-violet-200 text-violet-800' : 'bg-amber-50 border-amber-200 text-amber-800'">
         <ng-container *ngIf="actParentSub?.rollup_mode === 'auto'">
-          <i class="fas fa-calculator mr-1"></i>ผลงานของข้อนี้ = <b>ค่าเฉลี่ยของกิจกรรมที่เปิดใช้งาน</b> (กิจกรรมแบบ "ทำแล้ว" = 100, "ยังไม่ทำ" = 0;
+          <i class="fas fa-calculator mr-1"></i>ผลงานของข้อนี้ = <b>ค่าเฉลี่ยของข้อย่อยลูกและกิจกรรมที่เปิดใช้งาน</b> (กิจกรรมแบบ "ทำแล้ว" = 100, "ยังไม่ทำ" = 0;
           กิจกรรมที่ไม่ได้บันทึกในเดือนนั้นใช้ค่าล่าสุดของเดือนก่อน) — ผู้บันทึกกรอกที่กิจกรรม ไม่ต้องกรอกที่ข้อนี้
         </ng-container>
         <ng-container *ngIf="actParentSub?.rollup_mode !== 'auto'">
           <i class="fas fa-info-circle mr-1"></i>ข้อนี้ตั้งเป็น <b>"กรอกเอง"</b> — กิจกรรมใช้บันทึกประกอบเท่านั้น ไม่นำไปคำนวณผลงานของข้อนี้
-          (เปลี่ยนเป็น "คำนวณจากกิจกรรม" ได้ที่ปุ่มแก้ไขข้อย่อย)
+          (เปลี่ยนเป็น "คำนวณจากระดับล่าง" ได้ที่ปุ่มแก้ไขข้อย่อย)
         </ng-container>
       </div>
 
