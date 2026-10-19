@@ -310,6 +310,8 @@ export class KpiSetupComponent implements OnInit {
         if (res.inserted !== undefined) {
           message = mode === 'setup_insert_new'
             ? `เพิ่มตัวชี้วัดใหม่ ${res.inserted} รายการ (ข้าม ${res.skipped || 0} รายการที่มีอยู่แล้ว)`
+              + (res.skipped_type ? ` — ข้ามที่ไม่ตรงประเภทหน่วยบริการ ${res.skipped_type}` : '')
+              + (res.skipped_unset ? ` — ข้ามตัวชี้วัดที่ยังไม่ได้ตั้งประเภทหน่วยบริการ ${res.skipped_unset} (ตั้งค่าที่หน้าจัดการตัวชี้วัด)` : '')
             : `บันทึกตัวชี้วัดทั้งหมด ${res.inserted} รายการเรียบร้อยแล้ว (${modeLabel})`;
         }
         Swal.fire({

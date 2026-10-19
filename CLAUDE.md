@@ -277,18 +277,24 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   และปุ่ม "คัดลอก" คงรหัสของตัวต้นทางไว้ (ไม่เข้าโหมดอัตโนมัติ)
 - Test: `api/tests/indicator-codes-scope.test.js`, `kpi-manage.spec.ts`
 
-### เพิ่มตัวชี้วัดให้หน่วยบริการ ต้องตรงประเภทหน่วยบริการที่ตั้งไว้ (เพิ่ม 11 ต.ค. 2569)
-- กฎเดียว 2 สำเนาที่ต้องตรงกัน: `indicatorAllowsHostype(ind, hostype)` ใน `api/server.js` กับ
-  `frontend/src/app/shared/indicator-scope.ts` — `evaluation_mode='any_one'` + `required_off_types` มีรายการ → เฉพาะประเภทนั้น,
-  กรณีอื่น (all_required / ไม่ได้ตั้ง / JSON เสีย) → ทุกประเภท
-- Backend เป็นด่านจริง: `/update-kpi` โหมด `setup_insert_new` ข้ามคู่ตัวชี้วัด×หน่วยบริการที่ประเภทไม่ตรง (นับใน `skipped_type` แยกจาก
-  `skipped` = มีอยู่แล้ว) | `GET /kpi-template` คืน `evaluation_mode, required_off_types, result_formula, is_cumulative` และกรองตามประเภท
-  หน่วยบริการของผู้ใช้ใน `ROLE_SCOPE_HOSPCODE`
-- Dashboard modal (`dashboard.ts`): `addKpiAllowedHostypes` (= `unionHostypes()` ของตัวที่ติ๊ก, null = ไม่จำกัด) จำกัดรายการหน่วยบริการ +
-  ตัวกรองประเภทใน `rebuildAddKpiHospitals()`; `buildAddKpiList()` ซ่อนตัวชี้วัดที่ไม่ตรงประเภทของหน่วยบริการที่เลือก (ตัวที่ติ๊กไว้แล้วไม่ซ่อน —
-  กันตัวที่เพิ่งติ๊กหายเอง), คงค่าที่กรอก/รายการที่ติ๊กเมื่อเปลี่ยนตัวกรอง, แม่แบบโหลดครั้งเดียวต่อการเปิด modal (`_addKpiTemplate`)
-  — ผู้ดูแล (isAdmin/isLocalAdmin) เริ่มจาก**ไม่เลือกตัวใด** (เดิมเลือกทุกตัว เสี่ยงเพิ่มทุกตัวให้ทุกหน่วยโดยไม่ตั้งใจ)
-- ⚠️ โหมดอื่นของ `/update-kpi` และ `/bulk-add-kpi` ไม่ได้ใช้กฎนี้ (`/bulk-add-kpi` มี `resolveIndicatorHostypes()` ของตัวเองอยู่แล้ว)
+### เพิ่มตัวชี้วัดให้หน่วยบริการ — ปลายทางอัตโนมัติจากประเภทหน่วยบริการที่ตั้งไว้ (11 ต.ค. 2569, ปรับ 19 ต.ค. 2569)
+- กฎเดียว 2 สำเนาที่ต้องตรงกัน: `indicatorTypeSetting()` / `indicatorAllowsHostype()` ใน `api/server.js` กับ
+  `frontend/src/app/shared/indicator-scope.ts` — `'types'` = any_one + มีรายการ → เฉพาะประเภทนั้น | `'all'` = all_required → ทุกประเภท |
+  **`'unset'`** (evaluation_mode ว่าง / any_one ไม่มีรายการ / JSON เสีย) → **เพิ่มให้หน่วยบริการไม่ได้** (เดิม = ทุกประเภท; ผู้ใช้สั่งให้บังคับตั้งค่าก่อน)
+- **ไม่มีการเลือกหน่วยบริการใน modal แล้ว** (ผู้ใช้สั่ง 19 ต.ค. 2569): `resolveAddKpiTargets(ind, hospitals, { districts, singleUnit })` หาปลายทางต่อตัวชี้วัด
+  จาก `GET /hospitals` (ขอบเขตตามบทบาท) ∩ อำเภอที่เลือก (ไม่บังคับ) — หลายแห่ง: `autoTargetHostypes()` (all_required = `AUTO_ALL_HOSTYPES`
+  05/06/07/18 ชุดเดียวกับ `ALL_BULK_HOSTYPES` — ผู้ใช้เลือกแบบนี้) | หน่วยเดียวของผู้ใช้เอง (ผู้ใช้ทั่วไป/admin_hos/admin_sso, `addKpiSingleUnit`):
+  `indicatorAllowsHostype` (all_required ได้ทุกประเภท — สสอ./สสจ. ยังเพิ่มให้หน่วยตัวเองได้)
+- Dashboard (`dashboard.ts`): แถวมี `_setting`/`_autoTypes`/`_targets`, ติ๊กได้เมื่อ `isAddKpiSelectable()` (ตั้งค่าแล้ว + มีปลายทาง), unset มีปุ่ม
+  "ไปตั้งค่า" (`canSetupIndicatorType` = page kpi-manage + action edit) → `/kpi-manage?editIndicator=<id>` → `openPendingIndicatorEdit()` เปิด modal
+  แก้ไข + เลื่อนไป `#indicator-eval-mode` | บันทึก `buildAddKpiBatches()` ชุดละ ≤ 30 หน่วยบริการ (แถวระบุ `hospcode`) — โหลดตารางใหม่**หลัง**ปิดสรุปผล
+  (เดิมกล่อง "ไม่พบข้อมูล" ของ `loadKpiData()` ทับสรุปผล)
+- Backend เป็นด่านจริง: `/update-kpi` โหมด `setup_insert_new` เป็นสาขาแยก**ก่อน**ลูปล็อค/คงค่าเดิมรายคู่ — ตรวจขอบเขตปลายทาง (ROLE_SCOPE_HOSPCODE/
+  DISTRICT → 403, เดิมไม่ตรวจ), ตรวจ "มีอยู่แล้ว" query เดียว (คู่ที่ล็อค = ข้าม ไม่ล้มทั้งคำขอ), นับ `skipped` / `skipped_type` / `skipped_unset`,
+  INSERT bulk — ผู้ดูแลที่ทุกแถวมี hospcode ไม่ต้องส่ง `targetHospcode` | `GET /kpi-template` = active + หมวดหมู่หลัก/หน่วยงานไม่ถูกปิด + `hostype_setting`
+  (ROLE_SCOPE_HOSPCODE ซ่อน any_one ที่ไม่ตรงประเภท แต่**คงแถว unset** ให้เห็นว่าต้องตั้งค่า) — kpi-setup ใช้โหมดเดียวกัน (ข้าม unset ด้วย)
+- ⚠️ โหมดอื่นของ `/update-kpi` และ `/bulk-add-kpi` ไม่ได้ใช้กฎนี้ (`/bulk-add-kpi` มี `resolveIndicatorHostypes()` ของตัวเอง — unset = 4 ประเภทหลัก)
+- Test: `api/tests/add-kpi-auto-target.test.js`, `indicator-codes-scope.test.js`, `shared/indicator-scope.spec.ts`, `dashboard.spec.ts`, `kpi-manage.spec.ts`
 
 ### ป้ายสูตรในทุกหน้าที่มีรายชื่อตัวชี้วัด
 - `<app-formula-badge [formula]="x.result_formula">` (`frontend/src/app/shared/formula-badge.ts`) — ไอคอน `fa-calculator` + ตัวสูตร

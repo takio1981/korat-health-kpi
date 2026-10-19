@@ -137,14 +137,16 @@ describe('เพิ่มตัวชี้วัดให้หน่วยบ�
         const updates = [ind.only, ind.all, ind.unset].map(id => ({ indicator_id: id, year_bh: YEAR, target_value: '80' }));
         const out = await as(saToken, request(app).post(api('/update-kpi'))).send({ updates, targetHospcode: hospOut, mode: 'setup_insert_new' });
         expect(out.status).toBe(200);
-        expect(out.body.inserted).toBe(2);
+        expect(out.body.inserted).toBe(1);        // all_required เท่านั้น
         expect(out.body.skipped_type).toBe(1);
+        expect(out.body.skipped_unset).toBe(1);   // ยังไม่ได้ตั้งประเภท → เพิ่มไม่ได้ (19 ต.ค. 2569 — เดิมเพิ่มให้ทุกประเภท)
         const [[cOut]] = await db.query('SELECT COUNT(*) AS n FROM kpi_results WHERE indicator_id = ? AND hospcode = ? AND year_bh = ?', [ind.only, hospOut, YEAR]);
         expect(cOut.n).toBe(0);
 
         const inn = await as(saToken, request(app).post(api('/update-kpi'))).send({ updates, targetHospcode: hospIn, mode: 'setup_insert_new' });
-        expect(inn.body.inserted).toBe(3);
+        expect(inn.body.inserted).toBe(2);
         expect(inn.body.skipped_type).toBe(0);
+        expect(inn.body.skipped_unset).toBe(1);
         const [[cIn]] = await db.query('SELECT COUNT(*) AS n FROM kpi_results WHERE indicator_id = ? AND hospcode = ? AND year_bh = ?', [ind.only, hospIn, YEAR]);
         expect(cIn.n).toBe(12);
     });

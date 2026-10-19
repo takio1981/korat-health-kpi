@@ -181,7 +181,26 @@ export class KpiManageComponent implements OnInit {
       this.router.navigate(['/dashboard']);
       return;
     }
+    // ?editIndicator=<id> — มาจากปุ่ม "ไปตั้งค่า" ในหน้าต่างเพิ่มตัวชี้วัดให้หน่วยบริการ (ตัวชี้วัดที่ยังไม่ได้ตั้งประเภทหน่วยบริการ)
+    const editId = Number(this.router.parseUrl(this.router.url).queryParams['editIndicator']);
+    this.pendingEditIndicatorId = editId > 0 ? editId : null;
     this.loadAllData();
+  }
+
+  pendingEditIndicatorId: number | null = null;
+
+  /** เปิดหน้าต่างแก้ไขตัวชี้วัดที่ขอมาทาง query แล้วเลื่อนไปกล่อง "เกณฑ์การประเมิน" (ประเภทหน่วยบริการ) */
+  openPendingIndicatorEdit() {
+    const id = this.pendingEditIndicatorId;
+    if (!id) return;
+    this.pendingEditIndicatorId = null;
+    this.router.navigate([], { queryParams: {}, replaceUrl: true });
+    const item = this.indicators.find((i: any) => Number(i.id) === id);
+    if (!item || !this.canEditData) return;
+    this.activeTab = 'indicators';
+    this.openModal(item);
+    this.cdr.detectChanges();
+    setTimeout(() => document.getElementById('indicator-eval-mode')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200);
   }
 
   loadAllData() {
@@ -190,6 +209,7 @@ export class KpiManageComponent implements OnInit {
         this.indicators = res.data;
         this.filteredIndicators = [...this.indicators];
         if (this.activeTab === 'indicators') this.applyFilter();
+        this.openPendingIndicatorEdit();
       }
       this.cdr.detectChanges();
     });

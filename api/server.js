@@ -3272,18 +3272,27 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
 // Helper: หน่วยบริการ (hostype) ที่ใช้ได้กับตัวชี้วัด — อ้างอิง evaluation_mode/required_off_types
 // 'any_one' + required_off_types มีค่า → เฉพาะประเภทที่ระบุ, กรณีอื่น (all_required/ว่าง/parse ไม่ได้) → ชุดเดิมทั้งหมด (backward compat)
 const ALL_BULK_HOSTYPES = ['05', '06', '07', '18'];
-// ตัวชี้วัดใช้กับหน่วยบริการประเภทนี้ได้หรือไม่ — ตามค่าที่ตั้งไว้ในตัวชี้วัด (evaluation_mode/required_off_types)
-// 'any_one' + มีรายการประเภท → เฉพาะประเภทที่ระบุ | กรณีอื่น (all_required / ไม่ได้ตั้ง) → ทุกประเภท
-// ใช้กับการ "เพิ่มตัวชี้วัดให้หน่วยบริการ" (GET /kpi-template, /update-kpi โหมด setup_insert_new) — ต้องตรงกับ
-// indicatorAllowsHostype() ใน frontend/src/app/shared/indicator-scope.ts
+// การตั้งค่า "ประเภทหน่วยบริการ" ของตัวชี้วัด (evaluation_mode/required_off_types) — ใช้กับการ "เพิ่มตัวชี้วัดให้หน่วยบริการ"
+// (GET /kpi-template, /update-kpi โหมด setup_insert_new) — ต้องตรงกับ frontend/src/app/shared/indicator-scope.ts
+//   'types' = any_one + มีรายการประเภท → เฉพาะประเภทที่ระบุ
+//   'all'   = all_required → ทุกประเภท (เพิ่มอัตโนมัติหลายแห่ง = 4 ประเภทหลัก ALL_BULK_HOSTYPES)
+//   'unset' = ยังไม่ได้ตั้ง (evaluation_mode ว่าง / any_one ไม่มีรายการ / JSON เสีย) → เพิ่มให้หน่วยบริการไม่ได้ ต้องตั้งค่าก่อน (19 ต.ค. 2569)
+const indicatorOffTypeCodes = (ind) => {
+    if (!ind || !ind.required_off_types) return null;
+    let codes = ind.required_off_types;
+    if (typeof codes === 'string') { try { codes = JSON.parse(codes); } catch (_) { return null; } }
+    return (Array.isArray(codes) && codes.length > 0) ? codes.map(String) : null;
+};
+const indicatorTypeSetting = (ind) => {
+    if (ind && ind.evaluation_mode === 'all_required') return 'all';
+    if (ind && ind.evaluation_mode === 'any_one' && indicatorOffTypeCodes(ind)) return 'types';
+    return 'unset';
+};
 const indicatorAllowsHostype = (ind, hostype) => {
-    if (ind && ind.evaluation_mode === 'any_one' && ind.required_off_types) {
-        try {
-            const codes = JSON.parse(ind.required_off_types);
-            if (Array.isArray(codes) && codes.length > 0) return codes.map(String).includes(String(hostype));
-        } catch (_) {}
-    }
-    return true;
+    const setting = indicatorTypeSetting(ind);
+    if (setting === 'unset') return false;
+    if (setting === 'all') return true;
+    return indicatorOffTypeCodes(ind).includes(String(hostype));
 };
 const resolveIndicatorHostypes = (ind) => {
     if (ind.evaluation_mode === 'any_one' && ind.required_off_types) {
@@ -3893,12 +3902,14 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
 
     const hospcodeToSave = (ROLE_ADMIN_ALL.includes(user.role) && targetHospcode) ? targetHospcode : user.hospcode;
 
-    if (!hospcodeToSave) {
-        return res.status(400).json({ success: false, message: 'ไม่พบรหัสหน่วยบริการ กรุณาเลือกหน่วยบริการ' });
-    }
-
     if (!Array.isArray(updates) || updates.length === 0) {
         return res.status(400).json({ success: false, message: 'ไม่มีข้อมูล' });
+    }
+
+    // ผู้ดูแลที่ระบุหน่วยบริการรายแถวครบทุกแถว (เพิ่มตัวชี้วัดให้หลายหน่วยบริการในคำขอเดียว) ไม่ต้องมี targetHospcode
+    const everyRowHasHospcode = ROLE_ADMIN_ALL.includes(user.role) && updates.every(r => r && r.hospcode);
+    if (!hospcodeToSave && !everyRowHasHospcode) {
+        return res.status(400).json({ success: false, message: 'ไม่พบรหัสหน่วยบริการ กรุณาเลือกหน่วยบริการ' });
     }
 
     const connection = await db.getConnection();
@@ -3931,6 +3942,98 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
             const hc = (ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
             return `${row.indicator_id}_${row.year_bh}_${hc}`;
         }))];
+
+        // --- Mode: setup_insert_new → เพิ่มเฉพาะคู่ (ตัวชี้วัด × หน่วยบริการ × ปีงบ) ที่ยังไม่มี ---
+        // ทำก่อนลูปตรวจล็อค/คงค่าเดิมรายคู่ด้านล่าง: โหมดนี้ไม่แตะแถวที่มีอยู่ (รวมแถวที่ล็อค = ข้ามเฉยๆ ไม่ทำให้ทั้งคำขอล้ม)
+        // และรองรับหลายหน่วยบริการในคำขอเดียว (หน้าต่างเพิ่มตัวชี้วัดหาปลายทางอัตโนมัติจากประเภทหน่วยบริการ — 19 ต.ค. 2569)
+        if (saveMode === 'setup_insert_new') {
+            const rowHc = (row) => String((ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave).trim();
+            const hcs = [...new Set(updates.map(rowHc).filter(Boolean))];
+            const indIds = [...new Set(updates.map(r => Number(r.indicator_id)).filter(Boolean))];
+            const years = [...new Set(updates.map(r => String(r.year_bh || '')).filter(Boolean))];
+            if (indIds.length === 0 || years.length === 0) throw new Error('ข้อมูลไม่ครบ');
+            const [hosRows] = hcs.length ? await connection.query('SELECT hoscode, hostype, distid FROM chospital WHERE hoscode IN (?)', [hcs]) : [[]];
+            const hosMap = new Map(hosRows.map(h => [String(h.hoscode).trim(), h]));
+
+            // ขอบเขตหน่วยบริการปลายทางตามบทบาท (เดิมไม่ตรวจ — admin_cup ส่งรหัสหน่วยบริการอำเภออื่นได้)
+            let outOfScope = [];
+            if (ROLE_SCOPE_HOSPCODE.includes(user.role)) {
+                outOfScope = hcs.filter(hc => hc !== String(user.hospcode || '').trim());
+            } else if (ROLE_SCOPE_DISTRICT.includes(user.role)) {
+                const myDist = await getDistrictId(user.hospcode);
+                outOfScope = hcs.filter(hc => !myDist || String(hosMap.get(hc)?.distid || '') !== String(myDist));
+            }
+            if (outOfScope.length > 0) {
+                await connection.rollback();
+                return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์เพิ่มตัวชี้วัดให้หน่วยบริการนอกขอบเขตของท่าน: ' + outOfScope.slice(0, 5).join(', ') });
+            }
+
+            // คู่ที่มีอยู่แล้ว — query เดียว (เดิม 1 query ต่อคู่)
+            const [existRows] = await connection.query(
+                'SELECT DISTINCT indicator_id, year_bh, hospcode FROM kpi_results WHERE indicator_id IN (?) AND year_bh IN (?) AND hospcode IN (?)',
+                [indIds, years, hcs.length ? hcs : ['']]
+            );
+            const existingKeys = new Set(existRows.map(r => r.indicator_id + '_' + r.year_bh + '_' + String(r.hospcode).trim()));
+            const [indRows] = await connection.query('SELECT id, evaluation_mode, required_off_types FROM kpi_indicators WHERE id IN (?)', [indIds]);
+            const indMap = new Map(indRows.map(i => [Number(i.id), i]));
+
+            const seen = new Set();
+            const newUpdates = [];
+            let skipped = 0, skippedType = 0, skippedUnset = 0;
+            for (const row of updates) {
+                const hc = rowHc(row);
+                const key = Number(row.indicator_id) + '_' + row.year_bh + '_' + hc;
+                if (existingKeys.has(key) || seen.has(key)) { skipped++; continue; }
+                const ind = indMap.get(Number(row.indicator_id));
+                // ยังไม่ได้ตั้งประเภทหน่วยบริการ → เพิ่มไม่ได้ ต้องตั้งค่าที่หน้าจัดการตัวชี้วัดก่อน
+                if (indicatorTypeSetting(ind) === 'unset') { skippedUnset++; continue; }
+                const ht = hosMap.get(hc)?.hostype;
+                if (ht && !indicatorAllowsHostype(ind, ht)) { skippedType++; continue; }
+                seen.add(key);
+                newUpdates.push({ ...row, _hc: hc });
+            }
+
+            if (newUpdates.length === 0) {
+                await connection.commit();
+                const why = [skipped ? 'มีอยู่แล้ว ' + skipped : '', skippedType ? 'ไม่ตรงประเภทหน่วยบริการ ' + skippedType : '', skippedUnset ? 'ตัวชี้วัดยังไม่ได้ตั้งประเภทหน่วยบริการ ' + skippedUnset : ''].filter(Boolean).join(', ');
+                return res.json({ success: true, message: 'ไม่มีตัวชี้วัดใหม่ที่ต้องเพิ่ม' + (why ? ' (' + why + ')' : ''), inserted: 0, skipped, skipped_type: skippedType, skipped_unset: skippedUnset });
+            }
+
+            // INSERT เฉพาะคู่ใหม่ ครบ 12 เดือน (บันทึก 0 ได้) — แบ่งชุดกันคำสั่งยาวเกิน
+            const insertRows = [];
+            for (const row of newUpdates) {
+                const rawTarget = row.target_value;
+                const targetValue = (rawTarget !== undefined && rawTarget !== null && rawTarget !== '') ? String(rawTarget).trim() : '';
+                for (const m of months) {
+                    const rawActual = row[m.col];
+                    const actualValue = (rawActual !== undefined && rawActual !== null && rawActual !== '') ? String(rawActual).trim() : '';
+                    insertRows.push([row.indicator_id, row.year_bh, m.val, actualValue, targetValue, user.userId, 'Pending', row._hc, 0]);
+                }
+            }
+            for (let i = 0; i < insertRows.length; i += 2400) {
+                await connection.query(
+                    'INSERT INTO kpi_results (indicator_id, year_bh, month_bh, actual_value, target_value, user_id, status, hospcode, is_locked) VALUES ?',
+                    [insertRows.slice(i, i + 2400)]
+                );
+            }
+
+            await connection.query(
+                'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+                [user.userId, user.deptId || 0, 'INSERT', 'kpi_results',
+                 JSON.stringify({ message: 'เพิ่มตัวชี้วัดให้หน่วยบริการ ' + newUpdates.length + ' คู่ (' + hcs.length + ' หน่วยบริการ) ข้ามที่มีอยู่แล้ว ' + skipped + ' ไม่ตรงประเภท ' + skippedType + ' ยังไม่ตั้งประเภท ' + skippedUnset }),
+                 req.ip]
+            );
+
+            await connection.commit();
+            return res.json({
+                success: true,
+                message: 'เพิ่มตัวชี้วัดใหม่ ' + newUpdates.length + ' รายการ (ข้าม ' + (skipped + skippedType + skippedUnset) + ' รายการ)',
+                inserted: newUpdates.length,
+                skipped,
+                skipped_type: skippedType,
+                skipped_unset: skippedUnset
+            });
+        }
 
         // ตรวจสอบล็อค (super_admin ข้ามได้)
         if (user.role !== 'super_admin') {
@@ -3985,93 +4088,6 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
                     }
                 }
             }
-        }
-
-        // --- Mode: setup_insert_new → เพิ่มเฉพาะที่ยังไม่มี (ข้ามตัวที่มีอยู่แล้ว) ---
-        if (saveMode === 'setup_insert_new') {
-            // ตรวจสอบว่า indicator ไหนมีข้อมูลอยู่แล้ว
-            const existingKeys = new Set();
-            for (const key of uniqueKeys) {
-                const [indId, ybh, hc] = key.split('_');
-                const [existRows] = await connection.query(
-                    'SELECT COUNT(*) as cnt FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?',
-                    [indId, ybh, hc]
-                );
-                if (existRows[0].cnt > 0) {
-                    existingKeys.add(key);
-                }
-            }
-
-            // กรองเฉพาะ indicator ที่ยังไม่มีข้อมูล
-            const notExisting = updates.filter(row => {
-                const hc = (ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
-                const key = `${row.indicator_id}_${row.year_bh}_${hc}`;
-                return !existingKeys.has(key);
-            });
-            // ข้ามคู่ที่ประเภทหน่วยบริการไม่อยู่ในประเภทที่ตั้งไว้ของตัวชี้วัด (any_one + required_off_types)
-            let newUpdates = notExisting;
-            if (notExisting.length > 0) {
-                const rowHc = (row) => (ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
-                const indIds = [...new Set(notExisting.map(r => Number(r.indicator_id)).filter(Boolean))];
-                const hcs = [...new Set(notExisting.map(rowHc).filter(Boolean).map(String))];
-                if (indIds.length > 0 && hcs.length > 0) {
-                    const [indRows] = await connection.query('SELECT id, evaluation_mode, required_off_types FROM kpi_indicators WHERE id IN (?)', [indIds]);
-                    const [hosRows] = await connection.query('SELECT hoscode, hostype FROM chospital WHERE hoscode IN (?)', [hcs]);
-                    const indMap = new Map(indRows.map(i => [Number(i.id), i]));
-                    const typeMap = new Map(hosRows.map(h => [String(h.hoscode).trim(), h.hostype]));
-                    newUpdates = notExisting.filter(row => {
-                        const ht = typeMap.get(String(rowHc(row)).trim());
-                        return !ht || indicatorAllowsHostype(indMap.get(Number(row.indicator_id)), ht);
-                    });
-                }
-            }
-            const skippedType = notExisting.length - newUpdates.length;
-
-            if (newUpdates.length === 0) {
-                await connection.commit();
-                return res.json({ success: true, message: skippedType > 0 ? 'ไม่มีตัวชี้วัดใหม่ที่ต้องเพิ่ม (มีอยู่แล้ว หรือไม่ตรงประเภทหน่วยบริการที่ตั้งไว้)' : 'ไม่มีตัวชี้วัดใหม่ที่ต้องเพิ่ม (ทั้งหมดมีอยู่แล้ว)', inserted: 0, skipped: updates.length - skippedType, skipped_type: skippedType });
-            }
-
-            // INSERT เฉพาะ indicator ใหม่ (รวม 0 ด้วย)
-            const insertValues = [];
-            const insertParams = [];
-            for (const row of newUpdates) {
-                const { indicator_id, year_bh } = row;
-                const rowHospcode = (ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
-
-                for (const m of months) {
-                    const rawActual = row[m.col];
-                    const actualValue = (rawActual !== undefined && rawActual !== null && rawActual !== '') ? String(rawActual).trim() : '';
-                    const rawTarget = row.target_value;
-                    const targetValue = (rawTarget !== undefined && rawTarget !== null && rawTarget !== '') ? String(rawTarget).trim() : '';
-                    insertValues.push('(?, ?, ?, ?, ?, ?, ?, ?, 0)');
-                    insertParams.push(indicator_id, year_bh, m.val, actualValue, targetValue, user.userId, 'Pending', rowHospcode);
-                }
-            }
-
-            if (insertValues.length > 0) {
-                await connection.query(
-                    `INSERT INTO kpi_results (indicator_id, year_bh, month_bh, actual_value, target_value, user_id, status, hospcode, is_locked)
-                     VALUES ${insertValues.join(', ')}`,
-                    insertParams
-                );
-            }
-
-            await connection.query(
-                'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
-                [user.userId, user.deptId || 0, 'INSERT', 'kpi_results',
-                 JSON.stringify({ message: `KPI-Setup: เพิ่มเฉพาะที่ยังไม่มี ${newUpdates.length} ตัวชี้วัด (ข้าม ${updates.length - newUpdates.length} ที่มีอยู่แล้ว)` }),
-                 req.ip]
-            );
-
-            await connection.commit();
-            return res.json({
-                success: true,
-                message: `เพิ่มตัวชี้วัดใหม่ ${newUpdates.length} รายการ (ข้าม ${updates.length - newUpdates.length} รายการที่มีอยู่แล้ว)`,
-                inserted: newUpdates.length,
-                skipped: updates.length - newUpdates.length - skippedType,
-                skipped_type: skippedType
-            });
         }
 
         // --- Mode: setup_overwrite → เพิ่มทั้งหมด เขียนทับ (บันทึก 0 ได้) ---
@@ -4737,14 +4753,18 @@ apiRouter.get('/kpi-template', authenticateToken, async (req, res) => {
             FROM kpi_indicators i
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
             LEFT JOIN departments d on d.id = i.dept_id
-            WHERE i.is_active = 1 ${deptFilter}
+            WHERE i.is_active = 1
+              AND (mi.id IS NULL OR mi.is_active = 1)
+              AND (d.id IS NULL OR d.is_active = 1) ${deptFilter}
             ORDER BY mi.main_indicator_name DESC, i.kpi_indicators_name DESC, d.dept_name DESC
         `;
         let [rows] = await db.query(sql, params);
-        // ผู้ใช้ที่ผูกกับหน่วยบริการเดียว (ROLE_SCOPE_HOSPCODE): แสดงเฉพาะตัวชี้วัดที่ตั้งไว้ให้ใช้กับประเภทหน่วยบริการของตน
+        // hostype_setting: 'types' | 'all' | 'unset' — 'unset' แสดงในรายการแต่เพิ่มไม่ได้ (ต้องตั้งประเภทหน่วยบริการก่อน)
+        rows.forEach(r => { r.hostype_setting = indicatorTypeSetting(r); });
+        // ผู้ใช้ที่ผูกกับหน่วยบริการเดียว (ROLE_SCOPE_HOSPCODE): ซ่อนตัวชี้วัดที่ตั้งไว้เฉพาะประเภทอื่น (คงตัวที่ยังไม่ได้ตั้งไว้ให้เห็นว่าต้องตั้งค่า)
         if (ROLE_SCOPE_HOSPCODE.includes(user.role) && user.hospcode) {
             const [[h]] = await db.query('SELECT hostype FROM chospital WHERE hoscode = ?', [user.hospcode]);
-            if (h && h.hostype) rows = rows.filter(r => indicatorAllowsHostype(r, h.hostype));
+            if (h && h.hostype) rows = rows.filter(r => r.hostype_setting === 'unset' || indicatorAllowsHostype(r, h.hostype));
         }
         res.json({ success: true, data: rows });
     } catch (error) {

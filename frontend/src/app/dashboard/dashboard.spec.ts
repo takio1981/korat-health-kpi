@@ -199,18 +199,23 @@ describe('DashboardComponent', () => {
     });
   });
 
-  // ---- เพิ่มตัวชี้วัดให้หน่วยบริการ (11 ต.ค. 2569) ----
+  // ---- เพิ่มตัวชี้วัดให้หน่วยบริการ (11 ต.ค. 2569 / 19 ต.ค. 2569: หาหน่วยบริการปลายทางอัตโนมัติจากประเภทที่ตั้งไว้) ----
   describe('หน้าต่างเพิ่มตัวชี้วัดให้หน่วยบริการ', () => {
     const tpl = (id: number, extra: any = {}) => ({
       indicator_id: id, kpi_indicators_name: 'ตัวชี้วัด ' + id, main_indicator_name: 'หมวด ก', dept_id: 1, dept_name: 'กลุ่มงาน ก',
       target_percentage: '80', table_process: 'kpi_t_' + id, ...extra,
     });
     const item = (id: number) => component.newKpiList.find((i: any) => Number(i.indicator_id) === id);
+    const modalEl = () => {
+      const title = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('h3')).find(h => (h.textContent || '').includes('เพิ่มตัวชี้วัดให้หน่วยบริการ'))!;
+      return title.closest('.fixed') as HTMLElement;   // เฉพาะหน้าต่างเพิ่มตัวชี้วัด (ตารางหลักมีหัวเดือนอยู่แล้ว)
+    };
 
     beforeEach(() => {
       fixture.detectChanges();
       component.isAdmin = true;
       component.isLocalAdmin = false;
+      component.isAdminCup = false;
       component.kpiData = [];
       component.hosTypeList = component._allHosTypes = [
         { hostypecode: '07', hostypename: 'โรงพยาบาลชุมชน' }, { hostypecode: '18', hostypename: 'รพ.สต.' },
@@ -219,10 +224,8 @@ describe('DashboardComponent', () => {
         { hoscode: 'A', hosname: 'รพ.ก', hostype: '07', distid: '3001' },
         { hoscode: 'B', hosname: 'รพ.สต.ข', hostype: '18', distid: '3001' },
         { hoscode: 'C', hosname: 'รพ.สต.ค', hostype: '18', distid: '3002' },
+        { hoscode: 'D', hosname: 'สสอ.ง', hostype: '02', distid: '3001' },
       ];
-      component.addKpiFilteredHospitals = [...component.addKpiHospitalList];
-      component.addKpiSelHospcodes = [];
-      component.addKpiSelHosTypes = [];
       component.addKpiSelDistricts = [];
       component.addKpiSelDepts = [];
       component.addKpiSelectedYear = '2570';
@@ -233,40 +236,85 @@ describe('DashboardComponent', () => {
         tpl(1, { evaluation_mode: 'any_one', required_off_types: '["18"]', result_formula: 'SUM(ALL)' }),
         tpl(2, { evaluation_mode: 'all_required' }),
         tpl(3, { evaluation_mode: 'any_one', required_off_types: '["07"]', kpi_indicators_name: 'อัตราการคัดกรอง' }),
+        tpl(4, { evaluation_mode: null, required_off_types: null, kpi_indicators_name: 'ยังไม่ตั้งประเภท' }),
       ];
       component.showAddModal = true;
       component.loadAddKpiList();
     });
 
-    // เดิม: เปิดมาติ๊กทุกตัวให้ → ผู้ดูแลกดบันทึกแล้วเพิ่มทุกตัวชี้วัดให้ทุกหน่วยบริการโดยไม่ตั้งใจ
-    it('ผู้ดูแล: เริ่มจากไม่เลือกตัวชี้วัดใด และยังไม่จำกัดประเภทหน่วยบริการ', () => {
-      expect(component.newKpiList.length).toBe(3);
+    // เดิม: ผู้ดูแลต้องเลือกหน่วยบริการปลายทางเอง และตัวชี้วัดที่ไม่ได้ตั้งประเภทเพิ่มให้ได้ทุกแห่ง
+    it('ผู้ดูแล: ไม่ต้องเลือกหน่วยบริการ — ระบบหาปลายทางจากประเภทที่ตั้งไว้ (all_required = 4 ประเภทหลัก ไม่รวม สสอ.)', () => {
+      expect(component.newKpiList.length).toBe(4);
       expect(component.addKpiSelectedIds.size).toBe(0);
-      expect(component.addKpiAllowedHostypes).toBeNull();
-      expect(component.addKpiHosTypeOptions.length).toBe(2);
+      expect(item(1)._targets).toEqual(['B', 'C']);
+      expect(item(2)._targets).toEqual(['A', 'B', 'C']);
+      expect(item(3)._targets).toEqual(['A']);
+      expect(item(4)._targets).toEqual([]);
+      expect(component.addKpiUnsetCount).toBe(1);
     });
 
-    // เดิม: รายการหน่วยบริการไม่สนใจประเภทที่ตั้งไว้ในตัวชี้วัด — เลือก รพ. ให้ตัวชี้วัดของ รพ.สต. ได้
-    it('เลือกตัวชี้วัด → รายการหน่วยบริการ/ตัวกรองประเภทเหลือเฉพาะประเภทที่ตั้งไว้ และตัดหน่วยบริการที่ไม่ตรงออกจากที่เลือก', () => {
-      component.addKpiSelHospcodes = ['A', 'B'];
+    it('ตัวชี้วัดที่ยังไม่ได้ตั้งประเภท: ติ๊กไม่ได้ ("เลือกทั้งหมด" ข้าม) และมีปุ่มไปตั้งค่าที่เปิดหน้าจัดการตัวชี้วัด', () => {
+      component.toggleAddKpi(item(4));
+      expect(component.isAddKpiSelected(item(4))).toBe(false);
+      component.toggleAllAddKpi();
+      expect([...component.addKpiSelectedIds].sort()).toEqual([1, 2, 3]);
+      expect(component.isAllAddKpiSelected()).toBe(true);
+
+      fixture.detectChanges();
+      const btn = Array.from(modalEl().querySelectorAll('button')).find(b => (b.textContent || '').includes('ไปตั้งค่า')) as HTMLButtonElement;
+      expect(btn).toBeTruthy();
+      const nav = vi.spyOn((component as any).router, 'navigate').mockResolvedValue(true);
+      btn.click();
+      expect(nav).toHaveBeenCalledWith(['/kpi-manage'], { queryParams: { editIndicator: 4 } });
+      expect(component.showAddModal).toBe(false);
+    });
+
+    it('จำกัดอำเภอ → ปลายทางเหลือเฉพาะอำเภอนั้น และสรุปจำนวนหน่วยบริการ/คู่ตามตัวที่เลือก', () => {
       component.toggleAddKpi(item(1));
-      expect(component.addKpiAllowedHostypes).toEqual(['18']);
-      expect(component.addKpiFilteredHospitals.map((h: any) => h.hoscode)).toEqual(['B', 'C']);
-      expect(component.addKpiSelHospcodes).toEqual(['B']);
-      expect(component.addKpiHosTypeOptions.map((h: any) => h.hostypecode)).toEqual(['18']);
-      expect(component.addKpiAllowedHostypeNames()).toBe('รพ.สต.');
-
-      // เลือกเพิ่มตัวที่ใช้ได้ทุกประเภท → กลับมาไม่จำกัด
       component.toggleAddKpi(item(2));
-      expect(component.addKpiAllowedHostypes).toBeNull();
-      expect(component.addKpiFilteredHospitals.length).toBe(3);
+      expect(component.addKpiUnitCount).toBe(3);
+      expect(component.addKpiPairCount).toBe(5);
+      component.addKpiSelDistricts = ['3001'];
+      component.onAddKpiDistrictChange();
+      expect(item(1)._targets).toEqual(['B']);
+      expect(item(2)._targets).toEqual(['A', 'B']);
+      expect(component.addKpiPairCount).toBe(3);
+      // ชื่อประเภทแสดงเฉพาะประเภทที่มีหน่วยบริการปลายทางจริง (เดิมแสดงรหัส "05, 06" ที่ไม่มีในขอบเขตของ admin_cup)
+      expect(component.addKpiTargetTypeNames(item(2))).toBe('โรงพยาบาลชุมชน, รพ.สต.');
+      expect(component.addKpiTypeNames(['05'])).toBe('โรงพยาบาลศูนย์');
+      // ไม่มีหน่วยบริการปลายทางในอำเภอที่เลือก → ติ๊กไม่ได้ และหลุดจากรายการที่เลือก
+      component.addKpiSelDistricts = ['9999'];
+      component.onAddKpiDistrictChange();
+      expect(component.addKpiSelectedIds.size).toBe(0);
+      expect(component.addKpiNoTargetCount).toBe(3);
     });
 
-    it('เลือกหน่วยบริการก่อน → ซ่อนตัวชี้วัดที่ไม่ได้ตั้งไว้สำหรับประเภทของหน่วยบริการนั้น', () => {
-      component.addKpiSelHospcodes = ['A'];   // รพช. (07)
-      component.onAddKpiHospitalChange();
-      expect(component.newKpiList.map((i: any) => i.indicator_id)).toEqual([2, 3]);
-      expect(component.addKpiTypeHiddenCount).toBe(1);
+    it('แบ่งคำขอบันทึกครั้งละไม่เกิน 30 หน่วยบริการ แถวระบุ hospcode ของแต่ละคู่', () => {
+      component.toggleAddKpi(item(1));
+      component.toggleAddKpi(item(2));
+      item(2).target_value = '70';
+      const one = component.buildAddKpiBatches(component.addKpiSelectedItems);
+      expect(one.length).toBe(1);
+      expect(one[0].hospcodes.sort()).toEqual(['A', 'B', 'C']);
+      expect(one[0].rows.length).toBe(5);
+      expect(one[0].rows.find((r: any) => r.indicator_id === 2 && r.hospcode === 'A')).toEqual(expect.objectContaining({ year_bh: '2570', target_value: '70', oct: '' }));
+
+      component.addKpiHospitalList = Array.from({ length: 65 }, (_, i) => ({ hoscode: 'S' + i, hostype: '18', distid: '3001' }));
+      component.onAddKpiDistrictChange();
+      const many = component.buildAddKpiBatches([item(1)]);
+      expect(many.map(b => b.hospcodes.length)).toEqual([30, 30, 5]);
+    });
+
+    it('ผู้ใช้หน่วยบริการเดียว: ปลายทาง = หน่วยตัวเอง เลือกตัวที่เพิ่มได้ให้ตอนเปิด ตัวที่ยังไม่ตั้งประเภทเลือกไม่ได้', () => {
+      component.isAdmin = false;
+      component.newKpiList = [];
+      component.addKpiHospitalList = [{ hoscode: 'D', hosname: 'สสอ.ง', hostype: '' }];
+      (component as any)._addKpiDefaultAll = true;
+      component.loadAddKpiList();
+      expect(component.addKpiSingleUnit).toBe(true);
+      expect(item(2)._targets).toEqual(['D']);
+      expect(item(4)._targets).toEqual([]);
+      expect([...component.addKpiSelectedIds].sort()).toEqual([1, 2, 3]);
     });
 
     it('เปลี่ยนตัวกรองแล้วคงค่าที่กรอกและรายการที่ติ๊กไว้ + ค้นหาตัวชี้วัดได้', () => {
@@ -280,25 +328,25 @@ describe('DashboardComponent', () => {
 
       component.toggleAddKpi(item(2));
       item(2).target_value = '55';
-      component.addKpiSelHospcodes = ['B', 'C'];
-      component.onAddKpiHospitalChange();
+      component.addKpiSelDistricts = ['3002'];
+      component.onAddKpiDistrictChange();
       expect(item(2).target_value).toBe('55');          // เดิม: โหลดใหม่แล้วค่ากลับเป็น 80
       expect(component.isAddKpiSelected(item(2))).toBe(true);
 
-      component.addKpiSelHospcodes = [];
-      component.onAddKpiHospitalChange();
       component.addKpiSearch = 'คัดกรอง';
       expect(component.filteredNewKpiList.map((i: any) => i.indicator_id)).toEqual([3]);
       component.addKpiSearch = 'KPI_T_1';
       expect(component.filteredNewKpiList.map((i: any) => i.indicator_id)).toEqual([1]);
     });
 
-    it('แสดงป้ายสูตรในรายการ และซ่อนช่องผลงานรายเดือนเป็นค่าเริ่มต้น', () => {
+    it('แสดงป้ายสูตร + จำนวนหน่วยบริการปลายทาง และซ่อนช่องผลงานรายเดือนเป็นค่าเริ่มต้น', () => {
       fixture.detectChanges();
-      const title = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('h3')).find(h => (h.textContent || '').includes('เพิ่มตัวชี้วัดให้หน่วยบริการ'))!;
-      const el = title.closest('.fixed') as HTMLElement;   // เฉพาะหน้าต่างเพิ่มตัวชี้วัด (ตารางหลักมีหัวเดือนอยู่แล้ว)
+      const el = modalEl();
       expect(el.querySelector('app-formula-badge i.fa-calculator')).toBeTruthy();
       expect(el.textContent).toContain('SUM(ALL)');
+      expect(el.textContent).toContain('2 แห่ง');
+      expect(el.textContent).toContain('ยังไม่ได้ตั้งประเภทหน่วยบริการ');
+      expect(el.textContent).not.toContain('หน่วยบริการปลายทาง (เลือกได้หลายแห่ง)');   // ไม่มีช่องเลือกหน่วยบริการแล้ว
       expect(el.textContent).not.toContain('ต.ค.');
       component.addKpiShowMonths = true;
       (component as any).cdr.detectChanges();

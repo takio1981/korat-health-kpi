@@ -87,6 +87,29 @@ describe('KpiManageComponent', () => {
     });
   });
 
+  // ---- 19 ต.ค. 2569: ปุ่ม "ไปตั้งค่า" จากหน้าต่างเพิ่มตัวชี้วัดให้หน่วยบริการ → เปิดหน้าต่างแก้ไขตัวชี้วัดนั้นทันที ----
+  it('?editIndicator=<id> เปิดหน้าต่างแก้ไขตัวชี้วัดนั้นหลังโหลดรายการ (ครั้งเดียว)', () => {
+    component.canEditData = true;
+    component.pendingEditIndicatorId = 9;
+    component.indicators = [{ id: 8, kpi_indicators_name: 'อื่น' }, { id: 9, kpi_indicators_name: 'ยังไม่ตั้งประเภท', evaluation_mode: null }];
+    component.openPendingIndicatorEdit();
+    expect(component.showModal).toBe(true);
+    expect(component.isEditMode).toBe(true);
+    expect(component.currentItem.id).toBe(9);
+    expect(component.pendingEditIndicatorId).toBeNull();
+    component.showModal = false;
+    component.openPendingIndicatorEdit();
+    expect(component.showModal).toBe(false);
+  });
+
+  it('?editIndicator ไม่มีสิทธิ์แก้ไข → ไม่เปิดหน้าต่าง', () => {
+    component.canEditData = false;
+    component.pendingEditIndicatorId = 9;
+    component.indicators = [{ id: 9, kpi_indicators_name: 'x' }];
+    component.openPendingIndicatorEdit();
+    expect(component.showModal).toBe(false);
+  });
+
   // ---- ตัวชี้วัด 3 ระดับ (18 ต.ค. 2569): เลขข้อ + กิจกรรมใต้ตัวชี้วัดย่อย ----
   describe('กิจกรรมของตัวชี้วัดย่อย', () => {
     let http: HttpTestingController;
