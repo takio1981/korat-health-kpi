@@ -671,4 +671,37 @@ describe('DashboardComponent', () => {
       expect(auto.oct).toBe('90');
     });
   });
+  describe('เงื่อนไขเป้าหมาย (≥ > ≤ < =) — ร้อยละและผ่านเกณฑ์', () => {
+    const row = (cond: any, target: string, last: string) => ({ target_condition: cond, target_value: target, last_actual: last });
+
+    it('≤ ยิ่งน้อยยิ่งดี: ผลงาน 4 จากเป้าหมาย 8 = 200% ผ่าน (เดิม 50% ไม่ผ่าน)', () => {
+      expect(component.calcPercent(row('LTE', '8', '4'))).toBe(200);
+      expect(component.isTargetMet(row('LTE', '8', '4'))).toBe(true);
+      expect(component.calcPercent(row('LTE', '8', '10'))).toBe(80);
+      expect(component.isTargetMet(row('LTE', '8', '10'))).toBe(false);
+      expect(component.isTargetMet(row('LT', '8', '8'))).toBe(false);
+    });
+
+    it('= ความใกล้เคียง และ > เท่าพอดีไม่ผ่าน', () => {
+      expect(component.calcPercent(row('EQ', '100', '125'))).toBe(80);
+      expect(component.isTargetMet(row('EQ', '100', '100'))).toBe(true);
+      expect(component.isTargetMet(row('GT', '80', '80'))).toBe(false);
+    });
+
+    it('ไม่ได้ตั้งเงื่อนไข = ≥ เหมือนเดิม และไม่มีเป้าหมายไม่ระบายแดง', () => {
+      expect(component.calcPercent(row(null, '80', '40'))).toBe(50);
+      expect(component.isTargetMet(row(null, '80', '40'))).toBe(false);
+      expect(component.isTargetMet(row('LTE', '', '40'))).toBe(true);
+      expect(component.isTargetMet(row('LTE', '8', ''))).toBe(false);
+      expect(component.calcPercent(row('LTE', '', '40'))).toBe(0);
+    });
+
+    it('แถวลูกใช้เงื่อนไขของตัวชี้วัดหลัก + สัญลักษณ์หน้าเป้าหมาย', () => {
+      const rows = buildHierRows({ subs: [{ id: 1, name: 'ข้อ 1', rollup_mode: 'manual', target: '8', months: { 10: '4' } }], activities: [] }, '1');
+      expect(component.hierPct(rows[0], 'LTE')).toBe('200.00');
+      expect(component.hierPct(rows[0])).toBe('50.00');
+      expect(component.conditionSymbol({ target_condition: 'LT' })).toBe('<');
+      expect(component.conditionSymbol({ target_condition: null })).toBe('');
+    });
+  });
 });

@@ -18,6 +18,7 @@ import { Anomaly, detectAnomaly } from '../shared/anomaly';
 import { SUB_EXCEL_MONTHS, SubChangePlan, buildSubTemplateAoa, parseSubImportAoa, planSubImport, applySubChanges, subFieldLabel } from '../shared/kpi-sub-excel';
 import { activityValue, rollupMonthly, itemNumber, rollupTree, RollupNode } from '../shared/kpi-rollup';
 import { orderSubTree } from '../shared/sub-tree';
+import { evaluateTarget, normalizeCondition, CONDITION_SYMBOL, CONDITION_LABEL } from '../shared/kpi-target';
 
 // ตัวชี้วัดหลายระดับ — แถวลูกใต้แถวตัวชี้วัดหลักในตารางบันทึกผลงาน (ข้อย่อย 1.1 / ข้อย่อยระดับถัดไป 1.1.1 … / กิจกรรม)
 export interface HierRow {
@@ -2905,8 +2906,9 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
             }
           }
           r.last_actual = lastActual;
-          r.avg_pct = (lastActual != null && r.avg_target && parseFloat(r.avg_target) > 0)
-            ? this.formatNum(parseFloat(lastActual) / parseFloat(r.avg_target) * 100) : null;
+          const _cond = this.kpiData.find((k: any) => Number(k.indicator_id) === Number(r.indicator_id))?.target_condition;
+          const _ev = lastActual != null ? evaluateTarget(lastActual, r.avg_target, _cond) : null;
+          r.avg_pct = _ev && _ev.pct !== null ? this.formatNum(_ev.pct) : null;
           const key = `${r.indicator_id}|${r.hospcode}|${r.year_bh}`;
           this.subSummaryMap.set(key, r);
         }
@@ -3055,12 +3057,13 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     return '';
   }
 
-  hierPct(row: HierRow): string {
-    const t = parseFloat(row.target);
+  // แถวลูกใช้เงื่อนไขเป้าหมายของตัวชี้วัดหลัก (cond = item.target_condition)
+  hierPct(row: HierRow, cond?: any): string {
+    if (row.valueType === 'check') return '';
     const last = this.hierLastValue(row);
-    const v = parseFloat(last);
-    if (row.valueType === 'check' || !(t > 0) || isNaN(v)) return '';
-    return (v / t * 100).toFixed(2);
+    if (isNaN(parseFloat(last))) return '';
+    const r = evaluateTarget(last, row.target, cond);
+    return r.pct === null ? '' : r.pct.toFixed(2);
   }
 
   // ช่องที่แก้ไขในแถวลูกทั้งหมด → รายการสำหรับหน้ายืนยัน + payload ของ POST /hierarchy-results/save
@@ -3125,7 +3128,8 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       hospcode: item.hospcode,
       hosname: item.hosname,
       year_bh: item.year_bh || this.selectedYear,
-      is_locked: item.is_locked
+      is_locked: item.is_locked,
+      target_condition: item.target_condition
     };
     // Reset modal-local state ทุกครั้งที่เปิด modal ใหม่
     this.subEditMode = false;
@@ -3246,7 +3250,8 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     for (const m of [...this.subMonthColumns].reverse()) {
       if (monthly[m] !== null && monthly[m] !== undefined) { aa = monthly[m] as number; break; }
     }
-    const pct = (isFinite(at) && at > 0 && isFinite(aa)) ? (aa / at) * 100 : NaN;
+    const ev = (isFinite(at) && isFinite(aa)) ? evaluateTarget(aa, at, this.subResultContext?.target_condition) : null;
+    const pct = ev && ev.pct !== null ? ev.pct : NaN;
     return {
       avgTarget: isFinite(at) ? this.formatNum(at) : '-',
       avgActual: isFinite(aa) ? this.formatNum(aa) : '-',
@@ -3919,29 +3924,30 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     this.applyChangePlan(planPaste(grid, rows, startRow, fields.slice(startCol), this.editPerms), 'วาง');
   }
 
+  // ร้อยละ/ผ่านเกณฑ์ ตามเงื่อนไขเป้าหมายของตัวชี้วัด (target_condition ≥ > ≤ < =) — shared/kpi-target.ts (สำเนาเดียวกับ backend) — 22 ต.ค. 2569
+  //   ≥ / > : ผลงาน ÷ เป้าหมาย × 100 (เดิม) | ≤ / < : เป้าหมาย ÷ ผลงาน × 100 (ผลงาน 0 = 100) | = : ค่าน้อย ÷ ค่ามาก × 100
+  // ไม่มีเป้าหมาย/ผลงาน → ร้อยละ 0 และไม่ระบายแดง (เหมือนเดิม)
   calcPercent(item: any): number {
-    const tv = String(item.target_value ?? '').trim();
-    const la = String(item.last_actual ?? '').trim();
-    if (!tv) return 0;
-    const target = parseFloat(tv);
-    const actual = parseFloat(la);
-    // ทั้งคู่เป็นตัวเลข → คำนวณปกติ
-    if (!isNaN(target) && target !== 0 && !isNaN(actual)) return (actual / target) * 100;
-    // เป็นข้อความ → เปรียบเทียบตรงกัน = 100%, ไม่ตรง = 0%
-    if (la && tv === la) return 100;
-    return 0;
+    return evaluateTarget(item.last_actual, item.target_value, item.target_condition).pct ?? 0;
   }
 
   isTargetMet(item: any): boolean {
-    const tv = String(item.target_value ?? '').trim();
-    const la = String(item.last_actual ?? '').trim();
-    if (!tv) return true; // ไม่มีเป้าหมาย → ไม่แสดงสีแดง
-    const target = parseFloat(tv);
-    const actual = parseFloat(la);
-    // ทั้งคู่เป็นตัวเลข → เปรียบเทียบปกติ
-    if (!isNaN(target) && !isNaN(actual)) return actual >= target;
-    // เป็นข้อความ → ตรงกัน = ผ่าน
-    return la === tv;
+    const r = evaluateTarget(item.last_actual, item.target_value, item.target_condition);
+    // ไม่มีเป้าหมาย → ไม่แสดงสีแดง | มีเป้าหมายแต่ยังไม่มีผลงาน → ไม่ผ่าน (เหมือนเดิม)
+    if (r.pass === null) return !String(item.target_value ?? '').trim() || !!String(item.last_actual ?? '').trim();
+    return r.pass;
+  }
+
+  // สัญลักษณ์เงื่อนไขหน้าค่าเป้าหมาย (เช่น "≤") — แสดงเฉพาะเมื่อตั้งเงื่อนไขไว้ (ไม่ได้ตั้ง = ≥ ไม่แสดง กันรก)
+  conditionSymbol(item: any): string {
+    const raw = String(item?.target_condition ?? '').trim();
+    return raw ? CONDITION_SYMBOL[normalizeCondition(raw)] : '';
+  }
+  conditionTitle(item: any): string {
+    const c = normalizeCondition(item?.target_condition);
+    const how = c === 'LTE' || c === 'LT' ? 'ร้อยละ = เป้าหมาย ÷ ผลงาน × 100 (ยิ่งน้อยยิ่งดี)'
+      : c === 'EQ' ? 'ร้อยละ = ค่าน้อย ÷ ค่ามาก × 100 (ความใกล้เคียงเป้าหมาย)' : 'ร้อยละ = ผลงาน ÷ เป้าหมาย × 100';
+    return `ผ่านเมื่อผลงาน${CONDITION_LABEL[c]}เป้าหมาย — ${how}`;
   }
 
   // แปลง hostypecode → ตัวย่อสั้น (เช่น '07' → 'รพช.')

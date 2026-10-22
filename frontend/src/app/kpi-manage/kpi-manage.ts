@@ -11,6 +11,27 @@ import { orderSubTree } from '../shared/sub-tree';
 import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
+import { TARGET_CONDITIONS, CONDITION_SYMBOL, CONDITION_LABEL, normalizeCondition, evaluateTarget } from '../shared/kpi-target';
+
+// วิธีคิด "ผลงาน" แบบสำเร็จรูป ↔ is_cumulative + result_formula (ฟังก์ชันล้วน — ทดสอบใน kpi-manage.spec.ts)
+export type ResultMethod = 'last' | 'sum' | 'avg' | 'max' | 'min' | 'custom';
+const RESULT_METHOD_FORMULA: Partial<Record<ResultMethod, string>> = { avg: 'AVG(ALL)', max: 'MAX(ALL)', min: 'MIN(ALL)' };
+export function resultMethodOf(item: any): ResultMethod {
+  const f = String(item?.result_formula || '').replace(/\s+/g, '').toUpperCase();
+  if (!f) return item?.is_cumulative ? 'sum' : 'last';
+  const hit = (Object.keys(RESULT_METHOD_FORMULA) as ResultMethod[]).find(k => RESULT_METHOD_FORMULA[k] === f);
+  return hit || 'custom';
+}
+export function applyResultMethod(item: any, m: ResultMethod): void {
+  if (m === 'custom') {
+    // คงสูตรเดิมถ้าเป็นสูตรกำหนดเองอยู่แล้ว — ถ้าเป็นสูตรสำเร็จรูปให้ล้างเพื่อเริ่มพิมพ์เอง
+    if (resultMethodOf(item) !== 'custom') item.result_formula = '';
+    item.is_cumulative = false;
+    return;
+  }
+  item.result_formula = RESULT_METHOD_FORMULA[m] || '';
+  item.is_cumulative = m === 'sum';
+}
 
 @Component({
   selector: 'app-kpi-manage',
@@ -864,9 +885,57 @@ export class KpiManageComponent implements OnInit {
     const value = evaluateFormula(f, this.formulaTestMonths, this.formulaTestTarget, {
       months: this.formulaTestPrevMonths, target: this.formulaTestPrevTarget, result: this.formulaTestPrevResult,
     });
-    const t = parseFloat(this.formulaTestTarget);
-    const v = value === null ? NaN : parseFloat(value);
-    return { value, pct: !isNaN(t) && t !== 0 && !isNaN(v) ? Math.round((v / t) * 10000) / 100 : null };
+    // ร้อยละตามเงื่อนไขเป้าหมายที่เลือก (≥ > ≤ < =) — กฎเดียวกับหน้าบันทึกผลงาน (shared/kpi-target.ts)
+    const r = value === null ? null : evaluateTarget(value, this.formulaTestTarget, this.currentItem?.target_condition);
+    return { value, pct: r && r.pct !== null ? Math.round(r.pct * 100) / 100 : null };
+  }
+
+  // ===== เงื่อนไขเป้าหมาย (target_condition) + วิธีคิดผลงาน (22 ต.ค. 2569) =====
+  readonly TARGET_CONDITION_OPTIONS = TARGET_CONDITIONS.map(c => ({ v: c, l: `${CONDITION_SYMBOL[c]} ${CONDITION_LABEL[c]}` }));
+
+  // คำอธิบายใต้ dropdown เงื่อนไข: ผ่านเมื่อใด + วิธีคิดร้อยละ พร้อมตัวอย่างตัวเลข
+  get conditionHelp(): { pass: string; pct: string; example: string } {
+    const c = normalizeCondition(this.currentItem?.target_condition);
+    const sym = CONDITION_SYMBOL[c];
+    if (c === 'LTE' || c === 'LT') return {
+      pass: `ผ่านเมื่อผลงาน ${sym} เป้าหมาย (ยิ่งน้อยยิ่งดี)`,
+      pct: 'ร้อยละ = เป้าหมาย ÷ ผลงาน × 100 (ผลงาน 0 = 100%)',
+      example: `เป้าหมาย 8: ผลงาน 4 = 200% ผ่าน, ผลงาน 8 = 100% ${c === 'LTE' ? 'ผ่าน' : 'ไม่ผ่าน'}, ผลงาน 10 = 80% ไม่ผ่าน`,
+    };
+    if (c === 'EQ') return {
+      pass: 'ผ่านเมื่อผลงานเท่ากับเป้าหมายพอดี',
+      pct: 'ร้อยละ = ค่าน้อย ÷ ค่ามาก × 100 (ความใกล้เคียงเป้าหมาย)',
+      example: 'เป้าหมาย 100: ผลงาน 100 = 100% ผ่าน, ผลงาน 90 = 90%, ผลงาน 125 = 80% ไม่ผ่าน',
+    };
+    return {
+      pass: `ผ่านเมื่อผลงาน ${sym} เป้าหมาย${this.currentItem?.target_condition ? '' : ' (ไม่ระบุ = ≥)'}`,
+      pct: 'ร้อยละ = ผลงาน ÷ เป้าหมาย × 100',
+      example: `เป้าหมาย 80: ผลงาน 90 = 112.5% ผ่าน, ผลงาน 80 = 100% ${c === 'GT' ? 'ไม่ผ่าน' : 'ผ่าน'}, ผลงาน 40 = 50% ไม่ผ่าน`,
+    };
+  }
+
+  // วิธีคิด "ผลงาน" แบบสำเร็จรูป — เป็นแค่ทางลัดของ is_cumulative + result_formula เดิม (ไม่มีคอลัมน์ใหม่)
+  readonly RESULT_METHODS: { v: ResultMethod; l: string; d: string }[] = [
+    { v: 'last', l: 'ค่าเดือนล่าสุด', d: 'ผลงาน = ค่าของเดือนล่าสุดที่บันทึก (ค่าตั้งต้น)' },
+    { v: 'sum', l: 'ผลรวมสะสม', d: 'ผลงาน = รวมทุกเดือนในปีงบ (ตัวชี้วัดนับสะสม เช่น จำนวนราย)' },
+    { v: 'avg', l: 'ค่าเฉลี่ย', d: 'ผลงาน = ค่าเฉลี่ยของเดือนที่มีผลงาน — สูตร AVG(ALL)' },
+    { v: 'max', l: 'ค่าสูงสุด', d: 'ผลงาน = ค่าสูงสุดของเดือนที่มีผลงาน — สูตร MAX(ALL)' },
+    { v: 'min', l: 'ค่าต่ำสุด', d: 'ผลงาน = ค่าต่ำสุดของเดือนที่มีผลงาน — สูตร MIN(ALL)' },
+    { v: 'custom', l: 'สูตรกำหนดเอง', d: 'กำหนดสูตรเองในกล่องสูตรคำนวณผลงานด้านล่าง' },
+  ];
+  private _resultMethodCustomFor: any = null; // จำว่าเลือก "สูตรกำหนดเอง" ไว้สำหรับรายการนี้ (กันสลับกลับเองเมื่อสูตรยังว่าง)
+
+  get resultMethod(): ResultMethod {
+    if (this._resultMethodCustomFor && this._resultMethodCustomFor === this.currentItem) return 'custom';
+    return resultMethodOf(this.currentItem);
+  }
+  set resultMethod(m: ResultMethod) {
+    if (!this.currentItem) return;
+    this._resultMethodCustomFor = m === 'custom' ? this.currentItem : null;
+    applyResultMethod(this.currentItem, m);
+  }
+  get resultMethodDesc(): string {
+    return this.RESULT_METHODS.find(x => x.v === this.resultMethod)?.d || '';
   }
 
   // แทรกตัวแปร/ฟังก์ชันที่ตำแหน่งเคอร์เซอร์ในช่องสูตร
@@ -1813,7 +1882,7 @@ export class KpiManageComponent implements OnInit {
       { key: 'main_indicator_name', desc: 'ชื่อหมวดหมู่หลัก — ต้องตรงกับระบบ (ดูชีต "หมวดหมู่หลัก")', example: this.mainIndicators[0]?.main_indicator_name || 'งานควบคุมโรค' },
       { key: 'dept_name',           desc: 'ชื่อหน่วยงาน — ต้องตรงกับระบบ (ดูชีต "หน่วยงาน")', example: this.departments[0]?.dept_name || 'กลุ่มงานโรคไม่ติดต่อ' },
       { key: 'target_percentage',   desc: 'เป้าหมาย % เช่น 80 (ตัวเลข ไม่มีเครื่องหมาย)', example: '80' },
-      { key: 'target_condition',    desc: 'เงื่อนไข: GTE=มากกว่าเท่ากับ / LTE=น้อยกว่าเท่ากับ / EQ=เท่ากับ', example: 'GTE' },
+      { key: 'target_condition',    desc: 'เงื่อนไข: GTE=มากกว่าเท่ากับ / GT=มากกว่า / LTE=น้อยกว่าเท่ากับ / LT=น้อยกว่า / EQ=เท่ากับ', example: 'GTE' },
       { key: 'weight',              desc: 'น้ำหนัก (ตัวเลข ค่าเริ่มต้น 1)', example: '1' },
       { key: 'table_process',       desc: 'ชื่อตาราง MySQL: ขึ้นต้นด้วยตัวอักษร a-z ใช้ได้ a-z 0-9 _ เท่านั้น', example: 'kpi_ncd_001' },
       { key: 'r9',                  desc: 'ตัวชี้วัดระดับเขต 9 (1=ใช่, 0=ไม่ใช่)', example: '0' },
@@ -1908,8 +1977,8 @@ export class KpiManageComponent implements OnInit {
           if (!obj.kpi_indicators_name) addErr(0, 'kpi_indicators_name', 'ชื่อตัวชี้วัดไม่สามารถเว้นว่างได้');
           if (obj.table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(obj.table_process))
             addErr(8, 'table_process', 'ต้องขึ้นต้นด้วยตัวอักษร ใช้ได้เฉพาะ a-z 0-9 _');
-          if (obj.target_condition && !['GTE','LTE','EQ'].includes(obj.target_condition.toUpperCase()))
-            addErr(6, 'target_condition', `"${obj.target_condition}" ไม่ถูกต้อง ต้องเป็น GTE, LTE หรือ EQ`);
+          if (obj.target_condition && !['GTE','GT','LTE','LT','EQ'].includes(obj.target_condition.toUpperCase()))
+            addErr(6, 'target_condition', `"${obj.target_condition}" ไม่ถูกต้อง ต้องเป็น GTE, GT, LTE, LT หรือ EQ`);
           if (obj.evaluation_mode && !['any_one','all_required'].includes(obj.evaluation_mode))
             addErr(14, 'evaluation_mode', `"${obj.evaluation_mode}" ไม่ถูกต้อง ต้องเป็น any_one หรือ all_required`);
 

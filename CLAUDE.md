@@ -264,6 +264,21 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - CRUD `/indicators` POST/PUT/`bulk-import` รับทั้ง 2 ฟิลด์อิสระต่อกัน — audit-log diff message แยก "เป้าหมาย"
   กับ "เกณฑ์" คนละบรรทัด
 
+### เงื่อนไขเป้าหมาย (target_condition ≥ > ≤ < =) — ร้อยละและผ่านเกณฑ์ (เพิ่ม 22 ต.ค. 2569)
+- `kpi_indicators.target_condition` (GTE/GT/LTE/LT/EQ — ว่าง = GTE) ใช้เทียบ**ผลงานกับเป้าหมายของแต่ละหน่วยบริการ** (และเทียบเกณฑ์กับ KHD เหมือนเดิม)
+  — ก่อนหน้านี้ไม่เคยถูกใช้คำนวณเลย (ร้อยละ = ผลงาน ÷ เป้าหมาย, ผ่าน = ผลงาน ≥ เป้าหมาย เสมอ) และ `GET /kpi-results` ไม่ได้ส่งฟิลด์นี้มา
+- กฎกลาง 2 สำเนาต้องตรงกัน: `api/kpi-target.js` = `frontend/src/app/shared/kpi-target.ts` + fixture ร่วม `api/tests/fixtures/target-cases.json` = `shared/kpi-target.cases.json`
+  (jest บังคับตรงกัน) — `evaluateTarget(actual, target, cond)` → `{ pct, pass }`: GTE/GT = ผลงาน ÷ เป้าหมาย × 100 | LTE/LT = เป้าหมาย ÷ ผลงาน × 100
+  (ผลงาน ≤ 0 = 100) | EQ = ค่าน้อย ÷ ค่ามาก × 100 — `hasTarget()`: GTE/GT ต้อง > 0 (เดิม), LTE/LT/EQ ≥ 0 — ข้อความตรงกัน = 100/ผ่าน (เดิม) — ผู้ใช้เลือกสูตรร้อยละเอง
+- ฝั่ง SQL (kpi_summary): `targetHasSql(tCol, condExpr)` / `targetPassSql(aCol, tCol, condExpr)` (server.js ถัดจาก `activeIndicatorSql`) ใช้ทุกจุดที่นับผ่าน —
+  `/dashboard-stats` (การ์ด + อันดับ), `/report/by-indicator|by-hospital|by-district|by-year`, `/report/chart-stats` (`CHART_METRICS_SQL`/`CHART_MONTHLY_SQL`)
+  — condExpr = `i.target_condition` เมื่อ JOIN แล้ว ไม่งั้น `targetCondOf('s')` (subquery) → แก้เงื่อนไขแล้วมีผลทันทีไม่ต้อง refresh summary
+  — **ห้ามเขียน `last_actual >= target_value` ใหม่อีก** และผลงานที่เป็นข้อความต้องไม่ผ่าน ≤ (CAST ข้อความ = 0 — ตรวจ REGEXP ใน helper แล้ว)
+- Frontend: dashboard `calcPercent()`/`isTargetMet()`/`hierPct(row, cond)` (แถวลูกใช้เงื่อนไขของหลัก)/ค่าเฉลี่ยข้อย่อย, สัญลักษณ์หน้าเป้าหมาย `conditionSymbol()`,
+  `criteriaText` pipe ใช้ `CONDITION_SYMBOL` — kpi-manage: dropdown 5 ค่า + `conditionHelp`, **"วิธีคิดผลงาน"** (`resultMethodOf()`/`applyResultMethod()` —
+  ทางลัดของ `is_cumulative` + `result_formula` เดิม: ล่าสุด/สะสม/AVG(ALL)/MAX(ALL)/MIN(ALL)/สูตรเอง ไม่มีคอลัมน์ใหม่) — `/indicators` POST/PUT/bulk-import ผ่าน `normTargetCondition()`
+- Test: `api/tests/kpi-target.test.js`, `api/tests/target-condition.test.js`, `shared/kpi-target.spec.ts`, `dashboard.spec.ts`, `kpi-manage.spec.ts`
+
 ### รหัสของตัวชี้วัดสร้างอัตโนมัติ (เพิ่ม 11 ต.ค. 2569)
 - ผู้ใช้ไม่ต้องคิดรหัสเองตอนเพิ่มตัวชี้วัด — `suggestIndicatorCodes(conn, deptId)` (server.js) คืน
   `table_process = kpi_<key>_<ลำดับ 3 หลัก>` โดย `<key>` = `departments.dept_code` ตัวพิมพ์เล็กถ้าเข้า `/^[a-z][a-z0-9]{0,9}$/` (ncd, ems, dh)
@@ -1095,7 +1110,7 @@ build.bat
 `docker compose up -d --build` เสมอ ไม่งั้น Docker จะใช้ `dist/` เก่าที่ค้างจากรอบก่อนหน้าเงียบๆ
 โดยไม่มี error ใดๆ (container ขึ้น "Healthy" ปกติ แต่โค้ดที่รันจริงเป็นของเก่า):
 **⚠️ เพิ่มไฟล์ .js ใหม่ใน `api/` ที่ server.js `require('./xxx')` → ต้องเพิ่มชื่อไฟล์ในรายการ copy ของ `"build"` script ใน
-`api/package.json` ด้วยเสมอ** (ปัจจุบัน: server.js, db.js, db-remote.js, kpi-formula.js, kpi-rollup.js, khd-mapping.js) — ไม่งั้น Docker image ไม่มีไฟล์นั้น →
+`api/package.json` ด้วยเสมอ** (ปัจจุบัน: server.js, db.js, db-remote.js, kpi-formula.js, kpi-rollup.js, khd-mapping.js, kpi-target.js) — ไม่งั้น Docker image ไม่มีไฟล์นั้น →
 container backend crash `Cannot find module` (unhealthy) ตอน deploy ทั้งที่ test ผ่านหมด (test รันจาก `api/` ตรงๆ) — เกิดจริงแล้ว
 7 ต.ค. 2569 กับ `kpi-formula.js` — มี `api/tests/build.test.js` คุมไว้ (fail ถ้า require local ไฟล์ที่ไม่อยู่ใน build list)
 ```bash

@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
-import { KpiManageComponent } from './kpi-manage';
+import { KpiManageComponent, resultMethodOf, applyResultMethod } from './kpi-manage';
 import { testProviders } from '../testing/test-providers';
 
 describe('KpiManageComponent', () => {
@@ -280,5 +280,43 @@ describe('KpiManageComponent', () => {
     expect(component.currentItem.export_items).toBe(false);
     component.openModal({ id: 9, kpi_indicators_name: 'x', export_items: 1 });
     expect(component.currentItem.export_items).toBe(true);
+  });
+  describe('เงื่อนไขเป้าหมาย + วิธีคิดผลงาน', () => {
+    it('dropdown เงื่อนไขมีครบ 5 แบบ (≥ > ≤ < =)', () => {
+      expect(component.TARGET_CONDITION_OPTIONS.map(o => o.v)).toEqual(['GTE', 'GT', 'LTE', 'LT', 'EQ']);
+      component.currentItem = { target_condition: 'LTE' };
+      expect(component.conditionHelp.pct).toContain('เป้าหมาย ÷ ผลงาน');
+    });
+
+    it('วิธีคิดผลงาน ↔ is_cumulative + result_formula ไปกลับได้', () => {
+      expect(resultMethodOf({ result_formula: '', is_cumulative: 0 })).toBe('last');
+      expect(resultMethodOf({ result_formula: null, is_cumulative: 1 })).toBe('sum');
+      expect(resultMethodOf({ result_formula: 'avg( ALL )' })).toBe('avg');
+      expect(resultMethodOf({ result_formula: '(m10+m11)/2' })).toBe('custom');
+      const it: any = { result_formula: '', is_cumulative: true };
+      applyResultMethod(it, 'max');
+      expect(it).toEqual({ result_formula: 'MAX(ALL)', is_cumulative: false });
+      applyResultMethod(it, 'sum');
+      expect(it).toEqual({ result_formula: '', is_cumulative: true });
+      applyResultMethod(it, 'custom');
+      expect(it).toEqual({ result_formula: '', is_cumulative: false });
+    });
+
+    it('เลือก "สูตรกำหนดเอง" แล้วไม่สลับกลับเองแม้สูตรยังว่าง', () => {
+      component.currentItem = { result_formula: 'AVG(ALL)', is_cumulative: 0 };
+      expect(component.resultMethod).toBe('avg');
+      component.resultMethod = 'custom';
+      expect(component.resultMethod).toBe('custom');
+      expect(component.currentItem.result_formula).toBe('');
+      component.currentItem = { result_formula: '', is_cumulative: 0 };
+      expect(component.resultMethod).toBe('last');
+    });
+
+    it('ทดลองคำนวณสูตรใช้ร้อยละตามเงื่อนไข', () => {
+      component.currentItem = { result_formula: 'AVG(ALL)', target_condition: 'LTE' };
+      component.formulaTestMonths = { m10: '4' };
+      component.formulaTestTarget = '8';
+      expect(component.formulaTestResult?.pct).toBe(200);
+    });
   });
 });

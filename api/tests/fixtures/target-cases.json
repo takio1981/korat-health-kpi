@@ -1,0 +1,45 @@
+{
+  "normalize": [
+    { "name": "ว่าง = GTE (วิธีเดิม)", "in": null, "expected": "GTE" },
+    { "name": "ตัวพิมพ์เล็ก + ช่องว่าง", "in": " lte ", "expected": "LTE" },
+    { "name": "GT", "in": "GT", "expected": "GT" },
+    { "name": "LT", "in": "LT", "expected": "LT" },
+    { "name": "EQ", "in": "EQ", "expected": "EQ" },
+    { "name": "ค่าที่ไม่รู้จัก = GTE", "in": "XYZ", "expected": "GTE" }
+  ],
+  "evaluate": [
+    { "name": "GTE ผ่าน (วิธีเดิม)", "actual": "90", "target": "80", "cond": "GTE", "pct": 112.5, "pass": true },
+    { "name": "GTE เท่าพอดี ผ่าน", "actual": "80", "target": "80", "cond": "GTE", "pct": 100, "pass": true },
+    { "name": "GTE ไม่ผ่าน", "actual": "40", "target": "80", "cond": "GTE", "pct": 50, "pass": false },
+    { "name": "ไม่มีเงื่อนไข = GTE", "actual": "40", "target": "80", "cond": null, "pct": 50, "pass": false },
+    { "name": "GT เท่าพอดี ไม่ผ่าน", "actual": "80", "target": "80", "cond": "GT", "pct": 100, "pass": false },
+    { "name": "GT มากกว่า ผ่าน", "actual": "81", "target": "80", "cond": "GT", "pct": 101.25, "pass": true },
+    { "name": "GTE เป้าหมาย 0 = ไม่มีเป้าหมาย (วิธีเดิม)", "actual": "5", "target": "0", "cond": "GTE", "pct": null, "pass": null },
+    { "name": "LTE น้อยกว่าเป้า ผ่าน (เป้าหมาย ÷ ผลงาน)", "actual": "4", "target": "8", "cond": "LTE", "pct": 200, "pass": true },
+    { "name": "LTE เท่าพอดี ผ่าน", "actual": "8", "target": "8", "cond": "LTE", "pct": 100, "pass": true },
+    { "name": "LTE เกินเป้า ไม่ผ่าน", "actual": "10", "target": "8", "cond": "LTE", "pct": 80, "pass": false },
+    { "name": "LTE ผลงาน 0 = 100", "actual": "0", "target": "8", "cond": "LTE", "pct": 100, "pass": true },
+    { "name": "LTE เป้าหมาย 0 ผลงาน 0 ผ่าน", "actual": "0", "target": "0", "cond": "LTE", "pct": 100, "pass": true },
+    { "name": "LTE เป้าหมาย 0 มีผลงาน ไม่ผ่าน", "actual": "3", "target": "0", "cond": "LTE", "pct": 0, "pass": false },
+    { "name": "LT เท่าพอดี ไม่ผ่าน", "actual": "8", "target": "8", "cond": "LT", "pct": 100, "pass": false },
+    { "name": "LT น้อยกว่า ผ่าน", "actual": "5", "target": "8", "cond": "LT", "pct": 160, "pass": true },
+    { "name": "EQ เท่ากัน", "actual": "100", "target": "100", "cond": "EQ", "pct": 100, "pass": true },
+    { "name": "EQ ขาด (ค่าน้อย ÷ ค่ามาก)", "actual": "90", "target": "100", "cond": "EQ", "pct": 90, "pass": false },
+    { "name": "EQ เกิน (ค่าน้อย ÷ ค่ามาก)", "actual": "125", "target": "100", "cond": "EQ", "pct": 80, "pass": false },
+    { "name": "EQ เป้าหมาย 0 ผลงาน 0", "actual": "0", "target": "0", "cond": "EQ", "pct": 100, "pass": true },
+    { "name": "EQ เป้าหมาย 0 มีผลงาน", "actual": "2", "target": "0", "cond": "EQ", "pct": 0, "pass": false },
+    { "name": "ข้อความตรงกัน = ผ่าน", "actual": "ผ่าน", "target": "ผ่าน", "cond": "LTE", "pct": 100, "pass": true },
+    { "name": "ผลงานเป็นข้อความ (กำลังดำเนินการ) = 0", "actual": "กำลังดำเนินการ", "target": "8", "cond": "LTE", "pct": 0, "pass": false },
+    { "name": "ไม่มีเป้าหมาย", "actual": "5", "target": "", "cond": "LTE", "pct": null, "pass": null },
+    { "name": "ยังไม่มีผลงาน", "actual": "", "target": "8", "cond": "LTE", "pct": null, "pass": null },
+    { "name": "ตัวเลขมีเครื่องหมาย %", "actual": "85%", "target": "80", "cond": "GTE", "pct": 106.25, "pass": true }
+  ],
+  "has": [
+    { "name": "GTE เป้าหมาย 0 ไม่นับ", "target": "0", "cond": "GTE", "expected": false },
+    { "name": "LTE เป้าหมาย 0 นับ", "target": "0", "cond": "LTE", "expected": true },
+    { "name": "EQ เป้าหมาย 0 นับ", "target": "0", "cond": "EQ", "expected": true },
+    { "name": "ค่าว่าง ไม่นับ", "target": "", "cond": "LTE", "expected": false },
+    { "name": "ติดลบ ไม่นับ", "target": "-1", "cond": "LT", "expected": false },
+    { "name": "ข้อความ ไม่นับ", "target": "ผ่าน", "cond": "GTE", "expected": false }
+  ]
+}
