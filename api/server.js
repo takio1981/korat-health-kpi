@@ -3432,7 +3432,7 @@ apiRouter.post('/bulk-add-kpi', authenticateToken, isAdmin, async (req, res) => 
 
 // POST /kpi-results/bulk-delete — ลบ kpi_results + kpi_sub_results ตาม triplet
 // body: { items: [{ indicator_id, year_bh, hospcode }, ...] }
-apiRouter.post('/kpi-results/bulk-delete', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/kpi-results/bulk-delete', authenticateToken, isSuperAdmin, async (req, res) => withSummaryLock(async () => { // ไม่รันพร้อมงานอัปเดต kpi_summary อื่น
     const { items } = req.body;
     if (!Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ success: false, message: 'ไม่มีรายการที่จะลบ' });
@@ -3485,7 +3485,7 @@ apiRouter.post('/kpi-results/bulk-delete', authenticateToken, isSuperAdmin, asyn
         await connection.rollback();
         res.status(500).json({ success: false, message: e.message });
     } finally { connection.release(); }
-});
+}));
 
 // ========== จัดการข้อมูลผลงานตัวชี้วัด (super_admin) — View + Bulk Delete รายระเบียน ==========
 // คนละ endpoint กับ /kpi-results/bulk-delete เดิม (ซึ่งลบทั้งปีของ indicator+hospcode เดียว) — หน้านี้
@@ -3608,14 +3608,73 @@ async function recomputeSummaryLastActual(conn, indicatorId, yearBh) {
     `, [indicatorId, yearBh]);
 }
 
-// หลังบันทึกผลงานข้อย่อย/กิจกรรม → สร้าง summary ของตัวชี้วัดนั้น (ปีงบนั้น) ใหม่ทันที ให้กราฟ/รายงานเห็นผลโดยไม่ต้องรอ "อัปเดต Summary"
-// fire-and-forget: ล้มเหลวไม่กระทบการบันทึก (บันทึกลง console)
-function refreshSummaryAfterSubSave(pairs) {
-    const uniq = [...new Map(pairs.filter(x => x.indicator_id && x.year_bh).map(x => [`${x.indicator_id}|${x.year_bh}`, x])).values()];
-    if (!uniq.length) return;
-    refreshKpiSummaryForIndicatorYears(db, uniq)
-        .catch(e => console.error('[sub-save] refresh kpi_summary failed:', e.message));
+// อัปเดต kpi_summary อัตโนมัติทันทีหลังข้อมูลผลงานเปลี่ยน ให้กราฟ/รายงานเห็นผลโดยไม่ต้องรอ "อัปเดต Summary"
+// (23 ต.ค. 2569 — เดิมเฉพาะผลงานข้อย่อย/กิจกรรม ส่วนผลงานหลัก การอนุมัติ/ส่งกลับ/ปลดล็อค ต้องกด "อัปเดต Summary" เอง)
+// - fire-and-forget: ไม่หน่วงการตอบกลับ ล้มเหลวไม่กระทบการบันทึก (บันทึกลง console)
+// - คิวต่อคู่ (indicator_id|year_bh): คู่เดียวกันไม่รันซ้อนกัน (refreshSummaryPairs = DELETE + INSERT ซ้อนกันแล้วชน uk_ind_year_hos)
+//   มีการบันทึกเพิ่มระหว่างรัน → รันซ้ำอีกรอบหลังจบ (รวมหลายการบันทึกเป็นรอบเดียว)
+// - คืน Promise ให้รอได้ — summaryRefreshIdle() รอทุกคิวที่ค้าง (ใช้ในชุดทดสอบ)
+// ล็อคระดับแอปของงานที่เขียน kpi_summary แบบลบ-สร้างใหม่ (คิวอัตโนมัติ + ปุ่ม "อัปเดต Summary" batch/finalize + ลบผลงานแบบชุด)
+// — งานเหล่านี้ DELETE + INSERT แถวชุดเดียวกัน ถ้ารันพร้อมกันจะชน uk_ind_year_hos (พบจริงในชุดทดสอบ 23 ต.ค. 2569) จึงให้ทำทีละงาน
+let _summaryLockTail = Promise.resolve();
+function withSummaryLock(fn) {
+    const run = _summaryLockTail.then(() => fn());
+    _summaryLockTail = run.catch(() => {});
+    return run;
 }
+// refresh 1 คู่บน connection แยกระดับ READ COMMITTED: INSERT … SELECT จาก kpi_results ไม่ถือ shared lock ของแถวผลงาน
+// (ไม่บล็อก/ไม่ deadlock กับการบันทึกผลงานที่กำลังเกิดขึ้น) — deadlock/ชนคีย์ = ลองใหม่สูงสุด 3 ครั้ง
+async function refreshSummaryPairIsolated(pair) {
+    for (let attempt = 1; ; attempt++) {
+        const conn = await db.getConnection();
+        try {
+            await conn.query('SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED');
+            await refreshKpiSummaryForIndicatorYears(conn, [pair]);
+            return;
+        } catch (e) {
+            if (attempt >= 3 || !['ER_LOCK_DEADLOCK', 'ER_DUP_ENTRY', 'ER_LOCK_WAIT_TIMEOUT'].includes(e.code)) throw e;
+            await new Promise(r => setTimeout(r, 200 * attempt));
+        } finally {
+            try { await conn.query('SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ'); } catch (e) { /* ignore */ }
+            conn.release();
+        }
+    }
+}
+const _summaryRefreshQueue = new Map(); // key → { again, promise }
+function scheduleSummaryRefresh(pairs) {
+    const uniq = new Map();
+    for (const x of pairs || []) {
+        if (!x || !x.indicator_id || !x.year_bh) continue;
+        const p = { indicator_id: Number(x.indicator_id), year_bh: String(x.year_bh) };
+        uniq.set(`${p.indicator_id}|${p.year_bh}`, p);
+    }
+    const waits = [];
+    for (const [key, pair] of uniq) {
+        const cur = _summaryRefreshQueue.get(key);
+        if (cur) { cur.again = true; waits.push(cur.promise); continue; }
+        const st = { again: false, promise: null };
+        _summaryRefreshQueue.set(key, st);
+        st.promise = (async () => {
+            try {
+                do {
+                    st.again = false;
+                    await withSummaryLock(() => refreshSummaryPairIsolated(pair));
+                } while (st.again);
+            } catch (e) {
+                console.error(`[summary] refresh ${key} failed:`, e.message);
+            } finally {
+                _summaryRefreshQueue.delete(key);
+            }
+        })();
+        waits.push(st.promise);
+    }
+    return Promise.all(waits);
+}
+async function summaryRefreshIdle() {
+    while (_summaryRefreshQueue.size) await Promise.all([..._summaryRefreshQueue.values()].map(s => s.promise));
+}
+// ชื่อเดิม (บันทึกผลงานข้อย่อย/กิจกรรม) — ใช้คิวเดียวกัน
+const refreshSummaryAfterSubSave = scheduleSummaryRefresh;
 
 // Re-aggregate kpi_summary เฉพาะ (indicator_id, year_bh) ที่ได้รับผลกระทบหลังลบ kpi_results บางรายการ —
 // ลบแถว summary เดิมทิ้งแล้วคำนวณใหม่จาก kpi_results ที่เหลืออยู่จริง (ไม่ใช่ลบทั้งแถวทิ้งเฉยๆ เหมือน
@@ -3845,7 +3904,7 @@ apiRouter.get('/kpi-results/manage', authenticateToken, isSuperAdmin, async (req
 
 // POST /kpi-results/manage/bulk-delete — ลบตาม kpi_results.id ตรงๆ (ละเอียดระดับ 1 เดือน/1 แถว)
 // hardcode isSuperAdmin ตรงๆ เสมอ (ไม่เข้า PAGE_ACCESS_RULES) ตามกฎ DELETE ทุกตัวของระบบ
-apiRouter.post('/kpi-results/manage/bulk-delete', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/kpi-results/manage/bulk-delete', authenticateToken, isSuperAdmin, async (req, res) => withSummaryLock(async () => { // ไม่รันพร้อมงานอัปเดต kpi_summary อื่น
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ success: false, message: 'ไม่มีรายการที่จะลบ' });
@@ -3906,7 +3965,7 @@ apiRouter.post('/kpi-results/manage/bulk-delete', authenticateToken, isSuperAdmi
     } finally {
         connection.release();
     }
-});
+}));
 
 // authenticateToken: เดิม route นี้ verify JWT เองอย่างเดียว ข้ามการตรวจ single session — ผู้ใช้ที่ถูกบังคับ logout
 // หรือ login ซ้อนจากเครื่องอื่นแล้ว ยังบันทึกผลงานด้วย token เก่าได้จนหมดอายุ (8 ชม.) — ต้องผ่าน middleware กลางเสมอ
@@ -4048,6 +4107,7 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
             );
 
             await connection.commit();
+            scheduleSummaryRefresh(updates); // อัปเดต kpi_summary ของคู่ (ตัวชี้วัด × ปีงบ) ที่บันทึก ทันที (fire-and-forget)
             return res.json({
                 success: true,
                 message: 'เพิ่มตัวชี้วัดใหม่ ' + newUpdates.length + ' รายการ (ข้าม ' + (skipped + skippedType + skippedUnset) + ' รายการ)',
@@ -4157,6 +4217,7 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
             );
 
             await connection.commit();
+            scheduleSummaryRefresh(updates); // อัปเดต kpi_summary ของคู่ (ตัวชี้วัด × ปีงบ) ที่บันทึก ทันที (fire-and-forget)
             return res.json({
                 success: true,
                 message: `บันทึกตัวชี้วัดทั้งหมด ${updates.length} รายการเรียบร้อยแล้ว (เขียนทับ)`,
@@ -4209,6 +4270,7 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
         );
 
         await connection.commit();
+        scheduleSummaryRefresh(updates); // อัปเดต kpi_summary ของคู่ (ตัวชี้วัด × ปีงบ) ที่บันทึก ทันที (fire-and-forget)
 
         // === KPI Save Audit (fire-and-forget) ===
         (async () => {
@@ -4721,6 +4783,7 @@ apiRouter.post('/dynamic-data/:table_name', authenticateToken, async (req, res) 
             } catch (e) { console.warn('[KPI Audit] dynamic-data log error:', e.message); }
         })();
 
+        scheduleSummaryRefresh([{ indicator_id: data.indicator_id, year_bh: data.year_bh }]); // อัปเดต kpi_summary ทันที (สถานะ/ล็อค/ผลงานในรายงาน)
         res.json({ success: true, message: isUpdate ? 'อัปเดตข้อมูลเรียบร้อยแล้ว' : 'บันทึกข้อมูลเรียบร้อยแล้ว', id: insertedId });
     } catch (e) {
         await connection.rollback();
@@ -6681,7 +6744,7 @@ apiRouter.put('/indicators/:id', authenticateToken, requireAction('kpi-manage', 
             try {
                 const [years] = await db.query('SELECT DISTINCT year_bh FROM kpi_summary WHERE indicator_id = ?', [req.params.id]);
                 if (years.length > 0) {
-                    await refreshKpiSummaryForIndicatorYears(db, years.map(y => ({ indicator_id: Number(req.params.id), year_bh: y.year_bh })));
+                    await scheduleSummaryRefresh(years.map(y => ({ indicator_id: Number(req.params.id), year_bh: y.year_bh }))); // ผ่านคิวเดียวกับการบันทึกผลงาน (ไม่รันซ้อนคู่เดียวกัน)
                 }
             } catch (e) { console.error('[indicators PUT] refresh kpi_summary failed:', e.message); }
         }
@@ -7761,6 +7824,7 @@ apiRouter.post('/approve-kpi', authenticateToken, isAdmin, async (req, res) => {
         );
 
         await connection.commit();
+        scheduleSummaryRefresh(items); // อัปเดต kpi_summary ทันที (สถานะ/ล็อค/ผลงานในรายงาน)
         res.json({ success: true, message: `อนุมัติและล็อคข้อมูลเรียบร้อยแล้ว ${items.length} รายการ` });
     } catch (error) {
         await connection.rollback();
@@ -7788,6 +7852,7 @@ apiRouter.post('/unlock-kpi', authenticateToken, isSuperAdmin, async (req, res) 
             [user.userId, user.deptId, 'UNLOCK', 'kpi_results', JSON.stringify({ indicator_id, year_bh, hospcode, message: 'ปลดล็อคข้อมูล' }), req.ip]
         );
 
+        scheduleSummaryRefresh([{ indicator_id, year_bh }]); // อัปเดต kpi_summary ทันที (สถานะ/ล็อค/ผลงานในรายงาน)
         res.json({ success: true, message: 'ปลดล็อคข้อมูลเรียบร้อยแล้ว' });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -7816,6 +7881,7 @@ apiRouter.post('/unlock-kpi-all', authenticateToken, isSuperAdmin, async (req, r
             'INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?,?,?,?,?)',
             [req.user.userId, 'UNLOCK_ALL', 'kpi_results', JSON.stringify({ year_bh, affected: result.affectedRows }), req.ip]
         );
+        db.query('SELECT DISTINCT indicator_id FROM kpi_summary WHERE year_bh = ?', [year_bh]).then(([rs]) => scheduleSummaryRefresh(rs.map(r => ({ indicator_id: r.indicator_id, year_bh })))).catch(e => console.error('[summary] unlock-all:', e.message)); // อัปเดต kpi_summary ทันที (สถานะ/ล็อค/ผลงานในรายงาน)
         res.json({ success: true, message: `ปลดล็อคทั้งหมด ${result.affectedRows} รายการ ในปี ${year_bh}` });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
@@ -8037,6 +8103,7 @@ apiRouter.post('/appeal-kpi', authenticateToken, async (req, res) => {
             [user.userId, user.deptId, 'APPEAL', 'kpi_results', JSON.stringify({ indicator_id, year_bh, hospcode, reason }), req.ip]
         );
 
+        scheduleSummaryRefresh([{ indicator_id, year_bh }]); // อัปเดต kpi_summary ทันที (สถานะ/ล็อค/ผลงานในรายงาน)
         res.json({ success: true, message: 'ยื่นอุทธรณ์เรียบร้อยแล้ว' });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -8078,6 +8145,7 @@ apiRouter.post('/appeal-approve', authenticateToken, isAdmin, async (req, res) =
             [user.userId, user.deptId, 'APPEAL_APPROVE', 'kpi_results', JSON.stringify({ indicator_id, year_bh, hospcode, comment }), req.ip]
         );
 
+        scheduleSummaryRefresh([{ indicator_id, year_bh }]); // อัปเดต kpi_summary ทันที (สถานะ/ล็อค/ผลงานในรายงาน)
         res.json({ success: true, message: 'อนุมัติอุทธรณ์เรียบร้อย ปลดล็อคข้อมูลแล้ว' });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -8123,6 +8191,7 @@ apiRouter.post('/appeal-reject', authenticateToken, isAdmin, async (req, res) =>
             [user.userId, user.deptId, 'APPEAL_REJECT', 'kpi_results', JSON.stringify({ indicator_id, year_bh, hospcode, comment }), req.ip]
         );
 
+        scheduleSummaryRefresh([{ indicator_id, year_bh }]); // อัปเดต kpi_summary ทันที (สถานะ/ล็อค/ผลงานในรายงาน)
         res.json({ success: true, message: 'ปฏิเสธอุทธรณ์เรียบร้อย' });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -9940,7 +10009,7 @@ apiRouter.post('/sync-to-khd/execute', authenticateToken, isSuperAdmin, async (r
 // ========== KPI Summary (Materialized View) ==========
 
 // POST /refresh-summary/prepare — ล้างข้อมูลเก่า + ส่ง indicator_ids กลับให้ frontend batch
-apiRouter.post('/refresh-summary/prepare', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/refresh-summary/prepare', authenticateToken, isSuperAdmin, async (req, res) => withSummaryLock(async () => { // ไม่รันพร้อมงานอัปเดต kpi_summary อื่น
     try {
         const year = req.body.year_bh || '';
         if (year) await db.query('DELETE FROM kpi_summary WHERE year_bh = ?', [year]);
@@ -9965,10 +10034,10 @@ apiRouter.post('/refresh-summary/prepare', authenticateToken, isSuperAdmin, asyn
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
-});
+}));
 
 // POST /refresh-summary/batch — ประมวลผลทีละ batch (frontend ส่ง indicator_ids มา)
-apiRouter.post('/refresh-summary/batch', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/refresh-summary/batch', authenticateToken, isSuperAdmin, async (req, res) => withSummaryLock(async () => { // ไม่รันพร้อมงานอัปเดต kpi_summary อื่น
     try {
         const { indicator_ids, year_bh } = req.body;
         if (!Array.isArray(indicator_ids) || indicator_ids.length === 0) {
@@ -9977,6 +10046,10 @@ apiRouter.post('/refresh-summary/batch', authenticateToken, isSuperAdmin, async 
         const yearFilter = year_bh ? 'AND r.year_bh = ?' : '';
         const yearParams = year_bh ? [year_bh] : [];
         const idPlaceholders = indicator_ids.map(() => '?').join(',');
+
+        // ลบแถวของตัวชี้วัดชุดนี้ก่อน (เดิมพึ่ง /prepare ลบทั้งปีไว้ก่อน — แต่ระหว่าง prepare กับ batch การอัปเดตอัตโนมัติหลังบันทึกผลงาน
+        // อาจสร้างแถวกลับมาแล้ว → INSERT ชน uk_ind_year_hos) — ลบซ้ำได้ ไม่มีผลข้างเคียง
+        await db.query(`DELETE FROM kpi_summary WHERE indicator_id IN (${idPlaceholders}) ${year_bh ? 'AND year_bh = ?' : ''}`, [...indicator_ids, ...yearParams]);
 
         const [result] = await db.query(`
             INSERT INTO kpi_summary (indicator_id, year_bh, hospcode, main_indicator_name, kpi_indicators_name,
@@ -10021,10 +10094,10 @@ apiRouter.post('/refresh-summary/batch', authenticateToken, isSuperAdmin, async 
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
-});
+}));
 
 // POST /refresh-summary/finalize — อัปเดต last_actual + has_form_schema
-apiRouter.post('/refresh-summary/finalize', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/refresh-summary/finalize', authenticateToken, isSuperAdmin, async (req, res) => withSummaryLock(async () => { // ไม่รันพร้อมงานอัปเดต kpi_summary อื่น
     try {
         const year = req.body.year_bh || '';
         const yearWhere = year ? `AND s.year_bh = ?` : '';
@@ -10076,7 +10149,7 @@ apiRouter.post('/refresh-summary/finalize', authenticateToken, isSuperAdmin, asy
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
-});
+}));
 
 // GET /kpi-summary — ดึงข้อมูลจาก summary table (เร็วมาก ไม่ต้อง JOIN)
 // ผลงานรายเดือนของปีงบที่แล้ว (year_bh - 1) จาก kpi_summary ตามขอบเขตสิทธิ์เดียวกับรายงาน (chartScopeClauses)
@@ -12110,6 +12183,7 @@ apiRouter.post('/reject-kpi', authenticateToken, isAdmin, async (req, res) => {
         );
 
         await connection.commit();
+        scheduleSummaryRefresh(items); // อัปเดต kpi_summary ทันที (สถานะ/ล็อค/ผลงานในรายงาน)
         res.json({ success: true, message: `ส่งคืนแก้ไขเรียบร้อยแล้ว ${items.length} รายการ` });
     } catch (error) {
         await connection.rollback();
@@ -12201,6 +12275,7 @@ apiRouter.post('/notifications/mark-read', authenticateToken, async (req, res) =
             }
         }
 
+        scheduleSummaryRefresh(rejNotifs); // อัปเดต kpi_summary ทันที (สถานะ/ล็อค/ผลงานในรายงาน)
         res.json({ success: true, message: 'อ่านแจ้งเตือนเรียบร้อยแล้ว' });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -12298,6 +12373,7 @@ apiRouter.post('/reply-kpi', authenticateToken, async (req, res) => {
         );
 
         await connection.commit();
+        scheduleSummaryRefresh([{ indicator_id, year_bh }]); // อัปเดต kpi_summary ทันที (สถานะ/ล็อค/ผลงานในรายงาน)
         res.json({ success: true, message: 'ส่งตอบกลับเรียบร้อยแล้ว' });
     } catch (error) {
         await connection.rollback();
@@ -17141,4 +17217,4 @@ if (require.main === module) {
         startSessionCleanupJob();
     });
 }
-module.exports = { app, captureError, migrationsReady, loadSubAggregates, loadSubExportMonthMap, refreshKpiSummaryForIndicatorYears };
+module.exports = { app, captureError, migrationsReady, loadSubAggregates, loadSubExportMonthMap, refreshKpiSummaryForIndicatorYears, scheduleSummaryRefresh, summaryRefreshIdle };

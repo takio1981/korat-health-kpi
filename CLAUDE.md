@@ -209,6 +209,14 @@ users.dept_id → departments.id (FK)
 ### Performance
 - ตาราง `kpi_summary` เป็น Materialized View สำหรับ Chart + Report (ทั้ง 4 แถบ)
 - อัปเดตด้วย `POST /refresh-summary` — **batch by indicator_id** (ทีละ 50 indicators ป้องกัน timeout)
+- **อัปเดตอัตโนมัติทันที (23 ต.ค. 2569):** `scheduleSummaryRefresh(pairs)` (server.js) = คิวต่อคู่ `indicator_id|year_bh` แบบ fire-and-forget
+  (คู่เดียวกันไม่รันซ้อน มีการบันทึกระหว่างรัน → รันซ้ำอีกรอบ) เรียกหลัง commit ของ `/update-kpi` ทุกโหมด, approve/reject/unlock/unlock-all/
+  appeal-*/reply-kpi/notifications mark-read (สถานะ Resubmit), `/dynamic-data` sync, ข้อย่อย/กิจกรรม (`refreshSummaryAfterSubSave` = ชื่อเดิมของคิวเดียวกัน),
+  PUT `/indicators` ที่วิธีคำนวณเปลี่ยน (await) — **endpoint ใหม่ที่แก้ `kpi_results` ต้องเรียกด้วยเสมอ**
+  - refresh รันบน connection แยกระดับ READ COMMITTED (`refreshSummaryPairIsolated` — INSERT…SELECT ไม่ถือ shared lock แถวผลงาน ไม่บล็อกการบันทึก) + ลองใหม่เมื่อ deadlock/ชนคีย์
+  - `withSummaryLock()` = ล็อคระดับแอป ให้งานลบ-สร้าง summary ทำทีละงาน: คิวอัตโนมัติ, `/refresh-summary/prepare|batch|finalize`, `/kpi-results/bulk-delete`,
+    `/kpi-results/manage/bulk-delete` — `/refresh-summary/batch` ลบแถวของตัวชี้วัดชุดนั้นก่อน INSERT เสมอ (เดิมพึ่ง prepare — การอัปเดตอัตโนมัติระหว่างนั้นทำให้ชน `uk_ind_year_hos`)
+  - `summaryRefreshIdle()` (export) รอคิวว่าง — ใช้ในชุดทดสอบ | ไม่ครอบคลุม: `/bulk-add-kpi` (เพิ่มเฉพาะเป้าหมาย ไม่มีผลกับ summary), `/clear-kpi-data` | Test: `api/tests/summary-auto-refresh.test.js`
 - เก็บเฉพาะข้อมูลที่มีผลงานจริง (HAVING actual_value)
 - ใช้ composite index: `(indicator_id, year_bh, hospcode)`
 - มี `dept_id` + `distid` สำหรับ role-based filtering โดยไม่ต้อง JOIN ตารางอื่น

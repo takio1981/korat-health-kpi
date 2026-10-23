@@ -313,7 +313,7 @@ const SYSTEMS: SopSystem[] = [
   notes:['ปีงบประมาณ: ต.ค.(10) ถึง ก.ย.(9) | year_bh = VARCHAR(10) เช่น "2569"','Shell records: target_value จาก default, actual_value ว่าง, status=pending'],
 },{
   id:'charts', icon:'📈', title:'ระบบกราฟและรายงาน', sub:'Charts & Reports',
-  desc:'ดึงจาก kpi_summary materialized view เท่านั้น (รวมผลงานที่บันทึกที่ข้อย่อย/กิจกรรม) | อัปเดต Summary เมื่อมีการบันทึกผลงานหลักจำนวนมาก — ผลงานย่อย/กิจกรรมอัปเดตให้ทันที',
+  desc:'ดึงจาก kpi_summary materialized view เท่านั้น (รวมผลงานที่บันทึกที่ข้อย่อย/กิจกรรม) | อัปเดตอัตโนมัติทันทีหลังบันทึกผลงานหลัก/ย่อย/กิจกรรม/แบบฟอร์ม อนุมัติ ส่งกลับ ปลดล็อค อุทธรณ์ (คิวต่อตัวชี้วัด×ปีงบ scheduleSummaryRefresh) — ปุ่มอัปเดต Summary = สร้างใหม่ทั้งปี | เดิม: ผลงานย่อย/กิจกรรมอัปเดตให้ทันที',
   actors:['ผู้ใช้งาน','Backend API','kpi_summary'],
   subflows:[
     { id:'chart', title:'กราฟและสถิติ', nodes:[
