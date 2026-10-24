@@ -5,7 +5,7 @@ import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { FormBuilderComponent } from '../form-builder/form-builder';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
-import { validateFormula, evaluateFormula, usesPrevYear, FORMULA_FUNCTIONS } from '../shared/kpi-formula';
+import { validateFormula, evaluateFormula, usesPrevYear, usesBase, FORMULA_FUNCTIONS } from '../shared/kpi-formula';
 import { itemNumber } from '../shared/kpi-rollup';
 import { orderSubTree } from '../shared/sub-tree';
 import Swal from 'sweetalert2';
@@ -849,6 +849,7 @@ export class KpiManageComponent implements OnInit {
   readonly FORMULA_FUNCTIONS = FORMULA_FUNCTIONS;
   readonly FORMULA_EXAMPLES: { f: string; d: string }[] = [
     { f: 'AVG(ALL)', d: 'ค่าเฉลี่ยทุกเดือนที่มีผลงาน' },
+    { f: '(base - SUM(ALL)) / base * 100', d: 'ร้อยละการลดลงจากค่าฐานของหน่วยบริการ (เช่น ค่าเฉลี่ย 5 ปีของผู้เสียชีวิตจากการจมน้ำ) — บันทึกรายเดือนเป็นจำนวน' },
     { f: 'SUM(ALL)', d: 'ผลรวมทุกเดือน' },
     { f: 'MAX(ALL)', d: 'ค่าสูงสุด' },
     { f: '(m10+m11+m12)/3', d: 'เฉลี่ยไตรมาส 1' },
@@ -859,6 +860,7 @@ export class KpiManageComponent implements OnInit {
   ];
   formulaTestMonths: Record<string, string> = {};
   formulaTestTarget = '';
+  formulaTestBase = '';   // ค่าฐาน (base) สำหรับทดลองคำนวณ — แสดงเมื่อสูตรใช้ base
   // ข้อมูลปีงบที่แล้วสำหรับทดลองคำนวณ (แสดงเฉพาะเมื่อสูตรอ้าง prev_* / PREV_ALL)
   formulaTestPrevMonths: Record<string, string> = {};
   formulaTestPrevTarget = '';
@@ -867,6 +869,12 @@ export class KpiManageComponent implements OnInit {
   get formulaUsesPrev(): boolean {
     const f = String(this.currentItem?.result_formula || '').trim();
     return !!f && !this.formulaError && usesPrevYear(f);
+  }
+
+  // สูตรอ้างค่าฐาน (base) ของหน่วยบริการ — แสดงช่องทดลองค่าฐาน + คำอธิบาย
+  get formulaUsesBase(): boolean {
+    const f = String(this.currentItem?.result_formula || '').trim();
+    return !!f && !this.formulaError && usesBase(f);
   }
 
   get hasFormula(): boolean {
@@ -884,7 +892,7 @@ export class KpiManageComponent implements OnInit {
     if (!f || this.formulaError) return null;
     const value = evaluateFormula(f, this.formulaTestMonths, this.formulaTestTarget, {
       months: this.formulaTestPrevMonths, target: this.formulaTestPrevTarget, result: this.formulaTestPrevResult,
-    });
+    }, this.formulaTestBase);
     // ร้อยละตามเงื่อนไขเป้าหมายที่เลือก (≥ > ≤ < =) — กฎเดียวกับหน้าบันทึกผลงาน (shared/kpi-target.ts)
     const r = value === null ? null : evaluateTarget(value, this.formulaTestTarget, this.currentItem?.target_condition);
     return { value, pct: r && r.pct !== null ? Math.round(r.pct * 100) / 100 : null };
@@ -1003,6 +1011,7 @@ export class KpiManageComponent implements OnInit {
     this.codeSuggestLoading = false;
     this.formulaTestMonths = {};
     this.formulaTestTarget = String(item?.target_percentage ?? '');
+    this.formulaTestBase = '';
     this.formulaTestPrevMonths = {};
     this.formulaTestPrevTarget = '';
     this.formulaTestPrevResult = '';

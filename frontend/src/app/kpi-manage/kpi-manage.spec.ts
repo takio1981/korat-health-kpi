@@ -319,4 +319,17 @@ describe('KpiManageComponent', () => {
       expect(component.formulaTestResult?.pct).toBe(200);
     });
   });
+  describe('ค่าฐาน (base) ในกล่องสูตร', () => {
+    it('ทดลองคำนวณสูตรที่ใช้ค่าฐาน + วิธีคิดผลงานเป็นสูตรกำหนดเอง', () => {
+      component.currentItem = { result_formula: '(base - SUM(ALL)) / base * 100', target_condition: 'GTE' };
+      expect(component.formulaUsesBase).toBe(true);
+      expect(component.resultMethod).toBe('custom');
+      component.formulaTestMonths = { m10: '14' };
+      component.formulaTestTarget = '30';
+      component.formulaTestBase = '173.8';
+      expect(component.formulaTestResult?.value).toBe('91.94');
+      component.currentItem = { result_formula: 'AVG(ALL)' };
+      expect(component.formulaUsesBase).toBe(false);
+    });
+  });
 });

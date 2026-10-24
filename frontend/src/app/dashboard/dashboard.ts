@@ -10,7 +10,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { InitScrollLeftDirective } from './init-scroll-left.directive';
 import { CriteriaTextPipe } from '../shared/criteria-text.pipe';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
-import { activeFormula, validateFormula, evaluateFormula } from '../shared/kpi-formula';
+import { activeFormula, validateFormula, evaluateFormula, usesBase } from '../shared/kpi-formula';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { indicatorTypeSetting, autoTargetHostypes, resolveAddKpiTargets, HOSTYPE_NAMES } from '../shared/indicator-scope';
 import { EXCEL_MONTHS, ChangePlan, EditPerms, buildTemplateAoa, parseImportAoa, planImport, parseClipboardGrid, isMultiCell, planPaste, applyCellChanges, itemKey } from '../shared/kpi-excel';
@@ -1618,6 +1618,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     const changedItems = this.filteredData.filter(item => {
       if (!item._original) return false;
       if (String(item.target_value ?? '') !== String(item._original.target_value ?? '')) return true;
+      if (this.isBaseChanged(item)) return true;
       return months.some(m => String(item[m] ?? '') !== String(item._original[m] ?? ''));
     });
     // ช่องที่แก้ไขในแถวลูก (ข้อย่อย/กิจกรรม — ตัวชี้วัด 3 ระดับ) บันทึกพร้อมกันด้วยปุ่มเดียวกัน
@@ -1682,6 +1683,16 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
             <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${statusBadge(item._original.target_value, item.target_value)}</td>
           </tr>`);
         }
+        // ค่าฐาน (base ของสูตร)
+        if (this.isBaseChanged(item)) {
+          rows.push(`<tr>
+            <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">${kpiName}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center;color:#0369a1;font-weight:700">ค่าฐาน</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${fmt(item._original.base_value)}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:700">${fmt(item.base_value)}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${statusBadge(item._original.base_value, item.base_value)}</td>
+          </tr>`);
+        }
         // monthly values
         for (const m of months) {
           if (String(item[m] ?? '') !== String(item._original[m] ?? '')) {
@@ -1731,7 +1742,9 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         oct: item.oct, nov: item.nov, dece: item.dece,
         jan: item.jan, feb: item.feb, mar: item.mar,
         apr: item.apr, may: item.may, jun: item.jun,
-        jul: item.jul, aug: item.aug, sep: item.sep
+        jul: item.jul, aug: item.aug, sep: item.sep,
+        // ค่าฐาน — ส่งเฉพาะเมื่อแก้ (ไม่ส่ง = backend ไม่เปลี่ยนค่าเดิม)
+        ...(this.isBaseChanged(item) ? { base_value: String(item.base_value ?? '').trim() } : {})
       }));
 
       // ตรวจสอบว่ามีรายการที่สถานะ "รอตอบกลับ" (Resubmit) หรือไม่
@@ -2950,7 +2963,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       const formula = activeFormula(item);
       if (formula && !validateFormula(formula)) {
         // ตัวชี้วัดที่ตั้งสูตร: ผลงาน = สูตรบนค่าเฉลี่ยรายเดือนจาก sub (แทนค่าเดือนล่าสุดของ AVG)
-        const val = evaluateFormula(formula, item, item.target_value, item.prev_year);
+        const val = evaluateFormula(formula, item, item.target_value, item.prev_year, item.base_value);
         item.last_actual = val ?? '';
         item.total_actual = val === null ? 0 : parseFloat(val) || 0;
       } else if (sum.last_actual != null) {
@@ -3055,6 +3068,20 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       if (v !== '') return row.valueType === 'check' ? (v === '1' ? 'ทำแล้ว' : 'ยังไม่ทำ') : v;
     }
     return '';
+  }
+
+  // ===== ค่าฐาน (base) ของสูตรคำนวณผลงาน — kpi_base_values (24 ต.ค. 2569) =====
+  // แสดง/แก้ไขเฉพาะตัวชี้วัดที่สูตรใช้ base (เช่น ร้อยละการลดลงจากค่าเฉลี่ย 5 ปี) — แก้ได้ด้วยสิทธิ์เดียวกับเป้าหมาย
+  usesBaseItem(item: any): boolean {
+    const f = activeFormula(item);
+    return !!f && usesBase(f);
+  }
+  isBaseChanged(item: any): boolean {
+    return !!item?._original && this.usesBaseItem(item)
+      && String(item.base_value ?? '').trim() !== String(item._original.base_value ?? '').trim();
+  }
+  onBaseChange(item: any): void {
+    this.onValueChange(item, '');
   }
 
   // แถวลูกใช้เงื่อนไขเป้าหมายของตัวชี้วัดหลัก (cond = item.target_condition)
@@ -3709,7 +3736,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     const formula = activeFormula(item);
     if (formula && !validateFormula(formula)) {
       // ตัวชี้วัดที่ตั้งสูตรคำนวณผลงาน — evaluator เดียวกับ backend (ผลตรงกับ kpi_summary/Export)
-      lastActual = evaluateFormula(formula, item, item.target_value, item.prev_year) ?? '';
+      lastActual = evaluateFormula(formula, item, item.target_value, item.prev_year, item.base_value) ?? '';
     } else if (Number(item.is_cumulative) === 1) {
       // ตัวชี้วัดสะสม: รวมค่าตัวเลขทุกเดือนที่มีข้อมูล
       const nums = fiscalOrder.map(m => parseFloat(item[m])).filter(n => !isNaN(n));
@@ -3806,7 +3833,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     const items = this.filteredData;
     if (!items.length) { this.toast.warning('ไม่มีรายการในตาราง — ค้นหาข้อมูลก่อนดาวน์โหลดแบบฟอร์ม'); return; }
     import('xlsx').then(XLSX => {
-      const aoa = buildTemplateAoa(items);
+      const aoa = buildTemplateAoa(items, { withBase: items.some((i: any) => this.usesBaseItem(i)) });
       const ws = XLSX.utils.aoa_to_sheet(aoa);
       ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 11 }, { wch: 30 }, { wch: 55 }, { wch: 28 }, { wch: 22 }, { wch: 10 }, ...EXCEL_MONTHS.map(() => ({ wch: 8 }))];
       ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: aoa[1].length - 1 } }];
@@ -3861,7 +3888,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   /** HTML สรุปผลการอ่านไฟล์ (แยกเป็นฟังก์ชันเพื่อทดสอบได้โดยไม่ต้องเปิดหน้าต่าง) */
   buildImportPreviewHtml(plan: ChangePlan, fileRows: number, fileName = ''): string {
     const esc = (v: any) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as any)[c]);
-    const label = (f: string) => f === 'target_value' ? 'เป้าหมาย' : (EXCEL_MONTHS.find(m => m.key === f)?.label || f);
+    const label = (f: string) => f === 'target_value' ? 'เป้าหมาย' : f === 'base_value' ? 'ค่าฐาน' : (EXCEL_MONTHS.find(m => m.key === f)?.label || f);
     const line = (n: number, text: string, color: string) => n > 0 ? `<li style="color:${color}">${text} <b>${n.toLocaleString()}</b></li>` : '';
     const rows = plan.changes.slice(0, 30).map(c => `<tr>
         <td style="padding:5px 8px;border-bottom:1px solid #e5e7eb">${esc(c.item.kpi_indicators_name)}<div style="color:#9ca3af;font-size:10px">${esc(c.item.hosname || c.item.hospcode)}</div></td>

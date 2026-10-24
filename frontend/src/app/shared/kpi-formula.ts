@@ -61,7 +61,7 @@ function tokenize(src: string): Token[] {
 
 function normalizeVar(name: string): string | null {
   const n = name.toLowerCase();
-  if (n === 'target' || PREV_SCALARS.includes(n)) return n;
+  if (n === 'target' || n === 'base' || PREV_SCALARS.includes(n)) return n;
   if (FISCAL_MONTH_VARS.includes(n) || PREV_MONTH_VARS.includes(n)) return n;
   if (/^m[1-9]$/.test(n)) return 'm0' + n[1];
   if (/^prev_m[1-9]$/.test(n)) return 'prev_m0' + n[6];
@@ -135,7 +135,7 @@ export function parseFormula(src: string): Node {
       }
       if (upper === 'ALL' || upper === 'PREV_ALL') throw formulaError(`${upper} ใช้ได้เฉพาะในฟังก์ชัน เช่น SUM(${upper})`, t.pos);
       const v = normalizeVar(t.value);
-      if (!v) throw formulaError(`ไม่รู้จัก "${t.value}" (ใช้ได้: m10–m09, target, prev_m10–prev_m09, prev_target, prev_result, ${FORMULA_FUNCTIONS.join('/')})`, t.pos);
+      if (!v) throw formulaError(`ไม่รู้จัก "${t.value}" (ใช้ได้: m10–m09, target, base, prev_m10–prev_m09, prev_target, prev_result, ${FORMULA_FUNCTIONS.join('/')})`, t.pos);
       return { type: 'var', name: v };
     }
     if (t.type === 'end') throw formulaError('สูตรไม่สมบูรณ์', t.pos);
@@ -154,13 +154,14 @@ function toNumber(v: any): number | null {
   return parseFloat(s);
 }
 
-type EvalCtx = { months: Record<string, number | null>; target: number | null; prevTarget: number | null; prevResult: number | null };
+type EvalCtx = { months: Record<string, number | null>; target: number | null; prevTarget: number | null; prevResult: number | null; base: number | null };
 
 function evalNode(node: Node, ctx: EvalCtx): number | null {
   switch (node.type) {
     case 'num': return node.value;
     case 'var':
       if (node.name === 'target') return ctx.target;
+      if (node.name === 'base') return ctx.base;
       if (node.name === 'prev_target') return ctx.prevTarget;
       if (node.name === 'prev_result') return ctx.prevResult;
       return ctx.months[node.name];
@@ -216,15 +217,17 @@ function getAst(formula: string): Node {
 }
 
 /** คำนวณผลงานตามสูตร — คืน string หรือ null (คำนวณไม่ได้) — สูตรผิดจะ throw
- *  prev (ไม่บังคับ) = ข้อมูลปีงบที่แล้ว { months, target, result } — ไม่มี → ตัวแปร prev_* เป็น "ไม่มีค่า" */
+ *  prev (ไม่บังคับ) = ข้อมูลปีงบที่แล้ว { months, target, result } — ไม่มี → ตัวแปร prev_* เป็น "ไม่มีค่า"
+ *  base (ไม่บังคับ) = ค่าฐานของคู่ตัวชี้วัด×หน่วยบริการ×ปีงบ (kpi_base_values) — ไม่มี → base เป็น "ไม่มีค่า" */
 export function evaluateFormula(formula: string, months: Record<string, any> | null | undefined, target: any,
-                                prev?: PrevYearData | null): string | null {
+                                prev?: PrevYearData | null, base?: any): string | null {
   const ast = getAst(formula);
   return formatResult(evalNode(ast, {
     months: { ...normalizeMonths(months), ...normalizeMonths(prev?.months, 'prev_') },
     target: toNumber(target),
     prevTarget: toNumber(prev?.target),
     prevResult: toNumber(prev?.result),
+    base: toNumber(base),
   }));
 }
 
@@ -235,6 +238,19 @@ export function usesPrevYear(formula: string): boolean {
   const walk = (n: Node): boolean => {
     if (n.type === 'var') return n.name.startsWith('prev_');
     if (n.type === 'fn') return n.months.some(m => m.startsWith('prev_'));
+    if (n.type === 'neg') return walk(n.arg);
+    if (n.type === 'bin') return walk(n.left) || walk(n.right);
+    return false;
+  };
+  return walk(ast);
+}
+
+/** สูตรอ้างค่าฐาน (base) หรือไม่ — ใช้ตัดสินว่าต้องโหลด/แสดงค่าฐานหรือเปล่า */
+export function usesBase(formula: string): boolean {
+  let ast: Node;
+  try { ast = getAst(formula); } catch { return false; }
+  const walk = (n: Node): boolean => {
+    if (n.type === 'var') return n.name === 'base';
     if (n.type === 'neg') return walk(n.arg);
     if (n.type === 'bin') return walk(n.left) || walk(n.right);
     return false;

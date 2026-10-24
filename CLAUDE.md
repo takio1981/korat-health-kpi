@@ -217,7 +217,7 @@ users.dept_id → departments.id (FK)
   - `withSummaryLock()` = ล็อคระดับแอป ให้งานลบ-สร้าง summary ทำทีละงาน: คิวอัตโนมัติ, `/refresh-summary/prepare|batch|finalize`, `/kpi-results/bulk-delete`,
     `/kpi-results/manage/bulk-delete` — `/refresh-summary/batch` ลบแถวของตัวชี้วัดชุดนั้นก่อน INSERT เสมอ (เดิมพึ่ง prepare — การอัปเดตอัตโนมัติระหว่างนั้นทำให้ชน `uk_ind_year_hos`)
   - `summaryRefreshIdle()` (export) รอคิวว่าง — ใช้ในชุดทดสอบ | ไม่ครอบคลุม: `/bulk-add-kpi` (เพิ่มเฉพาะเป้าหมาย ไม่มีผลกับ summary), `/clear-kpi-data` | Test: `api/tests/summary-auto-refresh.test.js`
-- เก็บเฉพาะข้อมูลที่มีผลงานจริง (HAVING actual_value)
+- เก็บเฉพาะข้อมูลที่มีผลงานจริง (HAVING actual_value ไม่ว่าง — **ค่า 0 นับเป็นผลงาน** ตั้งแต่ 24 ต.ค. 2569 เช่น ไม่มีผู้เสียชีวิต = 0 ราย; เดิมตัดคู่ที่มีแต่ 0 ออกทำให้หายจากรายงาน)
 - ใช้ composite index: `(indicator_id, year_bh, hospcode)`
 - มี `dept_id` + `distid` สำหรับ role-based filtering โดยไม่ต้อง JOIN ตารางอื่น
 - Report endpoints ทั้ง 4 (`/report/by-indicator`, `/report/by-hospital`, `/report/by-district`, `/report/by-year`) ดึงจาก `kpi_summary` ไม่ใช่ `kpi_results`
@@ -367,7 +367,13 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - `kpi_indicators.result_formula` VARCHAR(500) NULL — มีค่า = "ผลงาน" (last_actual / export `result`) คำนวณตามสูตร
   **มีลำดับเหนือ `is_cumulative`** | NULL/ว่าง = วิธีเดิมทุกอย่าง (ไม่กระทบตัวชี้วัดเดิม) — ร้อยละ/ผ่านเกณฑ์ยังคิด
   `ผลงาน ÷ เป้าหมาย` เหมือนเดิม (สูตรคำนวณ "ผลงาน" เท่านั้น ไม่ใช่ร้อยละ — ผู้ใช้เลือกแบบนี้)
-- ภาษาสูตร: ตัวแปร `m10…m09` (`m1`–`m9` ย่อได้) + `target`, ฟังก์ชัน `SUM AVG MAX MIN COUNT LAST` (อาร์กิวเมนต์ = รายการเดือน
+- **ค่าฐาน `base` (24 ต.ค. 2569):** ค่าต่อคู่ ตัวชี้วัด × หน่วยบริการ × ปีงบ ในตาราง `kpi_base_values` (UNIQUE, FK ตัวชี้วัด CASCADE) — `evaluateFormula(formula, months, target, prev, base)`
+  (อาร์กิวเมนต์ที่ 5; ไม่ส่ง = ไม่มีค่า สูตรเดิมไม่กระทบ) + `usesBase()` ทั้ง 2 สำเนา — backend โหลดด้วย `loadBaseValues()`/`baseKey()` เฉพาะสูตรที่ใช้ base ทุกจุดที่คำนวณสูตร
+  (`GET /kpi-results` แนบ `row.base_value`, `applyFormulaToSummary()`, `performKpiExport` + `checkKpiChanges`) — บันทึกผ่าน `/update-kpi` โหมดปกติเท่านั้น: แถวที่มีฟิลด์ `base_value`
+  → UPSERT ใน transaction เดียวกัน (ล็อคตรวจแล้ว, สิทธิ์ `can_edit_target`, ว่าง = ลบ, ไม่ส่งฟิลด์ = ไม่เปลี่ยน) — dashboard: ช่อง "ฐาน" ใต้เป้าหมาย (`usesBaseItem`/`isBaseChanged`),
+  Excel คอลัมน์ "ค่าฐาน" (`buildTemplateAoa(items, { withBase })`, นำเข้าเฉพาะแถวที่ backend แนบ `base_value`) — ตัวอย่างจริง: ตัวชี้วัดการจมน้ำ `(base - SUM(ALL)) / base * 100`
+  เป้าหมาย 30 ≥ (ทดสอบ 33 หน่วยบริการตรงตารางผู้ใช้ทุกตัวเลข) — Test: `api/tests/base-value.test.js`, fixture สูตร (เคส base), `kpi-excel.spec.ts`, `dashboard.spec.ts`
+- ภาษาสูตร: ตัวแปร `m10…m09` (`m1`–`m9` ย่อได้) + `target` + `base`, ฟังก์ชัน `SUM AVG MAX MIN COUNT LAST` (อาร์กิวเมนต์ = รายการเดือน
   หรือ `ALL`), `+ - * /` วงเล็บ ตัวเลข — ค่าว่าง/ข้อความ = ไม่มีค่า (ฟังก์ชันข้าม, อ้างตรงในนิพจน์ → null), หารศูนย์ → null,
   ผลปัด 2 ตำแหน่งเป็น string
 - **ข้อมูลปีงบที่แล้ว (เพิ่ม 8 ต.ค. 2569):** `prev_m10…prev_m09`, `prev_target`, `prev_result`, `PREV_ALL` (ในฟังก์ชัน, ผสมเดือนปีนี้ได้

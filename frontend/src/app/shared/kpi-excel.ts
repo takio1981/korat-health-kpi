@@ -20,9 +20,10 @@ export const EXCEL_HEADERS = {
   hosname: 'หน่วยบริการ',
   note: 'หมายเหตุ',
   target: 'เป้าหมาย',
+  base: 'ค่าฐาน',            // ค่าฐานของสูตร (base) — มีเฉพาะเมื่อตัวชี้วัดในตารางใช้สูตรที่อ้าง base (24 ต.ค. 2569)
 };
 export const EXCEL_NOTE =
-  'แบบฟอร์มบันทึกผลงาน KHUPS KPI — แก้ไขได้เฉพาะคอลัมน์ "เป้าหมาย" และเดือน ต.ค.–ก.ย. | ห้ามแก้ไขหรือลบคอลัมน์ indicator_id, hospcode, ปีงบประมาณ | ช่องว่าง = ไม่เปลี่ยนค่าเดิม';
+  'แบบฟอร์มบันทึกผลงาน KHUPS KPI — แก้ไขได้เฉพาะคอลัมน์ "เป้าหมาย" "ค่าฐาน" (ถ้ามี) และเดือน ต.ค.–ก.ย. | ห้ามแก้ไขหรือลบคอลัมน์ indicator_id, hospcode, ปีงบประมาณ | ช่องว่าง = ไม่เปลี่ยนค่าเดิม';
 export const MAX_VALUE_LENGTH = 100;   // kpi_results.actual_value / target_value = VARCHAR(100)
 
 const NUMERIC_RE = /^-?\d+(\.\d+)?$/;
@@ -47,14 +48,15 @@ function toCell(v: any): string | number {
   return NUMERIC_RE.test(s) ? Number(s) : s;
 }
 
-/** สร้างตารางแบบฟอร์ม (แถวคำอธิบาย + หัวตาราง + 1 แถวต่อ ตัวชี้วัด × หน่วยบริการ) */
-export function buildTemplateAoa(items: any[]): (string | number)[][] {
+/** สร้างตารางแบบฟอร์ม (แถวคำอธิบาย + หัวตาราง + 1 แถวต่อ ตัวชี้วัด × หน่วยบริการ)
+ *  withBase = เพิ่มคอลัมน์ "ค่าฐาน" ต่อจากเป้าหมาย (เมื่อมีตัวชี้วัดที่สูตรใช้ base — แถวที่ไม่ใช้ base เว้นว่าง) */
+export function buildTemplateAoa(items: any[], opts: { withBase?: boolean } = {}): (string | number)[][] {
   const header = [EXCEL_HEADERS.indicator_id, EXCEL_HEADERS.hospcode, EXCEL_HEADERS.year_bh, EXCEL_HEADERS.main, EXCEL_HEADERS.name,
-    EXCEL_HEADERS.hosname, EXCEL_HEADERS.note, EXCEL_HEADERS.target, ...EXCEL_MONTHS.map(m => m.label)];
+    EXCEL_HEADERS.hosname, EXCEL_HEADERS.note, EXCEL_HEADERS.target, ...(opts.withBase ? [EXCEL_HEADERS.base] : []), ...EXCEL_MONTHS.map(m => m.label)];
   const rows = (items || []).map(it => [
     Number(it.indicator_id), String(it.hospcode ?? ''), String(it.year_bh ?? ''), String(it.main_indicator_name ?? ''),
     String(it.kpi_indicators_name ?? ''), String(it.hosname ?? ''), it.is_locked ? 'ล็อคแล้ว (นำเข้าไม่ได้)' : '',
-    toCell(it.target_value), ...EXCEL_MONTHS.map(m => toCell(it[m.key])),
+    toCell(it.target_value), ...(opts.withBase ? [toCell(it.base_value)] : []), ...EXCEL_MONTHS.map(m => toCell(it[m.key])),
   ]);
   return [[EXCEL_NOTE], header, ...rows];
 }
@@ -83,6 +85,7 @@ export function parseImportAoa(aoa: any[][]): ParsedImport {
   if (cYear < 0) return { rows: [], fields: [], error: 'ไม่พบคอลัมน์ "ปีงบประมาณ" ในไฟล์' };
   const fieldCols: { field: string; idx: number }[] = [];
   if (col(EXCEL_HEADERS.target) >= 0) fieldCols.push({ field: 'target_value', idx: col(EXCEL_HEADERS.target) });
+  if (col(EXCEL_HEADERS.base) >= 0) fieldCols.push({ field: 'base_value', idx: col(EXCEL_HEADERS.base) });
   for (const m of EXCEL_MONTHS) if (col(m.label) >= 0) fieldCols.push({ field: m.key, idx: col(m.label) });
   if (fieldCols.length === 0) return { rows: [], fields: [], error: 'ไม่พบคอลัมน์เป้าหมายหรือเดือน (ต.ค.–ก.ย.) ในไฟล์' };
 
@@ -126,11 +129,13 @@ function sameValue(a: string, b: string): boolean {
 function considerCell(plan: ChangePlan, item: any, field: string, raw: any, perms: EditPerms): void {
   const newVal = normalizeCell(raw);
   if (newVal === '') return;                                   // ช่องว่าง = ไม่เปลี่ยนค่าเดิม
+  // ค่าฐาน: เฉพาะแถวที่ตัวชี้วัดใช้สูตรที่อ้าง base (backend แนบ base_value มาให้เฉพาะแถวนั้น) — แถวอื่นข้ามเงียบๆ
+  if (field === 'base_value' && !Object.prototype.hasOwnProperty.call(item, 'base_value')) return;
   // เทียบค่าเดิมก่อน — ค่าที่ไม่ได้แก้ในไฟล์ (เท่าเดิม) ของแถวล็อค/ช่องที่ไม่มีสิทธิ์ ไม่ถือว่า "ถูกข้าม" (ไม่ทำให้ผู้ใช้ตกใจ)
   const oldVal = String(item[field] ?? '').trim();
   if (sameValue(oldVal, newVal)) { plan.same++; return; }
   if (item.is_locked) { plan.locked++; return; }
-  const allowed = field === 'target_value' ? perms.canEditTarget : perms.canEditActual;
+  const allowed = field === 'target_value' || field === 'base_value' ? perms.canEditTarget : perms.canEditActual;  // ค่าฐาน = สิทธิ์เดียวกับเป้าหมาย
   if (!allowed) { plan.noPerm++; return; }
   if (newVal.length > MAX_VALUE_LENGTH) { plan.tooLong++; return; }
   plan.changes.push({ item, field, oldVal, newVal });

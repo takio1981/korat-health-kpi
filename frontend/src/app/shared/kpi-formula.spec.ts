@@ -6,7 +6,7 @@ describe('kpi-formula (frontend) — สูตรที่ถูกต้อง'
   for (const c of (cases as any).valid) {
     it(c.name, () => {
       expect(validateFormula(c.formula)).toBeNull();
-      expect(evaluateFormula(c.formula, c.months, c.target, c.prev)).toBe(c.expect);
+      expect(evaluateFormula(c.formula, c.months, c.target, c.prev, c.base)).toBe(c.expect);
     });
   }
 });

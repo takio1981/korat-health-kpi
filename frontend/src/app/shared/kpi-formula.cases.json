@@ -1,6 +1,13 @@
 {
   "_note": "เคสทดสอบร่วมของสูตรคำนวณผลงาน — ต้องเหมือนกันทุกตัวอักษรกับ frontend/src/app/shared/kpi-formula.cases.json (มี jest test บังคับ)",
   "valid": [
+    { "name": "ค่าฐาน: ร้อยละการลดลงจากค่าเฉลี่ย 5 ปี (จมน้ำ ขามทะเลสอ)", "formula": "(base - SUM(ALL)) / base * 100", "months": { "oct": "1" }, "target": "30", "base": "4.6", "expect": "78.26" },
+    { "name": "ค่าฐาน: ภาพรวมจังหวัด 173.8 เสียชีวิต 14", "formula": "(base - SUM(ALL)) / base * 100", "months": { "oct": "14" }, "target": "30", "base": "173.8", "expect": "91.94" },
+    { "name": "ค่าฐาน: ไม่มีผู้เสียชีวิต (บันทึก 0) = 100", "formula": "(base - SUM(ALL)) / base * 100", "months": { "oct": "0" }, "target": "30", "base": "21.2", "expect": "100" },
+    { "name": "ค่าฐาน: เกินค่าฐาน = ติดลบ", "formula": "(base - SUM(ALL)) / base * 100", "months": { "oct": "6" }, "target": "30", "base": "4.6", "expect": "-30.43" },
+    { "name": "ค่าฐาน 0 = หารศูนย์ → ว่าง", "formula": "(base - SUM(ALL)) / base * 100", "months": { "oct": "1" }, "target": "30", "base": "0", "expect": null },
+    { "name": "ยังไม่ได้ตั้งค่าฐาน → ว่าง", "formula": "(base - SUM(ALL)) / base * 100", "months": { "oct": "1" }, "target": "30", "expect": null },
+    { "name": "ค่าฐานพิมพ์ใหญ่ BASE ใช้ได้", "formula": "SUM(ALL) / BASE * 100", "months": { "oct": "2", "nov": "3" }, "target": "", "base": "20", "expect": "25" },
     { "name": "AVG ทุกเดือนข้ามเดือนว่าง", "formula": "AVG(ALL)", "months": { "oct": "10", "nov": "20", "dece": "30" }, "target": "80", "expect": "20" },
     { "name": "SUM ทุกเดือน", "formula": "SUM(ALL)", "months": { "oct": "10", "nov": "20", "dece": "30" }, "target": "80", "expect": "60" },
     { "name": "MAX", "formula": "MAX(ALL)", "months": { "oct": "10", "nov": "45", "dece": "30" }, "target": "", "expect": "45" },

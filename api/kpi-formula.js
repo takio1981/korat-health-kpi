@@ -2,7 +2,8 @@
  * สูตรคำนวณผลงานเฉพาะตัวชี้วัด (kpi_indicators.result_formula)
  *
  * ภาษาสูตรเล็กๆ ที่ parse เอง — **ห้ามใช้ eval / new Function เด็ดขาด** (สูตรมาจากผู้ใช้)
- *   ตัวแปร:   m10 m11 m12 m01 … m09 (ต.ค.–ก.ย.), target (เป้าหมาย)
+ *   ตัวแปร:   m10 m11 m12 m01 … m09 (ต.ค.–ก.ย.), target (เป้าหมาย),
+ *             base (ค่าฐานของหน่วยบริการ เช่น ค่าเฉลี่ย 5 ปี — ตาราง kpi_base_values, เพิ่ม 24 ต.ค. 2569)
  *   ปีงบที่แล้ว: prev_m10 … prev_m09 (ผลงานรายเดือนปีงบก่อนหน้า), prev_target (เป้าหมายปีที่แล้ว),
  *              prev_result (ผลงานปีที่แล้วแบบพื้นฐาน = ค่าเดือนล่าสุดที่บันทึก หรือผลรวมถ้าเป็นตัวชี้วัดสะสม —\n *              ไม่ใช้ผลตามสูตรของปีที่แล้ว เพื่อไม่ให้ต้องย้อนเป็นทอดๆ; ต้องการวิธีอื่นใช้ฟังก์ชันกับ PREV_ALL)
  *   ฟังก์ชัน:  SUM AVG MAX MIN COUNT LAST — อาร์กิวเมนต์เป็นรายการเดือน (ปีนี้และ/หรือปีที่แล้ว ผสมกันได้)
@@ -61,7 +62,7 @@ function tokenize(src) {
 /** แปลงชื่อเป็นตัวแปรที่อนุญาต (ไม่สนตัวพิมพ์เล็กใหญ่) — คืน null ถ้าไม่ใช่ตัวแปร */
 function normalizeVar(name) {
     const n = name.toLowerCase();
-    if (n === 'target' || PREV_SCALARS.includes(n)) return n;
+    if (n === 'target' || n === 'base' || PREV_SCALARS.includes(n)) return n;
     if (FISCAL_MONTH_VARS.includes(n) || PREV_MONTH_VARS.includes(n)) return n;
     if (/^m[1-9]$/.test(n)) return 'm0' + n[1]; // m1..m9 → m01..m09
     if (/^prev_m[1-9]$/.test(n)) return 'prev_m0' + n[6]; // prev_m1..prev_m9 → prev_m01..prev_m09
@@ -136,7 +137,7 @@ function parseFormula(src) {
             }
             if (upper === 'ALL' || upper === 'PREV_ALL') throw formulaError(`${upper} ใช้ได้เฉพาะในฟังก์ชัน เช่น SUM(${upper})`, t.pos);
             const v = normalizeVar(t.value);
-            if (!v) throw formulaError(`ไม่รู้จัก "${t.value}" (ใช้ได้: m10–m09, target, prev_m10–prev_m09, prev_target, prev_result, ${FUNCTIONS.join('/')})`, t.pos);
+            if (!v) throw formulaError(`ไม่รู้จัก "${t.value}" (ใช้ได้: m10–m09, target, base, prev_m10–prev_m09, prev_target, prev_result, ${FUNCTIONS.join('/')})`, t.pos);
             return { type: 'var', name: v };
         }
         if (t.type === 'end') throw formulaError('สูตรไม่สมบูรณ์', t.pos);
@@ -161,6 +162,7 @@ function evalNode(node, ctx) {
         case 'num': return node.value;
         case 'var':
             if (node.name === 'target') return ctx.target;
+            if (node.name === 'base') return ctx.base;
             if (node.name === 'prev_target') return ctx.prevTarget;
             if (node.name === 'prev_result') return ctx.prevResult;
             return ctx.months[node.name];
@@ -221,15 +223,17 @@ function getAst(formula) {
  * คำนวณผลงานตามสูตร — คืน string (ผลงาน) หรือ null (คำนวณไม่ได้)
  * prev (ไม่บังคับ) = ข้อมูลปีงบที่แล้วของคู่ตัวชี้วัด×หน่วยบริการเดียวกัน { months, target, result }
  *   ไม่ส่ง/ไม่มีข้อมูล → ตัวแปร prev_* เป็น "ไม่มีค่า" (เหมือนเดือนว่าง)
+ * base (ไม่บังคับ) = ค่าฐานของคู่ตัวชี้วัด×หน่วยบริการ×ปีงบ (kpi_base_values) — ไม่ส่ง/ไม่ใช่ตัวเลข → base เป็น "ไม่มีค่า"
  * สูตรผิดจะ throw (validate ตอนบันทึกตัวชี้วัดแล้ว ปกติจึงไม่เกิด)
  */
-function evaluateFormula(formula, months, target, prev) {
+function evaluateFormula(formula, months, target, prev, base) {
     const ast = getAst(formula);
     const ctx = {
         months: { ...normalizeMonths(months), ...normalizeMonths(prev && prev.months, 'prev_') },
         target: toNumber(target),
         prevTarget: toNumber(prev && prev.target),
         prevResult: toNumber(prev && prev.result),
+        base: toNumber(base),
     };
     return formatResult(evalNode(ast, ctx));
 }
@@ -242,6 +246,20 @@ function usesPrevYear(formula) {
         if (!n) return false;
         if (n.type === 'var') return n.name.startsWith('prev_');
         if (n.type === 'fn') return n.months.some(m => m.startsWith('prev_'));
+        if (n.type === 'neg') return walk(n.arg);
+        if (n.type === 'bin') return walk(n.left) || walk(n.right);
+        return false;
+    };
+    return walk(ast);
+}
+
+/** สูตรอ้างค่าฐาน (base) หรือไม่ — ใช้ตัดสินว่าต้องโหลด/แสดงค่าฐานหรือเปล่า */
+function usesBase(formula) {
+    let ast;
+    try { ast = getAst(formula); } catch (e) { return false; }
+    const walk = (n) => {
+        if (!n) return false;
+        if (n.type === 'var') return n.name === 'base';
         if (n.type === 'neg') return walk(n.arg);
         if (n.type === 'bin') return walk(n.left) || walk(n.right);
         return false;
@@ -262,5 +280,5 @@ function activeFormula(indicator) {
 
 module.exports = {
     FISCAL_MONTH_VARS, PREV_MONTH_VARS, FUNCTIONS, MAX_FORMULA_LENGTH,
-    parseFormula, evaluateFormula, validateFormula, activeFormula, normalizeMonths, usesPrevYear
+    parseFormula, evaluateFormula, validateFormula, activeFormula, normalizeMonths, usesPrevYear, usesBase
 };

@@ -3254,6 +3254,9 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         for (const [yb, list] of prevRowsByYear) {
             prevByYear.set(yb, await loadPrevYearData(db, list.map(r => r.indicator_id), yb, list.map(r => r.hospcode)));
         }
+        // === ค่าฐาน (base) เฉพาะตัวชี้วัดที่สูตรใช้ base — แนบ row.base_value ให้หน้าบันทึกผลงานแสดง/แก้ไข ===
+        const baseRows = rows.filter(formulaUsesBase);
+        const baseMap = baseRows.length ? await loadBaseValues(db, baseRows.map(r => r.indicator_id), baseRows.map(r => r.year_bh)) : new Map();
 
         // === คำนวณ last_actual + appeal + has_form ฝั่ง JS (เร็วกว่า subquery) ===
         const monthOrder = [10,11,12,1,2,3,4,5,6,7,8,9];
@@ -3268,7 +3271,8 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 const pm = prevByYear.get(row.year_bh);
                 const prev = pm ? (pm.get(`${row.indicator_id}|${String(row.hospcode).trim()}`) || { year_bh: String(parseInt(row.year_bh, 10) - 1), months: null, target: null, result: null }) : undefined;
                 if (prev) row.prev_year = prev;
-                lastVal = kpiFormula.evaluateFormula(formula, row, row.target_value, prev);
+                if (kpiFormula.usesBase(formula)) row.base_value = baseMap.get(baseKey(row.indicator_id, row.year_bh, row.hospcode)) ?? null;
+                lastVal = kpiFormula.evaluateFormula(formula, row, row.target_value, prev, row.base_value);
             } else if (isCumulative) {
                 // ตัวชี้วัดสะสม: รวมค่าตัวเลขทุกเดือนที่มีข้อมูล (ไม่ sum ถ้าไม่มีเดือนไหนมีค่าเลย → คง null)
                 const numericVals = monthKeys.map(k => row[k]).filter(v => v != null && String(v).trim() !== '' && !isNaN(parseFloat(v)));
@@ -3736,7 +3740,8 @@ async function refreshSummaryPairs(connection, pairs) {
             LEFT JOIN co_district dist ON dist.distid = h.distid
             WHERE r.indicator_id = ? AND r.year_bh = ?
             GROUP BY i.id, r.year_bh, r.hospcode
-            HAVING MAX(CASE WHEN r.actual_value IS NOT NULL AND r.actual_value != '' AND r.actual_value != '0' THEN 1 ELSE 0 END) = 1
+            -- ผลงาน 0 นับเป็นผลงานจริง (เช่น ไม่มีผู้เสียชีวิต = 0 ราย) — เดิมตัดทิ้งทำให้คู่ที่บันทึก 0 ทั้งปีหายจากรายงาน (24 ต.ค. 2569 — ตรงกับ hasActualData ของ Export)
+            HAVING MAX(CASE WHEN r.actual_value IS NOT NULL AND TRIM(r.actual_value) != '' THEN 1 ELSE 0 END) = 1
         `, [p.indicator_id, p.year_bh]);
         // ผลงานจากตัวชี้วัดย่อย/กิจกรรม (ตัวชี้วัด 3 ระดับ) — ก่อนคำนวณ last_actual
         await mergeSubIntoSummary(connection, { indicatorIds: [p.indicator_id], yearBh: p.year_bh });
@@ -3766,6 +3771,23 @@ function defaultLastActual(monthsObj, isCumulative) {
     }
     return null;
 }
+// === ค่าฐาน (base) ของสูตรคำนวณผลงาน — kpi_base_values (24 ต.ค. 2569) ===
+// คืน Map key `${indicator_id}|${year_bh}|${hospcode}` → base_value (string) — years ว่าง = ทุกปีงบ
+const baseKey = (indicatorId, yearBh, hospcode) => `${Number(indicatorId)}|${String(yearBh)}|${String(hospcode).trim()}`;
+async function loadBaseValues(conn, indicatorIds, years) {
+    const map = new Map();
+    const ids = [...new Set((indicatorIds || []).map(Number).filter(Boolean))];
+    if (!ids.length) return map;
+    const ys = [...new Set((years || []).map(String).filter(Boolean))];
+    const [rows] = await conn.query(
+        `SELECT indicator_id, year_bh, hospcode, base_value FROM kpi_base_values WHERE indicator_id IN (?)${ys.length ? ' AND year_bh IN (?)' : ''}`,
+        ys.length ? [ids, ys] : [ids]);
+    for (const r of rows) map.set(baseKey(r.indicator_id, r.year_bh, r.hospcode), r.base_value);
+    return map;
+}
+// ตัวชี้วัดที่สูตรใช้ base (ใช้กรองก่อนโหลดค่าฐาน — สูตรอื่นไม่ต้องโหลด)
+const formulaUsesBase = (ind) => { const f = kpiFormula.activeFormula(ind); return !!f && kpiFormula.usesBase(f); };
+
 async function loadPrevYearData(conn, indicatorIds, yearBh, hospcodes) {
     const map = new Map();
     const y = parseInt(yearBh, 10);
@@ -3812,6 +3834,8 @@ async function applyFormulaToSummary(conn, opts = {}) {
             `SELECT id, year_bh, hospcode, target_value, oct, nov, dece, jan, feb, mar, apr, may, jun, jul, aug, sep
              FROM kpi_summary WHERE indicator_id = ? ${yw} ORDER BY year_bh ASC`, sp);
         const needPrev = kpiFormula.usesPrevYear(formula);
+        // ค่าฐาน (base) — โหลดครั้งเดียวต่อตัวชี้วัด เฉพาะสูตรที่ใช้ base
+        const baseMap = kpiFormula.usesBase(formula) ? await loadBaseValues(conn, [ind.id], opts.yearBh ? [opts.yearBh] : null) : null;
         let prevMap = null, prevFor = null;
         for (const r of rows) {
             if (needPrev && prevFor !== r.year_bh) {
@@ -3819,7 +3843,8 @@ async function applyFormulaToSummary(conn, opts = {}) {
                 prevFor = r.year_bh;
             }
             const prev = needPrev ? prevMap.get(`${ind.id}|${String(r.hospcode).trim()}`) : undefined;
-            const val = kpiFormula.evaluateFormula(formula, r, r.target_value, prev);
+            const base = baseMap ? baseMap.get(baseKey(ind.id, r.year_bh, r.hospcode)) : undefined;
+            const val = kpiFormula.evaluateFormula(formula, r, r.target_value, prev, base);
             await conn.query('UPDATE kpi_summary SET last_actual = ? WHERE id = ?', [val, r.id]);
             updated++;
         }
@@ -4268,6 +4293,28 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
             'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
             [user.userId, user.deptId || 0, 'UPDATE', 'kpi_results', JSON.stringify({ message: `บันทึก KPI ${updates.length} รายการ` }), req.ip]
         );
+
+        // ค่าฐาน (base ของสูตรคำนวณผลงาน — kpi_base_values) เฉพาะแถวที่ส่ง base_value มา (24 ต.ค. 2569)
+        // ล็อคตรวจด้านบนแล้ว (ทั้งคู่) | สิทธิ์เดียวกับเป้าหมาย (can_edit_target) — ไม่มีสิทธิ์ = ไม่เปลี่ยนค่าเดิม | ว่าง = ลบค่าฐาน
+        const baseRowsToSave = updates.filter(r => r && Object.prototype.hasOwnProperty.call(r, 'base_value'));
+        if (baseRowsToSave.length) {
+            const canEditBase = user.role === 'super_admin' || !!(await getPermsForUser(user.userId, user.role)).can_edit_target;
+            if (canEditBase) {
+                for (const row of baseRowsToSave) {
+                    const hc = (ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
+                    const v = String(row.base_value ?? '').trim();
+                    if (v.length > 100) throw new Error('ค่าฐานยาวเกิน 100 ตัวอักษร');
+                    if (!v) {
+                        await connection.query('DELETE FROM kpi_base_values WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?', [row.indicator_id, row.year_bh, hc]);
+                    } else {
+                        await connection.query(
+                            `INSERT INTO kpi_base_values (indicator_id, year_bh, hospcode, base_value, updated_by) VALUES (?, ?, ?, ?, ?)
+                             ON DUPLICATE KEY UPDATE base_value = VALUES(base_value), updated_by = VALUES(updated_by)`,
+                            [row.indicator_id, row.year_bh, hc, v, user.userId]);
+                    }
+                }
+            }
+        }
 
         await connection.commit();
         scheduleSummaryRefresh(updates); // อัปเดต kpi_summary ของคู่ (ตัวชี้วัด × ปีงบ) ที่บันทึก ทันที (fire-and-forget)
@@ -8898,6 +8945,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
             const _f = kpiFormula.activeFormula(indicator);
             const prevMap = _f && !kpiFormula.validateFormula(_f) && kpiFormula.usesPrevYear(_f)
                 ? await loadPrevYearData(db, [indicator.id], year_bh) : null;
+            const baseMapX = _f && !kpiFormula.validateFormula(_f) && kpiFormula.usesBase(_f) ? await loadBaseValues(db, [indicator.id], [year_bh]) : null; // ค่าฐาน (base)
             for (const [hc, d] of dataMap) {
                 // ไม่ข้าม hospcode ที่ยังไม่มีผลงานแล้ว — ต้องนับเป็น new/unchanged ด้วย (mirror performKpiExport)
                 const target = emptyToNull(d.target);
@@ -8906,7 +8954,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                 let resultVal;
                 const formula = kpiFormula.activeFormula(indicator);
                 if (formula && !kpiFormula.validateFormula(formula)) {
-                    resultVal = kpiFormula.evaluateFormula(formula, d, target, prevMap ? prevMap.get(`${indicator.id}|${String(hc).trim()}`) : undefined);
+                    resultVal = kpiFormula.evaluateFormula(formula, d, target, prevMap ? prevMap.get(`${indicator.id}|${String(hc).trim()}`) : undefined, baseMapX ? baseMapX.get(baseKey(indicator.id, year_bh, hc)) : undefined);
                 } else if (Number(indicator.is_cumulative) === 1) {
                     const numericVals = monthValues.filter(v => v !== null && v !== undefined && !isNaN(parseFloat(v)));
                     resultVal = numericVals.length > 0 ? numericVals.reduce((s, v) => s + parseFloat(v), 0) : null;
@@ -9438,6 +9486,7 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                 const _f = kpiFormula.activeFormula(indicator);
                 const prevMap = _f && !kpiFormula.validateFormula(_f) && kpiFormula.usesPrevYear(_f)
                     ? await loadPrevYearData(db, [indicator.id], year_bh) : null;
+                const baseMapX = _f && !kpiFormula.validateFormula(_f) && kpiFormula.usesBase(_f) ? await loadBaseValues(db, [indicator.id], [year_bh]) : null; // ค่าฐาน (base)
 
                 for (const [hc, d] of dataMap) {
                     // ไม่ข้ามแถวที่ยังไม่มีผลงานแล้ว (ต้อง export ครบทุกหน่วยบริการในขอบเขต) — นับไว้รายงานเฉยๆ
@@ -9451,7 +9500,7 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                     let resultVal;
                     const formula = kpiFormula.activeFormula(indicator);
                     if (formula && !kpiFormula.validateFormula(formula)) {
-                        resultVal = kpiFormula.evaluateFormula(formula, d, target, prevMap ? prevMap.get(`${indicator.id}|${String(hc).trim()}`) : undefined);
+                        resultVal = kpiFormula.evaluateFormula(formula, d, target, prevMap ? prevMap.get(`${indicator.id}|${String(hc).trim()}`) : undefined, baseMapX ? baseMapX.get(baseKey(indicator.id, year_bh, hc)) : undefined);
                     } else if (Number(indicator.is_cumulative) === 1) {
                         const numericVals = monthValues.filter(v => v !== null && v !== undefined && !isNaN(parseFloat(v)));
                         resultVal = numericVals.length > 0 ? numericVals.reduce((s, v) => s + parseFloat(v), 0) : null;
@@ -10085,7 +10134,8 @@ apiRouter.post('/refresh-summary/batch', authenticateToken, isSuperAdmin, async 
             LEFT JOIN co_district dist ON dist.distid = h.distid
             WHERE r.indicator_id IN (${idPlaceholders}) ${yearFilter}
             GROUP BY i.id, r.year_bh, r.hospcode
-            HAVING MAX(CASE WHEN r.actual_value IS NOT NULL AND r.actual_value != '' AND r.actual_value != '0' THEN 1 ELSE 0 END) = 1
+            -- ผลงาน 0 นับเป็นผลงานจริง (เช่น ไม่มีผู้เสียชีวิต = 0 ราย) — เดิมตัดทิ้งทำให้คู่ที่บันทึก 0 ทั้งปีหายจากรายงาน (24 ต.ค. 2569 — ตรงกับ hasActualData ของ Export)
+            HAVING MAX(CASE WHEN r.actual_value IS NOT NULL AND TRIM(r.actual_value) != '' THEN 1 ELSE 0 END) = 1
         `, [...indicator_ids, ...yearParams]);
         // ผลงานจากตัวชี้วัดย่อย/กิจกรรม (ตัวชี้วัด 3 ระดับ) — last_actual คำนวณใน /refresh-summary/finalize
         const merged = await mergeSubIntoSummary(db, { indicatorIds: indicator_ids, yearBh: year_bh || undefined });
@@ -11627,6 +11677,23 @@ const migrationsReady = (async () => {
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             `);
         } catch (e) { console.error('❌ kpi_sub_activities/kpi_activity_results:', e.message); }
+        // ค่าฐาน (base) ของคู่ตัวชี้วัด × หน่วยบริการ × ปีงบ (24 ต.ค. 2569) — ตัวแปร base ในสูตรคำนวณผลงาน เช่น ค่าเฉลี่ย 5 ปีของการเสียชีวิตจากการจมน้ำ
+        // 1 ค่าต่อคู่ (ไม่ซ้ำ 12 เดือนเหมือน target_value ใน kpi_results) — บันทึกผ่าน /update-kpi เท่านั้น (สิทธิ์/ล็อคเดียวกับเป้าหมาย)
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS kpi_base_values (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    indicator_id INT NOT NULL,
+                    year_bh VARCHAR(10) NOT NULL,
+                    hospcode VARCHAR(20) NOT NULL,
+                    base_value VARCHAR(100) NULL,
+                    updated_by INT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY uk_base_ind_year_hos (indicator_id, year_bh, hospcode),
+                    CONSTRAINT fk_base_indicator FOREIGN KEY (indicator_id) REFERENCES kpi_indicators(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+        } catch (e) { console.error('❌ kpi_base_values:', e.message); }
         try { await db.query("ALTER TABLE kpi_sub_indicators ADD COLUMN rollup_mode VARCHAR(10) NOT NULL DEFAULT 'manual'"); } catch (e) {}
         // ตัวชี้วัดหลายระดับ (19 ต.ค. 2569): ข้อย่อยมีข้อแม่เป็นข้อย่อยได้ — NULL = ข้อย่อยระดับบนสุด (ข้อมูลเดิมทั้งหมด)
         try { await db.query('ALTER TABLE kpi_sub_indicators ADD COLUMN parent_sub_id INT NULL AFTER indicator_id'); } catch (e) {}

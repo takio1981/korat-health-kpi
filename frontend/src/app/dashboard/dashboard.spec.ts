@@ -704,4 +704,35 @@ describe('DashboardComponent', () => {
       expect(component.conditionSymbol({ target_condition: null })).toBe('');
     });
   });
+  describe('ค่าฐาน (base) ของสูตร — ตัวชี้วัดการเสียชีวิตจากการจมน้ำ', () => {
+    const drowning = (extra: any = {}) => ({
+      indicator_id: 9, hospcode: '00228', year_bh: '2570', kpi_indicators_name: 'จมน้ำ', target_value: '30', target_condition: 'GTE',
+      result_formula: '(base - SUM(ALL)) / base * 100', base_value: '4.6',
+      oct: '', nov: '', dece: '', jan: '', feb: '', mar: '', apr: '', may: '', jun: '', jul: '', aug: '', sep: '', ...extra });
+
+    it('ผลงาน = ร้อยละการลดลงจากค่าฐาน ตรงตารางต้นฉบับ (ขามทะเลสอ 4.6 → 1 ราย = 78.26) และผ่านเกณฑ์ ≥ 30', () => {
+      const item: any = drowning({ oct: '1' });
+      component.onValueChange(item, 'oct');
+      expect(item.last_actual).toBe('78.26');
+      expect(component.isTargetMet(item)).toBe(true);
+      item.oct = '4';
+      component.onValueChange(item, 'oct');
+      expect(item.last_actual).toBe('13.04');
+      expect(component.isTargetMet(item)).toBe(false);
+    });
+
+    it('แก้ค่าฐาน → คำนวณใหม่ทันที และนับเป็นการเปลี่ยนแปลงเฉพาะตัวชี้วัดที่ใช้ค่าฐาน', () => {
+      const item: any = drowning({ oct: '1' });
+      item._original = { ...item };
+      expect(component.isBaseChanged(item)).toBe(false);
+      item.base_value = '9';
+      component.onBaseChange(item);
+      expect(item.last_actual).toBe('88.89');
+      expect(component.isBaseChanged(item)).toBe(true);
+      const plain: any = { ...drowning(), result_formula: 'AVG(ALL)', base_value: '1' };
+      plain._original = { ...plain, base_value: '2' };
+      expect(component.usesBaseItem(plain)).toBe(false);
+      expect(component.isBaseChanged(plain)).toBe(false);
+    });
+  });
 });

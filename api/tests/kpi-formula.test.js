@@ -12,7 +12,7 @@ const cases = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
 describe('evaluateFormula — สูตรที่ถูกต้อง', () => {
     test.each(cases.valid.map(c => [c.name, c]))('%s', (_n, c) => {
         expect(validateFormula(c.formula)).toBeNull();
-        expect(evaluateFormula(c.formula, c.months, c.target, c.prev)).toBe(c.expect);
+        expect(evaluateFormula(c.formula, c.months, c.target, c.prev, c.base)).toBe(c.expect);
     });
 });
 
@@ -43,4 +43,13 @@ test('activeFormula: ว่าง/ไม่มี = null, มีค่า = trim
 test('fixture ของ frontend ต้องเหมือนกับ backend ทุกตัวอักษร (ผลคำนวณสองฝั่งตรงกัน)', () => {
     const fe = path.join(__dirname, '..', '..', 'frontend', 'src', 'app', 'shared', 'kpi-formula.cases.json');
     expect(fs.readFileSync(fe, 'utf8').replace(/\r\n/g, '\n')).toBe(fs.readFileSync(fixturePath, 'utf8').replace(/\r\n/g, '\n'));
+});
+
+test('usesBase: ตรวจว่าสูตรอ้างค่าฐาน (base) หรือไม่', () => {
+    const { usesBase } = require('../kpi-formula');
+    expect(usesBase('(base - SUM(ALL)) / base * 100')).toBe(true);
+    expect(usesBase('-BASE + m10')).toBe(true);
+    expect(usesBase('AVG(ALL)')).toBe(false);
+    expect(usesBase('target - m10')).toBe(false);
+    expect(usesBase('สูตรผิด(')).toBe(false);
 });

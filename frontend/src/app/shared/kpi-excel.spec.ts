@@ -154,3 +154,30 @@ describe('kpi-excel: วางจากคลิปบอร์ด', () => {
     expect(applyCellChanges(plan.changes).length).toBe(2);
   });
 });
+
+describe('kpi-excel — ค่าฐาน (base ของสูตร)', () => {
+  it('แบบฟอร์มมีคอลัมน์ "ค่าฐาน" ต่อจากเป้าหมายเมื่อ withBase (แถวที่ไม่มีค่าฐานเว้นว่าง)', () => {
+    const items = [row(1, '00222', { base_value: '21.2' }), row(2, '00223')];
+    const aoa = buildTemplateAoa(items, { withBase: true });
+    const head = aoa[1] as string[];
+    expect(head.indexOf(EXCEL_HEADERS.base)).toBe(head.indexOf(EXCEL_HEADERS.target) + 1);
+    expect(aoa[2][head.indexOf(EXCEL_HEADERS.base)]).toBe(21.2);
+    expect(aoa[3][head.indexOf(EXCEL_HEADERS.base)]).toBe('');
+    expect((buildTemplateAoa(items)[1] as string[]).includes(EXCEL_HEADERS.base)).toBe(false);
+  });
+
+  it('นำเข้าค่าฐาน: เฉพาะแถวที่ตัวชี้วัดใช้ค่าฐาน + สิทธิ์เดียวกับเป้าหมาย', () => {
+    const withBase = row(1, '00222', { base_value: null });
+    const noBase = row(2, '00223');
+    const aoa = buildTemplateAoa([withBase, noBase], { withBase: true });
+    const h = (aoa[1] as string[]).indexOf(EXCEL_HEADERS.base);
+    aoa[2][h] = 4.6; aoa[3][h] = 9;
+    const parsed = parseImportAoa(aoa);
+    expect(parsed.fields).toContain('base_value');
+    const plan = planImport(parsed.rows, [withBase, noBase], PERMS);
+    expect(plan.changes.map(c => [c.item.indicator_id, c.field, c.newVal])).toEqual([[1, 'base_value', '4.6']]);
+    const denied = planImport(parsed.rows, [withBase, noBase], { canEditActual: true, canEditTarget: false });
+    expect(denied.changes).toEqual([]);
+    expect(denied.noPerm).toBe(1);
+  });
+});
