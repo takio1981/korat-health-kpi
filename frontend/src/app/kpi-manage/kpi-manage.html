@@ -1762,6 +1762,8 @@
                       class="px-1.5 py-0.5 text-[10px] rounded bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-700 font-bold" title="target">เป้าหมาย</button>
               <button type="button" (click)="insertFormulaToken('base', formulaInput)"
                       class="px-1.5 py-0.5 text-[10px] rounded bg-white border border-sky-300 hover:bg-sky-50 text-sky-700 font-bold" title="base — ค่าฐานของหน่วยบริการ (เช่น ค่าเฉลี่ย 5 ปี) กรอกที่หน้าบันทึกผลงานใต้เป้าหมาย">ค่าฐาน</button>
+              <button *ngFor="let k of customVarKeys" type="button" (click)="insertFormulaToken(k, formulaInput)"
+                      class="px-1.5 py-0.5 text-[10px] rounded bg-white border border-sky-300 hover:bg-sky-50 text-sky-700 font-bold" [title]="k + ' — ' + customVarLabel(k)">{{ customVarLabel(k) }}</button>
             </div>
             <!-- ข้อมูลปีงบประมาณที่แล้ว (คู่ตัวชี้วัด × หน่วยบริการเดียวกัน) -->
             <div class="flex flex-wrap items-center gap-1 mt-1">
@@ -1833,10 +1835,68 @@
                   <span class="text-sky-700 font-bold">ค่าฐาน</span>
                   <input id="formula-test-base" type="text" [(ngModel)]="formulaTestBase" class="w-20 px-2 py-0.5 border border-sky-300 rounded text-xs text-center bg-white">
                 </ng-container>
+                <ng-container *ngFor="let k of formulaTestVarKeys">
+                  <span class="text-sky-700 font-bold">{{ customVarLabel(k) }}</span>
+                  <input type="text" [(ngModel)]="formulaTestVars[k]" class="w-20 px-2 py-0.5 border border-sky-300 rounded text-xs text-center bg-white">
+                </ng-container>
                 <span class="text-gray-400">→</span>
                 <span class="font-bold text-violet-800">ผลงาน = {{ formulaTestResult?.value ?? 'ว่าง (คำนวณไม่ได้)' }}</span>
                 <span *ngIf="formulaTestResult?.pct !== null && formulaTestResult?.pct !== undefined" class="font-bold text-gray-700">| ร้อยละ = {{ formulaTestResult?.pct }}%</span>
               </div>
+            </div>
+          </div>
+
+          <!-- ค่าเพิ่มเติมของหน่วยบริการที่ตั้งชื่อเอง (custom_vars) — ใช้ในสูตรผลงาน/สูตรร้อยละ (25 ต.ค. 2569) -->
+          <div id="indicator-custom-vars" class="mt-3 border border-sky-200 rounded-lg p-3 bg-sky-50/50">
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-bold text-sky-800"><i class="fas fa-sliders-h mr-1"></i>ค่าเพิ่มเติมของหน่วยบริการ (ใช้ในสูตร)</label>
+              <button type="button" (click)="addCustomVar()" [disabled]="(currentItem.custom_vars?.length || 0) >= MAX_CUSTOM_VARS"
+                      class="text-[10px] px-2 py-0.5 rounded bg-sky-600 hover:bg-sky-700 text-white font-bold disabled:opacity-40"><i class="fas fa-plus mr-1"></i>เพิ่มค่า</button>
+            </div>
+            <p class="text-[10px] text-gray-500 mb-2">ค่าที่แต่ละหน่วยบริการมีไม่เท่ากัน เช่น <b>pop</b> = ประชากรกลางปี, <b>base</b> = ค่าเฉลี่ย 5 ปี — ตั้งชื่อ (ภาษาอังกฤษตัวเล็ก) ไว้ใช้ในสูตร
+              แล้วกรอกค่าของแต่ละหน่วยบริการที่หน้าบันทึกผลงาน (ใต้เป้าหมาย) หรือนำเข้าจากแบบฟอร์ม Excel — <code>base</code> (ค่าฐาน) ใช้ได้เสมอโดยไม่ต้องเพิ่ม</p>
+            <div *ngFor="let v of currentItem.custom_vars; let i = index" class="flex items-center gap-2 mb-1">
+              <input type="text" [(ngModel)]="v.key" placeholder="ชื่อในสูตร เช่น pop" maxlength="20" class="w-36 px-2 py-1 border rounded text-xs font-mono bg-white">
+              <input type="text" [(ngModel)]="v.label" placeholder="ชื่อที่แสดง เช่น ประชากรกลางปี" maxlength="60" class="flex-1 px-2 py-1 border rounded text-xs bg-white">
+              <button type="button" (click)="removeCustomVar(i)" class="text-red-500 hover:text-red-700 text-xs px-1" title="ลบค่านี้"><i class="fas fa-times"></i></button>
+            </div>
+            <div *ngIf="customVarsError" class="text-[11px] font-bold text-red-600 mt-1"><i class="fas fa-times-circle mr-1"></i>{{ customVarsError }}</div>
+          </div>
+
+          <!-- สูตรร้อยละ (pct_formula) — ว่าง = คิดตามเงื่อนไขเป้าหมาย | ผ่าน/ไม่ผ่านยังเทียบผลงานกับเป้าหมาย (25 ต.ค. 2569) -->
+          <div id="indicator-pct-formula" class="mt-3 border border-rose-200 rounded-lg p-3 bg-rose-50/40">
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-bold text-rose-800"><i class="fas fa-percent mr-1"></i>สูตรร้อยละ (ไม่บังคับ)</label>
+              <button *ngIf="hasPctFormula" type="button" (click)="currentItem.pct_formula = ''" class="text-[10px] px-2 py-0.5 rounded bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold">ล้างสูตร</button>
+            </div>
+            <p class="text-[10px] text-gray-500 mb-2">ไม่กรอก = ร้อยละคิดตามเงื่อนไขเป้าหมายด้านบน — กรอกสูตรเพื่อกำหนดตัวเลขในคอลัมน์ "ร้อยละ" ของหน้าบันทึกผลงานเอง
+              ใช้ <code>result</code> = ผลงาน, <code>target</code> = เป้าหมาย, ค่าเพิ่มเติม และเดือน/ฟังก์ชันเหมือนสูตรผลงาน (การผ่าน/ไม่ผ่านเกณฑ์ยังเทียบผลงานกับเป้าหมายตามเงื่อนไข)</p>
+            <input #pctInput type="text" [(ngModel)]="currentItem.pct_formula" maxlength="500" placeholder="เช่น result / target * 100  หรือ  (base - result) / base * 100"
+                   class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 text-sm bg-white font-mono"
+                   [ngClass]="pctFormulaError ? 'border-red-400 focus:ring-red-300' : (hasPctFormula ? 'border-rose-400 focus:ring-rose-300' : 'focus:ring-rose-300')">
+            <div class="mt-1 text-[11px] font-bold min-h-[16px]">
+              <span *ngIf="pctFormulaError" class="text-red-600"><i class="fas fa-times-circle mr-1"></i>{{ pctFormulaError }}</span>
+              <span *ngIf="hasPctFormula && !pctFormulaError" class="text-green-700"><i class="fas fa-check-circle mr-1"></i>สูตรถูกต้อง</span>
+            </div>
+            <div class="flex flex-wrap gap-1 mt-1">
+              <button type="button" (click)="insertPctToken('result', pctInput)" class="px-1.5 py-0.5 text-[10px] rounded bg-rose-600 hover:bg-rose-700 text-white font-bold" title="result = ผลงาน">ผลงาน</button>
+              <button type="button" (click)="insertPctToken('target', pctInput)" class="px-1.5 py-0.5 text-[10px] rounded bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-700 font-bold" title="target">เป้าหมาย</button>
+              <button type="button" (click)="insertPctToken('base', pctInput)" class="px-1.5 py-0.5 text-[10px] rounded bg-white border border-sky-300 hover:bg-sky-50 text-sky-700 font-bold" title="base">ค่าฐาน</button>
+              <button *ngFor="let k of customVarKeys" type="button" (click)="insertPctToken(k, pctInput)" class="px-1.5 py-0.5 text-[10px] rounded bg-white border border-sky-300 hover:bg-sky-50 text-sky-700 font-bold" [title]="k">{{ customVarLabel(k) }}</button>
+              <button *ngFor="let op of ['+','-','*','/','(',')']" type="button" (click)="insertPctToken(op, pctInput)" class="px-2 py-0.5 text-[10px] rounded bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold font-mono">{{ op }}</button>
+            </div>
+            <div *ngIf="hasPctFormula && !pctFormulaError" class="flex flex-wrap items-center gap-2 mt-2 text-xs">
+              <span class="text-[11px] font-bold text-rose-800"><i class="fas fa-flask mr-1"></i>ทดลอง</span>
+              <ng-container *ngIf="!(hasFormula && !formulaError)">
+                <span class="text-gray-600">ผลงาน</span>
+                <input id="pct-test-result" type="text" [(ngModel)]="formulaTestResultInput" class="w-20 px-2 py-0.5 border rounded text-xs text-center bg-white">
+                <span class="text-gray-600">เป้าหมาย</span>
+                <input type="text" [(ngModel)]="formulaTestTarget" class="w-20 px-2 py-0.5 border rounded text-xs text-center bg-white">
+                <ng-container *ngIf="formulaUsesBase"><span class="text-sky-700 font-bold">ค่าฐาน</span><input type="text" [(ngModel)]="formulaTestBase" class="w-20 px-2 py-0.5 border border-sky-300 rounded text-xs text-center bg-white"></ng-container>
+                <ng-container *ngFor="let k of formulaTestVarKeys"><span class="text-sky-700 font-bold">{{ customVarLabel(k) }}</span><input type="text" [(ngModel)]="formulaTestVars[k]" class="w-20 px-2 py-0.5 border border-sky-300 rounded text-xs text-center bg-white"></ng-container>
+              </ng-container>
+              <span *ngIf="hasFormula && !formulaError" class="text-gray-500">(ใช้ค่าจากการทดลองสูตรผลงานด้านบน)</span>
+              <span class="font-bold text-rose-800">→ ร้อยละ = {{ pctTestResult !== null ? pctTestResult + '%' : 'ว่าง (คำนวณไม่ได้)' }}</span>
             </div>
           </div>
           <label class="inline-flex items-center gap-2 mt-2 text-xs cursor-pointer">

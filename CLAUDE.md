@@ -373,7 +373,14 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   → UPSERT ใน transaction เดียวกัน (ล็อคตรวจแล้ว, สิทธิ์ `can_edit_target`, ว่าง = ลบ, ไม่ส่งฟิลด์ = ไม่เปลี่ยน) — dashboard: ช่อง "ฐาน" ใต้เป้าหมาย (`usesBaseItem`/`isBaseChanged`),
   Excel คอลัมน์ "ค่าฐาน" (`buildTemplateAoa(items, { withBase })`, นำเข้าเฉพาะแถวที่ backend แนบ `base_value`) — ตัวอย่างจริง: ตัวชี้วัดการจมน้ำ `(base - SUM(ALL)) / base * 100`
   เป้าหมาย 30 ≥ (ทดสอบ 33 หน่วยบริการตรงตารางผู้ใช้ทุกตัวเลข) — Test: `api/tests/base-value.test.js`, fixture สูตร (เคส base), `kpi-excel.spec.ts`, `dashboard.spec.ts`
-- ภาษาสูตร: ตัวแปร `m10…m09` (`m1`–`m9` ย่อได้) + `target` + `base`, ฟังก์ชัน `SUM AVG MAX MIN COUNT LAST` (อาร์กิวเมนต์ = รายการเดือน
+- **ค่าเพิ่มเติมที่ตั้งชื่อเอง + สูตรร้อยละ (25 ต.ค. 2569):** `kpi_indicators.custom_vars` TEXT = JSON `[{key,label}]` (≤ 10, `isValidVarKey()`: a-z ตามด้วย a-z0-9_ ≤ 20 ตัว ห้ามชนชื่อในตัว/`result`/`prev_*`/`m\d+`/ชื่อของ Object.prototype)
+  ค่าต่อคู่เก็บ `kpi_base_values` คอลัมน์ `var_key` (UNIQUE indicator+year+hospcode+var_key; base = var_key 'base') — `evaluateFormula(…, prev, vars)` อาร์กิวเมนต์ที่ 5 เป็น object `{base, pop, …}` (ค่าเดี่ยว = base แบบเดิม)
+  ตัวแปรอ่านแบบ own-property เท่านั้น — **`validateFormula(f, customKeys, extra)` ต้องส่งชื่อที่ประกาศเสมอ** (ไม่ส่ง = ใช้ได้แค่ base) ทั้ง backend (`formulaOk(ind, f)`, `varKeysOf()`) และ dashboard
+  (เคยพลาด: dashboard ไม่ส่งชื่อ → สูตรที่ใช้ pop ถูกมองว่าผิดแล้วไม่คำนวณ — จับได้ใน spec) | แถว `GET /kpi-results` มี `cv_<key>` (+ `base_value`), `custom_vars`, `pct_formula` — `/update-kpi` รับ `cv_<key>`/`base_value`
+  เฉพาะชื่อที่ประกาศ + base | `pct_formula` VARCHAR(500) = สูตรร้อยละ (ตัวแปรเพิ่ม `result`) — **ใช้เฉพาะตัวเลขคอลัมน์ร้อยละฝั่ง frontend** (`shared/custom-vars.ts` `evaluatePct()`),
+  ผ่าน/ไม่ผ่านไม่เปลี่ยน (ผู้ใช้เลือก) — POST/PUT `/indicators` ตรวจ custom_vars/สูตร/สูตรร้อยละ → 400 (PUT ไม่ส่ง = ใช้ค่าเดิม) — Excel คอลัมน์ `"label [key]"` (`customVarHeader()`)
+  — Test: `api/tests/custom-vars.test.js`, fixture สูตร (vars/allowed/allowExtra), `shared/custom-vars.spec.ts`, `kpi-excel.spec.ts`, `dashboard.spec.ts`, `kpi-manage.spec.ts`
+- ภาษาสูตร: ตัวแปร `m10…m09` (`m1`–`m9` ย่อได้) + `target` + `base` + ค่าเพิ่มเติม (+ `result` เฉพาะสูตรร้อยละ), ฟังก์ชัน `SUM AVG MAX MIN COUNT LAST` (อาร์กิวเมนต์ = รายการเดือน
   หรือ `ALL`), `+ - * /` วงเล็บ ตัวเลข — ค่าว่าง/ข้อความ = ไม่มีค่า (ฟังก์ชันข้าม, อ้างตรงในนิพจน์ → null), หารศูนย์ → null,
   ผลปัด 2 ตำแหน่งเป็น string
 - **ข้อมูลปีงบที่แล้ว (เพิ่ม 8 ต.ค. 2569):** `prev_m10…prev_m09`, `prev_target`, `prev_result`, `PREV_ALL` (ในฟังก์ชัน, ผสมเดือนปีนี้ได้

@@ -3223,6 +3223,8 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 MIN(i.required_off_types) AS required_off_types,
                 MAX(i.is_cumulative) AS is_cumulative,
                 MIN(i.result_formula) AS result_formula,
+                MIN(i.custom_vars) AS custom_vars, -- ค่าเพิ่มเติมที่ตั้งชื่อเอง [{key,label}] (25 ต.ค. 2569)
+                MIN(i.pct_formula) AS pct_formula, -- สูตรร้อยละ (ว่าง = ตามเงื่อนไขเป้าหมาย)
                 r.hospcode,
                 MIN(h.hosname) AS hosname,
                 MIN(h.hostype) AS hostype,
@@ -3246,7 +3248,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         const prevRowsByYear = new Map();
         for (const row of rows) {
             const f = kpiFormula.activeFormula(row);
-            if (!f || kpiFormula.validateFormula(f) || !kpiFormula.usesPrevYear(f)) continue;
+            if (!f || !formulaOk(row, f) || !kpiFormula.usesPrevYear(f)) continue;
             if (!prevRowsByYear.has(row.year_bh)) prevRowsByYear.set(row.year_bh, []);
             prevRowsByYear.get(row.year_bh).push(row);
         }
@@ -3254,8 +3256,8 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         for (const [yb, list] of prevRowsByYear) {
             prevByYear.set(yb, await loadPrevYearData(db, list.map(r => r.indicator_id), yb, list.map(r => r.hospcode)));
         }
-        // === ค่าฐาน (base) เฉพาะตัวชี้วัดที่สูตรใช้ base — แนบ row.base_value ให้หน้าบันทึกผลงานแสดง/แก้ไข ===
-        const baseRows = rows.filter(formulaUsesBase);
+        // === ค่าฐาน/ค่าเพิ่มเติม เฉพาะตัวชี้วัดที่ใช้ — แนบ row.cv_<key> (+ base_value) ให้หน้าบันทึกผลงานแสดง/แก้ไข/คำนวณร้อยละ ===
+        const baseRows = rows.filter(needsCustomValues);
         const baseMap = baseRows.length ? await loadBaseValues(db, baseRows.map(r => r.indicator_id), baseRows.map(r => r.year_bh)) : new Map();
 
         // === คำนวณ last_actual + appeal + has_form ฝั่ง JS (เร็วกว่า subquery) ===
@@ -3265,14 +3267,21 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
             const isCumulative = Number(row.is_cumulative) === 1;
             const formula = kpiFormula.activeFormula(row);
             let lastVal = null;
-            if (formula && !kpiFormula.validateFormula(formula)) {
+            // ค่าเพิ่มเติมของคู่นี้ (base + ที่ประกาศไว้ + ที่สูตรอ้าง) — แนบทุกแถวของตัวชี้วัดที่ใช้ เพื่อให้กรอกได้แม้ยังไม่มีค่า
+            let cvals;
+            if (needsCustomValues(row)) {
+                cvals = baseMap.get(baseKey(row.indicator_id, row.year_bh, row.hospcode)) || {};
+                const keys = new Set(['base', ...varKeysOf(row), ...(formula ? kpiFormula.formulaVarNames(formula) : [])]);
+                for (const k of keys) row['cv_' + k] = cvals[k] ?? null;
+                row.base_value = cvals.base ?? null;
+            }
+            if (formula && formulaOk(row, formula)) {
                 // ตัวชี้วัดที่ตั้งสูตรคำนวณผลงาน — ใช้สูตรแทน is_cumulative / ค่าเดือนล่าสุด
                 // สูตรอ้างปีที่แล้ว → แนบ prev_year ให้ frontend คำนวณซ้ำได้ตรงกันตอนแก้ไขค่า (โหมดแก้ไข)
                 const pm = prevByYear.get(row.year_bh);
                 const prev = pm ? (pm.get(`${row.indicator_id}|${String(row.hospcode).trim()}`) || { year_bh: String(parseInt(row.year_bh, 10) - 1), months: null, target: null, result: null }) : undefined;
                 if (prev) row.prev_year = prev;
-                if (kpiFormula.usesBase(formula)) row.base_value = baseMap.get(baseKey(row.indicator_id, row.year_bh, row.hospcode)) ?? null;
-                lastVal = kpiFormula.evaluateFormula(formula, row, row.target_value, prev, row.base_value);
+                lastVal = kpiFormula.evaluateFormula(formula, row, row.target_value, prev, cvals);
             } else if (isCumulative) {
                 // ตัวชี้วัดสะสม: รวมค่าตัวเลขทุกเดือนที่มีข้อมูล (ไม่ sum ถ้าไม่มีเดือนไหนมีค่าเลย → คง null)
                 const numericVals = monthKeys.map(k => row[k]).filter(v => v != null && String(v).trim() !== '' && !isNaN(parseFloat(v)));
@@ -3771,8 +3780,8 @@ function defaultLastActual(monthsObj, isCumulative) {
     }
     return null;
 }
-// === ค่าฐาน (base) ของสูตรคำนวณผลงาน — kpi_base_values (24 ต.ค. 2569) ===
-// คืน Map key `${indicator_id}|${year_bh}|${hospcode}` → base_value (string) — years ว่าง = ทุกปีงบ
+// === ค่าฐาน (base) + ค่าเพิ่มเติมที่ตั้งชื่อเองของสูตร — kpi_base_values (24–25 ต.ค. 2569) ===
+// คืน Map key `${indicator_id}|${year_bh}|${hospcode}` → { var_key: value } (base, pop, …) — years ว่าง = ทุกปีงบ
 const baseKey = (indicatorId, yearBh, hospcode) => `${Number(indicatorId)}|${String(yearBh)}|${String(hospcode).trim()}`;
 async function loadBaseValues(conn, indicatorIds, years) {
     const map = new Map();
@@ -3780,13 +3789,15 @@ async function loadBaseValues(conn, indicatorIds, years) {
     if (!ids.length) return map;
     const ys = [...new Set((years || []).map(String).filter(Boolean))];
     const [rows] = await conn.query(
-        `SELECT indicator_id, year_bh, hospcode, base_value FROM kpi_base_values WHERE indicator_id IN (?)${ys.length ? ' AND year_bh IN (?)' : ''}`,
+        `SELECT indicator_id, year_bh, hospcode, var_key, base_value FROM kpi_base_values WHERE indicator_id IN (?)${ys.length ? ' AND year_bh IN (?)' : ''}`,
         ys.length ? [ids, ys] : [ids]);
-    for (const r of rows) map.set(baseKey(r.indicator_id, r.year_bh, r.hospcode), r.base_value);
+    for (const r of rows) {
+        const k = baseKey(r.indicator_id, r.year_bh, r.hospcode);
+        if (!map.has(k)) map.set(k, {});
+        map.get(k)[r.var_key || 'base'] = r.base_value;
+    }
     return map;
 }
-// ตัวชี้วัดที่สูตรใช้ base (ใช้กรองก่อนโหลดค่าฐาน — สูตรอื่นไม่ต้องโหลด)
-const formulaUsesBase = (ind) => { const f = kpiFormula.activeFormula(ind); return !!f && kpiFormula.usesBase(f); };
 
 async function loadPrevYearData(conn, indicatorIds, yearBh, hospcodes) {
     const map = new Map();
@@ -3821,11 +3832,11 @@ async function applyFormulaToSummary(conn, opts = {}) {
     const where = ["result_formula IS NOT NULL", "TRIM(result_formula) <> ''"];
     const params = [];
     if (opts.indicatorId) { where.push('id = ?'); params.push(opts.indicatorId); }
-    const [inds] = await conn.query(`SELECT id, result_formula FROM kpi_indicators WHERE ${where.join(' AND ')}`, params);
+    const [inds] = await conn.query(`SELECT id, result_formula, custom_vars FROM kpi_indicators WHERE ${where.join(' AND ')}`, params);
     let updated = 0;
     for (const ind of inds) {
         const formula = kpiFormula.activeFormula(ind);
-        if (!formula || kpiFormula.validateFormula(formula)) continue; // สูตรผิด (ไม่ควรเกิด — validate ตอนบันทึกแล้ว) → คงค่าเดิม
+        if (!formulaOk(ind, formula)) continue; // สูตรผิด (ไม่ควรเกิด — validate ตอนบันทึกแล้ว) → คงค่าเดิม
         const sp = [ind.id];
         let yw = '';
         if (opts.yearBh) { yw = 'AND year_bh = ?'; sp.push(opts.yearBh); }
@@ -3834,8 +3845,8 @@ async function applyFormulaToSummary(conn, opts = {}) {
             `SELECT id, year_bh, hospcode, target_value, oct, nov, dece, jan, feb, mar, apr, may, jun, jul, aug, sep
              FROM kpi_summary WHERE indicator_id = ? ${yw} ORDER BY year_bh ASC`, sp);
         const needPrev = kpiFormula.usesPrevYear(formula);
-        // ค่าฐาน (base) — โหลดครั้งเดียวต่อตัวชี้วัด เฉพาะสูตรที่ใช้ base
-        const baseMap = kpiFormula.usesBase(formula) ? await loadBaseValues(conn, [ind.id], opts.yearBh ? [opts.yearBh] : null) : null;
+        // ค่าฐาน/ค่าเพิ่มเติม — โหลดครั้งเดียวต่อตัวชี้วัด เฉพาะสูตรที่อ้างตัวแปรที่ตั้งชื่อเอง
+        const baseMap = kpiFormula.formulaVarNames(formula).length ? await loadBaseValues(conn, [ind.id], opts.yearBh ? [opts.yearBh] : null) : null;
         let prevMap = null, prevFor = null;
         for (const r of rows) {
             if (needPrev && prevFor !== r.year_bh) {
@@ -3843,8 +3854,8 @@ async function applyFormulaToSummary(conn, opts = {}) {
                 prevFor = r.year_bh;
             }
             const prev = needPrev ? prevMap.get(`${ind.id}|${String(r.hospcode).trim()}`) : undefined;
-            const base = baseMap ? baseMap.get(baseKey(ind.id, r.year_bh, r.hospcode)) : undefined;
-            const val = kpiFormula.evaluateFormula(formula, r, r.target_value, prev, base);
+            const vars = baseMap ? (baseMap.get(baseKey(ind.id, r.year_bh, r.hospcode)) || {}) : undefined;
+            const val = kpiFormula.evaluateFormula(formula, r, r.target_value, prev, vars);
             await conn.query('UPDATE kpi_summary SET last_actual = ? WHERE id = ?', [val, r.id]);
             updated++;
         }
@@ -4294,23 +4305,36 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
             [user.userId, user.deptId || 0, 'UPDATE', 'kpi_results', JSON.stringify({ message: `บันทึก KPI ${updates.length} รายการ` }), req.ip]
         );
 
-        // ค่าฐาน (base ของสูตรคำนวณผลงาน — kpi_base_values) เฉพาะแถวที่ส่ง base_value มา (24 ต.ค. 2569)
-        // ล็อคตรวจด้านบนแล้ว (ทั้งคู่) | สิทธิ์เดียวกับเป้าหมาย (can_edit_target) — ไม่มีสิทธิ์ = ไม่เปลี่ยนค่าเดิม | ว่าง = ลบค่าฐาน
-        const baseRowsToSave = updates.filter(r => r && Object.prototype.hasOwnProperty.call(r, 'base_value'));
-        if (baseRowsToSave.length) {
-            const canEditBase = user.role === 'super_admin' || !!(await getPermsForUser(user.userId, user.role)).can_edit_target;
-            if (canEditBase) {
-                for (const row of baseRowsToSave) {
+        // ค่าฐาน + ค่าเพิ่มเติมที่ตั้งชื่อเอง (kpi_base_values.var_key) เฉพาะแถวที่ส่งมา: base_value (= base) และ cv_<key> (24–25 ต.ค. 2569)
+        // รับเฉพาะชื่อที่ตัวชี้วัดประกาศไว้ (custom_vars) + base | ล็อคตรวจด้านบนแล้ว | สิทธิ์เดียวกับเป้าหมาย (can_edit_target) — ไม่มีสิทธิ์ = ไม่เปลี่ยนค่าเดิม | ว่าง = ลบ
+        const varRowsToSave = updates.filter(r => r && Object.keys(r).some(k => k === 'base_value' || /^cv_[a-z][a-z0-9_]{0,19}$/.test(k)));
+        if (varRowsToSave.length) {
+            const canEditVars = user.role === 'super_admin' || !!(await getPermsForUser(user.userId, user.role)).can_edit_target;
+            if (canEditVars) {
+                const indIds = [...new Set(varRowsToSave.map(r => Number(r.indicator_id)).filter(Boolean))];
+                const [indRows] = indIds.length ? await connection.query('SELECT id, custom_vars FROM kpi_indicators WHERE id IN (?)', [indIds]) : [[]];
+                const allowedByInd = new Map(indRows.map(i => [Number(i.id), new Set(['base', ...varKeysOf(i)])]));
+                for (const row of varRowsToSave) {
                     const hc = (ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
-                    const v = String(row.base_value ?? '').trim();
-                    if (v.length > 100) throw new Error('ค่าฐานยาวเกิน 100 ตัวอักษร');
-                    if (!v) {
-                        await connection.query('DELETE FROM kpi_base_values WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?', [row.indicator_id, row.year_bh, hc]);
-                    } else {
-                        await connection.query(
-                            `INSERT INTO kpi_base_values (indicator_id, year_bh, hospcode, base_value, updated_by) VALUES (?, ?, ?, ?, ?)
-                             ON DUPLICATE KEY UPDATE base_value = VALUES(base_value), updated_by = VALUES(updated_by)`,
-                            [row.indicator_id, row.year_bh, hc, v, user.userId]);
+                    const allowed = allowedByInd.get(Number(row.indicator_id)) || new Set(['base']);
+                    const entries = [];
+                    if (Object.prototype.hasOwnProperty.call(row, 'base_value')) entries.push(['base', row.base_value]);
+                    for (const k of Object.keys(row)) {
+                        const m = /^cv_([a-z][a-z0-9_]{0,19})$/.exec(k);
+                        if (m && !(m[1] === 'base' && Object.prototype.hasOwnProperty.call(row, 'base_value'))) entries.push([m[1], row[k]]);
+                    }
+                    for (const [key, raw] of entries) {
+                        if (!allowed.has(key)) continue;   // ชื่อที่ตัวชี้วัดไม่ได้ประกาศ — ข้าม
+                        const v = String(raw ?? '').trim();
+                        if (v.length > 100) throw new Error(`ค่า "${key}" ยาวเกิน 100 ตัวอักษร`);
+                        if (!v) {
+                            await connection.query('DELETE FROM kpi_base_values WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? AND var_key = ?', [row.indicator_id, row.year_bh, hc, key]);
+                        } else {
+                            await connection.query(
+                                `INSERT INTO kpi_base_values (indicator_id, year_bh, hospcode, var_key, base_value, updated_by) VALUES (?, ?, ?, ?, ?, ?)
+                                 ON DUPLICATE KEY UPDATE base_value = VALUES(base_value), updated_by = VALUES(updated_by)`,
+                                [row.indicator_id, row.year_bh, hc, key, v, user.userId]);
+                        }
                     }
                 }
             }
@@ -6634,12 +6658,46 @@ const _actorLabel = async (userId) => {
 
 // รับค่า result_formula จาก request → { value: string|null, error: string|null }
 // ว่าง/ไม่ส่ง = null (ใช้วิธีเดิม) | สูตรผิด = error ภาษาไทยจาก kpi-formula.js (ห้ามบันทึกสูตรที่คำนวณไม่ได้)
-function parseFormulaInput(raw) {
+// customKeys = ชื่อค่าเพิ่มเติมของตัวชี้วัด (custom_vars) | extra = ['result'] สำหรับสูตรร้อยละ
+function parseFormulaInput(raw, customKeys, extra, label = 'สูตรคำนวณผลงาน') {
     if (raw === undefined || raw === null) return { value: null, error: null };
     const s = String(raw).trim();
     if (!s) return { value: null, error: null };
-    const err = kpiFormula.validateFormula(s);
-    return err ? { value: null, error: `สูตรคำนวณผลงานไม่ถูกต้อง: ${err}` } : { value: s, error: null };
+    const err = kpiFormula.validateFormula(s, customKeys, extra);
+    return err ? { value: null, error: `${label}ไม่ถูกต้อง: ${err}` } : { value: s, error: null };
+}
+
+// ===== ค่าเพิ่มเติมรายหน่วยบริการที่ตั้งชื่อเอง (kpi_indicators.custom_vars) + สูตรร้อยละ (pct_formula) — 25 ต.ค. 2569 =====
+// custom_vars = JSON [{ key: 'pop', label: 'ประชากร' }, …] — key ใช้ในสูตร ค่าของแต่ละหน่วยบริการเก็บใน kpi_base_values (var_key)
+// base (ค่าฐาน) ใช้ได้เสมอแม้ไม่ประกาศ — ประกาศ base เพื่อเปลี่ยนชื่อที่แสดงได้
+const MAX_CUSTOM_VARS = 10;
+function normalizeCustomVars(raw) {
+    if (raw === undefined || raw === null || raw === '') return { list: [], error: null };
+    let arr = raw;
+    if (typeof raw === 'string') { try { arr = JSON.parse(raw); } catch (e) { return { list: [], error: 'รูปแบบค่าเพิ่มเติมไม่ถูกต้อง' }; } }
+    if (!Array.isArray(arr)) return { list: [], error: 'รูปแบบค่าเพิ่มเติมไม่ถูกต้อง' };
+    const list = [];
+    for (const v of arr) {
+        const key = String((v && v.key) || '').trim().toLowerCase();
+        if (!key && !String((v && v.label) || '').trim()) continue;   // แถวว่าง
+        if (!kpiFormula.isValidVarKey(key)) return { list: [], error: `ชื่อค่าเพิ่มเติม "${key}" ไม่ถูกต้อง (a-z ตามด้วย a-z 0-9 _ ไม่เกิน 20 ตัว และห้ามซ้ำชื่อในตัว เช่น target, result, m10, prev_…)` };
+        if (list.some(x => x.key === key)) return { list: [], error: `ชื่อค่าเพิ่มเติม "${key}" ซ้ำกัน` };
+        list.push({ key, label: String((v && v.label) || '').trim().slice(0, 60) || key });
+    }
+    if (list.length > MAX_CUSTOM_VARS) return { list: [], error: `ค่าเพิ่มเติมได้ไม่เกิน ${MAX_CUSTOM_VARS} ค่า` };
+    return { list, error: null };
+}
+const customVarsOf = (ind) => normalizeCustomVars(ind && ind.custom_vars).list;   // ข้อมูลเสีย = ไม่มี (ไม่ throw)
+const varKeysOf = (ind) => customVarsOf(ind).map(v => v.key);
+// สูตรผลงานของตัวชี้วัดใช้งานได้ (มีและถูกต้องตามชื่อค่าเพิ่มเติมที่ประกาศ)
+const formulaOk = (ind, formula) => !!formula && !kpiFormula.validateFormula(formula, varKeysOf(ind));
+// ต้องโหลดค่าเพิ่มเติมของหน่วยบริการหรือไม่: สูตรผลงาน/สูตรร้อยละอ้างตัวแปรที่ตั้งชื่อเอง หรือประกาศค่าเพิ่มเติมไว้ (ให้หน้าบันทึกผลงานกรอกได้)
+function needsCustomValues(ind) {
+    const f = kpiFormula.activeFormula(ind);
+    if (f && kpiFormula.formulaVarNames(f).length) return true;
+    const p = ind && typeof ind.pct_formula === 'string' ? ind.pct_formula.trim() : '';
+    if (p && kpiFormula.formulaVarNames(p).some(n => n !== 'result')) return true;
+    return customVarsOf(ind).length > 0;
 }
 
 apiRouter.post('/indicators/bulk-import', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
@@ -6715,8 +6773,14 @@ apiRouter.post('/indicators', authenticateToken, requireAction('kpi-manage', 'ad
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
         return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
     }
-    const formula = parseFormulaInput(result_formula);
+    // ค่าเพิ่มเติมที่ตั้งชื่อเอง + สูตรร้อยละ (ตรวจชื่อตัวแปรในสูตรตามค่าที่ประกาศ)
+    const cvars = normalizeCustomVars(req.body.custom_vars);
+    if (cvars.error) return res.status(400).json({ success: false, message: cvars.error });
+    const cvKeys = cvars.list.map(v => v.key);
+    const formula = parseFormulaInput(result_formula, cvKeys);
     if (formula.error) return res.status(400).json({ success: false, message: formula.error });
+    const pctF = parseFormulaInput(req.body.pct_formula, cvKeys, ['result'], 'สูตรร้อยละ');
+    if (pctF.error) return res.status(400).json({ success: false, message: pctF.error });
     try {
         // ไม่ได้กรอกชื่อตาราง → ระบบสร้างรหัสให้อัตโนมัติ (รหัสตัวชี้วัดสร้างตามถ้าไม่ได้กรอก)
         let tpFinal = table_process && String(table_process).trim() ? String(table_process).trim() : null;
@@ -6754,8 +6818,20 @@ apiRouter.put('/indicators/:id', authenticateToken, requireAction('kpi-manage', 
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
         return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
     }
-    const formula = parseFormulaInput(result_formula);
+    // ค่าเพิ่มเติมที่ตั้งชื่อเอง + สูตรร้อยละ — ไม่ส่ง custom_vars/pct_formula มา = ใช้ค่าเดิม (ผู้เรียกเดิมไม่กระทบ)
+    let cvKeys;
+    let pctRaw = req.body.pct_formula;
+    {
+        const [cur] = await db.query('SELECT custom_vars, pct_formula FROM kpi_indicators WHERE id = ?', [req.params.id]).catch(() => [[]]);
+        const cvars = req.body.custom_vars !== undefined ? normalizeCustomVars(req.body.custom_vars) : { list: customVarsOf(cur[0]), error: null };
+        if (cvars.error) return res.status(400).json({ success: false, message: cvars.error });
+        cvKeys = cvars.list.map(v => v.key);
+        if (pctRaw === undefined && cur[0]) pctRaw = cur[0].pct_formula;
+    }
+    const formula = parseFormulaInput(result_formula, cvKeys);
     if (formula.error) return res.status(400).json({ success: false, message: formula.error });
+    const pctF = parseFormulaInput(pctRaw, cvKeys, ['result'], 'สูตรร้อยละ');
+    if (pctF.error) return res.status(400).json({ success: false, message: pctF.error });
     try {
         // ดึง old row เพื่อหาว่าฟิลด์ไหนเปลี่ยน (diff สั้นๆ)
         let diff = '';
@@ -7065,6 +7141,15 @@ async function saveHierarchyFields(conn, table, id, body) {
     if (table === 'kpi_indicators' && body && body.export_items !== undefined) {
         sets.push('export_items = ?');
         params.push(body.export_items === true || Number(body.export_items) === 1 ? 1 : 0);
+    }
+    if (table === 'kpi_indicators' && body && body.custom_vars !== undefined) {
+        const list = normalizeCustomVars(body.custom_vars).list;
+        sets.push('custom_vars = ?');
+        params.push(list.length ? JSON.stringify(list) : null);
+    }
+    if (table === 'kpi_indicators' && body && body.pct_formula !== undefined) {
+        sets.push('pct_formula = ?');
+        params.push(String(body.pct_formula || '').trim().slice(0, 500) || null);
     }
     // ยุทธศาสตร์ของตัวชี้วัดโดยตรง (ใช้แสดงเมื่อไม่มีหมวดหมู่หลัก — 19 ต.ค. 2569)
     if (table === 'kpi_indicators' && body && body.main_yut !== undefined) {
@@ -8721,7 +8806,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
     try {
         // กรอง upload_excel != 1 (ตัวที่ตั้งเป็น "อัปโหลด Excel เอง" ข้ามทั้งใน check และ export)
         // ดึง evaluation_mode/required_off_types ด้วย เพื่อคำนวณขอบเขตหน่วยบริการเหมือน performKpiExport
-        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, use_sub_indicator_export, evaluation_mode, required_off_types, item_no, export_items FROM kpi_indicators
+        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, custom_vars, use_sub_indicator_export, evaluation_mode, required_off_types, item_no, export_items FROM kpi_indicators
             WHERE table_process IS NOT NULL AND table_process != '' AND is_active = 1
             AND (upload_excel IS NULL OR upload_excel = 0)`;
         let indicatorParams = [];
@@ -8943,9 +9028,9 @@ async function checkKpiChanges(year_bh, indicator_ids) {
             let newCount = 0, changedCount = 0, unchangedCount = 0;
             // สูตรอ้างข้อมูลปีงบที่แล้ว → โหลดครั้งเดียวต่อตัวชี้วัด (เหมือน performKpiExport)
             const _f = kpiFormula.activeFormula(indicator);
-            const prevMap = _f && !kpiFormula.validateFormula(_f) && kpiFormula.usesPrevYear(_f)
+            const prevMap = formulaOk(indicator, _f) && kpiFormula.usesPrevYear(_f)
                 ? await loadPrevYearData(db, [indicator.id], year_bh) : null;
-            const baseMapX = _f && !kpiFormula.validateFormula(_f) && kpiFormula.usesBase(_f) ? await loadBaseValues(db, [indicator.id], [year_bh]) : null; // ค่าฐาน (base)
+            const baseMapX = formulaOk(indicator, _f) && kpiFormula.formulaVarNames(_f).length ? await loadBaseValues(db, [indicator.id], [year_bh]) : null; // ค่าฐาน/ค่าเพิ่มเติม
             for (const [hc, d] of dataMap) {
                 // ไม่ข้าม hospcode ที่ยังไม่มีผลงานแล้ว — ต้องนับเป็น new/unchanged ด้วย (mirror performKpiExport)
                 const target = emptyToNull(d.target);
@@ -8953,8 +9038,8 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                 // result: มีสูตร → ตามสูตร, ตัวชี้วัดสะสม → รวมทุกเดือน, ปกติ → ค่าเดือนล่าสุดที่คีย์ (ก.ย.→ต.ค.) — เหมือน performKpiExport
                 let resultVal;
                 const formula = kpiFormula.activeFormula(indicator);
-                if (formula && !kpiFormula.validateFormula(formula)) {
-                    resultVal = kpiFormula.evaluateFormula(formula, d, target, prevMap ? prevMap.get(`${indicator.id}|${String(hc).trim()}`) : undefined, baseMapX ? baseMapX.get(baseKey(indicator.id, year_bh, hc)) : undefined);
+                if (formulaOk(indicator, formula)) {
+                    resultVal = kpiFormula.evaluateFormula(formula, d, target, prevMap ? prevMap.get(`${indicator.id}|${String(hc).trim()}`) : undefined, baseMapX ? (baseMapX.get(baseKey(indicator.id, year_bh, hc)) || {}) : undefined);
                 } else if (Number(indicator.is_cumulative) === 1) {
                     const numericVals = monthValues.filter(v => v !== null && v !== undefined && !isNaN(parseFloat(v)));
                     resultVal = numericVals.length > 0 ? numericVals.reduce((s, v) => s + parseFloat(v), 0) : null;
@@ -9046,7 +9131,7 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
         // 1. Get indicators with valid table_process
         //    — กรอง upload_excel != 1 (ตัวที่ตั้งเป็น "อัปโหลดเอง" ข้ามไป)
         //    — ดึง evaluation_mode/required_off_types ด้วย เพื่อคำนวณขอบเขตหน่วยบริการที่ต้อง export (ดู resolveIndicatorHostypes)
-        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, use_sub_indicator_export, evaluation_mode, required_off_types, item_no, export_items FROM kpi_indicators
+        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, custom_vars, use_sub_indicator_export, evaluation_mode, required_off_types, item_no, export_items FROM kpi_indicators
             WHERE is_active = 1 AND (upload_excel IS NULL OR upload_excel = 0)
             AND table_process IS NOT NULL AND table_process != ''`;
         let indicatorParams = [];
@@ -9484,9 +9569,9 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                 let noDataCount = 0;
                 // สูตรอ้างข้อมูลปีงบที่แล้ว → โหลดครั้งเดียวต่อตัวชี้วัด (⚠️ ต้องตรงกับ checkKpiChanges)
                 const _f = kpiFormula.activeFormula(indicator);
-                const prevMap = _f && !kpiFormula.validateFormula(_f) && kpiFormula.usesPrevYear(_f)
+                const prevMap = formulaOk(indicator, _f) && kpiFormula.usesPrevYear(_f)
                     ? await loadPrevYearData(db, [indicator.id], year_bh) : null;
-                const baseMapX = _f && !kpiFormula.validateFormula(_f) && kpiFormula.usesBase(_f) ? await loadBaseValues(db, [indicator.id], [year_bh]) : null; // ค่าฐาน (base)
+                const baseMapX = formulaOk(indicator, _f) && kpiFormula.formulaVarNames(_f).length ? await loadBaseValues(db, [indicator.id], [year_bh]) : null; // ค่าฐาน/ค่าเพิ่มเติม
 
                 for (const [hc, d] of dataMap) {
                     // ไม่ข้ามแถวที่ยังไม่มีผลงานแล้ว (ต้อง export ครบทุกหน่วยบริการในขอบเขต) — นับไว้รายงานเฉยๆ
@@ -9499,8 +9584,8 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                     // ⚠️ ต้องตรงกับ checkKpiChanges เสมอ
                     let resultVal;
                     const formula = kpiFormula.activeFormula(indicator);
-                    if (formula && !kpiFormula.validateFormula(formula)) {
-                        resultVal = kpiFormula.evaluateFormula(formula, d, target, prevMap ? prevMap.get(`${indicator.id}|${String(hc).trim()}`) : undefined, baseMapX ? baseMapX.get(baseKey(indicator.id, year_bh, hc)) : undefined);
+                    if (formulaOk(indicator, formula)) {
+                        resultVal = kpiFormula.evaluateFormula(formula, d, target, prevMap ? prevMap.get(`${indicator.id}|${String(hc).trim()}`) : undefined, baseMapX ? (baseMapX.get(baseKey(indicator.id, year_bh, hc)) || {}) : undefined);
                     } else if (Number(indicator.is_cumulative) === 1) {
                         const numericVals = monthValues.filter(v => v !== null && v !== undefined && !isNaN(parseFloat(v)));
                         resultVal = numericVals.length > 0 ? numericVals.reduce((s, v) => s + parseFloat(v), 0) : null;
@@ -11686,14 +11771,30 @@ const migrationsReady = (async () => {
                     indicator_id INT NOT NULL,
                     year_bh VARCHAR(10) NOT NULL,
                     hospcode VARCHAR(20) NOT NULL,
+                    var_key VARCHAR(20) NOT NULL DEFAULT 'base',
                     base_value VARCHAR(100) NULL,
                     updated_by INT NULL,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    UNIQUE KEY uk_base_ind_year_hos (indicator_id, year_bh, hospcode),
+                    UNIQUE KEY uk_base_ind_year_hos_var (indicator_id, year_bh, hospcode, var_key),
                     CONSTRAINT fk_base_indicator FOREIGN KEY (indicator_id) REFERENCES kpi_indicators(id) ON DELETE CASCADE
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             `);
         } catch (e) { console.error('❌ kpi_base_values:', e.message); }
+        // ค่าเพิ่มเติมหลายค่าต่อคู่ (25 ต.ค. 2569): ตารางเดิม (24 ต.ค.) ไม่มี var_key → เพิ่มคอลัมน์ (ค่าเดิมทั้งหมด = base) แล้วเปลี่ยน UNIQUE
+        // เพิ่ม index ใหม่ก่อนลบตัวเดิมในคำสั่งเดียว (index นำหน้าด้วย indicator_id ยังรองรับ FK fk_base_indicator)
+        try {
+            const [cols] = await db.query("SHOW COLUMNS FROM kpi_base_values LIKE 'var_key'");
+            if (!cols.length) {
+                await db.query("ALTER TABLE kpi_base_values ADD COLUMN var_key VARCHAR(20) NOT NULL DEFAULT 'base' AFTER hospcode");
+            }
+            const [idx] = await db.query("SHOW INDEX FROM kpi_base_values WHERE Key_name = 'uk_base_ind_year_hos'");
+            if (idx.length) {
+                await db.query('ALTER TABLE kpi_base_values ADD UNIQUE KEY uk_base_ind_year_hos_var (indicator_id, year_bh, hospcode, var_key), DROP INDEX uk_base_ind_year_hos');
+            }
+        } catch (e) { console.error('❌ kpi_base_values var_key:', e.message); }
+        // ค่าเพิ่มเติมที่ตั้งชื่อเอง [{key,label}] + สูตรร้อยละ ของตัวชี้วัด (25 ต.ค. 2569)
+        try { await db.query('ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS custom_vars TEXT NULL'); } catch (e) {}
+        try { await db.query('ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS pct_formula VARCHAR(500) NULL'); } catch (e) {}
         try { await db.query("ALTER TABLE kpi_sub_indicators ADD COLUMN rollup_mode VARCHAR(10) NOT NULL DEFAULT 'manual'"); } catch (e) {}
         // ตัวชี้วัดหลายระดับ (19 ต.ค. 2569): ข้อย่อยมีข้อแม่เป็นข้อย่อยได้ — NULL = ข้อย่อยระดับบนสุด (ข้อมูลเดิมทั้งหมด)
         try { await db.query('ALTER TABLE kpi_sub_indicators ADD COLUMN parent_sub_id INT NULL AFTER indicator_id'); } catch (e) {}

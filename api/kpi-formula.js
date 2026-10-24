@@ -4,6 +4,8 @@
  * ภาษาสูตรเล็กๆ ที่ parse เอง — **ห้ามใช้ eval / new Function เด็ดขาด** (สูตรมาจากผู้ใช้)
  *   ตัวแปร:   m10 m11 m12 m01 … m09 (ต.ค.–ก.ย.), target (เป้าหมาย),
  *             base (ค่าฐานของหน่วยบริการ เช่น ค่าเฉลี่ย 5 ปี — ตาราง kpi_base_values, เพิ่ม 24 ต.ค. 2569)
+ *             + ค่าเพิ่มเติมที่ตัวชี้วัดตั้งชื่อเอง (kpi_indicators.custom_vars เช่น pop = ประชากร — 25 ต.ค. 2569)
+ *             result (เฉพาะสูตรร้อยละ pct_formula = ผลงานที่คำนวณได้แล้ว)
  *   ปีงบที่แล้ว: prev_m10 … prev_m09 (ผลงานรายเดือนปีงบก่อนหน้า), prev_target (เป้าหมายปีที่แล้ว),
  *              prev_result (ผลงานปีที่แล้วแบบพื้นฐาน = ค่าเดือนล่าสุดที่บันทึก หรือผลรวมถ้าเป็นตัวชี้วัดสะสม —\n *              ไม่ใช้ผลตามสูตรของปีที่แล้ว เพื่อไม่ให้ต้องย้อนเป็นทอดๆ; ต้องการวิธีอื่นใช้ฟังก์ชันกับ PREV_ALL)
  *   ฟังก์ชัน:  SUM AVG MAX MIN COUNT LAST — อาร์กิวเมนต์เป็นรายการเดือน (ปีนี้และ/หรือปีที่แล้ว ผสมกันได้)
@@ -25,6 +27,24 @@ const MONTH_NAME_TO_VAR = {
 };
 const FUNCTIONS = ['SUM', 'AVG', 'MAX', 'MIN', 'COUNT', 'LAST'];
 const MAX_FORMULA_LENGTH = 500;
+
+// ===== ตัวแปรที่ตั้งชื่อเอง (ค่าเพิ่มเติมรายหน่วยบริการ เช่น base, pop) — 25 ต.ค. 2569 =====
+// ชื่อ: a-z ตามด้วย a-z 0-9 _ ไม่เกิน 20 ตัว ห้ามชนชื่อในตัว (เดือน/target/result/prev_*/ฟังก์ชัน/ALL) และชื่อของ Object.prototype
+const RESERVED_VAR_NAMES = ['target', 'result', 'all', 'prev_all', ...FUNCTIONS.map(f => f.toLowerCase())];
+const DEFAULT_CUSTOM_VARS = ['base'];   // base ใช้ได้เสมอ (ค่าฐาน)
+function isValidVarKey(key) {
+    const k = String(key == null ? '' : key);
+    if (!/^[a-z][a-z0-9_]{0,19}$/.test(k)) return false;
+    if (RESERVED_VAR_NAMES.includes(k) || k.startsWith('prev_') || /^m\d+$/.test(k)) return false;
+    return !(k in Object.prototype);
+}
+/** รายชื่อตัวแปรที่สูตรใช้ได้ = base + ค่าที่ตั้งชื่อเอง (+ extra เช่น 'result' สำหรับสูตรร้อยละ) */
+function allowedVars(customKeys, extra) {
+    const out = [...DEFAULT_CUSTOM_VARS];
+    for (const k of (customKeys || [])) { const v = String(k).toLowerCase(); if (isValidVarKey(v) && !out.includes(v)) out.push(v); }
+    for (const k of (extra || [])) if (!out.includes(k)) out.push(k);
+    return out;
+}
 
 function formulaError(message, pos) {
     const e = new Error(pos === undefined ? message : `${message} (ตำแหน่งที่ ${pos + 1})`);
@@ -60,18 +80,20 @@ function tokenize(src) {
 }
 
 /** แปลงชื่อเป็นตัวแปรที่อนุญาต (ไม่สนตัวพิมพ์เล็กใหญ่) — คืน null ถ้าไม่ใช่ตัวแปร */
-function normalizeVar(name) {
+// custom = รายชื่อตัวแปรที่ตั้งชื่อเองที่อนุญาต (ค่าตั้งต้น ['base']) หรือ '*' = รับทุกชื่อ (ใช้ตอนคำนวณ — ตรวจชื่อแล้วตอนบันทึกตัวชี้วัด)
+function normalizeVar(name, custom = DEFAULT_CUSTOM_VARS) {
     const n = name.toLowerCase();
-    if (n === 'target' || n === 'base' || PREV_SCALARS.includes(n)) return n;
+    if (n === 'target' || PREV_SCALARS.includes(n)) return n;
     if (FISCAL_MONTH_VARS.includes(n) || PREV_MONTH_VARS.includes(n)) return n;
     if (/^m[1-9]$/.test(n)) return 'm0' + n[1]; // m1..m9 → m01..m09
     if (/^prev_m[1-9]$/.test(n)) return 'prev_m0' + n[6]; // prev_m1..prev_m9 → prev_m01..prev_m09
-    return null;
+    if (custom === '*') return /^[a-z][a-z0-9_]*$/.test(n) && !n.startsWith('prev_') && !/^m\d+$/.test(n) && n !== 'all' ? n : null;
+    return Array.isArray(custom) && custom.includes(n) ? n : null;
 }
 const isMonthVar = (v) => FISCAL_MONTH_VARS.includes(v) || PREV_MONTH_VARS.includes(v);
 
 /** parse สูตร → AST — throw Error (isFormulaError) พร้อมข้อความภาษาไทยถ้าสูตรผิด */
-function parseFormula(src) {
+function parseFormula(src, custom = DEFAULT_CUSTOM_VARS) {
     if (typeof src !== 'string' || !src.trim()) throw formulaError('สูตรว่าง');
     if (src.length > MAX_FORMULA_LENGTH) throw formulaError(`สูตรยาวเกิน ${MAX_FORMULA_LENGTH} ตัวอักษร`);
     const tokens = tokenize(src);
@@ -136,8 +158,8 @@ function parseFormula(src) {
                 return { type: 'fn', name: upper, months };
             }
             if (upper === 'ALL' || upper === 'PREV_ALL') throw formulaError(`${upper} ใช้ได้เฉพาะในฟังก์ชัน เช่น SUM(${upper})`, t.pos);
-            const v = normalizeVar(t.value);
-            if (!v) throw formulaError(`ไม่รู้จัก "${t.value}" (ใช้ได้: m10–m09, target, base, prev_m10–prev_m09, prev_target, prev_result, ${FUNCTIONS.join('/')})`, t.pos);
+            const v = normalizeVar(t.value, custom);
+            if (!v) throw formulaError(`ไม่รู้จัก "${t.value}" (ใช้ได้: m10–m09, target, ${Array.isArray(custom) ? custom.join(', ') + ', ' : ''}prev_m10–prev_m09, prev_target, prev_result, ${FUNCTIONS.join('/')})`, t.pos);
             return { type: 'var', name: v };
         }
         if (t.type === 'end') throw formulaError('สูตรไม่สมบูรณ์', t.pos);
@@ -162,10 +184,11 @@ function evalNode(node, ctx) {
         case 'num': return node.value;
         case 'var':
             if (node.name === 'target') return ctx.target;
-            if (node.name === 'base') return ctx.base;
             if (node.name === 'prev_target') return ctx.prevTarget;
             if (node.name === 'prev_result') return ctx.prevResult;
-            return ctx.months[node.name];
+            if (Object.prototype.hasOwnProperty.call(ctx.months, node.name)) return ctx.months[node.name];
+            // ตัวแปรที่ตั้งชื่อเอง (base, pop, result …) — อ่านเฉพาะ own property (กันชื่อของ Object.prototype)
+            return Object.prototype.hasOwnProperty.call(ctx.vars, node.name) ? ctx.vars[node.name] : null;
         case 'neg': { const v = evalNode(node.arg, ctx); return v === null ? null : -v; }
         case 'bin': {
             const a = evalNode(node.left, ctx), b = evalNode(node.right, ctx);
@@ -212,7 +235,7 @@ const _astCache = new Map();
 function getAst(formula) {
     let ast = _astCache.get(formula);
     if (!ast) {
-        ast = parseFormula(formula);
+        ast = parseFormula(formula, '*');
         if (_astCache.size > 500) _astCache.clear();
         _astCache.set(formula, ast);
     }
@@ -223,17 +246,25 @@ function getAst(formula) {
  * คำนวณผลงานตามสูตร — คืน string (ผลงาน) หรือ null (คำนวณไม่ได้)
  * prev (ไม่บังคับ) = ข้อมูลปีงบที่แล้วของคู่ตัวชี้วัด×หน่วยบริการเดียวกัน { months, target, result }
  *   ไม่ส่ง/ไม่มีข้อมูล → ตัวแปร prev_* เป็น "ไม่มีค่า" (เหมือนเดือนว่าง)
- * base (ไม่บังคับ) = ค่าฐานของคู่ตัวชี้วัด×หน่วยบริการ×ปีงบ (kpi_base_values) — ไม่ส่ง/ไม่ใช่ตัวเลข → base เป็น "ไม่มีค่า"
+ * vars (ไม่บังคับ) = ค่าเพิ่มเติมของคู่ตัวชี้วัด×หน่วยบริการ×ปีงบ { base, pop, … } (kpi_base_values) — ส่งเป็นค่าเดียว = base (แบบเดิม)
+ *   ไม่ส่ง/ไม่ใช่ตัวเลข → ตัวแปรนั้นเป็น "ไม่มีค่า" | สูตรร้อยละส่ง { …, result }
  * สูตรผิดจะ throw (validate ตอนบันทึกตัวชี้วัดแล้ว ปกติจึงไม่เกิด)
  */
-function evaluateFormula(formula, months, target, prev, base) {
+function normalizeVars(vars) {
+    if (vars === null || vars === undefined) return {};
+    if (typeof vars !== 'object') return { base: toNumber(vars) };
+    const out = {};
+    for (const [k, v] of Object.entries(vars)) out[String(k).toLowerCase()] = toNumber(v);
+    return out;
+}
+function evaluateFormula(formula, months, target, prev, vars) {
     const ast = getAst(formula);
     const ctx = {
         months: { ...normalizeMonths(months), ...normalizeMonths(prev && prev.months, 'prev_') },
         target: toNumber(target),
         prevTarget: toNumber(prev && prev.target),
         prevResult: toNumber(prev && prev.result),
-        base: toNumber(base),
+        vars: normalizeVars(vars),
     };
     return formatResult(evalNode(ast, ctx));
 }
@@ -267,9 +298,25 @@ function usesBase(formula) {
     return walk(ast);
 }
 
-/** ตรวจสูตร — คืน null ถ้าถูกต้อง หรือข้อความผิดพลาดภาษาไทย */
-function validateFormula(formula) {
-    try { parseFormula(formula); return null; } catch (e) { return e.message; }
+/** ชื่อตัวแปรที่ตั้งชื่อเองที่สูตรใช้ (ไม่รวมเดือน/target/prev_*) — ใช้ตัดสินว่าต้องโหลดค่าเพิ่มเติมของหน่วยบริการหรือไม่ */
+function formulaVarNames(formula) {
+    let ast;
+    try { ast = getAst(formula); } catch (e) { return []; }
+    const out = new Set();
+    const walk = (n) => {
+        if (!n) return;
+        if (n.type === 'var' && n.name !== 'target' && !PREV_SCALARS.includes(n.name) && !isMonthVar(n.name)) out.add(n.name);
+        if (n.type === 'neg') walk(n.arg);
+        if (n.type === 'bin') { walk(n.left); walk(n.right); }
+    };
+    walk(ast);
+    return [...out];
+}
+
+/** ตรวจสูตร — คืน null ถ้าถูกต้อง หรือข้อความผิดพลาดภาษาไทย
+ *  customKeys = ชื่อค่าเพิ่มเติมของตัวชี้วัด (custom_vars) — base ใช้ได้เสมอ | extra เช่น ['result'] สำหรับสูตรร้อยละ */
+function validateFormula(formula, customKeys, extra) {
+    try { parseFormula(formula, allowedVars(customKeys, extra)); return null; } catch (e) { return e.message; }
 }
 
 /** ค่า result_formula ที่ใช้งานได้ (trim แล้ว) หรือ null ถ้าไม่ได้ตั้ง */
@@ -280,5 +327,6 @@ function activeFormula(indicator) {
 
 module.exports = {
     FISCAL_MONTH_VARS, PREV_MONTH_VARS, FUNCTIONS, MAX_FORMULA_LENGTH,
-    parseFormula, evaluateFormula, validateFormula, activeFormula, normalizeMonths, usesPrevYear, usesBase
+    parseFormula, evaluateFormula, validateFormula, activeFormula, normalizeMonths, usesPrevYear, usesBase,
+    isValidVarKey, allowedVars, formulaVarNames, RESERVED_VAR_NAMES
 };

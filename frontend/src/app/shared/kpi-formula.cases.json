@@ -1,6 +1,12 @@
 {
   "_note": "เคสทดสอบร่วมของสูตรคำนวณผลงาน — ต้องเหมือนกันทุกตัวอักษรกับ frontend/src/app/shared/kpi-formula.cases.json (มี jest test บังคับ)",
   "valid": [
+    { "name": "ค่าเพิ่มเติมตั้งชื่อเอง: อัตราต่อแสนประชากร (pop)", "formula": "SUM(ALL) / pop * 100000", "months": { "oct": "3" }, "target": "", "allowed": ["pop"], "vars": { "pop": "25000" }, "expect": "12" },
+    { "name": "ค่าเพิ่มเติมหลายค่า + base พร้อมกัน", "formula": "(base - SUM(ALL)) / base * 100 + bonus", "months": { "oct": "1" }, "target": "", "allowed": ["bonus"], "vars": { "base": "4.6", "bonus": "1" }, "expect": "79.26" },
+    { "name": "ค่าเพิ่มเติมพิมพ์ใหญ่ใช้ได้ (POP)", "formula": "m10 / POP * 100", "months": { "oct": "5" }, "target": "", "allowed": ["pop"], "vars": { "pop": "50" }, "expect": "10" },
+    { "name": "ค่าเพิ่มเติมยังไม่กรอก → ว่าง", "formula": "SUM(ALL) / pop * 100000", "months": { "oct": "3" }, "target": "", "allowed": ["pop"], "vars": {}, "expect": null },
+    { "name": "สูตรร้อยละ: result เทียบค่าฐาน", "formula": "result / base * 100", "months": {}, "target": "", "allowed": [], "allowExtra": ["result"], "vars": { "base": "20", "result": "5" }, "expect": "25" },
+    { "name": "สูตรร้อยละ: result ÷ target (แบบเดิมเขียนเป็นสูตร)", "formula": "result / target * 100", "months": {}, "target": "80", "allowed": [], "allowExtra": ["result"], "vars": { "result": "60" }, "expect": "75" },
     { "name": "ค่าฐาน: ร้อยละการลดลงจากค่าเฉลี่ย 5 ปี (จมน้ำ ขามทะเลสอ)", "formula": "(base - SUM(ALL)) / base * 100", "months": { "oct": "1" }, "target": "30", "base": "4.6", "expect": "78.26" },
     { "name": "ค่าฐาน: ภาพรวมจังหวัด 173.8 เสียชีวิต 14", "formula": "(base - SUM(ALL)) / base * 100", "months": { "oct": "14" }, "target": "30", "base": "173.8", "expect": "91.94" },
     { "name": "ค่าฐาน: ไม่มีผู้เสียชีวิต (บันทึก 0) = 100", "formula": "(base - SUM(ALL)) / base * 100", "months": { "oct": "0" }, "target": "30", "base": "21.2", "expect": "100" },
@@ -45,6 +51,10 @@
     { "name": "ข้อมูลปีที่แล้วไม่ปนกับเดือนปีนี้ (ALL ไม่รวมปีที่แล้ว)", "formula": "SUM(ALL)", "months": { "oct": "1" }, "target": "", "prev": { "months": { "oct": "100" }}, "expect": "1" }
   ],
   "invalid": [
+    { "name": "ค่าเพิ่มเติมที่ไม่ได้ประกาศ", "formula": "SUM(ALL) / pop", "allowed": ["popx"] },
+    { "name": "result ในสูตรผลงาน (ใช้ได้เฉพาะสูตรร้อยละ)", "formula": "result * 2", "allowed": ["pop"] },
+    { "name": "ชื่อของ Object.prototype แม้ประกาศไว้", "formula": "constructor + 1", "allowed": ["constructor"] },
+    { "name": "ค่าเพิ่มเติมในฟังก์ชัน", "formula": "SUM(pop)", "allowed": ["pop"] },
     { "name": "สูตรว่าง", "formula": "   " },
     { "name": "ชื่อที่ไม่รู้จัก", "formula": "process.exit(1)" },
     { "name": "constructor", "formula": "constructor" },

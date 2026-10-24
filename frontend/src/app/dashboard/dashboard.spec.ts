@@ -707,7 +707,7 @@ describe('DashboardComponent', () => {
   describe('ค่าฐาน (base) ของสูตร — ตัวชี้วัดการเสียชีวิตจากการจมน้ำ', () => {
     const drowning = (extra: any = {}) => ({
       indicator_id: 9, hospcode: '00228', year_bh: '2570', kpi_indicators_name: 'จมน้ำ', target_value: '30', target_condition: 'GTE',
-      result_formula: '(base - SUM(ALL)) / base * 100', base_value: '4.6',
+      result_formula: '(base - SUM(ALL)) / base * 100', cv_base: '4.6',
       oct: '', nov: '', dece: '', jan: '', feb: '', mar: '', apr: '', may: '', jun: '', jul: '', aug: '', sep: '', ...extra });
 
     it('ผลงาน = ร้อยละการลดลงจากค่าฐาน ตรงตารางต้นฉบับ (ขามทะเลสอ 4.6 → 1 ราย = 78.26) และผ่านเกณฑ์ ≥ 30', () => {
@@ -724,15 +724,45 @@ describe('DashboardComponent', () => {
     it('แก้ค่าฐาน → คำนวณใหม่ทันที และนับเป็นการเปลี่ยนแปลงเฉพาะตัวชี้วัดที่ใช้ค่าฐาน', () => {
       const item: any = drowning({ oct: '1' });
       item._original = { ...item };
-      expect(component.isBaseChanged(item)).toBe(false);
-      item.base_value = '9';
-      component.onBaseChange(item);
+      expect(component.isCustomChanged(item)).toBe(false);
+      item.cv_base = '9';
+      component.onCustomChange(item);
       expect(item.last_actual).toBe('88.89');
-      expect(component.isBaseChanged(item)).toBe(true);
-      const plain: any = { ...drowning(), result_formula: 'AVG(ALL)', base_value: '1' };
-      plain._original = { ...plain, base_value: '2' };
-      expect(component.usesBaseItem(plain)).toBe(false);
-      expect(component.isBaseChanged(plain)).toBe(false);
+      expect(component.isCustomChanged(item)).toBe(true);
+      const plain: any = { ...drowning(), result_formula: 'AVG(ALL)', cv_base: '1' };
+      plain._original = { ...plain, cv_base: '2' };
+      expect(component.customVarDefs(plain)).toEqual([]);
+      expect(component.isCustomChanged(plain)).toBe(false);
+    });
+  });
+  describe('ค่าเพิ่มเติม (custom_vars) + สูตรร้อยละ (pct_formula)', () => {
+    const rate = (extra: any = {}) => ({
+      indicator_id: 7, hospcode: '00222', year_bh: '2570', kpi_indicators_name: 'อัตราต่อแสน', target_value: '5.5', target_condition: 'LTE',
+      custom_vars: '[{"key":"pop","label":"ประชากร"}]', result_formula: 'SUM(ALL) / pop * 100000', pct_formula: '(target - result) / target * 100 + 100',
+      cv_pop: '25000', oct: '', nov: '', dece: '', jan: '', feb: '', mar: '', apr: '', may: '', jun: '', jul: '', aug: '', sep: '', ...extra });
+
+    it('ผลงานใช้ค่า pop ของหน่วยบริการ + ร้อยละตามสูตรร้อยละ (ผ่าน/ไม่ผ่านยังเทียบเป้าหมายตามเงื่อนไข)', () => {
+      const item: any = rate({ oct: '1' });
+      component.onValueChange(item, 'oct');
+      expect(item.last_actual).toBe('4');
+      expect(component.calcPercent(item)).toBeCloseTo(127.27, 2);
+      expect(component.isTargetMet(item)).toBe(true);
+      item.oct = '3';
+      component.onValueChange(item, 'oct');
+      expect(item.last_actual).toBe('12');
+      expect(component.isTargetMet(item)).toBe(false);
+    });
+
+    it('ช่องค่าเพิ่มเติม + payload ส่งเฉพาะค่าที่แก้', () => {
+      const item: any = rate({ oct: '1' });
+      item._original = { ...item };
+      expect(component.customVarDefs(item).map(v => v.key)).toEqual(['pop']);
+      expect(component.customPayload(item)).toEqual({});
+      item.cv_pop = '50000';
+      component.onCustomChange(item);
+      expect(item.last_actual).toBe('2');
+      expect(component.isCustomChanged(item)).toBe(true);
+      expect(component.customPayload(item)).toEqual({ cv_pop: '50000' });
     });
   });
 });

@@ -11,8 +11,8 @@ const cases = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
 
 describe('evaluateFormula — สูตรที่ถูกต้อง', () => {
     test.each(cases.valid.map(c => [c.name, c]))('%s', (_n, c) => {
-        expect(validateFormula(c.formula)).toBeNull();
-        expect(evaluateFormula(c.formula, c.months, c.target, c.prev, c.base)).toBe(c.expect);
+        expect(validateFormula(c.formula, c.allowed, c.allowExtra)).toBeNull();
+        expect(evaluateFormula(c.formula, c.months, c.target, c.prev, c.vars ?? c.base)).toBe(c.expect);
     });
 });
 
@@ -28,7 +28,7 @@ test('usesPrevYear: ตรวจว่าสูตรอ้างข้อมู
 
 describe('validateFormula — สูตรที่ผิดต้องถูกปฏิเสธพร้อมข้อความ', () => {
     test.each(cases.invalid.map(c => [c.name, c]))('%s', (_n, c) => {
-        const msg = validateFormula(c.formula);
+        const msg = validateFormula(c.formula, c.allowed, c.allowExtra);
         expect(typeof msg).toBe('string');
         expect(msg.length).toBeGreaterThan(0);
     });
@@ -52,4 +52,11 @@ test('usesBase: ตรวจว่าสูตรอ้างค่าฐาน 
     expect(usesBase('AVG(ALL)')).toBe(false);
     expect(usesBase('target - m10')).toBe(false);
     expect(usesBase('สูตรผิด(')).toBe(false);
+});
+
+test('isValidVarKey / formulaVarNames: ชื่อค่าเพิ่มเติมที่ตั้งเองได้ และตัวแปรที่สูตรใช้', () => {
+    const { isValidVarKey, formulaVarNames } = require('../kpi-formula');
+    for (const ok of ['pop', 'base', 'den_1', 'x']) expect(isValidVarKey(ok)).toBe(true);
+    for (const bad of ['', 'Pop', '1pop', 'result', 'target', 'sum', 'all', 'prev_x', 'm10', 'm5', 'constructor', '__proto__', 'a'.repeat(21), 'ป๊อป']) expect(isValidVarKey(bad)).toBe(false);
+    expect(formulaVarNames('(base - SUM(ALL)) / base * 100 + pop - target + prev_result').sort()).toEqual(['base', 'pop']);
 });

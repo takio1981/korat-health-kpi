@@ -157,7 +157,7 @@ describe('kpi-excel: วางจากคลิปบอร์ด', () => {
 
 describe('kpi-excel — ค่าฐาน (base ของสูตร)', () => {
   it('แบบฟอร์มมีคอลัมน์ "ค่าฐาน" ต่อจากเป้าหมายเมื่อ withBase (แถวที่ไม่มีค่าฐานเว้นว่าง)', () => {
-    const items = [row(1, '00222', { base_value: '21.2' }), row(2, '00223')];
+    const items = [row(1, '00222', { cv_base: '21.2' }), row(2, '00223')];
     const aoa = buildTemplateAoa(items, { withBase: true });
     const head = aoa[1] as string[];
     expect(head.indexOf(EXCEL_HEADERS.base)).toBe(head.indexOf(EXCEL_HEADERS.target) + 1);
@@ -167,17 +167,32 @@ describe('kpi-excel — ค่าฐาน (base ของสูตร)', () => 
   });
 
   it('นำเข้าค่าฐาน: เฉพาะแถวที่ตัวชี้วัดใช้ค่าฐาน + สิทธิ์เดียวกับเป้าหมาย', () => {
-    const withBase = row(1, '00222', { base_value: null });
+    const withBase = row(1, '00222', { cv_base: null });
     const noBase = row(2, '00223');
     const aoa = buildTemplateAoa([withBase, noBase], { withBase: true });
     const h = (aoa[1] as string[]).indexOf(EXCEL_HEADERS.base);
     aoa[2][h] = 4.6; aoa[3][h] = 9;
     const parsed = parseImportAoa(aoa);
-    expect(parsed.fields).toContain('base_value');
+    expect(parsed.fields).toContain('cv_base');
     const plan = planImport(parsed.rows, [withBase, noBase], PERMS);
-    expect(plan.changes.map(c => [c.item.indicator_id, c.field, c.newVal])).toEqual([[1, 'base_value', '4.6']]);
+    expect(plan.changes.map(c => [c.item.indicator_id, c.field, c.newVal])).toEqual([[1, 'cv_base', '4.6']]);
     const denied = planImport(parsed.rows, [withBase, noBase], { canEditActual: true, canEditTarget: false });
     expect(denied.changes).toEqual([]);
     expect(denied.noPerm).toBe(1);
+  });
+});
+
+describe('kpi-excel — ค่าเพิ่มเติมที่ตั้งชื่อเอง', () => {
+  it('คอลัมน์ "ชื่อ [key]" ต่อจากเป้าหมาย + นำเข้าเป็น cv_<key>', () => {
+    const it1 = row(1, '00222', { cv_pop: '25000' });
+    const aoa = buildTemplateAoa([it1], { vars: [{ key: 'pop', label: 'ประชากร' }] });
+    const head = aoa[1] as string[];
+    const h = head.indexOf('ประชากร [pop]');
+    expect(h).toBe(head.indexOf(EXCEL_HEADERS.target) + 1);
+    expect(aoa[2][h]).toBe(25000);
+    aoa[2][h] = 30000;
+    const parsed = parseImportAoa(aoa);
+    expect(parsed.fields).toContain('cv_pop');
+    expect(planImport(parsed.rows, [it1], PERMS).changes.map(c => [c.field, c.newVal])).toEqual([['cv_pop', '30000']]);
   });
 });

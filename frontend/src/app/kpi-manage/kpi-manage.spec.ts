@@ -332,4 +332,31 @@ describe('KpiManageComponent', () => {
       expect(component.formulaUsesBase).toBe(false);
     });
   });
+  describe('ค่าเพิ่มเติม + สูตรร้อยละ ในหน้าต่างตัวชี้วัด', () => {
+    it('ตรวจชื่อค่าเพิ่มเติม + สูตรอ้างชื่อที่ประกาศ + สูตรร้อยละใช้ result', () => {
+      component.currentItem = { custom_vars: [{ key: 'pop', label: 'ประชากร' }], result_formula: 'SUM(ALL) / pop * 100000', pct_formula: '' };
+      expect(component.customVarsError).toBeNull();
+      expect(component.formulaError).toBeNull();
+      component.currentItem.custom_vars.push({ key: 'result', label: 'x' });
+      expect(component.customVarsError).toContain('result');
+      component.currentItem.custom_vars.pop();
+      component.currentItem.pct_formula = 'result / popx';
+      expect(component.pctFormulaError).toContain('popx');
+      component.currentItem.pct_formula = '(target - result) / target * 100 + 100';
+      expect(component.pctFormulaError).toBeNull();
+      component.currentItem.custom_vars = [];
+      expect(component.formulaError).toContain('pop');
+    });
+
+    it('ทดลองคำนวณ: ค่าเพิ่มเติม + ร้อยละตามสูตรร้อยละ', () => {
+      component.currentItem = { custom_vars: [{ key: 'pop', label: 'ประชากร' }], result_formula: 'SUM(ALL) / pop * 100000', pct_formula: '(target - result) / target * 100 + 100' };
+      component.formulaTestMonths = { m10: '1' };
+      component.formulaTestTarget = '5.5';
+      component.formulaTestVars = { pop: '25000' };
+      expect(component.formulaTestVarKeys).toEqual(['pop']);
+      expect(component.formulaTestResult?.value).toBe('4');
+      expect(component.formulaTestResult?.pct).toBe(127.27);
+      expect(component.pctTestResult).toBe(127.27);
+    });
+  });
 });

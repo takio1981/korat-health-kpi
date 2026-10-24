@@ -5,7 +5,8 @@ import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { FormBuilderComponent } from '../form-builder/form-builder';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
-import { validateFormula, evaluateFormula, usesPrevYear, usesBase, FORMULA_FUNCTIONS } from '../shared/kpi-formula';
+import { validateFormula, evaluateFormula, usesPrevYear, usesBase, formulaVarNames, isValidVarKey, FORMULA_FUNCTIONS } from '../shared/kpi-formula';
+import { parseCustomVars } from '../shared/custom-vars';
 import { itemNumber } from '../shared/kpi-rollup';
 import { orderSubTree } from '../shared/sub-tree';
 import Swal from 'sweetalert2';
@@ -871,10 +872,78 @@ export class KpiManageComponent implements OnInit {
     return !!f && !this.formulaError && usesPrevYear(f);
   }
 
-  // สูตรอ้างค่าฐาน (base) ของหน่วยบริการ — แสดงช่องทดลองค่าฐาน + คำอธิบาย
+  // สูตรผลงาน/สูตรร้อยละอ้างค่าฐาน (base) ของหน่วยบริการ — แสดงช่องทดลองค่าฐาน + คำอธิบาย
   get formulaUsesBase(): boolean {
     const f = String(this.currentItem?.result_formula || '').trim();
-    return !!f && !this.formulaError && usesBase(f);
+    const p = String(this.currentItem?.pct_formula || '').trim();
+    return (!!f && !this.formulaError && usesBase(f)) || (!!p && !this.pctFormulaError && usesBase(p));
+  }
+
+  // ===== ค่าเพิ่มเติมของหน่วยบริการที่ตั้งชื่อเอง (custom_vars) + สูตรร้อยละ (pct_formula) — 25 ต.ค. 2569 =====
+  // ชื่อ (key) ใช้ในสูตร ค่าของแต่ละหน่วยบริการกรอกที่หน้าบันทึกผลงาน (ใต้เป้าหมาย) หรือนำเข้า Excel — base (ค่าฐาน) ใช้ได้เสมอ
+  readonly MAX_CUSTOM_VARS = 10;
+  formulaTestVars: Record<string, string> = {};   // ค่าเพิ่มเติมสำหรับทดลองคำนวณ (base ใช้ formulaTestBase)
+  formulaTestResultInput = '';                     // ผลงานสำหรับทดลองสูตรร้อยละ เมื่อไม่ได้ตั้งสูตรผลงาน
+  get customVarKeys(): string[] {
+    return (this.currentItem?.custom_vars || []).map((v: any) => String(v?.key || '').trim().toLowerCase()).filter((k: string) => isValidVarKey(k));
+  }
+  get customVarsError(): string | null {
+    const seen = new Set<string>();
+    for (const v of (this.currentItem?.custom_vars || [])) {
+      const k = String(v?.key || '').trim().toLowerCase();
+      if (!k && !String(v?.label || '').trim()) continue;
+      if (!isValidVarKey(k)) return `ชื่อ "${k || '(ว่าง)'}" ใช้ไม่ได้ — ภาษาอังกฤษตัวเล็ก a-z ตามด้วย a-z 0-9 _ ไม่เกิน 20 ตัว และห้ามซ้ำชื่อในตัว (target, result, m10, prev_…, sum …)`;
+      if (seen.has(k)) return `ชื่อ "${k}" ซ้ำกัน`;
+      seen.add(k);
+    }
+    return seen.size > this.MAX_CUSTOM_VARS ? `ค่าเพิ่มเติมได้ไม่เกิน ${this.MAX_CUSTOM_VARS} ค่า` : null;
+  }
+  addCustomVar(): void {
+    if (!Array.isArray(this.currentItem.custom_vars)) this.currentItem.custom_vars = [];
+    this.currentItem.custom_vars.push({ key: '', label: '' });
+  }
+  removeCustomVar(i: number): void {
+    this.currentItem.custom_vars.splice(i, 1);
+  }
+  get hasPctFormula(): boolean {
+    return !!String(this.currentItem?.pct_formula || '').trim();
+  }
+  get pctFormulaError(): string | null {
+    const p = String(this.currentItem?.pct_formula || '').trim();
+    return p ? validateFormula(p, this.customVarKeys, ['result']) : null;
+  }
+  // ค่าเพิ่มเติมที่สูตรผลงาน/สูตรร้อยละใช้ (ยกเว้น base ที่มีช่องแยก และ result) — แสดงช่องทดลองค่า
+  get formulaTestVarKeys(): string[] {
+    const out = new Set<string>();
+    for (const f of [this.currentItem?.result_formula, this.currentItem?.pct_formula]) {
+      const s = String(f || '').trim();
+      if (s) formulaVarNames(s).forEach(n => { if (n !== 'base' && n !== 'result') out.add(n); });
+    }
+    return [...out];
+  }
+  customVarLabel(key: string): string {
+    return (this.currentItem?.custom_vars || []).find((v: any) => String(v?.key || '').toLowerCase() === key)?.label || key;
+  }
+  private get formulaTestVarValues(): Record<string, any> {
+    return { ...this.formulaTestVars, base: this.formulaTestBase };
+  }
+  // ทดลองสูตรร้อยละ: ผลงาน = ผลทดลองสูตรผลงาน (ถ้ามี) ไม่งั้นใช้ค่าที่กรอก
+  get pctTestResult(): number | null {
+    const p = String(this.currentItem?.pct_formula || '').trim();
+    if (!p || this.pctFormulaError) return null;
+    const result = this.hasFormula && !this.formulaError ? this.formulaTestResult?.value : this.formulaTestResultInput;
+    const v = evaluateFormula(p, this.formulaTestMonths, this.formulaTestTarget, {
+      months: this.formulaTestPrevMonths, target: this.formulaTestPrevTarget, result: this.formulaTestPrevResult,
+    }, { ...this.formulaTestVarValues, result });
+    return v === null ? null : Number(v);
+  }
+  insertPctToken(token: string, input: HTMLInputElement) {
+    const cur = String(this.currentItem.pct_formula || '');
+    const start = input.selectionStart ?? cur.length;
+    const end = input.selectionEnd ?? cur.length;
+    const text = FORMULA_FUNCTIONS.includes(token) ? `${token}(ALL)` : token;
+    this.currentItem.pct_formula = cur.slice(0, start) + text + cur.slice(end);
+    setTimeout(() => { input.focus(); const p = start + text.length; input.setSelectionRange(p, p); });
   }
 
   get hasFormula(): boolean {
@@ -884,7 +953,7 @@ export class KpiManageComponent implements OnInit {
   // null = สูตรถูกต้องหรือไม่ได้ตั้งสูตร
   get formulaError(): string | null {
     const f = String(this.currentItem?.result_formula || '').trim();
-    return f ? validateFormula(f) : null;
+    return f ? validateFormula(f, this.customVarKeys) : null;
   }
 
   get formulaTestResult(): { value: string | null; pct: number | null } | null {
@@ -892,8 +961,13 @@ export class KpiManageComponent implements OnInit {
     if (!f || this.formulaError) return null;
     const value = evaluateFormula(f, this.formulaTestMonths, this.formulaTestTarget, {
       months: this.formulaTestPrevMonths, target: this.formulaTestPrevTarget, result: this.formulaTestPrevResult,
-    }, this.formulaTestBase);
-    // ร้อยละตามเงื่อนไขเป้าหมายที่เลือก (≥ > ≤ < =) — กฎเดียวกับหน้าบันทึกผลงาน (shared/kpi-target.ts)
+    }, this.formulaTestVarValues);
+    // ร้อยละ: สูตรร้อยละ (ถ้าตั้ง) ไม่งั้นตามเงื่อนไขเป้าหมายที่เลือก (≥ > ≤ < =) — กฎเดียวกับหน้าบันทึกผลงาน
+    const p = String(this.currentItem?.pct_formula || '').trim();
+    if (p && !this.pctFormulaError) {
+      const pv = value === null ? null : evaluateFormula(p, this.formulaTestMonths, this.formulaTestTarget, null, { ...this.formulaTestVarValues, result: value });
+      return { value, pct: pv === null ? null : Number(pv) };
+    }
     const r = value === null ? null : evaluateTarget(value, this.formulaTestTarget, this.currentItem?.target_condition);
     return { value, pct: r && r.pct !== null ? Math.round(r.pct * 100) / 100 : null };
   }
@@ -1012,6 +1086,8 @@ export class KpiManageComponent implements OnInit {
     this.formulaTestMonths = {};
     this.formulaTestTarget = String(item?.target_percentage ?? '');
     this.formulaTestBase = '';
+    this.formulaTestVars = {};
+    this.formulaTestResultInput = '';
     this.formulaTestPrevMonths = {};
     this.formulaTestPrevTarget = '';
     this.formulaTestPrevResult = '';
@@ -1029,6 +1105,8 @@ export class KpiManageComponent implements OnInit {
         src.is_cumulative = Number(src.is_cumulative) === 1;
         src.use_sub_indicator_export = Number(src.use_sub_indicator_export) === 1;
         src.result_formula = src.result_formula || '';
+        src.custom_vars = parseCustomVars(src.custom_vars).map(v => ({ ...v }));   // ค่าเพิ่มเติมที่ตั้งชื่อเอง (แก้ไขในหน้าต่าง)
+        src.pct_formula = src.pct_formula || '';
         src.evaluation_mode = src.evaluation_mode || 'any_one';
         src.sub_rollup_mode = src.sub_rollup_mode === 'manual' ? 'manual' : 'auto';
         src.item_no = src.item_no || '';
@@ -1043,7 +1121,7 @@ export class KpiManageComponent implements OnInit {
       if (this.activeTab === 'indicators') {
         this.selectedYutInModal = null;
         this.selectedOffTypes = [];
-        this.currentItem = { ...baseDefaults, r9: false, moph: false, ssj: false, rmw: false, other: false, is_cumulative: false, use_sub_indicator_export: false, result_formula: '', weight: 1, target_condition: 'GTE', evaluation_mode: 'any_one', sub_rollup_mode: 'auto', item_no: '', export_items: false };
+        this.currentItem = { ...baseDefaults, r9: false, moph: false, ssj: false, rmw: false, other: false, is_cumulative: false, use_sub_indicator_export: false, result_formula: '', custom_vars: [], pct_formula: '', weight: 1, target_condition: 'GTE', evaluation_mode: 'any_one', sub_rollup_mode: 'auto', item_no: '', export_items: false };
       } else {
         this.currentItem = { ...baseDefaults };
       }
@@ -1097,8 +1175,16 @@ export class KpiManageComponent implements OnInit {
 
     if (this.activeTab === 'indicators') {
       // สูตรคำนวณผลงานผิด → ไม่ส่งไป backend (backend ก็ปฏิเสธด้วย 400 อยู่แล้ว แต่แจ้งตรงนี้ชัดกว่า)
+      if (this.customVarsError) {
+        Swal.fire('ค่าเพิ่มเติมไม่ถูกต้อง', this.customVarsError, 'warning');
+        return;
+      }
       if (this.formulaError) {
         Swal.fire('สูตรคำนวณผลงานไม่ถูกต้อง', this.formulaError, 'warning');
+        return;
+      }
+      if (this.pctFormulaError) {
+        Swal.fire('สูตรร้อยละไม่ถูกต้อง', this.pctFormulaError, 'warning');
         return;
       }
       // Serialize evaluation_mode + required_off_types (เฉพาะ any_one)
@@ -1107,6 +1193,10 @@ export class KpiManageComponent implements OnInit {
       payload.main_yut = this.selectedYutInModal ?? null;
       delete payload.yut_id; delete payload.yut_name;
       payload.result_formula = String(payload.result_formula || '').trim() || null;
+      payload.custom_vars = (payload.custom_vars || [])
+        .map((v: any) => ({ key: String(v?.key || '').trim().toLowerCase(), label: String(v?.label || '').trim() }))
+        .filter((v: any) => v.key);
+      payload.pct_formula = String(payload.pct_formula || '').trim() || null;
       payload.required_off_types = payload.evaluation_mode === 'any_one' && this.selectedOffTypes.length > 0
         ? this.selectedOffTypes
         : null;

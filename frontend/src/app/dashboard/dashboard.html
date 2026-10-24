@@ -697,12 +697,12 @@
                     <span *ngIf="conditionSymbol(item) as sym" class="ml-1 text-amber-700 font-bold" [title]="conditionTitle(item)">{{ sym }}</span>
                     <span *ngIf="!canShowTargetInput(item)" class="font-bold ml-1">{{ item.target_value || '-' }}</span>
                     <input *ngIf="canShowTargetInput(item)" type="text" [(ngModel)]="item.target_value" class="w-full border border-orange-300 rounded px-1 py-1 text-right text-xs focus:outline-none focus:border-orange-500 transition-colors" [ngClass]="(isModified(item, 'target_value') || isEditingTarget(item)) ? 'bg-orange-100 font-bold text-orange-700 ring-2 ring-orange-400' : 'bg-white'">
-                    <div *ngIf="usesBaseItem(item)" class="mt-1 text-[11px] text-sky-700" title="ค่าฐานของสูตรคำนวณผลงาน (base) เช่น ค่าเฉลี่ย 5 ปี — แก้ได้เช่นเดียวกับเป้าหมาย">
-                    <span>ฐาน</span>
-                    <span *ngIf="!canShowTargetInput(item)" class="ml-1 font-bold">{{ item.base_value || '-' }}</span>
-                    <input *ngIf="canShowTargetInput(item)" type="text" [(ngModel)]="item.base_value" (ngModelChange)="onBaseChange(item)" placeholder="ค่าฐาน"
-                           class="ml-1 w-14 border border-sky-200 rounded px-1 py-0.5 text-right text-[10px] bg-sky-50 outline-none focus:ring-1 focus:ring-sky-500"
-                           [ngClass]="isBaseChanged(item) ? '!bg-orange-100 !text-orange-700 ring-2 ring-orange-400 font-bold' : ''">
+                    <div *ngFor="let v of customVarDefs(item)" class="mt-1 text-[11px] text-sky-700" [title]="v.label + ' (' + v.key + ') — ค่าเพิ่มเติมของหน่วยบริการที่ใช้ในสูตร แก้ได้เช่นเดียวกับเป้าหมาย'">
+                    <span class="block truncate">{{ v.key === 'base' ? 'ฐาน' : v.label }}</span>
+                    <span *ngIf="!canShowTargetInput(item)" class="block font-bold">{{ item['cv_' + v.key] || '-' }}</span>
+                    <input *ngIf="canShowTargetInput(item)" type="text" [(ngModel)]="item['cv_' + v.key]" (ngModelChange)="onCustomChange(item)" [placeholder]="v.label"
+                           class="block w-full mt-0.5 border border-sky-200 rounded px-1 py-0.5 text-right text-[10px] bg-sky-50 outline-none focus:ring-1 focus:ring-sky-500"
+                           [ngClass]="isCustomFieldChanged(item, v.key) ? '!bg-orange-100 !text-orange-700 ring-2 ring-orange-400 font-bold' : ''">
                   </div>
                   </div>
                   <div class="bg-amber-50 p-2 rounded">
@@ -1208,12 +1208,12 @@
                   <input *ngIf="canShowTargetInput(item)" type="text" [(ngModel)]="item.target_value" (paste)="onCellPaste($event, item, 'target_value')"
                          class="w-20 border border-amber-200 rounded px-1 py-1 text-right text-xs focus:ring-1 focus:ring-orange-500 outline-none bg-orange-50 hover:border-orange-400 transition-all"
                          [ngClass]="isModified(item, 'target_value') || isEditingTarget(item) ? '!bg-orange-100 !text-orange-700 ring-2 ring-orange-400 font-bold' : ''">
-                  <div *ngIf="usesBaseItem(item)" class="mt-1 text-[10px] font-normal text-sky-700 whitespace-nowrap" title="ค่าฐานของสูตรคำนวณผลงาน (base) เช่น ค่าเฉลี่ย 5 ปี — แก้ได้เช่นเดียวกับเป้าหมาย">
-                    <span>ฐาน</span>
-                    <span *ngIf="!canShowTargetInput(item)" class="ml-1 font-bold">{{ item.base_value || '-' }}</span>
-                    <input *ngIf="canShowTargetInput(item)" type="text" [(ngModel)]="item.base_value" (ngModelChange)="onBaseChange(item)" placeholder="ค่าฐาน"
-                           class="ml-1 w-14 border border-sky-200 rounded px-1 py-0.5 text-right text-[10px] bg-sky-50 outline-none focus:ring-1 focus:ring-sky-500"
-                           [ngClass]="isBaseChanged(item) ? '!bg-orange-100 !text-orange-700 ring-2 ring-orange-400 font-bold' : ''">
+                  <div *ngFor="let v of customVarDefs(item)" class="mt-1 text-[10px] font-normal text-sky-700 text-left max-w-[86px]" [title]="v.label + ' (' + v.key + ') — ค่าเพิ่มเติมของหน่วยบริการที่ใช้ในสูตร แก้ได้เช่นเดียวกับเป้าหมาย'">
+                    <span class="block truncate">{{ v.key === 'base' ? 'ฐาน' : v.label }}</span>
+                    <span *ngIf="!canShowTargetInput(item)" class="block font-bold">{{ item['cv_' + v.key] || '-' }}</span>
+                    <input *ngIf="canShowTargetInput(item)" type="text" [(ngModel)]="item['cv_' + v.key]" (ngModelChange)="onCustomChange(item)" [placeholder]="v.label"
+                           class="block w-full mt-0.5 border border-sky-200 rounded px-1 py-0.5 text-right text-[10px] bg-sky-50 outline-none focus:ring-1 focus:ring-sky-500"
+                           [ngClass]="isCustomFieldChanged(item, v.key) ? '!bg-orange-100 !text-orange-700 ring-2 ring-orange-400 font-bold' : ''">
                   </div>
                 </td>
 
