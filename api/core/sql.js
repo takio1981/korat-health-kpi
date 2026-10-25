@@ -26,4 +26,7 @@ function targetPassSql(aCol, tCol, condExpr) {
         ` WHEN 'GT' THEN ${a} > ${t} WHEN 'LTE' THEN ${a} <= ${t} WHEN 'LT' THEN ${a} < ${t} WHEN 'EQ' THEN ${a} = ${t} ELSE ${a} >= ${t} END))`;
 }
 
-module.exports = { activeIndicatorSql, targetCondOf, targetHasSql, targetPassSql };
+// ตรวจสอบชื่อตาราง/คอลัมน์ (ป้องกัน SQL Injection) — ย้ายจาก server.js (ส่วน Form Builder) 25 ต.ค. 2569
+const isValidIdentifier = (name) => /^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(name);
+
+module.exports = { activeIndicatorSql, targetCondOf, targetHasSql, targetPassSql, isValidIdentifier };
