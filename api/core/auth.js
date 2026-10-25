@@ -50,24 +50,38 @@ const authenticateToken = async (req, res, next) => {
     const uid = user.userId;
     if (!uid) return next();
 
-    // === ตรวจสอบ session match (Single Session Enforcement) ===
-    // skip ถ้า JWT เก่าไม่มี sessionId (backward compat — token ที่สร้างก่อน feature นี้)
-    if (user.sessionId) {
+    // === ตรวจสอบบัญชี + session (Single Session Enforcement) ===
+    // แคชต่อผู้ใช้ 2 นาที: { sessionId, exists, isActive } — เส้นทางที่ปิดใช้งาน/ลบผู้ใช้/บังคับ logout ต้อง _sessionCache.delete(uid) ให้มีผลทันที
+    // (25 ต.ค. 2569) เดิมปฏิเสธเฉพาะ session ในฐาน "มีค่าและไม่ตรง" → logout/บังคับ logout (NULL) แล้ว token เดิมยังใช้ได้ 8 ชม.
+    //   และบัญชีที่ถูกปิดใช้งาน/ลบแล้วยังเรียก API ได้ — ตอนนี้: ไม่พบบัญชี/ปิดใช้งาน = ACCOUNT_DISABLED, token มี sessionId แต่ในฐานว่าง = SESSION_ENDED
+    {
         const now = Date.now();
         let cached = _sessionCache.get(uid);
         if (!cached || cached.expiry < now) {
             try {
-                const [rows] = await db.query('SELECT active_session_id FROM users WHERE id = ?', [uid]);
-                cached = { sessionId: rows[0]?.active_session_id || null, expiry: now + SESSION_CACHE_TTL };
+                const [rows] = await db.query('SELECT active_session_id, is_active FROM users WHERE id = ?', [uid]);
+                cached = {
+                    sessionId: rows[0]?.active_session_id || null,
+                    exists: rows.length > 0,
+                    isActive: rows.length > 0 && Number(rows[0].is_active) !== 0,
+                    expiry: now + SESSION_CACHE_TTL,
+                };
                 _sessionCache.set(uid, cached);
             } catch (e) {
                 // DB error — log + ปล่อยผ่านเพื่อไม่ให้ระบบล่มทั้งระบบ (แต่ enforcement ถูก bypass)
                 console.error(`❌ [Single Session] SELECT active_session_id ล้มเหลว user_id=${uid} —`, e.message);
                 console.error('   👉 ตรวจสอบว่ามีคอลัมน์ active_session_id ใน users table หรือไม่');
-                cached = { sessionId: user.sessionId, expiry: now + SESSION_CACHE_TTL };
+                cached = { sessionId: user.sessionId || null, exists: true, isActive: true, dbError: true, expiry: now + SESSION_CACHE_TTL };
             }
         }
-        if (cached.sessionId && cached.sessionId !== user.sessionId) {
+        if (!cached.exists || !cached.isActive) {
+            return res.status(401).json({ success: false, code: 'ACCOUNT_DISABLED', message: 'บัญชีนี้ถูกปิดใช้งานหรือไม่มีอยู่ในระบบแล้ว กรุณาติดต่อผู้ดูแลระบบ' });
+        }
+        // token รุ่นเก่าที่ไม่มี sessionId (สร้างก่อนมีระบบนี้) — ข้ามการตรวจ session เหมือนเดิม
+        if (user.sessionId && !cached.sessionId && !cached.dbError) {
+            return res.status(401).json({ success: false, code: 'SESSION_ENDED', message: 'การเข้าสู่ระบบนี้สิ้นสุดแล้ว (ออกจากระบบ หรือผู้ดูแลระบบบังคับออกจากระบบ) กรุณาเข้าสู่ระบบใหม่' });
+        }
+        if (user.sessionId && cached.sessionId && cached.sessionId !== user.sessionId) {
             // ดึงข้อมูล "ใครเตะ" จาก DB ให้เครื่องเก่าเห็น
             let kickInfo = { kicked_by_ip: null, kicked_by_ua: null, kicked_at: null };
             try {

@@ -23,6 +23,10 @@ apiRouter.get('/settings', authenticateToken, async (req, res) => {
 
 apiRouter.post('/settings', authenticateToken, isSuperAdmin, async (req, res) => {
     const settings = req.body; // Expect array of { key, value }
+    // รูปแบบไม่ถูกต้อง → 400 (เดิม: ไม่ใช่ array = 500 "settings.map is not a function", ไม่มี setting_key = 500) — 25 ต.ค. 2569
+    if (!Array.isArray(settings) || settings.length === 0 || settings.some(s => !s || typeof s.setting_key !== 'string' || !s.setting_key.trim())) {
+        return res.status(400).json({ success: false, message: 'รูปแบบข้อมูลตั้งค่าไม่ถูกต้อง' });
+    }
 
     const connection = await db.getConnection();
     try {

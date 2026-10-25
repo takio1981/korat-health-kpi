@@ -8,6 +8,7 @@ const { ROLE_ADMIN_ALL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN
 const { ROLLED_SUB_MESSAGE, activeSubTree, getHierarchyMaxLevels, loadSubAggregates, rolledSubIds, subLevelIn } = require('../services/hierarchy');
 const { _actorLabel, normTargetCondition, normalizeEvalMode, normalizeOffTypes } = require('../services/indicator-fields');
 const { apiRouter } = require('../core/router');
+const { parseActiveFlag, ACTIVE_FLAG_REQUIRED } = require('../core/validate');
 const { authenticateToken, isSuperAdmin } = require('../core/auth');
 const { customVarsOf, normalizeCustomVars, parseFormulaInput } = require('../services/formula-vars');
 const { getUserAuditInfo, logKpiSaveAudit } = require('../services/kpi-audit');
@@ -527,8 +528,11 @@ apiRouter.delete('/sub-indicators/:id', authenticateToken, isSuperAdmin, async (
 
 apiRouter.put('/sub-indicators/:id/toggle-active', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     try {
-        const { is_active } = req.body;
-        await db.query('UPDATE kpi_sub_indicators SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, req.params.id]);
+        // ต้องระบุ is_active ชัดเจน — เดิมไม่ส่งค่า = ปิดใช้งาน, id ที่ไม่มี = "สำเร็จ" (25 ต.ค. 2569)
+        const is_active = parseActiveFlag((req.body || {}).is_active);
+        if (is_active === null) return res.status(400).json({ success: false, message: ACTIVE_FLAG_REQUIRED });
+        const [upd] = await db.query('UPDATE kpi_sub_indicators SET is_active = ? WHERE id = ?', [is_active, req.params.id]);
+        if (!upd.affectedRows) return res.status(404).json({ success: false, message: 'ไม่พบข้อมูล' });
         res.json({ success: true, message: is_active ? 'เปิดใช้งานแล้ว' : 'ปิดใช้งานแล้ว' });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
@@ -624,8 +628,11 @@ apiRouter.put('/sub-activities/:id', authenticateToken, requireAction('kpi-manag
 
 apiRouter.put('/sub-activities/:id/toggle-active', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     try {
-        const { is_active } = req.body;
-        await db.query('UPDATE kpi_sub_activities SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, req.params.id]);
+        // ต้องระบุ is_active ชัดเจน — เดิมไม่ส่งค่า = ปิดใช้งาน, id ที่ไม่มี = "สำเร็จ" (25 ต.ค. 2569)
+        const is_active = parseActiveFlag((req.body || {}).is_active);
+        if (is_active === null) return res.status(400).json({ success: false, message: ACTIVE_FLAG_REQUIRED });
+        const [upd] = await db.query('UPDATE kpi_sub_activities SET is_active = ? WHERE id = ?', [is_active, req.params.id]);
+        if (!upd.affectedRows) return res.status(404).json({ success: false, message: 'ไม่พบข้อมูล' });
         res.json({ success: true, message: is_active ? 'เปิดใช้งานแล้ว' : 'ปิดใช้งานแล้ว' });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
@@ -935,8 +942,11 @@ apiRouter.delete('/sub-results/:id', authenticateToken, isSuperAdmin, async (req
 // --- Toggle is_active สำหรับ Master Data ทั้ง 4 ตาราง ---
 apiRouter.put('/indicators/:id/toggle-active', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     try {
-        const { is_active } = req.body;
-        await db.query('UPDATE kpi_indicators SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, req.params.id]);
+        // ต้องระบุ is_active ชัดเจน — เดิมไม่ส่งค่า = ปิดใช้งาน, id ที่ไม่มี = "สำเร็จ" (25 ต.ค. 2569)
+        const is_active = parseActiveFlag((req.body || {}).is_active);
+        if (is_active === null) return res.status(400).json({ success: false, message: ACTIVE_FLAG_REQUIRED });
+        const [upd] = await db.query('UPDATE kpi_indicators SET is_active = ? WHERE id = ?', [is_active, req.params.id]);
+        if (!upd.affectedRows) return res.status(404).json({ success: false, message: 'ไม่พบข้อมูล' });
         res.json({ success: true, message: is_active ? 'เปิดใช้งานแล้ว' : 'ปิดใช้งานแล้ว' });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Error toggling indicator' });
@@ -945,8 +955,11 @@ apiRouter.put('/indicators/:id/toggle-active', authenticateToken, requireAction(
 
 apiRouter.put('/main-indicators/:id/toggle-active', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     try {
-        const { is_active } = req.body;
-        await db.query('UPDATE kpi_main_indicators SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, req.params.id]);
+        // ต้องระบุ is_active ชัดเจน — เดิมไม่ส่งค่า = ปิดใช้งาน, id ที่ไม่มี = "สำเร็จ" (25 ต.ค. 2569)
+        const is_active = parseActiveFlag((req.body || {}).is_active);
+        if (is_active === null) return res.status(400).json({ success: false, message: ACTIVE_FLAG_REQUIRED });
+        const [upd] = await db.query('UPDATE kpi_main_indicators SET is_active = ? WHERE id = ?', [is_active, req.params.id]);
+        if (!upd.affectedRows) return res.status(404).json({ success: false, message: 'ไม่พบข้อมูล' });
         res.json({ success: true, message: is_active ? 'เปิดใช้งานแล้ว' : 'ปิดใช้งานแล้ว' });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Error toggling main indicator' });
@@ -955,8 +968,11 @@ apiRouter.put('/main-indicators/:id/toggle-active', authenticateToken, requireAc
 
 apiRouter.put('/main-yut/:id/toggle-active', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     try {
-        const { is_active } = req.body;
-        await db.query('UPDATE main_yut SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, req.params.id]);
+        // ต้องระบุ is_active ชัดเจน — เดิมไม่ส่งค่า = ปิดใช้งาน, id ที่ไม่มี = "สำเร็จ" (25 ต.ค. 2569)
+        const is_active = parseActiveFlag((req.body || {}).is_active);
+        if (is_active === null) return res.status(400).json({ success: false, message: ACTIVE_FLAG_REQUIRED });
+        const [upd] = await db.query('UPDATE main_yut SET is_active = ? WHERE id = ?', [is_active, req.params.id]);
+        if (!upd.affectedRows) return res.status(404).json({ success: false, message: 'ไม่พบข้อมูล' });
         res.json({ success: true, message: is_active ? 'เปิดใช้งานแล้ว' : 'ปิดใช้งานแล้ว' });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Error toggling strategy' });
@@ -965,8 +981,11 @@ apiRouter.put('/main-yut/:id/toggle-active', authenticateToken, requireAction('k
 
 apiRouter.put('/departments/:id/toggle-active', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     try {
-        const { is_active } = req.body;
-        await db.query('UPDATE departments SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, req.params.id]);
+        // ต้องระบุ is_active ชัดเจน — เดิมไม่ส่งค่า = ปิดใช้งาน, id ที่ไม่มี = "สำเร็จ" (25 ต.ค. 2569)
+        const is_active = parseActiveFlag((req.body || {}).is_active);
+        if (is_active === null) return res.status(400).json({ success: false, message: ACTIVE_FLAG_REQUIRED });
+        const [upd] = await db.query('UPDATE departments SET is_active = ? WHERE id = ?', [is_active, req.params.id]);
+        if (!upd.affectedRows) return res.status(404).json({ success: false, message: 'ไม่พบข้อมูล' });
         res.json({ success: true, message: is_active ? 'เปิดใช้งานแล้ว' : 'ปิดใช้งานแล้ว' });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Error toggling department' });

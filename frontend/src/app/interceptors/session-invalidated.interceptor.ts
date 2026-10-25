@@ -6,6 +6,7 @@ import Swal from 'sweetalert2';
 
 let isHandlingInvalidated = false;
 let isHandlingExpired = false;
+let isHandlingEnded = false;
 
 /** แปลง User-Agent → ชื่อ browser/OS แบบสั้น (เช่น "Chrome on Windows") */
 function parseUA(ua: string): string {
@@ -52,6 +53,34 @@ export const sessionInvalidatedInterceptor: HttpInterceptorFn = (req, next) => {
           isHandlingExpired = false;
           router.navigate(['/login']);
         });
+      }
+
+      // === 401 SESSION_ENDED / ACCOUNT_DISABLED — ออกจากระบบแล้ว / ถูกบังคับออก / บัญชีถูกปิดใช้งาน (25 ต.ค. 2569) ===
+      // แจ้งเฉพาะเมื่อยังมี token ในเครื่อง (ผู้ใช้ไม่ได้กดออกจากระบบเอง — คำขอที่ค้างหลัง logout ไม่ต้องแจ้ง)
+      if (err.status === 401 && (code === 'SESSION_ENDED' || code === 'ACCOUNT_DISABLED')) {
+        const hadToken = !!localStorage.getItem('kpi_token');
+        // ล้าง token เสมอ (แม้กล่องแจ้งเตือนจากคำขอก่อนหน้ายังเปิดอยู่) — กล่องแจ้งเตือนแสดงครั้งเดียว
+        localStorage.removeItem('kpi_token');
+        localStorage.removeItem('kpi_user');
+        if (hadToken && !isHandlingEnded) {
+          isHandlingEnded = true;
+          const disabled = code === 'ACCOUNT_DISABLED';
+          Swal.fire({
+            icon: 'warning',
+            title: disabled ? 'บัญชีถูกปิดใช้งาน' : 'การเข้าสู่ระบบสิ้นสุดแล้ว',
+            text: disabled
+              ? 'บัญชีของคุณถูกปิดใช้งานหรือถูกลบโดยผู้ดูแลระบบ กรุณาติดต่อผู้ดูแลระบบ'
+              : 'คุณออกจากระบบแล้ว หรือผู้ดูแลระบบบังคับออกจากระบบ กรุณาเข้าสู่ระบบใหม่',
+            confirmButtonText: '<i class="fas fa-sign-in-alt mr-1"></i> เข้าสู่ระบบ',
+            confirmButtonColor: '#10b981',
+            allowOutsideClick: false,
+            timer: 8000,
+            timerProgressBar: true
+          }).then(() => {
+            isHandlingEnded = false;
+            router.navigate(['/login']);
+          });
+        }
       }
 
       if (err.status === 401 && code === 'SESSION_INVALIDATED' && !isHandlingInvalidated) {

@@ -5,6 +5,7 @@
 const db = require('../db');
 const { apiRouter } = require('../core/router');
 const { authenticateToken, isAdmin } = require('../core/auth');
+const { indicatorsOutsideOwnDept, OUTSIDE_DEPT_MESSAGE } = require('../core/access');
 const { cascadeSubResultsStatus } = require('../services/hierarchy');
 const { scheduleSummaryRefresh } = require('../services/summary');
 
@@ -17,6 +18,13 @@ apiRouter.post('/reject-kpi', authenticateToken, isAdmin, async (req, res) => {
 
     if (items.length === 0 || !items[0].indicator_id) {
         return res.status(400).json({ success: false, message: 'No rejection data' });
+    }
+    // ไม่มีเหตุผล → 400 ก่อนเริ่ม transaction (เดิม throw ในลูป → 500) + admin_ssj ส่งคืนได้เฉพาะหน่วยงานตัวเอง
+    if (items.some(i => !i || !i.comment || !String(i.comment).trim())) {
+        return res.status(400).json({ success: false, message: 'กรุณาระบุเหตุผลการส่งคืนแก้ไข' });
+    }
+    if ((await indicatorsOutsideOwnDept(user, items.map(i => i.indicator_id))).length) {
+        return res.status(403).json({ success: false, message: OUTSIDE_DEPT_MESSAGE });
     }
 
     const connection = await db.getConnection();

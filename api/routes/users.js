@@ -7,10 +7,11 @@ const crypto = require('crypto');
 const db = require('../db');
 const { ROLE_ADMIN_CENTRAL, ROLE_ADMIN_LOCAL, getDistrictId, requireAction } = require('../core/access');
 const { apiRouter } = require('../core/router');
-const { authenticateToken, isAdmin, isAnyAdmin, isSuperAdmin } = require('../core/auth');
+const { authenticateToken, isAdmin, isAnyAdmin, isSuperAdmin, _sessionCache } = require('../core/auth');
+const { parseActiveFlag, ACTIVE_FLAG_REQUIRED } = require('../core/validate');
 const { cleanupPendingApprovalNotifications, sendLineToUser, sendMail } = require('../core/notify');
 const { getProviderIdSettings, getThaidSettings } = require('../services/sso');
-const { countUserKpiResults, userHasResultsMessage } = require('../services/users');
+const { countUserKpiResults, userHasResultsMessage, ALL_ROLES, ASSIGNABLE_ROLES, hospcodeInAdminScope } = require('../services/users');
 
 apiRouter.post('/users', authenticateToken, requireAction('users', 'add'), async (req, res) => {
     const { username, password, role, dept_id, firstname, lastname, hospcode, phone, email, cid } = req.body;
@@ -20,9 +21,25 @@ apiRouter.post('/users', authenticateToken, requireAction('users', 'add'), async
 
     // central admin: เปลี่ยน role+dept ได้, local admin: เปลี่ยน dept ได้แต่ role ไม่ได้
     const finalRole = isCentralAdmin ? (role || 'user_hos') : 'user_hos';
-    const finalDeptId = (isCentralAdmin || isLocalAdmin) ? (dept_id || null) : user.deptId;
+    // admin_ssj: หน่วยงานของผู้ใช้ใหม่ = หน่วยงานของ admin_ssj เสมอ (หน้าจอล็อค dropdown หน่วยงานไว้แล้ว — 25 ต.ค. 2569 บังคับฝั่ง backend ด้วย)
+    const finalDeptId = (user.role === 'admin_ssj' && user.deptId != null) ? user.deptId
+        : (isCentralAdmin || isLocalAdmin) ? (dept_id || null) : user.deptId;
+
+    // ตรวจข้อมูล + ขอบเขต (25 ต.ค. 2569) — เดิมไม่มี username/password = 500, admin_ssj สร้าง super_admin ได้ (รอการอนุมัติ), ผู้ดูแลระดับพื้นที่ระบุหน่วยบริการนอกขอบเขตได้
+    if (!username || !String(username).trim() || !password || !String(password).trim()) {
+        return res.status(400).json({ success: false, message: 'กรุณากรอกชื่อผู้ใช้และรหัสผ่าน' });
+    }
+    if (user.role !== 'super_admin' && !ASSIGNABLE_ROLES.includes(finalRole)) {
+        return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์กำหนดสิทธิ์การใช้งาน (Role) นี้' });
+    }
+    if (user.role === 'super_admin' && !ALL_ROLES.includes(finalRole)) {
+        return res.status(400).json({ success: false, message: 'สิทธิ์การใช้งาน (Role) ไม่ถูกต้อง' });
+    }
 
     try {
+        if (!(await hospcodeInAdminScope(user, hospcode))) {
+            return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์เพิ่มผู้ใช้ให้หน่วยบริการนอกขอบเขตของคุณ' });
+        }
         const [existing] = await db.query('SELECT id FROM users WHERE username = ?', [username]);
         if (existing.length > 0) return res.status(400).json({ success: false, message: 'Username exists' });
 
@@ -136,7 +153,11 @@ apiRouter.get('/system/maintenance-status', async (req, res) => {
 
 // เปิด/ปิด maintenance mode (super_admin เท่านั้น)
 apiRouter.put('/system/maintenance-mode', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { enabled, message } = req.body;
+    const { message } = req.body || {};
+    // ต้องระบุ enabled ชัดเจน (25 ต.ค. 2569) — เดิมไม่ส่งค่า = ปิดโหมดปิดปรับปรุงเงียบๆ
+    const flag = parseActiveFlag((req.body || {}).enabled);
+    if (flag === null) return res.status(400).json({ success: false, message: 'กรุณาระบุสถานะเปิด/ปิดโหมดปิดปรับปรุง (enabled)' });
+    const enabled = flag === 1;
     try {
         await db.query(
             "INSERT INTO system_settings (setting_key, setting_value, description) VALUES ('maintenance_mode', ?, 'โหมดปิดปรับปรุงระบบ') ON DUPLICATE KEY UPDATE setting_value = ?",
@@ -163,14 +184,17 @@ apiRouter.put('/system/maintenance-mode', authenticateToken, isSuperAdmin, async
 
 // เปิด/ปิดใช้งานทั้งหมด ยกเว้น super_admin (super_admin เท่านั้น)
 apiRouter.put('/users/bulk-toggle-active', authenticateToken, isSuperAdmin, async (req, res) => {
-    const { is_active } = req.body;
-    const newStatus = is_active ? 1 : 0;
+    const { is_active } = req.body || {};
+    // ต้องระบุค่าชัดเจน (25 ต.ค. 2569) — เดิมไม่ส่ง is_active = ปิดใช้งานผู้ใช้ทุกคนยกเว้น super_admin
+    const newStatus = parseActiveFlag(is_active);
+    if (newStatus === null) return res.status(400).json({ success: false, message: ACTIVE_FLAG_REQUIRED });
     const actionText = newStatus ? 'เปิดใช้งาน' : 'ปิดใช้งาน';
     try {
         const [result] = await db.query(
             'UPDATE users SET is_active = ? WHERE role != ? AND id != ?',
             [newStatus, 'super_admin', req.user.userId]
         );
+        _sessionCache.clear();   // ปิดใช้งานมีผลทันทีกับทุกคน
         await db.query(
             'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
             [req.user.userId, req.user.deptId, newStatus ? 'BULK_ACTIVATE' : 'BULK_DEACTIVATE', 'users',
@@ -228,6 +252,23 @@ apiRouter.put('/users/:id', authenticateToken, requireAction('users', 'edit'), a
     const isHosAdmin = ['admin_hos', 'admin_sso'].includes(user.role);
 
     try {
+        // ผู้ใช้ต้องมีอยู่จริง + บัญชี super_admin แก้ได้เฉพาะ super_admin + ข้อมูลที่จำเป็นต้องครบ (25 ต.ค. 2569)
+        // เดิม super_admin แก้ id ที่ไม่มีอยู่ = "Updated", ส่งข้อมูลว่าง = ตั้ง username/role เป็น NULL
+        const [[targetRow]] = await db.query('SELECT id, role FROM users WHERE id = ?', [userId]);
+        if (!targetRow) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
+        if (!isSuperAdmin && targetRow.role === 'super_admin') {
+            return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์แก้ไขบัญชีผู้ดูแลระบบสูงสุด' });
+        }
+        if (!username || !String(username).trim()) return res.status(400).json({ success: false, message: 'กรุณากรอกชื่อผู้ใช้' });
+        if (isCentralAdmin) {
+            if (!role) return res.status(400).json({ success: false, message: 'กรุณาเลือกสิทธิ์การใช้งาน (Role)' });
+            // admin_ssj กำหนด role ได้เฉพาะในรายการของหน้าจอ (ไม่มี super_admin) — เดิมยกระดับผู้ใช้เป็น super_admin ได้ทันที
+            if (!isSuperAdmin && !ASSIGNABLE_ROLES.includes(role)) {
+                return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์กำหนดสิทธิ์การใช้งาน (Role) นี้' });
+            }
+            if (isSuperAdmin && !ALL_ROLES.includes(role)) return res.status(400).json({ success: false, message: 'สิทธิ์การใช้งาน (Role) ไม่ถูกต้อง' });
+        }
+
         // ตรวจสอบสิทธิ์ตามขอบเขต
         if (user.role === 'admin_ssj') {
             // admin_ssj: ต้อง dept_id เดียวกัน
@@ -247,8 +288,15 @@ apiRouter.put('/users/:id', authenticateToken, requireAction('users', 'edit'), a
             return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์แก้ไขผู้ใช้งาน' });
         }
 
+        // หน่วยบริการใหม่ต้องอยู่ในขอบเขตของผู้ดูแลระดับพื้นที่ (เดิมตรวจเฉพาะหน่วยบริการเดิมของผู้ใช้ — ย้ายไปหน่วยบริการ/อำเภออื่นได้)
+        if (!(await hospcodeInAdminScope(user, hospcode))) {
+            return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์ย้ายผู้ใช้ไปหน่วยบริการนอกขอบเขตของคุณ' });
+        }
+
         const isLocalAdmin = ROLE_ADMIN_LOCAL.includes(user.role);
-        const finalDeptId = (isCentralAdmin || isLocalAdmin) ? (dept_id || null) : user.deptId;
+        // admin_ssj: หน่วยงานคงเป็นหน่วยงานของ admin_ssj (หน้าจอล็อค dropdown หน่วยงานไว้แล้ว)
+        const finalDeptId = (user.role === 'admin_ssj' && user.deptId != null) ? user.deptId
+            : (isCentralAdmin || isLocalAdmin) ? (dept_id || null) : user.deptId;
 
         // อัปเดต cid เฉพาะเมื่อส่ง raw national ID 13 หลักมาเท่านั้น
         // (ป้องกัน frontend ส่ง SHA-256 hash กลับมา → double-hash หรือ null → ลบค่าเดิม)
@@ -294,6 +342,12 @@ apiRouter.delete('/users/:id', authenticateToken, isAnyAdmin, async (req, res) =
     const user = req.user;
 
     try {
+        // ผู้ใช้ต้องมีอยู่จริง (เดิม super_admin ลบ id ที่ไม่มี = "Deleted" + log ปลอม) + บัญชี super_admin ลบได้เฉพาะ super_admin
+        const [[targetRow]] = await db.query('SELECT id, role FROM users WHERE id = ?', [userId]);
+        if (!targetRow) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
+        if (user.role !== 'super_admin' && targetRow.role === 'super_admin') {
+            return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์ลบบัญชีผู้ดูแลระบบสูงสุด' });
+        }
         if (user.role === 'admin_ssj') {
             const [target] = await db.query('SELECT dept_id FROM users WHERE id = ?', [userId]);
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
@@ -317,6 +371,7 @@ apiRouter.delete('/users/:id', authenticateToken, isAnyAdmin, async (req, res) =
         }
 
         await db.query('DELETE FROM users WHERE id = ?', [userId]);
+        _sessionCache.delete(Number(userId));   // token ของผู้ใช้ที่ถูกลบใช้ไม่ได้ทันที (authenticateToken ตรวจว่ามีบัญชี)
         await cleanupPendingApprovalNotifications(userId);
         await db.query(
             'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -337,6 +392,12 @@ apiRouter.put('/users/:id/reset-password', authenticateToken, requireAction('use
     const user = req.user;
     // ตรวจสอบสิทธิ์ตามขอบเขต
     try {
+        // ผู้ใช้ต้องมีอยู่จริง (เดิม super_admin รีเซ็ต id ที่ไม่มี = สำเร็จ + log ปลอม) + บัญชี super_admin รีเซ็ตได้เฉพาะ super_admin
+        const [[targetRow]] = await db.query('SELECT id, role FROM users WHERE id = ?', [userId]);
+        if (!targetRow) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
+        if (user.role !== 'super_admin' && targetRow.role === 'super_admin') {
+            return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์รีเซ็ตรหัสผ่านบัญชีผู้ดูแลระบบสูงสุด' });
+        }
         if (user.role === 'admin_ssj') {
             const [target] = await db.query('SELECT dept_id FROM users WHERE id = ?', [userId]);
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
@@ -527,8 +588,10 @@ apiRouter.put('/users/:id/toggle-active', authenticateToken, isAdmin, async (req
         if (Number(userId) === user.userId) {
             return res.status(400).json({ success: false, message: 'ไม่สามารถปิดใช้งานบัญชีของตัวเองได้' });
         }
-        const newStatus = is_active ? 1 : 0;
+        const newStatus = parseActiveFlag(is_active);
+        if (newStatus === null) return res.status(400).json({ success: false, message: ACTIVE_FLAG_REQUIRED });
         await db.query('UPDATE users SET is_active = ? WHERE id = ?', [newStatus, userId]);
+        _sessionCache.delete(Number(userId));   // ปิดใช้งานมีผลทันที (authenticateToken ตรวจ is_active)
         await db.query(
             'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [user.userId, user.deptId, newStatus ? 'ACTIVATE_USER' : 'DEACTIVATE_USER', 'users', userId,

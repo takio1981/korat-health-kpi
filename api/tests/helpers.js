@@ -13,7 +13,9 @@ function makeToken(payload = {}) {
         role: 'user',
         deptId: 1,
         hospcode: '11000',
-        sessionId: 'test-session-' + Date.now(),
+        // ไม่ใส่ sessionId เป็นค่าตั้งต้น (= token รุ่นเก่า ข้ามการตรวจ session แต่ยังตรวจว่าบัญชีมีอยู่และเปิดใช้งาน) — 25 ต.ค. 2569
+        // ตั้งแต่ authenticateToken ปฏิเสธ token ที่มี sessionId แต่ในฐานไม่มี session (SESSION_ENDED) ชุดทดสอบที่ต้องการ session
+        // ต้องส่ง sessionId เองคู่กับ ensureTestUser({ session_id }) ที่ค่าเดียวกัน
         ...payload
     }, secret, { expiresIn: '8h' });
 }

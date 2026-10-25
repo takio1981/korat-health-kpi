@@ -979,7 +979,7 @@ export class UserManagementComponent implements OnInit {
       : '<div class="text-xs text-gray-400 mt-1">ผู้ใช้นี้ไม่ได้ login อยู่</div>';
     Swal.fire({
       title: 'บังคับออกจากระบบ',
-      html: `<p>ต้องการบังคับ logout <b>${user.username}</b> ใช่หรือไม่?</p>${sessionInfo}<p class="text-xs text-amber-600 mt-2"><i class="fas fa-info-circle mr-1"></i>ผู้ใช้จะถูก logout อัตโนมัติภายใน ~30 วินาที</p>`,
+      html: `<p>ต้องการบังคับ logout <b>${user.username}</b> ใช่หรือไม่?</p>${sessionInfo}<p class="text-xs text-amber-600 mt-2"><i class="fas fa-info-circle mr-1"></i>ผู้ใช้จะถูก logout ทันทีเมื่อเรียกใช้งานระบบครั้งถัดไป</p>`,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#dc2626',

@@ -758,16 +758,22 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - หลักการ: 1 user = 1 active session — login ใหม่ขณะมี session ที่อื่นอยู่จะถูก block (ถ้า last_seen ≤ 5 นาที)
 - `POST /login`: ถ้า `active_session_id` + `last_seen_at > NOW() - 5 MIN` → **409 CONCURRENT_LOGIN** + `last_seen_ip` กลับไปแจ้งผู้ใช้
   - ถ้าผ่าน — สร้าง `sessionId = crypto.randomBytes(24).toString('hex')` → บันทึก DB + ใส่ใน JWT payload
-- `authenticateToken`: เช็ค JWT.sessionId vs DB.active_session_id (cached 30s ผ่าน `_sessionCache`)
+- `authenticateToken` (core/auth.js): อ่าน `active_session_id, is_active` ของผู้ใช้ (แคช 2 นาทีใน `_sessionCache`)
+  - ไม่พบบัญชี / `is_active = 0` → **401 ACCOUNT_DISABLED** (ทุก token)
+  - token มี sessionId แต่ในฐานว่าง (logout / บังคับ logout / session cleanup) → **401 SESSION_ENDED** — ⚠️ แก้ 25 ต.ค. 2569: เดิมปล่อยผ่าน
+    ทำให้ token เดิมใช้ได้ต่อจนหมดอายุ 8 ชม. หลัง logout/บังคับ logout และบัญชีที่ถูกปิดใช้งานยังเรียก API ได้ (พบจากการทดสอบทั้งระบบ)
   - ไม่ตรง → **401 SESSION_INVALIDATED** → frontend interceptor force logout + redirect /login
-  - JWT เก่าที่ไม่มี sessionId (backward compat) → ปล่อยผ่าน
+  - JWT เก่าที่ไม่มี sessionId (backward compat) → ข้ามการตรวจ session (แต่ยังตรวจบัญชี) | DB error → ปล่อยผ่าน (กันระบบล่ม)
+  - เส้นทางที่เปลี่ยนสถานะบัญชีต้องล้างแคช: toggle-active/ลบผู้ใช้ `_sessionCache.delete(uid)`, bulk-toggle-active `_sessionCache.clear()`
+  - ชุดทดสอบ: `makeToken()` ไม่ใส่ sessionId เป็นค่าตั้งต้นแล้ว — ต้องการทดสอบ session ให้ส่ง sessionId คู่กับ `ensureTestUser({ session_id })` (`tests/session-revoke.test.js`)
 - `POST /logout`: clear `active_session_id` + delete `_sessionCache.delete(uid)` + log
 - `POST /admin/force-logout-user/:userId` (super_admin): บังคับ logout user ใดก็ได้ (กรณีฉุกเฉิน)
 - Frontend interceptor: `frontend/src/app/interceptors/session-invalidated.interceptor.ts` — ดักจับ 401 + code SESSION_INVALIDATED → ล้าง localStorage + Swal + redirect
+  — SESSION_ENDED / ACCOUNT_DISABLED: ล้าง token เสมอ, แจ้งเตือนเฉพาะเมื่อยังมี token ในเครื่อง (ไม่แจ้งหลังผู้ใช้กดออกเอง) — Test: `session-invalidated.interceptor.spec.ts`
 - UI ปุ่ม "บังคับ logout" ใน user-management:
   - `GET /users` SELECT รวม `active_session_id, session_started_at, last_seen_at, last_seen_ip` (ใช้ตัดสินว่าใคร online อยู่)
   - ปุ่ม fa-sign-out-alt สีม่วง (mobile + desktop) — `*ngIf="isSuperAdmin && user.active_session_id"`
-  - กดแล้ว confirm dialog แสดง IP + เวลา + เตือน "logout ภายใน ~30 วินาที"
+  - กดแล้ว confirm dialog แสดง IP + เวลา + เตือน "logout ทันทีเมื่อเรียกใช้งานครั้งถัดไป"
   - log: `admin_force_logout` ใน system_logs
 
 ### Report Compare — เทียบตัวชี้วัดกับ KHD (`GET /report-compare`)
@@ -936,6 +942,16 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 | user_hos | hospcode + dept ตัวเอง | ❌ | - |
 | user_sso | hospcode + dept ตัวเอง | ❌ | - |
 | user_ssj | hospcode + dept ตัวเอง | ❌ | - |
+
+### ขอบเขตเมื่อผู้ดูแลเพิ่ม/แก้ไขผู้ใช้ + อนุมัติผลงาน (backend เป็นด่านจริง — แก้ 25 ต.ค. 2569 จากการทดสอบทั้งระบบ)
+- `services/users.js`: `ASSIGNABLE_ROLES` (8 role ในหน้าจอ ไม่มี super_admin) — ผู้ดูแลที่ไม่ใช่ super_admin กำหนด role นอกรายการ = 403
+  (เดิม admin_ssj ตั้งผู้ใช้เป็น super_admin ผ่าน PUT /users/:id ได้ทันที), `hospcodeInAdminScope(user, hospcode)`: admin_hos/admin_sso = หน่วยบริการตัวเอง,
+  admin_cup = อำเภอตัวเอง (เดิมตรวจเฉพาะ hospcode เดิมของผู้ใช้ → ย้ายผู้ใช้ไปหน่วยบริการอื่นได้) — admin_ssj: หน่วยงานของผู้ใช้ = หน่วยงานของ admin_ssj เสมอ
+  — บัญชี super_admin แก้ไข/ลบ/รีเซ็ตรหัสผ่านได้เฉพาะ super_admin | ผู้ใช้ที่ไม่มีอยู่ → 404 | ข้อมูลไม่ครบ → 400 — Test: `api/tests/user-admin-scope.test.js`
+- `core/access.js` `indicatorsOutsideOwnDept(user, ids)`: approve-kpi / reject-kpi / appeal-approve / appeal-reject ของ role ใน ROLE_SCOPE_OWN_DEPT (admin_ssj)
+  ทำได้เฉพาะตัวชี้วัดของหน่วยงานตัวเอง (403) — Test: `api/tests/approval-scope.test.js`
+- `core/validate.js` `parseActiveFlag()`: เส้นทาง toggle-active ทุกตัว + bulk-toggle-active + maintenance-mode **ต้องระบุค่าชัดเจน** (ไม่ส่ง = 400)
+  — เดิม `is_active ? 1 : 0` ทำให้คำขอที่ข้อมูลว่างปิดใช้งาน (bulk-toggle-active ข้อมูลว่าง = ปิดผู้ใช้ทุกคนยกเว้น super_admin) — endpoint ใหม่ที่รับค่าเปิด/ปิดต้องใช้ helper นี้
 
 ### UI Rules ตาม Role
 - **ปุ่มลบ**: `*ngIf="isSuperAdmin"` ทุก component

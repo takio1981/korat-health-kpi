@@ -7,7 +7,7 @@ const { activeIndicatorSql } = require('../core/sql');
 const { apiRouter } = require('../core/router');
 const { authenticateToken, isAdmin, isAnyAdmin, isSuperAdmin } = require('../core/auth');
 const { cascadeSubResultsStatus } = require('../services/hierarchy');
-const { getPermsForUser, invalidateUserPermCache, requireAction } = require('../core/access');
+const { getPermsForUser, invalidateUserPermCache, requireAction, indicatorsOutsideOwnDept, OUTSIDE_DEPT_MESSAGE } = require('../core/access');
 const { scheduleSummaryRefresh } = require('../services/summary');
 
 apiRouter.post('/approve-kpi', authenticateToken, isAdmin, async (req, res) => {
@@ -17,6 +17,10 @@ apiRouter.post('/approve-kpi', authenticateToken, isAdmin, async (req, res) => {
 
     if (items.length === 0 || !items[0].indicator_id) {
         return res.status(400).json({ success: false, message: 'No approval data' });
+    }
+    // admin_ssj อนุมัติได้เฉพาะตัวชี้วัดของหน่วยงานตัวเอง (เดิมตรวจที่หน้าจออย่างเดียว)
+    if ((await indicatorsOutsideOwnDept(user, items.map(i => i.indicator_id))).length) {
+        return res.status(403).json({ success: false, message: OUTSIDE_DEPT_MESSAGE });
     }
 
     const connection = await db.getConnection();
@@ -351,8 +355,11 @@ apiRouter.post('/appeal-kpi', authenticateToken, async (req, res) => {
 
 // Admin อนุมัติอุทธรณ์ → ปลดล็อค
 apiRouter.post('/appeal-approve', authenticateToken, isAdmin, async (req, res) => {
-    const { indicator_id, year_bh, hospcode, comment } = req.body;
+    const { indicator_id, year_bh, hospcode, comment } = req.body || {};
     const user = req.user;
+    // ข้อมูลไม่ครบ → 400 (เดิม 500 "Column 'indicator_id' cannot be null") + ขอบเขตหน่วยงานของ admin_ssj
+    if (!indicator_id || !year_bh || !hospcode) return res.status(400).json({ success: false, message: 'ข้อมูลไม่ครบ (ตัวชี้วัด/ปีงบประมาณ/หน่วยบริการ)' });
+    if ((await indicatorsOutsideOwnDept(user, [indicator_id])).length) return res.status(403).json({ success: false, message: OUTSIDE_DEPT_MESSAGE });
 
     try {
         // ปลดล็อคและเปลี่ยนสถานะเป็น Pending
@@ -393,8 +400,10 @@ apiRouter.post('/appeal-approve', authenticateToken, isAdmin, async (req, res) =
 
 // Admin ปฏิเสธอุทธรณ์ → กลับ Approved/locked
 apiRouter.post('/appeal-reject', authenticateToken, isAdmin, async (req, res) => {
-    const { indicator_id, year_bh, hospcode, comment } = req.body;
+    const { indicator_id, year_bh, hospcode, comment } = req.body || {};
     const user = req.user;
+    if (!indicator_id || !year_bh || !hospcode) return res.status(400).json({ success: false, message: 'ข้อมูลไม่ครบ (ตัวชี้วัด/ปีงบประมาณ/หน่วยบริการ)' });
+    if ((await indicatorsOutsideOwnDept(user, [indicator_id])).length) return res.status(403).json({ success: false, message: OUTSIDE_DEPT_MESSAGE });
 
     if (!comment) {
         return res.status(400).json({ success: false, message: 'กรุณาระบุเหตุผลในการปฏิเสธอุทธรณ์' });
@@ -510,8 +519,10 @@ apiRouter.get('/target-edit-requests', authenticateToken, isAnyAdmin, async (req
 
 // ส่งคำขอแก้ไขเป้าหมาย (admin_cup / admin_ssj / super_admin)
 apiRouter.post('/target-edit-request', authenticateToken, isAnyAdmin, async (req, res) => {
-    const { indicator_id, year_bh, hospcode } = req.body;
+    const { indicator_id, year_bh, hospcode } = req.body || {};
     const user = req.user;
+    // ข้อมูลไม่ครบ → 400 (เดิม 500 "Column 'indicator_id' cannot be null")
+    if (!indicator_id || !year_bh || !hospcode) return res.status(400).json({ success: false, message: 'ข้อมูลไม่ครบ (ตัวชี้วัด/ปีงบประมาณ/หน่วยบริการ)' });
     try {
         const [existing] = await db.query(
             "SELECT id FROM target_edit_requests WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? AND status IN ('pending','approved')",

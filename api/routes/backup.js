@@ -522,7 +522,11 @@ apiRouter.post('/backup/schedules', authenticateToken, isSuperAdmin, async (req,
 apiRouter.put('/backup/schedules/:id', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
         const b = req.body || {};
-        await db.query(
+        // ข้อมูลไม่ครบ → 400 (เดิม 500 "Unknown column 'NaN'" จาก Number(undefined)) — เงื่อนไขเดียวกับ POST
+        if (!b.name || !b.connection_id || !b.days_of_week || !b.time_of_day) {
+            return res.status(400).json({ success: false, message: 'ข้อมูลไม่ครบ (name/connection_id/days_of_week/time_of_day)' });
+        }
+        const [upd] = await db.query(
             `UPDATE backup_schedules SET name=?, is_enabled=?, connection_id=?, days_of_week=?, time_of_day=?, compress=?, retention_days=?,
              notify_email=?, notify_email_on_success=?, notify_email_on_failure=?,
              notify_telegram=?, notify_telegram_on_success=?, notify_telegram_on_failure=?,
@@ -537,6 +541,7 @@ apiRouter.put('/backup/schedules/:id', authenticateToken, isSuperAdmin, async (r
              b.auto_upload_cloud ? 1 : 0,
              Number(req.params.id)]
         );
+        if (!upd.affectedRows) return res.status(404).json({ success: false, message: 'ไม่พบตารางเวลาสำรองข้อมูล' });
         res.json({ success: true, message: 'แก้ไข schedule สำเร็จ' });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });

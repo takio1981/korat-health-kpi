@@ -366,7 +366,7 @@ const SYSTEMS: SopSystem[] = [
   notes:['ผลงานจากตัวชี้วัดย่อย/กิจกรรม: mergeSubIntoSummary() ทับช่องที่ข้อย่อยมีค่าด้วยค่าที่คำนวณ (เหมือนแถวหลักในหน้าบันทึกผลงาน) และสร้างแถวให้ตัวชี้วัดที่มีผลงานเฉพาะข้อย่อย — เฉพาะหลักแบบ "คำนวณจากตัวชี้วัดย่อย"; บันทึกผลงานย่อย/กิจกรรมแล้ว refresh summary ของตัวชี้วัดนั้นทันที','การ์ดหน้าแรก (/dashboard-stats): "กลุ่มงานที่บันทึกแล้ว" และ "รอการตรวจสอบ" นับผลงานข้อย่อย/กิจกรรมด้วย','แผนที่ผลงานรายอำเภอ (ส่วนที่ 7 ของแท็บกราฟ): app-district-map วาด SVG จากรูปร่าง 32 อำเภอที่ฝังมากับแอป (korat-district-shapes.ts — ไม่เรียกแผนที่ภายนอก) ระบายสีจาก by_district ของ /report/chart-stats, คลิก = กรองอำเภอ/คลิกซ้ำ = ยกเลิก, สลับเป็นมุมมองการ์ดได้','ห้าม query kpi_results ตรง — ต้องใช้ kpi_summary เสมอ (เร็วกว่ามาก)','2 tabs ใช้ [hidden] เก็บ state ไม่ destroy component'],
 },{
   id:'users', icon:'👥', title:'ระบบจัดการผู้ใช้งาน', sub:'User Management',
-  desc:'CRUD ผู้ใช้งาน อนุมัติ บังคับ logout | ซิงค์กับ KHD | Force Logout ทำงานใน ~30 วินาที',
+  desc:'CRUD ผู้ใช้งาน อนุมัติ บังคับ logout | ซิงค์กับ KHD | Force Logout / ปิดใช้งาน มีผลทันที (คำขอถัดไป) | admin_ssj กำหนด role ได้เฉพาะในรายการ (ไม่มี super_admin) ผู้ดูแลระดับพื้นที่ย้ายผู้ใช้ได้เฉพาะในขอบเขต',
   actors:['Admin / Super Admin','Super Admin','Backend API','ฐานข้อมูล'],
   nodes:[
     {id:'s',  r:0,c:0,t:'start',   l:'เปิด User Management'},

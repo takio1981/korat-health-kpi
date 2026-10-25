@@ -257,6 +257,19 @@ const ROLE_SCOPE_HOSPCODE = ['user', 'user_hos', 'user_sso', 'admin_hos', 'admin
 const ROLE_SCOPE_OWN_DEPT = ['admin_ssj', 'user_ssj', 'user_hos', 'user_sso', 'user_cup', 'user'];
 
 // Helper: ดึง distid ของ hospcode — ใช้ h.distid (pre-computed) เสมอ ไม่ CONCAT(provcode,distcode) เอง (ดู CLAUDE.md เรื่อง chospital)
+// ตัวชี้วัดที่อยู่นอกหน่วยงานของผู้ใช้ (role ใน ROLE_SCOPE_OWN_DEPT ที่มี dept_id) — คืนรายการ id ที่ไม่มีสิทธิ์ ([] = ผ่านทั้งหมด)
+// ใช้กับการอนุมัติ/ส่งคืน/รับ-ปฏิเสธอุทธรณ์ (isAdmin = admin_ssj + super_admin) — เดิมตรวจที่หน้าจออย่างเดียว admin_ssj
+// เรียก API อนุมัติตัวชี้วัดของหน่วยงานอื่นได้ (พบจากการทดสอบทั้งระบบ 25 ต.ค. 2569) | ตัวชี้วัดที่ไม่มีอยู่ = นับว่านอกขอบเขต
+async function indicatorsOutsideOwnDept(user, indicatorIds) {
+    if (!user || !ROLE_SCOPE_OWN_DEPT.includes(user.role) || user.deptId == null) return [];
+    const ids = [...new Set((indicatorIds || []).map(Number).filter(Boolean))];
+    if (!ids.length) return [];
+    const [rows] = await db.query('SELECT id, dept_id FROM kpi_indicators WHERE id IN (?)', [ids]);
+    const ok = new Set(rows.filter(r => String(r.dept_id) === String(user.deptId)).map(r => Number(r.id)));
+    return ids.filter(id => !ok.has(id));
+}
+const OUTSIDE_DEPT_MESSAGE = 'ไม่มีสิทธิ์ดำเนินการกับตัวชี้วัดของหน่วยงานอื่น';
+
 const getDistrictId = async (hospcode) => {
     if (!hospcode) return null;
     const [rows] = await db.query('SELECT distid FROM chospital WHERE hoscode = ?', [hospcode]);
@@ -293,4 +306,4 @@ setInterval(() => {
     for (const [k, v] of _userPermCache.entries()) if (v.expiry < now) _userPermCache.delete(k);
 }, 5 * 60 * 1000);
 
-module.exports = { PAGE_ACCESS_ROLES, PAGE_ACCESS_PAGES, PAGE_ACCESS_DEFAULT_ENABLED, loadRolePageAccessCache, hasPageAccess, PAGE_ACCESS_RULES, resolvePageKeyFromPath, ACTION_ACCESS_ROLES, ACTION_ACCESS_PAGES, ACTION_TYPES, ACTION_ACCESS_DEFAULT_ENABLED, loadRoleActionAccessCache, hasActionAccess, requireAction, ROLE_ADMIN_ALL, ROLE_ADMIN_CENTRAL, ROLE_ADMIN_LOCAL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, getDistrictId, getPermsForUser, invalidateUserPermCache };
+module.exports = { PAGE_ACCESS_ROLES, PAGE_ACCESS_PAGES, PAGE_ACCESS_DEFAULT_ENABLED, loadRolePageAccessCache, hasPageAccess, PAGE_ACCESS_RULES, resolvePageKeyFromPath, ACTION_ACCESS_ROLES, ACTION_ACCESS_PAGES, ACTION_TYPES, ACTION_ACCESS_DEFAULT_ENABLED, loadRoleActionAccessCache, hasActionAccess, requireAction, ROLE_ADMIN_ALL, ROLE_ADMIN_CENTRAL, ROLE_ADMIN_LOCAL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, getDistrictId, getPermsForUser, invalidateUserPermCache, indicatorsOutsideOwnDept, OUTSIDE_DEPT_MESSAGE };
