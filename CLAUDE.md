@@ -19,10 +19,11 @@
 
 ```
 api/
-  server.js          — Express 5 app + เส้นทาง API ส่วนใหญ่ (~16,400 บรรทัด — กำลังแยกเป็นโมดูลทีละระยะ ดู "การแยก server.js เป็นโมดูล" ด้านล่าง)
+  server.js          — Express 5 app + เส้นทาง API ทั้งหมด (~12,200 บรรทัด — กำลังแยกเป็นโมดูลทีละระยะ ดู "การแยก server.js เป็นโมดูล" ด้านล่าง)
   core/              — ส่วนแกนกลาง (แยกจาก server.js 25 ต.ค. 2569 ระยะ 1): env (ต้อง require แรก), notify, errors, security,
                        access (role constants + สิทธิ์หน้า/เพิ่ม-แก้ไข + แคช), sql (activeIndicatorSql/targetPassSql), auth (authenticateToken, isAdmin…, saveLog)
   migrations/index.js — migration ตอนเริ่มระบบ (ตารางหลัก + seed role_page_access/role_action_access + SSO audit) — export migrationsReady (ระยะ 2)
+  services/          — ตรรกะที่ใช้ร่วมหลายเส้นทาง (ระยะ 3): formula-vars, hierarchy, summary, indicator-scope, export, khd, backup
   scripts/build.js   — build backend → dist/ (ไฟล์ราก ROOT_FILES + โฟลเดอร์โมดูลทั้งโฟลเดอร์ DIRS)
   eslint.config.js   — ตรวจชื่อที่ไม่ได้ประกาศ (no-undef ฯลฯ) — `npm run lint`
   db.js              — MySQL pool (promise-based)
@@ -53,8 +54,25 @@ frontend/src/app/
 
 ### การแยก server.js เป็นโมดูล (เริ่ม 25 ต.ค. 2569 — ผู้ใช้เลือก: แยกโมดูล แต่รัน process เดิม)
 - เป้าหมาย: `core/` (ระยะ 1 ✅) → `migrations/` (ระยะ 2 ✅ — ไฟล์คำนวณ kpi-formula/kpi-rollup/kpi-target/khd-mapping คงไว้ที่ราก `api/`:
-  เป็นโมดูลแยกอยู่แล้ว และมีสำเนาคู่ฝั่ง frontend + test อ้างอิงตำแหน่งเดิมหลายจุด) → `services/` (summary, hierarchy, export, khd, backup) → `routes/<โดเมน>.js` (express.Router, mount ตามลำดับเดิม)
+  เป็นโมดูลแยกอยู่แล้ว และมีสำเนาคู่ฝั่ง frontend + test อ้างอิงตำแหน่งเดิมหลายจุด) → `services/` (ระยะ 3 ✅ — formula-vars, hierarchy, summary, indicator-scope, export, khd, backup) → `routes/<โดเมน>.js` (express.Router, mount ตามลำดับเดิม)
   → `jobs/` (scheduler ทั้ง 4 ยังรัน process เดียวกัน — คิว summary/แคชในหน่วยความจำต้องอยู่ process เดียว) — ทำทีละโดเมน 1 commit
+- **ตำแหน่งฟังก์ชันหลังแยก (หัวข้ออื่นใน CLAUDE.md ที่เขียนว่า "(server.js)" ให้ดูที่นี่):**
+  | โมดูล | ฟังก์ชันหลัก |
+  |---|---|
+  | `core/access.js` | ROLE_* constants, PAGE_ACCESS_RULES/resolvePageKeyFromPath, hasPageAccess, requireAction, getPermsForUser, getDistrictId |
+  | `core/auth.js` | authenticateToken (+ `_sessionCache`), isAdmin/isAnyAdmin/isSuperAdmin, saveLog |
+  | `core/sql.js` | activeIndicatorSql, targetHasSql/targetPassSql/targetCondOf, isValidIdentifier |
+  | `core/notify.js` / `core/errors.js` / `core/security.js` | sendMail/LINE/Telegram/notifyAdmins/getNotifSettings / captureError / SECRET_KEY + ตัวจำกัด + updateSystemSettings |
+  | `services/formula-vars.js` | parseFormulaInput, normalizeCustomVars/customVarsOf/varKeysOf, formulaOk, needsCustomValues |
+  | `services/hierarchy.js` | getHierarchyMaxLevels, activeSubTree, rolledSubIds, loadEffectiveSubMonthly, loadSubAggregates, loadSubExportMonthMap |
+  | `services/summary.js` | scheduleSummaryRefresh/refreshSummaryAfterSubSave, summaryRefreshIdle, withSummaryLock, refreshKpiSummaryForIndicatorYears, mergeSubIntoSummary, applyFormulaToSummary, loadPrevYearData, loadBaseValues/baseKey |
+  | `services/indicator-scope.js` | indicatorTypeSetting, indicatorAllowsHostype, resolveIndicatorHostypes, ALL_BULK_HOSTYPES (คู่กับ frontend `shared/indicator-scope.ts`) |
+  | `services/export.js` | performKpiExport, checkKpiChanges, buildItemExportRows/ensureItemsTable/writeItemsTable (`_items`) |
+  | `services/khd.js` | performSyncToKhd, getKhdEffectiveCriteriaFor, loadKhdResolver, insertIndicatorFromKhd, diffTableColumns |
+  | `services/backup.js` | runBackupJob/runRestoreJob, startBackupScheduler, การเชื่อมต่อ (bkEncrypt/bkDecrypt), Google Drive (resetDriveClientCache), migration ตารางสำรองข้อมูล |
+  — ที่ยังอยู่ใน server.js: เส้นทาง API ทั้งหมด (ระยะ 4), scheduler Export/KPI audit/session cleanup (ระยะ 5), helper เฉพาะเส้นทาง
+  — service ถูก `require` ที่ต้น server.js (ก่อนเส้นทาง) ห้าม require server.js — ย้ายเพิ่มด้วยสคริปต์ที่ใช้ตัวแยกวิเคราะห์ (espree): ชื่อที่โค้ดอ้างแต่ยังเป็น
+  declaration ใน server.js = ต้องย้ายตาม/ย้ายก่อน (ไม่ใช่ส่งผ่านพารามิเตอร์)
 - **ย้ายโค้ดแบบคำต่อคำเท่านั้น** (ไม่แก้ตรรกะในการย้าย) — server.js destructure ชื่อเดิมจากโมดูล โค้ดที่เหลือไม่ต้องแก้; ตัวแปร `let` ที่ถูกกำหนดค่าใหม่
   ห้าม export ตรงๆ (ค่าจะค้าง) — เก็บไว้ในโมดูลเดียวกับผู้ใช้ หรือเปลี่ยนเป็น object; Map/Set แชร์ได้ (object เดียวกัน)
 - ทิศทาง require: routes → services → core → db/lib (core ห้าม require routes/services) — `core/env.js` ต้องเป็น require แรกของ server.js

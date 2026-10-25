@@ -4,6 +4,24 @@
 
 ---
 
+## 2569-10-25 — แยก server.js ระยะ 3: services/ (ตรรกะที่ใช้ร่วมหลายเส้นทาง)
+
+### การแก้ไข
+- 7 โมดูลใน `api/services/`: formula-vars, hierarchy, summary, indicator-scope, export, khd, backup (+ `isValidIdentifier` → `core/sql.js`)
+- ย้ายด้วยสคริปต์ที่ใช้ตัวแยกวิเคราะห์ JavaScript (espree): เลือกทั้ง statement + comment นำหน้า, คำนวณ require ของโมดูลจากชื่อที่โค้ดอ้างจริง,
+  หยุดถ้าโค้ดอ้างชื่อที่ยังเป็น declaration ใน server.js หรือถ้าตัวแปร `let` ถูกใช้นอกโมดูล — service ถูก require ที่ต้น server.js
+- การเปลี่ยนโค้ดที่ไม่ใช่การย้าย 1 จุด: เส้นทาง Google Drive 3 เส้นทางเคยล้างแคชด้วย `_driveClientCache = null; _driveClientKey = null;` ตรงๆ
+  → เปลี่ยนเป็น `resetDriveClientCache()` (ทำงานเหมือนเดิม) เพราะตัวแปร `let` ส่งออกจากโมดูลแล้วกำหนดค่าใหม่จากภายนอกไม่ได้
+- ตัด require ที่ไม่ใช้แล้ว (zlib) — server.js 15,416 → 12,197 บรรทัด (เริ่มต้น 17,388)
+
+### ทดสอบ
+- ESLint ไม่มี error, route inventory เท่าเดิม, API 312/312 บนฐานในเครื่อง + ฐานว่างแบบ CI
+- backend ทดสอบ 3710 (khups_kpi_test_db, บล็อกการเชื่อมต่อออกนอกเครื่อง): หน้าจอหลักเหมือนรอบก่อน (login, สิทธิ์, บันทึกผลงาน → summary อัตโนมัติ, ไม่มี 5xx);
+  สำรองข้อมูล: system-info / files / jobs / schedules / cloud settings / monitor ตอบ 200, ทดสอบการเชื่อมต่อ + ตรวจสิทธิ์ผ่าน, **สำรองฐานทดสอบจริงสำเร็จ** (ไฟล์ + log) แล้วลบไฟล์,
+  กู้คืนด้วย mode ผิด → 400 (ไม่ทดสอบการกู้คืนจริง); ส่งออกตาราง KPI สำเร็จ 1 ตาราง, ตรวจการเปลี่ยนแปลง/sync preview ตอบ 200 — ไม่มี ReferenceError ใน log — ลบข้อมูลทดสอบแล้ว
+
+---
+
 ## 2569-10-25 — แยก server.js ระยะ 2: migration ตอนเริ่มระบบ → api/migrations/ + แก้ CI ล้มเป็นระยะ
 
 ### การแก้ไข
