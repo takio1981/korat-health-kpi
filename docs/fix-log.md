@@ -4,6 +4,29 @@
 
 ---
 
+## 2569-10-25 — แยก server.js ระยะ 4–5: เส้นทาง API → routes/ (21 ไฟล์) + งานเบื้องหลัง → jobs/ — server.js เหลือ 134 บรรทัด
+
+### การแก้ไข
+- `core/router.js` = apiRouter ตัวเดียวทั้งระบบ — ไฟล์ใน `routes/` ลงทะเบียนเส้นทางตอนถูก require และ server.js require แต่ละไฟล์ **ที่ตำแหน่งเดิมของเส้นทางชุดนั้น**
+  → ลำดับเส้นทาง 280 ตัวเหมือนเดิมทุกตัว (route inventory ตรวจทุกครั้งที่ย้าย) — แบ่งไฟล์ตามช่วงต่อเนื่องของไฟล์เดิม (ไม่จัดกลุ่มข้ามช่วง เพราะจะเปลี่ยนลำดับ
+  และเส้นทางก่อน `apiRouter.use(apiLimiter)` ต้องอยู่ก่อนเสมอ)
+- `jobs/`: export-scheduler, kpi-audit, session-cleanup (เริ่มเฉพาะ `require.main` เหมือนเดิม) — services ใหม่: kpi-audit, indicator-fields, sso, users
+- server.js เป็นจุดประกอบระบบ 134 บรรทัด (เริ่มต้น 17,388) — import เฉพาะชื่อที่ใช้
+- การเปลี่ยนที่ไม่ใช่การย้าย (ทำงานเหมือนเดิม): `invalidateAuditSettingsCache()` แทนการกำหนดค่า `let` จากเส้นทาง (3 จุด), `/debug/my-ip` อ่าน
+  `req.app.get('trust proxy')` แทนตัวแปร `app`, `port` ย้ายไป core/env, require กลางไฟล์ (child_process/fs/path/googleapis) ย้ายขึ้นส่วนหัวก่อนแยก
+
+### ปัญหาที่พบระหว่างทำ (จับได้ก่อน commit)
+- routes/auth require `countUserKpiResults` จาก routes/users → เส้นทางผู้ใช้ 15 ตัวถูกลงทะเบียนก่อนตำแหน่งเดิม (route inventory ล้ม) — ย้าย helper ไป services/users
+  และตั้งกฎ: ไฟล์ routes ห้าม require ไฟล์ routes อื่น
+- ตอนแก้ข้อแรก ลบบรรทัด import ของ routes/users ใน server.js ซึ่งเป็นบรรทัดเดียวที่ลงทะเบียนเส้นทางผู้ใช้ → เส้นทางหาย 15 ตัว (280 → 265) — route inventory จับได้ทันที คืนบรรทัด require
+
+### ทดสอบ
+- ESLint ไม่มี error, route inventory เท่าเดิม, API 312/312 บนฐานในเครื่อง + ฐานว่างแบบ CI, ไม่มีไฟล์ routes ที่ require routes อื่น
+- backend ทดสอบ 3710 (`require.main` จริง — scheduler ทั้ง 4 เริ่มทำงาน): หน้าจอหลัก (login, สิทธิ์, บันทึกผลงาน → summary อัตโนมัติ, ไม่มี 5xx),
+  สำรองฐานทดสอบจริงสำเร็จแล้วลบไฟล์, ส่งออกตาราง KPI, เริ่ม SSO ThaID/ProviderID (302 ไปผู้ให้บริการ), callback `/authen/thaid/callback` ตอบ 302 — ไม่มี ReferenceError — ลบข้อมูลทดสอบแล้ว
+
+---
+
 ## 2569-10-25 — แยก server.js ระยะ 3: services/ (ตรรกะที่ใช้ร่วมหลายเส้นทาง)
 
 ### การแก้ไข

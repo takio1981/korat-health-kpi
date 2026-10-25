@@ -4,7 +4,7 @@
 
 - **ชื่อ:** ระบบบันทึกผลงาน KPI ด้านสุขภาพ — สสจ.นครราชสีมา (Korat Health KPI)
 - **Stack:** Angular 21 (Standalone) + Express.js 5 + MySQL/MariaDB
-- **Backend:** `api/server.js` (single file), Port 8830 (prod), 3700 (dev)
+- **Backend:** `api/server.js` (จุดประกอบระบบ ~130 บรรทัด) + `api/core|migrations|services|routes|jobs/` (แยกโมดูล 25 ต.ค. 2569), Port 8830 (prod), 3700 (dev)
 - **Frontend:** `frontend/src/app/`, Port 8881 (prod via nginx), 4500 (dev)
 - **API Base Path:** `/khupskpi/api`
 - **ปีงบประมาณ:** ต.ค. (เดือน 10) ถึง ก.ย. (เดือน 9) — นับชื่อปีงบตามปี พ.ศ. ที่ปีงบสิ้นสุด (ก.ย.) เช่น
@@ -19,11 +19,14 @@
 
 ```
 api/
-  server.js          — Express 5 app + เส้นทาง API ทั้งหมด (~12,200 บรรทัด — กำลังแยกเป็นโมดูลทีละระยะ ดู "การแยก server.js เป็นโมดูล" ด้านล่าง)
+  server.js          — จุดประกอบระบบ (~130 บรรทัด): app + middleware → require routes ตามลำดับ → mount → error handler → listen + jobs (ดู "การแยก server.js เป็นโมดูล")
   core/              — ส่วนแกนกลาง (แยกจาก server.js 25 ต.ค. 2569 ระยะ 1): env (ต้อง require แรก), notify, errors, security,
                        access (role constants + สิทธิ์หน้า/เพิ่ม-แก้ไข + แคช), sql (activeIndicatorSql/targetPassSql), auth (authenticateToken, isAdmin…, saveLog)
   migrations/index.js — migration ตอนเริ่มระบบ (ตารางหลัก + seed role_page_access/role_action_access + SSO audit) — export migrationsReady (ระยะ 2)
-  services/          — ตรรกะที่ใช้ร่วมหลายเส้นทาง (ระยะ 3): formula-vars, hierarchy, summary, indicator-scope, export, khd, backup
+  services/          — ตรรกะที่ใช้ร่วมหลายเส้นทาง (ระยะ 3): formula-vars, hierarchy, summary, indicator-scope, export, khd, backup, kpi-audit,
+                       indicator-fields, sso, users
+  routes/            — เส้นทาง API 21 ไฟล์ แบ่งตามช่วงต่อเนื่องของไฟล์เดิม (ระยะ 4) — ลงทะเบียนกับ apiRouter (core/router.js) ตอนถูก require
+  jobs/              — งานเบื้องหลังตามเวลา (ระยะ 5): export-scheduler, kpi-audit, session-cleanup (ตารางสำรองข้อมูลอยู่ใน services/backup) — process เดียวกัน
   scripts/build.js   — build backend → dist/ (ไฟล์ราก ROOT_FILES + โฟลเดอร์โมดูลทั้งโฟลเดอร์ DIRS)
   eslint.config.js   — ตรวจชื่อที่ไม่ได้ประกาศ (no-undef ฯลฯ) — `npm run lint`
   db.js              — MySQL pool (promise-based)
@@ -54,8 +57,8 @@ frontend/src/app/
 
 ### การแยก server.js เป็นโมดูล (เริ่ม 25 ต.ค. 2569 — ผู้ใช้เลือก: แยกโมดูล แต่รัน process เดิม)
 - เป้าหมาย: `core/` (ระยะ 1 ✅) → `migrations/` (ระยะ 2 ✅ — ไฟล์คำนวณ kpi-formula/kpi-rollup/kpi-target/khd-mapping คงไว้ที่ราก `api/`:
-  เป็นโมดูลแยกอยู่แล้ว และมีสำเนาคู่ฝั่ง frontend + test อ้างอิงตำแหน่งเดิมหลายจุด) → `services/` (ระยะ 3 ✅ — formula-vars, hierarchy, summary, indicator-scope, export, khd, backup) → `routes/<โดเมน>.js` (express.Router, mount ตามลำดับเดิม)
-  → `jobs/` (scheduler ทั้ง 4 ยังรัน process เดียวกัน — คิว summary/แคชในหน่วยความจำต้องอยู่ process เดียว) — ทำทีละโดเมน 1 commit
+  เป็นโมดูลแยกอยู่แล้ว และมีสำเนาคู่ฝั่ง frontend + test อ้างอิงตำแหน่งเดิมหลายจุด) → `services/` (ระยะ 3 ✅ — formula-vars, hierarchy, summary, indicator-scope, export, khd, backup) → `routes/` (ระยะ 4 ✅ — 21 ไฟล์) → `jobs/` (ระยะ 5 ✅ — scheduler ทั้ง 4 ยังรัน process เดียวกัน: คิว summary/แคชในหน่วยความจำต้องอยู่ process เดียว)
+  — ทางเลือกภายหลัง (ยังไม่ทำ): แยก worker process สำหรับงานหนัก ต้องเปลี่ยน `withSummaryLock()`/แคชเป็นกลไกของฐานข้อมูล (GET_LOCK) ก่อน
 - **ตำแหน่งฟังก์ชันหลังแยก (หัวข้ออื่นใน CLAUDE.md ที่เขียนว่า "(server.js)" ให้ดูที่นี่):**
   | โมดูล | ฟังก์ชันหลัก |
   |---|---|
@@ -70,12 +73,24 @@ frontend/src/app/
   | `services/export.js` | performKpiExport, checkKpiChanges, buildItemExportRows/ensureItemsTable/writeItemsTable (`_items`) |
   | `services/khd.js` | performSyncToKhd, getKhdEffectiveCriteriaFor, loadKhdResolver, insertIndicatorFromKhd, diffTableColumns |
   | `services/backup.js` | runBackupJob/runRestoreJob, startBackupScheduler, การเชื่อมต่อ (bkEncrypt/bkDecrypt), Google Drive (resetDriveClientCache), migration ตารางสำรองข้อมูล |
-  — ที่ยังอยู่ใน server.js: เส้นทาง API ทั้งหมด (ระยะ 4), scheduler Export/KPI audit/session cleanup (ระยะ 5), helper เฉพาะเส้นทาง
-  — service ถูก `require` ที่ต้น server.js (ก่อนเส้นทาง) ห้าม require server.js — ย้ายเพิ่มด้วยสคริปต์ที่ใช้ตัวแยกวิเคราะห์ (espree): ชื่อที่โค้ดอ้างแต่ยังเป็น
-  declaration ใน server.js = ต้องย้ายตาม/ย้ายก่อน (ไม่ใช่ส่งผ่านพารามิเตอร์)
+  | `services/kpi-audit.js` | logKpiSaveAudit, getUserAuditInfo, getAuditSettings/invalidateAuditSettingsCache |
+  | `services/indicator-fields.js` | normTargetCondition, normalizeOffTypes, normalizeEvalMode, _actorLabel |
+  | `services/sso.js` / `services/users.js` | getThaidSettings/getProviderIdSettings + THAID_* / countUserKpiResults, userHasResultsMessage |
+  | `core/router.js` / `core/env.js` | apiRouter (ตัวเดียวทั้งระบบ) / port |
+  | `jobs/*.js` | startExportScheduler + runScheduledExport, startKpiAuditScheduler + runKpiAuditDigest, startSessionCleanupJob |
+- **เส้นทาง (routes/) — ลำดับ require ใน server.js = ลำดับเส้นทางเดิม:** auth (ก่อน `apiRouter.use(apiLimiter)` — login/SSO/ลงทะเบียน/public มีตัวจำกัดของตัวเอง;
+  `app.get('/authen/*/callback')` อยู่ใน server.js) → kpi-results (update-kpi) → forms → dashboard → monitoring → lookups → users → settings-access → indicators
+  → approval → announcements → export → reports → (migrations) → review → khd → feedback → db-sync → integrations → backup → kpi-audit
+  — บางไฟล์มีเส้นทางของโดเมนอื่นปนเพราะไฟล์เดิมเรียงไม่ต่อเนื่อง (เช่น POST/DELETE `/departments` อยู่ใน approval/announcements, `/sso` + `/system` อยู่ใน users)
+  ย้ายข้ามไฟล์ได้เฉพาะเมื่อ path ไม่ชนกับเส้นทางอื่น และต้อง `--write` route inventory พร้อมตรวจ diff ว่าเปลี่ยนแค่ลำดับที่ตั้งใจ
+- **เพิ่มเส้นทางใหม่:** เพิ่มในไฟล์ routes/ ของโดเมนนั้น (ใช้ `apiRouter` จาก `../core/router`, middleware จาก `../core/auth`/`../core/access`)
+  — ไฟล์ routes ห้าม require ไฟล์ routes อื่น (จะลงทะเบียนเส้นทางของไฟล์นั้นก่อนตำแหน่งเดิม — เกิดจริงตอนแยก: route inventory จับได้) helper ที่ใช้ร่วมให้อยู่ใน services/
+  — path ที่เจาะจงต้องอยู่ก่อน path ที่มี `:param` ในไฟล์เดียวกัน (เช่น `/users/sync-mapping` ก่อน `/users/:id`) — แล้ว `node tests/lib/route-inventory.js --write`
+- ทิศทาง require: server.js → routes → services → core → db/lib (core/services/jobs/migrations ห้าม require routes หรือ server.js) — ย้ายเพิ่มด้วยสคริปต์ที่ใช้
+  ตัวแยกวิเคราะห์ (espree): ชื่อที่โค้ดอ้างแต่ยังเป็น declaration ในไฟล์ต้นทาง = ต้องย้ายตาม/ย้ายก่อน (ไม่ใช่ส่งผ่านพารามิเตอร์)
 - **ย้ายโค้ดแบบคำต่อคำเท่านั้น** (ไม่แก้ตรรกะในการย้าย) — server.js destructure ชื่อเดิมจากโมดูล โค้ดที่เหลือไม่ต้องแก้; ตัวแปร `let` ที่ถูกกำหนดค่าใหม่
   ห้าม export ตรงๆ (ค่าจะค้าง) — เก็บไว้ในโมดูลเดียวกับผู้ใช้ หรือเปลี่ยนเป็น object; Map/Set แชร์ได้ (object เดียวกัน)
-- ทิศทาง require: routes → services → core → db/lib (core ห้าม require routes/services) — `core/env.js` ต้องเป็น require แรกของ server.js
+- `core/env.js` ต้องเป็น require แรกของ server.js
   (ตัวดัก unhandledRejection/uncaughtException เรียก `captureError` แบบ lazy จาก core/errors)
 - **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (280 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
   ตั้งใจเพิ่ม/แก้ route → `node tests/lib/route-inventory.js --write` แล้วตรวจ diff), `tests/lint.test.js` (ESLint no-undef ฯลฯ — จับชื่อที่ลืม require),
@@ -88,8 +103,10 @@ frontend/src/app/
 
 ### Express Router Pattern
 ```javascript
-const apiRouter = express.Router();
-app.use('/khupskpi/api', apiRouter);
+// routes/<โดเมน>.js — apiRouter ตัวเดียวทั้งระบบ (core/router.js), server.js mount ที่ /khupskpi/api
+const db = require('../db');
+const { apiRouter } = require('../core/router');
+const { authenticateToken } = require('../core/auth');
 
 // ทุก endpoint ใช้ apiRouter ไม่ใช่ app
 apiRouter.get('/endpoint', authenticateToken, async (req, res) => {

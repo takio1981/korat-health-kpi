@@ -226,4 +226,27 @@ async function loadSubExportMonthMap(conn, indicatorId, yearBh, { allLevels = fa
     return map;
 }
 
-module.exports = { HIERARCHY_DEFAULT_MAX_LEVELS, getHierarchyMaxLevels, subLevelIn, activeSubTree, rolledSubIds, ROLLED_SUB_MESSAGE, SUB_AGG_MONTH_KEYS, SUB_AGG_FISCAL_ORDER, subAggNum, loadEffectiveSubMonthly, loadSubAggregates, loadSubExportMonthMap };
+
+// อนุมัติผล KPI และ Lock ข้อมูล (รองรับทั้งรายการเดียวและหลายรายการ)
+// Cascade สถานะ/ล็อคจากตัวชี้วัดหลักไปตัวชี้วัดย่อยทั้งหมดของ indicator นั้น (join ผ่าน kpi_sub_indicators)
+// ใช้โดย approve/reject/unlock/appeal ทุกจุด — ให้ kpi_sub_results.status/is_locked mirror ค่าที่ตั้งบน kpi_results เสมอ
+async function cascadeSubResultsStatus(dbOrConn, indicator_id, year_bh, hospcode, status, is_locked) {
+    let sql = `UPDATE kpi_sub_results sr
+               JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
+               SET sr.status = ?, sr.is_locked = ?
+               WHERE si.indicator_id = ? AND sr.year_bh = ?`;
+    const params = [status, is_locked, indicator_id, year_bh];
+    if (hospcode) { sql += ' AND sr.hospcode = ?'; params.push(hospcode); }
+    await dbOrConn.query(sql, params);
+    // ระดับกิจกรรม (ตัวชี้วัด 3 ระดับ) — mirror เหมือนข้อย่อย
+    let asql = `UPDATE kpi_activity_results ar
+               JOIN kpi_sub_activities a ON ar.activity_id = a.id
+               JOIN kpi_sub_indicators si ON a.sub_indicator_id = si.id
+               SET ar.status = ?, ar.is_locked = ?
+               WHERE si.indicator_id = ? AND ar.year_bh = ?`;
+    const aparams = [status, is_locked, indicator_id, year_bh];
+    if (hospcode) { asql += ' AND ar.hospcode = ?'; aparams.push(hospcode); }
+    await dbOrConn.query(asql, aparams);
+}
+
+module.exports = { HIERARCHY_DEFAULT_MAX_LEVELS, getHierarchyMaxLevels, subLevelIn, activeSubTree, rolledSubIds, ROLLED_SUB_MESSAGE, SUB_AGG_MONTH_KEYS, SUB_AGG_FISCAL_ORDER, subAggNum, loadEffectiveSubMonthly, loadSubAggregates, loadSubExportMonthMap, cascadeSubResultsStatus };

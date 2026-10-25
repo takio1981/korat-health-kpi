@@ -51,3 +51,8 @@ process.on('uncaughtException', (err) => {
         try { captureError({ source: 'backend', severity: 'fatal', message: 'uncaughtException: ' + (err?.message || String(err)), stack: err?.stack }); } catch (_) {}
     });
 });
+
+// ใช้ Port จาก ENV หรือ Default 8830 ตามโจทย์ (ย้ายจาก server.js 25 ต.ค. 2569 — ใช้ร่วมกับ routes/)
+const port = process.env.PORT || 8830;
+
+module.exports = { port };
