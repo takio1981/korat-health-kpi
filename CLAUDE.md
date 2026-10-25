@@ -22,6 +22,7 @@ api/
   server.js          — Express 5 app + เส้นทาง API ส่วนใหญ่ (~16,400 บรรทัด — กำลังแยกเป็นโมดูลทีละระยะ ดู "การแยก server.js เป็นโมดูล" ด้านล่าง)
   core/              — ส่วนแกนกลาง (แยกจาก server.js 25 ต.ค. 2569 ระยะ 1): env (ต้อง require แรก), notify, errors, security,
                        access (role constants + สิทธิ์หน้า/เพิ่ม-แก้ไข + แคช), sql (activeIndicatorSql/targetPassSql), auth (authenticateToken, isAdmin…, saveLog)
+  migrations/index.js — migration ตอนเริ่มระบบ (ตารางหลัก + seed role_page_access/role_action_access + SSO audit) — export migrationsReady (ระยะ 2)
   scripts/build.js   — build backend → dist/ (ไฟล์ราก ROOT_FILES + โฟลเดอร์โมดูลทั้งโฟลเดอร์ DIRS)
   eslint.config.js   — ตรวจชื่อที่ไม่ได้ประกาศ (no-undef ฯลฯ) — `npm run lint`
   db.js              — MySQL pool (promise-based)
@@ -51,7 +52,8 @@ frontend/src/app/
 ## 3. Backend Rules
 
 ### การแยก server.js เป็นโมดูล (เริ่ม 25 ต.ค. 2569 — ผู้ใช้เลือก: แยกโมดูล แต่รัน process เดิม)
-- เป้าหมาย: `core/` → `migrations/` + `lib/` → `services/` (summary, hierarchy, export, khd, backup) → `routes/<โดเมน>.js` (express.Router, mount ตามลำดับเดิม)
+- เป้าหมาย: `core/` (ระยะ 1 ✅) → `migrations/` (ระยะ 2 ✅ — ไฟล์คำนวณ kpi-formula/kpi-rollup/kpi-target/khd-mapping คงไว้ที่ราก `api/`:
+  เป็นโมดูลแยกอยู่แล้ว และมีสำเนาคู่ฝั่ง frontend + test อ้างอิงตำแหน่งเดิมหลายจุด) → `services/` (summary, hierarchy, export, khd, backup) → `routes/<โดเมน>.js` (express.Router, mount ตามลำดับเดิม)
   → `jobs/` (scheduler ทั้ง 4 ยังรัน process เดียวกัน — คิว summary/แคชในหน่วยความจำต้องอยู่ process เดียว) — ทำทีละโดเมน 1 commit
 - **ย้ายโค้ดแบบคำต่อคำเท่านั้น** (ไม่แก้ตรรกะในการย้าย) — server.js destructure ชื่อเดิมจากโมดูล โค้ดที่เหลือไม่ต้องแก้; ตัวแปร `let` ที่ถูกกำหนดค่าใหม่
   ห้าม export ตรงๆ (ค่าจะค้าง) — เก็บไว้ในโมดูลเดียวกับผู้ใช้ หรือเปลี่ยนเป็น object; Map/Set แชร์ได้ (object เดียวกัน)
@@ -61,6 +63,9 @@ frontend/src/app/
   ตั้งใจเพิ่ม/แก้ route → `node tests/lib/route-inventory.js --write` แล้วตรวจ diff), `tests/lint.test.js` (ESLint no-undef ฯลฯ — จับชื่อที่ลืม require),
   `tests/build.test.js` (ไล่ require ทุกชั้นต้องอยู่ในชุดที่ build คัดลอก + build ลงโฟลเดอร์ชั่วคราว), `tests/startup.test.js` (เริ่มระบบ + โหลดผลลัพธ์ build ใน process แยก)
   — middleware ที่สร้างจาก factory/ไลบรารีต้องมีชื่อ (`requireAction(page,action)`, loginIpLimiter/loginLimiter/apiLimiter) ให้ snapshot แยกได้
+- ⚠️ ชุดทดสอบที่เลือกข้อมูลอ้างอิงด้วย `ORDER BY COUNT(*)` ต้องมีตัวเรียงลำดับรอง (เช่น `, hostype, distid`) และเลือกเฉพาะข้อมูลที่เงื่อนไขถัดไปหาเจอแน่
+  — `add-kpi-auto-target.test.js` เคยเลือกประเภทหน่วยบริการแบบสุ่มเมื่อจำนวนเท่ากัน บนฐาน CI (116 แห่ง) บางครั้งได้ประเภทที่มีอำเภอเดียว → CI ล้มเป็นระยะ (แก้ 25 ต.ค. 2569)
+  — ตรวจบนฐานว่างแบบ CI ได้ด้วย container ชั่วคราว (หัวข้อ 9.5) ก่อน push ทุกครั้งที่แก้ migration
 - ESLint baseline พบบั๊กจริง: `POST /login` สาขา `thaid_otp` อ้าง `_thaidOtpMap` ที่ไม่เคยประกาศ (ส่งมา = 500) — แก้แล้ว (ว่างเสมอ = 401)
 
 ### Express Router Pattern
@@ -129,7 +134,8 @@ notifications/pending-kpi, kpi-setup-check, exportable-indicators/checkKpiChange
 - Test: `api/tests/active-indicators.test.js`
 
 ### Auto-Migration Pattern
-เพิ่ม migration ใน section `✅ Auto-create tables` ของ server.js:
+เพิ่ม migration ในบล็อกหลักของ `api/migrations/index.js` (ย้ายจาก section `✅ Auto-create tables` ของ server.js เมื่อ 25 ต.ค. 2569 — ระยะ 2;
+migration ของตารางสำรองข้อมูลยังอยู่ใน server.js ใกล้ส่วนสำรองข้อมูล) — `require('./migrations')` เริ่มทำงานทันที, `migrationsReady` = promise ของบล็อกหลัก:
 ```javascript
 try { await db.query('ALTER TABLE x ADD COLUMN y ...'); } catch (e) {}
 ```

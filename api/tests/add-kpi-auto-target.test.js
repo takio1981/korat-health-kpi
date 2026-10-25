@@ -41,8 +41,11 @@ beforeAll(async () => {
     const [[d]] = await db.query('SELECT id FROM departments ORDER BY id LIMIT 1');
     deptId = d.id;
     // อำเภอที่มีหน่วยบริการประเภทเดียวกัน ≥ 2 แห่ง + หน่วยบริการประเภทเดียวกันในอำเภออื่น
+    // (25 ต.ค. 2569) เลือกเฉพาะประเภทที่มีในอย่างน้อย 2 อำเภอ + เรียงลำดับแน่นอน — เดิมเรียงด้วย COUNT(*) อย่างเดียว ค่าที่เท่ากันได้ลำดับสุ่ม
+    // บนฐาน CI (หน่วยบริการ 116 แห่ง) บางครั้งได้ประเภทที่มีอำเภอเดียว → ไม่พบหน่วยบริการ "อำเภออื่น" → ชุดทดสอบล้ม (CI ล้มเป็นระยะ)
     const [[g]] = await db.query(`SELECT hostype, distid FROM chospital WHERE hostype <> '' AND distid <> ''
-        GROUP BY hostype, distid HAVING COUNT(*) >= 2 ORDER BY COUNT(*) DESC LIMIT 1`);
+        AND hostype IN (SELECT hostype FROM chospital WHERE distid <> '' GROUP BY hostype HAVING COUNT(DISTINCT distid) >= 2)
+        GROUP BY hostype, distid HAVING COUNT(*) >= 2 ORDER BY COUNT(*) DESC, hostype, distid LIMIT 1`);
     typeA = String(g.hostype);
     const [same] = await db.query('SELECT hoscode FROM chospital WHERE hostype = ? AND distid = ? ORDER BY hoscode LIMIT 2', [typeA, g.distid]);
     [hA1, hA2] = same.map(r => r.hoscode);
