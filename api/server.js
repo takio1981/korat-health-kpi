@@ -572,6 +572,8 @@ const apiLimiter = rateLimit({
     legacyHeaders: false,
     message: { success: false, message: 'เรียก API ถี่เกินไป กรุณารอสักครู่' }
 });
+// ตั้งชื่อฟังก์ชัน middleware (ไม่เปลี่ยนการทำงาน) — ให้ tests/route-inventory.test.js แยกได้ว่าเส้นทางใดใช้ตัวจำกัดตัวไหน
+for (const [n, fn] of Object.entries({ loginIpLimiter, loginLimiter, apiLimiter })) Object.defineProperty(fn, 'name', { value: n });
 
 const SECRET_KEY = process.env.SECRET_KEY;
 if (!SECRET_KEY) {
@@ -834,11 +836,13 @@ function hasActionAccess(role, pageKey, action) {
 // Middleware factory — ใช้แทน isAdmin/isAnyAdmin/isSuperAdmin เดิมตรงๆ บน endpoint เพิ่ม/แก้ไขที่เลือกไว้
 function requireAction(pageKey, action) {
     const actionLabel = action === 'add' ? 'เพิ่ม' : 'แก้ไข';
-    return (req, res, next) => {
+    const mw = (req, res, next) => {
         const role = req.user?.role;
         if (role && hasActionAccess(role, pageKey, action)) return next();
         res.status(403).json({ success: false, message: `ไม่มีสิทธิ์${actionLabel}ข้อมูลในหน้านี้` });
     };
+    Object.defineProperty(mw, 'name', { value: `requireAction(${pageKey},${action})` }); // ชื่อสำหรับ route inventory
+    return mw;
 }
 
 const authenticateToken = async (req, res, next) => {
@@ -1059,6 +1063,10 @@ apiRouter.get('/debug/my-ip', (req, res) => {
         note: 'ถ้า req_ip เป็น docker bridge IP (172.x.x.x) สำหรับ user ทุกคน = nginx X-Forwarded-For ไม่ทำงาน — แก้ nginx config ให้ส่ง XFF header'
     });
 });
+
+// รหัส ThaiD OTP แบบใช้ครั้งเดียว (code → { username, userId, expires }) — ยังไม่มีจุดใดสร้างรหัส จึงว่างเสมอ = ปฏิเสธทุกรหัสด้วย 401
+// (เดิมไม่ได้ประกาศตัวแปรนี้เลย → ส่ง thaid_otp มา = ReferenceError → 500 — พบจาก ESLint no-undef 25 ต.ค. 2569)
+const _thaidOtpMap = new Map();
 
 apiRouter.post('/login', loginIpLimiter, loginLimiter, async (req, res) => {
     const { username, password, force_login, thaid_otp } = req.body;
@@ -17385,4 +17393,4 @@ if (require.main === module) {
         startSessionCleanupJob();
     });
 }
-module.exports = { app, captureError, migrationsReady, loadSubAggregates, loadSubExportMonthMap, refreshKpiSummaryForIndicatorYears, scheduleSummaryRefresh, summaryRefreshIdle };
+module.exports = { app, apiRouter, captureError, migrationsReady, loadSubAggregates, loadSubExportMonthMap, refreshKpiSummaryForIndicatorYears, scheduleSummaryRefresh, summaryRefreshIdle };

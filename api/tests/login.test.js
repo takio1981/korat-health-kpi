@@ -81,3 +81,16 @@ describe('POST /khupskpi/api/login', () => {
         expect(res.body.message).toMatch(/ปิดใช้งาน/);
     });
 });
+
+// Regression (25 ต.ค. 2569 — พบจาก ESLint baseline): สาขา ThaiD OTP ใน POST /login อ้าง `_thaidOtpMap` ที่ไม่เคยถูกประกาศ
+// → ส่ง thaid_otp มา = ReferenceError → 500 แทนที่จะปฏิเสธด้วย 401 (และไม่มีจุดใดสร้างรหัส OTP — รหัสทุกตัวจึงต้องถูกปฏิเสธ)
+describe('POST /login — thaid_otp ที่ไม่ถูกต้อง', () => {
+    test('❌ รหัส ThaiD ที่ไม่มีในระบบ → 401 (ไม่ใช่ 500)', async () => {
+        const res = await request(app)
+            .post('/khupskpi/api/login')
+            .send({ username: 'test_user_login', thaid_otp: 'not-a-real-otp' });
+        expect(res.status).toBe(401);
+        expect(res.body.success).toBe(false);
+        expect(res.body.message).toMatch(/ThaiD/);
+    });
+});
