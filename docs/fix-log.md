@@ -4,6 +4,34 @@
 
 ---
 
+## 2569-10-25 — แยก api/server.js เป็นโมดูล (ระยะ 0–1) + แก้เข้าสู่ระบบด้วยรหัส ThaiD ได้ 500
+
+### ความต้องการ
+- ผู้ใช้ต้องการออกแบบการแบ่งระบบ API ใน server.js (17,388 บรรทัด, 279 เส้นทาง, migration + scheduler 4 งานในไฟล์เดียว) เพื่อลดภาระและความเสี่ยง
+  — ผู้ใช้เลือก: ออกแบบทั้งหมด + ทำระยะแรก, แยกโมดูลแต่รัน process เดิม (แผนเต็มอยู่ใน CLAUDE.md หัวข้อ 3 "การแยก server.js เป็นโมดูล")
+
+### ระยะ 0 — ตาข่ายกันพัง (commit 510d3acb)
+- `tests/route-inventory.test.js` + fixture: 280 เส้นทาง (method, path, ชื่อ middleware, ลำดับ) ต้องเท่าเดิม — ตั้งชื่อ middleware ของ `requireAction()` และตัวจำกัด 3 ตัว (ไม่เปลี่ยนการทำงาน)
+- ESLint (`eslint.config.js`, `npm run lint`, `tests/lint.test.js` รันใน process แยก — ESLint 9 ใช้ dynamic import ที่ Jest ไม่รองรับ)
+- build ย้ายไป `scripts/build.js` (ไฟล์ราก + คัดลอกโฟลเดอร์โมดูลทั้งโฟลเดอร์) + `build.test.js` ไล่ require ทุกชั้น + `startup.test.js` โหลดผลลัพธ์ build ใน process แยก
+
+### บั๊กที่พบจาก ESLint baseline
+- อาการ: `POST /login` ที่ส่ง `thaid_otp` → 500 (ReferenceError: `_thaidOtpMap` is not defined) แทนที่จะปฏิเสธด้วย 401
+- สาเหตุ: สาขา ThaiD OTP อ้าง Map ที่ไม่เคยประกาศ และไม่มีจุดใดสร้างรหัส — แก้: ประกาศ Map (ว่างเสมอ = ทุกรหัสได้ 401 "รหัส ThaiD หมดอายุ")
+- Regression test ใน `tests/login.test.js` (ล้มกับโค้ดเดิม: ได้ 500)
+
+### ระยะ 1 — แยกส่วนแกนกลาง `api/core/`
+- ย้ายแบบคำต่อคำด้วยสคริปต์ (ตรวจข้อความที่ขอบช่วงทุกช่วง + ห้าม export ตัวแปร let ที่ใช้นอกโมดูล): env, notify, errors, security, access, sql, auth — 1,034 บรรทัด
+- server.js 17,397 → 16,421 บรรทัด, ตัด require ที่ไม่ใช้แล้ว (express-rate-limit, nodemailer)
+
+### ทดสอบ
+- ESLint ไม่มี error, route inventory เท่าเดิมทุกเส้นทาง, API 32 ชุด 312 กรณี ผ่าน 2 รอบ (frontend ไม่เปลี่ยน)
+- หน้าจอจริง (backend 3710 → khups_kpi_test_db, บล็อกการเชื่อมต่อออกนอกเครื่อง): login super_admin/user_hos (ประกาศระบบ + 409 single session ทำงาน),
+  หน้าจัดการตัวชี้วัด/ตั้งค่า/รายงาน/แจ้งเตือนโหลดได้, user_hos ถูกปฏิเสธ `/users` (PAGE_ACCESS_DENIED) และ `POST /indicators` (403),
+  บันทึกผลงาน `/update-kpi` → kpi_results + kpi_summary อัปเดตอัตโนมัติ, ไม่มี 5xx — ลบข้อมูลทดสอบแล้ว
+
+---
+
 ## 2569-10-25 — ค่าเพิ่มเติมที่ตั้งชื่อเอง (หลายค่า) + สูตรร้อยละของตัวชี้วัด
 
 ### ความต้องการ
