@@ -715,10 +715,23 @@
                   </div>
                   <div class="bg-gray-50 p-2 rounded">
                     <span class="text-gray-600">ร้อยละ:</span>
-                    <span class="font-bold ml-1" [ngClass]="isTargetMet(item) ? 'text-green-600' : 'text-red-600'">{{ calcPercent(item) | number:'1.2-2' }}%</span>
+                    <span class="font-bold ml-1" [ngClass]="isTargetMet(item) ? 'text-green-600' : 'text-red-600'">{{ pctText(item) }}</span>
                   </div>
                 </div>
 
+                <!-- ผลงานล่าสุด / ร้อยละ แบบกรอกเอง (มือถือ — 29 ต.ค. 2569) -->
+                <div *ngIf="isEditing && (isManualResult(item) || isManualPct(item)) && canEditManual(item)" class="grid grid-cols-2 gap-2 text-xs mb-2">
+                  <label *ngIf="isManualResult(item)" class="block p-1 rounded bg-teal-50 border border-teal-200">
+                    <span class="block text-teal-700 font-bold mb-1">ผลงานล่าสุด (กรอกเอง)</span>
+                    <input type="text" [(ngModel)]="item.manual_result" (ngModelChange)="onValueChange(item, '')" class="w-full border border-teal-300 rounded px-1 py-1 text-center bg-white"
+                           [ngClass]="isManualFieldChanged(item, 'manual_result') ? '!bg-orange-100 ring-2 ring-orange-400 font-bold' : ''">
+                  </label>
+                  <label *ngIf="isManualPct(item)" class="block p-1 rounded bg-teal-50 border border-teal-200">
+                    <span class="block text-teal-700 font-bold mb-1">ร้อยละ (กรอกเอง)</span>
+                    <input type="text" [(ngModel)]="item.manual_pct" class="w-full border border-teal-300 rounded px-1 py-1 text-center bg-white"
+                           [ngClass]="isManualPctInvalid(item) ? '!bg-red-100 ring-2 ring-red-500' : (isManualFieldChanged(item, 'manual_pct') ? '!bg-orange-100 ring-2 ring-orange-400 font-bold' : '')">
+                  </label>
+                </div>
                 <div class="grid grid-cols-3 gap-2 text-xs" *ngIf="isEditing">
                   <div *ngFor="let month of [{key: 'oct', name: 'ต.ค.'}, {key: 'nov', name: 'พ.ย.'}, {key: 'dece', name: 'ธ.ค.'}, {key: 'jan', name: 'ม.ค.'}, {key: 'feb', name: 'ก.พ.'}, {key: 'mar', name: 'มี.ค.'}, {key: 'apr', name: 'เม.ย.'}, {key: 'may', name: 'พ.ค.'}, {key: 'jun', name: 'มิ.ย.'}, {key: 'jul', name: 'ก.ค.'}, {key: 'aug', name: 'ส.ค.'}, {key: 'sep', name: 'ก.ย.'}]"
                        class="text-center p-1 rounded relative"
@@ -1219,14 +1232,26 @@
 
                 <!-- Col 7: ผลงานล่าสุด -->
                 <td *ngIf="colVisible['lastActual']" class="px-2 py-2 frozen col-7 bg-blue-50 font-bold text-right whitespace-nowrap border-r border-gray-100"
-                  [ngClass]="isTargetMet(item) ? 'text-blue-600' : 'text-red-600'">
-                  {{ item.last_actual || '-' }}
+                  [ngClass]="isTargetMet(item) ? 'text-blue-600' : 'text-red-600'"
+                  [title]="isManualResult(item) ? 'ผลงานล่าสุดกรอกเอง (ไม่คำนวณจากรายเดือน)' : ''">
+                  <!-- ผลงานล่าสุดแบบกรอกเอง (29 ต.ค. 2569) -->
+                  <input *ngIf="isManualResult(item) && canEditManual(item)" type="text" [(ngModel)]="item.manual_result" (ngModelChange)="onValueChange(item, '')" placeholder="กรอก"
+                         class="w-20 border border-teal-300 rounded px-1 py-1 text-right text-xs outline-none bg-teal-50 focus:ring-1 focus:ring-teal-500"
+                         [ngClass]="isManualFieldChanged(item, 'manual_result') ? '!bg-orange-100 !text-orange-700 ring-2 ring-orange-400 font-bold' : ''">
+                  <ng-container *ngIf="!(isManualResult(item) && canEditManual(item))">{{ item.last_actual || '-' }}</ng-container>
                 </td>
 
                 <!-- Col 8: ร้อยละ (last frozen) -->
                 <td *ngIf="colVisible['pct']" class="px-2 py-2 frozen col-8 bg-gray-50 font-bold border-r border-gray-100 text-center whitespace-nowrap"
-                  [ngClass]="isTargetMet(item) ? 'text-green-600' : 'text-red-600'">
-                  {{ calcPercent(item) | number:'1.2-2' }}%
+                  [ngClass]="isTargetMet(item) ? 'text-green-600' : 'text-red-600'"
+                  [title]="isManualPct(item) ? 'ร้อยละกรอกเอง — ผ่านเกณฑ์เมื่อ ≥ 100' : ''">
+                  <!-- ร้อยละแบบกรอกเอง (29 ต.ค. 2569) -->
+                  <span *ngIf="isManualPct(item) && canEditManual(item)" class="inline-flex items-center gap-0.5">
+                    <input type="text" [(ngModel)]="item.manual_pct" placeholder="%"
+                           class="w-16 border border-teal-300 rounded px-1 py-1 text-right text-xs outline-none bg-teal-50 focus:ring-1 focus:ring-teal-500"
+                           [ngClass]="isManualPctInvalid(item) ? '!bg-red-100 ring-2 ring-red-500' : (isManualFieldChanged(item, 'manual_pct') ? '!bg-orange-100 !text-orange-700 ring-2 ring-orange-400 font-bold' : '')">%
+                  </span>
+                  <ng-container *ngIf="!(isManualPct(item) && canEditManual(item))">{{ pctText(item) }}</ng-container>
                 </td>
 
                 <!-- Scrollable monthly columns -->

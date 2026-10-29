@@ -295,11 +295,29 @@ describe('KpiManageComponent', () => {
       expect(resultMethodOf({ result_formula: '(m10+m11)/2' })).toBe('custom');
       const it: any = { result_formula: '', is_cumulative: true };
       applyResultMethod(it, 'max');
-      expect(it).toEqual({ result_formula: 'MAX(ALL)', is_cumulative: false });
+      expect(it).toEqual({ result_formula: 'MAX(ALL)', is_cumulative: false, result_manual: false });
       applyResultMethod(it, 'sum');
-      expect(it).toEqual({ result_formula: '', is_cumulative: true });
+      expect(it).toEqual({ result_formula: '', is_cumulative: true, result_manual: false });
       applyResultMethod(it, 'custom');
-      expect(it).toEqual({ result_formula: '', is_cumulative: false });
+      expect(it).toEqual({ result_formula: '', is_cumulative: false, result_manual: false });
+    });
+
+    it('วิธีคิดผลงาน "กรอกเอง" ↔ result_manual (ล้างสูตร/สะสม) — 29 ต.ค. 2569', () => {
+      expect(resultMethodOf({ result_manual: 1, result_formula: 'AVG(ALL)' })).toBe('manual');
+      expect(resultMethodOf({ result_manual: 0, result_formula: '' })).toBe('last');
+      const it: any = { result_formula: 'SUM(m10, m11)', is_cumulative: true, result_manual: false };
+      applyResultMethod(it, 'manual');
+      expect(it).toEqual({ result_formula: '', is_cumulative: false, result_manual: true });
+      applyResultMethod(it, 'last');
+      expect(it.result_manual).toBe(false);
+      expect(component.RESULT_METHODS.some(m => m.v === 'manual')).toBe(true);
+    });
+
+    it('กรอกร้อยละเอง → ไม่ตรวจสูตรร้อยละ (สูตรค้างที่ผิดไม่บล็อกการบันทึก)', () => {
+      component.currentItem = { pct_formula: 'result /', custom_vars: [], pct_manual: false };
+      expect(component.pctFormulaError).toBeTruthy();
+      component.currentItem.pct_manual = true;
+      expect(component.pctFormulaError).toBeNull();
     });
 
     it('เลือก "สูตรกำหนดเอง" แล้วไม่สลับกลับเองแม้สูตรยังว่าง', () => {

@@ -124,16 +124,16 @@ apiRouter.get('/report/by-indicator', authenticateToken, async (req, res) => {
                 SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) AS total_actual,
                 COUNT(DISTINCT s.hospcode) AS hospital_count,
                 -- จำนวน hospcode ที่มี target — ใช้เทียบความสำเร็จ
-                SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'))} THEN 1 ELSE 0 END) AS hospitals_with_target,
+                SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) AS hospitals_with_target,
                 -- จำนวน hospcode ที่ผ่านเกณฑ์ (ตามเงื่อนไขเป้าหมาย ≥ > ≤ < = — targetPassSql)
-                SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'))}
+                SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'), 's.manual_pct')}
                          THEN 1 ELSE 0 END) AS hospitals_passed,
                 -- % สำเร็จ = passed / with_target × 100
-                CASE WHEN SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'))} THEN 1 ELSE 0 END) = 0 THEN 0
+                CASE WHEN SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) = 0 THEN 0
                      ELSE ROUND(
-                        SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'))}
+                        SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'), 's.manual_pct')}
                                  THEN 1 ELSE 0 END)
-                        / SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'))} THEN 1 ELSE 0 END) * 100, 2)
+                        / SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) * 100, 2)
                 END AS achievement_pct
             FROM kpi_summary s
             LEFT JOIN kpi_indicators i ON i.id = s.indicator_id
@@ -195,16 +195,16 @@ apiRouter.get('/report/by-hospital', authenticateToken, async (req, res) => {
                 SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4))) AS total_target,
                 SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) AS total_actual,
                 -- จำนวนตัวชี้วัดที่มี target (ใช้เป็นตัวหารของ % สำเร็จ)
-                SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'))} THEN 1 ELSE 0 END) AS indicators_with_target,
+                SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) AS indicators_with_target,
                 -- จำนวนตัวชี้วัดที่ผ่านเกณฑ์ (ตามเงื่อนไขเป้าหมาย ≥ > ≤ < = — targetPassSql)
-                SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'))}
+                SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'), 's.manual_pct')}
                          THEN 1 ELSE 0 END) AS indicators_passed,
                 -- % สำเร็จ = passed / with_target × 100 (ไม่ใช่ SUM(actual)/SUM(target))
-                CASE WHEN SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'))} THEN 1 ELSE 0 END) = 0 THEN 0
+                CASE WHEN SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) = 0 THEN 0
                      ELSE ROUND(
-                        SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'))}
+                        SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'), 's.manual_pct')}
                                  THEN 1 ELSE 0 END)
-                        / SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'))} THEN 1 ELSE 0 END) * 100, 2)
+                        / SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) * 100, 2)
                 END AS achievement_pct,
                 SUM(CASE WHEN s.indicator_status = 'Approved' THEN 1 ELSE 0 END) AS approved_count,
                 SUM(s.pending_count) AS pending_count
@@ -264,14 +264,14 @@ apiRouter.get('/report/by-district', authenticateToken, async (req, res) => {
                 SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4))) AS total_target,
                 SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) AS total_actual,
                 -- count-based achievement (ไม่ใช่ SUM ratio)
-                SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'))} THEN 1 ELSE 0 END) AS pairs_with_target,
-                SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'))}
+                SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) AS pairs_with_target,
+                SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'), 's.manual_pct')}
                          THEN 1 ELSE 0 END) AS pairs_passed,
-                CASE WHEN SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'))} THEN 1 ELSE 0 END) = 0 THEN 0
+                CASE WHEN SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) = 0 THEN 0
                      ELSE ROUND(
-                        SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'))}
+                        SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'), 's.manual_pct')}
                                  THEN 1 ELSE 0 END)
-                        / SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'))} THEN 1 ELSE 0 END) * 100, 2)
+                        / SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) * 100, 2)
                 END AS achievement_pct
             FROM kpi_summary s
             ${whereStr}
@@ -327,14 +327,14 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
                 SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4))) AS total_target,
                 SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) AS total_actual,
                 -- count-based achievement (ไม่ใช่ SUM ratio)
-                SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'))} THEN 1 ELSE 0 END) AS pairs_with_target,
-                SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'))}
+                SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) AS pairs_with_target,
+                SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'), 's.manual_pct')}
                          THEN 1 ELSE 0 END) AS pairs_passed,
-                CASE WHEN SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'))} THEN 1 ELSE 0 END) = 0 THEN 0
+                CASE WHEN SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) = 0 THEN 0
                      ELSE ROUND(
-                        SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'))}
+                        SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'), 's.manual_pct')}
                                  THEN 1 ELSE 0 END)
-                        / SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'))} THEN 1 ELSE 0 END) * 100, 2)
+                        / SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) * 100, 2)
                 END AS achievement_pct,
                 SUM(CASE WHEN s.indicator_status = 'Approved' THEN 1 ELSE 0 END) AS approved_count,
                 SUM(s.pending_count) AS pending_count
@@ -361,7 +361,7 @@ const CHART_MONTHS = [
 ];
 
 // มีเป้าหมาย/ผ่าน ตามเงื่อนไขเป้าหมายของตัวชี้วัด (i.target_condition — CHART_FROM_SQL JOIN kpi_indicators อยู่แล้ว) ตรงกับการ์ด /dashboard-stats
-const _cHas = targetHasSql('s.target_value', 'i.target_condition');
+const _cHas = targetHasSql('s.target_value', 'i.target_condition', 's.manual_pct');
 
 // ห้ามใช้ "?" ใน regex — mysql2 ตีความ ? ทุกตัวเป็น placeholder แม้อยู่ใน string literal ของ SQL
 const _cNum = (col) => `TRIM(${col}) REGEXP '^-{0,1}[0-9]+([.][0-9]+){0,1}$'`;
@@ -371,13 +371,14 @@ const CHART_METRICS_SQL = `
     COUNT(DISTINCT s.indicator_id) AS indicator_count,
     COUNT(DISTINCT s.hospcode) AS hospital_count,
     SUM(CASE WHEN ${_cHas} THEN 1 ELSE 0 END) AS with_target,
-    SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', 'i.target_condition')} THEN 1 ELSE 0 END) AS passed,
+    SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', 'i.target_condition', 's.manual_pct')} THEN 1 ELSE 0 END) AS passed,
     SUM(CASE WHEN NULLIF(TRIM(s.last_actual),'') IS NOT NULL THEN 1 ELSE 0 END) AS recorded,
     SUM(CASE WHEN COALESCE(s.pending_count,0) > 0 THEN 1 ELSE 0 END) AS pending_pairs`;
 
 // รายเดือน: recorded = มีค่าในเดือนนั้น | eligible/passed = เทียบค่าเดือนนั้นกับเป้าหมาย เฉพาะตัวชี้วัดแบบปกติ
 // (ไม่รวมตัวชี้วัดสะสม/มีสูตร เพราะค่ารายเดือนของตัวชี้วัดเหล่านั้นไม่ใช่ "ผลงาน ณ เดือนนั้น")
-const _cNormal = "(COALESCE(i.is_cumulative,0) = 0 AND (i.result_formula IS NULL OR TRIM(i.result_formula) = ''))";
+// + ไม่รวมตัวชี้วัดที่กรอกผลงาน/ร้อยละเอง (29 ต.ค. 2569 — ค่ารายเดือนไม่ใช่ผลงาน/ร้อยละที่ใช้ตัดสิน)
+const _cNormal = "(COALESCE(i.is_cumulative,0) = 0 AND (i.result_formula IS NULL OR TRIM(i.result_formula) = '') AND COALESCE(i.result_manual,0) = 0 AND COALESCE(i.pct_manual,0) = 0)";
 
 const CHART_MONTHLY_SQL = CHART_MONTHS.map(([m]) => `
     SUM(CASE WHEN NULLIF(TRIM(s.${m}),'') IS NOT NULL THEN 1 ELSE 0 END) AS rec_${m},

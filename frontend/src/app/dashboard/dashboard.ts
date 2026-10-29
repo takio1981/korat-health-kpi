@@ -12,6 +12,7 @@ import { CriteriaTextPipe } from '../shared/criteria-text.pipe';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import { activeFormula, validateFormula, evaluateFormula } from '../shared/kpi-formula';
 import { CustomVarDef, customVarDefsFor, customValuesOf, evaluatePct, pctFormulaOf, parseCustomVars } from '../shared/custom-vars';
+import { isManualResult, isManualPct, manualPctNumber, manualPctPass, normalizeManualPct } from '../shared/manual-result';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { indicatorTypeSetting, autoTargetHostypes, resolveAddKpiTargets, HOSTYPE_NAMES } from '../shared/indicator-scope';
 import { EXCEL_MONTHS, ChangePlan, EditPerms, buildTemplateAoa, parseImportAoa, planImport, parseClipboardGrid, isMultiCell, planPaste, applyCellChanges, itemKey } from '../shared/kpi-excel';
@@ -1620,8 +1621,15 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       if (!item._original) return false;
       if (String(item.target_value ?? '') !== String(item._original.target_value ?? '')) return true;
       if (this.isCustomChanged(item)) return true;
+      if (this.isManualChanged(item)) return true;
       return months.some(m => String(item[m] ?? '') !== String(item._original[m] ?? ''));
     });
+    // ร้อยละที่กรอกเองต้องเป็นตัวเลข
+    const badPct = changedItems.find(i => this.isManualPctInvalid(i));
+    if (badPct) {
+      Swal.fire('ร้อยละไม่ถูกต้อง', `"${badPct.kpi_indicators_name}" — ร้อยละต้องเป็นตัวเลข (เช่น 85 หรือ 92.5)`, 'warning');
+      return;
+    }
     // ช่องที่แก้ไขในแถวลูก (ข้อย่อย/กิจกรรม — ตัวชี้วัด 3 ระดับ) บันทึกพร้อมกันด้วยปุ่มเดียวกัน
     const hierChanges = this.collectHierChanges();
 
@@ -1682,6 +1690,17 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
             <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${fmt(item._original.target_value)}</td>
             <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:700">${fmt(item.target_value)}</td>
             <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${statusBadge(item._original.target_value, item.target_value)}</td>
+          </tr>`);
+        }
+        // ผลงานล่าสุด / ร้อยละ ที่กรอกเอง
+        for (const [f, label] of [['manual_result', 'ผลงานล่าสุด (กรอกเอง)'], ['manual_pct', 'ร้อยละ (กรอกเอง)']] as const) {
+          if (!this.isManualFieldChanged(item, f)) continue;
+          rows.push(`<tr>
+            <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">${kpiName}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center;color:#0f766e;font-weight:700">${label}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${fmt(item._original[f])}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:700">${fmt(item[f])}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${statusBadge(item._original[f], item[f])}</td>
           </tr>`);
         }
         // ค่าฐาน/ค่าเพิ่มเติมของสูตร (cv_<key>)
@@ -1747,7 +1766,9 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         apr: item.apr, may: item.may, jun: item.jun,
         jul: item.jul, aug: item.aug, sep: item.sep,
         // ค่าฐาน/ค่าเพิ่มเติม — ส่งเฉพาะช่องที่แก้ (ไม่ส่ง = backend ไม่เปลี่ยนค่าเดิม)
-        ...this.customPayload(item)
+        ...this.customPayload(item),
+        // ผลงานล่าสุด / ร้อยละ ที่กรอกเอง — ส่งเฉพาะช่องที่แก้
+        ...this.manualPayload(item)
       }));
 
       // ตรวจสอบว่ามีรายการที่สถานะ "รอตอบกลับ" (Resubmit) หรือไม่
@@ -2964,7 +2985,9 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         if (v != null) item[k] = this.formatNum(v);
       }
       const formula = activeFormula(item);
-      if (formula && !validateFormula(formula, parseCustomVars(item.custom_vars).map(v => v.key))) {
+      if (isManualResult(item)) {
+        // ผลงานล่าสุดแบบกรอกเอง — คงค่าที่กรอก ไม่ใช้ผลงานจากข้อย่อย (29 ต.ค. 2569)
+      } else if (formula && !validateFormula(formula, parseCustomVars(item.custom_vars).map(v => v.key))) {
         // ตัวชี้วัดที่ตั้งสูตร: ผลงาน = สูตรบนค่าเฉลี่ยรายเดือนจาก sub (แทนค่าเดือนล่าสุดของ AVG)
         const val = evaluateFormula(formula, item, item.target_value, item.prev_year, customValuesOf(item));
         item.last_actual = val ?? '';
@@ -3095,6 +3118,37 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   }
   onCustomChange(item: any): void {
     this.onValueChange(item, '');
+  }
+
+  // ===== ผลงานล่าสุด / ร้อยละ แบบกรอกเอง (29 ต.ค. 2569) — ช่องกรอกในคอลัมน์ "ผลงานล่าสุด" / "ร้อยละ" =====
+  isManualResult = isManualResult;
+  isManualPct = isManualPct;
+  // แก้ไขได้เมื่อเดียวกับช่องรายเดือน: โหมดแก้ไข + ไม่ล็อค + มีสิทธิ์ผลงาน
+  canEditManual(item: any): boolean {
+    return !!((this.isEditing || this.isSingleEditing(item)) && !item?.is_locked && this.canEditActual);
+  }
+  isManualFieldChanged(item: any, f: 'manual_result' | 'manual_pct'): boolean {
+    if (!item?._original) return false;
+    if (f === 'manual_result' ? !isManualResult(item) : !isManualPct(item)) return false;
+    return String(item[f] ?? '').trim() !== String(item._original[f] ?? '').trim();
+  }
+  isManualChanged(item: any): boolean {
+    return this.isManualFieldChanged(item, 'manual_result') || this.isManualFieldChanged(item, 'manual_pct');
+  }
+  manualPayload(item: any): Record<string, string> {
+    const out: Record<string, string> = {};
+    if (this.isManualFieldChanged(item, 'manual_result')) out['manual_result'] = String(item.manual_result ?? '').trim();
+    if (this.isManualFieldChanged(item, 'manual_pct')) out['manual_pct'] = normalizeManualPct(item.manual_pct) ?? String(item.manual_pct ?? '').trim();
+    return out;
+  }
+  // ร้อยละที่กรอกไม่ใช่ตัวเลข (ตรวจก่อนบันทึก — backend ปฏิเสธด้วย 400 อยู่แล้ว)
+  isManualPctInvalid(item: any): boolean {
+    return isManualPct(item) && normalizeManualPct(item?.manual_pct) === null;
+  }
+  // ข้อความในคอลัมน์ร้อยละ: กรอกเองแต่ยังไม่กรอก = '-'
+  pctText(item: any): string {
+    if (isManualPct(item) && manualPctNumber(item) === null) return '-';
+    return this.calcPercent(item).toFixed(2) + '%';
   }
 
   // แถวลูกใช้เงื่อนไขเป้าหมายของตัวชี้วัดหลัก (cond = item.target_condition)
@@ -3747,7 +3801,10 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     const fiscalOrder = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
     let lastActual = '';
     const formula = activeFormula(item);
-    if (formula && !validateFormula(formula, parseCustomVars(item.custom_vars).map(v => v.key))) {
+    if (isManualResult(item)) {
+      // ผลงานล่าสุดแบบกรอกเอง — ใช้ค่าที่กรอกเท่านั้น ไม่คำนวณจากรายเดือน (29 ต.ค. 2569)
+      lastActual = String(item.manual_result ?? '').trim();
+    } else if (formula && !validateFormula(formula, parseCustomVars(item.custom_vars).map(v => v.key))) {
       // ตัวชี้วัดที่ตั้งสูตรคำนวณผลงาน — evaluator เดียวกับ backend (ผลตรงกับ kpi_summary/Export)
       lastActual = evaluateFormula(formula, item, item.target_value, item.prev_year, customValuesOf(item)) ?? '';
     } else if (Number(item.is_cumulative) === 1) {
@@ -3971,12 +4028,16 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   //   ≥ / > : ผลงาน ÷ เป้าหมาย × 100 (เดิม) | ≤ / < : เป้าหมาย ÷ ผลงาน × 100 (ผลงาน 0 = 100) | = : ค่าน้อย ÷ ค่ามาก × 100
   // ไม่มีเป้าหมาย/ผลงาน → ร้อยละ 0 และไม่ระบายแดง (เหมือนเดิม)
   calcPercent(item: any): number {
+    // ร้อยละแบบกรอกเอง (29 ต.ค. 2569) — ใช้ค่าที่กรอก ไม่คำนวณ
+    if (isManualPct(item)) return manualPctNumber(item) ?? 0;
     // ตัวชี้วัดที่ตั้งสูตรร้อยละ (pct_formula) — ใช้สูตรแทน (ผ่าน/ไม่ผ่านยังเทียบผลงานกับเป้าหมายตามเงื่อนไข)
     if (pctFormulaOf(item)) return evaluatePct(item) ?? 0;
     return evaluateTarget(item.last_actual, item.target_value, item.target_condition).pct ?? 0;
   }
 
   isTargetMet(item: any): boolean {
+    // ร้อยละแบบกรอกเอง: ผ่าน = ร้อยละที่กรอก ≥ 100 | ยังไม่กรอก = ไม่ระบายแดง (ผู้ใช้เลือก — ไม่คำนวณจากผลงาน/เป้าหมาย)
+    if (isManualPct(item)) return manualPctPass(item) ?? true;
     const r = evaluateTarget(item.last_actual, item.target_value, item.target_condition);
     // ไม่มีเป้าหมาย → ไม่แสดงสีแดง | มีเป้าหมายแต่ยังไม่มีผลงาน → ไม่ผ่าน (เหมือนเดิม)
     if (r.pass === null) return !String(item.target_value ?? '').trim() || !!String(item.last_actual ?? '').trim();
@@ -4048,6 +4109,11 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
           : `\nสูตรอ้างข้อมูลปีงบ ${prev.year_bh} แต่ยังไม่มีผลงานของปีนั้น`;
       }
       return { label: 'สูตร', title, color: 'bg-fuchsia-100 text-fuchsia-700 border border-fuchsia-200', icon: 'fa-calculator', formula };
+    }
+    if (isManualResult(item) || isManualPct(item)) {
+      const what = [isManualResult(item) ? 'ผลงานล่าสุด' : '', isManualPct(item) ? 'ร้อยละ' : ''].filter(Boolean).join(' และ ');
+      return { label: 'กรอกเอง', title: `${what}กรอกเอง ไม่คำนวณจากผลงานรายเดือน${isManualPct(item) ? ' — ผ่านเกณฑ์เมื่อร้อยละที่กรอก ≥ 100' : ''}`,
+        color: 'bg-teal-100 text-teal-700 border border-teal-200', icon: 'fa-pen-to-square' };
     }
     if (Number(item?.is_cumulative) !== 1) return null;
     return { label: 'สะสม', title: 'ผลงานเดือนล่าสุด = ผลรวมสะสมตั้งแต่ตุลาคมถึงเดือนนี้', color: 'bg-violet-100 text-violet-700 border border-violet-200', icon: 'fa-layer-group' };
@@ -4545,8 +4611,12 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!item || !item._original) return;
 
     const months = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
-    const hasChange = String(item.target_value ?? '') !== String(item._original.target_value ?? '') ||
+    const hasChange = String(item.target_value ?? '') !== String(item._original.target_value ?? '') || this.isManualChanged(item) ||
       months.some(m => String(item[m] ?? '') !== String(item._original[m] ?? ''));
+    if (this.isManualPctInvalid(item)) {
+      Swal.fire('ร้อยละไม่ถูกต้อง', 'ร้อยละต้องเป็นตัวเลข (เช่น 85 หรือ 92.5)', 'warning');
+      return;
+    }
 
     if (!hasChange) {
       Swal.fire('ไม่มีการเปลี่ยนแปลง', 'ไม่พบข้อมูลที่แก้ไข', 'info');
@@ -4561,7 +4631,8 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       oct: item.oct, nov: item.nov, dece: item.dece,
       jan: item.jan, feb: item.feb, mar: item.mar,
       apr: item.apr, may: item.may, jun: item.jun,
-      jul: item.jul, aug: item.aug, sep: item.sep
+      jul: item.jul, aug: item.aug, sep: item.sep,
+      ...this.manualPayload(item)
     }];
 
     Swal.fire({

@@ -1866,9 +1866,16 @@
           <!-- สูตรร้อยละ (pct_formula) — ว่าง = คิดตามเงื่อนไขเป้าหมาย | ผ่าน/ไม่ผ่านยังเทียบผลงานกับเป้าหมาย (25 ต.ค. 2569) -->
           <div id="indicator-pct-formula" class="mt-3 border border-rose-200 rounded-lg p-3 bg-rose-50/40">
             <div class="flex items-center justify-between mb-1">
-              <label class="text-xs font-bold text-rose-800"><i class="fas fa-percent mr-1"></i>สูตรร้อยละ (ไม่บังคับ)</label>
-              <button *ngIf="hasPctFormula" type="button" (click)="currentItem.pct_formula = ''" class="text-[10px] px-2 py-0.5 rounded bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold">ล้างสูตร</button>
+              <label class="text-xs font-bold text-rose-800"><i class="fas fa-percent mr-1"></i>{{ currentItem.pct_manual ? 'ร้อยละ: กรอกเอง' : 'สูตรร้อยละ (ไม่บังคับ)' }}</label>
+              <button *ngIf="hasPctFormula && !currentItem.pct_manual" type="button" (click)="currentItem.pct_formula = ''" class="text-[10px] px-2 py-0.5 rounded bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold">ล้างสูตร</button>
             </div>
+            <!-- ร้อยละแบบกรอกเอง (pct_manual — 29 ต.ค. 2569): ผ่านเกณฑ์ = ร้อยละที่กรอก ≥ 100 -->
+            <label id="indicator-pct-manual" class="flex items-start gap-2 mb-2 cursor-pointer">
+              <input type="checkbox" [(ngModel)]="currentItem.pct_manual" class="mt-0.5 accent-rose-600">
+              <span class="text-[11px] text-gray-700"><b>กรอกร้อยละเอง (ไม่คำนวณ)</b> — ผู้บันทึกกรอกตัวเลขในคอลัมน์ "ร้อยละ" ของหน้าบันทึกผลงานเอง
+                <b>ผ่านเกณฑ์เมื่อร้อยละที่กรอก ≥ 100</b> (สีในตาราง การ์ดสถิติ รายงาน และกราฟ) ยังไม่กรอก = ว่าง</span>
+            </label>
+            <ng-container *ngIf="!currentItem.pct_manual">
             <p class="text-[10px] text-gray-500 mb-2">ไม่กรอก = ร้อยละคิดตามเงื่อนไขเป้าหมายด้านบน — กรอกสูตรเพื่อกำหนดตัวเลขในคอลัมน์ "ร้อยละ" ของหน้าบันทึกผลงานเอง
               ใช้ <code>result</code> = ผลงาน, <code>target</code> = เป้าหมาย, ค่าเพิ่มเติม และเดือน/ฟังก์ชันเหมือนสูตรผลงาน (การผ่าน/ไม่ผ่านเกณฑ์ยังเทียบผลงานกับเป้าหมายตามเงื่อนไข)</p>
             <input #pctInput type="text" [(ngModel)]="currentItem.pct_formula" maxlength="500" placeholder="เช่น result / target * 100  หรือ  (base - result) / base * 100"
@@ -1898,6 +1905,7 @@
               <span *ngIf="hasFormula && !formulaError" class="text-gray-500">(ใช้ค่าจากการทดลองสูตรผลงานด้านบน)</span>
               <span class="font-bold text-rose-800">→ ร้อยละ = {{ pctTestResult !== null ? pctTestResult + '%' : 'ว่าง (คำนวณไม่ได้)' }}</span>
             </div>
+            </ng-container>
           </div>
           <label class="inline-flex items-center gap-2 mt-2 text-xs cursor-pointer">
             <input type="checkbox" [(ngModel)]="currentItem.use_sub_indicator_export" class="rounded text-amber-600">

@@ -8,6 +8,7 @@ const { SUB_AGG_FISCAL_ORDER, SUB_AGG_MONTH_KEYS, activeSubTree, loadSubAggregat
 const { baseKey, loadBaseValues, loadPrevYearData } = require('./summary');
 const { formulaOk } = require('./formula-vars');
 const { isValidIdentifier } = require('../core/sql');
+const { isManualResult, loadManualValues, manualKey } = require('./manual-result');
 const { resolveIndicatorHostypes } = require('./indicator-scope');
 
 // ===== Export 3 ระดับ (18 ต.ค. 2569): ตาราง <table_process>_items — 1 แถว = หน่วยบริการ × ปีงบ × ข้อย่อย/กิจกรรม =====
@@ -182,7 +183,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
     try {
         // กรอง upload_excel != 1 (ตัวที่ตั้งเป็น "อัปโหลด Excel เอง" ข้ามทั้งใน check และ export)
         // ดึง evaluation_mode/required_off_types ด้วย เพื่อคำนวณขอบเขตหน่วยบริการเหมือน performKpiExport
-        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, custom_vars, use_sub_indicator_export, evaluation_mode, required_off_types, item_no, export_items FROM kpi_indicators
+        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, result_manual, custom_vars, use_sub_indicator_export, evaluation_mode, required_off_types, item_no, export_items FROM kpi_indicators
             WHERE table_process IS NOT NULL AND table_process != '' AND is_active = 1
             AND (upload_excel IS NULL OR upload_excel = 0)`;
         let indicatorParams = [];
@@ -407,6 +408,8 @@ async function checkKpiChanges(year_bh, indicator_ids) {
             const prevMap = formulaOk(indicator, _f) && kpiFormula.usesPrevYear(_f)
                 ? await loadPrevYearData(db, [indicator.id], year_bh) : null;
             const baseMapX = formulaOk(indicator, _f) && kpiFormula.formulaVarNames(_f).length ? await loadBaseValues(db, [indicator.id], [year_bh]) : null; // ค่าฐาน/ค่าเพิ่มเติม
+            // ผลงานล่าสุดแบบกรอกเอง (29 ต.ค. 2569) — ใช้ค่าที่กรอกแทนการคำนวณ (⚠️ ต้องตรงกันทั้ง checkKpiChanges และ performKpiExport)
+            const manualMapX = isManualResult(indicator) ? await loadManualValues(db, [indicator.id], [year_bh]) : null;
             for (const [hc, d] of dataMap) {
                 // ไม่ข้าม hospcode ที่ยังไม่มีผลงานแล้ว — ต้องนับเป็น new/unchanged ด้วย (mirror performKpiExport)
                 const target = emptyToNull(d.target);
@@ -424,6 +427,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                     const lastActual = reverseMonths.find(v => v !== null && v !== undefined);
                     resultVal = lastActual !== undefined ? lastActual : null;
                 }
+                if (manualMapX) resultVal = emptyToNull((manualMapX.get(manualKey(indicator.id, year_bh, hc)) || {}).result);
 
                 const existing = existingMap.get(hc);
                 if (!existing) {
@@ -500,7 +504,7 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
         // 1. Get indicators with valid table_process
         //    — กรอง upload_excel != 1 (ตัวที่ตั้งเป็น "อัปโหลดเอง" ข้ามไป)
         //    — ดึง evaluation_mode/required_off_types ด้วย เพื่อคำนวณขอบเขตหน่วยบริการที่ต้อง export (ดู resolveIndicatorHostypes)
-        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, custom_vars, use_sub_indicator_export, evaluation_mode, required_off_types, item_no, export_items FROM kpi_indicators
+        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, result_manual, custom_vars, use_sub_indicator_export, evaluation_mode, required_off_types, item_no, export_items FROM kpi_indicators
             WHERE is_active = 1 AND (upload_excel IS NULL OR upload_excel = 0)
             AND table_process IS NOT NULL AND table_process != ''`;
         let indicatorParams = [];
@@ -941,6 +945,8 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                 const prevMap = formulaOk(indicator, _f) && kpiFormula.usesPrevYear(_f)
                     ? await loadPrevYearData(db, [indicator.id], year_bh) : null;
                 const baseMapX = formulaOk(indicator, _f) && kpiFormula.formulaVarNames(_f).length ? await loadBaseValues(db, [indicator.id], [year_bh]) : null; // ค่าฐาน/ค่าเพิ่มเติม
+                // ผลงานล่าสุดแบบกรอกเอง (29 ต.ค. 2569) — ใช้ค่าที่กรอกแทนการคำนวณ (⚠️ ต้องตรงกันทั้ง checkKpiChanges และ performKpiExport)
+                const manualMapX = isManualResult(indicator) ? await loadManualValues(db, [indicator.id], [year_bh]) : null;
 
                 for (const [hc, d] of dataMap) {
                     // ไม่ข้ามแถวที่ยังไม่มีผลงานแล้ว (ต้อง export ครบทุกหน่วยบริการในขอบเขต) — นับไว้รายงานเฉยๆ
@@ -963,6 +969,7 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                         const lastActual = reverseMonths.find(v => v !== null && v !== undefined);
                         resultVal = lastActual !== undefined ? lastActual : null;
                     }
+                    if (manualMapX) resultVal = emptyToNull((manualMapX.get(manualKey(indicator.id, year_bh, hc)) || {}).result);
 
                     // เปรียบเทียบค่าเดิม vs ใหม่ ทีละคอลัมน์
                     const existing = existingDataMap.get(hc);

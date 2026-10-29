@@ -196,3 +196,24 @@ describe('kpi-excel — ค่าเพิ่มเติมที่ตั้�
     expect(planImport(parsed.rows, [it1], PERMS).changes.map(c => [c.field, c.newVal])).toEqual([['cv_pop', '30000']]);
   });
 });
+
+describe('kpi-excel — ผลงานล่าสุด / ร้อยละ แบบกรอกเอง (29 ต.ค. 2569)', () => {
+  it('มีคอลัมน์เมื่อมีแถวที่ตั้งกรอกเอง (แถวอื่นเว้นว่าง) + นำเข้าเฉพาะแถวที่ตั้งกรอกเอง + สิทธิ์เดียวกับผลงาน', () => {
+    const m1 = row(1, '00222', { result_manual: 1, pct_manual: 1, manual_result: '65', manual_pct: '95.5' });
+    const p2 = row(2, '00222');
+    const aoa = buildTemplateAoa([m1, p2]);
+    const head = aoa[1] as string[];
+    const cr = head.indexOf(EXCEL_HEADERS.manualResult), cp = head.indexOf(EXCEL_HEADERS.manualPct);
+    expect(cr).toBe(head.indexOf(EXCEL_HEADERS.target) + 1);
+    expect(cp).toBe(cr + 1);
+    expect([aoa[2][cr], aoa[2][cp], aoa[3][cr], aoa[3][cp]]).toEqual([65, 95.5, '', '']);
+    aoa[2][cr] = 70; aoa[2][cp] = 101; aoa[3][cr] = 5; aoa[3][cp] = 5;   // แถวที่ 2 ไม่ได้ตั้งกรอกเอง → ข้าม
+    const parsed = parseImportAoa(aoa);
+    expect(parsed.fields).toEqual(expect.arrayContaining(['manual_result', 'manual_pct']));
+    expect(planImport(parsed.rows, [m1, p2], PERMS).changes.map(c => [c.item.indicator_id, c.field, c.newVal]))
+      .toEqual([[1, 'manual_result', '70'], [1, 'manual_pct', '101']]);
+    expect(planImport(parsed.rows, [m1, p2], { canEditActual: false, canEditTarget: true }).noPerm).toBe(2);
+    // ไม่มีแถวที่ตั้งกรอกเอง → ไม่มีคอลัมน์
+    expect((buildTemplateAoa([p2])[1] as string[]).includes(EXCEL_HEADERS.manualResult)).toBe(false);
+  });
+});

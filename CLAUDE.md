@@ -75,6 +75,7 @@ frontend/src/app/
   | `services/backup.js` | runBackupJob/runRestoreJob, startBackupScheduler, การเชื่อมต่อ (bkEncrypt/bkDecrypt), Google Drive (resetDriveClientCache), migration ตารางสำรองข้อมูล |
   | `services/kpi-audit.js` | logKpiSaveAudit, getUserAuditInfo, getAuditSettings/invalidateAuditSettingsCache |
   | `services/indicator-fields.js` | normTargetCondition, normalizeOffTypes, normalizeEvalMode, _actorLabel |
+  | `services/manual-result.js` | ผลงานล่าสุด/ร้อยละ กรอกเอง: loadManualValues, applyManualToSummary, normalizeManualPct |
   | `services/sso.js` / `services/users.js` | getThaidSettings/getProviderIdSettings + THAID_* / countUserKpiResults, userHasResultsMessage |
   | `core/router.js` / `core/env.js` | apiRouter (ตัวเดียวทั้งระบบ) / port |
   | `jobs/*.js` | startExportScheduler + runScheduledExport, startKpiAuditScheduler + runKpiAuditDigest, startSessionCleanupJob |
@@ -431,6 +432,16 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   → UPSERT ใน transaction เดียวกัน (ล็อคตรวจแล้ว, สิทธิ์ `can_edit_target`, ว่าง = ลบ, ไม่ส่งฟิลด์ = ไม่เปลี่ยน) — dashboard: ช่อง "ฐาน" ใต้เป้าหมาย (`usesBaseItem`/`isBaseChanged`),
   Excel คอลัมน์ "ค่าฐาน" (`buildTemplateAoa(items, { withBase })`, นำเข้าเฉพาะแถวที่ backend แนบ `base_value`) — ตัวอย่างจริง: ตัวชี้วัดการจมน้ำ `(base - SUM(ALL)) / base * 100`
   เป้าหมาย 30 ≥ (ทดสอบ 33 หน่วยบริการตรงตารางผู้ใช้ทุกตัวเลข) — Test: `api/tests/base-value.test.js`, fixture สูตร (เคส base), `kpi-excel.spec.ts`, `dashboard.spec.ts`
+- **ผลงานล่าสุด / ร้อยละ แบบกรอกเอง (29 ต.ค. 2569 — ผู้ใช้เลือก: ตั้งแยก 2 ตัวเลือก, ผ่านเกณฑ์ = ร้อยละที่กรอก ≥ 100, รายเดือนยังกรอกได้แต่ไม่นำมาคำนวณ, ยังไม่กรอก = ว่าง):**
+  `kpi_indicators.result_manual` / `pct_manual` TINYINT (kpi-manage: "วิธีคิดผลงาน" = `'manual'` ใน `resultMethodOf()`/`applyResultMethod()` + checkbox `#indicator-pct-manual`
+  — กรอกร้อยละเองแล้วส่ง `pct_formula = null`) — ค่าที่กรอกต่อคู่เก็บ `kpi_base_values` var_key `'__result'` / `'__pct'` (ขึ้นต้น "_" ไม่ชนชื่อที่ผู้ใช้ตั้ง) — `services/manual-result.js`
+  | `/update-kpi` รับ `manual_result`/`manual_pct` (เฉพาะตัวชี้วัดที่ตั้งกรอกเอง, สิทธิ์ `can_edit_actual` ไม่มี = 403, ร้อยละไม่ใช่ตัวเลข = 400, ว่าง = ลบ)
+  | `GET /kpi-results` แนบ `manual_result`/`manual_pct` + `last_actual` = ผลงานที่กรอก | `kpi_summary.manual_pct` (NULL = คำนวณร้อยละเอง, '' = กรอกเองแต่ยังไม่กรอก) เขียนโดย
+  `applyManualToSummary()` **หลัง** `applyFormulaToSummary()` ทุกจุด (refreshSummaryPairs + finalize) และสร้างแถวให้คู่ที่มีแต่ค่าที่กรอกเอง
+  | **SQL นับผ่าน: `targetHasSql(t, cond, 's.manual_pct')` / `targetPassSql(a, t, cond, 's.manual_pct')` ทุกจุดที่อ่าน kpi_summary** (endpoint ใหม่ต้องส่งคอลัมน์นี้ด้วย),
+  กราฟรายเดือน (`_cNormal`) ไม่รวมตัวชี้วัดกรอกเอง | Export (`performKpiExport`/`checkKpiChanges` ตรงกัน) result = ผลงานที่กรอก | dashboard: ช่องกรอกในคอลัมน์ col-7/col-8
+  (`canEditManual()`, มือถือด้วย), `calcPercent`/`isTargetMet`/`pctText`, หน้ายืนยัน + `manualPayload()`, ป้าย "กรอกเอง", Excel คอลัมน์ "ผลงานล่าสุด/ร้อยละ (กรอกเอง)"
+  — Test: `api/tests/manual-result.test.js`, `shared/manual-result.spec.ts`, `kpi-excel.spec.ts`, `dashboard.spec.ts`, `kpi-manage.spec.ts`
 - **ค่าเพิ่มเติมที่ตั้งชื่อเอง + สูตรร้อยละ (25 ต.ค. 2569):** `kpi_indicators.custom_vars` TEXT = JSON `[{key,label}]` (≤ 10, `isValidVarKey()`: a-z ตามด้วย a-z0-9_ ≤ 20 ตัว ห้ามชนชื่อในตัว/`result`/`prev_*`/`m\d+`/ชื่อของ Object.prototype)
   ค่าต่อคู่เก็บ `kpi_base_values` คอลัมน์ `var_key` (UNIQUE indicator+year+hospcode+var_key; base = var_key 'base') — `evaluateFormula(…, prev, vars)` อาร์กิวเมนต์ที่ 5 เป็น object `{base, pop, …}` (ค่าเดี่ยว = base แบบเดิม)
   ตัวแปรอ่านแบบ own-property เท่านั้น — **`validateFormula(f, customKeys, extra)` ต้องส่งชื่อที่ประกาศเสมอ** (ไม่ส่ง = ใช้ได้แค่ base) ทั้ง backend (`formulaOk(ind, f)`, `varKeysOf()`) และ dashboard

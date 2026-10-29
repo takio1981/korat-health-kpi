@@ -158,8 +158,8 @@ apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
         const _sc = targetCondOf('s');
         const [successRows] = await db.query(`
             SELECT
-                SUM(CASE WHEN ${targetHasSql('s.target_value', _sc)} THEN 1 ELSE 0 END) AS total_with_target,
-                SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', _sc)} THEN 1 ELSE 0 END) AS passed
+                SUM(CASE WHEN ${targetHasSql('s.target_value', _sc, 's.manual_pct')} THEN 1 ELSE 0 END) AS total_with_target,
+                SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', _sc, 's.manual_pct')} THEN 1 ELSE 0 END) AS passed
             FROM kpi_summary s
             WHERE ${summaryWhere}
         `, summaryParams);
@@ -259,12 +259,12 @@ apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
         if (user.hospcode) {
             const [allHosRows] = await db.query(`
                 SELECT s.hospcode,
-                    SUM(CASE WHEN ${targetHasSql('s.target_value', _sc)} THEN 1 ELSE 0 END) AS total_with_target,
-                    SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', _sc)} THEN 1 ELSE 0 END) AS passed,
-                    CASE WHEN SUM(CASE WHEN ${targetHasSql('s.target_value', _sc)} THEN 1 ELSE 0 END) = 0 THEN 0
+                    SUM(CASE WHEN ${targetHasSql('s.target_value', _sc, 's.manual_pct')} THEN 1 ELSE 0 END) AS total_with_target,
+                    SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', _sc, 's.manual_pct')} THEN 1 ELSE 0 END) AS passed,
+                    CASE WHEN SUM(CASE WHEN ${targetHasSql('s.target_value', _sc, 's.manual_pct')} THEN 1 ELSE 0 END) = 0 THEN 0
                          ELSE ROUND(
-                            SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', _sc)} THEN 1 ELSE 0 END)
-                            / SUM(CASE WHEN ${targetHasSql('s.target_value', _sc)} THEN 1 ELSE 0 END) * 100, 2)
+                            SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', _sc, 's.manual_pct')} THEN 1 ELSE 0 END)
+                            / SUM(CASE WHEN ${targetHasSql('s.target_value', _sc, 's.manual_pct')} THEN 1 ELSE 0 END) * 100, 2)
                     END AS success_pct
                 FROM kpi_summary s
                 WHERE s.year_bh = ? AND ${activeIndicatorSql('s.indicator_id')}

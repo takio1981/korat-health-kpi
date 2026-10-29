@@ -298,7 +298,7 @@ apiRouter.put('/indicators/:id', authenticateToken, requireAction('kpi-manage', 
         let diff = '';
         let calcChanged = false; // สูตร/สะสม เปลี่ยน → ต้องคำนวณ kpi_summary ใหม่
         try {
-            const [oldRow] = await db.query('SELECT kpi_indicators_name, is_active, table_process, target_percentage, criterion, is_cumulative, result_formula FROM kpi_indicators WHERE id = ?', [req.params.id]);
+            const [oldRow] = await db.query('SELECT kpi_indicators_name, is_active, table_process, target_percentage, criterion, is_cumulative, result_formula, result_manual, pct_manual FROM kpi_indicators WHERE id = ?', [req.params.id]);
             if (oldRow[0]) {
                 const o = oldRow[0];
                 const changes = [];
@@ -312,6 +312,12 @@ apiRouter.put('/indicators/:id', authenticateToken, requireAction('kpi-manage', 
                     calcChanged = true;
                 }
                 if (Number(o.is_cumulative || 0) !== (is_cumulative ? 1 : 0)) calcChanged = true;
+                // เปลี่ยนวิธีได้ผลงานล่าสุด/ร้อยละ (คำนวณ ↔ กรอกเอง) → คำนวณตารางสรุปใหม่ (29 ต.ค. 2569)
+                for (const [k, label] of [['result_manual', 'ผลงานล่าสุด'], ['pct_manual', 'ร้อยละ']]) {
+                    if (req.body[k] === undefined) continue;
+                    const nv = req.body[k] === true || Number(req.body[k]) === 1 ? 1 : 0;
+                    if (Number(o[k] || 0) !== nv) { changes.push(`${label}→${nv ? 'กรอกเอง' : 'คำนวณ'}`); calcChanged = true; }
+                }
                 if (changes.length > 0) diff = `\n📝 เปลี่ยน: ${changes.join(', ')}`;
             }
         } catch (_) {}
@@ -326,7 +332,8 @@ apiRouter.put('/indicators/:id', authenticateToken, requireAction('kpi-manage', 
         // (ไม่ต้องรอผู้ดูแลกด "อัปเดต Summary") — ทำนอก transaction หลัก ล้มเหลวไม่กระทบการบันทึกตัวชี้วัด
         if (calcChanged) {
             try {
-                const [years] = await db.query('SELECT DISTINCT year_bh FROM kpi_summary WHERE indicator_id = ?', [req.params.id]);
+                // ปีงบจาก kpi_results (รวมปีที่ยังไม่มีแถวในตารางสรุป เช่น มีแต่ค่าที่กรอกเอง — 29 ต.ค. 2569)
+                const [years] = await db.query('SELECT DISTINCT year_bh FROM kpi_results WHERE indicator_id = ? UNION SELECT DISTINCT year_bh FROM kpi_summary WHERE indicator_id = ?', [req.params.id, req.params.id]);
                 if (years.length > 0) {
                     await scheduleSummaryRefresh(years.map(y => ({ indicator_id: Number(req.params.id), year_bh: y.year_bh }))); // ผ่านคิวเดียวกับการบันทึกผลงาน (ไม่รันซ้อนคู่เดียวกัน)
                 }
@@ -559,6 +566,13 @@ async function saveHierarchyFields(conn, table, id, body) {
         const list = normalizeCustomVars(body.custom_vars).list;
         sets.push('custom_vars = ?');
         params.push(list.length ? JSON.stringify(list) : null);
+    }
+    // ผลงานล่าสุด / ร้อยละ แบบกรอกเอง (29 ต.ค. 2569)
+    for (const k of ['result_manual', 'pct_manual']) {
+        if (table === 'kpi_indicators' && body && body[k] !== undefined) {
+            sets.push(`${k} = ?`);
+            params.push(body[k] === true || Number(body[k]) === 1 ? 1 : 0);
+        }
     }
     if (table === 'kpi_indicators' && body && body.pct_formula !== undefined) {
         sets.push('pct_formula = ?');

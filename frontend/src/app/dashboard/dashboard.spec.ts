@@ -753,6 +753,13 @@ describe('DashboardComponent', () => {
       expect(component.isTargetMet(item)).toBe(false);
     });
 
+    it('ร้อยละที่กรอกเองมาก่อนสูตรร้อยละ', () => {
+      const item: any = rate({ oct: '1', pct_manual: 1, manual_pct: '80' });
+      component.onValueChange(item, 'oct');
+      expect(component.calcPercent(item)).toBe(80);
+      expect(component.isTargetMet(item)).toBe(false);
+    });
+
     it('ช่องค่าเพิ่มเติม + payload ส่งเฉพาะค่าที่แก้', () => {
       const item: any = rate({ oct: '1' });
       item._original = { ...item };
@@ -763,6 +770,71 @@ describe('DashboardComponent', () => {
       expect(item.last_actual).toBe('2');
       expect(component.isCustomChanged(item)).toBe(true);
       expect(component.customPayload(item)).toEqual({ cv_pop: '50000' });
+    });
+  });
+
+  describe('ผลงานล่าสุด / ร้อยละ แบบกรอกเอง (29 ต.ค. 2569)', () => {
+    const row = (extra: any = {}) => ({
+      indicator_id: 9, hospcode: '10871', year_bh: '2570', kpi_indicators_name: 'กรอกเอง', target_value: '80', target_condition: 'GTE',
+      result_manual: 1, pct_manual: 1, manual_result: '65', manual_pct: '95.5', is_cumulative: 0, result_formula: null,
+      oct: '70', nov: '90', dece: '', jan: '', feb: '', mar: '', apr: '', may: '', jun: '', jul: '', aug: '', sep: '', ...extra });
+
+    it('ผลงานล่าสุด = ค่าที่กรอก ไม่คำนวณจากรายเดือน (เดือนล่าสุด 90 ไม่ถูกใช้) / ล้างแล้ว = ว่าง', () => {
+      const item: any = row();
+      component.onValueChange(item, 'nov');
+      expect(item.last_actual).toBe('65');
+      item.manual_result = '';
+      component.onValueChange(item, '');
+      expect(item.last_actual).toBe('');
+      // ผลงานกรอกเอง แต่ร้อยละคำนวณ → ร้อยละคิดจากผลงานที่กรอก
+      const r2: any = row({ pct_manual: 0, manual_result: '40' });
+      component.onValueChange(r2, '');
+      expect(component.calcPercent(r2)).toBe(50);
+      expect(component.isTargetMet(r2)).toBe(false);
+    });
+
+    it('ร้อยละ = ค่าที่กรอก, ผ่านเกณฑ์เมื่อ ≥ 100 (ไม่ขึ้นกับผลงาน/เป้าหมาย), ยังไม่กรอก = "-" และไม่ระบายแดง', () => {
+      const item: any = row();
+      component.onValueChange(item, '');
+      expect(component.calcPercent(item)).toBe(95.5);
+      expect(component.isTargetMet(item)).toBe(false);
+      expect(component.pctText(item)).toBe('95.50%');
+      item.manual_pct = '100';
+      expect(component.isTargetMet(item)).toBe(true);    // ผลงาน 65 ต่ำกว่าเป้าหมาย 80 ก็ผ่าน — ตัดสินจากร้อยละที่กรอก
+      item.manual_pct = '';
+      expect(component.pctText(item)).toBe('-');
+      expect(component.isTargetMet(item)).toBe(true);
+      item.manual_pct = 'ดีมาก';
+      expect(component.isManualPctInvalid(item)).toBe(true);
+    });
+
+    it('ตรวจการแก้ไข + payload ส่งเฉพาะช่องที่แก้ (ตัวชี้วัดที่ไม่ได้ตั้งกรอกเองไม่ส่ง)', () => {
+      const item: any = row();
+      item._original = { ...item };
+      expect(component.isManualChanged(item)).toBe(false);
+      expect(component.manualPayload(item)).toEqual({});
+      item.manual_pct = '102%';
+      expect(component.isManualFieldChanged(item, 'manual_pct')).toBe(true);
+      expect(component.manualPayload(item)).toEqual({ manual_pct: '102' });
+      item.manual_result = '70';
+      expect(component.manualPayload(item)).toEqual({ manual_result: '70', manual_pct: '102' });
+      const plain: any = row({ result_manual: 0, pct_manual: 0 });
+      plain._original = { ...plain };
+      plain.manual_result = '1';
+      expect(component.isManualChanged(plain)).toBe(false);
+      expect(component.manualPayload(plain)).toEqual({});
+    });
+
+    it('badge "กรอกเอง" และช่องกรอกแสดงเฉพาะโหมดแก้ไขที่ไม่ล็อค', () => {
+      const item: any = row();
+      expect(component.getCumulativeBadge(item)?.label).toBe('กรอกเอง');
+      component.isEditing = false;
+      expect(component.canEditManual(item)).toBe(false);
+      component.isEditing = true;
+      vi.spyOn(component, 'canEditActual', 'get').mockReturnValue(true);
+      expect(component.canEditManual(item)).toBe(true);
+      expect(component.canEditManual({ ...item, is_locked: 1 })).toBe(false);
+      component.isEditing = false;
     });
   });
 });

@@ -5,6 +5,7 @@ const db = require('../db');
 const kpiFormula = require('../kpi-formula');
 const { formulaOk } = require('./formula-vars');
 const { loadSubAggregates } = require('./hierarchy');
+const { applyManualToSummary } = require('./manual-result');
 
 // ===== ผลงานจากตัวชี้วัดย่อย/กิจกรรม → kpi_summary (ตัวชี้วัด 3 ระดับ — 18 ต.ค. 2569) =====
 // กราฟ/รายงานทั้ง 4 แถบ + การ์ดหน้าแรกอ่าน kpi_summary ซึ่งเดิมสร้างจาก kpi_results เท่านั้น → ตัวชี้วัดที่บันทึกผลงานที่ข้อย่อย/กิจกรรม
@@ -249,6 +250,8 @@ async function refreshSummaryPairs(connection, pairs) {
         await mergeSubIntoSummary(connection, { indicatorIds: [p.indicator_id], yearBh: p.year_bh });
         await recomputeSummaryLastActual(connection, p.indicator_id, p.year_bh);
         await applyFormulaToSummary(connection, { indicatorId: p.indicator_id, yearBh: p.year_bh });
+        // ผลงานล่าสุด/ร้อยละ ที่กรอกเอง — ทับผลที่คำนวณ (ต้องอยู่หลังสูตรเสมอ)
+        await applyManualToSummary(connection, { indicatorId: p.indicator_id, yearBh: p.year_bh });
     }
 }
 

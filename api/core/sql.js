@@ -16,14 +16,19 @@ const targetCondOf = (alias) => `(SELECT ti.target_condition FROM kpi_indicators
 const _tDec = (col) => `CAST(NULLIF(TRIM(${col}),'') AS DECIMAL(20,4))`;
 const _tCond = (condExpr) => `UPPER(TRIM(COALESCE(${condExpr},'')))`;
 // มีเป้าหมาย: GTE/GT (และไม่ได้ตั้ง) = เป้าหมาย > 0 (วิธีเดิม) | LTE/LT/EQ = เป้าหมายเป็นตัวเลข ≥ 0
-function targetHasSql(tCol, condExpr) {
-    return `(CASE WHEN ${_tCond(condExpr)} IN ('LTE','LT','EQ') THEN (TRIM(${tCol}) REGEXP '^[0-9]' AND ${_tDec(tCol)} >= 0) ELSE ${_tDec(tCol)} > 0 END)`;
+// pctCol (ไม่บังคับ — kpi_summary.manual_pct, 29 ต.ค. 2569): ไม่ใช่ NULL = ตัวชี้วัดที่กรอกร้อยละเอง → "มีเป้าหมาย" = กรอกร้อยละแล้ว,
+// "ผ่าน" = ร้อยละที่กรอก ≥ 100 (ไม่คำนวณจากผลงาน/เป้าหมาย — ผู้ใช้เลือก) | NULL = คำนวณตามเงื่อนไขเป้าหมายเหมือนเดิม
+const _pctHas = (pctCol) => `TRIM(${pctCol}) REGEXP '^[0-9]+([.][0-9]+){0,1}$'`;
+function targetHasSql(tCol, condExpr, pctCol) {
+    const base = `(CASE WHEN ${_tCond(condExpr)} IN ('LTE','LT','EQ') THEN (TRIM(${tCol}) REGEXP '^[0-9]' AND ${_tDec(tCol)} >= 0) ELSE ${_tDec(tCol)} > 0 END)`;
+    return pctCol ? `(CASE WHEN ${pctCol} IS NULL THEN ${base} ELSE ${_pctHas(pctCol)} END)` : base;
 }
 // ผ่านเกณฑ์: มีเป้าหมาย + ผลงานเป็นตัวเลข + เทียบตามเงื่อนไข
-function targetPassSql(aCol, tCol, condExpr) {
+function targetPassSql(aCol, tCol, condExpr, pctCol) {
     const a = _tDec(aCol), t = _tDec(tCol);
-    return `(${targetHasSql(tCol, condExpr)} AND TRIM(${aCol}) REGEXP '^-{0,1}[0-9]' AND (CASE ${_tCond(condExpr)}` +
+    const base = `(${targetHasSql(tCol, condExpr)} AND TRIM(${aCol}) REGEXP '^-{0,1}[0-9]' AND (CASE ${_tCond(condExpr)}` +
         ` WHEN 'GT' THEN ${a} > ${t} WHEN 'LTE' THEN ${a} <= ${t} WHEN 'LT' THEN ${a} < ${t} WHEN 'EQ' THEN ${a} = ${t} ELSE ${a} >= ${t} END))`;
+    return pctCol ? `(CASE WHEN ${pctCol} IS NULL THEN ${base} ELSE (${_pctHas(pctCol)} AND ${_tDec(pctCol)} >= 100) END)` : base;
 }
 
 // ตรวจสอบชื่อตาราง/คอลัมน์ (ป้องกัน SQL Injection) — ย้ายจาก server.js (ส่วน Form Builder) 25 ต.ค. 2569

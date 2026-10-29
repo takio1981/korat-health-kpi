@@ -15,15 +15,25 @@ import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { TARGET_CONDITIONS, CONDITION_SYMBOL, CONDITION_LABEL, normalizeCondition, evaluateTarget } from '../shared/kpi-target';
 
 // วิธีคิด "ผลงาน" แบบสำเร็จรูป ↔ is_cumulative + result_formula (ฟังก์ชันล้วน — ทดสอบใน kpi-manage.spec.ts)
-export type ResultMethod = 'last' | 'sum' | 'avg' | 'max' | 'min' | 'custom';
+// 'manual' = ผู้บันทึกกรอกผลงานล่าสุดเอง (kpi_indicators.result_manual — 29 ต.ค. 2569)
+export type ResultMethod = 'last' | 'sum' | 'avg' | 'max' | 'min' | 'custom' | 'manual';
 const RESULT_METHOD_FORMULA: Partial<Record<ResultMethod, string>> = { avg: 'AVG(ALL)', max: 'MAX(ALL)', min: 'MIN(ALL)' };
 export function resultMethodOf(item: any): ResultMethod {
+  if (item?.result_manual === true || Number(item?.result_manual) === 1) return 'manual';
   const f = String(item?.result_formula || '').replace(/\s+/g, '').toUpperCase();
   if (!f) return item?.is_cumulative ? 'sum' : 'last';
   const hit = (Object.keys(RESULT_METHOD_FORMULA) as ResultMethod[]).find(k => RESULT_METHOD_FORMULA[k] === f);
   return hit || 'custom';
 }
 export function applyResultMethod(item: any, m: ResultMethod): void {
+  if (m === 'manual') {
+    // กรอกเอง — ไม่ใช้สูตร/สะสม (ช่องรายเดือนยังกรอกได้แต่ไม่นำมาคำนวณ)
+    item.result_manual = true;
+    item.result_formula = '';
+    item.is_cumulative = false;
+    return;
+  }
+  item.result_manual = false;
   if (m === 'custom') {
     // คงสูตรเดิมถ้าเป็นสูตรกำหนดเองอยู่แล้ว — ถ้าเป็นสูตรสำเร็จรูปให้ล้างเพื่อเริ่มพิมพ์เอง
     if (resultMethodOf(item) !== 'custom') item.result_formula = '';
@@ -909,6 +919,7 @@ export class KpiManageComponent implements OnInit {
     return !!String(this.currentItem?.pct_formula || '').trim();
   }
   get pctFormulaError(): string | null {
+    if (this.currentItem?.pct_manual) return null;   // กรอกร้อยละเอง — ไม่ใช้สูตรร้อยละ (ส่งเป็นค่าว่าง)
     const p = String(this.currentItem?.pct_formula || '').trim();
     return p ? validateFormula(p, this.customVarKeys, ['result']) : null;
   }
@@ -1004,6 +1015,7 @@ export class KpiManageComponent implements OnInit {
     { v: 'max', l: 'ค่าสูงสุด', d: 'ผลงาน = ค่าสูงสุดของเดือนที่มีผลงาน — สูตร MAX(ALL)' },
     { v: 'min', l: 'ค่าต่ำสุด', d: 'ผลงาน = ค่าต่ำสุดของเดือนที่มีผลงาน — สูตร MIN(ALL)' },
     { v: 'custom', l: 'สูตรกำหนดเอง', d: 'กำหนดสูตรเองในกล่องสูตรคำนวณผลงานด้านล่าง' },
+    { v: 'manual', l: 'กรอกเอง (ไม่คำนวณ)', d: 'ผู้บันทึกกรอก "ผลงานล่าสุด" เองในหน้าบันทึกผลงาน — ช่องรายเดือนยังกรอกได้แต่ไม่นำมาคำนวณ, ยังไม่กรอก = ว่าง' },
   ];
   private _resultMethodCustomFor: any = null; // จำว่าเลือก "สูตรกำหนดเอง" ไว้สำหรับรายการนี้ (กันสลับกลับเองเมื่อสูตรยังว่าง)
 
@@ -1107,6 +1119,8 @@ export class KpiManageComponent implements OnInit {
         src.result_formula = src.result_formula || '';
         src.custom_vars = parseCustomVars(src.custom_vars).map(v => ({ ...v }));   // ค่าเพิ่มเติมที่ตั้งชื่อเอง (แก้ไขในหน้าต่าง)
         src.pct_formula = src.pct_formula || '';
+        src.result_manual = Number(src.result_manual) === 1;   // ผลงานล่าสุด / ร้อยละ แบบกรอกเอง (29 ต.ค. 2569)
+        src.pct_manual = Number(src.pct_manual) === 1;
         src.evaluation_mode = src.evaluation_mode || 'any_one';
         src.sub_rollup_mode = src.sub_rollup_mode === 'manual' ? 'manual' : 'auto';
         src.item_no = src.item_no || '';
@@ -1121,7 +1135,7 @@ export class KpiManageComponent implements OnInit {
       if (this.activeTab === 'indicators') {
         this.selectedYutInModal = null;
         this.selectedOffTypes = [];
-        this.currentItem = { ...baseDefaults, r9: false, moph: false, ssj: false, rmw: false, other: false, is_cumulative: false, use_sub_indicator_export: false, result_formula: '', custom_vars: [], pct_formula: '', weight: 1, target_condition: 'GTE', evaluation_mode: 'any_one', sub_rollup_mode: 'auto', item_no: '', export_items: false };
+        this.currentItem = { ...baseDefaults, r9: false, moph: false, ssj: false, rmw: false, other: false, is_cumulative: false, use_sub_indicator_export: false, result_formula: '', custom_vars: [], pct_formula: '', result_manual: false, pct_manual: false, weight: 1, target_condition: 'GTE', evaluation_mode: 'any_one', sub_rollup_mode: 'auto', item_no: '', export_items: false };
       } else {
         this.currentItem = { ...baseDefaults };
       }
@@ -1197,6 +1211,10 @@ export class KpiManageComponent implements OnInit {
         .map((v: any) => ({ key: String(v?.key || '').trim().toLowerCase(), label: String(v?.label || '').trim() }))
         .filter((v: any) => v.key);
       payload.pct_formula = String(payload.pct_formula || '').trim() || null;
+      // ผลงานล่าสุด / ร้อยละ แบบกรอกเอง — กรอกร้อยละเองแล้วไม่ใช้สูตรร้อยละ
+      payload.result_manual = payload.result_manual ? 1 : 0;
+      payload.pct_manual = payload.pct_manual ? 1 : 0;
+      if (payload.pct_manual) payload.pct_formula = null;
       payload.required_off_types = payload.evaluation_mode === 'any_one' && this.selectedOffTypes.length > 0
         ? this.selectedOffTypes
         : null;

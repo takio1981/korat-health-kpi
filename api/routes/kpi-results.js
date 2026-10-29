@@ -9,6 +9,7 @@ const { apiRouter } = require('../core/router');
 const { authenticateToken, isAdmin, isSuperAdmin } = require('../core/auth');
 const { baseKey, loadBaseValues, loadPrevYearData, refreshKpiSummaryForIndicatorYears, scheduleSummaryRefresh, withSummaryLock } = require('../services/summary');
 const { formulaOk, needsCustomValues, varKeysOf } = require('../services/formula-vars');
+const { isManualResult, isManualPct, manualKey, loadManualValues, normalizeManualPct, MANUAL_RESULT_KEY, MANUAL_PCT_KEY } = require('../services/manual-result');
 const { getUserAuditInfo, logKpiSaveAudit } = require('../services/kpi-audit');
 const { indicatorAllowsHostype, indicatorTypeSetting, resolveIndicatorHostypes } = require('../services/indicator-scope');
 
@@ -126,6 +127,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 MIN(i.result_formula) AS result_formula,
                 MIN(i.custom_vars) AS custom_vars, -- ค่าเพิ่มเติมที่ตั้งชื่อเอง [{key,label}] (25 ต.ค. 2569)
                 MIN(i.pct_formula) AS pct_formula, -- สูตรร้อยละ (ว่าง = ตามเงื่อนไขเป้าหมาย)
+                MIN(i.result_manual) AS result_manual, MIN(i.pct_manual) AS pct_manual, -- ผลงานล่าสุด/ร้อยละ แบบกรอกเอง (29 ต.ค. 2569)
                 r.hospcode,
                 MIN(h.hosname) AS hosname,
                 MIN(h.hostype) AS hostype,
@@ -160,6 +162,9 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         // === ค่าฐาน/ค่าเพิ่มเติม เฉพาะตัวชี้วัดที่ใช้ — แนบ row.cv_<key> (+ base_value) ให้หน้าบันทึกผลงานแสดง/แก้ไข/คำนวณร้อยละ ===
         const baseRows = rows.filter(needsCustomValues);
         const baseMap = baseRows.length ? await loadBaseValues(db, baseRows.map(r => r.indicator_id), baseRows.map(r => r.year_bh)) : new Map();
+        // === ผลงานล่าสุด/ร้อยละ ที่กรอกเอง — แนบ row.manual_result / row.manual_pct (29 ต.ค. 2569) ===
+        const manualRows = rows.filter(r => isManualResult(r) || isManualPct(r));
+        const manualMap = manualRows.length ? await loadManualValues(db, manualRows.map(r => r.indicator_id), manualRows.map(r => r.year_bh)) : new Map();
 
         // === คำนวณ last_actual + appeal + has_form ฝั่ง JS (เร็วกว่า subquery) ===
         const monthOrder = [10,11,12,1,2,3,4,5,6,7,8,9];
@@ -193,6 +198,12 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                     const v = row[monthKeys[m]];
                     if (v != null && String(v).trim() !== '' && String(v).trim() !== '0') { lastVal = v; break; }
                 }
+            }
+            // ผลงานล่าสุดแบบกรอกเอง: ใช้ค่าที่กรอกเท่านั้น (ยังไม่กรอก = ว่าง ไม่ใช้ค่าที่คำนวณ — ผู้ใช้เลือก)
+            if (isManualResult(row) || isManualPct(row)) {
+                const mv = manualMap.get(manualKey(row.indicator_id, row.year_bh, row.hospcode)) || {};
+                if (isManualResult(row)) { row.manual_result = mv.result ?? null; lastVal = mv.result ?? null; }
+                if (isManualPct(row)) row.manual_pct = mv.pct ?? null;
             }
             row.last_actual = lastVal;
             row.has_form_schema = formSchemaSet.has(row.indicator_id) ? 1 : 0;
@@ -865,6 +876,43 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
             }
         }
 
+        // ผลงานล่าสุด / ร้อยละ แบบกรอกเอง (29 ต.ค. 2569): ฟิลด์ manual_result / manual_pct ของแถวที่ส่งมา — รับเฉพาะตัวชี้วัดที่ตั้ง "กรอกเอง" ไว้
+        // ล็อคตรวจด้านบนแล้ว | สิทธิ์เดียวกับผลงาน (can_edit_actual — ไม่มีสิทธิ์ = 403 ทั้งคำขอ ไม่บันทึกบางส่วน) | ว่าง = ลบ | ร้อยละต้องเป็นตัวเลข ≥ 0
+        const manualRowsToSave = updates.filter(r => r && (Object.prototype.hasOwnProperty.call(r, 'manual_result') || Object.prototype.hasOwnProperty.call(r, 'manual_pct')));
+        if (manualRowsToSave.length) {
+            const canEditManual = user.role === 'super_admin' || !!(await getPermsForUser(user.userId, user.role)).can_edit_actual;
+            if (!canEditManual) throw Object.assign(new Error('ไม่มีสิทธิ์แก้ไขผลงาน'), { status: 403 });
+            const mIds = [...new Set(manualRowsToSave.map(r => Number(r.indicator_id)).filter(Boolean))];
+            const [mInds] = mIds.length ? await connection.query('SELECT id, result_manual, pct_manual FROM kpi_indicators WHERE id IN (?)', [mIds]) : [[]];
+            const mIndMap = new Map(mInds.map(i => [Number(i.id), i]));
+            for (const row of manualRowsToSave) {
+                const ind = mIndMap.get(Number(row.indicator_id));
+                if (!ind) continue;
+                const hc = (ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
+                const entries = [];
+                if (isManualResult(ind) && Object.prototype.hasOwnProperty.call(row, 'manual_result')) {
+                    const v = String(row.manual_result ?? '').trim();
+                    if (v.length > 100) throw Object.assign(new Error('ผลงานล่าสุดยาวเกิน 100 ตัวอักษร'), { status: 400 });
+                    entries.push([MANUAL_RESULT_KEY, v]);
+                }
+                if (isManualPct(ind) && Object.prototype.hasOwnProperty.call(row, 'manual_pct')) {
+                    const v = normalizeManualPct(row.manual_pct);
+                    if (v === null) throw Object.assign(new Error(`ร้อยละต้องเป็นตัวเลข (ได้รับ "${String(row.manual_pct).slice(0, 20)}")`), { status: 400 });
+                    entries.push([MANUAL_PCT_KEY, v]);
+                }
+                for (const [key, v] of entries) {
+                    if (!v) {
+                        await connection.query('DELETE FROM kpi_base_values WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? AND var_key = ?', [row.indicator_id, row.year_bh, hc, key]);
+                    } else {
+                        await connection.query(
+                            `INSERT INTO kpi_base_values (indicator_id, year_bh, hospcode, var_key, base_value, updated_by) VALUES (?, ?, ?, ?, ?, ?)
+                             ON DUPLICATE KEY UPDATE base_value = VALUES(base_value), updated_by = VALUES(updated_by)`,
+                            [row.indicator_id, row.year_bh, hc, key, v, user.userId]);
+                    }
+                }
+            }
+        }
+
         await connection.commit();
         scheduleSummaryRefresh(updates); // อัปเดต kpi_summary ของคู่ (ตัวชี้วัด × ปีงบ) ที่บันทึก ทันที (fire-and-forget)
 
@@ -908,7 +956,8 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
     } catch (error) {
         await connection.rollback();
         console.error('Update Error:', error);
-        res.status(500).json({ success: false, message: error.message || 'เกิดข้อผิดพลาดในการบันทึก' });
+        // ข้อผิดพลาดที่ระบุสถานะเอง (ข้อมูลผิด/ไม่มีสิทธิ์ — ผลงาน/ร้อยละที่กรอกเอง) ตอบตามนั้น ไม่ใช่ 500
+        res.status(error.status === 400 || error.status === 403 ? error.status : 500).json({ success: false, message: error.message || 'เกิดข้อผิดพลาดในการบันทึก' });
     } finally {
         connection.release();
     }
