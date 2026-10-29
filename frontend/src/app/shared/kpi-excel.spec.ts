@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import {
   EXCEL_HEADERS, EXCEL_MONTHS, buildTemplateAoa, normalizeCell, parseImportAoa, planImport,
-  parseClipboardGrid, isMultiCell, planPaste, applyCellChanges,
+  parseClipboardGrid, isMultiCell, planPaste, applyCellChanges, monthTargetHeader,
 } from './kpi-excel';
 
 const PERMS = { canEditActual: true, canEditTarget: true };
@@ -215,5 +215,26 @@ describe('kpi-excel — ผลงานล่าสุด / ร้อยละ �
     expect(planImport(parsed.rows, [m1, p2], { canEditActual: false, canEditTarget: true }).noPerm).toBe(2);
     // ไม่มีแถวที่ตั้งกรอกเอง → ไม่มีคอลัมน์
     expect((buildTemplateAoa([p2])[1] as string[]).includes(EXCEL_HEADERS.manualResult)).toBe(false);
+  });
+});
+
+describe('kpi-excel — เป้าหมายรายเดือน (29 ต.ค. 2569)', () => {
+  it('มีคอลัมน์ "เป้าหมาย <เดือน>" เมื่อมีแถวที่ตั้งเป้าหมายรายเดือน + นำเข้าเฉพาะแถวนั้น + "เป้าหมาย" (เป้าหมายรวม) ของแถวนั้นไม่นำเข้า', () => {
+    const m1 = row(1, '00222', { target_monthly: 'cumulative', target_value: '30', t_oct: '10', t_nov: '20' });
+    const p2 = row(2, '00222');
+    const aoa = buildTemplateAoa([m1, p2]);
+    const head = aoa[1] as string[];
+    const cOct = head.indexOf(monthTargetHeader('ต.ค.')), cNov = head.indexOf(monthTargetHeader('พ.ย.'));
+    expect(cOct).toBeGreaterThan(head.indexOf(EXCEL_HEADERS.target));
+    expect(cOct).toBeLessThan(head.indexOf('ต.ค.'));
+    expect([aoa[2][cOct], aoa[2][cNov], aoa[3][cOct]]).toEqual([10, 20, '']);
+    const cT = head.indexOf(EXCEL_HEADERS.target);
+    aoa[2][cNov] = 25; aoa[2][cT] = 999; aoa[3][cOct] = 7;   // เป้าหมายรวมของแถวรายเดือน / เป้ารายเดือนของแถวปกติ → ข้าม
+    const parsed = parseImportAoa(aoa);
+    expect(parsed.fields).toEqual(expect.arrayContaining(['t_oct', 't_nov']));
+    expect(planImport(parsed.rows, [m1, p2], PERMS).changes.map(c => [c.item.indicator_id, c.field, c.newVal]))
+      .toEqual([[1, 't_nov', '25']]);
+    expect(planImport(parsed.rows, [m1, p2], { canEditActual: true, canEditTarget: false }).noPerm).toBe(1);
+    expect((buildTemplateAoa([p2])[1] as string[]).includes(monthTargetHeader('ต.ค.'))).toBe(false);
   });
 });

@@ -20,7 +20,7 @@ import { Anomaly, detectAnomaly } from '../shared/anomaly';
 import { SUB_EXCEL_MONTHS, SubChangePlan, buildSubTemplateAoa, parseSubImportAoa, planSubImport, applySubChanges, subFieldLabel } from '../shared/kpi-sub-excel';
 import { activityValue, rollupMonthly, itemNumber, rollupTree, RollupNode } from '../shared/kpi-rollup';
 import { orderSubTree } from '../shared/sub-tree';
-import { evaluateTarget, normalizeCondition, CONDITION_SYMBOL, CONDITION_LABEL } from '../shared/kpi-target';
+import { evaluateTarget, normalizeCondition, CONDITION_SYMBOL, CONDITION_LABEL, aggregateMonthlyTarget, normalizeTargetMonthly } from '../shared/kpi-target';
 
 // ตัวชี้วัดหลายระดับ — แถวลูกใต้แถวตัวชี้วัดหลักในตารางบันทึกผลงาน (ข้อย่อย 1.1 / ข้อย่อยระดับถัดไป 1.1.1 … / กิจกรรม)
 export interface HierRow {
@@ -968,6 +968,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
             item.total_actual = parseFloat(item.last_actual) || 0;
             item.pending_count = Number(item.pending_count) || 0;
             ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'].forEach(m => item[m] = item[m] != null ? String(item[m]) : '');
+            this.normalizeMonthTargets(item);
           });
 
           this.filteredData = res.data;
@@ -1352,6 +1353,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
             item.total_actual = parseFloat(item.last_actual) || 0;
             item.pending_count = Number(item.pending_count) || 0;
             ['oct','nov','dece','jan','feb','mar','apr','may','jun','jul','aug','sep'].forEach(m => item[m] = item[m] != null ? String(item[m]) : '');
+            this.normalizeMonthTargets(item);
           });
           allData = allData.concat(res.data);
         }
@@ -1622,6 +1624,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       if (String(item.target_value ?? '') !== String(item._original.target_value ?? '')) return true;
       if (this.isCustomChanged(item)) return true;
       if (this.isManualChanged(item)) return true;
+      if (this.isMonthTargetChanged(item)) return true;
       return months.some(m => String(item[m] ?? '') !== String(item._original[m] ?? ''));
     });
     // ร้อยละที่กรอกเองต้องเป็นตัวเลข
@@ -1703,6 +1706,18 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
             <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${statusBadge(item._original[f], item[f])}</td>
           </tr>`);
         }
+        // เป้าหมายรายเดือน
+        for (const m of months) {
+          if (!this.isMonthTargetChanged(item, m)) continue;
+          const f = 't_' + m;
+          rows.push(`<tr>
+            <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">${kpiName}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center;color:#b45309;font-weight:700">เป้าหมาย ${monthNames[m]}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${fmt(item._original[f])}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:700">${fmt(item[f])}</td>
+            <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${statusBadge(item._original[f], item[f])}</td>
+          </tr>`);
+        }
         // ค่าฐาน/ค่าเพิ่มเติมของสูตร (cv_<key>)
         for (const v of this.customVarDefs(item)) {
           if (!this.isCustomFieldChanged(item, v.key)) continue;
@@ -1768,7 +1783,9 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         // ค่าฐาน/ค่าเพิ่มเติม — ส่งเฉพาะช่องที่แก้ (ไม่ส่ง = backend ไม่เปลี่ยนค่าเดิม)
         ...this.customPayload(item),
         // ผลงานล่าสุด / ร้อยละ ที่กรอกเอง — ส่งเฉพาะช่องที่แก้
-        ...this.manualPayload(item)
+        ...this.manualPayload(item),
+        // เป้าหมายรายเดือน — ส่งครบ 12 เดือนทุกครั้ง (backend ลบ-เขียนแถวของคู่นี้ใหม่ทั้งชุด)
+        ...this.monthTargetPayload(item)
       }));
 
       // ตรวจสอบว่ามีรายการที่สถานะ "รอตอบกลับ" (Resubmit) หรือไม่
@@ -2978,7 +2995,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         };
       }
       // override ด้วยค่าเฉลี่ยจาก sub (ผลรวม ÷ จำนวนข้อย่อยที่เปิดใช้งานทั้งหมด — ข้อที่ไม่ได้บันทึก = 0) — format จำนวนเต็ม/2 ทศนิยม
-      if (sum.avg_target != null) item.target_value = this.formatNum(sum.avg_target);
+      if (sum.avg_target != null && !this.isMonthlyTarget(item)) item.target_value = this.formatNum(sum.avg_target);
       const monthMap: any = { oct:'m10', nov:'m11', dece:'m12', jan:'m01', feb:'m02', mar:'m03', apr:'m04', may:'m05', jun:'m06', jul:'m07', aug:'m08', sep:'m09' };
       for (const k of Object.keys(monthMap)) {
         const v = sum[monthMap[k]];
@@ -3141,6 +3158,38 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.isManualFieldChanged(item, 'manual_pct')) out['manual_pct'] = normalizeManualPct(item.manual_pct) ?? String(item.manual_pct ?? '').trim();
     return out;
   }
+  // ===== เป้าหมายรายเดือน (target_monthly — 29 ต.ค. 2569) =====
+  // ช่องเป้าหมาย (บน) คู่กับผลงาน (ล่าง) ในแต่ละเดือน — ค่าอยู่ในแถวเป็น t_<เดือน> | คอลัมน์ "เป้าหมาย" = เป้าหมายรวม
+  // ('latest' = เป้าเดือนของผลงานล่าสุด / 'cumulative' = รวมเป้าถึงเดือนนั้น — aggregateMonthlyTarget() สำเนาเดียวกับ backend) แก้ตรงไม่ได้
+  readonly MONTH_KEYS = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
+  isMonthlyTarget(item: any): boolean {
+    return !!normalizeTargetMonthly(item?.target_monthly);
+  }
+  monthlyTargetLabel(item: any): string {
+    return normalizeTargetMonthly(item?.target_monthly) === 'cumulative' ? 'รวมเป้าสะสม' : 'เป้าเดือนล่าสุด';
+  }
+  normalizeMonthTargets(item: any): void {
+    if (this.isMonthlyTarget(item)) this.MONTH_KEYS.forEach(m => item['t_' + m] = item['t_' + m] != null ? String(item['t_' + m]) : '');
+  }
+  // แก้ได้เมื่อเดียวกับช่องเป้าหมายเดิม (โหมดแก้ไข + สิทธิ์เป้าหมาย / แก้รายข้อ / แก้เป้าหมายที่ได้รับอนุมัติ)
+  canShowMonthTargetInput(item: any): boolean {
+    return this.isMonthlyTarget(item) && this.canShowTargetInput(item);
+  }
+  isMonthTargetChanged(item: any, m?: string): boolean {
+    if (!item?._original || !this.isMonthlyTarget(item)) return false;
+    return (m ? [m] : this.MONTH_KEYS).some(k => String(item['t_' + k] ?? '').trim() !== String(item._original['t_' + k] ?? '').trim());
+  }
+  monthTargetPayload(item: any): Record<string, string> {
+    const out: Record<string, string> = {};
+    if (this.isMonthlyTarget(item)) this.MONTH_KEYS.forEach(m => out['t_' + m] = String(item['t_' + m] ?? '').trim());
+    return out;
+  }
+  private monthTargetSnapshot(item: any): Record<string, string> {
+    const out: Record<string, string> = {};
+    this.MONTH_KEYS.forEach(m => out['t_' + m] = item['t_' + m] ?? '');
+    return out;
+  }
+
   // ร้อยละที่กรอกไม่ใช่ตัวเลข (ตรวจก่อนบันทึก — backend ปฏิเสธด้วย 400 อยู่แล้ว)
   isManualPctInvalid(item: any): boolean {
     return isManualPct(item) && normalizeManualPct(item?.manual_pct) === null;
@@ -3799,6 +3848,10 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
 
   onValueChange(item: any, month: string) {
     const fiscalOrder = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
+    // เป้าหมายรายเดือน → เป้าหมายรวม (ก่อนสูตร — สูตรอ้าง target) ตามผลงานล่าสุดที่เพิ่งแก้
+    if (this.isMonthlyTarget(item)) {
+      item.target_value = aggregateMonthlyTarget(item.target_monthly, fiscalOrder.map(m => item[m]), fiscalOrder.map(m => item['t_' + m])) ?? '';
+    }
     let lastActual = '';
     const formula = activeFormula(item);
     if (isManualResult(item)) {
@@ -4511,6 +4564,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
 
   startEditTarget(item: any) {
     item._originalTarget = item.target_value;
+    if (this.isMonthlyTarget(item)) item._originalMonthTargets = this.monthTargetSnapshot(item);
     item._editingTarget = true;
     this.cdr.detectChanges();
   }
@@ -4521,12 +4575,15 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
 
   cancelEditTarget(item: any) {
     item.target_value = item._originalTarget;
+    if (item._originalMonthTargets) Object.assign(item, item._originalMonthTargets);
     item._editingTarget = false;
     this.cdr.detectChanges();
   }
 
   saveTargetOnly(item: any) {
-    if (String(item.target_value ?? '') === String(item._originalTarget ?? '')) {
+    const monthChanged = this.isMonthlyTarget(item) && !!item._originalMonthTargets &&
+      this.MONTH_KEYS.some(m => String(item['t_' + m] ?? '').trim() !== String(item._originalMonthTargets['t_' + m] ?? '').trim());
+    if (String(item.target_value ?? '') === String(item._originalTarget ?? '') && !monthChanged) {
       Swal.fire({ icon: 'info', title: 'ไม่มีการเปลี่ยนแปลง', text: 'ค่าเป้าหมายไม่ได้รับการแก้ไข', timer: 1500, showConfirmButton: false });
       item._editingTarget = false;
       this.cdr.detectChanges();
@@ -4553,12 +4610,14 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         oct: item.oct, nov: item.nov, dece: item.dece,
         jan: item.jan, feb: item.feb, mar: item.mar,
         apr: item.apr, may: item.may, jun: item.jun,
-        jul: item.jul, aug: item.aug, sep: item.sep
+        jul: item.jul, aug: item.aug, sep: item.sep,
+        ...this.monthTargetPayload(item)
       }];
       this.authService.updateKpiResults(payload).subscribe({
         next: (res) => {
           if (res.success) {
             item._originalTarget = item.target_value;
+            if (this.isMonthlyTarget(item)) item._originalMonthTargets = this.monthTargetSnapshot(item);
             item._editingTarget = false;
             this.cdr.detectChanges();
             // ปิด request ถ้ามีการอนุมัติไว้
@@ -4611,7 +4670,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!item || !item._original) return;
 
     const months = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
-    const hasChange = String(item.target_value ?? '') !== String(item._original.target_value ?? '') || this.isManualChanged(item) ||
+    const hasChange = String(item.target_value ?? '') !== String(item._original.target_value ?? '') || this.isManualChanged(item) || this.isMonthTargetChanged(item) ||
       months.some(m => String(item[m] ?? '') !== String(item._original[m] ?? ''));
     if (this.isManualPctInvalid(item)) {
       Swal.fire('ร้อยละไม่ถูกต้อง', 'ร้อยละต้องเป็นตัวเลข (เช่น 85 หรือ 92.5)', 'warning');
@@ -4632,7 +4691,8 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       jan: item.jan, feb: item.feb, mar: item.mar,
       apr: item.apr, may: item.may, jun: item.jun,
       jul: item.jul, aug: item.aug, sep: item.sep,
-      ...this.manualPayload(item)
+      ...this.manualPayload(item),
+      ...this.monthTargetPayload(item)
     }];
 
     Swal.fire({

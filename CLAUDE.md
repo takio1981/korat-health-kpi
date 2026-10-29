@@ -76,6 +76,7 @@ frontend/src/app/
   | `services/kpi-audit.js` | logKpiSaveAudit, getUserAuditInfo, getAuditSettings/invalidateAuditSettingsCache |
   | `services/indicator-fields.js` | normTargetCondition, normalizeOffTypes, normalizeEvalMode, _actorLabel |
   | `services/manual-result.js` | ผลงานล่าสุด/ร้อยละ กรอกเอง: loadManualValues, applyManualToSummary, normalizeManualPct |
+  | `services/monthly-target.js` | เป้าหมายรายเดือน: applyMonthlyTargetToSummary (กฎ aggregateMonthlyTarget อยู่ใน kpi-target.js) |
   | `services/sso.js` / `services/users.js` | getThaidSettings/getProviderIdSettings + THAID_* / countUserKpiResults, userHasResultsMessage |
   | `core/router.js` / `core/env.js` | apiRouter (ตัวเดียวทั้งระบบ) / port |
   | `jobs/*.js` | startExportScheduler + runScheduledExport, startKpiAuditScheduler + runKpiAuditDigest, startSessionCleanupJob |
@@ -442,6 +443,17 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   กราฟรายเดือน (`_cNormal`) ไม่รวมตัวชี้วัดกรอกเอง | Export (`performKpiExport`/`checkKpiChanges` ตรงกัน) result = ผลงานที่กรอก | dashboard: ช่องกรอกในคอลัมน์ col-7/col-8
   (`canEditManual()`, มือถือด้วย), `calcPercent`/`isTargetMet`/`pctText`, หน้ายืนยัน + `manualPayload()`, ป้าย "กรอกเอง", Excel คอลัมน์ "ผลงานล่าสุด/ร้อยละ (กรอกเอง)"
   — Test: `api/tests/manual-result.test.js`, `shared/manual-result.spec.ts`, `kpi-excel.spec.ts`, `dashboard.spec.ts`, `kpi-manage.spec.ts`
+- **เป้าหมายรายเดือน (29 ต.ค. 2569 — ผู้ใช้เลือก: "ล่าสุด" = เป้าเดือนเดียวกับผลงานล่าสุด, "สะสม" = รวมเป้าถึงเดือนของผลงานล่าสุด, 2 ช่องในแต่ละเดือน):**
+  `kpi_indicators.target_monthly` VARCHAR(20) = `'latest'` | `'cumulative'` | NULL (เป้าหมายเดียวทั้งปี — วิธีเดิม) — เป้าแต่ละเดือน = `kpi_results.target_value` ของเดือนนั้น (โครงสร้างเดิมเก็บรายเดือนอยู่แล้ว
+  แต่ทุกจุดเขียนค่าเดียวกันทุกเดือนและอ่านด้วย MAX) | **กฎกลาง `aggregateMonthlyTarget(mode, actuals, targets)` ใน `api/kpi-target.js` = `shared/kpi-target.ts`** (+ fixture `monthly` ใน target-cases ทั้ง 2 ไฟล์)
+  — "เดือนของผลงานล่าสุด" = เดือนสุดท้ายที่ผลงานไม่ว่าง (0 นับ) ยังไม่มีผลงาน = เดือนสุดท้ายที่มีเป้า | latest: เดือนนั้นว่าง = เดือนก่อนหน้าที่มีเป้า | cumulative: ข้ามค่าที่ไม่ใช่ตัวเลข ปัด 2 ตำแหน่ง
+  | `GET /kpi-results` แนบ `t_<เดือน>` (เฉพาะตัวชี้วัดที่ตั้ง) + `target_value` = เป้าหมายรวม (ก่อนคำนวณสูตร) | `/update-kpi` โหมดปกติรับ `t_<เดือน>` เฉพาะตัวชี้วัดที่ตั้ง —
+  **แถวที่ไม่ส่ง t_* = คงเป้ารายเดือนเดิมจากฐานข้อมูล** (กันแก้เป้าหมายรายข้อ/หน้าจออื่นเขียนเป้าหมายรวมทับทุกเดือน — มี test), ไม่มีสิทธิ์เป้าหมาย = คงค่าเดิม, มีเป้า (≠ 0) เดือนใดก็ได้ = บันทึกครบ 12 เดือน
+  | `services/monthly-target.js` `applyMonthlyTargetToSummary()` เขียน `kpi_summary.target_value` = เป้าหมายรวม **ก่อน** applyFormulaToSummary และอีกครั้งหลัง applyManualToSummary (refreshSummaryPairs + finalize)
+  | Export (`exportTargetOf()` ใน performKpiExport/checkKpiChanges) target = เป้าหมายรวม | กราฟร้อยละรายเดือน (`_cNormal`) ไม่รวมตัวชี้วัดนี้ | PUT ที่เปลี่ยนโหมด → คำนวณตารางสรุปใหม่
+  | dashboard: `isMonthlyTarget()`, ช่อง "เป้า" ในช่องเดือน (`canShowMonthTargetInput()` = เงื่อนไขเดียวกับช่องเป้าหมาย), คอลัมน์เป้าหมายแก้ตรงไม่ได้, `onValueChange()` คำนวณเป้าหมายรวมใหม่,
+  `monthTargetPayload()` ส่งครบ 12 เดือน (บันทึกรวม/รายข้อ/แก้เป้าหมาย) | kpi-manage: `#indicator-target-monthly` | Excel: คอลัมน์ `monthTargetHeader()` "เป้าหมาย ต.ค." … (แถวรายเดือนไม่นำเข้า "เป้าหมาย")
+  — ไม่ครอบคลุม: โหมด `use_sub_indicator_export`, `prev_target` ในสูตร (ยังเป็น MAX ของปีที่แล้ว) — Test: `api/tests/monthly-target.test.js`, `kpi-target.test.js`, `shared/kpi-target.spec.ts`, `kpi-excel.spec.ts`, `dashboard.spec.ts`
 - **ค่าเพิ่มเติมที่ตั้งชื่อเอง + สูตรร้อยละ (25 ต.ค. 2569):** `kpi_indicators.custom_vars` TEXT = JSON `[{key,label}]` (≤ 10, `isValidVarKey()`: a-z ตามด้วย a-z0-9_ ≤ 20 ตัว ห้ามชนชื่อในตัว/`result`/`prev_*`/`m\d+`/ชื่อของ Object.prototype)
   ค่าต่อคู่เก็บ `kpi_base_values` คอลัมน์ `var_key` (UNIQUE indicator+year+hospcode+var_key; base = var_key 'base') — `evaluateFormula(…, prev, vars)` อาร์กิวเมนต์ที่ 5 เป็น object `{base, pop, …}` (ค่าเดี่ยว = base แบบเดิม)
   ตัวแปรอ่านแบบ own-property เท่านั้น — **`validateFormula(f, customKeys, extra)` ต้องส่งชื่อที่ประกาศเสมอ** (ไม่ส่ง = ใช้ได้แค่ base) ทั้ง backend (`formulaOk(ind, f)`, `varKeysOf()`) และ dashboard

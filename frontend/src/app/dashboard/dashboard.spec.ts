@@ -837,4 +837,62 @@ describe('DashboardComponent', () => {
       component.isEditing = false;
     });
   });
+
+  describe('เป้าหมายรายเดือน (target_monthly — 29 ต.ค. 2569)', () => {
+    const row = (extra: any = {}) => ({
+      indicator_id: 11, hospcode: '10871', year_bh: '2570', kpi_indicators_name: 'เป้ารายเดือน', target_value: '', target_condition: 'GTE',
+      target_monthly: 'latest', is_cumulative: 0, result_formula: null,
+      oct: '70', nov: '90', dece: '', jan: '', feb: '', mar: '', apr: '', may: '', jun: '', jul: '', aug: '', sep: '',
+      t_oct: '80', t_nov: '100', t_dece: '120', t_jan: '', t_feb: '', t_mar: '', t_apr: '', t_may: '', t_jun: '', t_jul: '', t_aug: '', t_sep: '', ...extra });
+
+    it('เป้าหมายรวม: ล่าสุด = เป้าเดือนของผลงานล่าสุด / สะสม = รวมถึงเดือนนั้น — คำนวณใหม่เมื่อแก้ผลงานหรือเป้า', () => {
+      const item: any = row();
+      component.onValueChange(item, 'nov');
+      expect(item.target_value).toBe('100');
+      expect(component.calcPercent(item)).toBe(90);
+      item.dece = '130';
+      component.onValueChange(item, 'dece');
+      expect(item.target_value).toBe('120');
+      expect(component.isTargetMet(item)).toBe(true);
+      const c: any = row({ target_monthly: 'cumulative' });
+      component.onValueChange(c, 'nov');
+      expect(c.target_value).toBe('180');
+      c.t_nov = '50';
+      component.onValueChange(c, 'nov');
+      expect(c.target_value).toBe('130');
+      // ตัวชี้วัดปกติ: เป้าหมายไม่ถูกคำนวณทับ
+      const p: any = row({ target_monthly: null, target_value: '80' });
+      component.onValueChange(p, 'nov');
+      expect(p.target_value).toBe('80');
+    });
+
+    it('ตรวจการแก้ไขเป้ารายเดือน + payload ส่งครบ 12 เดือนเฉพาะตัวชี้วัดเป้าหมายรายเดือน', () => {
+      const item: any = row();
+      item._original = { ...item };
+      expect(component.isMonthTargetChanged(item)).toBe(false);
+      item.t_jan = '140';
+      expect(component.isMonthTargetChanged(item)).toBe(true);
+      expect(component.isMonthTargetChanged(item, 'jan')).toBe(true);
+      expect(component.isMonthTargetChanged(item, 'oct')).toBe(false);
+      const pl = component.monthTargetPayload(item);
+      expect(Object.keys(pl).length).toBe(12);
+      expect([pl['t_oct'], pl['t_jan'], pl['t_sep']]).toEqual(['80', '140', '']);
+      const plain: any = row({ target_monthly: '' });
+      plain._original = { ...plain };
+      plain.t_oct = '1';
+      expect(component.isMonthTargetChanged(plain)).toBe(false);
+      expect(component.monthTargetPayload(plain)).toEqual({});
+    });
+
+    it('ช่องเป้าหมายรวมแก้ตรงไม่ได้ — ช่องเป้ารายเดือนแสดงเมื่อแก้ไขได้ (สิทธิ์เป้าหมาย, ไม่ล็อค)', () => {
+      const item: any = row();
+      component.isEditing = true;
+      vi.spyOn(component, 'canEditTarget', 'get').mockReturnValue(true);
+      expect(component.canShowMonthTargetInput(item)).toBe(true);
+      expect(component.canShowMonthTargetInput({ ...item, is_locked: 1 })).toBe(false);
+      expect(component.canShowMonthTargetInput(row({ target_monthly: '' }))).toBe(false);
+      expect(component.monthlyTargetLabel(row({ target_monthly: 'cumulative' }))).toBe('รวมเป้าสะสม');
+      component.isEditing = false;
+    });
+  });
 });

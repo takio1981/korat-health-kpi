@@ -5,6 +5,8 @@
 // กติการ่วม: ช่องว่างในไฟล์/คลิปบอร์ด = ไม่เปลี่ยนค่าเดิม (ไม่ล้างค่า) | แถวที่ล็อค/ไม่มีสิทธิ์ = ข้าม | ค่ายาวเกิน 100 ตัวอักษร = ข้าม
 // สิทธิ์จริงยังตรวจที่ backend ตอนบันทึก (/update-kpi) เหมือนการพิมพ์เองทุกประการ
 
+import { normalizeTargetMonthly } from './kpi-target';
+
 export const EXCEL_MONTHS: { key: string; label: string }[] = [
   { key: 'oct', label: 'ต.ค.' }, { key: 'nov', label: 'พ.ย.' }, { key: 'dece', label: 'ธ.ค.' },
   { key: 'jan', label: 'ม.ค.' }, { key: 'feb', label: 'ก.พ.' }, { key: 'mar', label: 'มี.ค.' },
@@ -24,11 +26,15 @@ export const EXCEL_HEADERS = {
   manualResult: 'ผลงานล่าสุด (กรอกเอง)',   // มีเฉพาะเมื่อตัวชี้วัดในตารางตั้งให้กรอกผลงานล่าสุดเอง (29 ต.ค. 2569)
   manualPct: 'ร้อยละ (กรอกเอง)',           // มีเฉพาะเมื่อตัวชี้วัดในตารางตั้งให้กรอกร้อยละเอง
 };
+// เป้าหมายรายเดือน (29 ต.ค. 2569): คอลัมน์ "เป้าหมาย ต.ค." … "เป้าหมาย ก.ย." (ฟิลด์ t_<เดือน>) — มีเฉพาะเมื่อมีแถวที่ตั้งเป้าหมายรายเดือน
+// แถวเหล่านี้ "เป้าหมาย" = เป้าหมายรวมที่คำนวณ (นำเข้าไม่ได้) | สิทธิ์เดียวกับเป้าหมาย
+export const monthTargetHeader = (label: string) => 'เป้าหมาย ' + label;
+const isMonthlyTargetRow = (it: any) => !!normalizeTargetMonthly(it?.target_monthly);
 const isManualRow = (it: any, f: string) => f === 'manual_result'
   ? (it?.result_manual === true || Number(it?.result_manual) === 1)
   : (it?.pct_manual === true || Number(it?.pct_manual) === 1);
 export const EXCEL_NOTE =
-  'แบบฟอร์มบันทึกผลงาน KHUPS KPI — แก้ไขได้เฉพาะคอลัมน์ "เป้าหมาย" "ค่าฐาน"/ค่าเพิ่มเติม และ "ผลงานล่าสุด/ร้อยละ (กรอกเอง)" (ถ้ามี) และเดือน ต.ค.–ก.ย. | ห้ามแก้ไขหรือลบคอลัมน์ indicator_id, hospcode, ปีงบประมาณ | ช่องว่าง = ไม่เปลี่ยนค่าเดิม';
+  'แบบฟอร์มบันทึกผลงาน KHUPS KPI — แก้ไขได้เฉพาะคอลัมน์ "เป้าหมาย" "ค่าฐาน"/ค่าเพิ่มเติม "ผลงานล่าสุด/ร้อยละ (กรอกเอง)" "เป้าหมาย <เดือน>" (ถ้ามี) และเดือน ต.ค.–ก.ย. | ห้ามแก้ไขหรือลบคอลัมน์ indicator_id, hospcode, ปีงบประมาณ | ช่องว่าง = ไม่เปลี่ยนค่าเดิม';
 export const MAX_VALUE_LENGTH = 100;   // kpi_results.actual_value / target_value = VARCHAR(100)
 
 const NUMERIC_RE = /^-?\d+(\.\d+)?$/;
@@ -65,12 +71,15 @@ export function buildTemplateAoa(items: any[], opts: { withBase?: boolean; vars?
   // ผลงานล่าสุด/ร้อยละ แบบกรอกเอง — มีคอลัมน์เมื่อมีแถวที่ตั้งกรอกเอง (แถวอื่นเว้นว่าง)
   const manual = (['manual_result', 'manual_pct'] as const).filter(f => (items || []).some(it => isManualRow(it, f)));
   const manualHead = manual.map(f => f === 'manual_result' ? EXCEL_HEADERS.manualResult : EXCEL_HEADERS.manualPct);
+  const monthly = (items || []).some(isMonthlyTargetRow);
+  const mtHead = monthly ? EXCEL_MONTHS.map(m => monthTargetHeader(m.label)) : [];
   const header = [EXCEL_HEADERS.indicator_id, EXCEL_HEADERS.hospcode, EXCEL_HEADERS.year_bh, EXCEL_HEADERS.main, EXCEL_HEADERS.name,
-    EXCEL_HEADERS.hosname, EXCEL_HEADERS.note, EXCEL_HEADERS.target, ...vars.map(customVarHeader), ...manualHead, ...EXCEL_MONTHS.map(m => m.label)];
+    EXCEL_HEADERS.hosname, EXCEL_HEADERS.note, EXCEL_HEADERS.target, ...vars.map(customVarHeader), ...manualHead, ...mtHead, ...EXCEL_MONTHS.map(m => m.label)];
   const rows = (items || []).map(it => [
     Number(it.indicator_id), String(it.hospcode ?? ''), String(it.year_bh ?? ''), String(it.main_indicator_name ?? ''),
     String(it.kpi_indicators_name ?? ''), String(it.hosname ?? ''), it.is_locked ? 'ล็อคแล้ว (นำเข้าไม่ได้)' : '',
     toCell(it.target_value), ...vars.map(v => toCell(it['cv_' + v.key])), ...manual.map(f => isManualRow(it, f) ? toCell(it[f]) : ''),
+    ...(monthly ? EXCEL_MONTHS.map(m => isMonthlyTargetRow(it) ? toCell(it['t_' + m.key]) : '') : []),
     ...EXCEL_MONTHS.map(m => toCell(it[m.key])),
   ]);
   return [[EXCEL_NOTE], header, ...rows];
@@ -108,6 +117,7 @@ export function parseImportAoa(aoa: any[][]): ParsedImport {
   });
   if (col(EXCEL_HEADERS.manualResult) >= 0) fieldCols.push({ field: 'manual_result', idx: col(EXCEL_HEADERS.manualResult) });
   if (col(EXCEL_HEADERS.manualPct) >= 0) fieldCols.push({ field: 'manual_pct', idx: col(EXCEL_HEADERS.manualPct) });
+  for (const m of EXCEL_MONTHS) if (col(monthTargetHeader(m.label)) >= 0) fieldCols.push({ field: 't_' + m.key, idx: col(monthTargetHeader(m.label)) });
   for (const m of EXCEL_MONTHS) if (col(m.label) >= 0) fieldCols.push({ field: m.key, idx: col(m.label) });
   if (fieldCols.length === 0) return { rows: [], fields: [], error: 'ไม่พบคอลัมน์เป้าหมายหรือเดือน (ต.ค.–ก.ย.) ในไฟล์' };
 
@@ -155,11 +165,13 @@ function considerCell(plan: ChangePlan, item: any, field: string, raw: any, perm
   if (field.startsWith('cv_') && !Object.prototype.hasOwnProperty.call(item, field)) return;
   // ผลงานล่าสุด/ร้อยละ แบบกรอกเอง: เฉพาะแถวของตัวชี้วัดที่ตั้งกรอกเอง — แถวอื่นข้ามเงียบๆ (สิทธิ์เดียวกับผลงาน)
   if ((field === 'manual_result' || field === 'manual_pct') && !isManualRow(item, field)) return;
+  // เป้าหมายรายเดือน: t_<เดือน> เฉพาะแถวที่ตั้งเป้าหมายรายเดือน และแถวนั้นไม่นำเข้า "เป้าหมาย" (เป้าหมายรวมคำนวณเอง) — ข้ามเงียบๆ
+  if (field.startsWith('t_') ? !isMonthlyTargetRow(item) : (field === 'target_value' && isMonthlyTargetRow(item))) return;
   // เทียบค่าเดิมก่อน — ค่าที่ไม่ได้แก้ในไฟล์ (เท่าเดิม) ของแถวล็อค/ช่องที่ไม่มีสิทธิ์ ไม่ถือว่า "ถูกข้าม" (ไม่ทำให้ผู้ใช้ตกใจ)
   const oldVal = String(item[field] ?? '').trim();
   if (sameValue(oldVal, newVal)) { plan.same++; return; }
   if (item.is_locked) { plan.locked++; return; }
-  const allowed = field === 'target_value' || field.startsWith('cv_') ? perms.canEditTarget : perms.canEditActual;  // ค่าฐาน/ค่าเพิ่มเติม = สิทธิ์เดียวกับเป้าหมาย
+  const allowed = field === 'target_value' || field.startsWith('cv_') || field.startsWith('t_') ? perms.canEditTarget : perms.canEditActual;  // ค่าฐาน/ค่าเพิ่มเติม/เป้าหมายรายเดือน = สิทธิ์เดียวกับเป้าหมาย
   if (!allowed) { plan.noPerm++; return; }
   if (newVal.length > MAX_VALUE_LENGTH) { plan.tooLong++; return; }
   plan.changes.push({ item, field, oldVal, newVal });

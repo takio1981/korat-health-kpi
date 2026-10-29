@@ -10,6 +10,18 @@ const { formulaOk } = require('./formula-vars');
 const { isValidIdentifier } = require('../core/sql');
 const { isManualResult, loadManualValues, manualKey } = require('./manual-result');
 const { resolveIndicatorHostypes } = require('./indicator-scope');
+const { normalizeTargetMonthly, aggregateMonthlyTarget } = require('../kpi-target');
+
+// เป้าหมายรายเดือน (29 ต.ค. 2569): เป้าหมายรวม = ล่าสุด/สะสม ถึงเดือนของผลงานล่าสุด (เหมือนหน้าบันทึกผลงาน/ตารางสรุป)
+// d._mt = เป้าหมายรายเดือน { m10: …, … } จาก kpi_results — ไม่มี = เป้าหมายเดิม (เดือน ต.ค. / ข้อย่อย)
+// ⚠️ ต้องใช้ทั้ง checkKpiChanges และ performKpiExport (ผลต้องตรงกัน)
+function exportTargetOf(indicator, d, months) {
+    const plain = (d.target === '' || d.target === undefined) ? null : d.target;
+    const mode = normalizeTargetMonthly(indicator.target_monthly);
+    if (!mode || !d._mt) return plain;
+    const v = aggregateMonthlyTarget(mode, months.map(m => d[m]), months.map(m => d._mt[m]));
+    return v === null ? plain : v;
+}
 
 // ===== Export 3 ระดับ (18 ต.ค. 2569): ตาราง <table_process>_items — 1 แถว = หน่วยบริการ × ปีงบ × ข้อย่อย/กิจกรรม =====
 // ตารางหลัก <table_process> ไม่เปลี่ยน (KHD ไม่กระทบ — Sync ส่งเฉพาะตารางชื่อ table_process) ตารางนี้เก็บในระบบเท่านั้น
@@ -183,7 +195,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
     try {
         // กรอง upload_excel != 1 (ตัวที่ตั้งเป็น "อัปโหลด Excel เอง" ข้ามทั้งใน check และ export)
         // ดึง evaluation_mode/required_off_types ด้วย เพื่อคำนวณขอบเขตหน่วยบริการเหมือน performKpiExport
-        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, result_manual, custom_vars, use_sub_indicator_export, evaluation_mode, required_off_types, item_no, export_items FROM kpi_indicators
+        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, result_manual, target_monthly, custom_vars, use_sub_indicator_export, evaluation_mode, required_off_types, item_no, export_items FROM kpi_indicators
             WHERE table_process IS NOT NULL AND table_process != '' AND is_active = 1
             AND (upload_excel IS NULL OR upload_excel = 0)`;
         let indicatorParams = [];
@@ -343,6 +355,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                 const mKey = 'm' + String(row.month_bh).padStart(2, '0');
                 const actualVal = row.actual_value;
                 entry[mKey] = (actualVal != null && actualVal !== '') ? String(actualVal) : null;
+                if (normalizeTargetMonthly(indicator.target_monthly)) (entry._mt = entry._mt || {})[mKey] = row.target_value; // เป้าหมายรายเดือน
                 if (String(row.month_bh) === '10') {
                     const targetVal = row.target_value;
                     entry.target = (targetVal != null && targetVal !== '') ? String(targetVal) : null;
@@ -412,7 +425,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
             const manualMapX = isManualResult(indicator) ? await loadManualValues(db, [indicator.id], [year_bh]) : null;
             for (const [hc, d] of dataMap) {
                 // ไม่ข้าม hospcode ที่ยังไม่มีผลงานแล้ว — ต้องนับเป็น new/unchanged ด้วย (mirror performKpiExport)
-                const target = emptyToNull(d.target);
+                const target = exportTargetOf(indicator, d, months);
                 const monthValues = months.map(m => emptyToNull(d[m]));
                 // result: มีสูตร → ตามสูตร, ตัวชี้วัดสะสม → รวมทุกเดือน, ปกติ → ค่าเดือนล่าสุดที่คีย์ (ก.ย.→ต.ค.) — เหมือน performKpiExport
                 let resultVal;
@@ -504,7 +517,7 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
         // 1. Get indicators with valid table_process
         //    — กรอง upload_excel != 1 (ตัวที่ตั้งเป็น "อัปโหลดเอง" ข้ามไป)
         //    — ดึง evaluation_mode/required_off_types ด้วย เพื่อคำนวณขอบเขตหน่วยบริการที่ต้อง export (ดู resolveIndicatorHostypes)
-        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, result_manual, custom_vars, use_sub_indicator_export, evaluation_mode, required_off_types, item_no, export_items FROM kpi_indicators
+        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, result_manual, target_monthly, custom_vars, use_sub_indicator_export, evaluation_mode, required_off_types, item_no, export_items FROM kpi_indicators
             WHERE is_active = 1 AND (upload_excel IS NULL OR upload_excel = 0)
             AND table_process IS NOT NULL AND table_process != ''`;
         let indicatorParams = [];
@@ -811,6 +824,7 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                     const mKey = 'm' + String(row.month_bh).padStart(2, '0');
                     const actualVal = row.actual_value;
                     entry[mKey] = (actualVal != null && actualVal !== '') ? String(actualVal) : null;
+                    if (normalizeTargetMonthly(indicator.target_monthly)) (entry._mt = entry._mt || {})[mKey] = row.target_value; // เป้าหมายรายเดือน
                     if (String(row.month_bh) === '10') {
                         const targetVal = row.target_value;
                         entry.target = (targetVal != null && targetVal !== '') ? String(targetVal) : null;
@@ -952,7 +966,7 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
                     // ไม่ข้ามแถวที่ยังไม่มีผลงานแล้ว (ต้อง export ครบทุกหน่วยบริการในขอบเขต) — นับไว้รายงานเฉยๆ
                     if (!hasActualData(d)) noDataCount++;
 
-                    const target = emptyToNull(d.target);
+                    const target = exportTargetOf(indicator, d, months);
                     const dynValues = dynFieldKeys.map(k => emptyToNull(d['_dyn_' + k]));
                     const monthValues = months.map(m => emptyToNull(d[m]));
                     // result: มีสูตร → ตามสูตร, ตัวชี้วัดสะสม → รวมทุกเดือน, ปกติ → ค่าล่าสุดที่คีย์ (เดือนท้ายสุดตามปีงบ: ก.ย.→ต.ค.)

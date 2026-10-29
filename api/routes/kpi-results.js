@@ -4,6 +4,7 @@
 
 const db = require('../db');
 const kpiFormula = require('../kpi-formula');
+const { TARGET_MONTHLY_MODES, normalizeTargetMonthly, aggregateMonthlyTarget } = require('../kpi-target');
 const { ROLE_ADMIN_ALL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, getDistrictId, getPermsForUser } = require('../core/access');
 const { apiRouter } = require('../core/router');
 const { authenticateToken, isAdmin, isSuperAdmin } = require('../core/auth');
@@ -98,6 +99,19 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 i.id AS indicator_id,
                 MIN(d.dept_name) AS dept_name,
                 MAX(r.target_value) AS target_value,
+                -- เป้าหมายรายเดือน (target_monthly — 29 ต.ค. 2569) ใช้เฉพาะตัวชี้วัดที่ตั้งไว้ แถวอื่นลบทิ้งก่อนส่ง
+                MAX(CASE WHEN r.month_bh = 10 THEN r.target_value END) AS t_oct,
+                MAX(CASE WHEN r.month_bh = 11 THEN r.target_value END) AS t_nov,
+                MAX(CASE WHEN r.month_bh = 12 THEN r.target_value END) AS t_dece,
+                MAX(CASE WHEN r.month_bh = 1  THEN r.target_value END) AS t_jan,
+                MAX(CASE WHEN r.month_bh = 2  THEN r.target_value END) AS t_feb,
+                MAX(CASE WHEN r.month_bh = 3  THEN r.target_value END) AS t_mar,
+                MAX(CASE WHEN r.month_bh = 4  THEN r.target_value END) AS t_apr,
+                MAX(CASE WHEN r.month_bh = 5  THEN r.target_value END) AS t_may,
+                MAX(CASE WHEN r.month_bh = 6  THEN r.target_value END) AS t_jun,
+                MAX(CASE WHEN r.month_bh = 7  THEN r.target_value END) AS t_jul,
+                MAX(CASE WHEN r.month_bh = 8  THEN r.target_value END) AS t_aug,
+                MAX(CASE WHEN r.month_bh = 9  THEN r.target_value END) AS t_sep,
                 MAX(CASE WHEN r.month_bh = 10 THEN r.actual_value END) AS oct,
                 MAX(CASE WHEN r.month_bh = 11 THEN r.actual_value END) AS nov,
                 MAX(CASE WHEN r.month_bh = 12 THEN r.actual_value END) AS dece,
@@ -128,6 +142,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 MIN(i.custom_vars) AS custom_vars, -- ค่าเพิ่มเติมที่ตั้งชื่อเอง [{key,label}] (25 ต.ค. 2569)
                 MIN(i.pct_formula) AS pct_formula, -- สูตรร้อยละ (ว่าง = ตามเงื่อนไขเป้าหมาย)
                 MIN(i.result_manual) AS result_manual, MIN(i.pct_manual) AS pct_manual, -- ผลงานล่าสุด/ร้อยละ แบบกรอกเอง (29 ต.ค. 2569)
+                MIN(i.target_monthly) AS target_monthly, -- เป้าหมายรายเดือน: 'latest' | 'cumulative' | NULL (เป้าหมายเดียวทั้งปี)
                 r.hospcode,
                 MIN(h.hosname) AS hosname,
                 MIN(h.hostype) AS hostype,
@@ -170,6 +185,12 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         const monthOrder = [10,11,12,1,2,3,4,5,6,7,8,9];
         const monthKeys = ['oct','nov','dece','jan','feb','mar','apr','may','jun','jul','aug','sep'];
         for (const row of rows) {
+            // เป้าหมายรายเดือน: เป้าหมายรวม = เป้าเดือนของผลงานล่าสุด / ผลรวมเป้าถึงเดือนนั้น (ก่อนคำนวณสูตร — สูตรอ้าง target)
+            if (normalizeTargetMonthly(row.target_monthly)) {
+                row.target_value = aggregateMonthlyTarget(row.target_monthly, monthKeys.map(k => row[k]), monthKeys.map(k => row['t_' + k]));
+            } else {
+                for (const k of monthKeys) delete row['t_' + k];
+            }
             const isCumulative = Number(row.is_cumulative) === 1;
             const formula = kpiFormula.activeFormula(row);
             let lastVal = null;
@@ -591,6 +612,13 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
             { col: 'jul', val: 7 }, { col: 'aug', val: 8 }, { col: 'sep', val: 9 }
         ];
 
+        // เป้าหมายรายเดือน (29 ต.ค. 2569): ตัวชี้วัดที่ตั้ง target_monthly รับเป้าหมายต่อเดือนจากฟิลด์ t_<เดือน>
+        // (แถวที่ไม่ส่ง t_* = ใช้ target_value ทุกเดือนแบบเดิม เช่น ตั้งค่าปีงบใหม่/เพิ่มตัวชี้วัดให้หน่วยบริการ)
+        const mtIds = [...new Set(updates.map(u => Number(u && u.indicator_id)).filter(Boolean))];
+        const [mtRows] = mtIds.length ? await connection.query('SELECT id FROM kpi_indicators WHERE id IN (?) AND target_monthly IN (?)', [mtIds, TARGET_MONTHLY_MODES]) : [[]];
+        const monthlyTargetIds = new Set(mtRows.map(r => Number(r.id)));
+        const usesMonthlyTargets = (row) => monthlyTargetIds.has(Number(row.indicator_id)) && months.some(m => Object.prototype.hasOwnProperty.call(row, 't_' + m.col));
+
         // สร้าง uniqueKeys สำหรับใช้ทั้ง lock check + insert/update
         const uniqueKeys = [...new Set(updates.map(row => {
             const hc = (ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
@@ -717,10 +745,11 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
                         'SELECT month_bh, actual_value, target_value FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?',
                         [indId, ybh, hc]
                     );
-                    const entry = { target: null, months: {} };
+                    const entry = { target: null, months: {}, targets: {} };
                     for (const r of existing) {
                         if (entry.target === null && r.target_value != null && r.target_value !== '') entry.target = r.target_value;
                         entry.months[r.month_bh] = r.actual_value;
+                        entry.targets[r.month_bh] = r.target_value;
                     }
                     preserveMap[key] = entry;
                 }
@@ -733,6 +762,8 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
                     // ถ้าแก้เป้าหมายไม่ได้ → คืนค่า target เดิม
                     if (!perms.can_edit_target) {
                         row.target_value = saved.target != null ? saved.target : (row.target_value || '');
+                        // เป้าหมายรายเดือน → คืนค่าเดิมรายเดือน
+                        if (usesMonthlyTargets(row)) for (const m of months) row['t_' + m.col] = saved.targets[m.val] ?? '';
                     }
                     // ถ้าแก้ผลงานไม่ได้ → คืนค่า actual เดิมรายเดือน
                     if (!perms.can_edit_actual) {
@@ -797,6 +828,16 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
             });
         }
 
+        // ตัวชี้วัดเป้าหมายรายเดือนที่แถวไม่ได้ส่ง t_* (เช่น แก้เป้าหมายรายข้อ/บันทึกจากหน้าจออื่น) → คงเป้าหมายรายเดือนเดิมจากฐานข้อมูล
+        // ไม่ให้ target_value (เป้าหมายรวม) ถูกเขียนทับทุกเดือน — เป้าหมายรายเดือนเปลี่ยนได้ผ่าน t_* เท่านั้น
+        for (const row of updates) {
+            if (!monthlyTargetIds.has(Number(row.indicator_id)) || usesMonthlyTargets(row)) continue;
+            const hc = (ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
+            const [old] = await connection.query('SELECT month_bh, target_value FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?', [row.indicator_id, row.year_bh, hc]);
+            if (!old.length) continue;   // คู่ใหม่ = ใช้ target_value ทุกเดือนแบบเดิม
+            for (const m of months) row['t_' + m.col] = (old.find(o => Number(o.month_bh) === m.val) || {}).target_value ?? '';
+        }
+
         // --- Mode: default → Dashboard ปกติ (DELETE + INSERT เฉพาะ row ที่มีค่า) ---
         // Batch DELETE: ลบข้อมูลเก่าทั้งหมดของแต่ละ indicator/year/hospcode
         for (const key of uniqueKeys) {
@@ -816,14 +857,23 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
             const rowStatus = row.preserve_status || 'Pending';
 
             const rawTarget3 = row.target_value;
-            const targetValue3 = (rawTarget3 !== undefined && rawTarget3 !== null && rawTarget3 !== '') ? String(rawTarget3).trim() : '';
+            // เป้าหมายของแต่ละเดือน: ตัวชี้วัดเป้าหมายรายเดือน = t_<เดือน>, อื่นๆ = target_value ค่าเดียวทุกเดือน (วิธีเดิม)
+            const monthlyT = usesMonthlyTargets(row);
+            const targetOf = (m) => {
+                const raw = monthlyT ? row['t_' + m.col] : rawTarget3;
+                return (raw !== undefined && raw !== null && raw !== '') ? String(raw).trim() : '';
+            };
+            // มีเป้าหมาย (≠ 0) อย่างน้อย 1 เดือน = บันทึกครบ 12 เดือน (เหมือนเป้าหมายเดียวแบบเดิม) ไม่งั้นเฉพาะเดือนที่มีผลงาน
+            const anyTarget = months.some(m => { const t = targetOf(m); return t && t !== '0'; });
             for (const m of months) {
                 const rawActual = row[m.col];
                 const actualValue = (rawActual !== undefined && rawActual !== null && rawActual !== '') ? String(rawActual).trim() : null;
+                const tv = targetOf(m);
+                if (tv.length > 100) throw Object.assign(new Error('เป้าหมายยาวเกิน 100 ตัวอักษร'), { status: 400 });
 
-                if ((actualValue && actualValue !== '0') || (targetValue3 && targetValue3 !== '0')) {
+                if ((actualValue && actualValue !== '0') || anyTarget) {
                     insertValues.push('(?, ?, ?, ?, ?, ?, ?, ?, 0)');
-                    insertParams.push(indicator_id, year_bh, m.val, actualValue, targetValue3, user.userId, rowStatus, rowHospcode);
+                    insertParams.push(indicator_id, year_bh, m.val, actualValue, tv, user.userId, rowStatus, rowHospcode);
                 }
             }
         }

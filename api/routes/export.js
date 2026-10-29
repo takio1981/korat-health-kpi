@@ -6,6 +6,7 @@ const db = require('../db');
 const { apiRouter } = require('../core/router');
 const { applyFormulaToSummary, mergeSubIntoSummary, withSummaryLock } = require('../services/summary');
 const { applyManualToSummary } = require('../services/manual-result');
+const { applyMonthlyTargetToSummary } = require('../services/monthly-target');
 const { authenticateToken, isSuperAdmin } = require('../core/auth');
 const { checkKpiChanges, performKpiExport } = require('../services/export');
 const { getRemotePool } = require('../db-remote');
@@ -318,9 +319,11 @@ apiRouter.post('/refresh-summary/finalize', authenticateToken, isSuperAdmin, asy
         `, yearParams);
 
         // ตัวชี้วัดที่ตั้งสูตรคำนวณผลงาน: ทับ last_actual ด้วยผลจากสูตร (ต้องอยู่หลัง 2 UPDATE ด้านบนเสมอ)
+        await applyMonthlyTargetToSummary(db, { yearBh: year || undefined }); // เป้าหมายรายเดือน → เป้าหมายรวม (ก่อนสูตร)
         await applyFormulaToSummary(db, { yearBh: year || undefined });
         // ผลงานล่าสุด/ร้อยละ ที่กรอกเอง — ทับผลที่คำนวณ (29 ต.ค. 2569)
         await applyManualToSummary(db, { yearBh: year || undefined });
+        await applyMonthlyTargetToSummary(db, { yearBh: year || undefined });
 
         const [formSchemas] = await db.query('SELECT indicator_id FROM kpi_form_schemas WHERE is_active = 1');
         if (formSchemas.length > 0) {

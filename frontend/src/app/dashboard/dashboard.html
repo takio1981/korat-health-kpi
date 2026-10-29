@@ -695,8 +695,9 @@
                   <div class="bg-yellow-50 p-2 rounded">
                     <span class="text-gray-600">เป้าหมาย:</span>
                     <span *ngIf="conditionSymbol(item) as sym" class="ml-1 text-amber-700 font-bold" [title]="conditionTitle(item)">{{ sym }}</span>
-                    <span *ngIf="!canShowTargetInput(item)" class="font-bold ml-1">{{ item.target_value || '-' }}</span>
-                    <input *ngIf="canShowTargetInput(item)" type="text" [(ngModel)]="item.target_value" class="w-full border border-orange-300 rounded px-1 py-1 text-right text-xs focus:outline-none focus:border-orange-500 transition-colors" [ngClass]="(isModified(item, 'target_value') || isEditingTarget(item)) ? 'bg-orange-100 font-bold text-orange-700 ring-2 ring-orange-400' : 'bg-white'">
+                    <span *ngIf="!canShowTargetInput(item) || isMonthlyTarget(item)" class="font-bold ml-1">{{ item.target_value || '-' }}</span>
+                    <span *ngIf="isMonthlyTarget(item)" class="ml-1 text-[10px] text-amber-700">({{ monthlyTargetLabel(item) }})</span>
+                    <input *ngIf="canShowTargetInput(item) && !isMonthlyTarget(item)" type="text" [(ngModel)]="item.target_value" class="w-full border border-orange-300 rounded px-1 py-1 text-right text-xs focus:outline-none focus:border-orange-500 transition-colors" [ngClass]="(isModified(item, 'target_value') || isEditingTarget(item)) ? 'bg-orange-100 font-bold text-orange-700 ring-2 ring-orange-400' : 'bg-white'">
                     <div *ngFor="let v of customVarDefs(item)" class="mt-1 text-[11px] text-sky-700" [title]="v.label + ' (' + v.key + ') — ค่าเพิ่มเติมของหน่วยบริการที่ใช้ในสูตร แก้ได้เช่นเดียวกับเป้าหมาย'">
                     <span class="block truncate">{{ v.key === 'base' ? 'ฐาน' : v.label }}</span>
                     <span *ngIf="!canShowTargetInput(item)" class="block font-bold">{{ item['cv_' + v.key] || '-' }}</span>
@@ -740,6 +741,13 @@
                       {{ month.name }}
                       <i *ngIf="item.is_locked" class="fas fa-lock text-amber-500 text-[9px]" title="ล็อค — แก้ไขไม่ได้"></i>
                     </div>
+                    <!-- เป้าหมายรายเดือน (29 ต.ค. 2569) -->
+                    <div *ngIf="isMonthlyTarget(item)" class="mb-1 text-[10px] text-amber-700">
+                      <input *ngIf="canShowMonthTargetInput(item)" type="text" [(ngModel)]="item['t_' + month.key]" (ngModelChange)="onValueChange(item, month.key)" placeholder="เป้า"
+                             class="w-full min-w-0 border border-amber-300 rounded px-1 py-0.5 text-center text-[10px] bg-amber-50 outline-none"
+                             [ngClass]="isMonthTargetChanged(item, month.key) ? '!bg-orange-100 !text-orange-700 ring-2 ring-orange-400 font-bold' : ''">
+                      <span *ngIf="!canShowMonthTargetInput(item)">เป้า {{ item['t_' + month.key] || '-' }}</span>
+                    </div>
                     <div *ngIf="!item.is_locked && canEditActual" class="flex items-center gap-0.5">
                       <input type="text" [(ngModel)]="item[month.key]" (ngModelChange)="onValueChange(item, month.key)"
                              class="w-full min-w-0 border border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:border-green-500 hover:border-green-400 transition-colors"
@@ -766,6 +774,7 @@
                          class="w-[62px] shrink-0 text-center p-1 rounded"
                          [ngClass]="isPendingValue(item[month.key]) ? 'bg-amber-100 font-bold text-amber-700 border border-amber-300' : (item[month.key] && item[month.key] !== '0') ? 'bg-green-100 font-bold text-gray-900' : 'text-gray-400 bg-white border border-gray-100'">
                       <div class="text-gray-600 mb-1">{{ month.name }}</div>
+                      <div *ngIf="isMonthlyTarget(item)" class="text-[9px] font-normal text-amber-700">เป้า {{ item['t_' + month.key] || '-' }}</div>
                       <div *ngIf="isPendingValue(item[month.key])" class="text-[9px] leading-tight"><i class="fas fa-hourglass-half text-[8px]"></i> กำลังดำเนินการ</div>
                       <div *ngIf="!isPendingValue(item[month.key])">{{ (item[month.key] && item[month.key] !== '0') ? item[month.key] : '-' }}</div>
                     </div>
@@ -1217,8 +1226,10 @@
                 <!-- Col 6: เป้าหมาย -->
                 <td *ngIf="colVisible['target']" class="px-1 py-2 frozen col-6 bg-amber-50 font-bold text-gray-800 text-right whitespace-nowrap border-r border-gray-100" [title]="conditionTitle(item)">
                   <span *ngIf="conditionSymbol(item) as sym" class="text-amber-700 mr-0.5">{{ sym }}</span>
-                  <span *ngIf="!canShowTargetInput(item)">{{ item.target_value || '-' }}</span>
-                  <input *ngIf="canShowTargetInput(item)" type="text" [(ngModel)]="item.target_value" (paste)="onCellPaste($event, item, 'target_value')"
+                  <span *ngIf="!canShowTargetInput(item) || isMonthlyTarget(item)">{{ item.target_value || '-' }}</span>
+                  <!-- เป้าหมายรายเดือน: เป้าหมายรวมคำนวณจากช่องเป้าหมายในแต่ละเดือน (แก้ที่ช่องเดือน) -->
+                  <div *ngIf="isMonthlyTarget(item)" class="text-[9px] font-normal text-amber-700" [title]="'เป้าหมายกรอกรายเดือน — ' + monthlyTargetLabel(item) + ' (ถึงเดือนของผลงานล่าสุด)'">{{ monthlyTargetLabel(item) }}</div>
+                  <input *ngIf="canShowTargetInput(item) && !isMonthlyTarget(item)" type="text" [(ngModel)]="item.target_value" (paste)="onCellPaste($event, item, 'target_value')"
                          class="w-20 border border-amber-200 rounded px-1 py-1 text-right text-xs focus:ring-1 focus:ring-orange-500 outline-none bg-orange-50 hover:border-orange-400 transition-all"
                          [ngClass]="isModified(item, 'target_value') || isEditingTarget(item) ? '!bg-orange-100 !text-orange-700 ring-2 ring-orange-400 font-bold' : ''">
                   <div *ngFor="let v of customVarDefs(item)" class="mt-1 text-[10px] font-normal text-sky-700 text-left max-w-[86px]" [title]="v.label + ' (' + v.key + ') — ค่าเพิ่มเติมของหน่วยบริการที่ใช้ในสูตร แก้ได้เช่นเดียวกับเป้าหมาย'">
@@ -1258,6 +1269,13 @@
                 <td *ngFor="let m of visibleMonthKeys"
                     class="px-1 py-2 text-center border-x group whitespace-nowrap month-col relative"
                     [ngClass]="hasFormData(item, m) ? 'bg-purple-50/60 text-gray-900 font-bold' : isPendingValue(item[m]) ? 'bg-amber-50' : (item[m] && item[m] !== '0') ? 'bg-green-100/40 text-gray-900 font-bold' : 'text-gray-300'">
+                  <!-- เป้าหมายรายเดือน (29 ต.ค. 2569): ช่องบน = เป้าหมาย, ช่องล่าง = ผลงาน -->
+                  <div *ngIf="isMonthlyTarget(item)" class="mb-0.5 text-[10px] font-normal text-amber-700" title="เป้าหมายเดือนนี้">
+                    <input *ngIf="canShowMonthTargetInput(item)" type="text" [(ngModel)]="item['t_' + m]" (ngModelChange)="onValueChange(item, m)" placeholder="เป้า"
+                           class="w-full min-w-0 border border-amber-300 rounded px-1 py-0.5 text-center text-[10px] bg-amber-50 outline-none focus:ring-1 focus:ring-amber-500"
+                           [ngClass]="isMonthTargetChanged(item, m) ? '!bg-orange-100 !text-orange-700 ring-2 ring-orange-400 font-bold' : ''">
+                    <span *ngIf="!canShowMonthTargetInput(item)">เป้า {{ item['t_' + m] || '-' }}</span>
+                  </div>
                   <span *ngIf="(!isEditing && !isSingleEditing(item)) || item.is_locked || !canEditActual">
                     <span *ngIf="isPendingValue(item[m])" class="inline-flex items-center gap-0.5 px-1 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded text-[9px] font-bold" title="กำลังดำเนินการ">
                       <i class="fas fa-hourglass-half text-[8px]"></i>กำลังดำเนินการ

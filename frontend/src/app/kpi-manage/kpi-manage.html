@@ -1693,6 +1693,20 @@
                  class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white"
                  placeholder="เช่น 80">
           <p class="text-[10px] text-gray-500 mt-1.5">ค่าเริ่มต้นที่จะถูกคัดลอกเป็น "เป้าหมาย" ของแต่ละหน่วยบริการ เมื่อตั้งค่าปีงบประมาณใหม่ หรือเพิ่มตัวชี้วัดนี้ให้หน่วยบริการ — แก้ไขได้อิสระต่อหน่วยบริการ/เดือนภายหลัง ไม่ผูกกับค่านี้อีก</p>
+          <!-- เป้าหมายรายเดือน (29 ต.ค. 2569) -->
+          <div id="indicator-target-monthly" class="mt-2">
+            <label class="block text-xs font-bold text-gray-600 mb-1">การกรอกเป้าหมาย</label>
+            <select [(ngModel)]="currentItem.target_monthly" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white">
+              <option value="">เป้าหมายเดียวทั้งปี (แบบเดิม)</option>
+              <option value="latest">กรอกเป้าหมายรายเดือน — เป้าหมายรวม = เป้าเดือนของผลงานล่าสุด</option>
+              <option value="cumulative">กรอกเป้าหมายรายเดือน — เป้าหมายรวม = รวมเป้าสะสมถึงเดือนของผลงานล่าสุด</option>
+            </select>
+            <p *ngIf="currentItem.target_monthly" class="text-[10px] text-emerald-700 mt-1">
+              หน้าบันทึกผลงานจะมีช่อง "เป้า" คู่กับผลงานในทุกเดือน และคอลัมน์ "เป้าหมาย" แสดงเป้าหมายรวมที่คำนวณให้
+              ({{ currentItem.target_monthly === 'cumulative' ? 'เช่น ผลงานล่าสุดเดือน ธ.ค. → เป้า ต.ค.+พ.ย.+ธ.ค.' : 'เช่น ผลงานล่าสุดเดือน ธ.ค. → เป้าเดือน ธ.ค.' }})
+              ใช้คิดร้อยละ/ผ่านเกณฑ์ทั้งระบบ — เป้าหมายเดิมที่บันทึกไว้จะเป็นเป้าหมายของทุกเดือนจนกว่าจะแก้
+            </p>
+          </div>
         </div>
         <div class="border border-amber-200 rounded-xl p-3 bg-amber-50/40">
           <label class="block text-xs font-bold text-gray-700 mb-2">

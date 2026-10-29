@@ -12,7 +12,7 @@ import { orderSubTree } from '../shared/sub-tree';
 import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
-import { TARGET_CONDITIONS, CONDITION_SYMBOL, CONDITION_LABEL, normalizeCondition, evaluateTarget } from '../shared/kpi-target';
+import { TARGET_CONDITIONS, CONDITION_SYMBOL, CONDITION_LABEL, normalizeCondition, evaluateTarget, normalizeTargetMonthly } from '../shared/kpi-target';
 
 // วิธีคิด "ผลงาน" แบบสำเร็จรูป ↔ is_cumulative + result_formula (ฟังก์ชันล้วน — ทดสอบใน kpi-manage.spec.ts)
 // 'manual' = ผู้บันทึกกรอกผลงานล่าสุดเอง (kpi_indicators.result_manual — 29 ต.ค. 2569)
@@ -1121,6 +1121,7 @@ export class KpiManageComponent implements OnInit {
         src.pct_formula = src.pct_formula || '';
         src.result_manual = Number(src.result_manual) === 1;   // ผลงานล่าสุด / ร้อยละ แบบกรอกเอง (29 ต.ค. 2569)
         src.pct_manual = Number(src.pct_manual) === 1;
+        src.target_monthly = normalizeTargetMonthly(src.target_monthly);   // เป้าหมายรายเดือน (29 ต.ค. 2569) — '' = เป้าหมายเดียวทั้งปี
         src.evaluation_mode = src.evaluation_mode || 'any_one';
         src.sub_rollup_mode = src.sub_rollup_mode === 'manual' ? 'manual' : 'auto';
         src.item_no = src.item_no || '';
@@ -1135,7 +1136,7 @@ export class KpiManageComponent implements OnInit {
       if (this.activeTab === 'indicators') {
         this.selectedYutInModal = null;
         this.selectedOffTypes = [];
-        this.currentItem = { ...baseDefaults, r9: false, moph: false, ssj: false, rmw: false, other: false, is_cumulative: false, use_sub_indicator_export: false, result_formula: '', custom_vars: [], pct_formula: '', result_manual: false, pct_manual: false, weight: 1, target_condition: 'GTE', evaluation_mode: 'any_one', sub_rollup_mode: 'auto', item_no: '', export_items: false };
+        this.currentItem = { ...baseDefaults, r9: false, moph: false, ssj: false, rmw: false, other: false, is_cumulative: false, use_sub_indicator_export: false, result_formula: '', custom_vars: [], pct_formula: '', result_manual: false, pct_manual: false, target_monthly: '', weight: 1, target_condition: 'GTE', evaluation_mode: 'any_one', sub_rollup_mode: 'auto', item_no: '', export_items: false };
       } else {
         this.currentItem = { ...baseDefaults };
       }
@@ -1215,6 +1216,7 @@ export class KpiManageComponent implements OnInit {
       payload.result_manual = payload.result_manual ? 1 : 0;
       payload.pct_manual = payload.pct_manual ? 1 : 0;
       if (payload.pct_manual) payload.pct_formula = null;
+      payload.target_monthly = normalizeTargetMonthly(payload.target_monthly);   // เป้าหมายรายเดือน — '' = เป้าหมายเดียวทั้งปี
       payload.required_off_types = payload.evaluation_mode === 'any_one' && this.selectedOffTypes.length > 0
         ? this.selectedOffTypes
         : null;

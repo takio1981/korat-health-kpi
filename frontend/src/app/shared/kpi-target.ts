@@ -63,3 +63,40 @@ export function evaluateTarget(actual: any, target: any, cond: any): TargetResul
   else pct = Math.min(Math.abs(a), Math.abs(t)) / Math.max(Math.abs(a), Math.abs(t)) * 100;
   return { pct, pass: a === t };
 }
+
+// === เป้าหมายรายเดือน (target_monthly — เพิ่ม 29 ต.ค. 2569) ===
+// ตัวชี้วัดที่ตั้งเป้าหมายรายเดือน: เป้าหมายแต่ละเดือนเก็บคู่กับผลงานใน kpi_results.target_value ของเดือนนั้น
+// และ "เป้าหมายรวม" (คอลัมน์เป้าหมาย / ร้อยละ / ผ่านเกณฑ์ / ตารางสรุป / ส่งออก) คำนวณจากเป้าหมายรายเดือน:
+//   'latest'     = เป้าหมายของเดือนเดียวกับผลงานล่าสุด (เดือนนั้นว่าง = เดือนก่อนหน้าที่มีเป้าหมาย)
+//   'cumulative' = ผลรวมเป้าหมายตั้งแต่ ต.ค. ถึงเดือนของผลงานล่าสุด (ค่าที่ไม่ใช่ตัวเลขไม่นับ)
+//   อื่นๆ/ว่าง   = ไม่ใช้เป้าหมายรายเดือน (เป้าหมายเดียวทั้งปี — วิธีเดิม) → คืน null
+// "เดือนของผลงานล่าสุด" = เดือนสุดท้าย (ต.ค. → ก.ย.) ที่ผลงานไม่ว่าง (ค่า 0 นับ) — ยังไม่มีผลงาน = เดือนสุดท้ายที่มีเป้าหมาย
+// actuals / targets = อาร์เรย์ 12 ช่องเรียงตามปีงบ (ต.ค. … ก.ย.)
+export type TargetMonthlyMode = 'latest' | 'cumulative' | '';
+export const TARGET_MONTHLY_MODES: TargetMonthlyMode[] = ['latest', 'cumulative'];
+
+export function normalizeTargetMonthly(v: any): TargetMonthlyMode {
+  const s = String(v == null ? '' : v).trim().toLowerCase();
+  return (TARGET_MONTHLY_MODES as string[]).includes(s) ? s as TargetMonthlyMode : '';
+}
+
+export function aggregateMonthlyTarget(mode: any, actuals: any[], targets: any[]): string | null {
+  const m = normalizeTargetMonthly(mode);
+  if (!m) return null;
+  const has = (v: any) => v !== null && v !== undefined && String(v).trim() !== '';
+  const a = actuals || [], t = targets || [];
+  let end = -1;
+  for (let i = 11; i >= 0; i--) if (has(a[i])) { end = i; break; }
+  if (end < 0) for (let i = 11; i >= 0; i--) if (has(t[i])) { end = i; break; }
+  if (end < 0) return null;
+  if (m === 'latest') {
+    for (let i = end; i >= 0; i--) if (has(t[i])) return String(t[i]).trim();
+    return null;
+  }
+  let sum = 0, n = 0;
+  for (let i = 0; i <= end; i++) {
+    const v = has(t[i]) ? targetNum(t[i]) : null;
+    if (v !== null) { sum += v; n++; }
+  }
+  return n ? String(Math.round(sum * 100) / 100) : null;
+}

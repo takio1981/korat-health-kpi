@@ -4,6 +4,7 @@
 
 const db = require('../db');
 const kpiRollup = require('../kpi-rollup');
+const { normalizeTargetMonthly } = require('../kpi-target');
 const { ROLE_ADMIN_ALL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, getDistrictId, getPermsForUser, hasPageAccess, requireAction } = require('../core/access');
 const { ROLLED_SUB_MESSAGE, activeSubTree, getHierarchyMaxLevels, loadSubAggregates, rolledSubIds, subLevelIn } = require('../services/hierarchy');
 const { _actorLabel, normTargetCondition, normalizeEvalMode, normalizeOffTypes } = require('../services/indicator-fields');
@@ -298,7 +299,7 @@ apiRouter.put('/indicators/:id', authenticateToken, requireAction('kpi-manage', 
         let diff = '';
         let calcChanged = false; // สูตร/สะสม เปลี่ยน → ต้องคำนวณ kpi_summary ใหม่
         try {
-            const [oldRow] = await db.query('SELECT kpi_indicators_name, is_active, table_process, target_percentage, criterion, is_cumulative, result_formula, result_manual, pct_manual FROM kpi_indicators WHERE id = ?', [req.params.id]);
+            const [oldRow] = await db.query('SELECT kpi_indicators_name, is_active, table_process, target_percentage, criterion, is_cumulative, result_formula, result_manual, pct_manual, target_monthly FROM kpi_indicators WHERE id = ?', [req.params.id]);
             if (oldRow[0]) {
                 const o = oldRow[0];
                 const changes = [];
@@ -317,6 +318,12 @@ apiRouter.put('/indicators/:id', authenticateToken, requireAction('kpi-manage', 
                     if (req.body[k] === undefined) continue;
                     const nv = req.body[k] === true || Number(req.body[k]) === 1 ? 1 : 0;
                     if (Number(o[k] || 0) !== nv) { changes.push(`${label}→${nv ? 'กรอกเอง' : 'คำนวณ'}`); calcChanged = true; }
+                }
+                // เปลี่ยนเป้าหมายรายเดือน (เป้าหมายรวม = ล่าสุด/สะสม) → คำนวณเป้าหมายในตารางสรุปใหม่ (29 ต.ค. 2569)
+                if (req.body.target_monthly !== undefined && normalizeTargetMonthly(o.target_monthly) !== normalizeTargetMonthly(req.body.target_monthly)) {
+                    const nv = normalizeTargetMonthly(req.body.target_monthly);
+                    changes.push(`เป้าหมาย→${nv === 'latest' ? 'รายเดือน (ล่าสุด)' : nv === 'cumulative' ? 'รายเดือน (สะสม)' : 'ค่าเดียวทั้งปี'}`);
+                    calcChanged = true;
                 }
                 if (changes.length > 0) diff = `\n📝 เปลี่ยน: ${changes.join(', ')}`;
             }
@@ -573,6 +580,11 @@ async function saveHierarchyFields(conn, table, id, body) {
             sets.push(`${k} = ?`);
             params.push(body[k] === true || Number(body[k]) === 1 ? 1 : 0);
         }
+    }
+    // เป้าหมายรายเดือน (29 ต.ค. 2569): 'latest' | 'cumulative' | ว่าง = เป้าหมายเดียวทั้งปี
+    if (table === 'kpi_indicators' && body && body.target_monthly !== undefined) {
+        sets.push('target_monthly = ?');
+        params.push(normalizeTargetMonthly(body.target_monthly) || null);
     }
     if (table === 'kpi_indicators' && body && body.pct_formula !== undefined) {
         sets.push('pct_formula = ?');

@@ -378,7 +378,7 @@ const CHART_METRICS_SQL = `
 // รายเดือน: recorded = มีค่าในเดือนนั้น | eligible/passed = เทียบค่าเดือนนั้นกับเป้าหมาย เฉพาะตัวชี้วัดแบบปกติ
 // (ไม่รวมตัวชี้วัดสะสม/มีสูตร เพราะค่ารายเดือนของตัวชี้วัดเหล่านั้นไม่ใช่ "ผลงาน ณ เดือนนั้น")
 // + ไม่รวมตัวชี้วัดที่กรอกผลงาน/ร้อยละเอง (29 ต.ค. 2569 — ค่ารายเดือนไม่ใช่ผลงาน/ร้อยละที่ใช้ตัดสิน)
-const _cNormal = "(COALESCE(i.is_cumulative,0) = 0 AND (i.result_formula IS NULL OR TRIM(i.result_formula) = '') AND COALESCE(i.result_manual,0) = 0 AND COALESCE(i.pct_manual,0) = 0)";
+const _cNormal = "(COALESCE(i.is_cumulative,0) = 0 AND (i.result_formula IS NULL OR TRIM(i.result_formula) = '') AND COALESCE(i.result_manual,0) = 0 AND COALESCE(i.pct_manual,0) = 0 AND (i.target_monthly IS NULL OR i.target_monthly = ''))"; // ร้อยละรายเดือนเทียบเป้าหมายรวมไม่ได้กับตัวชี้วัดเป้าหมายรายเดือน
 
 const CHART_MONTHLY_SQL = CHART_MONTHS.map(([m]) => `
     SUM(CASE WHEN NULLIF(TRIM(s.${m}),'') IS NOT NULL THEN 1 ELSE 0 END) AS rec_${m},

@@ -4,7 +4,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { normalizeCondition, hasTarget, evaluateTarget } = require('../kpi-target');
+const { normalizeCondition, hasTarget, evaluateTarget, aggregateMonthlyTarget } = require('../kpi-target');
 
 const fixturePath = path.join(__dirname, 'fixtures', 'target-cases.json');
 const cases = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
@@ -27,6 +27,13 @@ describe('evaluateTarget', () => {
 describe('hasTarget', () => {
     test.each(cases.has.map(c => [c.name, c]))('%s', (_n, c) => {
         expect(hasTarget(c.target, c.cond)).toBe(c.expected);
+    });
+});
+
+// เป้าหมายรายเดือน → เป้าหมายรวม (ล่าสุด / สะสม ถึงเดือนของผลงานล่าสุด) — 29 ต.ค. 2569
+describe('aggregateMonthlyTarget', () => {
+    test.each(cases.monthly.map(c => [c.name, c]))('%s', (_n, c) => {
+        expect(aggregateMonthlyTarget(c.mode, c.actuals, c.targets)).toBe(c.expected);
     });
 });
 
