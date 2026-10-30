@@ -65,7 +65,7 @@
 
       <!-- Filters -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5 mb-4">
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-9 gap-3">
           <div>
             <label class="block text-xs font-bold text-gray-500 mb-1">ปีงบประมาณ</label>
             <select [(ngModel)]="selectedYear" (change)="onFilterChange('selectedYear')" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none">
@@ -102,10 +102,17 @@
             </select>
           </div>
           <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1">โซน</label>
+            <select [(ngModel)]="selectedZone" (change)="onFilterChange('selectedZone')" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none">
+              <option value="">ทุกโซน</option>
+              <option *ngFor="let z of options.zones" [value]="z">{{ zoneLabel(z) }}</option>
+            </select>
+          </div>
+          <div>
             <label class="block text-xs font-bold text-gray-500 mb-1">อำเภอ</label>
             <select [(ngModel)]="selectedDistrict" (change)="onFilterChange('selectedDistrict')" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none">
               <option value="">ทั้งหมด</option>
-              <option *ngFor="let o of options.districts" [value]="o.id">{{ o.name }}</option>
+              <option *ngFor="let o of districtOptions" [value]="o.id">{{ o.name }}</option>
             </select>
           </div>
           <div>

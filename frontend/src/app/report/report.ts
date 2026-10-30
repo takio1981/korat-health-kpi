@@ -10,6 +10,7 @@ import { CriteriaTextPipe } from '../shared/criteria-text.pipe';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import Swal from 'sweetalert2';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
+import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
 
 @Component({
   selector: 'app-report',
@@ -32,7 +33,16 @@ export class ReportComponent implements OnInit {
   // Filters
   selectedYear: string = '';
   selectedDeptId: string = '';
+  selectedZone: string = '';
   selectedDistId: string = '';
+  zoneLabel = zoneLabel;
+  get zoneList(): string[] { return zoneOptions(this.districts); }
+  /** อำเภอในตัวกรอง — เฉพาะอำเภอในโซนที่เลือก */
+  get zoneDistricts(): any[] { return this.districts.filter((d: any) => inZone(d, this.selectedZone)); }
+  onZoneChange() {
+    if (this.selectedDistId && !this.zoneDistricts.some((d: any) => d.distid === this.selectedDistId)) this.selectedDistId = '';
+    this.onFilterChange();
+  }
   selectedHosType: string = '';
   filterYears: string[] = [];
   departments: any[] = [];
@@ -189,6 +199,7 @@ export class ReportComponent implements OnInit {
     this.hospDrilldownLoading = true;
     const params: any = { year_bh: this.selectedYear, indicator_id: ind.indicator_id, filter };
     if (this.selectedHosType) params.hostype = this.selectedHosType;
+    if (this.selectedZone) params.zone = this.selectedZone;
     this.authService.getReportByDeptSummaryHospitals(params).subscribe({
       next: (res: any) => {
         this.hospDrilldownLoading = false;
@@ -213,6 +224,7 @@ export class ReportComponent implements OnInit {
     this.deptDrilldownLoading = true;
     const params: any = { year_bh: this.selectedYear, dept_id: dept.dept_id };
     if (this.selectedHosType) params.hostype = this.selectedHosType;
+    if (this.selectedZone) params.zone = this.selectedZone;
     this.authService.getReportByDeptSummaryIndicators(params).subscribe({
       next: (res: any) => {
         this.deptDrilldownLoading = false;
@@ -273,6 +285,7 @@ export class ReportComponent implements OnInit {
     this.selectedYear = this.filterYears.length > 0 ? this.filterYears[0] : '';
     this.selectedDeptId = '';
     this.selectedHosType = '';
+    this.selectedZone = '';
     this.selectedDistId = '';
     this.loadReport();
   }
@@ -284,6 +297,7 @@ export class ReportComponent implements OnInit {
     if (this.selectedDeptId) params.dept_id = this.selectedDeptId;
     if (this.selectedDistId) params.distid = this.selectedDistId;
     if (this.selectedHosType) params.hostype = this.selectedHosType;
+    if (this.selectedZone) params.zone = this.selectedZone;
 
     let observable;
     switch (this.activeTab) {

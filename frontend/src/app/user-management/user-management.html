@@ -63,7 +63,7 @@
     </div>
 
     <!-- ส่วนค้นหาและตัวกรอง -->
-    <div *ngIf="showFilters" class="p-6 bg-gray-50 border-b border-gray-100 grid grid-cols-1 gap-4" [ngClass]="isAdmin ? 'md:grid-cols-6' : 'md:grid-cols-2'">
+    <div *ngIf="showFilters" class="p-6 bg-gray-50 border-b border-gray-100 grid grid-cols-1 gap-4" [ngClass]="isAdmin ? 'md:grid-cols-4 xl:grid-cols-7' : 'md:grid-cols-2'">
       <div class="relative mt-2">
         <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">ค้นหา</label>
         <input type="text" [(ngModel)]="searchTerm" (input)="applyFilters()" placeholder="Username / ชื่อ-นามสกุล / Role / หน่วยบริการ / เบอร์โทร / Email..."
@@ -94,10 +94,18 @@
       </div>
 
       <div *ngIf="isAdmin" class="relative mt-2">
+        <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">โซน</label>
+        <select [(ngModel)]="selectedZone" (change)="onZoneFilterChange()" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm hover:border-green-400 transition-colors">
+          <option value="">ทุกโซน</option>
+          <option *ngFor="let z of zoneList" [value]="z">{{ zoneLabel(z) }}</option>
+        </select>
+      </div>
+
+      <div *ngIf="isAdmin" class="relative mt-2">
         <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">หน่วยบริการ</label>
         <select [(ngModel)]="selectedHospcode" (change)="applyFilters()" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm hover:border-green-400 transition-colors">
           <option value="">ทั้งหมด</option>
-          <option *ngFor="let hos of hospitals" [value]="hos.hoscode">{{ hos.hosname }} ({{ hos.hoscode }})</option>
+          <option *ngFor="let hos of zoneHospitals" [value]="hos.hoscode">{{ hos.hosname }} ({{ hos.hoscode }})</option>
         </select>
       </div>
 
@@ -112,7 +120,7 @@
       </div>
 
       <div class="flex items-end">
-        <button (click)="searchTerm=''; selectedRole=''; selectedDept=''; selectedHospcode=''; selectedStatus=''; applyFilters()" class="w-full py-2.5 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl text-sm transition-colors shadow-md"><i class="fas fa-times-circle mr-2"></i> ล้างตัวกรอง</button>
+        <button (click)="searchTerm=''; selectedRole=''; selectedDept=''; selectedZone=''; selectedHospcode=''; selectedStatus=''; applyFilters()" class="w-full py-2.5 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl text-sm transition-colors shadow-md"><i class="fas fa-times-circle mr-2"></i> ล้างตัวกรอง</button>
       </div>
     </div>
 

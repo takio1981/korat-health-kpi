@@ -391,7 +391,7 @@
           <h4 class="font-bold text-blue-800 text-sm mb-2"><i class="fas fa-filter mr-2"></i>ตัวกรองแบบ Multi-select (เลือกได้หลายค่า)</h4>
           <p class="text-xs text-blue-700 mb-2">แต่ละตัวกรองเป็นปุ่ม dropdown → เปิดแล้วติ๊ก checkbox ได้มากกว่า 1 รายการ</p>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-            <div class="bg-white rounded-lg p-2 border border-teal-200"><b class="text-teal-700">อำเภอ / ประเภท รพ. / หน่วยบริการ</b> — กรองตามสถานที่ (cascade กัน) | <b>ประเภท รพ.</b> กรองหน่วยบริการตาม chospital.hostype</div>
+            <div class="bg-white rounded-lg p-2 border border-teal-200"><b class="text-teal-700">โซน / อำเภอ / ประเภท รพ. / หน่วยบริการ</b> — กรองตามสถานที่ (cascade กัน) | <b>โซน</b> 1–6 กำหนดตามอำเภอ (ทุกหน่วยบริการในอำเภอเดียวกันอยู่โซนเดียวกัน) | <b>ประเภท รพ.</b> กรองหน่วยบริการตาม chospital.hostype</div>
             <div class="bg-white rounded-lg p-2 border border-amber-200"><b class="text-amber-700">หน่วยงาน / หมวดหมู่หลัก / ตัวชี้วัด</b> — กรองตามโครงสร้าง KPI</div>
             <div class="bg-white rounded-lg p-2 border border-cyan-200"><b class="text-cyan-700">ตัวชี้วัดของ</b> — กรองตัวชี้วัดตาม <b>required_off_types</b> (ประเภทที่รับผิดชอบ) + all_required (ครอบคลุมทุกประเภท)</div>
             <div class="bg-white rounded-lg p-2 border border-gray-200"><b class="text-gray-700">สถานะ</b> — ผ่านเป้า / ไม่ผ่านเป้า / รอตรวจสอบ / ตรวจสอบแล้ว / <b class="text-emerald-700">มีเป้า+มีผลงาน</b> / ยังไม่มีเป้า / มีเป้าแต่ไม่มีผลงาน</div>
@@ -505,6 +505,7 @@
           <div class="mt-3 bg-white border border-green-200 rounded-lg p-3 text-xs text-green-700 space-y-1">
             <p class="font-bold"><i class="fas fa-link mr-1"></i>ตัวกรองสอดคล้องกัน (Cascading Filters)</p>
             <ul class="list-disc ml-4 space-y-0.5">
+              <li>เลือก <b>โซน</b> → อำเภอ / ประเภท รพ. / หน่วยบริการ แสดงเฉพาะในโซนนั้น (มีตัวกรองโซนในหน้ากราฟ รายงาน +KPI ปีงบใหม่ จัดการตัวชี้วัด แท็บหน่วยบริการ และจัดการผู้ใช้ด้วย)</li>
               <li>เลือก <b>อำเภอ</b> → หน่วยบริการแสดงเฉพาะในอำเภอนั้น</li>
               <li>เลือก <b>หน่วยบริการ</b> → หมวดหมู่ + ตัวชี้วัด แสดงเฉพาะหน่วยงานของหน่วยบริการนั้น</li>
               <li>เลือก <b>หน่วยงาน</b> → หมวดหมู่ + ตัวชี้วัด แสดงเฉพาะหน่วยงานนั้น</li>
@@ -584,7 +585,7 @@
           · ใช้ข้อมูลทั้งหมดตามสิทธิ์ของผู้ใช้ เฉพาะตัวชี้วัดที่เปิดใช้งาน
           · ตัวชี้วัดที่บันทึกผลงานที่<b>ตัวชี้วัดย่อย/กิจกรรม</b> ใช้ผลงานที่คำนวณจากข้อย่อย (ค่าเดียวกับแถวหลักในหน้าบันทึกผลงาน)
         </div>
-        <p class="text-xs text-gray-500 mb-3"><b>ตัวกรอง 7 มิติ:</b> ปีงบประมาณ · ยุทธศาสตร์ · หมวดหมู่หลัก (ตามยุทธศาสตร์) · หน่วยงาน · ตัวชี้วัด (ตามหมวดหมู่/หน่วยงาน) · อำเภอ · ประเภทหน่วยบริการ
+        <p class="text-xs text-gray-500 mb-3"><b>ตัวกรอง 8 มิติ:</b> ปีงบประมาณ · ยุทธศาสตร์ · หมวดหมู่หลัก (ตามยุทธศาสตร์) · หน่วยงาน · ตัวชี้วัด (ตามหมวดหมู่/หน่วยงาน) · โซน · อำเภอ (ตามโซน) · ประเภทหน่วยบริการ
           — <b>คลิกแท่งกราฟ/การ์ดอำเภอ/แถวตารางเพื่อกรองเจาะลึก</b> และกด ✕ บนป้ายตัวกรองเพื่อเอาออก</p>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div class="bg-gray-50 rounded-xl p-4 border"><i class="fas fa-chart-pie text-emerald-500 text-lg mr-2"></i><b class="text-sm">1. ภาพรวม</b><p class="text-xs text-gray-500 mt-1">ตัวเลขสรุป (ตัวชี้วัด, หน่วยบริการ, คู่, ผ่าน/มีเป้าหมาย, ร้อยละ, รอตรวจสอบ) + โดนัทสถานะ ผ่าน/ไม่ผ่าน/ไม่มีเป้าหมาย + วงแหวนร้อยละ + การกระจายของตัวชี้วัดตามช่วงร้อยละ (0–49 / 50–79 / 80–99 / 100%)</p></div>

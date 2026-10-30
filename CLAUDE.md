@@ -492,11 +492,22 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - Tests: `api/tests/kpi-formula.test.js` (unit), `api/tests/result-formula.test.js` (integration — รอ migration ด้วย
   `waitForColumn` เพราะ ALTER อยู่ท้าย chain startup), `frontend/src/app/shared/kpi-formula.spec.ts`, `dashboard.spec.ts`
 
+### โซนของหน่วยบริการ (chospital.zone — เพิ่ม 30 ต.ค. 2569)
+- `chospital.zone` VARCHAR(1) '1'–'6' กำหนดตามอำเภอ (ทุกหน่วยบริการในอำเภอเดียวกันอยู่โซนเดียวกัน — ผู้ใช้กำหนดจากตารางโซน 6 โซน 32 อำเภอ)
+  — ตาราง `DISTRICT_ZONES` ใน `api/core/zones.js` ใช้ backfill ตอน migration (**เฉพาะแถวที่ zone ว่าง** ไม่ทับค่าที่แก้เอง) + ค่าตั้งต้นของ POST/PUT `/hospitals` ที่ไม่ส่ง zone
+- `GET /hospitals` คืน `zone`, `GET /districts` คืน `zone` ของอำเภอ, `/report/chart-stats` คืน `options.zones` + `zone` ในแต่ละอำเภอ
+- พารามิเตอร์ `zone` (คั่นด้วยจุลภาคได้) ผ่าน `addZoneFilter(clauses, params, col, req.query.zone, kind)` — subquery กับ chospital (ไม่ JOIN ตรง: คนละ collation)
+  ค่าผิดทั้งหมด = ไม่มีข้อมูล (`1 = 0`) — ใช้ใน `/kpi-results` (`h.zone`), `/report/by-indicator|by-hospital|by-district|by-year|chart-stats` (s.distid),
+  `/report/recording-status*` + `/report/by-dept-summary*` (r.hospcode) — **endpoint ใหม่ที่รับ hostype/distid ต้องรับ zone ด้วย**
+- Frontend: `shared/zone.ts` (`zoneOptions`/`zoneLabel`/`inZone`) — ตัวกรองโซนอยู่ก่อนอำเภอและกรองรายการอำเภอ/หน่วยบริการ (cascade) ใน dashboard (+ หน้าต่างเพิ่มตัวชี้วัด:
+  เลือกแค่โซน = ปลายทางทุกอำเภอในโซน `addKpiTargetDistricts()`), chart, report, kpi-setup, kpi-manage แท็บหน่วยบริการ (คอลัมน์ + ช่องแก้ไขโซนใน modal), user-management
+- Test: `api/tests/zone-filter.test.js`, `shared/zone.spec.ts`, `dashboard.spec.ts`
+
 ### kpi-manage Hospitals tab
 - 5 tabs: ตัวชี้วัด / หมวดหมู่หลัก / ยุทธศาสตร์ / หน่วยงาน / **หน่วยบริการ**
 - CRUD endpoints `/hospitals` (super_admin): GET/POST/PUT/DELETE
 - DELETE ตรวจ users + kpi_results อ้างอิงก่อน — block ถ้ามี
-- Modal fields: hoscode (PK, disabled เมื่อ edit) / hosname / hostype (จาก chostype) / distid (จาก co_district, auto-fill provcode+distcode)
+- Modal fields: hoscode (PK, disabled เมื่อ edit) / hosname / hostype (จาก chostype) / distid (จาก co_district, auto-fill provcode+distcode) / zone (ว่าง = ตามอำเภอ)
 - Filter row: อำเภอ + ประเภท (เพิ่มเติมจาก search + count badge)
 - chospital ไม่มี is_active → ซ่อน toggle column สำหรับแท็บนี้
 

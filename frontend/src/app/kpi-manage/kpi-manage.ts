@@ -12,6 +12,7 @@ import { orderSubTree } from '../shared/sub-tree';
 import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
+import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
 import { TARGET_CONDITIONS, CONDITION_SYMBOL, CONDITION_LABEL, normalizeCondition, evaluateTarget, normalizeTargetMonthly } from '../shared/kpi-target';
 
 // วิธีคิด "ผลงาน" แบบสำเร็จรูป ↔ is_cumulative + result_formula (ฟังก์ชันล้วน — ทดสอบใน kpi-manage.spec.ts)
@@ -75,7 +76,16 @@ export class KpiManageComponent implements OnInit {
   filteredDepartments: any[] = [];
   filteredHospitals: any[] = [];
   // Extra hospital filter — distid + hostype
+  hospFilterZone: string = '';
   hospFilterDistid: string = '';
+  zoneLabel = zoneLabel;
+  get hospZoneList(): string[] { return zoneOptions(this.districts); }
+  /** อำเภอในตัวกรองแท็บหน่วยบริการ — เฉพาะอำเภอในโซนที่เลือก */
+  get hospZoneDistricts(): any[] { return (this.districts || []).filter((d: any) => inZone(d, this.hospFilterZone)); }
+  onHospZoneChange() {
+    if (this.hospFilterDistid && !this.hospZoneDistricts.some((d: any) => String(d.distid) === this.hospFilterDistid)) this.hospFilterDistid = '';
+    this.applyFilter();
+  }
   hospFilterHostype: string = '';
   searchTerm: string = '';
   filterActive: string = ''; // '' = ทั้งหมด, '1' = เปิดใช้งาน, '0' = ปิดใช้งาน
@@ -804,6 +814,7 @@ export class KpiManageComponent implements OnInit {
       });
     } else if (this.activeTab === 'hospitals') {
       this.filteredHospitals = this.hospitals.filter(h => {
+        if (!inZone(h, this.hospFilterZone)) return false;
         if (this.hospFilterDistid && String(h.distid) !== this.hospFilterDistid) return false;
         if (this.hospFilterHostype && String(h.hostype) !== this.hospFilterHostype) return false;
         if (search && !((h.hosname && h.hosname.toLowerCase().includes(search)) || (h.hoscode && String(h.hoscode).toLowerCase().includes(search)))) return false;
@@ -833,7 +844,7 @@ export class KpiManageComponent implements OnInit {
   hasActiveFilter(): boolean {
     if (this.searchTerm) return true;
     if (this.activeTab === 'indicators') return !!(this.filterActive || this.filterMainIndicator || this.filterDept || this.filterFiscalYear);
-    if (this.activeTab === 'hospitals') return !!(this.hospFilterDistid || this.hospFilterHostype);
+    if (this.activeTab === 'hospitals') return !!(this.hospFilterZone || this.hospFilterDistid || this.hospFilterHostype);
     return !!this.filterActive;
   }
 
@@ -844,6 +855,7 @@ export class KpiManageComponent implements OnInit {
     this.filterMainIndicator = '';
     this.filterDept = '';
     this.filterFiscalYear = '';
+    this.hospFilterZone = '';
     this.hospFilterDistid = '';
     this.hospFilterHostype = '';
     this.khdCompareFilter = '';
@@ -1141,6 +1153,7 @@ export class KpiManageComponent implements OnInit {
         this.currentItem = { ...baseDefaults };
       }
     }
+    if (this.activeTab === 'hospitals') this.currentItem.zone = String(this.currentItem.zone ?? '').trim(); // '' = โซนตามอำเภอ
     this.rebuildMainForModal();
     this.showModal = true;
     this.refreshSuggestedCodes();
@@ -1239,7 +1252,8 @@ export class KpiManageComponent implements OnInit {
         hosname: this.currentItem.hosname,
         hostype: this.currentItem.hostype,
         provcode: this.currentItem.provcode,
-        distcode: this.currentItem.distcode
+        distcode: this.currentItem.distcode,
+        zone: this.currentItem.zone || ''
       };
       observable = this.isEditMode
         ? this.authService.updateHospital(this.currentItem.hoscode, payload)

@@ -318,7 +318,7 @@ const SYSTEMS: SopSystem[] = [
   subflows:[
     { id:'chart', title:'กราฟและสถิติ', nodes:[
       {id:'s',  r:0,c:0,t:'start',   l:'Tab กราฟและสถิติ'},
-      {id:'n1', r:0,c:1,t:'process', l:'ตั้งค่า Filters 7 มิติ\nปี ยุทธฯ หมวด หน่วยงาน\nตัวชี้วัด อำเภอ ประเภท'},
+      {id:'n1', r:0,c:1,t:'process', l:'ตั้งค่า Filters 8 มิติ\nปี ยุทธฯ หมวด หน่วยงาน\nตัวชี้วัด โซน อำเภอ ประเภท'},
       {id:'n2', r:1,c:1,t:'process', l:'GET /report/chart-stats\n(role-filtered, SQL aggregate)'},
       {id:'n3', r:2,c:1,t:'db',      l:'kpi_summary\ncomposite index'},
       {id:'d1', r:1,c:2,t:'decision',l:'ข้อมูล\nทันสมัย?'},

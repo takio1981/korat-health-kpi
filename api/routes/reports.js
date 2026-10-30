@@ -7,6 +7,7 @@ const { activeIndicatorSql, targetCondOf, targetHasSql, targetPassSql } = requir
 const { apiRouter } = require('../core/router');
 const { authenticateToken } = require('../core/auth');
 const { getDistrictId } = require('../core/access');
+const { addZoneFilter } = require('../core/zones');
 
 // GET /kpi-summary — ดึงข้อมูลจาก summary table (เร็วมาก ไม่ต้อง JOIN)
 // ผลงานรายเดือนของปีงบที่แล้ว (year_bh - 1) จาก kpi_summary ตามขอบเขตสิทธิ์เดียวกับรายงาน (chartScopeClauses)
@@ -95,6 +96,7 @@ apiRouter.get('/report/by-indicator', authenticateToken, async (req, res) => {
         if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
         if (distid) { whereClauses.push('s.distid = ?'); params.push(distid); }
         if (hostype) { whereClauses.push('s.hostype = ?'); params.push(hostype); }
+        addZoneFilter(whereClauses, params, 's.distid', req.query.zone);
         whereClauses.push(activeIndicatorSql('s.indicator_id')); // เฉพาะตัวชี้วัดที่เปิดใช้งาน
 
         const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
@@ -181,6 +183,7 @@ apiRouter.get('/report/by-hospital', authenticateToken, async (req, res) => {
         if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
         if (distid) { whereClauses.push('s.distid = ?'); params.push(distid); }
         if (hostype) { whereClauses.push('s.hostype = ?'); params.push(hostype); }
+        addZoneFilter(whereClauses, params, 's.distid', req.query.zone);
         whereClauses.push(activeIndicatorSql('s.indicator_id')); // เฉพาะตัวชี้วัดที่เปิดใช้งาน
 
         const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
@@ -251,6 +254,7 @@ apiRouter.get('/report/by-district', authenticateToken, async (req, res) => {
         if (year_bh) { whereClauses.push('s.year_bh = ?'); params.push(year_bh); }
         if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
         if (hostype) { whereClauses.push('s.hostype = ?'); params.push(hostype); }
+        addZoneFilter(whereClauses, params, 's.distid', req.query.zone);
         whereClauses.push(activeIndicatorSql('s.indicator_id')); // เฉพาะตัวชี้วัดที่เปิดใช้งาน
 
         const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
@@ -316,6 +320,7 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
         if (distid) { whereClauses.push('s.distid = ?'); params.push(distid); }
         if (hostype) { whereClauses.push('s.hostype = ?'); params.push(hostype); }
+        addZoneFilter(whereClauses, params, 's.distid', req.query.zone);
         whereClauses.push(activeIndicatorSql('s.indicator_id')); // เฉพาะตัวชี้วัดที่เปิดใช้งาน
 
         const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
@@ -466,6 +471,7 @@ apiRouter.get('/report/chart-stats', authenticateToken, async (req, res) => {
         eqFilter('s.indicator_id', indicator_id, true);
         eqFilter('s.distid', distid, false);
         eqFilter('s.hostype', hostype, false);
+        addZoneFilter(c, p, 's.distid', req.query.zone);
         const where = 'WHERE ' + c.join(' AND ');
 
         const groupQuery = (keySql, nameSql, extra = '') => db.query(`
@@ -488,6 +494,9 @@ apiRouter.get('/report/chart-stats', authenticateToken, async (req, res) => {
             // ชื่อประเภทหน่วยบริการแยก query (chostype คนละ collation กับ kpi_summary — ไม่ JOIN ตรง)
             db.query('SELECT hostypecode, hostypename FROM chostype'),
         ]);
+        // โซนของแต่ละอำเภอ (ตัวเลือกโซน + กรองรายการอำเภอตามโซนฝั่งหน้าจอ)
+        const [zoneRows] = await db.query("SELECT distid, MAX(zone) AS zone FROM chospital WHERE zone IS NOT NULL AND zone <> '' GROUP BY distid");
+        const zoneOfDist = new Map(zoneRows.map(r => [String(r.distid), String(r.zone)]));
 
         const typeName = new Map(hostypeNames.map(h => [String(h.hostypecode), h.hostypename]));
         const byPct = (a, b) => b.achievement_pct - a.achievement_pct || b.with_target - a.with_target || String(a.gname).localeCompare(String(b.gname), 'th');
@@ -512,7 +521,8 @@ apiRouter.get('/report/chart-stats', authenticateToken, async (req, res) => {
                 mains: uniq(optRows, 'main_id').map(r => ({ id: r.main_id, name: r.main_indicator_name, yut_id: r.yut_id })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'th')),
                 depts: uniq(optRows, 'dept_id').map(r => ({ id: r.dept_id, name: r.dept_name })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'th')),
                 indicators: uniq(optRows, 'indicator_id').map(r => ({ id: r.indicator_id, name: r.kpi_indicators_name, main_id: r.main_id, dept_id: r.dept_id })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'th')),
-                districts: uniq(optRows, 'distid').map(r => ({ id: r.distid, name: r.distname })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'th')),
+                districts: uniq(optRows, 'distid').map(r => ({ id: r.distid, name: r.distname, zone: zoneOfDist.get(String(r.distid)) || null })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'th')),
+                zones: [...new Set(uniq(optRows, 'distid').map(r => zoneOfDist.get(String(r.distid))).filter(Boolean))].sort(),
                 hostypes: uniq(optRows, 'hostype').map(r => ({ id: r.hostype, name: typeName.get(String(r.hostype)) || r.hostype })).sort((a, b) => String(a.id).localeCompare(String(b.id))),
             },
             overall,
@@ -569,6 +579,7 @@ apiRouter.get('/report/recording-status', authenticateToken, async (req, res) =>
         if (dept_id) { indicatorWhere.push('i.dept_id = ?'); params.push(dept_id); }
         if (distid) { indicatorWhere.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)'); params.push(distid); }
         if (hostype) { indicatorWhere.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE hostype = ?)'); params.push(hostype); }
+        addZoneFilter(indicatorWhere, params, 'r.hospcode', req.query.zone, 'hos');
 
         const whereStr = 'WHERE ' + indicatorWhere.join(' AND ');
 
@@ -675,6 +686,7 @@ apiRouter.get('/report/recording-status/by-hospital', authenticateToken, async (
         if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
         if (distid) { whereClauses.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)'); params.push(distid); }
         if (hostype) { whereClauses.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE hostype = ?)'); params.push(hostype); }
+        addZoneFilter(whereClauses, params, 'r.hospcode', req.query.zone, 'hos');
 
         const whereStr = 'WHERE ' + whereClauses.join(' AND ');
 
@@ -833,6 +845,7 @@ apiRouter.get('/report/by-dept-summary', authenticateToken, async (req, res) => 
             cteWhere.push('ch.hostype = ?');
             cteParams.push(hostype);
         }
+        addZoneFilter(cteWhere, cteParams, 'r.hospcode', req.query.zone, 'hos');
 
         const cteWhereStr = cteWhere.join(' AND ');
 
@@ -901,6 +914,7 @@ apiRouter.get('/report/by-dept-summary/hospitals', authenticateToken, async (req
         let params = [indicator_id, year_bh];
 
         if (hostype) { whereClauses.push('h.hostype = ?'); params.push(hostype); }
+        addZoneFilter(whereClauses, params, 'r.hospcode', req.query.zone, 'hos');
 
         let having = '';
         if (filter === 'recorded') having = 'HAVING has_recorded = 1';
@@ -955,6 +969,7 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
             cteWhere.push('ch.hostype = ?');
             cteParams.push(hostype);
         }
+        addZoneFilter(cteWhere, cteParams, 'r.hospcode', req.query.zone, 'hos');
         const cteWhereStr = cteWhere.join(' AND ');
 
         const sql = `

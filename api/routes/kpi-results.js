@@ -70,6 +70,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         if (req.query.main) { extraConditions.push('mi.main_indicator_name = ?'); params.push(req.query.main); }
         // Hostype filter: filter h.hostype โดยตรง (LEFT JOIN chospital จาก main query)
         addMultiFilter('h.hostype', req.query.hostype);
+        addMultiFilter('h.zone', req.query.zone); // โซนของหน่วยบริการ (chospital.zone)
         // Indicator off-type filter: กรองตัวชี้วัดตาม required_off_types (JSON array)
         // all_required = ใช้ทุกประเภท จึงแสดงเสมอ
         if (req.query.indicator_off_type) {

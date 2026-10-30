@@ -8,12 +8,13 @@ import { ApexBoxComponent } from '../shared/apex-box';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { DistrictMapComponent } from '../shared/district-map';
+import { zoneLabel, inZone } from '../shared/zone';
 import {
   ChartGroupRow, ChartMonthRow, buildPctBar, buildStatusStack, buildOverallDonut, buildOverallRadial,
   buildMonthlyCombo, buildHeatmap, buildDistribution, pctColor
 } from './chart-builders';
 
-type FilterKey = 'selectedYut' | 'selectedMain' | 'selectedDept' | 'selectedIndicator' | 'selectedDistrict' | 'selectedHostype';
+type FilterKey = 'selectedYut' | 'selectedMain' | 'selectedDept' | 'selectedIndicator' | 'selectedZone' | 'selectedDistrict' | 'selectedHostype';
 
 @Component({
   selector: 'app-chart',
@@ -36,10 +37,12 @@ export class ChartComponent implements OnInit, OnDestroy {
   selectedMain = '';
   selectedDept = '';
   selectedIndicator = '';
+  selectedZone = '';
   selectedDistrict = '';
   selectedHostype = '';
+  zoneLabel = zoneLabel;
 
-  options: any = { years: [], yuts: [], mains: [], depts: [], indicators: [], districts: [], hostypes: [] };
+  options: any = { years: [], yuts: [], mains: [], depts: [], indicators: [], districts: [], zones: [], hostypes: [] };
   data: any = null; // ผลดิบจาก API
 
   // options ของแต่ละกราฟ
@@ -83,6 +86,7 @@ export class ChartComponent implements OnInit, OnDestroy {
     if (this.selectedMain) p.main_id = this.selectedMain;
     if (this.selectedDept) p.dept_id = this.selectedDept;
     if (this.selectedIndicator) p.indicator_id = this.selectedIndicator;
+    if (this.selectedZone) p.zone = this.selectedZone;
     if (this.selectedDistrict) p.distid = this.selectedDistrict;
     if (this.selectedHostype) p.hostype = this.selectedHostype;
     return p;
@@ -218,6 +222,10 @@ export class ChartComponent implements OnInit, OnDestroy {
   get mainOptions(): any[] {
     return this.options.mains.filter((m: any) => !this.selectedYut || String(m.yut_id ?? '0') === this.selectedYut);
   }
+  /** อำเภอในตัวกรอง — เฉพาะอำเภอในโซนที่เลือก */
+  get districtOptions(): any[] {
+    return (this.options.districts || []).filter((d: any) => inZone(d, this.selectedZone));
+  }
   get indicatorOptions(): any[] {
     return this.options.indicators.filter((i: any) =>
       (!this.selectedMain || String(i.main_id ?? '0') === this.selectedMain) &&
@@ -227,11 +235,12 @@ export class ChartComponent implements OnInit, OnDestroy {
   onFilterChange(changed?: FilterKey | 'selectedYear') {
     if (changed === 'selectedYut') { this.selectedMain = ''; this.selectedIndicator = ''; }
     if (changed === 'selectedMain' || changed === 'selectedDept') this.selectedIndicator = '';
+    if (changed === 'selectedZone' && this.selectedDistrict && !this.districtOptions.some((d: any) => String(d.id) === String(this.selectedDistrict))) this.selectedDistrict = '';
     this.loadChartStats();
   }
 
   clearFilters() {
-    this.selectedYut = this.selectedMain = this.selectedDept = this.selectedIndicator = this.selectedDistrict = this.selectedHostype = '';
+    this.selectedYut = this.selectedMain = this.selectedDept = this.selectedIndicator = this.selectedZone = this.selectedDistrict = this.selectedHostype = '';
     this.indicatorSearch = '';
     this.loadChartStats();
   }
@@ -243,6 +252,7 @@ export class ChartComponent implements OnInit, OnDestroy {
     if (this.selectedMain) chips.push({ key: 'selectedMain', label: 'หมวดหมู่', value: name(this.options.mains, this.selectedMain) });
     if (this.selectedDept) chips.push({ key: 'selectedDept', label: 'หน่วยงาน', value: name(this.options.depts, this.selectedDept) });
     if (this.selectedIndicator) chips.push({ key: 'selectedIndicator', label: 'ตัวชี้วัด', value: name(this.options.indicators, this.selectedIndicator) });
+    if (this.selectedZone) chips.push({ key: 'selectedZone', label: 'โซน', value: zoneLabel(this.selectedZone) });
     if (this.selectedDistrict) chips.push({ key: 'selectedDistrict', label: 'อำเภอ', value: name(this.options.districts, this.selectedDistrict) });
     if (this.selectedHostype) chips.push({ key: 'selectedHostype', label: 'ประเภท', value: name(this.options.hostypes, this.selectedHostype) });
     return chips;

@@ -5,6 +5,7 @@ import { Router, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { ToastService } from '../services/toast.service';
 import Swal from 'sweetalert2';
+import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
 
 interface UsersFieldDiff { field: string; khd_field?: string; local_value: any; khd_value: any; }
 interface UsersSyncMappingRow { field: string; khd_field: string; excluded: boolean; }
@@ -30,6 +31,15 @@ export class UserManagementComponent implements OnInit {
   selectedRole: string = '';
   selectedDept: string = '';
   selectedHospcode: string = '';
+  selectedZone: string = '';
+  zoneLabel = zoneLabel;
+  get zoneList(): string[] { return zoneOptions(this.hospitals); }
+  /** หน่วยบริการในตัวกรอง — เฉพาะโซนที่เลือก */
+  get zoneHospitals(): any[] { return this.hospitals.filter((h: any) => inZone(h, this.selectedZone)); }
+  onZoneFilterChange() {
+    if (this.selectedHospcode && !this.zoneHospitals.some((h: any) => h.hoscode === this.selectedHospcode)) this.selectedHospcode = '';
+    this.applyFilters();
+  }
 
   currentPage: number = 1;
   pageSize: number = 10;
@@ -129,6 +139,7 @@ export class UserManagementComponent implements OnInit {
     this.selectedRole = '';
     this.selectedDept = '';
     this.selectedHospcode = '';
+    this.selectedZone = '';
     this.selectedStatus = '';
     this.selectedDistrictFilter = '';
     switch (type) {
@@ -154,6 +165,7 @@ export class UserManagementComponent implements OnInit {
     this.selectedRole = '';
     this.selectedDept = '';
     this.selectedHospcode = '';
+    this.selectedZone = '';
     this.selectedStatus = '';
     this.selectedDistrictFilter = '';
     this.applyFilters();
@@ -300,6 +312,7 @@ export class UserManagementComponent implements OnInit {
     this.selectedRole = '';
     this.selectedDept = '';
     this.selectedHospcode = '';
+    this.selectedZone = '';
     this.selectedStatus = '';
     this.selectedDistrictFilter = '';
     this.drillLabel = '';
@@ -423,7 +436,9 @@ export class UserManagementComponent implements OnInit {
         return h?.distid === this.selectedDistrictFilter;
       })();
 
-      return matchSearch && matchRole && matchDept && matchHosp && matchStatus && matchDistrict;
+      const matchZone = !this.selectedZone || inZone(this.hospitals.find((h: any) => h.hoscode === user.hospcode), this.selectedZone);
+
+      return matchSearch && matchRole && matchDept && matchHosp && matchStatus && matchDistrict && matchZone;
     });
 
     this.totalPages = Math.ceil(this.filteredUsers.length / this.pageSize);

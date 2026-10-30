@@ -6,6 +6,13 @@ const db = require('../db');
 const { ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, getDistrictId, requireAction } = require('../core/access');
 const { apiRouter } = require('../core/router');
 const { authenticateToken, isSuperAdmin } = require('../core/auth');
+const { zoneOfDistrict } = require('../core/zones');
+
+// โซนที่บันทึกกับหน่วยบริการ: ส่งมา = ต้องเป็นเลข 1–9 | ว่าง/ไม่ส่ง = ตามอำเภอ (DISTRICT_ZONES) | undefined คืน = ค่าไม่ถูกต้อง
+function hospitalZoneOf(zone, distid) {
+    if (zone === undefined || zone === null || String(zone).trim() === '') return zoneOfDistrict(distid);
+    return /^[1-9]$/.test(String(zone).trim()) ? String(zone).trim() : undefined;
+}
 
 // GET /departments — กรองเหลือเฉพาะ dept ตัวเองสำหรับ role ที่ scope คือ "dept ตัวเอง" (ROLE_SCOPE_OWN_DEPT)
 // role อื่น (super_admin, admin_cup, admin_hos, admin_sso) เห็น "ทุก dept" แม้จะมี dept_id ติดตัวอยู่ก็ตาม (ตาราง Role System ใน CLAUDE.md)
@@ -40,7 +47,7 @@ apiRouter.get('/hospitals', authenticateToken, async (req, res) => {
             if (distid) { where = 'WHERE h.distid = ?'; params.push(distid); }
         }
         const [hospitals] = await db.query(`
-            SELECT h.hoscode, h.hosname, h.hostype, h.provcode, h.distcode, h.distid,
+            SELECT h.hoscode, h.hosname, h.hostype, h.provcode, h.distcode, h.distid, h.zone,
                    t.hostypename, d.distname
               FROM chospital h
          LEFT JOIN chostype t ON t.hostypecode = h.hostype
@@ -64,9 +71,11 @@ apiRouter.post('/hospitals', authenticateToken, requireAction('kpi-manage', 'add
         const [exists] = await db.query('SELECT hoscode FROM chospital WHERE hoscode = ?', [hoscode]);
         if (exists.length > 0) return res.status(400).json({ success: false, message: 'hoscode นี้มีอยู่แล้ว' });
         const distid = (provcode && distcode) ? String(provcode) + String(distcode) : null;
+        const zone = hospitalZoneOf(req.body.zone, distid);
+        if (zone === undefined) return res.status(400).json({ success: false, message: 'โซนต้องเป็นตัวเลข 1–9' });
         await db.query(
-            'INSERT INTO chospital (hoscode, hosname, hostype, provcode, distcode, distid) VALUES (?, ?, ?, ?, ?, ?)',
-            [hoscode, hosname, hostype || null, provcode || null, distcode || null, distid]
+            'INSERT INTO chospital (hoscode, hosname, hostype, provcode, distcode, distid, zone) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [hoscode, hosname, hostype || null, provcode || null, distcode || null, distid, zone]
         );
         await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
             [req.user.userId, 'HOSPITAL_CREATE', 'chospital', JSON.stringify(req.body), req.ip]);
@@ -81,9 +90,11 @@ apiRouter.put('/hospitals/:hoscode', authenticateToken, requireAction('kpi-manag
     if (!hosname) return res.status(400).json({ success: false, message: 'กรุณากรอก hosname' });
     try {
         const distid = (provcode && distcode) ? String(provcode) + String(distcode) : null;
+        const zone = hospitalZoneOf(req.body.zone, distid);
+        if (zone === undefined) return res.status(400).json({ success: false, message: 'โซนต้องเป็นตัวเลข 1–9' });
         const [r] = await db.query(
-            'UPDATE chospital SET hosname=?, hostype=?, provcode=?, distcode=?, distid=? WHERE hoscode = ?',
-            [hosname, hostype || null, provcode || null, distcode || null, distid, hoscode]
+            'UPDATE chospital SET hosname=?, hostype=?, provcode=?, distcode=?, distid=?, zone=? WHERE hoscode = ?',
+            [hosname, hostype || null, provcode || null, distcode || null, distid, zone, hoscode]
         );
         if (r.affectedRows === 0) return res.status(404).json({ success: false, message: 'ไม่พบหน่วยบริการนี้' });
         await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
@@ -146,7 +157,9 @@ apiRouter.get('/districts', authenticateToken, async (req, res) => {
             const distid = await getDistrictId(user.hospcode);
             if (distid) { where = 'WHERE distid = ?'; params[0] = distid; }
         }
-        const [districts] = await db.query(`SELECT distid, distname FROM co_district ${where} ORDER BY distname`, params);
+        // zone = โซนของอำเภอ (จากหน่วยบริการในอำเภอ — ทุกแห่งในอำเภอเดียวกันอยู่โซนเดียวกัน) ใช้กรองอำเภอตามโซนในหน้าต่างๆ
+        const [districts] = await db.query(`SELECT distid, distname, (SELECT MAX(h.zone) FROM chospital h WHERE h.distid = co_district.distid) AS zone
+            FROM co_district ${where} ORDER BY distname`, params);
         res.json({ success: true, data: districts });
     } catch (error) {
         res.status(500).json({ success: false });

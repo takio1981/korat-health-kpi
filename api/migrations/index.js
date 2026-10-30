@@ -3,6 +3,7 @@
 // - require('./migrations') = เริ่มทำงานทันที (เหมือนเดิมที่รันตอนโหลด server.js) — migrationsReady = promise ของบล็อกหลัก (tests รอก่อนเริ่ม)
 // - migration ใหม่: เพิ่มในบล็อกหลัก (หรือบล็อกของโมดูลที่เป็นเจ้าของตาราง) ตามรูปแบบ try { await db.query('ALTER TABLE …') } catch (e) {}
 const db = require('../db');
+const { DISTRICT_ZONES } = require('../core/zones');
 const {
     PAGE_ACCESS_ROLES, PAGE_ACCESS_PAGES, PAGE_ACCESS_DEFAULT_ENABLED, loadRolePageAccessCache,
     ACTION_ACCESS_ROLES, ACTION_ACCESS_PAGES, ACTION_TYPES, ACTION_ACCESS_DEFAULT_ENABLED, loadRoleActionAccessCache,
@@ -360,6 +361,15 @@ const migrationsReady = (async () => {
             await db.query('UPDATE chospital SET distid = CONCAT(provcode, distcode) WHERE distid IS NULL');
             await db.query('CREATE INDEX idx_chospital_distid ON chospital (distid)');
         } catch (e) { /* already done */ }
+
+        // โซนของหน่วยบริการ (30 ต.ค. 2569) — backfill เฉพาะแถวที่ยังว่างตามอำเภอ (DISTRICT_ZONES ใน core/zones.js)
+        try { await db.query('ALTER TABLE chospital ADD COLUMN zone VARCHAR(1) NULL'); } catch (e) { /* already exists */ }
+        try { await db.query('CREATE INDEX idx_chospital_zone ON chospital (zone)'); } catch (e) { /* already exists */ }
+        try {
+            for (const [zone, dists] of Object.entries(DISTRICT_ZONES)) {
+                await db.query("UPDATE chospital SET zone = ? WHERE (zone IS NULL OR zone = '') AND distid IN (?)", [zone, dists]);
+            }
+        } catch (e) { console.error('[Migration] chospital.zone backfill:', e.message); }
 
         // เพิ่ม kpi_summary table
         try {

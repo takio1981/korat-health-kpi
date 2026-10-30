@@ -20,6 +20,7 @@ import { Anomaly, detectAnomaly } from '../shared/anomaly';
 import { SUB_EXCEL_MONTHS, SubChangePlan, buildSubTemplateAoa, parseSubImportAoa, planSubImport, applySubChanges, subFieldLabel } from '../shared/kpi-sub-excel';
 import { activityValue, rollupMonthly, itemNumber, rollupTree, RollupNode } from '../shared/kpi-rollup';
 import { orderSubTree } from '../shared/sub-tree';
+import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
 import { evaluateTarget, normalizeCondition, CONDITION_SYMBOL, CONDITION_LABEL, aggregateMonthlyTarget, normalizeTargetMonthly } from '../shared/kpi-target';
 
 // ตัวชี้วัดหลายระดับ — แถวลูกใต้แถวตัวชี้วัดหลักในตารางบันทึกผลงาน (ข้อย่อย 1.1 / ข้อย่อยระดับถัดไป 1.1.1 … / กิจกรรม)
@@ -316,6 +317,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   selectedDepts: string[] = [];
   selectedStatuses: string[] = [];
   selectedHospitals: string[] = [];
+  selectedZones: string[] = [];      // โซนของหน่วยบริการ (chospital.zone) — กรองรายการอำเภอ/หน่วยบริการ + ส่ง zone ให้ backend
   selectedDistricts: string[] = [];
   selectedTypes: string[] = [];
   selectedHosTypes: string[] = [];
@@ -461,6 +463,13 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   filterYears: string[] = [];
   hospitalNames: string[] = [];
   districtNames: string[] = [];
+  zoneList: string[] = [];
+  zoneLabel = zoneLabel;
+  /** ป้ายปุ่มตัวกรองโซน */
+  zoneFilterLabel(): string {
+    if (this.selectedZones.length === 0) return 'โซน: ทั้งหมด';
+    return 'โซน ' + [...this.selectedZones].sort().join(', ');
+  }
   hosTypeList: any[] = [];
 
   // Raw data for cascading filters
@@ -477,6 +486,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   addKpiTotalTemplateCount: number = 0;
 
   // === Multi-select filters (เหมือนตัวกรองหน้า dashboard) ===
+  addKpiSelZones: string[] = [];       // โซนที่เลือก (ว่าง = ทั้งหมด) — จำกัดรายการอำเภอ/ปลายทาง
   addKpiSelDistricts: string[] = [];   // distid ที่เลือก (ว่าง = ทั้งหมด) — จำกัดปลายทางที่ระบบหาให้อัตโนมัติ
   addKpiSelDepts: string[] = [];       // dept id ที่เลือก (filter ตัวชี้วัด)
   addKpiOpenDropdown: string = '';     // dropdown ที่เปิดอยู่ใน modal
@@ -889,6 +899,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   private computeAppliedFilters(): { label: string; value: string; color: string }[] {
     const out: { label: string; value: string; color: string }[] = [];
     if (this.selectedYear) out.push({ label: 'ปีงบฯ', value: this.selectedYear, color: 'bg-green-100 text-green-700' });
+    if (this.selectedZones.length > 0) out.push({ label: 'โซน', value: [...this.selectedZones].sort().join(', '), color: 'bg-violet-100 text-violet-700' });
     if (this.selectedDistricts.length > 0) out.push({ label: 'อำเภอ', value: this.selectedDistricts.join(', '), color: 'bg-teal-100 text-teal-700' });
     if (this.selectedHosTypes.length > 0) out.push({ label: 'ประเภท รพ.', value: this.hosTypeLabel(), color: 'bg-cyan-100 text-cyan-700' });
     if (this.selectedHospitals.length > 0) out.push({ label: 'หน่วยบริการ', value: this.selectedHospitals.length === 1 ? this.selectedHospitals[0] : `${this.selectedHospitals.length} รพ.`, color: 'bg-blue-100 text-blue-700' });
@@ -948,6 +959,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     if (this.selectedDepts.length > 0) filters.dept = this.selectedDepts.join(',');
     if (this.selectedDistricts.length > 0) filters.district = this.selectedDistricts.join(',');
+    if (this.selectedZones.length > 0) filters.zone = this.selectedZones.join(',');
     if (this.selectedIndicator) filters.indicator = this.selectedIndicator;
     if (this.selectedMain) filters.main = this.selectedMain;
     // ส่ง hostype → backend ใช้ subquery ผ่าน chospital.hostype
@@ -1161,6 +1173,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       this.authService.getDistricts().subscribe(res => {
         if (res.success) {
           this._allDistricts = res.data;
+          this.zoneList = zoneOptions(res.data);
           this.districtNames = res.data.map((d: any) => d.distname).filter(Boolean).sort();
           if (this.districtNames.length === 1) this.selectedDistrict = this.districtNames[0];
           this.cdr.detectChanges();
@@ -1188,7 +1201,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // กรองรายชื่อหน่วยบริการตาม districts[] + hosTypes[] (multi)
   private rebuildHospitalList() {
-    let filtered = this._allHospitals;
+    let filtered = this._allHospitals.filter((h: any) => inZone(h, this.selectedZones));
     if (this.selectedDistricts.length > 0) {
       const distIds = this._allDistricts
         .filter((d: any) => this.selectedDistricts.includes(d.distname))
@@ -1205,7 +1218,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // กรองประเภท รพ. ตาม districts[] — นับจำนวนหน่วยบริการ
   private rebuildHosTypeList() {
-    let hospitals = this._allHospitals;
+    let hospitals = this._allHospitals.filter((h: any) => inZone(h, this.selectedZones));
     if (this.selectedDistricts.length > 0) {
       const distIds = this._allDistricts
         .filter((d: any) => this.selectedDistricts.includes(d.distname))
@@ -1224,17 +1237,22 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // กรองอำเภอตาม hosTypes[] — แสดงเฉพาะอำเภอที่มี hostype นั้น
   private rebuildDistrictList() {
+    let districts = this._allDistricts.filter((d: any) => inZone(d, this.selectedZones));
     if (this.selectedHosTypes.length > 0) {
       const distsWithType = new Set(
         this._allHospitals.filter((h: any) => this.selectedHosTypes.includes(h.hostype)).map((h: any) => h.distid)
       );
-      this.districtNames = this._allDistricts
-        .filter((d: any) => distsWithType.has(d.distid))
-        .map((d: any) => d.distname).filter(Boolean).sort();
-      this.selectedDistricts = this.selectedDistricts.filter(n => this.districtNames.includes(n));
-    } else {
-      this.districtNames = this._allDistricts.map((d: any) => d.distname).filter(Boolean).sort();
+      districts = districts.filter((d: any) => distsWithType.has(d.distid));
     }
+    this.districtNames = districts.map((d: any) => d.distname).filter(Boolean).sort();
+    this.selectedDistricts = this.selectedDistricts.filter(n => this.districtNames.includes(n));
+  }
+
+  /** เปลี่ยนโซน → อำเภอ / ประเภท / หน่วยบริการ เหลือเฉพาะที่อยู่ในโซนที่เลือก */
+  onZoneCascade() {
+    this.rebuildDistrictList();
+    this.rebuildHosTypeList();
+    this.rebuildHospitalList();
   }
 
   onDistrictCascade() {
@@ -1285,7 +1303,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     // admin_ssj / user_ssj มี dept ล็อคอัตโนมัติ → ไม่นับเป็นตัวกรองที่ผู้ใช้เลือกเอง
     const role = this.authService.getUserRole();
     const isLockedDept = ['admin_ssj', 'user_ssj'].includes(role);
-    const hasFilter = this.selectedDistricts.length > 0 || this.selectedHospitals.length > 0
+    const hasFilter = this.selectedZones.length > 0 || this.selectedDistricts.length > 0 || this.selectedHospitals.length > 0
       || (!isLockedDept && this.selectedDepts.length > 0)
       || this.selectedHosTypes.length > 0 || this.selectedIndicatorOffTypes.length > 0
       || this.selectedMain || this.selectedIndicator
@@ -1414,6 +1432,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     this.setDefaultYear();
     this.selectedStatuses = [];
     this.selectedHospitals = [];
+    this.selectedZones = [];
     this.selectedDistricts = [];
     this.selectedTypes = [];
     this.selectedHosTypes = [];
@@ -1461,6 +1480,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       created_at: new Date().toISOString(),
       filters: {
         year: this.selectedYear,
+        zones: [...this.selectedZones],
         districts: [...this.selectedDistricts],
         hosTypes: [...this.selectedHosTypes],
         hospitals: [...this.selectedHospitals],
@@ -1485,6 +1505,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   applySavedView(v: any) {
     const f = v.filters || {};
     if (f.year) this.selectedYear = f.year;
+    this.selectedZones = [...(f.zones || [])];
     this.selectedDistricts = [...(f.districts || [])];
     this.selectedHosTypes = [...(f.hosTypes || [])];
     this.selectedHospitals = [...(f.hospitals || [])];
@@ -1528,6 +1549,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       const matchYear = this.selectedYear === '' || item.year_bh === this.selectedYear;
       const matchHospital = this.selectedHospitals.length === 0 || this.selectedHospitals.includes(item.hosname);
       const matchDistrict = this.selectedDistricts.length === 0 || this.selectedDistricts.includes(item.distname);
+      const matchZone = this.selectedZones.length === 0 || inZone(this._allHospitals.find((h: any) => h.hoscode === item.hospcode), this.selectedZones);
       const matchHosType = this.selectedHosTypes.length === 0 || this.selectedHosTypes.includes(item.hostype);
       const tv = String(item.target_value ?? '').trim();
       const la = String(item.last_actual ?? '').trim();
@@ -1548,7 +1570,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         (t === 'ssj' && item.ssj === 1) || (t === 'rmw' && item.rmw === 1) ||
         (t === 'other' && item.other === 1);
       const matchType = this.selectedTypes.length === 0 || this.selectedTypes.some(typeMatches);
-      return matchSearch && matchMain && matchIndicator && matchdept && matchYear && matchStatus && matchHospital && matchDistrict && matchHosType && matchType;
+      return matchSearch && matchMain && matchIndicator && matchdept && matchYear && matchStatus && matchHospital && matchDistrict && matchZone && matchHosType && matchType;
     });
     if (this.sortField) {
       const dir = this.sortDir === 'asc' ? 1 : -1;
@@ -2348,6 +2370,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       this.addKpiSelectedYear = this.addKpiYears[0];
     }
     if (this.isAdmin || this.isLocalAdmin) {
+      this.addKpiSelZones = [];
       this.addKpiSelDistricts = [];
       this.addKpiSelDepts = [];
       this.addKpiOpenDropdown = '';
@@ -2450,6 +2473,25 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   }
   isAllAddKpiDepts(): boolean {
     return this.addKpiDeptList.length > 0 && this.addKpiDeptList.every((d: any) => this.addKpiSelDepts.includes(String(d.id)));
+  }
+
+  // โซน (modal เพิ่มตัวชี้วัด): ตัวเลือกจากอำเภอในขอบเขต — อำเภอที่แสดงเหลือเฉพาะในโซนที่เลือก
+  get addKpiZoneList(): string[] { return zoneOptions(this.addKpiDistrictList); }
+  get addKpiZoneDistricts(): any[] { return this.addKpiDistrictList.filter((d: any) => inZone(d, this.addKpiSelZones)); }
+  addKpiZoneLabel(): string {
+    return this.addKpiSelZones.length === 0 ? 'โซน: ทั้งหมด' : 'โซน ' + [...this.addKpiSelZones].sort().join(', ');
+  }
+  /** อำเภอปลายทางที่ใช้จริง: เลือกอำเภอ = อำเภอนั้น | เลือกแค่โซน = ทุกอำเภอในโซน | ไม่เลือก = ทั้งขอบเขต ([]) */
+  addKpiTargetDistricts(): string[] {
+    if (this.addKpiSelDistricts.length > 0) return this.addKpiSelDistricts;
+    if (this.addKpiSelZones.length === 0) return [];
+    const ids = this.addKpiZoneDistricts.map((d: any) => String(d.distid));
+    return ids.length > 0 ? ids : ['__none__']; // โซนที่ไม่มีอำเภอในขอบเขต = ไม่มีปลายทาง (ไม่ใช่ทั้งหมด)
+  }
+  onAddKpiZoneChange() {
+    const ok = new Set(this.addKpiZoneDistricts.map((d: any) => String(d.distid)));
+    this.addKpiSelDistricts = this.addKpiSelDistricts.filter(id => ok.has(String(id)));
+    this.loadAddKpiList();
   }
 
   // === Cascade handlers ===
@@ -2586,7 +2628,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     this.addKpiExistingCount = allForDept.length - available.length;
 
-    const opts = { districts: single ? [] : this.addKpiSelDistricts, singleUnit: single };
+    const opts = { districts: single ? [] : this.addKpiTargetDistricts(), singleUnit: single };
     const valueFields = ['target_value', 'oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'total_actual', 'last_actual'];
     const prevRows = new Map<number, any>(this.newKpiList.map((i: any) => [Number(i.indicator_id), i]));
     this.newKpiList = available.map((item: any) => {

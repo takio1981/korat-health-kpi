@@ -934,4 +934,60 @@ describe('DashboardComponent', () => {
       component.isEditing = false;
     });
   });
+  describe('ตัวกรองโซน (30 ต.ค. 2569)', () => {
+    const districts = [
+      { distid: '3001', distname: 'เมืองนครราชสีมา', zone: '1' },
+      { distid: '3019', distname: 'ขามทะเลสอ', zone: '1' },
+      { distid: '3021', distname: 'ปากช่อง', zone: '6' },
+    ];
+    const hospitals = [
+      { hoscode: '10666', hosname: 'รพ.มหาราช', distid: '3001', hostype: '05', zone: '1' },
+      { hoscode: '11111', hosname: 'รพ.สต.ก', distid: '3019', hostype: '18', zone: '1' },
+      { hoscode: '10890', hosname: 'รพ.ปากช่องนานา', distid: '3021', hostype: '07', zone: '6' },
+    ];
+    const setup = () => {
+      const c: any = component;
+      c._allDistricts = districts; c._allHospitals = hospitals;
+      c._allHosTypes = [{ hostypecode: '05' }, { hostypecode: '07' }, { hostypecode: '18' }];
+      c.districtNames = districts.map(d => d.distname);
+      c.hospitalNames = hospitals.map(h => h.hosname);
+      return c;
+    };
+
+    it('เลือกโซน → อำเภอ/หน่วยบริการ/ประเภทเหลือเฉพาะในโซน และอำเภอที่เลือกไว้นอกโซนถูกล้าง', () => {
+      const c = setup();
+      c.selectedDistricts = ['ปากช่อง'];
+      c.selectedZones = ['1'];
+      c.onZoneCascade();
+      expect(c.districtNames).toEqual(['ขามทะเลสอ', 'เมืองนครราชสีมา'].sort());
+      expect(c.selectedDistricts).toEqual([]);
+      expect(c.hospitalNames.sort()).toEqual(['รพ.มหาราช', 'รพ.สต.ก'].sort());
+      expect(c.hosTypeList.map((t: any) => t.hostypecode).sort()).toEqual(['05', '18']);
+      expect(c.zoneFilterLabel()).toBe('โซน 1');
+    });
+
+    it('applyFilters กรองแถวตามโซนของหน่วยบริการ', () => {
+      const c = setup();
+      c.selectedYear = '2570';
+      c.kpiData = hospitals.map(h => ({ hospcode: h.hoscode, hosname: h.hosname, year_bh: '2570', target_value: '', last_actual: '' }));
+      c.selectedZones = ['6'];
+      c.applyFilters();
+      expect(c.filteredData.map((r: any) => r.hospcode)).toEqual(['10890']);
+    });
+
+    it('หน้าต่างเพิ่มตัวชี้วัด: เลือกแค่โซน = ปลายทางทุกอำเภอในโซน, ไม่มีอำเภอในขอบเขต = ไม่มีปลายทาง', () => {
+      const c = setup();
+      c.addKpiDistrictList = districts;
+      c.addKpiSelZones = ['1'];
+      expect(c.addKpiTargetDistricts()).toEqual(['3001', '3019']);
+      c.addKpiSelDistricts = ['3021'];
+      vi.spyOn(c, 'loadAddKpiList').mockImplementation(() => {});
+      c.onAddKpiZoneChange();
+      expect(c.addKpiSelDistricts).toEqual([]);   // ปากช่องไม่อยู่ในโซน 1
+      c.addKpiSelZones = ['5'];
+      expect(c.addKpiTargetDistricts()).toEqual(['__none__']);
+      c.addKpiSelZones = [];
+      expect(c.addKpiTargetDistricts()).toEqual([]);
+    });
+  });
 });

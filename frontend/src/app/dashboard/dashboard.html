@@ -315,6 +315,28 @@
           <!-- แถว 1: สถานที่ (teal) + เงื่อนไข (amber) -->
           <div class="flex flex-wrap items-end gap-2">
             <span class="px-1.5 py-0.5 bg-teal-100 text-teal-700 rounded text-[9px] font-bold self-center"><i class="fas fa-map-marker-alt mr-0.5"></i>สถานที่</span>
+            <!-- โซน (multi) -->
+            <div *ngIf="zoneList.length > 1" class="relative min-w-[110px] flex-1 max-w-[150px]">
+              <button type="button" (click)="toggleDropdown('zone')"
+                      class="w-full flex items-center justify-between px-2 py-1 border border-teal-200 rounded-lg bg-white text-xs hover:border-teal-400 focus:ring-1 focus:ring-teal-500 outline-none">
+                <span class="truncate" [class.text-gray-400]="selectedZones.length === 0">{{ zoneFilterLabel() }}</span>
+                <i class="fas fa-chevron-down ml-1 text-gray-400"></i>
+              </button>
+              <div *ngIf="openFilterDropdown === 'zone'" class="absolute z-50 top-full left-0 mt-1 w-[min(14rem,calc(100vw-2rem))] bg-white border border-gray-200 rounded-lg shadow-xl max-h-80 overflow-hidden flex flex-col">
+                <div class="p-2 border-b bg-teal-50 flex items-center justify-between text-[10px]">
+                  <button type="button" (click)="clearFilterArr(selectedZones); onZoneCascade()" class="px-2 py-0.5 bg-gray-200 hover:bg-gray-300 rounded font-bold">ล้าง</button>
+                  <span class="text-teal-700 font-bold">เลือก: {{ selectedZones.length }}</span>
+                  <button type="button" (click)="openFilterDropdown = ''" class="px-2 py-0.5 bg-teal-500 text-white rounded font-bold">ตกลง</button>
+                </div>
+                <div class="overflow-y-auto flex-1">
+                  <label *ngFor="let z of zoneList" class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
+                    <input type="checkbox" [checked]="isFilterSelected(selectedZones, z)"
+                           (change)="toggleFilterItem(selectedZones, z); onZoneCascade()" class="rounded text-teal-600">
+                    <span>{{ zoneLabel(z) }}</span>
+                  </label>
+                </div>
+              </div>
+            </div>
             <!-- อำเภอ (multi) -->
             <div class="relative min-w-[140px] flex-1 max-w-[200px]">
               <button type="button" (click)="toggleDropdown('district')"
@@ -1495,6 +1517,31 @@
       </div>
       <!-- Admin/Admin CUP: multi-select checkbox dropdowns (เหมือนตัวกรองหน้า dashboard) -->
       <ng-container *ngIf="isAdmin || isLocalAdmin">
+        <!-- โซน (multi) — จำกัดรายการอำเภอ / ปลายทาง (ไม่เลือก = ทั้งขอบเขต) -->
+        <div *ngIf="!addKpiSingleUnit && addKpiZoneList.length > 1" class="space-y-1">
+          <label class="text-xs font-bold text-gray-500">โซน <span class="text-[10px] text-gray-400 font-normal">(ไม่เลือก = ทั้งหมด)</span></label>
+          <div class="relative min-w-[120px]">
+            <button type="button" (click)="toggleAddKpiDropdown('zone')"
+                    class="w-full flex items-center justify-between px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm hover:border-green-400 outline-none">
+              <span class="truncate" [class.text-gray-400]="addKpiSelZones.length === 0">{{ addKpiZoneLabel() }}</span>
+              <i class="fas fa-chevron-down ml-1 text-gray-400 text-xs"></i>
+            </button>
+            <div *ngIf="addKpiOpenDropdown === 'zone'" class="absolute z-50 top-full left-0 mt-1 w-[min(14rem,calc(100vw-2rem))] bg-white border border-gray-200 rounded-lg shadow-xl max-h-72 overflow-hidden flex flex-col">
+              <div class="p-2 border-b bg-gray-50 flex items-center justify-between text-[11px]">
+                <button type="button" (click)="clearAddKpiArr(addKpiSelZones); onAddKpiZoneChange()" class="px-2 py-0.5 bg-gray-200 hover:bg-gray-300 rounded font-bold">ทั้งหมด</button>
+                <span class="text-green-700 font-bold">เลือก: {{ addKpiSelZones.length }}</span>
+                <button type="button" (click)="addKpiOpenDropdown = ''" class="px-2 py-0.5 bg-green-500 text-white rounded font-bold">ตกลง</button>
+              </div>
+              <div class="overflow-y-auto flex-1">
+                <label *ngFor="let z of addKpiZoneList" class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
+                  <input type="checkbox" [checked]="isAddKpiFilterSel(addKpiSelZones, z)"
+                         (change)="toggleAddKpiFilter(addKpiSelZones, z); onAddKpiZoneChange()" class="rounded text-green-600">
+                  <span>{{ zoneLabel(z) }}</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
         <!-- อำเภอ (multi) — จำกัดหน่วยบริการปลายทางที่ระบบเลือกให้ (ไม่เลือก = ทั้งขอบเขต) -->
         <div *ngIf="!addKpiSingleUnit" class="space-y-1">
           <label class="text-xs font-bold text-gray-500">อำเภอ <span class="text-[10px] text-gray-400 font-normal">(ไม่เลือก = ทั้งหมด)</span></label>
@@ -1511,7 +1558,7 @@
                 <button type="button" (click)="addKpiOpenDropdown = ''" class="px-2 py-0.5 bg-green-500 text-white rounded font-bold">ตกลง</button>
               </div>
               <div class="overflow-y-auto flex-1">
-                <label *ngFor="let d of addKpiDistrictList" class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
+                <label *ngFor="let d of addKpiZoneDistricts" class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
                   <input type="checkbox" [checked]="isAddKpiFilterSel(addKpiSelDistricts, d.distid)"
                          (change)="toggleAddKpiFilter(addKpiSelDistricts, d.distid); onAddKpiDistrictChange()" class="rounded text-green-600">
                   <span>{{ d.distname }}</span>

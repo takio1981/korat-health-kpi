@@ -7,6 +7,7 @@ import { CriteriaTextPipe } from '../shared/criteria-text.pipe';
 import { getNextFiscalYear } from '../shared/fiscal-year.util';
 import Swal from 'sweetalert2';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
+import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
 
 @Component({
   selector: 'app-kpi-setup',
@@ -27,8 +28,10 @@ export class KpiSetupComponent implements OnInit {
   filteredHospitals: any[] = [];
 
   selectedYear: string = '';
+  selectedZone: string = '';
   selectedDistrict: string = '';
   selectedHospital: string = '';
+  zoneLabel = zoneLabel;
   selectedDept: string = '';
 
   isAdmin: boolean = false;
@@ -132,12 +135,17 @@ export class KpiSetupComponent implements OnInit {
     this.applyDeptFilter();
   }
 
+  get zoneList(): string[] { return zoneOptions(this.districts); }
+  get zoneDistricts(): any[] { return this.districts.filter(d => inZone(d, this.selectedZone)); }
+
+  onZoneChange() {
+    if (this.selectedDistrict && !this.zoneDistricts.some(d => d.distid === this.selectedDistrict)) this.selectedDistrict = '';
+    this.onDistrictChange();
+  }
+
   onDistrictChange() {
-    if (this.selectedDistrict) {
-      this.filteredHospitals = this.hospitals.filter(h => h.distid === this.selectedDistrict);
-    } else {
-      this.filteredHospitals = [...this.hospitals];
-    }
+    this.filteredHospitals = this.hospitals.filter(h =>
+      inZone(h, this.selectedZone) && (!this.selectedDistrict || h.distid === this.selectedDistrict));
     this.selectedHospital = '';
     this.cdr.detectChanges();
   }
