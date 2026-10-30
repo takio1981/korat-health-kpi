@@ -281,7 +281,7 @@
             <select [(ngModel)]="formData.hospcode"
                     class="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-colors bg-gray-50 focus:bg-white text-sm">
               <option value="">-- เลือกหน่วยบริการ --</option>
-              <option *ngFor="let h of filteredHospitals" [value]="h.hoscode">{{ h.hoscode }}: {{ h.hosname }}</option>
+              <option *ngFor="let h of filteredHospitals" [value]="h.hoscode">{{ h.hoscode }}: {{ h.hosname }}{{ h.zone ? ' · โซน ' + h.zone : '' }}</option>
             </select>
           </div>
         </div>

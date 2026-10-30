@@ -100,7 +100,16 @@ describe('API ตัวกรองโซน', () => {
         expect(d.body.data.find(x => x.distid === hospA.distid).zone).toBe(hospA.zone);
     });
 
-    test('GET /report/chart-stats?zone= กรองเฉพาะโซนที่เลือก + มีตัวเลือกโซน', async () => {
+    test('GET /hospital-zones: รหัสหน่วยบริการ → โซน ทุกแห่ง (ใช้กับป้ายโซนต่อท้ายชื่อหน่วยบริการ)', async () => {
+        const r = await auth(request(app).get(api('/hospital-zones')));
+        expect(r.status).toBe(200);
+        expect(r.body.data[hospA.hoscode]).toBe(hospA.zone);
+        expect(r.body.data[hospB.hoscode]).toBe(hospB.zone);
+        const anon = await request(app).get(api('/hospital-zones'));
+        expect(anon.status).toBe(401);
+    });
+
+    test('GET /report/chart-stats?zone=กรองเฉพาะโซนที่เลือก + มีตัวเลือกโซน', async () => {
         const all = await auth(request(app).get(api(`/report/chart-stats?year_bh=${YEAR}&indicator_id=${indId}`)));
         expect(all.body.overall.pairs).toBe(2);
         expect(all.body.options.zones).toEqual(expect.arrayContaining([hospA.zone, hospB.zone]));

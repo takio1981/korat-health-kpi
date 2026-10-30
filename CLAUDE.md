@@ -94,7 +94,7 @@ frontend/src/app/
   ห้าม export ตรงๆ (ค่าจะค้าง) — เก็บไว้ในโมดูลเดียวกับผู้ใช้ หรือเปลี่ยนเป็น object; Map/Set แชร์ได้ (object เดียวกัน)
 - `core/env.js` ต้องเป็น require แรกของ server.js
   (ตัวดัก unhandledRejection/uncaughtException เรียก `captureError` แบบ lazy จาก core/errors)
-- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (280 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
+- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (281 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
   ตั้งใจเพิ่ม/แก้ route → `node tests/lib/route-inventory.js --write` แล้วตรวจ diff), `tests/lint.test.js` (ESLint no-undef ฯลฯ — จับชื่อที่ลืม require),
   `tests/build.test.js` (ไล่ require ทุกชั้นต้องอยู่ในชุดที่ build คัดลอก + build ลงโฟลเดอร์ชั่วคราว), `tests/startup.test.js` (เริ่มระบบ + โหลดผลลัพธ์ build ใน process แยก)
   — middleware ที่สร้างจาก factory/ไลบรารีต้องมีชื่อ (`requireAction(page,action)`, loginIpLimiter/loginLimiter/apiLimiter) ให้ snapshot แยกได้
@@ -501,7 +501,11 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   `/report/recording-status*` + `/report/by-dept-summary*` (r.hospcode) — **endpoint ใหม่ที่รับ hostype/distid ต้องรับ zone ด้วย**
 - Frontend: `shared/zone.ts` (`zoneOptions`/`zoneLabel`/`inZone`) — ตัวกรองโซนอยู่ก่อนอำเภอและกรองรายการอำเภอ/หน่วยบริการ (cascade) ใน dashboard (+ หน้าต่างเพิ่มตัวชี้วัด:
   เลือกแค่โซน = ปลายทางทุกอำเภอในโซน `addKpiTargetDistricts()`), chart, report, kpi-setup, kpi-manage แท็บหน่วยบริการ (คอลัมน์ + ช่องแก้ไขโซนใน modal), user-management
-- Test: `api/tests/zone-filter.test.js`, `shared/zone.spec.ts`, `dashboard.spec.ts`
+- **ป้ายโซนต่อท้ายชื่อหน่วยบริการ:** `<app-zone-badge [hospcode]="x.hospcode">` (`shared/zone-badge.ts`) — `HospitalZoneService` โหลด `GET /hospital-zones` (รหัส → โซน ทุกแห่ง)
+  ครั้งเดียวต่อการเข้าใช้แล้วแชร์ทุกป้าย (ระบุ `[zone]` ตรงได้) — ใช้แล้วใน dashboard, report, user-management, online-users, notifications, kpi-results-manage,
+  kpi-manage (ตารางเทียบ KHD), layout (โปรไฟล์) — `<option>` ใส่ข้อความ `· โซน N` จาก `h.zone` ของ /hospitals (และ /public/hospitals ในหน้าลงทะเบียน)
+  — **หน้าใหม่ที่แสดงชื่อหน่วยบริการต้องใส่ป้ายนี้ต่อท้ายเสมอ**
+- Test: `api/tests/zone-filter.test.js`, `shared/zone.spec.ts`, `shared/zone-badge.spec.ts`, `dashboard.spec.ts`
 
 ### kpi-manage Hospitals tab
 - 5 tabs: ตัวชี้วัด / หมวดหมู่หลัก / ยุทธศาสตร์ / หน่วยงาน / **หน่วยบริการ**

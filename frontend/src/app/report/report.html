@@ -229,7 +229,7 @@
             </ng-container>
             <!-- by-hospital -->
             <ng-container *ngIf="activeTab === 'by-hospital'">
-              <p class="font-bold text-gray-900 text-sm">{{ item.hosname }}</p>
+              <p class="font-bold text-gray-900 text-sm">{{ item.hosname }} <app-zone-badge [hospcode]="item.hospcode"></app-zone-badge></p>
               <p class="text-[10px] text-gray-400">{{ item.distname }} | {{ item.hospcode }}</p>
               <div class="grid grid-cols-3 gap-1 mt-2 text-xs text-center">
                 <div class="bg-gray-50 rounded p-1"><p class="text-[10px] text-gray-500">ตัวชี้วัด</p><p class="font-bold">{{ item.indicator_count }}</p></div>
@@ -270,7 +270,7 @@
             </ng-container>
             <!-- recording-status: by-hospital -->
             <ng-container *ngIf="activeTab === 'recording-status' && monitorView === 'by-hospital'">
-              <p class="font-bold text-gray-900 text-sm">{{ item.hosname || item.hospcode }}</p>
+              <p class="font-bold text-gray-900 text-sm">{{ item.hosname || item.hospcode }} <app-zone-badge [hospcode]="item.hospcode"></app-zone-badge></p>
               <p class="text-[10px] text-gray-400">{{ item.distname }} | {{ item.hostypename }} | {{ item.hospcode }}</p>
               <div class="grid grid-cols-3 gap-1 mt-2 text-xs text-center">
                 <div class="bg-emerald-50 rounded p-1"><p class="text-[10px] text-gray-500">บันทึก</p><p class="font-bold text-emerald-700">{{ item.recorded_indicators }}/{{ item.total_indicators }}</p></div>
@@ -373,7 +373,7 @@
               <tr *ngFor="let item of reportData; let i = index" class="border-b border-gray-50 hover:bg-blue-50/30 transition-colors">
                 <td class="px-4 py-2.5 text-gray-500">{{ i + 1 }}</td>
                 <td class="px-4 py-2.5 text-gray-600 font-mono text-xs">{{ item.hospcode }}</td>
-                <td class="px-4 py-2.5 text-gray-800 font-medium">{{ item.hosname }}</td>
+                <td class="px-4 py-2.5 text-gray-800 font-medium">{{ item.hosname }} <app-zone-badge [hospcode]="item.hospcode"></app-zone-badge></td>
                 <td class="px-4 py-2.5 text-gray-600">{{ item.distname }}</td>
                 <td class="px-4 py-2.5 text-right text-gray-700">{{ item.indicator_count }}</td>
                 <td class="px-4 py-2.5 text-right text-gray-700">{{ (item.total_target | number:'1.2-2') || '0.00' }}</td>
@@ -527,7 +527,7 @@
               <tr *ngFor="let item of reportData; let i = index" class="border-b border-gray-50 hover:bg-rose-50/30 transition-colors">
                 <td class="px-4 py-2.5 text-gray-500">{{ i + 1 }}</td>
                 <td class="px-4 py-2.5 text-gray-600 font-mono text-xs">{{ item.hospcode }}</td>
-                <td class="px-4 py-2.5 text-gray-800 font-medium">{{ item.hosname || '-' }}</td>
+                <td class="px-4 py-2.5 text-gray-800 font-medium">{{ item.hosname || '-' }} <app-zone-badge [hospcode]="item.hospcode"></app-zone-badge></td>
                 <td class="px-4 py-2.5 text-gray-600">{{ item.distname || '-' }}</td>
                 <td class="px-4 py-2.5 text-gray-600 text-xs">{{ item.hostypename || '-' }}</td>
                 <td class="px-4 py-2.5 text-right text-gray-700">{{ item.total_indicators }}</td>
@@ -808,6 +808,7 @@
                                             ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
                                             : 'bg-rose-50 border-rose-200 text-rose-800'">
                                       <span class="font-semibold">{{ h.hosname || h.hospcode }}</span>
+                                      <app-zone-badge [hospcode]="h.hospcode"></app-zone-badge>
                                       <span class="opacity-60 text-[9px]">{{ h.hostypename || h.hostype }}</span>
                                       <span *ngIf="h.distname" class="opacity-50 text-[9px]">· {{ h.distname }}</span>
                                     </span>
@@ -957,7 +958,7 @@
                               [ngClass]="selectedIndForHospDrilldown?.filter === 'recorded'
                                 ? 'bg-white border-emerald-200 text-emerald-900'
                                 : 'bg-white border-rose-200 text-rose-900'">
-                          <span class="font-semibold leading-tight">{{ h.hosname || h.hospcode }}</span>
+                          <span class="font-semibold leading-tight">{{ h.hosname || h.hospcode }} <app-zone-badge [hospcode]="h.hospcode"></app-zone-badge></span>
                           <span class="opacity-60 text-[9px]">{{ h.hostypename || h.hostype }}<span *ngIf="h.distname"> · {{ h.distname }}</span></span>
                         </span>
                       </div>

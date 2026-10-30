@@ -165,3 +165,16 @@ apiRouter.get('/districts', authenticateToken, async (req, res) => {
         res.status(500).json({ success: false });
     }
 });
+
+// GET /hospital-zones — รหัสหน่วยบริการ → โซน (ทุกแห่ง ไม่กรองตาม role: เป็นข้อมูลอ้างอิงสาธารณะของจังหวัด)
+// ใช้แสดงป้าย "โซน N" ต่อท้ายชื่อหน่วยบริการทุกหน้า (frontend shared/zone-badge.ts แคชครั้งเดียว)
+apiRouter.get('/hospital-zones', authenticateToken, async (req, res) => {
+    try {
+        const [rows] = await db.query("SELECT hoscode, zone FROM chospital WHERE zone IS NOT NULL AND zone <> ''");
+        const data = {};
+        for (const r of rows) data[String(r.hoscode).trim()] = String(r.zone);
+        res.json({ success: true, data });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});

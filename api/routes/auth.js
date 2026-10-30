@@ -2003,7 +2003,7 @@ apiRouter.get('/public/departments', async (req, res) => {
 
 apiRouter.get('/public/hospitals', async (req, res) => {
     try {
-        const [hospitals] = await db.query("SELECT hoscode, hosname, hostype, CONCAT(provcode, distcode) as distid FROM chospital ORDER BY FIELD(hostype,'05','06','07','18'), hosname");
+        const [hospitals] = await db.query("SELECT hoscode, hosname, hostype, CONCAT(provcode, distcode) as distid, zone FROM chospital ORDER BY FIELD(hostype,'05','06','07','18'), hosname");
         res.json({ success: true, data: hospitals });
     } catch (error) {
         res.status(500).json({ success: false });

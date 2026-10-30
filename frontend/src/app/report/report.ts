@@ -10,12 +10,13 @@ import { CriteriaTextPipe } from '../shared/criteria-text.pipe';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import Swal from 'sweetalert2';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
+import { ZoneBadgeComponent } from '../shared/zone-badge';
 import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
 
 @Component({
   selector: 'app-report',
   standalone: true,
-  imports: [CommonModule, RouterModule, NgApexchartsModule, FormsModule, SkeletonTableComponent, CriteriaTextPipe, FormulaBadgeComponent],
+  imports: [CommonModule, RouterModule, NgApexchartsModule, FormsModule, SkeletonTableComponent, CriteriaTextPipe, FormulaBadgeComponent, ZoneBadgeComponent],
   templateUrl: './report.html',
   styleUrl: './report.css'
 })

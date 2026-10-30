@@ -80,6 +80,7 @@
   "DELETE /khupskpi/api/hospitals/:hoscode :: authenticateToken > isSuperAdmin > handler",
   "GET /khupskpi/api/hostype :: authenticateToken > handler",
   "GET /khupskpi/api/districts :: authenticateToken > handler",
+  "GET /khupskpi/api/hospital-zones :: authenticateToken > handler",
   "POST /khupskpi/api/users :: authenticateToken > requireAction(users,add) > handler",
   "PUT /khupskpi/api/users/change-password :: authenticateToken > handler",
   "GET /khupskpi/api/sso/connectivity :: handler",

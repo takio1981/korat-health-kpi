@@ -696,6 +696,7 @@
                     <p *ngIf="item.hosname" class="text-xs text-blue-500">
                       {{ item.hosname }}
                       <span *ngIf="item.hostypename" class="ml-1 px-1.5 py-0.5 bg-cyan-50 text-cyan-700 rounded-full text-[9px] font-semibold">{{ item.hostypename }}</span>
+                      <app-zone-badge [hospcode]="item.hospcode"></app-zone-badge>
                       <span *ngIf="item.distname" class="text-gray-400">| {{ item.distname }}</span>
                     </p>
                   </div>
@@ -1239,6 +1240,7 @@
                     <span class="break-words">{{ item.hosname || '-' }}</span>
                     <span *ngIf="item.hostype" class="px-1.5 py-0.5 bg-cyan-50 text-cyan-700 border border-cyan-200 rounded text-[10px] font-bold whitespace-nowrap shrink-0"
                           [title]="item.hostypename">{{ getHosTypeAbbr(item.hostype) }}</span>
+                    <app-zone-badge [hospcode]="item.hospcode"></app-zone-badge>
                   </div>
                   <div *ngIf="item.distname" class="text-[10px] text-gray-500 mt-0.5 flex items-center gap-1">
                     <i class="fas fa-map-marker-alt text-gray-400 text-[9px]"></i>{{ item.distname }}
@@ -1435,7 +1437,7 @@
   <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 transform transition-all scale-100">
     <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-undo-alt text-red-500 mr-2"></i>ส่งคืนแก้ไข</h3>
     <p class="text-sm text-gray-600 mb-2">ตัวชี้วัด: <span class="font-bold">{{ rejectingItem?.kpi_indicators_name }}</span></p>
-    <p class="text-sm text-gray-500 mb-3">ปีงบประมาณ: <span class="font-bold">{{ rejectingItem?.year_bh }}</span> | หน่วยบริการ: <span class="font-bold">{{ rejectingItem?.hosname || '-' }}</span></p>
+    <p class="text-sm text-gray-500 mb-3">ปีงบประมาณ: <span class="font-bold">{{ rejectingItem?.year_bh }}</span> | หน่วยบริการ: <span class="font-bold">{{ rejectingItem?.hosname || '-' }}</span> <app-zone-badge [hospcode]="rejectingItem?.hospcode"></app-zone-badge></p>
 
     <!-- เลือกเดือนที่ต้องแก้ไข -->
     <div class="mb-3">
@@ -1602,7 +1604,7 @@
         <div class="space-y-1">
           <label class="text-xs font-bold text-gray-500">หน่วยบริการ</label>
           <div class="px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 font-medium">
-            <i class="fas fa-hospital text-green-500 mr-1"></i>{{ currentUser?.service_unit || currentUser?.hospcode || '-' }}
+            <i class="fas fa-hospital text-green-500 mr-1"></i>{{ currentUser?.service_unit || currentUser?.hospcode || '-' }} <app-zone-badge [hospcode]="currentUser?.hospcode"></app-zone-badge>
           </div>
         </div>
         <div class="space-y-1">
@@ -1880,7 +1882,7 @@
         </div>
         <div class="bg-gray-50 rounded-lg p-2">
           <p class="text-gray-500 font-bold">หน่วยบริการ</p>
-          <p class="font-bold text-gray-800 truncate">{{ dynamicFormItem?.hosname || dynamicFormData.hospcode }}</p>
+          <p class="font-bold text-gray-800 truncate">{{ dynamicFormItem?.hosname || dynamicFormData.hospcode }} <app-zone-badge [hospcode]="dynamicFormData.hospcode"></app-zone-badge></p>
         </div>
         <div class="bg-purple-50 rounded-lg p-2">
           <p class="text-purple-600 font-bold">ฟิลด์ในแบบฟอร์ม</p>
@@ -2091,7 +2093,7 @@
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3 text-xs">
         <div class="bg-gray-50 rounded-lg p-2">
           <p class="text-gray-500 font-bold">หน่วยบริการ</p>
-          <p class="font-bold text-gray-800">{{ subResultContext?.hosname }} ({{ subResultContext?.hospcode }})</p>
+          <p class="font-bold text-gray-800">{{ subResultContext?.hosname }} ({{ subResultContext?.hospcode }}) <app-zone-badge [hospcode]="subResultContext?.hospcode"></app-zone-badge></p>
         </div>
         <div class="bg-gray-50 rounded-lg p-2">
           <p class="text-gray-500 font-bold">ปีงบประมาณ</p>

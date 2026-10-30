@@ -14,6 +14,7 @@ import { activeFormula, validateFormula, evaluateFormula } from '../shared/kpi-f
 import { CustomVarDef, customVarDefsFor, customValuesOf, evaluatePct, pctFormulaOf, parseCustomVars } from '../shared/custom-vars';
 import { isManualResult, isManualPct, manualPctNumber, manualPctPass, normalizeManualPct } from '../shared/manual-result';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
+import { ZoneBadgeComponent } from '../shared/zone-badge';
 import { indicatorTypeSetting, autoTargetHostypes, resolveAddKpiTargets, HOSTYPE_NAMES } from '../shared/indicator-scope';
 import { EXCEL_MONTHS, ChangePlan, EditPerms, buildTemplateAoa, templateFileName, parseImportAoa, planImport, parseClipboardGrid, isMultiCell, planPaste, applyCellChanges, itemKey } from '../shared/kpi-excel';
 import { Anomaly, detectAnomaly } from '../shared/anomaly';
@@ -112,7 +113,7 @@ export function recomputeHierRows(rows: HierRow[]) {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, NgApexchartsModule, InitScrollLeftDirective, CriteriaTextPipe, FormulaBadgeComponent],
+  imports: [CommonModule, FormsModule, RouterModule, NgApexchartsModule, InitScrollLeftDirective, CriteriaTextPipe, FormulaBadgeComponent, ZoneBadgeComponent],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css'
 })

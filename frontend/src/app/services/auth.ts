@@ -360,6 +360,13 @@ export class AuthService {
     return this.http.delete(`${this.apiUrl}/hospitals/${encodeURIComponent(hoscode)}`, { headers });
   }
 
+  /** รหัสหน่วยบริการ → โซน (ทุกแห่ง) — ใช้แสดงป้ายโซนต่อท้ายชื่อหน่วยบริการ (shared/zone-badge.ts) */
+  getHospitalZones(): Observable<any> {
+    const token = localStorage.getItem('kpi_token');
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
+    return this.http.get(`${this.apiUrl}/hospital-zones`, { headers });
+  }
+
   getDistricts(): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

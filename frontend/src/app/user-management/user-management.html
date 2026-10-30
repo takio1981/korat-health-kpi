@@ -105,7 +105,7 @@
         <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">หน่วยบริการ</label>
         <select [(ngModel)]="selectedHospcode" (change)="applyFilters()" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm hover:border-green-400 transition-colors">
           <option value="">ทั้งหมด</option>
-          <option *ngFor="let hos of zoneHospitals" [value]="hos.hoscode">{{ hos.hosname }} ({{ hos.hoscode }})</option>
+          <option *ngFor="let hos of zoneHospitals" [value]="hos.hoscode">{{ hos.hosname }} ({{ hos.hoscode }}){{ hos.zone ? ' · โซน ' + hos.zone : '' }}</option>
         </select>
       </div>
 
@@ -168,7 +168,7 @@
         <!-- Info grid -->
         <div class="grid grid-cols-2 gap-1 text-xs">
           <div class="text-gray-500"><i class="fas fa-building mr-1 w-4 text-center"></i>{{ user.dept_name || '-' }}</div>
-          <div class="text-gray-500"><i class="fas fa-hospital mr-1 w-4 text-center"></i>{{ user.hosname || '-' }}</div>
+          <div class="text-gray-500"><i class="fas fa-hospital mr-1 w-4 text-center"></i>{{ user.hosname || '-' }} <app-zone-badge [hospcode]="user.hospcode"></app-zone-badge></div>
           <div class="text-gray-500"><i class="fas fa-phone mr-1 w-4 text-center"></i>{{ formatPhoneDisplay(user.phone) || '-' }}</div>
           <div class="text-gray-500"><i class="fas fa-envelope mr-1 w-4 text-center"></i>{{ user.email || '-' }}</div>
         </div>
@@ -248,7 +248,7 @@
               </span>
             </td>
             <td class="px-4 py-3 text-gray-600 text-sm">{{ user.dept_name || '-' }}</td>
-            <td class="px-4 py-3 text-gray-600 text-xs">{{ user.hosname || user.hospcode || '-' }}</td>
+            <td class="px-4 py-3 text-gray-600 text-xs">{{ user.hosname || user.hospcode || '-' }} <app-zone-badge [hospcode]="user.hospcode"></app-zone-badge></td>
             <td class="px-4 py-3 text-gray-600 text-sm">{{ formatPhoneDisplay(user.phone) || '-' }}</td>
             <td class="px-4 py-3 text-gray-600 text-xs">
               <span *ngIf="user.email" class="inline-flex items-center gap-1"><i class="fas fa-envelope text-blue-400"></i> {{ user.email }}</span>
@@ -520,7 +520,7 @@
                    class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all group" title="คลิกเพื่อดูรายชื่อ">
                 <i *ngIf="isActiveDrill('hospcode', h.hospcode)" class="fas fa-check-circle text-orange-500 text-xs flex-shrink-0"></i>
                 <div class="min-w-0 flex-1">
-                  <p class="text-xs font-medium truncate transition-colors" [ngClass]="isActiveDrill('hospcode', h.hospcode) ? 'text-orange-700' : 'text-gray-700'">{{ h.hosname || h.hospcode || '(ไม่ระบุ)' }}</p>
+                  <p class="text-xs font-medium truncate transition-colors" [ngClass]="isActiveDrill('hospcode', h.hospcode) ? 'text-orange-700' : 'text-gray-700'">{{ h.hosname || h.hospcode || '(ไม่ระบุ)' }} <app-zone-badge [hospcode]="h.hospcode"></app-zone-badge></p>
                   <p class="text-[10px] text-gray-400 truncate">
                     <span class="bg-cyan-100 text-cyan-700 rounded px-1 mr-1">{{ getHostypeLabel(h.hostype) }}</span>
                     {{ h.distname || '' }}
@@ -675,7 +675,7 @@
                     </span>
                   </td>
                   <td class="px-4 py-2.5">
-                    <div class="text-xs text-gray-700 font-medium">{{ u.hosname || u.hospcode || '-' }}</div>
+                    <div class="text-xs text-gray-700 font-medium">{{ u.hosname || u.hospcode || '-' }} <app-zone-badge [hospcode]="u.hospcode"></app-zone-badge></div>
                     <div class="text-[10px] text-gray-400">{{ getHostypeLabel(u.hostype) }}</div>
                   </td>
                   <td class="px-4 py-2.5 text-xs text-gray-600">{{ u.dept_name || '-' }}</td>
@@ -808,7 +808,7 @@
           <label class="block text-sm font-medium text-gray-700 mb-1">หน่วยบริการ (รพ./สสอ.) <span class="text-red-500">*</span></label>
           <select [(ngModel)]="currentUser.hospcode" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
             <option value="">-- เลือกหน่วยบริการ --</option>
-            <option *ngFor="let h of filteredHospitals" [value]="h.hoscode">{{ h.hoscode }}: {{ h.hosname }}</option>
+            <option *ngFor="let h of filteredHospitals" [value]="h.hoscode">{{ h.hoscode }}: {{ h.hosname }}{{ h.zone ? ' · โซน ' + h.zone : '' }}</option>
           </select>
         </div>
       </div>
@@ -1148,7 +1148,7 @@
         <div class="text-xs text-gray-500 mt-1">
           <span class="bg-gray-200 px-2 py-0.5 rounded-full">{{ permUser.role }}</span>
           <span class="ml-2"><i class="fas fa-building text-blue-400 mr-1"></i>{{ permUser.dept_name || '-' }}</span>
-          <span class="ml-2"><i class="fas fa-hospital text-green-400 mr-1"></i>{{ permUser.hosname || permUser.hospcode || '-' }}</span>
+          <span class="ml-2"><i class="fas fa-hospital text-green-400 mr-1"></i>{{ permUser.hosname || permUser.hospcode || '-' }} <app-zone-badge [hospcode]="permUser.hospcode"></app-zone-badge></span>
         </div>
       </div>
 

@@ -9,11 +9,12 @@ import Swal from 'sweetalert2';
 import { filter, map, mergeMap } from 'rxjs/operators';
 import { Title } from '@angular/platform-browser';
 import { CommandPaletteComponent } from '../shared/command-palette/command-palette';
+import { ZoneBadgeComponent } from '../shared/zone-badge';
 
 @Component({
   selector: 'app-layout',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, RouterOutlet, CommandPaletteComponent],
+  imports: [CommonModule, FormsModule, RouterModule, RouterOutlet, CommandPaletteComponent, ZoneBadgeComponent],
   templateUrl: './layout.html',
   styleUrls: ['./layout.css']
 })

@@ -4,11 +4,12 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
 import Swal from 'sweetalert2';
+import { ZoneBadgeComponent } from '../shared/zone-badge';
 
 @Component({
   selector: 'app-online-users',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ZoneBadgeComponent],
   templateUrl: './online-users.html'
 })
 export class OnlineUsersComponent implements OnInit, OnDestroy {

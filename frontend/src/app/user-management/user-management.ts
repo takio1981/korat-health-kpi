@@ -5,6 +5,7 @@ import { Router, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { ToastService } from '../services/toast.service';
 import Swal from 'sweetalert2';
+import { ZoneBadgeComponent } from '../shared/zone-badge';
 import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
 
 interface UsersFieldDiff { field: string; khd_field?: string; local_value: any; khd_value: any; }
@@ -13,7 +14,7 @@ interface UsersSyncMappingRow { field: string; khd_field: string; excluded: bool
 @Component({
   selector: 'app-user-management',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ZoneBadgeComponent],
   templateUrl: './user-management.html'
 })
 export class UserManagementComponent implements OnInit {

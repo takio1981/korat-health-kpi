@@ -4,11 +4,12 @@ import { Router, RouterModule, ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth';
 import Swal from 'sweetalert2';
+import { ZoneBadgeComponent } from '../shared/zone-badge';
 
 @Component({
   selector: 'app-notifications',
   standalone: true,
-  imports: [CommonModule, RouterModule, FormsModule],
+  imports: [CommonModule, RouterModule, FormsModule, ZoneBadgeComponent],
   templateUrl: './notifications.html',
   styleUrl: './notifications.css'
 })

@@ -94,7 +94,7 @@
                 <div class="font-medium text-gray-800">{{ row.kpi_indicators_name }}<app-formula-badge class="ml-1" [formula]="row.result_formula"></app-formula-badge></div>
                 <div class="text-[10px] text-gray-400">{{ row.dept_name }}</div>
               </td>
-              <td class="px-3 py-2 text-gray-600">{{ row.hosname || row.hospcode }}</td>
+              <td class="px-3 py-2 text-gray-600">{{ row.hosname || row.hospcode }} <app-zone-badge [hospcode]="row.hospcode"></app-zone-badge></td>
               <td class="px-3 py-2 text-center">{{ row.year_bh }}</td>
               <td class="px-3 py-2 text-center">{{ monthLabel(row.month_bh) }}</td>
               <td class="px-3 py-2 text-right">{{ row.target_value || '-' }}</td>
