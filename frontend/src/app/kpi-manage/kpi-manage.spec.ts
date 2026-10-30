@@ -334,7 +334,9 @@ describe('KpiManageComponent', () => {
       component.currentItem = { result_formula: 'AVG(ALL)', target_condition: 'LTE' };
       component.formulaTestMonths = { m10: '4' };
       component.formulaTestTarget = '8';
-      expect(component.formulaTestResult?.pct).toBe(200);
+      expect(component.formulaTestResult?.pct).toBe(100);   // ≤ ไม่เกินเป้าหมาย = 100%
+      component.formulaTestMonths = { m10: '10' };
+      expect(component.formulaTestResult?.pct).toBe(80);
     });
   });
   describe('ค่าฐาน (base) ในกล่องสูตร', () => {

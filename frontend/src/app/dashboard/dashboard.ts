@@ -4078,7 +4078,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   // ร้อยละ/ผ่านเกณฑ์ ตามเงื่อนไขเป้าหมายของตัวชี้วัด (target_condition ≥ > ≤ < =) — shared/kpi-target.ts (สำเนาเดียวกับ backend) — 22 ต.ค. 2569
-  //   ≥ / > : ผลงาน ÷ เป้าหมาย × 100 (เดิม) | ≤ / < : เป้าหมาย ÷ ผลงาน × 100 (ผลงาน 0 = 100) | = : ค่าน้อย ÷ ค่ามาก × 100
+  //   ≥ / > : ผลงาน ÷ เป้าหมาย × 100 (เดิม) | ≤ / < : ไม่เกินเป้าหมาย = 100, เกิน = เป้าหมาย ÷ ผลงาน × 100 | = : ค่าน้อย ÷ ค่ามาก × 100
   // ไม่มีเป้าหมาย/ผลงาน → ร้อยละ 0 และไม่ระบายแดง (เหมือนเดิม)
   calcPercent(item: any): number {
     // ร้อยละแบบกรอกเอง (29 ต.ค. 2569) — ใช้ค่าที่กรอก ไม่คำนวณ
@@ -4104,7 +4104,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   }
   conditionTitle(item: any): string {
     const c = normalizeCondition(item?.target_condition);
-    const how = c === 'LTE' || c === 'LT' ? 'ร้อยละ = เป้าหมาย ÷ ผลงาน × 100 (ยิ่งน้อยยิ่งดี)'
+    const how = c === 'LTE' || c === 'LT' ? 'ร้อยละ = 100 เมื่อผลงานไม่เกินเป้าหมาย, เกินเป้าหมาย = เป้าหมาย ÷ ผลงาน × 100 (ยิ่งน้อยยิ่งดี)'
       : c === 'EQ' ? 'ร้อยละ = ค่าน้อย ÷ ค่ามาก × 100 (ความใกล้เคียงเป้าหมาย)' : 'ร้อยละ = ผลงาน ÷ เป้าหมาย × 100';
     return `ผ่านเมื่อผลงาน${CONDITION_LABEL[c]}เป้าหมาย — ${how}`;
   }

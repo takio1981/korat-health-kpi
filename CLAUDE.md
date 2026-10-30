@@ -336,8 +336,8 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - `kpi_indicators.target_condition` (GTE/GT/LTE/LT/EQ — ว่าง = GTE) ใช้เทียบ**ผลงานกับเป้าหมายของแต่ละหน่วยบริการ** (และเทียบเกณฑ์กับ KHD เหมือนเดิม)
   — ก่อนหน้านี้ไม่เคยถูกใช้คำนวณเลย (ร้อยละ = ผลงาน ÷ เป้าหมาย, ผ่าน = ผลงาน ≥ เป้าหมาย เสมอ) และ `GET /kpi-results` ไม่ได้ส่งฟิลด์นี้มา
 - กฎกลาง 2 สำเนาต้องตรงกัน: `api/kpi-target.js` = `frontend/src/app/shared/kpi-target.ts` + fixture ร่วม `api/tests/fixtures/target-cases.json` = `shared/kpi-target.cases.json`
-  (jest บังคับตรงกัน) — `evaluateTarget(actual, target, cond)` → `{ pct, pass }`: GTE/GT = ผลงาน ÷ เป้าหมาย × 100 | LTE/LT = เป้าหมาย ÷ ผลงาน × 100
-  (ผลงาน ≤ 0 = 100) | EQ = ค่าน้อย ÷ ค่ามาก × 100 — `hasTarget()`: GTE/GT ต้อง > 0 (เดิม), LTE/LT/EQ ≥ 0 — ข้อความตรงกัน = 100/ผ่าน (เดิม) — ผู้ใช้เลือกสูตรร้อยละเอง
+  (jest บังคับตรงกัน) — `evaluateTarget(actual, target, cond)` → `{ pct, pass }`: GTE/GT = ผลงาน ÷ เป้าหมาย × 100 | LTE/LT = **ไม่เกินเป้าหมาย (ผลงาน ≤ เป้าหมาย) = 100**, เกินเป้าหมาย = เป้าหมาย ÷ ผลงาน × 100
+  (30 ต.ค. 2569 ผู้ใช้สั่ง — เดิมไม่มีเพดาน ผลงาน 4 เป้าหมาย 8 = 200%; ใช้ทั้ง ≤ และ < — < ผลงานเท่าเป้าพอดี = 100% แต่ไม่ผ่าน) | EQ = ค่าน้อย ÷ ค่ามาก × 100 — `hasTarget()`: GTE/GT ต้อง > 0 (เดิม), LTE/LT/EQ ≥ 0 — ข้อความตรงกัน = 100/ผ่าน (เดิม) — ผู้ใช้เลือกสูตรร้อยละเอง
 - ฝั่ง SQL (kpi_summary): `targetHasSql(tCol, condExpr)` / `targetPassSql(aCol, tCol, condExpr)` (server.js ถัดจาก `activeIndicatorSql`) ใช้ทุกจุดที่นับผ่าน —
   `/dashboard-stats` (การ์ด + อันดับ), `/report/by-indicator|by-hospital|by-district|by-year`, `/report/chart-stats` (`CHART_METRICS_SQL`/`CHART_MONTHLY_SQL`)
   — condExpr = `i.target_condition` เมื่อ JOIN แล้ว ไม่งั้น `targetCondOf('s')` (subquery) → แก้เงื่อนไขแล้วมีผลทันทีไม่ต้อง refresh summary

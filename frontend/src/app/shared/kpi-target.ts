@@ -5,7 +5,7 @@
 //
 // | เงื่อนไข  | ผ่าน            | ร้อยละ                                            |
 // | GTE / GT | a ≥ t / a > t   | a ÷ t × 100 (วิธีเดิม)                              |
-// | LTE / LT | a ≤ t / a < t   | t ÷ a × 100 (ยิ่งน้อยยิ่งดี) — ผลงาน ≤ 0 = 100         |
+// | LTE / LT | a ≤ t / a < t   | ไม่เกินเป้าหมาย (a ≤ t) = 100, เกินเป้าหมาย = t ÷ a × 100 (ยิ่งน้อยยิ่งดี — 30 ต.ค. 2569) |
 // | EQ       | a = t           | ค่าน้อย ÷ ค่ามาก × 100 (ความใกล้เคียง) — ทั้งคู่ 0 = 100 |
 // เป้าหมายที่ใช้ได้: GTE/GT ต้อง > 0 (เดิม) | LTE/LT/EQ ≥ 0 (เป้าหมาย 0 เช่น "≤ 0 ราย" ใช้ได้)
 // ผลงาน/เป้าหมายเป็นข้อความ: ตรงกัน = 100/ผ่าน ไม่ตรง = 0/ไม่ผ่าน (วิธีเดิม) | ไม่มีเป้าหมาย/ไม่มีผลงาน → { pct: null, pass: null }
@@ -54,7 +54,7 @@ export function evaluateTarget(actual: any, target: any, cond: any): TargetResul
   if (c === 'GTE') return { pct: a / t * 100, pass: a >= t };
   if (c === 'GT') return { pct: a / t * 100, pass: a > t };
   if (c === 'LTE' || c === 'LT') {
-    return { pct: a <= 0 ? 100 : t / a * 100, pass: c === 'LTE' ? a <= t : a < t };
+    return { pct: a <= t ? 100 : t / a * 100, pass: c === 'LTE' ? a <= t : a < t };
   }
   // EQ
   let pct: number;

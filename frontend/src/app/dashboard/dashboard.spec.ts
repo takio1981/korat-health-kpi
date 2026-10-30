@@ -674,8 +674,10 @@ describe('DashboardComponent', () => {
   describe('เงื่อนไขเป้าหมาย (≥ > ≤ < =) — ร้อยละและผ่านเกณฑ์', () => {
     const row = (cond: any, target: string, last: string) => ({ target_condition: cond, target_value: target, last_actual: last });
 
-    it('≤ ยิ่งน้อยยิ่งดี: ผลงาน 4 จากเป้าหมาย 8 = 200% ผ่าน (เดิม 50% ไม่ผ่าน)', () => {
-      expect(component.calcPercent(row('LTE', '8', '4'))).toBe(200);
+    it('≤ ยิ่งน้อยยิ่งดี: ผลงาน 4 จากเป้าหมาย 8 = 100% ผ่าน (ไม่เกินเป้าหมาย = 100% — 30 ต.ค. 2569 เดิม 200%)', () => {
+      expect(component.calcPercent(row('LTE', '8', '4'))).toBe(100);
+      expect(component.calcPercent(row('LT', '8', '5'))).toBe(100);
+      expect(component.calcPercent(row('LTE', '8', '16'))).toBe(50);
       expect(component.isTargetMet(row('LTE', '8', '4'))).toBe(true);
       expect(component.calcPercent(row('LTE', '8', '10'))).toBe(80);
       expect(component.isTargetMet(row('LTE', '8', '10'))).toBe(false);
@@ -698,7 +700,7 @@ describe('DashboardComponent', () => {
 
     it('แถวลูกใช้เงื่อนไขของตัวชี้วัดหลัก + สัญลักษณ์หน้าเป้าหมาย', () => {
       const rows = buildHierRows({ subs: [{ id: 1, name: 'ข้อ 1', rollup_mode: 'manual', target: '8', months: { 10: '4' } }], activities: [] }, '1');
-      expect(component.hierPct(rows[0], 'LTE')).toBe('200.00');
+      expect(component.hierPct(rows[0], 'LTE')).toBe('100.00');
       expect(component.hierPct(rows[0])).toBe('50.00');
       expect(component.conditionSymbol({ target_condition: 'LT' })).toBe('<');
       expect(component.conditionSymbol({ target_condition: null })).toBe('');
