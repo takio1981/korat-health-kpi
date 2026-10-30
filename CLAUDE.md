@@ -289,6 +289,8 @@ Layout + Dashboard สื่อสารผ่าน `AuthService` BehaviorSubje
 - `focusMode$` — โหมดเต็มพื้นที่ (true = ซ่อน sidebar อัตโนมัติ)
   - Setter: `authService.setFocusMode(true|false)`
   - Dashboard call ตอนเข้า `toggleEditMode()` / `toggleDeleteMode()` + reset ใน `ngOnDestroy`
+  - **ออกจากโหมดลบต้องผ่าน `exitDeleteMode()` เสมอ** (ลบสำเร็จ / สลับไปโหมดตรวจสอบ) — คืน `setFocusMode(isEditing)` ด้วย
+    ⚠️ เดิมตั้ง `isDeleteMode = false` ตรงๆ หลังลบสำเร็จ → focus mode ค้าง เมนูข้างเปิดไม่ได้จนกว่าจะรีเฟรช (แก้ 30 ต.ค. 2569 — มี spec)
   - Layout subscribe → ปิด **desktop** sidebar (`isSidebarOpen`/`isSidebarCollapsed`) + จำค่าเดิมใน
     `_prevSidebarOpen`/`_prevSidebarCollapsed` → คืนเมื่อออก focus mode — **ไม่แตะ `isMobileMenuOpen`
     (เมนู slide มือถือ) เด็ดขาด** ตัวแปรแยกกันโดยตั้งใจ กันเมนู slide เปิดเอง/ปิดค้างไม่ตรงกับที่ผู้ใช้กดปุ่ม

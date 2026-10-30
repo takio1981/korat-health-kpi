@@ -2064,7 +2064,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   toggleReviewMode() {
     this.isReviewMode = !this.isReviewMode;
     if (!this.isReviewMode) this.reviewSelected.clear();
-    if (this.isReviewMode) { this.isDeleteMode = false; this.deleteSelected.clear(); }
+    if (this.isReviewMode && this.isDeleteMode) this.exitDeleteMode();
   }
 
   reviewKey(item: any): string {
@@ -2077,6 +2077,13 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!this.isDeleteMode) this.deleteSelected.clear();
     if (this.isDeleteMode) { this.isReviewMode = false; this.reviewSelected.clear(); }
     this.authService.setFocusMode(this.isDeleteMode || this.isEditing);
+  }
+
+  // ออกจากโหมดลบทุกเส้นทาง (ลบสำเร็จ / สลับไปโหมดตรวจสอบ) — ต้องคืนโหมดเต็มพื้นที่ด้วย ไม่งั้นเมนูข้างซ่อนค้างจนกว่าจะรีเฟรช (แก้ 30 ต.ค. 2569)
+  exitDeleteMode() {
+    this.isDeleteMode = false;
+    this.deleteSelected.clear();
+    this.authService.setFocusMode(this.isEditing);
   }
 
   toggleDeleteItem(item: any) {
@@ -2148,8 +2155,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
             html: `<p class="text-sm">${res.message}</p>`,
             timer: 3000
           });
-          this.isDeleteMode = false;
-          this.deleteSelected.clear();
+          this.exitDeleteMode();
           this.loadKpiData();
         },
         error: (e: any) => Swal.fire('ผิดพลาด', e.error?.message || 'ลบไม่สำเร็จ', 'error')

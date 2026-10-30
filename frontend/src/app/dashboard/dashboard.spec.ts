@@ -897,4 +897,41 @@ describe('DashboardComponent', () => {
       component.isEditing = false;
     });
   });
+
+  // บั๊กจริง (30 ต.ค. 2569): ลบตัวชี้วัดสำเร็จแล้วเมนูข้างเปิดไม่ได้ ต้องรีเฟรช — ออกจากโหมดลบโดยไม่คืนโหมดเต็มพื้นที่ (focusMode ค้าง true)
+  describe('ออกจากโหมดลบ → คืนเมนูข้าง (focus mode)', () => {
+    let focus: boolean;
+    beforeEach(() => {
+      (component as any).authService.focusMode$.subscribe((v: boolean) => focus = v);
+      component.isEditing = false;
+      component.isDeleteMode = false;
+    });
+
+    it('ลบสำเร็จ (exitDeleteMode) → ปิดโหมดเต็มพื้นที่ + ล้างรายการที่เลือก', () => {
+      component.toggleDeleteMode();
+      component.deleteSelected.add('1_2570_10871');
+      expect(focus).toBe(true);
+      component.exitDeleteMode();
+      expect(component.isDeleteMode).toBe(false);
+      expect(component.deleteSelected.size).toBe(0);
+      expect(focus).toBe(false);
+    });
+
+    it('สลับจากโหมดลบไปโหมดตรวจสอบ → ปิดโหมดเต็มพื้นที่', () => {
+      component.toggleDeleteMode();
+      expect(focus).toBe(true);
+      component.toggleReviewMode();
+      expect(component.isDeleteMode).toBe(false);
+      expect(focus).toBe(false);
+      component.toggleReviewMode();
+    });
+
+    it('ยังอยู่ในโหมดแก้ไข → คงโหมดเต็มพื้นที่ไว้', () => {
+      component.isEditing = true;
+      component.toggleDeleteMode();
+      component.exitDeleteMode();
+      expect(focus).toBe(true);
+      component.isEditing = false;
+    });
+  });
 });
