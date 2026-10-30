@@ -2203,7 +2203,7 @@ export class KpiManageComponent implements OnInit {
     const ids = items.map(i => i.id);
     Swal.fire({
       title: 'ปิดส่งออกอัตโนมัติ',
-      html: `<p class="text-sm">ตั้งเป็น <code>key_in</code> ให้ <b>${ids.length}</b> ตัวชี้วัด</p>
+      html: `<p class="text-sm">ปิด "ส่งออก KHD" ให้ <b>${ids.length}</b> ตัวชี้วัด</p>
              <p class="text-xs text-gray-500 mt-2">KHD report เหล่านี้อยู่สถานะ inactive — ระบบจะไม่ export อัตโนมัติ</p>`,
       icon: 'warning', showCancelButton: true, confirmButtonColor: '#dc2626',
       confirmButtonText: '<i class="fas fa-toggle-off mr-1"></i> ปิดทั้งหมด', cancelButtonText: 'ยกเลิก'

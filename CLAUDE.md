@@ -880,6 +880,9 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - Dashboard SQL (`GET /kpi-results`) เพิ่ม `MIN(i.data_source) AS data_source, MIN(i.khd_report_id) AS
   khd_report_id` เข้า GROUP BY query หลัก — ต้องคงรูปแบบ `MIN(i.xxx)` เดียวกับคอลัมน์อื่นของ `kpi_indicators`
   ใน query นี้ (functionally dependent on `i.id` อยู่แล้วจาก GROUP BY)
+- **สวิตช์คอลัมน์ "ส่งออก KHD" (30 ต.ค. 2569 — เดิมหัวคอลัมน์ชื่อ "key_in"):** หน้าจัดการตัวชี้วัดแท็บตัวชี้วัด = `upload_excel` (0 = ส่งออกเข้า KHD อัตโนมัติ
+  = สวิตช์เปิดสีเขียวปุ่มขวา, 1 = ไม่ส่งออก = ปิดสีแดงปุ่มซ้าย) พร้อม tooltip อธิบายทั้ง 2 สถานะ — banner/ป้าย "KHD inactive" ใช้คำว่า "ปิดส่งออก KHD"
+  (ป้าย key_in สีฟ้าใต้ชื่อตัวชี้วัด = แหล่งที่มา data_source เป็นคนละกลไก ยังใช้คำเดิม)
 - คำว่า "upload_excel"/"Excel" ที่เป็น**ข้อความแสดงผล** (label, banner, tooltip) เปลี่ยนเป็น "key_in" ทั่วระบบแล้ว
   (kpi-manage, kpi-manager, help) — **column `upload_excel` ในฐานข้อมูล, API field name, route path
   (`/indicators/:id/upload-excel`) ไม่เปลี่ยน** (ตั้งใจ — ผู้ใช้ยืนยันแล้วว่าต้องการแค่เปลี่ยนข้อความที่แสดงผล

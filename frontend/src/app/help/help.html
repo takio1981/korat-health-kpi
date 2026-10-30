@@ -1453,10 +1453,10 @@
                 <li><span class="text-emerald-700 font-bold">ตรงกัน</span> — table_process + ชื่อตรงกัน</li>
                 <li><span class="text-amber-700 font-bold">ชื่อต่างกัน</span> — table_process ตรง แต่ชื่อไม่ตรง — ดู inline diff + กดปุ่ม <i class="fas fa-sync text-teal-600 mx-0.5"></i> Sync ชื่อ</li>
                 <li><span class="text-purple-700 font-bold">ไม่มีใน KHD</span> — Local มีแต่ KHD ไม่มี</li>
-                <li><span class="text-rose-700 font-bold">KHD inactive</span> — KHD ปิด is_active=0 → ควรตั้งเป็น key_in</li>
+                <li><span class="text-rose-700 font-bold">KHD inactive</span> — KHD ปิด is_active=0 → ควรปิดสวิตช์ "ส่งออก KHD"</li>
               </ul>
             </li>
-            <li>ถ้ามี KHD inactive — banner <b>"ตั้งเป็น key_in ทั้ง N ตัว"</b> แสดงขึ้นมา → กด bulk ครั้งเดียว</li>
+            <li>ถ้ามี KHD inactive — banner แนะนำปิด "ส่งออก KHD" แสดงขึ้นมา พร้อมปุ่ม <b>"ปิด N ตัว"</b> → กด bulk ครั้งเดียว</li>
             <li><span class="text-orange-700 font-bold">ปรับเกณฑ์ให้เท่ากับ KHD:</span> ตัวที่ขึ้นป้าย <b>"เกณฑ์ต่างกัน"</b> (ชิป "เกณฑ์ต่างกัน (N)" กรองได้)
               กดปุ่ม <b>"ใช้เกณฑ์ KHD"</b> ในแถว หรือ banner สีส้ม <b>"ใช้เกณฑ์ KHD ทั้ง N ตัว"</b> → หน้ายืนยันแสดงเกณฑ์เดิม → เกณฑ์ของ KHD
               — ปรับเฉพาะ <b>เกณฑ์ + เงื่อนไข</b> (≥ / ≤ / =) ตามปีงบที่เลือกในช่อง "ปีงบที่ใช้เทียบ" ไม่เปลี่ยน "เป้าหมาย" และข้ามตัวที่ KHD ไม่มีเกณฑ์ (ต้องมีสิทธิ์แก้ไขตัวชี้วัด)</li>
@@ -1545,12 +1545,12 @@
 
         <!-- upload_excel toggle -->
         <div class="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-4">
-          <h4 class="font-bold text-orange-800 text-sm mb-2"><i class="fas fa-keyboard mr-2"></i>key_in — ตัวชี้วัดที่ "คีย์ข้อมูลมือเอง"</h4>
-          <p class="text-xs text-gray-600 mb-2">ใช้กรณีที่ KHD report ปิดไปแล้ว หรือต้องการ override ไม่ให้ระบบ export อัตโนมัติ</p>
+          <h4 class="font-bold text-orange-800 text-sm mb-2"><i class="fas fa-cloud-upload-alt mr-2"></i>ส่งออก KHD — เปิด/ปิดการส่งออกตัวชี้วัดเข้า KHD อัตโนมัติ</h4>
+          <p class="text-xs text-gray-600 mb-2">ใช้กรณีที่ KHD report ปิดไปแล้ว หรือไม่ต้องการให้ระบบส่งออกตัวชี้วัดนั้นเข้า KHD อัตโนมัติ (ชี้เมาส์ที่สวิตช์เพื่อดูคำอธิบาย)</p>
           <ul class="list-disc ml-5 text-xs text-gray-600 space-y-1">
-            <li>คอลัมน์ <b>"key_in"</b> ในตารางตัวชี้วัด — toggle เปิด/ปิด (สีฟ้า)</li>
-            <li><b>0 (default)</b> — ส่งออกอัตโนมัติได้ผ่าน Export pipeline</li>
-            <li><b>1</b> — ข้าม Export pipeline ทั้งหมด (manual + scheduler) — ต้อง key_in เข้า KHD เอง</li>
+            <li>คอลัมน์ <b>"ส่งออก KHD"</b> ในตารางตัวชี้วัด — สวิตช์เปิด/ปิด (super_admin)</li>
+            <li><b class="text-emerald-700">เปิด (สีเขียว — ค่าตั้งต้น)</b> — ระบบส่งออกข้อมูลตัวชี้วัดนี้เข้า KHD อัตโนมัติ (ทั้งกดส่งออกเองและตามตารางเวลา)</li>
+            <li><b class="text-rose-700">ปิด (สีแดง)</b> — ไม่ส่งออกอัตโนมัติ ผู้รับผิดชอบนำข้อมูลเข้า KHD เอง — การบันทึกผลงานในระบบยังทำได้ตามปกติ</li>
           </ul>
         </div>
 

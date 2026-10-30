@@ -326,7 +326,7 @@
           <div class="flex-1 min-w-0">
             <h4 class="text-sm font-bold text-rose-900">พบ KHD report ที่ inactive แต่ Local ยังเปิดส่งออกอัตโนมัติ</h4>
             <p class="text-xs text-rose-700 mt-1">
-              <b>{{ khdInactiveSuggestItems.length }} ตัวชี้วัด</b> — แนะนำตั้งเป็น <code>key_in</code> ให้สอดคล้องกับ KHD (key_in เอง)
+              <b>{{ khdInactiveSuggestItems.length }} ตัวชี้วัด</b> — แนะนำปิด "ส่งออก KHD" ให้สอดคล้องกับ KHD (ไม่ส่งออกอัตโนมัติ)
             </p>
           </div>
           <button (click)="bulkDisableKhdInactive()"
@@ -470,7 +470,8 @@
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'indicators'">หมวดหมู่หลัก</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'indicators'">หน่วยงาน</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-32" *ngIf="activeTab === 'indicators' && khdCompareSummary" title="สถานะเทียบกับ KHD">KHD ↔ Local</th>
-              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-24" *ngIf="activeTab === 'indicators' && canEditData" title="0=ส่งออกอัตโนมัติ, 1=ข้าม (key_in เอง)">key_in</th>
+              <th class="px-4 py-3 text-sm font-bold tracking-wider text-center w-28" *ngIf="activeTab === 'indicators' && canEditData"
+                  title="ส่งออกข้อมูลตัวชี้วัดเข้า KHD อัตโนมัติ — เปิด (เขียว) = ระบบส่งให้เอง, ปิด (แดง) = ไม่ส่ง ผู้รับผิดชอบนำข้อมูลเข้า KHD เอง">ส่งออก KHD</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'main-indicators'">ชื่อหมวดหมู่หลัก</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'main-indicators'">ยุทธศาสตร์</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-32" *ngIf="activeTab === 'main-indicators' && mainIndCompareSummary">KHD Coverage</th>
@@ -614,7 +615,7 @@
                   <!-- KHD inactive badge -->
                   <div *ngIf="getKhdData(item)?.khd_is_active === 0 || getKhdData(item)?.khd_is_active === '0'"
                        class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700"
-                       title="KHD inactive — แนะนำเปลี่ยนเป็น key_in">
+                       title="KHD inactive — แนะนำปิดส่งออก KHD">
                     <i class="fas fa-power-off mr-1"></i>KHD inactive
                   </div>
                   <!-- เกณฑ์ต่างกัน badge -->
@@ -629,13 +630,15 @@
                     <i class="fas fa-arrow-down mr-1"></i>ใช้เกณฑ์ KHD
                   </button>
                 </td>
-                <!-- upload_excel toggle -->
+                <!-- ส่งออก KHD อัตโนมัติ (คอลัมน์ upload_excel: 0 = ส่งออก = สวิตช์เปิด, 1 = ไม่ส่งออก = สวิตช์ปิด) -->
                 <td class="px-4 py-3 text-center" *ngIf="canEditData">
                   <button (click)="toggleUploadExcel(item)" class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
                           [ngClass]="(item.upload_excel === 1 || item.upload_excel === '1') ? 'bg-rose-500' : 'bg-emerald-500'"
-                          [title]="(item.upload_excel === 1 || item.upload_excel === '1') ? '1 = ข้าม export (key_in เอง)' : '0 = ส่งออกอัตโนมัติ'">
+                          [title]="(item.upload_excel === 1 || item.upload_excel === '1')
+                            ? 'ปิด — ไม่ส่งออกตัวชี้วัดนี้เข้า KHD อัตโนมัติ (ผู้รับผิดชอบนำข้อมูลเข้า KHD เอง)' + (isSuperAdmin ? ' · คลิกเพื่อเปิด' : '')
+                            : 'เปิด — ระบบส่งออกข้อมูลตัวชี้วัดนี้เข้า KHD อัตโนมัติ' + (isSuperAdmin ? ' · คลิกเพื่อปิด' : '')">
                     <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform"
-                          [ngClass]="(item.upload_excel === 1 || item.upload_excel === '1') ? 'translate-x-5' : 'translate-x-0.5'"></span>
+                          [ngClass]="(item.upload_excel === 1 || item.upload_excel === '1') ? 'translate-x-0.5' : 'translate-x-5'"></span>
                   </button>
                   <div *ngIf="getKhdData(item)?.suggest_disable_upload" class="mt-1 text-rose-600 text-[10px] font-bold animate-pulse" title="แนะนำให้ปิด">
                     <i class="fas fa-arrow-up"></i> ควรปิด
