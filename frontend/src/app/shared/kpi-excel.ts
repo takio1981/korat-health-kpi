@@ -64,6 +64,23 @@ export function customVarHeader(v: { key: string; label: string }): string {
   return v.key === 'base' ? EXCEL_HEADERS.base : `${v.label} [${v.key}]`;
 }
 
+/** ชื่อไฟล์แบบฟอร์ม: KPI_บันทึกผลงาน_<ชื่อตัวชี้วัด>_ปีงบ<ปี>_<หน่วยบริการ>.xlsx (30 ต.ค. 2569 — เดิมมีแค่ปีจากตัวกรองและหน่วยบริการ)
+ *  หลายตัวชี้วัด = ชื่อตัวแรก + "_และอีกN" | ปีงบจากแถวในตาราง (หลายปีคั่นด้วย -) ไม่มี = fallbackYear
+ *  ตัดอักขระที่ใช้ในชื่อไฟล์ไม่ได้ (\ / : * ? " < > |) และย่อชื่อตัวชี้วัดไม่เกิน 60 ตัวอักษร */
+export function templateFileName(items: any[], fallbackYear?: string): string {
+  const clean = (s: any) => String(s ?? '').replace(/[\\/:*?"<>|\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const uniq = (f: (it: any) => string) => Array.from(new Set((items || []).map(f).filter(Boolean)));
+  const names = uniq(it => clean(it.kpi_indicators_name));
+  let name = names.length ? names[0] : 'ตัวชี้วัด';
+  if (name.length > 60) name = name.slice(0, 60).trim() + '…';
+  if (names.length > 1) name += `_และอีก${names.length - 1}ตัวชี้วัด`;
+  const years = uniq(it => clean(it.year_bh)).sort();
+  const year = years.length ? years.join('-') : (clean(fallbackYear) || 'ทุกปี');
+  const hos = uniq(it => clean(it.hospcode));
+  const unit = hos.length === 1 ? hos[0] : `${hos.length}หน่วย`;
+  return `KPI_บันทึกผลงาน_${name}_ปีงบ${year}_${unit}.xlsx`;
+}
+
 /** สร้างตารางแบบฟอร์ม (แถวคำอธิบาย + หัวตาราง + 1 แถวต่อ ตัวชี้วัด × หน่วยบริการ)
  *  vars = ค่าฐาน/ค่าเพิ่มเติมที่ตัวชี้วัดในตารางใช้ → 1 คอลัมน์ต่อค่าต่อจากเป้าหมาย (แถวที่ไม่มีค่านั้นเว้นว่าง) | withBase = แบบเดิม (base อย่างเดียว) */
 export function buildTemplateAoa(items: any[], opts: { withBase?: boolean; vars?: { key: string; label: string }[] } = {}): (string | number)[][] {

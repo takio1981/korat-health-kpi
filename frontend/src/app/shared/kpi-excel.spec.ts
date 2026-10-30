@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import {
   EXCEL_HEADERS, EXCEL_MONTHS, buildTemplateAoa, normalizeCell, parseImportAoa, planImport,
-  parseClipboardGrid, isMultiCell, planPaste, applyCellChanges, monthTargetHeader,
+  parseClipboardGrid, isMultiCell, planPaste, applyCellChanges, monthTargetHeader, templateFileName,
 } from './kpi-excel';
 
 const PERMS = { canEditActual: true, canEditTarget: true };
@@ -236,5 +236,26 @@ describe('kpi-excel — เป้าหมายรายเดือน (29 ต
       .toEqual([[1, 't_nov', '25']]);
     expect(planImport(parsed.rows, [m1, p2], { canEditActual: true, canEditTarget: false }).noPerm).toBe(1);
     expect((buildTemplateAoa([p2])[1] as string[]).includes(monthTargetHeader('ต.ค.'))).toBe(false);
+  });
+});
+
+describe('kpi-excel — ชื่อไฟล์แบบฟอร์ม (ชื่อตัวชี้วัด + ปีงบประมาณ — 30 ต.ค. 2569)', () => {
+  it('ตัวชี้วัดเดียว หน่วยบริการเดียว', () => {
+    expect(templateFileName([row(1, '10871', { kpi_indicators_name: 'ร้อยละผู้ป่วยเบาหวาน' })], '2569'))
+      .toBe('KPI_บันทึกผลงาน_ร้อยละผู้ป่วยเบาหวาน_ปีงบ2570_10871.xlsx');   // ปีงบจากแถว (2570) ไม่ใช่ตัวกรอง
+  });
+  it('หลายตัวชี้วัด/หลายหน่วย/หลายปี + ตัดอักขระต้องห้ามและย่อชื่อยาว', () => {
+    const long = 'ก'.repeat(70);
+    const items = [
+      row(1, '10871', { kpi_indicators_name: 'อัตรา TB: รักษา/สำเร็จ?' }),
+      row(2, '10872', { kpi_indicators_name: long, year_bh: '2569' }),
+      row(1, '10872', { kpi_indicators_name: 'อัตรา TB: รักษา/สำเร็จ?' }),
+    ];
+    expect(templateFileName(items)).toBe('KPI_บันทึกผลงาน_อัตรา TB รักษา สำเร็จ_และอีก1ตัวชี้วัด_ปีงบ2569-2570_2หน่วย.xlsx');
+    expect(templateFileName([row(3, '1', { kpi_indicators_name: long })])).toBe(`KPI_บันทึกผลงาน_${'ก'.repeat(60)}…_ปีงบ2570_1.xlsx`);
+  });
+  it('ไม่มีปีในแถว = ใช้ปีจากตัวกรอง / ไม่มีทั้งคู่ = ทุกปี', () => {
+    expect(templateFileName([row(1, '1', { year_bh: '' })], '2570')).toContain('_ปีงบ2570_');
+    expect(templateFileName([row(1, '1', { year_bh: '' })])).toContain('_ปีงบทุกปี_');
   });
 });

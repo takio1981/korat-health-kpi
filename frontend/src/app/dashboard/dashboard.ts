@@ -15,7 +15,7 @@ import { CustomVarDef, customVarDefsFor, customValuesOf, evaluatePct, pctFormula
 import { isManualResult, isManualPct, manualPctNumber, manualPctPass, normalizeManualPct } from '../shared/manual-result';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { indicatorTypeSetting, autoTargetHostypes, resolveAddKpiTargets, HOSTYPE_NAMES } from '../shared/indicator-scope';
-import { EXCEL_MONTHS, ChangePlan, EditPerms, buildTemplateAoa, parseImportAoa, planImport, parseClipboardGrid, isMultiCell, planPaste, applyCellChanges, itemKey } from '../shared/kpi-excel';
+import { EXCEL_MONTHS, ChangePlan, EditPerms, buildTemplateAoa, templateFileName, parseImportAoa, planImport, parseClipboardGrid, isMultiCell, planPaste, applyCellChanges, itemKey } from '../shared/kpi-excel';
 import { Anomaly, detectAnomaly } from '../shared/anomaly';
 import { SUB_EXCEL_MONTHS, SubChangePlan, buildSubTemplateAoa, parseSubImportAoa, planSubImport, applySubChanges, subFieldLabel } from '../shared/kpi-sub-excel';
 import { activityValue, rollupMonthly, itemNumber, rollupTree, RollupNode } from '../shared/kpi-rollup';
@@ -3971,8 +3971,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: aoa[1].length - 1 } }];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'ผลงาน');
-      const hos = new Set(items.map(i => String(i.hospcode)));
-      XLSX.writeFile(wb, `KPI_บันทึกผลงาน_${this.selectedYear || 'all'}_${hos.size === 1 ? Array.from(hos)[0] : hos.size + 'หน่วย'}.xlsx`);
+      XLSX.writeFile(wb, templateFileName(items, this.selectedYear));
     });
   }
 
