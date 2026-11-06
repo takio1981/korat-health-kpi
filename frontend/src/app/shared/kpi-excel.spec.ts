@@ -259,3 +259,14 @@ describe('kpi-excel — ชื่อไฟล์แบบฟอร์ม (ชื
     expect(templateFileName([row(1, '1', { year_bh: '' })])).toContain('_ปีงบทุกปี_');
   });
 });
+
+// แถวของหน่วยบริการอื่น (ผู้ใช้ที่ไม่ใช่ผู้ดูแล เช่น user_ssj ที่เห็นทุกหน่วยบริการ — 6 พ.ย. 2569) นับเหมือนแถวล็อค ไม่นำเข้า
+describe('kpi-excel: planImport rowLocked', () => {
+  it('แถวที่ rowLocked = true ข้ามและนับเป็นแถวล็อค', () => {
+    const file = parseImportAoa([['indicator_id', 'hospcode', 'ปีงบประมาณ', 'เป้าหมาย', 'ต.ค.'], [1, '10666', 2570, 80, 90], [1, '10890', 2570, 80, 90]]).rows;
+    const items = [row(1, '10666'), row(1, '10890')];
+    const plan = planImport(file, items, { ...PERMS, rowLocked: (i: any) => i.hospcode !== '10666' });
+    expect(plan.changes.map(c => c.item.hospcode)).toEqual(['10666']);
+    expect(plan.locked).toBe(1);
+  });
+});

@@ -34,6 +34,18 @@ const sameValue = (a: string, b: string) => a === b || (NUMERIC_RE.test(a) && NU
 export interface SubExcelContext { indicator_name?: string; hospcode: any; hosname?: string; year_bh: any }
 
 /** แบบฟอร์ม: แถวคำอธิบาย + แถวบริบท (ตัวชี้วัด/หน่วยบริการ) + หัวตาราง + 1 แถวต่อข้อย่อย (พร้อมค่าปัจจุบัน) */
+/** ชื่อไฟล์แบบฟอร์มผลงานตัวชี้วัดย่อย (6 พ.ย. 2569 — เดิมมีแค่รหัสตัวชี้วัด ไม่รู้ว่าเป็น KPI ข้ออะไร):
+ *  KPI_ผลงานตัวชี้วัดย่อย_ข้อ<เลขข้อ>_<ชื่อตัวชี้วัดหลัก>_ปีงบ<ปี>_<หน่วยบริการ>.xlsx — ไม่มีเลขข้อ = ไม่ใส่ส่วน "ข้อ"
+ *  ตัดอักขระที่ใช้ในชื่อไฟล์ไม่ได้ และย่อชื่อตัวชี้วัดไม่เกิน 60 ตัวอักษร (กติกาเดียวกับ templateFileName ของตารางหลัก) */
+export function subTemplateFileName(ctx: { item_no?: any; indicator_name?: any; indicator_id?: any; year_bh?: any; hospcode?: any }): string {
+  const clean = (s: any) => String(s ?? '').replace(/[\\/:*?"<>|\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+  let name = clean(ctx?.indicator_name) || `ตัวชี้วัด ${clean(ctx?.indicator_id)}`.trim();
+  if (name.length > 60) name = name.slice(0, 60).trim() + '…';
+  const no = clean(ctx?.item_no);
+  const parts = ['KPI_ผลงานตัวชี้วัดย่อย', ...(no ? [`ข้อ${no}`] : []), name, `ปีงบ${clean(ctx?.year_bh) || 'ทุกปี'}`, clean(ctx?.hospcode) || 'ทุกหน่วย'];
+  return parts.join('_') + '.xlsx';
+}
+
 export function buildSubTemplateAoa(subs: any[], ctx: SubExcelContext): (string | number)[][] {
   const header = [SUB_EXCEL_HEADERS.sub_id, SUB_EXCEL_HEADERS.hospcode, SUB_EXCEL_HEADERS.year_bh, SUB_EXCEL_HEADERS.code,
     SUB_EXCEL_HEADERS.name, SUB_EXCEL_HEADERS.target, ...SUB_EXCEL_MONTHS.map(m => m.label)];

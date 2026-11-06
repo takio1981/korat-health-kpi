@@ -153,7 +153,7 @@ export function parseImportAoa(aoa: any[][]): ParsedImport {
 }
 
 export interface CellChange { item: any; field: string; oldVal: string; newVal: string }
-export interface EditPerms { canEditActual: boolean; canEditTarget: boolean }
+export interface EditPerms { canEditActual: boolean; canEditTarget: boolean; rowLocked?: (item: any) => boolean }  // rowLocked = นับเหมือนแถวล็อค (เช่น หน่วยบริการอื่น)
 export interface ChangePlan {
   changes: CellChange[];
   same: number;            // ค่าเท่าเดิม
@@ -187,7 +187,7 @@ function considerCell(plan: ChangePlan, item: any, field: string, raw: any, perm
   // เทียบค่าเดิมก่อน — ค่าที่ไม่ได้แก้ในไฟล์ (เท่าเดิม) ของแถวล็อค/ช่องที่ไม่มีสิทธิ์ ไม่ถือว่า "ถูกข้าม" (ไม่ทำให้ผู้ใช้ตกใจ)
   const oldVal = String(item[field] ?? '').trim();
   if (sameValue(oldVal, newVal)) { plan.same++; return; }
-  if (item.is_locked) { plan.locked++; return; }
+  if (item.is_locked || perms.rowLocked?.(item)) { plan.locked++; return; }
   const allowed = field === 'target_value' || field.startsWith('cv_') || field.startsWith('t_') ? perms.canEditTarget : perms.canEditActual;  // ค่าฐาน/ค่าเพิ่มเติม/เป้าหมายรายเดือน = สิทธิ์เดียวกับเป้าหมาย
   if (!allowed) { plan.noPerm++; return; }
   if (newVal.length > MAX_VALUE_LENGTH) { plan.tooLong++; return; }

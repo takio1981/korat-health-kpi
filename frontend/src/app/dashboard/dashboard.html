@@ -771,7 +771,7 @@
                              [ngClass]="isMonthTargetChanged(item, month.key) ? '!bg-orange-100 !text-orange-700 ring-2 ring-orange-400 font-bold' : ''">
                       <span *ngIf="!canShowMonthTargetInput(item)">เป้า {{ item['t_' + month.key] || '-' }}</span>
                     </div>
-                    <div *ngIf="!item.is_locked && canEditActual" class="flex items-center gap-0.5">
+                    <div *ngIf="!isRowLocked(item) && canEditActual" class="flex items-center gap-0.5">
                       <input type="text" [(ngModel)]="item[month.key]" (ngModelChange)="onValueChange(item, month.key)"
                              class="w-full min-w-0 border border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:border-green-500 hover:border-green-400 transition-colors"
                              [ngClass]="item._anomaly?.[month.key] ? 'bg-red-100 font-bold text-red-700 ring-2 ring-red-500' : (isModified(item, month.key) ? 'bg-orange-200 font-bold text-red-600 ring-2 ring-orange-400' : (isPendingValue(item[month.key]) ? 'bg-amber-100 text-amber-700 text-[9px] font-bold' : 'bg-white'))">
@@ -783,7 +783,7 @@
                       </button>
                     </div>
                     <p *ngIf="item._anomaly?.[month.key] as an" class="mt-0.5 text-[9px] leading-tight text-red-600 text-left"><i class="fas fa-exclamation-triangle mr-0.5"></i>{{ an.message }}</p>
-                    <span *ngIf="item.is_locked || !canEditActual" class="block font-bold text-gray-600">{{ (item[month.key] && item[month.key] !== '0') ? item[month.key] : '-' }}</span>
+                    <span *ngIf="isRowLocked(item) || !canEditActual" class="block font-bold text-gray-600">{{ (item[month.key] && item[month.key] !== '0') ? item[month.key] : '-' }}</span>
                   </div>
                 </div>
 
@@ -837,13 +837,13 @@
                       <i class="fas fa-times mr-1"></i> ปฏิเสธอุทธรณ์
                     </button>
                     <!-- ปุ่มแก้ไขเฉพาะข้อ (Mobile) -->
-                    <button *ngIf="(isLocalAdmin || (!isAdmin && !isSuperAdmin)) && !isEditing && item.appeal_approved > 0 && !item.is_locked && (item.indicator_status === 'pending' || item.indicator_status === 'Pending') && !isSingleEditing(item)"
+                    <button *ngIf="(isLocalAdmin || (!isAdmin && !isSuperAdmin)) && !isEditing && item.appeal_approved > 0 && !isRowLocked(item) && (item.indicator_status === 'pending' || item.indicator_status === 'Pending') && !isSingleEditing(item)"
                             (click)="startEditSingle(item)"
                             class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
                       <i class="fas fa-pen-square mr-1"></i> แก้ไขข้อนี้
                     </button>
                     <!-- ปุ่มแก้ไขเป้าหมายรายข้อ (Mobile - ตามสิทธิ์ role เมื่อไม่ล็อค) -->
-                    <button *ngIf="canEditTarget && !isEditing && !isSingleEditing(item) && !isEditingTarget(item) && !item.is_locked"
+                    <button *ngIf="canEditTarget && !isEditing && !isSingleEditing(item) && !isEditingTarget(item) && !isRowLocked(item)"
                             (click)="startEditTarget(item)"
                             class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
                       <i class="fas fa-bullseye mr-1"></i> แก้ไขเป้าหมาย
@@ -860,7 +860,7 @@
                       <i class="fas fa-times mr-1"></i> ยกเลิก
                     </button>
                     <!-- ปุ่มขออนุมัติ/แสดงสถานะ (Mobile - เมื่อล็อค) -->
-                    <ng-container *ngIf="canRequestTargetEdit && !isEditing && !isSingleEditing(item) && !isEditingTarget(item) && !item.is_locked">
+                    <ng-container *ngIf="canRequestTargetEdit && !isEditing && !isSingleEditing(item) && !isEditingTarget(item) && !isRowLocked(item)">
                       <ng-container *ngIf="!getTargetEditRequest(item)">
                         <button (click)="requestTargetEdit(item)"
                                 class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-[10px] font-bold flex items-center transition-all shadow-md active:scale-95">
@@ -1037,7 +1037,7 @@
                         <i class="fas fa-gavel text-xs"></i>
                       </button>
                       <!-- ปุ่มแก้ไขเฉพาะข้อ (อุทธรณ์ได้รับอนุมัติ) -->
-                      <button *ngIf="(isLocalAdmin || (!isAdmin && !isSuperAdmin)) && !isEditing && item.appeal_approved > 0 && !item.is_locked && (item.indicator_status === 'pending' || item.indicator_status === 'Pending') && !isSingleEditing(item)"
+                      <button *ngIf="(isLocalAdmin || (!isAdmin && !isSuperAdmin)) && !isEditing && item.appeal_approved > 0 && !isRowLocked(item) && (item.indicator_status === 'pending' || item.indicator_status === 'Pending') && !isSingleEditing(item)"
                               (click)="startEditSingle(item)"
                               class="text-purple-600 hover:text-purple-800 p-0.5 transition-colors"
                               title="แก้ไขข้อนี้ (อุทธรณ์อนุมัติแล้ว)">
@@ -1056,7 +1056,7 @@
                         <i class="fas fa-times text-xs"></i>
                       </button>
                       <!-- ปุ่มแก้ไขเป้าหมายรายข้อ (ตามสิทธิ์ role เมื่อไม่ล็อค) -->
-                      <button *ngIf="canEditTarget && !isEditing && !isSingleEditing(item) && !isEditingTarget(item) && !item.is_locked"
+                      <button *ngIf="canEditTarget && !isEditing && !isSingleEditing(item) && !isEditingTarget(item) && !isRowLocked(item)"
                               (click)="startEditTarget(item)"
                               class="text-orange-500 hover:text-orange-700 p-0.5 transition-colors"
                               title="แก้ไขเป้าหมาย">
@@ -1076,7 +1076,7 @@
                         <i class="fas fa-times text-xs"></i>
                       </button>
                       <!-- ปุ่มขออนุมัติ/แสดงสถานะ (เมื่อล็อค: admin_cup/admin_ssj/super_admin) -->
-                      <ng-container *ngIf="canRequestTargetEdit && !isEditing && !isSingleEditing(item) && !isEditingTarget(item) && !item.is_locked">
+                      <ng-container *ngIf="canRequestTargetEdit && !isEditing && !isSingleEditing(item) && !isEditingTarget(item) && !isRowLocked(item)">
                         <ng-container *ngIf="!getTargetEditRequest(item)">
                           <button (click)="requestTargetEdit(item)"
                                   class="text-orange-500 hover:text-orange-700 p-0.5 transition-colors"
@@ -1300,14 +1300,14 @@
                            [ngClass]="isMonthTargetChanged(item, m) ? '!bg-orange-100 !text-orange-700 ring-2 ring-orange-400 font-bold' : ''">
                     <span *ngIf="!canShowMonthTargetInput(item)">เป้า {{ item['t_' + m] || '-' }}</span>
                   </div>
-                  <span *ngIf="(!isEditing && !isSingleEditing(item)) || item.is_locked || !canEditActual">
+                  <span *ngIf="(!isEditing && !isSingleEditing(item)) || isRowLocked(item) || !canEditActual">
                     <span *ngIf="isPendingValue(item[m])" class="inline-flex items-center gap-0.5 px-1 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded text-[9px] font-bold" title="กำลังดำเนินการ">
                       <i class="fas fa-hourglass-half text-[8px]"></i>กำลังดำเนินการ
                     </span>
                     <ng-container *ngIf="!isPendingValue(item[m])">{{ (item[m] && item[m] !== '0') ? item[m] : '-' }}</ng-container>
                     <i *ngIf="hasFormData(item, m)" class="fas fa-clipboard-check text-purple-400 text-[8px] ml-0.5" title="ข้อมูลจากแบบฟอร์ม"></i>
                   </span>
-                  <div *ngIf="(isEditing || isSingleEditing(item)) && !item.is_locked && canEditActual" class="flex items-center gap-0.5">
+                  <div *ngIf="(isEditing || isSingleEditing(item)) && !isRowLocked(item) && canEditActual" class="flex items-center gap-0.5">
                     <!-- ช่องเดือนแคบ — ค่า "กำลังดำเนินการ" แสดงเป็นป้าย 2 บรรทัดแทน input (กด ⏳ อีกครั้งเพื่อล้างแล้วกรอกค่าใหม่) -->
                     <span *ngIf="isPendingValue(item[m])"
                           class="flex-1 min-w-0 px-0.5 py-0.5 rounded border text-[9px] leading-tight font-bold text-center whitespace-normal"
@@ -1897,7 +1897,7 @@
 
       <!-- Mode Toolbar -->
       <div class="flex flex-wrap items-center gap-2 mb-3">
-        <button *ngIf="!dynamicEditMode && !isEntryLocked"
+        <button *ngIf="!dynamicEditMode && !isEntryLocked && !isForeignRow(dynamicFormItem)"
                 (click)="toggleDynamicEditMode()"
                 class="flex-1 sm:flex-none px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-1.5">
           <i class="fas fa-edit"></i>แก้ไขข้อมูลรายเดือน
@@ -2133,7 +2133,7 @@
       <!-- Mode Toolbar: ปุ่มแก้ไข + โหมดลบ (local ใน modal นี้เท่านั้น) -->
       <div class="flex flex-wrap items-center gap-2 mb-3">
         <!-- แก้ไขผลงาน -->
-        <button *ngIf="!subEditMode && !subDeleteMode && !isEntryLocked && (!subResultContext?.is_locked || isSuperAdmin)"
+        <button *ngIf="!subEditMode && !subDeleteMode && !isEntryLocked && !isForeignRow(subResultContext) && (!subResultContext?.is_locked || isSuperAdmin)"
                 (click)="toggleSubEditMode()"
                 class="flex-1 sm:flex-none px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-sm flex items-center justify-center gap-1.5">
           <i class="fas fa-edit"></i>แก้ไขผลงาน

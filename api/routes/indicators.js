@@ -5,7 +5,7 @@
 const db = require('../db');
 const kpiRollup = require('../kpi-rollup');
 const { normalizeTargetMonthly } = require('../kpi-target');
-const { ROLE_ADMIN_ALL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, getDistrictId, getPermsForUser, hasPageAccess, requireAction } = require('../core/access');
+const { ROLE_ADMIN_ALL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, foreignWriteHospcodes, getDistrictId, getPermsForUser, hasPageAccess, requireAction } = require('../core/access');
 const { ROLLED_SUB_MESSAGE, activeSubTree, getHierarchyMaxLevels, loadSubAggregates, rolledSubIds, subLevelIn } = require('../services/hierarchy');
 const { _actorLabel, normTargetCondition, normalizeEvalMode, normalizeOffTypes } = require('../services/indicator-fields');
 const { apiRouter } = require('../core/router');
@@ -778,6 +778,7 @@ apiRouter.post('/hierarchy-results/save', authenticateToken, async (req, res) =>
         }
     }
     try {
+        if (foreignWriteHospcodes(user, [hospcode]).length > 0) return res.status(403).json({ success: false, code: 'FOREIGN_HOSPCODE', message: 'บันทึกได้เฉพาะหน่วยบริการของตัวเอง' });
         if (!(await canAccessHospcode(user, hospcode))) return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์บันทึกข้อมูลหน่วยบริการนี้' });
         if (!ROLE_ADMIN_ALL.includes(user.role) && await getDataEntryLockState()) {
             return res.status(403).json({ success: false, message: 'ระบบปิดการคีย์ข้อมูลชั่วคราว' });
@@ -904,6 +905,9 @@ apiRouter.post('/sub-results/upsert', authenticateToken, async (req, res) => {
         const { sub_indicator_id, year_bh, hospcode, month_bh, target_value, actual_value, status } = req.body;
         if (!sub_indicator_id || !year_bh || !hospcode || !month_bh) {
             return res.status(400).json({ success: false, message: 'sub_indicator_id, year_bh, hospcode, month_bh required' });
+        }
+        if (foreignWriteHospcodes(req.user, [hospcode]).length > 0) {
+            return res.status(403).json({ success: false, code: 'FOREIGN_HOSPCODE', message: 'บันทึกได้เฉพาะหน่วยบริการของตัวเอง' });
         }
         // ข้อย่อยที่คำนวณจากระดับล่าง (ข้อลูก/กิจกรรม) กรอกเองไม่ได้ — บันทึกที่ระดับล่างแทน
         if ((await rolledSubIds(db, [sub_indicator_id])).size > 0) return res.status(400).json({ success: false, message: ROLLED_SUB_MESSAGE });

@@ -3,7 +3,7 @@
 // ลงทะเบียนเส้นทางกับ apiRouter ตอนถูก require — server.js require ไฟล์นี้ที่ตำแหน่งเดิมของเส้นทางชุดนี้ (ลำดับเส้นทางสำคัญ)
 
 const db = require('../db');
-const { ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, getDistrictId } = require('../core/access');
+const { ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, getDistrictId } = require('../core/access');
 const { activeIndicatorSql, targetCondOf, targetHasSql, targetPassSql } = require('../core/sql');
 const { apiRouter } = require('../core/router');
 const { authenticateToken } = require('../core/auth');
@@ -111,7 +111,7 @@ apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
         const needsHosJoin = ROLE_SCOPE_DISTRICT.includes(user.role);
         if (user.role === 'super_admin') {
             // no filter
-        } else if (user.role === 'admin_ssj') {
+        } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
             if (user.deptId != null) { whereClause = 'AND i.dept_id = ?'; filterParams.push(user.deptId); }
         } else if (ROLE_SCOPE_DISTRICT.includes(user.role)) {
             const distid = await getDistrictId(user.hospcode);
@@ -138,7 +138,7 @@ apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
         const summaryParams = [year];
         if (user.role === 'super_admin') {
             // เห็นทั้งหมด
-        } else if (user.role === 'admin_ssj') {
+        } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
             if (user.deptId != null) { summaryWhereClauses.push('s.dept_id = ?'); summaryParams.push(user.deptId); }
         } else if (ROLE_SCOPE_DISTRICT.includes(user.role)) {
             const distid = await getDistrictId(user.hospcode);

@@ -18,7 +18,7 @@ import { ZoneBadgeComponent } from '../shared/zone-badge';
 import { indicatorTypeSetting, autoTargetHostypes, resolveAddKpiTargets, HOSTYPE_NAMES } from '../shared/indicator-scope';
 import { EXCEL_MONTHS, ChangePlan, EditPerms, buildTemplateAoa, templateFileName, parseImportAoa, planImport, parseClipboardGrid, isMultiCell, planPaste, applyCellChanges, itemKey } from '../shared/kpi-excel';
 import { Anomaly, detectAnomaly } from '../shared/anomaly';
-import { SUB_EXCEL_MONTHS, SubChangePlan, buildSubTemplateAoa, parseSubImportAoa, planSubImport, applySubChanges, subFieldLabel } from '../shared/kpi-sub-excel';
+import { SUB_EXCEL_MONTHS, SubChangePlan, buildSubTemplateAoa, parseSubImportAoa, planSubImport, applySubChanges, subFieldLabel, subTemplateFileName } from '../shared/kpi-sub-excel';
 import { activityValue, rollupMonthly, itemNumber, rollupTree, RollupNode } from '../shared/kpi-rollup';
 import { orderSubTree } from '../shared/sub-tree';
 import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
@@ -730,6 +730,18 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   get canEditActual(): boolean {
     if (this.isSuperAdmin) return true;
     return this.myPerms.can_edit_actual !== false;
+  }
+
+  /** แถวของหน่วยบริการอื่นสำหรับผู้ใช้ที่ไม่ใช่ผู้ดูแล (6 พ.ย. 2569): user_ssj เห็นทุกหน่วยบริการ / user_cup เห็นทั้งอำเภอ
+   *  แต่บันทึกได้เฉพาะหน่วยบริการตัวเอง (backend ตอบ 403 FOREIGN_HOSPCODE) — ใช้เหมือนแถวที่ล็อค */
+  isForeignRow(item: any): boolean {
+    if (!item || this.isSuperAdmin || this.isAdmin || this.isLocalAdmin) return false;
+    const own = String(this.currentUser?.hospcode || '').trim();
+    return !!own && String(item.hospcode ?? '').trim() !== own;
+  }
+  /** แก้ไขแถวนี้ไม่ได้: ล็อคจากการอนุมัติ หรือเป็นแถวของหน่วยบริการอื่น */
+  isRowLocked(item: any): boolean {
+    return !!item?.is_locked || this.isForeignRow(item);
   }
 
   // admin_cup / admin_ssj / super_admin เห็นปุ่มขอแก้ไขเป้าหมายเมื่อล็อค
@@ -3134,7 +3146,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   canEditHierRow(item: any, row: HierRow): boolean {
-    return this.isEditing && !item.is_locked && this.canEditActual && !row.locked && !row.auto && !this.isEntryLocked;
+    return this.isEditing && !this.isRowLocked(item) && this.canEditActual && !row.locked && !row.auto && !this.isEntryLocked;
   }
 
   onHierChange(item: any) {
@@ -3191,7 +3203,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   isManualPct = isManualPct;
   // แก้ไขได้เมื่อเดียวกับช่องรายเดือน: โหมดแก้ไข + ไม่ล็อค + มีสิทธิ์ผลงาน
   canEditManual(item: any): boolean {
-    return !!((this.isEditing || this.isSingleEditing(item)) && !item?.is_locked && this.canEditActual);
+    return !!((this.isEditing || this.isSingleEditing(item)) && !this.isRowLocked(item) && this.canEditActual);
   }
   isManualFieldChanged(item: any, f: 'manual_result' | 'manual_pct'): boolean {
     if (!item?._original) return false;
@@ -3590,7 +3602,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: last } }, { s: { r: 1, c: 0 }, e: { r: 1, c: last } }];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'ผลงานย่อย');
-      XLSX.writeFile(wb, `KPI_ผลงานตัวชี้วัดย่อย_${ctx.indicator_id}_${ctx.hospcode}_${ctx.year_bh}.xlsx`);
+      XLSX.writeFile(wb, subTemplateFileName(ctx));
     });
   }
 
@@ -3997,7 +4009,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   // (สิทธิ์/การล็อค/การยืนยัน ใช้เส้นทางบันทึกเดิมทั้งหมด) | ตรรกะอยู่ใน shared/kpi-excel.ts
   // =====================================================================================================
   get editPerms(): EditPerms {
-    return { canEditActual: this.canEditActual, canEditTarget: this.canEditTarget };
+    return { canEditActual: this.canEditActual, canEditTarget: this.canEditTarget, rowLocked: (i: any) => this.isForeignRow(i) };
   }
 
   /** ดาวน์โหลดแบบฟอร์ม Excel ของแถวที่แสดงอยู่ (พร้อมค่าปัจจุบัน) — กรอกแล้วนำเข้ากลับได้ */
@@ -4601,7 +4613,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // helper: ตรวจสอบว่าควรแสดง input ช่องเป้าหมายหรือไม่
   canShowTargetInput(item: any): boolean {
-    if (item.is_locked) return false;
+    if (this.isRowLocked(item)) return false;
     if (this.isEditing && this.canEditTarget) return true;
     if (this.isSingleEditing(item)) return true;
     if (this.isEditingTarget(item)) return true;

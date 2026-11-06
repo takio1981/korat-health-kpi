@@ -251,10 +251,20 @@ const ROLE_ADMIN_ALL = ['admin_hos', 'admin_sso', 'admin_cup', 'admin_ssj', 'sup
 const ROLE_ADMIN_CENTRAL = ['admin_ssj', 'super_admin'];
 const ROLE_ADMIN_LOCAL = ['admin_hos', 'admin_sso', 'admin_cup']; // admin ระดับพื้นที่
 const ROLE_SCOPE_DISTRICT = ['user_cup', 'admin_cup']; // เห็นทุก hospcode ในอำเภอ
-const ROLE_SCOPE_HOSPCODE = ['user', 'user_hos', 'user_sso', 'admin_hos', 'admin_sso', 'user_ssj']; // เห็นเฉพาะ hospcode ตัวเอง (รวม 'user' เดิม) — user_ssj ก็ hospcode ตัวเองเหมือนกัน (ตาราง Role System ใน CLAUDE.md)
+const ROLE_SCOPE_HOSPCODE = ['user', 'user_hos', 'user_sso', 'admin_hos', 'admin_sso']; // เห็นเฉพาะ hospcode ตัวเอง (รวม 'user' เดิม)
+// เห็นทุกหน่วยบริการ ทุกอำเภอ แต่เฉพาะหน่วยงาน (dept) ตัวเอง — user_ssj ย้ายมาจาก ROLE_SCOPE_HOSPCODE เมื่อ 6 พ.ย. 2569 (ผู้ใช้สั่ง)
+const ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT = ['admin_ssj', 'user_ssj'];
 // เห็นเฉพาะ dept ตัวเอง (ตรงข้ามกับ admin_cup/admin_hos/admin_sso ที่เห็น "ทุก dept" แม้จะมี dept_id ติดตัวอยู่ก็ตาม)
 // ใช้แยกจาก ROLE_SCOPE_HOSPCODE เพราะ admin_hos/admin_sso อยู่ใน HOSPCODE (ล็อค hospcode) แต่ไม่ล็อค dept
 const ROLE_SCOPE_OWN_DEPT = ['admin_ssj', 'user_ssj', 'user_hos', 'user_sso', 'user_cup', 'user'];
+
+// ผู้ใช้ที่ไม่ใช่ผู้ดูแลบันทึกผลงานได้เฉพาะหน่วยบริการตัวเอง แม้จะเห็นข้อมูลกว้างกว่านั้น (user_ssj = ทุกหน่วยบริการ, user_cup = ทั้งอำเภอ)
+// คืนรายการ hospcode ที่บันทึกไม่ได้ ([] = ผ่าน) — เดิม /update-kpi แทน hospcode ของแถวด้วยของผู้ใช้เงียบๆ ค่าที่แก้ในแถวหน่วยบริการอื่นจึงไปลงหน่วยบริการตัวเอง
+function foreignWriteHospcodes(user, hospcodes) {
+    if (!user || ROLE_ADMIN_ALL.includes(user.role)) return [];
+    const own = String(user.hospcode || '').trim();
+    return [...new Set((hospcodes || []).map(h => String(h ?? '').trim()).filter(h => h && h !== own))];
+}
 
 // Helper: ดึง distid ของ hospcode — ใช้ h.distid (pre-computed) เสมอ ไม่ CONCAT(provcode,distcode) เอง (ดู CLAUDE.md เรื่อง chospital)
 // ตัวชี้วัดที่อยู่นอกหน่วยงานของผู้ใช้ (role ใน ROLE_SCOPE_OWN_DEPT ที่มี dept_id) — คืนรายการ id ที่ไม่มีสิทธิ์ ([] = ผ่านทั้งหมด)
@@ -306,4 +316,4 @@ setInterval(() => {
     for (const [k, v] of _userPermCache.entries()) if (v.expiry < now) _userPermCache.delete(k);
 }, 5 * 60 * 1000);
 
-module.exports = { PAGE_ACCESS_ROLES, PAGE_ACCESS_PAGES, PAGE_ACCESS_DEFAULT_ENABLED, loadRolePageAccessCache, hasPageAccess, PAGE_ACCESS_RULES, resolvePageKeyFromPath, ACTION_ACCESS_ROLES, ACTION_ACCESS_PAGES, ACTION_TYPES, ACTION_ACCESS_DEFAULT_ENABLED, loadRoleActionAccessCache, hasActionAccess, requireAction, ROLE_ADMIN_ALL, ROLE_ADMIN_CENTRAL, ROLE_ADMIN_LOCAL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, getDistrictId, getPermsForUser, invalidateUserPermCache, indicatorsOutsideOwnDept, OUTSIDE_DEPT_MESSAGE };
+module.exports = { ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, foreignWriteHospcodes, PAGE_ACCESS_ROLES, PAGE_ACCESS_PAGES, PAGE_ACCESS_DEFAULT_ENABLED, loadRolePageAccessCache, hasPageAccess, PAGE_ACCESS_RULES, resolvePageKeyFromPath, ACTION_ACCESS_ROLES, ACTION_ACCESS_PAGES, ACTION_TYPES, ACTION_ACCESS_DEFAULT_ENABLED, loadRoleActionAccessCache, hasActionAccess, requireAction, ROLE_ADMIN_ALL, ROLE_ADMIN_CENTRAL, ROLE_ADMIN_LOCAL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, getDistrictId, getPermsForUser, invalidateUserPermCache, indicatorsOutsideOwnDept, OUTSIDE_DEPT_MESSAGE };

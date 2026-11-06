@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import {
-  SUB_EXCEL_HEADERS, buildSubTemplateAoa, parseSubImportAoa, planSubImport, applySubChanges, subFieldLabel,
+  SUB_EXCEL_HEADERS, buildSubTemplateAoa, parseSubImportAoa, planSubImport, applySubChanges, subFieldLabel, subTemplateFileName,
 } from './kpi-sub-excel';
 
 const CTX = { indicator_name: 'ตัวชี้วัดหลัก', hospcode: '00123', hosname: 'รพ.ทดสอบ', year_bh: '2570' };
@@ -92,5 +92,19 @@ describe('kpi-sub-excel: แบบฟอร์ม → นำเข้า', () =>
     expect(parseSubImportAoa([[SUB_EXCEL_HEADERS.sub_id, 'อื่นๆ'], [1, 2]]).error).toContain('เดือน');
     expect(subFieldLabel('target')).toBe('เป้าหมาย');
     expect(subFieldLabel('10')).toBe('ต.ค.');
+  });
+});
+
+// ชื่อไฟล์แบบฟอร์มผลงานตัวชี้วัดย่อย (6 พ.ย. 2569 — เดิม KPI_ผลงานตัวชี้วัดย่อย_<รหัส>_<หน่วยบริการ>_<ปี> ไม่รู้ว่าเป็น KPI ข้ออะไร)
+describe('kpi-sub-excel: subTemplateFileName', () => {
+  it('มีเลขข้อ + ชื่อตัวชี้วัดหลัก + ปีงบ + หน่วยบริการ', () => {
+    expect(subTemplateFileName({ item_no: '2', indicator_name: 'ร้อยละผู้ป่วยเบาหวาน: คุมน้ำตาลได้', indicator_id: 15, year_bh: '2570', hospcode: '10871' }))
+      .toBe('KPI_ผลงานตัวชี้วัดย่อย_ข้อ2_ร้อยละผู้ป่วยเบาหวาน คุมน้ำตาลได้_ปีงบ2570_10871.xlsx');
+  });
+  it('ไม่มีเลขข้อ = ไม่ใส่ส่วน "ข้อ", ไม่มีชื่อ = ใช้รหัสตัวชี้วัด, ชื่อยาวย่อที่ 60 ตัวอักษร', () => {
+    expect(subTemplateFileName({ ...CTX, item_no: '' })).toBe('KPI_ผลงานตัวชี้วัดย่อย_ตัวชี้วัดหลัก_ปีงบ2570_00123.xlsx');
+    expect(subTemplateFileName({ indicator_id: 9, year_bh: '2570', hospcode: '00123' })).toBe('KPI_ผลงานตัวชี้วัดย่อย_ตัวชี้วัด 9_ปีงบ2570_00123.xlsx');
+    const long = subTemplateFileName({ indicator_name: 'ก'.repeat(80), year_bh: '2570', hospcode: '1' });
+    expect(long).toContain('ก'.repeat(60) + '…_ปีงบ2570');
   });
 });

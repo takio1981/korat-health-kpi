@@ -5,7 +5,7 @@
 const db = require('../db');
 const { apiRouter } = require('../core/router');
 const { authenticateToken, isAdmin } = require('../core/auth');
-const { indicatorsOutsideOwnDept, OUTSIDE_DEPT_MESSAGE } = require('../core/access');
+const { indicatorsOutsideOwnDept, OUTSIDE_DEPT_MESSAGE, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT } = require('../core/access');
 const { cascadeSubResultsStatus } = require('../services/hierarchy');
 const { scheduleSummaryRefresh } = require('../services/summary');
 
@@ -303,7 +303,7 @@ apiRouter.get('/kpi-replies', authenticateToken, async (req, res) => {
         // user: เฉพาะ hospcode + dept ของตัวเอง
         if (user.role === 'super_admin') {
             // ไม่มี filter เพิ่ม
-        } else if (user.role === 'admin_ssj') {
+        } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
             if (user.deptId !== null && user.deptId !== undefined) {
                 whereClause += ' AND i.dept_id = ?';
                 params.push(user.deptId);

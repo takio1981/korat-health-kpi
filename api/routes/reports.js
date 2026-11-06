@@ -6,7 +6,7 @@ const db = require('../db');
 const { activeIndicatorSql, targetCondOf, targetHasSql, targetPassSql } = require('../core/sql');
 const { apiRouter } = require('../core/router');
 const { authenticateToken } = require('../core/auth');
-const { getDistrictId } = require('../core/access');
+const { getDistrictId, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT } = require('../core/access');
 const { addZoneFilter } = require('../core/zones');
 
 // GET /kpi-summary — ดึงข้อมูลจาก summary table (เร็วมาก ไม่ต้อง JOIN)
@@ -47,10 +47,10 @@ apiRouter.get('/kpi-summary', authenticateToken, async (req, res) => {
         conditions.push(activeIndicatorSql('s.indicator_id')); // เฉพาะตัวชี้วัดที่เปิดใช้งาน
 
         // Role-based filter
-        if (user.role === 'admin_ssj' && user.deptId != null) {
+        if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role) && user.deptId != null) {
             conditions.push('s.dept_name = (SELECT dept_name FROM departments WHERE id = ?)');
             params.push(user.deptId);
-        } else if (!['super_admin', 'admin_ssj'].includes(user.role) && user.hospcode) {
+        } else if (user.role !== 'super_admin' && !ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role) && user.hospcode) {
             conditions.push('s.hospcode = ?');
             params.push(user.hospcode);
         }
@@ -76,7 +76,7 @@ apiRouter.get('/report/by-indicator', authenticateToken, async (req, res) => {
         // === Role-based filtering (ใช้ kpi_summary) ===
         if (user.role === 'super_admin') {
             // เห็นทั้งหมด
-        } else if (user.role === 'admin_ssj') {
+        } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
             if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
         } else if (user.role === 'admin_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
@@ -163,7 +163,7 @@ apiRouter.get('/report/by-hospital', authenticateToken, async (req, res) => {
         // === Role-based filtering (ใช้ kpi_summary) ===
         if (user.role === 'super_admin') {
             // เห็นทั้งหมด
-        } else if (user.role === 'admin_ssj') {
+        } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
             if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
         } else if (user.role === 'admin_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
@@ -235,7 +235,7 @@ apiRouter.get('/report/by-district', authenticateToken, async (req, res) => {
         // === Role-based filtering (ใช้ kpi_summary) ===
         if (user.role === 'super_admin') {
             // เห็นทั้งหมด
-        } else if (user.role === 'admin_ssj') {
+        } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
             if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
         } else if (user.role === 'admin_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
@@ -301,7 +301,7 @@ apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {
         // === Role-based filtering (ใช้ kpi_summary) ===
         if (user.role === 'super_admin') {
             // เห็นทั้งหมด
-        } else if (user.role === 'admin_ssj') {
+        } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
             if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
         } else if (user.role === 'admin_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
@@ -414,7 +414,7 @@ async function chartScopeClauses(user) {
     const c = [], p = [];
     if (user.role === 'super_admin') {
         // เห็นทั้งหมด
-    } else if (user.role === 'admin_ssj') {
+    } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
         if (user.deptId != null) { c.push('s.dept_id = ?'); p.push(user.deptId); }
     } else if (user.role === 'admin_cup') {
         const d = await getDistrictId(user.hospcode);
@@ -561,7 +561,7 @@ apiRouter.get('/report/recording-status', authenticateToken, async (req, res) =>
         // Role-based scope (เทียบกับ kpi_indicators i, kpi_results r)
         if (user.role === 'super_admin') {
             // เห็นทั้งหมด
-        } else if (user.role === 'admin_ssj') {
+        } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
             if (user.deptId != null) { indicatorWhere.push('i.dept_id = ?'); params.push(user.deptId); }
         } else if (user.role === 'admin_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
@@ -668,7 +668,7 @@ apiRouter.get('/report/recording-status/by-hospital', authenticateToken, async (
         // Role-based scope (เดียวกับ /report/recording-status)
         if (user.role === 'super_admin') {
             // เห็นทั้งหมด
-        } else if (user.role === 'admin_ssj') {
+        } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
             if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
         } else if (user.role === 'admin_cup') {
             const distid_auto = await getDistrictId(user.hospcode);
@@ -768,7 +768,7 @@ apiRouter.get('/report/recording-missing/by-hospital/:hospcode', authenticateTok
         // Role-based scope — ผู้ใช้ที่ไม่ใช่ super_admin/admin_ssj ต้องดูเฉพาะ hospcode ตัวเอง
         if (user.role === 'super_admin') {
             // ผ่าน
-        } else if (user.role === 'admin_ssj') {
+        } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
             if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
         } else if (['admin_hos', 'admin_sso', 'user_hos', 'user_sso'].includes(user.role)) {
             if (user.hospcode && user.hospcode !== hospcode) {
@@ -832,7 +832,7 @@ apiRouter.get('/report/by-dept-summary', authenticateToken, async (req, res) => 
         // Role-based scope
         if (user.role === 'super_admin') {
             // เห็นทุก dept
-        } else if (user.role === 'admin_ssj') {
+        } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
             if (user.deptId != null) { deptFilter = 'AND i.dept_id = ?'; deptFilterParam = user.deptId; }
         } else {
             // role อื่นไม่ควรเห็น dept summary แต่ให้กรองตาม dept ตัวเองไว้
@@ -957,7 +957,7 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
         }
 
         // Role check: admin_ssj ดูได้เฉพาะ dept ตัวเอง
-        if (user.role === 'admin_ssj' && user.deptId != null && String(user.deptId) !== String(dept_id)) {
+        if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role) && user.deptId != null && String(user.deptId) !== String(dept_id)) {
             return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์ดูหน่วยงานอื่น' });
         }
 

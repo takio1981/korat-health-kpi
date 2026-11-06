@@ -584,6 +584,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   `parseSubImportAoa`, `planSubImport`, `applySubChanges`) — หลักการเดียวกับการนำเข้าของตารางหลัก: **เติมค่าลง `subResultList` เท่านั้น ไม่เรียก API เอง**
   ผู้ใช้กด "บันทึกทั้งหมด" ผ่าน `saveSubResults()` เดิม (การล็อคตรวจที่ `/sub-results/upsert`) — จับคู่แถวด้วย `sub_indicator_id`, แถวที่ hospcode/ปีงบ
   ไม่ตรงกับ modal = ไม่นำเข้า (กันไฟล์ของหน่วยบริการอื่นทับ), ช่องว่าง = ไม่เปลี่ยนค่าเดิม, ค่า 0 นำเข้าได้ — Test: `shared/kpi-sub-excel.spec.ts`, `dashboard.spec.ts`
+  — ชื่อไฟล์ = `subTemplateFileName(ctx)` (6 พ.ย. 2569): `KPI_ผลงานตัวชี้วัดย่อย_ข้อ<item_no>_<ชื่อตัวชี้วัดหลัก>_ปีงบ<ปี>_<หน่วยบริการ>.xlsx` (ไม่มีเลขข้อ = ไม่ใส่ส่วน "ข้อ")
 - `formatNum()` helper: จำนวนเต็มไม่มีทศนิยม (70), มีเศษ 2 ตำแหน่ง (70.50)
 
 ### ตัวชี้วัด 3 ระดับ: หลัก 1 → ย่อย 1.1 → กิจกรรม 1.1.1 (เพิ่ม 18 ต.ค. 2569)
@@ -994,7 +995,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 | user_cup | อำเภอตัวเอง, dept ตัวเอง | ❌ | - |
 | user_hos | hospcode + dept ตัวเอง | ❌ | - |
 | user_sso | hospcode + dept ตัวเอง | ❌ | - |
-| user_ssj | hospcode + dept ตัวเอง | ❌ | - |
+| user_ssj | ทุก hospcode ทุกอำเภอ, dept ตัวเอง (บันทึกได้เฉพาะ hospcode ตัวเอง — 6 พ.ย. 2569) | ❌ | - |
 
 ### ขอบเขตเมื่อผู้ดูแลเพิ่ม/แก้ไขผู้ใช้ + อนุมัติผลงาน (backend เป็นด่านจริง — แก้ 25 ต.ค. 2569 จากการทดสอบทั้งระบบ)
 - `services/users.js`: `ASSIGNABLE_ROLES` (8 role ในหน้าจอ ไม่มี super_admin) — ผู้ดูแลที่ไม่ใช่ super_admin กำหนด role นอกรายการ = 403
@@ -1020,7 +1021,14 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   `admin_sso` ที่บังเอิญมี `dept_id` ติดตัวอยู่ในฐานข้อมูล — แม้ scope จริงคือ "ทุก dept" — โดนจำกัดผิดๆ)
 - Role constants ใน `api/server.js` ที่ใช้กำหนด scope (ต้องตรงกับตาราง Role System ด้านบนเป๊ะ — แก้ตารางต้องแก้ตรงนี้ด้วย):
   - `ROLE_SCOPE_OWN_DEPT` = `['admin_ssj','user_ssj','user_hos','user_sso','user_cup','user']` — เห็นเฉพาะ dept ตัวเอง
-  - `ROLE_SCOPE_HOSPCODE` = `['user','user_hos','user_sso','admin_hos','admin_sso','user_ssj']` — เห็นเฉพาะ hoscode ตัวเอง (1 หน่วยบริการ)
+  - `ROLE_SCOPE_HOSPCODE` = `['user','user_hos','user_sso','admin_hos','admin_sso']` — เห็นเฉพาะ hoscode ตัวเอง (1 หน่วยบริการ)
+  - `ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT` = `['admin_ssj','user_ssj']` — เห็นทุก hoscode ทุกอำเภอ เฉพาะ dept ตัวเอง (user_ssj ย้ายจาก ROLE_SCOPE_HOSPCODE 6 พ.ย. 2569 — ผู้ใช้สั่ง)
+    ใช้แทน `user.role === 'admin_ssj'` เดิมในสาขาขอบเขตข้อมูลของ /kpi-results, /dashboard-stats, รายงานทุกแถบ, chart-stats, /kpi-replies
+    — **ห้ามใช้กับสิทธิ์ผู้ดูแล** (อนุมัติ, bulk-add-kpi, จัดการผู้ใช้ ยังเป็น admin_ssj เท่านั้น)
+  - **บันทึกผลงาน: ผู้ใช้ที่ไม่ใช่ผู้ดูแล (ไม่อยู่ใน ROLE_ADMIN_ALL) บันทึกได้เฉพาะ hospcode ตัวเอง** — `foreignWriteHospcodes(user, hospcodes)` (core/access.js) → 403 `FOREIGN_HOSPCODE`
+    ที่ `/update-kpi`, `/sub-results/upsert`, `/hierarchy-results/save`, `POST /dynamic-data/:table` (เดิม /update-kpi และ dynamic-data แทน hospcode ของแถวด้วยของผู้ใช้เงียบๆ
+    → ค่าที่แก้ในแถวหน่วยบริการอื่นของ user_cup ลงหน่วยบริการตัวเอง) | frontend: `isForeignRow()`/`isRowLocked()` ใน dashboard (แถวหน่วยบริการอื่น = แก้ไม่ได้, Excel ข้าม `EditPerms.rowLocked`)
+    — **endpoint ใหม่ที่บันทึกผลงานต้องเรียก `foreignWriteHospcodes()` ด้วย** | Test: `api/tests/user-ssj-scope.test.js`, `dashboard.spec.ts`, `kpi-excel.spec.ts`
   - `ROLE_SCOPE_DISTRICT` = `['user_cup','admin_cup']` — เห็นทุกหน่วยบริการในอำเภอตัวเอง (ผ่าน `getDistrictId(hospcode)` → `chospital.distid`)
   - role ที่ไม่อยู่ใน constant ไหนเลย (`super_admin`, `admin_ssj` สำหรับ hospcode/อำเภอ, `admin_cup`/`admin_hos`/`admin_sso` สำหรับ dept) เห็น "ทุก" ตามที่ตาราง Role System กำหนด แม้ user record จะมี `dept_id`/`hospcode` ติดตัวอยู่ก็ตาม
   - **ห้ามเช็คแค่ `user.deptId != null`/`user.hospcode` เฉยๆ โดยไม่เช็ค role ก่อนเด็ดขาด** — ต้องเช็คผ่าน constant ทั้ง 3 นี้เท่านั้น กันบั๊กแบบเดียวกันเกิดซ้ำ

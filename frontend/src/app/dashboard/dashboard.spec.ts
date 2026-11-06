@@ -990,4 +990,32 @@ describe('DashboardComponent', () => {
       expect(c.addKpiTargetDistricts()).toEqual([]);
     });
   });
+
+  // user_ssj เห็นทุกหน่วยบริการ (6 พ.ย. 2569) — ผู้ใช้ที่ไม่ใช่ผู้ดูแลแก้ไขได้เฉพาะแถวของหน่วยบริการตัวเอง (backend 403 FOREIGN_HOSPCODE)
+  describe('แถวของหน่วยบริการอื่น = อ่านอย่างเดียว (ผู้ใช้ทั่วไป)', () => {
+    const own = row('2569', { hospcode: '10871' });
+    const other = row('2569', { hospcode: '10890' });
+    it('ผู้ใช้ทั่วไป: แถวหน่วยบริการอื่นแก้ไม่ได้ทั้งช่องเป้าหมาย/ผลงานกรอกเอง/Excel, แถวตัวเองแก้ได้', () => {
+      const c: any = component;
+      c.isSuperAdmin = false; c.isAdmin = false; c.isLocalAdmin = false;
+      c.currentUser = { ...(c.currentUser || {}), hospcode: '10871', role: 'user_ssj' };
+      c.isEditing = true;
+      expect(c.isForeignRow(other)).toBe(true);
+      expect(c.isRowLocked(other)).toBe(true);
+      expect(c.isForeignRow(own)).toBe(false);
+      expect(c.isRowLocked({ ...own, is_locked: 1 })).toBe(true);
+      expect(c.canShowTargetInput(other)).toBe(false);
+      expect(c.canEditManual(other)).toBe(false);
+      expect(c.editPerms.rowLocked(other)).toBe(true);
+      expect(c.editPerms.rowLocked(own)).toBe(false);
+    });
+    it('ผู้ดูแล (admin_ssj / ผู้ดูแลพื้นที่) ไม่ถูกจำกัดด้วยกติกานี้', () => {
+      const c: any = component;
+      c.currentUser = { ...(c.currentUser || {}), hospcode: '10871' };
+      c.isSuperAdmin = false; c.isAdmin = true; c.isLocalAdmin = false;
+      expect(c.isForeignRow(other)).toBe(false);
+      c.isAdmin = false; c.isLocalAdmin = true;
+      expect(c.isForeignRow(other)).toBe(false);
+    });
+  });
 });

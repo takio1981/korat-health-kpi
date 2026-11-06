@@ -5,7 +5,7 @@
 const db = require('../db');
 const kpiFormula = require('../kpi-formula');
 const { TARGET_MONTHLY_MODES, normalizeTargetMonthly, aggregateMonthlyTarget } = require('../kpi-target');
-const { ROLE_ADMIN_ALL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, getDistrictId, getPermsForUser } = require('../core/access');
+const { ROLE_ADMIN_ALL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, foreignWriteHospcodes, getDistrictId, getPermsForUser } = require('../core/access');
 const { apiRouter } = require('../core/router');
 const { authenticateToken, isAdmin, isSuperAdmin } = require('../core/auth');
 const { baseKey, loadBaseValues, loadPrevYearData, refreshKpiSummaryForIndicatorYears, scheduleSummaryRefresh, withSummaryLock } = require('../services/summary');
@@ -24,8 +24,8 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         // === Role-based KPI visibility ===
         if (user.role === 'super_admin') {
             // เห็นทั้งหมด
-        } else if (user.role === 'admin_ssj') {
-            // เห็นทุก hospcode แต่เฉพาะหน่วยงานตัวเอง
+        } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
+            // admin_ssj / user_ssj: เห็นทุก hospcode แต่เฉพาะหน่วยงานตัวเอง
             if (user.deptId != null) { whereClause = 'WHERE i.dept_id = ?'; params.push(user.deptId); }
         } else if (ROLE_SCOPE_DISTRICT.includes(user.role)) {
             // admin_cup / user_cup: ทุกตัวชี้วัด ทุก hospcode ในอำเภอ
@@ -44,7 +44,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
             // admin_hos / admin_sso: ทุก dept แต่เฉพาะ hospcode ตัวเอง
             if (user.hospcode) { whereClause = 'WHERE r.hospcode = ?'; params.push(user.hospcode); }
         } else {
-            // user_hos / user_sso / user_ssj: hospcode + dept ตัวเอง
+            // user_hos / user_sso: hospcode + dept ตัวเอง
             const conditions = [];
             if (user.hospcode) { conditions.push('r.hospcode = ?'); params.push(user.hospcode); }
             if (user.deptId != null) { conditions.push('i.dept_id = ?'); params.push(user.deptId); }
@@ -586,6 +586,12 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
     const everyRowHasHospcode = ROLE_ADMIN_ALL.includes(user.role) && updates.every(r => r && r.hospcode);
     if (!hospcodeToSave && !everyRowHasHospcode) {
         return res.status(400).json({ success: false, message: 'ไม่พบรหัสหน่วยบริการ กรุณาเลือกหน่วยบริการ' });
+    }
+
+    // ผู้ใช้ที่ไม่ใช่ผู้ดูแลบันทึกได้เฉพาะหน่วยบริการตัวเอง — แถวของหน่วยบริการอื่น = 403 (เดิมเขียนลงหน่วยบริการตัวเองเงียบๆ)
+    const foreignHc = foreignWriteHospcodes(user, updates.map(r => r && r.hospcode));
+    if (foreignHc.length > 0) {
+        return res.status(403).json({ success: false, code: 'FOREIGN_HOSPCODE', message: `บันทึกได้เฉพาะหน่วยบริการของตัวเอง (พบ: ${foreignHc.slice(0, 5).join(', ')})` });
     }
 
     const connection = await db.getConnection();

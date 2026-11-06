@@ -3,7 +3,7 @@
 // ลงทะเบียนเส้นทางกับ apiRouter ตอนถูก require — server.js require ไฟล์นี้ที่ตำแหน่งเดิมของเส้นทางชุดนี้ (ลำดับเส้นทางสำคัญ)
 
 const db = require('../db');
-const { ROLE_ADMIN_ALL, requireAction } = require('../core/access');
+const { ROLE_ADMIN_ALL, requireAction, foreignWriteHospcodes } = require('../core/access');
 const { apiRouter } = require('../core/router');
 const { authenticateToken, isSuperAdmin } = require('../core/auth');
 const { getUserAuditInfo, logKpiSaveAudit } = require('../services/kpi-audit');
@@ -328,6 +328,10 @@ apiRouter.post('/dynamic-data/:table_name', authenticateToken, async (req, res) 
     const data = { ...req.body };
     delete data.id; delete data.created_at; delete data.updated_at; delete data.created_by_name;
     data.created_by = req.user.userId;
+    // ผู้ใช้ที่ไม่ใช่ผู้ดูแลส่ง hospcode ของหน่วยบริการอื่น = 403 (เดิมแทนด้วยของตัวเองเงียบๆ — ข้อมูลไปลงผิดหน่วยบริการ)
+    if (foreignWriteHospcodes(req.user, [data.hospcode]).length > 0) {
+        return res.status(403).json({ success: false, code: 'FOREIGN_HOSPCODE', message: 'บันทึกได้เฉพาะหน่วยบริการของตัวเอง' });
+    }
     if (!data.hospcode) data.hospcode = req.user.hospcode;
     if (!ROLE_ADMIN_ALL.includes(req.user.role)) data.hospcode = req.user.hospcode;
 
