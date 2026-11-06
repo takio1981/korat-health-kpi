@@ -5,7 +5,7 @@
 const db = require('../db');
 const { apiRouter } = require('../core/router');
 const { authenticateToken, isSuperAdmin } = require('../core/auth');
-const { diffTableColumns } = require('../services/khd');
+const { diffTableColumns, performSyncToKhd } = require('../services/khd');
 const { getRemotePool } = require('../db-remote');
 
 // GET /db-compare — เปรียบเทียบ structure ตาราง table_process ระหว่าง local กับ khd
@@ -246,7 +246,9 @@ apiRouter.post('/db-compare/create-remote', authenticateToken, isSuperAdmin, asy
     res.json({ success: true, message: `สร้าง ${created.length} ตาราง, แก้ไข ${altered.length} ตารางใน KHD`, created, altered, errors });
 });
 
-// POST /db-compare/sync-to-khd — Sync ข้อมูลจาก Local → KHD (upsert batch 100 rows)
+// POST /db-compare/sync-to-khd — Sync ข้อมูลจาก Local → KHD
+// ใช้ performSyncToKhd() กติกาเดียวกับหน้าส่งออก (6 พ.ย. 2569 — เดิม UPSERT ทุกคอลัมน์โดยไม่ตรวจคีย์/เวลา/ค่าว่าง):
+// คีย์ KHD ต้องเป็น hospcode + byear, แถวที่มีแล้วทับเฉพาะเมื่อ update_date ของ local ใหม่กว่า, ค่าว่างไม่ทับค่าใน KHD
 apiRouter.post('/db-compare/sync-to-khd', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
     if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (KHD)' });
@@ -254,39 +256,9 @@ apiRouter.post('/db-compare/sync-to-khd', authenticateToken, isSuperAdmin, async
     const { tables } = req.body;
     if (!Array.isArray(tables) || tables.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตาราง' });
 
-    const synced = [], errors = [];
-
-    for (const tableName of tables) {
-        if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(tableName)) { errors.push({ table: tableName, error: 'ชื่อไม่ถูกต้อง' }); continue; }
-        try {
-            // ตรวจว่า remote มีตารางนี้
-            try { await remoteDb.query(`SELECT 1 FROM \`${tableName}\` LIMIT 0`); } catch (e) {
-                errors.push({ table: tableName, error: 'ตารางไม่มีใน KHD กรุณาสร้างก่อน' }); continue;
-            }
-
-            // ดึงข้อมูลจาก local
-            const [localRows] = await db.query(`SELECT * FROM \`${tableName}\``);
-            if (localRows.length === 0) { synced.push({ table: tableName, rows: 0, message: 'ไม่มีข้อมูลใน local' }); continue; }
-
-            // ดึง column names
-            const columns = Object.keys(localRows[0]);
-            const colList = columns.map(c => `\`${c}\``).join(', ');
-            const placeholders = columns.map(() => '?').join(', ');
-            const onDup = columns.map(c => `\`${c}\`=VALUES(\`${c}\`)`).join(', ');
-
-            // Batch upsert → KHD (100 rows per batch)
-            let totalInserted = 0;
-            for (let i = 0; i < localRows.length; i += 100) {
-                const batch = localRows.slice(i, i + 100);
-                const allPlaceholders = batch.map(() => `(${placeholders})`).join(', ');
-                const flatValues = batch.flatMap(row => columns.map(c => row[c]));
-                await remoteDb.query(`INSERT INTO \`${tableName}\` (${colList}) VALUES ${allPlaceholders} ON DUPLICATE KEY UPDATE ${onDup}`, flatValues);
-                totalInserted += batch.length;
-            }
-
-            synced.push({ table: tableName, rows: totalInserted });
-        } catch (e) { errors.push({ table: tableName, error: e.message }); }
-    }
+    const out = await performSyncToKhd(tables.map(t => ({ table: t })), req.user.userId);
+    const synced = (out.results || []).filter(r => r.status === 'success');
+    const errors = (out.results || []).filter(r => r.status !== 'success').map(r => ({ table: r.table, error: r.reason }));
 
     await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
         [req.user.userId, 'DB_COMPARE_SYNC_TO_KHD', 'MULTIPLE', JSON.stringify({ synced: synced.length, total_rows: synced.reduce((s, t) => s + t.rows, 0) }), req.ip]).catch(() => {});

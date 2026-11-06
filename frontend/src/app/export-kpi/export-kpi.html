@@ -533,6 +533,11 @@
                     class="px-3 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap">
               <i class="fas fa-inbox mr-1"></i>ไม่มีข้อมูล ({{ getSyncCount('empty') }})
             </button>
+            <button (click)="syncStatusFilter = 'blocked'"
+                    [ngClass]="syncStatusFilter === 'blocked' ? 'bg-red-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
+                    class="px-3 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap">
+              <i class="fas fa-ban mr-1"></i>ส่งไม่ได้ ({{ getSyncCount('blocked') }})
+            </button>
             <button *ngIf="hasActiveSyncFilters()" (click)="clearSyncFilters()"
                     class="px-3 py-2 bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 rounded-lg text-xs font-bold transition-all whitespace-nowrap" title="ล้างตัวกรองทั้งหมด">
               <i class="fas fa-times mr-1"></i>ล้างตัวกรอง
@@ -566,12 +571,13 @@
                 <th class="px-4 py-3 text-center">Local rows</th>
                 <th class="px-4 py-3 text-center">KHD rows</th>
                 <th class="px-4 py-3 text-center">Sync columns</th>
+                <th class="px-4 py-3 text-center" title="แผนการส่งรายแถว: เพิ่มใหม่ / อัปเดต (ข้อมูลในระบบใหม่กว่า) / คงค่า KHD (KHD ใหม่กว่า เวลาเท่ากัน หรือไม่มีเวลาให้เทียบ)">แผนการส่ง</th>
                 <th class="px-4 py-3 text-center">สถานะ</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
               @if (filteredSyncPreview.length === 0) {
-                <tr><td colspan="9" class="px-4 py-8 text-center text-gray-400 text-sm">
+                <tr><td colspan="10" class="px-4 py-8 text-center text-gray-400 text-sm">
                   <i class="fas fa-filter text-2xl mb-2 block"></i>ไม่พบรายการที่ตรงกับตัวกรอง
                 </td></tr>
               }
@@ -589,11 +595,26 @@
                   <td class="px-4 py-3 text-center font-bold text-green-700">{{ t.local_rows }}</td>
                   <td class="px-4 py-3 text-center font-bold text-blue-700">{{ t.remote_rows }}</td>
                   <td class="px-4 py-3 text-center text-gray-500">{{ t.sync_columns?.length || 0 }}</td>
+                  <td class="px-4 py-3 text-center text-[11px] whitespace-nowrap">
+                    @if (t.plan) {
+                      <span class="text-green-700 font-bold" title="แถวใหม่ที่จะเพิ่มเข้า KHD">+{{ t.plan.insert }}</span>
+                      <span class="mx-1 text-blue-700 font-bold" title="แถวที่ข้อมูลในระบบใหม่กว่า KHD (update_date) — อัปเดตเฉพาะช่องที่มีค่า">↻{{ t.plan.update }}</span>
+                      <span class="text-amber-700 font-bold" title="แถวที่คงค่า KHD (KHD ใหม่กว่า เวลาเท่ากัน หรือไม่มีเวลาให้เทียบ)">⏸{{ t.plan.khd_newer + t.plan.no_time }}</span>
+                      @if (t.plan.kept_blank > 0) {
+                        <div class="text-gray-500" title="ช่องที่ว่างในระบบจะไม่ทับค่าใน KHD">ช่องว่างไม่ทับ {{ t.plan.kept_blank }} แถว</div>
+                      }
+                    } @else {
+                      <span class="text-gray-300">-</span>
+                    }
+                  </td>
                   <td class="px-4 py-3 text-center">
                     @if (t.status === 'ready') {
                       <span class="px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold">พร้อมส่ง</span>
                     } @else if (t.status === 'empty') {
                       <span class="px-2.5 py-1 bg-gray-100 text-gray-500 rounded-full text-xs font-bold">ไม่มีข้อมูล</span>
+                    } @else if (t.status === 'blocked') {
+                      <span class="px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-xs font-bold cursor-help" [title]="t.reason">ส่งไม่ได้</span>
+                      <div class="text-[10px] text-red-500 mt-1 max-w-[180px] mx-auto whitespace-normal">{{ t.reason }}</div>
                     } @else if (t.status === 'no_remote') {
                       <span class="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-bold">ไม่มีใน KHD</span>
                     } @else {
@@ -610,7 +631,7 @@
 
     <!-- Footer -->
     <div class="px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-gray-50 rounded-b-2xl">
-      <p class="text-sm text-gray-500"><i class="fas fa-info-circle text-teal-500 mr-1"></i>อัปเดตเฉพาะข้อมูลที่ตรง key — ข้อมูลเดิมใน KHD ที่ไม่ซ้ำจะยังอยู่</p>
+      <p class="text-sm text-gray-500"><i class="fas fa-info-circle text-teal-500 mr-1"></i>จับคู่ด้วย hospcode + byear — ทับเฉพาะแถวที่ข้อมูลในระบบใหม่กว่า (update_date) และช่องว่างไม่ทับค่าใน KHD</p>
       <div class="flex gap-2">
         <button (click)="showSyncModal = false" class="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl text-sm font-bold transition-all">
           ยกเลิก

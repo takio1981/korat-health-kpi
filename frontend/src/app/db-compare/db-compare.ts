@@ -199,7 +199,7 @@ export class DbCompareComponent implements OnInit {
     if (tables.length === 0) { Swal.fire('แจ้งเตือน', 'กรุณาเลือกตารางอย่างน้อย 1 ตาราง', 'warning'); return; }
     Swal.fire({
       title: 'ยืนยัน Sync → KHD',
-      html: `<p>ส่งข้อมูลจาก Local ไปยัง KHD <b>${tables.length}</b> ตาราง</p><p class="text-xs text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>ข้อมูลใน KHD ที่ key ซ้ำจะถูกเขียนทับ — ต้องมีสิทธิ์ write ใน KHD</p>`,
+      html: `<p>ส่งข้อมูลจาก Local ไปยัง KHD <b>${tables.length}</b> ตาราง</p><p class="text-xs text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>ส่งได้เฉพาะตารางที่ KHD ใช้คีย์ hospcode + byear — แถวที่มีแล้วทับเฉพาะเมื่อข้อมูลในระบบใหม่กว่า (update_date) และช่องว่างไม่ทับค่าใน KHD</p>`,
       icon: 'warning', showCancelButton: true, confirmButtonColor: '#dc2626',
       confirmButtonText: '<i class="fas fa-cloud-upload-alt mr-1"></i> Sync → KHD', cancelButtonText: 'ยกเลิก'
     }).then((r) => {
@@ -207,7 +207,7 @@ export class DbCompareComponent implements OnInit {
       Swal.fire({ title: 'กำลัง Sync ไป KHD...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
       this.authService.dbCompareSyncToKhd(tables).subscribe({
         next: (res: any) => {
-          const detail = res.synced?.map((s: any) => `${s.table}: ${s.rows} rows`).join('<br>') || '';
+          const detail = res.synced?.map((s: any) => `${s.table}: เพิ่ม ${s.inserted || 0} · อัปเดต ${s.updated || 0} · คงค่า KHD ${(s.khd_newer || 0) + (s.no_time || 0)}`).join('<br>') || '';
           const errDetail = res.errors?.length ? `<br><div class="text-xs mt-2 text-red-500">${res.errors.map((e: any) => `${e.table}: ${e.error}`).join('<br>')}</div>` : '';
           Swal.fire({ icon: 'success', title: 'Sync → KHD สำเร็จ', html: `${res.message}<br><div class="text-xs mt-2 text-gray-500">${detail}</div>${errDetail}` });
           this.runCompare();

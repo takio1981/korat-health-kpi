@@ -58,3 +58,29 @@ describe('ExportKpiComponent — แถวตารางรายละเอ�
     expect(c.itemsPopupRow({ items: { skipped: 'ชื่อตารางยาวเกิน' } }, esc)).toContain('ชื่อตารางยาวเกิน');
   });
 });
+
+// ส่งเข้า KHD อย่างปลอดภัย (6 พ.ย. 2569): ตารางที่คีย์ KHD ไม่ใช่ hospcode + byear = "ส่งไม่ได้" ไม่ถูกเลือกอัตโนมัติ + แสดงแผนรายแถว
+describe('ExportKpiComponent — หน้าต่างส่งข้อมูลเข้า KHD', () => {
+  it('เลือกอัตโนมัติเฉพาะตารางพร้อมส่ง, ตาราง blocked แสดงเหตุผล และแสดงแผน เพิ่ม/อัปเดต/คงค่า KHD', async () => {
+    await TestBed.configureTestingModule({ imports: [ExportKpiComponent], providers: testProviders }).compileComponents();
+    const fixture = TestBed.createComponent(ExportKpiComponent);
+    const c = fixture.componentInstance;
+    const { HttpTestingController } = await import('@angular/common/http/testing');
+    const http = TestBed.inject(HttpTestingController);
+    c.openSyncToKhd();
+    http.expectOne(r => r.url.endsWith('/sync-to-khd/preview')).flush({ success: true, tables: [
+      { table: 'kpi_a_001', name: 'ก', status: 'ready', local_rows: 5, remote_rows: 4, sync_columns: ['hospcode', 'byear', 'target'],
+        plan: { insert: 1, update: 1, khd_newer: 2, no_time: 0, unchanged: 1, kept_blank: 1 } },
+      { table: 'i_kpi_30', name: 'ข', status: 'blocked', reason: 'คีย์ของตาราง KHD ไม่ใช่ hospcode + byear (PK(province_id))', local_rows: 1, remote_rows: 4 },
+    ] });
+    fixture.detectChanges();
+    expect([...c.syncSelectedTables]).toEqual(['kpi_a_001']);
+    expect(c.getSyncCount('blocked')).toBe(1);
+    const text = (fixture.nativeElement as HTMLElement).textContent || '';
+    expect(text).toContain('ส่งไม่ได้');
+    expect(text).toContain('PK(province_id)');
+    expect(text).toContain('+1');
+    expect(text).toContain('↻1');
+    expect(text).toContain('⏸2');
+  });
+});

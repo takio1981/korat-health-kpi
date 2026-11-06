@@ -10,7 +10,7 @@ const { applyMonthlyTargetToSummary } = require('../services/monthly-target');
 const { authenticateToken, isSuperAdmin } = require('../core/auth');
 const { checkKpiChanges, performKpiExport } = require('../services/export');
 const { getRemotePool } = require('../db-remote');
-const { performSyncToKhd } = require('../services/khd');
+const { performSyncToKhd, planKhdTableSync } = require('../services/khd');
 const { runScheduledExport } = require('../jobs/export-scheduler');
 
 // ========== Export KPI Tables ==========
@@ -128,6 +128,7 @@ apiRouter.post('/sync-to-khd/preview', authenticateToken, isSuperAdmin, async (r
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
             LEFT JOIN departments d ON i.dept_id = d.id
             WHERE i.is_active = 1 AND i.table_process IS NOT NULL AND i.table_process != ''
+              AND (i.upload_excel IS NULL OR i.upload_excel = 0)
         `);
         // deduplicate ตาม table_process (1 ตารางอาจมีหลายตัวชี้วัด/หลายหมวดหมู่/หลายหน่วยงานรวมกันได้)
         const tableMap = new Map();
@@ -169,6 +170,14 @@ apiRouter.post('/sync-to-khd/preview', authenticateToken, isSuperAdmin, async (r
             // หา common columns
             if (item.local_columns.length > 0 && item.remote_columns.length > 0) {
                 item.sync_columns = item.local_columns.filter(c => item.remote_columns.includes(c));
+            }
+            // แผนการส่งรายแถว (คีย์ hospcode + byear, update_date ใหม่กว่า, ค่าว่างไม่ทับ) — กติกาเดียวกับตอนส่งจริง
+            if (item.status === 'ready') {
+                try {
+                    const plan = await planKhdTableSync(remoteDb, tp, item.sync_columns);
+                    if (plan.skip) { item.status = 'blocked'; item.reason = plan.skip; }
+                    else item.plan = plan.counts;
+                } catch (e) { item.status = 'blocked'; item.reason = e.message; }
             }
             tables.push(item);
         }

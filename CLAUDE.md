@@ -952,10 +952,18 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - Log: `BULK_DELETE_KPI_MANAGE` ใน system_logs
 
 ### Sync to KHD
-- Core function: `performSyncToKhd(tables, userId)` — UPSERT local export tables → KHD
-- ถ้า `sync_columns` ไม่ส่งมา → auto-detect common columns ระหว่าง local กับ remote
-- HTTP: `POST /sync-to-khd/preview` + `/sync-to-khd/execute`
-- ใช้ `INSERT ... ON DUPLICATE KEY UPDATE` (ไม่ลบข้อมูลเดิม)
+- Core function: `performSyncToKhd(tables, userId)` (`services/khd.js`) — ใช้ร่วม: `/sync-to-khd/execute`, ตารางเวลา auto_sync_khd, `/db-compare/sync-to-khd`
+- HTTP: `POST /sync-to-khd/preview` (แนบ `plan` รายตาราง / สถานะ `blocked` + `reason`) + `/sync-to-khd/execute`
+- **กติกากันเขียนทับ (6 พ.ย. 2569 — ผู้ใช้เลือก; เดิม UPSERT ทุกคอลัมน์โดยอาศัยคีย์ใดก็ได้ของ KHD จึงล้างผลงานใน KHD เป็นค่าว่างได้ — ตรวจพบจริง 99 แถว):**
+  `planKhdTableSync()` (อ่านอย่างเดียว ใช้ทั้ง preview และตอนส่ง) → `applyKhdTableSync()`
+  - ตาราง KHD ต้องมีคีย์ unique ชุดเดียว = PRIMARY (hospcode, byear) (`hasHospYearKeyOnly()` จาก SHOW KEYS) ไม่งั้นข้ามทั้งตาราง — พบจริง: `i_kpi_30`/`i_kpi_301` คีย์ province_id
+  - แถวใหม่ = INSERT (`ON DUPLICATE KEY UPDATE hospcode = hospcode` กันชนระหว่างทาง) | แถวที่มีแล้ว = เทียบ local `update_date` กับเวลาฝั่ง KHD
+    (`update_date` / `update_datetime` / `updated_at` — KHD ใช้ชื่อต่างกัน 41+4 / 32 / 123 ตาราง) ใหม่กว่าชนะ, เท่ากัน = คงค่า KHD,
+    ฝั่งใดไม่มีคอลัมน์เวลาหรือแถว local ไม่มีเวลา = ไม่ทับ (`no_time`)
+  - local ใหม่กว่า: UPDATE เฉพาะช่องที่ local มีค่าและต่างกัน (**ค่าว่างไม่ทับ** — `kept_blank`) + ตั้งเวลา KHD = เวลา local, WHERE ตรวจเวลาซ้ำ
+  - ส่งได้เฉพาะตารางของตัวชี้วัดที่ `upload_excel = 0` อย่างน้อย 1 ตัว (`khdExportableTables()`) — preview ก็กรองแล้ว
+  - `sync_columns` จากผู้เรียก: ตัดชื่อที่ไม่ใช่ identifier/ไม่มีทั้ง 2 ฝั่ง และเติม hospcode/byear เสมอ — คอลัมน์เวลาไม่อยู่ในชุดข้อมูล (ส่งเป็นเวลาของ KHD)
+  - ผลรายตาราง: inserted, updated, unchanged, khd_newer, kept_blank, no_time, bad_key — Test: `api/tests/khd-sync-guard.test.js` (KHD จำลอง = ตาราง `<ชื่อ>__khd`), `export-kpi.spec.ts`
 - Log: `SYNC_TO_KHD` ใน system_logs
 
 ### Export Scheduler (ตารางเวลา Export อัตโนมัติ)

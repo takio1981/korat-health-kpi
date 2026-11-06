@@ -679,7 +679,7 @@ export class ExportKpiComponent implements OnInit {
     Swal.fire({
       title: 'ยืนยันส่งข้อมูลเข้า KHD',
       html: `<p class="text-sm">ส่ง <b>${tables.length}</b> ตาราง เข้า KHD?</p>
-             <p class="text-xs text-teal-600 mt-2"><i class="fas fa-info-circle mr-1"></i>ระบบจะอัปเดตเฉพาะข้อมูลที่ตรง key — ข้อมูลเดิมใน KHD ที่ไม่ซ้ำจะยังคงอยู่</p>`,
+             <p class="text-xs text-teal-600 mt-2"><i class="fas fa-info-circle mr-1"></i>จับคู่ด้วย hospcode + byear — แถวที่มีแล้วทับเฉพาะเมื่อข้อมูลในระบบใหม่กว่า (update_date) และช่องว่างไม่ทับค่าใน KHD</p>`,
       icon: 'question', showCancelButton: true, confirmButtonColor: '#0d9488',
       confirmButtonText: '<i class="fas fa-upload mr-1"></i> ส่งข้อมูล', cancelButtonText: 'ยกเลิก'
     }).then(r => {
@@ -695,6 +695,9 @@ export class ExportKpiComponent implements OnInit {
             const successCount = res.results?.filter((x: any) => x.status === 'success').length || 0;
             const errorCount = res.results?.filter((x: any) => x.status === 'error').length || 0;
             const totalRows = res.results?.filter((x: any) => x.status === 'success').reduce((s: number, x: any) => s + x.rows, 0) || 0;
+            const ok = res.results?.filter((x: any) => x.status === 'success') || [];
+            const sum = (k: string) => ok.reduce((s: number, x: any) => s + (Number(x[k]) || 0), 0);
+            const skipped = res.results?.filter((x: any) => x.status === 'skipped') || [];
             Swal.fire({
               icon: errorCount > 0 ? 'warning' : 'success',
               title: 'ส่งข้อมูลเสร็จสิ้น',
@@ -704,6 +707,9 @@ export class ExportKpiComponent implements OnInit {
                   <div class="bg-red-50 border border-red-200 rounded-lg p-2"><p class="text-xl font-bold text-red-600">${errorCount}</p><p class="text-[10px]">ผิดพลาด</p></div>
                   <div class="bg-blue-50 border border-blue-200 rounded-lg p-2"><p class="text-xl font-bold text-blue-700">${totalRows}</p><p class="text-[10px]">rows ทั้งหมด</p></div>
                 </div>
+                <p class="text-xs text-gray-600">เพิ่มใหม่ <b>${sum('inserted')}</b> · อัปเดต (ระบบใหม่กว่า) <b>${sum('updated')}</b> · คงค่า KHD <b>${sum('khd_newer') + sum('no_time')}</b> · ช่องว่างไม่ทับ <b>${sum('kept_blank')}</b> แถว</p>
+                ${skipped.length > 0 ? '<div class="bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs text-amber-700">' +
+                  skipped.map((x: any) => `<b>${x.table}</b>: ${x.reason}`).join('<br>') + '</div>' : ''}
                 ${errorCount > 0 ? '<div class="bg-red-50 border border-red-200 rounded-lg p-2 text-xs text-red-600 mt-2">' +
                   res.results.filter((x: any) => x.status === 'error').map((x: any) => `<b>${x.table}</b>: ${x.reason}`).join('<br>') + '</div>' : ''}
               </div>`,
