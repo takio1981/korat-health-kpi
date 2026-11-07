@@ -117,6 +117,7 @@ const PAGE_ACCESS_RULES = [
     // /ai/status ไม่มี rule (ทุก role ที่เข้าสู่ระบบ) | ตั้งค่า/ทดสอบ = หน้า settings (isSuperAdmin + สิทธิ์หน้าที่เปิดเพิ่ม)
     { path: '/ai/settings', pageKey: 'settings' },
     { method: 'POST', path: '/ai/test', pageKey: 'settings' },
+    { method: 'POST', path: '/ai/models', pageKey: 'settings' },
 
     // settings (กลุ่มนี้ทั้งหมด isSuperAdmin เดิม ไม่มี endpoint เปิดปนอยู่ — ยืนยันแล้ว ปลอดภัยใช้ prefix กว้าง)
     { method: 'POST', path: '/settings', pageKey: 'settings' },

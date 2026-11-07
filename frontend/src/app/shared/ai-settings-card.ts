@@ -7,6 +7,13 @@ import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth';
 import Swal from 'sweetalert2';
 
+export interface AiModel { id: string; name: string; created?: string | null; free?: boolean; deprecated?: boolean; }
+
+// ข้อความในรายการรุ่น: รหัสรุ่น — ชื่อที่ผู้ให้บริการแสดง (ฟรี / เลิกใช้แล้ว)
+export function modelLabel(m: AiModel): string {
+  return m.id + (m.name && m.name !== m.id ? ' — ' + m.name : '') + (m.free ? ' (ฟรี)' : '') + (m.deprecated ? ' (เลิกใช้แล้ว)' : '');
+}
+
 export interface AiPreset { id: string; label: string; provider: 'anthropic' | 'openai'; base_url: string; model: string; needsKey: boolean; note: string; }
 
 export const AI_PRESETS: AiPreset[] = [
@@ -61,12 +68,7 @@ export function presetOf(provider: string, baseUrl: string): string {
           </select>
           <p class="text-[11px] text-gray-500 mt-1">{{ preset?.note }}</p>
         </div>
-        <div>
-          <label class="block text-sm font-bold text-gray-700 mb-1">รุ่นโมเดล</label>
-          <input type="text" [(ngModel)]="model" name="aiModel" [ngModelOptions]="{ standalone: true }" maxlength="100" placeholder="ชื่อรุ่นตามรายการของผู้ให้บริการ"
-                 class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-fuchsia-400 outline-none">
-        </div>
-        <div *ngIf="provider === 'openai'" class="md:col-span-2">
+        <div *ngIf="provider === 'openai'">
           <label class="block text-sm font-bold text-gray-700 mb-1">Base URL</label>
           <input type="url" [(ngModel)]="baseUrl" name="aiBaseUrl" [ngModelOptions]="{ standalone: true }" placeholder="https://.../v1"
                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-fuchsia-400 outline-none">
@@ -91,6 +93,40 @@ export function presetOf(provider: string, baseUrl: string): string {
           <input type="number" [(ngModel)]="dailyLimit" name="aiDailyLimit" [ngModelOptions]="{ standalone: true }" min="1" max="10000"
                  class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-fuchsia-400 outline-none">
           <p class="text-[11px] text-gray-400 mt-1">กันค่าใช้จ่าย/โควตาฟรีหมด — การกดทดสอบไม่นับ</p>
+        </div>
+      </div>
+
+      <!-- รุ่นโมเดล: รายการดึงจากผู้ให้บริการโดยตรง (ครบทุกรุ่น) + อัปเดตได้เมื่อมีรุ่นใหม่ — พิมพ์ชื่อรุ่นเองได้เสมอ -->
+      <div class="bg-fuchsia-50/40 border border-fuchsia-100 rounded-xl p-4">
+        <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+          <label class="text-sm font-bold text-gray-700">รุ่นโมเดล</label>
+          <button type="button" (click)="loadModels(true)" [disabled]="modelsLoading"
+                  class="px-3 py-1.5 rounded-xl bg-white border border-fuchsia-300 text-fuchsia-700 hover:bg-fuchsia-50 text-xs font-bold disabled:opacity-50">
+            <i class="fas" [ngClass]="modelsLoading ? 'fa-spinner fa-spin' : 'fa-rotate'"></i> อัปเดตรายชื่อรุ่นจากผู้ให้บริการ
+          </button>
+        </div>
+        <p class="text-[11px] text-gray-500 mb-2">
+          <ng-container *ngIf="models.length">พบ {{ models.length }} รุ่น<span *ngIf="modelsHidden"> (ซ่อนรุ่นที่ไม่ใช่โมเดลสนทนา {{ modelsHidden }} รุ่น)</span>
+            · อัปเดตล่าสุด {{ modelsFetchedAt | date:'d/M/yyyy HH:mm' }}</ng-container>
+          <ng-container *ngIf="!models.length && !modelsLoading">ยังไม่มีรายชื่อรุ่น — กด "อัปเดตรายชื่อรุ่นจากผู้ให้บริการ"{{ preset?.needsKey && !hasApiKey ? ' (กรอก API key ก่อน)' : '' }}</ng-container>
+        </p>
+        <div *ngIf="modelsError" class="mb-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-2"><i class="fas fa-triangle-exclamation me-1"></i>{{ modelsError }}</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+          <div *ngIf="models.length" class="md:col-span-2 flex gap-2">
+            <input *ngIf="models.length > 15" type="text" [(ngModel)]="modelFilter" name="aiModelFilter" [ngModelOptions]="{ standalone: true }" placeholder="ค้นหารุ่น..."
+                   class="w-48 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-fuchsia-400 outline-none">
+            <select [ngModel]="inList(model) ? model : ''" (ngModelChange)="model = $event || model" name="aiModelPick" [ngModelOptions]="{ standalone: true }"
+                    class="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-fuchsia-400 outline-none bg-white">
+              <option value="">— เลือกจากรายการ ({{ filteredModels.length }} รุ่น) —</option>
+              <option *ngFor="let m of filteredModels" [value]="m.id">{{ modelLabel(m) }}</option>
+            </select>
+          </div>
+          <div class="md:col-span-2">
+            <input type="text" [(ngModel)]="model" name="aiModel" [ngModelOptions]="{ standalone: true }" maxlength="100" placeholder="หรือพิมพ์ชื่อรุ่นเอง"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-fuchsia-400 outline-none">
+            <p *ngIf="model && models.length && !inList(model)" class="text-[11px] text-amber-600 mt-1">
+              <i class="fas fa-circle-info me-1"></i>รุ่น "{{ model }}" ไม่อยู่ในรายชื่อล่าสุดของผู้ให้บริการ — ตรวจชื่อหรือกดอัปเดตรายชื่อรุ่น</p>
+          </div>
         </div>
       </div>
 
@@ -136,6 +172,46 @@ export class AiSettingsCardComponent implements OnInit {
   dailyLimit = 200;
   usedToday = 0;
   testResult: { ok: boolean; text: string } | null = null;
+  models: AiModel[] = [];
+  modelsHidden = 0;
+  modelsFetchedAt = '';
+  modelsLoading = false;
+  modelsError = '';
+  modelFilter = '';
+  modelLabel = modelLabel;
+  private modelsSeq = 0;
+
+  get filteredModels(): AiModel[] {
+    const q = this.modelFilter.trim().toLowerCase();
+    return q ? this.models.filter(m => (m.id + ' ' + m.name).toLowerCase().includes(q)) : this.models;
+  }
+  inList(id: string): boolean { return !!id && this.models.some(m => m.id === id); }
+
+  // refresh = false: แสดงรายชื่อล่าสุดที่เก็บไว้ (ไม่มี = ดึงจากผู้ให้บริการ) | true: ดึงใหม่ (เห็นรุ่นใหม่ของผู้ให้บริการ)
+  loadModels(refresh: boolean) {
+    if (this.provider === 'openai' && !/^https?:\/\//i.test(this.baseUrl.trim())) { this.models = []; this.modelsError = ''; return; }
+    const seq = ++this.modelsSeq;
+    this.modelsLoading = true;
+    this.modelsError = '';
+    this.authService.getAiModels({ provider: this.provider, base_url: this.baseUrl.trim(), api_key: this.apiKey.trim(), refresh }).subscribe({
+      next: (res) => {
+        if (seq !== this.modelsSeq) return; // เปลี่ยนผู้ให้บริการระหว่างรอ — ทิ้งผลเก่า
+        this.modelsLoading = false;
+        this.models = res?.models || [];
+        this.modelsHidden = res?.hidden || 0;
+        this.modelsFetchedAt = res?.fetched_at || '';
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        if (seq !== this.modelsSeq) return;
+        this.modelsLoading = false;
+        this.models = [];
+        // ยังไม่มี key/ยังไม่เคยดึง ตอนเปิดหน้า = ไม่ต้องแสดงเป็นข้อผิดพลาด
+        this.modelsError = refresh ? (err.error?.message || 'ดึงรายชื่อรุ่นไม่สำเร็จ') : '';
+        this.cdr.detectChanges();
+      },
+    });
+  }
 
   get preset(): AiPreset | undefined { return this.presets.find(p => p.id === this.presetId); }
 
@@ -155,6 +231,7 @@ export class AiSettingsCardComponent implements OnInit {
         this.presetId = presetOf(this.provider, this.baseUrl);
         this.loaded = true;
         this.cdr.detectChanges();
+        this.loadModels(false);
       },
       error: () => { this.loaded = true; this.cdr.detectChanges(); },
     });
@@ -167,6 +244,9 @@ export class AiSettingsCardComponent implements OnInit {
     if (p.id !== 'custom') this.baseUrl = p.base_url;
     if (p.model) this.model = p.model;
     else if (/^claude-/.test(this.model)) this.model = ''; // รุ่นของ Claude ใช้กับผู้ให้บริการอื่นไม่ได้
+    this.models = [];
+    this.modelFilter = '';
+    this.loadModels(false);
   }
 
   payload() {

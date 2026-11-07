@@ -94,7 +94,7 @@ frontend/src/app/
   ห้าม export ตรงๆ (ค่าจะค้าง) — เก็บไว้ในโมดูลเดียวกับผู้ใช้ หรือเปลี่ยนเป็น object; Map/Set แชร์ได้ (object เดียวกัน)
 - `core/env.js` ต้องเป็น require แรกของ server.js
   (ตัวดัก unhandledRejection/uncaughtException เรียก `captureError` แบบ lazy จาก core/errors)
-- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (286 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
+- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (287 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
   ตั้งใจเพิ่ม/แก้ route → `node tests/lib/route-inventory.js --write` แล้วตรวจ diff), `tests/lint.test.js` (ESLint no-undef ฯลฯ — จับชื่อที่ลืม require),
   `tests/build.test.js` (ไล่ require ทุกชั้นต้องอยู่ในชุดที่ build คัดลอก + build ลงโฟลเดอร์ชั่วคราว), `tests/startup.test.js` (เริ่มระบบ + โหลดผลลัพธ์ build ใน process แยก)
   — middleware ที่สร้างจาก factory/ไลบรารีต้องมีชื่อ (`requireAction(page,action)`, loginIpLimiter/loginLimiter/apiLimiter) ให้ snapshot แยกได้
@@ -515,6 +515,11 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   (Ollama ในเครื่อง, Google Gemini, Groq, OpenRouter — preset ใน `shared/ai-settings-card.ts`) — SDK ต้องใช้ **Node 20+** (`api/Dockerfile` = node:22-alpine ตั้งแต่ 7 พ.ย. 2569)
 - ตั้งค่าใน `system_settings` (`ai_enabled/ai_provider/ai_base_url/ai_model/ai_daily_limit/ai_api_key_enc`) ผ่าน `GET|PUT /ai/settings` + `POST /ai/test` (isSuperAdmin, pageKey settings) เท่านั้น —
   key เข้ารหัส `bkEncrypt`, GET คืนแค่ `has_api_key`, **`GET /settings` ตัด `ai_api_key_enc` ออก** (endpoint นั้นคืนทุกแถวให้ทุก role) | `GET /ai/status` ทุก role (frontend `authService.getAiStatus()` แคช — ซ่อนปุ่ม AI เมื่อปิด)
+- **รายชื่อรุ่นโมเดล (ผู้ใช้ขอ 7 พ.ย. 2569: ครบทุกรุ่น + อัปเดตได้เมื่อผู้ให้บริการออกรุ่นใหม่) — ห้ามเขียนรายชื่อรุ่นตายตัว:** `POST /ai/models { provider, base_url, api_key?, refresh }`
+  (isSuperAdmin, pageKey settings) → `listModels()`: Claude = SDK `client.models.list()` (ใหม่ → เก่า, `deprecated`), OpenAI-compatible = `GET {base}/models` (ตัด `models/` ของ Gemini,
+  `free` จาก `:free`/ราคา 0 ของ OpenRouter, ซ่อนรุ่นที่ไม่ใช่โมเดลสนทนาด้วย `NON_CHAT_MODEL` แจ้งจำนวน `hidden`) — เก็บผลใน `system_settings.ai_models_cache` (JSON แยกตาม provider + Base URL,
+  ไม่ส่งรวมใน `GET /settings`) ไม่ส่ง refresh = ผลที่เก็บไว้ | api_key ว่าง = ใช้ key ที่บันทึกไว้**เฉพาะผู้ให้บริการ/Base URL เดียวกัน** (กันส่ง key ไปผิดที่)
+  | UI: ปุ่ม "อัปเดตรายชื่อรุ่นจากผู้ให้บริการ" + ค้นหา + เลือก/พิมพ์เอง (เตือนเมื่อรุ่นที่ตั้งไม่อยู่ในรายชื่อล่าสุด)
 - ตาราง `ai_usage_logs` (ไม่เก็บ prompt/คำตอบ) + โควตารายวันทั้งระบบ (`ai_daily_limit`, การทดสอบไม่นับ) → 429 `AI_QUOTA`, ปิดอยู่ → 503, `aiLimiter` 10 ครั้ง/นาที/ผู้ใช้ (core/security.js)
   — **ข้อผิดพลาดจากผู้ให้บริการห้ามส่งกลับเป็น 401** (interceptor หน้าจอ) ใช้ `sendAiError()` (502/504/422/429) | `extractJson()` อ่าน JSON จากคำตอบ | `createAiCache()` แคชในหน่วยความจำ
 - **ฟีเจอร์ 1 สรุปรายงาน:** `POST /report/ai-summary` (routes/reports.js, สิทธิ์หน้า charts) ใช้ `computeChartStats(user, q)` ตัวเดียวกับ `GET /report/chart-stats` → `services/ai-report.js`

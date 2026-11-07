@@ -1202,6 +1202,10 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     return this.http.put(`${this.apiUrl}/ai/settings`, data, { headers: this.authHeaders() })
       .pipe(tap(() => { this._aiStatus$ = null; }));
   }
+  // รายชื่อรุ่นโมเดลจากผู้ให้บริการ — refresh = ดึงใหม่ (ไม่ส่ง = ผลล่าสุดที่เก็บไว้)
+  getAiModels(body: { provider: string; base_url: string; api_key?: string; refresh?: boolean }): Observable<any> {
+    return this.http.post(`${this.apiUrl}/ai/models`, body, { headers: this.authHeaders() });
+  }
   testAi(): Observable<any> {
     return this.http.post(`${this.apiUrl}/ai/test`, {}, { headers: this.authHeaders() });
   }

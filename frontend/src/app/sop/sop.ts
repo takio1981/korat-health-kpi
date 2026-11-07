@@ -665,6 +665,7 @@ const SYSTEMS: SopSystem[] = [
   notes:[
     'ตั้งค่า (super_admin): ตั้งค่าระบบ → ผู้ช่วย AI — GET/PUT /ai/settings, POST /ai/test (ไม่นับโควตา) | API key เข้ารหัส (bkEncrypt) ไม่ส่งกลับหน้าจอ และไม่อยู่ใน GET /settings',
     'ตัวจำกัด aiLimiter 10 ครั้ง/นาที/ผู้ใช้ + โควตารายวันทั้งระบบ (ai_daily_limit) | ข้อผิดพลาดจากผู้ให้บริการส่งกลับเป็น 502/504 (ไม่ใช้ 401)',
+    'รายชื่อรุ่นโมเดล: POST /ai/models ดึงจากผู้ให้บริการ (Claude Models API / GET {base}/models) เก็บใน ai_models_cache — ปุ่ม "อัปเดตรายชื่อรุ่น" = ดึงใหม่เมื่อมีรุ่นใหม่',
   ],
 },{
   id:'settings', icon:'🛠️', title:'ระบบตั้งค่า', sub:'System Settings',

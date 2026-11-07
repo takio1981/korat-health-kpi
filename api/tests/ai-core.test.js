@@ -5,7 +5,7 @@
  *   - ข้อผิดพลาดจากผู้ให้บริการไม่ส่งกลับเป็น 401 (หน้าจอจะถือว่าหมดสิทธิ์เข้าสู่ระบบ), AI ปฏิเสธ = 422
  *   - ปิดอยู่ = 503, ใช้ครบโควตารายวัน = 429, ทุกการเรียกบันทึก ai_usage_logs
  */
-const mockAnthropic = { calls: [], next: null };
+const mockAnthropic = { calls: [], next: null, models: [], listCalls: 0 };
 jest.mock('@anthropic-ai/sdk', () => {
     class APIError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
     class AuthenticationError extends APIError {}
@@ -17,6 +17,7 @@ jest.mock('@anthropic-ai/sdk', () => {
         constructor(opts) {
             this.opts = opts;
             this.beta = { messages: { create: async (body) => { mockAnthropic.calls.push({ opts, body }); return mockAnthropic.next(body); } } };
+            this.models = { list: () => { mockAnthropic.listCalls++; return (async function* () { for (const m of mockAnthropic.models) yield m; })(); } };
         }
     }
     Object.assign(Anthropic, { APIError, AuthenticationError, PermissionDeniedError, NotFoundError, RateLimitError, APIConnectionError });
@@ -213,6 +214,77 @@ describe('ปิดใช้งาน / โควตารายวัน (ผ�
         await expect(callLlm({ feature: 'report_summary', userId: saId, system: 's', prompt: 'p' })).rejects.toMatchObject({ status: 429, code: 'AI_QUOTA' });
         expect((await as(request(app).post(api('/ai/test')))).status).toBe(200);
         await putSettings({ daily_limit: 50 });
+    });
+});
+
+describe('รายชื่อรุ่นโมเดลจากผู้ให้บริการ (POST /ai/models)', () => {
+    // บัญชีแยก: aiLimiter จำกัด 10 ครั้ง/นาที/ผู้ใช้ — บัญชีหลักใช้ไปกับการทดสอบด้านบนแล้ว
+    let sa2Token;
+    beforeAll(async () => {
+        const sa2 = await ensureTestUser(db, { username: 'test_aicore_sa2', role: 'super_admin', session_id: 'sess-aicore-sa2' });
+        sa2Token = makeToken({ userId: sa2.id, username: sa2.username, role: 'super_admin', deptId: null, hospcode: null, sessionId: 'sess-aicore-sa2' });
+    });
+    const models = (body, t) => as(request(app).post(api('/ai/models')), t || sa2Token).send(body);
+
+    test('ผู้ใช้ทั่วไปเรียกไม่ได้', async () => {
+        expect((await models({ provider: 'openai', base_url: 'http://x.local/v1' }, userToken)).status).toBe(403);
+    });
+
+    test('OpenAI-compatible: ดึงครบทุกรุ่นจาก GET /models, ตัด prefix models/, ซ่อนรุ่นที่ไม่ใช่โมเดลสนทนา, ทำเครื่องหมายรุ่นฟรี', async () => {
+        global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: [
+            { id: 'models/gemini-x-pro' }, { id: 'zeta-chat:free' }, { id: 'alpha-chat', pricing: { prompt: '0.000001', completion: '0.000002' } },
+            { id: 'text-embedding-9' }, { id: 'whisper-large' }, { id: 'alpha-chat' },
+        ] }) }));
+        const res = await models({ provider: 'openai', base_url: 'http://models.test.local/v1/', refresh: true });
+        expect(res.status).toBe(200);
+        expect(global.fetch.mock.calls[0][0]).toBe('http://models.test.local/v1/models');
+        expect(res.body.models.map(m => m.id)).toEqual(['alpha-chat', 'gemini-x-pro', 'zeta-chat:free']);
+        expect(res.body.models.find(m => m.id === 'zeta-chat:free').free).toBe(true);
+        expect(res.body.models.find(m => m.id === 'alpha-chat').free).toBeUndefined();
+        expect(res.body.hidden).toBe(2);
+        expect(res.body.cached).toBe(false);
+    });
+
+    test('ผลถูกเก็บไว้ — เรียกซ้ำไม่ดึงจากผู้ให้บริการ, refresh = ดึงใหม่ (เห็นรุ่นใหม่ที่ผู้ให้บริการเพิ่ม)', async () => {
+        global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: [{ id: 'alpha-chat' }, { id: 'brand-new-model' }] }) }));
+        const again = await models({ provider: 'openai', base_url: 'http://models.test.local/v1' });
+        expect(again.body.cached).toBe(true);
+        expect(global.fetch).not.toHaveBeenCalled();
+        const fresh = await models({ provider: 'openai', base_url: 'http://models.test.local/v1', refresh: true });
+        expect(fresh.body.models.map(m => m.id)).toContain('brand-new-model');
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+        const all = await as(request(app).get(api('/settings')), userToken);
+        expect(all.body.data.some(r => r.setting_key === 'ai_models_cache')).toBe(false);
+    });
+
+    test('ใช้ key ที่บันทึกไว้เฉพาะผู้ให้บริการ/Base URL เดียวกัน (ไม่ส่ง key ไปผู้ให้บริการอื่น)', async () => {
+        global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: [] }) }));
+        await models({ provider: 'openai', base_url: 'http://ai.test.local/v1', refresh: true });
+        expect(global.fetch.mock.calls[0][1].headers.Authorization).toBe(`Bearer ${KEY}`);
+        global.fetch.mockClear();
+        await models({ provider: 'openai', base_url: 'http://other.test.local/v1', refresh: true });
+        expect(global.fetch.mock.calls[0][1].headers.Authorization).toBeUndefined();
+        global.fetch.mockClear();
+        await models({ provider: 'openai', base_url: 'http://other.test.local/v1', api_key: 'sk-typed', refresh: true });
+        expect(global.fetch.mock.calls[0][1].headers.Authorization).toBe('Bearer sk-typed');
+    });
+
+    test('ผู้ให้บริการตอบ 401 = 502 (ไม่ใช่ 401)', async () => {
+        global.fetch = jest.fn(async () => ({ ok: false, status: 401, json: async () => ({}) }));
+        const res = await models({ provider: 'openai', base_url: 'http://bad.test.local/v1', refresh: true });
+        expect(res.status).toBe(502);
+    });
+
+    test('Claude: ใช้ Models API ของ SDK — ใหม่ → เก่า, ระบุรุ่นที่เลิกใช้แล้ว', async () => {
+        mockAnthropic.models = [
+            { id: 'claude-old-1', display_name: 'Claude Old', created_at: '2025-01-01T00:00:00Z', deprecated_at: '2026-01-01T00:00:00Z' },
+            { id: 'claude-new-9', display_name: 'Claude New', created_at: '2026-10-01T00:00:00Z', deprecated_at: null },
+        ];
+        const res = await models({ provider: 'anthropic', api_key: 'sk-ant-typed', refresh: true });
+        expect(res.status).toBe(200);
+        expect(res.body.models.map(m => m.id)).toEqual(['claude-new-9', 'claude-old-1']);
+        expect(res.body.models[1]).toMatchObject({ name: 'Claude Old', deprecated: true });
+        expect(mockAnthropic.listCalls).toBe(1);
     });
 });
 

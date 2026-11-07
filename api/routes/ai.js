@@ -4,7 +4,7 @@ const { apiRouter } = require('../core/router');
 const { authenticateToken, isSuperAdmin, saveLog } = require('../core/auth');
 const { aiLimiter } = require('../core/security');
 const { parseActiveFlag } = require('../core/validate');
-const { AI_PROVIDERS, getAiSettings, saveAiSetting, encryptApiKey, usedToday, callLlm, sendAiError } = require('../services/ai');
+const { AI_PROVIDERS, getAiSettings, saveAiSetting, encryptApiKey, usedToday, callLlm, sendAiError, listModels } = require('../services/ai');
 
 const clientIp = (req) => (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim();
 
@@ -61,6 +61,18 @@ apiRouter.put('/ai/settings', authenticateToken, isSuperAdmin, async (req, res) 
         res.json({ success: true, message: 'บันทึกการตั้งค่าผู้ช่วย AI แล้ว' });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// รายชื่อรุ่นโมเดลจากผู้ให้บริการ (ครบทุกรุ่น + อัปเดตได้เมื่อมีรุ่นใหม่) — refresh = ดึงใหม่จากผู้ให้บริการ, ไม่ส่ง = ใช้ผลล่าสุดที่เก็บไว้
+// api_key ใน body ใช้เฉพาะครั้งนี้ (ไม่บันทึก) — ว่าง = ใช้ key ที่บันทึกไว้ของผู้ให้บริการเดียวกัน
+apiRouter.post('/ai/models', authenticateToken, isSuperAdmin, aiLimiter, async (req, res) => {
+    try {
+        const b = req.body || {};
+        const out = await listModels({ provider: b.provider, base_url: b.base_url, api_key: b.api_key, refresh: b.refresh === true });
+        res.json({ success: true, ...out });
+    } catch (e) {
+        sendAiError(res, e, 'ดึงรายชื่อรุ่นโมเดลไม่สำเร็จ');
     }
 });
 

@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { testProviders } from '../testing/test-providers';
-import { AiSettingsCardComponent, presetOf } from './ai-settings-card';
+import { AiSettingsCardComponent, presetOf, modelLabel } from './ai-settings-card';
 import Swal from 'sweetalert2';
 
 // การ์ดตั้งค่าผู้ช่วย AI (7 พ.ย. 2569)
@@ -25,6 +25,49 @@ describe('AiSettingsCardComponent', () => {
     f.detectChanges();
     return f;
   };
+
+  // รายชื่อรุ่นจากผู้ให้บริการ (7 พ.ย. 2569 — ครบทุกรุ่น + อัปเดตได้เมื่อมีรุ่นใหม่)
+  const modelsReq = () => http.expectOne(r => r.url.endsWith('/ai/models'));
+  const LIST = [{ id: 'claude-new-9', name: 'Claude New' }, { id: 'claude-old-1', name: 'Claude Old', deprecated: true }];
+
+  it('โหลดการตั้งค่าแล้วแสดงรายชื่อรุ่นล่าสุดที่เก็บไว้ (ไม่บังคับดึงใหม่)', () => {
+    const f = make({ enabled: true, provider: 'anthropic', base_url: '', model: 'claude-new-9', daily_limit: 200, has_api_key: true });
+    const req = modelsReq();
+    expect(req.request.body).toEqual({ provider: 'anthropic', base_url: '', api_key: '', refresh: false });
+    req.flush({ success: true, models: LIST, hidden: 0, fetched_at: '2026-11-07T01:00:00Z', cached: true });
+    f.detectChanges();
+    const opts = Array.from(f.nativeElement.querySelectorAll('select[name="aiModelPick"] option')).map((o: any) => o.textContent.trim());
+    expect(opts).toContain('claude-old-1 — Claude Old (เลิกใช้แล้ว)');
+    expect(f.nativeElement.textContent).toContain('พบ 2 รุ่น');
+  });
+
+  it('กดอัปเดตรายชื่อรุ่น: ดึงใหม่พร้อม key ที่กรอก, รุ่นที่เลือกไม่อยู่ในรายการ = เตือน, ผิดพลาด = แสดงข้อความ', () => {
+    const f = make({ enabled: true, provider: 'openai', base_url: 'https://api.groq.com/openai/v1', model: 'gone-model', daily_limit: 200, has_api_key: false });
+    modelsReq().flush({ success: false }, { status: 400, statusText: 'Bad' });
+    f.detectChanges();
+    const c = f.componentInstance;
+    expect(c.modelsError).toBe(''); // ตอนเปิดหน้า ยังไม่มี key = ไม่แสดงเป็นข้อผิดพลาด
+    c.apiKey = 'gsk-typed';
+    c.loadModels(true);
+    const req = modelsReq();
+    expect(req.request.body).toEqual({ provider: 'openai', base_url: 'https://api.groq.com/openai/v1', api_key: 'gsk-typed', refresh: true });
+    req.flush({ success: true, models: [{ id: 'new-chat-model', name: 'new-chat-model', free: true }], hidden: 3, fetched_at: '2026-11-07T01:00:00Z' });
+    f.detectChanges();
+    expect(f.nativeElement.textContent).toContain('ไม่อยู่ในรายชื่อล่าสุดของผู้ให้บริการ');
+    expect(f.nativeElement.textContent).toContain('ซ่อนรุ่นที่ไม่ใช่โมเดลสนทนา 3 รุ่น');
+    c.loadModels(true);
+    modelsReq().flush({ success: false, message: 'API key ของผู้ให้บริการ AI ไม่ถูกต้อง' }, { status: 502, statusText: 'Bad Gateway' });
+    f.detectChanges();
+    expect(f.nativeElement.textContent).toContain('API key ของผู้ให้บริการ AI ไม่ถูกต้อง');
+  });
+
+  it('ค้นหารุ่น + ป้ายรุ่นฟรี', () => {
+    const c = make({ enabled: true, provider: 'anthropic', base_url: '', model: '', daily_limit: 200, has_api_key: true }).componentInstance;
+    modelsReq().flush({ success: true, models: LIST });
+    c.modelFilter = 'old';
+    expect(c.filteredModels.map(m => m.id)).toEqual(['claude-old-1']);
+    expect(modelLabel({ id: 'x:free', name: 'x:free', free: true })).toBe('x:free (ฟรี)');
+  });
 
   it('presetOf: จับคู่ผู้ให้บริการจาก Base URL (ไม่ตรง = กำหนดเอง)', () => {
     expect(presetOf('anthropic', '')).toBe('claude');
