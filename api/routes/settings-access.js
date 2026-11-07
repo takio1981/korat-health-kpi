@@ -14,7 +14,8 @@ const { updateSystemSettings } = require('../core/security');
 // แม้ไม่ login ก็อ่าน secrets เช่น thaid_client_secret/telegram token ได้) แก้ให้ต้อง login อย่างน้อย
 apiRouter.get('/settings', authenticateToken, async (req, res) => {
     try {
-        const [rows] = await db.query('SELECT * FROM system_settings');
+        // ไม่ส่ง API key ของผู้ช่วย AI (เข้ารหัสแล้วก็ไม่ส่ง) — อ่าน/ตั้งผ่าน /ai/settings ของ super_admin เท่านั้น (7 พ.ย. 2569)
+        const [rows] = await db.query("SELECT * FROM system_settings WHERE setting_key <> 'ai_api_key_enc'");
         res.json({ success: true, data: rows });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Error fetching settings' });

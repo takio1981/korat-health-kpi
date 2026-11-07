@@ -94,7 +94,7 @@ frontend/src/app/
   ห้าม export ตรงๆ (ค่าจะค้าง) — เก็บไว้ในโมดูลเดียวกับผู้ใช้ หรือเปลี่ยนเป็น object; Map/Set แชร์ได้ (object เดียวกัน)
 - `core/env.js` ต้องเป็น require แรกของ server.js
   (ตัวดัก unhandledRejection/uncaughtException เรียก `captureError` แบบ lazy จาก core/errors)
-- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (281 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
+- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (286 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
   ตั้งใจเพิ่ม/แก้ route → `node tests/lib/route-inventory.js --write` แล้วตรวจ diff), `tests/lint.test.js` (ESLint no-undef ฯลฯ — จับชื่อที่ลืม require),
   `tests/build.test.js` (ไล่ require ทุกชั้นต้องอยู่ในชุดที่ build คัดลอก + build ลงโฟลเดอร์ชั่วคราว), `tests/startup.test.js` (เริ่มระบบ + โหลดผลลัพธ์ build ใน process แยก)
   — middleware ที่สร้างจาก factory/ไลบรารีต้องมีชื่อ (`requireAction(page,action)`, loginIpLimiter/loginLimiter/apiLimiter) ให้ snapshot แยกได้
@@ -506,6 +506,22 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   kpi-manage (ตารางเทียบ KHD), layout (โปรไฟล์) — `<option>` ใส่ข้อความ `· โซน N` จาก `h.zone` ของ /hospitals (และ /public/hospitals ในหน้าลงทะเบียน)
   — **หน้าใหม่ที่แสดงชื่อหน่วยบริการต้องใส่ป้ายนี้ต่อท้ายเสมอ**
 - Test: `api/tests/zone-filter.test.js`, `shared/zone.spec.ts`, `shared/zone-badge.spec.ts`, `dashboard.spec.ts`
+
+### ผู้ช่วย AI (เริ่ม 7 พ.ย. 2569 — ผู้ใช้สั่ง: ทำตามลำดับ สรุปรายงาน → ช่วยเขียนสูตร → เสนอจับคู่ KHD → ผู้ช่วยคู่มือ → คุณภาพข้อมูล ทีละฟีเจอร์)
+- **หลักการ (ห้ามเปลี่ยน):** AI สรุป/เสนอแนะเท่านั้น — ห้ามให้ AI บันทึก `kpi_results`, อนุมัติ, ส่ง KHD หรือปรับเกณฑ์เอง ผลลัพธ์ต้องผ่านด่านเดิม (validateFormula/saveKhdMap/saveKpiData)
+  | ส่งเฉพาะตัวเลขรวม/ชื่อตัวชี้วัด/ข้อความคู่มือตามขอบเขต role ของผู้เรียก — **ห้ามส่ง users/cid/login/รหัสหน่วยบริการรายแถวเข้า prompt** | แสดงผลเป็นข้อความล้วน (ห้าม innerHTML) + ป้าย "ข้อความจาก AI — โปรดตรวจสอบ"
+- `services/ai.js` `callLlm({ feature, userId, system, prompt, maxTokens, test })` — ผู้ให้บริการ (ผู้ใช้เลือกให้รองรับทั้งหมด): `anthropic` = **`@anthropic-ai/sdk`** (`client.beta.messages.create`,
+  ค่าตั้งต้น `claude-opus-5-5`, effort low, `fallbacks: 'default'` เฉพาะรุ่นที่รองรับ, ไม่ส่ง temperature, `stop_reason: refusal` = 422) | `openai` = OpenAI-compatible `/chat/completions` ด้วย fetch
+  (Ollama ในเครื่อง, Google Gemini, Groq, OpenRouter — preset ใน `shared/ai-settings-card.ts`) — SDK ต้องใช้ **Node 20+** (`api/Dockerfile` = node:22-alpine ตั้งแต่ 7 พ.ย. 2569)
+- ตั้งค่าใน `system_settings` (`ai_enabled/ai_provider/ai_base_url/ai_model/ai_daily_limit/ai_api_key_enc`) ผ่าน `GET|PUT /ai/settings` + `POST /ai/test` (isSuperAdmin, pageKey settings) เท่านั้น —
+  key เข้ารหัส `bkEncrypt`, GET คืนแค่ `has_api_key`, **`GET /settings` ตัด `ai_api_key_enc` ออก** (endpoint นั้นคืนทุกแถวให้ทุก role) | `GET /ai/status` ทุก role (frontend `authService.getAiStatus()` แคช — ซ่อนปุ่ม AI เมื่อปิด)
+- ตาราง `ai_usage_logs` (ไม่เก็บ prompt/คำตอบ) + โควตารายวันทั้งระบบ (`ai_daily_limit`, การทดสอบไม่นับ) → 429 `AI_QUOTA`, ปิดอยู่ → 503, `aiLimiter` 10 ครั้ง/นาที/ผู้ใช้ (core/security.js)
+  — **ข้อผิดพลาดจากผู้ให้บริการห้ามส่งกลับเป็น 401** (interceptor หน้าจอ) ใช้ `sendAiError()` (502/504/422/429) | `extractJson()` อ่าน JSON จากคำตอบ | `createAiCache()` แคชในหน่วยความจำ
+- **ฟีเจอร์ 1 สรุปรายงาน:** `POST /report/ai-summary` (routes/reports.js, สิทธิ์หน้า charts) ใช้ `computeChartStats(user, q)` ตัวเดียวกับ `GET /report/chart-stats` → `services/ai-report.js`
+  `buildSummaryInput()` (ภาพรวม/รายเดือน/อันดับบน-ล่าง 5 ของยุทธศาสตร์ หน่วยงาน อำเภอ ประเภท ตัวชี้วัด ≥ 3 คู่) แคช 1 ชม. ต่อชุดข้อมูล (`refresh` = สร้างใหม่) | UI `shared/ai-summary-panel.ts`
+  ใต้การ์ดภาพรวมใน chart.html (`aiParams` เปลี่ยน = ล้างสรุป)
+- ชุดทดสอบห้ามเรียกผู้ให้บริการจริง: `jest.mock('@anthropic-ai/sdk')` / stub `global.fetch` / `jest.mock('../services/ai')` — Test: `api/tests/ai-core.test.js`, `ai-report-summary.test.js`,
+  `shared/ai-summary-panel.spec.ts`, `shared/ai-settings-card.spec.ts`
 
 ### kpi-manage Hospitals tab
 - 5 tabs: ตัวชี้วัด / หมวดหมู่หลัก / ยุทธศาสตร์ / หน่วยงาน / **หน่วยบริการ**

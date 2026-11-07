@@ -597,6 +597,18 @@
           <div class="bg-gray-50 rounded-xl p-4 border md:col-span-2"><i class="fas fa-map-marked-alt text-teal-500 text-lg mr-2"></i><b class="text-sm">7. พื้นที่และประเภทหน่วยบริการ</b><p class="text-xs text-gray-500 mt-1">แผนที่ระบายสีรายอำเภอ (สลับเป็นการ์ดรายอำเภอได้) + กราฟร้อยละรายอำเภอ + กราฟร้อยละตามประเภทหน่วยบริการ (รพศ./รพท./รพช./รพ.สต. ฯลฯ)</p></div>
         </div>
 
+        <!-- AI summary (7 พ.ย. 2569) -->
+        <div class="mt-4 bg-fuchsia-50 border border-fuchsia-200 rounded-xl p-4 text-xs text-gray-700">
+          <h4 class="font-bold text-fuchsia-800 text-sm mb-2"><i class="fas fa-wand-magic-sparkles mr-2"></i>สรุปโดย AI (แสดงเมื่อผู้ดูแลเปิดผู้ช่วย AI)</h4>
+          <ol class="list-decimal ml-5 space-y-1">
+            <li>เลือกตัวกรองตามต้องการ (ปีงบ ยุทธศาสตร์ หน่วยงาน โซน อำเภอ ฯลฯ) ให้หน้ากราฟแสดงข้อมูลชุดที่ต้องการสรุป</li>
+            <li>กด <b>"สร้างสรุป"</b> ในแผงสีม่วงใต้ตัวเลขภาพรวม — AI เขียนสรุป 5 หัวข้อ: ภาพรวม · จุดเด่น · จุดที่ควรติดตาม · แนวโน้มรายเดือน · ข้อเสนอแนะ</li>
+            <li>กด <b>"คัดลอก"</b> เพื่อนำไปใช้ในรายงาน/การประชุม — <b>ตรวจตัวเลขกับกราฟในหน้าเดียวกันก่อนใช้ทุกครั้ง</b></li>
+          </ol>
+          <p class="mt-2">AI ใช้เฉพาะ<b>ตัวเลขรวม</b>ตามสิทธิ์ของคุณ (ไม่มีข้อมูลบุคคล) · เปลี่ยนตัวกรองแล้วสรุปเดิมจะถูกล้าง · ข้อมูลชุดเดิมภายใน 1 ชั่วโมงใช้สรุปที่สร้างไว้แล้ว (กด "สรุปใหม่" เพื่อสร้างใหม่)
+            · มีการจำกัดจำนวนครั้งต่อวันทั้งระบบ</p>
+        </div>
+
         <!-- District map detail -->
         <div class="mt-4 bg-teal-50 border border-teal-200 rounded-xl p-4">
           <h4 class="font-bold text-teal-800 text-sm mb-2"><i class="fas fa-map-marked-alt mr-2"></i>แผนที่ผลงาน KPI รายอำเภอ — จ.นครราชสีมา</h4>
@@ -997,6 +1009,10 @@
           </div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+          <div class="bg-fuchsia-50 border border-fuchsia-200 rounded-xl p-3 md:col-span-2"><p class="text-sm font-bold text-fuchsia-800"><i class="fas fa-wand-magic-sparkles mr-2"></i>ผู้ช่วย AI</p>
+            <p class="text-xs text-gray-500">เปิด/ปิด + เลือกผู้ให้บริการ: <b>Claude API</b> (ต้องมี API key, มีค่าใช้จ่าย) · <b>Ollama</b> ในเครื่องแม่ข่าย (ข้อมูลไม่ออกนอกหน่วยงาน) · <b>Google Gemini / Groq / OpenRouter</b> (มีโควตาฟรี — ระบุชื่อรุ่นตามผู้ให้บริการ)
+              → กด "บันทึกการตั้งค่า AI" แล้ว "ทดสอบการเชื่อมต่อ" — กำหนดจำนวนครั้งสูงสุดต่อวันได้ (การทดสอบไม่นับ) · API key เข้ารหัสในฐานข้อมูล ไม่แสดงกลับ (เว้นว่าง = ใช้ key เดิม)
+              · บริการฟรีบางรายอาจนำข้อมูลไปพัฒนาโมเดล ตรวจเงื่อนไขก่อนเปิดใช้</p></div>
           <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-3"><p class="text-sm font-bold text-yellow-800"><i class="fas fa-clock mr-2"></i>Auto Logout</p><p class="text-xs text-gray-500">ตั้งเวลาออกจากระบบอัตโนมัติ + นับถอยหลัง</p></div>
           <div class="bg-red-50 border border-red-200 rounded-xl p-3"><p class="text-sm font-bold text-red-800"><i class="fas fa-user-lock mr-2"></i>จำนวน Login ผิดสูงสุด</p><p class="text-xs text-gray-500">ล็อค 15 นาทีเมื่อเกินกำหนด</p></div>
           <div class="bg-red-50 border border-red-200 rounded-xl p-3"><p class="text-sm font-bold text-red-800"><i class="fas fa-lock mr-2"></i>ล็อคการคีย์ข้อมูล</p><p class="text-xs text-gray-500">ปิดปุ่มแก้ไข/เพิ่ม สำหรับ user (Admin ไม่ถูกล็อค)</p></div>

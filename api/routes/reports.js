@@ -8,6 +8,10 @@ const { apiRouter } = require('../core/router');
 const { authenticateToken } = require('../core/auth');
 const { getDistrictId, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT } = require('../core/access');
 const { addZoneFilter } = require('../core/zones');
+const crypto = require('crypto');
+const { aiLimiter } = require('../core/security');
+const { callLlm, sendAiError, createAiCache } = require('../services/ai');
+const { buildSummaryInput, SUMMARY_SYSTEM_PROMPT, summaryPrompt } = require('../services/ai-report');
 
 // GET /kpi-summary — ดึงข้อมูลจาก summary table (เร็วมาก ไม่ต้อง JOIN)
 // ผลงานรายเดือนของปีงบที่แล้ว (year_bh - 1) จาก kpi_summary ตามขอบเขตสิทธิ์เดียวกับรายงาน (chartScopeClauses)
@@ -439,10 +443,9 @@ const CHART_FROM_SQL = `
     LEFT JOIN kpi_main_indicators mi ON mi.id = i.main_indicator_id
     LEFT JOIN main_yut y ON y.id = COALESCE(mi.yut_id, i.main_yut)`;  // ยุทธศาสตร์: จากหมวดหมู่หลัก ถ้าไม่มีหมวดหมู่ใช้ kpi_indicators.main_yut
 
-apiRouter.get('/report/chart-stats', authenticateToken, async (req, res) => {
-    try {
-        const user = req.user;
-        const { year_bh, yut_id, main_id, dept_id, indicator_id, distid, hostype } = req.query;
+// คำนวณข้อมูลกราฟ/สถิติทั้งหมดตามขอบเขต role + ตัวกรอง — ใช้ร่วม GET /report/chart-stats และ POST /report/ai-summary (7 พ.ย. 2569)
+async function computeChartStats(user, q) {
+        const { year_bh, yut_id, main_id, dept_id, indicator_id, distid, hostype } = q;
         const scope = await chartScopeClauses(user);
 
         // ปีงบที่มีข้อมูล (ตามขอบเขต role) — ใช้เป็นตัวเลือกปี
@@ -471,7 +474,7 @@ apiRouter.get('/report/chart-stats', authenticateToken, async (req, res) => {
         eqFilter('s.indicator_id', indicator_id, true);
         eqFilter('s.distid', distid, false);
         eqFilter('s.hostype', hostype, false);
-        addZoneFilter(c, p, 's.distid', req.query.zone);
+        addZoneFilter(c, p, 's.distid', q.zone);
         const where = 'WHERE ' + c.join(' AND ');
 
         const groupQuery = (keySql, nameSql, extra = '') => db.query(`
@@ -512,7 +515,7 @@ apiRouter.get('/report/chart-stats', authenticateToken, async (req, res) => {
         buckets.forEach(b => { delete b.min; delete b.max; });
 
         const uniq = (arr, key) => [...new Map(arr.filter(r => r[key] != null).map(r => [r[key], r])).values()];
-        res.json({
+        return {
             success: true,
             year_bh: year,
             options: {
@@ -536,10 +539,41 @@ apiRouter.get('/report/chart-stats', authenticateToken, async (req, res) => {
             heatmap_main: mainMonthRows.map(r => ({ gkey: r.gkey, gname: r.gname, months: chartMonthly(r) })),
             heatmap_dept: deptMonthRows.map(r => ({ gkey: r.gkey, gname: r.gname, months: chartMonthly(r) })),
             distribution: buckets,
-        });
+        };
+}
+
+apiRouter.get('/report/chart-stats', authenticateToken, async (req, res) => {
+    try {
+        res.json(await computeChartStats(req.user, req.query));
     } catch (error) {
         console.error('Report chart-stats error:', error);
         res.status(500).json({ success: false, message: 'ไม่สามารถดึงข้อมูลกราฟได้' });
+    }
+});
+
+// สรุปผลการดำเนินงานด้วย AI (7 พ.ย. 2569) — ใช้ตัวเลขชุดเดียวกับหน้ากราฟ (ขอบเขต role + ตัวกรอง) ส่งเฉพาะตัวเลขรวม
+// สิทธิ์หน้า charts (prefix /report/) — ผลแคช 1 ชม. ต่อชุดข้อมูลเดียวกัน (refresh: true = สร้างใหม่)
+const _aiSummaryCache = createAiCache();
+apiRouter.post('/report/ai-summary', authenticateToken, aiLimiter, async (req, res) => {
+    try {
+        const q = {};
+        for (const k of ['year_bh', 'yut_id', 'main_id', 'dept_id', 'indicator_id', 'distid', 'hostype', 'zone']) {
+            if (req.body?.[k] !== undefined && req.body[k] !== null && req.body[k] !== '') q[k] = String(req.body[k]);
+        }
+        const stats = await computeChartStats(req.user, q);
+        const input = buildSummaryInput(stats, q);
+        if (!input.overall.pairs) return res.status(400).json({ success: false, message: 'ไม่มีข้อมูลผลงานตามตัวกรองนี้ — ยังสรุปไม่ได้' });
+        const key = crypto.createHash('sha256').update(JSON.stringify(input)).digest('hex');
+        if (!req.body?.refresh) {
+            const hit = _aiSummaryCache.get(key);
+            if (hit) return res.json({ success: true, ...hit, cached: true });
+        }
+        const out = await callLlm({ feature: 'report_summary', userId: req.user.userId, system: SUMMARY_SYSTEM_PROMPT, prompt: summaryPrompt(input), maxTokens: 2500 });
+        const result = { summary: out.text, model: out.model, generated_at: new Date().toISOString(), year_bh: input.year_bh, scope: input.filters };
+        _aiSummaryCache.set(key, result);
+        res.json({ success: true, ...result, cached: false });
+    } catch (e) {
+        sendAiError(res, e, 'สร้างสรุปด้วย AI ไม่สำเร็จ');
     }
 });
 
@@ -1009,4 +1043,4 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
     }
 });
 
-module.exports = { CHART_MONTHS, _cHas, _cNum, CHART_METRICS_SQL, _cNormal, CHART_MONTHLY_SQL, chartPct, chartRow, chartMonthly, chartScopeClauses, CHART_FROM_SQL };
+module.exports = { computeChartStats, CHART_MONTHS, _cHas, _cNum, CHART_METRICS_SQL, _cNormal, CHART_MONTHLY_SQL, chartPct, chartRow, chartMonthly, chartScopeClauses, CHART_FROM_SQL };

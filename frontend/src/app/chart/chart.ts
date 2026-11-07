@@ -8,6 +8,7 @@ import { ApexBoxComponent } from '../shared/apex-box';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { DistrictMapComponent } from '../shared/district-map';
+import { AiSummaryPanelComponent } from '../shared/ai-summary-panel';
 import { zoneLabel, inZone } from '../shared/zone';
 import {
   ChartGroupRow, ChartMonthRow, buildPctBar, buildStatusStack, buildOverallDonut, buildOverallRadial,
@@ -19,7 +20,7 @@ type FilterKey = 'selectedYut' | 'selectedMain' | 'selectedDept' | 'selectedIndi
 @Component({
   selector: 'app-chart',
   standalone: true,
-  imports: [CommonModule, RouterModule, FormsModule, ReportComponent, ApexBoxComponent, FormulaBadgeComponent, DistrictMapComponent],
+  imports: [CommonModule, RouterModule, FormsModule, ReportComponent, ApexBoxComponent, FormulaBadgeComponent, DistrictMapComponent, AiSummaryPanelComponent],
   templateUrl: './chart.html'
 })
 export class ChartComponent implements OnInit, OnDestroy {
@@ -44,6 +45,7 @@ export class ChartComponent implements OnInit, OnDestroy {
 
   options: any = { years: [], yuts: [], mains: [], depts: [], indicators: [], districts: [], zones: [], hostypes: [] };
   data: any = null; // ผลดิบจาก API
+  aiParams: any = {}; // ตัวกรองของข้อมูลที่แสดงอยู่ — ส่งให้แผงสรุปโดย AI (เปลี่ยน = ล้างสรุปเดิม)
 
   // options ของแต่ละกราฟ
   donutChart: any = {}; radialChart: any = {};
@@ -111,6 +113,7 @@ export class ChartComponent implements OnInit, OnDestroy {
             return;
           }
           this.data = res;
+          this.aiParams = { ...this.buildParams(), year_bh: res.year_bh };
           this.buildCharts();
           this.loadDashboardStats();
         }

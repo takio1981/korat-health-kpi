@@ -95,6 +95,7 @@ require('./routes/db-sync');         // เทียบ/sync ฐานข้อ�
 require('./routes/integrations');    // ตั้งค่า env, ทดสอบการแจ้งเตือน, /me, LINE webhook
 require('./routes/backup');          // สำรอง & กู้คืนข้อมูล
 require('./routes/kpi-audit');       // แจ้งเตือนการบันทึก KPI
+require('./routes/ai');              // ผู้ช่วย AI: สถานะ + ตั้งค่าผู้ให้บริการ (ฟีเจอร์ AI อยู่ในไฟล์ของโดเมนนั้น)
 
 // Mount Router ที่ path /khupskpi/api
 app.use('/khupskpi/api', apiRouter);

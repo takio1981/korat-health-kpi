@@ -534,6 +534,25 @@ const migrationsReady = (async () => {
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             `);
         } catch (e) { console.error('❌ kpi_base_values:', e.message); }
+        // ผู้ช่วย AI (7 พ.ย. 2569) — บันทึกการเรียกโมเดลทุกครั้ง (โควตารายวัน + ตรวจสอบย้อนหลัง) ไม่เก็บเนื้อหา prompt/คำตอบ
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS ai_usage_logs (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NULL,
+                    feature VARCHAR(40) NOT NULL,
+                    provider VARCHAR(20) NOT NULL,
+                    model VARCHAR(100) NULL,
+                    input_tokens INT NOT NULL DEFAULT 0,
+                    output_tokens INT NOT NULL DEFAULT 0,
+                    ok TINYINT(1) NOT NULL DEFAULT 1,
+                    error_msg VARCHAR(500) NULL,
+                    duration_ms INT NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_ai_usage_created (created_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+        } catch (e) { console.error('❌ ai_usage_logs:', e.message); }
         // ค่าเพิ่มเติมหลายค่าต่อคู่ (25 ต.ค. 2569): ตารางเดิม (24 ต.ค.) ไม่มี var_key → เพิ่มคอลัมน์ (ค่าเดิมทั้งหมด = base) แล้วเปลี่ยน UNIQUE
         // เพิ่ม index ใหม่ก่อนลบตัวเดิมในคำสั่งเดียว (index นำหน้าด้วย indicator_id ยังรองรับ FK fk_base_indicator)
         try {

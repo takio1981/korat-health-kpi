@@ -4,12 +4,13 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
+import { AiSettingsCardComponent } from '../shared/ai-settings-card';
 import Swal from 'sweetalert2';
 
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, AiSettingsCardComponent],
   templateUrl: './settings.html'
 })
 export class SettingsComponent implements OnInit {

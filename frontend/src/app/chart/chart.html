@@ -160,6 +160,7 @@
         <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-3"><p class="text-[11px] text-gray-500">ร้อยละผ่านเกณฑ์</p><p class="text-xl font-bold" [style.color]="getDistrictColor(data.overall.achievement_pct)">{{ data.overall.achievement_pct }}%</p></div>
         <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-3"><p class="text-[11px] text-gray-500">คู่ที่รอตรวจสอบ</p><p class="text-xl font-bold text-orange-600">{{ data.overall.pending_pairs | number }}</p></div>
       </div>
+      <app-ai-summary-panel [params]="aiParams"></app-ai-summary-panel>
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><app-apex-box [options]="donutChart"></app-apex-box></div>
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><app-apex-box [options]="radialChart"></app-apex-box></div>

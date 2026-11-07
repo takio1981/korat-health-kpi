@@ -229,6 +229,11 @@
           </div>
         </div>
 
+        <!-- ผู้ช่วย AI (7 พ.ย. 2569) — คอมโพเนนต์แยก โหลด/บันทึกผ่าน /ai/settings เอง (ไม่รวมในปุ่มบันทึกของฟอร์มนี้) -->
+        <div *ngIf="isSuperAdmin" class="mt-8 pt-6 border-t border-gray-100">
+          <app-ai-settings-card></app-ai-settings-card>
+        </div>
+
         <!-- ตั้งค่าอุทธรณ์ -->
         <!-- ตั้งค่า SSO: ThaID + ProviderID -->
         <div class="mt-8 pt-6 border-t border-gray-100">

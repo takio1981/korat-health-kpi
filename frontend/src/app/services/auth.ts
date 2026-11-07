@@ -1,7 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable, BehaviorSubject } from 'rxjs';
-import { tap, timeout } from 'rxjs/operators';
+import { tap, timeout, shareReplay, catchError } from 'rxjs/operators';
+import { of } from 'rxjs';
 import { environment } from '../../environments/environment';
 
 @Injectable({
@@ -227,6 +228,7 @@ export class AuthService {
     localStorage.removeItem('kpi_user');
     localStorage.removeItem('kpi_page_access');
     localStorage.removeItem('kpi_action_access');
+    this._aiStatus$ = null;
   }
 
   // 3. ฟังก์ชันเช็คว่าล็อกอินอยู่หรือไม่ (เช็คว่ามี Token ไหม)
@@ -1181,6 +1183,30 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     const queryStr = new URLSearchParams(params).toString();
     return this.http.get(`${this.apiUrl}/report/chart-stats${queryStr ? '?' + queryStr : ''}`, { headers });
+  }
+
+  // ===== ผู้ช่วย AI (7 พ.ย. 2569) =====
+  // สถานะเปิด/ปิด — แคชตลอดการเข้าใช้ (ล้างเมื่อบันทึกการตั้งค่า) ใช้ซ่อน/แสดงปุ่ม AI ทุกหน้า
+  private _aiStatus$: Observable<any> | null = null;
+  getAiStatus(): Observable<any> {
+    if (!this._aiStatus$) {
+      this._aiStatus$ = this.http.get(`${this.apiUrl}/ai/status`, { headers: this.authHeaders() })
+        .pipe(catchError(() => of({ success: true, enabled: false })), shareReplay(1));
+    }
+    return this._aiStatus$;
+  }
+  getAiSettings(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/ai/settings`, { headers: this.authHeaders() });
+  }
+  saveAiSettings(data: any): Observable<any> {
+    return this.http.put(`${this.apiUrl}/ai/settings`, data, { headers: this.authHeaders() })
+      .pipe(tap(() => { this._aiStatus$ = null; }));
+  }
+  testAi(): Observable<any> {
+    return this.http.post(`${this.apiUrl}/ai/test`, {}, { headers: this.authHeaders() });
+  }
+  getAiReportSummary(params: any = {}, refresh = false): Observable<any> {
+    return this.http.post(`${this.apiUrl}/report/ai-summary`, { ...params, refresh }, { headers: this.authHeaders() });
   }
 
   getReportRecordingStatus(params: any = {}): Observable<any> {

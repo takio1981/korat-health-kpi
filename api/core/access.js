@@ -113,6 +113,11 @@ const PAGE_ACCESS_RULES = [
     { method: 'GET', path: '/feedback', pageKey: 'feedback' },
     { prefix: '/report/', pageKey: 'charts' },
 
+    // ผู้ช่วย AI (7 พ.ย. 2569) — exact path เท่านั้น ไม่ใช้ prefix '/ai/' (มีทั้ง endpoint ของทุก role และของ super_admin ปนกัน)
+    // /ai/status ไม่มี rule (ทุก role ที่เข้าสู่ระบบ) | ตั้งค่า/ทดสอบ = หน้า settings (isSuperAdmin + สิทธิ์หน้าที่เปิดเพิ่ม)
+    { path: '/ai/settings', pageKey: 'settings' },
+    { method: 'POST', path: '/ai/test', pageKey: 'settings' },
+
     // settings (กลุ่มนี้ทั้งหมด isSuperAdmin เดิม ไม่มี endpoint เปิดปนอยู่ — ยืนยันแล้ว ปลอดภัยใช้ prefix กว้าง)
     { method: 'POST', path: '/settings', pageKey: 'settings' },
     { prefix: '/env-config', pageKey: 'settings' },

@@ -94,8 +94,18 @@ const apiLimiter = rateLimit({
     legacyHeaders: false,
     message: { success: false, message: 'เรียก API ถี่เกินไป กรุณารอสักครู่' }
 });
+// aiLimiter (7 พ.ย. 2569): เส้นทางผู้ช่วย AI — แต่ละคำขอเรียกโมเดลภายนอก (มีค่าใช้จ่าย/โควตา) จำกัด 10 ครั้ง/นาที/ผู้ใช้
+// ใช้หลัง authenticateToken เสมอ (req.user มีแล้ว)
+const aiLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 10,
+    keyGenerator: (req) => `ai-user:${req.user?.userId ?? 'anon'}`,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, code: 'AI_RATE_LIMIT', message: 'เรียกผู้ช่วย AI ถี่เกินไป กรุณารอ 1 นาที' }
+});
 // ตั้งชื่อฟังก์ชัน middleware (ไม่เปลี่ยนการทำงาน) — ให้ tests/route-inventory.test.js แยกได้ว่าเส้นทางใดใช้ตัวจำกัดตัวไหน
-for (const [n, fn] of Object.entries({ loginIpLimiter, loginLimiter, apiLimiter })) Object.defineProperty(fn, 'name', { value: n });
+for (const [n, fn] of Object.entries({ loginIpLimiter, loginLimiter, apiLimiter, aiLimiter })) Object.defineProperty(fn, 'name', { value: n });
 
 const SECRET_KEY = process.env.SECRET_KEY;
 if (!SECRET_KEY) {
@@ -103,4 +113,4 @@ if (!SECRET_KEY) {
     process.exit(1);
 }
 
-module.exports = { updateSystemSettings, loginIpLimiter, loginLimiter, apiLimiter, SECRET_KEY };
+module.exports = { updateSystemSettings, loginIpLimiter, loginLimiter, apiLimiter, aiLimiter, SECRET_KEY };

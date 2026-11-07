@@ -1,4 +1,4 @@
-FROM node:18-alpine
+FROM node:22-alpine
 
 # Install PM2 globally + mariadb-client + gzip + tzdata (สำคัญ: alpine ไม่มี tzdata default — schedulers จะใช้ UTC)
 RUN apk add --no-cache mariadb-client gzip tzdata \

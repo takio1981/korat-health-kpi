@@ -190,6 +190,7 @@
   "GET /khupskpi/api/report/by-district :: authenticateToken > handler",
   "GET /khupskpi/api/report/by-year :: authenticateToken > handler",
   "GET /khupskpi/api/report/chart-stats :: authenticateToken > handler",
+  "POST /khupskpi/api/report/ai-summary :: authenticateToken > aiLimiter > handler",
   "GET /khupskpi/api/report/recording-status :: authenticateToken > handler",
   "GET /khupskpi/api/report/recording-status/by-hospital :: authenticateToken > handler",
   "GET /khupskpi/api/report/recording-missing/by-hospital/:hospcode :: authenticateToken > handler",
@@ -291,6 +292,10 @@
   "GET /khupskpi/api/kpi-audit/settings :: authenticateToken > isSuperAdmin > handler",
   "POST /khupskpi/api/kpi-audit/settings :: authenticateToken > isSuperAdmin > handler",
   "GET /khupskpi/api/kpi-audit/records :: authenticateToken > isSuperAdmin > handler",
-  "POST /khupskpi/api/kpi-audit/run-digest-now :: authenticateToken > isSuperAdmin > handler"
+  "POST /khupskpi/api/kpi-audit/run-digest-now :: authenticateToken > isSuperAdmin > handler",
+  "GET /khupskpi/api/ai/status :: authenticateToken > handler",
+  "GET /khupskpi/api/ai/settings :: authenticateToken > isSuperAdmin > handler",
+  "PUT /khupskpi/api/ai/settings :: authenticateToken > isSuperAdmin > handler",
+  "POST /khupskpi/api/ai/test :: authenticateToken > isSuperAdmin > aiLimiter > handler"
  ]
 }
