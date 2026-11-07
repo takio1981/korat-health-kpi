@@ -210,6 +210,57 @@ async function insertIndicatorFromKhd(remoteDb, resolver, khd, fallback, yearBh)
     return { id: ins.insertId, resolved: r };
 }
 
+// รายการค่าใน KHD reports (data_source='excel') ของ kind + ผลการจับคู่ปัจจุบัน + รายการของ Local ให้เลือก
+// ใช้ร่วม: GET /khd-mappings (หน้าต่างจับคู่ข้อมูล KHD) และ POST /ai/khd-mapping-suggest (ย้ายจาก routes/khd.js 7 พ.ย. 2569)
+const KHD_MAP_COLUMN = { dept: 'dept', main: 'main_indicator', yut: 'main_yut' };
+
+async function listKhdMappings(kind) {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) { const err = new Error('ไม่ได้ตั้งค่า Remote DB (KHD)'); err.status = 400; throw err; }
+    const col = KHD_MAP_COLUMN[kind];
+    const [khdRows] = await remoteDb.query(
+        `SELECT ${col} AS v, table_process FROM reports
+         WHERE data_source = 'excel' AND ${col} IS NOT NULL AND TRIM(${col}) <> ''`
+    );
+    // ชื่อเต็มของรหัสหน่วยงานจากตาราง departments ของ KHD (ช่วยตัดสินใจ — ไม่บังคับมี)
+    let khdLabels = new Map();
+    if (kind === 'dept') {
+        try {
+            const [d] = await remoteDb.query('SELECT dept_code, dept_name FROM departments');
+            khdLabels = new Map(d.map(r => [khdMapping.normKhd(r.dept_code), r.dept_name]));
+        } catch (_) { /* KHD ไม่มีตาราง departments */ }
+    }
+    const [localTp] = await db.query("SELECT table_process FROM kpi_indicators WHERE table_process IS NOT NULL AND table_process <> ''");
+    const tpSet = new Set(localTp.map(r => String(r.table_process).trim()));
+    const groups = new Map();   // normKhd(ค่า) → { khd_value, report_count, missing_count }
+    for (const r of khdRows) {
+        const n = khdMapping.normKhd(r.v);
+        if (!n) continue;
+        if (!groups.has(n)) groups.set(n, { khd_value: String(r.v).replace(/[\s\u200b\u00a0]+/g, ' ').trim(), report_count: 0, missing_count: 0 });
+        const g = groups.get(n);
+        g.report_count++;
+        if (r.table_process && !tpSet.has(String(r.table_process).trim())) g.missing_count++;
+    }
+    const resolver = await loadKhdResolver(db);
+    const [maps] = await db.query('SELECT khd_key, local_id, updated_at FROM khd_value_mappings WHERE kind = ?', [kind]);
+    const mapByKey = new Map(maps.map(m => [m.khd_key, m]));
+    const items = [...groups.values()].map(g => ({
+        ...g,
+        khd_label: khdLabels.get(khdMapping.normKhd(g.khd_value)) || null,
+        resolved: resolver.resolve(kind, g.khd_value),
+        mapping: mapByKey.get(khdMapping.khdKey(g.khd_value)) || null,
+    })).sort((a, b) => b.missing_count - a.missing_count || b.report_count - a.report_count);
+    const optionSql = {
+        dept: 'SELECT id, dept_name AS name, dept_code AS code FROM departments ORDER BY dept_name',
+        main: 'SELECT mi.id, mi.main_indicator_name AS name, y.yut_name AS code FROM kpi_main_indicators mi LEFT JOIN main_yut y ON y.id = mi.yut_id ORDER BY mi.main_indicator_name',
+        yut: 'SELECT id, yut_name AS name, NULL AS code FROM main_yut ORDER BY id',
+    }[kind];
+    const [options] = await db.query(optionSql);
+    const summary = { total: items.length, unmatched: 0, auto: 0, mapped: 0, ignored: 0 };
+    items.forEach(i => { summary[i.resolved.status] = (summary[i.resolved.status] || 0) + 1; });
+    return { kind, summary, items, options };
+}
+
 // Shared: เทียบ column ระหว่าง local vs remote (ใช้ร่วมกันทั้ง /db-compare และ /users/structure-compare)
 function diffTableColumns(localColumns, remoteColumns) {
     const diff = [];
@@ -225,4 +276,4 @@ function diffTableColumns(localColumns, remoteColumns) {
     return diff;
 }
 
-module.exports = { performSyncToKhd, planKhdTableSync, khdExportableTables, hasHospYearKeyOnly, getKhdEffectiveCriteriaFor, loadKhdResolver, insertIndicatorFromKhd, diffTableColumns };
+module.exports = { performSyncToKhd, planKhdTableSync, khdExportableTables, hasHospYearKeyOnly, getKhdEffectiveCriteriaFor, loadKhdResolver, insertIndicatorFromKhd, diffTableColumns, listKhdMappings, KHD_MAP_COLUMN };

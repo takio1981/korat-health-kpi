@@ -190,6 +190,37 @@ describe('KpiManageComponent', () => {
       expect(http.expectOne(r => r.method === 'PUT').request.body).toEqual({ kind: 'dept', khd_value: 'ทต.', local_id: null, ignore: true });
     });
 
+    // ผู้ช่วย AI ระยะที่ 3 (7 พ.ย. 2569): ข้อเสนอแนบที่แถว — "ใช้" แค่เลือกในช่อง ไม่บันทึกเอง
+    it('AI แนะนำการจับคู่: แนบข้อเสนอที่แถว, "ใช้" เลือกรายการโดยไม่ส่งคำขอบันทึก, สลับแท็บแล้วข้อเสนอเดิมถูกล้าง', () => {
+      component.openKhdMapping('dept');
+      http.expectOne(r => r.url.includes('/khd-mappings')).flush({ success: true, items: items(), options: [{ id: 6, name: 'กลุ่มงาน NCD' }, { id: 13, name: 'กลุ่มงาน 13' }], summary: { total: 2, unmatched: 1, auto: 1 } });
+      component.suggestKhdMapAi();
+      const req = http.expectOne(r => r.method === 'POST' && r.url.includes('/ai/khd-mapping-suggest'));
+      expect(req.request.body).toEqual({ kind: 'dept' });
+      req.flush({ success: true, total: 1, truncated: false, suggestions: [{ khd_value: 'ทต.', local_id: 13, local_name: 'กลุ่มงาน 13', confidence: 72, reason: 'ชื่อใกล้เคียง' }] });
+      const row = component.khdMapItems[1];
+      expect(row._ai).toEqual(expect.objectContaining({ local_id: 13, confidence: 72 }));
+      expect(row._pick).toBeNull();                 // ยังไม่เลือกให้จนกว่าจะกด "ใช้"
+      expect(component.khdMapAiNote).toContain('1 จาก 1');
+      component.useKhdAi(row);
+      expect(row._pick).toBe(13);
+      http.expectNone(r => r.method === 'PUT');      // ไม่บันทึกเอง
+      component.loadKhdMapping('yut');
+      expect(component.khdMapAiNote).toBe('');
+    });
+
+    it('AI แนะนำการจับคู่: ข้อผิดพลาดแสดงในหน้าต่าง / id ที่ไม่อยู่ในตัวเลือกกด "ใช้" ไม่ได้', () => {
+      component.openKhdMapping('dept');
+      http.expectOne(r => r.url.includes('/khd-mappings')).flush({ success: true, items: items(), options: [{ id: 6, name: 'กลุ่มงาน NCD' }], summary: { unmatched: 1 } });
+      component.suggestKhdMapAi();
+      http.expectOne(r => r.url.includes('/ai/khd-mapping-suggest')).flush({ success: false, message: 'ใช้ผู้ช่วย AI ครบโควตาของวันนี้แล้ว' }, { status: 429, statusText: 'Too Many' });
+      expect(component.khdMapAiError).toContain('โควตา');
+      const row = component.khdMapItems[1];
+      row._ai = { khd_value: 'ทต.', local_id: 99, local_name: 'x', confidence: 90 };
+      component.useKhdAi(row);
+      expect(row._pick).toBeNull();
+    });
+
     it('ตาราง "ยังไม่มีในระบบ": นับรายการที่ยังจับคู่ไม่ครบ และป้ายแสดงค่าที่จะได้', () => {
       component.khdCompareMap = new Map<string, any>([
         ['a', { status: 'missing_local', khd_report_id: 1, khd_resolved: { unmatched: ['yut'] } }],

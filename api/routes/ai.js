@@ -6,7 +6,8 @@ const { aiLimiter } = require('../core/security');
 const { parseActiveFlag } = require('../core/validate');
 const { requireAnyAction } = require('../core/access');
 const { suggestFormula } = require('../services/ai-formula');
-const { AI_PROVIDERS, getAiSettings, saveAiSetting, encryptApiKey, usedToday, callLlm, sendAiError, listModels } = require('../services/ai');
+const { suggestKhdMappings } = require('../services/ai-khd');
+const { AI_PROVIDERS, getAiSettings, saveAiSetting, encryptApiKey, usedToday, callLlm, sendAiError, listModels, AiError } = require('../services/ai');
 
 const clientIp = (req) => (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim();
 
@@ -86,6 +87,19 @@ apiRouter.post('/ai/formula-suggest', authenticateToken, requireAnyAction('kpi-m
         res.json({ success: true, ...out });
     } catch (e) {
         sendAiError(res, e, 'AI ช่วยเขียนสูตรไม่สำเร็จ');
+    }
+});
+
+// ระยะที่ 3: เสนอการจับคู่ค่าใน KHD กับหน่วยงาน/หมวดหมู่หลัก/ยุทธศาสตร์ของระบบ (หน้าต่างจับคู่ข้อมูล KHD — super_admin เท่านั้นเหมือน /khd-mappings)
+// คืนเฉพาะ id ที่อยู่ในตัวเลือกจริง ไม่บันทึกให้ — ผู้ดูแลกด "จับคู่" เอง (PUT /khd-mappings)
+apiRouter.post('/ai/khd-mapping-suggest', authenticateToken, isSuperAdmin, aiLimiter, async (req, res) => {
+    try {
+        const b = req.body || {};
+        const out = await suggestKhdMappings({ kind: b.kind, khd_values: b.khd_values }, req.user.userId);
+        res.json({ success: true, ...out });
+    } catch (e) {
+        if (!(e instanceof AiError) && e.status) return res.status(e.status).json({ success: false, message: e.message });
+        sendAiError(res, e, 'AI เสนอการจับคู่ไม่สำเร็จ');
     }
 });
 

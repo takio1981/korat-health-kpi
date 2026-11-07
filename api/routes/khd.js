@@ -7,7 +7,7 @@ const khdMapping = require('../khd-mapping');
 const { _actorLabel } = require('../services/indicator-fields');
 const { apiRouter } = require('../core/router');
 const { authenticateToken, isSuperAdmin } = require('../core/auth');
-const { getKhdEffectiveCriteriaFor, insertIndicatorFromKhd, loadKhdResolver } = require('../services/khd');
+const { getKhdEffectiveCriteriaFor, insertIndicatorFromKhd, loadKhdResolver, listKhdMappings, KHD_MAP_COLUMN } = require('../services/khd');
 const { getRemotePool } = require('../db-remote');
 const { notifyLineAction } = require('../core/notify');
 const { requireAction } = require('../core/access');
@@ -442,57 +442,12 @@ apiRouter.post('/report-compare/sync-khd-link', authenticateToken, isSuperAdmin,
 
 // ========== จับคู่ข้อมูล KHD ↔ Local (หน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์) — 19 ต.ค. 2569 ==========
 // GET /khd-mappings?kind=dept|main|yut — ค่าที่พบใน KHD reports (data_source='excel') + ผลการจับคู่ปัจจุบัน + รายการของ Local ให้เลือก
-const KHD_MAP_COLUMN = { dept: 'dept', main: 'main_indicator', yut: 'main_yut' };
-
 apiRouter.get('/khd-mappings', authenticateToken, isSuperAdmin, async (req, res) => {
     const kind = String(req.query.kind || '');
     if (!khdMapping.KHD_MAP_KINDS.includes(kind)) return res.status(400).json({ success: false, message: 'kind ต้องเป็น dept, main หรือ yut' });
-    const remoteDb = getRemotePool();
-    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
     try {
-        const col = KHD_MAP_COLUMN[kind];
-        const [khdRows] = await remoteDb.query(
-            `SELECT ${col} AS v, table_process FROM reports
-             WHERE data_source = 'excel' AND ${col} IS NOT NULL AND TRIM(${col}) <> ''`
-        );
-        // ชื่อเต็มของรหัสหน่วยงานจากตาราง departments ของ KHD (ช่วยตัดสินใจ — ไม่บังคับมี)
-        let khdLabels = new Map();
-        if (kind === 'dept') {
-            try {
-                const [d] = await remoteDb.query('SELECT dept_code, dept_name FROM departments');
-                khdLabels = new Map(d.map(r => [khdMapping.normKhd(r.dept_code), r.dept_name]));
-            } catch (_) { /* KHD ไม่มีตาราง departments */ }
-        }
-        const [localTp] = await db.query("SELECT table_process FROM kpi_indicators WHERE table_process IS NOT NULL AND table_process <> ''");
-        const tpSet = new Set(localTp.map(r => String(r.table_process).trim()));
-        const groups = new Map();   // normKhd(ค่า) → { khd_value, report_count, missing_count }
-        for (const r of khdRows) {
-            const n = khdMapping.normKhd(r.v);
-            if (!n) continue;
-            if (!groups.has(n)) groups.set(n, { khd_value: String(r.v).replace(/[\s\u200b\u00a0]+/g, ' ').trim(), report_count: 0, missing_count: 0 });
-            const g = groups.get(n);
-            g.report_count++;
-            if (r.table_process && !tpSet.has(String(r.table_process).trim())) g.missing_count++;
-        }
-        const resolver = await loadKhdResolver(db);
-        const [maps] = await db.query('SELECT khd_key, local_id, updated_at FROM khd_value_mappings WHERE kind = ?', [kind]);
-        const mapByKey = new Map(maps.map(m => [m.khd_key, m]));
-        const items = [...groups.values()].map(g => ({
-            ...g,
-            khd_label: khdLabels.get(khdMapping.normKhd(g.khd_value)) || null,
-            resolved: resolver.resolve(kind, g.khd_value),
-            mapping: mapByKey.get(khdMapping.khdKey(g.khd_value)) || null,
-        })).sort((a, b) => b.missing_count - a.missing_count || b.report_count - a.report_count);
-        const optionSql = {
-            dept: 'SELECT id, dept_name AS name, dept_code AS code FROM departments ORDER BY dept_name',
-            main: 'SELECT mi.id, mi.main_indicator_name AS name, y.yut_name AS code FROM kpi_main_indicators mi LEFT JOIN main_yut y ON y.id = mi.yut_id ORDER BY mi.main_indicator_name',
-            yut: 'SELECT id, yut_name AS name, NULL AS code FROM main_yut ORDER BY id',
-        }[kind];
-        const [options] = await db.query(optionSql);
-        const summary = { total: items.length, unmatched: 0, auto: 0, mapped: 0, ignored: 0 };
-        items.forEach(i => { summary[i.resolved.status] = (summary[i.resolved.status] || 0) + 1; });
-        res.json({ success: true, kind, summary, items, options });
-    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+        res.json({ success: true, ...(await listKhdMappings(kind)) });
+    } catch (e) { res.status(e.status || 500).json({ success: false, message: e.message }); }
 });
 
 // PUT /khd-mappings — { kind, khd_value, local_id }: local_id = จับคู่, ignore = true → ไม่ต้องจับคู่ (เว้นว่าง), ทั้งคู่ไม่ส่ง = ลบการจับคู่ (กลับไปใช้อัตโนมัติ)

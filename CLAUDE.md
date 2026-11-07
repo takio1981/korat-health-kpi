@@ -71,7 +71,7 @@ frontend/src/app/
   | `services/summary.js` | scheduleSummaryRefresh/refreshSummaryAfterSubSave, summaryRefreshIdle, withSummaryLock, refreshKpiSummaryForIndicatorYears, mergeSubIntoSummary, applyFormulaToSummary, loadPrevYearData, loadBaseValues/baseKey |
   | `services/indicator-scope.js` | indicatorTypeSetting, indicatorAllowsHostype, resolveIndicatorHostypes, ALL_BULK_HOSTYPES (คู่กับ frontend `shared/indicator-scope.ts`) |
   | `services/export.js` | performKpiExport, checkKpiChanges, buildItemExportRows/ensureItemsTable/writeItemsTable (`_items`) |
-  | `services/khd.js` | performSyncToKhd, getKhdEffectiveCriteriaFor, loadKhdResolver, insertIndicatorFromKhd, diffTableColumns |
+  | `services/khd.js` | performSyncToKhd, getKhdEffectiveCriteriaFor, loadKhdResolver, insertIndicatorFromKhd, diffTableColumns, listKhdMappings (รายการของ GET /khd-mappings) |
   | `services/backup.js` | runBackupJob/runRestoreJob, startBackupScheduler, การเชื่อมต่อ (bkEncrypt/bkDecrypt), Google Drive (resetDriveClientCache), migration ตารางสำรองข้อมูล |
   | `services/kpi-audit.js` | logKpiSaveAudit, getUserAuditInfo, getAuditSettings/invalidateAuditSettingsCache |
   | `services/indicator-fields.js` | normTargetCondition, normalizeOffTypes, normalizeEvalMode, _actorLabel |
@@ -94,7 +94,7 @@ frontend/src/app/
   ห้าม export ตรงๆ (ค่าจะค้าง) — เก็บไว้ในโมดูลเดียวกับผู้ใช้ หรือเปลี่ยนเป็น object; Map/Set แชร์ได้ (object เดียวกัน)
 - `core/env.js` ต้องเป็น require แรกของ server.js
   (ตัวดัก unhandledRejection/uncaughtException เรียก `captureError` แบบ lazy จาก core/errors)
-- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (288 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
+- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (289 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
   ตั้งใจเพิ่ม/แก้ route → `node tests/lib/route-inventory.js --write` แล้วตรวจ diff), `tests/lint.test.js` (ESLint no-undef ฯลฯ — จับชื่อที่ลืม require),
   `tests/build.test.js` (ไล่ require ทุกชั้นต้องอยู่ในชุดที่ build คัดลอก + build ลงโฟลเดอร์ชั่วคราว), `tests/startup.test.js` (เริ่มระบบ + โหลดผลลัพธ์ build ใน process แยก)
   — middleware ที่สร้างจาก factory/ไลบรารีต้องมีชื่อ (`requireAction(page,action)`, loginIpLimiter/loginLimiter/apiLimiter) ให้ snapshot แยกได้
@@ -532,6 +532,14 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   → **คืนเฉพาะสูตรที่ผ่าน `parseFormulaInput()`** (ผิด = ส่งข้อผิดพลาดให้ AI แก้ 1 รอบ, ยังผิด/ว่าง = 422) | UI `shared/ai-formula-helper.ts` ในกล่องสูตรผลงานและสูตรร้อยละของ kpi-manage
   — "ใช้สูตรนี้" แค่ใส่ลงช่อง ผู้ใช้ทดลองคำนวณและบันทึกเอง | ⚠️ prompt ต้องบอก "ค่ารายเดือน = จำนวนของเดือนนั้น (รวมทั้งปี = SUM(ALL))" และ "สูตรร้อยละใช้ result"
   — ทดลองกับ Gemini จริง: ก่อนเพิ่ม 2 บรรทัดนี้ ความหมายถูก 3/5 (ตอบ LAST(ALL) แทน SUM(ALL), สูตรร้อยละคำนวณผลงานใหม่) หลังเพิ่ม 5/5 — มี test คุมข้อความ
+- **ฟีเจอร์ 3 แนะนำการจับคู่ KHD (7 พ.ย. 2569):** `POST /ai/khd-mapping-suggest { kind, khd_values? }` (isSuperAdmin เหมือน /khd-mappings + aiLimiter) → `services/ai-khd.js`
+  `suggestKhdMappings()`: รายการจาก `listKhdMappings(kind)` (services/khd.js — ย้ายคำต่อคำจาก GET /khd-mappings ใช้ร่วมกัน) ไม่ส่ง khd_values = เฉพาะสถานะ unmatched,
+  ทีละ 40 ค่า สูงสุด 120 ต่อคำขอ, ส่งเลขลำดับ + ค่าใน KHD (+ ชื่อใน KHD) + รายการของระบบ `id: ชื่อ (รหัส)` → `parseSuggestions()` **ตัด id ที่ไม่อยู่ในตัวเลือก** (AI สร้างรายการเองไม่ได้), confidence 0–100
+  — prompt ต้องมีกติกา "ชื่อตรงทุกตัวอักษรมาก่อน" (ทดลอง Gemini กับค่าที่ผู้ดูแลจับคู่แล้ว 11 ค่า: ไม่มีกติกา 10/11 — เลือก "(37)" แทน "(PP&P Excellence)", มี 11/11 — มี test คุม)
+  — **ไม่บันทึกเอง** | UI ในหน้าต่างจับคู่ (kpi-manage): ปุ่ม "AI แนะนำการจับคู่" → ป้าย `item._ai` + ปุ่ม "ใช้" (`useKhdAi()` แค่ตั้ง `_pick`) → ผู้ดูแลกด "จับคู่" (saveKhdMap เดิม)
+  — Test: `api/tests/ai-khd-mapping.test.js` (KHD จำลอง + callLlm mock), `kpi-manage.spec.ts`
+- ⚠️ **ฐานทดสอบมีโทเคน LINE/Telegram จริง และชุดทดสอบไม่ได้บล็อกการส่งออกนอกเครื่อง** — server.js ล้มตอน require (เช่น ลืม import) = ตัวดัก uncaughtException ส่งแจ้งเตือนจริง
+  (เกิดจริง 7 พ.ย. 2569 ขณะรัน route-inventory --write) — รันสคริปต์ที่ require server.js ด้วย preload ที่บล็อก net/fetch ออกนอก localhost เมื่อไม่แน่ใจ
 - ชุดทดสอบห้ามเรียกผู้ให้บริการจริง: `jest.mock('@anthropic-ai/sdk')` / stub `global.fetch` / `jest.mock('../services/ai')` — Test: `api/tests/ai-core.test.js`, `ai-report-summary.test.js`,
   `shared/ai-summary-panel.spec.ts`, `shared/ai-settings-card.spec.ts`
 

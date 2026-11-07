@@ -1210,6 +1210,10 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
   suggestAiFormula(body: { description: string; kind: 'result' | 'pct'; custom_vars?: any[]; target_condition?: string; indicator_name?: string }): Observable<any> {
     return this.http.post(`${this.apiUrl}/ai/formula-suggest`, body, { headers: this.authHeaders() });
   }
+  // ผู้ช่วย AI ระยะที่ 3: เสนอการจับคู่ค่าใน KHD กับรายการของระบบ (super_admin) — ไม่บันทึกให้
+  suggestAiKhdMapping(body: { kind: string; khd_values?: string[] }): Observable<any> {
+    return this.http.post(`${this.apiUrl}/ai/khd-mapping-suggest`, body, { headers: this.authHeaders() });
+  }
   testAi(): Observable<any> {
     return this.http.post(`${this.apiUrl}/ai/test`, {}, { headers: this.authHeaders() });
   }

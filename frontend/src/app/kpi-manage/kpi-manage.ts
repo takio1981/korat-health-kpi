@@ -1779,6 +1779,7 @@ export class KpiManageComponent implements OnInit {
   openKhdMapping(kind: string = 'dept') {
     if (!this.isSuperAdmin) return;
     this.khdMapOpen = true;
+    this.authService.getAiStatus().subscribe((res: any) => { this.khdMapAiEnabled = !!res?.enabled; this.cdr.detectChanges(); });
     this.loadKhdMapping(kind);
   }
 
@@ -1792,6 +1793,8 @@ export class KpiManageComponent implements OnInit {
     this.khdMapKind = kind;
     this.khdMapLoading = true;
     this.khdMapItems = [];
+    this.khdMapAiNote = '';
+    this.khdMapAiError = '';
     this.authService.getKhdMappings(kind).subscribe({
       next: (res: any) => {
         this.khdMapLoading = false;
@@ -1853,6 +1856,53 @@ export class KpiManageComponent implements OnInit {
     const s: any = { total: this.khdMapItems.length, unmatched: 0, auto: 0, mapped: 0, ignored: 0 };
     this.khdMapItems.forEach(i => { s[i.resolved?.status] = (s[i.resolved?.status] || 0) + 1; });
     this.khdMapSummary = s;
+  }
+
+  // ===== ผู้ช่วย AI ระยะที่ 3: เสนอการจับคู่ค่าที่ยังจับคู่ไม่ได้ (7 พ.ย. 2569) =====
+  // AI เสนอเท่านั้น — ปุ่ม "ใช้" แค่เลือกรายการในช่อง ผู้ดูแลตรวจแล้วกด "จับคู่" เอง (บันทึกผ่าน saveKhdMap เดิม)
+  khdMapAiEnabled = false;
+  khdMapAiLoading = false;
+  khdMapAiNote = '';
+  khdMapAiError = '';
+
+  suggestKhdMapAi() {
+    const kind = this.khdMapKind;
+    this.khdMapAiLoading = true;
+    this.khdMapAiNote = '';
+    this.khdMapAiError = '';
+    this.authService.suggestAiKhdMapping({ kind }).subscribe({
+      next: (res: any) => {
+        this.khdMapAiLoading = false;
+        if (kind !== this.khdMapKind) return;   // ผู้ใช้สลับแท็บระหว่างรอ
+        const n = this.attachKhdAiSuggestions(res?.suggestions || []);
+        this.khdMapAiNote = (res?.total || 0) === 0
+          ? 'ไม่มีค่าที่ยังไม่จับคู่'
+          : `AI เสนอรายการให้ ${n} จาก ${res.total} ค่า${res.truncated ? ` (ครั้งละไม่เกิน ${res.suggestions.length} ค่า — กดอีกครั้งหลังจับคู่ชุดนี้)` : ''} — ตรวจแล้วกด "ใช้" และ "จับคู่" ทีละรายการ`;
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.khdMapAiLoading = false;
+        this.khdMapAiError = err.error?.message || 'AI เสนอการจับคู่ไม่สำเร็จ';
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  /** แนบข้อเสนอของ AI ให้แถวในตาราง (item._ai) — คืนจำนวนแถวที่ AI เสนอรายการให้ */
+  attachKhdAiSuggestions(list: any[]): number {
+    const byValue = new Map(list.map(s => [s.khd_value, s]));
+    let n = 0;
+    for (const it of this.khdMapItems) {
+      const s = byValue.get(it.khd_value);
+      if (!s) continue;
+      it._ai = s;
+      if (s.local_id) n++;
+    }
+    return n;
+  }
+
+  useKhdAi(item: any) {
+    if (item._ai?.local_id && this.khdMapOptions.some(o => o.id === item._ai.local_id)) item._pick = item._ai.local_id;
   }
 
   /** สร้างรายการใหม่ในระบบจากค่าของ KHD แล้วจับคู่ทันที (เมื่อไม่มีรายการเดิมที่ตรงความหมาย) */

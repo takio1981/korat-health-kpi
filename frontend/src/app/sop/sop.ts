@@ -666,6 +666,7 @@ const SYSTEMS: SopSystem[] = [
     'ตั้งค่า (super_admin): ตั้งค่าระบบ → ผู้ช่วย AI — GET/PUT /ai/settings, POST /ai/test (ไม่นับโควตา) | API key เข้ารหัส (bkEncrypt) ไม่ส่งกลับหน้าจอ และไม่อยู่ใน GET /settings',
     'ตัวจำกัด aiLimiter 10 ครั้ง/นาที/ผู้ใช้ + โควตารายวันทั้งระบบ (ai_daily_limit) | ข้อผิดพลาดจากผู้ให้บริการส่งกลับเป็น 502/504 (ไม่ใช้ 401)',
     'ระยะที่ 2 ช่วยเขียนสูตร: POST /ai/formula-suggest (requireAnyAction kpi-manage add|edit) → AI เสนอ → parseFormulaInput ตรวจ (ผิด = ให้ AI แก้ 1 รอบ) → ผู้ใช้กด "ใช้สูตรนี้" + ทดลองคำนวณ → บันทึกตัวชี้วัดเอง',
+    'ระยะที่ 3 แนะนำการจับคู่ KHD: POST /ai/khd-mapping-suggest (isSuperAdmin) → listKhdMappings (ชุดเดียวกับ GET /khd-mappings) → ส่งเฉพาะค่าที่ยังไม่จับคู่ ทีละ 40 ค่า (≤ 120) → ตัด id ที่ไม่อยู่ในตัวเลือก → ป้าย AI แนะนำ → ผู้ดูแลกด ใช้ + จับคู่ (PUT /khd-mappings เดิม)',
     'รายชื่อรุ่นโมเดล: POST /ai/models ดึงจากผู้ให้บริการ (Claude Models API / GET {base}/models) เก็บใน ai_models_cache — ปุ่ม "อัปเดตรายชื่อรุ่น" = ดึงใหม่เมื่อมีรุ่นใหม่',
   ],
 },{

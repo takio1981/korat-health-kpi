@@ -1184,6 +1184,16 @@
       <label class="inline-flex items-center gap-1.5 text-xs font-bold text-gray-600 cursor-pointer">
         <input type="checkbox" [(ngModel)]="khdMapOnlyUnmatched" class="rounded text-cyan-600">เฉพาะที่ยังไม่จับคู่
       </label>
+      <button *ngIf="khdMapAiEnabled" type="button" (click)="suggestKhdMapAi()" [disabled]="khdMapAiLoading || khdMapLoading || !khdMapSummary?.unmatched"
+              class="px-3 py-1.5 rounded-lg text-xs font-bold bg-fuchsia-600 hover:bg-fuchsia-700 text-white disabled:opacity-40"
+              title="ให้ AI เสนอรายการในระบบสำหรับค่าที่ยังไม่จับคู่ — ไม่บันทึกให้ ตรวจแล้วกดจับคู่เอง">
+        <i class="fas" [ngClass]="khdMapAiLoading ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'"></i> {{ khdMapAiLoading ? 'AI กำลังจับคู่...' : 'AI แนะนำการจับคู่' }}
+      </button>
+    </div>
+    <div *ngIf="khdMapAiNote || khdMapAiError" class="mb-2 text-[11px] rounded-lg px-2.5 py-1.5 border"
+         [ngClass]="khdMapAiError ? 'bg-red-50 border-red-200 text-red-700' : 'bg-fuchsia-50 border-fuchsia-200 text-fuchsia-800'">
+      <i class="fas mr-1" [ngClass]="khdMapAiError ? 'fa-triangle-exclamation' : 'fa-robot'"></i>{{ khdMapAiError || khdMapAiNote }}
+      <span *ngIf="!khdMapAiError" class="text-gray-500"> · ข้อความจาก AI — โปรดตรวจสอบ</span>
     </div>
     <div *ngIf="khdMapSummary" class="flex flex-wrap gap-2 mb-2 text-[11px] font-bold">
       <span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">ทั้งหมด {{ khdMapSummary.total }}</span>
@@ -1219,6 +1229,15 @@
                 <option [ngValue]="null">-- เลือก{{ khdMapKind === 'dept' ? 'หน่วยงาน' : khdMapKind === 'main' ? 'หมวดหมู่หลัก' : 'ยุทธศาสตร์' }} --</option>
                 <option *ngFor="let o of khdMapOptions" [ngValue]="o.id">{{ o.name }}{{ o.code ? ' (' + o.code + ')' : '' }}</option>
               </select>
+              <div *ngIf="item._ai" class="mt-1 flex items-center gap-1 flex-wrap text-[10px]">
+                <span *ngIf="item._ai.local_id" class="px-1.5 py-0.5 rounded bg-fuchsia-50 border border-fuchsia-200 text-fuchsia-800 font-bold">
+                  <i class="fas fa-robot mr-1"></i>AI แนะนำ: {{ item._ai.local_name }} ({{ item._ai.confidence }}%)
+                </span>
+                <span *ngIf="!item._ai.local_id" class="px-1.5 py-0.5 rounded bg-gray-50 border border-gray-200 text-gray-500"><i class="fas fa-robot mr-1"></i>AI: ไม่พบรายการที่ตรงความหมาย</span>
+                <button *ngIf="item._ai.local_id && item._pick !== item._ai.local_id" type="button" (click)="useKhdAi(item)"
+                        class="px-1.5 py-0.5 rounded bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-bold">ใช้</button>
+                <span *ngIf="item._ai.reason" class="w-full text-gray-500">{{ item._ai.reason }}</span>
+              </div>
             </td>
             <td class="px-2 py-2">
               <div class="flex flex-wrap justify-center gap-1">
