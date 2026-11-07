@@ -4,6 +4,8 @@ const { apiRouter } = require('../core/router');
 const { authenticateToken, isSuperAdmin, saveLog } = require('../core/auth');
 const { aiLimiter } = require('../core/security');
 const { parseActiveFlag } = require('../core/validate');
+const { requireAnyAction } = require('../core/access');
+const { suggestFormula } = require('../services/ai-formula');
 const { AI_PROVIDERS, getAiSettings, saveAiSetting, encryptApiKey, usedToday, callLlm, sendAiError, listModels } = require('../services/ai');
 
 const clientIp = (req) => (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim();
@@ -73,6 +75,17 @@ apiRouter.post('/ai/models', authenticateToken, isSuperAdmin, aiLimiter, async (
         res.json({ success: true, ...out });
     } catch (e) {
         sendAiError(res, e, 'ดึงรายชื่อรุ่นโมเดลไม่สำเร็จ');
+    }
+});
+
+// ระยะที่ 2: ช่วยเขียนสูตรคำนวณผลงาน/สูตรร้อยละ (หน้าจัดการตัวชี้วัด — สิทธิ์เพิ่มหรือแก้ไขตัวชี้วัด) — คืนเฉพาะสูตรที่ผ่านตัวตรวจของระบบ ไม่บันทึกให้
+apiRouter.post('/ai/formula-suggest', authenticateToken, requireAnyAction('kpi-manage', ['add', 'edit']), aiLimiter, async (req, res) => {
+    try {
+        const b = req.body || {};
+        const out = await suggestFormula({ description: b.description, kind: b.kind, custom_vars: b.custom_vars, target_condition: b.target_condition, indicator_name: b.indicator_name }, req.user.userId);
+        res.json({ success: true, ...out });
+    } catch (e) {
+        sendAiError(res, e, 'AI ช่วยเขียนสูตรไม่สำเร็จ');
     }
 });
 

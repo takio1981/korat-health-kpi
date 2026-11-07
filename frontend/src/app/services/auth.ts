@@ -1206,6 +1206,10 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
   getAiModels(body: { provider: string; base_url: string; api_key?: string; refresh?: boolean }): Observable<any> {
     return this.http.post(`${this.apiUrl}/ai/models`, body, { headers: this.authHeaders() });
   }
+  // ผู้ช่วย AI ระยะที่ 2: เสนอสูตรคำนวณผลงาน/สูตรร้อยละจากคำอธิบาย (คืนเฉพาะสูตรที่ผ่านตัวตรวจของระบบ)
+  suggestAiFormula(body: { description: string; kind: 'result' | 'pct'; custom_vars?: any[]; target_condition?: string; indicator_name?: string }): Observable<any> {
+    return this.http.post(`${this.apiUrl}/ai/formula-suggest`, body, { headers: this.authHeaders() });
+  }
   testAi(): Observable<any> {
     return this.http.post(`${this.apiUrl}/ai/test`, {}, { headers: this.authHeaders() });
   }

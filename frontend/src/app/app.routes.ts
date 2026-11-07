@@ -10,9 +10,7 @@ import { SettingsComponent } from './settings/settings';
 import { KpiManageComponent } from './kpi-manage/kpi-manage';
 import { ReportComponent } from './report/report';
 import { NotificationsComponent } from './notifications/notifications';
-import { HelpComponent } from './help/help';
 import { FeedbackComponent } from './feedback/feedback';
-import { ChangelogComponent } from './changelog/changelog';
 import { KpiManagerComponent } from './kpi-manager/kpi-manager';
 import { AnnouncementsComponent } from './announcements/announcements';
 import { OnlineUsersComponent } from './online-users/online-users';
@@ -21,7 +19,6 @@ import { KpiAuditDigestComponent } from './kpi-audit-digest/kpi-audit-digest';
 import { ErrorLogsComponent } from './error-logs/error-logs';
 import { SsoLogsComponent } from './sso-logs/sso-logs';
 import { SsoCallbackComponent } from './sso-callback/sso-callback';
-import { SopComponent } from './sop/sop';
 import { RolePageAccessComponent } from './role-page-access/role-page-access';
 import { KpiResultsManageComponent } from './kpi-results-manage/kpi-results-manage';
 import { authGuard } from './guards/auth-guard';
@@ -33,7 +30,8 @@ export const routes: Routes = [
   { path: 'login', component: LoginComponent },
   { path: 'register', component: RegisterComponent },
   { path: 'sso-callback', component: SsoCallbackComponent },
-  { path: 'help-public', component: HelpComponent },
+  // คู่มือ / ประวัติการอัปเดต / ผัง SOP โหลดเมื่อเปิดหน้า (lazy) — เนื้อหาข้อความใหญ่ ใช้ไม่บ่อย; bundle เริ่มต้นชนงบ 5 MB (7 พ.ย. 2569)
+  { path: 'help-public', loadComponent: () => import('./help/help').then(m => m.HelpComponent) },
   {
     path: '',
     component: LayoutComponent,
@@ -56,10 +54,10 @@ export const routes: Routes = [
       { path: 'kpi-audit-digest', component: KpiAuditDigestComponent, canActivate: [pageAccessGuard], data: { title: 'แจ้งเตือนการบันทึก KPI', pageKey: 'kpi-audit-digest' } },
       { path: 'error-logs', component: ErrorLogsComponent, canActivate: [pageAccessGuard], data: { title: 'Error Logs', pageKey: 'error-logs' } },
       { path: 'sso-logs', component: SsoLogsComponent, canActivate: [pageAccessGuard], data: { title: 'SSO Audit Logs', pageKey: 'sso-logs' } },
-      { path: 'sop', component: SopComponent, canActivate: [pageAccessGuard], data: { title: 'ผังกระบวนการทำงาน (SOP)', pageKey: 'sop' } },
+      { path: 'sop', loadComponent: () => import('./sop/sop').then(m => m.SopComponent), canActivate: [pageAccessGuard], data: { title: 'ผังกระบวนการทำงาน (SOP)', pageKey: 'sop' } },
       { path: 'feedback', component: FeedbackComponent, canActivate: [pageAccessGuard], data: { title: 'กระดานข้อเสนอแนะ', pageKey: 'feedback' } },
-      { path: 'changelog', component: ChangelogComponent, canActivate: [pageAccessGuard], data: { title: 'ประวัติการอัปเดต', pageKey: 'changelog' } },
-      { path: 'help', component: HelpComponent, canActivate: [pageAccessGuard], data: { title: 'คู่มือการใช้งาน', pageKey: 'help' } },
+      { path: 'changelog', loadComponent: () => import('./changelog/changelog').then(m => m.ChangelogComponent), canActivate: [pageAccessGuard], data: { title: 'ประวัติการอัปเดต', pageKey: 'changelog' } },
+      { path: 'help', loadComponent: () => import('./help/help').then(m => m.HelpComponent), canActivate: [pageAccessGuard], data: { title: 'คู่มือการใช้งาน', pageKey: 'help' } },
     ]
   },
   { path: '**', redirectTo: 'login' }

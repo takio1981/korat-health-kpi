@@ -13,6 +13,7 @@ import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { ZoneBadgeComponent } from '../shared/zone-badge';
+import { AiFormulaHelperComponent } from '../shared/ai-formula-helper';
 import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
 import { TARGET_CONDITIONS, CONDITION_SYMBOL, CONDITION_LABEL, normalizeCondition, evaluateTarget, normalizeTargetMonthly } from '../shared/kpi-target';
 
@@ -49,7 +50,7 @@ export function applyResultMethod(item: any, m: ResultMethod): void {
 @Component({
   selector: 'app-kpi-manage',
   standalone: true,
-  imports: [CommonModule, FormsModule, FormBuilderComponent, FormulaBadgeComponent, ZoneBadgeComponent],
+  imports: [CommonModule, FormsModule, FormBuilderComponent, FormulaBadgeComponent, ZoneBadgeComponent, AiFormulaHelperComponent],
   templateUrl: './kpi-manage.html'
 })
 export class KpiManageComponent implements OnInit {

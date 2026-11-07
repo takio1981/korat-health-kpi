@@ -241,6 +241,17 @@ function hasActionAccess(role, pageKey, action) {
     return !!(set && set.has(action));
 }
 // Middleware factory — ใช้แทน isAdmin/isAnyAdmin/isSuperAdmin เดิมตรงๆ บน endpoint เพิ่ม/แก้ไขที่เลือกไว้
+// ผ่านเมื่อมีสิทธิ์อย่างน้อย 1 action (เช่น ผู้ช่วย AI เขียนสูตร ใช้ได้ทั้งตอนเพิ่มและแก้ไขตัวชี้วัด — 7 พ.ย. 2569)
+function requireAnyAction(pageKey, actions) {
+    const mw = (req, res, next) => {
+        const role = req.user?.role;
+        if (role && actions.some(a => hasActionAccess(role, pageKey, a))) return next();
+        res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์เพิ่ม/แก้ไขข้อมูลในหน้านี้' });
+    };
+    Object.defineProperty(mw, 'name', { value: `requireAnyAction(${pageKey},${actions.join('|')})` }); // ชื่อสำหรับ route inventory
+    return mw;
+}
+
 function requireAction(pageKey, action) {
     const actionLabel = action === 'add' ? 'เพิ่ม' : 'แก้ไข';
     const mw = (req, res, next) => {
@@ -322,4 +333,4 @@ setInterval(() => {
     for (const [k, v] of _userPermCache.entries()) if (v.expiry < now) _userPermCache.delete(k);
 }, 5 * 60 * 1000);
 
-module.exports = { ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, foreignWriteHospcodes, PAGE_ACCESS_ROLES, PAGE_ACCESS_PAGES, PAGE_ACCESS_DEFAULT_ENABLED, loadRolePageAccessCache, hasPageAccess, PAGE_ACCESS_RULES, resolvePageKeyFromPath, ACTION_ACCESS_ROLES, ACTION_ACCESS_PAGES, ACTION_TYPES, ACTION_ACCESS_DEFAULT_ENABLED, loadRoleActionAccessCache, hasActionAccess, requireAction, ROLE_ADMIN_ALL, ROLE_ADMIN_CENTRAL, ROLE_ADMIN_LOCAL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, getDistrictId, getPermsForUser, invalidateUserPermCache, indicatorsOutsideOwnDept, OUTSIDE_DEPT_MESSAGE };
+module.exports = { ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, foreignWriteHospcodes, PAGE_ACCESS_ROLES, PAGE_ACCESS_PAGES, PAGE_ACCESS_DEFAULT_ENABLED, loadRolePageAccessCache, hasPageAccess, PAGE_ACCESS_RULES, resolvePageKeyFromPath, ACTION_ACCESS_ROLES, ACTION_ACCESS_PAGES, ACTION_TYPES, ACTION_ACCESS_DEFAULT_ENABLED, loadRoleActionAccessCache, hasActionAccess, requireAction, requireAnyAction, ROLE_ADMIN_ALL, ROLE_ADMIN_CENTRAL, ROLE_ADMIN_LOCAL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, getDistrictId, getPermsForUser, invalidateUserPermCache, indicatorsOutsideOwnDept, OUTSIDE_DEPT_MESSAGE };

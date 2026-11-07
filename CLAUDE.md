@@ -94,7 +94,7 @@ frontend/src/app/
   ห้าม export ตรงๆ (ค่าจะค้าง) — เก็บไว้ในโมดูลเดียวกับผู้ใช้ หรือเปลี่ยนเป็น object; Map/Set แชร์ได้ (object เดียวกัน)
 - `core/env.js` ต้องเป็น require แรกของ server.js
   (ตัวดัก unhandledRejection/uncaughtException เรียก `captureError` แบบ lazy จาก core/errors)
-- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (287 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
+- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (288 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
   ตั้งใจเพิ่ม/แก้ route → `node tests/lib/route-inventory.js --write` แล้วตรวจ diff), `tests/lint.test.js` (ESLint no-undef ฯลฯ — จับชื่อที่ลืม require),
   `tests/build.test.js` (ไล่ require ทุกชั้นต้องอยู่ในชุดที่ build คัดลอก + build ลงโฟลเดอร์ชั่วคราว), `tests/startup.test.js` (เริ่มระบบ + โหลดผลลัพธ์ build ใน process แยก)
   — middleware ที่สร้างจาก factory/ไลบรารีต้องมีชื่อ (`requireAction(page,action)`, loginIpLimiter/loginLimiter/apiLimiter) ให้ snapshot แยกได้
@@ -241,6 +241,8 @@ Swal.fire({
 1. สร้าง component ใน `frontend/src/app/[name]/`
 2. เพิ่ม import + route ใน `app.routes.ts`
 3. เพิ่มเมนูใน `layout.html` (ทั้ง mobile + desktop sidebar)
+- ⚠️ initial bundle ติดงบ error 5 MB (`angular.json`) — หน้าที่ใหญ่และใช้ไม่บ่อยให้ใช้ `loadComponent: () => import(...)` (lazy) แทน import ตรง
+  (help, help-public, changelog, sop เป็น lazy ตั้งแต่ 7 พ.ย. 2569 — เดิม 5.00 MB build ล้ม หลังแยก 3.43 MB)
 
 ## 5. Database Rules
 
@@ -525,6 +527,11 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - **ฟีเจอร์ 1 สรุปรายงาน:** `POST /report/ai-summary` (routes/reports.js, สิทธิ์หน้า charts) ใช้ `computeChartStats(user, q)` ตัวเดียวกับ `GET /report/chart-stats` → `services/ai-report.js`
   `buildSummaryInput()` (ภาพรวม/รายเดือน/อันดับบน-ล่าง 5 ของยุทธศาสตร์ หน่วยงาน อำเภอ ประเภท ตัวชี้วัด ≥ 3 คู่) แคช 1 ชม. ต่อชุดข้อมูล (`refresh` = สร้างใหม่) | UI `shared/ai-summary-panel.ts`
   ใต้การ์ดภาพรวมใน chart.html (`aiParams` เปลี่ยน = ล้างสรุป)
+- **ฟีเจอร์ 2 ช่วยเขียนสูตร (7 พ.ย. 2569):** `POST /ai/formula-suggest { description, kind: 'result'|'pct', custom_vars, target_condition, indicator_name }`
+  (`requireAnyAction('kpi-manage', ['add','edit'])` ใน core/access.js + aiLimiter) → `services/ai-formula.js` `suggestFormula()`: prompt สเปกภาษาสูตร + ค่าเพิ่มเติมที่ประกาศ
+  → **คืนเฉพาะสูตรที่ผ่าน `parseFormulaInput()`** (ผิด = ส่งข้อผิดพลาดให้ AI แก้ 1 รอบ, ยังผิด/ว่าง = 422) | UI `shared/ai-formula-helper.ts` ในกล่องสูตรผลงานและสูตรร้อยละของ kpi-manage
+  — "ใช้สูตรนี้" แค่ใส่ลงช่อง ผู้ใช้ทดลองคำนวณและบันทึกเอง | ⚠️ prompt ต้องบอก "ค่ารายเดือน = จำนวนของเดือนนั้น (รวมทั้งปี = SUM(ALL))" และ "สูตรร้อยละใช้ result"
+  — ทดลองกับ Gemini จริง: ก่อนเพิ่ม 2 บรรทัดนี้ ความหมายถูก 3/5 (ตอบ LAST(ALL) แทน SUM(ALL), สูตรร้อยละคำนวณผลงานใหม่) หลังเพิ่ม 5/5 — มี test คุมข้อความ
 - ชุดทดสอบห้ามเรียกผู้ให้บริการจริง: `jest.mock('@anthropic-ai/sdk')` / stub `global.fetch` / `jest.mock('../services/ai')` — Test: `api/tests/ai-core.test.js`, `ai-report-summary.test.js`,
   `shared/ai-summary-panel.spec.ts`, `shared/ai-settings-card.spec.ts`
 

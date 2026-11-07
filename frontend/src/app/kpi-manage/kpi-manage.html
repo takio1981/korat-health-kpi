@@ -1781,6 +1781,9 @@
               <span *ngIf="formulaError" class="text-red-600"><i class="fas fa-times-circle mr-1"></i>{{ formulaError }}</span>
               <span *ngIf="hasFormula && !formulaError" class="text-green-700"><i class="fas fa-check-circle mr-1"></i>สูตรถูกต้อง</span>
             </div>
+            <!-- ผู้ช่วย AI ระยะที่ 2: เสนอสูตรจากคำอธิบาย (ผ่านตัวตรวจของระบบแล้ว) — ใส่ลงช่องเมื่อกด "ใช้สูตรนี้" ไม่บันทึกเอง -->
+            <app-ai-formula-helper kind="result" [customVars]="currentItem.custom_vars || []" [targetCondition]="currentItem.target_condition || ''"
+                                   [indicatorName]="currentItem.kpi_indicators_name || ''" (apply)="currentItem.result_formula = $event"></app-ai-formula-helper>
 
             <!-- ปุ่มแทรกตัวแปร/ฟังก์ชัน ที่ตำแหน่งเคอร์เซอร์ -->
             <div class="flex flex-wrap gap-1 mt-1">
@@ -1913,6 +1916,8 @@
               <span *ngIf="pctFormulaError" class="text-red-600"><i class="fas fa-times-circle mr-1"></i>{{ pctFormulaError }}</span>
               <span *ngIf="hasPctFormula && !pctFormulaError" class="text-green-700"><i class="fas fa-check-circle mr-1"></i>สูตรถูกต้อง</span>
             </div>
+            <app-ai-formula-helper kind="pct" [customVars]="currentItem.custom_vars || []" [targetCondition]="currentItem.target_condition || ''"
+                                   [indicatorName]="currentItem.kpi_indicators_name || ''" (apply)="currentItem.pct_formula = $event"></app-ai-formula-helper>
             <div class="flex flex-wrap gap-1 mt-1">
               <button type="button" (click)="insertPctToken('result', pctInput)" class="px-1.5 py-0.5 text-[10px] rounded bg-rose-600 hover:bg-rose-700 text-white font-bold" title="result = ผลงาน">ผลงาน</button>
               <button type="button" (click)="insertPctToken('target', pctInput)" class="px-1.5 py-0.5 text-[10px] rounded bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-700 font-bold" title="target">เป้าหมาย</button>
