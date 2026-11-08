@@ -1,0 +1,121 @@
+<div class="space-y-4" id="risk-view">
+  <!-- ส่วนหัว + ตัวเลือกปีงบ/เดือน -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+    <div class="flex items-center gap-2 flex-wrap">
+      <h3 class="text-base font-bold text-gray-800 me-2"><i class="fas fa-triangle-exclamation text-red-500 me-1"></i>ตัวชี้วัดเสี่ยง (เตือนล่วงหน้า)</h3>
+      <select [(ngModel)]="yearBh" (ngModelChange)="onYearChange()" name="riskYear" class="px-3 py-1.5 border border-gray-200 rounded-xl text-sm bg-white">
+        <option *ngFor="let y of yearOptions" [value]="y">ปีงบ {{ y }}</option>
+      </select>
+      <select [(ngModel)]="through" (ngModelChange)="load()" name="riskThrough" class="px-3 py-1.5 border border-gray-200 rounded-xl text-sm bg-white"
+              title="ดูผลการคาดการณ์ ณ เดือนที่เลือก (ย้อนดูได้ — ใช้ข้อมูลถึงเดือนนั้นเท่านั้น)">
+        <option value="">ข้อมูลล่าสุด</option>
+        <option *ngFor="let m of throughOptions" [value]="m.value">ดู ณ {{ m.label }}</option>
+      </select>
+      <button type="button" (click)="load()" [disabled]="loading" class="px-3 py-1.5 rounded-xl bg-white border border-gray-200 hover:bg-gray-50 text-xs font-bold disabled:opacity-50">
+        <i class="fas" [ngClass]="loading ? 'fa-spinner fa-spin' : 'fa-rotate'"></i> โหลดใหม่
+      </button>
+    </div>
+    <p class="text-xs text-gray-500 mt-2">
+      ระบบคาดการณ์ผลงาน ณ สิ้นปีงบ (ก.ย.) ของแต่ละคู่ตัวชี้วัด × หน่วยบริการด้วยวิธีทางสถิติ: ตัวชี้วัดสะสม = อัตราเฉลี่ยต่อเดือน, ตัวชี้วัดค่าล่าสุด = แนวโน้มเชิงเส้น,
+      ตัวชี้วัดที่มีสูตร = คำนวณตามสูตรเดิม — <b>เฝ้าระวัง</b> = ค่าคาดการณ์ต่ำกว่าเป้าหมายไม่เกิน {{ data?.watch_pct ?? 10 }}%, <b>เสี่ยงสูง</b> = ต่ำกว่าเกินนั้น,
+      <b>ขาดการรายงาน</b> = เดือนล่าสุดว่างติดต่อกันตั้งแต่ 2 เดือน (ไม่ตรวจตัวชี้วัดที่รายงานเป็นรอบ) — คู่ที่มีข้อมูลน้อยกว่า 3 เดือนยังไม่คาดการณ์
+    </p>
+    <div *ngIf="error" class="mt-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-2"><i class="fas fa-triangle-exclamation me-1"></i>{{ error }}</div>
+  </div>
+
+  <ng-container *ngIf="data">
+    <!-- การ์ดสรุปตามระดับ (กดเพื่อกรอง) -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <button *ngFor="let s of ['high','watch','no_report','normal','insufficient']" type="button" (click)="s === 'normal' || s === 'insufficient' ? null : setStatus(s)"
+              class="rounded-2xl border p-3 text-left transition-all" [ngClass]="STATUS[s].cls + (filter.status === s ? ' ring-2 ring-offset-1 ring-gray-500' : '')"
+              [attr.data-status]="s">
+        <div class="text-xs font-bold"><i class="fas me-1" [ngClass]="STATUS[s].icon"></i>{{ STATUS[s].label }}</div>
+        <div class="text-2xl font-bold mt-1">{{ (data.counts[s] || 0) | number }}</div>
+        <div class="text-[10px] opacity-75">คู่ตัวชี้วัด×หน่วยบริการ</div>
+      </button>
+    </div>
+    <p class="text-xs text-gray-600">
+      ปีงบ {{ data.year_bh }} · ใช้ข้อมูลถึงเดือน <b>{{ data.through_label || '— (ยังไม่มีเดือนที่ควรรายงาน)' }}</b>{{ data.year_closed ? ' (ปีงบสิ้นสุดแล้ว = ผลจริง)' : '' }}
+      · คู่ทั้งหมด {{ data.pairs | number }} · คาดการณ์ได้ {{ data.forecastable | number }}
+      <ng-container *ngIf="data.risk_pct !== null"> · มีแนวโน้มไม่บรรลุเป้าหมาย <b class="text-red-700">{{ data.risk_pct }}%</b></ng-container>
+      <span *ngIf="data.forecastable === 0 && !data.year_closed" class="text-amber-700"> · ยังคาดการณ์ไม่ได้ เพราะต้องมีผลงานอย่างน้อย 3 เดือน — เลือกปีงบที่แล้วเพื่อย้อนดูได้</span>
+    </p>
+
+    <!-- ตัวชี้วัดที่มีคู่เสี่ยงมากที่สุด -->
+    <div *ngIf="data.by_indicator?.length" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+      <h4 class="text-sm font-bold text-gray-700 mb-2"><i class="fas fa-ranking-star me-1 text-red-500"></i>ตัวชี้วัดที่มีหน่วยบริการเสี่ยงมากที่สุด</h4>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-xs">
+        <div *ngFor="let x of data.by_indicator.slice(0, 10); let i = index" class="flex items-start gap-2 border-b border-gray-50 py-1">
+          <span class="text-gray-400 w-4 shrink-0">{{ i + 1 }}.</span>
+          <span class="flex-1">{{ x.name }}</span>
+          <span class="shrink-0 whitespace-nowrap">
+            <span *ngIf="x.high" class="text-red-700 font-bold">เสี่ยงสูง {{ x.high }}</span>
+            <span *ngIf="x.watch" class="text-amber-700 font-bold ms-1">เฝ้าระวัง {{ x.watch }}</span>
+            <span *ngIf="x.no_report" class="text-slate-600 ms-1">ขาดรายงาน {{ x.no_report }}</span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ตัวกรอง + ตาราง -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100">
+      <div class="p-3 border-b border-gray-100 flex gap-2 flex-wrap items-center">
+        <select [(ngModel)]="filter.status" name="fStatus" class="px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white">
+          <option value="">ทุกระดับ</option>
+          <option value="high">เสี่ยงสูง</option><option value="watch">เฝ้าระวัง</option><option value="no_report">ขาดการรายงาน</option>
+        </select>
+        <select [(ngModel)]="filter.yut" name="fYut" class="px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white max-w-[220px]">
+          <option value="">ทุกยุทธศาสตร์</option><option *ngFor="let o of options.yuts" [value]="o.id">{{ o.label }}</option>
+        </select>
+        <select [(ngModel)]="filter.dept" name="fDept" class="px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white max-w-[200px]">
+          <option value="">ทุกหน่วยงาน</option><option *ngFor="let o of options.depts" [value]="o.id">{{ o.label }}</option>
+        </select>
+        <select [(ngModel)]="filter.zone" name="fZone" class="px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white">
+          <option value="">ทุกโซน</option><option *ngFor="let o of options.zones" [value]="o.id">{{ o.label }}</option>
+        </select>
+        <select [(ngModel)]="filter.district" name="fDist" class="px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white">
+          <option value="">ทุกอำเภอ</option><option *ngFor="let o of options.districts" [value]="o.id">{{ o.label }}</option>
+        </select>
+        <input [(ngModel)]="filter.search" name="fSearch" placeholder="ค้นหาตัวชี้วัด / หน่วยบริการ" class="px-2 py-1.5 border border-gray-200 rounded-lg text-xs flex-1 min-w-[160px]">
+        <button type="button" (click)="clearFilters()" class="px-2 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-xs font-bold"><i class="fas fa-times me-1"></i>ล้าง</button>
+        <span class="text-xs text-gray-500">{{ filtered.length | number }} รายการ</span>
+      </div>
+      <div *ngIf="!filtered.length" class="p-8 text-center text-sm text-gray-400"><i class="fas fa-circle-check text-emerald-400 text-2xl mb-2 block"></i>ไม่มีคู่ที่เสี่ยงหรือขาดการรายงานตามตัวกรองนี้</div>
+      <div *ngIf="filtered.length" class="overflow-auto card-scroll" style="max-height: calc(100vh - 360px)">
+        <table class="w-full text-xs">
+          <thead class="bg-gray-100 text-gray-600 sticky top-0 z-20 shadow-md">
+            <tr>
+              <th class="px-2 py-2 text-left">ระดับ</th>
+              <th class="px-2 py-2 text-left">ตัวชี้วัด</th>
+              <th class="px-2 py-2 text-left">หน่วยบริการ</th>
+              <th class="px-2 py-2 text-right">ผลงานล่าสุด</th>
+              <th class="px-2 py-2 text-right">คาดการณ์ ก.ย.</th>
+              <th class="px-2 py-2 text-right">เป้าหมาย</th>
+              <th class="px-2 py-2 text-right">ร้อยละคาด</th>
+              <th class="px-2 py-2 text-center">ความเชื่อมั่น</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let it of pageItems" class="border-t border-gray-100 align-top hover:bg-gray-50">
+              <td class="px-2 py-1.5"><span class="px-2 py-0.5 rounded-full border whitespace-nowrap" [ngClass]="STATUS[it.status].cls">{{ STATUS[it.status].label }}</span></td>
+              <td class="px-2 py-1.5">{{ it.indicator_name }} <app-formula-badge [formula]="it.result_formula"></app-formula-badge>
+                <div class="text-[10px] text-gray-400">{{ it.dept_name }}{{ it.periodic ? ' · รายงานเป็นรอบ' : '' }}</div></td>
+              <td class="px-2 py-1.5 whitespace-nowrap">{{ it.hosname || it.hospcode }} <app-zone-badge [hospcode]="it.hospcode"></app-zone-badge>
+                <div class="text-[10px] text-gray-400"><i class="fas fa-location-dot me-0.5"></i>{{ it.distname }}</div></td>
+              <td class="px-2 py-1.5 text-right whitespace-nowrap">{{ it.last_actual ?? '-' }} <span class="text-[10px] text-gray-400">{{ it.last_month }}</span></td>
+              <td class="px-2 py-1.5 text-right font-bold">{{ it.status === 'no_report' ? '—' : it.projected }}</td>
+              <td class="px-2 py-1.5 text-right whitespace-nowrap">{{ it.target ? symbol(it.condition) + ' ' + it.target : '-' }}</td>
+              <td class="px-2 py-1.5 text-right" [ngClass]="it.status === 'high' ? 'text-red-700 font-bold' : (it.status === 'watch' ? 'text-amber-700 font-bold' : '')">
+                {{ it.status === 'no_report' ? ('ว่าง ' + it.missing_months + ' เดือน') : (it.pct | number:'1.0-1') + '%' }}</td>
+              <td class="px-2 py-1.5 text-center">{{ it.confidence ? CONF[it.confidence] : '-' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div *ngIf="filtered.length > shownCount || data.truncated" class="p-2 text-xs text-gray-500 flex gap-2 items-center border-t border-gray-100">
+        <span>แสดง {{ pageItems.length | number }} จาก {{ filtered.length | number }} รายการ{{ data.truncated ? ' (ระบบส่งมา ' + (data.items.length | number) + ' จาก ' + (data.total_items | number) + ')' : '' }}</span>
+        <button *ngIf="filtered.length > shownCount" type="button" (click)="shownCount = shownCount + 100" class="px-2 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 font-bold">แสดงเพิ่ม</button>
+      </div>
+    </div>
+  </ng-container>
+</div>

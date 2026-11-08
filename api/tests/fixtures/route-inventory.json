@@ -192,6 +192,7 @@
   "GET /khupskpi/api/report/by-year :: authenticateToken > handler",
   "GET /khupskpi/api/report/chart-stats :: authenticateToken > handler",
   "POST /khupskpi/api/report/ai-summary :: authenticateToken > aiLimiter > handler",
+  "GET /khupskpi/api/report/forecast :: authenticateToken > handler",
   "GET /khupskpi/api/report/recording-status :: authenticateToken > handler",
   "GET /khupskpi/api/report/recording-status/by-hospital :: authenticateToken > handler",
   "GET /khupskpi/api/report/recording-missing/by-hospital/:hospcode :: authenticateToken > handler",

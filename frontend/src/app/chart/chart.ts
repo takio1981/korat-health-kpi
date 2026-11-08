@@ -8,6 +8,7 @@ import { ApexBoxComponent } from '../shared/apex-box';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { DistrictMapComponent } from '../shared/district-map';
+import { RiskViewComponent } from './risk-view';
 import { AiSummaryPanelComponent } from '../shared/ai-summary-panel';
 import { zoneLabel, inZone } from '../shared/zone';
 import {
@@ -20,7 +21,7 @@ type FilterKey = 'selectedYut' | 'selectedMain' | 'selectedDept' | 'selectedIndi
 @Component({
   selector: 'app-chart',
   standalone: true,
-  imports: [CommonModule, RouterModule, FormsModule, ReportComponent, ApexBoxComponent, FormulaBadgeComponent, DistrictMapComponent, AiSummaryPanelComponent],
+  imports: [CommonModule, RouterModule, FormsModule, ReportComponent, ApexBoxComponent, FormulaBadgeComponent, DistrictMapComponent, AiSummaryPanelComponent, RiskViewComponent],
   templateUrl: './chart.html'
 })
 export class ChartComponent implements OnInit, OnDestroy {
@@ -28,7 +29,7 @@ export class ChartComponent implements OnInit, OnDestroy {
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
 
-  activeView: 'chart' | 'report' = 'chart';
+  activeView: 'chart' | 'report' | 'risk' = 'chart';
   isLoading = true;
   loadError = '';
 
@@ -45,6 +46,8 @@ export class ChartComponent implements OnInit, OnDestroy {
 
   options: any = { years: [], yuts: [], mains: [], depts: [], indicators: [], districts: [], zones: [], hostypes: [] };
   data: any = null; // ผลดิบจาก API
+  riskOpened = false; // แท็บตัวชี้วัดเสี่ยง — โหลดเมื่อเปิดครั้งแรก (ไม่เพิ่มคำขอตอนเปิดหน้ากราฟ)
+  openRisk() { this.riskOpened = true; this.activeView = 'risk'; }
   aiParams: any = {}; // ตัวกรองของข้อมูลที่แสดงอยู่ — ส่งให้แผงสรุปโดย AI (เปลี่ยน = ล้างสรุปเดิม)
 
   // options ของแต่ละกราฟ

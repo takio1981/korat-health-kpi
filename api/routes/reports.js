@@ -12,6 +12,7 @@ const crypto = require('crypto');
 const { aiLimiter } = require('../core/security');
 const { callLlm, sendAiError, createAiCache } = require('../services/ai');
 const { buildSummaryInput, SUMMARY_SYSTEM_PROMPT, summaryPrompt } = require('../services/ai-report');
+const { computeForecasts, summarizeByIndicator, summarizeByDistrict } = require('../services/forecast');
 
 // GET /kpi-summary — ดึงข้อมูลจาก summary table (เร็วมาก ไม่ต้อง JOIN)
 // ผลงานรายเดือนของปีงบที่แล้ว (year_bh - 1) จาก kpi_summary ตามขอบเขตสิทธิ์เดียวกับรายงาน (chartScopeClauses)
@@ -574,6 +575,18 @@ apiRouter.post('/report/ai-summary', authenticateToken, aiLimiter, async (req, r
         res.json({ success: true, ...result, cached: false });
     } catch (e) {
         sendAiError(res, e, 'สร้างสรุปด้วย AI ไม่สำเร็จ');
+    }
+});
+
+// ระบบเตือนล่วงหน้า (ข้อเสนอแนวคิด — 8 พ.ย. 2569) ระยะที่ 2: ตัวชี้วัดเสี่ยง — คาดการณ์ผลงาน ณ สิ้นปีงบของทุกคู่ตามขอบเขตเดียวกับรายงาน
+// คืนเฉพาะคู่ระดับเสี่ยงสูง/เฝ้าระวัง/ขาดการรายงาน (จำนวนทุกระดับใน counts) — ตัวกรองยุทธศาสตร์/หมวดหมู่/หน่วยงาน/อำเภอ ทำที่หน้าจอจากฟิลด์ของแต่ละแถว
+apiRouter.get('/report/forecast', authenticateToken, async (req, res) => {
+    try {
+        const scope = await chartScopeClauses(req.user);
+        const out = await computeForecasts(scope, { year: req.query.year_bh || undefined, through: req.query.through });
+        res.json({ success: true, ...out, by_indicator: summarizeByIndicator(out.items), by_district: summarizeByDistrict(out.items) });
+    } catch (e) {
+        res.status(e.status || 500).json({ success: false, message: e.message });
     }
 });
 

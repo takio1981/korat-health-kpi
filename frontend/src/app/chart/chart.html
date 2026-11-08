@@ -1,7 +1,7 @@
 <div class="p-6 relative">
 
       <!-- Tab Switcher -->
-      <div class="flex gap-1 mb-5 bg-gray-100 p-1 rounded-xl max-w-md">
+      <div class="flex gap-1 mb-5 bg-gray-100 p-1 rounded-xl max-w-2xl">
         <button (click)="activeView = 'chart'" class="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all"
                 [ngClass]="activeView === 'chart' ? 'bg-white text-green-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
           <i class="fas fa-chart-bar"></i> กราฟและสถิติ
@@ -10,6 +10,15 @@
                 [ngClass]="activeView === 'report' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
           <i class="fas fa-file-alt"></i> รายงานสรุปผล
         </button>
+        <button (click)="openRisk()" id="tab-risk" class="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all"
+                [ngClass]="activeView === 'risk' ? 'bg-white text-red-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+          <i class="fas fa-triangle-exclamation"></i> ตัวชี้วัดเสี่ยง
+        </button>
+      </div>
+
+      <!-- ===== ตัวชี้วัดเสี่ยง (ระบบเตือนล่วงหน้า) — สร้างเมื่อเปิดแท็บครั้งแรก แล้วเก็บสถานะไว้ ===== -->
+      <div *ngIf="riskOpened" [hidden]="activeView !== 'risk'" class="overflow-y-auto card-scroll" style="max-height: calc(100vh - 200px);">
+        <app-risk-view></app-risk-view>
       </div>
 
       <!-- ===== Report View ===== -->

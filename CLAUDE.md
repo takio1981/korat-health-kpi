@@ -94,7 +94,7 @@ frontend/src/app/
   ห้าม export ตรงๆ (ค่าจะค้าง) — เก็บไว้ในโมดูลเดียวกับผู้ใช้ หรือเปลี่ยนเป็น object; Map/Set แชร์ได้ (object เดียวกัน)
 - `core/env.js` ต้องเป็น require แรกของ server.js
   (ตัวดัก unhandledRejection/uncaughtException เรียก `captureError` แบบ lazy จาก core/errors)
-- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (293 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
+- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (294 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
   ตั้งใจเพิ่ม/แก้ route → `node tests/lib/route-inventory.js --write` แล้วตรวจ diff), `tests/lint.test.js` (ESLint no-undef ฯลฯ — จับชื่อที่ลืม require),
   `tests/build.test.js` (ไล่ require ทุกชั้นต้องอยู่ในชุดที่ build คัดลอก + build ลงโฟลเดอร์ชั่วคราว), `tests/startup.test.js` (เริ่มระบบ + โหลดผลลัพธ์ build ใน process แยก)
   — middleware ที่สร้างจาก factory/ไลบรารีต้องมีชื่อ (`requireAction(page,action)`, loginIpLimiter/loginLimiter/apiLimiter) ให้ snapshot แยกได้
@@ -565,7 +565,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   `shared/ai-summary-panel.spec.ts`, `shared/ai-settings-card.spec.ts`
 
 ### ระบบเตือนล่วงหน้า — คาดการณ์ผลงาน ณ สิ้นปีงบ (เริ่ม 8 พ.ย. 2569 ตามข้อเสนอแนวคิดการพัฒนา — ผู้ใช้สั่ง ทำทีละระยะ)
-- ระยะ: 1) แบบจำลองคาดการณ์ + ระดับความเสี่ยง + ทดสอบย้อนหลัง ✅ → 2) หน้า "ตัวชี้วัดเสี่ยง" ตามขอบเขตสิทธิ์ → 3) สรุปรายสัปดาห์ผ่านช่องทางแจ้งเตือนเดิม → 4) AI อธิบายรายการเสี่ยง
+- ระยะ: 1) แบบจำลองคาดการณ์ + ระดับความเสี่ยง + ทดสอบย้อนหลัง ✅ → 2) หน้า "ตัวชี้วัดเสี่ยง" ตามขอบเขตสิทธิ์ ✅ → 3) สรุปรายสัปดาห์ผ่านช่องทางแจ้งเตือนเดิม → 4) AI อธิบายรายการเสี่ยง
 - `api/kpi-forecast.js` (ฟังก์ชันล้วน **ไม่ใช้ AI**) `forecastPair(pair, { through, method, watchPct, minPoints, missingRun })`:
   สะสม = run-rate เติมเดือนที่เหลือแล้วรวม | ค่าล่าสุด = ค่า ก.ย. จากแนวโน้มเชิงเส้น (ไม่ติดลบ) | สูตร = เติมเดือนแล้ว `evaluateFormula()` (สูตรอ้างปีที่แล้ว/ค่าเพิ่มเติมโดยไม่ส่งค่า = unsupported)
   — เดือนที่ผ่านแล้วแต่ว่างไม่เติม (ไม่เดาย้อนหลัง) | ระดับ: `evaluateTarget()` ตัวเดียวกับทั้งระบบ (คำนึงถึง ≤) ผ่าน = normal, ต่ำกว่าเป้า ≤ watchPct (10) = watch, เกิน = high
@@ -574,7 +574,14 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - **ทดสอบย้อนหลัง** `node api/scripts/forecast-backtest.js [ปีงบ] [เดือนตัด 0–11] [--json]` (อ่านอย่างเดียวจาก kpi_summary) — นับเฉพาะคู่ที่**มีข้อมูลหลังเดือนตัด**
   (ไม่งั้นผลจริง = ข้อมูลชุดเดียวกับที่ใช้คาดการณ์: ข้อมูลจริงปีงบ 2569 ส่วนใหญ่สิ้นสุด เม.ย.) — ผล 8 พ.ย. 2569 ตัดที่ มี.ค.: 340 คู่ linear ถูก 97.35%
   (เตือนครบ 100% เตือนแม่น 87.5%) > last 96.76% > blend 94.12% > ma3 93.82% → ค่าตั้งต้น `method: 'linear'` — ข้อมูลส่วนใหญ่คงที่ระหว่างเดือน วิธีพื้นฐาน (last) จึงแม่นใกล้เคียง
-- Test: `api/tests/kpi-forecast.test.js`
+- **ระยะที่ 2 (8 พ.ย. 2569):** `services/forecast.js` `computeForecasts(scope, { year, through, watchPct })` — scope = `{ c, p }` จากผู้เรียก (route ใช้ `chartScopeClauses()` ของรายงาน — ไฟล์ routes ห้ามถูก require จาก services จึงรับเงื่อนไขเป็นพารามิเตอร์)
+  อ่าน kpi_summary + คุณสมบัติตัวชี้วัด, เป้าหมายรายเดือนจาก kpi_results, ค่าเพิ่มเติมของสูตรจาก `loadBaseValues()` — คืน counts ทุกระดับ + items เฉพาะ high/watch/no_report (≤ 3000)
+  — `through` (ดู ณ เดือน) ไม่เกิน `throughIndex()` | **ปีงบที่ปิดแล้วไม่ตรวจขาดการรายงาน** | **ตัวชี้วัดรายงานเป็นรอบ** (ปีงบที่แล้วหน่วยบริการที่รายงานมากที่สุด < 6 เดือน) ไม่ตรวจขาดการรายงาน
+  — ⚠️ ข้อมูลจริง: ปีงบ 2569 มี 468 คู่ที่รายงานเดือนเดียว (เช่น RDU ประเมินปีละครั้ง) ถ้าไม่ยกเว้นจะเตือน "ขาดการรายงาน" ผิดหลายร้อยคู่ | ค่าตั้งค่าใน system_settings `forecast_*` (`getForecastSettings()` แคช 1 นาที)
+  — `GET /report/forecast?year_bh=&through=` (routes/reports.js, pageKey charts จาก prefix /report/) + `by_indicator`/`by_district`
+  — UI: แท็บที่ 3 "ตัวชี้วัดเสี่ยง" ในหน้ารายงานสถิติ `chart/risk-view.ts` (สร้างเมื่อเปิดแท็บครั้งแรก `openRisk()`) ตัวกรองยุทธศาสตร์/หน่วยงาน/โซน/อำเภอทำที่หน้าจอ (`filterRiskItems()`)
+  ⚠️ ตัวเลือก `<option>` ห้ามมาจาก getter ที่สร้าง array ใหม่ทุกรอบ (NG0103 — พบใน spec) ให้คำนวณตอนโหลด
+- Test: `api/tests/kpi-forecast.test.js`, `api/tests/forecast-route.test.js`, `chart/risk-view.spec.ts`
 
 ### kpi-manage Hospitals tab
 - 5 tabs: ตัวชี้วัด / หมวดหมู่หลัก / ยุทธศาสตร์ / หน่วยงาน / **หน่วยบริการ**
