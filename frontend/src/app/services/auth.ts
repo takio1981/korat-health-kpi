@@ -1750,4 +1750,8 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
   apiPost(path: string, body: any): Observable<any> {
     return this.http.post(`${this.apiUrl}${path}`, body, { headers: this.bkHeaders() });
   }
+
+  apiPut(path: string, body: any): Observable<any> {
+    return this.http.put(`${this.apiUrl}${path}`, body, { headers: this.bkHeaders() });
+  }
 }

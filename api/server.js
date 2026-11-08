@@ -22,6 +22,7 @@ const { startBackupScheduler } = require('./services/backup');
 const { startSessionCleanupJob } = require('./jobs/session-cleanup');
 const { startExportScheduler } = require('./jobs/export-scheduler');
 const { startKpiAuditScheduler } = require('./jobs/kpi-audit');
+const { startForecastDigestScheduler } = require('./jobs/forecast-digest');
 
 const app = express();
 
@@ -96,6 +97,7 @@ require('./routes/integrations');    // ตั้งค่า env, ทดสอ�
 require('./routes/backup');          // สำรอง & กู้คืนข้อมูล
 require('./routes/kpi-audit');       // แจ้งเตือนการบันทึก KPI
 require('./routes/ai');              // ผู้ช่วย AI: สถานะ + ตั้งค่าผู้ให้บริการ (ฟีเจอร์ AI อยู่ในไฟล์ของโดเมนนั้น)
+require('./routes/forecast');        // ระบบเตือนล่วงหน้า: ตั้งค่า + สรุปรายสัปดาห์ (รายการเสี่ยงอยู่ใน routes/reports.js)
 
 // Mount Router ที่ path /khupskpi/api
 app.use('/khupskpi/api', apiRouter);
@@ -129,6 +131,7 @@ if (require.main === module) {
         try { startExportScheduler(); } catch (e) { console.error('[Scheduler] start failed:', e.message); }
         try { startBackupScheduler(); } catch (e) { console.error('[BackupScheduler] start failed:', e.message); }
         try { startKpiAuditScheduler(); } catch (e) { console.error('[KPI Audit] start failed:', e.message); }
+        try { startForecastDigestScheduler(); } catch (e) { console.error('[Forecast] start failed:', e.message); }
         startSessionCleanupJob();
     });
 }

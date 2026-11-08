@@ -234,6 +234,11 @@
           <app-ai-settings-card></app-ai-settings-card>
         </div>
 
+        <!-- ระบบเตือนล่วงหน้า (8 พ.ย. 2569) — คอมโพเนนต์แยก โหลด/บันทึกผ่าน /forecast/settings เอง -->
+        <div *ngIf="isSuperAdmin" class="mt-8 pt-6 border-t border-gray-100">
+          <app-forecast-settings-card></app-forecast-settings-card>
+        </div>
+
         <!-- ตั้งค่าอุทธรณ์ -->
         <!-- ตั้งค่า SSO: ThaID + ProviderID -->
         <div class="mt-8 pt-6 border-t border-gray-100">

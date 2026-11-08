@@ -304,6 +304,9 @@
   "POST /khupskpi/api/ai/help-ask :: authenticateToken > aiLimiter > handler",
   "POST /khupskpi/api/ai/data-quality-explain :: authenticateToken > isSuperAdmin > aiLimiter > handler",
   "POST /khupskpi/api/ai/anomaly-explain :: authenticateToken > aiLimiter > handler",
-  "POST /khupskpi/api/ai/test :: authenticateToken > isSuperAdmin > aiLimiter > handler"
+  "POST /khupskpi/api/ai/test :: authenticateToken > isSuperAdmin > aiLimiter > handler",
+  "GET /khupskpi/api/forecast/settings :: authenticateToken > isSuperAdmin > handler",
+  "PUT /khupskpi/api/forecast/settings :: authenticateToken > isSuperAdmin > handler",
+  "POST /khupskpi/api/forecast/digest/run :: authenticateToken > isSuperAdmin > handler"
  ]
 }
