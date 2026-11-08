@@ -564,6 +564,18 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - ชุดทดสอบห้ามเรียกผู้ให้บริการจริง: `jest.mock('@anthropic-ai/sdk')` / stub `global.fetch` / `jest.mock('../services/ai')` — Test: `api/tests/ai-core.test.js`, `ai-report-summary.test.js`,
   `shared/ai-summary-panel.spec.ts`, `shared/ai-settings-card.spec.ts`
 
+### ระบบเตือนล่วงหน้า — คาดการณ์ผลงาน ณ สิ้นปีงบ (เริ่ม 8 พ.ย. 2569 ตามข้อเสนอแนวคิดการพัฒนา — ผู้ใช้สั่ง ทำทีละระยะ)
+- ระยะ: 1) แบบจำลองคาดการณ์ + ระดับความเสี่ยง + ทดสอบย้อนหลัง ✅ → 2) หน้า "ตัวชี้วัดเสี่ยง" ตามขอบเขตสิทธิ์ → 3) สรุปรายสัปดาห์ผ่านช่องทางแจ้งเตือนเดิม → 4) AI อธิบายรายการเสี่ยง
+- `api/kpi-forecast.js` (ฟังก์ชันล้วน **ไม่ใช้ AI**) `forecastPair(pair, { through, method, watchPct, minPoints, missingRun })`:
+  สะสม = run-rate เติมเดือนที่เหลือแล้วรวม | ค่าล่าสุด = ค่า ก.ย. จากแนวโน้มเชิงเส้น (ไม่ติดลบ) | สูตร = เติมเดือนแล้ว `evaluateFormula()` (สูตรอ้างปีที่แล้ว/ค่าเพิ่มเติมโดยไม่ส่งค่า = unsupported)
+  — เดือนที่ผ่านแล้วแต่ว่างไม่เติม (ไม่เดาย้อนหลัง) | ระดับ: `evaluateTarget()` ตัวเดียวกับทั้งระบบ (คำนึงถึง ≤) ผ่าน = normal, ต่ำกว่าเป้า ≤ watchPct (10) = watch, เกิน = high
+  | no_report = เดือนล่าสุดที่ควรรายงานว่างติดต่อกัน ≥ 2 (ตรวจก่อนคาดการณ์) | insufficient = < 3 เดือน | no_target | unsupported (ผลงานกรอกเอง)
+  — `throughIndex(ปีงบ, วันที่)` = เดือนล่าสุดที่ควรรายงานแล้ว (ช้ากว่าเดือนปัจจุบัน 1 เดือน) | ความเชื่อมั่น low/medium/high ตามจำนวนเดือนที่มีข้อมูลและเดือนที่เหลือ
+- **ทดสอบย้อนหลัง** `node api/scripts/forecast-backtest.js [ปีงบ] [เดือนตัด 0–11] [--json]` (อ่านอย่างเดียวจาก kpi_summary) — นับเฉพาะคู่ที่**มีข้อมูลหลังเดือนตัด**
+  (ไม่งั้นผลจริง = ข้อมูลชุดเดียวกับที่ใช้คาดการณ์: ข้อมูลจริงปีงบ 2569 ส่วนใหญ่สิ้นสุด เม.ย.) — ผล 8 พ.ย. 2569 ตัดที่ มี.ค.: 340 คู่ linear ถูก 97.35%
+  (เตือนครบ 100% เตือนแม่น 87.5%) > last 96.76% > blend 94.12% > ma3 93.82% → ค่าตั้งต้น `method: 'linear'` — ข้อมูลส่วนใหญ่คงที่ระหว่างเดือน วิธีพื้นฐาน (last) จึงแม่นใกล้เคียง
+- Test: `api/tests/kpi-forecast.test.js`
+
 ### kpi-manage Hospitals tab
 - 5 tabs: ตัวชี้วัด / หมวดหมู่หลัก / ยุทธศาสตร์ / หน่วยงาน / **หน่วยบริการ**
 - CRUD endpoints `/hospitals` (super_admin): GET/POST/PUT/DELETE
@@ -1323,7 +1335,7 @@ build.bat
 `docker compose up -d --build` เสมอ ไม่งั้น Docker จะใช้ `dist/` เก่าที่ค้างจากรอบก่อนหน้าเงียบๆ
 โดยไม่มี error ใดๆ (container ขึ้น "Healthy" ปกติ แต่โค้ดที่รันจริงเป็นของเก่า):
 **⚠️ เพิ่มไฟล์ .js ใหม่ในราก `api/` ที่ server.js `require('./xxx')` → ต้องเพิ่มชื่อไฟล์ใน `ROOT_FILES` ของ `api/scripts/build.js`
-ด้วยเสมอ** (ปัจจุบัน: server.js, db.js, db-remote.js, kpi-formula.js, kpi-rollup.js, khd-mapping.js, kpi-target.js, kpi-anomaly.js — ไฟล์ในโฟลเดอร์ core/ lib/ migrations/ services/ routes/ jobs/ data/
+ด้วยเสมอ** (ปัจจุบัน: server.js, db.js, db-remote.js, kpi-formula.js, kpi-rollup.js, khd-mapping.js, kpi-target.js, kpi-anomaly.js, kpi-forecast.js — ไฟล์ในโฟลเดอร์ core/ lib/ migrations/ services/ routes/ jobs/ data/
 ถูกคัดลอกทั้งโฟลเดอร์อัตโนมัติ — data/ = ไฟล์ข้อมูลที่อ่านตอนรัน เช่น help-kb.json) — ไม่งั้น Docker image ไม่มีไฟล์นั้น →
 container backend crash `Cannot find module` (unhealthy) ตอน deploy ทั้งที่ test ผ่านหมด (test รันจาก `api/` ตรงๆ) — เกิดจริงแล้ว
 7 ต.ค. 2569 กับ `kpi-formula.js` — มี `api/tests/build.test.js` คุมไว้ (fail ถ้า require local ไฟล์ที่ไม่อยู่ใน build list)
