@@ -1214,6 +1214,10 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
   suggestAiKhdMapping(body: { kind: string; khd_values?: string[] }): Observable<any> {
     return this.http.post(`${this.apiUrl}/ai/khd-mapping-suggest`, body, { headers: this.authHeaders() });
   }
+  // ผู้ช่วยคู่มือ: ตอบจากเนื้อหาคู่มือที่สิทธิ์ของผู้ถามเห็น (ระยะที่ 4)
+  askAiHelp(question: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/ai/help-ask`, { question }, { headers: this.authHeaders() });
+  }
   testAi(): Observable<any> {
     return this.http.post(`${this.apiUrl}/ai/test`, {}, { headers: this.authHeaders() });
   }

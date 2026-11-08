@@ -94,7 +94,7 @@ frontend/src/app/
   ห้าม export ตรงๆ (ค่าจะค้าง) — เก็บไว้ในโมดูลเดียวกับผู้ใช้ หรือเปลี่ยนเป็น object; Map/Set แชร์ได้ (object เดียวกัน)
 - `core/env.js` ต้องเป็น require แรกของ server.js
   (ตัวดัก unhandledRejection/uncaughtException เรียก `captureError` แบบ lazy จาก core/errors)
-- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (289 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
+- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (290 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
   ตั้งใจเพิ่ม/แก้ route → `node tests/lib/route-inventory.js --write` แล้วตรวจ diff), `tests/lint.test.js` (ESLint no-undef ฯลฯ — จับชื่อที่ลืม require),
   `tests/build.test.js` (ไล่ require ทุกชั้นต้องอยู่ในชุดที่ build คัดลอก + build ลงโฟลเดอร์ชั่วคราว), `tests/startup.test.js` (เริ่มระบบ + โหลดผลลัพธ์ build ใน process แยก)
   — middleware ที่สร้างจาก factory/ไลบรารีต้องมีชื่อ (`requireAction(page,action)`, loginIpLimiter/loginLimiter/apiLimiter) ให้ snapshot แยกได้
@@ -538,6 +538,15 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   — prompt ต้องมีกติกา "ชื่อตรงทุกตัวอักษรมาก่อน" (ทดลอง Gemini กับค่าที่ผู้ดูแลจับคู่แล้ว 11 ค่า: ไม่มีกติกา 10/11 — เลือก "(37)" แทน "(PP&P Excellence)", มี 11/11 — มี test คุม)
   — **ไม่บันทึกเอง** | UI ในหน้าต่างจับคู่ (kpi-manage): ปุ่ม "AI แนะนำการจับคู่" → ป้าย `item._ai` + ปุ่ม "ใช้" (`useKhdAi()` แค่ตั้ง `_pick`) → ผู้ดูแลกด "จับคู่" (saveKhdMap เดิม)
   — Test: `api/tests/ai-khd-mapping.test.js` (KHD จำลอง + callLlm mock), `kpi-manage.spec.ts`
+- **ฟีเจอร์ 4 ผู้ช่วยคู่มือ (8 พ.ย. 2569):** `POST /ai/help-ask { question }` (authenticateToken + aiLimiter, PAGE_ACCESS_RULES exact → pageKey help) → `services/ai-help.js` `askHelp()`
+  — ฐานความรู้ `api/data/help-kb.json` สร้างจาก help.html + สิทธิ์ใน help.ts (`sections[].roles`) ด้วย `node api/scripts/build-help-kb.js` (ไม่มี dependency — CI ของ api ไม่มีแพ็กเกจ frontend)
+  แบ่งชิ้นตาม h2/h3/h4 + `*ngIf` แต่ละชิ้นมี audience = role ที่เห็นในหน้าคู่มือ (+ public) — **แก้ help.html/help.ts แล้วต้องรันสคริปต์ใหม่** (`tests/ai-help.test.js` ตรวจว่าไฟล์ตรงกับคู่มือ)
+  เงื่อนไข `*ngIf` ในเนื้อหาคู่มือรองรับเฉพาะ `canSeeSection('x')` (||/&&) และ `isPublicView` — แบบอื่นสคริปต์ล้มโดยเจตนา (กันเนื้อหาจำกัดสิทธิ์หลุด) | `<section>` ระดับบนต้องมี `id="section-…"` (จุดอ้างอิงคำตอบ)
+  — ค้น: Intl.Segmenter('th') + คู่คำติดกัน + BM25 เฉพาะชิ้นที่ role เห็น, ไม่ผ่านเกณฑ์ (คะแนน < 4 และคำตรงไม่เกินครึ่ง) = ตอบ `NOT_FOUND` **โดยไม่เรียก AI** | ปิด AI = 503 ก่อนค้นเสมอ (รวมกรณีไม่พบ/แคช)
+  — prompt: บทบาท (ไม่มีชื่อผู้ใช้/หน่วยบริการ) + ชิ้นคู่มือ [n] (ตัดเลขข้อหัวข้อ — มีเลขแล้ว AI เรียก "เมนู 5. …") + คำถามที่ปิดเลขยาว/อีเมล (`maskQuestion`) → JSON {found, answer, sources}
+  เลขอ้างอิงนอกช่วงถูกตัด, found=false = ไม่คืนแหล่งอ้างอิง (Gemini ส่งมาจริง), ไม่ตอบ JSON = ใช้ข้อความตรง — คืน `related` (หัวข้อที่ค้นได้) เสมอ | แคช 1 ชม. ต่อ role + คำถาม
+  — UI `shared/ai-help-box.ts` บนหน้าคู่มือ (ไม่แสดงใน /help-public) ปุ่มหัวข้อ → `HelpComponent.onAiPick()` ขยายหัวข้อแล้วเลื่อนไป | ทดลอง Gemini 10 คำถาม (8 มีคำตอบ/1 นอกคู่มือ/1 เกินสิทธิ์) ผ่าน 10/10
+  — Test: `api/tests/ai-help.test.js` (ใช้บัญชีแยกเมื่อเกิน aiLimiter 10 ครั้ง/นาที), `shared/ai-help-box.spec.ts`
 - ⚠️ **ฐานทดสอบมีโทเคน LINE/Telegram จริง และชุดทดสอบไม่ได้บล็อกการส่งออกนอกเครื่อง** — server.js ล้มตอน require (เช่น ลืม import) = ตัวดัก uncaughtException ส่งแจ้งเตือนจริง
   (เกิดจริง 7 พ.ย. 2569 ขณะรัน route-inventory --write) — รันสคริปต์ที่ require server.js ด้วย preload ที่บล็อก net/fetch ออกนอก localhost เมื่อไม่แน่ใจ
 - ชุดทดสอบห้ามเรียกผู้ให้บริการจริง: `jest.mock('@anthropic-ai/sdk')` / stub `global.fetch` / `jest.mock('../services/ai')` — Test: `api/tests/ai-core.test.js`, `ai-report-summary.test.js`,
@@ -1302,8 +1311,8 @@ build.bat
 `docker compose up -d --build` เสมอ ไม่งั้น Docker จะใช้ `dist/` เก่าที่ค้างจากรอบก่อนหน้าเงียบๆ
 โดยไม่มี error ใดๆ (container ขึ้น "Healthy" ปกติ แต่โค้ดที่รันจริงเป็นของเก่า):
 **⚠️ เพิ่มไฟล์ .js ใหม่ในราก `api/` ที่ server.js `require('./xxx')` → ต้องเพิ่มชื่อไฟล์ใน `ROOT_FILES` ของ `api/scripts/build.js`
-ด้วยเสมอ** (ปัจจุบัน: server.js, db.js, db-remote.js, kpi-formula.js, kpi-rollup.js, khd-mapping.js, kpi-target.js — ไฟล์ในโฟลเดอร์ core/ lib/ migrations/ services/ routes/ jobs/
-ถูกคัดลอกทั้งโฟลเดอร์อัตโนมัติ) — ไม่งั้น Docker image ไม่มีไฟล์นั้น →
+ด้วยเสมอ** (ปัจจุบัน: server.js, db.js, db-remote.js, kpi-formula.js, kpi-rollup.js, khd-mapping.js, kpi-target.js — ไฟล์ในโฟลเดอร์ core/ lib/ migrations/ services/ routes/ jobs/ data/
+ถูกคัดลอกทั้งโฟลเดอร์อัตโนมัติ — data/ = ไฟล์ข้อมูลที่อ่านตอนรัน เช่น help-kb.json) — ไม่งั้น Docker image ไม่มีไฟล์นั้น →
 container backend crash `Cannot find module` (unhealthy) ตอน deploy ทั้งที่ test ผ่านหมด (test รันจาก `api/` ตรงๆ) — เกิดจริงแล้ว
 7 ต.ค. 2569 กับ `kpi-formula.js` — มี `api/tests/build.test.js` คุมไว้ (fail ถ้า require local ไฟล์ที่ไม่อยู่ใน build list)
 ```bash

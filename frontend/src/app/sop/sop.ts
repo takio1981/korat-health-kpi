@@ -56,7 +56,7 @@ const SYSTEMS: SopSystem[] = [
     {id:'feedback',icon:'💬', title:'ข้อเสนอแนะ',      desc:'Feedback Board'},
     {id:'sub',     icon:'🔢', title:'ตัวชี้วัดหลายระดับ', desc:'หลัก → ย่อย → ย่อยระดับถัดไป → กิจกรรม'},
     {id:'resultsmanage', icon:'🧹', title:'จัดการข้อมูลผลงาน', desc:'Bulk Delete kpi_results'},
-    {id:'ai',      icon:'✨', title:'ผู้ช่วย AI',        desc:'สรุปรายงาน (เสนอแนะเท่านั้น)'},
+    {id:'ai',      icon:'✨', title:'ผู้ช่วย AI',        desc:'สรุปรายงาน · สูตร · จับคู่ KHD · ถามคู่มือ (เสนอแนะเท่านั้น)'},
   ],
 },{
   id:'auth', icon:'🔐', title:'ระบบเข้าสู่ระบบ', sub:'Authentication',
@@ -667,6 +667,7 @@ const SYSTEMS: SopSystem[] = [
     'ตัวจำกัด aiLimiter 10 ครั้ง/นาที/ผู้ใช้ + โควตารายวันทั้งระบบ (ai_daily_limit) | ข้อผิดพลาดจากผู้ให้บริการส่งกลับเป็น 502/504 (ไม่ใช้ 401)',
     'ระยะที่ 2 ช่วยเขียนสูตร: POST /ai/formula-suggest (requireAnyAction kpi-manage add|edit) → AI เสนอ → parseFormulaInput ตรวจ (ผิด = ให้ AI แก้ 1 รอบ) → ผู้ใช้กด "ใช้สูตรนี้" + ทดลองคำนวณ → บันทึกตัวชี้วัดเอง',
     'ระยะที่ 3 แนะนำการจับคู่ KHD: POST /ai/khd-mapping-suggest (isSuperAdmin) → listKhdMappings (ชุดเดียวกับ GET /khd-mappings) → ส่งเฉพาะค่าที่ยังไม่จับคู่ ทีละ 40 ค่า (≤ 120) → ตัด id ที่ไม่อยู่ในตัวเลือก → ป้าย AI แนะนำ → ผู้ดูแลกด ใช้ + จับคู่ (PUT /khd-mappings เดิม)',
+    'ระยะที่ 4 ผู้ช่วยคู่มือ: หน้าคู่มือ → POST /ai/help-ask (pageKey help) → ค้นเฉพาะหัวข้อคู่มือที่ role เห็น (data/help-kb.json สร้างจาก help.html ด้วย scripts/build-help-kb.js) → ไม่พบ = ตอบว่าไม่พบโดยไม่เรียก AI | พบ = AI ตอบจากเนื้อหาที่ส่งไปพร้อมเลขอ้างอิง → ปุ่มหัวข้ออ้างอิงเลื่อนไปอ่านในคู่มือ',
     'รายชื่อรุ่นโมเดล: POST /ai/models ดึงจากผู้ให้บริการ (Claude Models API / GET {base}/models) เก็บใน ai_models_cache — ปุ่ม "อัปเดตรายชื่อรุ่น" = ดึงใหม่เมื่อมีรุ่นใหม่',
   ],
 },{

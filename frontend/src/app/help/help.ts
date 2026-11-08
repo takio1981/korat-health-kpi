@@ -4,11 +4,12 @@ import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { PdfExportService } from '../services/pdf-export.service';
 import Swal from 'sweetalert2';
+import { AiHelpBoxComponent } from '../shared/ai-help-box';
 
 @Component({
   selector: 'app-help',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, AiHelpBoxComponent],
   templateUrl: './help.html'
 })
 export class HelpComponent {
@@ -110,6 +111,12 @@ export class HelpComponent {
     this.activeSection = id;
     const el = document.getElementById('section-' + id);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /** กดหัวข้ออ้างอิงจากผู้ช่วย AI → ขยายหัวข้อที่พับไว้แล้วเลื่อนไป */
+  onAiPick(anchor: string) {
+    this.collapsedSections[anchor] = false;
+    setTimeout(() => this.scrollTo(anchor));
   }
 
   private wait(ms: number): Promise<void> {

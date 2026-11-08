@@ -7,6 +7,7 @@ const { parseActiveFlag } = require('../core/validate');
 const { requireAnyAction } = require('../core/access');
 const { suggestFormula } = require('../services/ai-formula');
 const { suggestKhdMappings } = require('../services/ai-khd');
+const { askHelp } = require('../services/ai-help');
 const { AI_PROVIDERS, getAiSettings, saveAiSetting, encryptApiKey, usedToday, callLlm, sendAiError, listModels, AiError } = require('../services/ai');
 
 const clientIp = (req) => (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim();
@@ -100,6 +101,17 @@ apiRouter.post('/ai/khd-mapping-suggest', authenticateToken, isSuperAdmin, aiLim
     } catch (e) {
         if (!(e instanceof AiError) && e.status) return res.status(e.status).json({ success: false, message: e.message });
         sendAiError(res, e, 'AI เสนอการจับคู่ไม่สำเร็จ');
+    }
+});
+
+// ระยะที่ 4: ผู้ช่วยตอบคำถามการใช้งานจากคู่มือ (ทุก role ที่เปิดหน้าคู่มือได้ — PAGE_ACCESS_RULES pageKey help)
+// ค้นเฉพาะหัวข้อคู่มือที่ role ของผู้ถามเห็น (data/help-kb.json) แล้วให้ AI ตอบจากเนื้อหานั้นพร้อมอ้างหัวข้อ — ไม่พบ = ไม่เรียก AI
+apiRouter.post('/ai/help-ask', authenticateToken, aiLimiter, async (req, res) => {
+    try {
+        const out = await askHelp({ question: (req.body || {}).question }, req.user);
+        res.json({ success: true, ...out });
+    } catch (e) {
+        sendAiError(res, e, 'ผู้ช่วยคู่มือตอบไม่สำเร็จ');
     }
 });
 

@@ -72,6 +72,9 @@
       </div>
 
 
+      <!-- ผู้ช่วย AI ตอบคำถามจากคู่มือ (เฉพาะผู้ที่เข้าสู่ระบบ + ผู้ดูแลเปิดผู้ช่วย AI) -->
+      <app-ai-help-box *ngIf="!isPublicView" (pick)="onAiPick($event)"></app-ai-help-box>
+
       <!-- ==================== 1. ภาพรวมระบบ ==================== -->
       <section id="section-overview" *ngIf="canSeeSection('overview')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
@@ -117,6 +120,17 @@
               <p class="text-xs text-gray-500">แจ้งผลการบันทึก/อนุมัติ/อัพเดท ในรูปแถบเล็กมุมบนขวา (หายเอง 3 วินาที) — ไม่บล็อกหน้าจอเหมือนเดิม</p>
             </div>
           </div>
+        </div>
+        <div class="mt-4 bg-fuchsia-50 border border-fuchsia-200 rounded-xl p-4">
+          <h4 class="font-bold text-fuchsia-800 mb-2"><i class="fas fa-wand-magic-sparkles mr-2"></i>ถามผู้ช่วย AI บนหน้าคู่มือ</h4>
+          <p class="text-xs text-gray-600">เมื่อผู้ดูแลระบบเปิดผู้ช่วย AI และคุณเข้าสู่ระบบแล้ว ด้านบนของหน้าคู่มือมีกล่อง <b>"ถามผู้ช่วย AI เกี่ยวกับการใช้งาน"</b>
+            — พิมพ์คำถามเป็นภาษาไทย (เช่น "ลืมรหัสผ่านทำอย่างไร") แล้วกด <b>ถาม</b></p>
+          <ul class="text-xs text-gray-600 mt-2 space-y-1 list-disc list-inside">
+            <li>AI ตอบจาก<b>เนื้อหาคู่มือนี้เท่านั้น</b> และเฉพาะหัวข้อที่สิทธิ์ของคุณเห็น — ถ้าคู่มือไม่มีคำตอบ ระบบแจ้งว่า "ไม่พบ" (แนะนำให้ถามผู้ดูแลระบบหรือกระดานข้อเสนอแนะ)</li>
+            <li>ใต้คำตอบมีปุ่ม <b>"อ้างอิงคู่มือ"</b> และ <b>"หัวข้อที่เกี่ยวข้อง"</b> — กดเพื่อเลื่อนไปอ่านหัวข้อนั้นในคู่มือ</li>
+            <li>คำตอบเป็นข้อความจาก AI โปรดตรวจกับเนื้อหาคู่มือก่อนทำตาม — AI ไม่ทำรายการใดๆ ในระบบแทนคุณ</li>
+            <li>อย่าพิมพ์ข้อมูลส่วนบุคคลในคำถาม (ระบบปิดเลขยาวและอีเมลก่อนส่งให้ AI อยู่แล้ว)</li>
+          </ul>
         </div>
       </section>
 
@@ -1199,7 +1213,7 @@
       </section>
 
       <!-- ==================== Dark Mode + Language + Backup ==================== -->
-      <section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <section id="section-roles-ui" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-gray-800 flex items-center justify-center"><i class="fas fa-moon text-yellow-300"></i></div>
           <div>
@@ -1255,7 +1269,7 @@
       </section>
 
       <!-- ==================== ช่องทางการแจ้งเตือน (Telegram + Email + LINE Group + ในระบบ) ==================== -->
-      <section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <section id="section-notify-channels" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center"><i class="fas fa-bullhorn text-blue-600"></i></div>
           <div>
@@ -1364,7 +1378,7 @@
       </section>
 
       <!-- ==================== LINE แจ้งเตือนส่วนตัว (per-user) ==================== -->
-      <section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <section id="section-line-personal" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center"><i class="fab fa-line text-green-600"></i></div>
           <div>
@@ -1401,7 +1415,7 @@
       </section>
 
       <!-- ==================== Mobile + Profile ==================== -->
-      <section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <section id="section-mobile" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-cyan-100 flex items-center justify-center"><i class="fas fa-mobile-alt text-cyan-600"></i></div>
           <div>
@@ -1450,7 +1464,7 @@
       </section>
 
       <!-- ==================== 11.5 จัดการตัวชี้วัด — KHD Compare + key_in ==================== -->
-      <section *ngIf="canSeeSection('users') || canSeeSection('kpi-manager')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <section id="section-khd-compare" *ngIf="canSeeSection('users') || canSeeSection('kpi-manager')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center"><i class="fas fa-exchange-alt text-teal-600"></i></div>
           <div>
@@ -1603,7 +1617,7 @@
       </section>
 
       <!-- ==================== 11.6 ตัวชี้วัดย่อย (Sub-Indicators) ==================== -->
-      <section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <section id="section-sub-levels" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center"><i class="fas fa-list-ul text-indigo-600"></i></div>
           <div>
@@ -2482,6 +2496,10 @@
             <p class="text-sm font-bold text-gray-800">ถาม: ต้องการดึงผลงานรายข้อย่อย/รายกิจกรรมออกเป็นตาราง?</p>
             <p class="text-xs text-gray-600 mt-1">ตอบ: เปิด "ส่งออกรายละเอียดตัวชี้วัดย่อย/กิจกรรม" ในหน้าแก้ไขตัวชี้วัด แล้ว Export ข้อมูล KPI (เมนูจัดการข้อมูล KPI ขั้นที่ 2)
               ระบบสร้างตาราง &lt;table_process&gt;_items ในฐานข้อมูลของระบบ (ไม่ส่งเข้า KHD)</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-4">
+            <p class="text-sm font-bold text-gray-800">ถาม: ผู้ช่วย AI บนหน้าคู่มือตอบจากอะไร?</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: ตอบจากเนื้อหาคู่มือนี้เท่านั้น เฉพาะหัวข้อที่สิทธิ์ของคุณเห็น พร้อมบอกหัวข้อที่ใช้ตอบ — ถ้าไม่พบในคู่มือจะแจ้งว่าไม่พบ ไม่เดาคำตอบ (ดูหัวข้อ 1 "ถามผู้ช่วย AI บนหน้าคู่มือ")</p>
           </div>
           <div class="bg-gray-50 rounded-xl p-4">
             <p class="text-sm font-bold text-gray-800">ถาม: สีข้อความใน "ข้อเสนอแนะ" คืออะไร?</p>

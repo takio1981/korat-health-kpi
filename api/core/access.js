@@ -118,6 +118,7 @@ const PAGE_ACCESS_RULES = [
     { path: '/ai/settings', pageKey: 'settings' },
     { method: 'POST', path: '/ai/test', pageKey: 'settings' },
     { method: 'POST', path: '/ai/models', pageKey: 'settings' },
+    { method: 'POST', path: '/ai/help-ask', pageKey: 'help' },
 
     // settings (กลุ่มนี้ทั้งหมด isSuperAdmin เดิม ไม่มี endpoint เปิดปนอยู่ — ยืนยันแล้ว ปลอดภัยใช้ prefix กว้าง)
     { method: 'POST', path: '/settings', pageKey: 'settings' },
