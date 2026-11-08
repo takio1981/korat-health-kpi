@@ -35,7 +35,7 @@
       </button>
     </div>
     <p class="text-xs text-gray-600">
-      ปีงบ {{ data.year_bh }} · ใช้ข้อมูลถึงเดือน <b>{{ data.through_label || '— (ยังไม่มีเดือนที่ควรรายงาน)' }}</b>{{ data.year_closed ? ' (ปีงบสิ้นสุดแล้ว = ผลจริง)' : '' }}
+      ปีงบ {{ data.year_bh }} · ใช้ข้อมูลถึงเดือน <b>{{ data.through_label || '— (ยังไม่มีเดือนที่ควรรายงาน)' }}</b>{{ data.through < data.natural_through ? ' (ย้อนดู — ใช้ข้อมูลถึงเดือนนี้เท่านั้น)' : (data.year_closed ? ' (ปีงบสิ้นสุดแล้ว = ผลจริง)' : '') }}
       · คู่ทั้งหมด {{ data.pairs | number }} · คาดการณ์ได้ {{ data.forecastable | number }}
       <ng-container *ngIf="data.risk_pct !== null"> · มีแนวโน้มไม่บรรลุเป้าหมาย <b class="text-red-700">{{ data.risk_pct }}%</b></ng-container>
       <span *ngIf="data.forecastable === 0 && !data.year_closed" class="text-amber-700"> · ยังคาดการณ์ไม่ได้ เพราะต้องมีผลงานอย่างน้อย 3 เดือน — เลือกปีงบที่แล้วเพื่อย้อนดูได้</span>

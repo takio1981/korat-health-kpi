@@ -60,6 +60,20 @@ describe('RiskViewComponent', () => {
     expect(el.querySelectorAll('tbody tr').length).toBe(1);
   });
 
+  // พบจากการทดสอบหน้าจอ: ปีงบที่ปิดแล้วแต่ดู ณ มี.ค. เดิมขึ้น "= ผลจริง" ทั้งที่ใช้ข้อมูลถึง มี.ค. เท่านั้น
+  it('ปีงบที่ปิดแล้ว: ดู ณ เดือน = ย้อนดู (ไม่ใช่ผลจริง) | ข้อมูลล่าสุด = ผลจริง', () => {
+    const f = TestBed.createComponent(RiskViewComponent);
+    f.detectChanges();
+    http.expectOne(r => r.url.includes('/report/forecast')).flush(response({ year_closed: true, natural_through: 11, through: 5 }));
+    f.detectChanges();
+    expect((f.nativeElement as HTMLElement).textContent).toContain('ย้อนดู — ใช้ข้อมูลถึงเดือนนี้เท่านั้น');
+    expect((f.nativeElement as HTMLElement).textContent).not.toContain('= ผลจริง');
+    f.componentInstance.load();
+    http.expectOne(r => r.url.includes('/report/forecast')).flush(response({ year_closed: true, natural_through: 11, through: 11, through_label: 'ก.ย.' }));
+    f.detectChanges();
+    expect((f.nativeElement as HTMLElement).textContent).toContain('ปีงบสิ้นสุดแล้ว = ผลจริง');
+  });
+
   it('เปลี่ยน "ดู ณ เดือน" → ส่ง through | ยังคาดการณ์ไม่ได้ = แนะนำให้ย้อนดูปีงบที่แล้ว', () => {
     const f = TestBed.createComponent(RiskViewComponent);
     f.detectChanges();
@@ -67,6 +81,7 @@ describe('RiskViewComponent', () => {
     f.detectChanges();
     expect((f.nativeElement as HTMLElement).textContent).toContain('ต้องมีผลงานอย่างน้อย 3 เดือน');
     expect(f.componentInstance.throughOptions.map(o => o.label)).toEqual(['ต.ค.', 'พ.ย.', 'ธ.ค.', 'ม.ค.', 'ก.พ.', 'มี.ค.']);
+    expect((f.nativeElement as HTMLElement).textContent).not.toContain('ย้อนดู — ใช้ข้อมูล');
     f.componentInstance.through = '2';
     f.componentInstance.load();
     expect(http.expectOne(r => r.url.includes('/report/forecast')).request.url).toContain('through=2');
