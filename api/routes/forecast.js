@@ -5,6 +5,7 @@ const { authenticateToken, isSuperAdmin, saveLog } = require('../core/auth');
 const { parseActiveFlag } = require('../core/validate');
 const { getForecastSettings, saveForecastSetting } = require('../services/forecast');
 const { runForecastDigest, getLastRun } = require('../jobs/forecast-digest');
+const { forecastAiSummarizer } = require('../services/ai-forecast');
 
 const clientIp = (req) => (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim();
 const DAYS = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
@@ -50,7 +51,7 @@ apiRouter.put('/forecast/settings', authenticateToken, isSuperAdmin, async (req,
 apiRouter.post('/forecast/digest/run', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
         const preview = (req.body || {}).preview === true;
-        const out = await runForecastDigest({ manual: true, preview });
+        const out = await runForecastDigest({ manual: true, preview, aiSummarize: forecastAiSummarizer(req.user.userId) });
         if (!preview && !out.skipped) await saveLog(req.user.username, 'FORECAST_DIGEST_RUN', `ส่งสรุปตัวชี้วัดเสี่ยง ปีงบ ${out.year_bh} (เสี่ยงสูง ${out.counts.high})`, clientIp(req));
         res.json({ success: true, ...out });
     } catch (e) {

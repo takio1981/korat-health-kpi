@@ -23,6 +23,7 @@ const { startSessionCleanupJob } = require('./jobs/session-cleanup');
 const { startExportScheduler } = require('./jobs/export-scheduler');
 const { startKpiAuditScheduler } = require('./jobs/kpi-audit');
 const { startForecastDigestScheduler } = require('./jobs/forecast-digest');
+const { forecastAiSummarizer } = require('./services/ai-forecast');
 
 const app = express();
 
@@ -131,7 +132,7 @@ if (require.main === module) {
         try { startExportScheduler(); } catch (e) { console.error('[Scheduler] start failed:', e.message); }
         try { startBackupScheduler(); } catch (e) { console.error('[BackupScheduler] start failed:', e.message); }
         try { startKpiAuditScheduler(); } catch (e) { console.error('[KPI Audit] start failed:', e.message); }
-        try { startForecastDigestScheduler(); } catch (e) { console.error('[Forecast] start failed:', e.message); }
+        try { startForecastDigestScheduler(forecastAiSummarizer(null)); } catch (e) { console.error('[Forecast] start failed:', e.message); }
         startSessionCleanupJob();
     });
 }

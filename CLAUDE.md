@@ -94,7 +94,7 @@ frontend/src/app/
   ห้าม export ตรงๆ (ค่าจะค้าง) — เก็บไว้ในโมดูลเดียวกับผู้ใช้ หรือเปลี่ยนเป็น object; Map/Set แชร์ได้ (object เดียวกัน)
 - `core/env.js` ต้องเป็น require แรกของ server.js
   (ตัวดัก unhandledRejection/uncaughtException เรียก `captureError` แบบ lazy จาก core/errors)
-- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (297 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
+- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (298 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
   ตั้งใจเพิ่ม/แก้ route → `node tests/lib/route-inventory.js --write` แล้วตรวจ diff), `tests/lint.test.js` (ESLint no-undef ฯลฯ — จับชื่อที่ลืม require),
   `tests/build.test.js` (ไล่ require ทุกชั้นต้องอยู่ในชุดที่ build คัดลอก + build ลงโฟลเดอร์ชั่วคราว), `tests/startup.test.js` (เริ่มระบบ + โหลดผลลัพธ์ build ใน process แยก)
   — middleware ที่สร้างจาก factory/ไลบรารีต้องมีชื่อ (`requireAction(page,action)`, loginIpLimiter/loginLimiter/apiLimiter) ให้ snapshot แยกได้
@@ -565,7 +565,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   `shared/ai-summary-panel.spec.ts`, `shared/ai-settings-card.spec.ts`
 
 ### ระบบเตือนล่วงหน้า — คาดการณ์ผลงาน ณ สิ้นปีงบ (เริ่ม 8 พ.ย. 2569 ตามข้อเสนอแนวคิดการพัฒนา — ผู้ใช้สั่ง ทำทีละระยะ)
-- ระยะ: 1) แบบจำลองคาดการณ์ + ระดับความเสี่ยง + ทดสอบย้อนหลัง ✅ → 2) หน้า "ตัวชี้วัดเสี่ยง" ตามขอบเขตสิทธิ์ ✅ → 3) สรุปรายสัปดาห์ผ่านช่องทางแจ้งเตือนเดิม ✅ → 4) AI อธิบายรายการเสี่ยง
+- ระยะ: 1) แบบจำลองคาดการณ์ + ระดับความเสี่ยง + ทดสอบย้อนหลัง ✅ → 2) หน้า "ตัวชี้วัดเสี่ยง" ตามขอบเขตสิทธิ์ ✅ → 3) สรุปรายสัปดาห์ผ่านช่องทางแจ้งเตือนเดิม ✅ → 4) AI อธิบายรายการเสี่ยง ✅
 - `api/kpi-forecast.js` (ฟังก์ชันล้วน **ไม่ใช้ AI**) `forecastPair(pair, { through, method, watchPct, minPoints, missingRun })`:
   สะสม = run-rate เติมเดือนที่เหลือแล้วรวม | ค่าล่าสุด = ค่า ก.ย. จากแนวโน้มเชิงเส้น (ไม่ติดลบ) | สูตร = เติมเดือนแล้ว `evaluateFormula()` (สูตรอ้างปีที่แล้ว/ค่าเพิ่มเติมโดยไม่ส่งค่า = unsupported)
   — เดือนที่ผ่านแล้วแต่ว่างไม่เติม (ไม่เดาย้อนหลัง) | ระดับ: `evaluateTarget()` ตัวเดียวกับทั้งระบบ (คำนึงถึง ≤) ผ่าน = normal, ต่ำกว่าเป้า ≤ watchPct (10) = watch, เกิน = high
@@ -586,7 +586,12 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   | แจ้งเตือนในระบบ (notifications type info): super_admin = ภาพรวม, admin_ssj = เฉพาะหน่วยงานที่มีคู่เสี่ยงสูง (`buildDeptNotices()`) | อีเมล/Telegram = ภาพรวม (getNotifSettings, escape HTML)
   | ผลครั้งล่าสุด system_settings `forecast_digest_last_run` — `routes/forecast.js`: GET/PUT `/forecast/settings`, POST `/forecast/digest/run { preview }` (isSuperAdmin, PAGE_ACCESS_RULES prefix `/forecast/` → settings)
   — UI `shared/forecast-settings-card.ts` ในหน้าตั้งค่าระบบ | `AuthService.apiPut()` เพิ่มคู่กับ apiGet/apiPost | ⚠️ ชุดทดสอบ mock sendMail/sendTelegramDirect/getNotifSettings (ฐานทดสอบมีโทเคนจริง)
-- Test: `api/tests/kpi-forecast.test.js`, `api/tests/forecast-route.test.js`, `api/tests/forecast-digest.test.js`, `chart/risk-view.spec.ts`, `shared/forecast-settings-card.spec.ts`
+- **ระยะที่ 4 (8 พ.ย. 2569):** `services/ai-forecast.js` `explainForecast(fc, { userId, filters, refresh })` — `POST /report/forecast/ai-explain` (aiLimiter, prefix /report/ → charts)
+  server คำนวณใหม่ตามขอบเขตผู้เรียกเสมอ + `applyRiskFilters()` (ความหมายเดียวกับ filterRiskItems ฝั่งหน้าจอ) ส่งจำนวน/ชื่อตัวชี้วัด/อำเภอ/ร้อยละที่คาด **ไม่มีรหัส/ชื่อหน่วยบริการ**
+  ไม่มีรายการเสี่ยง = ไม่เรียก AI | `forecastAiSummarizer(userId)` ส่งให้สรุปรายสัปดาห์ (ตั้งค่า `forecast_digest_ai`, ล้มเหลว = ส่งต่อพร้อม `ai_error`)
+  — ⚠️ ทดลอง Gemini จริง (ปีงบ 2569 ณ มี.ค.): ตัวเลข/ชื่อถูกทุกค่า แต่เขียน "หน่วยงาน 411 รายการ" แทน 411 คู่ → prompt บังคับใช้คำว่า "คู่" (มี test คุม)
+  — UI `shared/ai-forecast-panel.ts` ในแท็บตัวชี้วัดเสี่ยง (`aiParams` คืน object เดิมเมื่อค่าไม่เปลี่ยน กัน NG0100)
+- Test: `api/tests/kpi-forecast.test.js`, `api/tests/forecast-route.test.js`, `api/tests/forecast-digest.test.js`, `api/tests/ai-forecast.test.js`, `shared/ai-forecast-panel.spec.ts`, `chart/risk-view.spec.ts`, `shared/forecast-settings-card.spec.ts`
 
 ### kpi-manage Hospitals tab
 - 5 tabs: ตัวชี้วัด / หมวดหมู่หลัก / ยุทธศาสตร์ / หน่วยงาน / **หน่วยบริการ**

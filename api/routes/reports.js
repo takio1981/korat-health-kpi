@@ -10,9 +10,10 @@ const { getDistrictId, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT } = require('../core/acc
 const { addZoneFilter } = require('../core/zones');
 const crypto = require('crypto');
 const { aiLimiter } = require('../core/security');
-const { callLlm, sendAiError, createAiCache } = require('../services/ai');
+const { callLlm, sendAiError, createAiCache, AiError } = require('../services/ai');
 const { buildSummaryInput, SUMMARY_SYSTEM_PROMPT, summaryPrompt } = require('../services/ai-report');
 const { computeForecasts, summarizeByIndicator, summarizeByDistrict } = require('../services/forecast');
+const { explainForecast } = require('../services/ai-forecast');
 
 // GET /kpi-summary — ดึงข้อมูลจาก summary table (เร็วมาก ไม่ต้อง JOIN)
 // ผลงานรายเดือนของปีงบที่แล้ว (year_bh - 1) จาก kpi_summary ตามขอบเขตสิทธิ์เดียวกับรายงาน (chartScopeClauses)
@@ -587,6 +588,23 @@ apiRouter.get('/report/forecast', authenticateToken, async (req, res) => {
         res.json({ success: true, ...out, by_indicator: summarizeByIndicator(out.items), by_district: summarizeByDistrict(out.items) });
     } catch (e) {
         res.status(e.status || 500).json({ success: false, message: e.message });
+    }
+});
+
+// ระบบเตือนล่วงหน้า ระยะที่ 4: AI อธิบายรายการตัวชี้วัดเสี่ยงตามตัวกรองบนหน้าจอ — server คำนวณใหม่ตามขอบเขตของผู้เรียกเสมอ (ไม่รับรายการจาก client)
+// ส่งเฉพาะจำนวน/ชื่อตัวชี้วัด/อำเภอ/ร้อยละที่คาด ไม่มีรหัส/ชื่อหน่วยบริการ | ไม่มีรายการเสี่ยง = ไม่เรียก AI
+apiRouter.post('/report/forecast/ai-explain', authenticateToken, aiLimiter, async (req, res) => {
+    try {
+        const b = req.body || {};
+        const scope = await chartScopeClauses(req.user);
+        const fc = await computeForecasts(scope, { year: b.year_bh || undefined, through: b.through });
+        const filters = {};
+        for (const k of ['status', 'yut', 'dept', 'zone', 'district']) if (b[k] !== undefined && b[k] !== null && b[k] !== '') filters[k] = String(b[k]);
+        const out = await explainForecast(fc, { userId: req.user.userId, filters, refresh: b.refresh === true });
+        res.json({ success: true, ...out });
+    } catch (e) {
+        if (!(e instanceof AiError) && e.status) return res.status(e.status).json({ success: false, message: e.message });
+        sendAiError(res, e, 'AI อธิบายตัวชี้วัดเสี่ยงไม่สำเร็จ');
     }
 });
 

@@ -9,6 +9,7 @@ import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import { CONDITION_SYMBOL, normalizeCondition } from '../shared/kpi-target';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { ZoneBadgeComponent } from '../shared/zone-badge';
+import { AiForecastPanelComponent } from '../shared/ai-forecast-panel';
 
 export const RISK_MONTHS = ['ต.ค.', 'พ.ย.', 'ธ.ค.', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.'];
 export const RISK_STATUS: Record<string, { label: string; cls: string; icon: string }> = {
@@ -52,7 +53,7 @@ export function riskOptions(items: any[]) {
 @Component({
   selector: 'app-risk-view',
   standalone: true,
-  imports: [CommonModule, FormsModule, FormulaBadgeComponent, ZoneBadgeComponent],
+  imports: [CommonModule, FormsModule, FormulaBadgeComponent, ZoneBadgeComponent, AiForecastPanelComponent],
   templateUrl: './risk-view.html',
 })
 export class RiskViewComponent implements OnInit {
@@ -77,12 +78,16 @@ export class RiskViewComponent implements OnInit {
   get pageItems(): any[] { return this.filtered.slice(0, this.shownCount); }
   /** เดือนที่เลือก "ดู ณ เดือน" ได้ (ไม่เกินเดือนล่าสุดที่ควรรายงานแล้วของปีงบนั้น) — คำนวณตอนโหลด (getter สร้าง <option> ใหม่ทุกรอบ = NG0103) */
   throughOptions: { value: string; label: string }[] = [];
-  /** ตัวชี้วัด/อำเภอที่ส่งให้แผง AI (ระยะที่ 4) — ตามตัวกรองที่แสดงอยู่ */
+  /** ตัวกรองที่ส่งให้แผง AI (ระยะที่ 4) — คืน object เดิมเมื่อค่าไม่เปลี่ยน (object ใหม่ทุกรอบ = NG0100 ที่ input binding) */
+  private _aiKey = '';
+  private _aiParams: any = {};
   get aiParams(): any {
     const p: any = { year_bh: this.data?.year_bh || this.yearBh };
     if (this.through !== '') p.through = this.through;
     for (const k of ['status', 'yut', 'dept', 'zone', 'district'] as const) if (this.filter[k]) p[k] = this.filter[k];
-    return p;
+    const key = JSON.stringify(p);
+    if (key !== this._aiKey) { this._aiKey = key; this._aiParams = p; }
+    return this._aiParams;
   }
 
   ngOnInit() { this.load(); }
