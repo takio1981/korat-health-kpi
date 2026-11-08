@@ -7,6 +7,7 @@ import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import Swal from 'sweetalert2';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { ZoneBadgeComponent } from '../shared/zone-badge';
+import { DataQualityPanelComponent } from '../shared/data-quality-panel';
 
 // month_bh encoding ที่ระบบใช้จริงทั้งระบบ: 10,11,12,1,2,...,9 (ปีงบเริ่ม ต.ค.=10) — เรียงตามปีงบ (ต.ค. ก่อน)
 const FISCAL_MONTHS = [
@@ -19,7 +20,7 @@ const FISCAL_MONTHS = [
 @Component({
   selector: 'app-kpi-results-manage',
   standalone: true,
-  imports: [CommonModule, FormsModule, FormulaBadgeComponent, ZoneBadgeComponent],
+  imports: [CommonModule, FormsModule, FormulaBadgeComponent, ZoneBadgeComponent, DataQualityPanelComponent],
   templateUrl: './kpi-results-manage.html'
 })
 export class KpiResultsManageComponent implements OnInit {

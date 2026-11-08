@@ -48,6 +48,7 @@
   "POST /khupskpi/api/bulk-add-kpi :: authenticateToken > isAdmin > handler",
   "POST /khupskpi/api/kpi-results/bulk-delete :: authenticateToken > isSuperAdmin > handler",
   "GET /khupskpi/api/kpi-results/manage :: authenticateToken > isSuperAdmin > handler",
+  "GET /khupskpi/api/kpi-results/manage/data-quality :: authenticateToken > isSuperAdmin > handler",
   "POST /khupskpi/api/kpi-results/manage/bulk-delete :: authenticateToken > isSuperAdmin > handler",
   "POST /khupskpi/api/update-kpi :: authenticateToken > handler",
   "GET /khupskpi/api/form-schemas :: authenticateToken > handler",
@@ -300,6 +301,8 @@
   "POST /khupskpi/api/ai/formula-suggest :: authenticateToken > requireAnyAction(kpi-manage,add|edit) > aiLimiter > handler",
   "POST /khupskpi/api/ai/khd-mapping-suggest :: authenticateToken > isSuperAdmin > aiLimiter > handler",
   "POST /khupskpi/api/ai/help-ask :: authenticateToken > aiLimiter > handler",
+  "POST /khupskpi/api/ai/data-quality-explain :: authenticateToken > isSuperAdmin > aiLimiter > handler",
+  "POST /khupskpi/api/ai/anomaly-explain :: authenticateToken > aiLimiter > handler",
   "POST /khupskpi/api/ai/test :: authenticateToken > isSuperAdmin > aiLimiter > handler"
  ]
 }

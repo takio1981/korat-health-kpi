@@ -1,0 +1,356 @@
+[
+  {
+    "name": "พิมพ์เกินหลัก (850 แทน 85) → สูงกว่าค่ากลางของเดือนอื่น",
+    "value": "850",
+    "ctx": {
+      "others": [
+        "85",
+        "88",
+        "",
+        "90"
+      ]
+    },
+    "expected": {
+      "kind": "high",
+      "basis": "months",
+      "ref": 88,
+      "contains": [
+        "สูงกว่า",
+        "88"
+      ]
+    }
+  },
+  {
+    "name": "พิมพ์ตกหลัก (8 แทน 85) → ต่ำกว่า",
+    "value": "8",
+    "ctx": {
+      "others": [
+        "85",
+        "88"
+      ]
+    },
+    "expected": {
+      "kind": "low",
+      "basis": "months",
+      "contains": [
+        "ต่ำกว่า"
+      ]
+    }
+  },
+  {
+    "name": "แกว่งตามปกติ 120 ไม่เตือน",
+    "value": "120",
+    "ctx": {
+      "others": [
+        "85",
+        "88",
+        "90"
+      ]
+    },
+    "expected": null
+  },
+  {
+    "name": "แกว่งตามปกติ 40 ไม่เตือน",
+    "value": "40",
+    "ctx": {
+      "others": [
+        "85",
+        "88",
+        "90"
+      ]
+    },
+    "expected": null
+  },
+  {
+    "name": "4.9 เท่า ไม่เตือน",
+    "value": "430",
+    "ctx": {
+      "others": [
+        "88"
+      ]
+    },
+    "expected": null
+  },
+  {
+    "name": "5 เท่าพอดี เตือน",
+    "value": "440",
+    "ctx": {
+      "others": [
+        "88"
+      ]
+    },
+    "expected": {
+      "kind": "high",
+      "basis": "months"
+    }
+  },
+  {
+    "name": "แถว 85, 88, 850: เตือน 850",
+    "value": "850",
+    "ctx": {
+      "others": [
+        "85",
+        "88"
+      ]
+    },
+    "expected": {
+      "kind": "high",
+      "basis": "months"
+    }
+  },
+  {
+    "name": "แถว 85, 88, 850: ไม่เตือน 85 (regression)",
+    "value": "85",
+    "ctx": {
+      "others": [
+        "88",
+        "850"
+      ]
+    },
+    "expected": null
+  },
+  {
+    "name": "แถว 85, 88, 850: ไม่เตือน 88 (regression)",
+    "value": "88",
+    "ctx": {
+      "others": [
+        "85",
+        "850"
+      ]
+    },
+    "expected": null
+  },
+  {
+    "name": "12 เดือน ค่าผิด 1 เดือน: เดือนปกติไม่เตือน",
+    "value": "85",
+    "ctx": {
+      "others": [
+        "80",
+        "82",
+        "85",
+        "88",
+        "90",
+        "86",
+        "84",
+        "83",
+        "87",
+        "89",
+        "8500"
+      ]
+    },
+    "expected": null
+  },
+  {
+    "name": "12 เดือน ค่าผิด 1 เดือน: เดือนที่ผิดเตือน",
+    "value": "8500",
+    "ctx": {
+      "others": [
+        "80",
+        "82",
+        "85",
+        "88",
+        "90",
+        "86",
+        "84",
+        "83",
+        "87",
+        "89",
+        "85"
+      ]
+    },
+    "expected": {
+      "kind": "high",
+      "basis": "months"
+    }
+  },
+  {
+    "name": "2 ค่าต่างกันมาก: เตือนค่ามาก",
+    "value": "850",
+    "ctx": {
+      "others": [
+        "85"
+      ]
+    },
+    "expected": {
+      "kind": "high",
+      "basis": "months"
+    }
+  },
+  {
+    "name": "2 ค่าต่างกันมาก: เตือนค่าน้อย",
+    "value": "85",
+    "ctx": {
+      "others": [
+        "850"
+      ]
+    },
+    "expected": {
+      "kind": "low",
+      "basis": "months"
+    }
+  },
+  {
+    "name": "จำนวนนับน้อยๆ (1 → 6) ไม่เตือน",
+    "value": "6",
+    "ctx": {
+      "others": [
+        "1",
+        "1",
+        "2"
+      ]
+    },
+    "expected": null
+  },
+  {
+    "name": "ค่า 0 ไม่เตือน",
+    "value": "0",
+    "ctx": {
+      "others": [
+        "85",
+        "90"
+      ]
+    },
+    "expected": null
+  },
+  {
+    "name": "ค่าว่างไม่ตรวจ",
+    "value": "",
+    "ctx": {
+      "others": [
+        "85"
+      ]
+    },
+    "expected": null
+  },
+  {
+    "name": "ข้อความไม่ตรวจ",
+    "value": "รอดำเนินการ",
+    "ctx": {
+      "others": [
+        "85"
+      ]
+    },
+    "expected": null
+  },
+  {
+    "name": "ค่าติดลบเตือนเสมอ",
+    "value": "-5",
+    "ctx": {},
+    "expected": {
+      "kind": "negative",
+      "basis": "none",
+      "ref": null
+    }
+  },
+  {
+    "name": "มีจุลภาคคั่นหลักพัน",
+    "value": "8,500",
+    "ctx": {
+      "others": [
+        "850",
+        "880",
+        "900"
+      ]
+    },
+    "expected": {
+      "kind": "high",
+      "basis": "months",
+      "ref": 880
+    }
+  },
+  {
+    "name": "ไม่มีเดือนอื่น → เดือนเดียวกันของปีงบที่แล้ว",
+    "value": "850",
+    "ctx": {
+      "others": [
+        "",
+        "0"
+      ],
+      "prevSame": "80",
+      "prevAll": [
+        "80",
+        "82"
+      ]
+    },
+    "expected": {
+      "kind": "high",
+      "basis": "prev-month",
+      "contains": [
+        "เดือนเดียวกันของปีงบที่แล้ว"
+      ]
+    }
+  },
+  {
+    "name": "ไม่มีเดือนเดียวกัน → ค่ากลางของปีงบที่แล้ว",
+    "value": "850",
+    "ctx": {
+      "others": [],
+      "prevSame": "",
+      "prevAll": [
+        "80",
+        "90",
+        "100"
+      ]
+    },
+    "expected": {
+      "kind": "high",
+      "basis": "prev-year",
+      "ref": 90
+    }
+  },
+  {
+    "name": "ใกล้ปีที่แล้ว ไม่เตือน",
+    "value": "95",
+    "ctx": {
+      "others": [],
+      "prevSame": "80"
+    },
+    "expected": null
+  },
+  {
+    "name": "มีเดือนอื่นแล้ว ไม่ใช้ปีที่แล้ว",
+    "value": "900",
+    "ctx": {
+      "others": [
+        "850",
+        "880"
+      ],
+      "prevSame": "80"
+    },
+    "expected": null
+  },
+  {
+    "name": "ไม่มีข้อมูลอ้างอิง → เกินเป้าหมาย 10 เท่า",
+    "value": "850",
+    "ctx": {
+      "target": "80"
+    },
+    "expected": {
+      "kind": "high",
+      "basis": "target",
+      "ref": 80
+    }
+  },
+  {
+    "name": "ไม่ถึง 10 เท่าของเป้าหมาย ไม่เตือน",
+    "value": "500",
+    "ctx": {
+      "target": "80"
+    },
+    "expected": null
+  },
+  {
+    "name": "ไม่มีอะไรเทียบ ไม่เตือน",
+    "value": "850",
+    "ctx": {},
+    "expected": null
+  },
+  {
+    "name": "เป้าหมายเป็นข้อความ ไม่เตือน",
+    "value": "850",
+    "ctx": {
+      "target": "ผ่าน"
+    },
+    "expected": null
+  }
+]

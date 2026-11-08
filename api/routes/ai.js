@@ -8,6 +8,8 @@ const { requireAnyAction } = require('../core/access');
 const { suggestFormula } = require('../services/ai-formula');
 const { suggestKhdMappings } = require('../services/ai-khd');
 const { askHelp } = require('../services/ai-help');
+const { scanDataQuality } = require('../services/data-quality');
+const { explainDataQuality, explainAnomalies } = require('../services/ai-quality');
 const { AI_PROVIDERS, getAiSettings, saveAiSetting, encryptApiKey, usedToday, callLlm, sendAiError, listModels, AiError } = require('../services/ai');
 
 const clientIp = (req) => (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim();
@@ -112,6 +114,32 @@ apiRouter.post('/ai/help-ask', authenticateToken, aiLimiter, async (req, res) =>
         res.json({ success: true, ...out });
     } catch (e) {
         sendAiError(res, e, 'ผู้ช่วยคู่มือตอบไม่สำเร็จ');
+    }
+});
+
+// ระยะที่ 5 (ก): สรุปผลตรวจคุณภาพข้อมูลทั้งปีงบ (หน้าจัดการข้อมูลผลงาน — super_admin) — server ตรวจใหม่เสมอ ไม่รับผลตรวจจาก client
+// ไม่พบรายการ = ไม่เรียก AI | ส่งเฉพาะจำนวน/ชื่อตัวชี้วัด/ตัวอย่างค่า (ไม่มีรหัส/ชื่อหน่วยบริการ)
+apiRouter.post('/ai/data-quality-explain', authenticateToken, isSuperAdmin, aiLimiter, async (req, res) => {
+    try {
+        const b = req.body || {};
+        const scan = await scanDataQuality(b.year_bh);
+        const out = await explainDataQuality(scan, req.user.userId, { refresh: b.refresh === true });
+        res.json({ success: true, ...out });
+    } catch (e) {
+        if (!(e instanceof AiError) && e.status) return res.status(e.status).json({ success: false, message: e.message });
+        sendAiError(res, e, 'AI สรุปผลตรวจคุณภาพข้อมูลไม่สำเร็จ');
+    }
+});
+
+// ระยะที่ 5 (ข): อธิบายคำเตือนค่าที่อาจผิดปกติของช่องที่กำลังแก้ในหน้าบันทึกผลงาน (ยังไม่บันทึก) — เตือนเท่านั้น ไม่ห้ามบันทึก
+// server คำนวณคำเตือนใหม่ด้วย detectAnomaly() และอ่านชื่อตัวชี้วัดจากฐานข้อมูล (ตามขอบเขตหน่วยงาน) — ไม่ส่งรหัสหน่วยบริการเข้า prompt
+apiRouter.post('/ai/anomaly-explain', authenticateToken, aiLimiter, async (req, res) => {
+    try {
+        const b = req.body || {};
+        const out = await explainAnomalies(b.items, req.user, { refresh: b.refresh === true });
+        res.json({ success: true, ...out });
+    } catch (e) {
+        sendAiError(res, e, 'AI อธิบายค่าที่อาจผิดปกติไม่สำเร็จ');
     }
 });
 

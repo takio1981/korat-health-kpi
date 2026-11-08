@@ -18,6 +18,7 @@ import { ZoneBadgeComponent } from '../shared/zone-badge';
 import { indicatorTypeSetting, autoTargetHostypes, resolveAddKpiTargets, HOSTYPE_NAMES } from '../shared/indicator-scope';
 import { EXCEL_MONTHS, ChangePlan, EditPerms, buildTemplateAoa, templateFileName, parseImportAoa, planImport, parseClipboardGrid, isMultiCell, planPaste, applyCellChanges, itemKey } from '../shared/kpi-excel';
 import { Anomaly, detectAnomaly } from '../shared/anomaly';
+import { AiAnomalyExplainComponent, AnomalyExplainRow, anomalyPayload } from '../shared/ai-anomaly-explain';
 import { SUB_EXCEL_MONTHS, SubChangePlan, buildSubTemplateAoa, parseSubImportAoa, planSubImport, applySubChanges, subFieldLabel, subTemplateFileName } from '../shared/kpi-sub-excel';
 import { activityValue, rollupMonthly, itemNumber, rollupTree, RollupNode } from '../shared/kpi-rollup';
 import { orderSubTree } from '../shared/sub-tree';
@@ -113,7 +114,7 @@ export function recomputeHierRows(rows: HierRow[]) {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, NgApexchartsModule, InitScrollLeftDirective, CriteriaTextPipe, FormulaBadgeComponent, ZoneBadgeComponent],
+  imports: [CommonModule, FormsModule, RouterModule, NgApexchartsModule, InitScrollLeftDirective, CriteriaTextPipe, FormulaBadgeComponent, ZoneBadgeComponent, AiAnomalyExplainComponent],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css'
 })
@@ -653,7 +654,11 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   ngOnInit() {
     this.handleSsoCallback();
     this.currentUser = this.authService.getUser();
-    if (this.authService.isLoggedIn()) this.loadColumnPrefs();
+    if (this.authService.isLoggedIn()) {
+      this.loadColumnPrefs();
+      // ผู้ช่วย AI เปิดอยู่ = แสดงปุ่ม "AI อธิบาย" ข้างตัวนับค่าที่อาจผิดปกติ (สถานะแคชใน AuthService)
+      this.authService.getAiStatus().subscribe((res: any) => { this.aiEnabled = !!res?.enabled; this.cdr.detectChanges(); });
+    }
     const role = this.authService.getUserRole();
     this.isAdmin = ['admin_ssj', 'super_admin'].includes(role);      // admin ส่วนกลาง
     this.isSuperAdmin = role === 'super_admin';
@@ -3998,6 +4003,23 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     return out;
   }
+  // ผู้ช่วย AI ระยะที่ 5: อธิบายคำเตือนของช่องที่กำลังแก้ (ยังไม่บันทึก) — เตือนเท่านั้น ไม่แก้ค่า ไม่ห้ามบันทึก
+  aiEnabled = false;
+  aiAnomalyRows: AnomalyExplainRow[] | null = null;
+  openAiAnomalyExplain() {
+    const list = this.anomalyList;
+    if (!list.length) return;
+    this.aiAnomalyRows = list.map(a => ({
+      indicatorName: a.item.kpi_indicators_name || '',
+      hosname: a.item.hosname || '',
+      hospcode: String(a.item.hospcode ?? ''),
+      monthName: a.monthName,
+      value: a.value,
+      message: a.message,
+      payload: anomalyPayload(a.item, a.month, this.prevYearMonths.get(itemKey(a.item.indicator_id, a.item.hospcode, a.item.year_bh))),
+    }));
+  }
+
   get anomalyCount(): number {
     let n = 0;
     for (const item of this.filteredData) if (item._anomaly) n += Object.keys(item._anomaly).length;

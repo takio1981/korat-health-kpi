@@ -1218,6 +1218,17 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
   askAiHelp(question: string): Observable<any> {
     return this.http.post(`${this.apiUrl}/ai/help-ask`, { question }, { headers: this.authHeaders() });
   }
+  // ระยะที่ 5: ตรวจคุณภาพข้อมูลทั้งปีงบ (ตรวจแบบกฎ ไม่ใช้ AI) + ให้ AI สรุป (super_admin — หน้าจัดการข้อมูลผลงาน)
+  getDataQuality(yearBh: string): Observable<any> {
+    return this.http.get(`${this.apiUrl}/kpi-results/manage/data-quality?year_bh=${encodeURIComponent(yearBh)}`, { headers: this.authHeaders() });
+  }
+  explainDataQuality(yearBh: string, refresh = false): Observable<any> {
+    return this.http.post(`${this.apiUrl}/ai/data-quality-explain`, { year_bh: yearBh, refresh }, { headers: this.authHeaders() });
+  }
+  // ระยะที่ 5: AI อธิบายคำเตือนค่าที่อาจผิดปกติของช่องที่กำลังแก้ (หน้าบันทึกผลงาน) — เตือนเท่านั้น
+  explainAnomalies(items: any[], refresh = false): Observable<any> {
+    return this.http.post(`${this.apiUrl}/ai/anomaly-explain`, { items, refresh }, { headers: this.authHeaders() });
+  }
   testAi(): Observable<any> {
     return this.http.post(`${this.apiUrl}/ai/test`, {}, { headers: this.authHeaders() });
   }

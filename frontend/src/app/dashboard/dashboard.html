@@ -80,6 +80,11 @@
                     title="ช่องสีแดงในตาราง = ค่าต่างจากเดือนอื่น/ปีงบที่แล้ว/เป้าหมายมากผิดปกติ — ชี้ที่ไอคอนเตือนในช่องเพื่อดูเหตุผล (เตือนเท่านั้น ยังบันทึกได้)">
                 <i class="fas fa-exclamation-triangle"></i> ค่าอาจผิดปกติ {{ anomalyCount }} ช่อง
               </span>
+              <button *ngIf="anomalyCount > 0 && aiEnabled" type="button" (click)="openAiAnomalyExplain()" id="btn-ai-anomaly"
+                      class="flex-1 md:flex-none px-3 py-2 bg-fuchsia-600 hover:bg-fuchsia-700 text-white rounded-xl shadow-md text-xs font-bold flex items-center justify-center gap-1.5"
+                      title="ให้ AI อธิบายว่าค่าที่ถูกเตือนอาจผิดปกติเพราะอะไร และควรตรวจอะไร (เตือนเท่านั้น ไม่แก้ค่าให้)">
+                <i class="fas fa-wand-magic-sparkles"></i> AI อธิบาย
+              </button>
             </div>
             <p *ngIf="isEditing" class="hidden lg:block w-full text-[11px] text-gray-500">
               <i class="fas fa-lightbulb text-amber-500 mr-1"></i>คัดลอกหลายช่องจาก Excel แล้ว<b>วาง (Ctrl+V)</b> ในช่องเป้าหมายหรือช่องเดือนได้เลย — ระบบเติมไล่ลงและไปทางขวาจากช่องที่วาง (ช่องว่างไม่ทับค่าเดิม)
@@ -2337,3 +2342,5 @@
         title="เพิ่มตัวชี้วัด">
   <i class="fas fa-plus text-xl"></i>
 </button>
+
+<app-ai-anomaly-explain *ngIf="aiAnomalyRows" [rows]="aiAnomalyRows" (close)="aiAnomalyRows = null"></app-ai-anomaly-explain>

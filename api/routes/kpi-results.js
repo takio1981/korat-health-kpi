@@ -13,6 +13,7 @@ const { formulaOk, needsCustomValues, varKeysOf } = require('../services/formula
 const { isManualResult, isManualPct, manualKey, loadManualValues, normalizeManualPct, MANUAL_RESULT_KEY, MANUAL_PCT_KEY } = require('../services/manual-result');
 const { getUserAuditInfo, logKpiSaveAudit } = require('../services/kpi-audit');
 const { indicatorAllowsHostype, indicatorTypeSetting, resolveIndicatorHostypes } = require('../services/indicator-scope');
+const { scanDataQuality } = require('../services/data-quality');
 
 apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
     try {
@@ -493,6 +494,17 @@ apiRouter.get('/kpi-results/manage', authenticateToken, isSuperAdmin, async (req
         res.json({ success: true, data, total: countRows[0].total, page, limit });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// GET /kpi-results/manage/data-quality?year_bh= — ตรวจคุณภาพข้อมูลผลงานทั้งปีงบแบบกฎ (ผู้ช่วย AI ระยะที่ 5 — 8 พ.ย. 2569)
+// อ่านอย่างเดียว ไม่แก้ข้อมูล — กฎอยู่ใน services/data-quality.js (คำเตือนรายเดือนใช้ kpi-anomaly.js สำเนาเดียวกับหน้าบันทึกผลงาน)
+apiRouter.get('/kpi-results/manage/data-quality', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const { _indicators, ...scan } = await scanDataQuality(req.query.year_bh);
+        res.json({ success: true, ...scan });
+    } catch (e) {
+        res.status(e.status || 500).json({ success: false, message: e.message });
     }
 });
 

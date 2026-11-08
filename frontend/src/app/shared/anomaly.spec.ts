@@ -1,4 +1,19 @@
 import { detectAnomaly, median, toNumber } from './anomaly';
+import cases from './anomaly.cases.json';
+
+// fixture เดียวกับ backend (api/tests/fixtures/anomaly-cases.json — api/kpi-anomaly.js ใช้ตรวจคุณภาพข้อมูลทั้งปีงบ) — ผลต้องตรงกันทุกเคส
+describe('anomaly (frontend) — fixture ร่วมกับ backend', () => {
+  for (const c of cases as any[]) {
+    it(c.name, () => {
+      const a = detectAnomaly(c.value, c.ctx);
+      if (c.expected === null) { expect(a).toBeNull(); return; }
+      expect(a?.kind).toBe(c.expected.kind);
+      expect(a?.basis).toBe(c.expected.basis);
+      if ('ref' in c.expected) expect(a?.ref).toBe(c.expected.ref);
+      for (const t of c.expected.contains || []) expect(a?.message).toContain(t);
+    });
+  }
+});
 
 describe('anomaly: เตือนค่าผลงานที่อาจผิดปกติ', () => {
   it('ตัวช่วย: toNumber / median', () => {

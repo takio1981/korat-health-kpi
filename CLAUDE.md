@@ -94,7 +94,7 @@ frontend/src/app/
   ห้าม export ตรงๆ (ค่าจะค้าง) — เก็บไว้ในโมดูลเดียวกับผู้ใช้ หรือเปลี่ยนเป็น object; Map/Set แชร์ได้ (object เดียวกัน)
 - `core/env.js` ต้องเป็น require แรกของ server.js
   (ตัวดัก unhandledRejection/uncaughtException เรียก `captureError` แบบ lazy จาก core/errors)
-- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (290 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
+- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (293 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
   ตั้งใจเพิ่ม/แก้ route → `node tests/lib/route-inventory.js --write` แล้วตรวจ diff), `tests/lint.test.js` (ESLint no-undef ฯลฯ — จับชื่อที่ลืม require),
   `tests/build.test.js` (ไล่ require ทุกชั้นต้องอยู่ในชุดที่ build คัดลอก + build ลงโฟลเดอร์ชั่วคราว), `tests/startup.test.js` (เริ่มระบบ + โหลดผลลัพธ์ build ใน process แยก)
   — middleware ที่สร้างจาก factory/ไลบรารีต้องมีชื่อ (`requireAction(page,action)`, loginIpLimiter/loginLimiter/apiLimiter) ให้ snapshot แยกได้
@@ -547,6 +547,18 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   เลขอ้างอิงนอกช่วงถูกตัด, found=false = ไม่คืนแหล่งอ้างอิง (Gemini ส่งมาจริง), ไม่ตอบ JSON = ใช้ข้อความตรง — คืน `related` (หัวข้อที่ค้นได้) เสมอ | แคช 1 ชม. ต่อ role + คำถาม
   — UI `shared/ai-help-box.ts` บนหน้าคู่มือ (ไม่แสดงใน /help-public) ปุ่มหัวข้อ → `HelpComponent.onAiPick()` ขยายหัวข้อแล้วเลื่อนไป | ทดลอง Gemini 10 คำถาม (8 มีคำตอบ/1 นอกคู่มือ/1 เกินสิทธิ์) ผ่าน 10/10
   — Test: `api/tests/ai-help.test.js` (ใช้บัญชีแยกเมื่อเกิน aiLimiter 10 ครั้ง/นาที), `shared/ai-help-box.spec.ts`
+- **ฟีเจอร์ 5 คุณภาพข้อมูล + อธิบายค่าผิดปกติ (8 พ.ย. 2569):** ตัวตรวจคำเตือนรายเดือน 2 สำเนาต้องตรงกัน: `api/kpi-anomaly.js` = `frontend/src/app/shared/anomaly.ts`
+  (fixture ร่วม `api/tests/fixtures/anomaly-cases.json` = `shared/anomaly.cases.json` — jest บังคับไฟล์ตรงกัน; แก้ตรรกะ → แก้ทั้ง 2 สำเนา + เพิ่มเคสทั้ง 2 ไฟล์)
+  — (ก) `GET /kpi-results/manage/data-quality?year_bh=` (isSuperAdmin, pageKey kpi-results-manage) → `services/data-quality.js` `scanDataQuality()` **ตรวจแบบกฎ ไม่ใช้ AI** อ่านอย่างเดียว:
+  ติดลบ / สูง-ต่ำ (detectAnomaly: เดือนอื่น → ปีงบที่แล้วจาก kpi_summary → เป้าหมาย) / ข้อความในตัวชี้วัดที่ผลงาน ≥ 80% เป็นตัวเลข (≥ 5 ช่อง) / ชื่อ "ร้อยละ" + เป้า ≤ 100 แต่ผลงาน > 100
+  เฉพาะ is_active = 1, ชื่อหน่วยบริการดึงแยก (ไม่ JOIN chospital), คืน ≤ 1000 รายการ (counts ครบ) | `POST /ai/data-quality-explain { year_bh }` (isSuperAdmin + aiLimiter) server ตรวจใหม่เอง ไม่พบ = ไม่เรียก AI
+  — (ข) `POST /ai/anomaly-explain { items }` (aiLimiter, pageKey dashboard) ≤ 20 ช่อง: client ส่ง indicator_id + ค่า 12 เดือน (รวมค่าที่ยังไม่บันทึก) + เป้าหมาย + ปีงบที่แล้ว —
+  **server คำนวณคำเตือนใหม่ด้วย detectAnomaly (ไม่ใช้ข้อความจาก client), อ่านชื่อตัวชี้วัดจากฐาน (ROLE_SCOPE_OWN_DEPT กรองหน่วยงาน), ค่าที่ไม่ใช่ตัวเลขส่งเป็น "ข้อความ"** ช่องที่ไม่เข้าเกณฑ์ = ตัด (ทั้งหมด = 422)
+  — **ข้อสังเกตที่ระบบคำนวณ** `anomalyHints()`/`withBasisHint()`/`textHint()` (เท่ากับผลรวมเดือนก่อนหน้า = ยอดสะสม, ×/÷ 10/100/1000 ใกล้ค่ากลาง = เกิน/ตกหลัก, ร้อยละเกิน 100, เทียบปีที่แล้ว)
+  ส่งเข้า prompt + แสดงบนหน้าจอ และ `KIND_CAUSES` = สาเหตุที่ AI เลือกได้ต่อประเภท — ⚠️ ทดลอง Gemini จริง: ไม่มีข้อสังเกต AI ตีความ 55 (= ผลรวม 5 เดือน) ว่า "ตั้งใจพิมพ์ 5" (3/5 → 5/5 หลังเพิ่ม)
+  และสรุปทั้งปีคัดลอกรายการสาเหตุทั้งหมด (หลังให้เลือกตามประเภท = เลือกเฉพาะที่สอดคล้อง) — มี test คุม | ไม่ส่งรหัส/ชื่อหน่วยบริการและข้อความที่บันทึกจริงเข้า prompt
+  — UI: `shared/data-quality-panel.ts` (หน้า kpi-results-manage) + `shared/ai-anomaly-explain.ts` (ปุ่ม `#btn-ai-anomaly` ข้างตัวนับค่าผิดปกติใน dashboard, `openAiAnomalyExplain()`) — AI ไม่แก้ค่า ไม่ห้ามบันทึก
+  — Test: `api/tests/ai-quality.test.js`, `shared/anomaly.spec.ts` (fixture), `shared/ai-anomaly-explain.spec.ts`, `shared/data-quality-panel.spec.ts`, `dashboard.spec.ts`
 - ⚠️ **ฐานทดสอบมีโทเคน LINE/Telegram จริง และชุดทดสอบไม่ได้บล็อกการส่งออกนอกเครื่อง** — server.js ล้มตอน require (เช่น ลืม import) = ตัวดัก uncaughtException ส่งแจ้งเตือนจริง
   (เกิดจริง 7 พ.ย. 2569 ขณะรัน route-inventory --write) — รันสคริปต์ที่ require server.js ด้วย preload ที่บล็อก net/fetch ออกนอก localhost เมื่อไม่แน่ใจ
 - ชุดทดสอบห้ามเรียกผู้ให้บริการจริง: `jest.mock('@anthropic-ai/sdk')` / stub `global.fetch` / `jest.mock('../services/ai')` — Test: `api/tests/ai-core.test.js`, `ai-report-summary.test.js`,
@@ -1311,7 +1323,7 @@ build.bat
 `docker compose up -d --build` เสมอ ไม่งั้น Docker จะใช้ `dist/` เก่าที่ค้างจากรอบก่อนหน้าเงียบๆ
 โดยไม่มี error ใดๆ (container ขึ้น "Healthy" ปกติ แต่โค้ดที่รันจริงเป็นของเก่า):
 **⚠️ เพิ่มไฟล์ .js ใหม่ในราก `api/` ที่ server.js `require('./xxx')` → ต้องเพิ่มชื่อไฟล์ใน `ROOT_FILES` ของ `api/scripts/build.js`
-ด้วยเสมอ** (ปัจจุบัน: server.js, db.js, db-remote.js, kpi-formula.js, kpi-rollup.js, khd-mapping.js, kpi-target.js — ไฟล์ในโฟลเดอร์ core/ lib/ migrations/ services/ routes/ jobs/ data/
+ด้วยเสมอ** (ปัจจุบัน: server.js, db.js, db-remote.js, kpi-formula.js, kpi-rollup.js, khd-mapping.js, kpi-target.js, kpi-anomaly.js — ไฟล์ในโฟลเดอร์ core/ lib/ migrations/ services/ routes/ jobs/ data/
 ถูกคัดลอกทั้งโฟลเดอร์อัตโนมัติ — data/ = ไฟล์ข้อมูลที่อ่านตอนรัน เช่น help-kb.json) — ไม่งั้น Docker image ไม่มีไฟล์นั้น →
 container backend crash `Cannot find module` (unhealthy) ตอน deploy ทั้งที่ test ผ่านหมด (test รันจาก `api/` ตรงๆ) — เกิดจริงแล้ว
 7 ต.ค. 2569 กับ `kpi-formula.js` — มี `api/tests/build.test.js` คุมไว้ (fail ถ้า require local ไฟล์ที่ไม่อยู่ใน build list)

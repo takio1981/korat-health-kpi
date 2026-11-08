@@ -108,6 +108,7 @@ const PAGE_ACCESS_RULES = [
     // จัดการข้อมูลผลงานตัวชี้วัด — เฉพาะ GET (list) เข้าระบบนี้ได้ ส่วน bulk-delete hardcode isSuperAdmin ตรงๆ
     // เสมอ (ตามกฎ DELETE ทุกตัวของระบบ) ไม่เข้า PAGE_ACCESS_RULES เด็ดขาด กันเปิดสิทธิ์ลบผ่านการตั้งค่านี้
     { method: 'GET', path: '/kpi-results/manage', pageKey: 'kpi-results-manage' },
+    { method: 'GET', path: '/kpi-results/manage/data-quality', pageKey: 'kpi-results-manage' }, // ตรวจคุณภาพข้อมูล (8 พ.ย. 2569) — isSuperAdmin
     { method: 'GET', path: '/kpi-setup-check', pageKey: 'kpi-setup' },
     { method: 'GET', path: '/notifications', pageKey: 'notifications' },
     { method: 'GET', path: '/feedback', pageKey: 'feedback' },
@@ -119,6 +120,8 @@ const PAGE_ACCESS_RULES = [
     { method: 'POST', path: '/ai/test', pageKey: 'settings' },
     { method: 'POST', path: '/ai/models', pageKey: 'settings' },
     { method: 'POST', path: '/ai/help-ask', pageKey: 'help' },
+    { method: 'POST', path: '/ai/anomaly-explain', pageKey: 'dashboard' },          // ระยะที่ 5: อธิบายคำเตือนค่าผิดปกติตอนบันทึกผลงาน
+    { method: 'POST', path: '/ai/data-quality-explain', pageKey: 'kpi-results-manage' }, // ระยะที่ 5: สรุปผลตรวจคุณภาพข้อมูล (isSuperAdmin)
 
     // settings (กลุ่มนี้ทั้งหมด isSuperAdmin เดิม ไม่มี endpoint เปิดปนอยู่ — ยืนยันแล้ว ปลอดภัยใช้ prefix กว้าง)
     { method: 'POST', path: '/settings', pageKey: 'settings' },

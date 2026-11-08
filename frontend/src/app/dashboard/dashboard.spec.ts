@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { DashboardComponent } from './dashboard';
 import { testProviders } from '../testing/test-providers';
-import { parseImportAoa, planImport, buildTemplateAoa } from '../shared/kpi-excel';
+import { parseImportAoa, planImport, buildTemplateAoa, itemKey } from '../shared/kpi-excel';
 import { parseSubImportAoa, planSubImport } from '../shared/kpi-sub-excel';
 import { buildHierRows, recomputeHierRows } from './dashboard';
 
@@ -525,6 +525,32 @@ describe('DashboardComponent', () => {
       expect(el.textContent).toContain('นำเข้า Excel');
       expect(el.textContent).toContain('ค่าอาจผิดปกติ 1 ช่อง');
       expect(el.querySelector('input[type=file][accept*=".xlsx"]')).toBeTruthy();
+      expect(el.querySelector('#btn-ai-anomaly')).toBeNull();   // ผู้ช่วย AI ปิด = ไม่มีปุ่ม AI อธิบาย
+    });
+
+    // ผู้ช่วย AI ระยะที่ 5 (8 พ.ย. 2569): ปุ่ม "AI อธิบาย" ส่งค่าทุกเดือนของแถว (รวมค่าที่ยังไม่บันทึก) + เป้าหมาย + ปีงบที่แล้ว
+    it('AI อธิบาย: แสดงปุ่มเมื่อเปิดผู้ช่วย AI และสร้างข้อมูลที่ส่งจากช่องที่ถูกเตือน', () => {
+      const a = component.filteredData[0];
+      component.kpiData = component.filteredData;
+      component.prevYearMonths.set(itemKey(a.indicator_id, a.hospcode, a.year_bh), { oct: '70', dece: '75' });
+      a.dece = '850';
+      component.onValueChange(a, 'dece');
+      component.aiEnabled = true;
+      (component as any).cdr.detectChanges();
+      const btn = (fixture.nativeElement as HTMLElement).querySelector('#btn-ai-anomaly') as HTMLButtonElement;
+      expect(btn).toBeTruthy();
+      component.openAiAnomalyExplain();
+      expect(component.aiAnomalyRows).toHaveLength(1);
+      const row = component.aiAnomalyRows![0];
+      expect(row.monthName).toBe('ธ.ค.');
+      expect(row.value).toBe('850');
+      expect(row.payload.indicator_id).toBe(Number(a.indicator_id));
+      expect(row.payload.month).toBe('dece');
+      expect(row.payload.months['dece']).toBe('850');
+      expect(Object.keys(row.payload.months)).toHaveLength(12);
+      expect(row.payload.prev?.['dece']).toBe('75');
+      expect(row.payload.target).toBe(String(a.target_value ?? ''));
+      expect((row.payload as any).hospcode).toBeUndefined();     // รหัสหน่วยบริการไม่อยู่ในข้อมูลที่ส่ง
     });
   });
 

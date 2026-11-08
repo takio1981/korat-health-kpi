@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const ROOT_FILES = ['server.js', 'db.js', 'db-remote.js', 'kpi-formula.js', 'kpi-rollup.js', 'khd-mapping.js', 'kpi-target.js'];
+const ROOT_FILES = ['server.js', 'db.js', 'db-remote.js', 'kpi-formula.js', 'kpi-rollup.js', 'khd-mapping.js', 'kpi-target.js', 'kpi-anomaly.js'];
 const DIRS = ['core', 'lib', 'migrations', 'services', 'routes', 'jobs', 'data']; // data = ไฟล์ข้อมูลที่ระบบอ่านตอนรัน (help-kb.json)
 
 function build(apiDir = path.join(__dirname, '..'), outDir = path.join(apiDir, 'dist')) {
