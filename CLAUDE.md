@@ -94,7 +94,7 @@ frontend/src/app/
   ห้าม export ตรงๆ (ค่าจะค้าง) — เก็บไว้ในโมดูลเดียวกับผู้ใช้ หรือเปลี่ยนเป็น object; Map/Set แชร์ได้ (object เดียวกัน)
 - `core/env.js` ต้องเป็น require แรกของ server.js
   (ตัวดัก unhandledRejection/uncaughtException เรียก `captureError` แบบ lazy จาก core/errors)
-- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (298 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
+- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (301 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
   ตั้งใจเพิ่ม/แก้ route → `node tests/lib/route-inventory.js --write` แล้วตรวจ diff), `tests/lint.test.js` (ESLint no-undef ฯลฯ — จับชื่อที่ลืม require),
   `tests/build.test.js` (ไล่ require ทุกชั้นต้องอยู่ในชุดที่ build คัดลอก + build ลงโฟลเดอร์ชั่วคราว), `tests/startup.test.js` (เริ่มระบบ + โหลดผลลัพธ์ build ใน process แยก)
   — middleware ที่สร้างจาก factory/ไลบรารีต้องมีชื่อ (`requireAction(page,action)`, loginIpLimiter/loginLimiter/apiLimiter) ให้ snapshot แยกได้
@@ -615,6 +615,19 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   - `ngOnInit` → `handleSsoCallback()` อ่าน query → save token+user → redirect dashboard | แสดง error
 - Frontend Settings: OAuth config form (input type=password สำหรับ client_secret พร้อมปุ่ม show/hide)
 - maintenance-status endpoint (public) คืน `thaid_enabled` + `providerid_enabled` — login/register poll ทุก 3s
+
+### เข้าสู่ระบบอัตโนมัติจาก KHD (9 พ.ย. 2569 — ผู้ใช้เลือก: JWT รหัสลับร่วม ไม่มีรหัสผ่าน, บัญชีใช้อยู่ที่อื่น = ถามก่อน, URL ตั้งได้จากหน้าตั้งค่า)
+- KHD เปิด `<khd_sso_login_url>?khd_token=<JWT>` (`?token=` เป็นของ ThaID/ProviderID — ห้ามใช้ร่วม) — สเปกสำหรับทีม KHD: `docs/khd-sso-spec.md`
+- `POST /auth/khd/login { token, force_login }` (public, **เฉพาะ loginIpLimiter** — loginLimiter แยกตาม username ใน body ซึ่งไม่มี = NAT เดียวโดนบล็อกทั้งหน่วยงาน):
+  `jwt.verify` HS256 เท่านั้น + iss/aud + clockTolerance 30s, ต้องมี iat/exp (exp − iat ≤ 300) + jti, ชื่อผู้ใช้จาก `username` หรือ `sub` — jti จำใน Map **เมื่อสำเร็จเท่านั้น**
+  (409 แล้วกด "เข้าใช้ที่นี่" ส่ง token เดิม + force_login ได้) — process เดียว | ผิด = 401 `KHD_TOKEN_INVALID` (เหตุผลจริงอยู่ใน login_logs), ไม่พบผู้ใช้ 401 `KHD_USER_NOT_FOUND`, ปิดใช้งาน 403 `KHD_SSO_DISABLED`
+- **`completeLogin(req, res, user, opts)` (routes/auth.js)** = ส่วนหลังรหัสผ่านถูกของ `POST /login` (แยกคำต่อคำ) ใช้ร่วมทั้ง 2 เส้นทาง — สถานะบัญชี, 409 CONCURRENT_LOGIN, session, JWT 8 ชม., แจ้งเตือน (`method: 'khd'` → "KHD")
+  — ช่องทางเข้าสู่ระบบใหม่ที่ยืนยันตัวตนแล้วให้เรียก helper นี้ ห้ามเขียนการออก session ซ้ำ | KHD ไม่บังคับเปลี่ยนรหัสผ่าน (`noForceChange`)
+- ตั้งค่า `system_settings`: `khd_sso_enabled`, `khd_sso_url` (ค่าตั้งต้น https://khd.moph.go.th/ — iss ที่ยอมรับ = ชื่อโฮสต์ ถ้าไม่ตั้ง `khd_sso_issuer`), `khd_sso_login_url`, `khd_sso_audience` (khupskpi),
+  `khd_sso_secret_enc` (bkEncrypt — **`GET /settings` ตัดคีย์นี้ออก**) — `getKhdSsoSettings()` ใน services/sso.js แคช 1 นาที | `GET|PUT /auth/khd/settings` (isSuperAdmin, PAGE_ACCESS_RULES exact → settings):
+  URL ผ่าน `normalizeSsoUrl()` (https เท่านั้น / http เฉพาะ localhost), `generate_secret` คืนรหัสลับครั้งเดียว, `secret` ≥ 32 ตัวอักษร, เปิดโดยไม่มีรหัสลับ = 400 — **ห้าม hardcode URL ของ KHD ในโค้ดใหม่**
+- Frontend: `login.ts` `handleKhdTokenParam()` (ก่อน ThaID — ล้าง token จาก URL ทันที คงพารามิเตอร์อื่น) → `loginWithKhdToken()` ใช้ `showConcurrentLoginDialog()`/`showAnnouncementThenDashboard()` ร่วมกับ login ปกติ
+  | การ์ด `shared/khd-sso-settings-card.ts` ในหน้าตั้งค่าระบบ — Test: `api/tests/khd-sso.test.js`, `login.spec.ts`, `shared/khd-sso-settings-card.spec.ts`
 
 ### Form Builder Field Types
 - 7 ประเภท: text / number / textarea / select / score_option / date / checkbox

@@ -294,6 +294,18 @@
           <p class="text-[10px] text-amber-600 mt-2"><i class="fas fa-info-circle mr-1"></i>super_admin ต้องเปิด toggle + กรอก Login URL ในหน้า <b>ตั้งค่าระบบ → ตั้งค่าการเข้าสู่ระบบด้วย SSO</b> | ปุ่มจะปรากฏใน login ภายใน ≤3 วินาที (poll auto)</p>
         </div>
 
+        <!-- เข้าสู่ระบบอัตโนมัติจาก KHD (9 พ.ย. 2569) -->
+        <div class="bg-sky-50 border border-sky-200 rounded-xl p-4 mt-4">
+          <h4 class="font-bold text-sky-800 text-sm mb-2"><i class="fas fa-right-to-bracket mr-2"></i>เข้าสู่ระบบอัตโนมัติจากระบบ KHD</h4>
+          <ol class="list-decimal list-inside text-xs text-gray-700 space-y-1">
+            <li>เข้าสู่ระบบ KHD ตามปกติ แล้วกดลิงก์ไปยัง KHUPS KPI ที่ KHD จัดไว้</li>
+            <li>ระบบตรวจลิงก์แล้วเข้าสู่ระบบให้ทันทีโดยไม่ต้องกรอกรหัสผ่าน (แสดง "เข้าสู่ระบบสำเร็จ (KHD)") แล้วไปหน้าบันทึกผลงาน</li>
+            <li>ถ้าบัญชีกำลังใช้งานอยู่ที่เครื่องอื่น ระบบถามก่อนเหมือนการเข้าสู่ระบบปกติ — กด "เข้าใช้ที่นี่" เพื่อใช้เครื่องนี้</li>
+            <li>ลิงก์ใช้ไม่ได้ (หมดอายุ / ใช้ไปแล้ว / ไม่พบบัญชี) → ระบบแจ้งเหตุผล แล้วให้กรอกชื่อผู้ใช้และรหัสผ่านเองตามปกติ</li>
+          </ol>
+          <p class="text-[11px] text-sky-700 mt-2"><i class="fas fa-shield-alt mr-1"></i>ลิงก์มีอายุไม่เกิน 5 นาทีและใช้ได้ครั้งเดียว — ชื่อผู้ใช้ใน KHD ต้องตรงกับบัญชีในระบบนี้ (ยังไม่มีบัญชี = ลงทะเบียนก่อน)</p>
+        </div>
+
         <!-- ลืมรหัสผ่าน -->
         <div class="mt-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4">
           <h4 class="font-bold text-blue-800 text-sm mb-3"><i class="fas fa-key mr-2"></i>ลืมรหัสผ่าน?</h4>
@@ -1112,6 +1124,18 @@
             </div>
           </div>
           <p class="text-[11px] text-cyan-700 mt-2"><i class="fas fa-shield-alt mr-1"></i>ระบบ match user ด้วย <b>เลขบัตรประชาชน (SHA-256 hash)</b> — ปฏิเสธ user ใหม่ ต้องลงทะเบียนก่อน</p>
+        </div>
+
+        <!-- เข้าสู่ระบบอัตโนมัติจาก KHD (9 พ.ย. 2569) -->
+        <div class="bg-sky-50 border border-sky-200 rounded-xl p-4 mb-4">
+          <h4 class="font-bold text-sky-800 text-sm mb-2"><i class="fas fa-right-to-bracket mr-2"></i>ตั้งค่าการเข้าสู่ระบบอัตโนมัติจาก KHD</h4>
+          <ol class="list-decimal list-inside text-xs text-gray-700 space-y-1">
+            <li>ตั้งค่าระบบ → การ์ด <b>"เข้าสู่ระบบอัตโนมัติจาก KHD"</b> (ผู้ดูแลระบบสูงสุด)</li>
+            <li>ตรวจ <b>URL ระบบ KHD</b> และ <b>URL หน้าเข้าสู่ระบบของ KHUPS KPI</b> — แก้ได้เมื่อ URL เปลี่ยน (ต้องขึ้นต้นด้วย https://) หรือกด "คืนค่า URL ตั้งต้น"</li>
+            <li>กด <b>"สร้างรหัสลับ"</b> → คัดลอกรหัสลับที่แสดงครั้งเดียว ส่งให้ผู้ดูแลระบบ KHD ทางช่องทางที่ปลอดภัย พร้อมเอกสารสเปก (docs/khd-sso-spec.md)</li>
+            <li>ติ๊ก "เปิดใช้การเข้าสู่ระบบจาก KHD" แล้วกดบันทึก</li>
+          </ol>
+          <p class="text-[11px] text-sky-700 mt-2"><i class="fas fa-info-circle mr-1"></i>KHD ส่ง JWT ที่ลงนามด้วยรหัสลับ (มีเฉพาะชื่อผู้ใช้ ไม่มีรหัสผ่าน) — เปลี่ยน URL ระบบ KHD แล้วผู้ออก token (iss) ที่ยอมรับเปลี่ยนตาม | สร้างรหัสลับใหม่ = ลิงก์ที่ใช้รหัสเดิมใช้ไม่ได้ทันที</p>
         </div>
 
         <!-- แจ้งเตือนผู้สมัครใหม่ -->

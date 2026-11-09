@@ -16,7 +16,8 @@ apiRouter.get('/settings', authenticateToken, async (req, res) => {
     try {
         // ไม่ส่ง API key ของผู้ช่วย AI (เข้ารหัสแล้วก็ไม่ส่ง) — อ่าน/ตั้งผ่าน /ai/settings ของ super_admin เท่านั้น (7 พ.ย. 2569)
         // ai_models_cache = รายชื่อรุ่นโมเดล (JSON ขนาดใหญ่ ใช้เฉพาะหน้าตั้งค่า AI) — ไม่ส่งรวมด้วย
-        const [rows] = await db.query("SELECT * FROM system_settings WHERE setting_key NOT IN ('ai_api_key_enc', 'ai_models_cache')");
+        // khd_sso_secret_enc = รหัสลับเข้าสู่ระบบจาก KHD (9 พ.ย. 2569) — อ่าน/ตั้งผ่าน /auth/khd/settings เท่านั้น
+        const [rows] = await db.query("SELECT * FROM system_settings WHERE setting_key NOT IN ('ai_api_key_enc', 'ai_models_cache', 'khd_sso_secret_enc')");
         res.json({ success: true, data: rows });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Error fetching settings' });

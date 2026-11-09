@@ -212,6 +212,7 @@ async function sendLoginNotifications(user, ip, ua, provider) {
         const providerLabel = provider === 'thaid' ? 'ThaID'
                            : provider === 'providerid' ? 'ProviderID'
                            : provider === 'password' ? 'Username/Password'
+                           : provider === 'khd' ? 'KHD'
                            : 'SSO';
         const notifType   = provider === 'password' ? 'login' : 'login_sso';
 

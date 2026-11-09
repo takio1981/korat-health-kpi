@@ -239,6 +239,11 @@
           <app-forecast-settings-card></app-forecast-settings-card>
         </div>
 
+        <!-- เข้าสู่ระบบอัตโนมัติจาก KHD (9 พ.ย. 2569) — คอมโพเนนต์แยก โหลด/บันทึกผ่าน /auth/khd/settings เอง (URL ตั้งได้) -->
+        <div *ngIf="isSuperAdmin" class="mt-8 pt-6 border-t border-gray-100">
+          <app-khd-sso-settings-card></app-khd-sso-settings-card>
+        </div>
+
         <!-- ตั้งค่าอุทธรณ์ -->
         <!-- ตั้งค่า SSO: ThaID + ProviderID -->
         <div class="mt-8 pt-6 border-t border-gray-100">

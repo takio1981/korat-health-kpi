@@ -78,3 +78,64 @@ async function getProviderIdSettings() {
 }
 
 module.exports = { THAID_AUTH_URL, THAID_TOKEN_URL, THAID_CLIENT_ID, THAID_REDIRECT_URI, THAID_SCOPE, getThaidSettings, MOPH_TOKEN_URL, MOPH_USERINFO_URL, getProviderIdSettings };
+
+// ============================================================
+// === เข้าสู่ระบบอัตโนมัติจาก KHD (9 พ.ย. 2569) ===
+// ============================================================
+// KHD เปิด <khd_sso_login_url>?khd_token=<JWT> — JWT ลงนาม HS256 ด้วยรหัสลับร่วม, claims: username|sub, iat, exp (อายุ ≤ 5 นาที), jti, iss, aud
+// URL ทั้ง 2 ตั้งได้จากหน้าตั้งค่า (ผู้ใช้สั่ง: เผื่อ URL เปลี่ยนในอนาคต) — ค่าด้านล่างเป็นค่าตั้งต้นเมื่อยังไม่ได้ตั้งเท่านั้น
+// รหัสลับเก็บเข้ารหัส (bkEncrypt) ใน khd_sso_secret_enc — GET /settings ไม่ส่งคีย์นี้ (routes/settings-access.js)
+const KHD_SSO_DEFAULTS = {
+    url: 'https://khd.moph.go.th/',
+    login_url: 'https://apikorat.moph.go.th/khupskpi/login',
+    audience: 'khupskpi',
+};
+const KHD_SSO_KEYS = ['khd_sso_enabled', 'khd_sso_url', 'khd_sso_login_url', 'khd_sso_issuer', 'khd_sso_audience', 'khd_sso_secret_enc'];
+const KHD_TOKEN_MAX_AGE = 300; // วินาที — exp - iat ต้องไม่เกินนี้ (ลิงก์ใช้ได้ไม่เกิน 5 นาที)
+let _khdSsoCache = null;
+
+/** URL ที่ยอมรับ: https เท่านั้น (http ได้เฉพาะ localhost/127.0.0.1 สำหรับทดสอบ) — คืน URL ที่ normalize แล้ว หรือ null */
+function normalizeSsoUrl(value) {
+    let u;
+    try { u = new URL(String(value || '').trim()); } catch (_) { return null; }
+    const local = ['localhost', '127.0.0.1'].includes(u.hostname);
+    if (u.protocol !== 'https:' && !(u.protocol === 'http:' && local)) return null;
+    if (u.username || u.password) return null;
+    return u.toString();
+}
+
+/** issuer ที่ยอมรับ = ค่าที่ตั้งเอง หรือชื่อโฮสต์ของ URL ระบบ KHD (เช่น khd.moph.go.th) */
+function khdIssuerOf(s) {
+    if (s.issuer) return s.issuer;
+    try { return new URL(s.url).hostname; } catch (_) { return ''; }
+}
+
+async function getKhdSsoSettings({ fresh = false } = {}) {
+    if (!fresh && _khdSsoCache && _khdSsoCache.at > Date.now() - 60000) return _khdSsoCache.value;
+    const [rows] = await db.query('SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN (?)', [KHD_SSO_KEYS]);
+    const s = {};
+    rows.forEach(r => { s[r.setting_key] = r.setting_value; });
+    // require ภายในฟังก์ชัน — services/backup.js โหลดหนัก และไม่ต้องใช้เมื่อปิดใช้งาน
+    const { bkDecrypt } = require('./backup');
+    let secret = '';
+    if (s.khd_sso_secret_enc) { try { secret = bkDecrypt(s.khd_sso_secret_enc) || ''; } catch (_) { secret = ''; } }
+    const value = {
+        enabled: s.khd_sso_enabled === 'true',
+        url: s.khd_sso_url || KHD_SSO_DEFAULTS.url,
+        login_url: s.khd_sso_login_url || KHD_SSO_DEFAULTS.login_url,
+        issuer: (s.khd_sso_issuer || '').trim(),
+        audience: (s.khd_sso_audience || '').trim() || KHD_SSO_DEFAULTS.audience,
+        secret,
+    };
+    value.effective_issuer = khdIssuerOf(value);
+    _khdSsoCache = { at: Date.now(), value };
+    return value;
+}
+const invalidateKhdSsoCache = () => { _khdSsoCache = null; };
+
+module.exports.KHD_SSO_DEFAULTS = KHD_SSO_DEFAULTS;
+module.exports.KHD_TOKEN_MAX_AGE = KHD_TOKEN_MAX_AGE;
+module.exports.normalizeSsoUrl = normalizeSsoUrl;
+module.exports.khdIssuerOf = khdIssuerOf;
+module.exports.getKhdSsoSettings = getKhdSsoSettings;
+module.exports.invalidateKhdSsoCache = invalidateKhdSsoCache;

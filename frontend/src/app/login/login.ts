@@ -45,6 +45,7 @@ export class LoginComponent implements OnInit, OnDestroy {
 
 
   ngOnInit() {
+    this.handleKhdTokenParam();   // รับ ?khd_token= จากลิงก์ในระบบ KHD (เข้าสู่ระบบอัตโนมัติ — 9 พ.ย. 2569)
     this.handleThaidTokenParam(); // รับ ?token= จาก DGA direct JWT redirect
     this.handleSsoCallback();     // รับ sso_token จาก OAuth callback (legacy)
     this.checkMaintenance();
@@ -294,57 +295,13 @@ export class LoginComponent implements OnInit, OnDestroy {
               icon: 'success', title: 'เข้าสู่ระบบสำเร็จ',
               text: `ยินดีต้อนรับ คุณ${response.user.firstname} ${response.user.lastname}`,
               timer: 1500, showConfirmButton: false
-            }).then(() => {
-              // ดึงประกาศไดนามิกจาก DB
-              this.authService.getActiveAnnouncement().subscribe({
-                next: (res: any) => {
-                  if (res.success && res.data && Number(res.data.show_on_login) === 1) {
-                    const a = res.data;
-                    Swal.fire({
-                      title: `<i class="fas fa-bullhorn text-red-500"></i> ${a.title || 'ประกาศระบบ'}`,
-                      html: `<div class="rounded-lg p-4" style="background:${a.bg_color};color:${a.text_color}">${a.content_html}</div>`,
-                      confirmButtonText: 'รับทราบ',
-                      confirmButtonColor: '#16a34a'
-                    }).then(() => this.router.navigate(['/dashboard']));
-                  } else {
-                    this.router.navigate(['/dashboard']);
-                  }
-                },
-                error: () => this.router.navigate(['/dashboard'])
-              });
-            });
+            }).then(() => this.showAnnouncementThenDashboard());
           }
         },
         error: (err) => {
           // 409 CONCURRENT_LOGIN — บัญชีมี session active ที่อื่นอยู่
           if (err.status === 409 && err.error?.code === 'CONCURRENT_LOGIN') {
-            const ip = err.error?.last_seen_ip || '-';
-            const lastSeenStr = err.error?.last_seen_at
-              ? new Date(err.error.last_seen_at).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })
-              : '-';
-            Swal.fire({
-              icon: 'info',
-              title: 'บัญชีนี้กำลังใช้งานอยู่ที่อุปกรณ์อื่น',
-              html: `<div style="text-align:left;font-size:13px">
-                <p class="text-gray-600">เพื่อความปลอดภัย ระบบจำกัด 1 บัญชี = 1 อุปกรณ์ในขณะเดียวกัน</p>
-                <div class="mt-3 p-3 bg-sky-50 rounded-lg border border-sky-200 text-xs space-y-1">
-                  <div class="font-semibold text-sky-700"><i class="fas fa-laptop mr-1"></i>เครื่องที่กำลังใช้งานอยู่:</div>
-                  <div><b>IP:</b> <code>${ip}</code></div>
-                  <div><b>ใช้งานล่าสุด:</b> ${lastSeenStr}</div>
-                </div>
-                <div class="mt-3 p-2 bg-gray-50 rounded-lg text-[11px] text-gray-600 space-y-1">
-                  <div><b><i class="fas fa-clock text-gray-400 mr-1"></i>วิธีที่ 1:</b> รอประมาณ 5 นาที (session เก่าจะหมดอายุเอง)</div>
-                  <div><b><i class="fas fa-arrow-right text-gray-400 mr-1"></i>วิธีที่ 2:</b> เข้าใช้ที่เครื่องนี้ทันที — เครื่องเก่าจะได้รับการแจ้งเตือนและออกจากระบบโดยสุภาพ</div>
-                </div>
-              </div>`,
-              showCancelButton: true,
-              confirmButtonText: '<i class="fas fa-sign-in-alt mr-1"></i> เข้าใช้ที่นี่',
-              cancelButtonText: 'รอสักครู่',
-              confirmButtonColor: '#0ea5e9',
-              cancelButtonColor: '#9ca3af'
-            }).then((r) => {
-              if (r.isConfirmed) this.forceLogin();
-            });
+            this.showConcurrentLoginDialog(err, () => this.forceLogin());
             return;
           }
           // 429 Rate Limit — แยกประเภทให้ user เข้าใจ
@@ -384,6 +341,104 @@ export class LoginComponent implements OnInit, OnDestroy {
         }
       });
     }
+  }
+
+  /** หน้าต่าง "บัญชีนี้กำลังใช้งานอยู่ที่อุปกรณ์อื่น" (409 CONCURRENT_LOGIN) — ใช้ร่วม login ปกติ + เข้าสู่ระบบจาก KHD */
+  private showConcurrentLoginDialog(err: any, onForce: () => void) {
+    const ip = err.error?.last_seen_ip || '-';
+    const lastSeenStr = err.error?.last_seen_at
+      ? new Date(err.error.last_seen_at).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })
+      : '-';
+    Swal.fire({
+      icon: 'info',
+      title: 'บัญชีนี้กำลังใช้งานอยู่ที่อุปกรณ์อื่น',
+      html: `<div style="text-align:left;font-size:13px">
+        <p class="text-gray-600">เพื่อความปลอดภัย ระบบจำกัด 1 บัญชี = 1 อุปกรณ์ในขณะเดียวกัน</p>
+        <div class="mt-3 p-3 bg-sky-50 rounded-lg border border-sky-200 text-xs space-y-1">
+          <div class="font-semibold text-sky-700"><i class="fas fa-laptop mr-1"></i>เครื่องที่กำลังใช้งานอยู่:</div>
+          <div><b>IP:</b> <code>${ip}</code></div>
+          <div><b>ใช้งานล่าสุด:</b> ${lastSeenStr}</div>
+        </div>
+        <div class="mt-3 p-2 bg-gray-50 rounded-lg text-[11px] text-gray-600 space-y-1">
+          <div><b><i class="fas fa-clock text-gray-400 mr-1"></i>วิธีที่ 1:</b> รอประมาณ 5 นาที (session เก่าจะหมดอายุเอง)</div>
+          <div><b><i class="fas fa-arrow-right text-gray-400 mr-1"></i>วิธีที่ 2:</b> เข้าใช้ที่เครื่องนี้ทันที — เครื่องเก่าจะได้รับการแจ้งเตือนและออกจากระบบโดยสุภาพ</div>
+        </div>
+      </div>`,
+      showCancelButton: true,
+      confirmButtonText: '<i class="fas fa-sign-in-alt mr-1"></i> เข้าใช้ที่นี่',
+      cancelButtonText: 'รอสักครู่',
+      confirmButtonColor: '#0ea5e9',
+      cancelButtonColor: '#9ca3af'
+    }).then((r) => {
+      if (r.isConfirmed) onForce();
+    });
+  }
+
+  /** หลังเข้าสู่ระบบสำเร็จ: แสดงประกาศระบบ (ถ้าตั้งให้แสดงตอน login) แล้วไปหน้าบันทึกผลงาน */
+  private showAnnouncementThenDashboard() {
+    this.authService.getActiveAnnouncement().subscribe({
+      next: (res: any) => {
+        if (res.success && res.data && Number(res.data.show_on_login) === 1) {
+          const a = res.data;
+          Swal.fire({
+            title: `<i class="fas fa-bullhorn text-red-500"></i> ${a.title || 'ประกาศระบบ'}`,
+            html: `<div class="rounded-lg p-4" style="background:${a.bg_color};color:${a.text_color}">${a.content_html}</div>`,
+            confirmButtonText: 'รับทราบ',
+            confirmButtonColor: '#16a34a'
+          }).then(() => this.router.navigate(['/dashboard']));
+        } else {
+          this.router.navigate(['/dashboard']);
+        }
+      },
+      error: () => this.router.navigate(['/dashboard'])
+    });
+  }
+
+  /** เข้าสู่ระบบอัตโนมัติจาก KHD: /login?khd_token=<JWT> — ไม่มีพารามิเตอร์ = ผู้ใช้กรอกชื่อผู้ใช้/รหัสผ่านเองตามปกติ
+   *  ล้าง token ออกจาก URL ทันที (กันรีเฟรช/แชร์ลิงก์) | ผิดพลาด = แจ้งเหตุผลแล้วอยู่หน้าฟอร์มเดิม */
+  handleKhdTokenParam(): void {
+    const params = new URLSearchParams(window.location.search);
+    const khdToken = params.get('khd_token');
+    if (!khdToken) return;
+    params.delete('khd_token');
+    const rest = params.toString();
+    window.history.replaceState({}, '', window.location.pathname + (rest ? '?' + rest : ''));
+    this.loginWithKhdToken(khdToken, false);
+  }
+
+  private loginWithKhdToken(token: string, force: boolean) {
+    this.ssoLoading = true;
+    Swal.fire({ title: 'กำลังเข้าสู่ระบบจาก KHD...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    this.authService.khdLogin(token, force).subscribe({
+      next: (res: any) => {
+        this.ssoLoading = false;
+        Swal.close();
+        if (!res?.success) { this.cdr.detectChanges(); return; }
+        this.authService.saveToken(res.token);
+        this.authService.saveUser(res.user);
+        this.authService.startTokenExpiryWatcher();
+        Swal.fire({
+          icon: 'success', title: 'เข้าสู่ระบบสำเร็จ (KHD)',
+          text: `ยินดีต้อนรับ คุณ${res.user.firstname || ''} ${res.user.lastname || ''}`,
+          timer: 1500, showConfirmButton: false
+        }).then(() => this.showAnnouncementThenDashboard());
+      },
+      error: (err: any) => {
+        this.ssoLoading = false;
+        Swal.close();
+        if (err.status === 409 && err.error?.code === 'CONCURRENT_LOGIN') {
+          this.showConcurrentLoginDialog(err, () => this.loginWithKhdToken(token, true));
+        } else {
+          Swal.fire({
+            icon: 'warning', title: 'เข้าสู่ระบบจาก KHD ไม่สำเร็จ',
+            // ข้อความจาก backend บอกวิธีถัดไปแล้ว (กรอกรหัสผ่าน/ลงทะเบียน) — ไม่ต่อท้ายซ้ำ
+            text: err.error?.message || 'ไม่สามารถเข้าสู่ระบบจาก KHD ได้ — กรุณากรอกชื่อผู้ใช้และรหัสผ่าน',
+            confirmButtonColor: '#10b981'
+          });
+        }
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   /** Force login — ใช้ตอน user ยืนยันใน 409 dialog ว่าจะ kick session เก่า */

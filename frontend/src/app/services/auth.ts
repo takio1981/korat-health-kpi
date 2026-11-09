@@ -455,6 +455,11 @@ export class AuthService {
     return this.http.post(`${this.apiUrl}/auth/thaid/verify-token`, { token, hint_provider: hintProvider });
   }
 
+  /** เข้าสู่ระบบอัตโนมัติจาก KHD (9 พ.ย. 2569) — token = JWT จาก ?khd_token= | force = ยืนยันเข้าใช้ที่เครื่องนี้ (บัญชีใช้อยู่ที่อื่น) */
+  khdLogin(token: string, force: boolean = false): Observable<any> {
+    return this.http.post(`${this.apiUrl}/auth/khd/login`, { token, force_login: force });
+  }
+
   checkSsoConnectivity(): Observable<any> {
     return this.http.get(`${this.apiUrl}/sso/connectivity`);
   }

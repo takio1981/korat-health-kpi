@@ -124,6 +124,8 @@ const PAGE_ACCESS_RULES = [
     { method: 'POST', path: '/ai/data-quality-explain', pageKey: 'kpi-results-manage' }, // ระยะที่ 5: สรุปผลตรวจคุณภาพข้อมูล (isSuperAdmin)
     // ระบบเตือนล่วงหน้า: ตั้งค่า/ส่งสรุปรายสัปดาห์ (ทุกเส้นทางใต้ /forecast/ เป็น isSuperAdmin — ไม่มี endpoint ของ role อื่นปน จึงใช้ prefix ได้)
     { prefix: '/forecast/', pageKey: 'settings' },
+    // เข้าสู่ระบบจาก KHD (9 พ.ย. 2569): ตั้งค่าเท่านั้น (isSuperAdmin) — POST /auth/khd/login เป็น public ไม่มี rule
+    { path: '/auth/khd/settings', pageKey: 'settings' },
 
     // settings (กลุ่มนี้ทั้งหมด isSuperAdmin เดิม ไม่มี endpoint เปิดปนอยู่ — ยืนยันแล้ว ปลอดภัยใช้ prefix กว้าง)
     { method: 'POST', path: '/settings', pageKey: 'settings' },

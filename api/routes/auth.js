@@ -7,7 +7,9 @@ const crypto = require('crypto');
 const db = require('../db');
 const jwt = require('jsonwebtoken');
 const { SECRET_KEY, loginIpLimiter, loginLimiter } = require('../core/security');
-const { THAID_AUTH_URL, THAID_CLIENT_ID, THAID_REDIRECT_URI, THAID_SCOPE, THAID_TOKEN_URL, getProviderIdSettings, getThaidSettings } = require('../services/sso');
+const { THAID_AUTH_URL, THAID_CLIENT_ID, THAID_REDIRECT_URI, THAID_SCOPE, THAID_TOKEN_URL, getProviderIdSettings, getThaidSettings, KHD_SSO_DEFAULTS, KHD_TOKEN_MAX_AGE, normalizeSsoUrl, getKhdSsoSettings, invalidateKhdSsoCache } = require('../services/sso');
+const { bkEncrypt } = require('../services/backup');
+const { parseActiveFlag } = require('../core/validate');
 const { _sessionCache, authenticateToken, isSuperAdmin, saveLog } = require('../core/auth');
 const { apiRouter } = require('../core/router');
 const { cleanupPendingApprovalNotifications, notifyAdmins, sendLoginNotifications, sendMail } = require('../core/notify');
@@ -40,6 +42,109 @@ apiRouter.get('/debug/my-ip', (req, res) => {
         note: 'ถ้า req_ip เป็น docker bridge IP (172.x.x.x) สำหรับ user ทุกคน = nginx X-Forwarded-For ไม่ทำงาน — แก้ nginx config ให้ส่ง XFF header'
     });
 });
+
+// ส่วนหลังยืนยันตัวตนแล้วของการเข้าสู่ระบบ — แยกจาก POST /login คำต่อคำ (9 พ.ย. 2569) ใช้ร่วมกับ POST /auth/khd/login (เข้าสู่ระบบจาก KHD)
+// ตรวจสถานะบัญชี → กัน login ซ้อน (409 / force_login) → บันทึก log + แจ้งเตือน → สร้าง session + JWT 8 ชม.
+// opts: { ip, logName (ชื่อที่ใช้ใน log), force_login, usedTempPassword, method (ช่องทางในแจ้งเตือน), successMsg, noForceChange, onSuccess }
+async function completeLogin(req, res, user, opts = {}) {
+    const { ip, logName, force_login, usedTempPassword = false } = opts;
+    // ตรวจสอบสถานะการอนุมัติ
+    if (user.is_approved === 0) {
+        await saveLog(logName, 'login_failed', 'บัญชีรอการอนุมัติ', ip);
+        return res.status(403).json({ success: false, message: 'บัญชีของคุณยังรอการอนุมัติจากผู้ดูแลระบบ กรุณารอการติดต่อกลับ' });
+    }
+    if (user.is_approved === -1) {
+        await saveLog(logName, 'login_failed', 'บัญชีถูกปฏิเสธ', ip);
+        return res.status(403).json({ success: false, message: 'คำขอลงทะเบียนถูกปฏิเสธ กรุณาติดต่อผู้ดูแลระบบ' });
+    }
+    if (user.is_active === 0) {
+        await saveLog(logName, 'login_failed', 'บัญชีถูกปิดใช้งาน', ip);
+        return res.status(403).json({ success: false, message: 'บัญชีนี้ถูกปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ' });
+    }
+
+    // === ตรวจสอบ login ซ้อน (Single Session Enforcement) ===
+    // ถ้ามี active_session_id อยู่ + last_seen ภายใน 5 นาทีล่าสุด → ถือว่ายังใช้งานอยู่ ห้าม login ซ้อน
+    // ยกเว้น force_login = true (user ยืนยันว่าจะ kick session เก่า)
+    if (user.active_session_id && !force_login) {
+        const lastSeen = user.last_seen_at ? new Date(user.last_seen_at).getTime() : 0;
+        const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+        if (lastSeen > fiveMinAgo) {
+            await saveLog(logName, 'login_blocked', 'login ซ้อน — บัญชีกำลังใช้งานที่อื่น', ip);
+            return res.status(409).json({
+                success: false,
+                code: 'CONCURRENT_LOGIN',
+                message: 'บัญชีนี้กำลังใช้งานอยู่ที่อุปกรณ์อื่น',
+                last_seen_ip: user.last_seen_ip || '-',
+                last_seen_at: user.last_seen_at,
+                can_force_login: true
+            });
+        }
+    }
+    // ถ้าเป็น force_login → log ว่า kick session เดิม + บันทึก kicked_by_* ให้เครื่องเก่าเห็น
+    if (user.active_session_id && force_login) {
+        await saveLog(logName, 'login_force', `force login — kick session เดิม (last IP: ${user.last_seen_ip || '-'})`, ip);
+        const ua = (req.headers['user-agent'] || '').toString().slice(0, 255);
+        try {
+            await db.query(
+                'UPDATE users SET kicked_by_ip = ?, kicked_by_ua = ?, kicked_at = NOW() WHERE id = ?',
+                [ip || '-', ua, user.id]
+            );
+        } catch (e) { /* column อาจยังไม่ migrate — ปล่อย */ }
+        // _sessionCache.delete จะถูก override ตอน update active_session_id ใหม่ด้านล่างอยู่แล้ว
+    }
+
+    const serviceUnitDisplay = user.hosname ? `${user.hosname} ${user.distname ? 'อ.' + user.distname : ''}` : user.service_unit;
+
+    // ถ้าใช้รหัสชั่วคราว → ยังไม่ล้าง (จะล้างตอน change-password สำเร็จ)
+    // เพื่อให้ change-password ยังตรวจ temp_password ได้
+
+    const forceChange = opts.noForceChange ? false : (user.must_change_password === 1 || usedTempPassword);
+
+    await saveLog(logName, 'login_success', opts.successMsg || (usedTempPassword ? 'เข้าสู่ระบบด้วยรหัสชั่วคราว' : 'เข้าสู่ระบบสำเร็จ'), ip);
+
+    sendLoginNotifications(user, ip, req.headers['user-agent'] || '', opts.method || 'password');
+
+    // สร้าง sessionId ใหม่ + บันทึกลง DB (overwrite session เดิมถ้า stale > 5 นาที)
+    const sessionId = crypto.randomBytes(24).toString('hex');
+    try {
+        const [updateResult] = await db.query(
+            'UPDATE users SET active_session_id = ?, session_started_at = NOW(), last_seen_at = NOW(), last_seen_ip = ? WHERE id = ?',
+            [sessionId, ip.toString().split(',')[0].trim().slice(0, 64), user.id]
+        );
+        if (!updateResult || updateResult.affectedRows === 0) {
+            console.error(`⚠️ [Single Session] UPDATE active_session_id ไม่ได้แก้ไขแถวใดสำหรับ user_id=${user.id}`);
+        }
+        _sessionCache.delete(user.id);  // เคลียร์ cache เพื่อให้ middleware อ่านค่าใหม่
+    } catch (e) {
+        console.error(`❌ [Single Session] UPDATE active_session_id ล้มเหลว user_id=${user.id} —`, e.message);
+        console.error('   👉 ตรวจสอบว่าได้ ALTER TABLE users ADD COLUMN active_session_id แล้วหรือยัง');
+    }
+
+    const token = jwt.sign(
+        { userId: user.id, username: user.username, deptId: user.dept_id, role: user.role, hospcode: user.hospcode, sessionId },
+        SECRET_KEY,
+        { expiresIn: '8h' }
+    );
+    if (opts.onSuccess) opts.onSuccess(user);
+    res.json({
+        success: true,
+        token,
+        force_change: forceChange,
+        user: {
+            id: user.id,
+            username: user.username,
+            role: user.role,
+            firstname: user.firstname,
+            lastname: user.lastname,
+            service_unit: serviceUnitDisplay,
+            dept_name: user.dept_name,
+            hospcode: user.hospcode,
+            dept_id: user.dept_id,
+            email: user.email || '',
+            phone: user.phone || ''
+        }
+    });
+}
 
 // รหัส ThaiD OTP แบบใช้ครั้งเดียว (code → { username, userId, expires }) — ยังไม่มีจุดใดสร้างรหัส จึงว่างเสมอ = ปฏิเสธทุกรหัสด้วย 401
 // (เดิมไม่ได้ประกาศตัวแปรนี้เลย → ส่ง thaid_otp มา = ReferenceError → 500 — พบจาก ESLint no-undef 25 ต.ค. 2569)
@@ -114,101 +219,7 @@ apiRouter.post('/login', loginIpLimiter, loginLimiter, async (req, res) => {
             }
 
             if (isMatch) {
-                // ตรวจสอบสถานะการอนุมัติ
-                if (user.is_approved === 0) {
-                    await saveLog(username, 'login_failed', 'บัญชีรอการอนุมัติ', ip);
-                    return res.status(403).json({ success: false, message: 'บัญชีของคุณยังรอการอนุมัติจากผู้ดูแลระบบ กรุณารอการติดต่อกลับ' });
-                }
-                if (user.is_approved === -1) {
-                    await saveLog(username, 'login_failed', 'บัญชีถูกปฏิเสธ', ip);
-                    return res.status(403).json({ success: false, message: 'คำขอลงทะเบียนถูกปฏิเสธ กรุณาติดต่อผู้ดูแลระบบ' });
-                }
-                if (user.is_active === 0) {
-                    await saveLog(username, 'login_failed', 'บัญชีถูกปิดใช้งาน', ip);
-                    return res.status(403).json({ success: false, message: 'บัญชีนี้ถูกปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ' });
-                }
-
-                // === ตรวจสอบ login ซ้อน (Single Session Enforcement) ===
-                // ถ้ามี active_session_id อยู่ + last_seen ภายใน 5 นาทีล่าสุด → ถือว่ายังใช้งานอยู่ ห้าม login ซ้อน
-                // ยกเว้น force_login = true (user ยืนยันว่าจะ kick session เก่า)
-                if (user.active_session_id && !force_login) {
-                    const lastSeen = user.last_seen_at ? new Date(user.last_seen_at).getTime() : 0;
-                    const fiveMinAgo = Date.now() - 5 * 60 * 1000;
-                    if (lastSeen > fiveMinAgo) {
-                        await saveLog(username, 'login_blocked', 'login ซ้อน — บัญชีกำลังใช้งานที่อื่น', ip);
-                        return res.status(409).json({
-                            success: false,
-                            code: 'CONCURRENT_LOGIN',
-                            message: 'บัญชีนี้กำลังใช้งานอยู่ที่อุปกรณ์อื่น',
-                            last_seen_ip: user.last_seen_ip || '-',
-                            last_seen_at: user.last_seen_at,
-                            can_force_login: true
-                        });
-                    }
-                }
-                // ถ้าเป็น force_login → log ว่า kick session เดิม + บันทึก kicked_by_* ให้เครื่องเก่าเห็น
-                if (user.active_session_id && force_login) {
-                    await saveLog(username, 'login_force', `force login — kick session เดิม (last IP: ${user.last_seen_ip || '-'})`, ip);
-                    const ua = (req.headers['user-agent'] || '').toString().slice(0, 255);
-                    try {
-                        await db.query(
-                            'UPDATE users SET kicked_by_ip = ?, kicked_by_ua = ?, kicked_at = NOW() WHERE id = ?',
-                            [ip || '-', ua, user.id]
-                        );
-                    } catch (e) { /* column อาจยังไม่ migrate — ปล่อย */ }
-                    // _sessionCache.delete จะถูก override ตอน update active_session_id ใหม่ด้านล่างอยู่แล้ว
-                }
-
-                const serviceUnitDisplay = user.hosname ? `${user.hosname} ${user.distname ? 'อ.' + user.distname : ''}` : user.service_unit;
-
-                // ถ้าใช้รหัสชั่วคราว → ยังไม่ล้าง (จะล้างตอน change-password สำเร็จ)
-                // เพื่อให้ change-password ยังตรวจ temp_password ได้
-
-                const forceChange = user.must_change_password === 1 || usedTempPassword;
-
-                await saveLog(username, 'login_success', usedTempPassword ? 'เข้าสู่ระบบด้วยรหัสชั่วคราว' : 'เข้าสู่ระบบสำเร็จ', ip);
-
-                sendLoginNotifications(user, ip, req.headers['user-agent'] || '', 'password');
-
-                // สร้าง sessionId ใหม่ + บันทึกลง DB (overwrite session เดิมถ้า stale > 5 นาที)
-                const sessionId = crypto.randomBytes(24).toString('hex');
-                try {
-                    const [updateResult] = await db.query(
-                        'UPDATE users SET active_session_id = ?, session_started_at = NOW(), last_seen_at = NOW(), last_seen_ip = ? WHERE id = ?',
-                        [sessionId, ip.toString().split(',')[0].trim().slice(0, 64), user.id]
-                    );
-                    if (!updateResult || updateResult.affectedRows === 0) {
-                        console.error(`⚠️ [Single Session] UPDATE active_session_id ไม่ได้แก้ไขแถวใดสำหรับ user_id=${user.id}`);
-                    }
-                    _sessionCache.delete(user.id);  // เคลียร์ cache เพื่อให้ middleware อ่านค่าใหม่
-                } catch (e) {
-                    console.error(`❌ [Single Session] UPDATE active_session_id ล้มเหลว user_id=${user.id} —`, e.message);
-                    console.error('   👉 ตรวจสอบว่าได้ ALTER TABLE users ADD COLUMN active_session_id แล้วหรือยัง');
-                }
-
-                const token = jwt.sign(
-                    { userId: user.id, username: user.username, deptId: user.dept_id, role: user.role, hospcode: user.hospcode, sessionId },
-                    SECRET_KEY,
-                    { expiresIn: '8h' }
-                );
-                res.json({
-                    success: true,
-                    token,
-                    force_change: forceChange,
-                    user: {
-                        id: user.id,
-                        username: user.username,
-                        role: user.role,
-                        firstname: user.firstname,
-                        lastname: user.lastname,
-                        service_unit: serviceUnitDisplay,
-                        dept_name: user.dept_name,
-                        hospcode: user.hospcode,
-                        dept_id: user.dept_id,
-                        email: user.email || '',
-                        phone: user.phone || ''
-                    }
-                });
+                return await completeLogin(req, res, user, { ip, logName: username, force_login, usedTempPassword }); // await = ข้อผิดพลาดเข้า catch เดิม (500)
             } else {
                 await saveLog(username, 'login_failed', 'รหัสผ่านไม่ถูกต้อง', ip);
                 res.status(401).json({ success: false, message: 'ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง' });
@@ -221,6 +232,112 @@ apiRouter.post('/login', loginIpLimiter, loginLimiter, async (req, res) => {
         console.error(error);
         await saveLog(username, 'system_error', error.message, ip);
         res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดที่ Server' });
+    }
+});
+
+// === เข้าสู่ระบบอัตโนมัติจาก KHD (9 พ.ย. 2569) — KHD เปิด /login?khd_token=<JWT> หน้าจอส่ง token มาที่นี่ ===
+// JWT ลงนาม HS256 ด้วยรหัสลับร่วม (ตั้งในหน้าตั้งค่า) ภายในมีแค่ชื่อผู้ใช้ — ไม่มีรหัสผ่าน | ต้องมี exp (อายุ ≤ 5 นาที), jti, iss, aud
+// กันใช้ลิงก์ซ้ำ: จำ jti เมื่อเข้าสู่ระบบสำเร็จเท่านั้น (ตอบ 409 = ยังใช้ token เดิมกด "เข้าใช้ที่นี่" ได้ภายในอายุลิงก์) — process เดียว (ดู CLAUDE.md การแยกโมดูล)
+const _khdJtiUsed = new Map(); // jti → เวลาที่ลบออกได้ (ms)
+setInterval(() => { const now = Date.now(); for (const [k, exp] of _khdJtiUsed) if (exp < now) _khdJtiUsed.delete(k); }, 60000).unref();
+
+// เฉพาะ loginIpLimiter: loginLimiter แยกตามชื่อผู้ใช้ใน body (ไม่มีในคำขอนี้ = 'anonymous') → ลิงก์เสีย 10 ครั้งจาก NAT เดียวจะบล็อกทั้งหน่วยงาน
+// token ลงนามด้วยรหัสลับ เดาไม่ได้ จึงไม่ต้องจำกัดรายชื่อผู้ใช้
+apiRouter.post('/auth/khd/login', loginIpLimiter, async (req, res) => {
+    const { token, force_login } = req.body || {};
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const bad = (detail) => {
+        saveLog('-', 'login_failed', `เข้าสู่ระบบจาก KHD ไม่สำเร็จ: ${detail}`, ip).catch(() => {});
+        return res.status(401).json({ success: false, code: 'KHD_TOKEN_INVALID', message: 'ลิงก์เข้าสู่ระบบจาก KHD ไม่ถูกต้องหรือหมดอายุ กรุณากลับไปกดลิงก์จาก KHD ใหม่ หรือเข้าสู่ระบบด้วยชื่อผู้ใช้และรหัสผ่าน' });
+    };
+    try {
+        const s = await getKhdSsoSettings();
+        if (!s.enabled || !s.secret) {
+            return res.status(403).json({ success: false, code: 'KHD_SSO_DISABLED', message: 'ยังไม่เปิดใช้การเข้าสู่ระบบจาก KHD กรุณาเข้าสู่ระบบด้วยชื่อผู้ใช้และรหัสผ่าน' });
+        }
+        if (typeof token !== 'string' || !token || token.length > 4096) return bad('ไม่มี token');
+        let p;
+        try {
+            p = jwt.verify(token, s.secret, { algorithms: ['HS256'], issuer: s.effective_issuer, audience: s.audience, clockTolerance: 30 });
+        } catch (e) {
+            return bad(e.name === 'TokenExpiredError' ? 'ลิงก์หมดอายุ' : `token ไม่ถูกต้อง (${e.message})`);
+        }
+        if (typeof p.exp !== 'number' || typeof p.iat !== 'number' || p.exp - p.iat > KHD_TOKEN_MAX_AGE) return bad('อายุลิงก์เกิน 5 นาทีหรือไม่มี iat/exp');
+        if (typeof p.jti !== 'string' || !p.jti || p.jti.length > 200) return bad('ไม่มี jti');
+        if (_khdJtiUsed.has(p.jti)) return bad('ลิงก์นี้ถูกใช้ไปแล้ว');
+        const username = String(p.username || p.sub || '').trim();
+        if (!username || username.length > 100) return bad('ไม่มีชื่อผู้ใช้');
+
+        const [users] = await db.query(`
+            SELECT u.*, d.dept_name, h.hosname, dist.distname
+            FROM users u
+            LEFT JOIN departments d ON u.dept_id = d.id
+            LEFT JOIN chospital h ON u.hospcode = h.hoscode
+            LEFT JOIN co_district dist ON dist.distid = h.distid
+            WHERE u.username = ?
+        `, [username]);
+        if (!users.length) {
+            await saveLog(username, 'login_failed', 'เข้าสู่ระบบจาก KHD: ไม่พบชื่อผู้ใช้งานในระบบ', ip);
+            return res.status(401).json({ success: false, code: 'KHD_USER_NOT_FOUND', message: `ไม่พบบัญชี "${username}" ในระบบ KHUPS KPI กรุณาลงทะเบียนหรือติดต่อผู้ดูแลระบบ` });
+        }
+        return await completeLogin(req, res, users[0], {
+            ip, logName: username, force_login: force_login === true, method: 'khd', successMsg: 'เข้าสู่ระบบจาก KHD',
+            noForceChange: true,   // ผู้ใช้ไม่ได้พิมพ์รหัสผ่าน — ไม่บังคับเปลี่ยนรหัสผ่านตอนนี้
+            onSuccess: () => _khdJtiUsed.set(p.jti, p.exp * 1000 + 60000),
+        });
+    } catch (error) {
+        console.error('[KHD SSO]', error);
+        res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดที่ Server' });
+    }
+});
+
+// ตั้งค่า (super_admin) — ไม่คืนรหัสลับ (has_secret) | generate_secret = สร้างรหัสลับใหม่แล้วคืนค่าให้คัดลอกครั้งเดียว | URL ตั้งได้ เผื่อเปลี่ยนในอนาคต
+const khdSsoView = (s) => ({
+    enabled: s.enabled, url: s.url, login_url: s.login_url, issuer: s.issuer, audience: s.audience,
+    effective_issuer: s.effective_issuer, has_secret: !!s.secret, max_age_seconds: KHD_TOKEN_MAX_AGE, defaults: KHD_SSO_DEFAULTS,
+});
+apiRouter.get('/auth/khd/settings', authenticateToken, isSuperAdmin, async (req, res) => {
+    try { res.json({ success: true, data: khdSsoView(await getKhdSsoSettings({ fresh: true })) }); }
+    catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+apiRouter.put('/auth/khd/settings', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const b = req.body || {};
+        const enabled = parseActiveFlag(b.enabled);
+        if (enabled === null) return res.status(400).json({ success: false, message: 'กรุณาระบุสถานะเปิด/ปิดการเข้าสู่ระบบจาก KHD' });
+        const url = normalizeSsoUrl(b.url || KHD_SSO_DEFAULTS.url);
+        const loginUrl = normalizeSsoUrl(b.login_url || KHD_SSO_DEFAULTS.login_url);
+        if (!url) return res.status(400).json({ success: false, message: 'URL ระบบ KHD ไม่ถูกต้อง (ต้องขึ้นต้นด้วย https://)' });
+        if (!loginUrl) return res.status(400).json({ success: false, message: 'URL หน้าเข้าสู่ระบบ KHUPS ไม่ถูกต้อง (ต้องขึ้นต้นด้วย https://)' });
+        const issuer = String(b.issuer || '').trim();
+        const audience = String(b.audience || '').trim();
+        if (issuer.length > 200 || audience.length > 200 || /\s/.test(issuer) || /\s/.test(audience)) {
+            return res.status(400).json({ success: false, message: 'issuer/audience ต้องไม่มีช่องว่างและไม่เกิน 200 ตัวอักษร' });
+        }
+        const cur = await getKhdSsoSettings({ fresh: true });
+        let newSecret = '';
+        if (b.generate_secret === true) newSecret = crypto.randomBytes(48).toString('base64url');
+        else if (typeof b.secret === 'string' && b.secret.trim()) {
+            newSecret = b.secret.trim();
+            if (newSecret.length < 32) return res.status(400).json({ success: false, message: 'รหัสลับต้องยาวอย่างน้อย 32 ตัวอักษร' });
+        }
+        if (enabled && !newSecret && !cur.secret) return res.status(400).json({ success: false, message: 'กรุณาสร้างรหัสลับก่อนเปิดใช้งาน' });
+
+        const put = (k, v) => db.query('INSERT INTO system_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)', [k, v]);
+        await put('khd_sso_enabled', enabled ? 'true' : 'false');
+        await put('khd_sso_url', url);
+        await put('khd_sso_login_url', loginUrl);
+        await put('khd_sso_issuer', issuer);
+        await put('khd_sso_audience', audience);
+        if (newSecret) await put('khd_sso_secret_enc', bkEncrypt(newSecret));
+        invalidateKhdSsoCache();
+        const after = await getKhdSsoSettings({ fresh: true });
+        await saveLog(req.user.username, 'KHD_SSO_SETTINGS_UPDATE',
+            `เข้าสู่ระบบจาก KHD: ${enabled ? 'เปิด' : 'ปิด'} / KHD ${url} / หน้าเข้าสู่ระบบ ${loginUrl} / iss ${after.effective_issuer} / aud ${after.audience}${newSecret ? ' / เปลี่ยนรหัสลับ' : ''}`,
+            (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim());
+        res.json({ success: true, message: 'บันทึกการตั้งค่าการเข้าสู่ระบบจาก KHD แล้ว', data: khdSsoView(after), ...(b.generate_secret === true ? { secret: newSecret } : {}) });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
     }
 });
 
