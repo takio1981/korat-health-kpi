@@ -14,6 +14,7 @@ import * as XLSX from 'xlsx';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { ZoneBadgeComponent, HospitalZoneService } from '../shared/zone-badge';
 import { ZoneManagerComponent } from '../shared/zone-manager';
+import { typesText, hostypeText } from '../shared/khd-types';
 import { AiFormulaHelperComponent } from '../shared/ai-formula-helper';
 import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
 import { TARGET_CONDITIONS, CONDITION_SYMBOL, CONDITION_LABEL, normalizeCondition, evaluateTarget, normalizeTargetMonthly } from '../shared/kpi-target';
@@ -780,6 +781,10 @@ export class KpiManageComponent implements OnInit {
           const cmp = this.getKhdCompareStatus(i);
           if (this.filterKhdStatus === 'criteria') {
             if (this.getKhdData(i)?.criteria_match !== false) return false;
+          } else if (this.filterKhdStatus === 'types') {
+            if (this.getKhdData(i)?.types_match !== false) return false;
+          } else if (this.filterKhdStatus === 'hostype') {
+            if (this.getKhdData(i)?.hostype_match !== false) return false;
           } else if (this.filterKhdStatus === 'inactive') {
             const khd = this.khdCompareMap.get(i.table_process || '');
             if (!(khd && (khd.khd_is_active === 0 || khd.khd_is_active === '0'))) return false;
@@ -1584,7 +1589,7 @@ export class KpiManageComponent implements OnInit {
    * ตัวนี้ iterate this.indicators (ที่ table แสดงจริง) — ตรงกันการนับ
    */
   get khdCounts() {
-    const counts = { match: 0, different: 0, missing_remote: 0, inactive: 0, criteria: 0, total: 0 };
+    const counts = { match: 0, different: 0, missing_remote: 0, inactive: 0, criteria: 0, types: 0, hostype: 0, total: 0 };
     if (!this.khdCompareMap.size) return counts;
     for (const i of this.indicators) {
       counts.total++;
@@ -1595,6 +1600,8 @@ export class KpiManageComponent implements OnInit {
       const khd = this.getKhdData(i);
       if (khd && (khd.khd_is_active === 0 || khd.khd_is_active === '0')) counts.inactive++;
       if (khd?.criteria_match === false) counts.criteria++;
+      if (khd?.types_match === false) counts.types++;
+      if (khd?.hostype_match === false) counts.hostype++;
     }
     return counts;
   }
@@ -2272,6 +2279,51 @@ export class KpiManageComponent implements OnInit {
           this.runKhdCompare();
         },
         error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถปรับเกณฑ์ได้', 'error')
+      });
+    });
+  }
+
+  // ===== ประเภทตัวชี้วัด / ประเภทหน่วยบริการ เทียบกับ KHD (9 พ.ย. 2569) — ตัดสินตรง/ต่างที่ backend (services/khd-types.js) =====
+  get khdTypesDiffItems(): any[] { return this.indicators.filter(i => this.getKhdData(i)?.types_match === false); }
+  get khdHostypeDiffItems(): any[] { return this.indicators.filter(i => this.getKhdData(i)?.hostype_match === false); }
+  private get hosTypeNames(): Record<string, string> {
+    return Object.fromEntries((this.hosTypes || []).map((h: any) => [String(h.hostypecode), h.hostypename]));
+  }
+  localTypesText(item: any): string { return typesText(item); }
+  khdTypesText(khd: any): string { return typesText(khd?.khd_types); }
+  localHostypeText(item: any): string { return hostypeText(item?.evaluation_mode, item?.required_off_types, this.hosTypeNames); }
+  khdHostypeText(khd: any): string { return hostypeText(khd?.khd_eval_mode, khd?.khd_off_types, this.hosTypeNames); }
+
+  applyKhdTypes(items: any[], part: 'types' | 'hostype') {
+    const label = part === 'types' ? 'ประเภทตัวชี้วัด' : 'ประเภทหน่วยบริการ';
+    if (!items.length) { Swal.fire('แจ้งเตือน', 'ไม่มีตัวชี้วัดที่' + label + 'ต่างจาก KHD', 'info'); return; }
+    const esc = (t: any) => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as any)[c]);
+    const cur = (i: any) => part === 'types' ? this.localTypesText(i) : this.localHostypeText(i);
+    const next = (i: any) => part === 'types' ? this.khdTypesText(this.getKhdData(i)) : this.khdHostypeText(this.getKhdData(i));
+    const list = items.slice(0, 10).map(i =>
+      `<tr><td class="text-left pr-2 py-0.5">${esc(i.kpi_indicators_name)}</td><td class="px-1 text-gray-600">${esc(cur(i))}</td>` +
+      `<td class="px-1">→</td><td class="font-bold text-sky-700">${esc(next(i))}</td></tr>`).join('');
+    const more = items.length > 10 ? `<p class="text-xs text-gray-500 mt-1">... และอีก ${items.length - 10} ตัว</p>` : '';
+    const note = part === 'hostype'
+      ? 'มีผลกับการเพิ่มตัวชี้วัดให้หน่วยบริการ (หน่วยบริการปลายทาง) และขอบเขตการส่งออก — ไม่ลบผลงานที่บันทึกแล้ว'
+      : 'ใช้ค่าของปีงบที่เลือกใน KHD ก่อน (ถ้ามี) แล้วจึงค่าทั่วไป';
+    Swal.fire({
+      title: 'ใช้' + label + 'ตาม KHD',
+      html: `<p class="text-sm">ปรับ<b>${label}</b>ของ <b>${items.length}</b> ตัวชี้วัดให้เท่ากับ KHD ปีงบ <b>${esc(this.khdCompareYear)}</b></p>
+             <div class="max-h-60 overflow-auto mt-2"><table class="w-full text-xs">${list}</table></div>${more}
+             <p class="text-[11px] text-gray-500 mt-2">${note}</p>`,
+      icon: 'question', showCancelButton: true, confirmButtonColor: '#0284c7',
+      confirmButtonText: '<i class="fas fa-arrow-down mr-1"></i> ปรับตาม KHD', cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      this.authService.applyKhdTypes(items.map(i => i.id), this.khdCompareYear, [part]).subscribe({
+        next: (res: any) => {
+          if (!res.success) { Swal.fire('ผิดพลาด', res.message, 'error'); return; }
+          Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2500, showConfirmButton: false });
+          this.loadAllData();
+          this.runKhdCompare();
+        },
+        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถปรับได้', 'error')
       });
     });
   }

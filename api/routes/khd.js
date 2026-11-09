@@ -11,6 +11,7 @@ const { getKhdEffectiveCriteriaFor, insertIndicatorFromKhd, loadKhdResolver, lis
 const { getRemotePool } = require('../db-remote');
 const { notifyLineAction } = require('../core/notify');
 const { requireAction } = require('../core/access');
+const { compareKhdTypes, khdTypeUpdate, khdIndicatorTypes, hostypeSetting } = require('../services/khd-types');
 
 // === Test Telegram (super_admin) ===
 // ============================================================
@@ -39,7 +40,7 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
         `);
         // ดึง override เกณฑ์รายปีงบจาก report_fiscal_year_config (เฉพาะปีที่กำลังเทียบ)
         const [fyRows] = await remoteDb.query(
-            `SELECT report_id, fiscal_year, target_percentage, target_condition, is_active
+            `SELECT report_id, fiscal_year, target_percentage, target_condition, is_active, r9, moph, ssj, rmw
              FROM report_fiscal_year_config WHERE fiscal_year = ?`,
             [year_bh]
         );
@@ -51,6 +52,7 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
             SELECT i.id, i.kpi_indicators_name, i.table_process, i.kpi_indicators_code, i.is_active,
                    i.dept_id, i.main_indicator_id, i.upload_excel,
                    i.criterion, i.target_condition, i.data_source, i.khd_report_id,
+                   i.r9, i.moph, i.ssj, i.rmw, i.other, i.evaluation_mode, i.required_off_types,
                    d.dept_name, mi.main_indicator_name
             FROM kpi_indicators i
             LEFT JOIN departments d ON i.dept_id = d.id
@@ -66,7 +68,7 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
 
         const items = [];
         let match = 0, different = 0, missing_local = 0, missing_remote = 0, criteria_different = 0;
-        let khd_inactive_count = 0, suggest_disable_count = 0;
+        let khd_inactive_count = 0, suggest_disable_count = 0, types_different = 0, hostype_different = 0;
 
         // Helper: ถ้า KHD report inactive (=0) แต่ Local ยัง upload_excel=0 → suggest = ปิด upload_excel
         const computeSuggest = (khdIsActive, localUploadExcel) => {
@@ -100,6 +102,9 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                     khd_report_id: khd.report_id, khd_name: khd.report_name, khd_dept: khd.dept, khd_main_yut: khd.main_yut,
                     khd_main_indicator: khd.main_indicator || null,
                     khd_resolved: khdResolver.resolveIndicator(khd),
+                    // ประเภทตัวชี้วัด/หน่วยบริการของ KHD (แสดงในรายการที่ยังไม่มีใน Local — เพิ่มเข้าระบบแล้วได้ค่าเหล่านี้)
+                    khd_types: khdIndicatorTypes(khd, fyConfig), khd_eval_mode: hostypeSetting(khd.evaluation_mode, khd.required_off_types).mode,
+                    khd_off_types: hostypeSetting(khd.evaluation_mode, khd.required_off_types).types,
                     report_code: khd.report_code, table_process: tp, khd_is_active: effectiveIsActive,
                     khd_data_source: khd.data_source,
                     khd_target_percentage: effective.target_percentage, khd_target_condition: effective.target_condition,
@@ -125,6 +130,11 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                 const criteria_match = pctMatch && condMatch;
                 if (!criteria_match) criteria_different++;
 
+                // ประเภทตัวชี้วัด + ประเภทหน่วยบริการ (9 พ.ย. 2569) — services/khd-types.js
+                const typeCmp = compareKhdTypes(khd, fyConfig, local);
+                if (!typeCmp.types_match) types_different++;
+                if (typeCmp.hostype_match === false) hostype_different++;
+
                 const suggest = computeSuggest(effectiveIsActive, local.upload_excel);
                 if (suggest) suggest_disable_count++;
                 if (effectiveIsActive === 0 || effectiveIsActive === '0') khd_inactive_count++;
@@ -141,6 +151,7 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                     local_criterion: local.criterion, local_target_condition: local.target_condition,
                     local_data_source: local.data_source,
                     criteria_match,
+                    ...typeCmp,
                     suggest_disable_upload: suggest
                 });
             }
@@ -171,7 +182,7 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
             summary: {
                 total: items.length, match, different, missing_local, missing_remote,
                 khd_inactive: khd_inactive_count, suggest_disable: suggest_disable_count,
-                criteria_different, year_bh
+                criteria_different, types_different, hostype_different, year_bh
             },
             items
         });
@@ -248,6 +259,64 @@ apiRouter.post('/indicators/apply-khd-criteria', authenticateToken, requireActio
     }
 });
 
+// POST /indicators/apply-khd-types — ปรับ "ประเภทตัวชี้วัด" (r9/moph/ssj/rmw/other) และ/หรือ "ประเภทหน่วยบริการ" (evaluation_mode + required_off_types)
+// ให้เท่ากับ KHD (9 พ.ย. 2569) — body { ids, year_bh, parts: ['types'|'hostype'] } — server อ่านค่าจาก KHD ใหม่เสมอ (ไม่เชื่อค่าจาก client)
+// ด้วยการจับคู่เดียวกับ GET /report-compare + ค่าปีงบ (report_fiscal_year_config) ก่อนค่าทั่วไป | KHD ไม่ได้ตั้งประเภทหน่วยบริการ = ข้าม (ไม่ล้างค่าเดิม)
+apiRouter.post('/indicators/apply-khd-types', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
+    const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.map(Number).filter(n => Number.isInteger(n) && n > 0))] : [];
+    if (ids.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตัวชี้วัด' });
+    const parts = Array.isArray(req.body?.parts) ? [...new Set(req.body.parts.filter(p => p === 'types' || p === 'hostype'))] : [];
+    if (parts.length === 0) return res.status(400).json({ success: false, message: 'กรุณาระบุสิ่งที่จะปรับ (ประเภทตัวชี้วัด / ประเภทหน่วยบริการ)' });
+    const now = new Date();
+    const yearBh = req.body?.year_bh ? String(req.body.year_bh) : String(now.getFullYear() + 543 + (now.getMonth() >= 9 ? 1 : 0));
+    try {
+        const [locals] = await db.query(`SELECT id, kpi_indicators_name, table_process, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types
+            FROM kpi_indicators WHERE id IN (?)`, [ids]);
+        const tps = [...new Set(locals.map(l => String(l.table_process || '').trim()).filter(Boolean))];
+        const khdByTp = new Map();
+        const fyById = new Map();
+        if (tps.length) {
+            const [khdRows] = await remoteDb.query(
+                `SELECT report_id, table_process, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types FROM reports
+                 WHERE data_source = 'excel' AND LENGTH(report_code) = LENGTH(table_process) AND table_process IN (?) ORDER BY report_id`, [tps]);
+            khdRows.forEach(r => khdByTp.set(String(r.table_process).trim(), r));
+            const rids = khdRows.map(r => r.report_id);
+            if (rids.length) {
+                const [fy] = await remoteDb.query('SELECT report_id, r9, moph, ssj, rmw FROM report_fiscal_year_config WHERE fiscal_year = ? AND report_id IN (?)', [yearBh, rids]);
+                fy.forEach(r => fyById.set(r.report_id, r));
+            }
+        }
+        const updated = [], skipped = [];
+        let hostypeChanged = false;
+        for (const l of locals) {
+            const khd = khdByTp.get(String(l.table_process || '').trim());
+            if (!khd) { skipped.push({ id: l.id, reason: 'ไม่พบใน KHD' }); continue; }
+            const fy = fyById.get(khd.report_id) || null;
+            const cmp = compareKhdTypes(khd, fy, l);
+            const set = {};
+            if (parts.includes('types') && !cmp.types_match) Object.assign(set, khdTypeUpdate(khd, fy, 'types'));
+            if (parts.includes('hostype') && cmp.hostype_match === false) Object.assign(set, khdTypeUpdate(khd, fy, 'hostype'));
+            if (!Object.keys(set).length) {
+                skipped.push({ id: l.id, reason: parts.includes('hostype') && cmp.hostype_match === null && cmp.types_match ? 'KHD ไม่ได้ตั้งประเภทหน่วยบริการ' : 'ตรงกันอยู่แล้ว' });
+                continue;
+            }
+            const cols = Object.keys(set);
+            await db.query(`UPDATE kpi_indicators SET ${cols.map(c => c + ' = ?').join(', ')} WHERE id = ?`, [...cols.map(c => set[c]), l.id]);
+            if ('evaluation_mode' in set) hostypeChanged = true;
+            updated.push({ id: l.id, name: l.kpi_indicators_name, before: Object.fromEntries(cols.map(c => [c, l[c]])), after: set });
+        }
+        await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+            [req.user.userId, 'APPLY_KHD_TYPES', 'kpi_indicators', JSON.stringify({ year_bh: yearBh, parts, updated, skipped }).slice(0, 60000), req.ip]);
+        const what = parts.map(p => p === 'types' ? 'ประเภทตัวชี้วัด' : 'ประเภทหน่วยบริการ').join(' + ');
+        res.json({ success: true, message: `ปรับ${what}ให้เท่ากับ KHD ${updated.length} ตัวชี้วัด` + (skipped.length ? ` (ข้าม ${skipped.length})` : ''),
+            updated, skipped, year_bh: yearBh, hostype_changed: hostypeChanged });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 apiRouter.post('/indicators/bulk-upload-excel', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
     try {
         const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(x => Number(x)).filter(Number.isFinite) : [];
@@ -317,7 +386,7 @@ apiRouter.post('/report-compare/sync', authenticateToken, isSuperAdmin, async (r
     }
 });
 
-const KHD_REPORT_ADD_COLS = 'report_id, report_name, report_code, table_process, data_source, target_percentage, target_condition, dept, main_yut, main_indicator';
+const KHD_REPORT_ADD_COLS = 'report_id, report_name, report_code, table_process, data_source, target_percentage, target_condition, dept, main_yut, main_indicator, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types';
 
 apiRouter.post('/report-compare/add-from-khd', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();

@@ -203,6 +203,16 @@
                   class="px-2.5 py-1 rounded-lg font-bold transition-all">
             <i class="fas fa-bullseye mr-1"></i>เกณฑ์ต่างกัน ({{ khdCounts.criteria }})
           </button>
+          <button (click)="filterKhdStatus = filterKhdStatus === 'types' ? '' : 'types'; applyFilter()" id="btn-khd-filter-types"
+                  [ngClass]="filterKhdStatus === 'types' ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700 border border-sky-200'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all">
+            <i class="fas fa-tags mr-1"></i>ประเภทตัวชี้วัดต่างกัน ({{ khdCounts.types }})
+          </button>
+          <button (click)="filterKhdStatus = filterKhdStatus === 'hostype' ? '' : 'hostype'; applyFilter()" id="btn-khd-filter-hostype"
+                  [ngClass]="filterKhdStatus === 'hostype' ? 'bg-cyan-600 text-white' : 'bg-cyan-50 text-cyan-700 border border-cyan-200'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all">
+            <i class="fas fa-hospital mr-1"></i>ประเภทหน่วยบริการต่างกัน ({{ khdCounts.hostype }})
+          </button>
           <span class="w-px h-4 bg-teal-200"></span>
           <button (click)="filterResultStatus = filterResultStatus === 'has_results' ? '' : 'has_results'; applyFilter()"
                   [ngClass]="filterResultStatus === 'has_results' ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'"
@@ -373,6 +383,31 @@
         </div>
       </div>
 
+      <!-- Banner: ประเภทตัวชี้วัด / ประเภทหน่วยบริการไม่ตรงกับ KHD (9 พ.ย. 2569) -->
+      <div *ngIf="activeTab === 'indicators' && canEditData && (khdTypesDiffItems.length > 0 || khdHostypeDiffItems.length > 0)" id="khd-types-banner"
+           class="mb-4 bg-sky-50 border-2 border-sky-200 rounded-xl p-4">
+        <div class="flex flex-wrap items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center shrink-0">
+            <i class="fas fa-tags text-sky-600 text-lg"></i>
+          </div>
+          <div class="flex-1 min-w-0">
+            <h4 class="text-sm font-bold text-sky-900">ประเภทของตัวชี้วัดไม่ตรงกับ KHD (ปีงบ {{ khdCompareYear }})</h4>
+            <p class="text-xs text-sky-700 mt-1">
+              ประเภทตัวชี้วัด (R9/MOPH/SSJ/RMW/อื่นๆ) ต่างกัน <b>{{ khdTypesDiffItems.length }}</b> ตัว · ประเภทหน่วยบริการ (เกณฑ์การประเมิน) ต่างกัน <b>{{ khdHostypeDiffItems.length }}</b> ตัว
+              — ปรับให้เท่ากับ KHD ได้ทีละตัว (ปุ่มในแถว) หรือทั้งหมด
+            </p>
+          </div>
+          <button *ngIf="khdTypesDiffItems.length > 0" (click)="applyKhdTypes(khdTypesDiffItems, 'types')" id="btn-khd-apply-types-all"
+                  class="shrink-0 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-sm font-bold shadow-md transition-colors">
+            <i class="fas fa-tags mr-1"></i>ใช้ประเภทตัวชี้วัด KHD ({{ khdTypesDiffItems.length }})
+          </button>
+          <button *ngIf="khdHostypeDiffItems.length > 0" (click)="applyKhdTypes(khdHostypeDiffItems, 'hostype')" id="btn-khd-apply-hostype-all"
+                  class="shrink-0 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-sm font-bold shadow-md transition-colors">
+            <i class="fas fa-hospital mr-1"></i>ใช้ประเภทหน่วยบริการ KHD ({{ khdHostypeDiffItems.length }})
+          </button>
+        </div>
+      </div>
+
       <!-- === Mobile Card View === -->
       <div class="md:hidden space-y-2 p-3 overflow-y-auto card-scroll" style="max-height: calc(100vh - 320px);">
         <div *ngIf="currentList.length === 0" class="text-center py-10 text-gray-400 text-sm">
@@ -428,6 +463,12 @@
                   <i class="fas fa-bullseye text-[9px]"></i>KHD: {{ getKhdCriteriaText(getKhdData(item)) }}
                 </span>
                 <button *ngIf="canEditData && getKhdData(item)?.criteria_match === false" (click)="applyKhdCriteria([item])" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-600 text-white font-bold"><i class="fas fa-arrow-down text-[9px]"></i>ใช้เกณฑ์ KHD</button>
+                <span *ngIf="getKhdData(item)?.types_match === false" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-50 border border-sky-300 text-sky-700 font-bold"
+                      [title]="'ระบบ: ' + localTypesText(item)"><i class="fas fa-tags text-[9px]"></i>KHD: {{ khdTypesText(getKhdData(item)) }}</span>
+                <button *ngIf="canEditData && getKhdData(item)?.types_match === false" (click)="applyKhdTypes([item], 'types')" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-600 text-white font-bold"><i class="fas fa-arrow-down text-[9px]"></i>ใช้ประเภทตัวชี้วัด KHD</button>
+                <span *ngIf="getKhdData(item)?.hostype_match === false" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-cyan-50 border border-cyan-300 text-cyan-700 font-bold"
+                      [title]="'ระบบ: ' + localHostypeText(item)"><i class="fas fa-hospital text-[9px]"></i>KHD: {{ khdHostypeText(getKhdData(item)) }}</span>
+                <button *ngIf="canEditData && getKhdData(item)?.hostype_match === false" (click)="applyKhdTypes([item], 'hostype')" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-cyan-600 text-white font-bold"><i class="fas fa-arrow-down text-[9px]"></i>ใช้ประเภทหน่วยบริการ KHD</button>
                 <span *ngIf="item.weight" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-50 border border-orange-200 text-orange-700" title="น้ำหนัก">
                   <i class="fas fa-weight-hanging text-[9px]"></i>{{ item.weight }}
                 </span>
@@ -644,6 +685,25 @@
                           class="mt-1 block mx-auto px-2 py-0.5 bg-orange-600 hover:bg-orange-700 text-white rounded text-[10px] font-bold whitespace-nowrap"
                           [title]="'ปรับเกณฑ์เป็น ' + getKhdCriteriaText(getKhdData(item))">
                     <i class="fas fa-arrow-down mr-1"></i>ใช้เกณฑ์ KHD
+                  </button>
+                  <!-- ประเภทตัวชี้วัด / ประเภทหน่วยบริการต่างกัน (9 พ.ย. 2569) -->
+                  <div *ngIf="getKhdData(item)?.types_match === false" class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-700"
+                       [title]="'ระบบ: ' + localTypesText(item) + ' | KHD: ' + khdTypesText(getKhdData(item))">
+                    <i class="fas fa-tags mr-1"></i>ประเภทตัวชี้วัดต่างกัน
+                  </div>
+                  <button *ngIf="canEditData && getKhdData(item)?.types_match === false" (click)="applyKhdTypes([item], 'types')"
+                          class="mt-1 block mx-auto px-2 py-0.5 bg-sky-600 hover:bg-sky-700 text-white rounded text-[10px] font-bold whitespace-nowrap"
+                          [title]="'ปรับเป็น ' + khdTypesText(getKhdData(item))">
+                    <i class="fas fa-arrow-down mr-1"></i>ใช้ประเภทตัวชี้วัด KHD
+                  </button>
+                  <div *ngIf="getKhdData(item)?.hostype_match === false" class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-cyan-100 text-cyan-700"
+                       [title]="'ระบบ: ' + localHostypeText(item) + ' | KHD: ' + khdHostypeText(getKhdData(item))">
+                    <i class="fas fa-hospital mr-1"></i>ประเภทหน่วยบริการต่างกัน
+                  </div>
+                  <button *ngIf="canEditData && getKhdData(item)?.hostype_match === false" (click)="applyKhdTypes([item], 'hostype')"
+                          class="mt-1 block mx-auto px-2 py-0.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded text-[10px] font-bold whitespace-nowrap"
+                          [title]="'ปรับเป็น ' + khdHostypeText(getKhdData(item))">
+                    <i class="fas fa-arrow-down mr-1"></i>ใช้ประเภทหน่วยบริการ KHD
                   </button>
                 </td>
                 <!-- ส่งออก KHD อัตโนมัติ (คอลัมน์ upload_excel: 0 = ส่งออก = สวิตช์เปิด, 1 = ไม่ส่งออก = สวิตช์ปิด) -->

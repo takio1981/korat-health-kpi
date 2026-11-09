@@ -154,6 +154,44 @@ describe('KpiManageComponent', () => {
     });
   });
 
+  // ---- 9 พ.ย. 2569: ประเภทตัวชี้วัด / ประเภทหน่วยบริการ ต่างจาก KHD ----
+  describe('ประเภทตัวชี้วัด/ประเภทหน่วยบริการต่างจาก KHD', () => {
+    beforeEach(() => {
+      component.activeTab = 'indicators';
+      component.hosTypes = [{ hostypecode: '05', hostypename: 'รพ.ศูนย์' }, { hostypecode: '07', hostypename: 'รพ.ชุมชน' }];
+      component.indicators = [
+        { id: 1, kpi_indicators_name: 'ก', table_process: 'tp1', is_active: 1, r9: 1, moph: 0, evaluation_mode: 'all_required', required_off_types: null },
+        { id: 2, kpi_indicators_name: 'ข', table_process: 'tp2', is_active: 1, r9: 0, moph: 1, evaluation_mode: 'any_one', required_off_types: '["07"]' },
+      ];
+      component.khdCompareMap = new Map<string, any>([
+        ['tp1', { status: 'match', table_process: 'tp1', types_match: false, khd_types: { r9: 0, moph: 1, ssj: 1, rmw: 0, other: 0 }, hostype_match: true }],
+        ['tp2', { status: 'match', table_process: 'tp2', types_match: true, hostype_match: false, khd_eval_mode: 'any_one', khd_off_types: ['05', '07'] }],
+      ]);
+    });
+
+    it('นับ/กรองแยก 2 อย่าง และแสดงค่าของระบบเทียบกับ KHD', () => {
+      expect(component.khdCounts.types).toBe(1);
+      expect(component.khdCounts.hostype).toBe(1);
+      component.filterKhdStatus = 'types';
+      component.applyFilter();
+      expect(component.filteredIndicators.map((i: any) => i.id)).toEqual([1]);
+      component.filterKhdStatus = 'hostype';
+      component.applyFilter();
+      expect(component.filteredIndicators.map((i: any) => i.id)).toEqual([2]);
+      expect(component.localTypesText(component.indicators[0])).toBe('R9');
+      expect(component.khdTypesText(component.getKhdData(component.indicators[0]))).toBe('MOPH, SSJ');
+      expect(component.localHostypeText(component.indicators[1])).toBe('รพ.ชุมชน (07)');
+      expect(component.khdHostypeText(component.getKhdData(component.indicators[1]))).toBe('รพ.ศูนย์ (05), รพ.ชุมชน (07)');
+    });
+
+    it('เรียก API ด้วยรายการ ปีงบ และส่วนที่จะปรับ', () => {
+      const http = TestBed.inject(HttpTestingController);
+      (component as any).authService.applyKhdTypes([2], '2570', ['hostype']).subscribe();
+      const req = http.expectOne(r => r.method === 'POST' && r.url.includes('/indicators/apply-khd-types'));
+      expect(req.request.body).toEqual({ ids: [2], year_bh: '2570', parts: ['hostype'] });
+    });
+  });
+
   // ---- 19 ต.ค. 2569: จับคู่ข้อมูล KHD (หน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์) ----
   describe('จับคู่ข้อมูล KHD', () => {
     let http: HttpTestingController;

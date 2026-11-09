@@ -9,7 +9,8 @@
 const TP = { r1: 'test_khdmap_tp1', r2: 'test_khdmap_tp2', r3: 'test_khdmap_tp3' };
 const mockReports = [
     { report_id: 990001, report_name: 'test_khdmap ตัวชี้วัด 1', report_code: 'TEST_KHDMAP_TP1', table_process: TP.r1, data_source: 'excel',
-      target_percentage: 80, target_condition: 'GTE', is_active: 1, dept: 'TKM1', main_yut: 'test_khdmap   ยุทธศาสตร์ 1\t', main_indicator: '' },
+      target_percentage: 80, target_condition: 'GTE', is_active: 1, dept: 'TKM1', main_yut: 'test_khdmap   ยุทธศาสตร์ 1\t', main_indicator: '',
+      r9: 1, moph: 0, ssj: 1, rmw: 0, other: null, evaluation_mode: 'any_one', required_off_types: '["07","18"]' },
     { report_id: 990002, report_name: 'test_khdmap ตัวชี้วัด 2', report_code: 'TEST_KHDMAP_TP2', table_process: TP.r2, data_source: 'excel',
       target_percentage: 90, target_condition: 'GTE', is_active: 1, dept: 'TKMX', main_yut: 'test_khdmap ยุทธ์ชื่ออื่น', main_indicator: 'test_khdmap หมวด 1' },
     { report_id: 990003, report_name: 'test_khdmap ตัวชี้วัด 3', report_code: 'TEST_KHDMAP_TP3', table_process: TP.r3, data_source: 'excel',
@@ -90,6 +91,9 @@ describe('เพิ่มตัวชี้วัดจาก KHD — นำห�
             .send({ khd_report_id: 990001, dept_id: L.d2, main_indicator_id: L.m1, year_bh: '2570' });
         expect(res.status).toBe(200);
         expect(await indByTp(TP.r1)).toEqual(expect.objectContaining({ dept_id: L.d1, main_indicator_id: L.m1, main_yut: L.y1 }));
+        // ประเภทตัวชี้วัด + ประเภทหน่วยบริการจาก KHD (9 พ.ย. 2569 — เดิมไม่คัดลอก ตัวชี้วัดที่เพิ่มจาก KHD จึงเพิ่มให้หน่วยบริการไม่ได้จนกว่าจะตั้งเอง)
+        const [[t]] = await db.query('SELECT r9, moph, ssj, rmw, other, evaluation_mode, required_off_types FROM kpi_indicators WHERE table_process = ?', [TP.r1]);
+        expect(t).toEqual({ r9: 1, moph: 0, ssj: 1, rmw: 0, other: 0, evaluation_mode: 'any_one', required_off_types: '["07","18"]' });
     });
 
     test('หลายตัว: ช่องที่ยังจับคู่ไม่ได้ใช้ค่าที่เลือก และรายงานชื่อรายการที่ยังจับคู่ไม่ครบ', async () => {

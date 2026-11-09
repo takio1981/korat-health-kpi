@@ -4,6 +4,7 @@
 const db = require('../db');
 const khdMapping = require('../khd-mapping');
 const { getRemotePool } = require('../db-remote');
+const { khdTypeUpdate } = require('./khd-types');
 
 // ===== ส่งตาราง export เข้า KHD อย่างปลอดภัย (6 พ.ย. 2569 — เดิม UPSERT ทุกแถวทุกคอลัมน์โดยอาศัยคีย์ของ KHD เพียงอย่างเดียว) =====
 // กติกา (ผู้ใช้เลือก):
@@ -200,12 +201,18 @@ async function loadKhdResolver(conn) {
 async function insertIndicatorFromKhd(remoteDb, resolver, khd, fallback, yearBh) {
     const effective = await getKhdEffectiveCriteriaFor(remoteDb, khd.report_id, khd.target_percentage, khd.target_condition, yearBh);
     const r = resolver.resolveIndicator(khd, fallback);
+    // ประเภทตัวชี้วัด + ประเภทหน่วยบริการจาก KHD (9 พ.ย. 2569) — ค่าปีงบ (report_fiscal_year_config) ก่อนค่าทั่วไป
+    let fy = null;
+    if (yearBh) { const [f] = await remoteDb.query('SELECT r9, moph, ssj, rmw FROM report_fiscal_year_config WHERE report_id = ? AND fiscal_year = ?', [khd.report_id, yearBh]); fy = f[0] || null; }
+    const t = khdTypeUpdate(khd, fy, 'types');
+    const h = khdTypeUpdate(khd, fy, 'hostype') || { evaluation_mode: null, required_off_types: null };
     const [ins] = await db.query(
         `INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_code, dept_id, main_indicator_id, main_yut, is_active,
-            data_source, khd_report_id, criterion, target_condition, khd_fiscal_year)
-         VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
+            data_source, khd_report_id, criterion, target_condition, khd_fiscal_year, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types)
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [khd.report_name, khd.table_process, khd.report_code || null, r.dept_id, r.main_indicator_id, r.main_yut,
-         khd.data_source || null, khd.report_id, effective.target_percentage || null, effective.target_condition || null, effective.khd_fiscal_year]
+         khd.data_source || null, khd.report_id, effective.target_percentage || null, effective.target_condition || null, effective.khd_fiscal_year,
+         t.r9, t.moph, t.ssj, t.rmw, t.other, h.evaluation_mode, h.required_off_types]
     );
     return { id: ins.insertId, resolved: r };
 }

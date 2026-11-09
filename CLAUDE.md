@@ -94,7 +94,7 @@ frontend/src/app/
   ห้าม export ตรงๆ (ค่าจะค้าง) — เก็บไว้ในโมดูลเดียวกับผู้ใช้ หรือเปลี่ยนเป็น object; Map/Set แชร์ได้ (object เดียวกัน)
 - `core/env.js` ต้องเป็น require แรกของ server.js
   (ตัวดัก unhandledRejection/uncaughtException เรียก `captureError` แบบ lazy จาก core/errors)
-- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (307 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
+- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (308 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
   ตั้งใจเพิ่ม/แก้ route → `node tests/lib/route-inventory.js --write` แล้วตรวจ diff), `tests/lint.test.js` (ESLint no-undef ฯลฯ — จับชื่อที่ลืม require),
   `tests/build.test.js` (ไล่ require ทุกชั้นต้องอยู่ในชุดที่ build คัดลอก + build ลงโฟลเดอร์ชั่วคราว), `tests/startup.test.js` (เริ่มระบบ + โหลดผลลัพธ์ build ใน process แยก)
   — middleware ที่สร้างจาก factory/ไลบรารีต้องมีชื่อ (`requireAction(page,action)`, loginIpLimiter/loginLimiter/apiLimiter) ให้ snapshot แยกได้
@@ -946,6 +946,13 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   อัปเดตเฉพาะ `criterion` + `target_condition` (**ไม่แตะ `target_percentage`/เป้าหมาย**) ตัวเลขเก็บแบบตัดศูนย์ท้าย ("85.50" → "85.5"), KHD ไม่มีเกณฑ์/ไม่พบ = ข้าม
   (ไม่ล้างค่าเดิม), log `APPLY_KHD_CRITERIA` (ค่าเดิม/ค่าใหม่) — UI: ปุ่ม "ใช้เกณฑ์ KHD" ในแถว + banner สีส้ม + ชิป "เกณฑ์ต่างกัน" (`filterKhdStatus = 'criteria'`)
   — Test: `api/tests/khd-criteria.test.js` (KHD จำลอง), `kpi-manage.spec.ts`
+- **เทียบ/ปรับประเภทตัวชี้วัด + ประเภทหน่วยบริการกับ KHD (9 พ.ย. 2569 — ผู้ใช้สั่ง):** `services/khd-types.js` (ฟังก์ชันล้วน) — ประเภทตัวชี้วัด = r9/moph/ssj/rmw/other
+  (KHD `reports` + **ค่าปีงบใน `report_fiscal_year_config` (r9/moph/ssj/rmw) ก่อน** — ปีงบ 2570 KHD ตั้งครบทุกตัว), null/'0' = 0 | ประเภทหน่วยบริการ = `hostypeSetting(evaluation_mode, required_off_types)`
+  key 'all' (all_required ไม่สนรายการ) / 'any:05,07' (เรียง ไม่ซ้ำ) / 'unset' — KHD unset = `hostype_match: null` (ไม่นับต่าง ไม่มีค่าให้ใช้)
+  | `GET /report-compare` แนบ `types_match`/`hostype_match` + ค่าทั้ง 2 ฝั่ง + summary `types_different`/`hostype_different` | `POST /indicators/apply-khd-types { ids, year_bh, parts: ['types'|'hostype'] }`
+  (requireAction kpi-manage edit) server อ่าน KHD ใหม่ ปรับเฉพาะส่วนที่เลือกที่ต่างจริง, KHD ไม่ตั้ง = ข้าม, log `APPLY_KHD_TYPES` | **เพิ่มตัวชี้วัดจาก KHD คัดลอกทั้ง 2 อย่างด้วย** (`insertIndicatorFromKhd`)
+  — UI: ชิป "ประเภทตัวชี้วัดต่างกัน"/"ประเภทหน่วยบริการต่างกัน" (`filterKhdStatus = 'types'|'hostype'`), banner สีฟ้า + ปุ่มในแถว (`applyKhdTypes()`, ข้อความ `shared/khd-types.ts`)
+  — ข้อมูลจริง 9 พ.ย. 2569 (ปีงบ 2570, 149 คู่): ประเภทตัวชี้วัดต่าง 18 / ประเภทหน่วยบริการต่าง 67 (ฝั่งเรายังไม่ตั้ง 33) — Test: `api/tests/khd-types.test.js`, `khd-add-mapping.test.js`, `shared/khd-types.spec.ts`, `kpi-manage.spec.ts`
 - Join กับ local ผ่าน `table_process` (key เดียวกันทั้ง 2 ทาง) — คืน field `khd_*` (`khd_report_id, khd_name,
   khd_dept, khd_main_yut, khd_is_active, khd_data_source, khd_target_percentage, khd_target_condition,
   khd_criteria_source, khd_fiscal_year`) คู่กับ `local_*` ต่อ item
