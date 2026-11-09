@@ -15,6 +15,7 @@ const { customVarsOf, normalizeCustomVars, parseFormulaInput } = require('../ser
 const { getUserAuditInfo, logKpiSaveAudit } = require('../services/kpi-audit');
 const { notifyLineAction } = require('../core/notify');
 const { refreshSummaryAfterSubSave, scheduleSummaryRefresh } = require('../services/summary');
+const { normalizeFiscalYears, invalidFiscalYears } = require('../services/fiscal-years');
 
 // --- CRUD Main Yut (ยุทธศาสตร์) ---
 apiRouter.get('/main-yut', authenticateToken, async (req, res) => {
@@ -243,6 +244,9 @@ apiRouter.post('/indicators', authenticateToken, requireAction('kpi-manage', 'ad
     if (formula.error) return res.status(400).json({ success: false, message: formula.error });
     const pctF = parseFormulaInput(req.body.pct_formula, cvKeys, ['result'], 'สูตรร้อยละ');
     if (pctF.error) return res.status(400).json({ success: false, message: pctF.error });
+    if (req.body.khd_fiscal_year !== undefined && invalidFiscalYears(req.body.khd_fiscal_year).length) {
+        return res.status(400).json({ success: false, message: 'ปีงบประมาณไม่ถูกต้อง: ' + invalidFiscalYears(req.body.khd_fiscal_year).join(', ') + ' (ใช้ปี พ.ศ. 4 หลัก)' });
+    }
     try {
         // ไม่ได้กรอกชื่อตาราง → ระบบสร้างรหัสให้อัตโนมัติ (รหัสตัวชี้วัดสร้างตามถ้าไม่ได้กรอก)
         let tpFinal = table_process && String(table_process).trim() ? String(table_process).trim() : null;
@@ -294,6 +298,9 @@ apiRouter.put('/indicators/:id', authenticateToken, requireAction('kpi-manage', 
     if (formula.error) return res.status(400).json({ success: false, message: formula.error });
     const pctF = parseFormulaInput(pctRaw, cvKeys, ['result'], 'สูตรร้อยละ');
     if (pctF.error) return res.status(400).json({ success: false, message: pctF.error });
+    if (req.body.khd_fiscal_year !== undefined && invalidFiscalYears(req.body.khd_fiscal_year).length) {
+        return res.status(400).json({ success: false, message: 'ปีงบประมาณไม่ถูกต้อง: ' + invalidFiscalYears(req.body.khd_fiscal_year).join(', ') + ' (ใช้ปี พ.ศ. 4 หลัก)' });
+    }
     try {
         // ดึง old row เพื่อหาว่าฟิลด์ไหนเปลี่ยน (diff สั้นๆ)
         let diff = '';
@@ -589,6 +596,11 @@ async function saveHierarchyFields(conn, table, id, body) {
     if (table === 'kpi_indicators' && body && body.pct_formula !== undefined) {
         sets.push('pct_formula = ?');
         params.push(String(body.pct_formula || '').trim().slice(0, 500) || null);
+    }
+    // ปีงบประมาณของตัวชี้วัด (khd_fiscal_year comma-list — ตั้งเองได้ 9 พ.ย. 2569): array หรือ "2569,2570", ว่าง = ไม่ระบุ
+    if (table === 'kpi_indicators' && body && body.khd_fiscal_year !== undefined) {
+        sets.push('khd_fiscal_year = ?');
+        params.push(normalizeFiscalYears(body.khd_fiscal_year));
     }
     // ยุทธศาสตร์ของตัวชี้วัดโดยตรง (ใช้แสดงเมื่อไม่มีหมวดหมู่หลัก — 19 ต.ค. 2569)
     if (table === 'kpi_indicators' && body && body.main_yut !== undefined) {

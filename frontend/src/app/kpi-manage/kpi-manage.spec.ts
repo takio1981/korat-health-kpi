@@ -213,6 +213,41 @@ describe('KpiManageComponent', () => {
       expect(req.request.body).toEqual({ id: 3, khd_report_id: 77 });
     });
 
+    it('ปีงบประมาณ: นับ/กรอง "ปีงบต่างกัน" จากค่าปัจจุบัน + กรองไม่ระบุปีงบ + ปรับค่าในรายการทันทีหลังบันทึก', () => {
+      component.indicators.push(
+        { id: 4, kpi_indicators_name: 'ง', table_process: 'tp4', is_active: 1, khd_fiscal_year: '2570' },
+        { id: 5, kpi_indicators_name: 'จ', table_process: 'tp5', is_active: 1, khd_fiscal_year: null });
+      component.khdCompareMap.set('tp4', { status: 'match', table_process: 'tp4', khd_fiscal_years: ['2569', '2570'] });
+      component.khdCompareMap.set('tp5', { status: 'match', table_process: 'tp5', khd_fiscal_years: [] });   // KHD ไม่มีปีงบ = ไม่นับต่าง
+      expect(component.khdFiscalYearMatch(component.indicators.find((i: any) => i.id === 4))).toBe(false);
+      expect(component.khdFiscalYearMatch(component.indicators.find((i: any) => i.id === 5))).toBeNull();
+      expect(component.khdCounts.fiscal_year).toBe(1);
+      component.filterKhdStatus = 'fiscal_year';
+      component.applyFilter();
+      expect(component.filteredIndicators.map((i: any) => i.id)).toEqual([4]);
+      component.filterKhdStatus = '';
+      component.filterFiscalYear = '__none';
+      component.applyFilter();
+      expect(component.filteredIndicators.map((i: any) => i.id)).toContain(5);
+      expect(component.filteredIndicators.map((i: any) => i.id)).not.toContain(4);
+      component.applyFiscalYearUpdates([{ id: 4, after: '2569,2570' }, { id: 5, after: '2570' }]);
+      expect(component.khdCounts.fiscal_year).toBe(0);
+      expect(component.filteredIndicators.map((i: any) => i.id)).not.toContain(5);
+      const http = TestBed.inject(HttpTestingController);
+      (component as any).authService.setIndicatorFiscalYear([5], ['2570'], 'add').subscribe();
+      expect(http.expectOne(r => r.method === 'POST' && r.url.includes('/indicators/set-fiscal-year')).request.body).toEqual({ ids: [5], years: ['2570'], mode: 'add' });
+      (component as any).authService.applyKhdFiscalYear([4]).subscribe();
+      expect(http.expectOne(r => r.method === 'POST' && r.url.includes('/indicators/apply-khd-fiscal-year')).request.body).toEqual({ ids: [4] });
+    });
+
+    it('ปีงบประมาณในหน้าต่างตัวชี้วัด: เลือก/ยกเลิก แล้วส่ง khd_fiscal_year', () => {
+      component.setModalFiscalYears(['2565']);
+      expect(component.modalFiscalYearChoices).toContain('2565');
+      component.toggleModalFiscalYear('2570');
+      component.toggleModalFiscalYear('2565');
+      expect(component.modalFiscalYears).toEqual(['2570']);
+    });
+
     it('เรียก API ด้วยรายการ ปีงบ และส่วนที่จะปรับ', () => {
       const http = TestBed.inject(HttpTestingController);
       (component as any).authService.applyKhdTypes([2], '2570', ['hostype']).subscribe();

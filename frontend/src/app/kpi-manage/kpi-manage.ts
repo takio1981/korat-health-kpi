@@ -15,7 +15,7 @@ import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { ZoneBadgeComponent, HospitalZoneService } from '../shared/zone-badge';
 import { ZoneManagerComponent } from '../shared/zone-manager';
 import { typesText, hostypeText } from '../shared/khd-types';
-import { buildKhdDiffRows, khdDiffAoa, KhdDiffRow, KhdDiffKind, KHD_DIFF_KIND_LABEL } from '../shared/khd-diff';
+import { buildKhdDiffRows, khdDiffAoa, KhdDiffRow, KhdDiffKind, KHD_DIFF_KIND_LABEL, fiscalYearList, fiscalYearMatch, fiscalYearChoices } from '../shared/khd-diff';
 import { AiFormulaHelperComponent } from '../shared/ai-formula-helper';
 import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
 import { TARGET_CONDITIONS, CONDITION_SYMBOL, CONDITION_LABEL, normalizeCondition, evaluateTarget, normalizeTargetMonthly } from '../shared/kpi-target';
@@ -391,9 +391,113 @@ export class KpiManageComponent implements OnInit {
   getFiscalYearBadge(item: any): { label: string; title: string; color: string } {
     const years = this.getFiscalYears(item);
     if (years.length === 0) {
-      return { label: 'ไม่ระบุปีงบ', title: 'ไม่พบข้อมูลปีงบประมาณจาก KHD — ลองกด "เชื่อมโยง KHD Link"', color: 'bg-gray-50 border-gray-200 text-gray-500' };
+      return { label: 'ไม่ระบุปีงบ', title: 'ยังไม่ได้ตั้งปีงบประมาณ' + (this.canEditData ? ' — คลิกเพื่อตั้งปีงบ' : ' (กด "เชื่อมโยง KHD Link" เพื่อดึงจาก KHD)'), color: 'bg-gray-50 border-gray-200 text-gray-500' };
     }
-    return { label: `ปีงบ ${years.join(', ')}`, title: `พบใน KHD report_fiscal_year_config ปีงบ: ${years.join(', ')}`, color: 'bg-teal-50 border-teal-200 text-teal-700' };
+    return { label: `ปีงบ ${years.join(', ')}`, title: `ปีงบประมาณ: ${years.join(', ')}` + (this.canEditData ? ' — คลิกเพื่อแก้ไข' : ''), color: 'bg-teal-50 border-teal-200 text-teal-700' };
+  }
+
+  // ===== ปีงบประมาณของตัวชี้วัด: เทียบกับ KHD + ตั้งเอง (9 พ.ย. 2569) =====
+  /** เทียบค่าปัจจุบันของตัวชี้วัดกับปีงบที่ KHD ตั้งไว้ — null = ยังไม่เทียบ / ไม่มีคู่ใน KHD / KHD ไม่มีปีงบ */
+  khdFiscalYearMatch(item: any): boolean | null {
+    const khd = this.getKhdData(item);
+    if (!khd || khd.status === 'missing_remote' || khd.status === 'missing_local') return null;
+    return fiscalYearMatch(item?.khd_fiscal_year, khd.khd_fiscal_years);
+  }
+  khdFiscalYearText(item: any): string { return fiscalYearList(this.getKhdData(item)?.khd_fiscal_years).join(', '); }
+
+  /** ตัวชี้วัดในรายการที่แสดงอยู่ที่ยังไม่ระบุปีงบ (ปุ่ม "ตั้งปีงบ") */
+  get unsetFiscalYearCount(): number { return this.filteredIndicators.filter(i => !this.getFiscalYears(i).length).length; }
+  openSetFiscalYearForUnset() { this.openSetFiscalYear(this.filteredIndicators.filter(i => !this.getFiscalYears(i).length)); }
+
+  /** ตั้งปีงบเอง — 1 ตัว = แก้ปีงบของตัวนั้น (แทนที่), หลายตัว = เลือกแทนที่หรือเพิ่มต่อจากปีเดิม */
+  openSetFiscalYear(items: any[]) {
+    if (!this.canEditData || !items.length) return;
+    const esc = (t: any) => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as any)[c]);
+    const single = items.length === 1;
+    const cur = single ? this.getFiscalYears(items[0]) : [String(getCurrentFiscalYear())];
+    const nowFy = String(getCurrentFiscalYear());
+    const boxes = fiscalYearChoices(getCurrentFiscalYear(), items.map(i => i.khd_fiscal_year)).map(y =>
+      `<label class="inline-flex items-center gap-1 px-2 py-1 border rounded-lg mr-1 mb-1 cursor-pointer text-sm">` +
+      `<input type="checkbox" class="fy-choice" value="${y}" ${cur.includes(y) ? 'checked' : ''}> ปีงบ ${y}` +
+      (y === nowFy ? ' <span class="text-[10px] text-emerald-600">(ปัจจุบัน)</span>' : '') + `</label>`).join('');
+    const mode = single ? '' : `<div class="text-sm mt-2 text-left"><label class="mr-3"><input type="radio" name="fy-mode" value="replace" checked> แทนที่ปีงบเดิม</label>` +
+      `<label><input type="radio" name="fy-mode" value="add"> เพิ่มต่อจากปีงบเดิม</label></div>`;
+    const head = single ? `<p class="text-sm mb-2">${esc(items[0].kpi_indicators_name)}</p>` : `<p class="text-sm mb-2">ตั้งปีงบของ <b>${items.length}</b> ตัวชี้วัด</p>`;
+    Swal.fire({
+      title: 'ตั้งปีงบประมาณ',
+      html: head + `<div id="fy-choices" class="text-left">${boxes}</div>${mode}` +
+        `<p class="text-[11px] text-gray-500 mt-2">ไม่เลือกปีใดเลย = ไม่ระบุปีงบ — ตัวชี้วัดที่มีใน KHD ใช้ปีงบตาม KHD ได้จาก "เทียบกับ KHD"</p>`,
+      showCancelButton: true, confirmButtonColor: '#10b981', confirmButtonText: 'บันทึก', cancelButtonText: 'ยกเลิก',
+      preConfirm: () => {
+        const years = Array.from(document.querySelectorAll<HTMLInputElement>('.fy-choice')).filter(b => b.checked).map(b => b.value);
+        const m = (document.querySelector<HTMLInputElement>('input[name="fy-mode"]:checked')?.value || 'replace') as 'replace' | 'add';
+        if (m === 'add' && !years.length) { Swal.showValidationMessage('กรุณาเลือกปีงบที่จะเพิ่ม'); return false; }
+        return { years, mode: m };
+      }
+    }).then(r => {
+      if (!r.isConfirmed || !r.value) return;
+      this.authService.setIndicatorFiscalYear(items.map(i => i.id), r.value.years, r.value.mode).subscribe({
+        next: (res: any) => {
+          if (!res.success) { Swal.fire('ผิดพลาด', res.message, 'error'); return; }
+          this.applyFiscalYearUpdates(res.updated);
+          Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2000, showConfirmButton: false });
+        },
+        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถตั้งปีงบได้', 'error')
+      });
+    });
+  }
+
+  /** ปรับค่าในรายการที่โหลดไว้ทันที (ไม่ต้องโหลดใหม่ทั้งหน้า) แล้วกรอง/คำนวณหน้าต่างความแตกต่างใหม่ */
+  applyFiscalYearUpdates(updated: { id: number; after: string | null }[]) {
+    for (const u of updated || []) {
+      const it = this.indicators.find(i => i.id === u.id);
+      if (it) it.khd_fiscal_year = u.after;
+    }
+    this.applyFilter();
+    if (this.showKhdDiff) this.refreshKhdDiff();
+    this.cdr.detectChanges();
+  }
+
+  /** ตัวชี้วัดที่ปีงบต่างจาก KHD (ปุ่ม "ใช้ปีงบ KHD ทั้งหมด") */
+  get khdFiscalYearDiffItems(): any[] { return this.indicators.filter(i => this.khdFiscalYearMatch(i) === false); }
+
+  /** ใช้ปีงบประมาณตาม KHD — server อ่านปีงบจาก KHD เอง (KHD ไม่มีปีงบ = ข้าม ไม่ล้างค่าเดิม) */
+  applyKhdFiscalYear(items: any[]) {
+    items = items.filter(i => this.khdFiscalYearMatch(i) === false);
+    if (!items.length) { Swal.fire('แจ้งเตือน', 'ไม่มีตัวชี้วัดที่ปีงบต่างจาก KHD', 'info'); return; }
+    const esc = (t: any) => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as any)[c]);
+    const list = items.slice(0, 10).map(i => `<tr><td class="text-left pr-2 py-0.5">${esc(i.kpi_indicators_name)}</td>` +
+      `<td class="px-1 text-gray-600">${esc(this.getFiscalYears(i).join(', ') || 'ไม่ระบุปีงบ')}</td><td class="px-1">→</td>` +
+      `<td class="font-bold text-teal-700">${esc(this.khdFiscalYearText(i))}</td></tr>`).join('');
+    const more = items.length > 10 ? `<p class="text-xs text-gray-500 mt-1">... และอีก ${items.length - 10} ตัว</p>` : '';
+    Swal.fire({
+      title: 'ใช้ปีงบประมาณตาม KHD',
+      html: `<p class="text-sm">ปรับปีงบของ <b>${items.length}</b> ตัวชี้วัดให้ตรงกับปีงบที่ KHD ตั้งค่าไว้</p>` +
+        `<div class="max-h-60 overflow-auto mt-2"><table class="w-full text-xs">${list}</table></div>${more}`,
+      showCancelButton: true, confirmButtonColor: '#0d9488',
+      confirmButtonText: '<i class="fas fa-arrow-down mr-1"></i> ใช้ปีงบ KHD', cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      this.authService.applyKhdFiscalYear(items.map(i => i.id)).subscribe({
+        next: (res: any) => {
+          if (!res.success) { Swal.fire('ผิดพลาด', res.message, 'error'); return; }
+          this.applyFiscalYearUpdates(res.updated);
+          Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2000, showConfirmButton: false });
+        },
+        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถปรับได้', 'error')
+      });
+    });
+  }
+
+  // ปีงบประมาณในหน้าต่างเพิ่ม/แก้ไขตัวชี้วัด (ตัวเลือกคำนวณตอนเปิดหน้าต่าง — ไม่ใช่ getter กัน NG0103)
+  modalFiscalYears: string[] = [];
+  modalFiscalYearChoices: string[] = [];
+  setModalFiscalYears(years: string[]) {
+    this.modalFiscalYears = [...years];
+    this.modalFiscalYearChoices = fiscalYearChoices(getCurrentFiscalYear(), years);
+  }
+  toggleModalFiscalYear(y: string) {
+    this.modalFiscalYears = this.modalFiscalYears.includes(y) ? this.modalFiscalYears.filter(x => x !== y) : [...this.modalFiscalYears, y].sort();
   }
 
   // badge แหล่งที่มาข้อมูล — 3 สถานะ ตาม data_source/khd_report_id (link ถาวรกับ KHD reports.report_id ผ่าน table_process)
@@ -776,7 +880,8 @@ export class KpiManageComponent implements OnInit {
         if (!matchSearch) return false;
         if (this.filterMainIndicator && String(i.main_indicator_id) !== this.filterMainIndicator) return false;
         if (this.filterDept && String(i.dept_id) !== this.filterDept) return false;
-        if (this.filterFiscalYear && !this.getFiscalYears(i).includes(this.filterFiscalYear)) return false;
+        if (this.filterFiscalYear === '__none') { if (this.getFiscalYears(i).length) return false; }
+        else if (this.filterFiscalYear && !this.getFiscalYears(i).includes(this.filterFiscalYear)) return false;
         // KHD compare filter
         if (this.filterKhdStatus) {
           const cmp = this.getKhdCompareStatus(i);
@@ -786,6 +891,8 @@ export class KpiManageComponent implements OnInit {
             if (this.getKhdData(i)?.types_match !== false) return false;
           } else if (this.filterKhdStatus === 'hostype') {
             if (this.getKhdData(i)?.hostype_match !== false) return false;
+          } else if (this.filterKhdStatus === 'fiscal_year') {
+            if (this.khdFiscalYearMatch(i) !== false) return false;
           } else if (this.filterKhdStatus === 'inactive') {
             const khd = this.khdCompareMap.get(i.table_process || '');
             if (!(khd && (khd.khd_is_active === 0 || khd.khd_is_active === '0'))) return false;
@@ -1159,6 +1266,7 @@ export class KpiManageComponent implements OnInit {
         src.sub_rollup_mode = src.sub_rollup_mode === 'manual' ? 'manual' : 'auto';
         src.item_no = src.item_no || '';
         src.export_items = Number(src.export_items) === 1;
+        this.setModalFiscalYears(fiscalYearList(src.khd_fiscal_year));   // ปีงบประมาณ (ตั้งเองได้ — 9 พ.ย. 2569)
         this.selectedOffTypes = this.parseOffTypes(src.required_off_types);
         // auto-set yut_id จาก main_indicator ที่เลือก
         this.selectedYutInModal = src.yut_id ? Number(src.yut_id) : null;
@@ -1169,6 +1277,7 @@ export class KpiManageComponent implements OnInit {
       if (this.activeTab === 'indicators') {
         this.selectedYutInModal = null;
         this.selectedOffTypes = [];
+        this.setModalFiscalYears([String(getCurrentFiscalYear())]);
         this.currentItem = { ...baseDefaults, r9: false, moph: false, ssj: false, rmw: false, other: false, is_cumulative: false, use_sub_indicator_export: false, result_formula: '', custom_vars: [], pct_formula: '', result_manual: false, pct_manual: false, target_monthly: '', weight: 1, target_condition: 'GTE', evaluation_mode: 'any_one', sub_rollup_mode: 'auto', item_no: '', export_items: false };
       } else {
         this.currentItem = { ...baseDefaults };
@@ -1250,6 +1359,7 @@ export class KpiManageComponent implements OnInit {
       payload.result_manual = payload.result_manual ? 1 : 0;
       payload.pct_manual = payload.pct_manual ? 1 : 0;
       if (payload.pct_manual) payload.pct_formula = null;
+      payload.khd_fiscal_year = [...this.modalFiscalYears];   // ปีงบประมาณ (ว่าง = ไม่ระบุ)
       payload.target_monthly = normalizeTargetMonthly(payload.target_monthly);   // เป้าหมายรายเดือน — '' = เป้าหมายเดียวทั้งปี
       payload.required_off_types = payload.evaluation_mode === 'any_one' && this.selectedOffTypes.length > 0
         ? this.selectedOffTypes
@@ -1592,7 +1702,7 @@ export class KpiManageComponent implements OnInit {
    * ตัวนี้ iterate this.indicators (ที่ table แสดงจริง) — ตรงกันการนับ
    */
   get khdCounts() {
-    const counts = { match: 0, different: 0, tp_different: 0, missing_remote: 0, inactive: 0, criteria: 0, types: 0, hostype: 0, total: 0 };
+    const counts = { match: 0, different: 0, tp_different: 0, missing_remote: 0, inactive: 0, criteria: 0, types: 0, hostype: 0, fiscal_year: 0, total: 0 };
     if (!this.khdCompareMap.size) return counts;
     for (const i of this.indicators) {
       counts.total++;
@@ -1606,6 +1716,7 @@ export class KpiManageComponent implements OnInit {
       if (khd?.criteria_match === false) counts.criteria++;
       if (khd?.types_match === false) counts.types++;
       if (khd?.hostype_match === false) counts.hostype++;
+      if (this.khdFiscalYearMatch(i) === false) counts.fiscal_year++;
     }
     return counts;
   }
@@ -2340,7 +2451,7 @@ export class KpiManageComponent implements OnInit {
   khdDiffAll: KhdDiffRow[] = [];
   khdDiffRows: KhdDiffRow[] = [];
   khdDiffCounts: Record<string, number> = {};
-  readonly khdDiffKinds: KhdDiffKind[] = ['name', 'table_process', 'criteria', 'types', 'hostype', 'status'];
+  readonly khdDiffKinds: KhdDiffKind[] = ['name', 'table_process', 'criteria', 'types', 'hostype', 'fiscal_year', 'status'];
   readonly khdDiffKindLabel = KHD_DIFF_KIND_LABEL;
 
   openKhdDiff(item?: any) {
@@ -2380,6 +2491,7 @@ export class KpiManageComponent implements OnInit {
     else if (r.kind === 'table_process') this.applyKhdTableProcess(item);
     else if (r.kind === 'criteria') this.applyKhdCriteria([item]);
     else if (r.kind === 'types' || r.kind === 'hostype') this.applyKhdTypes([item], r.kind);
+    else if (r.kind === 'fiscal_year') this.applyKhdFiscalYear([item]);
   }
 
   /** ใช้ชื่อของ KHD ทุกตัวที่ table_process เดียวกันแต่ชื่อต่าง (POST /report-compare/sync เดิม — server อ่านชื่อจาก KHD) */

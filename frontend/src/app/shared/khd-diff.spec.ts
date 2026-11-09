@@ -1,4 +1,4 @@
-import { buildKhdDiffRows, typesChangeText, hostypeChangeText, khdDiffAoa } from './khd-diff';
+import { buildKhdDiffRows, typesChangeText, hostypeChangeText, khdDiffAoa, fiscalYearList, fiscalYearMatch, fiscalYearChangeText, fiscalYearChoices } from './khd-diff';
 
 // รายละเอียดความแตกต่างหลังเทียบกับ KHD (9 พ.ย. 2569)
 describe('khd-diff', () => {
@@ -37,6 +37,28 @@ describe('khd-diff', () => {
     const aoa = khdDiffAoa(rows, '2570');
     expect(aoa[0][5]).toBe('ใน KHD (ปีงบ 2570)');
     expect(aoa).toHaveLength(6);
+  });
+});
+
+// ปีงบประมาณเทียบกับ KHD (9 พ.ย. 2569)
+describe('khd-diff fiscal year', () => {
+  it('fiscalYearList / fiscalYearMatch / fiscalYearChangeText / fiscalYearChoices', () => {
+    expect(fiscalYearList('2570, 2569,2570,x')).toEqual(['2569', '2570']);
+    expect(fiscalYearList(['2571', 2570])).toEqual(['2570', '2571']);
+    expect(fiscalYearMatch('2570,2569', ['2569', '2570'])).toBe(true);
+    expect(fiscalYearMatch(null, ['2570'])).toBe(false);
+    expect(fiscalYearMatch('2570', [])).toBeNull();
+    expect(fiscalYearChangeText('2568,2570', ['2569', '2570'])).toBe('เพิ่ม: 2569 · เอาออก: 2568');
+    expect(fiscalYearChoices(2570, ['2560'])).toEqual(['2572', '2571', '2570', '2569', '2568', '2560']);
+  });
+  it('buildKhdDiffRows: แถวปีงบ (ค่าปัจจุบันของตัวชี้วัด) — KHD ไม่มีปีงบ = ไม่มีแถว', () => {
+    const items = [
+      { id: 1, kpi_indicators_name: 'ก', table_process: 'a', khd_fiscal_year: null },
+      { id: 2, kpi_indicators_name: 'ข', table_process: 'b', khd_fiscal_year: '2570' },
+    ];
+    const khd: Record<string, any> = { a: { status: 'match', khd_fiscal_years: ['2570'] }, b: { status: 'match', khd_fiscal_years: [] } };
+    const rows = buildKhdDiffRows(items, { getKhd: (i: any) => khd[i.table_process], criteriaText: () => '-', khdCriteriaText: () => '-' });
+    expect(rows).toEqual([expect.objectContaining({ id: 1, kind: 'fiscal_year', local: 'ไม่ระบุปีงบ', khd: '2570', detail: 'เพิ่ม: 2570' })]);
   });
 });
 

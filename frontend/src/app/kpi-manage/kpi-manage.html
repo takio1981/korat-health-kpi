@@ -46,11 +46,17 @@
               <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">ปีงบประมาณ</label>
               <select [(ngModel)]="filterFiscalYear" (change)="applyFilter()"
                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none truncate"
-                      title="กรองจาก KHD report_fiscal_year_config (khd_fiscal_year) — กด 'เชื่อมโยง KHD Link' ก่อนถ้ายังไม่มีตัวเลือก">
+                      title="ปีงบประมาณของตัวชี้วัด (จาก KHD หรือตั้งเอง)">
                 <option value="">ทุกปีงบ</option>
+                <option value="__none">ไม่ระบุปีงบ</option>
                 <option *ngFor="let y of fiscalYearOptions" [value]="y">ปีงบ {{ y }}</option>
               </select>
             </div>
+            <button *ngIf="canEditData && unsetFiscalYearCount > 0" (click)="openSetFiscalYearForUnset()" id="btn-set-fiscal-year"
+                    class="px-3 py-2 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold whitespace-nowrap"
+                    title="ตั้งปีงบประมาณให้ตัวชี้วัดในรายการที่ยังไม่ระบุปีงบ">
+              <i class="fas fa-calendar-plus mr-1"></i>ตั้งปีงบ ({{ unsetFiscalYearCount }} ตัวที่ไม่ระบุ)
+            </button>
           </ng-container>
           <!-- Hospital filter row: อำเภอ + ประเภท -->
           <ng-container *ngIf="activeTab === 'hospitals'">
@@ -217,6 +223,11 @@
                   [ngClass]="filterKhdStatus === 'hostype' ? 'bg-cyan-600 text-white' : 'bg-cyan-50 text-cyan-700 border border-cyan-200'"
                   class="px-2.5 py-1 rounded-lg font-bold transition-all">
             <i class="fas fa-hospital mr-1"></i>ประเภทหน่วยบริการต่างกัน ({{ khdCounts.hostype }})
+          </button>
+          <button (click)="filterKhdStatus = filterKhdStatus === 'fiscal_year' ? '' : 'fiscal_year'; applyFilter()" id="btn-khd-filter-fy"
+                  [ngClass]="filterKhdStatus === 'fiscal_year' ? 'bg-teal-600 text-white' : 'bg-teal-50 text-teal-700 border border-teal-200'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all">
+            <i class="fas fa-calendar-alt mr-1"></i>ปีงบต่างกัน ({{ khdCounts.fiscal_year }})
           </button>
           <span class="w-px h-4 bg-teal-200"></span>
           <button (click)="filterResultStatus = filterResultStatus === 'has_results' ? '' : 'has_results'; applyFilter()"
@@ -478,13 +489,17 @@
                 <span *ngIf="getKhdData(item)?.hostype_match === false" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-cyan-50 border border-cyan-300 text-cyan-700 font-bold"
                       [title]="'ระบบ: ' + localHostypeText(item)"><i class="fas fa-hospital text-[9px]"></i>KHD: {{ khdHostypeText(getKhdData(item)) }}</span>
                 <button *ngIf="canEditData && getKhdData(item)?.hostype_match === false" (click)="applyKhdTypes([item], 'hostype')" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-cyan-600 text-white font-bold"><i class="fas fa-arrow-down text-[9px]"></i>ใช้ประเภทหน่วยบริการ KHD</button>
+                <span *ngIf="khdFiscalYearMatch(item) === false" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-50 border border-teal-300 text-teal-700 font-bold"
+                      [title]="'ระบบ: ' + (getFiscalYears(item).join(', ') || 'ไม่ระบุปีงบ')"><i class="fas fa-calendar-alt text-[9px]"></i>KHD: ปีงบ {{ khdFiscalYearText(item) }}</span>
+                <button *ngIf="canEditData && khdFiscalYearMatch(item) === false" (click)="applyKhdFiscalYear([item])" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-600 text-white font-bold"><i class="fas fa-arrow-down text-[9px]"></i>ใช้ปีงบ KHD</button>
                 <span *ngIf="item.weight" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-50 border border-orange-200 text-orange-700" title="น้ำหนัก">
                   <i class="fas fa-weight-hanging text-[9px]"></i>{{ item.weight }}
                 </span>
                 <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold" [ngClass]="getSourceBadge(item).color" [title]="getSourceBadge(item).title">
                   <i class="fas text-[9px]" [ngClass]="getSourceBadge(item).icon"></i>{{ getSourceBadge(item).label }}
                 </span>
-                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold" [ngClass]="getFiscalYearBadge(item).color" [title]="getFiscalYearBadge(item).title">
+                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold" [ngClass]="getFiscalYearBadge(item).color" [title]="getFiscalYearBadge(item).title"
+                      [class.cursor-pointer]="canEditData" (click)="openSetFiscalYear([item])" data-fy-badge>
                   <i class="fas fa-calendar-alt text-[9px]"></i>{{ getFiscalYearBadge(item).label }}
                 </span>
                 <span *ngFor="let t of getIndicatorTypes(item)" class="inline-flex items-center px-1.5 py-0.5 rounded font-bold" [ngClass]="t.color" [title]="'ประเภทตัวชี้วัด: ' + t.label">
@@ -631,7 +646,8 @@
                     <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold" [ngClass]="getSourceBadge(item).color" [title]="getSourceBadge(item).title">
                       <i class="fas text-[9px]" [ngClass]="getSourceBadge(item).icon"></i>{{ getSourceBadge(item).label }}
                     </span>
-                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold" [ngClass]="getFiscalYearBadge(item).color" [title]="getFiscalYearBadge(item).title">
+                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold" [ngClass]="getFiscalYearBadge(item).color" [title]="getFiscalYearBadge(item).title"
+                      [class.cursor-pointer]="canEditData" (click)="openSetFiscalYear([item])" data-fy-badge>
                       <i class="fas fa-calendar-alt text-[9px]"></i>{{ getFiscalYearBadge(item).label }}
                     </span>
                     <span *ngFor="let t of getIndicatorTypes(item)" class="inline-flex items-center px-1.5 py-0.5 rounded font-bold" [ngClass]="t.color" [title]="'ประเภทตัวชี้วัด: ' + t.label">
@@ -718,7 +734,16 @@
                           [title]="'ปรับเป็น ' + khdHostypeText(getKhdData(item))">
                     <i class="fas fa-arrow-down mr-1"></i>ใช้ประเภทหน่วยบริการ KHD
                   </button>
-                  <button *ngIf="getKhdData(item) && (getKhdCompareStatus(item) === 'different' || getKhdCompareStatus(item) === 'tp_different' || getKhdData(item)?.criteria_match === false || getKhdData(item)?.types_match === false || getKhdData(item)?.hostype_match === false || getKhdData(item)?.khd_is_active === 0 || getKhdData(item)?.khd_is_active === '0')"
+                  <div *ngIf="khdFiscalYearMatch(item) === false" class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-700"
+                       [title]="'ระบบ: ' + (getFiscalYears(item).join(', ') || 'ไม่ระบุปีงบ') + ' | KHD: ' + khdFiscalYearText(item)">
+                    <i class="fas fa-calendar-alt mr-1"></i>ปีงบต่างกัน
+                  </div>
+                  <button *ngIf="canEditData && khdFiscalYearMatch(item) === false" (click)="applyKhdFiscalYear([item])"
+                          class="mt-1 block mx-auto px-2 py-0.5 bg-teal-600 hover:bg-teal-700 text-white rounded text-[10px] font-bold whitespace-nowrap"
+                          [title]="'ปรับเป็นปีงบ ' + khdFiscalYearText(item)">
+                    <i class="fas fa-arrow-down mr-1"></i>ใช้ปีงบ KHD
+                  </button>
+                  <button *ngIf="getKhdData(item) && (khdFiscalYearMatch(item) === false || getKhdCompareStatus(item) === 'different' || getKhdCompareStatus(item) === 'tp_different' || getKhdData(item)?.criteria_match === false || getKhdData(item)?.types_match === false || getKhdData(item)?.hostype_match === false || getKhdData(item)?.khd_is_active === 0 || getKhdData(item)?.khd_is_active === '0')"
                           (click)="openKhdDiff(item)" class="mt-1 block mx-auto text-[10px] font-bold text-indigo-700 hover:underline whitespace-nowrap">
                     <i class="fas fa-code-compare mr-1"></i>ดูรายละเอียด
                   </button>
@@ -2159,6 +2184,19 @@
           </div>
         </div>
 
+        <!-- ปีงบประมาณของตัวชี้วัด (9 พ.ย. 2569) — khd_fiscal_year: ตั้งเองได้ / ตัวที่มีใน KHD ใช้ปีงบตาม KHD ได้จาก "เทียบกับ KHD" -->
+        <div id="indicator-fiscal-year" class="border border-teal-200 rounded-xl p-3 bg-teal-50/40">
+          <label class="block text-xs font-bold text-gray-700 mb-1.5"><i class="fas fa-calendar-alt text-teal-600 mr-1"></i>ปีงบประมาณ</label>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" *ngFor="let y of modalFiscalYearChoices" (click)="toggleModalFiscalYear(y)" [attr.data-fy]="y"
+                    [ngClass]="modalFiscalYears.includes(y) ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-teal-50'"
+                    class="px-3 py-1.5 border rounded-lg text-xs font-bold">
+              <i class="fas mr-1" [ngClass]="modalFiscalYears.includes(y) ? 'fa-check-square' : 'fa-square'"></i>ปีงบ {{ y }}
+            </button>
+          </div>
+          <p class="text-[11px] text-gray-500 mt-1.5">{{ modalFiscalYears.length ? 'เลือกแล้ว: ' + modalFiscalYears.join(', ') : 'ยังไม่เลือก = ไม่ระบุปีงบ' }}</p>
+        </div>
+
         <!-- เกณฑ์ประเภทหน่วยบริการที่รับผิดชอบ -->
         <div id="indicator-eval-mode" class="border border-cyan-200 rounded-xl p-3 bg-cyan-50/40 space-y-3">
           <div>
@@ -2580,6 +2618,8 @@
              class="ml-auto px-3 py-1.5 border border-gray-200 rounded-lg bg-white text-sm w-full sm:w-64">
       <button *ngIf="isSuperAdmin && khdDiffCounts['name']" (click)="syncAllNamesFromKhd()" id="btn-khd-diff-names"
               class="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold"><i class="fas fa-sync mr-1"></i>ใช้ชื่อ KHD ทั้งหมด ({{ khdDiffCounts['name'] }})</button>
+      <button *ngIf="canEditData && khdDiffCounts['fiscal_year']" (click)="applyKhdFiscalYear(khdFiscalYearDiffItems)" id="btn-khd-diff-fy"
+              class="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-bold"><i class="fas fa-calendar-check mr-1"></i>ใช้ปีงบ KHD ทั้งหมด ({{ khdDiffCounts['fiscal_year'] }})</button>
       <button (click)="downloadKhdDiff()" [disabled]="!khdDiffRows.length" id="btn-khd-diff-excel"
               class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold disabled:opacity-50"><i class="fas fa-file-excel mr-1"></i>Excel</button>
     </div>

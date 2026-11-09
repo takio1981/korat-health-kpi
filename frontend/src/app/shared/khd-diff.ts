@@ -2,9 +2,9 @@
 // 1 แถว = 1 หัวข้อที่ต่างกันของตัวชี้วัด 1 ตัว (ชื่อ / เกณฑ์ / ประเภทตัวชี้วัด / ประเภทหน่วยบริการ / สถานะใน KHD)
 import { KHD_TYPE_KEYS, KHD_TYPE_LABEL, typesText, hostypeText } from './khd-types';
 
-export type KhdDiffKind = 'name' | 'table_process' | 'criteria' | 'types' | 'hostype' | 'status';
+export type KhdDiffKind = 'name' | 'table_process' | 'criteria' | 'types' | 'hostype' | 'fiscal_year' | 'status';
 export const KHD_DIFF_KIND_LABEL: Record<KhdDiffKind, string> = {
-  name: 'ชื่อตัวชี้วัด', table_process: 'table_process', criteria: 'เกณฑ์', types: 'ประเภทตัวชี้วัด', hostype: 'ประเภทหน่วยบริการ', status: 'สถานะใน KHD',
+  name: 'ชื่อตัวชี้วัด', table_process: 'table_process', criteria: 'เกณฑ์', types: 'ประเภทตัวชี้วัด', hostype: 'ประเภทหน่วยบริการ', fiscal_year: 'ปีงบประมาณ', status: 'สถานะใน KHD',
 };
 
 export interface KhdDiffRow {
@@ -48,6 +48,34 @@ export function hostypeChangeText(localMode: any, localCodes: any, khdMode: any,
   return [add.length ? 'เพิ่ม: ' + add.join(', ') : '', del.length ? 'เอาออก: ' + del.join(', ') : ''].filter(Boolean).join(' · ');
 }
 
+/** ปีงบประมาณ (comma-list "2569,2570" หรือ array) → ['2569','2570'] ไม่ซ้ำ เรียง — ตรงกับ api/services/fiscal-years.js */
+export function fiscalYearList(v: any): string[] {
+  const raw: any[] = Array.isArray(v) ? v : String(v ?? '').split(',');
+  return [...new Set(raw.map(x => String(x ?? '').trim()).filter(x => /^2[5-6]\d\d$/.test(x)))].sort();
+}
+
+/** ปีงบของตัวชี้วัด (khd_fiscal_year) ต่างจาก KHD ไหม — KHD ไม่มีปีงบ = null (ไม่นับต่าง ไม่มีค่าให้ใช้) */
+export function fiscalYearMatch(localValue: any, khdYears: any): boolean | null {
+  const khd = fiscalYearList(khdYears);
+  if (!khd.length) return null;
+  return fiscalYearList(localValue).join(',') === khd.join(',');
+}
+
+/** ตัวเลือกปีงบสำหรับตั้งเอง: ปีงบปัจจุบัน −2 … +2 รวมปีที่มีอยู่แล้ว (เรียงปีล่าสุดก่อน) */
+export function fiscalYearChoices(currentFy: number, existing: any[] = []): string[] {
+  const set = new Set<string>();
+  for (let y = currentFy - 2; y <= currentFy + 2; y++) set.add(String(y));
+  for (const v of existing) for (const y of fiscalYearList(v)) set.add(y);
+  return [...set].sort((a, b) => Number(b) - Number(a));
+}
+
+/** "เพิ่ม: 2569 · เอาออก: 2568" */
+export function fiscalYearChangeText(localValue: any, khdYears: any): string {
+  const a = fiscalYearList(localValue), b = fiscalYearList(khdYears);
+  const add = b.filter(y => !a.includes(y)), del = a.filter(y => !b.includes(y));
+  return [add.length ? 'เพิ่ม: ' + add.join(', ') : '', del.length ? 'เอาออก: ' + del.join(', ') : ''].filter(Boolean).join(' · ');
+}
+
 export function buildKhdDiffRows(indicators: any[], ctx: KhdDiffContext): KhdDiffRow[] {
   const rows: KhdDiffRow[] = [];
   for (const it of indicators || []) {
@@ -73,6 +101,11 @@ export function buildKhdDiffRows(indicators: any[], ctx: KhdDiffContext): KhdDif
         local: hostypeText(it.evaluation_mode, it.required_off_types, ctx.hosNames),
         khd: hostypeText(k.khd_eval_mode, k.khd_off_types, ctx.hosNames),
         detail: hostypeChangeText(it.evaluation_mode, it.required_off_types, k.khd_eval_mode, k.khd_off_types, ctx.hosNames) });
+    }
+    // ปีงบประมาณ: เทียบจากค่าปัจจุบันของตัวชี้วัด (ตั้งเอง/ใช้ค่า KHD แล้วเห็นผลทันทีโดยไม่ต้องเทียบใหม่)
+    if (fiscalYearMatch(it.khd_fiscal_year, k.khd_fiscal_years) === false) {
+      rows.push({ ...base, kind: 'fiscal_year', local: fiscalYearList(it.khd_fiscal_year).join(', ') || 'ไม่ระบุปีงบ',
+        khd: fiscalYearList(k.khd_fiscal_years).join(', '), detail: fiscalYearChangeText(it.khd_fiscal_year, k.khd_fiscal_years) });
     }
     if (k.khd_is_active === 0 || k.khd_is_active === '0') {
       const exporting = !(it.upload_excel === 1 || it.upload_excel === '1');

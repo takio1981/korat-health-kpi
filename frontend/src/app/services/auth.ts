@@ -1281,6 +1281,13 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
   applyKhdTypes(ids: number[], year_bh: string, parts: ('types' | 'hostype')[]): Observable<any> {
     return this.apiPost('/indicators/apply-khd-types', { ids, year_bh, parts });
   }
+  // ปีงบประมาณของตัวชี้วัด (9 พ.ย. 2569): ใช้ปีงบตาม KHD (server อ่านเอง) / ตั้งเอง (mode 'replace' | 'add', years ว่าง = ล้าง)
+  applyKhdFiscalYear(ids: number[]): Observable<any> {
+    return this.apiPost('/indicators/apply-khd-fiscal-year', { ids });
+  }
+  setIndicatorFiscalYear(ids: number[], years: string[], mode: 'replace' | 'add' = 'replace'): Observable<any> {
+    return this.apiPost('/indicators/set-fiscal-year', { ids, years, mode });
+  }
   bulkSetUploadExcel(ids: number[], upload_excel: 0 | 1): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

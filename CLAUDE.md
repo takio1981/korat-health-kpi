@@ -1037,6 +1037,13 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   มีโค้ดจุดไหน UPDATE ค่านี้จริงเลยจนถึงตอนนี้ — ต้องรองรับทั้ง 2 การใช้งาน (audit เดิม + filter/badge ใหม่) จึง
   เก็บเป็น list ไม่ใช่ปีเดียว เพราะ 1 report_id มักมีมากกว่า 1 แถวใน `report_fiscal_year_config` จริง (พบปี 2569
   และ 2570 พร้อมกัน)
+- **ตั้งเองได้ + เทียบกับ KHD (9 พ.ย. 2569 — ผู้ใช้สั่ง):** `services/fiscal-years.js` (`fiscalYearsOf`/`normalizeFiscalYears` ปี พ.ศ. 2500–2699 เรียง ไม่ซ้ำ, `compareFiscalYears`, `buildKhdFiscalYearMap`)
+  = `shared/khd-diff.ts` (`fiscalYearList`/`fiscalYearMatch`/`fiscalYearChoices`) | `GET /report-compare` แนบ `khd_fiscal_years`/`local_fiscal_years`/`fiscal_year_match` (KHD ไม่มีปีงบ = null ไม่นับต่าง) + summary `fiscal_year_different`
+  | `POST /indicators/apply-khd-fiscal-year { ids }` (server อ่าน KHD เอง, log `APPLY_KHD_FISCAL_YEAR`) | `POST /indicators/set-fiscal-year { ids, years, mode: replace|add }` (ปีผิด = 400, log `SET_FISCAL_YEAR`)
+  | POST/PUT `/indicators` รับ `khd_fiscal_year` (array/ข้อความ, ไม่ส่ง = ไม่เปลี่ยน) ผ่าน `saveHierarchyFields()` | **`sync-khd-link` ไม่ล้างปีงบแล้ว** (ตัวที่ไม่มีใน KHD/KHD ไม่มีปีงบ = คงค่าเดิม)
+  | เพิ่มจาก KHD = ทุกปีงบที่ KHD ตั้งไว้ | UI: ป้ายปีงบกดตั้งได้ (`openSetFiscalYear()`), ตัวกรอง `__none` = ไม่ระบุปีงบ + ปุ่ม `#btn-set-fiscal-year`, ชิป "ปีงบต่างกัน" (`filterKhdStatus = 'fiscal_year'`,
+  เทียบจากค่าปัจจุบัน `khdFiscalYearMatch()` — ปรับแล้วเห็นผลทันที `applyFiscalYearUpdates()`), แถว `fiscal_year` ในหน้าต่างรายละเอียด + `#btn-khd-diff-fy`, ช่อง `#indicator-fiscal-year` ในหน้าต่างตัวชี้วัด
+  — ข้อมูลจริง 9 พ.ย. 2569: 175 ตัว ไม่ระบุปีงบ 26 (ไม่มีใน KHD 25) ปีงบต่างจาก KHD 1 — Test: `api/tests/khd-fiscal-year.test.js`, `shared/khd-diff.spec.ts`, `kpi-manage.spec.ts`
 - **Backfill/populate**: `POST /report-compare/sync-khd-link` (ปุ่ม "เชื่อมโยง KHD Link") ดึง `report_id,
   fiscal_year` จาก `report_fiscal_year_config` ทั้งหมด (ไม่กรอง `is_active` — ค่านี้แค่บอกว่า KHD เคย/กำลังมี
   config ปีงบนี้ให้ตัวชี้วัดนี้ ไม่ใช่สถานะ active ซึ่งมี badge "HDC inactive" แยกต่างหากอยู่แล้วใน `/report-compare`
