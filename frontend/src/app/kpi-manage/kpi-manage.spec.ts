@@ -184,6 +184,21 @@ describe('KpiManageComponent', () => {
       expect(component.khdHostypeText(component.getKhdData(component.indicators[1]))).toBe('รพ.ศูนย์ (05), รพ.ชุมชน (07)');
     });
 
+    it('หน้าต่างรายละเอียดความแตกต่าง: นับตามหัวข้อ กรองหัวข้อ/ค้นหา และเปิดเฉพาะตัวชี้วัดเดียวได้', () => {
+      component.openKhdDiff();
+      expect(component.showKhdDiff).toBe(true);
+      expect(component.khdDiffCounts).toEqual({ all: 2, types: 1, hostype: 1 });
+      component.khdDiffKind = 'hostype';
+      component.refreshKhdDiff();
+      expect(component.khdDiffRows.map(r => r.id)).toEqual([2]);
+      component.khdDiffKind = '';
+      component.khdDiffSearch = 'tp1';
+      component.refreshKhdDiff();
+      expect(component.khdDiffRows.map(r => r.kind)).toEqual(['types']);
+      component.openKhdDiff(component.indicators[1]);
+      expect(component.khdDiffAll.map(r => r.id)).toEqual([2]);
+    });
+
     it('เรียก API ด้วยรายการ ปีงบ และส่วนที่จะปรับ', () => {
       const http = TestBed.inject(HttpTestingController);
       (component as any).authService.applyKhdTypes([2], '2570', ['hostype']).subscribe();

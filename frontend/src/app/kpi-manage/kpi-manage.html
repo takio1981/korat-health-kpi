@@ -229,6 +229,10 @@
                   class="px-2.5 py-1 rounded-lg font-bold bg-cyan-50 text-cyan-700 border border-cyan-200 inline-flex items-center gap-1 hover:bg-cyan-100 transition-colors cursor-pointer">
             <i class="fas fa-cloud-arrow-down text-[10px]"></i>KHD มีแต่ยังไม่มีใน Local ({{ khdMissingLocalItems.length }})
           </button>
+          <button (click)="openKhdDiff()" id="btn-khd-diff"
+                  class="px-2.5 py-1 rounded-lg font-bold bg-indigo-600 text-white hover:bg-indigo-700 inline-flex items-center gap-1 transition-colors">
+            <i class="fas fa-code-compare text-[10px]"></i>รายละเอียดความแตกต่าง
+          </button>
           <span class="text-[10px] text-gray-400 ml-auto" *ngIf="khdCompareLastRun" title="ตัวเลขในชิปนับฝั่ง Local indicators (ตรงกับที่กรองได้ในตาราง); backend summary จาก KHD อาจมากกว่าเพราะ KHD มี report ซ้ำ table_process เดียวกัน">
             <i class="fas fa-clock mr-1"></i>เทียบล่าสุด: {{ khdCompareLastRun | date:'HH:mm:ss' }}
           </span>
@@ -704,6 +708,10 @@
                           class="mt-1 block mx-auto px-2 py-0.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded text-[10px] font-bold whitespace-nowrap"
                           [title]="'ปรับเป็น ' + khdHostypeText(getKhdData(item))">
                     <i class="fas fa-arrow-down mr-1"></i>ใช้ประเภทหน่วยบริการ KHD
+                  </button>
+                  <button *ngIf="getKhdData(item) && (getKhdCompareStatus(item) === 'different' || getKhdData(item)?.criteria_match === false || getKhdData(item)?.types_match === false || getKhdData(item)?.hostype_match === false || getKhdData(item)?.khd_is_active === 0 || getKhdData(item)?.khd_is_active === '0')"
+                          (click)="openKhdDiff(item)" class="mt-1 block mx-auto text-[10px] font-bold text-indigo-700 hover:underline whitespace-nowrap">
+                    <i class="fas fa-code-compare mr-1"></i>ดูรายละเอียด
                   </button>
                 </td>
                 <!-- ส่งออก KHD อัตโนมัติ (คอลัมน์ upload_excel: 0 = ส่งออก = สวิตช์เปิด, 1 = ไม่ส่งออก = สวิตช์ปิด) -->
@@ -2537,6 +2545,70 @@
         </div>
 
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- รายละเอียดความแตกต่างหลังเทียบกับ KHD (9 พ.ย. 2569) — shared/khd-diff.ts -->
+<div *ngIf="showKhdDiff" id="khd-diff-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+  <div class="bg-white rounded-2xl shadow-xl border border-indigo-200 w-full max-w-6xl flex flex-col" style="max-height: calc(100vh - 40px);">
+    <div class="flex flex-wrap items-center gap-2 px-5 py-4 border-b border-gray-100">
+      <i class="fas fa-code-compare text-indigo-600 text-lg"></i>
+      <h3 class="font-bold text-gray-800 text-lg">รายละเอียดความแตกต่าง ระบบ ↔ KHD (ปีงบ {{ khdCompareYear }})</h3>
+      <span *ngIf="khdDiffOnlyId != null" class="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">เฉพาะตัวชี้วัดที่เลือก
+        <button (click)="khdDiffOnlyId = null; refreshKhdDiff()" class="ml-1 underline">ดูทั้งหมด</button></span>
+      <button (click)="closeKhdDiff()" class="ml-auto text-gray-400 hover:text-gray-600 text-xl" title="ปิด"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 px-5 py-3 border-b border-gray-100 text-xs">
+      <button (click)="khdDiffKind = ''; refreshKhdDiff()" [ngClass]="khdDiffKind === '' ? 'bg-indigo-600 text-white' : 'bg-gray-50 text-gray-700 border border-gray-200'"
+              class="px-2.5 py-1 rounded-lg font-bold">ทั้งหมด ({{ khdDiffCounts['all'] || 0 }})</button>
+      <ng-container *ngFor="let k of khdDiffKinds">
+        <button *ngIf="khdDiffCounts[k]" (click)="khdDiffKind = k; refreshKhdDiff()" [attr.data-kind]="k"
+                [ngClass]="khdDiffKind === k ? 'bg-indigo-600 text-white' : 'bg-gray-50 text-gray-700 border border-gray-200'"
+                class="px-2.5 py-1 rounded-lg font-bold">{{ khdDiffKindLabel[k] }} ({{ khdDiffCounts[k] }})</button>
+      </ng-container>
+      <input [(ngModel)]="khdDiffSearch" (ngModelChange)="refreshKhdDiff()" placeholder="ค้นหาชื่อ / ชื่อตาราง..."
+             class="ml-auto px-3 py-1.5 border border-gray-200 rounded-lg bg-white text-sm w-full sm:w-64">
+      <button (click)="downloadKhdDiff()" [disabled]="!khdDiffRows.length" id="btn-khd-diff-excel"
+              class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold disabled:opacity-50"><i class="fas fa-file-excel mr-1"></i>Excel</button>
+    </div>
+    <div class="overflow-auto card-scroll flex-1">
+      <div *ngIf="!khdDiffRows.length" class="p-10 text-center text-gray-400 text-sm">
+        <i class="fas fa-circle-check text-emerald-500 text-2xl mb-2 block"></i>
+        {{ khdDiffAll.length ? 'ไม่มีรายการตามตัวกรอง' : 'ไม่พบความแตกต่างกับ KHD' }}
+      </div>
+      <table *ngIf="khdDiffRows.length" class="min-w-full text-sm">
+        <thead class="bg-gray-50 text-xs text-gray-600 sticky top-0 z-10">
+          <tr>
+            <th class="px-3 py-2 text-left">ตัวชี้วัด</th>
+            <th class="px-3 py-2 text-left w-36">หัวข้อ</th>
+            <th class="px-3 py-2 text-left">ในระบบ (KHUPS KPI)</th>
+            <th class="px-3 py-2 text-left">ใน KHD</th>
+            <th class="px-3 py-2 text-left">รายละเอียด</th>
+            <th class="px-3 py-2 w-32" *ngIf="canEditData"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let r of khdDiffRows; trackBy: trackKhdDiff" class="border-t border-gray-100 align-top">
+            <td class="px-3 py-2">
+              <div class="font-medium text-gray-800">{{ r.name }}</div>
+              <div class="text-[10px] text-gray-400 font-mono">#{{ r.id }} · {{ r.table_process }}</div>
+            </td>
+            <td class="px-3 py-2"><span class="text-xs font-bold px-2 py-0.5 rounded-full"
+                [ngClass]="{ 'bg-amber-100 text-amber-800': r.kind === 'name', 'bg-orange-100 text-orange-800': r.kind === 'criteria', 'bg-sky-100 text-sky-800': r.kind === 'types', 'bg-cyan-100 text-cyan-800': r.kind === 'hostype', 'bg-rose-100 text-rose-800': r.kind === 'status' }">{{ khdDiffKindLabel[r.kind] }}</span></td>
+            <td class="px-3 py-2 text-gray-700 bg-gray-50/60">{{ r.local }}</td>
+            <td class="px-3 py-2 font-bold text-indigo-800 bg-indigo-50/50">{{ r.khd }}</td>
+            <td class="px-3 py-2 text-xs text-gray-600">{{ r.detail }}</td>
+            <td class="px-3 py-2 text-right" *ngIf="canEditData">
+              <button *ngIf="r.kind === 'criteria' || r.kind === 'types' || r.kind === 'hostype'" (click)="applyKhdDiffRow(r)"
+                      class="px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold whitespace-nowrap"><i class="fas fa-arrow-down mr-1"></i>ใช้ค่า KHD</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="px-5 py-3 border-t border-gray-100 text-[11px] text-gray-500">
+      ชื่อตัวชี้วัดและสถานะใน KHD แสดงเพื่อตรวจสอบเท่านั้น — "ใช้ค่า KHD" ปรับเกณฑ์/ประเภทผ่านหน้ายืนยันเดิม (ระบบอ่านค่าจาก KHD ใหม่ก่อนบันทึก) แล้วเทียบใหม่ให้อัตโนมัติ
     </div>
   </div>
 </div>

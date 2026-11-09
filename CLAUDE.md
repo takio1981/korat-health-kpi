@@ -952,6 +952,9 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   | `GET /report-compare` แนบ `types_match`/`hostype_match` + ค่าทั้ง 2 ฝั่ง + summary `types_different`/`hostype_different` | `POST /indicators/apply-khd-types { ids, year_bh, parts: ['types'|'hostype'] }`
   (requireAction kpi-manage edit) server อ่าน KHD ใหม่ ปรับเฉพาะส่วนที่เลือกที่ต่างจริง, KHD ไม่ตั้ง = ข้าม, log `APPLY_KHD_TYPES` | **เพิ่มตัวชี้วัดจาก KHD คัดลอกทั้ง 2 อย่างด้วย** (`insertIndicatorFromKhd`)
   — UI: ชิป "ประเภทตัวชี้วัดต่างกัน"/"ประเภทหน่วยบริการต่างกัน" (`filterKhdStatus = 'types'|'hostype'`), banner สีฟ้า + ปุ่มในแถว (`applyKhdTypes()`, ข้อความ `shared/khd-types.ts`)
+  — **หน้าต่าง "รายละเอียดความแตกต่าง"** (ปุ่มในแถบผลเทียบ + "ดูรายละเอียด" ในแถว): `shared/khd-diff.ts` `buildKhdDiffRows()` 1 แถว = 1 หัวข้อที่ต่าง (ชื่อ/เกณฑ์/ประเภทตัวชี้วัด/
+    ประเภทหน่วยบริการ/สถานะใน KHD) ระบบ ↔ KHD + รายละเอียดทีละจุด ("R9: มี → ไม่มี", "เพิ่ม: … · เอาออก: …"), กรองหัวข้อ/ค้นหา, ดาวน์โหลด Excel, "ใช้ค่า KHD" ใช้เส้นทางเดิม
+    — คำนวณใน `refreshKhdDiff()` (ไม่ใช่ getter) และคำนวณใหม่หลัง `runKhdCompare()` เมื่อหน้าต่างเปิดอยู่
   — ข้อมูลจริง 9 พ.ย. 2569 (ปีงบ 2570, 149 คู่): ประเภทตัวชี้วัดต่าง 18 / ประเภทหน่วยบริการต่าง 67 (ฝั่งเรายังไม่ตั้ง 33) — Test: `api/tests/khd-types.test.js`, `khd-add-mapping.test.js`, `shared/khd-types.spec.ts`, `kpi-manage.spec.ts`
 - Join กับ local ผ่าน `table_process` (key เดียวกันทั้ง 2 ทาง) — คืน field `khd_*` (`khd_report_id, khd_name,
   khd_dept, khd_main_yut, khd_is_active, khd_data_source, khd_target_percentage, khd_target_condition,

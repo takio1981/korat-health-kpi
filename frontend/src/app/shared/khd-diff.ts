@@ -1,0 +1,88 @@
+// รายละเอียดความแตกต่างหลัง "เทียบกับ KHD" (9 พ.ย. 2569) — ฟังก์ชันล้วน สร้างแถวเทียบคู่ ระบบ ↔ KHD จากผลของ GET /report-compare
+// 1 แถว = 1 หัวข้อที่ต่างกันของตัวชี้วัด 1 ตัว (ชื่อ / เกณฑ์ / ประเภทตัวชี้วัด / ประเภทหน่วยบริการ / สถานะใน KHD)
+import { KHD_TYPE_KEYS, KHD_TYPE_LABEL, typesText, hostypeText } from './khd-types';
+
+export type KhdDiffKind = 'name' | 'criteria' | 'types' | 'hostype' | 'status';
+export const KHD_DIFF_KIND_LABEL: Record<KhdDiffKind, string> = {
+  name: 'ชื่อตัวชี้วัด', criteria: 'เกณฑ์', types: 'ประเภทตัวชี้วัด', hostype: 'ประเภทหน่วยบริการ', status: 'สถานะใน KHD',
+};
+
+export interface KhdDiffRow {
+  id: number; name: string; table_process: string;
+  kind: KhdDiffKind; local: string; khd: string;
+  /** รายละเอียดเพิ่ม เช่น "R9: มี → ไม่มี" หรือ "เพิ่ม: 05 · เอาออก: 18" */
+  detail: string;
+}
+
+export interface KhdDiffContext {
+  getKhd: (item: any) => any;
+  criteriaText: (item: any) => string;
+  khdCriteriaText: (khd: any) => string;
+  hosNames?: Record<string, string>;
+}
+
+const on = (v: any) => v !== null && v !== undefined && String(v).trim() !== '' && String(v).trim() !== '0';
+
+/** ประเภทตัวชี้วัดที่ต่างกันทีละตัว: "R9: มี → ไม่มี, MOPH: ไม่มี → มี" */
+export function typesChangeText(local: any, khd: any): string {
+  return KHD_TYPE_KEYS.filter(k => on(local?.[k]) !== on(khd?.[k]))
+    .map(k => `${KHD_TYPE_LABEL[k]}: ${on(local?.[k]) ? 'มี' : 'ไม่มี'} → ${on(khd?.[k]) ? 'มี' : 'ไม่มี'}`).join(', ');
+}
+
+const codesOf = (v: any): string[] => {
+  if (Array.isArray(v)) return v.map(String);
+  if (typeof v === 'string' && v.trim()) { try { const p = JSON.parse(v); return Array.isArray(p) ? p.map(String) : []; } catch { return []; } }
+  return [];
+};
+
+/** ประเภทหน่วยบริการที่ต่าง: เปลี่ยนโหมด หรือรายการที่เพิ่ม/เอาออก */
+export function hostypeChangeText(localMode: any, localCodes: any, khdMode: any, khdCodes: any, names?: Record<string, string>): string {
+  const label = (c: string) => names?.[c] ? `${names[c]} (${c})` : c;
+  if ((localMode || '') !== (khdMode || '')) {
+    const m = (x: any) => x === 'all_required' ? 'ทุกประเภท' : x === 'any_one' ? 'เฉพาะบางประเภท' : 'ยังไม่ตั้ง';
+    return `โหมด: ${m(localMode)} → ${m(khdMode)}`;
+  }
+  const a = new Set(codesOf(localCodes)), b = new Set(codesOf(khdCodes));
+  const add = [...b].filter(c => !a.has(c)).sort().map(label);
+  const del = [...a].filter(c => !b.has(c)).sort().map(label);
+  return [add.length ? 'เพิ่ม: ' + add.join(', ') : '', del.length ? 'เอาออก: ' + del.join(', ') : ''].filter(Boolean).join(' · ');
+}
+
+export function buildKhdDiffRows(indicators: any[], ctx: KhdDiffContext): KhdDiffRow[] {
+  const rows: KhdDiffRow[] = [];
+  for (const it of indicators || []) {
+    const k = ctx.getKhd(it);
+    if (!k || k.status === 'missing_remote' || k.status === 'missing_local') continue;
+    const base = { id: it.id, name: it.kpi_indicators_name, table_process: it.table_process || '' };
+    if (k.status === 'different') {
+      rows.push({ ...base, kind: 'name', local: it.kpi_indicators_name || '-', khd: k.khd_name || '-', detail: '' });
+    }
+    if (k.criteria_match === false) {
+      rows.push({ ...base, kind: 'criteria', local: ctx.criteriaText(it), khd: ctx.khdCriteriaText(k), detail: '' });
+    }
+    if (k.types_match === false) {
+      rows.push({ ...base, kind: 'types', local: typesText(it), khd: typesText(k.khd_types),
+        detail: typesChangeText(it, k.khd_types) + (k.khd_types_source === 'fiscal_year_config' ? ' (KHD: ค่าของปีงบ)' : '') });
+    }
+    if (k.hostype_match === false) {
+      rows.push({ ...base, kind: 'hostype',
+        local: hostypeText(it.evaluation_mode, it.required_off_types, ctx.hosNames),
+        khd: hostypeText(k.khd_eval_mode, k.khd_off_types, ctx.hosNames),
+        detail: hostypeChangeText(it.evaluation_mode, it.required_off_types, k.khd_eval_mode, k.khd_off_types, ctx.hosNames) });
+    }
+    if (k.khd_is_active === 0 || k.khd_is_active === '0') {
+      const exporting = !(it.upload_excel === 1 || it.upload_excel === '1');
+      rows.push({ ...base, kind: 'status', local: exporting ? 'ส่งออก KHD อยู่' : 'ปิดส่งออก KHD แล้ว', khd: 'ปิดใช้งาน (inactive)',
+        detail: exporting ? 'แนะนำปิดส่งออก KHD' : '' });
+    }
+  }
+  return rows;
+}
+
+/** ข้อมูลตารางสำหรับดาวน์โหลด Excel */
+export function khdDiffAoa(rows: KhdDiffRow[], year: string): any[][] {
+  return [
+    ['รหัส', 'ตัวชี้วัด', 'ชื่อตาราง', 'หัวข้อ', 'ในระบบ (KHUPS KPI)', `ใน KHD (ปีงบ ${year})`, 'รายละเอียด'],
+    ...rows.map(r => [r.id, r.name, r.table_process, KHD_DIFF_KIND_LABEL[r.kind], r.local, r.khd, r.detail]),
+  ];
+}

@@ -15,6 +15,7 @@ import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { ZoneBadgeComponent, HospitalZoneService } from '../shared/zone-badge';
 import { ZoneManagerComponent } from '../shared/zone-manager';
 import { typesText, hostypeText } from '../shared/khd-types';
+import { buildKhdDiffRows, khdDiffAoa, KhdDiffRow, KhdDiffKind, KHD_DIFF_KIND_LABEL } from '../shared/khd-diff';
 import { AiFormulaHelperComponent } from '../shared/ai-formula-helper';
 import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
 import { TARGET_CONDITIONS, CONDITION_SYMBOL, CONDITION_LABEL, normalizeCondition, evaluateTarget, normalizeTargetMonthly } from '../shared/kpi-target';
@@ -1472,6 +1473,7 @@ export class KpiManageComponent implements OnInit {
           this.khdCompareLastRun = new Date();
           this.khdMissingLocalSelected.clear();
           this.applyFilter();
+          if (this.showKhdDiff) this.refreshKhdDiff();
           this.cdr.detectChanges();
         }
       },
@@ -2325,6 +2327,66 @@ export class KpiManageComponent implements OnInit {
         },
         error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถปรับได้', 'error')
       });
+    });
+  }
+
+  // ===== รายละเอียดความแตกต่างหลังเทียบกับ KHD (9 พ.ย. 2569) — ตารางเทียบคู่ ระบบ ↔ KHD ทุกหัวข้อที่ต่างกัน (shared/khd-diff.ts) =====
+  showKhdDiff = false;
+  khdDiffKind: '' | KhdDiffKind = '';
+  khdDiffSearch = '';
+  khdDiffOnlyId: number | null = null;
+  khdDiffAll: KhdDiffRow[] = [];
+  khdDiffRows: KhdDiffRow[] = [];
+  khdDiffCounts: Record<string, number> = {};
+  readonly khdDiffKinds: KhdDiffKind[] = ['name', 'criteria', 'types', 'hostype', 'status'];
+  readonly khdDiffKindLabel = KHD_DIFF_KIND_LABEL;
+
+  openKhdDiff(item?: any) {
+    this.khdDiffOnlyId = item ? item.id : null;
+    this.khdDiffKind = '';
+    this.khdDiffSearch = '';
+    this.showKhdDiff = true;
+    this.refreshKhdDiff();
+  }
+  closeKhdDiff() { this.showKhdDiff = false; this.cdr.detectChanges(); }
+  trackKhdDiff = (_: number, r: KhdDiffRow) => r.id + '|' + r.kind;
+
+  /** คำนวณใหม่เมื่อเปิด/เปลี่ยนตัวกรอง/เทียบใหม่ (ไม่ใช้ getter — กันสร้าง array ใหม่ทุกรอบ change detection) */
+  refreshKhdDiff() {
+    const base = this.khdDiffOnlyId != null ? this.indicators.filter(i => i.id === this.khdDiffOnlyId) : this.indicators;
+    this.khdDiffAll = buildKhdDiffRows(base, {
+      getKhd: (i: any) => this.getKhdData(i),
+      criteriaText: (i: any) => this.getCriteriaText(i),
+      khdCriteriaText: (k: any) => this.getKhdCriteriaText(k),
+      hosNames: this.hosTypeNames,
+    });
+    const counts: Record<string, number> = { all: this.khdDiffAll.length };
+    for (const r of this.khdDiffAll) counts[r.kind] = (counts[r.kind] || 0) + 1;
+    this.khdDiffCounts = counts;
+    if (this.khdDiffKind && !counts[this.khdDiffKind]) this.khdDiffKind = '';   // ปรับครบแล้ว (ชิปหัวข้อหาย) → กลับไปดูทั้งหมด
+    const q = this.khdDiffSearch.trim().toLowerCase();
+    this.khdDiffRows = this.khdDiffAll.filter(r => (!this.khdDiffKind || r.kind === this.khdDiffKind)
+      && (!q || String(r.name || '').toLowerCase().includes(q) || r.table_process.toLowerCase().includes(q)));
+    this.cdr.detectChanges();
+  }
+
+  /** ปุ่ม "ใช้ค่า KHD" ในแถว — ใช้เส้นทางเดิมของแต่ละหัวข้อ (หน้ายืนยัน + server อ่าน KHD ใหม่) */
+  applyKhdDiffRow(r: KhdDiffRow) {
+    const item = this.indicators.find(i => i.id === r.id);
+    if (!item) return;
+    if (r.kind === 'criteria') this.applyKhdCriteria([item]);
+    else if (r.kind === 'types' || r.kind === 'hostype') this.applyKhdTypes([item], r.kind);
+  }
+
+  downloadKhdDiff() {
+    const rows = this.khdDiffRows;
+    if (!rows.length) return;
+    import('xlsx').then(XLSX => {
+      const ws = XLSX.utils.aoa_to_sheet(khdDiffAoa(rows, this.khdCompareYear));
+      ws['!cols'] = [{ wch: 8 }, { wch: 50 }, { wch: 18 }, { wch: 18 }, { wch: 30 }, { wch: 30 }, { wch: 40 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'ความแตกต่าง');
+      XLSX.writeFile(wb, `KHD_ความแตกต่าง_ปีงบ${this.khdCompareYear}.xlsx`);
     });
   }
 
