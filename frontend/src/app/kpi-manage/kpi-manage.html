@@ -188,6 +188,11 @@
                   class="px-2.5 py-1 rounded-lg font-bold transition-all">
             <i class="fas fa-exclamation-triangle mr-1"></i>ชื่อต่างกัน ({{ khdCounts.different }})
           </button>
+          <button (click)="filterKhdStatus = filterKhdStatus === 'tp_different' ? '' : 'tp_different'; applyFilter()" id="btn-khd-filter-tp"
+                  [ngClass]="filterKhdStatus === 'tp_different' ? 'bg-teal-700 text-white' : 'bg-teal-50 text-teal-800 border border-teal-200'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all" title="ชื่อเดียวกัน แต่ table_process ไม่ตรงกับ KHD">
+            <i class="fas fa-table mr-1"></i>table_process ต่างกัน ({{ khdCounts.tp_different }})
+          </button>
           <button (click)="filterKhdStatus = filterKhdStatus === 'missing_remote' ? '' : 'missing_remote'; applyFilter()"
                   [ngClass]="filterKhdStatus === 'missing_remote' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 border border-purple-200'"
                   class="px-2.5 py-1 rounded-lg font-bold transition-all">
@@ -668,6 +673,10 @@
                     <span *ngSwitchCase="'different'" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700" title="ชื่อต่างกัน">
                       <i class="fas fa-exclamation-triangle mr-1"></i>ต่างกัน
                     </span>
+                    <span *ngSwitchCase="'tp_different'" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800"
+                          [title]="'ชื่อเดียวกัน แต่ table_process ใน KHD = ' + getKhdData(item)?.khd_table_process">
+                      <i class="fas fa-table mr-1"></i>table_process ต่างกัน
+                    </span>
                     <span *ngSwitchCase="'missing_remote'" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700" title="ไม่มีใน KHD">
                       <i class="fas fa-arrow-up mr-1"></i>ไม่มีใน KHD
                     </span>
@@ -709,7 +718,7 @@
                           [title]="'ปรับเป็น ' + khdHostypeText(getKhdData(item))">
                     <i class="fas fa-arrow-down mr-1"></i>ใช้ประเภทหน่วยบริการ KHD
                   </button>
-                  <button *ngIf="getKhdData(item) && (getKhdCompareStatus(item) === 'different' || getKhdData(item)?.criteria_match === false || getKhdData(item)?.types_match === false || getKhdData(item)?.hostype_match === false || getKhdData(item)?.khd_is_active === 0 || getKhdData(item)?.khd_is_active === '0')"
+                  <button *ngIf="getKhdData(item) && (getKhdCompareStatus(item) === 'different' || getKhdCompareStatus(item) === 'tp_different' || getKhdData(item)?.criteria_match === false || getKhdData(item)?.types_match === false || getKhdData(item)?.hostype_match === false || getKhdData(item)?.khd_is_active === 0 || getKhdData(item)?.khd_is_active === '0')"
                           (click)="openKhdDiff(item)" class="mt-1 block mx-auto text-[10px] font-bold text-indigo-700 hover:underline whitespace-nowrap">
                     <i class="fas fa-code-compare mr-1"></i>ดูรายละเอียด
                   </button>
@@ -2569,6 +2578,8 @@
       </ng-container>
       <input [(ngModel)]="khdDiffSearch" (ngModelChange)="refreshKhdDiff()" placeholder="ค้นหาชื่อ / ชื่อตาราง..."
              class="ml-auto px-3 py-1.5 border border-gray-200 rounded-lg bg-white text-sm w-full sm:w-64">
+      <button *ngIf="isSuperAdmin && khdDiffCounts['name']" (click)="syncAllNamesFromKhd()" id="btn-khd-diff-names"
+              class="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold"><i class="fas fa-sync mr-1"></i>ใช้ชื่อ KHD ทั้งหมด ({{ khdDiffCounts['name'] }})</button>
       <button (click)="downloadKhdDiff()" [disabled]="!khdDiffRows.length" id="btn-khd-diff-excel"
               class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold disabled:opacity-50"><i class="fas fa-file-excel mr-1"></i>Excel</button>
     </div>
@@ -2595,12 +2606,12 @@
               <div class="text-[10px] text-gray-400 font-mono">#{{ r.id }} · {{ r.table_process }}</div>
             </td>
             <td class="px-3 py-2"><span class="text-xs font-bold px-2 py-0.5 rounded-full"
-                [ngClass]="{ 'bg-amber-100 text-amber-800': r.kind === 'name', 'bg-orange-100 text-orange-800': r.kind === 'criteria', 'bg-sky-100 text-sky-800': r.kind === 'types', 'bg-cyan-100 text-cyan-800': r.kind === 'hostype', 'bg-rose-100 text-rose-800': r.kind === 'status' }">{{ khdDiffKindLabel[r.kind] }}</span></td>
+                [ngClass]="{ 'bg-amber-100 text-amber-800': r.kind === 'name', 'bg-teal-100 text-teal-800': r.kind === 'table_process', 'bg-orange-100 text-orange-800': r.kind === 'criteria', 'bg-sky-100 text-sky-800': r.kind === 'types', 'bg-cyan-100 text-cyan-800': r.kind === 'hostype', 'bg-rose-100 text-rose-800': r.kind === 'status' }">{{ khdDiffKindLabel[r.kind] }}</span></td>
             <td class="px-3 py-2 text-gray-700 bg-gray-50/60">{{ r.local }}</td>
             <td class="px-3 py-2 font-bold text-indigo-800 bg-indigo-50/50">{{ r.khd }}</td>
             <td class="px-3 py-2 text-xs text-gray-600">{{ r.detail }}</td>
             <td class="px-3 py-2 text-right" *ngIf="canEditData">
-              <button *ngIf="r.kind === 'criteria' || r.kind === 'types' || r.kind === 'hostype'" (click)="applyKhdDiffRow(r)"
+              <button *ngIf="r.kind !== 'status'" (click)="applyKhdDiffRow(r)" [attr.data-apply-kind]="r.kind"
                       class="px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold whitespace-nowrap"><i class="fas fa-arrow-down mr-1"></i>ใช้ค่า KHD</button>
             </td>
           </tr>
@@ -2608,7 +2619,7 @@
       </table>
     </div>
     <div class="px-5 py-3 border-t border-gray-100 text-[11px] text-gray-500">
-      ชื่อตัวชี้วัดและสถานะใน KHD แสดงเพื่อตรวจสอบเท่านั้น — "ใช้ค่า KHD" ปรับเกณฑ์/ประเภทผ่านหน้ายืนยันเดิม (ระบบอ่านค่าจาก KHD ใหม่ก่อนบันทึก) แล้วเทียบใหม่ให้อัตโนมัติ
+      สถานะใน KHD แสดงเพื่อตรวจสอบเท่านั้น — "ใช้ค่า KHD" ปรับชื่อ/table_process/เกณฑ์/ประเภทผ่านหน้ายืนยัน (ระบบอ่านค่าจาก KHD ใหม่ก่อนบันทึก) แล้วเทียบใหม่ให้อัตโนมัติ
     </div>
   </div>
 </div>

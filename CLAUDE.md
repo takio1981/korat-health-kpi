@@ -94,7 +94,7 @@ frontend/src/app/
   ห้าม export ตรงๆ (ค่าจะค้าง) — เก็บไว้ในโมดูลเดียวกับผู้ใช้ หรือเปลี่ยนเป็น object; Map/Set แชร์ได้ (object เดียวกัน)
 - `core/env.js` ต้องเป็น require แรกของ server.js
   (ตัวดัก unhandledRejection/uncaughtException เรียก `captureError` แบบ lazy จาก core/errors)
-- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (308 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
+- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (309 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
   ตั้งใจเพิ่ม/แก้ route → `node tests/lib/route-inventory.js --write` แล้วตรวจ diff), `tests/lint.test.js` (ESLint no-undef ฯลฯ — จับชื่อที่ลืม require),
   `tests/build.test.js` (ไล่ require ทุกชั้นต้องอยู่ในชุดที่ build คัดลอก + build ลงโฟลเดอร์ชั่วคราว), `tests/startup.test.js` (เริ่มระบบ + โหลดผลลัพธ์ build ใน process แยก)
   — middleware ที่สร้างจาก factory/ไลบรารีต้องมีชื่อ (`requireAction(page,action)`, loginIpLimiter/loginLimiter/apiLimiter) ให้ snapshot แยกได้
@@ -955,6 +955,12 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   — **หน้าต่าง "รายละเอียดความแตกต่าง"** (ปุ่มในแถบผลเทียบ + "ดูรายละเอียด" ในแถว): `shared/khd-diff.ts` `buildKhdDiffRows()` 1 แถว = 1 หัวข้อที่ต่าง (ชื่อ/เกณฑ์/ประเภทตัวชี้วัด/
     ประเภทหน่วยบริการ/สถานะใน KHD) ระบบ ↔ KHD + รายละเอียดทีละจุด ("R9: มี → ไม่มี", "เพิ่ม: … · เอาออก: …"), กรองหัวข้อ/ค้นหา, ดาวน์โหลด Excel, "ใช้ค่า KHD" ใช้เส้นทางเดิม
     — คำนวณใน `refreshKhdDiff()` (ไม่ใช่ getter) และคำนวณใหม่หลัง `runKhdCompare()` เมื่อหน้าต่างเปิดอยู่
+  — **table_process (9 พ.ย. 2569 — ผู้ใช้สั่ง):** (1) table_process เดียวกันแต่ชื่อต่าง = status 'different' เดิม — ปุ่ม "ใช้ชื่อ KHD" ในหน้าต่าง/ทั้งหมด ใช้ `POST /report-compare/sync` เดิม
+    (2) **ชื่อเดียวกันแต่ table_process ต่าง:** `pairByNameDifferentTp()` (routes/khd.js) จับคู่ missing_remote ↔ missing_local ด้วยชื่อ (`normName`: ตัดช่องว่างซ้ำ ไม่สนตัวพิมพ์)
+    **เฉพาะชื่อที่มีคู่เดียวทั้ง 2 ฝั่ง** → แถว Local status 'tp_different' + `khd_table_process`, แถว KHD ถูกตัดจาก "ยังไม่มีใน Local" (กันเพิ่มซ้ำ), summary `tp_different`
+    | `POST /indicators/apply-khd-table-process { id, khd_report_id }` (requireAction edit) server ตรวจ: ชื่อตรง (NAME_MISMATCH), `isValidIdentifier`, ไม่ซ้ำตัวอื่น (409 TP_IN_USE),
+    **ไม่มีตาราง `<tp เดิม>` / `<tp>_items` / `form_<tp>`** (409 OLD_TABLES_EXIST + รายชื่อตาราง — ข้อมูลในตารางเดิมจะไม่ถูกใช้ต่อ) แล้วตั้ง table_process + รหัส + khd_report_id + data_source
+    — ข้อมูลจริง: ชื่อเดียวกัน tp ต่าง 1 คู่ (จมน้ำ kpi_ems_001 ↔ excellence_indicator_1_51), tp เดียวกันชื่อต่าง 23 — Test: `api/tests/khd-table-process.test.js`, `khd-diff.spec.ts`, `kpi-manage.spec.ts`
   — ข้อมูลจริง 9 พ.ย. 2569 (ปีงบ 2570, 149 คู่): ประเภทตัวชี้วัดต่าง 18 / ประเภทหน่วยบริการต่าง 67 (ฝั่งเรายังไม่ตั้ง 33) — Test: `api/tests/khd-types.test.js`, `khd-add-mapping.test.js`, `shared/khd-types.spec.ts`, `kpi-manage.spec.ts`
 - Join กับ local ผ่าน `table_process` (key เดียวกันทั้ง 2 ทาง) — คืน field `khd_*` (`khd_report_id, khd_name,
   khd_dept, khd_main_yut, khd_is_active, khd_data_source, khd_target_percentage, khd_target_condition,

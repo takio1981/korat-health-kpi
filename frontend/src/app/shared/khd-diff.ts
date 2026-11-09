@@ -2,9 +2,9 @@
 // 1 แถว = 1 หัวข้อที่ต่างกันของตัวชี้วัด 1 ตัว (ชื่อ / เกณฑ์ / ประเภทตัวชี้วัด / ประเภทหน่วยบริการ / สถานะใน KHD)
 import { KHD_TYPE_KEYS, KHD_TYPE_LABEL, typesText, hostypeText } from './khd-types';
 
-export type KhdDiffKind = 'name' | 'criteria' | 'types' | 'hostype' | 'status';
+export type KhdDiffKind = 'name' | 'table_process' | 'criteria' | 'types' | 'hostype' | 'status';
 export const KHD_DIFF_KIND_LABEL: Record<KhdDiffKind, string> = {
-  name: 'ชื่อตัวชี้วัด', criteria: 'เกณฑ์', types: 'ประเภทตัวชี้วัด', hostype: 'ประเภทหน่วยบริการ', status: 'สถานะใน KHD',
+  name: 'ชื่อตัวชี้วัด', table_process: 'table_process', criteria: 'เกณฑ์', types: 'ประเภทตัวชี้วัด', hostype: 'ประเภทหน่วยบริการ', status: 'สถานะใน KHD',
 };
 
 export interface KhdDiffRow {
@@ -55,7 +55,11 @@ export function buildKhdDiffRows(indicators: any[], ctx: KhdDiffContext): KhdDif
     if (!k || k.status === 'missing_remote' || k.status === 'missing_local') continue;
     const base = { id: it.id, name: it.kpi_indicators_name, table_process: it.table_process || '' };
     if (k.status === 'different') {
-      rows.push({ ...base, kind: 'name', local: it.kpi_indicators_name || '-', khd: k.khd_name || '-', detail: '' });
+      rows.push({ ...base, kind: 'name', local: it.kpi_indicators_name || '-', khd: k.khd_name || '-', detail: 'table_process เดียวกัน: ' + (it.table_process || '-') });
+    }
+    if (k.status === 'tp_different') {
+      rows.push({ ...base, kind: 'table_process', local: it.table_process || '-', khd: k.khd_table_process || '-',
+        detail: 'ชื่อเดียวกัน (KHD #' + k.khd_report_id + (k.report_code ? ' · รหัส ' + k.report_code : '') + ')' });
     }
     if (k.criteria_match === false) {
       rows.push({ ...base, kind: 'criteria', local: ctx.criteriaText(it), khd: ctx.khdCriteriaText(k), detail: '' });

@@ -1510,10 +1510,11 @@ export class KpiManageComponent implements OnInit {
   }
 
   /** สถานะ compare ของ indicator แต่ละตัว — ใช้กับ badge + filter */
-  getKhdCompareStatus(item: any): 'not_compared' | 'match' | 'different' | 'missing_remote' {
+  getKhdCompareStatus(item: any): 'not_compared' | 'match' | 'different' | 'tp_different' | 'missing_remote' {
     if (!this.khdCompareMap.size) return 'not_compared';
     const khd = item.table_process ? this.khdCompareMap.get(item.table_process) : null;
     if (!khd) return 'missing_remote';
+    if (khd.status === 'tp_different') return 'tp_different';   // ชื่อเดียวกันแต่ table_process ต่างกัน (9 พ.ย. 2569)
     return khd.status === 'match' ? 'match' : (khd.status === 'different' ? 'different' : 'missing_remote');
   }
 
@@ -1591,13 +1592,14 @@ export class KpiManageComponent implements OnInit {
    * ตัวนี้ iterate this.indicators (ที่ table แสดงจริง) — ตรงกันการนับ
    */
   get khdCounts() {
-    const counts = { match: 0, different: 0, missing_remote: 0, inactive: 0, criteria: 0, types: 0, hostype: 0, total: 0 };
+    const counts = { match: 0, different: 0, tp_different: 0, missing_remote: 0, inactive: 0, criteria: 0, types: 0, hostype: 0, total: 0 };
     if (!this.khdCompareMap.size) return counts;
     for (const i of this.indicators) {
       counts.total++;
       const cmp = this.getKhdCompareStatus(i);
       if (cmp === 'match') counts.match++;
       else if (cmp === 'different') counts.different++;
+      else if (cmp === 'tp_different') counts.tp_different++;
       else if (cmp === 'missing_remote') counts.missing_remote++;
       const khd = this.getKhdData(i);
       if (khd && (khd.khd_is_active === 0 || khd.khd_is_active === '0')) counts.inactive++;
@@ -2338,7 +2340,7 @@ export class KpiManageComponent implements OnInit {
   khdDiffAll: KhdDiffRow[] = [];
   khdDiffRows: KhdDiffRow[] = [];
   khdDiffCounts: Record<string, number> = {};
-  readonly khdDiffKinds: KhdDiffKind[] = ['name', 'criteria', 'types', 'hostype', 'status'];
+  readonly khdDiffKinds: KhdDiffKind[] = ['name', 'table_process', 'criteria', 'types', 'hostype', 'status'];
   readonly khdDiffKindLabel = KHD_DIFF_KIND_LABEL;
 
   openKhdDiff(item?: any) {
@@ -2374,8 +2376,64 @@ export class KpiManageComponent implements OnInit {
   applyKhdDiffRow(r: KhdDiffRow) {
     const item = this.indicators.find(i => i.id === r.id);
     if (!item) return;
-    if (r.kind === 'criteria') this.applyKhdCriteria([item]);
+    if (r.kind === 'name') this.syncSingleNameFromKhd(item);
+    else if (r.kind === 'table_process') this.applyKhdTableProcess(item);
+    else if (r.kind === 'criteria') this.applyKhdCriteria([item]);
     else if (r.kind === 'types' || r.kind === 'hostype') this.applyKhdTypes([item], r.kind);
+  }
+
+  /** ใช้ชื่อของ KHD ทุกตัวที่ table_process เดียวกันแต่ชื่อต่าง (POST /report-compare/sync เดิม — server อ่านชื่อจาก KHD) */
+  syncAllNamesFromKhd() {
+    const items = this.indicators.filter(i => this.getKhdCompareStatus(i) === 'different' && this.getKhdData(i)?.khd_report_id);
+    if (!items.length) { Swal.fire('แจ้งเตือน', 'ไม่มีตัวชี้วัดที่ชื่อต่างจาก KHD', 'info'); return; }
+    const esc = (t: any) => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as any)[c]);
+    const list = items.slice(0, 10).map(i => `<tr><td class="text-left pr-2 py-0.5 text-gray-600">${esc(i.kpi_indicators_name)}</td><td class="px-1">→</td>` +
+      `<td class="text-left font-bold text-emerald-700">${esc(this.getKhdData(i)?.khd_name)}</td></tr>`).join('');
+    const more = items.length > 10 ? `<p class="text-xs text-gray-500 mt-1">... และอีก ${items.length - 10} ตัว</p>` : '';
+    Swal.fire({
+      title: 'ใช้ชื่อตัวชี้วัดตาม KHD',
+      html: `<p class="text-sm">เปลี่ยนชื่อ <b>${items.length}</b> ตัวชี้วัด (table_process เดียวกัน) ให้ตรงกับ KHD</p>
+             <div class="max-h-60 overflow-auto mt-2"><table class="w-full text-xs">${list}</table></div>${more}`,
+      icon: 'question', showCancelButton: true, confirmButtonColor: '#10b981',
+      confirmButtonText: '<i class="fas fa-sync mr-1"></i> ใช้ชื่อ KHD', cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      this.authService.reportCompareSync(items.map(i => this.getKhdData(i).khd_report_id)).subscribe({
+        next: (res: any) => {
+          Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2500, showConfirmButton: false });
+          this.loadAllData();
+          this.runKhdCompare();
+        },
+        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ใช้ชื่อ KHD ไม่สำเร็จ', 'error')
+      });
+    });
+  }
+
+  /** ชื่อเดียวกันแต่ table_process ต่างกัน: เปลี่ยน table_process ของระบบเป็นของ KHD (ทีละตัว — server ตรวจชื่อ/ซ้ำ/ตารางชื่อเดิม) */
+  applyKhdTableProcess(item: any) {
+    const k = this.getKhdData(item);
+    if (!k || k.status !== 'tp_different') return;
+    const esc = (t: any) => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as any)[c]);
+    Swal.fire({
+      title: 'ใช้ table_process ของ KHD',
+      html: `<div class="text-left text-sm space-y-2">
+        <p><b>${esc(item.kpi_indicators_name)}</b></p>
+        <p><code class="bg-gray-100 px-1 rounded">${esc(item.table_process)}</code> → <code class="bg-emerald-50 px-1 rounded font-bold">${esc(k.khd_table_process)}</code></p>
+        <p class="text-xs text-gray-500">เชื่อมกับ KHD #${esc(k.khd_report_id)} และใช้รหัสตัวชี้วัดของ KHD — ระบบจะไม่เปลี่ยนถ้ายังมีตารางส่งออก/ตารางแบบฟอร์มที่ใช้ชื่อเดิม
+        หรือมีตัวชี้วัดอื่นใช้ table_process นี้อยู่แล้ว (ผลงานที่บันทึกไม่ได้ผูกกับ table_process จึงไม่หาย)</p></div>`,
+      icon: 'warning', showCancelButton: true, confirmButtonColor: '#0d9488',
+      confirmButtonText: '<i class="fas fa-arrow-down mr-1"></i> เปลี่ยน table_process', cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      this.authService.applyKhdTableProcess(item.id, k.khd_report_id).subscribe({
+        next: (res: any) => {
+          Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2500, showConfirmButton: false });
+          this.loadAllData();
+          this.runKhdCompare();
+        },
+        error: (err: any) => Swal.fire('เปลี่ยนไม่ได้', err.error?.message || 'ไม่สามารถเปลี่ยน table_process ได้', 'warning')
+      });
+    });
   }
 
   downloadKhdDiff() {

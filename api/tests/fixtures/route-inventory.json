@@ -220,6 +220,7 @@
   "PUT /khupskpi/api/indicators/:id/upload-excel :: authenticateToken > requireAction(kpi-manage,edit) > handler",
   "POST /khupskpi/api/indicators/apply-khd-criteria :: authenticateToken > requireAction(kpi-manage,edit) > handler",
   "POST /khupskpi/api/indicators/apply-khd-types :: authenticateToken > requireAction(kpi-manage,edit) > handler",
+  "POST /khupskpi/api/indicators/apply-khd-table-process :: authenticateToken > requireAction(kpi-manage,edit) > handler",
   "POST /khupskpi/api/indicators/bulk-upload-excel :: authenticateToken > requireAction(kpi-manage,add) > handler",
   "POST /khupskpi/api/report-compare/sync :: authenticateToken > isSuperAdmin > handler",
   "POST /khupskpi/api/report-compare/add-from-khd :: authenticateToken > isSuperAdmin > handler",

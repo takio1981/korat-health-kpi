@@ -39,3 +39,22 @@ describe('khd-diff', () => {
     expect(aoa).toHaveLength(6);
   });
 });
+
+// table_process เทียบกับ KHD (9 พ.ย. 2569): ชื่อเดียวกันแต่ table_process ต่าง / table_process เดียวกันแต่ชื่อต่าง
+describe('khd-diff table_process', () => {
+  it('tp_different → แถว table_process (ระบบ ↔ KHD) | different → แถวชื่อบอกว่า table_process เดียวกัน', () => {
+    const items = [
+      { id: 7, kpi_indicators_name: 'ร้อยละ ก', table_process: 'kpi_local_7' },
+      { id: 8, kpi_indicators_name: 'ร้อยละ ข', table_process: 'kpi_same_8' },
+    ];
+    const khd: Record<string, any> = {
+      kpi_local_7: { status: 'tp_different', khd_table_process: 'kpi_khd_7', khd_report_id: 501, report_code: 'R-7' },
+      kpi_same_8: { status: 'different', khd_name: 'ร้อยละ ข (ใหม่)' },
+    };
+    const rows = buildKhdDiffRows(items, { getKhd: (i: any) => khd[i.table_process], criteriaText: () => '-', khdCriteriaText: () => '-' });
+    expect(rows).toEqual([
+      expect.objectContaining({ id: 7, kind: 'table_process', local: 'kpi_local_7', khd: 'kpi_khd_7', detail: 'ชื่อเดียวกัน (KHD #501 · รหัส R-7)' }),
+      expect.objectContaining({ id: 8, kind: 'name', local: 'ร้อยละ ข', khd: 'ร้อยละ ข (ใหม่)', detail: 'table_process เดียวกัน: kpi_same_8' }),
+    ]);
+  });
+});

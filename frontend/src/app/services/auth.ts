@@ -1273,6 +1273,10 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.post(`${this.apiUrl}/indicators/apply-khd-criteria`, { ids, year_bh }, { headers });
   }
+  // ชื่อเดียวกันแต่ table_process ต่างกัน: ใช้ table_process ของ KHD (9 พ.ย. 2569) — server ตรวจชื่อ/ซ้ำ/ตารางชื่อเดิมเอง
+  applyKhdTableProcess(id: number, khd_report_id: number): Observable<any> {
+    return this.apiPost('/indicators/apply-khd-table-process', { id, khd_report_id });
+  }
   // ปรับประเภทตัวชี้วัด / ประเภทหน่วยบริการให้เท่ากับ KHD (9 พ.ย. 2569) — parts: 'types' | 'hostype', server อ่านค่าจาก KHD เอง
   applyKhdTypes(ids: number[], year_bh: string, parts: ('types' | 'hostype')[]): Observable<any> {
     return this.apiPost('/indicators/apply-khd-types', { ids, year_bh, parts });

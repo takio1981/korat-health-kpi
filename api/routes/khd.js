@@ -12,6 +12,7 @@ const { getRemotePool } = require('../db-remote');
 const { notifyLineAction } = require('../core/notify');
 const { requireAction } = require('../core/access');
 const { compareKhdTypes, khdTypeUpdate, khdIndicatorTypes, hostypeSetting } = require('../services/khd-types');
+const { isValidIdentifier } = require('../core/sql');
 
 // === Test Telegram (super_admin) ===
 // ============================================================
@@ -19,6 +20,31 @@ const { compareKhdTypes, khdTypeUpdate, khdIndicatorTypes, hostypeSetting } = re
 // ============================================================
 
 // GET /report-compare — เปรียบเทียบ reports (KHD) กับ kpi_indicators (Local) โดยใช้ table_process เป็น key
+// ชื่อสำหรับจับคู่ (ตัดช่องว่างซ้ำ/หัวท้าย ไม่สนตัวพิมพ์)
+const normName = (s) => String(s ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+/** จับคู่แถว missing_remote (Local) กับ missing_local (KHD) ที่ชื่อเดียวกัน — แก้ items ในที่ คืนจำนวนคู่ (แถว KHD ที่จับคู่แล้วมี _paired) */
+function pairByNameDifferentTp(items) {
+    const locals = new Map(), khds = new Map();
+    for (const it of items) {
+        if (it.status === 'missing_remote' && it.local_name) { const k = normName(it.local_name); locals.set(k, locals.has(k) ? null : it); }
+        if (it.status === 'missing_local' && it.khd_name) { const k = normName(it.khd_name); khds.set(k, khds.has(k) ? null : it); }
+    }
+    let n = 0;
+    for (const [k, loc] of locals) {
+        const khd = khds.get(k);
+        if (!loc || !khd || !k) continue;   // ชื่อซ้ำฝั่งใดฝั่งหนึ่ง = ไม่จับคู่
+        Object.assign(loc, {
+            status: 'tp_different',
+            khd_report_id: khd.khd_report_id, khd_name: khd.khd_name, khd_dept: khd.khd_dept, khd_main_yut: khd.khd_main_yut,
+            report_code: khd.report_code, khd_table_process: khd.table_process, khd_is_active: khd.khd_is_active, khd_data_source: khd.khd_data_source,
+        });
+        khd._paired = true;
+        n++;
+    }
+    return n;
+}
+
 apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
     if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
@@ -176,11 +202,16 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                 missing_remote++;
             }
         }
+        // ชื่อเดียวกันแต่ table_process ต่างกัน (9 พ.ย. 2569): จับคู่ "ไม่มีใน KHD" (Local) กับ "ยังไม่มีใน Local" (KHD) ด้วยชื่อ (ตัดช่องว่างซ้ำ/ไม่สนตัวพิมพ์)
+        // เฉพาะชื่อที่มีคู่เดียวทั้ง 2 ฝั่ง (ไม่เดา) → แถว Local เป็น status 'tp_different' + ค่าฝั่ง KHD, แถว KHD ถูกตัดออกจากรายการ "ยังไม่มีใน Local" (กันเพิ่มซ้ำ)
+        const tpDiff = pairByNameDifferentTp(items);
+        missing_remote -= tpDiff; missing_local -= tpDiff;
+        for (let i = items.length - 1; i >= 0; i--) if (items[i]._paired) items.splice(i, 1);
         res.json({
             success: true,
             khd_count: khdRows.length, local_count: localRows.length,
             summary: {
-                total: items.length, match, different, missing_local, missing_remote,
+                total: items.length, match, different, missing_local, missing_remote, tp_different: tpDiff,
                 khd_inactive: khd_inactive_count, suggest_disable: suggest_disable_count,
                 criteria_different, types_different, hostype_different, year_bh
             },
@@ -312,6 +343,51 @@ apiRouter.post('/indicators/apply-khd-types', authenticateToken, requireAction('
         const what = parts.map(p => p === 'types' ? 'ประเภทตัวชี้วัด' : 'ประเภทหน่วยบริการ').join(' + ');
         res.json({ success: true, message: `ปรับ${what}ให้เท่ากับ KHD ${updated.length} ตัวชี้วัด` + (skipped.length ? ` (ข้าม ${skipped.length})` : ''),
             updated, skipped, year_bh: yearBh, hostype_changed: hostypeChanged });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// POST /indicators/apply-khd-table-process { id, khd_report_id } — ชื่อเดียวกันแต่ table_process ต่างกัน: ใช้ table_process ของ KHD (9 พ.ย. 2569)
+// server อ่าน KHD ใหม่และตรวจซ้ำทุกอย่าง (ไม่เชื่อค่าจาก client): ชื่อต้องตรงกัน, table_process ใหม่ถูกรูปแบบและไม่ซ้ำตัวชี้วัดอื่น,
+// **ไม่มีตารางที่ใช้ชื่อเดิม** (<tp> ตารางส่งออก, <tp>_items, form_<tp>) — มี = ปฏิเสธพร้อมรายชื่อตาราง (เปลี่ยนแล้วข้อมูลในตารางเดิมจะไม่ถูกใช้ต่อ)
+apiRouter.post('/indicators/apply-khd-table-process', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
+    const id = Number(req.body?.id), rid = Number(req.body?.khd_report_id);
+    if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(rid) || rid <= 0) return res.status(400).json({ success: false, message: 'ข้อมูลไม่ครบ' });
+    try {
+        const [[local]] = await db.query('SELECT id, kpi_indicators_name, table_process FROM kpi_indicators WHERE id = ?', [id]);
+        if (!local) return res.status(404).json({ success: false, message: 'ไม่พบตัวชี้วัด' });
+        const [[khd]] = await remoteDb.query(
+            `SELECT report_id, report_name, report_code, table_process, data_source FROM reports WHERE report_id = ? AND data_source = 'excel'`, [rid]);
+        if (!khd) return res.status(404).json({ success: false, message: 'ไม่พบรายการนี้ใน KHD' });
+        if (normName(khd.report_name) !== normName(local.kpi_indicators_name)) {
+            return res.status(400).json({ success: false, code: 'NAME_MISMATCH', message: 'ชื่อตัวชี้วัดในระบบไม่ตรงกับ KHD — ใช้ได้เฉพาะกรณีชื่อเดียวกัน' });
+        }
+        const oldTp = String(local.table_process || '').trim();
+        const newTp = String(khd.table_process || '').trim();
+        if (!isValidIdentifier(newTp)) return res.status(400).json({ success: false, message: `table_process ของ KHD ไม่ถูกรูปแบบ (${newTp || 'ว่าง'})` });
+        if (newTp === oldTp) return res.status(400).json({ success: false, message: 'table_process ตรงกันอยู่แล้ว' });
+        const [dup] = await db.query('SELECT id, kpi_indicators_name FROM kpi_indicators WHERE table_process = ? AND id <> ?', [newTp, id]);
+        if (dup.length) {
+            return res.status(409).json({ success: false, code: 'TP_IN_USE', message: `มีตัวชี้วัดอื่นใช้ table_process "${newTp}" อยู่แล้ว: #${dup[0].id} ${dup[0].kpi_indicators_name}` });
+        }
+        if (oldTp) {
+            const [tabs] = await db.query(
+                'SELECT TABLE_NAME AS t FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (?)',
+                [[oldTp, oldTp + '_items', 'form_' + oldTp]]);
+            if (tabs.length) {
+                return res.status(409).json({ success: false, code: 'OLD_TABLES_EXIST', tables: tabs.map(r => r.t),
+                    message: `ยังมีตารางที่ใช้ชื่อเดิม: ${tabs.map(r => r.t).join(', ')} — เปลี่ยนแล้วข้อมูลในตารางเหล่านี้จะไม่ถูกใช้ต่อ กรุณาย้าย/เปลี่ยนชื่อตารางก่อน` });
+            }
+        }
+        await db.query('UPDATE kpi_indicators SET table_process = ?, kpi_indicators_code = ?, khd_report_id = ?, data_source = ? WHERE id = ?',
+            [newTp, khd.report_code || null, khd.report_id, khd.data_source || null, id]);
+        await db.query('INSERT INTO system_logs (user_id, action_type, table_name, old_value, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+            [req.user.userId, 'APPLY_KHD_TABLE_PROCESS', 'kpi_indicators', JSON.stringify({ id, table_process: oldTp }),
+             JSON.stringify({ id, table_process: newTp, khd_report_id: khd.report_id }), req.ip]);
+        res.json({ success: true, message: `เปลี่ยน table_process เป็น "${newTp}" แล้ว (เชื่อมกับ KHD #${khd.report_id})`, id, before: oldTp, after: newTp });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }

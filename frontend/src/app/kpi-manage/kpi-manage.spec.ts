@@ -199,6 +199,20 @@ describe('KpiManageComponent', () => {
       expect(component.khdDiffAll.map(r => r.id)).toEqual([2]);
     });
 
+    it('table_process ต่างกัน: นับ/กรองเป็นสถานะแยก และส่ง id + khd_report_id ไปเปลี่ยน', () => {
+      component.indicators.push({ id: 3, kpi_indicators_name: 'ค', table_process: 'tp3_local', is_active: 1 });
+      component.khdCompareMap.set('tp3_local', { status: 'tp_different', table_process: 'tp3_local', khd_table_process: 'tp3_khd', khd_report_id: 77 });
+      expect(component.getKhdCompareStatus(component.indicators[2])).toBe('tp_different');
+      expect(component.khdCounts.tp_different).toBe(1);
+      component.filterKhdStatus = 'tp_different';
+      component.applyFilter();
+      expect(component.filteredIndicators.map((i: any) => i.id)).toEqual([3]);
+      const http = TestBed.inject(HttpTestingController);
+      (component as any).authService.applyKhdTableProcess(3, 77).subscribe();
+      const req = http.expectOne(r => r.method === 'POST' && r.url.includes('/indicators/apply-khd-table-process'));
+      expect(req.request.body).toEqual({ id: 3, khd_report_id: 77 });
+    });
+
     it('เรียก API ด้วยรายการ ปีงบ และส่วนที่จะปรับ', () => {
       const http = TestBed.inject(HttpTestingController);
       (component as any).authService.applyKhdTypes([2], '2570', ['hostype']).subscribe();
