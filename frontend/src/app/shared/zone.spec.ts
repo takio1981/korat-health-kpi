@@ -1,4 +1,4 @@
-import { zoneOptions, zoneLabel, inZone } from './zone';
+import { zoneOptions, zoneLabel, inZone, setZoneNames, zoneName } from './zone';
 
 // ตัวกรองโซนของหน่วยบริการ (chospital.zone) — ใช้ร่วมทุกหน้าที่มีตัวกรองหน่วยบริการ/อำเภอ
 describe('zone', () => {
@@ -10,6 +10,17 @@ describe('zone', () => {
   it('zoneLabel', () => {
     expect(zoneLabel('3')).toBe('โซน 3');
     expect(zoneLabel('')).toBe('ไม่ระบุโซน');
+  });
+
+  // หน้าจัดการโซน (9 พ.ย. 2569): ชื่อโซน + รหัส 2 หลัก
+  it('setZoneNames → zoneLabel มีชื่อโซน, โซนที่ไม่มีชื่อแสดงแค่เลข | zoneOptions เรียงเลข 2 หลักถูก', () => {
+    setZoneNames([{ code: '1', name: 'เมือง' }, { code: '12', name: '' }]);
+    expect(zoneLabel('1')).toBe('โซน 1 · เมือง');
+    expect(zoneName('1')).toBe('เมือง');
+    expect(zoneLabel('12')).toBe('โซน 12');
+    expect(zoneOptions([{ zone: '12' }, { zone: '2' }, { zone: '10' }])).toEqual(['2', '10', '12']);
+    setZoneNames([]);
+    expect(zoneLabel('1')).toBe('โซน 1');
   });
 
   it('inZone: ไม่เลือกโซน = ผ่านทุกแถว, เลือกแล้วเทียบค่าโซนของแถว (รับทั้งค่าเดียวและ array)', () => {

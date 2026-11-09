@@ -470,7 +470,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   /** ป้ายปุ่มตัวกรองโซน */
   zoneFilterLabel(): string {
     if (this.selectedZones.length === 0) return 'โซน: ทั้งหมด';
-    return 'โซน ' + [...this.selectedZones].sort().join(', ');
+    return 'โซน ' + [...this.selectedZones].sort((a, b) => Number(a) - Number(b)).join(', ');
   }
   hosTypeList: any[] = [];
 
@@ -2497,7 +2497,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   get addKpiZoneList(): string[] { return zoneOptions(this.addKpiDistrictList); }
   get addKpiZoneDistricts(): any[] { return this.addKpiDistrictList.filter((d: any) => inZone(d, this.addKpiSelZones)); }
   addKpiZoneLabel(): string {
-    return this.addKpiSelZones.length === 0 ? 'โซน: ทั้งหมด' : 'โซน ' + [...this.addKpiSelZones].sort().join(', ');
+    return this.addKpiSelZones.length === 0 ? 'โซน: ทั้งหมด' : 'โซน ' + [...this.addKpiSelZones].sort((a, b) => Number(a) - Number(b)).join(', ');
   }
   /** อำเภอปลายทางที่ใช้จริง: เลือกอำเภอ = อำเภอนั้น | เลือกแค่โซน = ทุกอำเภอในโซน | ไม่เลือก = ทั้งขอบเขต ([]) */
   addKpiTargetDistricts(): string[] {

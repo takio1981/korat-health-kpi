@@ -1,5 +1,6 @@
 // โซนของหน่วยบริการ (chospital.zone '1'–'6') — ผู้ใช้กำหนดตามอำเภอ 30 ต.ค. 2569 (ทุกหน่วยบริการในอำเภอเดียวกันอยู่โซนเดียวกัน)
-// DISTRICT_ZONES ใช้ backfill ตอน migration (เฉพาะแถวที่ zone ยังว่าง) และเป็นค่าตั้งต้นเมื่อเพิ่มหน่วยบริการใหม่
+// DISTRICT_ZONES = ค่า seed ครั้งแรกของตาราง zones/district_zones (migration) และค่าสำรองเมื่ออ่านฐานข้อมูลไม่ได้เท่านั้น
+// ตั้งแต่ 9 พ.ย. 2569 โซนของอำเภอ/ชื่อโซนแก้ที่แท็บ "โซน" ในหน้าจัดการตัวชี้วัด (services/zones.js) — ห้ามแก้ตารางนี้เพื่อย้ายโซน
 const DISTRICT_ZONES = {
     1: ['3001', '3019', '3032', '3006', '3016'],          // เมืองนครราชสีมา ขามทะเลสอ เฉลิมพระเกียรติ จักราช ห้วยแถลง
     2: ['3002', '3007', '3014', '3025', '3003', '3022'],  // ครบุรี โชคชัย ปักธงชัย วังน้ำเขียว เสิงสาง หนองบุญมาก
@@ -15,10 +16,13 @@ function zoneOfDistrict(distid) {
     return null;
 }
 
+// รหัสโซน = ตัวเลข 1–99 (เดิม 1–9 ตัวเดียว — เพิ่มโซนเกิน 9 ได้ตั้งแต่ 9 พ.ย. 2569)
+const isZoneCode = (v) => /^[1-9][0-9]?$/.test(String(v ?? '').trim());
+
 // ค่าพารามิเตอร์ zone จาก query ("1" หรือ "1,3") → null = ไม่ได้กรอง | [] = ส่งมาแต่ไม่มีค่าที่ถูกต้อง (ผู้เรียกให้ผลว่าง) | ['1','3']
 function parseZones(value) {
     if (value === undefined || value === null || String(value).trim() === '') return null;
-    return [...new Set(String(value).split(',').map(v => v.trim()).filter(v => /^[1-9]$/.test(v)))];
+    return [...new Set(String(value).split(',').map(v => v.trim()).filter(isZoneCode))];
 }
 
 // เงื่อนไข SQL + พารามิเตอร์ของตัวกรองโซน — col = คอลัมน์อำเภอ (kind 'dist') หรือรหัสหน่วยบริการ (kind 'hos')
@@ -38,4 +42,4 @@ function addZoneFilter(clauses, params, col, value, kind = 'dist') {
     if (zf) { clauses.push(zf.sql); params.push(...zf.params); }
 }
 
-module.exports = { DISTRICT_ZONES, zoneOfDistrict, parseZones, zoneFilter, addZoneFilter };
+module.exports = { DISTRICT_ZONES, zoneOfDistrict, isZoneCode, parseZones, zoneFilter, addZoneFilter };

@@ -417,7 +417,7 @@
           <h4 class="font-bold text-blue-800 text-sm mb-2"><i class="fas fa-filter mr-2"></i>ตัวกรองแบบ Multi-select (เลือกได้หลายค่า)</h4>
           <p class="text-xs text-blue-700 mb-2">แต่ละตัวกรองเป็นปุ่ม dropdown → เปิดแล้วติ๊ก checkbox ได้มากกว่า 1 รายการ</p>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-            <div class="bg-white rounded-lg p-2 border border-teal-200"><b class="text-teal-700">โซน / อำเภอ / ประเภท รพ. / หน่วยบริการ</b> — กรองตามสถานที่ (cascade กัน) | <b>โซน</b> 1–6 กำหนดตามอำเภอ (ทุกหน่วยบริการในอำเภอเดียวกันอยู่โซนเดียวกัน) | <b>ประเภท รพ.</b> กรองหน่วยบริการตาม chospital.hostype</div>
+            <div class="bg-white rounded-lg p-2 border border-teal-200"><b class="text-teal-700">โซน / อำเภอ / ประเภท รพ. / หน่วยบริการ</b> — กรองตามสถานที่ (cascade กัน) | <b>โซน</b> กำหนดตามอำเภอ (ทุกหน่วยบริการในอำเภอเดียวกันอยู่โซนเดียวกัน — ตั้งชื่อ/เพิ่มโซน/ย้ายอำเภอได้ที่จัดการตัวชี้วัด แท็บโซน) | <b>ประเภท รพ.</b> กรองหน่วยบริการตาม chospital.hostype</div>
             <div class="bg-white rounded-lg p-2 border border-amber-200"><b class="text-amber-700">หน่วยงาน / หมวดหมู่หลัก / ตัวชี้วัด</b> — กรองตามโครงสร้าง KPI</div>
             <div class="bg-white rounded-lg p-2 border border-cyan-200"><b class="text-cyan-700">ตัวชี้วัดของ</b> — กรองตัวชี้วัดตาม <b>required_off_types</b> (ประเภทที่รับผิดชอบ) + all_required (ครอบคลุมทุกประเภท)</div>
             <div class="bg-white rounded-lg p-2 border border-gray-200"><b class="text-gray-700">สถานะ</b> — ผ่านเป้า / ไม่ผ่านเป้า / รอตรวจสอบ / ตรวจสอบแล้ว / <b class="text-emerald-700">มีเป้า+มีผลงาน</b> / ยังไม่มีเป้า / มีเป้าแต่ไม่มีผลงาน</div>
@@ -951,7 +951,19 @@
           · ระบบตรวจไวยากรณ์ให้แล้ว (สูตรที่ใช้ไม่ได้จะไม่ถูกเสนอ) แต่ความหมายต้องตรวจเอง · ถ้าสูตรใช้ค่าเพิ่มเติม (เช่น ประชากร) ให้ตั้งชื่อค่าเพิ่มเติมก่อน AI จึงจะใช้ได้
         </div>
         <div class="bg-teal-50 border border-teal-200 rounded-xl p-3 mb-3 text-xs text-teal-700">
-          <i class="fas fa-layer-group mr-1"></i><b>5 แท็บ:</b> ตัวชี้วัด (KPIs) / หมวดหมู่หลัก / ยุทธศาสตร์ / หน่วยงาน / หน่วยบริการ — แท็บนอกจาก "ตัวชี้วัด" แก้ไขได้เฉพาะ super_admin เท่านั้น
+          <i class="fas fa-layer-group mr-1"></i><b>6 แท็บ:</b> ตัวชี้วัด (KPIs) / หมวดหมู่หลัก / ยุทธศาสตร์ / หน่วยงาน / หน่วยบริการ / โซน — แท็บนอกจาก "ตัวชี้วัด" แก้ไขได้เฉพาะ super_admin เท่านั้น
+        </div>
+        <!-- หน้าจัดการโซน (9 พ.ย. 2569) -->
+        <div class="bg-violet-50 border border-violet-200 rounded-xl p-3 mb-3 text-xs text-gray-700">
+          <b class="text-violet-800"><i class="fas fa-layer-group mr-1"></i>แท็บโซน — จัดการโซนของแต่ละอำเภอ</b>
+          <ol class="list-decimal list-inside space-y-1 mt-1">
+            <li><b>ตั้งชื่อโซน:</b> พิมพ์ชื่อในตารางโซนแล้วกด "บันทึกชื่อ" — ตัวกรองโซนทุกหน้าแสดงเป็น "โซน 1 · ชื่อ"</li>
+            <li><b>เพิ่มโซน:</b> กด "เพิ่มโซน" ระบบให้รหัสถัดไปอัตโนมัติ (โซน 7, 8, … สูงสุด 99) ตั้งชื่อได้ทันที</li>
+            <li><b>ย้ายอำเภอ:</b> เลือกโซนใหม่ในตารางอำเภอ (แถวที่เปลี่ยนเป็นสีเหลือง) → กด "บันทึกการย้ายโซน" → ตรวจรายการในหน้ายืนยัน → หน่วยบริการ<b>ทุกแห่ง</b>ในอำเภอเปลี่ยนโซนตาม และหน่วยบริการที่เพิ่มใหม่ในอำเภอได้โซนนี้</li>
+            <li>ป้ายสีแดง "มีหน่วยบริการอยู่โซนอื่น" = มีบางแห่งในอำเภอถูกแก้โซนเองในแท็บหน่วยบริการ — บันทึกโซนของอำเภออีกครั้งเพื่อให้ตรงกันทั้งอำเภอ</li>
+            <li><b>ลบโซน</b> (super_admin): ทำได้เฉพาะโซนที่ไม่มีอำเภอ/หน่วยบริการ — ย้ายอำเภอออกก่อน</li>
+          </ol>
+          <p class="mt-1 text-violet-700">ผลมีทันทีกับตัวกรองโซนในหน้าบันทึกผลงาน กราฟ รายงาน ตัวชี้วัดเสี่ยง และป้ายโซนทุกหน้า (ไม่ต้องอัปเดตตารางสรุป)</p>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
           <div class="bg-gray-50 rounded-lg p-2 border border-gray-200"><i class="fas fa-plus mr-1 text-green-500"></i><b>เพิ่มข้อมูล:</b> เปิด modal CRUD ตามแท็บที่เลือก พร้อม toggle เปิด/ปิดใช้งาน (is_active) ต่อรายการ</div>

@@ -8,6 +8,7 @@ const { apiRouter } = require('../core/router');
 const { authenticateToken } = require('../core/auth');
 const { getDistrictId, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT } = require('../core/access');
 const { addZoneFilter } = require('../core/zones');
+const { districtZoneMap } = require('../services/zones');
 const crypto = require('crypto');
 const { aiLimiter } = require('../core/security');
 const { callLlm, sendAiError, createAiCache, AiError } = require('../services/ai');
@@ -502,6 +503,7 @@ async function computeChartStats(user, q) {
         // โซนของแต่ละอำเภอ (ตัวเลือกโซน + กรองรายการอำเภอตามโซนฝั่งหน้าจอ)
         const [zoneRows] = await db.query("SELECT distid, MAX(zone) AS zone FROM chospital WHERE zone IS NOT NULL AND zone <> '' GROUP BY distid");
         const zoneOfDist = new Map(zoneRows.map(r => [String(r.distid), String(r.zone)]));
+        for (const [d, z] of await districtZoneMap()) zoneOfDist.set(d, z);   // โซนของอำเภอจากหน้าจัดการโซน (9 พ.ย. 2569) มาก่อน
 
         const typeName = new Map(hostypeNames.map(h => [String(h.hostypecode), h.hostypename]));
         const byPct = (a, b) => b.achievement_pct - a.achievement_pct || b.with_target - a.with_target || String(a.gname).localeCompare(String(b.gname), 'th');
@@ -527,7 +529,7 @@ async function computeChartStats(user, q) {
                 depts: uniq(optRows, 'dept_id').map(r => ({ id: r.dept_id, name: r.dept_name })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'th')),
                 indicators: uniq(optRows, 'indicator_id').map(r => ({ id: r.indicator_id, name: r.kpi_indicators_name, main_id: r.main_id, dept_id: r.dept_id })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'th')),
                 districts: uniq(optRows, 'distid').map(r => ({ id: r.distid, name: r.distname, zone: zoneOfDist.get(String(r.distid)) || null })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'th')),
-                zones: [...new Set(uniq(optRows, 'distid').map(r => zoneOfDist.get(String(r.distid))).filter(Boolean))].sort(),
+                zones: [...new Set(uniq(optRows, 'distid').map(r => zoneOfDist.get(String(r.distid))).filter(Boolean))].sort((a, b) => Number(a) - Number(b)),
                 hostypes: uniq(optRows, 'hostype').map(r => ({ id: r.hostype, name: typeName.get(String(r.hostype)) || r.hostype })).sort((a, b) => String(a.id).localeCompare(String(b.id))),
             },
             overall,

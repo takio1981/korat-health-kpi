@@ -370,6 +370,35 @@ const migrationsReady = (async () => {
                 await db.query("UPDATE chospital SET zone = ? WHERE (zone IS NULL OR zone = '') AND distid IN (?)", [zone, dists]);
             }
         } catch (e) { console.error('[Migration] chospital.zone backfill:', e.message); }
+        // หน้าจัดการโซน (9 พ.ย. 2569): รหัสโซน 1–99 (เดิม VARCHAR(1)) + ชื่อโซน + โซนของอำเภอในฐานข้อมูล (แทน DISTRICT_ZONES ที่ hardcode)
+        // seed ครั้งแรกจาก DISTRICT_ZONES เท่านั้น — หลังจากนั้นแก้ที่แท็บ "โซน" ในหน้าจัดการตัวชี้วัด (routes/lookups.js)
+        try { await db.query('ALTER TABLE chospital MODIFY zone VARCHAR(10) NULL'); } catch (e) { console.error('[Migration] chospital.zone widen:', e.message); }
+        try {
+            await db.query(`CREATE TABLE IF NOT EXISTS zones (
+                code VARCHAR(10) NOT NULL PRIMARY KEY,
+                name VARCHAR(100) NULL,
+                sort_order INT NOT NULL DEFAULT 0,
+                updated_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                updated_by VARCHAR(100) NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+            await db.query(`CREATE TABLE IF NOT EXISTS district_zones (
+                distid VARCHAR(4) NOT NULL PRIMARY KEY,
+                zone_code VARCHAR(10) NOT NULL,
+                updated_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                updated_by VARCHAR(100) NULL,
+                INDEX idx_district_zones_zone (zone_code)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+            const [[zc]] = await db.query('SELECT COUNT(*) AS n FROM zones');
+            if (!zc.n) {
+                for (const z of Object.keys(DISTRICT_ZONES)) await db.query('INSERT IGNORE INTO zones (code, name, sort_order) VALUES (?, NULL, ?)', [z, Number(z)]);
+            }
+            const [[dc]] = await db.query('SELECT COUNT(*) AS n FROM district_zones');
+            if (!dc.n) {
+                for (const [z, dists] of Object.entries(DISTRICT_ZONES)) {
+                    for (const d of dists) await db.query('INSERT IGNORE INTO district_zones (distid, zone_code) VALUES (?, ?)', [d, z]);
+                }
+            }
+        } catch (e) { console.error('[Migration] zones/district_zones:', e.message); }
 
         // เพิ่ม kpi_summary table
         try {

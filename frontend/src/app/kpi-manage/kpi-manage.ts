@@ -12,7 +12,8 @@ import { orderSubTree } from '../shared/sub-tree';
 import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
-import { ZoneBadgeComponent } from '../shared/zone-badge';
+import { ZoneBadgeComponent, HospitalZoneService } from '../shared/zone-badge';
+import { ZoneManagerComponent } from '../shared/zone-manager';
 import { AiFormulaHelperComponent } from '../shared/ai-formula-helper';
 import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
 import { TARGET_CONDITIONS, CONDITION_SYMBOL, CONDITION_LABEL, normalizeCondition, evaluateTarget, normalizeTargetMonthly } from '../shared/kpi-target';
@@ -50,7 +51,7 @@ export function applyResultMethod(item: any, m: ResultMethod): void {
 @Component({
   selector: 'app-kpi-manage',
   standalone: true,
-  imports: [CommonModule, FormsModule, FormBuilderComponent, FormulaBadgeComponent, ZoneBadgeComponent, AiFormulaHelperComponent],
+  imports: [CommonModule, FormsModule, FormBuilderComponent, FormulaBadgeComponent, ZoneBadgeComponent, AiFormulaHelperComponent, ZoneManagerComponent],
   templateUrl: './kpi-manage.html'
 })
 export class KpiManageComponent implements OnInit {
@@ -81,6 +82,15 @@ export class KpiManageComponent implements OnInit {
   hospFilterZone: string = '';
   hospFilterDistid: string = '';
   zoneLabel = zoneLabel;
+  /** รหัสโซนทั้งหมด (GET /zones) — ตัวเลือกโซนในหน้าต่างหน่วยบริการ (เดิม hardcode 1–6) */
+  zoneCodes: string[] = [];
+  private zoneSvc = inject(HospitalZoneService);
+  loadZoneCodes() {
+    this.authService.apiGet('/zones').subscribe({
+      next: (r: any) => { this.zoneCodes = (r?.data || []).map((z: any) => String(z.code)); this.zoneSvc.applyZoneNames(r?.data || []); this.cdr.detectChanges(); },
+      error: () => {},
+    });
+  }
   get hospZoneList(): string[] { return zoneOptions(this.districts); }
   /** อำเภอในตัวกรองแท็บหน่วยบริการ — เฉพาะอำเภอในโซนที่เลือก */
   get hospZoneDistricts(): any[] { return (this.districts || []).filter((d: any) => inZone(d, this.hospFilterZone)); }
@@ -220,6 +230,7 @@ export class KpiManageComponent implements OnInit {
     this.isSuperAdmin = role === 'super_admin';
     this.canAddData = this.authService.canPerformAction('kpi-manage', 'add');
     this.canEditData = this.authService.canPerformAction('kpi-manage', 'edit');
+    this.loadZoneCodes();
     // เดิม hardcode เช็ค isAdmin ตรงๆ ที่นี่ ซ้ำซ้อนกับ pageAccessGuard ที่ route และขัดกับระบบ
     // Role × Page Access — ใช้ canAccessPage() แทนให้ตรงกับ guard
     if (!this.authService.canAccessPage('kpi-manage')) {
@@ -852,6 +863,8 @@ export class KpiManageComponent implements OnInit {
 
   switchTab(tab: string) {
     this.activeTab = tab;
+    if (tab === 'zones') return;   // แท็บโซนเป็นคอมโพเนนต์แยก (shared/zone-manager.ts) ไม่ใช้ตารางกลาง/ตัวกรองของหน้านี้
+    if (tab === 'hospitals') this.loadZoneCodes();
     this.searchTerm = '';
     this.filterActive = '';
     this.filterMainIndicator = '';

@@ -94,7 +94,7 @@ frontend/src/app/
   ห้าม export ตรงๆ (ค่าจะค้าง) — เก็บไว้ในโมดูลเดียวกับผู้ใช้ หรือเปลี่ยนเป็น object; Map/Set แชร์ได้ (object เดียวกัน)
 - `core/env.js` ต้องเป็น require แรกของ server.js
   (ตัวดัก unhandledRejection/uncaughtException เรียก `captureError` แบบ lazy จาก core/errors)
-- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (301 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
+- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (307 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
   ตั้งใจเพิ่ม/แก้ route → `node tests/lib/route-inventory.js --write` แล้วตรวจ diff), `tests/lint.test.js` (ESLint no-undef ฯลฯ — จับชื่อที่ลืม require),
   `tests/build.test.js` (ไล่ require ทุกชั้นต้องอยู่ในชุดที่ build คัดลอก + build ลงโฟลเดอร์ชั่วคราว), `tests/startup.test.js` (เริ่มระบบ + โหลดผลลัพธ์ build ใน process แยก)
   — middleware ที่สร้างจาก factory/ไลบรารีต้องมีชื่อ (`requireAction(page,action)`, loginIpLimiter/loginLimiter/apiLimiter) ให้ snapshot แยกได้
@@ -495,8 +495,14 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   `waitForColumn` เพราะ ALTER อยู่ท้าย chain startup), `frontend/src/app/shared/kpi-formula.spec.ts`, `dashboard.spec.ts`
 
 ### โซนของหน่วยบริการ (chospital.zone — เพิ่ม 30 ต.ค. 2569)
-- `chospital.zone` VARCHAR(1) '1'–'6' กำหนดตามอำเภอ (ทุกหน่วยบริการในอำเภอเดียวกันอยู่โซนเดียวกัน — ผู้ใช้กำหนดจากตารางโซน 6 โซน 32 อำเภอ)
-  — ตาราง `DISTRICT_ZONES` ใน `api/core/zones.js` ใช้ backfill ตอน migration (**เฉพาะแถวที่ zone ว่าง** ไม่ทับค่าที่แก้เอง) + ค่าตั้งต้นของ POST/PUT `/hospitals` ที่ไม่ส่ง zone
+- `chospital.zone` VARCHAR(10) รหัส 1–99 (`isZoneCode()` ใน core/zones.js — เดิม VARCHAR(1) '1'–'6') กำหนดตามอำเภอ (ทุกหน่วยบริการในอำเภอเดียวกันอยู่โซนเดียวกัน)
+  — `DISTRICT_ZONES` ใน `api/core/zones.js` = **ค่า seed ครั้งแรกเท่านั้น** (backfill chospital.zone ที่ว่าง + seed ตาราง zones/district_zones) ห้ามแก้เพื่อย้ายโซน
+- **หน้าจัดการโซน (9 พ.ย. 2569 — ผู้ใช้สั่ง: ตั้งชื่อโซน + เพิ่มโซนเกิน 6):** ตาราง `zones` (code, name, sort_order) + `district_zones` (distid → zone_code) — `services/zones.js`
+  `loadZoneData()` (แคช 1 นาที, `invalidateZoneCache()`), `zoneOfDistrictDb()` = ค่าตั้งต้นโซนของ POST/PUT `/hospitals` (ส่งโซนที่ไม่มีในตาราง zones = 400), `districtZoneMap()` ใช้ใน services/forecast.js + chart-stats
+  | `GET /zones` (ทุก role — ชื่อ/จำนวน), `GET|PUT /zones/districts` + `POST /zones` + `PUT /zones/:code` (requireAction kpi-manage add/edit), `DELETE /zones/:code` (isSuperAdmin เฉพาะโซนว่าง)
+  — **ย้ายอำเภอ = UPSERT district_zones + UPDATE chospital.zone ทุกแห่งในอำเภอใน transaction** (log ZONE_DISTRICT_UPDATE) | `GET /districts` zone = district_zones ก่อน MAX(chospital.zone)
+  | Frontend: แท็บที่ 6 "โซน" ในหน้าจัดการตัวชี้วัด (`shared/zone-manager.ts`), `zoneLabel()` = "โซน N · ชื่อ" จาก `setZoneNames()` ที่ `HospitalZoneService` โหลดตอนเข้าระบบ (layout) — **ตัวเลือก/ป้ายโซนเดี่ยวใช้ `zoneLabel()` เสมอ** (สรุปหลายโซนแบบย่อ "โซน 1, 3" ใน dashboard เรียงแบบตัวเลข)
+  — Test: `api/tests/zone-manage.test.js`, `shared/zone-manager.spec.ts`, `shared/zone.spec.ts`
 - `GET /hospitals` คืน `zone`, `GET /districts` คืน `zone` ของอำเภอ, `/report/chart-stats` คืน `options.zones` + `zone` ในแต่ละอำเภอ
 - พารามิเตอร์ `zone` (คั่นด้วยจุลภาคได้) ผ่าน `addZoneFilter(clauses, params, col, req.query.zone, kind)` — subquery กับ chospital (ไม่ JOIN ตรง: คนละ collation)
   ค่าผิดทั้งหมด = ไม่มีข้อมูล (`1 = 0`) — ใช้ใน `/kpi-results` (`h.zone`), `/report/by-indicator|by-hospital|by-district|by-year|chart-stats` (s.distid),

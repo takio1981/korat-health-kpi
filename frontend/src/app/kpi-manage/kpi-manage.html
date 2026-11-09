@@ -7,9 +7,15 @@
       <button (click)="switchTab('strategies')" [class]="activeTab === 'strategies' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="flex-1 py-4 px-6 text-center border-b-2 font-medium text-sm focus:outline-none">ยุทธศาสตร์</button>
       <button (click)="switchTab('departments')" [class]="activeTab === 'departments' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="flex-1 py-4 px-6 text-center border-b-2 font-medium text-sm focus:outline-none">หน่วยงาน</button>
       <button (click)="switchTab('hospitals')" [class]="activeTab === 'hospitals' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="flex-1 py-4 px-6 text-center border-b-2 font-medium text-sm focus:outline-none">หน่วยบริการ</button>
+      <button (click)="switchTab('zones')" id="tab-zones" [class]="activeTab === 'zones' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="flex-1 py-4 px-6 text-center border-b-2 font-medium text-sm focus:outline-none">โซน</button>
     </div>
 
-    <div class="p-6">
+    <!-- แท็บโซน (9 พ.ย. 2569) — คอมโพเนนต์แยก โหลด/บันทึกผ่าน /zones เอง -->
+    <div class="p-6" *ngIf="activeTab === 'zones'">
+      <app-zone-manager [canAdd]="canAddData" [canEdit]="canEditData" [isSuperAdmin]="isSuperAdmin"></app-zone-manager>
+    </div>
+
+    <div class="p-6" *ngIf="activeTab !== 'zones'">
       <!-- Row 1: ค้นหา + ตัวกรองทั้งหมด (แยกออกจากปุ่ม กันแบ่งครึ่งแถวตอนพื้นที่ไม่พอ) -->
       <div class="flex flex-wrap items-end gap-3 mb-3">
           <div class="relative w-full md:w-64">
@@ -2263,7 +2269,7 @@
             <label class="block text-xs font-bold text-gray-600 mb-1">โซน</label>
             <select [(ngModel)]="currentItem.zone" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none bg-white">
               <option [ngValue]="''">ตามอำเภอ (อัตโนมัติ)</option>
-              <option *ngFor="let z of ['1','2','3','4','5','6']" [ngValue]="z">{{ zoneLabel(z) }}</option>
+              <option *ngFor="let z of zoneCodes" [ngValue]="z">{{ zoneLabel(z) }}</option>
             </select>
             <p class="text-[10px] text-gray-400 mt-0.5">ว่าง = ใช้โซนของอำเภอที่เลือก</p>
           </div>

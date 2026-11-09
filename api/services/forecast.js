@@ -4,7 +4,7 @@
 const db = require('../db');
 const kpiFormula = require('../kpi-formula');
 const { forecastPair, throughIndex, MONTH_KEYS, DEFAULTS } = require('../kpi-forecast');
-const { zoneOfDistrict } = require('../core/zones');
+const { districtZoneMap } = require('./zones');
 const { loadBaseValues, baseKey } = require('./summary');
 
 const FROM_SQL = `
@@ -76,6 +76,7 @@ async function computeForecasts(scope, opts = {}) {
     const c = [...(scope.c || [])], p = [...(scope.p || [])];
     if (!c.some(x => /i\.is_active\s*=\s*1/.test(x))) c.push('i.is_active = 1');
     c.push('s.year_bh = ?'); p.push(year);
+    const distZone = await districtZoneMap();   // โซนของอำเภอจากหน้าจัดการโซน (9 พ.ย. 2569 — เดิม DISTRICT_ZONES hardcode)
 
     const [rows] = await db.query(`
         SELECT s.indicator_id, s.hospcode, s.hosname, s.distid, s.distname, s.hostype, s.dept_id, s.dept_name, s.target_value,
@@ -134,7 +135,7 @@ async function computeForecasts(scope, opts = {}) {
         if (!opts.includeAll && !RISK_STATUSES.includes(f.status)) continue;
         items.push({
             indicator_id: Number(r.indicator_id), indicator_name: r.kpi_indicators_name, result_formula: r.result_formula || null,
-            hospcode: hc, hosname: r.hosname, distid: r.distid, distname: r.distname, zone: zoneOfDistrict(r.distid), hostype: r.hostype,
+            hospcode: hc, hosname: r.hosname, distid: r.distid, distname: r.distname, zone: distZone.get(String(r.distid)) || null, hostype: r.hostype,
             dept_id: r.dept_id, dept_name: r.dept_name, main_id: r.main_id, main_name: r.main_indicator_name, yut_id: r.yut_id, yut_name: r.yut_name,
             last_actual: f.last_idx !== null ? String(r[MONTH_KEYS[f.last_idx]]) : null, last_month: f.last_idx !== null ? MONTH_LABELS[f.last_idx] : null,
             ...f, periodic: periodic.has(Number(r.indicator_id)),

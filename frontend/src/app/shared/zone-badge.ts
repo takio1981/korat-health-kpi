@@ -2,6 +2,7 @@ import { Component, Injectable, Input, OnChanges, OnDestroy, OnInit, ChangeDetec
 import { CommonModule } from '@angular/common';
 import { BehaviorSubject, Subscription } from 'rxjs';
 import { AuthService } from '../services/auth';
+import { setZoneNames, zoneLabel } from './zone';
 
 /**
  * ตาราง รหัสหน่วยบริการ → โซน (GET /hospital-zones) โหลดครั้งเดียวต่อการเข้าใช้ แล้วแชร์ให้ป้ายโซนทุกหน้า
@@ -14,9 +15,17 @@ export class HospitalZoneService {
   private loaded = false;
   readonly zones$ = new BehaviorSubject<Record<string, string>>({});
 
+  /** ชื่อโซน (GET /zones) → zoneLabel() ทุกหน้า — names$ เปลี่ยนเมื่อชื่อโซนเปลี่ยน */
+  readonly names$ = new BehaviorSubject<number>(0);
+  applyZoneNames(rows: { code: any; name?: any }[]) { setZoneNames(rows); this.names$.next(this.names$.value + 1); }
+
+  /** โหลดใหม่หลังแก้โซน (แท็บโซนในหน้าจัดการตัวชี้วัด) */
+  reload() { this.loaded = false; this.load(); }
+
   load() {
     if (this.loaded || this.loading || !localStorage.getItem('kpi_token')) return;
     this.loading = true;
+    this.authService.apiGet('/zones').subscribe({ next: (r: any) => { if (r?.success) this.applyZoneNames(r.data || []); }, error: () => {} });
     this.authService.getHospitalZones().subscribe({
       next: (res: any) => {
         this.loading = false;
@@ -37,12 +46,13 @@ export class HospitalZoneService {
   standalone: true,
   imports: [CommonModule],
   template: `<span *ngIf="value" class="inline-flex items-center px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 border border-violet-200 text-[10px] font-bold whitespace-nowrap align-middle shrink-0"
-    [title]="'โซน ' + value"><i class="fas fa-layer-group mr-1 text-[9px]"></i>โซน {{ value }}</span>`
+    [title]="label"><i class="fas fa-layer-group mr-1 text-[9px]"></i>โซน {{ value }}</span>`
 })
 export class ZoneBadgeComponent implements OnInit, OnChanges, OnDestroy {
   @Input() hospcode: any = '';
   @Input() zone: any = '';
   value = '';
+  get label() { return zoneLabel(this.value); }
   private svc = inject(HospitalZoneService);
   private cdr = inject(ChangeDetectorRef);
   private sub?: Subscription;

@@ -1,4 +1,4 @@
-// โซนของหน่วยบริการ (chospital.zone '1'–'6' ตามอำเภอ — กำหนด 30 ต.ค. 2569) — ใช้ร่วมทุกหน้าที่มีตัวกรองหน่วยบริการ/อำเภอ
+// โซนของหน่วยบริการ (chospital.zone — รหัส 1–99 + ชื่อโซน ตั้งที่แท็บ "โซน" ในหน้าจัดการตัวชี้วัด ตั้งแต่ 9 พ.ย. 2569) — ใช้ร่วมทุกหน้าที่มีตัวกรองหน่วยบริการ/อำเภอ
 // แถวจาก GET /hospitals และ GET /districts มีฟิลด์ zone (ว่าง = ยังไม่กำหนดโซน)
 
 /** รายการโซนที่พบในข้อมูล (ไม่ซ้ำ เรียงตามเลข) — ใช้สร้างตัวเลือก dropdown ตามขอบเขตที่ backend ส่งมา */
@@ -11,9 +11,19 @@ export function zoneOptions(rows: any[]): string[] {
   return Array.from(set).sort((a, b) => Number(a) - Number(b) || a.localeCompare(b));
 }
 
+// ชื่อโซน (GET /zones) — HospitalZoneService ตั้งค่าตอนโหลด ใช้ร่วมทุกหน้า (ไม่มีชื่อ = แสดงแค่ "โซน N")
+const _zoneNames = new Map<string, string>();
+export function setZoneNames(rows: { code: any; name?: any }[]): void {
+  _zoneNames.clear();
+  for (const r of rows || []) { const n = String(r?.name ?? '').trim(); if (n) _zoneNames.set(String(r.code).trim(), n); }
+}
+export function zoneName(zone: any): string { return _zoneNames.get(String(zone ?? '').trim()) || ''; }
+
 export function zoneLabel(zone: any): string {
   const z = String(zone ?? '').trim();
-  return z ? `โซน ${z}` : 'ไม่ระบุโซน';
+  if (!z) return 'ไม่ระบุโซน';
+  const n = zoneName(z);
+  return n ? `โซน ${z} · ${n}` : `โซน ${z}`;
 }
 
 /** แถว (หน่วยบริการ/อำเภอ) อยู่ในโซนที่เลือกหรือไม่ — ไม่เลือกโซน (ค่าว่าง / array ว่าง) = ผ่านทุกแถว */

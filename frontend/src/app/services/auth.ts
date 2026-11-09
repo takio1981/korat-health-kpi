@@ -1759,4 +1759,8 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
   apiPut(path: string, body: any): Observable<any> {
     return this.http.put(`${this.apiUrl}${path}`, body, { headers: this.bkHeaders() });
   }
+
+  apiDelete(path: string): Observable<any> {
+    return this.http.delete(`${this.apiUrl}${path}`, { headers: this.bkHeaders() });
+  }
 }

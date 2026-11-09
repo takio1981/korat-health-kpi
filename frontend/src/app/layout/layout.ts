@@ -9,7 +9,7 @@ import Swal from 'sweetalert2';
 import { filter, map, mergeMap } from 'rxjs/operators';
 import { Title } from '@angular/platform-browser';
 import { CommandPaletteComponent } from '../shared/command-palette/command-palette';
-import { ZoneBadgeComponent } from '../shared/zone-badge';
+import { ZoneBadgeComponent, HospitalZoneService } from '../shared/zone-badge';
 
 @Component({
   selector: 'app-layout',
@@ -86,6 +86,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
     return this.authService.canAccessPage(pageKey);
   }
 
+  private hospitalZoneService = inject(HospitalZoneService);
+
   ngOnInit() {
     this.currentUser = this.authService.getUser();
     const role = this.authService.getUserRole();
@@ -98,6 +100,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
     // (เดิมเรียกซ้ำจาก app.ts ด้วย ทำให้ทุกหน้ารวมถึงหน้า login ยิง GET /settings ก่อน login เสมอ ได้ 401
     // ค้างใน console โดยไม่จำเป็น — เอาออกแล้ว)
     this.idleTimeoutService.start();
+    // ชื่อโซน (หน้าจัดการโซน 9 พ.ย. 2569) — โหลดครั้งเดียวหลังเข้าสู่ระบบ ให้ตัวกรอง/ป้ายโซนทุกหน้าแสดง "โซน N · ชื่อ"
+    this.hospitalZoneService.load();
     this.loadSettings();
     this.loadPendingCount();
     this.loadUnreadNotifCount();

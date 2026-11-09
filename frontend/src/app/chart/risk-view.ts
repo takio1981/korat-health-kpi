@@ -9,6 +9,7 @@ import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import { CONDITION_SYMBOL, normalizeCondition } from '../shared/kpi-target';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { ZoneBadgeComponent } from '../shared/zone-badge';
+import { zoneLabel } from '../shared/zone';
 import { AiForecastPanelComponent } from '../shared/ai-forecast-panel';
 
 export const RISK_MONTHS = ['ต.ค.', 'พ.ย.', 'ธ.ค.', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.'];
@@ -45,7 +46,7 @@ export function riskOptions(items: any[]) {
   return {
     yuts: uniq(x => String(x.yut_id ?? '0'), x => x.yut_name || 'ไม่ระบุยุทธศาสตร์'),
     depts: uniq(x => (x.dept_id == null ? '' : String(x.dept_id)), x => x.dept_name || '-'),
-    zones: uniq(x => (x.zone ? String(x.zone) : ''), x => 'โซน ' + x.zone),
+    zones: uniq(x => (x.zone ? String(x.zone) : ''), x => zoneLabel(x.zone)),
     districts: uniq(x => (x.distid ? String(x.distid) : ''), x => x.distname || x.distid),
   };
 }
