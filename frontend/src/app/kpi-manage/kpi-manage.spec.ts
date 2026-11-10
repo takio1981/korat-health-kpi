@@ -248,6 +248,19 @@ describe('KpiManageComponent', () => {
       expect(component.modalFiscalYears).toEqual(['2570']);
     });
 
+    it('ปีงบประมาณแบบ dropdown: ตัวเลือก = ปีที่ยังไม่ได้เลือก, เพิ่ม/เอาออกแล้วตัวเลือกเปลี่ยนตาม', () => {
+      component.setModalFiscalYears(['2570']);
+      expect(component.modalFiscalYearAvailable).not.toContain('2570');
+      const other = component.modalFiscalYearAvailable[0];
+      component.addModalFiscalYear(other);
+      component.addModalFiscalYear('');        // ตัวเลือกว่าง ("+ เลือกปีงบประมาณ") = ไม่เปลี่ยน
+      expect(component.modalFiscalYears).toEqual([other, '2570'].sort());
+      expect(component.modalFiscalYearAvailable).not.toContain(other);
+      component.removeModalFiscalYear('2570');
+      expect(component.modalFiscalYears).toEqual([other]);
+      expect(component.modalFiscalYearAvailable).toContain('2570');
+    });
+
     it('เรียก API ด้วยรายการ ปีงบ และส่วนที่จะปรับ', () => {
       const http = TestBed.inject(HttpTestingController);
       (component as any).authService.applyKhdTypes([2], '2570', ['hostype']).subscribe();

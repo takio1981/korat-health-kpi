@@ -416,10 +416,23 @@ export class KpiManageComponent implements OnInit {
     const single = items.length === 1;
     const cur = single ? this.getFiscalYears(items[0]) : [String(getCurrentFiscalYear())];
     const nowFy = String(getCurrentFiscalYear());
-    const boxes = fiscalYearChoices(getCurrentFiscalYear(), items.map(i => i.khd_fiscal_year)).map(y =>
-      `<label class="inline-flex items-center gap-1 px-2 py-1 border rounded-lg mr-1 mb-1 cursor-pointer text-sm">` +
-      `<input type="checkbox" class="fy-choice" value="${y}" ${cur.includes(y) ? 'checked' : ''}> ปีงบ ${y}` +
-      (y === nowFy ? ' <span class="text-[10px] text-emerald-600">(ปัจจุบัน)</span>' : '') + `</label>`).join('');
+    // dropdown เลือกปี → เพิ่มเป็นป้าย (กด × เอาออก) — เลือกได้หลายปี
+    const choices = fiscalYearChoices(getCurrentFiscalYear(), items.map(i => i.khd_fiscal_year));
+    let picked = choices.filter(y => cur.includes(y));
+    const render = () => {
+      const sel = document.getElementById('fy-select') as HTMLSelectElement | null;
+      const chips = document.getElementById('fy-chips');
+      if (!sel || !chips) return;
+      const avail = choices.filter(y => !picked.includes(y));
+      sel.innerHTML = `<option value="">${avail.length ? '+ เลือกปีงบประมาณ' : 'เลือกครบทุกปีแล้ว'}</option>` +
+        avail.map(y => `<option value="${y}">ปีงบ ${y}${y === nowFy ? ' (ปัจจุบัน)' : ''}</option>`).join('');
+      sel.disabled = !avail.length;
+      chips.innerHTML = picked.length
+        ? picked.map(y => `<span class="fy-chip inline-flex items-center gap-1 px-2.5 py-1 bg-teal-600 text-white rounded-lg text-sm font-bold mr-1 mb-1" data-fy="${y}">` +
+            `ปีงบ ${y} <button type="button" class="fy-remove" data-fy="${y}" title="เอาออก">✕</button></span>`).join('')
+        : '<span class="text-xs text-gray-500">ยังไม่เลือก = ไม่ระบุปีงบ</span>';
+    };
+    const boxes = `<select id="fy-select" class="swal2-select" style="margin:0 0 8px 0;width:100%;max-width:100%"></select><div id="fy-chips"></div>`;
     const mode = single ? '' : `<div class="text-sm mt-2 text-left"><label class="mr-3"><input type="radio" name="fy-mode" value="replace" checked> แทนที่ปีงบเดิม</label>` +
       `<label><input type="radio" name="fy-mode" value="add"> เพิ่มต่อจากปีงบเดิม</label></div>`;
     const head = single ? `<p class="text-sm mb-2">${esc(items[0].kpi_indicators_name)}</p>` : `<p class="text-sm mb-2">ตั้งปีงบของ <b>${items.length}</b> ตัวชี้วัด</p>`;
@@ -428,8 +441,20 @@ export class KpiManageComponent implements OnInit {
       html: head + `<div id="fy-choices" class="text-left">${boxes}</div>${mode}` +
         `<p class="text-[11px] text-gray-500 mt-2">ไม่เลือกปีใดเลย = ไม่ระบุปีงบ — ตัวชี้วัดที่มีใน KHD ใช้ปีงบตาม KHD ได้จาก "เทียบกับ KHD"</p>`,
       showCancelButton: true, confirmButtonColor: '#10b981', confirmButtonText: 'บันทึก', cancelButtonText: 'ยกเลิก',
+      didOpen: () => {
+        render();
+        document.getElementById('fy-select')?.addEventListener('change', (e) => {
+          const y = (e.target as HTMLSelectElement).value;
+          if (y && !picked.includes(y)) picked = [...picked, y].sort();
+          render();
+        });
+        document.getElementById('fy-chips')?.addEventListener('click', (e) => {
+          const b = (e.target as HTMLElement).closest('.fy-remove') as HTMLElement | null;
+          if (b) { picked = picked.filter(y => y !== b.dataset['fy']); render(); }
+        });
+      },
       preConfirm: () => {
-        const years = Array.from(document.querySelectorAll<HTMLInputElement>('.fy-choice')).filter(b => b.checked).map(b => b.value);
+        const years = [...picked];
         const m = (document.querySelector<HTMLInputElement>('input[name="fy-mode"]:checked')?.value || 'replace') as 'replace' | 'add';
         if (m === 'add' && !years.length) { Swal.showValidationMessage('กรุณาเลือกปีงบที่จะเพิ่ม'); return false; }
         return { years, mode: m };
@@ -492,12 +517,27 @@ export class KpiManageComponent implements OnInit {
   // ปีงบประมาณในหน้าต่างเพิ่ม/แก้ไขตัวชี้วัด (ตัวเลือกคำนวณตอนเปิดหน้าต่าง — ไม่ใช่ getter กัน NG0103)
   modalFiscalYears: string[] = [];
   modalFiscalYearChoices: string[] = [];
+  modalFiscalYearAvailable: string[] = [];   // ตัวเลือกใน dropdown = ปีที่ยังไม่ได้เลือก
+  readonly currentFiscalYearText = String(getCurrentFiscalYear());
   setModalFiscalYears(years: string[]) {
     this.modalFiscalYears = [...years];
     this.modalFiscalYearChoices = fiscalYearChoices(getCurrentFiscalYear(), years);
+    this.syncModalFiscalYearAvailable();
+  }
+  private syncModalFiscalYearAvailable() {
+    this.modalFiscalYearAvailable = this.modalFiscalYearChoices.filter(y => !this.modalFiscalYears.includes(y));
+  }
+  addModalFiscalYear(y: string) {
+    if (!y || this.modalFiscalYears.includes(y)) return;
+    this.modalFiscalYears = [...this.modalFiscalYears, y].sort();
+    this.syncModalFiscalYearAvailable();
+  }
+  removeModalFiscalYear(y: string) {
+    this.modalFiscalYears = this.modalFiscalYears.filter(x => x !== y);
+    this.syncModalFiscalYearAvailable();
   }
   toggleModalFiscalYear(y: string) {
-    this.modalFiscalYears = this.modalFiscalYears.includes(y) ? this.modalFiscalYears.filter(x => x !== y) : [...this.modalFiscalYears, y].sort();
+    if (this.modalFiscalYears.includes(y)) this.removeModalFiscalYear(y); else this.addModalFiscalYear(y);
   }
 
   // badge แหล่งที่มาข้อมูล — 3 สถานะ ตาม data_source/khd_report_id (link ถาวรกับ KHD reports.report_id ผ่าน table_process)
