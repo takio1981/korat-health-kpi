@@ -690,6 +690,10 @@
                           <i class="fas text-[8px]" [ngClass]="cumBadge.icon"></i>{{ cumBadge.label }}<span *ngIf="cumBadge.formula" class="font-mono font-normal truncate max-w-[180px]">: {{ cumBadge.formula }}</span>
                         </span>
                       </ng-container>
+                      <span *ngIf="quarterBadgeText(item)" class="quarter-badge inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap bg-sky-100 text-sky-700 border border-sky-200"
+                            [title]="quarterBadgeTitle(item)">
+                        <i class="fas fa-calendar-week text-[8px]"></i>{{ quarterBadgeText(item) }}
+                      </span>
                       <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap"
                             [ngClass]="getSourceBadge(item).color" [title]="getSourceBadge(item).title">
                         <i class="fas text-[8px]" [ngClass]="getSourceBadge(item).icon"></i>{{ getSourceBadge(item).label }}
@@ -776,7 +780,7 @@
                              [ngClass]="isMonthTargetChanged(item, month.key) ? '!bg-orange-100 !text-orange-700 ring-2 ring-orange-400 font-bold' : ''">
                       <span *ngIf="!canShowMonthTargetInput(item)">เป้า {{ item['t_' + month.key] || '-' }}</span>
                     </div>
-                    <div *ngIf="!isRowLocked(item) && canEditActual" class="flex items-center gap-0.5">
+                    <div *ngIf="!isRowLocked(item) && canEditActual && !isQuarterOffMonth(item, month.key)" class="flex items-center gap-0.5">
                       <input type="text" [(ngModel)]="item[month.key]" (ngModelChange)="onValueChange(item, month.key)"
                              class="w-full min-w-0 border border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:border-green-500 hover:border-green-400 transition-colors"
                              [ngClass]="item._anomaly?.[month.key] ? 'bg-red-100 font-bold text-red-700 ring-2 ring-red-500' : (isModified(item, month.key) ? 'bg-orange-200 font-bold text-red-600 ring-2 ring-orange-400' : (isPendingValue(item[month.key]) ? 'bg-amber-100 text-amber-700 text-[9px] font-bold' : 'bg-white'))">
@@ -788,7 +792,8 @@
                       </button>
                     </div>
                     <p *ngIf="item._anomaly?.[month.key] as an" class="mt-0.5 text-[9px] leading-tight text-red-600 text-left"><i class="fas fa-exclamation-triangle mr-0.5"></i>{{ an.message }}</p>
-                    <span *ngIf="isRowLocked(item) || !canEditActual" class="block font-bold text-gray-600">{{ (item[month.key] && item[month.key] !== '0') ? item[month.key] : '-' }}</span>
+                    <span *ngIf="isRowLocked(item) || !canEditActual || isQuarterOffMonth(item, month.key)" class="block font-bold text-gray-600" [title]="isQuarterOffMonth(item, month.key) ? 'ตัวชี้วัดนี้บันทึกรายไตรมาส — กรอกที่เดือนสุดท้ายของไตรมาส' : ''">{{ (item[month.key] && item[month.key] !== '0') ? item[month.key] : '-' }}</span>
+                    <p *ngIf="quarterCellText(item, month.key)" class="mt-0.5 text-[9px] text-sky-700 font-bold">{{ quarterCellText(item, month.key) }}</p>
                   </div>
                 </div>
 
@@ -1216,6 +1221,10 @@
                           <i class="fas text-[7px]" [ngClass]="cumBadge.icon"></i>{{ cumBadge.label }}<span *ngIf="cumBadge.formula" class="font-mono font-normal truncate max-w-[220px]">: {{ cumBadge.formula }}</span>
                         </span>
                       </ng-container>
+                      <span *ngIf="quarterBadgeText(item)" class="quarter-badge inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] font-bold whitespace-nowrap bg-sky-100 text-sky-700 border border-sky-200 shrink-0 mt-0.5"
+                            [title]="quarterBadgeTitle(item)">
+                        <i class="fas fa-calendar-week text-[7px]"></i>{{ quarterBadgeText(item) }}
+                      </span>
                       <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] font-bold whitespace-nowrap shrink-0 mt-0.5"
                             [ngClass]="getSourceBadge(item).color" [title]="getSourceBadge(item).title">
                         <i class="fas text-[7px]" [ngClass]="getSourceBadge(item).icon"></i>{{ getSourceBadge(item).label }}
@@ -1305,14 +1314,15 @@
                            [ngClass]="isMonthTargetChanged(item, m) ? '!bg-orange-100 !text-orange-700 ring-2 ring-orange-400 font-bold' : ''">
                     <span *ngIf="!canShowMonthTargetInput(item)">เป้า {{ item['t_' + m] || '-' }}</span>
                   </div>
-                  <span *ngIf="(!isEditing && !isSingleEditing(item)) || isRowLocked(item) || !canEditActual">
+                  <span *ngIf="(!isEditing && !isSingleEditing(item)) || isRowLocked(item) || !canEditActual || isQuarterOffMonth(item, m)"
+                        [title]="isQuarterOffMonth(item, m) && (isEditing || isSingleEditing(item)) ? 'ตัวชี้วัดนี้บันทึกรายไตรมาส — กรอกที่เดือนสุดท้ายของไตรมาส (ธ.ค./มี.ค./มิ.ย./ก.ย.)' : ''">
                     <span *ngIf="isPendingValue(item[m])" class="inline-flex items-center gap-0.5 px-1 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded text-[9px] font-bold" title="กำลังดำเนินการ">
                       <i class="fas fa-hourglass-half text-[8px]"></i>กำลังดำเนินการ
                     </span>
                     <ng-container *ngIf="!isPendingValue(item[m])">{{ (item[m] && item[m] !== '0') ? item[m] : '-' }}</ng-container>
                     <i *ngIf="hasFormData(item, m)" class="fas fa-clipboard-check text-purple-400 text-[8px] ml-0.5" title="ข้อมูลจากแบบฟอร์ม"></i>
                   </span>
-                  <div *ngIf="(isEditing || isSingleEditing(item)) && !isRowLocked(item) && canEditActual" class="flex items-center gap-0.5">
+                  <div *ngIf="(isEditing || isSingleEditing(item)) && !isRowLocked(item) && canEditActual && !isQuarterOffMonth(item, m)" class="flex items-center gap-0.5">
                     <!-- ช่องเดือนแคบ — ค่า "กำลังดำเนินการ" แสดงเป็นป้าย 2 บรรทัดแทน input (กด ⏳ อีกครั้งเพื่อล้างแล้วกรอกค่าใหม่) -->
                     <span *ngIf="isPendingValue(item[m])"
                           class="flex-1 min-w-0 px-0.5 py-0.5 rounded border text-[9px] leading-tight font-bold text-center whitespace-normal"
@@ -1330,6 +1340,8 @@
                       <i class="fas fa-hourglass-half"></i>
                     </button>
                   </div>
+                  <!-- วัดผลรายไตรมาส (10 พ.ย. 2569): เดือนสุดท้ายของไตรมาสแสดงเลขไตรมาส (+ ค่าของไตรมาสเมื่อบันทึกรายเดือน) -->
+                  <div *ngIf="quarterCellText(item, m)" class="mt-0.5 text-[9px] font-bold text-sky-700 whitespace-nowrap">{{ quarterCellText(item, m) }}</div>
                 </td>
               </tr>
 

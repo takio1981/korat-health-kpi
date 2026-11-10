@@ -153,7 +153,8 @@ export function parseImportAoa(aoa: any[][]): ParsedImport {
 }
 
 export interface CellChange { item: any; field: string; oldVal: string; newVal: string }
-export interface EditPerms { canEditActual: boolean; canEditTarget: boolean; rowLocked?: (item: any) => boolean }  // rowLocked = นับเหมือนแถวล็อค (เช่น หน่วยบริการอื่น)
+// rowLocked = นับเหมือนแถวล็อค (เช่น หน่วยบริการอื่น) | cellLocked = ช่องที่ปิดการกรอก (เช่น เดือนกลางไตรมาสของตัวชี้วัดที่บันทึกรายไตรมาส) นับเป็น "ไม่มีสิทธิ์"
+export interface EditPerms { canEditActual: boolean; canEditTarget: boolean; rowLocked?: (item: any) => boolean; cellLocked?: (item: any, field: string) => boolean }
 export interface ChangePlan {
   changes: CellChange[];
   same: number;            // ค่าเท่าเดิม
@@ -189,7 +190,7 @@ function considerCell(plan: ChangePlan, item: any, field: string, raw: any, perm
   if (sameValue(oldVal, newVal)) { plan.same++; return; }
   if (item.is_locked || perms.rowLocked?.(item)) { plan.locked++; return; }
   const allowed = field === 'target_value' || field.startsWith('cv_') || field.startsWith('t_') ? perms.canEditTarget : perms.canEditActual;  // ค่าฐาน/ค่าเพิ่มเติม/เป้าหมายรายเดือน = สิทธิ์เดียวกับเป้าหมาย
-  if (!allowed) { plan.noPerm++; return; }
+  if (!allowed || perms.cellLocked?.(item, field)) { plan.noPerm++; return; }
   if (newVal.length > MAX_VALUE_LENGTH) { plan.tooLong++; return; }
   plan.changes.push({ item, field, oldVal, newVal });
 }

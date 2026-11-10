@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
-import { KpiManageComponent, resultMethodOf, applyResultMethod } from './kpi-manage';
+import { KpiManageComponent, resultMethodOf, applyResultMethod, quarterModeParts, quarterModeFrom, setQuarterMode } from './kpi-manage';
 import { testProviders } from '../testing/test-providers';
 
 describe('KpiManageComponent', () => {
@@ -523,6 +523,50 @@ describe('KpiManageComponent', () => {
       expect(component.formulaTestResult?.value).toBe('4');
       expect(component.formulaTestResult?.pct).toBe(127.27);
       expect(component.pctTestResult).toBe(127.27);
+    });
+  });
+
+  describe('รอบการวัดผล (quarter_mode — 10 พ.ย. 2569)', () => {
+    it('quarterModeParts ↔ quarterModeFrom', () => {
+      expect(quarterModeParts('')).toEqual({ period: 'month', entry: 'month', agg: 'sum' });
+      expect(quarterModeParts('quarter')).toEqual({ period: 'quarter', entry: 'quarter', agg: 'sum' });
+      expect(quarterModeParts('month_avg')).toEqual({ period: 'quarter', entry: 'month', agg: 'avg' });
+      expect(quarterModeFrom({ period: 'month', entry: 'quarter', agg: 'avg' })).toBe('');
+      expect(quarterModeFrom({ period: 'quarter', entry: 'quarter', agg: 'avg' })).toBe('quarter');
+      expect(quarterModeFrom({ period: 'quarter', entry: 'month', agg: 'last' })).toBe('month_last');
+    });
+
+    it('เปลี่ยนรอบการวัดผล → วิธีคิดผลงาน "ค่าไตรมาสล่าสุด" ตามค่าของไตรมาส (วิธีอื่นที่ตั้งไว้คงเดิม)', () => {
+      const it: any = { result_formula: '', is_cumulative: false, quarter_mode: '' };
+      setQuarterMode(it, 'month_sum');
+      expect(it.result_formula).toBe('LASTQ(SUM)');
+      expect(resultMethodOf(it)).toBe('quarter');
+      setQuarterMode(it, 'month_avg');
+      expect(it.result_formula).toBe('LASTQ(AVG)');
+      setQuarterMode(it, 'quarter');
+      expect(it.result_formula).toBe('');
+      expect(resultMethodOf(it)).toBe('last');
+      const cum: any = { result_formula: '', is_cumulative: true, quarter_mode: '' };
+      setQuarterMode(cum, 'month_sum');
+      expect(cum.result_formula).toBe('');
+      expect(resultMethodOf(cum)).toBe('sum');
+    });
+
+    it('ตัวเลือกในหน้าต่าง: รายไตรมาส + บันทึกรายเดือน + เฉลี่ย → quarter_mode และรายการวิธีคิดผลงานมี "ค่าไตรมาสล่าสุด"', () => {
+      component.currentItem = { result_formula: '', is_cumulative: false, quarter_mode: '' };
+      expect(component.resultMethodOptions).toBe(component.RESULT_METHODS);
+      component.quarterPeriod = 'quarter';
+      expect(component.currentItem.quarter_mode).toBe('month_sum');   // ค่าตั้งต้น = บันทึกรายเดือนเหมือนเดิม รวม 3 เดือน
+      component.quarterEntry = 'quarter';
+      expect(component.currentItem.quarter_mode).toBe('quarter');
+      component.quarterEntry = 'month';
+      component.quarterAgg = 'avg';
+      expect(component.currentItem.quarter_mode).toBe('month_avg');
+      expect(component.resultMethod).toBe('quarter');
+      expect(component.resultMethodOptions).toBe(component.RESULT_METHODS_QUARTER);
+      component.quarterPeriod = 'month';
+      expect(component.currentItem.quarter_mode).toBe('');
+      expect(component.currentItem.result_formula).toBe('');
     });
   });
 });

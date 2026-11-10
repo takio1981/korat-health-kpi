@@ -144,6 +144,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 MIN(i.custom_vars) AS custom_vars, -- ค่าเพิ่มเติมที่ตั้งชื่อเอง [{key,label}] (25 ต.ค. 2569)
                 MIN(i.pct_formula) AS pct_formula, -- สูตรร้อยละ (ว่าง = ตามเงื่อนไขเป้าหมาย)
                 MIN(i.result_manual) AS result_manual, MIN(i.pct_manual) AS pct_manual, -- ผลงานล่าสุด/ร้อยละ แบบกรอกเอง (29 ต.ค. 2569)
+                MIN(i.quarter_mode) AS quarter_mode, -- วัดผลรายไตรมาส: 'quarter' | 'month_sum' | 'month_last' | 'month_avg' | NULL = รายเดือน (10 พ.ย. 2569)
                 MIN(i.target_monthly) AS target_monthly, -- เป้าหมายรายเดือน: 'latest' | 'cumulative' | NULL (เป้าหมายเดียวทั้งปี)
                 r.hospcode,
                 MIN(h.hosname) AS hosname,
@@ -845,6 +846,26 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
                 message: `บันทึกตัวชี้วัดทั้งหมด ${updates.length} รายการเรียบร้อยแล้ว (เขียนทับ)`,
                 inserted: updates.length
             });
+        }
+
+        // ตัวชี้วัดรายไตรมาสที่บันทึกรายไตรมาส (quarter_mode = 'quarter' — 10 พ.ย. 2569): บันทึกผลงานได้เฉพาะเดือนสุดท้ายของไตรมาส (ธ.ค./มี.ค./มิ.ย./ก.ย.)
+        // เดือนอื่นต้องว่างหรือเท่าค่าเดิมในฐานข้อมูล (ข้อมูลเดิมก่อนเปลี่ยนโหมดคงไว้/ล้างได้) — ไม่งั้น 400 ทั้งคำขอ
+        const [qRows] = mtIds.length ? await connection.query("SELECT id FROM kpi_indicators WHERE id IN (?) AND quarter_mode = 'quarter'", [mtIds]) : [[]];
+        if (qRows.length) {
+            const qIds = new Set(qRows.map(r => Number(r.id)));
+            for (const row of updates) {
+                if (!qIds.has(Number(row.indicator_id))) continue;
+                const hc = (ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
+                const [old] = await connection.query('SELECT month_bh, actual_value FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?', [row.indicator_id, row.year_bh, hc]);
+                for (const m of months) {
+                    if (kpiFormula.isQuarterEntryMonth('quarter', m.val)) continue;
+                    const nv = String(row[m.col] ?? '').trim();
+                    const ov = String((old.find(o => Number(o.month_bh) === m.val) || {}).actual_value ?? '').trim();
+                    if (nv !== '' && nv !== ov) {
+                        throw Object.assign(new Error('ตัวชี้วัดนี้บันทึกผลงานรายไตรมาส — บันทึกได้เฉพาะเดือน ธ.ค. มี.ค. มิ.ย. และ ก.ย. (ตัวชี้วัด ID ' + row.indicator_id + ')'), { status: 400, code: 'QUARTER_ENTRY_ONLY' });
+                    }
+                }
+            }
         }
 
         // ตัวชี้วัดเป้าหมายรายเดือนที่แถวไม่ได้ส่ง t_* (เช่น แก้เป้าหมายรายข้อ/บันทึกจากหน้าจออื่น) → คงเป้าหมายรายเดือนเดิมจากฐานข้อมูล

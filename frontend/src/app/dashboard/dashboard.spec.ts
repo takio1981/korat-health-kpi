@@ -1044,4 +1044,37 @@ describe('DashboardComponent', () => {
       expect(c.isForeignRow(other)).toBe(false);
     });
   });
+
+  describe('ตัวชี้วัดวัดผลรายไตรมาส (quarter_mode — 10 พ.ย. 2569)', () => {
+    it('บันทึกรายไตรมาส: ปิดการกรอกเดือนกลางไตรมาส เปิดเฉพาะ ธ.ค./มี.ค./มิ.ย./ก.ย. และไม่กระทบช่องอื่น', () => {
+      const item = row('2570', { quarter_mode: 'quarter', dece: '5' });
+      expect(component.MONTH_KEYS.filter(m => !component.isQuarterOffMonth(item, m))).toEqual(['dece', 'mar', 'jun', 'sep']);
+      expect(component.isQuarterOffMonth(item, 'target_value')).toBe(false);
+      expect(component.isQuarterOffMonth(row('2570'), 'nov')).toBe(false);
+      expect(component.quarterCellText(item, 'dece')).toBe('ไตรมาส 1');
+      expect(component.quarterCellText(item, 'nov')).toBe('');
+      expect(component.quarterBadgeText(item)).toBe('รายไตรมาส');
+    });
+
+    it('บันทึกรายเดือน: แสดงค่าของไตรมาสใต้เดือนสุดท้ายของไตรมาส + ผลงานไตรมาสล่าสุดตามสูตร LASTQ', () => {
+      const item: any = row('2570', { quarter_mode: 'month_sum', result_formula: 'LASTQ(SUM)', oct: '1', nov: '2', dece: '3', jan: '10' });
+      expect(component.isQuarterOffMonth(item, 'nov')).toBe(false);
+      expect(component.quarterCellText(item, 'dece')).toBe('ไตรมาส 1: 6');
+      expect(component.quarterCellText(item, 'mar')).toBe('ไตรมาส 2: 10');
+      expect(component.quarterCellText(item, 'jun')).toBe('ไตรมาส 3: -');
+      expect(component.quarterBadgeTitle(item)).toContain('ไตรมาส 1 = 6 | ไตรมาส 2 = 10');
+      item.mar = '20';
+      component.onValueChange(item, 'mar');
+      expect(item.last_actual).toBe('30');
+      expect(component.quarterBadgeText(row('2570'))).toBe('');
+    });
+
+    it('นำเข้า Excel: เดือนกลางไตรมาสของตัวชี้วัดบันทึกรายไตรมาสไม่นำเข้า (นับเป็นไม่มีสิทธิ์)', () => {
+      const items = [row('2570', { quarter_mode: 'quarter' })];
+      const file = parseImportAoa([['indicator_id', 'hospcode', 'ปีงบประมาณ', 'พ.ย.', 'ธ.ค.'], [1, '10871', 2570, 4, 9]]).rows;
+      const plan = planImport(file, items, { ...component.editPerms, canEditActual: true, canEditTarget: true });
+      expect(plan.changes.map(c => c.field)).toEqual(['dece']);
+      expect(plan.noPerm).toBe(1);
+    });
+  });
 });

@@ -81,7 +81,7 @@ async function computeForecasts(scope, opts = {}) {
     const [rows] = await db.query(`
         SELECT s.indicator_id, s.hospcode, s.hosname, s.distid, s.distname, s.hostype, s.dept_id, s.dept_name, s.target_value,
                ${MONTH_KEYS.map(k => 's.' + k).join(', ')},
-               i.kpi_indicators_name, i.target_condition, i.is_cumulative, i.result_formula, i.result_manual, i.target_monthly,
+               i.kpi_indicators_name, i.target_condition, i.is_cumulative, i.result_formula, i.result_manual, i.target_monthly, i.quarter_mode,
                mi.id AS main_id, mi.main_indicator_name, y.id AS yut_id, y.yut_name
         ${FROM_SQL} WHERE ${c.join(' AND ')}`, p);
 
@@ -119,6 +119,8 @@ async function computeForecasts(scope, opts = {}) {
         }
         for (const [id, n] of maxMonths) if (n > 0 && n < PERIODIC_MAX_MONTHS) periodic.add(id);
     }
+    // ตัวชี้วัดที่บันทึกรายไตรมาส (quarter_mode = 'quarter') เว้นเดือนกลางไตรมาสโดยเจตนา — ไม่ตรวจขาดการรายงาน (10 พ.ย. 2569)
+    for (const r of rows) if (r.quarter_mode === 'quarter') periodic.add(Number(r.indicator_id));
     const counts = { high: 0, watch: 0, no_report: 0, normal: 0, insufficient: 0, no_target: 0, unsupported: 0 };
     const items = [];
     for (const r of rows) {

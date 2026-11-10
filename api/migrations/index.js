@@ -604,6 +604,9 @@ const migrationsReady = (async () => {
         try { await db.query('ALTER TABLE kpi_summary ADD COLUMN IF NOT EXISTS manual_pct VARCHAR(30) NULL'); } catch (e) {}
         // เป้าหมายรายเดือน (29 ต.ค. 2569): 'latest' | 'cumulative' | NULL (เป้าหมายเดียวทั้งปี) — เป้าหมายแต่ละเดือนอยู่ใน kpi_results.target_value
         try { await db.query('ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS target_monthly VARCHAR(20) NULL'); } catch (e) {}
+        // วัดผลรายไตรมาส (10 พ.ย. 2569): NULL = รายเดือน (เดิม) | 'quarter' = บันทึกรายไตรมาส (เก็บที่ ธ.ค./มี.ค./มิ.ย./ก.ย.)
+        // | 'month_sum' / 'month_last' / 'month_avg' = บันทึกรายเดือน ค่าไตรมาส = รวม/เดือนสุดท้าย/เฉลี่ย (kpi-formula.js quarterValues)
+        try { await db.query('ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS quarter_mode VARCHAR(20) NULL'); } catch (e) {}
         try { await db.query("ALTER TABLE kpi_sub_indicators ADD COLUMN rollup_mode VARCHAR(10) NOT NULL DEFAULT 'manual'"); } catch (e) {}
         // ตัวชี้วัดหลายระดับ (19 ต.ค. 2569): ข้อย่อยมีข้อแม่เป็นข้อย่อยได้ — NULL = ข้อย่อยระดับบนสุด (ข้อมูลเดิมทั้งหมด)
         try { await db.query('ALTER TABLE kpi_sub_indicators ADD COLUMN parent_sub_id INT NULL AFTER indicator_id'); } catch (e) {}

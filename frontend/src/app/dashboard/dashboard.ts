@@ -10,7 +10,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { InitScrollLeftDirective } from './init-scroll-left.directive';
 import { CriteriaTextPipe } from '../shared/criteria-text.pipe';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
-import { activeFormula, validateFormula, evaluateFormula } from '../shared/kpi-formula';
+import { activeFormula, validateFormula, evaluateFormula, normalizeQuarterMode, quarterValues, isQuarterEntryMonth } from '../shared/kpi-formula';
 import { CustomVarDef, customVarDefsFor, customValuesOf, evaluatePct, pctFormulaOf, parseCustomVars } from '../shared/custom-vars';
 import { isManualResult, isManualPct, manualPctNumber, manualPctPass, normalizeManualPct } from '../shared/manual-result';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
@@ -3224,6 +3224,36 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.isManualFieldChanged(item, 'manual_pct')) out['manual_pct'] = normalizeManualPct(item.manual_pct) ?? String(item.manual_pct ?? '').trim();
     return out;
   }
+  // ===== วัดผลรายไตรมาส (quarter_mode — 10 พ.ย. 2569) =====
+  // 'quarter' = บันทึกรายไตรมาส: กรอกได้เฉพาะเดือนสุดท้ายของไตรมาส (backend /update-kpi ตรวจซ้ำ) | 'month_*' = บันทึกรายเดือน แสดงค่าไตรมาสใต้เดือนสุดท้ายของไตรมาส
+  readonly QUARTER_END_KEYS: Record<string, number> = { dece: 1, mar: 2, jun: 3, sep: 4 };
+  isQuarterly(item: any): boolean { return !!normalizeQuarterMode(item?.quarter_mode); }
+  isQuarterEntry(item: any): boolean { return normalizeQuarterMode(item?.quarter_mode) === 'quarter'; }
+  /** เดือนนี้ปิดการกรอก (ตัวชี้วัดบันทึกรายไตรมาส และไม่ใช่เดือนสุดท้ายของไตรมาส) */
+  isQuarterOffMonth(item: any, m: string): boolean {
+    return this.isQuarterEntry(item) && this.MONTH_KEYS.includes(m) && !isQuarterEntryMonth(item?.quarter_mode, m);
+  }
+  /** ข้อความใต้ช่องเดือนสุดท้ายของไตรมาส: "ไตรมาส 2" หรือ "ไตรมาส 2: 30" (บันทึกรายเดือน) — ไม่ใช่ = '' */
+  quarterCellText(item: any, m: string): string {
+    const q = this.QUARTER_END_KEYS[m];
+    if (!q || !this.isQuarterly(item)) return '';
+    if (this.isQuarterEntry(item)) return 'ไตรมาส ' + q;
+    const v = quarterValues(item.quarter_mode, item)[q - 1];
+    return 'ไตรมาส ' + q + ': ' + (v ?? '-');
+  }
+  quarterBadgeText(item: any): string {
+    const m = normalizeQuarterMode(item?.quarter_mode);
+    return !m ? '' : m === 'quarter' ? 'รายไตรมาส' : 'ไตรมาส (บันทึกรายเดือน)';
+  }
+  quarterBadgeTitle(item: any): string {
+    const m = normalizeQuarterMode(item?.quarter_mode);
+    if (!m) return '';
+    const vals = quarterValues(m, item).map((v, i) => `ไตรมาส ${i + 1} = ${v ?? '-'}`).join(' | ');
+    const how = m === 'quarter' ? 'บันทึกไตรมาสละ 1 ค่าที่เดือน ธ.ค. / มี.ค. / มิ.ย. / ก.ย.'
+      : 'บันทึกรายเดือน — ค่าไตรมาส = ' + (m === 'month_sum' ? 'รวม 3 เดือน' : m === 'month_avg' ? 'เฉลี่ย 3 เดือน' : 'ค่าเดือนสุดท้ายที่บันทึกในไตรมาส');
+    return `วัดผลรายไตรมาส: ${how}\n${vals}`;
+  }
+
   // ===== เป้าหมายรายเดือน (target_monthly — 29 ต.ค. 2569) =====
   // ช่องเป้าหมาย (บน) คู่กับผลงาน (ล่าง) ในแต่ละเดือน — ค่าอยู่ในแถวเป็น t_<เดือน> | คอลัมน์ "เป้าหมาย" = เป้าหมายรวม
   // ('latest' = เป้าเดือนของผลงานล่าสุด / 'cumulative' = รวมเป้าถึงเดือนนั้น — aggregateMonthlyTarget() สำเนาเดียวกับ backend) แก้ตรงไม่ได้
@@ -4031,7 +4061,8 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   // (สิทธิ์/การล็อค/การยืนยัน ใช้เส้นทางบันทึกเดิมทั้งหมด) | ตรรกะอยู่ใน shared/kpi-excel.ts
   // =====================================================================================================
   get editPerms(): EditPerms {
-    return { canEditActual: this.canEditActual, canEditTarget: this.canEditTarget, rowLocked: (i: any) => this.isForeignRow(i) };
+    return { canEditActual: this.canEditActual, canEditTarget: this.canEditTarget, rowLocked: (i: any) => this.isForeignRow(i),
+      cellLocked: (i: any, field: string) => this.isQuarterOffMonth(i, field) };
   }
 
   /** ดาวน์โหลดแบบฟอร์ม Excel ของแถวที่แสดงอยู่ (พร้อมค่าปัจจุบัน) — กรอกแล้วนำเข้ากลับได้ */

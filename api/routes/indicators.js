@@ -5,6 +5,7 @@
 const db = require('../db');
 const kpiRollup = require('../kpi-rollup');
 const { normalizeTargetMonthly } = require('../kpi-target');
+const { normalizeQuarterMode } = require('../kpi-formula');
 const { ROLE_ADMIN_ALL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, foreignWriteHospcodes, getDistrictId, getPermsForUser, hasPageAccess, requireAction } = require('../core/access');
 const { ROLLED_SUB_MESSAGE, activeSubTree, getHierarchyMaxLevels, loadSubAggregates, rolledSubIds, subLevelIn } = require('../services/hierarchy');
 const { _actorLabel, normTargetCondition, normalizeEvalMode, normalizeOffTypes } = require('../services/indicator-fields');
@@ -306,7 +307,7 @@ apiRouter.put('/indicators/:id', authenticateToken, requireAction('kpi-manage', 
         let diff = '';
         let calcChanged = false; // สูตร/สะสม เปลี่ยน → ต้องคำนวณ kpi_summary ใหม่
         try {
-            const [oldRow] = await db.query('SELECT kpi_indicators_name, is_active, table_process, target_percentage, criterion, is_cumulative, result_formula, result_manual, pct_manual, target_monthly FROM kpi_indicators WHERE id = ?', [req.params.id]);
+            const [oldRow] = await db.query('SELECT kpi_indicators_name, is_active, table_process, target_percentage, criterion, is_cumulative, result_formula, result_manual, pct_manual, target_monthly, quarter_mode FROM kpi_indicators WHERE id = ?', [req.params.id]);
             if (oldRow[0]) {
                 const o = oldRow[0];
                 const changes = [];
@@ -331,6 +332,10 @@ apiRouter.put('/indicators/:id', authenticateToken, requireAction('kpi-manage', 
                     const nv = normalizeTargetMonthly(req.body.target_monthly);
                     changes.push(`เป้าหมาย→${nv === 'latest' ? 'รายเดือน (ล่าสุด)' : nv === 'cumulative' ? 'รายเดือน (สะสม)' : 'ค่าเดียวทั้งปี'}`);
                     calcChanged = true;
+                }
+                if (req.body.quarter_mode !== undefined && normalizeQuarterMode(o.quarter_mode) !== normalizeQuarterMode(req.body.quarter_mode)) {
+                    const QL = { quarter: 'รายไตรมาส (บันทึกรายไตรมาส)', month_sum: 'รายไตรมาส (รวม 3 เดือน)', month_last: 'รายไตรมาส (เดือนสุดท้าย)', month_avg: 'รายไตรมาส (เฉลี่ย 3 เดือน)' };
+                    changes.push(`รอบการวัดผล→${QL[normalizeQuarterMode(req.body.quarter_mode)] || 'รายเดือน'}`);
                 }
                 if (changes.length > 0) diff = `\n📝 เปลี่ยน: ${changes.join(', ')}`;
             }
@@ -592,6 +597,11 @@ async function saveHierarchyFields(conn, table, id, body) {
     if (table === 'kpi_indicators' && body && body.target_monthly !== undefined) {
         sets.push('target_monthly = ?');
         params.push(normalizeTargetMonthly(body.target_monthly) || null);
+    }
+    // วัดผลรายไตรมาส (10 พ.ย. 2569): 'quarter' | 'month_sum' | 'month_last' | 'month_avg' | ว่าง = รายเดือน (เดิม)
+    if (table === 'kpi_indicators' && body && body.quarter_mode !== undefined) {
+        sets.push('quarter_mode = ?');
+        params.push(normalizeQuarterMode(body.quarter_mode) || null);
     }
     if (table === 'kpi_indicators' && body && body.pct_formula !== undefined) {
         sets.push('pct_formula = ?');

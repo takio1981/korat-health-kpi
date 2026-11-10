@@ -18,9 +18,18 @@ const MONTH_NAME_TO_VAR: Record<string, string> = {
 export const FORMULA_FUNCTIONS = ['SUM', 'AVG', 'MAX', 'MIN', 'COUNT', 'LAST'];
 export const MAX_FORMULA_LENGTH = 500;
 
+// ===== ตัวชี้วัดวัดผลรายไตรมาส (kpi_indicators.quarter_mode — 10 พ.ย. 2569) =====
+// ไตรมาส 1 = ต.ค.–ธ.ค. … ไตรมาส 4 = ก.ค.–ก.ย. | ค่าของไตรมาสที่บันทึกรายไตรมาสเก็บที่เดือนสุดท้ายของไตรมาส (ธ.ค./มี.ค./มิ.ย./ก.ย.)
+// quarter_mode: 'quarter' = บันทึกรายไตรมาส | 'month_sum' / 'month_last' / 'month_avg' = บันทึกรายเดือน ค่าไตรมาส = รวม / เดือนสุดท้าย / เฉลี่ย 3 เดือน
+// ฟังก์ชันสูตร LASTQ(SUM|AVG|LAST) = ค่าของไตรมาสล่าสุดที่มีข้อมูล (ผลงานของตัวชี้วัดรายไตรมาสที่บันทึกรายเดือน)
+export const QUARTER_MONTH_VARS = [['m10', 'm11', 'm12'], ['m01', 'm02', 'm03'], ['m04', 'm05', 'm06'], ['m07', 'm08', 'm09']];
+export const QUARTER_END_VARS = ['m12', 'm03', 'm06', 'm09'];
+const QUARTER_AGGS = ['SUM', 'AVG', 'LAST'];
+export const QUARTER_MODES = ['quarter', 'month_sum', 'month_last', 'month_avg'];
+
 // ===== ตัวแปรที่ตั้งชื่อเอง (ค่าเพิ่มเติมรายหน่วยบริการ เช่น base, pop) — 25 ต.ค. 2569 =====
 // ชื่อ: a-z ตามด้วย a-z 0-9 _ ไม่เกิน 20 ตัว ห้ามชนชื่อในตัว (เดือน/target/result/prev_*/ฟังก์ชัน/ALL) และชื่อของ Object.prototype
-export const RESERVED_VAR_NAMES = ['target', 'result', 'all', 'prev_all', ...FORMULA_FUNCTIONS.map(f => f.toLowerCase())];
+export const RESERVED_VAR_NAMES = ['target', 'result', 'all', 'prev_all', 'lastq', ...FORMULA_FUNCTIONS.map(f => f.toLowerCase())];
 const DEFAULT_CUSTOM_VARS = ['base'];   // base ใช้ได้เสมอ (ค่าฐาน)
 export function isValidVarKey(key: any): boolean {
   const k = String(key == null ? '' : key);
@@ -42,7 +51,7 @@ type Node =
   | { type: 'var'; name: string }
   | { type: 'neg'; arg: Node }
   | { type: 'bin'; op: string; left: Node; right: Node }
-  | { type: 'fn'; name: string; months: string[] };
+  | { type: 'fn'; name: string; months: string[]; agg?: string };
 
 class FormulaError extends Error {}
 
@@ -133,6 +142,14 @@ export function parseFormula(src: string, custom: string[] | '*' = DEFAULT_CUSTO
     }
     if (t.type === 'name') {
       const upper = String(t.value).toUpperCase();
+      if (upper === 'LASTQ') {
+        expect('(', 'ฟังก์ชัน LASTQ ต้องตามด้วยวงเล็บ เช่น LASTQ(SUM)');
+        const a = next();
+        const agg = a.type === 'name' ? String(a.value).toUpperCase() : '';
+        if (!QUARTER_AGGS.includes(agg)) throw formulaError('อาร์กิวเมนต์ของ LASTQ ต้องเป็น SUM, AVG หรือ LAST', a.pos);
+        expect(')', 'ขาดวงเล็บปิดของ LASTQ');
+        return { type: 'fn', name: 'LASTQ', agg, months: [...FISCAL_MONTH_VARS] };
+      }
       if (FORMULA_FUNCTIONS.includes(upper)) {
         expect('(', `ฟังก์ชัน ${upper} ต้องตามด้วยวงเล็บ เช่น ${upper}(ALL)`);
         const months: string[] = [];
@@ -196,6 +213,7 @@ function evalNode(node: Node, ctx: EvalCtx): number | null {
       return b === 0 ? null : a / b;
     }
     case 'fn': {
+      if (node.name === 'LASTQ') return lastQuarterValue(node.agg || 'LAST', ctx.months);
       const vals = node.months.map(m => ctx.months[m]).filter((v): v is number => v !== null);
       if (node.name === 'COUNT') return vals.length;
       if (vals.length === 0) return null;
@@ -205,6 +223,23 @@ function evalNode(node: Node, ctx: EvalCtx): number | null {
       if (node.name === 'MIN') return Math.min(...vals);
       return vals[vals.length - 1];
     }
+  }
+  return null;
+}
+
+/** รวมค่า 3 เดือนของไตรมาส (เรียงตามเดือน) — ไม่มีค่าเลย = null */
+function aggQuarter(agg: string, vals: (number | null | undefined)[]): number | null {
+  const v = vals.filter((x): x is number => x !== null && x !== undefined);
+  if (v.length === 0) return null;
+  if (agg === 'SUM') return v.reduce((s, x) => s + x, 0);
+  if (agg === 'AVG') return v.reduce((s, x) => s + x, 0) / v.length;
+  return v[v.length - 1];
+}
+/** ค่าของไตรมาสล่าสุด (ไตรมาส 4 → 1) ที่มีข้อมูล */
+function lastQuarterValue(agg: string, months: Record<string, number | null>): number | null {
+  for (let q = 3; q >= 0; q--) {
+    const r = aggQuarter(agg, QUARTER_MONTH_VARS[q].map(m => months[m] ?? null));
+    if (r !== null) return r;
   }
   return null;
 }
@@ -304,6 +339,31 @@ export function formulaVarNames(formula: string): string[] {
  *  customKeys = ชื่อค่าเพิ่มเติมของตัวชี้วัด (custom_vars) — base ใช้ได้เสมอ | extra เช่น ['result'] สำหรับสูตรร้อยละ */
 export function validateFormula(formula: string, customKeys?: any[] | null, extra?: string[] | null): string | null {
   try { parseFormula(formula, allowedVars(customKeys, extra)); return null; } catch (e: any) { return e.message; }
+}
+
+export function normalizeQuarterMode(v: any): string {
+  const s = String(v == null ? '' : v).trim().toLowerCase();
+  return QUARTER_MODES.includes(s) ? s : '';
+}
+/** ค่าแต่ละไตรมาส [ไตรมาส 1..4] (string ปัด 2 ตำแหน่ง | null) — 'quarter' = ค่าที่เดือนสุดท้ายของไตรมาส, ไม่ใช่ตัวชี้วัดรายไตรมาส = null ทั้งหมด */
+export function quarterValues(mode: any, months: Record<string, any> | null | undefined): (string | null)[] {
+  const m = normalizeQuarterMode(mode);
+  if (!m) return [null, null, null, null];
+  const mv = normalizeMonths(months);
+  const agg = m === 'month_sum' ? 'SUM' : m === 'month_avg' ? 'AVG' : 'LAST';
+  return QUARTER_MONTH_VARS.map((qm, q) => formatResult(m === 'quarter' ? mv[QUARTER_END_VARS[q]] : aggQuarter(agg, qm.map(k => mv[k]))));
+}
+/** สูตรผลงาน "ค่าไตรมาสล่าสุด" ของโหมดบันทึกรายเดือน (รวม/เฉลี่ย) — โหมดอื่น = null (ผลงานล่าสุดแบบเดิมให้ค่าเดียวกันอยู่แล้ว) */
+export function quarterResultFormula(mode: any): string | null {
+  const m = normalizeQuarterMode(mode);
+  return m === 'month_sum' ? 'LASTQ(SUM)' : m === 'month_avg' ? 'LASTQ(AVG)' : null;
+}
+/** เดือนนี้บันทึกผลงานได้หรือไม่ — โหมด 'quarter' ได้เฉพาะเดือนสุดท้ายของไตรมาส (รับ oct/dece/m12/12 ได้) */
+export function isQuarterEntryMonth(mode: any, month: any): boolean {
+  if (normalizeQuarterMode(mode) !== 'quarter') return true;
+  const k = String(month == null ? '' : month).trim().toLowerCase();
+  const v = MONTH_NAME_TO_VAR[k] || (/^\d{1,2}$/.test(k) ? 'm' + String(Number(k)).padStart(2, '0') : normalizeVar(k));
+  return QUARTER_END_VARS.includes(String(v));
 }
 
 /** ค่า result_formula ที่ใช้งานได้ (trim แล้ว) หรือ null ถ้าไม่ได้ตั้ง */

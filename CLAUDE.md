@@ -460,6 +460,14 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   | dashboard: `isMonthlyTarget()`, ช่อง "เป้า" ในช่องเดือน (`canShowMonthTargetInput()` = เงื่อนไขเดียวกับช่องเป้าหมาย), คอลัมน์เป้าหมายแก้ตรงไม่ได้, `onValueChange()` คำนวณเป้าหมายรวมใหม่,
   `monthTargetPayload()` ส่งครบ 12 เดือน (บันทึกรวม/รายข้อ/แก้เป้าหมาย) | kpi-manage: `#indicator-target-monthly` | Excel: คอลัมน์ `monthTargetHeader()` "เป้าหมาย ต.ค." … (แถวรายเดือนไม่นำเข้า "เป้าหมาย")
   — ไม่ครอบคลุม: โหมด `use_sub_indicator_export`, `prev_target` ในสูตร (ยังเป็น MAX ของปีที่แล้ว) — Test: `api/tests/monthly-target.test.js`, `kpi-target.test.js`, `shared/kpi-target.spec.ts`, `kpi-excel.spec.ts`, `dashboard.spec.ts`
+- **วัดผลรายไตรมาส (10 พ.ย. 2569 — ผู้ใช้เลือก: ผู้ดูแลตั้งต่อตัวชี้วัด, บันทึกรายไตรมาสเก็บที่เดือนสุดท้ายของไตรมาส, บันทึกรายเดือนให้เลือกค่าไตรมาส รวม/เดือนสุดท้าย/เฉลี่ย, ส่งออกคง m10–m09):**
+  `kpi_indicators.quarter_mode` VARCHAR(20) = `'quarter'` (บันทึกรายไตรมาส ธ.ค./มี.ค./มิ.ย./ก.ย.) | `'month_sum'`/`'month_last'`/`'month_avg'` (บันทึกรายเดือน) | NULL = รายเดือน (เดิม) — ไม่มีตารางใหม่ ข้อมูลยังเป็น kpi_results รายเดือน
+  | กฎกลางใน `kpi-formula` 2 สำเนา: `normalizeQuarterMode`, `quarterValues(mode, months)` (ค่า 4 ไตรมาส), `isQuarterEntryMonth(mode, month)`, `quarterResultFormula(mode)` + **ฟังก์ชันสูตร `LASTQ(SUM|AVG|LAST)`** = ค่าไตรมาสล่าสุดที่มีข้อมูล (fixture formula-cases ทั้ง 2 ไฟล์)
+  — **ผลงานของตัวชี้วัดรายไตรมาสที่บันทึกรายเดือน = result_formula `LASTQ(SUM|AVG)`** (kpi-manage `setQuarterMode()` ตั้งให้เมื่อวิธีคิดผลงานเป็น "ค่าเดือนล่าสุด"/"ค่าไตรมาสล่าสุด" — วิธีอื่นคงไว้) จึงใช้เส้นทางสูตรเดิมทุกจุด (kpi-results, summary, export, forecast) ไม่ต้องแก้แยก;
+  'quarter'/'month_last' ใช้ผลงานล่าสุดแบบเดิม | `/update-kpi` โหมดปกติ: 'quarter' + ค่าใหม่ (ไม่ว่าง ≠ ค่าเดิม) ในเดือนกลางไตรมาส = 400 `QUARTER_ENTRY_ONLY` ทั้งคำขอ (ค่าเดิมก่อนเปลี่ยนโหมด ส่งกลับ/ล้างได้)
+  | POST/PUT `/indicators` ผ่าน `saveHierarchyFields()` (ไม่ส่ง = ไม่เปลี่ยน) | forecast: 'quarter' = ไม่ตรวจขาดการรายงาน | dashboard: `isQuarterOffMonth()` ปิดช่องเดือนกลางไตรมาส (ตาราง + มือถือ + Excel ผ่าน `EditPerms.cellLocked` นับ noPerm),
+  `quarterCellText()` "ไตรมาส N[: ค่า]" ใต้เดือนสุดท้ายของไตรมาส, ป้าย `quarterBadgeText()` | kpi-manage: กล่อง `#indicator-quarter-mode` (period/entry/agg ↔ `quarterModeParts()`/`quarterModeFrom()`), วิธีคิดผลงาน 'quarter' (`RESULT_METHODS_QUARTER`)
+  — ไม่ครอบคลุม: ตัวชี้วัดย่อย/กิจกรรม, kpi-setup, กราฟรายเดือน (`_cNormal` ไม่รวมตัวชี้วัดที่มีสูตรอยู่แล้ว) — Test: `api/tests/quarter-mode.test.js`, `kpi-formula.test.js`, `shared/kpi-formula.spec.ts`, `dashboard.spec.ts`, `kpi-manage.spec.ts`
 - **ค่าเพิ่มเติมที่ตั้งชื่อเอง + สูตรร้อยละ (25 ต.ค. 2569):** `kpi_indicators.custom_vars` TEXT = JSON `[{key,label}]` (≤ 10, `isValidVarKey()`: a-z ตามด้วย a-z0-9_ ≤ 20 ตัว ห้ามชนชื่อในตัว/`result`/`prev_*`/`m\d+`/ชื่อของ Object.prototype)
   ค่าต่อคู่เก็บ `kpi_base_values` คอลัมน์ `var_key` (UNIQUE indicator+year+hospcode+var_key; base = var_key 'base') — `evaluateFormula(…, prev, vars)` อาร์กิวเมนต์ที่ 5 เป็น object `{base, pop, …}` (ค่าเดี่ยว = base แบบเดิม)
   ตัวแปรอ่านแบบ own-property เท่านั้น — **`validateFormula(f, customKeys, extra)` ต้องส่งชื่อที่ประกาศเสมอ** (ไม่ส่ง = ใช้ได้แค่ base) ทั้ง backend (`formulaOk(ind, f)`, `varKeysOf()`) และ dashboard
@@ -468,7 +476,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   ผ่าน/ไม่ผ่านไม่เปลี่ยน (ผู้ใช้เลือก) — POST/PUT `/indicators` ตรวจ custom_vars/สูตร/สูตรร้อยละ → 400 (PUT ไม่ส่ง = ใช้ค่าเดิม) — Excel คอลัมน์ `"label [key]"` (`customVarHeader()`)
   — Test: `api/tests/custom-vars.test.js`, fixture สูตร (vars/allowed/allowExtra), `shared/custom-vars.spec.ts`, `kpi-excel.spec.ts`, `dashboard.spec.ts`, `kpi-manage.spec.ts`
 - ภาษาสูตร: ตัวแปร `m10…m09` (`m1`–`m9` ย่อได้) + `target` + `base` + ค่าเพิ่มเติม (+ `result` เฉพาะสูตรร้อยละ), ฟังก์ชัน `SUM AVG MAX MIN COUNT LAST` (อาร์กิวเมนต์ = รายการเดือน
-  หรือ `ALL`), `+ - * /` วงเล็บ ตัวเลข — ค่าว่าง/ข้อความ = ไม่มีค่า (ฟังก์ชันข้าม, อ้างตรงในนิพจน์ → null), หารศูนย์ → null,
+  หรือ `ALL`) + `LASTQ(SUM|AVG|LAST)` (ค่าไตรมาสล่าสุด), `+ - * /` วงเล็บ ตัวเลข — ค่าว่าง/ข้อความ = ไม่มีค่า (ฟังก์ชันข้าม, อ้างตรงในนิพจน์ → null), หารศูนย์ → null,
   ผลปัด 2 ตำแหน่งเป็น string
 - **ข้อมูลปีงบที่แล้ว (เพิ่ม 8 ต.ค. 2569):** `prev_m10…prev_m09`, `prev_target`, `prev_result`, `PREV_ALL` (ในฟังก์ชัน, ผสมเดือนปีนี้ได้
   เช่น `SUM(m10, prev_m10)`) — `evaluateFormula(formula, months, target, prev)` โดย prev = `{ months, target, result }` ของคู่

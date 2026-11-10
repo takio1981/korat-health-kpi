@@ -5,7 +5,7 @@ import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { FormBuilderComponent } from '../form-builder/form-builder';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
-import { validateFormula, evaluateFormula, usesPrevYear, usesBase, formulaVarNames, isValidVarKey, FORMULA_FUNCTIONS } from '../shared/kpi-formula';
+import { validateFormula, evaluateFormula, usesPrevYear, usesBase, formulaVarNames, isValidVarKey, FORMULA_FUNCTIONS, normalizeQuarterMode, quarterResultFormula } from '../shared/kpi-formula';
 import { parseCustomVars } from '../shared/custom-vars';
 import { itemNumber } from '../shared/kpi-rollup';
 import { orderSubTree } from '../shared/sub-tree';
@@ -22,13 +22,15 @@ import { TARGET_CONDITIONS, CONDITION_SYMBOL, CONDITION_LABEL, normalizeConditio
 
 // วิธีคิด "ผลงาน" แบบสำเร็จรูป ↔ is_cumulative + result_formula (ฟังก์ชันล้วน — ทดสอบใน kpi-manage.spec.ts)
 // 'manual' = ผู้บันทึกกรอกผลงานล่าสุดเอง (kpi_indicators.result_manual — 29 ต.ค. 2569)
-export type ResultMethod = 'last' | 'sum' | 'avg' | 'max' | 'min' | 'custom' | 'manual';
+// 'quarter' = ค่าไตรมาสล่าสุด (LASTQ(SUM|AVG|LAST)) — ตัวชี้วัดรายไตรมาสที่บันทึกรายเดือน (10 พ.ย. 2569)
+export type ResultMethod = 'last' | 'sum' | 'avg' | 'max' | 'min' | 'custom' | 'manual' | 'quarter';
 const RESULT_METHOD_FORMULA: Partial<Record<ResultMethod, string>> = { avg: 'AVG(ALL)', max: 'MAX(ALL)', min: 'MIN(ALL)' };
 export function resultMethodOf(item: any): ResultMethod {
   if (item?.result_manual === true || Number(item?.result_manual) === 1) return 'manual';
   const f = String(item?.result_formula || '').replace(/\s+/g, '').toUpperCase();
   if (!f) return item?.is_cumulative ? 'sum' : 'last';
   const hit = (Object.keys(RESULT_METHOD_FORMULA) as ResultMethod[]).find(k => RESULT_METHOD_FORMULA[k] === f);
+  if (!hit && /^LASTQ\((SUM|AVG|LAST)\)$/.test(f)) return 'quarter';
   return hit || 'custom';
 }
 export function applyResultMethod(item: any, m: ResultMethod): void {
@@ -46,8 +48,28 @@ export function applyResultMethod(item: any, m: ResultMethod): void {
     item.is_cumulative = false;
     return;
   }
-  item.result_formula = RESULT_METHOD_FORMULA[m] || '';
+  item.result_formula = m === 'quarter' ? (quarterResultFormula(item.quarter_mode) || '') : (RESULT_METHOD_FORMULA[m] || '');
   item.is_cumulative = m === 'sum';
+}
+
+// รอบการวัดผล (kpi_indicators.quarter_mode — 10 พ.ย. 2569) แยกเป็น 3 ตัวเลือกในหน้าต่าง ↔ ค่าเดียวในฐานข้อมูล
+// period: 'month' | 'quarter', entry (เมื่อรายไตรมาส): 'month' | 'quarter', agg (เมื่อบันทึกรายเดือน): 'sum' | 'last' | 'avg'
+export function quarterModeParts(mode: any): { period: 'month' | 'quarter'; entry: 'month' | 'quarter'; agg: 'sum' | 'last' | 'avg' } {
+  const m = normalizeQuarterMode(mode);
+  if (!m) return { period: 'month', entry: 'month', agg: 'sum' };
+  if (m === 'quarter') return { period: 'quarter', entry: 'quarter', agg: 'sum' };
+  return { period: 'quarter', entry: 'month', agg: m.slice(6) as 'sum' | 'last' | 'avg' };
+}
+export function quarterModeFrom(p: { period: string; entry: string; agg: string }): string {
+  if (p.period !== 'quarter') return '';
+  if (p.entry === 'quarter') return 'quarter';
+  return normalizeQuarterMode('month_' + p.agg) || 'month_sum';
+}
+/** เปลี่ยนรอบการวัดผลของตัวชี้วัดในหน้าต่าง — วิธีคิดผลงาน "ค่าเดือนล่าสุด"/"ค่าไตรมาสล่าสุด" เปลี่ยนตามให้อัตโนมัติ (วิธีอื่นคงไว้) */
+export function setQuarterMode(item: any, mode: string): void {
+  const before = resultMethodOf(item);
+  item.quarter_mode = normalizeQuarterMode(mode);
+  if (before === 'last' || before === 'quarter') applyResultMethod(item, 'quarter');
 }
 
 @Component({
@@ -1197,6 +1219,26 @@ export class KpiManageComponent implements OnInit {
     { v: 'custom', l: 'สูตรกำหนดเอง', d: 'กำหนดสูตรเองในกล่องสูตรคำนวณผลงานด้านล่าง' },
     { v: 'manual', l: 'กรอกเอง (ไม่คำนวณ)', d: 'ผู้บันทึกกรอก "ผลงานล่าสุด" เองในหน้าบันทึกผลงาน — ช่องรายเดือนยังกรอกได้แต่ไม่นำมาคำนวณ, ยังไม่กรอก = ว่าง' },
   ];
+  // ตัวชี้วัดรายไตรมาสที่บันทึกรายเดือน (รวม/เฉลี่ย) มีตัวเลือก "ค่าไตรมาสล่าสุด" เพิ่ม — อาร์เรย์คงที่ (กัน NG0100 จาก getter ที่สร้างอาร์เรย์ใหม่)
+  readonly RESULT_METHODS_QUARTER: { v: ResultMethod; l: string; d: string }[] = [
+    { v: 'quarter', l: 'ค่าไตรมาสล่าสุด', d: 'ผลงาน = ค่าของไตรมาสล่าสุดที่มีข้อมูล ตาม "ค่าของไตรมาส" ที่ตั้งไว้ — สูตร LASTQ(…)' },
+    ...this.RESULT_METHODS,
+  ];
+  get resultMethodOptions(): { v: ResultMethod; l: string; d: string }[] {
+    return quarterResultFormula(this.currentItem?.quarter_mode) || this.resultMethod === 'quarter' ? this.RESULT_METHODS_QUARTER : this.RESULT_METHODS;
+  }
+  // รอบการวัดผล (10 พ.ย. 2569) — 3 ตัวเลือกในหน้าต่างรวมเป็น currentItem.quarter_mode
+  get quarterPeriod(): string { return quarterModeParts(this.currentItem?.quarter_mode).period; }
+  set quarterPeriod(v: string) { this.updateQuarterPart({ period: v }); }
+  get quarterEntry(): string { return quarterModeParts(this.currentItem?.quarter_mode).entry; }
+  set quarterEntry(v: string) { this.updateQuarterPart({ entry: v }); }
+  get quarterAgg(): string { return quarterModeParts(this.currentItem?.quarter_mode).agg; }
+  set quarterAgg(v: string) { this.updateQuarterPart({ agg: v }); }
+  private updateQuarterPart(part: Partial<{ period: string; entry: string; agg: string }>): void {
+    if (!this.currentItem) return;
+    setQuarterMode(this.currentItem, quarterModeFrom({ ...quarterModeParts(this.currentItem.quarter_mode), ...part }));
+    this._resultMethodCustomFor = null;
+  }
   private _resultMethodCustomFor: any = null; // จำว่าเลือก "สูตรกำหนดเอง" ไว้สำหรับรายการนี้ (กันสลับกลับเองเมื่อสูตรยังว่าง)
 
   get resultMethod(): ResultMethod {
@@ -1302,6 +1344,7 @@ export class KpiManageComponent implements OnInit {
         src.result_manual = Number(src.result_manual) === 1;   // ผลงานล่าสุด / ร้อยละ แบบกรอกเอง (29 ต.ค. 2569)
         src.pct_manual = Number(src.pct_manual) === 1;
         src.target_monthly = normalizeTargetMonthly(src.target_monthly);   // เป้าหมายรายเดือน (29 ต.ค. 2569) — '' = เป้าหมายเดียวทั้งปี
+        src.quarter_mode = normalizeQuarterMode(src.quarter_mode);   // รอบการวัดผล (10 พ.ย. 2569) — '' = รายเดือน
         src.evaluation_mode = src.evaluation_mode || 'any_one';
         src.sub_rollup_mode = src.sub_rollup_mode === 'manual' ? 'manual' : 'auto';
         src.item_no = src.item_no || '';
@@ -1318,7 +1361,7 @@ export class KpiManageComponent implements OnInit {
         this.selectedYutInModal = null;
         this.selectedOffTypes = [];
         this.setModalFiscalYears([String(getCurrentFiscalYear())]);
-        this.currentItem = { ...baseDefaults, r9: false, moph: false, ssj: false, rmw: false, other: false, is_cumulative: false, use_sub_indicator_export: false, result_formula: '', custom_vars: [], pct_formula: '', result_manual: false, pct_manual: false, target_monthly: '', weight: 1, target_condition: 'GTE', evaluation_mode: 'any_one', sub_rollup_mode: 'auto', item_no: '', export_items: false };
+        this.currentItem = { ...baseDefaults, r9: false, moph: false, ssj: false, rmw: false, other: false, is_cumulative: false, use_sub_indicator_export: false, result_formula: '', custom_vars: [], pct_formula: '', result_manual: false, pct_manual: false, target_monthly: '', quarter_mode: '', weight: 1, target_condition: 'GTE', evaluation_mode: 'any_one', sub_rollup_mode: 'auto', item_no: '', export_items: false };
       } else {
         this.currentItem = { ...baseDefaults };
       }
@@ -1401,6 +1444,7 @@ export class KpiManageComponent implements OnInit {
       if (payload.pct_manual) payload.pct_formula = null;
       payload.khd_fiscal_year = [...this.modalFiscalYears];   // ปีงบประมาณ (ว่าง = ไม่ระบุ)
       payload.target_monthly = normalizeTargetMonthly(payload.target_monthly);   // เป้าหมายรายเดือน — '' = เป้าหมายเดียวทั้งปี
+      payload.quarter_mode = normalizeQuarterMode(payload.quarter_mode);   // รอบการวัดผล — '' = รายเดือน
       payload.required_off_types = payload.evaluation_mode === 'any_one' && this.selectedOffTypes.length > 0
         ? this.selectedOffTypes
         : null;
