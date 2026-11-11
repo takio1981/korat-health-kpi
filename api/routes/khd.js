@@ -26,27 +26,56 @@ const { scheduleSummaryRefresh } = require('../services/summary');
 // ชื่อสำหรับจับคู่ (ตัดช่องว่างซ้ำ/หัวท้าย ไม่สนตัวพิมพ์)
 const normName = (s) => String(s ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
 
-/** จับคู่แถว missing_remote (Local) กับ missing_local (KHD) ที่ชื่อเดียวกัน — แก้ items ในที่ คืนจำนวนคู่ (แถว KHD ที่จับคู่แล้วมี _paired) */
-function pairByNameDifferentTp(items) {
-    const locals = new Map(), khds = new Map();
-    for (const it of items) {
-        if (it.status === 'missing_remote' && it.local_name) { const k = normName(it.local_name); locals.set(k, locals.has(k) ? null : it); }
-        if (it.status === 'missing_local' && it.khd_name) { const k = normName(it.khd_name); khds.set(k, khds.has(k) ? null : it); }
+// รหัสรายงานของ KHD (report_code ใช้ขีดกลาง) ในรูปแบบ table_process — ใช้ตัดสินเมื่อชื่อตรงกับ KHD หลายรายการ
+const normCode = (s) => String(s ?? '').trim().toLowerCase().replace(/-/g, '_');
+
+/**
+ * ชื่อเดียวกันแต่ table_process ต่างกัน (9 พ.ย. 2569, ขยาย 11 พ.ย. 2569) — แก้ items ในที่ คืนจำนวนแถวที่เปลี่ยนเป็น 'tp_different'
+ * แถว Local "ไม่มีใน KHD" (missing_remote) ที่ชื่อตรงกับแถว KHD "ยังไม่มีใน Local" (missing_local รวมรายงาน KHD ที่ใช้ table_process ซ้ำกับรายงานอื่น):
+ * - ตรงรายการเดียว (ชื่อตรงหลายรายการ → เลือกรายการที่รหัสรายงานตรงกับ table_process ของระบบ) และไม่มีตัวชี้วัดอื่นแย่งรายการเดียวกัน
+ *   → จับคู่: ค่าทุกหัวข้อเทียบกับรายงาน KHD นั้น (pairFields) แถว KHD ถูกตัดจาก "ยังไม่มีใน Local" (_paired)
+ * - ยังเลือกไม่ได้ → tp_ambiguous + tp_candidates (ไม่เดา ไม่มีปุ่มปรับ)
+ * - ชื่อตรงเฉพาะรายงาน KHD ที่เชื่อมกับตัวชี้วัดอื่นของระบบแล้ว → tp_note 'linked_other' + tp_candidates (อาจเป็นตัวชี้วัดซ้ำในระบบ)
+ */
+function pairByNameDifferentTp(items, pairFields) {
+    const group = (pred) => {
+        const m = new Map();
+        for (const it of items) if (pred(it) && it.khd_name) { const k = normName(it.khd_name); if (!m.has(k)) m.set(k, []); m.get(k).push(it); }
+        return m;
+    };
+    const free = group(it => it.status === 'missing_local');
+    const linked = group(it => it.status === 'match' || it.status === 'different');
+    const cand = (x) => ({ report_id: x.khd_report_id, report_code: x.report_code || null, table_process: x.table_process || null,
+        used_by_id: x.local_id || x.khd_tp_used_by?.id || null, used_by_name: x.local_name || x.khd_tp_used_by?.name || null });
+    const choice = new Map(), claims = new Map();
+    for (const loc of items) {
+        if (loc.status !== 'missing_remote' || !loc.local_name) continue;
+        const k = normName(loc.local_name);
+        if (!k) continue;
+        let c = free.get(k) || [];
+        if (c.length > 1) { const byCode = c.filter(x => normCode(x.report_code) === normCode(loc.table_process)); if (byCode.length) c = byCode; }
+        if (!c.length) {
+            const l = linked.get(k);
+            if (l) Object.assign(loc, { status: 'tp_different', tp_note: 'linked_other', tp_candidates: l.map(cand) });
+            continue;
+        }
+        choice.set(loc, c);
+        if (c.length === 1) claims.set(c[0], (claims.get(c[0]) || 0) + 1);
     }
-    let n = 0;
-    for (const [k, loc] of locals) {
-        const khd = khds.get(k);
-        if (!loc || !khd || !k) continue;   // ชื่อซ้ำฝั่งใดฝั่งหนึ่ง = ไม่จับคู่
-        Object.assign(loc, {
-            status: 'tp_different',
-            khd_report_id: khd.khd_report_id, khd_name: khd.khd_name, khd_dept: khd.khd_dept, khd_main_yut: khd.khd_main_yut,
-            report_code: khd.report_code, khd_table_process: khd.table_process, khd_is_active: khd.khd_is_active, khd_data_source: khd.khd_data_source,
-            khd_fiscal_years: khd.khd_fiscal_years || [],
-        });
-        khd._paired = true;
-        n++;
+    for (const [loc, c] of choice) {
+        if (c.length === 1 && claims.get(c[0]) === 1) {
+            const khd = c[0];
+            Object.assign(loc, pairFields(khd._khd, loc._local), {
+                status: 'tp_different', table_process: loc.table_process, khd_table_process: khd.table_process,
+                khd_tp_shared: khd.khd_tp_shared || 0, khd_tp_used_by: khd.khd_tp_used_by || null,
+                khd_code_matches_tp: normCode(khd.report_code) === normCode(loc.table_process),
+            });
+            khd._paired = true;
+        } else {
+            Object.assign(loc, { status: 'tp_different', tp_ambiguous: true, tp_candidates: c.map(cand) });
+        }
     }
-    return n;
+    return items.filter(it => it.status === 'tp_different').length;
 }
 
 apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, res) => {
@@ -119,10 +148,74 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
             return { target_percentage: khd.target_percentage, target_condition: khd.target_condition, source: 'reports' };
         };
 
+        // KHD หลายรายงานใช้ table_process เดียวกันได้ (ข้อมูลจริง 11 พ.ย. 2569: excellence_indicator_2_38_4 = 6 รายงาน) — เทียบกับตัวชี้วัดในระบบ
+        // เฉพาะรายงานหลักของ table_process นั้น (เชื่อมไว้ด้วย khd_report_id → ชื่อตรงกัน → รายการท้ายสุด = พฤติกรรมเดิมของ khdMap)
+        // รายงานที่เหลือ = "ยังไม่มีใน Local" (เดิมทุกรายงานถูกเทียบกับตัวชี้วัดเดียวกัน → "ชื่อต่างกัน" ปลอม) แล้วไปจับคู่ด้วยชื่อใน pairByNameDifferentTp
+        const khdByTp = new Map();
+        khdRows.forEach(r => { if (r.table_process) { if (!khdByTp.has(r.table_process)) khdByTp.set(r.table_process, []); khdByTp.get(r.table_process).push(r); } });
+        const primaryOf = new Map();
+        for (const [tp, rows] of khdByTp) {
+            const local = localMap.get(tp);
+            if (!local) continue;
+            // ชื่อตรงมาก่อน khd_report_id: ลิงก์เดิมของตัวชี้วัดที่ใช้ table_process ซ้ำมาจากการเลือก "รายการท้ายสุด" (ข้อมูลจริง #136 ↔ KHD #2386 ชื่อไม่ตรง)
+            const linked = (r) => local.khd_report_id != null && Number(r.report_id) === Number(local.khd_report_id);
+            const named = rows.filter(r => normName(r.report_name) === normName(local.kpi_indicators_name));
+            primaryOf.set(tp, named.find(linked) || named.find(r => normCode(r.report_code) === normCode(tp)) || named[0]
+                || rows.find(linked) || rows[rows.length - 1]);
+        }
+
+        // ค่าเทียบทุกหัวข้อของคู่ รายงาน KHD × ตัวชี้วัด (ใช้ทั้งคู่ table_process เดียวกัน และคู่ชื่อเดียวกันแต่ table_process ต่าง)
+        const pairFields = (khd, local) => {
+            const tp = khd.table_process;
+            const fyConfig = fyConfigMap.get(khd.report_id) || null;
+            const effective = getEffectiveKhdCriteria(khd, fyConfig);
+            const effectiveIsActive = (fyConfig && fyConfig.is_active != null) ? fyConfig.is_active : khd.is_active;
+                // criteria_match: เทียบ criterion (numeric-aware) + target_condition — local.criterion คือ "เกณฑ์" จริง (แยกจาก target_percentage/เป้าหมาย แล้ว)
+                const pctMatch = Number(effective.target_percentage) === Number(local.criterion)
+                    || (effective.target_percentage == null && local.criterion == null);
+                const condMatch = String(effective.target_condition || '') === String(local.target_condition || '');
+                const criteria_match = pctMatch && condMatch;
+                if (!criteria_match) criteria_different++;
+
+                // ประเภทตัวชี้วัด + ประเภทหน่วยบริการ (9 พ.ย. 2569) — services/khd-types.js
+                const typeCmp = compareKhdTypes(khd, fyConfig, local);
+                if (!typeCmp.types_match) types_different++;
+                if (typeCmp.hostype_match === false) hostype_different++;
+                const fyCmp = compareFiscalYears(local.local_fy, khdYearsMap.get(khd.report_id));
+                if (fyCmp.fiscal_year_match === false) fiscal_year_different++;
+                // หน่วยงาน + หมวดหมู่หลัก (11 พ.ย. 2569) — services/khd-org.js (ตัวจับคู่ค่าข้อความ KHD → id ของระบบ)
+                const orgCmp = compareKhdOrg(khdResolver, khd, local);
+                if (orgCmp.dept_match === false) dept_different++;
+                if (orgCmp.main_match === false) main_different++;
+                if (orgCmp.khd_dept_status === 'unmatched' || orgCmp.khd_main_status === 'unmatched') org_unmatched++;
+
+                const suggest = computeSuggest(effectiveIsActive, local.upload_excel);
+                if (suggest) suggest_disable_count++;
+                if (effectiveIsActive === 0 || effectiveIsActive === '0') khd_inactive_count++;
+                return {
+                    khd_report_id: khd.report_id, khd_name: khd.report_name, khd_dept: khd.dept, khd_main_yut: khd.main_yut,
+                    report_code: khd.report_code, table_process: tp, khd_is_active: effectiveIsActive,
+                    khd_data_source: khd.data_source,
+                    khd_target_percentage: effective.target_percentage, khd_target_condition: effective.target_condition,
+                    khd_criteria_source: effective.source, khd_fiscal_year: fyConfig ? year_bh : null,
+                    local_id: local.id, local_name: local.kpi_indicators_name, local_dept: local.dept_name,
+                    local_dept_id: local.dept_id, local_main_indicator_id: local.main_indicator_id, local_is_active: local.is_active,
+                    local_upload_excel: local.upload_excel || 0,
+                    local_criterion: local.criterion, local_target_condition: local.target_condition,
+                    local_data_source: local.data_source,
+                    criteria_match,
+                    ...typeCmp,
+                    ...fyCmp,
+                    ...orgCmp,
+                    local_main_indicator_name: local.main_indicator_name || null,
+                    suggest_disable_upload: suggest
+                };
+        };
+
         // เทียบจาก KHD
         for (const khd of khdRows) {
             const tp = khd.table_process;
-            const local = tp ? localMap.get(tp) : null;
+            const local = tp && primaryOf.get(tp) === khd ? localMap.get(tp) : null;
             const fyConfig = fyConfigMap.get(khd.report_id) || null;
             const effective = getEffectiveKhdCriteria(khd, fyConfig);
             // effectiveIsActive: ใช้ report_fiscal_year_config.is_active ของปีงบที่กำลังเทียบก่อนเสมอ (ถ้ามี override
@@ -131,7 +224,12 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
             // มีเคสแบบนี้อยู่จริงบน remote — ไม่ใช่แค่ทฤษฎี)
             const effectiveIsActive = (fyConfig && fyConfig.is_active != null) ? fyConfig.is_active : khd.is_active;
             if (!local) {
+                const sharedN = tp ? (khdByTp.get(tp) || []).length : 0;
+                const usedBy = tp ? localMap.get(tp) : null;
                 items.push({
+                    _khd: khd,
+                    khd_tp_shared: sharedN > 1 ? sharedN : 0,   // จำนวนรายงาน KHD ที่ใช้ table_process เดียวกัน (> 1 = ข้อมูลใน KHD ซ้ำ)
+                    khd_tp_used_by: usedBy ? { id: usedBy.id, name: usedBy.kpi_indicators_name } : null,
                     status: 'missing_local',
                     khd_report_id: khd.report_id, khd_name: khd.report_name, khd_dept: khd.dept, khd_main_yut: khd.main_yut,
                     khd_main_indicator: khd.main_indicator || null,
@@ -157,54 +255,14 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                 const nameMatch = (khd.report_name || '').trim() === (local.kpi_indicators_name || '').trim();
                 const status = nameMatch ? 'match' : 'different';
                 if (status === 'match') match++; else different++;
-
-                // criteria_match: เทียบ criterion (numeric-aware) + target_condition — local.criterion คือ "เกณฑ์" จริง (แยกจาก target_percentage/เป้าหมาย แล้ว)
-                const pctMatch = Number(effective.target_percentage) === Number(local.criterion)
-                    || (effective.target_percentage == null && local.criterion == null);
-                const condMatch = String(effective.target_condition || '') === String(local.target_condition || '');
-                const criteria_match = pctMatch && condMatch;
-                if (!criteria_match) criteria_different++;
-
-                // ประเภทตัวชี้วัด + ประเภทหน่วยบริการ (9 พ.ย. 2569) — services/khd-types.js
-                const typeCmp = compareKhdTypes(khd, fyConfig, local);
-                if (!typeCmp.types_match) types_different++;
-                if (typeCmp.hostype_match === false) hostype_different++;
-                const fyCmp = compareFiscalYears(local.local_fy, khdYearsMap.get(khd.report_id));
-                if (fyCmp.fiscal_year_match === false) fiscal_year_different++;
-                // หน่วยงาน + หมวดหมู่หลัก (11 พ.ย. 2569) — services/khd-org.js (ตัวจับคู่ค่าข้อความ KHD → id ของระบบ)
-                const orgCmp = compareKhdOrg(khdResolver, khd, local);
-                if (orgCmp.dept_match === false) dept_different++;
-                if (orgCmp.main_match === false) main_different++;
-                if (orgCmp.khd_dept_status === 'unmatched' || orgCmp.khd_main_status === 'unmatched') org_unmatched++;
-
-                const suggest = computeSuggest(effectiveIsActive, local.upload_excel);
-                if (suggest) suggest_disable_count++;
-                if (effectiveIsActive === 0 || effectiveIsActive === '0') khd_inactive_count++;
-                items.push({
-                    status,
-                    khd_report_id: khd.report_id, khd_name: khd.report_name, khd_dept: khd.dept, khd_main_yut: khd.main_yut,
-                    report_code: khd.report_code, table_process: tp, khd_is_active: effectiveIsActive,
-                    khd_data_source: khd.data_source,
-                    khd_target_percentage: effective.target_percentage, khd_target_condition: effective.target_condition,
-                    khd_criteria_source: effective.source, khd_fiscal_year: fyConfig ? year_bh : null,
-                    local_id: local.id, local_name: local.kpi_indicators_name, local_dept: local.dept_name,
-                    local_dept_id: local.dept_id, local_main_indicator_id: local.main_indicator_id, local_is_active: local.is_active,
-                    local_upload_excel: local.upload_excel || 0,
-                    local_criterion: local.criterion, local_target_condition: local.target_condition,
-                    local_data_source: local.data_source,
-                    criteria_match,
-                    ...typeCmp,
-                    ...fyCmp,
-                    ...orgCmp,
-                    local_main_indicator_name: local.main_indicator_name || null,
-                    suggest_disable_upload: suggest
-                });
+                items.push({ status, ...pairFields(khd, local) });
             }
         }
         // เทียบจาก Local ที่ไม่มีใน KHD
         for (const local of localRows) {
             if (local.table_process && !khdMap.has(local.table_process)) {
                 items.push({
+                    _local: local,
                     status: 'missing_remote',
                     khd_report_id: null, khd_name: null, khd_dept: null, khd_main_yut: null,
                     report_code: null, table_process: local.table_process, khd_is_active: null,
@@ -224,14 +282,18 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
         }
         // ชื่อเดียวกันแต่ table_process ต่างกัน (9 พ.ย. 2569): จับคู่ "ไม่มีใน KHD" (Local) กับ "ยังไม่มีใน Local" (KHD) ด้วยชื่อ (ตัดช่องว่างซ้ำ/ไม่สนตัวพิมพ์)
         // เฉพาะชื่อที่มีคู่เดียวทั้ง 2 ฝั่ง (ไม่เดา) → แถว Local เป็น status 'tp_different' + ค่าฝั่ง KHD, แถว KHD ถูกตัดออกจากรายการ "ยังไม่มีใน Local" (กันเพิ่มซ้ำ)
-        const tpDiff = pairByNameDifferentTp(items);
-        missing_remote -= tpDiff; missing_local -= tpDiff;
+        const remoteBefore = items.filter(it => it.status === 'missing_remote').length;
+        const tpDiff = pairByNameDifferentTp(items, pairFields);
+        const pairedKhd = items.filter(it => it._paired).length;
+        missing_remote = remoteBefore - tpDiff; missing_local -= pairedKhd;
+        const tp_ambiguous = items.filter(it => it.tp_ambiguous).length, tp_linked_other = items.filter(it => it.tp_note === 'linked_other').length;
         for (let i = items.length - 1; i >= 0; i--) if (items[i]._paired) items.splice(i, 1);
+        for (const it of items) { delete it._khd; delete it._local; }
         res.json({
             success: true,
             khd_count: khdRows.length, local_count: localRows.length,
             summary: {
-                total: items.length, match, different, missing_local, missing_remote, tp_different: tpDiff,
+                total: items.length, match, different, missing_local, missing_remote, tp_different: tpDiff, tp_ambiguous, tp_linked_other,
                 khd_inactive: khd_inactive_count, suggest_disable: suggest_disable_count,
                 criteria_different, types_different, hostype_different, fiscal_year_different,
                 dept_different, main_different, org_unmatched, year_bh
@@ -508,6 +570,12 @@ apiRouter.post('/indicators/apply-khd-table-process', authenticateToken, require
         if (newTp === oldTp) return res.status(400).json({ success: false, message: 'table_process ตรงกันอยู่แล้ว' });
         const [dup] = await db.query('SELECT id, kpi_indicators_name FROM kpi_indicators WHERE table_process = ? AND id <> ?', [newTp, id]);
         if (dup.length) {
+            // รายงาน KHD ที่ใช้ table_process ร่วมกันหลายรายงาน = ข้อมูลใน KHD ซ้ำ (11 พ.ย. 2569) — แจ้งให้แก้ที่ KHD
+            const [[sh]] = await remoteDb.query(`SELECT COUNT(*) AS n FROM reports WHERE table_process = ? AND data_source = 'excel'`, [newTp]);
+            if (Number(sh?.n) > 1) {
+                return res.status(409).json({ success: false, code: 'KHD_TP_SHARED',
+                    message: `KHD ใช้ table_process "${newTp}" ร่วมกัน ${sh.n} รายงาน และตัวชี้วัด #${dup[0].id} ${dup[0].kpi_indicators_name} ของระบบใช้อยู่แล้ว — ควรแก้ table_process ของรายงาน KHD #${khd.report_id} ที่ KHD` });
+            }
             return res.status(409).json({ success: false, code: 'TP_IN_USE', message: `มีตัวชี้วัดอื่นใช้ table_process "${newTp}" อยู่แล้ว: #${dup[0].id} ${dup[0].kpi_indicators_name}` });
         }
         if (oldTp) {

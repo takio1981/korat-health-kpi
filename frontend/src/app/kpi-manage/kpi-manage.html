@@ -467,6 +467,30 @@
         </div>
       </div>
 
+      <!-- Banner: ชื่อเดียวกันแต่ table_process ต่างกัน (11 พ.ย. 2569) -->
+      <div *ngIf="activeTab === 'indicators' && khdCounts.tp_different > 0" id="khd-tp-banner"
+           class="mb-4 bg-teal-50 border-2 border-teal-200 rounded-xl p-4">
+        <div class="flex flex-wrap items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center shrink-0">
+            <i class="fas fa-table text-teal-600 text-lg"></i>
+          </div>
+          <div class="flex-1 min-w-0">
+            <h4 class="text-sm font-bold text-teal-900">ชื่อตัวชี้วัดเหมือนกับ KHD แต่ table_process ต่างกัน ({{ khdCounts.tp_different }} ตัว)</h4>
+            <p class="text-xs text-teal-700 mt-1">
+              ใช้ table_process ของ KHD ได้ <b>{{ khdTpCounts.apply }}</b> ตัว (ปุ่มในแถว)
+              · ต้องแก้ที่ KHD <b>{{ khdTpCounts.khd_fix }}</b> ตัว (KHD ใช้ table_process เดียวกันหลายรายงาน และระบบใช้ table_process นั้นกับตัวชี้วัดอื่นแล้ว)
+              · ชื่อตรงกับ KHD หลายรายการ <b>{{ khdTpCounts.ambiguous }}</b> ตัว
+              · อาจเป็นตัวชี้วัดซ้ำในระบบ <b>{{ khdTpCounts.linked_other }}</b> ตัว
+            </p>
+            <p class="text-[11px] text-teal-600 mt-1">ค่าหัวข้ออื่น (เกณฑ์ ประเภท ปีงบ หน่วยงาน หมวดหมู่หลัก) ของคู่ที่จับได้ เทียบกับรายงาน KHD ที่ชื่อเดียวกันแล้ว — ดูได้ในหน้าต่างรายละเอียด</p>
+          </div>
+          <button (click)="openKhdTpDiff()" id="btn-khd-tp-detail"
+                  class="shrink-0 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold shadow-md transition-colors">
+            <i class="fas fa-code-compare mr-1"></i>ดูรายละเอียด
+          </button>
+        </div>
+      </div>
+
       <!-- === Mobile Card View === -->
       <div class="md:hidden space-y-2 p-3 overflow-y-auto card-scroll" style="max-height: calc(100vh - 320px);">
         <div *ngIf="currentList.length === 0" class="text-center py-10 text-gray-400 text-sm">
@@ -537,6 +561,9 @@
                 <span *ngIf="khdOrgMatch(item, 'main') === false" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-fuchsia-50 border border-fuchsia-300 text-fuchsia-700 font-bold"
                       [title]="'ระบบ: ' + localOrgText(item, 'main')"><i class="fas fa-folder-tree text-[9px]"></i>KHD: {{ khdOrgText(item, 'main') }}</span>
                 <button *ngIf="canEditData && khdOrgMatch(item, 'main') === false" (click)="applyKhdOrg([item], 'main')" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-fuchsia-600 text-white font-bold"><i class="fas fa-arrow-down text-[9px]"></i>ใช้หมวดหมู่หลัก KHD</button>
+                <span *ngIf="khdTpKind(item)" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-50 border border-teal-300 text-teal-700 font-bold" [title]="khdTpDetail(item)">
+                  <i class="fas fa-table text-[9px]"></i>{{ khdTpKind(item) === 'apply' || khdTpKind(item) === 'khd_fix' ? 'KHD: ' + getKhdData(item)?.khd_table_process : (khdTpKind(item) === 'ambiguous' ? 'ชื่อตรงกับ KHD หลายรายการ' : 'อาจซ้ำในระบบ') }}</span>
+                <button *ngIf="canEditData && khdTpKind(item) === 'apply'" (click)="applyKhdTableProcess(item)" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-600 text-white font-bold"><i class="fas fa-arrow-down text-[9px]"></i>ใช้ table_process KHD</button>
                 <span *ngIf="item.weight" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-50 border border-orange-200 text-orange-700" title="น้ำหนัก">
                   <i class="fas fa-weight-hanging text-[9px]"></i>{{ item.weight }}
                 </span>
@@ -735,7 +762,7 @@
                       <i class="fas fa-exclamation-triangle mr-1"></i>ต่างกัน
                     </span>
                     <span *ngSwitchCase="'tp_different'" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800"
-                          [title]="'ชื่อเดียวกัน แต่ table_process ใน KHD = ' + getKhdData(item)?.khd_table_process">
+                          [title]="khdTpDetail(item)">
                       <i class="fas fa-table mr-1"></i>table_process ต่างกัน
                     </span>
                     <span *ngSwitchCase="'missing_remote'" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700" title="ไม่มีใน KHD">
@@ -805,6 +832,14 @@
                           class="mt-1 block mx-auto px-2 py-0.5 bg-fuchsia-600 hover:bg-fuchsia-700 text-white rounded text-[10px] font-bold whitespace-nowrap"
                           [title]="'ปรับเป็น ' + khdOrgText(item, 'main')">
                     <i class="fas fa-arrow-down mr-1"></i>ใช้หมวดหมู่หลัก KHD
+                  </button>
+                  <div *ngIf="khdTpKind(item) && khdTpKind(item) !== 'apply'" class="mt-1 text-[10px] font-bold text-teal-700" [title]="khdTpDetail(item)">
+                    <i class="fas fa-circle-info mr-1"></i>{{ khdTpKind(item) === 'khd_fix' ? 'ต้องแก้ที่ KHD' : khdTpKind(item) === 'ambiguous' ? 'ชื่อตรง KHD หลายรายการ' : 'อาจซ้ำในระบบ' }}
+                  </div>
+                  <button *ngIf="canEditData && khdTpKind(item) === 'apply'" (click)="applyKhdTableProcess(item)"
+                          class="mt-1 block mx-auto px-2 py-0.5 bg-teal-600 hover:bg-teal-700 text-white rounded text-[10px] font-bold whitespace-nowrap"
+                          [title]="'เปลี่ยนเป็น ' + getKhdData(item)?.khd_table_process">
+                    <i class="fas fa-arrow-down mr-1"></i>ใช้ table_process KHD
                   </button>
                   <button *ngIf="getKhdData(item) && (khdFiscalYearMatch(item) === false || khdOrgMatch(item, 'dept') === false || khdOrgMatch(item, 'main') === false || getKhdCompareStatus(item) === 'different' || getKhdCompareStatus(item) === 'tp_different' || getKhdData(item)?.criteria_match === false || getKhdData(item)?.types_match === false || getKhdData(item)?.hostype_match === false || getKhdData(item)?.khd_is_active === 0 || getKhdData(item)?.khd_is_active === '0')"
                           (click)="openKhdDiff(item)" class="mt-1 block mx-auto text-[10px] font-bold text-indigo-700 hover:underline whitespace-nowrap">
@@ -1074,7 +1109,11 @@
                          (change)="toggleMissingLocalSelect(item)"
                          class="w-3.5 h-3.5 accent-cyan-700 cursor-pointer">
                 </td>
-                <td class="px-3 py-2 font-mono text-cyan-700">{{ item.table_process }}</td>
+                <td class="px-3 py-2 font-mono text-cyan-700">{{ item.table_process }}
+                  <div *ngIf="item.khd_tp_shared > 1" class="mt-0.5 font-sans text-[10px] font-bold text-amber-700"
+                       [title]="item.khd_tp_used_by ? 'ระบบใช้ table_process นี้กับตัวชี้วัด #' + item.khd_tp_used_by.id + ' ' + item.khd_tp_used_by.name + ' แล้ว — เพิ่มเข้าระบบด้วย table_process นี้ไม่ได้ ควรแก้ที่ KHD' : ''">
+                    <i class="fas fa-triangle-exclamation mr-1"></i>KHD ใช้ซ้ำ {{ item.khd_tp_shared }} รายงาน<span *ngIf="item.khd_tp_used_by"> · ระบบใช้แล้ว (#{{ item.khd_tp_used_by.id }})</span></div>
+                </td>
                 <td class="px-3 py-2 text-gray-800 font-medium">{{ item.khd_name }}</td>
                 <td class="px-3 py-2 align-top">
                   <div class="text-gray-500">{{ item.khd_dept || '-' }}</div>
@@ -2764,7 +2803,8 @@
             <td class="px-3 py-2 font-bold text-indigo-800 bg-indigo-50/50">{{ r.khd }}</td>
             <td class="px-3 py-2 text-xs text-gray-600">{{ r.detail }}</td>
             <td class="px-3 py-2 text-right" *ngIf="canEditData">
-              <button *ngIf="r.kind !== 'status'" (click)="applyKhdDiffRow(r)" [attr.data-apply-kind]="r.kind"
+              <span *ngIf="r.applicable === false" class="text-[11px] font-bold text-gray-500 whitespace-nowrap"><i class="fas fa-circle-info mr-1"></i>{{ r.note }}</span>
+              <button *ngIf="r.kind !== 'status' && r.applicable !== false" (click)="applyKhdDiffRow(r)" [attr.data-apply-kind]="r.kind"
                       class="px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold whitespace-nowrap"><i class="fas fa-arrow-down mr-1"></i>ใช้ค่า KHD</button>
             </td>
           </tr>

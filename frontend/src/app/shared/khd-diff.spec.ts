@@ -1,4 +1,4 @@
-import { buildKhdDiffRows, typesChangeText, hostypeChangeText, khdDiffAoa, fiscalYearList, fiscalYearMatch, fiscalYearChangeText, fiscalYearChoices, khdOrgMatch, khdOrgUnmatched } from './khd-diff';
+import { buildKhdDiffRows, typesChangeText, hostypeChangeText, khdDiffAoa, fiscalYearList, fiscalYearMatch, fiscalYearChangeText, fiscalYearChoices, khdOrgMatch, khdOrgUnmatched, khdTpKind, khdTpDetail } from './khd-diff';
 
 // รายละเอียดความแตกต่างหลังเทียบกับ KHD (9 พ.ย. 2569)
 describe('khd-diff', () => {
@@ -104,5 +104,27 @@ describe('khd-diff หน่วยงาน/หมวดหมู่หลัก
       expect.objectContaining({ kind: 'dept', local: 'กลุ่มงาน ก', khd: 'กลุ่มงาน ข', detail: 'ค่าใน KHD: "NCD" (จับคู่อัตโนมัติ)' }),
       expect.objectContaining({ kind: 'main', local: 'ไม่ระบุ', khd: 'หมวด ก', detail: 'ค่าใน KHD: "หมวด ก (37)" (จับคู่ที่ตั้งไว้)' }),
     ]);
+  });
+});
+
+// ชื่อเดียวกันแต่ table_process ต่าง — ใช้ได้ / ต้องแก้ที่ KHD / ชื่อตรงหลายรายการ / อาจซ้ำในระบบ (11 พ.ย. 2569)
+describe('khd-diff table_process — สถานะของคู่', () => {
+  const items = [1, 2, 3, 4].map(id => ({ id, kpi_indicators_name: 'ก', table_process: 'tp_' + id }));
+  const khd: Record<string, any> = {
+    tp_1: { status: 'tp_different', khd_report_id: 11, khd_table_process: 'kpi_x' },
+    tp_2: { status: 'tp_different', khd_report_id: 12, report_code: 'tp-2', khd_table_process: 'kpi_shared', khd_tp_shared: 6, khd_code_matches_tp: true, khd_tp_used_by: { id: 9, name: 'ข' } },
+    tp_3: { status: 'tp_different', khd_report_id: null, tp_ambiguous: true, tp_candidates: [{ report_id: 21, table_process: 'a' }, { report_id: 22, table_process: 'b' }] },
+    tp_4: { status: 'tp_different', tp_note: 'linked_other', tp_candidates: [{ report_id: 31, table_process: 'c', used_by_id: 5 }] },
+  };
+  it('khdTpKind + ข้อความอธิบาย', () => {
+    expect(['tp_1', 'tp_2', 'tp_3', 'tp_4'].map(t => khdTpKind(khd[t]))).toEqual(['apply', 'khd_fix', 'ambiguous', 'linked_other']);
+    expect(khdTpKind({ status: 'match' })).toBeNull();
+    expect(khdTpDetail(khd['tp_2'])).toBe('ชื่อเดียวกัน (KHD #12 · รหัส tp-2) · รหัสรายงาน KHD ตรงกับ table_process ของระบบ · KHD ใช้ table_process นี้ร่วมกัน 6 รายงาน · ตัวชี้วัด #9 ข ของระบบใช้ table_process นี้แล้ว → ควรแก้ table_process ของรายงานนี้ที่ KHD');
+    expect(khdTpDetail(khd['tp_4'])).toContain('#31 c (ใช้กับตัวชี้วัด #5 ในระบบ)');
+  });
+  it('แถวในหน้าต่างรายละเอียด: ใช้ได้เฉพาะคู่ที่ปรับได้ ที่เหลือมีหมายเหตุแทนปุ่ม', () => {
+    const rows = buildKhdDiffRows(items, { getKhd: (i: any) => khd[i.table_process], criteriaText: () => '-', khdCriteriaText: () => '-' });
+    expect(rows.map(r => [r.id, r.khd, r.applicable, r.note])).toEqual([
+      [1, 'kpi_x', undefined, undefined], [2, 'kpi_shared', false, 'แก้ที่ KHD'], [3, 'a, b', false, 'ตรวจสอบเอง'], [4, 'c', false, 'ตรวจสอบเอง']]);
   });
 });

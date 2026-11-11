@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { KpiManageComponent, resultMethodOf, applyResultMethod, quarterModeParts, quarterModeFrom, setQuarterMode } from './kpi-manage';
 import { testProviders } from '../testing/test-providers';
+import Swal from 'sweetalert2';
 
 describe('KpiManageComponent', () => {
   let component: KpiManageComponent;
@@ -211,6 +212,24 @@ describe('KpiManageComponent', () => {
       (component as any).authService.applyKhdTableProcess(3, 77).subscribe();
       const req = http.expectOne(r => r.method === 'POST' && r.url.includes('/indicators/apply-khd-table-process'));
       expect(req.request.body).toEqual({ id: 3, khd_report_id: 77 });
+    });
+
+    it('table_process ต่างกัน: นับแยกตามสถานะ แถบสรุปเปิดหน้าต่างเฉพาะหัวข้อ และคู่ที่ต้องแก้ที่ KHD ไม่เรียก API (11 พ.ย. 2569)', () => {
+      component.indicators.push(
+        { id: 31, kpi_indicators_name: 'ก', table_process: 'tp31', is_active: 1 },
+        { id: 32, kpi_indicators_name: 'ข', table_process: 'tp32', is_active: 1 });
+      component.khdCompareMap.set('tp31', { status: 'tp_different', table_process: 'tp31', khd_table_process: 'kx', khd_report_id: 81 });
+      component.khdCompareMap.set('tp32', { status: 'tp_different', table_process: 'tp32', khd_table_process: 'ks', khd_report_id: 82, khd_tp_shared: 3, khd_tp_used_by: { id: 1, name: 'ค' } });
+      expect(component.khdTpCounts).toEqual({ apply: 1, khd_fix: 1, ambiguous: 0, linked_other: 0 });
+      component.openKhdTpDiff();
+      expect(component.khdDiffKind).toBe('table_process');
+      expect(component.khdDiffRows.map(r => [r.id, r.applicable])).toEqual([[31, undefined], [32, false]]);
+      const http = TestBed.inject(HttpTestingController);
+      const swal = vi.spyOn(Swal, 'fire').mockResolvedValue({} as any);
+      component.applyKhdTableProcess(component.indicators.find((i: any) => i.id === 32));
+      expect(swal).toHaveBeenCalledWith(expect.objectContaining({ title: 'ใช้ table_process ของ KHD ไม่ได้' }));
+      http.expectNone(r => r.url.includes('/indicators/apply-khd-table-process'));
+      swal.mockRestore();
     });
 
     it('ปีงบประมาณ: นับ/กรอง "ปีงบต่างกัน" จากค่าปัจจุบัน + กรองไม่ระบุปีงบ + ปรับค่าในรายการทันทีหลังบันทึก', () => {

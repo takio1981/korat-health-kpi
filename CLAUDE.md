@@ -988,6 +988,12 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
     | `POST /indicators/apply-khd-table-process { id, khd_report_id }` (requireAction edit) server ตรวจ: ชื่อตรง (NAME_MISMATCH), `isValidIdentifier`, ไม่ซ้ำตัวอื่น (409 TP_IN_USE),
     **ไม่มีตาราง `<tp เดิม>` / `<tp>_items` / `form_<tp>`** (409 OLD_TABLES_EXIST + รายชื่อตาราง — ข้อมูลในตารางเดิมจะไม่ถูกใช้ต่อ) แล้วตั้ง table_process + รหัส + khd_report_id + data_source
     — ข้อมูลจริง: ชื่อเดียวกัน tp ต่าง 1 คู่ (จมน้ำ kpi_ems_001 ↔ excellence_indicator_1_51), tp เดียวกันชื่อต่าง 23 — Test: `api/tests/khd-table-process.test.js`, `khd-diff.spec.ts`, `kpi-manage.spec.ts`
+    — **ขยาย 11 พ.ย. 2569 (ผู้ใช้สั่ง):** ⚠️ **KHD หลายรายงานใช้ table_process เดียวกันได้** (ข้อมูลจริง: excellence_indicator_2_38_4 = 6 รายงาน, 2_40_1 = 5, moph_kpi_816/817/846 = 2 — เดิมทุกรายงานถูกเทียบกับตัวชี้วัดเดียว → "ชื่อต่างกัน" ปลอม)
+    → `primaryOf` เลือกรายงานหลักต่อ table_process (khd_report_id ของตัวชี้วัด → ชื่อตรง → ท้ายสุด) ที่เหลือเป็น missing_local (`khd_tp_shared`, `khd_tp_used_by`) | `pairByNameDifferentTp(items, pairFields)`: ชื่อตรงหลายรายการ → เลือกรายการที่
+    `report_code` (ขีดกลาง → ขีดล่าง) = table_process ของระบบ, ตัวชี้วัดหลายตัวแย่งรายการเดียว/ยังเลือกไม่ได้ = `tp_ambiguous` + `tp_candidates`, ชื่อตรงเฉพาะรายงานที่เชื่อมกับตัวชี้วัดอื่นแล้ว = `tp_note: 'linked_other'`
+    | คู่ที่จับได้ใช้ `pairFields()` ตัวเดียวกับคู่ table_process เดียวกัน (เกณฑ์/ประเภท/ปีงบ/หน่วยงาน/หมวดหมู่หลัก) | apply: KHD ใช้ table_process ร่วมหลายรายงาน + ระบบใช้แล้ว = 409 `KHD_TP_SHARED`
+    | frontend `khdTpKind()` apply/khd_fix/ambiguous/linked_other (`shared/khd-diff.ts`), แถบ `#khd-tp-banner` + `openKhdTpDiff()`, แถวในหน้าต่างที่ปรับไม่ได้ = `applicable: false` + หมายเหตุ
+    — ข้อมูลจริง 11 พ.ย. 2569: ตัวชี้วัดชื่อตรงกับ KHD แต่ tp ต่าง 7 ตัว (ทั้งหมดเป็นรายงาน KHD ที่ใช้ tp ซ้ำ; เดิมระบบหาไม่เจอเลย)
   — ข้อมูลจริง 9 พ.ย. 2569 (ปีงบ 2570, 149 คู่): ประเภทตัวชี้วัดต่าง 18 / ประเภทหน่วยบริการต่าง 67 (ฝั่งเรายังไม่ตั้ง 33) — Test: `api/tests/khd-types.test.js`, `khd-add-mapping.test.js`, `shared/khd-types.spec.ts`, `kpi-manage.spec.ts`
 - Join กับ local ผ่าน `table_process` (key เดียวกันทั้ง 2 ทาง) — คืน field `khd_*` (`khd_report_id, khd_name,
   khd_dept, khd_main_yut, khd_is_active, khd_data_source, khd_target_percentage, khd_target_condition,

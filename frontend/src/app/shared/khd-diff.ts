@@ -13,6 +13,37 @@ export interface KhdDiffRow {
   kind: KhdDiffKind; local: string; khd: string;
   /** รายละเอียดเพิ่ม เช่น "R9: มี → ไม่มี" หรือ "เพิ่ม: 05 · เอาออก: 18" */
   detail: string;
+  /** false = ไม่มีค่าให้ใช้ในระบบ (ต้องแก้ที่ KHD / ตรวจสอบเอง) — ไม่แสดงปุ่ม "ใช้ค่า KHD" */
+  applicable?: boolean;
+  /** ข้อความแทนปุ่มเมื่อ applicable = false */
+  note?: string;
+}
+
+/**
+ * ชื่อเดียวกันแต่ table_process ต่างกัน (11 พ.ย. 2569) — สถานะของคู่จาก GET /report-compare:
+ * 'apply' = ใช้ table_process ของ KHD ได้ | 'khd_fix' = table_process ของ KHD ถูกตัวชี้วัดอื่นของระบบใช้แล้ว (KHD ใช้ซ้ำหลายรายงาน → ควรแก้ที่ KHD)
+ * | 'ambiguous' = ชื่อตรงกับ KHD หลายรายการ เลือกไม่ได้ | 'linked_other' = ชื่อตรงกับรายงาน KHD ที่เชื่อมกับตัวชี้วัดอื่นแล้ว (อาจเป็นตัวชี้วัดซ้ำ)
+ */
+export type KhdTpKind = 'apply' | 'khd_fix' | 'ambiguous' | 'linked_other';
+export function khdTpKind(k: any): KhdTpKind | null {
+  if (!k || k.status !== 'tp_different') return null;
+  if (k.tp_note === 'linked_other') return 'linked_other';
+  if (k.tp_ambiguous || !k.khd_report_id) return 'ambiguous';
+  if (k.khd_tp_used_by) return 'khd_fix';
+  return 'apply';
+}
+const tpCand = (c: any) => '#' + c.report_id + ' ' + (c.table_process || '-') + (c.used_by_id ? ' (ใช้กับตัวชี้วัด #' + c.used_by_id + ' ในระบบ)' : '');
+/** ข้อความอธิบายคู่ชื่อเดียวกันแต่ table_process ต่าง (หน้าต่างรายละเอียด / ป้ายในแถว) */
+export function khdTpDetail(k: any): string {
+  const kind = khdTpKind(k);
+  if (!kind) return '';
+  if (kind === 'ambiguous') return 'ชื่อตรงกับรายงาน KHD หลายรายการ: ' + (k.tp_candidates || []).map(tpCand).join(', ') + ' — ระบบไม่เลือกให้ (ตรวจสอบว่าเป็นรายการใด)';
+  if (kind === 'linked_other') return 'ชื่อตรงกับรายงาน KHD ที่เชื่อมกับตัวชี้วัดอื่นของระบบแล้ว: ' + (k.tp_candidates || []).map(tpCand).join(', ') + ' — อาจเป็นตัวชี้วัดซ้ำในระบบ';
+  const parts = ['ชื่อเดียวกัน (KHD #' + k.khd_report_id + (k.report_code ? ' · รหัส ' + k.report_code : '') + ')'];
+  if (k.khd_code_matches_tp) parts.push('รหัสรายงาน KHD ตรงกับ table_process ของระบบ');
+  if (k.khd_tp_shared > 1) parts.push('KHD ใช้ table_process นี้ร่วมกัน ' + k.khd_tp_shared + ' รายงาน');
+  if (k.khd_tp_used_by) parts.push('ตัวชี้วัด #' + k.khd_tp_used_by.id + ' ' + (k.khd_tp_used_by.name || '') + ' ของระบบใช้ table_process นี้แล้ว → ควรแก้ table_process ของรายงานนี้ที่ KHD');
+  return parts.join(' · ');
 }
 
 export interface KhdDiffContext {
@@ -112,8 +143,10 @@ export function buildKhdDiffRows(indicators: any[], ctx: KhdDiffContext): KhdDif
       rows.push({ ...base, kind: 'name', local: it.kpi_indicators_name || '-', khd: k.khd_name || '-', detail: 'table_process เดียวกัน: ' + (it.table_process || '-') });
     }
     if (k.status === 'tp_different') {
-      rows.push({ ...base, kind: 'table_process', local: it.table_process || '-', khd: k.khd_table_process || '-',
-        detail: 'ชื่อเดียวกัน (KHD #' + k.khd_report_id + (k.report_code ? ' · รหัส ' + k.report_code : '') + ')' });
+      const tk = khdTpKind(k);
+      const khdTp = tk === 'ambiguous' || tk === 'linked_other' ? (k.tp_candidates || []).map((c: any) => c.table_process || '-').join(', ') || '-' : (k.khd_table_process || '-');
+      rows.push({ ...base, kind: 'table_process', local: it.table_process || '-', khd: khdTp, detail: khdTpDetail(k),
+        ...(tk === 'apply' ? {} : { applicable: false, note: tk === 'khd_fix' ? 'แก้ที่ KHD' : 'ตรวจสอบเอง' }) });
     }
     if (k.criteria_match === false) {
       rows.push({ ...base, kind: 'criteria', local: ctx.criteriaText(it), khd: ctx.khdCriteriaText(k), detail: '' });

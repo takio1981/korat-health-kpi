@@ -15,7 +15,7 @@ import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { ZoneBadgeComponent, HospitalZoneService } from '../shared/zone-badge';
 import { ZoneManagerComponent } from '../shared/zone-manager';
 import { typesText, hostypeText } from '../shared/khd-types';
-import { buildKhdDiffRows, khdDiffAoa, KhdDiffRow, KhdDiffKind, KHD_DIFF_KIND_LABEL, fiscalYearList, fiscalYearMatch, fiscalYearChoices, khdOrgMatch, khdOrgUnmatched, KhdOrgPart } from '../shared/khd-diff';
+import { buildKhdDiffRows, khdDiffAoa, KhdDiffRow, KhdDiffKind, KHD_DIFF_KIND_LABEL, fiscalYearList, fiscalYearMatch, fiscalYearChoices, khdOrgMatch, khdOrgUnmatched, KhdOrgPart, khdTpKind, khdTpDetail, KhdTpKind } from '../shared/khd-diff';
 import { AiFormulaHelperComponent } from '../shared/ai-formula-helper';
 import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
 import { TARGET_CONDITIONS, CONDITION_SYMBOL, CONDITION_LABEL, normalizeCondition, evaluateTarget, normalizeTargetMonthly } from '../shared/kpi-target';
@@ -2545,6 +2545,21 @@ export class KpiManageComponent implements OnInit {
   get khdDeptDiffItems(): any[] { return this.indicators.filter(i => this.khdOrgMatch(i, 'dept') === false); }
   get khdMainDiffItems(): any[] { return this.indicators.filter(i => this.khdOrgMatch(i, 'main') === false); }
   /** ค่าหน่วยงาน/หมวดหมู่หลักใน KHD ที่ยังจับคู่กับระบบไม่ได้ (เทียบไม่ได้จนกว่าจะตั้งที่ "จับคู่ข้อมูล KHD") */
+  /** ชื่อเดียวกันแต่ table_process ต่างกัน (11 พ.ย. 2569): ใช้ได้ / ต้องแก้ที่ KHD / ชื่อตรงหลายรายการ / อาจซ้ำในระบบ */
+  khdTpKind(item: any): KhdTpKind | null { return khdTpKind(this.getKhdData(item)); }
+  khdTpDetail(item: any): string { return khdTpDetail(this.getKhdData(item)); }
+  get khdTpCounts(): Record<KhdTpKind, number> {
+    const c: Record<KhdTpKind, number> = { apply: 0, khd_fix: 0, ambiguous: 0, linked_other: 0 };
+    for (const i of this.indicators) { const k = this.khdTpKind(i); if (k) c[k]++; }
+    return c;
+  }
+  /** แถบสรุป → หน้าต่างรายละเอียดเฉพาะหัวข้อ table_process */
+  openKhdTpDiff() {
+    this.openKhdDiff();
+    this.khdDiffKind = 'table_process';
+    this.refreshKhdDiff();
+  }
+
   get khdOrgUnmatchedCount(): number {
     return this.indicators.filter(i => khdOrgUnmatched(this.getKhdData(i), 'dept') || khdOrgUnmatched(this.getKhdData(i), 'main')).length;
   }
@@ -2678,6 +2693,10 @@ export class KpiManageComponent implements OnInit {
   applyKhdTableProcess(item: any) {
     const k = this.getKhdData(item);
     if (!k || k.status !== 'tp_different') return;
+    if (khdTpKind(k) !== 'apply') {   // ไม่มีค่าที่ใช้ได้ในระบบ — อธิบายเหตุผล (ต้องแก้ที่ KHD / ตรวจสอบเอง)
+      Swal.fire({ icon: 'info', title: 'ใช้ table_process ของ KHD ไม่ได้', text: khdTpDetail(k), confirmButtonText: 'ปิด' });
+      return;
+    }
     const esc = (t: any) => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as any)[c]);
     Swal.fire({
       title: 'ใช้ table_process ของ KHD',
