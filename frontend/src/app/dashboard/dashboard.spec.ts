@@ -1077,4 +1077,43 @@ describe('DashboardComponent', () => {
       expect(plan.noPerm).toBe(1);
     });
   });
+
+  describe('ข้อย่อย/กิจกรรมของตัวชี้วัดรายไตรมาส (11 พ.ย. 2569)', () => {
+    const hierRow = (months: any = {}, extra: any = {}): any => ({ kind: 'sub', id: 1, subId: 1, parentSubId: null, level: 1, no: '1.1', name: 'ข้อ', valueType: 'number',
+      auto: false, target: '10', locked: false, months: { oct: '', nov: '', dece: '', jan: '', feb: '', mar: '', apr: '', may: '', jun: '', jul: '', aug: '', sep: '', ...months }, _orig: {}, ...extra });
+
+    it('แถวลูก: บันทึกรายไตรมาส ปิดช่องเดือนกลางไตรมาส / บันทึกรายเดือน แสดงค่าไตรมาส + ผลงานไตรมาสล่าสุด', () => {
+      component.isEditing = true;
+      vi.spyOn(component, 'canEditHierRow').mockReturnValue(true);
+      const q = row('2570', { quarter_mode: 'quarter' });
+      expect(component.canEditHierCell(q, hierRow(), 'nov')).toBe(false);
+      expect(component.canEditHierCell(q, hierRow(), 'dece')).toBe(true);
+      expect(component.hierQuarterText(q, hierRow(), 'dece')).toBe('');
+      const m = row('2570', { quarter_mode: 'month_sum' });
+      const r = hierRow({ oct: '1', nov: '2', dece: '3', jan: '10' });
+      expect(component.canEditHierCell(m, r, 'nov')).toBe(true);
+      expect(component.hierQuarterText(m, r, 'dece')).toBe('ไตรมาส 1: 6');
+      expect(component.hierQuarterText(m, hierRow({}, { valueType: 'check' }), 'dece')).toBe('');
+      expect(component.hierLastValue(r, m)).toBe('10');
+      expect(component.hierLastValue(r)).toBe('10');
+      expect(component.hierLastValue(hierRow({ oct: '1', nov: '2', dece: '3' }), m)).toBe('6');
+      expect(component.hierPct(hierRow({ oct: '1', nov: '2', dece: '3' }), 'GTE', m)).toBe('60.00');
+    });
+
+    it('หน้าต่างบันทึกผลงานย่อย: เดือนกลางไตรมาสอ่านอย่างเดียว / ค่าไตรมาส + ผลงานไตรมาสล่าสุด', () => {
+      component.subResultContext = { quarter_mode: 'quarter' };
+      expect(component.subMonthColumns.filter(mm => !component.isSubQuarterOff(mm))).toEqual([12, 3, 6, 9]);
+      expect(component.subQuarterText({ _actuals: {} }, 12)).toBe('ไตรมาส 1');
+      component.subResultContext = { quarter_mode: 'month_avg' };
+      const s = { _target: '10', _actuals: { 10: '2', 11: '4', 12: '', 1: '8' } };
+      expect(component.isSubQuarterOff(11)).toBe(false);
+      expect(component.subQuarterText(s, 12)).toBe('ไตรมาส 1: 3');
+      expect(component.subQuarterText(s, 11)).toBe('');
+      expect(component.getSubLastActual(s)).toBe('8');
+      expect(component.getSubPct({ ...s, _actuals: { 10: '2', 11: '4' } })).toBe('30');
+      component.subResultContext = { quarter_mode: null };
+      expect(component.getSubLastActual({ _actuals: { 10: '2', 11: '4' } })).toBe('4');
+      expect(component.subQuarterText(s, 12)).toBe('');
+    });
+  });
 });

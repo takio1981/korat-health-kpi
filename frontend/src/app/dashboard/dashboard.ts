@@ -3171,7 +3171,14 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     return !row.auto && String(row.months[m] ?? '') !== String(row._orig[m] ?? '');
   }
 
-  hierLastValue(row: HierRow): string {
+  hierLastValue(row: HierRow, item?: any): string {
+    // บันทึกรายเดือน + ค่าไตรมาสรวม/เฉลี่ย → ผลงาน = ค่าไตรมาสล่าสุด (เหมือนสูตร LASTQ ของตัวชี้วัดหลัก)
+    const mode = normalizeQuarterMode(item?.quarter_mode);
+    if (row.valueType !== 'check' && (mode === 'month_sum' || mode === 'month_avg')) {
+      const qv = quarterValues(mode, row.months);
+      for (let q = 3; q >= 0; q--) if (qv[q] !== null) return qv[q] as string;
+      return '';
+    }
     for (let i = HIER_MONTHS.length - 1; i >= 0; i--) {
       const v = String(row.months[HIER_MONTHS[i].key] ?? '').trim();
       if (v !== '') return row.valueType === 'check' ? (v === '1' ? 'ทำแล้ว' : 'ยังไม่ทำ') : v;
@@ -3245,6 +3252,51 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     const m = normalizeQuarterMode(item?.quarter_mode);
     return !m ? '' : m === 'quarter' ? 'รายไตรมาส' : 'ไตรมาส (บันทึกรายเดือน)';
   }
+  // ข้อย่อย/กิจกรรมใช้รอบการวัดผลของตัวชี้วัดหลัก (11 พ.ย. 2569) — บันทึกรายไตรมาส: ช่องเดือนกลางไตรมาสปิด (backend ตรวจซ้ำ)
+  canEditHierCell(item: any, row: HierRow, m: string): boolean {
+    return this.canEditHierRow(item, row) && !this.isQuarterOffMonth(item, m);
+  }
+  /** ค่าไตรมาสของแถวลูก (บันทึกรายเดือน) ใต้เดือนสุดท้ายของไตรมาส — ไม่ใช่ = '' */
+  hierQuarterText(item: any, row: HierRow, m: string): string {
+    const q = this.QUARTER_END_KEYS[m];
+    if (!q || !this.isQuarterly(item) || this.isQuarterEntry(item) || row.valueType === 'check') return '';
+    const v = quarterValues(item.quarter_mode, row.months)[q - 1];
+    return 'ไตรมาส ' + q + ': ' + (v ?? '-');
+  }
+  /** หน้าต่างบันทึกผลงานย่อย: เดือน (เลขเดือน) ปิดการกรอกเพราะตัวชี้วัดหลักบันทึกรายไตรมาส */
+  isSubQuarterOff(m: number): boolean {
+    return normalizeQuarterMode(this.subResultContext?.quarter_mode) === 'quarter' && !isQuarterEntryMonth('quarter', m);
+  }
+  private subMonthsObj(sub: any): Record<string, any> {
+    const o: Record<string, any> = {};
+    for (const m of this.subMonthColumns) o['m' + String(m).padStart(2, '0')] = sub?._actuals?.[m];
+    return o;
+  }
+  /** หน้าต่างบันทึกผลงานย่อย: ข้อความใต้เดือนสุดท้ายของไตรมาส */
+  subQuarterText(sub: any, m: number): string {
+    const mode = normalizeQuarterMode(this.subResultContext?.quarter_mode);
+    const q = ({ 12: 1, 3: 2, 6: 3, 9: 4 } as Record<number, number>)[m];
+    if (!mode || !q) return '';
+    if (mode === 'quarter') return 'ไตรมาส ' + q;
+    return 'ไตรมาส ' + q + ': ' + (quarterValues(mode, this.subMonthsObj(sub))[q - 1] ?? '-');
+  }
+  /** ผลงานของข้อย่อยในหน้าต่าง: ค่าเดือนล่าสุด หรือค่าไตรมาสล่าสุด (บันทึกรายเดือน + รวม/เฉลี่ย) */
+  private subLastRaw(sub: any): any {
+    if (!sub?._actuals) return null;
+    const mode = normalizeQuarterMode(this.subResultContext?.quarter_mode);
+    if (mode === 'month_sum' || mode === 'month_avg') {
+      const qv = quarterValues(mode, this.subMonthsObj(sub));
+      for (let q = 3; q >= 0; q--) if (qv[q] !== null) return qv[q];
+      return null;
+    }
+    const rev = [...this.subMonthColumns].reverse();
+    for (const m of rev) {
+      const v = sub._actuals[m];
+      if (v !== null && v !== undefined && String(v).trim() !== '') return v;
+    }
+    return null;
+  }
+
   quarterBadgeTitle(item: any): string {
     const m = normalizeQuarterMode(item?.quarter_mode);
     if (!m) return '';
@@ -3297,9 +3349,9 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   // แถวลูกใช้เงื่อนไขเป้าหมายของตัวชี้วัดหลัก (cond = item.target_condition)
-  hierPct(row: HierRow, cond?: any): string {
+  hierPct(row: HierRow, cond?: any, item?: any): string {
     if (row.valueType === 'check') return '';
-    const last = this.hierLastValue(row);
+    const last = this.hierLastValue(row, item);
     if (isNaN(parseFloat(last))) return '';
     const r = evaluateTarget(last, row.target, cond);
     return r.pct === null ? '' : r.pct.toFixed(2);
@@ -3368,7 +3420,8 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       hosname: item.hosname,
       year_bh: item.year_bh || this.selectedYear,
       is_locked: item.is_locked,
-      target_condition: item.target_condition
+      target_condition: item.target_condition,
+      quarter_mode: item.quarter_mode || null
     };
     // Reset modal-local state ทุกครั้งที่เปิด modal ใหม่
     this.subEditMode = false;
@@ -3596,26 +3649,13 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // ค่าเดือนล่าสุดที่มีผลงาน (ลำดับย้อนกลับ ก.ย.→ต.ค.) — format จำนวนเต็ม/2 ตำแหน่ง
   getSubLastActual(sub: any): string {
-    if (!sub?._actuals) return '';
-    const rev = [...this.subMonthColumns].reverse();
-    for (const m of rev) {
-      const v = sub._actuals[m];
-      if (v !== null && v !== undefined && String(v).trim() !== '') return this.formatNum(v);
-    }
-    return '';
+    const v = this.subLastRaw(sub);
+    return v === null ? '' : this.formatNum(v);
   }
 
   // % เทียบเป้าหมาย — int ถ้าเต็ม, 2 ทศนิยมถ้ามีเศษ
   getSubPct(sub: any): string {
-    const actualRaw = (() => {
-      if (!sub?._actuals) return null;
-      const rev = [...this.subMonthColumns].reverse();
-      for (const m of rev) {
-        const v = sub._actuals[m];
-        if (v !== null && v !== undefined && String(v).trim() !== '') return v;
-      }
-      return null;
-    })();
+    const actualRaw = this.subLastRaw(sub);
     const actual = parseFloat(actualRaw as any);
     const target = parseFloat(sub?._target);
     if (!isFinite(actual) || !isFinite(target) || target === 0) return '';
@@ -3711,6 +3751,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         ${line(plan.tooLong, 'ข้าม — ข้อความยาวเกิน 100 ตัวอักษร', '#b45309')}
         ${line(plan.unmatchedRows.length, 'ข้าม — แถวที่ไม่ใช่ข้อย่อยของตัวชี้วัดนี้ หรือเป็นของหน่วยบริการ/ปีงบประมาณอื่น', '#b91c1c')}
         ${line(plan.duplicateRows.length, 'ข้าม — แถวซ้ำในไฟล์ (ใช้แถวแรก)', '#b45309')}
+        ${line(plan.offQuarter || 0, 'ข้าม — เดือนกลางไตรมาส (ตัวชี้วัดนี้บันทึกรายไตรมาส: ธ.ค. / มี.ค. / มิ.ย. / ก.ย.)', '#b45309')}
       </ul>
       ${plan.unmatchedRows.length ? `<p style="font-size:11px;color:#b91c1c;margin-top:2px">แถวที่ไม่ตรง: ${plan.unmatchedRows.slice(0, 15).join(', ')}${plan.unmatchedRows.length > 15 ? ' …' : ''} — ตรวจว่าเป็นไฟล์ของตัวชี้วัด หน่วยบริการ และปีงบประมาณเดียวกับหน้าต่างนี้</p>` : ''}
       ${table}

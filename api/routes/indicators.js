@@ -5,7 +5,7 @@
 const db = require('../db');
 const kpiRollup = require('../kpi-rollup');
 const { normalizeTargetMonthly } = require('../kpi-target');
-const { normalizeQuarterMode } = require('../kpi-formula');
+const { normalizeQuarterMode, isQuarterEntryMonth } = require('../kpi-formula');
 const { ROLE_ADMIN_ALL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, foreignWriteHospcodes, getDistrictId, getPermsForUser, hasPageAccess, requireAction } = require('../core/access');
 const { ROLLED_SUB_MESSAGE, activeSubTree, getHierarchyMaxLevels, loadSubAggregates, rolledSubIds, subLevelIn } = require('../services/hierarchy');
 const { _actorLabel, normTargetCondition, normalizeEvalMode, normalizeOffTypes } = require('../services/indicator-fields');
@@ -733,7 +733,7 @@ apiRouter.get('/hierarchy-results', authenticateToken, async (req, res) => {
         const { indicator_id, year_bh, hospcode } = req.query;
         if (!indicator_id || !year_bh || !hospcode) return res.status(400).json({ success: false, message: 'ต้องระบุ indicator_id, year_bh, hospcode' });
         if (!(await canAccessHospcode(req.user, hospcode))) return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์ดูข้อมูลหน่วยบริการนี้' });
-        const [[ind]] = await db.query('SELECT id, item_no, sub_rollup_mode FROM kpi_indicators WHERE id = ?', [indicator_id]);
+        const [[ind]] = await db.query('SELECT id, item_no, sub_rollup_mode, quarter_mode FROM kpi_indicators WHERE id = ?', [indicator_id]);
         if (!ind) return res.status(404).json({ success: false, message: 'ไม่พบตัวชี้วัด' });
         const [allSubs] = await db.query(
             `SELECT id, parent_sub_id, is_active, sub_indicator_name, sub_indicator_code, item_no, rollup_mode, target_percentage, sort_order
@@ -772,6 +772,7 @@ apiRouter.get('/hierarchy-results', authenticateToken, async (req, res) => {
             success: true,
             data: {
                 indicator_id: ind.id, item_no: ind.item_no, sub_rollup_mode: ind.sub_rollup_mode || 'auto', max_levels: await getHierarchyMaxLevels(),
+                quarter_mode: normalizeQuarterMode(ind.quarter_mode) || null,
                 subs: subs.map(x => ({ ...x, rollup_mode: x.rollup_mode || 'manual', ...(subMap.get(x.id) || empty) })),
                 activities: acts.map(a => ({ ...a, ...(actMap.get(a.id) || empty) })),
             }
@@ -846,8 +847,11 @@ apiRouter.post('/hierarchy-results/save', authenticateToken, async (req, res) =>
             }
         }
         const perms = await getPermsForUser(user.userId, user.role);
+        // ตัวชี้วัดหลักบันทึกรายไตรมาส (quarter_mode = 'quarter') → ข้อย่อย/กิจกรรมบันทึกได้เฉพาะเดือนสุดท้ายของไตรมาส (11 พ.ย. 2569)
+        const [qInd] = await conn.query("SELECT id FROM kpi_indicators WHERE id IN (?) AND quarter_mode = 'quarter'", [indicatorIds]);
+        const quarterIndIds = new Set(qInd.map(r => Number(r.id)));
 
-        const upsert = async (table, idCol, id, it, valueType) => {
+        const upsert = async (table, idCol, id, it, valueType, indicatorId) => {
             let actual = norm(it.actual_value);
             if (valueType === 'check' && actual !== null) actual = kpiRollup.activityValue('check', actual) === 100 ? '1' : '0';
             const hasTarget = it.target_value !== undefined;
@@ -855,6 +859,11 @@ apiRouter.post('/hierarchy-results/save', authenticateToken, async (req, res) =>
             const [ex] = await conn.query(`SELECT target_value, actual_value FROM ${table} WHERE ${idCol} = ? AND year_bh = ? AND hospcode = ? AND month_bh = ?`,
                 [id, year_bh, hospcode, Number(it.month_bh)]);
             const old = ex[0] || {};
+            // ค่าใหม่ในเดือนกลางไตรมาส = ปฏิเสธทั้งคำขอ (ค่าเดิมก่อนเปลี่ยนโหมด ส่งกลับ/ล้างได้ — กติกาเดียวกับ /update-kpi)
+            if (quarterIndIds.has(Number(indicatorId)) && !isQuarterEntryMonth('quarter', Number(it.month_bh)) && actual !== null
+                && actual !== String(old.actual_value ?? '').trim()) {
+                throw Object.assign(new Error(QUARTER_ENTRY_MESSAGE), { status: 400, code: 'QUARTER_ENTRY_ONLY' });
+            }
             // ไม่มีสิทธิ์แก้ผลงาน/เป้าหมาย → คงค่าเดิม (เหมือน /update-kpi)
             const finalActual = perms.can_edit_actual ? actual : (old.actual_value ?? null);
             const finalTarget = (hasTarget && perms.can_edit_target) ? target : (old.target_value ?? null);
@@ -864,8 +873,11 @@ apiRouter.post('/hierarchy-results/save', authenticateToken, async (req, res) =>
                  ON DUPLICATE KEY UPDATE target_value = VALUES(target_value), actual_value = VALUES(actual_value), user_id = VALUES(user_id)`,
                 [id, year_bh, hospcode, Number(it.month_bh), finalTarget, finalActual, user.userId]);
         };
-        for (const it of subItems) await upsert('kpi_sub_results', 'sub_indicator_id', Number(it.sub_indicator_id), it, 'number');
-        for (const it of actItems) await upsert('kpi_activity_results', 'activity_id', Number(it.activity_id), it, actById.get(Number(it.activity_id)).value_type);
+        for (const it of subItems) await upsert('kpi_sub_results', 'sub_indicator_id', Number(it.sub_indicator_id), it, 'number', subById.get(Number(it.sub_indicator_id)).indicator_id);
+        for (const it of actItems) {
+            const a = actById.get(Number(it.activity_id));
+            await upsert('kpi_activity_results', 'activity_id', Number(it.activity_id), it, a.value_type, a.indicator_id);
+        }
         await conn.commit();
 
         (async () => {
@@ -887,11 +899,13 @@ apiRouter.post('/hierarchy-results/save', authenticateToken, async (req, res) =>
         res.json({ success: true, message: 'บันทึกสำเร็จ', saved: subItems.length + actItems.length });
     } catch (e) {
         await conn.rollback();
-        res.status(e.status || 500).json({ success: false, message: e.message });
+        res.status(e.status || 500).json({ success: false, message: e.message, ...(e.code ? { code: e.code } : {}) });
     } finally {
         conn.release();
     }
 });
+
+const QUARTER_ENTRY_MESSAGE = 'ตัวชี้วัดนี้บันทึกผลงานรายไตรมาส — ข้อย่อย/กิจกรรมบันทึกได้เฉพาะเดือน ธ.ค. มี.ค. มิ.ย. และ ก.ย.';
 
 // ========== KPI Sub-Results (บันทึกผลงานย่อย) ==========
 apiRouter.get('/sub-results', authenticateToken, async (req, res) => {
@@ -933,6 +947,16 @@ apiRouter.post('/sub-results/upsert', authenticateToken, async (req, res) => {
         }
         // ข้อย่อยที่คำนวณจากระดับล่าง (ข้อลูก/กิจกรรม) กรอกเองไม่ได้ — บันทึกที่ระดับล่างแทน
         if ((await rolledSubIds(db, [sub_indicator_id])).size > 0) return res.status(400).json({ success: false, message: ROLLED_SUB_MESSAGE });
+        // ตัวชี้วัดหลักบันทึกรายไตรมาส → ค่าใหม่ในเดือนกลางไตรมาสบันทึกไม่ได้ (11 พ.ย. 2569)
+        if (!isQuarterEntryMonth('quarter', Number(month_bh)) && (actual_value === 0 || (actual_value != null && String(actual_value).trim() !== ''))) {
+            const [[q]] = await db.query(
+                `SELECT sr.actual_value FROM kpi_sub_indicators si JOIN kpi_indicators i ON i.id = si.indicator_id AND i.quarter_mode = 'quarter'
+                 LEFT JOIN kpi_sub_results sr ON sr.sub_indicator_id = si.id AND sr.year_bh = ? AND sr.hospcode = ? AND sr.month_bh = ?
+                 WHERE si.id = ?`, [year_bh, hospcode, month_bh, sub_indicator_id]);
+            if (q && String(q.actual_value ?? '').trim() !== String(actual_value).trim()) {
+                return res.status(400).json({ success: false, code: 'QUARTER_ENTRY_ONLY', message: QUARTER_ENTRY_MESSAGE });
+            }
+        }
         // ตรวจสอบล็อค (super_admin ข้ามได้) — mirror /update-kpi (ล็อคจะถูก cascade มาจากตัวชี้วัดหลักตอนอนุมัติ)
         if (req.user.role !== 'super_admin') {
             const [lockedRows] = await db.query(

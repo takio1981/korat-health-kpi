@@ -8,6 +8,10 @@ import { getNextFiscalYear } from '../shared/fiscal-year.util';
 import Swal from 'sweetalert2';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
+import { normalizeQuarterMode, isQuarterEntryMonth, quarterValues } from '../shared/kpi-formula';
+
+const SETUP_MONTHS = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
+const QUARTER_END: Record<string, number> = { dece: 1, mar: 2, jun: 3, sep: 4 };
 
 @Component({
   selector: 'app-kpi-setup',
@@ -120,15 +124,30 @@ export class KpiSetupComponent implements OnInit {
     if (this.selectedDept) {
       filtered = filtered.filter(item => String(item.dept_id) === this.selectedDept);
     }
-    this.kpiTemplate = filtered.map((item: any) => ({
-      ...item,
-      year_bh: this.selectedYear,
-      target_value: item.target_percentage != null ? item.target_percentage : 0,
-      oct: 0, nov: 0, dece: 0, jan: 0, feb: 0, mar: 0,
-      apr: 0, may: 0, jun: 0, jul: 0, aug: 0, sep: 0,
-      total_actual: 0
-    }));
+    this.kpiTemplate = filtered.map((item: any) => {
+      const row: any = { ...item, year_bh: this.selectedYear, target_value: item.target_percentage != null ? item.target_percentage : 0, total_actual: 0 };
+      // ตัวชี้วัดบันทึกรายไตรมาส: เดือนกลางไตรมาสว่าง (ไม่ใช่ 0) — กรอกได้เฉพาะ ธ.ค./มี.ค./มิ.ย./ก.ย. (backend ล้างซ้ำ)
+      for (const m of SETUP_MONTHS) row[m] = this.isQuarterOff(item, m) ? '' : 0;
+      return row;
+    });
     this.cdr.detectChanges();
+  }
+
+  // ===== วัดผลรายไตรมาส (quarter_mode — 11 พ.ย. 2569) — กติกาเดียวกับหน้าบันทึกผลงาน =====
+  isQuarterOff(item: any, m: string): boolean {
+    return normalizeQuarterMode(item?.quarter_mode) === 'quarter' && SETUP_MONTHS.includes(m) && !isQuarterEntryMonth('quarter', m);
+  }
+  quarterBadgeText(item: any): string {
+    const m = normalizeQuarterMode(item?.quarter_mode);
+    return !m ? '' : m === 'quarter' ? 'รายไตรมาส' : 'ไตรมาส (บันทึกรายเดือน)';
+  }
+  /** ใต้ช่องเดือนสุดท้ายของไตรมาส: "ไตรมาส N" (บันทึกรายไตรมาส) / "ไตรมาส N: ค่า" (บันทึกรายเดือน) */
+  quarterText(item: any, m: string): string {
+    const mode = normalizeQuarterMode(item?.quarter_mode);
+    const q = QUARTER_END[m];
+    if (!mode || !q) return '';
+    if (mode === 'quarter') return 'ไตรมาส ' + q;
+    return 'ไตรมาส ' + q + ': ' + (quarterValues(mode, item)[q - 1] ?? '-');
   }
 
   onDeptChange() {
@@ -156,6 +175,7 @@ export class KpiSetupComponent implements OnInit {
   }
 
   onValueChange(item: any, month: string) {
+    if (this.isQuarterOff(item, month)) { item[month] = ''; return; }
     if (item[month] < 0) item[month] = 0;
     const months = ['oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep'];
     let sum = 0;

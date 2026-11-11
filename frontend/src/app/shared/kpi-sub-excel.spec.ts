@@ -107,4 +107,16 @@ describe('kpi-sub-excel: subTemplateFileName', () => {
     const long = subTemplateFileName({ indicator_name: 'ก'.repeat(80), year_bh: '2570', hospcode: '1' });
     expect(long).toContain('ก'.repeat(60) + '…_ปีงบ2570');
   });
+
+  it('ตัวชี้วัดบันทึกรายไตรมาส: เดือนกลางไตรมาสไม่นำเข้า (นับ offQuarter) — บันทึกรายเดือนนำเข้าได้ทุกเดือน (11 พ.ย. 2569)', () => {
+    const subs = [sub(1, '100')];
+    const aoa = buildSubTemplateAoa(subs, CTX);
+    aoa[3][7] = 5;    // พ.ย.
+    aoa[3][8] = 6;    // ธ.ค.
+    const rows = parseSubImportAoa(roundTrip(aoa)).rows;
+    const q = planSubImport(rows, subs, { ...CTX, quarter_mode: 'quarter' });
+    expect(q.changes.map(c => c.field)).toEqual(['12']);
+    expect(q.offQuarter).toBe(1);
+    expect(planSubImport(rows, subs, { ...CTX, quarter_mode: 'month_sum' }).changes.length).toBe(2);
+  });
 });

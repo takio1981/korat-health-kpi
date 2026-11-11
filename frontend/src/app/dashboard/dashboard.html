@@ -1371,9 +1371,9 @@
                 <td *ngIf="colVisible['hospital']" class="px-3 py-1 frozen col-5 bg-white border-r border-gray-100"></td>
                 <td *ngIf="colVisible['target']" class="px-1 py-1 frozen col-6 bg-amber-50/60 text-gray-600 text-right whitespace-nowrap border-r border-gray-100">{{ ch.target || '-' }}</td>
                 <td *ngIf="colVisible['lastActual']" class="px-2 py-1 frozen col-7 bg-blue-50/60 text-right whitespace-nowrap border-r border-gray-100"
-                    [ngClass]="ch.auto ? 'text-gray-500' : 'text-blue-700 font-semibold'">{{ hierLastValue(ch) || '-' }}</td>
+                    [ngClass]="ch.auto ? 'text-gray-500' : 'text-blue-700 font-semibold'">{{ hierLastValue(ch, item) || '-' }}</td>
                 <td *ngIf="colVisible['pct']" class="px-2 py-1 frozen col-8 bg-gray-50 text-center whitespace-nowrap border-r border-gray-100 text-gray-600">
-                  {{ hierPct(ch, item.target_condition) ? hierPct(ch, item.target_condition) + '%' : '-' }}
+                  {{ hierPct(ch, item.target_condition, item) ? hierPct(ch, item.target_condition, item) + '%' : '-' }}
                 </td>
                 <td *ngFor="let m of visibleMonthKeys" class="px-1 py-1 text-center border-x whitespace-nowrap month-col">
                   <!-- ระดับที่คำนวณ: แสดงค่าอย่างเดียว (คำนวณใหม่ทันทีเมื่อกรอกกิจกรรม) -->
@@ -1383,22 +1383,23 @@
                   <ng-container *ngIf="!ch.auto">
                     <!-- กิจกรรมแบบทำแล้ว/ยังไม่ทำ: ปุ่มกดวน ว่าง → ทำแล้ว → ยังไม่ทำ -->
                     <button *ngIf="ch.valueType === 'check'" type="button" (click)="cycleHierCheck(item, ch, m)"
-                            [disabled]="!canEditHierRow(item, ch)"
+                            [disabled]="!canEditHierCell(item, ch, m)"
                             class="w-7 h-6 rounded text-[11px] font-bold transition-colors disabled:cursor-default"
                             [ngClass]="(ch.months[m] === '1' ? 'bg-emerald-100 text-emerald-700' : ch.months[m] === '0' ? 'bg-red-100 text-red-600' : 'text-gray-300')
-                                       + (isHierModified(ch, m) ? ' ring-2 ring-orange-400' : '') + (canEditHierRow(item, ch) ? ' border border-gray-200 hover:bg-white' : '')"
+                                       + (isHierModified(ch, m) ? ' ring-2 ring-orange-400' : '') + (canEditHierCell(item, ch, m) ? ' border border-gray-200 hover:bg-white' : '')"
                             [title]="ch.months[m] === '1' ? 'ทำแล้ว' : ch.months[m] === '0' ? 'ยังไม่ทำ' : 'ยังไม่บันทึก'">
                       <i *ngIf="ch.months[m] === '1'" class="fas fa-check"></i>
                       <i *ngIf="ch.months[m] === '0'" class="fas fa-times"></i>
                       <span *ngIf="ch.months[m] !== '1' && ch.months[m] !== '0'">-</span>
                     </button>
                     <ng-container *ngIf="ch.valueType !== 'check'">
-                      <input *ngIf="canEditHierRow(item, ch)" type="text" maxlength="100" [(ngModel)]="ch.months[m]" (ngModelChange)="onHierChange(item)"
+                      <input *ngIf="canEditHierCell(item, ch, m)" type="text" maxlength="100" [(ngModel)]="ch.months[m]" (ngModelChange)="onHierChange(item)"
                              class="w-full min-w-0 border border-indigo-200 rounded px-1 py-0.5 text-center text-xs focus:ring-1 focus:ring-indigo-500 outline-none bg-white"
                              [ngClass]="isHierModified(ch, m) ? '!bg-orange-200 !text-red-600 ring-2 ring-orange-400 font-bold' : ''">
-                      <span *ngIf="!canEditHierRow(item, ch)" [ngClass]="ch.months[m] ? 'text-gray-800' : 'text-gray-300'">{{ ch.months[m] || '-' }}</span>
+                      <span *ngIf="!canEditHierCell(item, ch, m)" [ngClass]="ch.months[m] ? 'text-gray-800' : 'text-gray-300'">{{ ch.months[m] || '-' }}</span>
                     </ng-container>
                   </ng-container>
+                  <div *ngIf="hierQuarterText(item, ch, m) as qt" class="hier-quarter text-[9px] text-sky-600 font-bold leading-tight">{{ qt }}</div>
                 </td>
               </tr>
               </ng-container>
@@ -2268,11 +2269,13 @@
               </td>
               <td *ngFor="let m of subMonthColumns" class="px-0.5 py-1">
                 <input type="text" [(ngModel)]="s._actuals[m]"
-                       [readonly]="!subEditMode || s._auto"
+                       [readonly]="!subEditMode || s._auto || isSubQuarterOff(m)"
+                       [title]="isSubQuarterOff(m) ? 'ตัวชี้วัดนี้บันทึกรายไตรมาส — กรอกได้เฉพาะ ธ.ค. / มี.ค. / มิ.ย. / ก.ย.' : ''"
                        class="w-full px-1 py-0.5 border rounded text-center text-xs"
-                       [ngClass]="subEditMode
+                       [ngClass]="subEditMode && !isSubQuarterOff(m)
                           ? 'border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-400 ' + (s._actuals[m] ? 'bg-indigo-50' : '')
                           : 'border-gray-100 bg-gray-50 text-gray-600 cursor-not-allowed'">
+                <div *ngIf="subQuarterText(s, m) as qt" class="sub-quarter text-[9px] text-sky-600 font-bold text-center leading-tight mt-0.5">{{ qt }}</div>
               </td>
             </tr>
             <tr *ngIf="subResultList.length === 0">

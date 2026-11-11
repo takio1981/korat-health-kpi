@@ -5,6 +5,7 @@
 // กติกา: ช่องว่างในไฟล์ = ไม่เปลี่ยนค่าเดิม (สอดคล้องกับการคำนวณที่ใช้ผลงานล่าสุดของแต่ละข้อ — กรอกเฉพาะข้อที่ยังไม่ผ่าน)
 //        จับคู่แถวด้วย sub_indicator_id | แถวของหน่วยบริการ/ปีงบประมาณอื่น (ถ้าไฟล์มีคอลัมน์นั้น) = ไม่ตรง ไม่นำเข้า
 import { normalizeCell, MAX_VALUE_LENGTH } from './kpi-excel';
+import { isQuarterEntryMonth } from './kpi-formula';
 
 export const SUB_EXCEL_MONTHS: { month: number; label: string }[] = [
   { month: 10, label: 'ต.ค.' }, { month: 11, label: 'พ.ย.' }, { month: 12, label: 'ธ.ค.' },
@@ -31,7 +32,7 @@ const toCell = (v: any): string | number => {
 };
 const sameValue = (a: string, b: string) => a === b || (NUMERIC_RE.test(a) && NUMERIC_RE.test(b) && Number(a) === Number(b));
 
-export interface SubExcelContext { indicator_name?: string; hospcode: any; hosname?: string; year_bh: any }
+export interface SubExcelContext { indicator_name?: string; hospcode: any; hosname?: string; year_bh: any; quarter_mode?: any }
 
 /** แบบฟอร์ม: แถวคำอธิบาย + แถวบริบท (ตัวชี้วัด/หน่วยบริการ) + หัวตาราง + 1 แถวต่อข้อย่อย (พร้อมค่าปัจจุบัน) */
 /** ชื่อไฟล์แบบฟอร์มผลงานตัวชี้วัดย่อย (6 พ.ย. 2569 — เดิมมีแค่รหัสตัวชี้วัด ไม่รู้ว่าเป็น KPI ข้ออะไร):
@@ -103,6 +104,7 @@ export interface SubChangePlan {
   tooLong: number;          // ยาวเกิน 100 ตัวอักษร
   unmatchedRows: number[];  // เลขแถวในไฟล์ที่ไม่ใช่ข้อย่อยของตัวชี้วัดนี้ / คนละหน่วยบริการ / คนละปีงบประมาณ
   duplicateRows: number[];  // แถวซ้ำในไฟล์ — ใช้แถวแรก
+  offQuarter?: number;      // ข้าม — เดือนกลางไตรมาสของตัวชี้วัดที่บันทึกรายไตรมาส (11 พ.ย. 2569)
 }
 
 const currentValue = (sub: any, field: string) =>
@@ -110,7 +112,7 @@ const currentValue = (sub: any, field: string) =>
 
 /** จับคู่แถวในไฟล์กับข้อย่อยในหน้าต่าง แล้วสรุปช่องที่จะเปลี่ยน */
 export function planSubImport(rows: SubImportRow[], subs: any[], ctx: SubExcelContext): SubChangePlan {
-  const plan: SubChangePlan = { changes: [], same: 0, tooLong: 0, unmatchedRows: [], duplicateRows: [] };
+  const plan: SubChangePlan = { changes: [], same: 0, tooLong: 0, unmatchedRows: [], duplicateRows: [], offQuarter: 0 };
   const map = new Map<number, any>();
   for (const s of subs || []) map.set(Number(s.id), s);
   const hos = String(ctx.hospcode ?? '').trim(), year = String(ctx.year_bh ?? '').trim();
@@ -127,6 +129,7 @@ export function planSubImport(rows: SubImportRow[], subs: any[], ctx: SubExcelCo
       const oldVal = currentValue(sub, field);
       if (sameValue(oldVal, newVal)) { plan.same++; continue; }
       if (newVal.length > MAX_VALUE_LENGTH) { plan.tooLong++; continue; }
+      if (field !== 'target' && !isQuarterEntryMonth(ctx.quarter_mode, field)) { plan.offQuarter = (plan.offQuarter || 0) + 1; continue; }
       plan.changes.push({ sub, field, oldVal, newVal });
     }
   }

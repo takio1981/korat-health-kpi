@@ -645,6 +645,18 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
             return `${row.indicator_id}_${row.year_bh}_${hc}`;
         }))];
 
+        // โหมด setup_* (kpi-setup / เพิ่มตัวชี้วัดให้หน่วยบริการ): ตัวชี้วัดบันทึกรายไตรมาส → เดือนกลางไตรมาสเป็นค่าว่างเสมอ
+        // (kpi-setup ส่ง 0 ทุกเดือน — ถ้าเก็บ 0 ไว้ ผลงานล่าสุดจะเป็น 0 ของ ก.ย. และช่องที่ปิดไว้มีค่า — 11 พ.ย. 2569)
+        if (saveMode === 'setup_insert_new' || saveMode === 'setup_overwrite') {
+            const setupIds = [...new Set(updates.map(r => Number(r.indicator_id)).filter(Boolean))];
+            const [qs] = setupIds.length ? await connection.query("SELECT id FROM kpi_indicators WHERE id IN (?) AND quarter_mode = 'quarter'", [setupIds]) : [[]];
+            const qSet = new Set(qs.map(r => Number(r.id)));
+            for (const row of updates) {
+                if (!qSet.has(Number(row.indicator_id))) continue;
+                for (const m of months) if (!kpiFormula.isQuarterEntryMonth('quarter', m.val)) row[m.col] = '';
+            }
+        }
+
         // --- Mode: setup_insert_new → เพิ่มเฉพาะคู่ (ตัวชี้วัด × หน่วยบริการ × ปีงบ) ที่ยังไม่มี ---
         // ทำก่อนลูปตรวจล็อค/คงค่าเดิมรายคู่ด้านล่าง: โหมดนี้ไม่แตะแถวที่มีอยู่ (รวมแถวที่ล็อค = ข้ามเฉยๆ ไม่ทำให้ทั้งคำขอล้ม)
         // และรองรับหลายหน่วยบริการในคำขอเดียว (หน้าต่างเพิ่มตัวชี้วัดหาปลายทางอัตโนมัติจากประเภทหน่วยบริการ — 19 ต.ค. 2569)
