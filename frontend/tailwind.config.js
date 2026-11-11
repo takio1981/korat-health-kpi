@@ -7,5 +7,5 @@ module.exports = {
   theme: {
     extend: {},
   },
-  plugins: [],
+  plugins: [require('./tailwind.dark-theme')],   // โหมดมืด: กฎ .dark ของ utility สีทั้งชุด (ดูคำอธิบายในไฟล์)
 }

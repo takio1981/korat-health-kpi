@@ -37,50 +37,113 @@
     background: linear-gradient(135deg, #eaf6ee 0%, #c8ecd9 22%, #a8e6c8 45%, #b8e8d2 68%, #f0e0ea 100%);
   }
   .dark .layout-bg-gradient {
-    background: linear-gradient(135deg, #1e293b 0%, #1e3a3a 25%, #134e4a 50%, #1e3a3a 75%, #1e1e2e 100%) !important;
+    background: linear-gradient(135deg, #0b1519 0%, #0e2024 30%, #10292a 55%, #0d1f22 80%, #0b171b 100%) !important;
   }
 }
 
-/* === Dark Mode Global Styles === */
+/* === Dark Mode (11 พ.ย. 2569 — ปรับโทนใหม่ทั้งระบบ) ===
+   โทนเดียวกันทั้งหน้า: พื้นหลังเขียวอมฟ้าเข้ม (slate-teal) ให้เข้ากับธีมเขียวมิ้นต์ของโหมดสว่าง
+   — เดิมการ์ดใช้สีม่วงเทา (#1e1e2e) คนละโทนกับพื้นหลัง และพื้นสีพาสเทล/ข้อความสีเข้มไม่ถูกปรับ
+   สีของ utility ที่มีความหมาย (bg-amber-50, text-blue-700, border-red-200 …) สร้างอัตโนมัติใน tailwind.dark-theme.js
+   ตัวแปร --dk-surface ต้องตรงกับ SURFACE ในไฟล์นั้น */
+:root.dark {
+  color-scheme: dark;
+  --dk-bg: #0e1b20;
+  --dk-surface: #14232a;     /* การ์ด / bg-white */
+  --dk-surface-2: #1a2d34;   /* พื้นรอง (gray-50/100), ช่องกรอก */
+  --dk-surface-3: #223940;   /* hover, gray-200 */
+  --dk-surface-4: #2b464e;   /* gray-300, ปุ่มรอง */
+  --dk-border: #2a4047;
+  --dk-border-strong: #3a555d;
+  --dk-text: #e3eeeb;
+  --dk-text-2: #a9bdb8;
+  --dk-text-3: #7e938e;
+  --dk-accent: #34d399;
+}
+
 @layer base {
-  .dark body,
-  .dark .bg-white { background-color: #1e1e2e !important; color: #cdd6f4 !important; }
-  .dark .bg-gray-50, .dark .bg-gray-100 { background-color: #313244 !important; }
-  .dark .bg-white.rounded-2xl, .dark .bg-white.rounded-xl { background-color: #24243a !important; }
-  .dark .border-gray-100, .dark .border-gray-200 { border-color: #45475a !important; }
-  .dark .text-gray-800, .dark .text-gray-900, .dark .text-gray-700 { color: #cdd6f4 !important; }
-  .dark .text-gray-600, .dark .text-gray-500 { color: #a6adc8 !important; }
-  .dark .text-gray-400, .dark .text-gray-300 { color: #7f849c !important; }
-  .dark input, .dark select, .dark textarea {
-    background-color: #313244 !important; color: #cdd6f4 !important; border-color: #45475a !important;
-  }
-  .dark input:focus, .dark select:focus, .dark textarea:focus {
-    border-color: #89b4fa !important;
-  }
-  .dark table thead { background: linear-gradient(135deg, #1e3a3a, #1e4040) !important; }
-  .dark table tbody tr { border-color: #313244 !important; }
-  .dark table tbody tr:hover { background-color: #313244 !important; }
-  .dark .shadow-sm, .dark .shadow-md, .dark .shadow-lg { box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important; }
-  .dark .swal2-popup { background: #24243a !important; color: #cdd6f4 !important; }
-  .dark .swal2-title { color: #cdd6f4 !important; }
-  .dark .swal2-html-container { color: #a6adc8 !important; }
+  .dark body { background-color: var(--dk-bg) !important; color: var(--dk-text) !important; }
+  .dark .bg-white { background-color: var(--dk-surface) !important; color: var(--dk-text); }
+  .dark .bg-white\/95, .dark .bg-white\/90 { background-color: rgba(20, 35, 42, 0.95) !important; }
+  .dark .bg-gray-50\/50 { background-color: rgba(26, 45, 52, 0.6) !important; }
 
-  /* Glassmorphism semi-transparent surfaces in dark mode */
+  /* Glassmorphism (sidebar / header / เมนูมือถือ / การ์ดโปร่ง) */
   .dark .bg-white\/65, .dark .bg-white\/70, .dark .bg-white\/85, .dark .bg-white\/80, .dark .bg-white\/60 {
-    background-color: rgba(36, 36, 58, 0.65) !important;
+    background-color: rgba(18, 32, 38, 0.78) !important;
   }
-  .dark .bg-white\/40 { background-color: rgba(36, 36, 58, 0.4) !important; }
-  .dark .bg-green-100\/70, .dark .bg-green-200\/70, .dark .bg-green-100\/60 {
-    background-color: rgba(34, 197, 94, 0.18) !important;
-  }
-  .dark .border-white\/60, .dark .border-white\/40, .dark .border-white\/50 { border-color: rgba(148, 163, 184, 0.25) !important; }
-  .dark .border-green-200\/60, .dark .border-green-200 { border-color: rgba(74, 222, 128, 0.25) !important; }
+  .dark .bg-white\/40, .dark .bg-white\/50, .dark .bg-white\/30, .dark .bg-white\/20, .dark .bg-white\/10 { background-color: rgba(26, 45, 52, 0.45) !important; }
+  .dark .border-white\/60, .dark .border-white\/40, .dark .border-white\/50, .dark .border-white\/30 { border-color: rgba(126, 160, 152, 0.18) !important; }
 
-  /* Sidebar / Header text in dark mode */
-  .dark .text-green-700 { color: #86efac !important; }
-  .dark .text-green-800 { color: #86efac !important; }
-  .dark .text-green-900 { color: #bbf7d0 !important; }
+  /* ข้อความ/ช่องกรอก */
+  .dark input, .dark select, .dark textarea {
+    background-color: var(--dk-surface-2) !important; color: var(--dk-text) !important; border-color: var(--dk-border-strong) !important;
+  }
+  .dark input::placeholder, .dark textarea::placeholder { color: var(--dk-text-3) !important; }
+  .dark input:focus, .dark select:focus, .dark textarea:focus { border-color: var(--dk-accent) !important; }
+  .dark input:disabled, .dark select:disabled, .dark textarea:disabled, .dark input[readonly] { background-color: #16272d !important; color: var(--dk-text-3) !important; }
+  .dark input[type="checkbox"], .dark input[type="radio"] { accent-color: #10b981; }
+  .dark option { background-color: var(--dk-surface-2); color: var(--dk-text); }
+
+  /* ตาราง */
+  .dark table thead:not([class*="bg-"]) { background-color: #12302c !important; }
+  .dark table tbody tr { border-color: var(--dk-border) !important; }
+  .dark table tbody tr:hover { background-color: rgba(52, 211, 153, 0.06) !important; }
+  .dark .divide-y > :not([hidden]) ~ :not([hidden]) { border-color: var(--dk-border); }
+
+  .dark .shadow-sm, .dark .shadow, .dark .shadow-md { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45) !important; }
+  .dark .shadow-lg, .dark .shadow-xl, .dark .shadow-2xl { box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.7) !important; }
+
+  /* ข้อความสีเขียวของ sidebar/header (เดิม) — ให้ตรงกับเฉดของ tailwind.dark-theme.js */
   .dark .text-green-700\/70 { color: rgba(134, 239, 172, 0.7) !important; }
+
+  /* SweetAlert2 */
+  .dark .swal2-popup { background: var(--dk-surface) !important; color: var(--dk-text) !important; border: 1px solid var(--dk-border); }
+  .dark .swal2-title { color: var(--dk-text) !important; }
+  .dark .swal2-html-container { color: var(--dk-text-2) !important; }
+  .dark .swal2-input, .dark .swal2-textarea, .dark .swal2-select { background: var(--dk-surface-2) !important; color: var(--dk-text) !important; border-color: var(--dk-border-strong) !important; }
+  .dark .swal2-validation-message { background: var(--dk-surface-2) !important; color: #fca5a5 !important; }
+  .dark .swal2-footer { border-color: var(--dk-border) !important; color: var(--dk-text-3) !important; }
+  .dark .swal2-close { color: var(--dk-text-3) !important; }
+  .dark .swal2-timer-progress-bar { background: rgba(52, 211, 153, 0.5) !important; }
+  .dark .swal2-icon.swal2-success [class^='swal2-success-circular-line'], .dark .swal2-icon.swal2-success .swal2-success-fix { background-color: transparent !important; }
+  /* ตาราง HTML ที่สร้างใน Swal (inline style สีขาว/เทาอ่อน) */
+  .dark .swal2-html-container table { background: var(--dk-surface-2) !important; color: var(--dk-text) !important; }
+  .dark .swal2-html-container thead, .dark .swal2-html-container th { background: var(--dk-surface-3) !important; color: var(--dk-text) !important; }
+  .dark .swal2-html-container td, .dark .swal2-html-container th { border-color: var(--dk-border) !important; }
+  .dark .swal2-html-container [style*="background:white"], .dark .swal2-html-container [style*="background: white"],
+  .dark .swal2-html-container [style*="background:#fff"], .dark .swal2-html-container [style*="background: #fff"],
+  .dark .swal2-html-container [style*="background:#f"], .dark .swal2-html-container [style*="background: #f"],
+  .dark .swal2-html-container [style*="background-color:#f"], .dark .swal2-html-container [style*="background-color: #f"] {
+    background: var(--dk-surface-2) !important;
+  }
+  .dark .swal2-html-container [style*="border:1px solid #e"], .dark .swal2-html-container [style*="border: 1px solid #e"],
+  .dark .swal2-html-container [style*="border-bottom:1px solid #e"] { border-color: var(--dk-border) !important; }
+  .dark .swal2-html-container [style*="color:#6b7280"], .dark .swal2-html-container [style*="color: #6b7280"],
+  .dark .swal2-html-container [style*="color:#374151"], .dark .swal2-html-container [style*="color:#111"] { color: var(--dk-text-2) !important; }
+
+  /* ApexCharts — ตัวอักษร/เส้นกริด/คำอธิบาย/tooltip */
+  .dark .apexcharts-text, .dark .apexcharts-text tspan, .dark .apexcharts-title-text, .dark .apexcharts-subtitle-text,
+  .dark .apexcharts-xaxis-label, .dark .apexcharts-yaxis-label, .dark .apexcharts-datalabel-label { fill: var(--dk-text-2) !important; }
+  .dark .apexcharts-title-text { fill: var(--dk-text) !important; }
+  .dark .apexcharts-legend-text { color: var(--dk-text-2) !important; }
+  .dark .apexcharts-gridline, .dark .apexcharts-xaxis line, .dark .apexcharts-yaxis line, .dark .apexcharts-xaxis-tick { stroke: var(--dk-border) !important; }
+  .dark .apexcharts-pie-series path, .dark .apexcharts-radialbar-track path { stroke: var(--dk-surface) !important; }
+  .dark .apexcharts-tooltip.apexcharts-theme-light { background: var(--dk-surface-2) !important; color: var(--dk-text) !important; border-color: var(--dk-border-strong) !important; }
+  .dark .apexcharts-tooltip.apexcharts-theme-light .apexcharts-tooltip-title { background: var(--dk-surface-3) !important; border-color: var(--dk-border) !important; }
+  .dark .apexcharts-xaxistooltip, .dark .apexcharts-yaxistooltip { background: var(--dk-surface-2) !important; color: var(--dk-text) !important; border-color: var(--dk-border-strong) !important; }
+  .dark .apexcharts-menu { background: var(--dk-surface-2) !important; border-color: var(--dk-border) !important; }
+  .dark .apexcharts-menu-item:hover { background: var(--dk-surface-3) !important; }
+  .dark .apexcharts-toolbar svg { fill: var(--dk-text-3) !important; }
+
+  /* แถบเลื่อน */
+  .dark .card-scroll { scrollbar-color: rgba(52, 211, 153, 0.45) rgba(26, 45, 52, 0.6); }
+  .dark .card-scroll::-webkit-scrollbar-track, .dark .notif-scroll::-webkit-scrollbar-track, .dark .mobile-scroll::-webkit-scrollbar-track { background: var(--dk-surface-2); }
+  .dark .notif-scroll { scrollbar-color: var(--dk-border-strong) var(--dk-surface-2); }
+  .dark .notif-scroll::-webkit-scrollbar-thumb, .dark .mobile-scroll::-webkit-scrollbar-thumb { background: var(--dk-border-strong); }
+  .dark ::-webkit-scrollbar-corner { background: var(--dk-surface-2); }
+
+  /* toast ใช้สีเดิม (สีทึบอ่านได้ทั้ง 2 โหมด) — เพิ่มเงาให้แยกจากพื้นมืด */
+  .dark .toast-container .ngx-toastr { box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.6) !important; }
 }
 
 /* === SweetAlert / Modal positioning fixes === */

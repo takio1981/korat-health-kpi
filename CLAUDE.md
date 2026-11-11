@@ -1233,7 +1233,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - Main: `flex-1 overflow-hidden min-w-0` → `<div h-full w-full overflow-y-auto overflow-x-hidden card-scroll>`
 - **`min-w-0` บน flex chain** สำคัญ — กัน table `min-w-[1600px]` ดันหน้ากว้างเกินจอ
 - Mobile menu: `bg-white/85 backdrop-blur-xl` ตรงกลางจอ (top-[84px])
-- Dark mode: ใช้ `.dark` overrides ใน styles.css สำหรับ `bg-white/{60,65,70,80,85}` + `bg-green-100/70` + text-green-{700,800,900}
+- Dark mode: ดูหัวข้อ "Dark Mode" ในหมวด 8 (โทน slate-teal ตัวแปร `--dk-*` + กฎสีอัตโนมัติจาก `tailwind.dark-theme.js`)
 
 ### Page Sizing Pattern (ทุกหน้าต้อง fit จอ + ไม่ scroll body)
 - Outer: `<div class="p-6">` (ไม่ใช่ `<ng-container>` ตรงๆ — กัน card ติดขอบ)
@@ -1291,9 +1291,17 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - Rounded: `rounded-xl` (ปุ่ม), `rounded-2xl` (card)
 - Shadow: `shadow-sm` (card), `shadow-md` (ปุ่ม)
 
-### Dark Mode
-- ใช้ `darkMode: 'class'` ใน tailwind.config.js
-- Override ใน `styles.css` `@layer base { .dark ... }`
+### Dark Mode (ปรับโทนใหม่ทั้งระบบ 11 พ.ย. 2569)
+- ใช้ `darkMode: 'class'` ใน tailwind.config.js (`ThemeService` ใส่ `.dark` ที่ `<html>`, จำค่าใน localStorage `kpi_dark_mode`)
+- **โทนเดียวทั้งระบบ = slate-teal** (เข้ากับธีมมิ้นต์ของโหมดสว่าง) — ตัวแปรใน `styles.css` `:root.dark`: `--dk-bg/--dk-surface/--dk-surface-2..4/--dk-border/--dk-text/-2/-3/--dk-accent`
+  ⚠️ เดิมการ์ดเป็นสีม่วงเทา (#1e1e2e/#24243a) คนละโทนกับพื้นหลัง และพื้นพาสเทล/ข้อความสีเข้มไม่ถูกปรับ → กล่องขาวจ้า/ข้อความอ่านไม่ออก — **ห้ามใช้ `dark:bg-[#1e1e2e]` หรือสีม่วงเทาอีก**
+- **`frontend/tailwind.dark-theme.js` (plugin)** สร้างกฎ `.dark` ให้ utility สีที่ใช้จริงใน src/ อัตโนมัติ (สแกน .html/.ts ตอน build): พื้น `bg-*-50…300` (+ `/opacity`, `hover:`, `from-/via-/to-`)
+  = สีเฉด 500 ผสมบนพื้นการ์ดเป็นสีทึบ (คอลัมน์ตรึงยังบังเนื้อหาที่เลื่อนผ่าน), `text-*-500…900` → เฉดสว่าง, `border-/divide-/ring-*-100…300` → จาง, สีกลาง (gray/slate…) + ขาว → ตัวแปร `--dk-*`
+  — พื้นหลังข้าม element ที่มี `checked:bg-*` (สวิตช์ peer-checked — เคยทำให้สวิตช์เปิดดูเหมือนปิด) | ค่า `SURFACE` ในไฟล์ต้องตรงกับ `--dk-surface`
+  — **ไม่ต้องเขียน `dark:` ให้สีพาสเทลเอง** | เพิ่มคลาสสีใหม่ระหว่าง `ng serve` ต้องเริ่ม ng serve ใหม่ (plugin โหลดครั้งเดียวต่อ process; `ng build` สร้างใหม่ทุกครั้ง)
+- `styles.css` ครอบคลุมเพิ่ม: ช่องกรอก/placeholder/disabled, ตาราง, SweetAlert2 (รวม HTML ที่ใช้ inline style สีขาว), ApexCharts (ตัวอักษร/กริด/tooltip), แถบเลื่อน
+  — สไตล์ของ component ใช้ `:host-context(.dark)` (เช่น ป้ายสถานะ/คอลัมน์ตรึงใน dashboard.css) | หน้า login/register ใช้คลาส `layout-bg-gradient` (เดิม inline style สีอ่อน → โหมดมืดพื้นยังสว่าง)
+- ตรวจด้วยภาพหน้าจอจริงทุกครั้งที่แก้ (ทั้งโหมดมืดและสว่าง — โหมดสว่างต้องไม่เปลี่ยน)
 
 ### Responsive
 - Mobile first: `grid-cols-1 sm:grid-cols-2 lg:grid-cols-4`

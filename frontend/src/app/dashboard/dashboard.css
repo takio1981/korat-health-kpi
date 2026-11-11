@@ -232,3 +232,18 @@
 .blink-slow {
   animation: blink-slow 2.5s ease-in-out infinite;
 }
+
+
+/* ===== โหมดมืด (11 พ.ย. 2569) ===== */
+:host-context(.dark) .kpi-table-wrapper::-webkit-scrollbar-track,
+:host-context(.dark) .kpi-table-wrapper::-webkit-scrollbar-corner { background: #1a2d34; }
+:host-context(.dark) .kpi-table-wrapper::-webkit-scrollbar-thumb { background: #3a555d; }
+:host-context(.dark) .kpi-table-wrapper::-webkit-scrollbar-thumb:hover { background: #4d6b73; }
+:host-context(.dark) .kpi-table tbody tr:hover td.frozen { background-color: #1b3132 !important; }
+:host-context(.dark) .kpi-table tbody tr:hover td.frozen.col-1 { background-color: #1b3132 !important; }
+:host-context(.dark) .col-8::after { background: linear-gradient(to right, rgba(0, 0, 0, 0.35), transparent); }
+:host-context(.dark) .status-approved { background-color: #143a30; color: #6ee7b7; border-color: #1f5a49; }
+:host-context(.dark) .status-pending { background-color: #3a3018; color: #fcd34d; border-color: #5c4a1c; }
+:host-context(.dark) .status-locked { background-color: #223940; color: #a9bdb8; border-color: #3a555d; }
+:host-context(.dark) .status-rejected { background-color: #3d1d22; color: #fca5a5; border-color: #6b2a31; }
+:host-context(.dark) .status-resubmit { background-color: #3a3018; color: #fbbf24; border-color: #5c4a1c; }
