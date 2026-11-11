@@ -43,7 +43,16 @@ function itemSame(a, b) {
     return na === nb;
 }
 
-function itemResult(monthVals, isCumulative) {
+function itemResult(monthVals, isCumulative, quarterMode) {
+    // วัดผลรายไตรมาส บันทึกรายเดือน + ค่าไตรมาสรวม/เฉลี่ย → ผลงาน = ค่าไตรมาสล่าสุด (ตรงกับสูตร LASTQ ของตัวชี้วัดหลัก — 11 พ.ย. 2569)
+    const qm = kpiFormula.normalizeQuarterMode(quarterMode);
+    if (!isCumulative && (qm === 'month_sum' || qm === 'month_avg')) {
+        const months = {};
+        ITEM_MONTHS.forEach((mk, i) => { months[mk] = monthVals[i]; });
+        const qv = kpiFormula.quarterValues(qm, months);
+        for (let q = 3; q >= 0; q--) if (qv[q] !== null) return qv[q];
+        return null;
+    }
     if (isCumulative) {
         const nums = monthVals.filter(v => v !== null && !isNaN(parseFloat(v)));
         if (!nums.length) return null;
@@ -112,6 +121,7 @@ async function buildItemExportRows(conn, indicator, yearBh) {
     const childSubs = (pid) => subs.filter(s => (s.parent_sub_id == null ? null : Number(s.parent_sub_id)) === pid);
     const subActs = (sid) => acts.filter(a => Number(a.sub_indicator_id) === Number(sid));
     const isCum = Number(indicator.is_cumulative) === 1;
+    const qMode = indicator.quarter_mode;
     const out = [];
     for (const hc of [...hospcodes].filter(Boolean).sort()) {
         const walk = (parentId, parentNo, level) => {
@@ -122,7 +132,7 @@ async function buildItemExportRows(conn, indicator, yearBh) {
                 const vals = ITEM_MONTHS.map(mk => itemNull(m[mk]));
                 const data = { item_level: level, item_no: no, parent_no: itemNull(parentNo), item_name: su.sub_indicator_name, value_type: 'sub',
                     calc_mode: kpiRollup.isRolledNode({ kind: 'sub', auto: su.rollup_mode === 'auto' }, kids) ? 'auto' : 'manual',
-                    target: subTarget.get(`${su.id}_${hc}`) ?? itemNull(su.target_percentage), result: itemResult(vals, isCum) };
+                    target: subTarget.get(`${su.id}_${hc}`) ?? itemNull(su.target_percentage), result: itemResult(vals, isCum, qMode) };
                 ITEM_MONTHS.forEach((mk, i) => { data[mk] = vals[i]; });
                 out.push({ key: `${hc}|sub|${su.id}`, hospcode: hc, item_kind: 'sub', item_id: Number(su.id), data });
                 walk(Number(su.id), no, level + 1);
@@ -137,7 +147,7 @@ async function buildItemExportRows(conn, indicator, yearBh) {
                     // เลขข้อกิจกรรมต่อจากข้อลูก (ข้อย่อยลูกใช้ลำดับ 1..n ก่อน กิจกรรมต่อท้าย) — ตรงกับหน้าจอ
                     const ad = { item_level: level + 1, item_no: kpiRollup.itemNumber(a.item_no, no, childSubs(Number(su.id)).length + ai), parent_no: no,
                         item_name: a.activity_name, value_type: isCheck ? 'check' : 'number', calc_mode: null,
-                        target: isCheck ? null : (e.target ?? itemNull(a.target_percentage)), result: itemResult(avals, isCum) };
+                        target: isCheck ? null : (e.target ?? itemNull(a.target_percentage)), result: itemResult(avals, isCum, isCheck ? null : qMode) };
                     ITEM_MONTHS.forEach((mk, i) => { ad[mk] = avals[i]; });
                     out.push({ key: `${hc}|activity|${a.id}`, hospcode: hc, item_kind: 'activity', item_id: Number(a.id), data: ad });
                 });
@@ -195,7 +205,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
     try {
         // กรอง upload_excel != 1 (ตัวที่ตั้งเป็น "อัปโหลด Excel เอง" ข้ามทั้งใน check และ export)
         // ดึง evaluation_mode/required_off_types ด้วย เพื่อคำนวณขอบเขตหน่วยบริการเหมือน performKpiExport
-        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, result_manual, target_monthly, custom_vars, use_sub_indicator_export, evaluation_mode, required_off_types, item_no, export_items FROM kpi_indicators
+        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, result_manual, target_monthly, custom_vars, use_sub_indicator_export, evaluation_mode, required_off_types, item_no, export_items, quarter_mode FROM kpi_indicators
             WHERE table_process IS NOT NULL AND table_process != '' AND is_active = 1
             AND (upload_excel IS NULL OR upload_excel = 0)`;
         let indicatorParams = [];
@@ -517,7 +527,7 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
         // 1. Get indicators with valid table_process
         //    — กรอง upload_excel != 1 (ตัวที่ตั้งเป็น "อัปโหลดเอง" ข้ามไป)
         //    — ดึง evaluation_mode/required_off_types ด้วย เพื่อคำนวณขอบเขตหน่วยบริการที่ต้อง export (ดู resolveIndicatorHostypes)
-        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, result_manual, target_monthly, custom_vars, use_sub_indicator_export, evaluation_mode, required_off_types, item_no, export_items FROM kpi_indicators
+        let indicatorQuery = `SELECT id, table_process, kpi_indicators_name, is_cumulative, result_formula, result_manual, target_monthly, custom_vars, use_sub_indicator_export, evaluation_mode, required_off_types, item_no, export_items, quarter_mode FROM kpi_indicators
             WHERE is_active = 1 AND (upload_excel IS NULL OR upload_excel = 0)
             AND table_process IS NOT NULL AND table_process != ''`;
         let indicatorParams = [];

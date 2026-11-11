@@ -390,12 +390,33 @@ const CHART_METRICS_SQL = `
 // รายเดือน: recorded = มีค่าในเดือนนั้น | eligible/passed = เทียบค่าเดือนนั้นกับเป้าหมาย เฉพาะตัวชี้วัดแบบปกติ
 // (ไม่รวมตัวชี้วัดสะสม/มีสูตร เพราะค่ารายเดือนของตัวชี้วัดเหล่านั้นไม่ใช่ "ผลงาน ณ เดือนนั้น")
 // + ไม่รวมตัวชี้วัดที่กรอกผลงาน/ร้อยละเอง (29 ต.ค. 2569 — ค่ารายเดือนไม่ใช่ผลงาน/ร้อยละที่ใช้ตัดสิน)
-const _cNormal = "(COALESCE(i.is_cumulative,0) = 0 AND (i.result_formula IS NULL OR TRIM(i.result_formula) = '') AND COALESCE(i.result_manual,0) = 0 AND COALESCE(i.pct_manual,0) = 0 AND (i.target_monthly IS NULL OR i.target_monthly = ''))"; // ร้อยละรายเดือนเทียบเป้าหมายรวมไม่ได้กับตัวชี้วัดเป้าหมายรายเดือน
+// ร้อยละรายเดือนเทียบเป้าหมายรวมไม่ได้กับตัวชี้วัดเป้าหมายรายเดือน
+const _cBase = "(COALESCE(i.is_cumulative,0) = 0 AND COALESCE(i.result_manual,0) = 0 AND COALESCE(i.pct_manual,0) = 0 AND (i.target_monthly IS NULL OR i.target_monthly = ''))";
+const _cNoFormula = "(i.result_formula IS NULL OR TRIM(i.result_formula) = '')";
+const _qMode = "COALESCE(i.quarter_mode,'')";
+const _QMODES = "('quarter','month_sum','month_last','month_avg')";
+const _cNormal = `(${_cBase} AND ${_cNoFormula} AND ${_qMode} NOT IN ${_QMODES})`;
+// วัดผลรายไตรมาส (11 พ.ย. 2569): นับเฉพาะเดือนสุดท้ายของไตรมาส (ธ.ค./มี.ค./มิ.ย./ก.ย.) ด้วย "ค่าของไตรมาส" — กติกาเดียวกับ quarterValues() ใน kpi-formula
+// (บันทึกรายไตรมาส = ค่าเดือนสุดท้าย | รวม = ผลรวม | เฉลี่ย = ค่าเฉลี่ยของเดือนที่มีค่า | เดือนสุดท้าย = ค่าล่าสุดที่บันทึกในไตรมาส)
+// ตัวชี้วัดที่มีสูตรอื่นนอกจากสูตรค่าไตรมาสล่าสุด (LASTQ) ยังไม่นับ — ค่ารายเดือนของสูตรอื่นไม่ใช่ผลงาน ณ เดือนนั้น
+const _cQuarter = `(${_cBase} AND ${_qMode} IN ${_QMODES} AND (${_cNoFormula} OR UPPER(REPLACE(TRIM(i.result_formula),' ','')) IN ('LASTQ(SUM)','LASTQ(AVG)','LASTQ(LAST)')))`;
+const CHART_QUARTER_OF = { dece: ['oct', 'nov', 'dece'], mar: ['jan', 'feb', 'mar'], jun: ['apr', 'may', 'jun'], sep: ['jul', 'aug', 'sep'] };
+function chartQuarterValueSql(endMonth) {
+    const [na, nb, nc] = CHART_QUARTER_OF[endMonth].map(m => `(CASE WHEN ${_cNum('s.' + m)} THEN CAST(TRIM(s.${m}) AS DECIMAL(20,4)) END)`);
+    const sum = `(CASE WHEN COALESCE(${na},${nb},${nc}) IS NULL THEN NULL ELSE COALESCE(${na},0) + COALESCE(${nb},0) + COALESCE(${nc},0) END)`;
+    const cnt = `((${na} IS NOT NULL) + (${nb} IS NOT NULL) + (${nc} IS NOT NULL))`;
+    return `(CASE ${_qMode} WHEN 'quarter' THEN ${nc} WHEN 'month_sum' THEN ${sum} WHEN 'month_avg' THEN ${sum} / NULLIF(${cnt},0) ELSE COALESCE(${nc},${nb},${na}) END)`;
+}
 
-const CHART_MONTHLY_SQL = CHART_MONTHS.map(([m]) => `
+const CHART_MONTHLY_SQL = CHART_MONTHS.map(([m]) => {
+    const q = CHART_QUARTER_OF[m] ? chartQuarterValueSql(m) : null;
+    const qElig = q ? ` + CASE WHEN ${_cQuarter} AND ${_cHas} AND ${q} IS NOT NULL THEN 1 ELSE 0 END` : '';
+    const qPass = q ? ` + CASE WHEN ${_cQuarter} AND ${q} IS NOT NULL AND ${targetPassSql(q, 's.target_value', 'i.target_condition')} THEN 1 ELSE 0 END` : '';
+    return `
     SUM(CASE WHEN NULLIF(TRIM(s.${m}),'') IS NOT NULL THEN 1 ELSE 0 END) AS rec_${m},
-    SUM(CASE WHEN ${_cNormal} AND ${_cHas} AND ${_cNum('s.' + m)} THEN 1 ELSE 0 END) AS elig_${m},
-    SUM(CASE WHEN ${_cNormal} AND ${_cNum('s.' + m)} AND ${targetPassSql('s.' + m, 's.target_value', 'i.target_condition')} THEN 1 ELSE 0 END) AS pass_${m}`).join(',');
+    SUM(CASE WHEN ${_cNormal} AND ${_cHas} AND ${_cNum('s.' + m)} THEN 1 ELSE 0 END${qElig}) AS elig_${m},
+    SUM(CASE WHEN ${_cNormal} AND ${_cNum('s.' + m)} AND ${targetPassSql('s.' + m, 's.target_value', 'i.target_condition')} THEN 1 ELSE 0 END${qPass}) AS pass_${m}`;
+}).join(',');
 
 function chartPct(n, d) { return Number(d) > 0 ? Math.round(Number(n) / Number(d) * 10000) / 100 : 0; }
 
