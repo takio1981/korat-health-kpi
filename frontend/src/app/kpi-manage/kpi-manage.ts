@@ -15,7 +15,7 @@ import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { ZoneBadgeComponent, HospitalZoneService } from '../shared/zone-badge';
 import { ZoneManagerComponent } from '../shared/zone-manager';
 import { typesText, hostypeText } from '../shared/khd-types';
-import { buildKhdDiffRows, khdDiffAoa, KhdDiffRow, KhdDiffKind, KHD_DIFF_KIND_LABEL, fiscalYearList, fiscalYearMatch, fiscalYearChoices } from '../shared/khd-diff';
+import { buildKhdDiffRows, khdDiffAoa, KhdDiffRow, KhdDiffKind, KHD_DIFF_KIND_LABEL, fiscalYearList, fiscalYearMatch, fiscalYearChoices, khdOrgMatch, khdOrgUnmatched, KhdOrgPart } from '../shared/khd-diff';
 import { AiFormulaHelperComponent } from '../shared/ai-formula-helper';
 import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
 import { TARGET_CONDITIONS, CONDITION_SYMBOL, CONDITION_LABEL, normalizeCondition, evaluateTarget, normalizeTargetMonthly } from '../shared/kpi-target';
@@ -955,6 +955,8 @@ export class KpiManageComponent implements OnInit {
             if (this.getKhdData(i)?.hostype_match !== false) return false;
           } else if (this.filterKhdStatus === 'fiscal_year') {
             if (this.khdFiscalYearMatch(i) !== false) return false;
+          } else if (this.filterKhdStatus === 'dept' || this.filterKhdStatus === 'main') {
+            if (this.khdOrgMatch(i, this.filterKhdStatus) !== false) return false;
           } else if (this.filterKhdStatus === 'inactive') {
             const khd = this.khdCompareMap.get(i.table_process || '');
             if (!(khd && (khd.khd_is_active === 0 || khd.khd_is_active === '0'))) return false;
@@ -1786,7 +1788,7 @@ export class KpiManageComponent implements OnInit {
    * ตัวนี้ iterate this.indicators (ที่ table แสดงจริง) — ตรงกันการนับ
    */
   get khdCounts() {
-    const counts = { match: 0, different: 0, tp_different: 0, missing_remote: 0, inactive: 0, criteria: 0, types: 0, hostype: 0, fiscal_year: 0, total: 0 };
+    const counts = { match: 0, different: 0, tp_different: 0, missing_remote: 0, inactive: 0, criteria: 0, types: 0, hostype: 0, fiscal_year: 0, dept: 0, main: 0, total: 0 };
     if (!this.khdCompareMap.size) return counts;
     for (const i of this.indicators) {
       counts.total++;
@@ -1801,6 +1803,8 @@ export class KpiManageComponent implements OnInit {
       if (khd?.types_match === false) counts.types++;
       if (khd?.hostype_match === false) counts.hostype++;
       if (this.khdFiscalYearMatch(i) === false) counts.fiscal_year++;
+      if (this.khdOrgMatch(i, 'dept') === false) counts.dept++;
+      if (this.khdOrgMatch(i, 'main') === false) counts.main++;
     }
     return counts;
   }
@@ -2527,6 +2531,68 @@ export class KpiManageComponent implements OnInit {
     });
   }
 
+  // ===== หน่วยงาน / หมวดหมู่หลัก เทียบกับ KHD (11 พ.ย. 2569) — ค่าใน KHD แปลงเป็น id ที่ backend (services/khd-org.js) เทียบกับค่าปัจจุบัน =====
+  khdOrgMatch(item: any, part: KhdOrgPart): boolean | null { return khdOrgMatch(item, this.getKhdData(item), part); }
+  orgName(part: KhdOrgPart, id: any): string {
+    if (id === null || id === undefined || id === '') return '';
+    const r = part === 'dept' ? this.departments.find((d: any) => Number(d.id) === Number(id)) : this.mainIndicators.find((m: any) => Number(m.id) === Number(id));
+    return (part === 'dept' ? r?.dept_name : r?.main_indicator_name) || '';
+  }
+  localOrgText(item: any, part: KhdOrgPart): string {
+    return this.orgName(part, part === 'dept' ? item?.dept_id : item?.main_indicator_id) || 'ไม่ระบุ';
+  }
+  khdOrgText(item: any, part: KhdOrgPart): string { return this.getKhdData(item)?.['khd_' + part + '_name'] || '-'; }
+  get khdDeptDiffItems(): any[] { return this.indicators.filter(i => this.khdOrgMatch(i, 'dept') === false); }
+  get khdMainDiffItems(): any[] { return this.indicators.filter(i => this.khdOrgMatch(i, 'main') === false); }
+  /** ค่าหน่วยงาน/หมวดหมู่หลักใน KHD ที่ยังจับคู่กับระบบไม่ได้ (เทียบไม่ได้จนกว่าจะตั้งที่ "จับคู่ข้อมูล KHD") */
+  get khdOrgUnmatchedCount(): number {
+    return this.indicators.filter(i => khdOrgUnmatched(this.getKhdData(i), 'dept') || khdOrgUnmatched(this.getKhdData(i), 'main')).length;
+  }
+
+  applyKhdOrg(items: any[], part: KhdOrgPart) {
+    const label = part === 'dept' ? 'หน่วยงาน' : 'หมวดหมู่หลัก';
+    items = items.filter(i => this.khdOrgMatch(i, part) === false);
+    if (!items.length) { Swal.fire('แจ้งเตือน', 'ไม่มีตัวชี้วัดที่' + label + 'ต่างจาก KHD', 'info'); return; }
+    const esc = (t: any) => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as any)[c]);
+    const list = items.slice(0, 10).map(i =>
+      `<tr><td class="text-left pr-2 py-0.5">${esc(i.kpi_indicators_name)}</td><td class="px-1 text-gray-600">${esc(this.localOrgText(i, part))}</td>` +
+      `<td class="px-1">→</td><td class="font-bold text-violet-700">${esc(this.khdOrgText(i, part))}</td></tr>`).join('');
+    const more = items.length > 10 ? `<p class="text-xs text-gray-500 mt-1">... และอีก ${items.length - 10} ตัว</p>` : '';
+    const note = part === 'dept'
+      ? 'หน่วยงานมีผลกับสิทธิ์การเห็นตัวชี้วัดของผู้ใช้ระดับหน่วยงาน ระบบคำนวณตารางสรุปใหม่ให้อัตโนมัติ — ผลงานที่บันทึกแล้วไม่เปลี่ยน'
+      : 'ยุทธศาสตร์ของตัวชี้วัดเปลี่ยนตามหมวดหมู่หลักใหม่ ระบบคำนวณตารางสรุปใหม่ให้อัตโนมัติ — ผลงานที่บันทึกแล้วไม่เปลี่ยน';
+    Swal.fire({
+      title: 'ใช้' + label + 'ตาม KHD',
+      html: `<p class="text-sm">ปรับ<b>${label}</b>ของ <b>${items.length}</b> ตัวชี้วัดให้ตรงกับ KHD</p>
+             <div class="max-h-60 overflow-auto mt-2"><table class="w-full text-xs">${list}</table></div>${more}
+             <p class="text-[11px] text-gray-500 mt-2">${note}</p>`,
+      icon: 'question', showCancelButton: true, confirmButtonColor: '#7c3aed',
+      confirmButtonText: '<i class="fas fa-arrow-down mr-1"></i> ปรับตาม KHD', cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      this.authService.applyKhdOrg(items.map(i => i.id), [part]).subscribe({
+        next: (res: any) => {
+          if (!res.success) { Swal.fire('ผิดพลาด', res.message, 'error'); return; }
+          this.applyOrgUpdates(res.updated);
+          Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2500, showConfirmButton: false });
+        },
+        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถปรับได้', 'error')
+      });
+    });
+  }
+  /** ปรับค่าในรายการที่โหลดไว้ทันที (เทียบจากค่าปัจจุบัน — ไม่ต้องเทียบกับ KHD ใหม่) */
+  applyOrgUpdates(updated: { id: number; after: any }[]) {
+    for (const u of updated || []) {
+      const it = this.indicators.find(i => i.id === u.id);
+      if (!it) continue;
+      if ('dept_id' in (u.after || {})) { it.dept_id = u.after.dept_id; it.dept_name = this.orgName('dept', u.after.dept_id); }
+      if ('main_indicator_id' in (u.after || {})) { it.main_indicator_id = u.after.main_indicator_id; it.main_indicator_name = this.orgName('main', u.after.main_indicator_id); }
+    }
+    this.applyFilter();
+    if (this.showKhdDiff) this.refreshKhdDiff();
+    this.cdr.detectChanges();
+  }
+
   // ===== รายละเอียดความแตกต่างหลังเทียบกับ KHD (9 พ.ย. 2569) — ตารางเทียบคู่ ระบบ ↔ KHD ทุกหัวข้อที่ต่างกัน (shared/khd-diff.ts) =====
   showKhdDiff = false;
   khdDiffKind: '' | KhdDiffKind = '';
@@ -2535,7 +2601,7 @@ export class KpiManageComponent implements OnInit {
   khdDiffAll: KhdDiffRow[] = [];
   khdDiffRows: KhdDiffRow[] = [];
   khdDiffCounts: Record<string, number> = {};
-  readonly khdDiffKinds: KhdDiffKind[] = ['name', 'table_process', 'criteria', 'types', 'hostype', 'fiscal_year', 'status'];
+  readonly khdDiffKinds: KhdDiffKind[] = ['name', 'table_process', 'criteria', 'types', 'hostype', 'fiscal_year', 'dept', 'main', 'status'];
   readonly khdDiffKindLabel = KHD_DIFF_KIND_LABEL;
 
   openKhdDiff(item?: any) {
@@ -2556,6 +2622,8 @@ export class KpiManageComponent implements OnInit {
       criteriaText: (i: any) => this.getCriteriaText(i),
       khdCriteriaText: (k: any) => this.getKhdCriteriaText(k),
       hosNames: this.hosTypeNames,
+      deptName: (id: any) => this.orgName('dept', id),
+      mainName: (id: any) => this.orgName('main', id),
     });
     const counts: Record<string, number> = { all: this.khdDiffAll.length };
     for (const r of this.khdDiffAll) counts[r.kind] = (counts[r.kind] || 0) + 1;
@@ -2576,6 +2644,7 @@ export class KpiManageComponent implements OnInit {
     else if (r.kind === 'criteria') this.applyKhdCriteria([item]);
     else if (r.kind === 'types' || r.kind === 'hostype') this.applyKhdTypes([item], r.kind);
     else if (r.kind === 'fiscal_year') this.applyKhdFiscalYear([item]);
+    else if (r.kind === 'dept' || r.kind === 'main') this.applyKhdOrg([item], r.kind);
   }
 
   /** ใช้ชื่อของ KHD ทุกตัวที่ table_process เดียวกันแต่ชื่อต่าง (POST /report-compare/sync เดิม — server อ่านชื่อจาก KHD) */

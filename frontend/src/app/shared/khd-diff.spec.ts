@@ -1,4 +1,4 @@
-import { buildKhdDiffRows, typesChangeText, hostypeChangeText, khdDiffAoa, fiscalYearList, fiscalYearMatch, fiscalYearChangeText, fiscalYearChoices } from './khd-diff';
+import { buildKhdDiffRows, typesChangeText, hostypeChangeText, khdDiffAoa, fiscalYearList, fiscalYearMatch, fiscalYearChangeText, fiscalYearChoices, khdOrgMatch, khdOrgUnmatched } from './khd-diff';
 
 // รายละเอียดความแตกต่างหลังเทียบกับ KHD (9 พ.ย. 2569)
 describe('khd-diff', () => {
@@ -77,6 +77,32 @@ describe('khd-diff table_process', () => {
     expect(rows).toEqual([
       expect.objectContaining({ id: 7, kind: 'table_process', local: 'kpi_local_7', khd: 'kpi_khd_7', detail: 'ชื่อเดียวกัน (KHD #501 · รหัส R-7)' }),
       expect.objectContaining({ id: 8, kind: 'name', local: 'ร้อยละ ข', khd: 'ร้อยละ ข (ใหม่)', detail: 'table_process เดียวกัน: kpi_same_8' }),
+    ]);
+  });
+});
+
+
+// หน่วยงาน / หมวดหมู่หลัก เทียบกับ KHD (11 พ.ย. 2569)
+describe('khd-diff หน่วยงาน/หมวดหมู่หลัก', () => {
+  const k = (extra: any) => ({ status: 'match', khd_dept_status: 'auto', khd_dept_id: 2, khd_dept_name: 'กลุ่มงาน ข', khd_dept_value: 'NCD',
+    khd_main_status: 'mapped', khd_main_id: 10, khd_main_name: 'หมวด ก', khd_main_value: 'หมวด ก (37)', ...extra });
+  it('khdOrgMatch: เทียบค่าปัจจุบัน — จับคู่ไม่ได้/ไม่ระบุ/ยังไม่เทียบ = null', () => {
+    expect(khdOrgMatch({ dept_id: 2 }, k({}), 'dept')).toBe(true);
+    expect(khdOrgMatch({ dept_id: '1' }, k({}), 'dept')).toBe(false);
+    expect(khdOrgMatch({ main_indicator_id: null }, k({}), 'main')).toBe(false);
+    expect(khdOrgMatch({ dept_id: 1 }, k({ khd_dept_status: 'unmatched', khd_dept_id: null }), 'dept')).toBeNull();
+    expect(khdOrgMatch({ dept_id: 1 }, k({ khd_dept_status: 'empty' }), 'dept')).toBeNull();
+    expect(khdOrgMatch({ dept_id: 1 }, null, 'dept')).toBeNull();
+    expect(khdOrgMatch({ dept_id: 1 }, k({ status: 'missing_remote' }), 'dept')).toBeNull();
+    expect(khdOrgUnmatched(k({ khd_main_status: 'unmatched' }), 'main')).toBe(true);
+  });
+  it('buildKhdDiffRows: แถวหน่วยงาน/หมวดหมู่หลัก ระบบ ↔ KHD พร้อมค่าใน KHD และวิธีจับคู่', () => {
+    const items = [{ id: 1, kpi_indicators_name: 'ก', table_process: 'a', dept_id: 1, main_indicator_id: null }];
+    const rows = buildKhdDiffRows(items, { getKhd: () => k({}), criteriaText: () => '-', khdCriteriaText: () => '-',
+      deptName: (id: any) => ({ 1: 'กลุ่มงาน ก', 2: 'กลุ่มงาน ข' } as any)[id], mainName: () => '' });
+    expect(rows).toEqual([
+      expect.objectContaining({ kind: 'dept', local: 'กลุ่มงาน ก', khd: 'กลุ่มงาน ข', detail: 'ค่าใน KHD: "NCD" (จับคู่อัตโนมัติ)' }),
+      expect.objectContaining({ kind: 'main', local: 'ไม่ระบุ', khd: 'หมวด ก', detail: 'ค่าใน KHD: "หมวด ก (37)" (จับคู่ที่ตั้งไว้)' }),
     ]);
   });
 });

@@ -261,6 +261,35 @@ describe('KpiManageComponent', () => {
       expect(component.modalFiscalYearAvailable).toContain('2570');
     });
 
+    it('หน่วยงาน/หมวดหมู่หลัก: นับ/กรอง ชิปแยก แถวในหน้าต่างรายละเอียด และปรับค่าในรายการทันทีหลังบันทึก (11 พ.ย. 2569)', () => {
+      component.departments = [{ id: 1, dept_name: 'กลุ่มงาน ก' }, { id: 2, dept_name: 'กลุ่มงาน ข' }];
+      component.mainIndicators = [{ id: 10, main_indicator_name: 'หมวด ก' }];
+      component.indicators.push(
+        { id: 6, kpi_indicators_name: 'ฉ', table_process: 'tp6', is_active: 1, dept_id: 1, main_indicator_id: null },
+        { id: 7, kpi_indicators_name: 'ช', table_process: 'tp7', is_active: 1, dept_id: 1, main_indicator_id: 10 });
+      component.khdCompareMap.set('tp6', { status: 'match', table_process: 'tp6', khd_dept_status: 'auto', khd_dept_id: 2, khd_dept_name: 'กลุ่มงาน ข', khd_dept_value: 'NCD',
+        khd_main_status: 'mapped', khd_main_id: 10, khd_main_name: 'หมวด ก', khd_main_value: 'หมวด ก' });
+      component.khdCompareMap.set('tp7', { status: 'match', table_process: 'tp7', khd_dept_status: 'unmatched', khd_dept_id: null, khd_dept_value: 'XYZ',
+        khd_main_status: 'auto', khd_main_id: 10, khd_main_name: 'หมวด ก' });
+      expect(component.khdCounts.dept).toBe(1);
+      expect(component.khdCounts.main).toBe(1);
+      expect(component.khdOrgUnmatchedCount).toBe(1);
+      component.filterKhdStatus = 'dept';
+      component.applyFilter();
+      expect(component.filteredIndicators.map((i: any) => i.id)).toEqual([6]);
+      expect(component.localOrgText(component.indicators.find((i: any) => i.id === 6), 'dept')).toBe('กลุ่มงาน ก');
+      component.openKhdDiff(component.indicators.find((i: any) => i.id === 6));
+      expect(component.khdDiffAll.map(r => r.kind)).toEqual(['dept', 'main']);
+      component.applyOrgUpdates([{ id: 6, after: { dept_id: 2, main_indicator_id: 10 } }]);
+      expect(component.khdCounts.dept).toBe(0);
+      expect(component.khdCounts.main).toBe(0);
+      expect(component.indicators.find((i: any) => i.id === 6).dept_name).toBe('กลุ่มงาน ข');
+      expect(component.khdDiffAll.length).toBe(0);
+      const http = TestBed.inject(HttpTestingController);
+      (component as any).authService.applyKhdOrg([6], ['dept']).subscribe();
+      expect(http.expectOne(r => r.method === 'POST' && r.url.includes('/indicators/apply-khd-org')).request.body).toEqual({ ids: [6], parts: ['dept'] });
+    });
+
     it('เรียก API ด้วยรายการ ปีงบ และส่วนที่จะปรับ', () => {
       const http = TestBed.inject(HttpTestingController);
       (component as any).authService.applyKhdTypes([2], '2570', ['hostype']).subscribe();

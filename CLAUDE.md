@@ -966,6 +966,13 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   อัปเดตเฉพาะ `criterion` + `target_condition` (**ไม่แตะ `target_percentage`/เป้าหมาย**) ตัวเลขเก็บแบบตัดศูนย์ท้าย ("85.50" → "85.5"), KHD ไม่มีเกณฑ์/ไม่พบ = ข้าม
   (ไม่ล้างค่าเดิม), log `APPLY_KHD_CRITERIA` (ค่าเดิม/ค่าใหม่) — UI: ปุ่ม "ใช้เกณฑ์ KHD" ในแถว + banner สีส้ม + ชิป "เกณฑ์ต่างกัน" (`filterKhdStatus = 'criteria'`)
   — Test: `api/tests/khd-criteria.test.js` (KHD จำลอง), `kpi-manage.spec.ts`
+- **เทียบ/ปรับหน่วยงาน + หมวดหมู่หลักกับ KHD (11 พ.ย. 2569 — ผู้ใช้สั่ง):** `services/khd-org.js` (ฟังก์ชันล้วน) แปลง `reports.dept` / `reports.main_indicator` เป็น id ด้วย `loadKhdResolver()`
+  (ตัวจับคู่เดียวกับเพิ่มตัวชี้วัดจาก KHD: khd_value_mappings → อัตโนมัติ) — `dept_match`/`main_match` true/false/**null = เทียบไม่ได้ (ไม่ระบุ / ignored / unmatched — ไม่นับต่าง)**
+  | `GET /report-compare` แนบ `khd_dept_value/status/id/name`, `khd_main_*` + summary `dept_different`/`main_different`/`org_unmatched` | `POST /indicators/apply-khd-org { ids, parts: ['dept'|'main'] }`
+  (requireAction kpi-manage edit) server อ่าน KHD ใหม่ เทียบไม่ได้ = ข้าม (ไม่ล้างค่าเดิม) + `scheduleSummaryRefresh` ทุกปีงบใน kpi_summary (เก็บ dept_id/ชื่อหมวดหมู่) + log `APPLY_KHD_ORG`
+  | frontend เทียบจาก**ค่าปัจจุบัน** `khdOrgMatch()` (shared/khd-diff.ts) — ปรับแล้วเห็นผลทันที `applyOrgUpdates()`, ชิป `filterKhdStatus = 'dept'|'main'`, แถบสีม่วง `#khd-org-banner` (+ จำนวนที่ยังจับคู่ไม่ได้/ปุ่มไปจับคู่),
+  แถว kind `dept`/`main` ในหน้าต่างรายละเอียด (`#btn-khd-diff-dept`/`#btn-khd-diff-main`) — ข้อมูลจริง 11 พ.ย. 2569: 152 คู่ หน่วยงานต่าง 16 (ระบบยังไม่ระบุหน่วยงาน) หมวดหมู่หลักต่าง 2, KHD ไม่ระบุหมวดหมู่ 72
+  — Test: `api/tests/khd-org.test.js`, `shared/khd-diff.spec.ts`, `kpi-manage.spec.ts`
 - **เทียบ/ปรับประเภทตัวชี้วัด + ประเภทหน่วยบริการกับ KHD (9 พ.ย. 2569 — ผู้ใช้สั่ง):** `services/khd-types.js` (ฟังก์ชันล้วน) — ประเภทตัวชี้วัด = r9/moph/ssj/rmw/other
   (KHD `reports` + **ค่าปีงบใน `report_fiscal_year_config` (r9/moph/ssj/rmw) ก่อน** — ปีงบ 2570 KHD ตั้งครบทุกตัว), null/'0' = 0 | ประเภทหน่วยบริการ = `hostypeSetting(evaluation_mode, required_off_types)`
   key 'all' (all_required ไม่สนรายการ) / 'any:05,07' (เรียง ไม่ซ้ำ) / 'unset' — KHD unset = `hostype_match: null` (ไม่นับต่าง ไม่มีค่าให้ใช้)

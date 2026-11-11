@@ -14,6 +14,8 @@ const { requireAction } = require('../core/access');
 const { compareKhdTypes, khdTypeUpdate, khdIndicatorTypes, hostypeSetting } = require('../services/khd-types');
 const { isValidIdentifier } = require('../core/sql');
 const { compareFiscalYears, buildKhdFiscalYearMap, normalizeFiscalYears, invalidFiscalYears } = require('../services/fiscal-years');
+const { compareKhdOrg, khdOrgUpdate, KHD_ORG_PARTS } = require('../services/khd-org');
+const { scheduleSummaryRefresh } = require('../services/summary');
 
 // === Test Telegram (super_admin) ===
 // ============================================================
@@ -100,6 +102,7 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
         const items = [];
         let match = 0, different = 0, missing_local = 0, missing_remote = 0, criteria_different = 0;
         let khd_inactive_count = 0, suggest_disable_count = 0, types_different = 0, hostype_different = 0, fiscal_year_different = 0;
+        let dept_different = 0, main_different = 0, org_unmatched = 0;
 
         // Helper: ถ้า KHD report inactive (=0) แต่ Local ยัง upload_excel=0 → suggest = ปิด upload_excel
         const computeSuggest = (khdIsActive, localUploadExcel) => {
@@ -168,6 +171,11 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                 if (typeCmp.hostype_match === false) hostype_different++;
                 const fyCmp = compareFiscalYears(local.local_fy, khdYearsMap.get(khd.report_id));
                 if (fyCmp.fiscal_year_match === false) fiscal_year_different++;
+                // หน่วยงาน + หมวดหมู่หลัก (11 พ.ย. 2569) — services/khd-org.js (ตัวจับคู่ค่าข้อความ KHD → id ของระบบ)
+                const orgCmp = compareKhdOrg(khdResolver, khd, local);
+                if (orgCmp.dept_match === false) dept_different++;
+                if (orgCmp.main_match === false) main_different++;
+                if (orgCmp.khd_dept_status === 'unmatched' || orgCmp.khd_main_status === 'unmatched') org_unmatched++;
 
                 const suggest = computeSuggest(effectiveIsActive, local.upload_excel);
                 if (suggest) suggest_disable_count++;
@@ -187,6 +195,8 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                     criteria_match,
                     ...typeCmp,
                     ...fyCmp,
+                    ...orgCmp,
+                    local_main_indicator_name: local.main_indicator_name || null,
                     suggest_disable_upload: suggest
                 });
             }
@@ -223,7 +233,8 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
             summary: {
                 total: items.length, match, different, missing_local, missing_remote, tp_different: tpDiff,
                 khd_inactive: khd_inactive_count, suggest_disable: suggest_disable_count,
-                criteria_different, types_different, hostype_different, fiscal_year_different, year_bh
+                criteria_different, types_different, hostype_different, fiscal_year_different,
+                dept_different, main_different, org_unmatched, year_bh
             },
             items
         });
@@ -353,6 +364,51 @@ apiRouter.post('/indicators/apply-khd-types', authenticateToken, requireAction('
         const what = parts.map(p => p === 'types' ? 'ประเภทตัวชี้วัด' : 'ประเภทหน่วยบริการ').join(' + ');
         res.json({ success: true, message: `ปรับ${what}ให้เท่ากับ KHD ${updated.length} ตัวชี้วัด` + (skipped.length ? ` (ข้าม ${skipped.length})` : ''),
             updated, skipped, year_bh: yearBh, hostype_changed: hostypeChanged });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// POST /indicators/apply-khd-org { ids, parts: ['dept'|'main'] } — ปรับ "หน่วยงาน" (dept_id) และ/หรือ "หมวดหมู่หลัก" (main_indicator_id) ให้ตรงกับ KHD (11 พ.ย. 2569)
+// server อ่านค่าจาก KHD ใหม่เสมอ (ไม่เชื่อค่าจาก client) + แปลงด้วยตัวจับคู่เดียวกับ GET /report-compare — KHD ไม่ได้ระบุ / ยังจับคู่ไม่ได้ = ข้าม (ไม่ล้างค่าเดิม)
+// ยุทธศาสตร์ตามหมวดหมู่หลักอัตโนมัติ (COALESCE(mi.yut_id, i.main_yut)) | คำนวณตารางสรุปใหม่ (kpi_summary เก็บ dept_id/ชื่อหมวดหมู่ไว้)
+apiRouter.post('/indicators/apply-khd-org', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
+    const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.map(Number).filter(n => Number.isInteger(n) && n > 0))] : [];
+    if (ids.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตัวชี้วัด' });
+    const parts = Array.isArray(req.body?.parts) ? [...new Set(req.body.parts.filter(p => KHD_ORG_PARTS.includes(p)))] : [];
+    if (parts.length === 0) return res.status(400).json({ success: false, message: 'กรุณาระบุสิ่งที่จะปรับ (หน่วยงาน / หมวดหมู่หลัก)' });
+    try {
+        const [locals] = await db.query('SELECT id, kpi_indicators_name, table_process, dept_id, main_indicator_id FROM kpi_indicators WHERE id IN (?)', [ids]);
+        const tps = [...new Set(locals.map(l => String(l.table_process || '').trim()).filter(Boolean))];
+        const khdByTp = new Map();
+        if (tps.length) {
+            const [khdRows] = await remoteDb.query(
+                `SELECT report_id, table_process, dept, main_indicator FROM reports
+                 WHERE data_source = 'excel' AND LENGTH(report_code) = LENGTH(table_process) AND table_process IN (?) ORDER BY report_id`, [tps]);
+            khdRows.forEach(r => khdByTp.set(String(r.table_process).trim(), r));
+        }
+        const resolver = await loadKhdResolver(db);
+        const updated = [], skipped = [];
+        for (const l of locals) {
+            const khd = khdByTp.get(String(l.table_process || '').trim());
+            if (!khd) { skipped.push({ id: l.id, reason: 'ไม่พบใน KHD' }); continue; }
+            const { set, reason } = khdOrgUpdate(resolver, khd, l, parts);
+            const cols = Object.keys(set);
+            if (!cols.length) { skipped.push({ id: l.id, reason }); continue; }
+            await db.query(`UPDATE kpi_indicators SET ${cols.map(c => c + ' = ?').join(', ')} WHERE id = ?`, [...cols.map(c => set[c]), l.id]);
+            updated.push({ id: l.id, name: l.kpi_indicators_name, before: Object.fromEntries(cols.map(c => [c, l[c]])), after: set, ...(reason ? { note: reason } : {}) });
+        }
+        if (updated.length) {
+            // ตารางสรุปเก็บหน่วยงาน/ชื่อหมวดหมู่ไว้ (ใช้กรองตามสิทธิ์และในรายงาน) → คำนวณใหม่ทุกปีงบที่มี
+            const [pairs] = await db.query('SELECT DISTINCT indicator_id, year_bh FROM kpi_summary WHERE indicator_id IN (?)', [updated.map(u => u.id)]);
+            scheduleSummaryRefresh(pairs);
+        }
+        await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+            [req.user.userId, 'APPLY_KHD_ORG', 'kpi_indicators', JSON.stringify({ parts, updated, skipped }).slice(0, 60000), req.ip]);
+        const what = parts.map(p => p === 'dept' ? 'หน่วยงาน' : 'หมวดหมู่หลัก').join(' + ');
+        res.json({ success: true, message: `ปรับ${what}ให้ตรงกับ KHD ${updated.length} ตัวชี้วัด` + (skipped.length ? ` (ข้าม ${skipped.length})` : ''), updated, skipped });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }

@@ -1281,6 +1281,10 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
   applyKhdTypes(ids: number[], year_bh: string, parts: ('types' | 'hostype')[]): Observable<any> {
     return this.apiPost('/indicators/apply-khd-types', { ids, year_bh, parts });
   }
+  // หน่วยงาน / หมวดหมู่หลักให้ตรงกับ KHD (11 พ.ย. 2569) — parts: 'dept' | 'main', server อ่านค่าจาก KHD + ตัวจับคู่เอง
+  applyKhdOrg(ids: number[], parts: ('dept' | 'main')[]): Observable<any> {
+    return this.apiPost('/indicators/apply-khd-org', { ids, parts });
+  }
   // ปีงบประมาณของตัวชี้วัด (9 พ.ย. 2569): ใช้ปีงบตาม KHD (server อ่านเอง) / ตั้งเอง (mode 'replace' | 'add', years ว่าง = ล้าง)
   applyKhdFiscalYear(ids: number[]): Observable<any> {
     return this.apiPost('/indicators/apply-khd-fiscal-year', { ids });

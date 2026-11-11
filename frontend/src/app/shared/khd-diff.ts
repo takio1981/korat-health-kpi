@@ -1,10 +1,11 @@
 // รายละเอียดความแตกต่างหลัง "เทียบกับ KHD" (9 พ.ย. 2569) — ฟังก์ชันล้วน สร้างแถวเทียบคู่ ระบบ ↔ KHD จากผลของ GET /report-compare
-// 1 แถว = 1 หัวข้อที่ต่างกันของตัวชี้วัด 1 ตัว (ชื่อ / เกณฑ์ / ประเภทตัวชี้วัด / ประเภทหน่วยบริการ / สถานะใน KHD)
+// 1 แถว = 1 หัวข้อที่ต่างกันของตัวชี้วัด 1 ตัว (ชื่อ / เกณฑ์ / ประเภทตัวชี้วัด / ประเภทหน่วยบริการ / หน่วยงาน / หมวดหมู่หลัก / สถานะใน KHD)
 import { KHD_TYPE_KEYS, KHD_TYPE_LABEL, typesText, hostypeText } from './khd-types';
 
-export type KhdDiffKind = 'name' | 'table_process' | 'criteria' | 'types' | 'hostype' | 'fiscal_year' | 'status';
+export type KhdDiffKind = 'name' | 'table_process' | 'criteria' | 'types' | 'hostype' | 'fiscal_year' | 'dept' | 'main' | 'status';
 export const KHD_DIFF_KIND_LABEL: Record<KhdDiffKind, string> = {
-  name: 'ชื่อตัวชี้วัด', table_process: 'table_process', criteria: 'เกณฑ์', types: 'ประเภทตัวชี้วัด', hostype: 'ประเภทหน่วยบริการ', fiscal_year: 'ปีงบประมาณ', status: 'สถานะใน KHD',
+  name: 'ชื่อตัวชี้วัด', table_process: 'table_process', criteria: 'เกณฑ์', types: 'ประเภทตัวชี้วัด', hostype: 'ประเภทหน่วยบริการ', fiscal_year: 'ปีงบประมาณ',
+  dept: 'หน่วยงาน', main: 'หมวดหมู่หลัก', status: 'สถานะใน KHD',
 };
 
 export interface KhdDiffRow {
@@ -19,6 +20,31 @@ export interface KhdDiffContext {
   criteriaText: (item: any) => string;
   khdCriteriaText: (khd: any) => string;
   hosNames?: Record<string, string>;
+  /** ชื่อหน่วยงาน / หมวดหมู่หลักของระบบจาก id (ค่าปัจจุบันของตัวชี้วัด) */
+  deptName?: (id: any) => string;
+  mainName?: (id: any) => string;
+}
+
+// ===== หน่วยงาน / หมวดหมู่หลัก (11 พ.ย. 2569) — backend แปลงค่าข้อความของ KHD เป็น id ของระบบ (khd_dept_id / khd_main_id + สถานะการจับคู่) =====
+export type KhdOrgPart = 'dept' | 'main';
+const ORG_LOCAL_COL: Record<KhdOrgPart, string> = { dept: 'dept_id', main: 'main_indicator_id' };
+/** เทียบค่าปัจจุบันของตัวชี้วัดกับ KHD — null = เทียบไม่ได้ (ยังไม่เทียบ / ไม่มีคู่ใน KHD / KHD ไม่ระบุ / ยังจับคู่ค่าใน KHD ไม่ได้) */
+export function khdOrgMatch(item: any, khd: any, part: KhdOrgPart): boolean | null {
+  if (!khd || khd.status === 'missing_remote' || khd.status === 'missing_local') return null;
+  const st = khd['khd_' + part + '_status'];
+  if (st !== 'mapped' && st !== 'auto') return null;
+  const local = item?.[ORG_LOCAL_COL[part]];
+  const localId = local === null || local === undefined || local === '' ? null : Number(local);
+  return localId === Number(khd['khd_' + part + '_id']);
+}
+/** ค่าใน KHD ยังจับคู่กับระบบไม่ได้ (ต้องตั้งที่ "จับคู่ข้อมูล KHD") */
+export function khdOrgUnmatched(khd: any, part: KhdOrgPart): boolean {
+  return !!khd && khd.status !== 'missing_remote' && khd.status !== 'missing_local' && khd['khd_' + part + '_status'] === 'unmatched';
+}
+export function khdOrgDetail(khd: any, part: KhdOrgPart): string {
+  const v = khd?.['khd_' + part + '_value'];
+  const how = khd?.['khd_' + part + '_status'] === 'mapped' ? 'จับคู่ที่ตั้งไว้' : 'จับคู่อัตโนมัติ';
+  return v ? `ค่าใน KHD: "${v}" (${how})` : '';
 }
 
 const on = (v: any) => v !== null && v !== undefined && String(v).trim() !== '' && String(v).trim() !== '0';
@@ -106,6 +132,14 @@ export function buildKhdDiffRows(indicators: any[], ctx: KhdDiffContext): KhdDif
     if (fiscalYearMatch(it.khd_fiscal_year, k.khd_fiscal_years) === false) {
       rows.push({ ...base, kind: 'fiscal_year', local: fiscalYearList(it.khd_fiscal_year).join(', ') || 'ไม่ระบุปีงบ',
         khd: fiscalYearList(k.khd_fiscal_years).join(', '), detail: fiscalYearChangeText(it.khd_fiscal_year, k.khd_fiscal_years) });
+    }
+    for (const part of ['dept', 'main'] as KhdOrgPart[]) {
+      if (khdOrgMatch(it, k, part) !== false) continue;
+      const nameOf = part === 'dept' ? ctx.deptName : ctx.mainName;
+      const localId = it?.[ORG_LOCAL_COL[part]];
+      rows.push({ ...base, kind: part,
+        local: (localId ? (nameOf?.(localId) || '#' + localId) : '') || 'ไม่ระบุ',
+        khd: k['khd_' + part + '_name'] || '-', detail: khdOrgDetail(k, part) });
     }
     if (k.khd_is_active === 0 || k.khd_is_active === '0') {
       const exporting = !(it.upload_excel === 1 || it.upload_excel === '1');
