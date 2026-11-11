@@ -3,7 +3,7 @@
 // ลงทะเบียนเส้นทางกับ apiRouter ตอนถูก require — server.js require ไฟล์นี้ที่ตำแหน่งเดิมของเส้นทางชุดนี้ (ลำดับเส้นทางสำคัญ)
 
 const db = require('../db');
-const { ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, getDistrictId } = require('../core/access');
+const { ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, getDistrictId, hasPageAccess } = require('../core/access');
 const { activeIndicatorSql, targetCondOf, targetHasSql, targetPassSql } = require('../core/sql');
 const { apiRouter } = require('../core/router');
 const { authenticateToken } = require('../core/auth');
@@ -13,6 +13,9 @@ const { indicatorAllowsHostype, indicatorTypeSetting } = require('../services/in
 apiRouter.get('/kpi-template', authenticateToken, async (req, res) => {
     try {
         const user = req.user;
+        // ?include_inactive=1 — หน้าต่างเพิ่มตัวชี้วัดให้หน่วยบริการ ตัวกรอง "สถานะ" = ปิด/ทั้งหมด (11 พ.ย. 2569)
+        // เฉพาะ role ที่เข้าหน้าจัดการตัวชี้วัดได้ (กติกาเดียวกับ GET /indicators?include_inactive=1) — ค่าตั้งต้น/kpi-setup = เปิดใช้งานเท่านั้นเหมือนเดิม
+        const includeInactive = String(req.query.include_inactive || '') === '1' && hasPageAccess(user.role, 'kpi-manage');
         let deptFilter = '';
         const params = [];
         // กรองตาม dept เฉพาะ role ที่ scope = หน่วยงานตัวเอง (ROLE_SCOPE_OWN_DEPT) — admin_cup/hos/sso เห็นทุกหน่วยงาน
@@ -36,11 +39,13 @@ apiRouter.get('/kpi-template', authenticateToken, async (req, res) => {
                 i.result_formula,
                 i.is_cumulative,
                 i.quarter_mode,
+                i.r9, i.moph, i.ssj, i.rmw, i.other,
+                i.is_active,
                 d.dept_name
             FROM kpi_indicators i
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
             LEFT JOIN departments d on d.id = i.dept_id
-            WHERE i.is_active = 1
+            WHERE ${includeInactive ? '1 = 1' : 'i.is_active = 1'}
               AND (mi.id IS NULL OR mi.is_active = 1)
               AND (d.id IS NULL OR d.is_active = 1) ${deptFilter}
             ORDER BY mi.main_indicator_name DESC, i.kpi_indicators_name DESC, d.dept_name DESC

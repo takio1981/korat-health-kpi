@@ -93,6 +93,12 @@
   .dark .shadow-sm, .dark .shadow, .dark .shadow-md { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45) !important; }
   .dark .shadow-lg, .dark .shadow-xl, .dark .shadow-2xl { box-shadow: 0 10px 30px -8px rgba(0, 0, 0, 0.7) !important; }
 
+  /* ตราหน่วยงาน (login/register): คงพื้นขาวหลังตรา + วงแสงเขียว — PNG พื้นโปร่ง ตัวอักษรขอบตราสีเข้ม บนพื้นมืดมองไม่เห็น (11 พ.ย. 2569) */
+  .dark .logo-frame, .dark .logo-frame.bg-white {
+    background-color: #ffffff !important;
+    box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.45), 0 0 40px 4px rgba(16, 185, 129, 0.35), 0 18px 40px -12px rgba(0, 0, 0, 0.7) !important;
+  }
+
   /* ข้อความสีเขียวของ sidebar/header (เดิม) — ให้ตรงกับเฉดของ tailwind.dark-theme.js */
   .dark .text-green-700\/70 { color: rgba(134, 239, 172, 0.7) !important; }
 

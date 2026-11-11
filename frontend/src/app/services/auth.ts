@@ -525,12 +525,12 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     return this.http.put(`${this.apiUrl}/my-ui-prefs/${key}`, { value }, { headers });
   }
 
-  getKpiTemplate(): Observable<any> {
+  getKpiTemplate(includeInactive = false): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({
       'Authorization': `Bearer ${token}`
     });
-    return this.http.get(`${this.apiUrl}/kpi-template`, { headers });
+    return this.http.get(`${this.apiUrl}/kpi-template${includeInactive ? '?include_inactive=1' : ''}`, { headers });
   }
 
   getSettings(): Observable<any> {

@@ -256,6 +256,77 @@ describe('DashboardComponent', () => {
       component.loadAddKpiList();
     });
 
+    // ---- ตัวกรองเพิ่มเติม + นำตัวกรองจากหน้าบันทึกผลงานมาใช้ (11 พ.ย. 2569) ----
+    it('เปิดหน้าต่าง: นำตัวกรองหน่วยงาน/ชื่อตัวชี้วัด/หมวดหมู่/ประเภทหน่วยบริการ/ตัวชี้วัดของ/ประเภทตัวชี้วัด จากหน้าบันทึกผลงานมาใช้', () => {
+      component.selectedIndicator = 'อัตราการคัดกรอง';
+      component.selectedMain = 'หมวด ก';
+      component.selectedHosTypes = ['18'];
+      component.selectedIndicatorOffTypes = ['07'];
+      component.selectedTypes = ['r9'];
+      component.selectedDepts = ['กลุ่มงาน ข'];
+      component.applyDashboardFiltersToAddKpi();
+      expect(component.addKpiIndicatorName).toBe('อัตราการคัดกรอง');
+      expect(component.addKpiSelMains).toEqual(['หมวด ก']);
+      expect(component.addKpiSelHosTypes).toEqual(['18']);
+      expect(component.addKpiSelOffTypes).toEqual(['07']);
+      expect(component.addKpiSelKpiTypes).toEqual(['r9']);
+      expect(component.addKpiStatus).toBe('active');
+      component.addKpiDeptList = [{ id: 1, dept_name: 'กลุ่มงาน ก' }, { id: 7, dept_name: 'กลุ่มงาน ข' }];
+      component.syncAddKpiDeptsFromDashboard();
+      expect(component.addKpiSelDepts).toEqual(['7']);
+      // ไม่ได้กรองหน่วยงานไว้ = ไม่เปลี่ยน
+      component.selectedDepts = [];
+      component.addKpiSelDepts = ['1'];
+      component.syncAddKpiDeptsFromDashboard();
+      expect(component.addKpiSelDepts).toEqual(['1']);
+    });
+
+    it('ตัวกรองในหน้าต่าง: สถานะเปิด/ปิด, ชื่อตัวชี้วัด, ตัวชี้วัดของ, ประเภทตัวชี้วัด และประเภทหน่วยบริการจำกัดปลายทาง', () => {
+      (component as any)._addKpiTemplate = [
+        tpl(1, { evaluation_mode: 'any_one', required_off_types: '["18"]', r9: 1 }),
+        tpl(2, { evaluation_mode: 'all_required', moph: 1 }),
+        tpl(3, { evaluation_mode: 'any_one', required_off_types: '["07"]', kpi_indicators_name: 'อัตราการคัดกรอง', is_active: 0, r9: 1 }),
+      ];
+      component.loadAddKpiList();
+      const ids = () => component.filteredNewKpiList.map((i: any) => Number(i.indicator_id));
+      expect(ids()).toEqual([1, 2]);                       // ค่าเริ่มต้น = เปิดใช้งาน
+      component.addKpiStatus = 'inactive';
+      expect(ids()).toEqual([3]);
+      component.addKpiStatus = '';
+      expect(ids()).toEqual([1, 2, 3]);
+      expect(component.addKpiNameList).toEqual(['ตัวชี้วัด 1', 'ตัวชี้วัด 2', 'อัตราการคัดกรอง'].sort((a, b) => a.localeCompare(b, 'th')));
+      component.addKpiIndicatorName = 'อัตราการคัดกรอง';
+      expect(ids()).toEqual([3]);
+      component.addKpiIndicatorName = '';
+      component.addKpiSelOffTypes = ['18'];
+      expect(ids()).toEqual([1, 2]);                       // all_required นับเป็นของทุกประเภท (เหมือนตารางหลัก)
+      component.addKpiSelOffTypes = [];
+      component.addKpiSelKpiTypes = ['r9'];
+      expect(ids()).toEqual([1, 3]);
+      component.addKpiSelKpiTypes = ['r9', 'moph'];
+      expect(ids()).toEqual([1, 2, 3]);
+      expect(component.addKpiHasFilters).toBe(true);
+      // ประเภทหน่วยบริการ → จำกัดหน่วยบริการปลายทาง
+      component.addKpiSelHosTypes = ['18'];
+      component.onAddKpiHosTypeChange();
+      expect(item(2)._targets).toEqual(['B', 'C']);
+      expect(item(3)._targets).toEqual([]);
+      component.clearAddKpiFilters();
+      expect(item(2)._targets).toEqual(['A', 'B', 'C']);
+      expect(component.addKpiHasFilters).toBe(false);
+      expect(ids()).toEqual([1, 2]);
+    });
+
+    it('แสดงตัวกรองเพิ่มเติมในหน้าต่าง (สถานะ / ประเภทหน่วยบริการ / ชื่อตัวชี้วัด / ตัวชี้วัดของ / ประเภทตัวชี้วัด)', () => {
+      fixture.detectChanges();
+      const box = modalEl().querySelector('#add-kpi-extra-filters') as HTMLElement;
+      expect(box).toBeTruthy();
+      expect(box.querySelector('#add-kpi-status')).toBeTruthy();
+      expect(box.querySelector('#add-kpi-name')).toBeTruthy();
+      const text = box.textContent || '';
+      for (const t of ['ประเภทหน่วยบริการ', 'ตัวชี้วัดของ', 'ประเภทตัวชี้วัด']) expect(text).toContain(t);
+    });
+
     // เดิม: ผู้ดูแลต้องเลือกหน่วยบริการปลายทางเอง และตัวชี้วัดที่ไม่ได้ตั้งประเภทเพิ่มให้ได้ทุกแห่ง
     it('ผู้ดูแล: ไม่ต้องเลือกหน่วยบริการ — ระบบหาปลายทางจากประเภทที่ตั้งไว้ (all_required = 4 ประเภทหลัก ไม่รวม สสอ.)', () => {
       expect(component.newKpiList.length).toBe(4);

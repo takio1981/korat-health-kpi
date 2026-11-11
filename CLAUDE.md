@@ -372,6 +372,11 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   จาก `GET /hospitals` (ขอบเขตตามบทบาท) ∩ อำเภอที่เลือก (ไม่บังคับ) — หลายแห่ง: `autoTargetHostypes()` (all_required = `AUTO_ALL_HOSTYPES`
   05/06/07/18 ชุดเดียวกับ `ALL_BULK_HOSTYPES` — ผู้ใช้เลือกแบบนี้) | หน่วยเดียวของผู้ใช้เอง (ผู้ใช้ทั่วไป/admin_hos/admin_sso, `addKpiSingleUnit`):
   `indicatorAllowsHostype` (all_required ได้ทุกประเภท — สสอ./สสจ. ยังเพิ่มให้หน่วยตัวเองได้)
+- **ตัวกรองของหน้าต่าง (11 พ.ย. 2569 — ผู้ใช้สั่ง):** เปิดหน้าต่างแล้ว `applyDashboardFiltersToAddKpi()` นำตัวกรองหน้าบันทึกผลงานมาใช้ (ชื่อตัวชี้วัด, หมวดหมู่, ประเภทหน่วยบริการ, ตัวชี้วัดของ, ประเภทตัวชี้วัด;
+  หน่วยงานแปลงชื่อ → id ใน `syncAddKpiDeptsFromDashboard()` หลังโหลดรายการหน่วยงาน) + ตัวกรองเพิ่ม `#add-kpi-extra-filters`: สถานะ (`addKpiStatus` ค่าตั้งต้น เปิดใช้งาน),
+  ประเภทหน่วยบริการ (`addKpiSelHosTypes` **จำกัดหน่วยบริการปลายทาง** — เฉพาะเพิ่มให้หลายแห่ง), ชื่อตัวชี้วัด, ตัวชี้วัดของ (`indicatorOfTypes()` ความหมายเดียวกับตัวกรองตารางหลัก: all_required = ทุกประเภท),
+  ประเภทตัวชี้วัด r9/moph/ssj/rmw/other, ปุ่มล้างตัวกรอง — `GET /kpi-template` คืน r9…other + is_active และ `?include_inactive=1` เฉพาะ role ที่เข้าหน้า kpi-manage ได้ (kpi-setup ไม่ส่ง = เปิดใช้งานเท่านั้น)
+  — Test: `api/tests/kpi-template-filters.test.js`, `dashboard.spec.ts`
 - Dashboard (`dashboard.ts`): แถวมี `_setting`/`_autoTypes`/`_targets`, ติ๊กได้เมื่อ `isAddKpiSelectable()` (ตั้งค่าแล้ว + มีปลายทาง), unset มีปุ่ม
   "ไปตั้งค่า" (`canSetupIndicatorType` = page kpi-manage + action edit) → `/kpi-manage?editIndicator=<id>` → `openPendingIndicatorEdit()` เปิด modal
   แก้ไข + เลื่อนไป `#indicator-eval-mode` | บันทึก `buildAddKpiBatches()` ชุดละ ≤ 30 หน่วยบริการ (แถวระบุ `hospcode`) — โหลดตารางใหม่**หลัง**ปิดสรุปผล
@@ -1300,6 +1305,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   — พื้นหลังข้าม element ที่มี `checked:bg-*` (สวิตช์ peer-checked — เคยทำให้สวิตช์เปิดดูเหมือนปิด) | ค่า `SURFACE` ในไฟล์ต้องตรงกับ `--dk-surface`
   — **ไม่ต้องเขียน `dark:` ให้สีพาสเทลเอง** | เพิ่มคลาสสีใหม่ระหว่าง `ng serve` ต้องเริ่ม ng serve ใหม่ (plugin โหลดครั้งเดียวต่อ process; `ng build` สร้างใหม่ทุกครั้ง)
 - `styles.css` ครอบคลุมเพิ่ม: ช่องกรอก/placeholder/disabled, ตาราง, SweetAlert2 (รวม HTML ที่ใช้ inline style สีขาว), ApexCharts (ตัวอักษร/กริด/tooltip), แถบเลื่อน
+  — **ตราหน่วยงาน (login/register) ใส่คลาส `logo-frame`** = คงพื้นขาวหลังตรา + วงแสงเขียวในโหมดมืด (PNG พื้นโปร่ง ตัวอักษรขอบตราสีเข้ม บนพื้นมืดมองไม่เห็น)
   — สไตล์ของ component ใช้ `:host-context(.dark)` (เช่น ป้ายสถานะ/คอลัมน์ตรึงใน dashboard.css) | หน้า login/register ใช้คลาส `layout-bg-gradient` (เดิม inline style สีอ่อน → โหมดมืดพื้นยังสว่าง)
 - ตรวจด้วยภาพหน้าจอจริงทุกครั้งที่แก้ (ทั้งโหมดมืดและสว่าง — โหมดสว่างต้องไม่เปลี่ยน)
 
