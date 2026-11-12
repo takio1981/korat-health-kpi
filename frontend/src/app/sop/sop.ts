@@ -562,7 +562,7 @@ const SYSTEMS: SopSystem[] = [
     {id:'n1', r:0,c:2,t:'process', l:'GET /kpi-results/manage\ndate_from/to หรือ year_bh+month'},
     {id:'n2', r:1,c:2,t:'db',      l:'kpi_results JOIN kpi_indicators\n(ไม่ join chospital ตรง — บั๊ก collation เดิม)'},
     {id:'n3', r:0,c:3,t:'process', l:'เติมชื่อหน่วยบริการแยก\n(hoscode ในหน้านี้เท่านั้น)'},
-    {id:'n4', r:0,c:4,t:'process', l:'ติ๊กเลือก checkbox\nทีละแถว/เลือกทั้งหมดในหน้า'},
+    {id:'n4', r:0,c:4,t:'process', l:'ติ๊กเลือก checkbox\nทีละแถว/ทั้งหน้า/\nทั้งหมดที่ค้นหาได้'},
     {id:'n5', r:0,c:5,t:'process', l:'ยืนยัน Swal\n"ลบถาวร ไม่มี Undo"'},
     {id:'n6', r:0,c:6,t:'process', l:'POST /kpi-results/manage\n/bulk-delete { ids }'},
     {id:'n7', r:1,c:6,t:'db',      l:'DELETE kpi_results\n+ kpi_sub_results + kpi_activity_results\n(เดือนตรงกัน)'},

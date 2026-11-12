@@ -1112,6 +1112,9 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   (DELETE + INSERT ใหม่จาก `kpi_results` ที่เหลือจริง + finalize last_actual ซ้ำ ใช้ SQL เดียวกับ
   `/refresh-summary/batch`+`/finalize` แต่ scope เฉพาะ indicator_id+year_bh ที่กระทบ) — **ไม่ลบ dynamic `form_*`
   tables ตามไปด้วย** (known gap เดิมของระบบ ไม่ใช่ regression ใหม่)
+- **เลือกทั้งหมดที่ค้นหาได้ทุกหน้า (12 พ.ย. 2569):** `GET /kpi-results/manage/ids` (isSuperAdmin, อ่านอย่างเดียว) คืนรหัสทุกแถวที่ตรงเงื่อนไข ≤ `MANAGE_SELECT_ALL_MAX` 20,000 (`truncated`)
+  — เงื่อนไขค้นหาร่วม `manageWhere()` กับ GET /kpi-results/manage (ต้องได้ชุดเดียวกัน) | bulk-delete รับครั้งละ ≤ `MANAGE_DELETE_BATCH_MAX` 2,000 (เกิน = 400) หน้าจอส่งชุดละ 1,000 (`deleteInBatches()`)
+  | หน้าจอคงรายการที่เลือกเมื่อเปลี่ยนหน้า ล้างเมื่อค้นหาใหม่/ลบเสร็จ — Test: `api/tests/kpi-results-manage-select-all.test.js`, `kpi-results-manage.spec.ts`
 - Log: `BULK_DELETE_KPI_MANAGE` ใน system_logs
 
 ### Sync to KHD

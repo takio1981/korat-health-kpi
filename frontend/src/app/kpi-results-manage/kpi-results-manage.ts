@@ -1,4 +1,5 @@
 import { Component, inject, OnInit, ChangeDetectorRef } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -50,8 +51,11 @@ export class KpiResultsManageComponent implements OnInit {
   loading = false;
   hasSearched = false; // ยังไม่เคยกดค้นหาเลย — แสดงข้อความ "กรุณาเลือกตัวกรอง" แทนตาราง (เหมือน Dashboard admin_ssj/super_admin)
 
-  // Selection
+  // Selection — คงไว้ข้ามหน้า (ล้างเมื่อค้นหาใหม่/ล้างตัวกรอง/ลบเสร็จ)
   selectedIds = new Set<number>();
+  selectingAll = false;
+  /** ส่งลบครั้งละกี่รายการ (backend รับสูงสุด 2000 — MANAGE_DELETE_BATCH_MAX) */
+  readonly deleteBatchSize = 1000;
 
   ngOnInit() {
     // ต้องเช็คตรงๆ เสมอ แม้ route จะมี pageAccessGuard แล้วก็ตาม (กันบั๊กแบบที่เคยเจอใน 9 component ก่อนหน้า)
@@ -77,6 +81,51 @@ export class KpiResultsManageComponent implements OnInit {
     else this.data.forEach(r => this.selectedIds.add(r.id));
   }
 
+  /** เลือกครบทุกแถวที่ค้นหาได้ (ทุกหน้า) แล้ว */
+  get isAllMatchingSelected(): boolean {
+    return this.total > 0 && this.selectedIds.size >= this.total;
+  }
+  get isPartialMatchingSelected(): boolean {
+    return this.selectedIds.size > 0 && !this.isAllMatchingSelected;
+  }
+
+  /** checkbox "เลือกทั้งหมดที่ค้นหาได้ทุกหน้า" — ขอรหัสทุกแถวที่ตรงเงื่อนไขจาก server (เงื่อนไขเดียวกับตาราง) — 12 พ.ย. 2569 */
+  toggleSelectAllMatching() {
+    if (this.isAllMatchingSelected || this.isPartialMatchingSelected) {
+      this.selectedIds.clear();
+      this.cdr.detectChanges();
+      return;
+    }
+    this.selectingAll = true;
+    this.authService.apiGet('/kpi-results/manage/ids', this.filterParams()).subscribe({
+      next: (res: any) => {
+        this.selectingAll = false;
+        if (res.success) {
+          this.selectedIds = new Set<number>(res.ids);
+          if (res.truncated) {
+            Swal.fire('เลือกได้บางส่วน', `ผลการค้นหามีมากกว่า ${Number(res.max).toLocaleString()} รายการ — เลือกไว้ ${Number(res.max).toLocaleString()} รายการล่าสุด กรุณากรองให้แคบลงเพื่อเลือกส่วนที่เหลือ`, 'info');
+          }
+        }
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.selectingAll = false;
+        Swal.fire('ผิดพลาด', err.error?.message || 'เลือกทั้งหมดไม่สำเร็จ', 'error');
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  /** เงื่อนไขค้นหาปัจจุบัน (ใช้ทั้งโหลดตารางและเลือกทั้งหมด) */
+  filterParams(): any {
+    const params: any = {};
+    if (this.dateFrom) params.date_from = this.dateFrom;
+    if (this.dateTo) params.date_to = this.dateTo;
+    if (this.yearBh) params.year_bh = this.yearBh;
+    if (this.monthFrom && this.monthTo) { params.month_from = this.monthFrom; params.month_to = this.monthTo; }
+    return params;
+  }
+
   applyFilters() {
     if (!this.dateFrom && !this.dateTo && !this.yearBh) {
       Swal.fire('แจ้งเตือน', 'กรุณาเลือกช่วงวันที่ หรือ ปีงบ อย่างน้อย 1 อย่างก่อนค้นหา', 'warning');
@@ -100,14 +149,9 @@ export class KpiResultsManageComponent implements OnInit {
   }
 
   loadData(resetPage = false) {
-    if (resetPage) this.page = 1;
+    if (resetPage) { this.page = 1; this.selectedIds.clear(); }   // เปลี่ยนหน้า = คงรายการที่เลือกไว้
     this.loading = true;
-    this.selectedIds.clear();
-    const params: any = { page: this.page, limit: this.pageSize };
-    if (this.dateFrom) params.date_from = this.dateFrom;
-    if (this.dateTo) params.date_to = this.dateTo;
-    if (this.yearBh) params.year_bh = this.yearBh;
-    if (this.monthFrom && this.monthTo) { params.month_from = this.monthFrom; params.month_to = this.monthTo; }
+    const params: any = { ...this.filterParams(), page: this.page, limit: this.pageSize };
 
     this.authService.apiGet('/kpi-results/manage', params).subscribe({
       next: (res: any) => {
@@ -172,16 +216,27 @@ export class KpiResultsManageComponent implements OnInit {
       confirmButtonText: '<i class="fas fa-trash-alt mr-1"></i> ลบถาวร', cancelButtonText: 'ยกเลิก'
     }).then(r => {
       if (!r.isConfirmed) return;
-      Swal.fire({ title: 'กำลังลบ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-      this.authService.apiPost('/kpi-results/manage/bulk-delete', { ids }).subscribe({
-        next: (res: any) => {
-          if (res.success) {
-            Swal.fire({ icon: 'success', title: 'ลบสำเร็จ', text: res.message, timer: 2500, showConfirmButton: false });
-            this.loadData();
-          }
-        },
-        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ลบไม่สำเร็จ', 'error')
-      });
+      this.deleteInBatches(ids);
     });
+  }
+
+  /** ลบเป็นชุด (ครั้งละ deleteBatchSize) ตามลำดับ — เลือกทั้งหมดที่ค้นหาได้อาจมีหลายพันรายการ */
+  async deleteInBatches(ids: number[]) {
+    const batches: number[][] = [];
+    for (let i = 0; i < ids.length; i += this.deleteBatchSize) batches.push(ids.slice(i, i + this.deleteBatchSize));
+    let deletedKpi = 0, deletedSub = 0, done = 0;
+    Swal.fire({ title: 'กำลังลบ...', html: `0 / ${ids.length.toLocaleString()} รายการ`, allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+      for (const b of batches) {
+        const res: any = await firstValueFrom(this.authService.apiPost('/kpi-results/manage/bulk-delete', { ids: b }));
+        deletedKpi += res.deletedKpi || 0; deletedSub += res.deletedSub || 0; done += b.length;
+        Swal.update({ html: `${done.toLocaleString()} / ${ids.length.toLocaleString()} รายการ` });
+      }
+      Swal.fire({ icon: 'success', title: 'ลบสำเร็จ', text: `ลบสำเร็จ — kpi_results ${deletedKpi}, kpi_sub_results ${deletedSub}`, timer: 2500, showConfirmButton: false });
+    } catch (err: any) {
+      Swal.fire('ผิดพลาด', (err?.error?.message || 'ลบไม่สำเร็จ') + (done ? ` (ลบไปแล้ว ${done.toLocaleString()} รายการ)` : ''), 'error');
+    }
+    this.selectedIds.clear();
+    this.loadData();
   }
 }

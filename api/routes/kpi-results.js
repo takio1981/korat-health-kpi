@@ -429,37 +429,63 @@ function monthBhRangeList(monthFrom, monthTo) {
 // charset/collation ไม่ตรงกันทั้ง 3 อย่าง (บั๊ก schema เดิมที่มีอยู่ก่อนงานนี้ ไม่ได้เกิดจากโค้ดใหม่) ทำให้ MySQL
 // ใช้ index ของ chospital ไม่ได้เลย (แม้ hoscode เป็น PRIMARY KEY) กลายเป็น full scan วัดจริงช้ากว่า 30s —
 // แก้โดย query ชื่อหน่วยบริการแยกเฉพาะ hoscode ที่อยู่ในหน้านั้นๆ (≤ limit ต่อหน้า) มา merge ใน JS แทน
+// เงื่อนไขค้นหาร่วมของ GET /kpi-results/manage และ /kpi-results/manage/ids (ชุดเดียวกัน — "เลือกทั้งหมดที่ค้นหาได้" ต้องได้แถวเดียวกับที่แสดง)
+// บังคับต้องมีอย่างน้อย 1 filter เสมอ — กัน query ทั้งตาราง 494K แถวโดยไม่มีเงื่อนไข (ORDER BY + LIMIT
+// ไม่มี WHERE ทำให้ MySQL optimizer เลือก full scan เองไม่ว่าจะเพิ่ม index อะไรก็ตาม — เป็นข้อจำกัดโดย
+// ธรรมชาติของ query แบบนี้ ไม่ใช่แค่เรื่อง index)
+function manageWhere(q) {
+    const { date_from, date_to, year_bh, month_from, month_to, indicator_id, hospcode, dept_id } = q;
+    if (!date_from && !date_to && !year_bh) return { error: 'กรุณาเลือกช่วงวันที่หรือปีงบก่อนค้นหา' };
+    // แยก WHERE 2 ชุด — ชุดที่ join กับ kpi_indicators (ต้องใช้เมื่อกรอง dept_id) กับชุดที่ไม่ต้อง join
+    // (กรอง r.* ล้วนๆ) กัน COUNT(*) ช้าโดยไม่จำเป็นเมื่อไม่ได้กรอง dept_id
+    const where = [];
+    const params = [];
+    if (date_from) { where.push('r.created_at >= ?'); params.push(date_from + ' 00:00:00'); }
+    if (date_to) { where.push('r.created_at <= ?'); params.push(date_to + ' 23:59:59'); }
+    if (year_bh) { where.push('r.year_bh = ?'); params.push(String(year_bh)); }
+    if (month_from && month_to) {
+        const months = monthBhRangeList(month_from, month_to);
+        where.push(`r.month_bh IN (${months.map(() => '?').join(',')})`);
+        params.push(...months);
+    }
+    if (indicator_id) { where.push('r.indicator_id = ?'); params.push(Number(indicator_id)); }
+    if (hospcode) { where.push('r.hospcode = ?'); params.push(String(hospcode)); }
+    const needsIndicatorJoin = !!dept_id;
+    if (dept_id) { where.push('i.dept_id = ?'); params.push(Number(dept_id)); }
+    return { whereSql: where.length ? 'WHERE ' + where.join(' AND ') : '', params, needsIndicatorJoin };
+}
+// จำนวนสูงสุดที่ "เลือกทั้งหมดที่ค้นหาได้" คืนให้ในครั้งเดียว (มากกว่านี้ = ให้กรองให้แคบลง)
+const MANAGE_SELECT_ALL_MAX = 20000;
+const MANAGE_DELETE_BATCH_MAX = 2000;
+
+// GET /kpi-results/manage/ids — รหัสทุกแถวที่ตรงเงื่อนไขค้นหา (ทุกหน้า) สำหรับ checkbox "เลือกทั้งหมดที่ค้นหาได้" (12 พ.ย. 2569)
+// อ่านอย่างเดียว — ลบจริงยังผ่าน POST /kpi-results/manage/bulk-delete (หน้าจอส่งเป็นชุด)
+apiRouter.get('/kpi-results/manage/ids', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const w = manageWhere(req.query);
+        if (w.error) return res.status(400).json({ success: false, message: w.error });
+        const [rows] = await db.query(`
+            SELECT r.id FROM kpi_results r
+            ${w.needsIndicatorJoin ? 'JOIN kpi_indicators i ON r.indicator_id = i.id' : ''}
+            ${w.whereSql}
+            ORDER BY r.created_at DESC
+            LIMIT ?
+        `, [...w.params, MANAGE_SELECT_ALL_MAX + 1]);
+        const truncated = rows.length > MANAGE_SELECT_ALL_MAX;
+        res.json({ success: true, ids: rows.slice(0, MANAGE_SELECT_ALL_MAX).map(r => r.id), truncated, max: MANAGE_SELECT_ALL_MAX });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 apiRouter.get('/kpi-results/manage', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
-        const { date_from, date_to, year_bh, month_from, month_to, indicator_id, hospcode, dept_id } = req.query;
         const page = Math.max(1, Number(req.query.page) || 1);
         const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
         const offset = (page - 1) * limit;
-
-        // บังคับต้องมีอย่างน้อย 1 filter เสมอ — กัน query ทั้งตาราง 494K แถวโดยไม่มีเงื่อนไข (ORDER BY + LIMIT
-        // ไม่มี WHERE ทำให้ MySQL optimizer เลือก full scan เองไม่ว่าจะเพิ่ม index อะไรก็ตาม — เป็นข้อจำกัดโดย
-        // ธรรมชาติของ query แบบนี้ ไม่ใช่แค่เรื่อง index)
-        if (!date_from && !date_to && !year_bh) {
-            return res.status(400).json({ success: false, message: 'กรุณาเลือกช่วงวันที่หรือปีงบก่อนค้นหา' });
-        }
-
-        // แยก WHERE 2 ชุด — ชุดที่ join กับ kpi_indicators (ต้องใช้เมื่อกรอง dept_id) กับชุดที่ไม่ต้อง join
-        // (กรอง r.* ล้วนๆ) กัน COUNT(*) ช้าโดยไม่จำเป็นเมื่อไม่ได้กรอง dept_id
-        const where = [];
-        const params = [];
-        if (date_from) { where.push('r.created_at >= ?'); params.push(date_from + ' 00:00:00'); }
-        if (date_to) { where.push('r.created_at <= ?'); params.push(date_to + ' 23:59:59'); }
-        if (year_bh) { where.push('r.year_bh = ?'); params.push(String(year_bh)); }
-        if (month_from && month_to) {
-            const months = monthBhRangeList(month_from, month_to);
-            where.push(`r.month_bh IN (${months.map(() => '?').join(',')})`);
-            params.push(...months);
-        }
-        if (indicator_id) { where.push('r.indicator_id = ?'); params.push(Number(indicator_id)); }
-        if (hospcode) { where.push('r.hospcode = ?'); params.push(String(hospcode)); }
-        const needsIndicatorJoin = !!dept_id;
-        if (dept_id) { where.push('i.dept_id = ?'); params.push(Number(dept_id)); }
-        const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+        const w = manageWhere(req.query);
+        if (w.error) return res.status(400).json({ success: false, message: w.error });
+        const { whereSql, params, needsIndicatorJoin } = w;
 
         const [countRows] = await db.query(`
             SELECT COUNT(*) AS total
@@ -516,6 +542,10 @@ apiRouter.post('/kpi-results/manage/bulk-delete', authenticateToken, isSuperAdmi
     if (!Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ success: false, message: 'ไม่มีรายการที่จะลบ' });
     }
+    // หน้าจอส่งเป็นชุด (เลือกทั้งหมดที่ค้นหาได้ — 12 พ.ย. 2569) — กันคำขอเดียวที่ใหญ่เกิน (placeholder/transaction ยาว)
+    if (ids.length > MANAGE_DELETE_BATCH_MAX) {
+        return res.status(400).json({ success: false, message: `ลบได้ครั้งละไม่เกิน ${MANAGE_DELETE_BATCH_MAX} รายการ` });
+    }
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
@@ -532,7 +562,11 @@ apiRouter.post('/kpi-results/manage/bulk-delete', authenticateToken, isSuperAdmi
         }
 
         let deletedSub = 0;
+        const seenCell = new Set();
         for (const t of targetRows) {
+            const cellKey = `${t.indicator_id}|${t.year_bh}|${t.hospcode}|${t.month_bh}`;
+            if (seenCell.has(cellKey)) continue;   // แถวซ้ำช่องเดียวกัน — ลบข้อย่อย/กิจกรรมครั้งเดียวพอ
+            seenCell.add(cellKey);
             const [subRes] = await connection.query(
                 `DELETE sr FROM kpi_sub_results sr
                  JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
