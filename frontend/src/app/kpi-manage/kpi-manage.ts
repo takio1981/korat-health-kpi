@@ -1506,7 +1506,8 @@ export class KpiManageComponent implements OnInit {
           }
           this.cdr.detectChanges();
         },
-        error: () => Swal.fire('ผิดพลาด', 'ไม่สามารถบันทึกข้อมูลได้', 'error')
+        // แสดงเหตุผลจาก server (เดิมซ่อนไว้ — 400 บน production ผู้ใช้เห็นแค่ "ไม่สามารถบันทึกข้อมูลได้" 12 พ.ย. 2569)
+        error: (err: any) => Swal.fire('ผิดพลาด', err?.error?.message || 'ไม่สามารถบันทึกข้อมูลได้', 'error')
       });
     }
   }

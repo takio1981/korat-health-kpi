@@ -360,6 +360,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   `POST /indicators`** เมื่อ `table_process` ว่าง (frontend ส่งค่าว่างเมื่ออยู่โหมดอัตโนมัติ `codeAuto` กันลำดับชนกันระหว่างผู้ใช้ 2 คน)
   response คืน `table_process` + `kpi_indicators_code` ที่ใช้จริง — กรอกเองมา = ใช้ค่าที่กรอก ไม่ทับ
 - `kpi_indicators_id` ("รหัสอ้างอิง") **ไม่สร้างให้** — ข้อมูลจริงคือเลขรายงานของ KHD (ตรงกับ `khd_report_id` 134/174 ตัว) ใช้เฉพาะตัวที่มาจาก KHD
+- PUT `/indicators/:id` ตรวจรูปแบบ table_process **เฉพาะเมื่อเปลี่ยนค่า** (12 พ.ย. 2569 — ข้อมูลเดิมบางตัวมีขีดกลาง เช่น `kpi-main-2568-1901` เดิมแก้ไขตัวชี้วัดนั้นไม่ได้เลย = 400 บน production) — Test: `api/tests/indicator-legacy-tp.test.js`
 - ชื่อตารางซ้ำ = **เตือนเฉยๆ ไม่บล็อก** (`tableProcessDuplicateName` ใน kpi-manage.ts) — มีข้อมูลเดิมที่ใช้ตารางร่วมกันโดยตั้งใจ (คัดลอกข้ามปี)
   และปุ่ม "คัดลอก" คงรหัสของตัวต้นทางไว้ (ไม่เข้าโหมดอัตโนมัติ)
 - Test: `api/tests/indicator-codes-scope.test.js`, `kpi-manage.spec.ts`

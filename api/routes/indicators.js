@@ -282,14 +282,16 @@ apiRouter.post('/indicators', authenticateToken, requireAction('kpi-manage', 'ad
 
 apiRouter.put('/indicators/:id', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, criterion, weight, kpi_indicators_code, is_active, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export, result_formula } = req.body;
-    if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
-        return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
-    }
     // ค่าเพิ่มเติมที่ตั้งชื่อเอง + สูตรร้อยละ — ไม่ส่ง custom_vars/pct_formula มา = ใช้ค่าเดิม (ผู้เรียกเดิมไม่กระทบ)
     let cvKeys;
     let pctRaw = req.body.pct_formula;
     {
-        const [cur] = await db.query('SELECT custom_vars, pct_formula FROM kpi_indicators WHERE id = ?', [req.params.id]).catch(() => [[]]);
+        const [cur] = await db.query('SELECT custom_vars, pct_formula, table_process FROM kpi_indicators WHERE id = ?', [req.params.id]).catch(() => [[]]);
+        // ตรวจรูปแบบ table_process เฉพาะเมื่อเปลี่ยนค่า (12 พ.ย. 2569): ข้อมูลเดิมบางตัวมีขีดกลาง (เช่น kpi-main-2568-1901)
+        // เดิมตรวจทุกครั้ง → แก้ไขตัวชี้วัดนั้นไม่ได้เลยแม้ไม่ได้แตะ table_process (400 บน production)
+        if (table_process && table_process !== (cur[0]?.table_process ?? null) && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
+            return res.status(400).json({ success: false, code: 'INVALID_TABLE_PROCESS', message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
+        }
         const cvars = req.body.custom_vars !== undefined ? normalizeCustomVars(req.body.custom_vars) : { list: customVarsOf(cur[0]), error: null };
         if (cvars.error) return res.status(400).json({ success: false, message: cvars.error });
         cvKeys = cvars.list.map(v => v.key);
