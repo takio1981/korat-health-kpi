@@ -245,6 +245,18 @@ describe('รายชื่อรุ่นโมเดลจากผู้ใ�
         expect(res.body.cached).toBe(false);
     });
 
+    test('Together AI: รุ่นฟรีจากชื่อลงท้าย -Free หรือ pricing.input/output = 0 (13 พ.ย. 2569)', async () => {
+        global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => ([
+            { id: 'meta-llama/Llama-X-Turbo-Free' }, { id: 'org/zero-price', pricing: { input: 0, output: 0 } },
+            { id: 'org/paid', pricing: { input: 0.88, output: 0.88 } },
+        ]) }));
+        // Together คืน array ตรง (ไม่มี data) — รองรับแบบเดียวกับ { data }
+        const res = await models({ provider: 'openai', base_url: 'http://together.test.local/v1', refresh: true });
+        expect(res.status).toBe(200);
+        const free = Object.fromEntries(res.body.models.map(m => [m.id, !!m.free]));
+        expect(free).toEqual({ 'meta-llama/Llama-X-Turbo-Free': true, 'org/paid': false, 'org/zero-price': true });
+    });
+
     test('ผลถูกเก็บไว้ — เรียกซ้ำไม่ดึงจากผู้ให้บริการ, refresh = ดึงใหม่ (เห็นรุ่นใหม่ที่ผู้ให้บริการเพิ่ม)', async () => {
         global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ data: [{ id: 'alpha-chat' }, { id: 'brand-new-model' }] }) }));
         const again = await models({ provider: 'openai', base_url: 'http://models.test.local/v1' });

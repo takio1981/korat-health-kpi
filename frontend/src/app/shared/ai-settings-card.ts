@@ -10,25 +10,49 @@ import Swal from 'sweetalert2';
 export interface AiModel { id: string; name: string; created?: string | null; free?: boolean; deprecated?: boolean; }
 
 // ข้อความในรายการรุ่น: รหัสรุ่น — ชื่อที่ผู้ให้บริการแสดง (ฟรี / เลิกใช้แล้ว)
-export function modelLabel(m: AiModel): string {
-  return m.id + (m.name && m.name !== m.id ? ' — ' + m.name : '') + (m.free ? ' (ฟรี)' : '') + (m.deprecated ? ' (เลิกใช้แล้ว)' : '');
+export function modelLabel(m: AiModel, freeTier = false): string {
+  return m.id + (m.name && m.name !== m.id ? ' — ' + m.name : '') + (m.free ? ' (ฟรี)' : freeTier ? ' (โควตาฟรี)' : '') + (m.deprecated ? ' (เลิกใช้แล้ว)' : '');
 }
 
-export interface AiPreset { id: string; label: string; provider: 'anthropic' | 'openai'; base_url: string; model: string; needsKey: boolean; note: string; }
+/**
+ * free: 'all' = ใช้ฟรีได้ทุกรุ่น (โควตาฟรีของผู้ให้บริการ / เครื่องแม่ข่ายเอง) | 'some' = มีบางรุ่นฟรี (ดูป้าย "ฟรี" ที่ราคาจากผู้ให้บริการ = 0)
+ * | 'none' = มีค่าใช้จ่ายตามการใช้งาน — เงื่อนไขโควตาฟรีเปลี่ยนได้ตามผู้ให้บริการ (ตรวจกับผู้ให้บริการก่อนใช้จริง)
+ * รายชื่อรุ่นไม่เขียนตายตัว — ดึงจากผู้ให้บริการโดยตรง (POST /ai/models) ครบทุกรุ่นและเห็นรุ่นใหม่ทันที
+ */
+export type AiFree = 'all' | 'some' | 'none';
+export interface AiPreset { id: string; label: string; provider: 'anthropic' | 'openai'; base_url: string; model: string; needsKey: boolean; free: AiFree; note: string; }
 
+// ผู้ให้บริการยอดนิยม 10 ราย (13 พ.ย. 2569 — ผู้ใช้สั่ง) + Ollama ในเครื่อง + กำหนดเอง — ทุกรายนอกจาก Claude ใช้ API แบบ OpenAI-compatible (/chat/completions, /models)
 export const AI_PRESETS: AiPreset[] = [
-  { id: 'claude', label: 'Claude API (Anthropic)', provider: 'anthropic', base_url: '', model: 'claude-opus-5-5', needsKey: true,
-    note: 'คุณภาพภาษาไทยดีที่สุด มีค่าใช้จ่ายตามการใช้งาน — รุ่นประหยัด: claude-sonnet-5-5, claude-haiku-5-5' },
-  { id: 'ollama', label: 'Ollama (โมเดลในเครื่องแม่ข่าย)', provider: 'openai', base_url: 'http://localhost:11434/v1', model: '', needsKey: false,
+  { id: 'claude', label: 'Claude API (Anthropic)', provider: 'anthropic', base_url: '', model: 'claude-opus-5-5', needsKey: true, free: 'none',
+    note: 'คุณภาพภาษาไทยดีที่สุด มีค่าใช้จ่ายตามการใช้งาน — รุ่นประหยัด: claude-sonnet-5-5, claude-haiku-5-5 · API key จาก console.anthropic.com' },
+  { id: 'openai', label: 'OpenAI (GPT)', provider: 'openai', base_url: 'https://api.openai.com/v1', model: '', needsKey: true, free: 'none',
+    note: 'มีค่าใช้จ่ายตามการใช้งาน · API key จาก platform.openai.com' },
+  { id: 'gemini', label: 'Google Gemini', provider: 'openai', base_url: 'https://generativelanguage.googleapis.com/v1beta/openai', model: '', needsKey: true, free: 'all',
+    note: 'มีโควตาฟรีรายวัน (จำกัดจำนวนครั้ง) · API key จาก Google AI Studio (aistudio.google.com)' },
+  { id: 'xai', label: 'xAI (Grok)', provider: 'openai', base_url: 'https://api.x.ai/v1', model: '', needsKey: true, free: 'none',
+    note: 'มีค่าใช้จ่ายตามการใช้งาน · API key จาก console.x.ai' },
+  { id: 'deepseek', label: 'DeepSeek', provider: 'openai', base_url: 'https://api.deepseek.com/v1', model: '', needsKey: true, free: 'none',
+    note: 'ราคาต่อการใช้งานต่ำ (เติมเงินล่วงหน้า) · API key จาก platform.deepseek.com' },
+  { id: 'mistral', label: 'Mistral AI', provider: 'openai', base_url: 'https://api.mistral.ai/v1', model: '', needsKey: true, free: 'all',
+    note: 'มีแผนทดลองใช้ฟรี (Experiment — จำกัดอัตราการเรียก) · API key จาก console.mistral.ai' },
+  { id: 'groq', label: 'Groq', provider: 'openai', base_url: 'https://api.groq.com/openai/v1', model: '', needsKey: true, free: 'all',
+    note: 'มีโควตาฟรี (จำกัดจำนวนครั้ง/โทเคนต่อนาที) ตอบเร็ว · API key จาก console.groq.com' },
+  { id: 'openrouter', label: 'OpenRouter (รวมหลายผู้ให้บริการ)', provider: 'openai', base_url: 'https://openrouter.ai/api/v1', model: '', needsKey: true, free: 'some',
+    note: 'รวมรุ่นจากหลายผู้ให้บริการ รุ่นฟรีมีชื่อลงท้ายด้วย :free · API key จาก openrouter.ai' },
+  { id: 'together', label: 'Together AI', provider: 'openai', base_url: 'https://api.together.xyz/v1', model: '', needsKey: true, free: 'some',
+    note: 'โมเดลโอเพนซอร์สหลายรุ่น บางรุ่นฟรี (ชื่อลงท้าย -Free) · API key จาก api.together.ai' },
+  { id: 'cerebras', label: 'Cerebras', provider: 'openai', base_url: 'https://api.cerebras.ai/v1', model: '', needsKey: true, free: 'all',
+    note: 'มีโควตาฟรีรายวัน ตอบเร็วมาก · API key จาก cloud.cerebras.ai' },
+  { id: 'ollama', label: 'Ollama (โมเดลในเครื่องแม่ข่าย)', provider: 'openai', base_url: 'http://localhost:11434/v1', model: '', needsKey: false, free: 'all',
     note: 'ข้อมูลไม่ออกนอกหน่วยงาน ไม่มีค่า API — ต้องติดตั้ง Ollama และดาวน์โหลดโมเดลที่รองรับภาษาไทยก่อน (ระบุชื่อรุ่นตามที่ติดตั้ง)' },
-  { id: 'gemini', label: 'Google Gemini (มีโควตาฟรี)', provider: 'openai', base_url: 'https://generativelanguage.googleapis.com/v1beta/openai', model: '', needsKey: true,
-    note: 'ใช้ API key จาก Google AI Studio — ระบุชื่อรุ่นตามรายการของ Google' },
-  { id: 'groq', label: 'Groq (มีโควตาฟรี)', provider: 'openai', base_url: 'https://api.groq.com/openai/v1', model: '', needsKey: true,
-    note: 'ใช้ API key จาก console.groq.com — ระบุชื่อรุ่นตามรายการของ Groq' },
-  { id: 'openrouter', label: 'OpenRouter (มีรุ่นฟรี)', provider: 'openai', base_url: 'https://openrouter.ai/api/v1', model: '', needsKey: true,
-    note: 'รุ่นฟรีมีชื่อลงท้ายด้วย :free — ระบุชื่อรุ่นตามรายการของ OpenRouter' },
-  { id: 'custom', label: 'กำหนดเอง (OpenAI-compatible)', provider: 'openai', base_url: '', model: '', needsKey: false, note: 'ระบุ Base URL ที่ลงท้ายก่อน /chat/completions' },
+  { id: 'custom', label: 'กำหนดเอง (OpenAI-compatible)', provider: 'openai', base_url: '', model: '', needsKey: false, free: 'none', note: 'ระบุ Base URL ที่ลงท้ายก่อน /chat/completions' },
 ];
+const FREE_TEXT: Record<AiFree, string> = { all: 'ใช้ฟรีได้', some: 'มีรุ่นฟรี', none: '' };
+/** ข้อความในตัวเลือกผู้ให้บริการ: "Google Gemini — ใช้ฟรีได้" */
+export function presetLabel(p: AiPreset): string { return p.label + (FREE_TEXT[p.free] ? ' — ' + FREE_TEXT[p.free] : ''); }
+/** รุ่นที่ใช้ฟรีได้: ราคาจากผู้ให้บริการ = 0 (free) หรือผู้ให้บริการมีโควตาฟรีทุกรุ่น */
+export function isFreeModel(m: AiModel, p?: AiPreset): boolean { return !!m.free || p?.free === 'all'; }
 
 // เลือก preset ที่ตรงกับค่าที่บันทึกไว้ (ไม่ตรงตัวใด = กำหนดเอง)
 export function presetOf(provider: string, baseUrl: string): string {
@@ -62,10 +86,15 @@ export function presetOf(provider: string, baseUrl: string): string {
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-bold text-gray-700 mb-1">ผู้ให้บริการ</label>
-          <select [(ngModel)]="presetId" (ngModelChange)="applyPreset($event)" name="aiPreset" [ngModelOptions]="{ standalone: true }"
+          <select [(ngModel)]="presetId" (ngModelChange)="applyPreset($event)" name="aiPreset" [ngModelOptions]="{ standalone: true }" id="ai-preset"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-fuchsia-400 outline-none bg-white">
-            <option *ngFor="let p of presets" [value]="p.id">{{ p.label }}</option>
+            <option *ngFor="let p of visiblePresets" [value]="p.id">{{ presetLabel(p) }}</option>
           </select>
+          <label class="inline-flex items-center gap-1.5 mt-1.5 text-xs font-bold text-emerald-700 cursor-pointer" id="lbl-ai-free-only"
+                 title="แสดงเฉพาะผู้ให้บริการและรุ่นที่ใช้ฟรีได้ (โควตาฟรี / รุ่นราคา 0 / เครื่องแม่ข่ายเอง)">
+            <input type="checkbox" id="chk-ai-free-only" [ngModel]="freeOnly" (ngModelChange)="setFreeOnly($event)" name="aiFreeOnly" [ngModelOptions]="{ standalone: true }"
+                   class="rounded text-emerald-600 focus:ring-emerald-400"> เฉพาะที่ใช้ฟรีได้
+          </label>
           <p class="text-[11px] text-gray-500 mt-1">{{ preset?.note }}</p>
         </div>
         <div *ngIf="provider === 'openai'">
@@ -106,21 +135,23 @@ export function presetOf(provider: string, baseUrl: string): string {
           </button>
         </div>
         <p class="text-[11px] text-gray-500 mb-2">
-          <ng-container *ngIf="models.length">พบ {{ models.length }} รุ่น<span *ngIf="modelsHidden"> (ซ่อนรุ่นที่ไม่ใช่โมเดลสนทนา {{ modelsHidden }} รุ่น)</span>
+          <ng-container *ngIf="models.length">พบ {{ models.length }} รุ่น (ใช้ฟรีได้ {{ freeModelCount }} รุ่น)<span *ngIf="modelsHidden"> (ซ่อนรุ่นที่ไม่ใช่โมเดลสนทนา {{ modelsHidden }} รุ่น)</span>
             · อัปเดตล่าสุด {{ modelsFetchedAt | date:'d/M/yyyy HH:mm' }}</ng-container>
           <ng-container *ngIf="!models.length && !modelsLoading">ยังไม่มีรายชื่อรุ่น — กด "อัปเดตรายชื่อรุ่นจากผู้ให้บริการ"{{ preset?.needsKey && !hasApiKey ? ' (กรอก API key ก่อน)' : '' }}</ng-container>
         </p>
         <div *ngIf="modelsError" class="mb-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-2"><i class="fas fa-triangle-exclamation me-1"></i>{{ modelsError }}</div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
           <div *ngIf="models.length" class="md:col-span-2 flex gap-2">
-            <input *ngIf="models.length > 15" type="text" [(ngModel)]="modelFilter" name="aiModelFilter" [ngModelOptions]="{ standalone: true }" placeholder="ค้นหารุ่น..."
+            <input *ngIf="models.length > 15" type="text" [ngModel]="modelFilter" (ngModelChange)="modelFilter = $event; refreshModelView()" name="aiModelFilter" [ngModelOptions]="{ standalone: true }" placeholder="ค้นหารุ่น..."
                    class="w-48 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-fuchsia-400 outline-none">
             <select [ngModel]="inList(model) ? model : ''" (ngModelChange)="model = $event || model" name="aiModelPick" [ngModelOptions]="{ standalone: true }"
                     class="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-fuchsia-400 outline-none bg-white">
-              <option value="">— เลือกจากรายการ ({{ filteredModels.length }} รุ่น) —</option>
-              <option *ngFor="let m of filteredModels" [value]="m.id">{{ modelLabel(m) }}</option>
+              <option value="">— เลือกจากรายการ ({{ filteredModels.length }} รุ่น{{ freeOnly ? ' ที่ใช้ฟรีได้' : '' }}) —</option>
+              <option *ngFor="let m of filteredModels" [value]="m.id">{{ modelLabel(m, preset?.free === 'all') }}</option>
             </select>
           </div>
+          <p *ngIf="freeOnly && models.length && !filteredModels.length" class="md:col-span-2 text-[11px] text-amber-600" id="ai-no-free-models">
+            <i class="fas fa-circle-info me-1"></i>ผู้ให้บริการนี้ไม่มีรุ่นที่ใช้ฟรีได้ในรายการ — ยกเลิก "เฉพาะที่ใช้ฟรีได้" หรือเลือกผู้ให้บริการอื่น</p>
           <div class="md:col-span-2">
             <input type="text" [(ngModel)]="model" name="aiModel" [ngModelOptions]="{ standalone: true }" maxlength="100" placeholder="หรือพิมพ์ชื่อรุ่นเอง"
                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-fuchsia-400 outline-none">
@@ -179,17 +210,35 @@ export class AiSettingsCardComponent implements OnInit {
   modelsError = '';
   modelFilter = '';
   modelLabel = modelLabel;
+  presetLabel = presetLabel;
   private modelsSeq = 0;
+  /** ตัวกรอง "เฉพาะที่ใช้ฟรีได้" — ใช้ทั้งรายชื่อผู้ให้บริการและรายชื่อรุ่น (13 พ.ย. 2569) */
+  freeOnly = false;
+  // คำนวณเมื่อค่าที่เกี่ยวข้องเปลี่ยน (ไม่ใช่ getter ที่สร้าง array ใหม่ทุกรอบ — ตัวเลือก <option> จาก getter ทำให้เกิด NG0103)
+  visiblePresets: AiPreset[] = AI_PRESETS;
+  filteredModels: AiModel[] = [];
+  freeModelCount = 0;
 
-  get filteredModels(): AiModel[] {
+  setFreeOnly(v: boolean) {
+    this.freeOnly = !!v;
+    this.refreshPresetView();
+    this.refreshModelView();
+  }
+  /** เฉพาะที่ใช้ฟรีได้ = ผู้ให้บริการที่ free ≠ none (คงตัวที่เลือกอยู่และ "กำหนดเอง" ไว้เสมอ) */
+  refreshPresetView() {
+    this.visiblePresets = this.freeOnly ? AI_PRESETS.filter(p => p.free !== 'none' || p.id === this.presetId || p.id === 'custom') : AI_PRESETS;
+  }
+  refreshModelView() {
     const q = this.modelFilter.trim().toLowerCase();
-    return q ? this.models.filter(m => (m.id + ' ' + m.name).toLowerCase().includes(q)) : this.models;
+    const p = this.preset;
+    this.freeModelCount = this.models.filter(m => isFreeModel(m, p)).length;
+    this.filteredModels = this.models.filter(m => (!q || (m.id + ' ' + m.name).toLowerCase().includes(q)) && (!this.freeOnly || isFreeModel(m, p)));
   }
   inList(id: string): boolean { return !!id && this.models.some(m => m.id === id); }
 
   // refresh = false: แสดงรายชื่อล่าสุดที่เก็บไว้ (ไม่มี = ดึงจากผู้ให้บริการ) | true: ดึงใหม่ (เห็นรุ่นใหม่ของผู้ให้บริการ)
   loadModels(refresh: boolean) {
-    if (this.provider === 'openai' && !/^https?:\/\//i.test(this.baseUrl.trim())) { this.models = []; this.modelsError = ''; return; }
+    if (this.provider === 'openai' && !/^https?:\/\//i.test(this.baseUrl.trim())) { this.models = []; this.refreshModelView(); this.modelsError = ''; return; }
     const seq = ++this.modelsSeq;
     this.modelsLoading = true;
     this.modelsError = '';
@@ -198,6 +247,7 @@ export class AiSettingsCardComponent implements OnInit {
         if (seq !== this.modelsSeq) return; // เปลี่ยนผู้ให้บริการระหว่างรอ — ทิ้งผลเก่า
         this.modelsLoading = false;
         this.models = res?.models || [];
+        this.refreshModelView();
         this.modelsHidden = res?.hidden || 0;
         this.modelsFetchedAt = res?.fetched_at || '';
         this.cdr.detectChanges();
@@ -206,6 +256,7 @@ export class AiSettingsCardComponent implements OnInit {
         if (seq !== this.modelsSeq) return;
         this.modelsLoading = false;
         this.models = [];
+        this.refreshModelView();
         // ยังไม่มี key/ยังไม่เคยดึง ตอนเปิดหน้า = ไม่ต้องแสดงเป็นข้อผิดพลาด
         this.modelsError = refresh ? (err.error?.message || 'ดึงรายชื่อรุ่นไม่สำเร็จ') : '';
         this.cdr.detectChanges();
@@ -229,6 +280,7 @@ export class AiSettingsCardComponent implements OnInit {
         this.hasApiKey = !!d.has_api_key;
         this.usedToday = d.used_today || 0;
         this.presetId = presetOf(this.provider, this.baseUrl);
+        this.refreshPresetView();
         this.loaded = true;
         this.cdr.detectChanges();
         this.loadModels(false);
@@ -246,6 +298,8 @@ export class AiSettingsCardComponent implements OnInit {
     else if (/^claude-/.test(this.model)) this.model = ''; // รุ่นของ Claude ใช้กับผู้ให้บริการอื่นไม่ได้
     this.models = [];
     this.modelFilter = '';
+    this.refreshPresetView();
+    this.refreshModelView();
     this.loadModels(false);
   }
 

@@ -541,7 +541,9 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   | ส่งเฉพาะตัวเลขรวม/ชื่อตัวชี้วัด/ข้อความคู่มือตามขอบเขต role ของผู้เรียก — **ห้ามส่ง users/cid/login/รหัสหน่วยบริการรายแถวเข้า prompt** | แสดงผลเป็นข้อความล้วน (ห้าม innerHTML) + ป้าย "ข้อความจาก AI — โปรดตรวจสอบ"
 - `services/ai.js` `callLlm({ feature, userId, system, prompt, maxTokens, test })` — ผู้ให้บริการ (ผู้ใช้เลือกให้รองรับทั้งหมด): `anthropic` = **`@anthropic-ai/sdk`** (`client.beta.messages.create`,
   ค่าตั้งต้น `claude-opus-5-5`, effort low, `fallbacks: 'default'` เฉพาะรุ่นที่รองรับ, ไม่ส่ง temperature, `stop_reason: refusal` = 422) | `openai` = OpenAI-compatible `/chat/completions` ด้วย fetch
-  (Ollama ในเครื่อง, Google Gemini, Groq, OpenRouter — preset ใน `shared/ai-settings-card.ts`) — SDK ต้องใช้ **Node 20+** (`api/Dockerfile` = node:22-alpine ตั้งแต่ 7 พ.ย. 2569)
+  (preset 10 ราย + Ollama + กำหนดเอง ใน `shared/ai-settings-card.ts` `AI_PRESETS` — 13 พ.ย. 2569: Claude, OpenAI, Gemini, xAI, DeepSeek, Mistral, Groq, OpenRouter, Together, Cerebras;
+  `free` 'all' = โควตาฟรีทุกรุ่น | 'some' = บางรุ่นฟรี (ราคา 0 จาก /models) | 'none' — ตัวกรอง "เฉพาะที่ใช้ฟรีได้" `setFreeOnly()` กรองทั้งผู้ให้บริการ (`visiblePresets`) และรุ่น (`filteredModels` คำนวณใน `refreshModelView()` ไม่ใช่ getter);
+  backend `fetchOpenAiModels()` รุ่นฟรี = `:free`/`-Free`/pricing.prompt+completion หรือ input+output = 0, รองรับ /models ที่คืน array ตรง (Together)) — SDK ต้องใช้ **Node 20+** (`api/Dockerfile` = node:22-alpine ตั้งแต่ 7 พ.ย. 2569)
 - ตั้งค่าใน `system_settings` (`ai_enabled/ai_provider/ai_base_url/ai_model/ai_daily_limit/ai_api_key_enc`) ผ่าน `GET|PUT /ai/settings` + `POST /ai/test` (isSuperAdmin, pageKey settings) เท่านั้น —
   key เข้ารหัส `bkEncrypt`, GET คืนแค่ `has_api_key`, **`GET /settings` ตัด `ai_api_key_enc` ออก** (endpoint นั้นคืนทุกแถวให้ทุก role) | `GET /ai/status` ทุก role (frontend `authService.getAiStatus()` แคช — ซ่อนปุ่ม AI เมื่อปิด)
 - **รายชื่อรุ่นโมเดล (ผู้ใช้ขอ 7 พ.ย. 2569: ครบทุกรุ่น + อัปเดตได้เมื่อผู้ให้บริการออกรุ่นใหม่) — ห้ามเขียนรายชื่อรุ่นตายตัว:** `POST /ai/models { provider, base_url, api_key?, refresh }`

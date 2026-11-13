@@ -692,7 +692,7 @@ const SYSTEMS: SopSystem[] = [
   ],
 },{
   id:'ai', icon:'✨', title:'ระบบผู้ช่วย AI', sub:'AI Assistant',
-  desc:'AI สรุป/เสนอแนะเท่านั้น ไม่บันทึกผลงาน ไม่อนุมัติ | ส่งเฉพาะตัวเลขรวมตามสิทธิ์ผู้ใช้ | ผู้ให้บริการ: Claude API / Ollama ในเครื่อง / API แบบ OpenAI-compatible (Gemini, Groq, OpenRouter) | ปิดเป็นค่าตั้งต้น',
+  desc:'AI สรุป/เสนอแนะเท่านั้น ไม่บันทึกผลงาน ไม่อนุมัติ | ส่งเฉพาะตัวเลขรวมตามสิทธิ์ผู้ใช้ | ผู้ให้บริการ: Claude API / Ollama ในเครื่อง / API แบบ OpenAI-compatible (OpenAI, Gemini, xAI, DeepSeek, Mistral, Groq, OpenRouter, Together, Cerebras — ตัวกรองเฉพาะที่ใช้ฟรีได้) | ปิดเป็นค่าตั้งต้น',
   actors:['ผู้ใช้งาน','Super Admin','Backend API','ผู้ให้บริการ AI'],
   nodes:[
     {id:'s',  r:0,c:0,t:'start',   l:'หน้ากราฟ\nกด "สร้างสรุป"'},

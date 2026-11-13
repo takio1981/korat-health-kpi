@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { testProviders } from '../testing/test-providers';
-import { AiSettingsCardComponent, presetOf, modelLabel } from './ai-settings-card';
+import { AiSettingsCardComponent, presetOf, modelLabel, AI_PRESETS, presetLabel, isFreeModel } from './ai-settings-card';
 import Swal from 'sweetalert2';
 
 // การ์ดตั้งค่าผู้ช่วย AI (7 พ.ย. 2569)
@@ -65,8 +65,43 @@ describe('AiSettingsCardComponent', () => {
     const c = make({ enabled: true, provider: 'anthropic', base_url: '', model: '', daily_limit: 200, has_api_key: true }).componentInstance;
     modelsReq().flush({ success: true, models: LIST });
     c.modelFilter = 'old';
+    c.refreshModelView();
     expect(c.filteredModels.map(m => m.id)).toEqual(['claude-old-1']);
     expect(modelLabel({ id: 'x:free', name: 'x:free', free: true })).toBe('x:free (ฟรี)');
+  });
+
+  it('ผู้ให้บริการ 10 ราย + Ollama + กำหนดเอง พร้อม Base URL (13 พ.ย. 2569)', () => {
+    const cloud = AI_PRESETS.filter(p => p.id !== 'ollama' && p.id !== 'custom');
+    expect(cloud.map(p => p.id)).toEqual(['claude', 'openai', 'gemini', 'xai', 'deepseek', 'mistral', 'groq', 'openrouter', 'together', 'cerebras']);
+    for (const p of AI_PRESETS.filter(x => x.provider === 'openai' && x.id !== 'custom')) {
+      expect(p.base_url).toMatch(/^https?:\/\/[^/\s]+\/\S+[^/]$/);
+      expect(presetOf('openai', p.base_url + '/')).toBe(p.id);   // Base URL ไม่ซ้ำกัน — เลือก preset กลับได้ถูกตัว
+    }
+    expect(presetLabel(AI_PRESETS.find(p => p.id === 'gemini')!)).toBe('Google Gemini — ใช้ฟรีได้');
+    expect(presetLabel(AI_PRESETS.find(p => p.id === 'openrouter')!)).toContain('มีรุ่นฟรี');
+    expect(presetLabel(AI_PRESETS.find(p => p.id === 'openai')!)).toBe('OpenAI (GPT)');
+  });
+
+  it('ตัวกรอง "เฉพาะที่ใช้ฟรีได้": ผู้ให้บริการ (คงตัวที่เลือก + กำหนดเอง) และรุ่น (ราคา 0 / โควตาฟรีทั้งผู้ให้บริการ)', () => {
+    const c = make({ enabled: true, provider: 'openai', base_url: 'https://openrouter.ai/api/v1', model: '', daily_limit: 200, has_api_key: true }).componentInstance;
+    modelsReq().flush({ success: true, models: [{ id: 'a:free', name: 'a:free', free: true }, { id: 'b-paid', name: 'b-paid' }] });
+    expect(c.freeModelCount).toBe(1);
+    c.setFreeOnly(true);
+    expect(c.visiblePresets.map(p => p.id)).toEqual(['gemini', 'mistral', 'groq', 'openrouter', 'together', 'cerebras', 'ollama', 'custom']);
+    expect(c.filteredModels.map(m => m.id)).toEqual(['a:free']);
+    const v = c.visiblePresets;
+    c.refreshModelView();
+    expect(c.visiblePresets).toBe(v);   // คำนวณเมื่อค่าเปลี่ยนเท่านั้น ไม่สร้าง array ใหม่ทุกรอบ (กัน NG0103)
+    // Groq = โควตาฟรีทุกรุ่น
+    c.presetId = 'groq';
+    c.applyPreset('groq');
+    modelsReq().flush({ success: true, models: [{ id: 'x', name: 'x' }, { id: 'y', name: 'y' }] });
+    expect(c.filteredModels.map(m => m.id)).toEqual(['x', 'y']);
+    expect(modelLabel({ id: 'x', name: 'x' }, true)).toBe('x (โควตาฟรี)');
+    // ปิดตัวกรอง = ครบทุกผู้ให้บริการ
+    c.setFreeOnly(false);
+    expect(c.visiblePresets.length).toBe(AI_PRESETS.length);
+    expect(isFreeModel({ id: 'z', name: 'z' }, AI_PRESETS.find(p => p.id === 'openai'))).toBe(false);
   });
 
   it('presetOf: จับคู่ผู้ให้บริการจาก Base URL (ไม่ตรง = กำหนดเอง)', () => {

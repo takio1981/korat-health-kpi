@@ -194,7 +194,8 @@ async function fetchOpenAiModels(baseUrl, apiKey) {
         if (r.status === 401 || r.status === 403) throw new AiError(502, 'API key ของผู้ให้บริการ AI ไม่ถูกต้อง', 'AI_AUTH');
         throw new AiError(502, `ดึงรายชื่อรุ่นไม่สำเร็จ (${r.status})`, 'AI_UPSTREAM');
     }
-    const list = Array.isArray(json?.data) ? json.data : Array.isArray(json?.models) ? json.models : [];
+    // { data: [...] } (OpenAI/ส่วนใหญ่) | { models: [...] } | [...] ตรงๆ (Together AI)
+    const list = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : Array.isArray(json?.models) ? json.models : [];
     let hidden = 0;
     const seen = new Set();
     const models = [];
@@ -204,8 +205,10 @@ async function fetchOpenAiModels(baseUrl, apiKey) {
         if (!id || seen.has(id)) continue;
         seen.add(id);
         if (NON_CHAT_MODEL.test(id)) { hidden++; continue; }
+        // รุ่นฟรี: OpenRouter (ลงท้าย :free / pricing.prompt+completion = 0), Together AI (ลงท้าย -Free / pricing.input+output = 0) — 13 พ.ย. 2569
         const p = m.pricing || {};
-        const free = /:free$/.test(id) || (p.prompt !== undefined && Number(p.prompt) === 0 && Number(p.completion || 0) === 0);
+        const zero = (a, b) => a !== undefined && a !== null && Number(a) === 0 && Number(b || 0) === 0;
+        const free = /:free$/i.test(id) || /-free$/i.test(id) || zero(p.prompt, p.completion) || zero(p.input, p.output);
         models.push({ id, name: m.name && m.name !== m.id ? String(m.name) : id, created: m.created ? new Date(Number(m.created) * 1000).toISOString() : null, free: free || undefined });
     }
     models.sort((a, b) => a.id.localeCompare(b.id));

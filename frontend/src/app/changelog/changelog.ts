@@ -18,6 +18,13 @@ export class ChangelogComponent {
 
   changelog = [
     {
+      version: '2569.11.13',
+      date: '13 พฤศจิกายน 2569',
+      changes: [
+        { type: 'feature', text: 'ตั้งค่าระบบ → ผู้ช่วย AI: เพิ่มผู้ให้บริการยอดนิยม 10 ราย (Claude, OpenAI, Google Gemini, xAI Grok, DeepSeek, Mistral, Groq, OpenRouter, Together AI, Cerebras) + Ollama พร้อม Base URL อัตโนมัติ รายชื่อรุ่นดึงครบจากผู้ให้บริการ และตัวกรอง "เฉพาะที่ใช้ฟรีได้" (ผู้ให้บริการ + รุ่นฟรี/โควตาฟรี)' },
+      ]
+    },
+    {
       version: '2569.11.12',
       date: '12 พฤศจิกายน 2569',
       changes: [
