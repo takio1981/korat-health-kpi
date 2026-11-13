@@ -999,6 +999,8 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.selectedHosTypes.length > 0) filters.hostype = this.selectedHosTypes.join(',');
     // ส่ง indicator_off_type → backend filter kpi_indicators.required_off_types
     if (this.selectedIndicatorOffTypes.length > 0) filters.indicator_off_type = this.selectedIndicatorOffTypes.join(',');
+    // คำค้น → กรองที่ server ภายในขอบเขตสิทธิ์ (ไม่ต้องโหลดทั้งหมดก่อน — super_admin/admin_ssj ค้นได้โดยไม่เลือกตัวกรอง)
+    if (this.hasSearchQuery) filters.q = this.searchTerm.trim();
     this.authService.getKpiResults(filters).subscribe({
       next: (res) => {
         this.isLoading = false;
@@ -1331,6 +1333,11 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.selectedMain && !this.mainCategories.includes(this.selectedMain)) this.selectedMain = '';
   }
 
+  /** คำค้นที่ส่งให้ server (≥ 2 ตัวอักษร) — ตรงกับเงื่อนไขของ GET /kpi-results ?q= */
+  get hasSearchQuery(): boolean {
+    return (this.searchTerm || '').trim().length >= 2;
+  }
+
   // === กดปุ่ม "ค้นหา" → ตรวจว่าเลือกตัวกรองหรือยัง ===
   doSearch() {
     // admin_ssj / user_ssj มี dept ล็อคอัตโนมัติ → ไม่นับเป็นตัวกรองที่ผู้ใช้เลือกเอง
@@ -1340,12 +1347,14 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       || (!isLockedDept && this.selectedDepts.length > 0)
       || this.selectedHosTypes.length > 0 || this.selectedIndicatorOffTypes.length > 0
       || this.selectedMain || this.selectedIndicator
-      || this.selectedTypes.length > 0 || this.selectedStatuses.length > 0;
+      || this.selectedTypes.length > 0 || this.selectedStatuses.length > 0
+      // พิมพ์คำค้น ≥ 2 ตัวอักษร = ค้นได้เลยโดยไม่ต้องเลือกตัวกรอง (13 พ.ย. 2569) — server กรองตามคำค้นภายในขอบเขตสิทธิ์ของ role
+      || this.hasSearchQuery;
 
     if (!hasFilter) {
       Swal.fire({
         title: 'กรุณาเลือกตัวกรอง',
-        html: `<p class="text-sm text-gray-600">เลือกอย่างน้อย 1 เงื่อนไข เช่น อำเภอ, ประเภท รพ., หน่วยงาน หรือตัวชี้วัด<br>เพื่อจำกัดขอบเขตข้อมูลก่อนค้นหา</p>`,
+        html: `<p class="text-sm text-gray-600">เลือกอย่างน้อย 1 เงื่อนไข เช่น อำเภอ, ประเภท รพ., หน่วยงาน หรือตัวชี้วัด<br>หรือพิมพ์คำค้น (อย่างน้อย 2 ตัวอักษร) ในช่องค้นหาแล้วกด Enter</p>`,
         icon: 'info',
         confirmButtonText: 'ตกลง',
         confirmButtonColor: '#6366f1',

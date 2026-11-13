@@ -1183,6 +1183,8 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - **super_admin**: ข้ามการตรวจสอบ lock ได้
 - **admin_ssj / user_ssj**: ล็อค dropdown หน่วยงาน เห็นเฉพาะ dept ตัวเอง
 - **admin_ssj / super_admin**: ไม่โหลดข้อมูล dashboard อัตโนมัติ ต้องกด "ค้นหา"
+- **ช่องค้นหาหน้าบันทึกผลงาน (13 พ.ย. 2569):** คำค้น ≥ 2 ตัวอักษร + Enter = ค้นได้โดยไม่เลือกตัวกรอง (`hasSearchQuery` ใน `doSearch()`) → `GET /kpi-results?q=`
+  กรองที่ server (ทุกคำต้องพบใน ชื่อตัวชี้วัด/หมวดหมู่หลัก/หน่วยงาน/หน่วยบริการ/อำเภอ หรือ = รหัสหน่วยบริการ, % _ escape) **ต่อท้ายขอบเขตสิทธิ์ของ role เสมอ ไม่ขยายสิทธิ์** — Test: `api/tests/kpi-results-search.test.js`, `dashboard.spec.ts`
 
 ### Role-based Scoping ของรายการตัวกรอง (dept/hospcode/อำเภอ ตัวเอง) — Backend เป็นหลัก
 - Endpoint ที่คืนรายการให้ dropdown ใช้ร่วมกันทั้งระบบ (`GET /departments`, `/hospitals`, `/hostype`, `/districts`,

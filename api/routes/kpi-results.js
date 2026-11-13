@@ -69,6 +69,16 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         addMultiFilter('dist.distname', req.query.district);
         if (req.query.indicator) { extraConditions.push('i.kpi_indicators_name = ?'); params.push(req.query.indicator); }
         if (req.query.main) { extraConditions.push('mi.main_indicator_name = ?'); params.push(req.query.main); }
+        // คำค้นจากช่องค้นหา (13 พ.ย. 2569 — ค้นได้โดยไม่ต้องเลือกตัวกรอง): ชื่อตัวชี้วัด/หมวดหมู่หลัก/หน่วยงาน/หน่วยบริการ/อำเภอ/รหัสหน่วยบริการ
+        // ขอบเขตตามสิทธิ์ (whereClause ด้านบน) ยังใช้เสมอ — คำค้นแค่จำกัดเพิ่ม | ≥ 2 ตัวอักษร, ทุกคำ (เว้นวรรค) ต้องพบ, % _ \ ในคำค้น = ตัวอักษรธรรมดา (escape)
+        const qWords = String(req.query.q || '').trim().split(/\s+/).filter(Boolean).slice(0, 5);
+        if (qWords.join('').length >= 2) {
+            for (const w of qWords) {
+                extraConditions.push('(i.kpi_indicators_name LIKE ? OR mi.main_indicator_name LIKE ? OR d.dept_name LIKE ? OR h.hosname LIKE ? OR dist.distname LIKE ? OR r.hospcode = ?)');
+                const like = `%${w.replace(/[\\%_]/g, c => '\\' + c)}%`;
+                params.push(like, like, like, like, like, w);
+            }
+        }
         // Hostype filter: filter h.hostype โดยตรง (LEFT JOIN chospital จาก main query)
         addMultiFilter('h.hostype', req.query.hostype);
         addMultiFilter('h.zone', req.query.zone); // โซนของหน่วยบริการ (chospital.zone)

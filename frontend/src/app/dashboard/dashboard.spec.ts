@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { DashboardComponent } from './dashboard';
+import Swal from 'sweetalert2';
 import { testProviders } from '../testing/test-providers';
 import { parseImportAoa, planImport, buildTemplateAoa, itemKey } from '../shared/kpi-excel';
 import { parseSubImportAoa, planSubImport } from '../shared/kpi-sub-excel';
@@ -50,6 +51,23 @@ describe('DashboardComponent', () => {
 
     expect(component.selectedYear).toBe('2560');
     expect(component.filteredData.length).toBe(2);
+  });
+
+  // พิมพ์คำค้นแล้วกด Enter ค้นได้โดยไม่ต้องเลือกตัวกรอง — ส่งคำค้นให้ server (กรองภายในขอบเขตสิทธิ์) 13 พ.ย. 2569
+  it('คำค้น ≥ 2 ตัวอักษร = ค้นได้โดยไม่เลือกตัวกรอง และส่ง q ไปที่ /kpi-results | สั้นกว่า = แจ้งให้เลือกตัวกรอง', () => {
+    const swal = vi.spyOn(Swal, 'fire').mockResolvedValue({} as any);
+    component.selectedYear = '2569';
+    component.searchTerm = 'ก';
+    component.doSearch();
+    expect(swal).toHaveBeenCalledWith(expect.objectContaining({ title: 'กรุณาเลือกตัวกรอง' }));
+    http.expectNone(r => r.url.includes('/kpi-results'));
+    swal.mockClear();
+    component.searchTerm = '  วัณโรค ปอด ';
+    component.doSearch();
+    const req = http.expectOne(r => r.url.includes('/kpi-results?'));
+    expect(new URL(req.request.urlWithParams).searchParams.get('q')).toBe('วัณโรค ปอด');
+    expect(swal).not.toHaveBeenCalledWith(expect.objectContaining({ title: 'กรุณาเลือกตัวกรอง' }));
+    swal.mockRestore();
   });
 
   // ตัวเลือก "กำลังดำเนินการ" รายเดือน (5 ต.ค. 2569 — เปลี่ยนคำจาก "รอดำเนินการ" 19 ต.ค. 2569)
