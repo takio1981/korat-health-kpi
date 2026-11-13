@@ -79,7 +79,8 @@ frontend/src/app/
   | `services/monthly-target.js` | เป้าหมายรายเดือน: applyMonthlyTargetToSummary (กฎ aggregateMonthlyTarget อยู่ใน kpi-target.js) |
   | `services/sso.js` / `services/users.js` | getThaidSettings/getProviderIdSettings + THAID_* / countUserKpiResults, userHasResultsMessage |
   | `core/router.js` / `core/env.js` | apiRouter (ตัวเดียวทั้งระบบ) / port |
-  | `jobs/*.js` | startExportScheduler + runScheduledExport, startKpiAuditScheduler + runKpiAuditDigest, startSessionCleanupJob |
+  | `services/user-approval.js` / `services/users-khd-sync.js` | approveUser (ย้ายจาก PUT /users/:id/approve), recordRegistration, runAutoApprove, runScheduledKhdSync, syncAfterApprove / syncUsersToKhd + getUsersSyncConfig (ย้ายจาก POST /users/sync-to-khd) |
+  | `jobs/*.js` | startExportScheduler + runScheduledExport, startKpiAuditScheduler + runKpiAuditDigest, startSessionCleanupJob, startUserApprovalScheduler |
 - **เส้นทาง (routes/) — ลำดับ require ใน server.js = ลำดับเส้นทางเดิม:** auth (ก่อน `apiRouter.use(apiLimiter)` — login/SSO/ลงทะเบียน/public มีตัวจำกัดของตัวเอง;
   `app.get('/authen/*/callback')` อยู่ใน server.js) → kpi-results (update-kpi) → forms → dashboard → monitoring → lookups → users → settings-access → indicators
   → approval → announcements → export → reports → (migrations) → review → khd → feedback → db-sync → integrations → backup → kpi-audit
@@ -760,6 +761,16 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - ทดสอบหน้าจอ (18 ต.ค. 2569): backend ชุดที่ 2 พอร์ต 3710 ชี้ `khups_kpi_test_db` + บล็อกการเชื่อมต่อออกนอกเครื่อง (ฐานทดสอบมีโทเคน LINE/Telegram/SMTP จริง)
   + Playwright เปลี่ยนคำขอ :3700 → :3710 — ⚠️ อย่ารัน `npm test` ระหว่างทดสอบหน้าจอ: `cleanupTestUsers()` ลบผู้ใช้ `test_*` ทุกคนในฐานทดสอบ (รวมบัญชี `test_e2e_*`)
 - Test: `api/tests/hierarchy.test.js`, `api/tests/kpi-rollup.test.js`, `shared/kpi-rollup.spec.ts`, `dashboard.spec.ts`, `kpi-manage.spec.ts`
+
+### อนุมัติผู้สมัครใหม่อัตโนมัติ + ส่งผู้ใช้ใหม่ขึ้น KHD (13 พ.ย. 2569 — ผู้ใช้เลือก: ทุกบทบาท + แจ้ง super_admin, เวลา = หลังลงทะเบียน, ส่ง KHD ทั้งทันทีและตามรอบ)
+- ตาราง `user_registrations` (user_id PK, registered_at, source, auto_approved_at) + `user_khd_sync` (user_id PK, synced_at, last_error, attempts) — **ไม่เพิ่มคอลัมน์ใน users**
+  (Users Data Sync จะ ALTER ADD COLUMN ตาราง users ของ KHD ตาม) | บันทึกเวลาลงทะเบียน: `/register` (self_register) และ POST /users ที่รออนุมัติ (admin_created)
+  — **ผู้ที่รออนุมัติอยู่ก่อนไม่มีแถว = ไม่ถูกอนุมัติอัตโนมัติ** (ผู้ใช้: "เช็คเวลาเฉพาะเมื่อมีการลงทะเบียนมาใหม่")
+- ตั้งค่า system_settings `user_auto_approve_enabled/_delay_min` (1–10080 นาที), `user_khd_sync_on_approve`, `user_khd_sync_schedule_enabled/_time` — `GET|PUT /user-approval/settings`,
+  `POST /user-approval/run { task: approve|sync }` (isSuperAdmin, path ไม่อยู่ใต้ /users) | UI `shared/user-approval-settings-card.ts` ในหน้าตั้งค่าระบบ
+- `jobs/user-approval.js` ตรวจทุก 30 วินาที: อนุมัติ (approved_by NULL, log `AUTO_APPROVE_USER`, LINE/อีเมลถึงผู้สมัครเหมือนกดเอง, notifications + notifyAdmins ถึง super_admin)
+  แล้วส่งขึ้น KHD ทันทีถ้าเปิด | ส่งรายวัน (`isSyncDue` ช่วง 2 นาที) = ผู้ใช้ใหม่ที่อนุมัติแล้วและยังส่งไม่สำเร็จ (attempts < 20) | PUT /users/:id/approve + POST /users (อนุมัติแล้ว) → `syncAfterApprove()`
+- Test: `api/tests/user-auto-approve.test.js` (mock syncUsersToKhd + core/notify — ฐานทดสอบมีโทเคนจริง), `shared/user-approval-settings-card.spec.ts`
 
 ### Users Data Sync (Local ↔ KHD)
 - `GET /users/sync-compare` — เทียบ 4 สถานะ (matched/different/local_only/khd_only) — แต่ละ user ใน `different[]`

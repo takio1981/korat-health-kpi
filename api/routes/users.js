@@ -12,6 +12,8 @@ const { parseActiveFlag, ACTIVE_FLAG_REQUIRED } = require('../core/validate');
 const { cleanupPendingApprovalNotifications, sendLineToUser, sendMail } = require('../core/notify');
 const { getProviderIdSettings, getThaidSettings } = require('../services/sso');
 const { countUserKpiResults, userHasResultsMessage, ALL_ROLES, ASSIGNABLE_ROLES, hospcodeInAdminScope } = require('../services/users');
+const { recordRegistration, approveUser, syncAfterApprove, getUserApprovalSettings, parseSettingsInput, saveUserApprovalSettings,
+    runAutoApprove, runScheduledKhdSync, saveLastRun, getStatus } = require('../services/user-approval');
 
 apiRouter.post('/users', authenticateToken, requireAction('users', 'add'), async (req, res) => {
     const { username, password, role, dept_id, firstname, lastname, hospcode, phone, email, cid } = req.body;
@@ -57,6 +59,8 @@ apiRouter.post('/users', authenticateToken, requireAction('users', 'add'), async
             'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [user.userId, user.deptId, 'INSERT', 'users', result.insertId, JSON.stringify({ username, role: finalRole }), req.ip]
         );
+        // รออนุมัติ = เริ่มนับเวลาอนุมัติอัตโนมัติ | อนุมัติแล้ว (super_admin สร้าง) = ส่งขึ้น KHD ทันทีถ้าเปิดไว้ (13 พ.ย. 2569)
+        if (autoApprove) syncAfterApprove([result.insertId]); else await recordRegistration(result.insertId, 'admin_created');
         res.json({ success: true, message: 'User created' });
     } catch (error) {
         res.status(500).json({ success: false });
@@ -470,6 +474,41 @@ apiRouter.put('/users/:id/reset-password', authenticateToken, requireAction('use
 });
 
 // อนุมัติการลงทะเบียน
+// ===== อนุมัติผู้สมัครใหม่อัตโนมัติ + ส่งผู้ใช้ใหม่ขึ้น KHD (13 พ.ย. 2569) — super_admin เท่านั้น (path ไม่อยู่ใต้ /users กัน PAGE_ACCESS_RULES prefix /users) =====
+apiRouter.get('/user-approval/settings', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        res.json({ success: true, data: await getUserApprovalSettings(true), status: await getStatus() });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+apiRouter.put('/user-approval/settings', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const p = parseSettingsInput(req.body);
+        if (p.error) return res.status(400).json({ success: false, message: p.error });
+        await saveUserApprovalSettings(p.values);
+        await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+            [req.user.userId, 'USER_APPROVAL_SETTINGS', 'system_settings', JSON.stringify(p.values), req.ip]).catch(() => {});
+        res.json({ success: true, data: await getUserApprovalSettings(true) });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+// POST /user-approval/run { task: 'approve' | 'sync' } — ตรวจ/ส่งตอนนี้ (ไม่รอรอบเวลา)
+apiRouter.post('/user-approval/run', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const task = req.body?.task;
+        if (task === 'approve') {
+            const r = await runAutoApprove();
+            if (r.reason === 'disabled') return res.status(400).json({ success: false, message: 'ยังไม่ได้เปิดการอนุมัติอัตโนมัติ' });
+            await saveLastRun({ task: 'approve', approved: r.approved.length, manual: true });
+            return res.json({ success: true, approved: r.approved, message: r.approved.length ? `อนุมัติอัตโนมัติ ${r.approved.length} บัญชี` : 'ไม่มีผู้สมัครที่ครบเวลา' });
+        }
+        if (task === 'sync') {
+            const r = await runScheduledKhdSync();
+            await saveLastRun({ task: 'sync', synced: r.synced, failed: r.failed, manual: true });
+            return res.json({ success: true, ...r });
+        }
+        res.status(400).json({ success: false, message: 'task ต้องเป็น approve หรือ sync' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
 apiRouter.put('/users/:id/approve', authenticateToken, isAdmin, async (req, res) => {
     const userId = req.params.id;
     const user = req.user;
@@ -479,40 +518,8 @@ apiRouter.put('/users/:id/approve', authenticateToken, isAdmin, async (req, res)
         const target = rows[0];
         if (target.is_approved !== 0) return res.status(400).json({ success: false, message: 'ผู้ใช้งานนี้ไม่ได้อยู่ในสถานะรอการอนุมัติ' });
 
-        await db.query('UPDATE users SET is_approved = 1, approved_by = ? WHERE id = ?', [user.userId, userId]);
-
-        await db.query(
-            'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [user.userId, user.deptId, 'APPROVE_USER', 'users', userId, JSON.stringify({ username: target.username, approved_by: user.userId }), req.ip]
-        );
-
-        // LINE: แจ้งผลอนุมัติให้ผู้สมัคร
-        sendLineToUser(userId,
-            `✅ บัญชีของคุณได้รับการอนุมัติแล้ว\n` +
-            `Username: ${target.username}\n\n` +
-            `เข้าใช้งานระบบได้ที่:\nhttps://apikorat.moph.go.th/khupskpi/login`
-        );
-
-        // ส่ง Email แจ้งผลอนุมัติ
-        if (target.email) {
-            sendMail(target.email, '✅ บัญชีของคุณได้รับการอนุมัติแล้ว — ระบบ KPI สสจ.นครราชสีมา',
-                `<div style="font-family:Sarabun,sans-serif;max-width:500px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
-                    <div style="background:linear-gradient(135deg,#16a34a,#22c55e);padding:24px;text-align:center;color:white">
-                        <h2 style="margin:0;font-size:20px">✅ อนุมัติเรียบร้อยแล้ว</h2>
-                    </div>
-                    <div style="padding:24px">
-                        <p>เรียน คุณ${target.firstname} ${target.lastname},</p>
-                        <p>คำขอลงทะเบียนใช้งาน <b>ระบบบันทึกผลงาน KPI ด้านสุขภาพ สสจ.นครราชสีมา</b> ได้รับการ <span style="color:#16a34a;font-weight:bold">อนุมัติ</span> แล้ว</p>
-                        <table style="width:100%;border-collapse:collapse;font-size:14px;margin:16px 0">
-                            <tr><td style="padding:6px 0;color:#6b7280">ชื่อผู้ใช้</td><td style="font-weight:bold">${target.username}</td></tr>
-                            <tr><td style="padding:6px 0;color:#6b7280">สิทธิ์</td><td style="font-weight:bold">${target.role}</td></tr>
-                        </table>
-                        <p>คุณสามารถเข้าสู่ระบบได้ทันที</p>
-                        <p style="color:#9ca3af;font-size:12px;margin-top:24px">อีเมลฉบับนี้ส่งโดยอัตโนมัติ กรุณาอย่าตอบกลับ</p>
-                    </div>
-                </div>`
-            );
-        }
+        await approveUser(target, { approverId: user.userId, approverDeptId: user.deptId, ip: req.ip });   // services/user-approval.js
+        syncAfterApprove([target.id]);   // ส่งขึ้น KHD ทันทีถ้าเปิดไว้ (13 พ.ย. 2569)
 
         res.json({ success: true, message: 'อนุมัติผู้ใช้งานเรียบร้อย' });
     } catch (error) {

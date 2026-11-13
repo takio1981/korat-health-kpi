@@ -609,6 +609,13 @@ const migrationsReady = (async () => {
         try { await db.query('ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS quarter_mode VARCHAR(20) NULL'); } catch (e) {}
         // หน่วยนับผลงาน (13 พ.ย. 2569 — ไม่บังคับ): ข้อความอิสระ เช่น ร้อยละ, ราย, แห่ง, คน, ครั้ง — แสดงประกอบเท่านั้น ไม่ใช้คำนวณ
         try { await db.query('ALTER TABLE kpi_indicators ADD COLUMN IF NOT EXISTS unit VARCHAR(50) NULL'); } catch (e) {}
+        // อนุมัติผู้สมัครใหม่อัตโนมัติ + ส่งผู้ใช้ใหม่ขึ้น KHD (13 พ.ย. 2569) — ตารางแยก ไม่เพิ่มคอลัมน์ใน users (Users Data Sync จะ ALTER ตาราง users ของ KHD ตาม)
+        try { await db.query(`CREATE TABLE IF NOT EXISTS user_registrations (
+            user_id INT NOT NULL PRIMARY KEY, registered_at DATETIME NOT NULL, source VARCHAR(20) NULL, auto_approved_at DATETIME NULL,
+            KEY idx_ur_registered (registered_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`); } catch (e) { console.error('[migration] user_registrations:', e.message); }
+        try { await db.query(`CREATE TABLE IF NOT EXISTS user_khd_sync (
+            user_id INT NOT NULL PRIMARY KEY, synced_at DATETIME NULL, last_error VARCHAR(500) NULL, attempts INT NOT NULL DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`); } catch (e) { console.error('[migration] user_khd_sync:', e.message); }
         try { await db.query("ALTER TABLE kpi_sub_indicators ADD COLUMN rollup_mode VARCHAR(10) NOT NULL DEFAULT 'manual'"); } catch (e) {}
         // ตัวชี้วัดหลายระดับ (19 ต.ค. 2569): ข้อย่อยมีข้อแม่เป็นข้อย่อยได้ — NULL = ข้อย่อยระดับบนสุด (ข้อมูลเดิมทั้งหมด)
         try { await db.query('ALTER TABLE kpi_sub_indicators ADD COLUMN parent_sub_id INT NULL AFTER indicator_id'); } catch (e) {}

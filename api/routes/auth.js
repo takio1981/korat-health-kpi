@@ -5,6 +5,7 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const db = require('../db');
+const { recordRegistration } = require('../services/user-approval');
 const jwt = require('jsonwebtoken');
 const { SECRET_KEY, loginIpLimiter, loginLimiter } = require('../core/security');
 const { THAID_AUTH_URL, THAID_CLIENT_ID, THAID_REDIRECT_URI, THAID_SCOPE, THAID_TOKEN_URL, getProviderIdSettings, getThaidSettings, KHD_SSO_DEFAULTS, KHD_TOKEN_MAX_AGE, normalizeSsoUrl, getKhdSsoSettings, invalidateKhdSsoCache } = require('../services/sso');
@@ -2028,6 +2029,7 @@ apiRouter.post('/register', loginIpLimiter, loginLimiter, async (req, res) => {
             'INSERT INTO users (username, password_hash, role, dept_id, firstname, lastname, hospcode, phone, email, cid, is_approved) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)',
             [username, hashedPassword, finalRole, dept_id || null, firstname, lastname, hospcode, cleanPhone, email || null, hashedCid]
         );
+        await recordRegistration(result.insertId, 'self_register');   // จุดเริ่มนับเวลาอนุมัติอัตโนมัติ (13 พ.ย. 2569)
 
         // บันทึก log
         await db.query(

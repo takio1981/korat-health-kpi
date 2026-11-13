@@ -6,13 +6,14 @@ import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { AiSettingsCardComponent } from '../shared/ai-settings-card';
 import { ForecastSettingsCardComponent } from '../shared/forecast-settings-card';
+import { UserApprovalSettingsCardComponent } from '../shared/user-approval-settings-card';
 import { KhdSsoSettingsCardComponent } from '../shared/khd-sso-settings-card';
 import Swal from 'sweetalert2';
 
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, AiSettingsCardComponent, ForecastSettingsCardComponent, KhdSsoSettingsCardComponent],
+  imports: [CommonModule, FormsModule, RouterLink, AiSettingsCardComponent, ForecastSettingsCardComponent, KhdSsoSettingsCardComponent, UserApprovalSettingsCardComponent],
   templateUrl: './settings.html'
 })
 export class SettingsComponent implements OnInit {
