@@ -1142,6 +1142,20 @@ export class KpiManageComponent implements OnInit {
   private get formulaTestVarValues(): Record<string, any> {
     return { ...this.formulaTestVars, base: this.formulaTestBase };
   }
+  /**
+   * สูตรร้อยละอ้างค่ารายเดือน (m10…m09 / ฟังก์ชัน SUM/AVG/…/LASTQ) หรือปีงบที่แล้ว — ช่องทดลองของสูตรร้อยละต้องมีช่องกรอกรายเดือนด้วย
+   * (13 พ.ย. 2569: สูตร (SUM(ALL) - target) / target * 100 ทดลองแล้ว "ว่าง" เสมอ เพราะช่องทดลองมีแค่ผลงาน/เป้าหมาย ค่ารายเดือนว่างทั้งหมด)
+   * ไม่มีสูตรผลงาน = แสดงช่องรายเดือนในกล่องสูตรร้อยละ | มีสูตรผลงาน = ใช้ค่ารายเดือนจากการทดลองสูตรผลงานด้านบน (ชุดเดียวกัน)
+   */
+  get pctUsesMonths(): boolean {
+    const p = String(this.currentItem?.pct_formula || '').trim();
+    if (!p || this.pctFormulaError) return false;
+    return /\b(SUM|AVG|MAX|MIN|COUNT|LAST|LASTQ)\s*\(/i.test(p) || /\bm(0?[1-9]|1[0-2])\b/i.test(p);
+  }
+  get pctUsesPrev(): boolean {
+    const p = String(this.currentItem?.pct_formula || '').trim();
+    return !!p && !this.pctFormulaError && usesPrevYear(p);
+  }
   // ทดลองสูตรร้อยละ: ผลงาน = ผลทดลองสูตรผลงาน (ถ้ามี) ไม่งั้นใช้ค่าที่กรอก
   get pctTestResult(): number | null {
     const p = String(this.currentItem?.pct_formula || '').trim();

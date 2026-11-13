@@ -486,7 +486,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   ตัวแปรอ่านแบบ own-property เท่านั้น — **`validateFormula(f, customKeys, extra)` ต้องส่งชื่อที่ประกาศเสมอ** (ไม่ส่ง = ใช้ได้แค่ base) ทั้ง backend (`formulaOk(ind, f)`, `varKeysOf()`) และ dashboard
   (เคยพลาด: dashboard ไม่ส่งชื่อ → สูตรที่ใช้ pop ถูกมองว่าผิดแล้วไม่คำนวณ — จับได้ใน spec) | แถว `GET /kpi-results` มี `cv_<key>` (+ `base_value`), `custom_vars`, `pct_formula` — `/update-kpi` รับ `cv_<key>`/`base_value`
   เฉพาะชื่อที่ประกาศ + base | `pct_formula` VARCHAR(500) = สูตรร้อยละ (ตัวแปรเพิ่ม `result`) — **ใช้เฉพาะตัวเลขคอลัมน์ร้อยละฝั่ง frontend** (`shared/custom-vars.ts` `evaluatePct()`),
-  ผ่าน/ไม่ผ่านไม่เปลี่ยน (ผู้ใช้เลือก) — POST/PUT `/indicators` ตรวจ custom_vars/สูตร/สูตรร้อยละ → 400 (PUT ไม่ส่ง = ใช้ค่าเดิม) — Excel คอลัมน์ `"label [key]"` (`customVarHeader()`)
+  ผ่าน/ไม่ผ่านไม่เปลี่ยน (ผู้ใช้เลือก) — ทดลองสูตรร้อยละใน kpi-manage: สูตรอ้างค่ารายเดือน/ปีงบที่แล้ว (`pctUsesMonths`/`pctUsesPrev`) และไม่มีสูตรผลงาน = แสดงช่องรายเดือน `#pct-test-months` (13 พ.ย. 2569 — เดิมได้ "ว่าง" เสมอ) — POST/PUT `/indicators` ตรวจ custom_vars/สูตร/สูตรร้อยละ → 400 (PUT ไม่ส่ง = ใช้ค่าเดิม) — Excel คอลัมน์ `"label [key]"` (`customVarHeader()`)
   — Test: `api/tests/custom-vars.test.js`, fixture สูตร (vars/allowed/allowExtra), `shared/custom-vars.spec.ts`, `kpi-excel.spec.ts`, `dashboard.spec.ts`, `kpi-manage.spec.ts`
 - ภาษาสูตร: ตัวแปร `m10…m09` (`m1`–`m9` ย่อได้) + `target` + `base` + ค่าเพิ่มเติม (+ `result` เฉพาะสูตรร้อยละ), ฟังก์ชัน `SUM AVG MAX MIN COUNT LAST` (อาร์กิวเมนต์ = รายการเดือน
   หรือ `ALL`) + `LASTQ(SUM|AVG|LAST)` (ค่าไตรมาสล่าสุด), `+ - * /` วงเล็บ ตัวเลข — ค่าว่าง/ข้อความ = ไม่มีค่า (ฟังก์ชันข้าม, อ้างตรงในนิพจน์ → null), หารศูนย์ → null,

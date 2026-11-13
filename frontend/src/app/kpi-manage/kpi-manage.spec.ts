@@ -572,6 +572,22 @@ describe('KpiManageComponent', () => {
       expect(component.formulaTestResult?.pct).toBe(127.27);
       expect(component.pctTestResult).toBe(127.27);
     });
+
+    it('ทดลองสูตรร้อยละที่ใช้ค่ารายเดือน (ไม่มีสูตรผลงาน) → มีช่องรายเดือนและคำนวณได้ (13 พ.ย. 2569)', () => {
+      component.currentItem = { custom_vars: [], result_formula: '', pct_formula: '(SUM(ALL) - target ) / target * 100' };
+      component.formulaTestResultInput = '2';
+      component.formulaTestTarget = '3';
+      expect(component.pctUsesMonths).toBe(true);
+      expect(component.pctTestResult).toBeNull();   // เดิม: กรอกแค่ผลงาน/เป้าหมาย ค่ารายเดือนว่าง = คำนวณไม่ได้
+      component.formulaTestMonths = { m10: '2', m11: '4' };
+      expect(component.pctTestResult).toBe(100);    // (6 - 3) / 3 * 100
+      component.currentItem.pct_formula = 'result / target * 100';
+      expect(component.pctUsesMonths).toBe(false);
+      component.currentItem.pct_formula = '(m10 + m11) / target * 100';
+      expect(component.pctUsesMonths).toBe(true);
+      component.currentItem.pct_formula = 'result / prev_result * 100';
+      expect([component.pctUsesMonths, component.pctUsesPrev]).toEqual([false, true]);
+    });
   });
 
   describe('รอบการวัดผล (quarter_mode — 10 พ.ย. 2569)', () => {
