@@ -86,7 +86,7 @@ apiRouter.post('/ai/models', authenticateToken, isSuperAdmin, aiLimiter, async (
 apiRouter.post('/ai/formula-suggest', authenticateToken, requireAnyAction('kpi-manage', ['add', 'edit']), aiLimiter, async (req, res) => {
     try {
         const b = req.body || {};
-        const out = await suggestFormula({ description: b.description, kind: b.kind, custom_vars: b.custom_vars, target_condition: b.target_condition, indicator_name: b.indicator_name }, req.user.userId);
+        const out = await suggestFormula({ description: b.description, kind: b.kind, custom_vars: b.custom_vars, target_condition: b.target_condition, indicator_name: b.indicator_name, indicator: b.indicator }, req.user.userId);
         res.json({ success: true, ...out });
     } catch (e) {
         sendAiError(res, e, 'AI ช่วยเขียนสูตรไม่สำเร็จ');

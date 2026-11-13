@@ -13,9 +13,10 @@ const request = require('supertest');
 const { ensureTestUser, makeToken, cleanupTestUsers } = require('./helpers');
 const { callLlm } = require('../services/ai');
 
-let app, db, saToken, ssjToken, hosToken;
+let app, db, saToken, sa2Token, ssjToken, hosToken;
 const api = (p) => '/khupskpi/api' + p;
 const reply = (obj) => ({ text: typeof obj === 'string' ? obj : JSON.stringify(obj), model: 'mock-model', provider: 'openai', ms: 1 });
+const suggest2 = (body) => suggest(body, sa2Token);
 const suggest = (body, t = saToken) => request(app).post(api('/ai/formula-suggest')).set('Authorization', `Bearer ${t}`).send(body);
 
 beforeAll(async () => {
@@ -29,6 +30,7 @@ beforeAll(async () => {
         return makeToken({ userId: u.id, username, role, deptId: 1, hospcode: '11000', sessionId: sid });
     };
     saToken = await mk('test_aiform_sa', 'super_admin', 'sess-aiform-sa');
+    sa2Token = await mk('test_aiform_sa2', 'super_admin', 'sess-aiform-sa2');   // บัญชีแยก — aiLimiter 10 ครั้ง/นาที/ผู้ใช้
     ssjToken = await mk('test_aiform_ssj', 'admin_ssj', 'sess-aiform-ssj');
     hosToken = await mk('test_aiform_hos', 'user_hos', 'sess-aiform-hos');
 });
@@ -98,6 +100,39 @@ describe('POST /ai/formula-suggest', () => {
         const res = await suggest({ description: 'อายุเฉลี่ยของผู้ป่วยแต่ละคน' });
         expect(res.status).toBe(422);
         expect(res.body.message).toContain('ต้องใช้ข้อมูลรายบุคคล');
+    });
+
+    // สูตรร้อยละจากข้อมูลตัวชี้วัด (13 พ.ย. 2569): ไม่มีคำอธิบายได้เมื่อส่ง indicator — prompt มีเป้าหมาย/เกณฑ์/เงื่อนไข/วิธีคิดผลงาน
+    test('ไม่มีคำอธิบาย + มีข้อมูลตัวชี้วัด → เสนอสูตรจากข้อมูล (prompt มีเป้าหมาย เกณฑ์ เงื่อนไข วิธีคิดผลงาน)', async () => {
+        callLlm.mockResolvedValueOnce(reply({ formula: 'result / target * 100', explanation: 'ร้อยละของเป้าหมาย' }));
+        const res = await suggest2({ description: '', kind: 'pct', indicator_name: 'ร้อยละผู้ป่วยเบาหวานควบคุมได้',
+            indicator: { target_percentage: '40', criterion: '40', target_condition: 'GTE', result_formula: 'SUM(ALL) / pop * 100', is_cumulative: 0, quarter_mode: 'month_sum' },
+            custom_vars: [{ key: 'pop', label: 'ประชากร' }] });
+        expect(res.status).toBe(200);
+        expect(res.body.formula).toBe('result / target * 100');
+        const p = callLlm.mock.calls[0][0].prompt;
+        expect(p).toContain('ผู้ใช้ไม่ได้อธิบายวิธีคำนวณ');
+        expect(p).toContain('เป้าหมาย (ค่าตั้งต้นของหน่วยบริการ = target): 40');
+        expect(p).toContain('เกณฑ์: ≥ 40');
+        expect(p).toContain('คำนวณตามสูตรผลงาน: SUM(ALL) / pop * 100');
+        expect(p).toContain('ผลรวม 3 เดือน');
+        expect(callLlm.mock.calls[0][0].system).toContain('need_more');
+    });
+
+    test('AI ขอข้อมูลเพิ่ม (need_more) = 200 พร้อมคำถาม ไม่ใช่ข้อผิดพลาด', async () => {
+        callLlm.mockResolvedValueOnce(reply({ formula: '', need_more: true, question: 'ต้องการเทียบกับอะไร?' }));
+        const res = await suggest2({ kind: 'pct', indicator: { target_condition: 'LTE', is_cumulative: 1 } });
+        expect(res.status).toBe(200);
+        expect(res.body).toMatchObject({ need_more: true, question: 'ต้องการเทียบกับอะไร?' });
+        expect(res.body.formula).toBeUndefined();
+        expect(callLlm.mock.calls[0][0].prompt).toContain('ผลงานสะสม = SUM(ALL)');
+        expect(callLlm.mock.calls[0][0].prompt).toContain('น้อยกว่าหรือเท่ากับเป้าหมาย');
+    });
+
+    test('ไม่มีคำอธิบายและไม่มีข้อมูลตัวชี้วัด = 400 โดยไม่เรียกโมเดล', async () => {
+        const res = await suggest2({ description: '', kind: 'pct' });
+        expect(res.status).toBe(400);
+        expect(callLlm).not.toHaveBeenCalled();
     });
 
     test('คำอธิบายสั้นเกิน = 400 โดยไม่เรียกโมเดล', async () => {

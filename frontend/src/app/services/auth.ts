@@ -1212,7 +1212,7 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     return this.http.post(`${this.apiUrl}/ai/models`, body, { headers: this.authHeaders() });
   }
   // ผู้ช่วย AI ระยะที่ 2: เสนอสูตรคำนวณผลงาน/สูตรร้อยละจากคำอธิบาย (คืนเฉพาะสูตรที่ผ่านตัวตรวจของระบบ)
-  suggestAiFormula(body: { description: string; kind: 'result' | 'pct'; custom_vars?: any[]; target_condition?: string; indicator_name?: string }): Observable<any> {
+  suggestAiFormula(body: { description: string; kind: 'result' | 'pct'; custom_vars?: any[]; target_condition?: string; indicator_name?: string; indicator?: any }): Observable<any> {
     return this.http.post(`${this.apiUrl}/ai/formula-suggest`, body, { headers: this.authHeaders() });
   }
   // ผู้ช่วย AI ระยะที่ 3: เสนอการจับคู่ค่าใน KHD กับรายการของระบบ (super_admin) — ไม่บันทึกให้

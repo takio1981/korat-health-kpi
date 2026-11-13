@@ -2186,7 +2186,7 @@
               <span *ngIf="hasPctFormula && !pctFormulaError" class="text-green-700"><i class="fas fa-check-circle mr-1"></i>สูตรถูกต้อง</span>
             </div>
             <app-ai-formula-helper kind="pct" [customVars]="currentItem.custom_vars || []" [targetCondition]="currentItem.target_condition || ''"
-                                   [indicatorName]="currentItem.kpi_indicators_name || ''" (apply)="currentItem.pct_formula = $event"></app-ai-formula-helper>
+                                   [indicatorName]="currentItem.kpi_indicators_name || ''" [indicator]="currentItem" (apply)="currentItem.pct_formula = $event"></app-ai-formula-helper>
             <div class="flex flex-wrap gap-1 mt-1">
               <button type="button" (click)="insertPctToken('result', pctInput)" class="px-1.5 py-0.5 text-[10px] rounded bg-rose-600 hover:bg-rose-700 text-white font-bold" title="result = ผลงาน">ผลงาน</button>
               <button type="button" (click)="insertPctToken('target', pctInput)" class="px-1.5 py-0.5 text-[10px] rounded bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-700 font-bold" title="target">เป้าหมาย</button>

@@ -559,7 +559,8 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - **ฟีเจอร์ 2 ช่วยเขียนสูตร (7 พ.ย. 2569):** `POST /ai/formula-suggest { description, kind: 'result'|'pct', custom_vars, target_condition, indicator_name }`
   (`requireAnyAction('kpi-manage', ['add','edit'])` ใน core/access.js + aiLimiter) → `services/ai-formula.js` `suggestFormula()`: prompt สเปกภาษาสูตร + ค่าเพิ่มเติมที่ประกาศ
   → **คืนเฉพาะสูตรที่ผ่าน `parseFormulaInput()`** (ผิด = ส่งข้อผิดพลาดให้ AI แก้ 1 รอบ, ยังผิด/ว่าง = 422) | UI `shared/ai-formula-helper.ts` ในกล่องสูตรผลงานและสูตรร้อยละของ kpi-manage
-  — "ใช้สูตรนี้" แค่ใส่ลงช่อง ผู้ใช้ทดลองคำนวณและบันทึกเอง | ⚠️ prompt ต้องบอก "ค่ารายเดือน = จำนวนของเดือนนั้น (รวมทั้งปี = SUM(ALL))" และ "สูตรร้อยละใช้ result"
+  — "ใช้สูตรนี้" แค่ใส่ลงช่อง ผู้ใช้ทดลองคำนวณและบันทึกเอง | **สูตรร้อยละจากข้อมูลตัวชี้วัด (13 พ.ย. 2569):** `[indicator]="currentItem"` (เฉพาะกล่องสูตรร้อยละ) → body `indicator`
+  (เป้าหมาย/เกณฑ์/เงื่อนไข/สูตรผลงาน/สะสม/กรอกเอง/quarter_mode/target_monthly) → `indicatorContextLines()` ใน prompt — มี indicator = คำอธิบายว่างได้, AI ตอบ `need_more` + `question` = 200 (ไม่ใช่ 422) หน้าจอเปิดช่องอธิบายเพิ่ม | ⚠️ prompt ต้องบอก "ค่ารายเดือน = จำนวนของเดือนนั้น (รวมทั้งปี = SUM(ALL))" และ "สูตรร้อยละใช้ result"
   — ทดลองกับ Gemini จริง: ก่อนเพิ่ม 2 บรรทัดนี้ ความหมายถูก 3/5 (ตอบ LAST(ALL) แทน SUM(ALL), สูตรร้อยละคำนวณผลงานใหม่) หลังเพิ่ม 5/5 — มี test คุมข้อความ
 - **ฟีเจอร์ 3 แนะนำการจับคู่ KHD (7 พ.ย. 2569):** `POST /ai/khd-mapping-suggest { kind, khd_values? }` (isSuperAdmin เหมือน /khd-mappings + aiLimiter) → `services/ai-khd.js`
   `suggestKhdMappings()`: รายการจาก `listKhdMappings(kind)` (services/khd.js — ย้ายคำต่อคำจาก GET /khd-mappings ใช้ร่วมกัน) ไม่ส่ง khd_values = เฉพาะสถานะ unmatched,

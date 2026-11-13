@@ -5,6 +5,36 @@ const { parseFormulaInput, normalizeCustomVars } = require('./formula-vars');
 const { callLlm, extractJson, AiError } = require('./ai');
 
 const MAX_ATTEMPTS = 2;
+const CONDITION_SYMBOL = { GTE: '≥', GT: '>', LTE: '≤', LT: '<', EQ: '=' };
+const QUARTER_TEXT = { quarter: 'วัดผลรายไตรมาส บันทึกเฉพาะเดือนสุดท้ายของไตรมาส (ธ.ค./มี.ค./มิ.ย./ก.ย.)', month_sum: 'วัดผลรายไตรมาส บันทึกรายเดือน ค่าไตรมาส = ผลรวม 3 เดือน',
+    month_last: 'วัดผลรายไตรมาส บันทึกรายเดือน ค่าไตรมาส = เดือนสุดท้ายของไตรมาส', month_avg: 'วัดผลรายไตรมาส บันทึกรายเดือน ค่าไตรมาส = ค่าเฉลี่ย' };
+const clip = (v, n = 100) => String(v ?? '').trim().slice(0, n);
+
+/**
+ * ข้อมูลที่ผู้ใช้กรอกไว้แล้วในหน้าต่างตัวชี้วัด (13 พ.ย. 2569 — ผู้ใช้สั่ง: AI เสนอสูตรจากข้อมูลนี้ก่อน ต้องการเพิ่มค่อยให้อธิบาย)
+ * เป้าหมาย / เกณฑ์ + เงื่อนไข / วิธีคิดผลงาน (สูตรผลงาน, สะสม, กรอกเอง, รายไตรมาส, เป้าหมายรายเดือน) → บรรทัดข้อความสำหรับ prompt
+ * kind = 'result' ไม่ส่งสูตรผลงานเดิม (กำลังเสนอสูตรผลงานใหม่)
+ */
+function indicatorContextLines(ind, kind) {
+    if (!ind || typeof ind !== 'object') return [];
+    const out = [];
+    const target = clip(ind.target_percentage), crit = clip(ind.criterion);
+    const cond = CONDITION_TEXT[ind.target_condition] ? ind.target_condition : 'GTE';
+    if (target) out.push(`เป้าหมาย (ค่าตั้งต้นของหน่วยบริการ = target): ${target}`);
+    if (crit) out.push(`เกณฑ์: ${CONDITION_SYMBOL[cond]} ${crit}`);
+    out.push(`เงื่อนไขเป้าหมาย: ${CONDITION_TEXT[cond]}`);
+    const rf = clip(ind.result_formula, 500);
+    let method;
+    if (ind.result_manual === 1 || ind.result_manual === true || ind.result_manual === '1') method = 'ผู้บันทึกกรอกผลงานล่าสุดเอง (result = ค่าที่กรอก)';
+    else if (rf && kind === 'pct') method = `คำนวณตามสูตรผลงาน: ${rf} (result = ผลของสูตรนี้)`;
+    else if (ind.is_cumulative === 1 || ind.is_cumulative === true || ind.is_cumulative === '1') method = 'ผลงานสะสม = SUM(ALL) (ผลรวมทุกเดือน)';
+    else method = 'ผลงาน = ค่าเดือนล่าสุดที่บันทึก = LAST(ALL)';
+    out.push(`วิธีคิดผลงาน: ${method}`);
+    if (QUARTER_TEXT[ind.quarter_mode]) out.push(`รอบการวัดผล: ${QUARTER_TEXT[ind.quarter_mode]}`);
+    if (ind.target_monthly === 'latest') out.push('เป้าหมายรายเดือน: target = เป้าหมายของเดือนเดียวกับผลงานล่าสุด');
+    if (ind.target_monthly === 'cumulative') out.push('เป้าหมายรายเดือน: target = ผลรวมเป้าหมายถึงเดือนของผลงานล่าสุด');
+    return out;
+}
 const CONDITION_TEXT = { GTE: 'มากกว่าหรือเท่ากับเป้าหมาย = ผ่าน', GT: 'มากกว่าเป้าหมาย = ผ่าน', LTE: 'น้อยกว่าหรือเท่ากับเป้าหมาย = ผ่าน (ยิ่งน้อยยิ่งดี)', LT: 'น้อยกว่าเป้าหมาย = ผ่าน (ยิ่งน้อยยิ่งดี)', EQ: 'เท่ากับเป้าหมาย = ผ่าน' };
 
 function systemPrompt(kind, customVars) {
@@ -30,35 +60,48 @@ function systemPrompt(kind, customVars) {
         kind === 'pct'
             ? 'งานนี้คือ "สูตรร้อยละ" — ผลลัพธ์เป็นร้อยละที่แสดงในคอลัมน์ร้อยละ'
             : 'งานนี้คือ "สูตรคำนวณผลงาน" — ผลลัพธ์คือผลงานของตัวชี้วัด (ระบบนำไปเทียบกับเป้าหมายเอง ไม่ต้องหารด้วย target เว้นแต่คำอธิบายต้องการ)',
+        ...(kind === 'pct' ? ['- ถ้าไม่ตั้งสูตรร้อยละ ระบบคิดร้อยละตามเงื่อนไขเป้าหมายเอง (≥/>: result / target * 100 | ≤/<: ไม่เกินเป้าหมาย = 100 เกิน = target / result * 100 | =: ค่าน้อย ÷ ค่ามาก × 100)'] : []),
+        'ผู้ใช้อาจส่งเฉพาะ "ข้อมูลตัวชี้วัด" (เป้าหมาย เกณฑ์ เงื่อนไข วิธีคิดผลงาน) โดยไม่มีคำอธิบาย — ให้เสนอสูตรที่เหมาะสมที่สุดจากข้อมูลนั้นและชื่อตัวชี้วัด ' +
+            'ถ้ามีคำอธิบาย ให้ยึดคำอธิบายเป็นหลักและใช้ข้อมูลตัวชี้วัดประกอบ',
         'ตอบเป็น JSON อย่างเดียว รูปแบบ {"formula":"<สูตร>","explanation":"<อธิบายภาษาไทยสั้นๆ 1-2 ประโยคว่าสูตรคำนวณอะไร>"}',
+        'ถ้าข้อมูลที่มียังไม่พอจะตัดสินสูตร (เช่น ไม่รู้ว่าต้องเทียบกับอะไร) ให้ตอบ {"formula":"","need_more":true,"question":"<ถามสั้นๆ 1 ประโยคว่าต้องการรู้อะไรเพิ่ม>"}',
         'ถ้าคำอธิบายทำเป็นสูตรในภาษานี้ไม่ได้ ให้ตอบ {"formula":"","explanation":"<เหตุผล>"}',
     ].join('\n');
 }
 
 function userPrompt(input, previous) {
-    const lines = [`คำอธิบายของผู้ใช้: ${input.description}`];
+    const lines = [input.description ? `คำอธิบายของผู้ใช้: ${input.description}` : 'ผู้ใช้ไม่ได้อธิบายวิธีคำนวณ — เสนอสูตรจากข้อมูลตัวชี้วัดด้านล่าง'];
     if (input.indicator_name) lines.push(`ชื่อตัวชี้วัด: ${input.indicator_name}`);
-    if (input.target_condition && CONDITION_TEXT[input.target_condition]) lines.push(`เงื่อนไขเป้าหมาย: ${CONDITION_TEXT[input.target_condition]}`);
+    if (input.context && input.context.length) lines.push('ข้อมูลตัวชี้วัดที่กรอกไว้แล้ว:', ...input.context.map(l => '- ' + l));
+    else if (input.target_condition && CONDITION_TEXT[input.target_condition]) lines.push(`เงื่อนไขเป้าหมาย: ${CONDITION_TEXT[input.target_condition]}`);
     if (previous) lines.push(`ครั้งก่อนเสนอ "${previous.formula}" แต่ระบบตรวจแล้วผิด: ${previous.error} — แก้ให้ถูกไวยากรณ์`);
     return lines.join('\n');
 }
 
-// input: { description, kind: 'result'|'pct', custom_vars, target_condition, indicator_name } → { formula, explanation, attempts }
+// input: { description, kind: 'result'|'pct', custom_vars, target_condition, indicator_name, indicator } → { formula, explanation, attempts } | { need_more, question }
+// indicator (ไม่บังคับ) = ข้อมูลที่กรอกไว้ในหน้าต่างตัวชี้วัด — ส่งมาแล้วไม่ต้องมีคำอธิบาย (13 พ.ย. 2569)
 async function suggestFormula(input, userId) {
     const kind = input.kind === 'pct' ? 'pct' : 'result';
     const desc = String(input.description || '').trim();
-    if (desc.length < 5 || desc.length > 500) throw new AiError(400, 'กรุณาอธิบายวิธีคำนวณ 5–500 ตัวอักษร', 'AI_INPUT');
+    const context = indicatorContextLines(input.indicator, kind);
+    if (desc.length > 500 || (desc.length < 5 && !(desc.length === 0 && context.length))) {
+        throw new AiError(400, 'กรุณาอธิบายวิธีคำนวณ 5–500 ตัวอักษร', 'AI_INPUT');
+    }
     const cv = normalizeCustomVars(input.custom_vars);
     if (cv.error) throw new AiError(400, cv.error, 'AI_INPUT');
     const keys = cv.list.map(v => v.key);
     const extra = kind === 'pct' ? ['result'] : undefined;
-    const ctx = { description: desc, target_condition: input.target_condition, indicator_name: String(input.indicator_name || '').slice(0, 300) };
+    const ctx = { description: desc, target_condition: input.target_condition, indicator_name: String(input.indicator_name || '').slice(0, 300), context };
     let previous = null;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         const out = await callLlm({ feature: kind === 'pct' ? 'formula_pct' : 'formula', userId, system: systemPrompt(kind, cv.list), prompt: userPrompt(ctx, previous), maxTokens: 1500 });
         const j = extractJson(out.text) || {};
         const formula = String(j.formula || '').trim();
         const explanation = String(j.explanation || '').trim().slice(0, 500);
+        // ข้อมูลไม่พอ → ให้ผู้ใช้อธิบายเพิ่ม (ไม่ใช่ข้อผิดพลาด)
+        if (!formula && (j.need_more || j.question)) {
+            return { need_more: true, question: String(j.question || explanation || 'กรุณาอธิบายวิธีคำนวณเพิ่มเติม').trim().slice(0, 300), model: out.model };
+        }
         if (!formula) throw new AiError(422, explanation ? `AI เขียนสูตรไม่ได้: ${explanation}` : 'AI ไม่ได้เสนอสูตร', 'AI_NO_FORMULA');
         const chk = parseFormulaInput(formula, keys, extra);
         if (!chk.error) return { formula: chk.value, explanation, attempts: attempt, model: out.model };
@@ -67,4 +110,4 @@ async function suggestFormula(input, userId) {
     throw new AiError(422, `AI เสนอสูตรที่ระบบตรวจแล้วใช้ไม่ได้ (${previous.error}) — ลองอธิบายใหม่ให้ชัดขึ้น หรือเขียนสูตรเอง`, 'AI_BAD_FORMULA');
 }
 
-module.exports = { suggestFormula, systemPrompt, userPrompt, MAX_ATTEMPTS };
+module.exports = { suggestFormula, systemPrompt, userPrompt, indicatorContextLines, MAX_ATTEMPTS };
