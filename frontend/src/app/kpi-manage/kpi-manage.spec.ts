@@ -406,6 +406,17 @@ describe('KpiManageComponent', () => {
       expect(req.request.body.main_yut).toBe(3);
       expect(req.request.body.yut_id).toBeUndefined();
     });
+
+    it('หน่วยนับผลงาน: เปิดแก้ไขได้ค่าเดิม → บันทึกส่ง unit + มีตัวเลือกหน่วยทั่วไป (13 พ.ย. 2569)', () => {
+      component.activeTab = 'indicators';
+      component.openModal({ id: 6, kpi_indicators_name: 'x', unit: 'ราย', evaluation_mode: 'all_required' });
+      expect(component.currentItem.unit).toBe('ราย');
+      component.currentItem.unit = 'แห่ง';
+      component.saveItem();
+      const req = http.expectOne(r => r.method === 'PUT' && r.url.includes('/indicators/6'));
+      expect(req.request.body.unit).toBe('แห่ง');
+      expect(component.UNIT_OPTIONS).toEqual(expect.arrayContaining(['ร้อยละ', 'ราย', 'แห่ง']));
+    });
   });
 
   // ---- 19 ต.ค. 2569: ปุ่ม "ไปตั้งค่า" จากหน้าต่างเพิ่มตัวชี้วัดให้หน่วยบริการ → เปิดหน้าต่างแก้ไขตัวชี้วัดนั้นทันที ----

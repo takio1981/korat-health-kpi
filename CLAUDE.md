@@ -328,6 +328,8 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   - `criterion` VARCHAR(50) — **"เกณฑ์"** จับคู่กับ `target_condition` (GTE/LTE/EQ) ใช้เทียบ "เกณฑ์ต่างกัน" กับ KHD
     (`GET /report-compare`) และแสดงผลผ่าน `criteriaText` pipe ทั่วทั้งระบบ (dashboard, report, form-builder,
     export-kpi, kpi-setup)
+- **หน่วยนับผลงาน `unit` VARCHAR(50) (13 พ.ย. 2569 — ไม่บังคับ):** ช่อง `#indicator-unit` ในกล่องเป้าหมาย (datalist `UNIT_OPTIONS` + พิมพ์เอง) บันทึกผ่าน `saveHierarchyFields()` (`normalizeUnit()` ≤ 50, ว่าง = NULL, ไม่ส่ง = ไม่เปลี่ยน)
+  — `GET /kpi-results` คืน `MIN(i.unit)`, ป้าย "หน่วย" ใน dashboard col-2 + kpi-manage (ป้ายเป้าหมายแสดงหน่วยแทน %) — **ไม่ใช้คำนวณ** | Test: `api/tests/indicator-unit.test.js`, `kpi-manage.spec.ts`
 - Modal เพิ่ม/แก้ไขตัวชี้วัดมี 2 กล่องแยกกันชัดเจน: "เป้าหมาย (ค่าเริ่มต้น)" (emerald, ผูก `target_percentage`)
   กับ "เกณฑ์" (amber, ผูก `criterion` + `target_condition`)
 - Migrate มาจาก conflation เดิม (ก่อนหน้านี้ทั้งสองใช้ `target_percentage` ตัวเดียวปนกัน) — มี backfill one-time
@@ -1509,7 +1511,7 @@ docker builder prune -af
 |-------|---------|-------------|
 | users | ผู้ใช้งาน | id, username, role, dept_id, hospcode, is_approved, approved_by, last_seen_at, last_seen_ip, last_seen_ua, **active_session_id**, **session_started_at** |
 | departments | หน่วยงาน | id, dept_name, dept_code |
-| kpi_indicators | ตัวชี้วัด | id, kpi_indicators_name, main_indicator_id, dept_id, table_process, target_percentage (เป้าหมาย), criterion (เกณฑ์), target_condition, is_cumulative, r9, moph, ssj, rmw, other, evaluation_mode ('any_one'\|'all_required'), required_off_types (JSON array ของ hostypecode), **khd_fiscal_year** (เดิมชื่อ hdc_fiscal_year — audit only, ปีงบฯ ที่ criterion/target_condition อ้างอิงจาก KHD ล่าสุด) |
+| kpi_indicators | ตัวชี้วัด | id, kpi_indicators_name, main_indicator_id, dept_id, table_process, target_percentage (เป้าหมาย), criterion (เกณฑ์), unit (หน่วยนับผลงาน — ไม่บังคับ แสดงประกอบเท่านั้น 13 พ.ย. 2569), target_condition, is_cumulative, r9, moph, ssj, rmw, other, evaluation_mode ('any_one'\|'all_required'), required_off_types (JSON array ของ hostypecode), **khd_fiscal_year** (เดิมชื่อ hdc_fiscal_year — audit only, ปีงบฯ ที่ criterion/target_condition อ้างอิงจาก KHD ล่าสุด) |
 | kpi_main_indicators | หมวดหมู่หลัก | id, main_indicator_name, yut_id |
 | main_yut | ยุทธศาสตร์ | id, yut_name |
 | kpi_results | ผลงาน KPI | id, indicator_id, year_bh, hospcode, month_bh, target_value, actual_value, status, is_locked |

@@ -309,7 +309,7 @@ apiRouter.put('/indicators/:id', authenticateToken, requireAction('kpi-manage', 
         let diff = '';
         let calcChanged = false; // สูตร/สะสม เปลี่ยน → ต้องคำนวณ kpi_summary ใหม่
         try {
-            const [oldRow] = await db.query('SELECT kpi_indicators_name, is_active, table_process, target_percentage, criterion, is_cumulative, result_formula, result_manual, pct_manual, target_monthly, quarter_mode FROM kpi_indicators WHERE id = ?', [req.params.id]);
+            const [oldRow] = await db.query('SELECT kpi_indicators_name, is_active, table_process, target_percentage, criterion, is_cumulative, result_formula, result_manual, pct_manual, target_monthly, quarter_mode, unit FROM kpi_indicators WHERE id = ?', [req.params.id]);
             if (oldRow[0]) {
                 const o = oldRow[0];
                 const changes = [];
@@ -339,6 +339,7 @@ apiRouter.put('/indicators/:id', authenticateToken, requireAction('kpi-manage', 
                     const QL = { quarter: 'รายไตรมาส (บันทึกรายไตรมาส)', month_sum: 'รายไตรมาส (รวม 3 เดือน)', month_last: 'รายไตรมาส (เดือนสุดท้าย)', month_avg: 'รายไตรมาส (เฉลี่ย 3 เดือน)' };
                     changes.push(`รอบการวัดผล→${QL[normalizeQuarterMode(req.body.quarter_mode)] || 'รายเดือน'}`);
                 }
+                if (req.body.unit !== undefined && (o.unit || null) !== normalizeUnit(req.body.unit)) changes.push(`หน่วย→${normalizeUnit(req.body.unit) || 'ไม่ระบุ'}`);
                 if (changes.length > 0) diff = `\n📝 เปลี่ยน: ${changes.join(', ')}`;
             }
         } catch (_) {}
@@ -568,6 +569,12 @@ apiRouter.put('/sub-indicators/:id/toggle-active', authenticateToken, requireAct
 // ========== ตัวชี้วัด 3 ระดับ (18 ต.ค. 2569): หลัก 1 → ย่อย 1.1 → กิจกรรม 1.1.1 ==========
 // item_no = เลขข้อที่แสดง (ว่าง = หน้าจอสร้างจากลำดับ), sub_rollup_mode (ตัวชี้วัดหลัก) / rollup_mode (ข้อย่อย) = 'auto' | 'manual'
 // อัปเดตเฉพาะฟิลด์ที่ส่งมา — ผู้เรียกเดิม (KHD sync, คัดลอก, นำเข้า) ที่ไม่ส่งฟิลด์เหล่านี้ไม่ถูกเปลี่ยนค่า
+/** หน่วยนับผลงาน: ตัดช่องว่างซ้ำ ≤ 50 ตัวอักษร ว่าง = NULL */
+function normalizeUnit(v) {
+    const t = String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, 50);
+    return t || null;
+}
+
 async function saveHierarchyFields(conn, table, id, body) {
     const sets = [], params = [];
     if (body && body.item_no !== undefined) {
@@ -604,6 +611,11 @@ async function saveHierarchyFields(conn, table, id, body) {
     if (table === 'kpi_indicators' && body && body.quarter_mode !== undefined) {
         sets.push('quarter_mode = ?');
         params.push(normalizeQuarterMode(body.quarter_mode) || null);
+    }
+    // หน่วยนับผลงาน (13 พ.ย. 2569 — ไม่บังคับ, ไม่ส่ง = ไม่เปลี่ยน, ว่าง = ไม่ระบุ)
+    if (table === 'kpi_indicators' && body && body.unit !== undefined) {
+        sets.push('unit = ?');
+        params.push(normalizeUnit(body.unit));
     }
     if (table === 'kpi_indicators' && body && body.pct_formula !== undefined) {
         sets.push('pct_formula = ?');

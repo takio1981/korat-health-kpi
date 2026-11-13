@@ -144,7 +144,8 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 MIN(i.custom_vars) AS custom_vars, -- ค่าเพิ่มเติมที่ตั้งชื่อเอง [{key,label}] (25 ต.ค. 2569)
                 MIN(i.pct_formula) AS pct_formula, -- สูตรร้อยละ (ว่าง = ตามเงื่อนไขเป้าหมาย)
                 MIN(i.result_manual) AS result_manual, MIN(i.pct_manual) AS pct_manual, -- ผลงานล่าสุด/ร้อยละ แบบกรอกเอง (29 ต.ค. 2569)
-                MIN(i.quarter_mode) AS quarter_mode, -- วัดผลรายไตรมาส: 'quarter' | 'month_sum' | 'month_last' | 'month_avg' | NULL = รายเดือน (10 พ.ย. 2569)
+                MIN(i.quarter_mode) AS quarter_mode,
+                MIN(i.unit) AS unit, -- หน่วยนับผลงาน (13 พ.ย. 2569 — แสดงประกอบ) -- วัดผลรายไตรมาส: 'quarter' | 'month_sum' | 'month_last' | 'month_avg' | NULL = รายเดือน (10 พ.ย. 2569)
                 MIN(i.target_monthly) AS target_monthly, -- เป้าหมายรายเดือน: 'latest' | 'cumulative' | NULL (เป้าหมายเดียวทั้งปี)
                 r.hospcode,
                 MIN(h.hosname) AS hosname,

@@ -684,6 +684,8 @@
                           <i class="fas fa-hospital text-[8px]"></i>{{ offBadge.label }}
                         </span>
                       </ng-container>
+                      <span *ngIf="item.unit" class="unit-badge inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap bg-stone-100 text-stone-700 border border-stone-200"
+                            title="หน่วยนับผลงาน"><i class="fas fa-ruler text-[8px]"></i>หน่วย: {{ item.unit }}</span>
                       <ng-container *ngIf="getCumulativeBadge(item) as cumBadge">
                         <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap"
                               [ngClass]="cumBadge.color" [title]="cumBadge.title">
@@ -1215,6 +1217,8 @@
                           <i class="fas fa-hospital text-[7px]"></i>{{ offBadge.label }}
                         </span>
                       </ng-container>
+                      <span *ngIf="item.unit" class="unit-badge inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] font-bold whitespace-nowrap bg-stone-100 text-stone-700 border border-stone-200"
+                            title="หน่วยนับผลงาน"><i class="fas fa-ruler text-[7px]"></i>หน่วย: {{ item.unit }}</span>
                       <ng-container *ngIf="getCumulativeBadge(item) as cumBadge">
                         <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] font-bold whitespace-nowrap shrink-0 mt-0.5"
                               [ngClass]="cumBadge.color" [title]="cumBadge.title">

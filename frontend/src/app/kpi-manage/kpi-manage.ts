@@ -2633,6 +2633,8 @@ export class KpiManageComponent implements OnInit {
   khdDiffCounts: Record<string, number> = {};
   readonly khdDiffKinds: KhdDiffKind[] = ['name', 'table_process', 'criteria', 'types', 'hostype', 'fiscal_year', 'dept', 'main', 'status'];
   readonly khdDiffKindLabel = KHD_DIFF_KIND_LABEL;
+  /** ตัวเลือกหน่วยนับผลงาน (พิมพ์หน่วยอื่นเองได้ — 13 พ.ย. 2569) */
+  readonly UNIT_OPTIONS = ['ร้อยละ', 'ราย', 'คน', 'แห่ง', 'ครั้ง', 'อำเภอ', 'ตำบล', 'หมู่บ้าน', 'ชุมชน', 'โรงเรียน', 'ครัวเรือน', 'เรื่อง', 'โครงการ', 'ระดับ', 'คะแนน', 'อัตราต่อแสนประชากร', 'อัตราต่อพันประชากร', 'อัตราต่อพันการเกิดมีชีพ', 'วัน', 'บาท'];
 
   openKhdDiff(item?: any) {
     this.khdDiffOnlyId = item ? item.id : null;
