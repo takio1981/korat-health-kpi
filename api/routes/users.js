@@ -501,7 +501,7 @@ apiRouter.post('/user-approval/run', authenticateToken, isSuperAdmin, async (req
             return res.json({ success: true, approved: r.approved, message: r.approved.length ? `อนุมัติอัตโนมัติ ${r.approved.length} บัญชี` : 'ไม่มีผู้สมัครที่ครบเวลา' });
         }
         if (task === 'sync') {
-            const r = await runScheduledKhdSync();
+            const r = await runScheduledKhdSync('manual');
             await saveLastRun({ task: 'sync', synced: r.synced, failed: r.failed, manual: true });
             return res.json({ success: true, ...r });
         }

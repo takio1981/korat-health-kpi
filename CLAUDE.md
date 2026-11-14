@@ -769,7 +769,8 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - ตั้งค่า system_settings `user_auto_approve_enabled/_delay_min` (1–10080 นาที), `user_khd_sync_on_approve`, `user_khd_sync_schedule_enabled/_time` — `GET|PUT /user-approval/settings`,
   `POST /user-approval/run { task: approve|sync }` (isSuperAdmin, path ไม่อยู่ใต้ /users) | UI `shared/user-approval-settings-card.ts` ในหน้าตั้งค่าระบบ
 - `jobs/user-approval.js` ตรวจทุก 30 วินาที: อนุมัติ (approved_by NULL, log `AUTO_APPROVE_USER`, LINE/อีเมลถึงผู้สมัครเหมือนกดเอง, notifications + notifyAdmins ถึง super_admin)
-  แล้วส่งขึ้น KHD ทันทีถ้าเปิด | ส่งรายวัน (`isSyncDue` ช่วง 2 นาที) = ผู้ใช้ใหม่ที่อนุมัติแล้วและยังส่งไม่สำเร็จ (attempts < 20) | PUT /users/:id/approve + POST /users (อนุมัติแล้ว) → `syncAfterApprove()`
+  แล้วส่งขึ้น KHD ทันทีถ้าเปิด | **ช่องทางแจ้ง super_admin (14 พ.ย. 2569):** `user_approval_notify` / `user_khd_sync_notify` (JSON inapp/email/telegram/line [+ failedOnly]) — `notifyChannels()`:
+  inapp = notifications ทุก super_admin, ช่องอื่น = `notifyAdmins(…, { email, telegram, line })` | ค่าตั้งต้น อนุมัติ = ทุกช่อง, ส่ง KHD = ในระบบเฉพาะเมื่อไม่สำเร็จ | PUT ส่งบางช่อง = รวมกับค่าเดิม | ส่งรายวัน (`isSyncDue` ช่วง 2 นาที) = ผู้ใช้ใหม่ที่อนุมัติแล้วและยังส่งไม่สำเร็จ (attempts < 20) | PUT /users/:id/approve + POST /users (อนุมัติแล้ว) → `syncAfterApprove()`
 - Test: `api/tests/user-auto-approve.test.js` (mock syncUsersToKhd + core/notify — ฐานทดสอบมีโทเคนจริง), `shared/user-approval-settings-card.spec.ts`
 
 ### Users Data Sync (Local ↔ KHD)

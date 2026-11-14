@@ -14,12 +14,13 @@ require('./setup');
 const request = require('supertest');
 const { ensureTestUser, makeToken, cleanupTestUsers } = require('./helpers');
 const { syncUsersToKhd } = require('../services/users-khd-sync');
+const { notifyAdmins } = require('../core/notify');
 const { isSyncDue } = require('../jobs/user-approval');
 
 let app, db, saToken, ssjToken, sa;
 const api = (p) => '/khupskpi/api' + p;
 const as = (t) => ({ Authorization: `Bearer ${t}` });
-const KEYS = ['user_auto_approve_enabled', 'user_auto_approve_delay_min', 'user_khd_sync_on_approve', 'user_khd_sync_schedule_enabled', 'user_khd_sync_time', 'user_approval_last_run'];
+const KEYS = ['user_auto_approve_enabled', 'user_auto_approve_delay_min', 'user_khd_sync_on_approve', 'user_khd_sync_schedule_enabled', 'user_khd_sync_time', 'user_approval_last_run', 'user_approval_notify', 'user_khd_sync_notify'];
 let savedSettings = [];
 const created = [];
 const pending = async (username, role, minutesAgo) => {
@@ -50,11 +51,11 @@ afterAll(async () => {
     if (created.length) {
         await db.query('DELETE FROM user_registrations WHERE user_id IN (?)', [created]);
         await db.query('DELETE FROM user_khd_sync WHERE user_id IN (?)', [created]);
-        await db.query("DELETE FROM notifications WHERE title = 'อนุมัติผู้ใช้งานใหม่อัตโนมัติ' AND user_id = ?", [sa.id]);
+        await db.query("DELETE FROM notifications WHERE title IN ('อนุมัติผู้ใช้งานใหม่อัตโนมัติ', 'ส่งผู้ใช้ใหม่ขึ้น KHD ไม่สำเร็จ', 'ส่งผู้ใช้ใหม่ขึ้น KHD แล้ว') AND user_id = ?", [sa.id]);
     }
     await cleanupTestUsers(db);
 });
-beforeEach(() => syncUsersToKhd.mockReset());
+beforeEach(() => { syncUsersToKhd.mockReset(); notifyAdmins.mockClear(); });
 
 describe('ตั้งค่า', () => {
     test('super_admin เท่านั้น | ค่าผิด = 400 | บันทึกแล้วอ่านกลับได้', async () => {
@@ -64,7 +65,15 @@ describe('ตั้งค่า', () => {
         expect((await putSettings({ autoApprove: 'yes' })).status).toBe(400);
         const r = await putSettings({ autoApprove: false, delay: 5, syncOnApprove: true, syncSchedule: true, syncTime: '03:30' });
         expect(r.status).toBe(200);
-        expect(r.body.data).toEqual({ autoApprove: false, delay: 5, syncOnApprove: true, syncSchedule: true, syncTime: '03:30' });
+        expect(r.body.data).toEqual(expect.objectContaining({ autoApprove: false, delay: 5, syncOnApprove: true, syncSchedule: true, syncTime: '03:30' }));
+        // ช่องทางแจ้งเตือน super_admin (14 พ.ย. 2569): ค่าตั้งต้น อนุมัติ = ทุกช่องทาง | ส่ง KHD = ในระบบ เฉพาะเมื่อไม่สำเร็จ
+        expect(r.body.data.approveNotify).toEqual({ inapp: true, email: true, telegram: true, line: true });
+        expect(r.body.data.syncNotify).toEqual({ inapp: true, email: false, telegram: false, line: false, failedOnly: true });
+        expect((await putSettings({ approveNotify: { fax: true } })).status).toBe(400);
+        expect((await putSettings({ syncNotify: { email: 'yes' } })).status).toBe(400);
+        const p = await putSettings({ syncNotify: { telegram: true } });   // ส่งบางช่อง = ช่องอื่นคงเดิม
+        expect(p.body.data.syncNotify).toEqual({ inapp: true, email: false, telegram: true, line: false, failedOnly: true });
+        await putSettings({ syncNotify: { telegram: false } });
         const g = await request(app).get(api('/user-approval/settings')).set(as(saToken));
         expect(g.body.status).toEqual(expect.objectContaining({ waiting_auto: expect.any(Number), khd_failed: expect.any(Number) }));
     });
@@ -132,6 +141,50 @@ describe('อนุมัติอัตโนมัติ', () => {
         for (let i = 0; i < 20 && !syncUsersToKhd.mock.calls.length; i++) await new Promise(res => setTimeout(res, 50));
         expect(syncUsersToKhd.mock.calls[0][0].usernames).toEqual(['test_uaa_old']);
         expect((await approvedOf(old.id)).approved_by).toBe(sa.id);
+    });
+});
+
+describe('ช่องทางแจ้งเตือน super_admin (14 พ.ย. 2569)', () => {
+    const notes = async (title) => (await db.query('SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND title = ?', [sa.id, title]))[0][0].n;
+
+    test('อนุมัติอัตโนมัติ: ปิดทุกช่องทาง = ไม่แจ้ง | เปิดเฉพาะอีเมล = notifyAdmins เฉพาะอีเมล ไม่แจ้งในระบบ', async () => {
+        syncUsersToKhd.mockResolvedValue({ status: 200, body: { success: true }, failedUsernames: [] });
+        await putSettings({ autoApprove: true, delay: 5, syncOnApprove: false, approveNotify: { inapp: false, email: false, telegram: false, line: false } });
+        const before = await notes('อนุมัติผู้ใช้งานใหม่อัตโนมัติ');
+        await pending('test_uaa_ch1', 'user_hos', 30);
+        await request(app).post(api('/user-approval/run')).set(as(saToken)).send({ task: 'approve' });
+        expect(await notes('อนุมัติผู้ใช้งานใหม่อัตโนมัติ')).toBe(before);
+        expect(notifyAdmins).not.toHaveBeenCalled();
+        await putSettings({ approveNotify: { email: true } });
+        await pending('test_uaa_ch2', 'user_hos', 30);
+        await request(app).post(api('/user-approval/run')).set(as(saToken)).send({ task: 'approve' });
+        expect(await notes('อนุมัติผู้ใช้งานใหม่อัตโนมัติ')).toBe(before);
+        expect(notifyAdmins).toHaveBeenCalledTimes(1);
+        expect(notifyAdmins.mock.calls[0][3]).toEqual({ email: true, telegram: false, line: false });
+        expect(notifyAdmins.mock.calls[0][2]).toContain('test_uaa_ch2');
+    });
+
+    test('ส่งขึ้น KHD: เฉพาะเมื่อไม่สำเร็จ = สำเร็จไม่แจ้ง ไม่สำเร็จแจ้งในระบบ + Telegram ตามที่ตั้ง', async () => {
+        await putSettings({ syncNotify: { inapp: true, telegram: true, failedOnly: true } });
+        const ok0 = await notes('ส่งผู้ใช้ใหม่ขึ้น KHD แล้ว'), bad0 = await notes('ส่งผู้ใช้ใหม่ขึ้น KHD ไม่สำเร็จ');
+        await pending('test_uaa_s1', 'user_hos', 30);
+        await putSettings({ syncOnApprove: true });
+        syncUsersToKhd.mockResolvedValueOnce({ status: 200, body: { success: true, message: 'ok' }, failedUsernames: [] });
+        await request(app).post(api('/user-approval/run')).set(as(saToken)).send({ task: 'approve' });
+        expect(await notes('ส่งผู้ใช้ใหม่ขึ้น KHD แล้ว')).toBe(ok0);
+        notifyAdmins.mockClear();
+        await pending('test_uaa_s2', 'user_hos', 30);
+        syncUsersToKhd.mockResolvedValueOnce({ status: 500, body: { success: false, message: 'KHD ล่ม' }, failedUsernames: [] });
+        await request(app).post(api('/user-approval/run')).set(as(saToken)).send({ task: 'approve' });
+        expect(await notes('ส่งผู้ใช้ใหม่ขึ้น KHD ไม่สำเร็จ')).toBe(bad0 + 1);
+        const tg = notifyAdmins.mock.calls.find(c => String(c[2]).includes('KHD'));
+        expect(tg[3]).toEqual({ email: false, telegram: true, line: false });
+        expect(tg[2]).toContain('test_uaa_s2');
+        // ปิด "เฉพาะเมื่อไม่สำเร็จ" = แจ้งเมื่อสำเร็จด้วย
+        await putSettings({ syncNotify: { failedOnly: false, telegram: false } });
+        syncUsersToKhd.mockResolvedValueOnce({ status: 200, body: { success: true, message: 'ok' }, failedUsernames: [] });
+        await request(app).post(api('/user-approval/run')).set(as(saToken)).send({ task: 'sync' });
+        expect(await notes('ส่งผู้ใช้ใหม่ขึ้น KHD แล้ว')).toBe(ok0 + 1);
     });
 });
 

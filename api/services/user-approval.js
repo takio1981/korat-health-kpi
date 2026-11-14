@@ -13,8 +13,24 @@ const KEYS = {
     syncSchedule: 'user_khd_sync_schedule_enabled',
     syncTime: 'user_khd_sync_time',
     lastRun: 'user_approval_last_run',
+    approveNotify: 'user_approval_notify',        // JSON {inapp,email,telegram,line} — แจ้ง super_admin เมื่ออนุมัติอัตโนมัติ (14 พ.ย. 2569)
+    syncNotify: 'user_khd_sync_notify',           // JSON {inapp,email,telegram,line,failedOnly} — แจ้ง super_admin ผลการส่งขึ้น KHD
 };
-const DEFAULTS = { autoApprove: false, delay: 5, syncOnApprove: false, syncSchedule: false, syncTime: '02:00' };
+const CHANNELS = ['inapp', 'email', 'telegram', 'line'];
+const DEFAULTS = {
+    autoApprove: false, delay: 5, syncOnApprove: false, syncSchedule: false, syncTime: '02:00',
+    // ค่าตั้งต้นการอนุมัติ = ทุกช่องทาง (พฤติกรรมเดิม 13 พ.ย. 2569) | การส่ง KHD = แจ้งในระบบเฉพาะเมื่อส่งไม่สำเร็จ
+    approveNotify: { inapp: true, email: true, telegram: true, line: true },
+    syncNotify: { inapp: true, email: false, telegram: false, line: false, failedOnly: true },
+};
+/** แปลง JSON ช่องทางแจ้งเตือน → object ครบทุกช่อง (ค่าที่ไม่มี = ค่าตั้งต้น) */
+function parseNotify(raw, def) {
+    let o = {};
+    try { o = raw ? JSON.parse(raw) : {}; } catch (_) { o = {}; }
+    const out = {};
+    for (const k of Object.keys(def)) out[k] = typeof o[k] === 'boolean' ? o[k] : def[k];
+    return out;
+}
 const MAX_DELAY_MIN = 10080;   // 7 วัน
 const MAX_SYNC_ATTEMPTS = 20;  // ส่งซ้ำตามรอบได้ไม่เกินนี้ต่อผู้ใช้ (กันวนส่งรายการที่ผิดถาวร)
 
@@ -32,6 +48,8 @@ async function getUserApprovalSettings(force = false) {
         syncOnApprove: on(KEYS.syncOnApprove, DEFAULTS.syncOnApprove),
         syncSchedule: on(KEYS.syncSchedule, DEFAULTS.syncSchedule),
         syncTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(time) ? time : DEFAULTS.syncTime,
+        approveNotify: parseNotify(m.get(KEYS.approveNotify), DEFAULTS.approveNotify),
+        syncNotify: parseNotify(m.get(KEYS.syncNotify), DEFAULTS.syncNotify),
     };
     _cacheAt = Date.now();
     return _cache;
@@ -52,6 +70,17 @@ function parseSettingsInput(body) {
         if (!Number.isInteger(d) || d < 1 || d > MAX_DELAY_MIN) return { error: `ระยะเวลาหลังลงทะเบียนต้องเป็นจำนวนเต็ม 1–${MAX_DELAY_MIN} นาที` };
         out.delay = d;
     }
+    for (const k of ['approveNotify', 'syncNotify']) {
+        if (b[k] === undefined) continue;
+        if (!b[k] || typeof b[k] !== 'object' || Array.isArray(b[k])) return { error: `ค่า ${k} ต้องเป็นรายการช่องทาง` };
+        const def = DEFAULTS[k], v = {};
+        for (const [ck, cv] of Object.entries(b[k])) {
+            if (!(ck in def)) return { error: `ช่องทาง ${ck} ไม่ถูกต้อง` };
+            if (typeof cv !== 'boolean') return { error: `ค่าช่องทาง ${ck} ต้องเป็น true/false` };
+            v[ck] = cv;
+        }
+        out[k] = v;
+    }
     if (b.syncTime !== undefined) {
         if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(b.syncTime))) return { error: 'เวลาส่งข้อมูลขึ้น KHD ต้องเป็นรูปแบบ HH:MM' };
         out.syncTime = String(b.syncTime);
@@ -59,8 +88,11 @@ function parseSettingsInput(body) {
     return { values: out };
 }
 async function saveUserApprovalSettings(values) {
+    const cur = await getUserApprovalSettings(true);
     for (const [k, v] of Object.entries(values)) {
-        const val = typeof v === 'boolean' ? (v ? '1' : '0') : String(v);
+        // ช่องทางแจ้งเตือน: รวมกับค่าเดิม (ส่งบางช่อง = ช่องที่ไม่ส่งคงเดิม) แล้วเก็บเป็น JSON
+        const val = (k === 'approveNotify' || k === 'syncNotify') ? JSON.stringify({ ...cur[k], ...v })
+            : typeof v === 'boolean' ? (v ? '1' : '0') : String(v);
         await db.query('INSERT INTO system_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)', [KEYS[k], val]);
     }
     invalidateUserApprovalSettings();
@@ -116,7 +148,7 @@ async function approveUser(target, { approverId = null, approverDeptId = null, i
 }
 
 /** ส่งผู้ใช้ขึ้น KHD แล้วบันทึกสถานะรายคน (user_khd_sync) — คืน { synced, failed, message } */
-async function syncUsersAndRecord(users, { auto = true } = {}) {
+async function syncUsersAndRecord(users, { auto = true, source = 'approve' } = {}) {
     if (!users.length) return { synced: 0, failed: 0, message: 'ไม่มีผู้ใช้ที่ต้องส่ง' };
     const usernames = users.map(u => u.username);
     let r;
@@ -132,7 +164,9 @@ async function syncUsersAndRecord(users, { auto = true } = {}) {
                 ON DUPLICATE KEY UPDATE synced_at = NOW(), last_error = NULL, attempts = attempts + 1`, [u.id]);
         }
     }
-    return { synced: users.length - failedSet.size, failed: failedSet.size, message: r.body?.message || '' };
+    const result = { synced: users.length - failedSet.size, failed: failedSet.size, message: r.body?.message || '' };
+    result.notified = await notifySyncResult(users, result, failedSet, source).catch(e => { console.error('[UserApproval] sync notify failed:', e.message); return []; });
+    return result;
 }
 
 /** หลังอนุมัติ (คนกด / สร้างผู้ใช้ที่อนุมัติแล้ว) — ส่งขึ้น KHD ทันทีถ้าเปิดไว้ (fire-and-forget ไม่ทำให้การอนุมัติช้า/ล้ม) */
@@ -141,7 +175,7 @@ function syncAfterApprove(userIds) {
         const cfg = await getUserApprovalSettings();
         if (!cfg.syncOnApprove || !userIds.length) return;
         const [users] = await db.query('SELECT id, username FROM users WHERE id IN (?) AND is_approved = 1', [userIds]);
-        await syncUsersAndRecord(users);
+        await syncUsersAndRecord(users, { source: 'approve' });
     })().catch(e => console.error('[UserApproval] sync after approve failed:', e.message));
 }
 
@@ -165,29 +199,69 @@ async function runAutoApprove() {
         } catch (e) { console.error('[UserApproval] auto approve failed:', u.username, e.message); }
     }
     if (approved.length) {
-        await notifySuperAdmins(approved, cfg.delay);
-        if (cfg.syncOnApprove) await syncUsersAndRecord(approved).catch(e => console.error('[UserApproval] sync failed:', e.message));
+        await notifySuperAdmins(approved, cfg.delay, cfg.approveNotify);
+        if (cfg.syncOnApprove) await syncUsersAndRecord(approved, { source: 'approve' }).catch(e => console.error('[UserApproval] sync failed:', e.message));
     }
     return { approved: approved.map(u => u.username) };
 }
 
-async function notifySuperAdmins(users, delay) {
-    const list = users.map(u => `${u.firstname || ''} ${u.lastname || ''} (${u.username}) — ${u.role}${u.hospcode ? ' / ' + u.hospcode : ''}`.trim());
-    const msg = `อนุมัติอัตโนมัติ ${users.length} บัญชี (ครบ ${delay} นาทีหลังลงทะเบียน): ${list.join(', ')}`.slice(0, 1000);
-    const [admins] = await db.query("SELECT id FROM users WHERE role = 'super_admin' AND is_approved = 1 AND is_active = 1");
-    for (const a of admins) {
-        await db.query("INSERT INTO notifications (user_id, type, title, message) VALUES (?, 'info', ?, ?)", [a.id, 'อนุมัติผู้ใช้งานใหม่อัตโนมัติ', msg]).catch(() => {});
+const esc = (t) => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/**
+ * แจ้ง super_admin ตามช่องทางที่ตั้ง (14 พ.ย. 2569): inapp = แจ้งเตือนในระบบทุก super_admin | email/telegram/line = notifyAdmins() (ผู้รับตามหน้าตั้งค่าการแจ้งเตือนเดิม)
+ * คืนรายชื่อช่องทางที่ส่ง (ใช้ในชุดทดสอบ/บันทึกผล)
+ */
+async function notifyChannels(ch, { title, msg, subject, html, text }) {
+    const sent = [];
+    if (ch.inapp) {
+        const [admins] = await db.query("SELECT id FROM users WHERE role = 'super_admin' AND is_approved = 1 AND is_active = 1");
+        for (const a of admins) {
+            await db.query("INSERT INTO notifications (user_id, type, title, message) VALUES (?, 'info', ?, ?)", [a.id, title, String(msg).slice(0, 1000)]).catch(() => {});
+        }
+        sent.push('inapp');
     }
-    const esc = (t) => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    notifyAdmins('✅ อนุมัติผู้ใช้งานใหม่อัตโนมัติ — ระบบ KPI สสจ.นครราชสีมา',
-        `<div style="font-family:Sarabun,sans-serif"><p>ระบบอนุมัติผู้ใช้งานใหม่อัตโนมัติ ${users.length} บัญชี (ครบ ${delay} นาทีหลังลงทะเบียน)</p><ul>${list.map(l => `<li>${esc(l)}</li>`).join('')}</ul>
+    if (ch.email || ch.telegram || ch.line) {
+        await notifyAdmins(subject, html, text, { email: !!ch.email, telegram: !!ch.telegram, line: !!ch.line })
+            .catch(e => console.error('[UserApproval] notifyAdmins failed:', e.message));
+        sent.push(...['email', 'telegram', 'line'].filter(k => ch[k]));
+    }
+    return sent;
+}
+
+async function notifySuperAdmins(users, delay, ch = DEFAULTS.approveNotify) {
+    const list = users.map(u => `${u.firstname || ''} ${u.lastname || ''} (${u.username}) — ${u.role}${u.hospcode ? ' / ' + u.hospcode : ''}`.trim());
+    return notifyChannels(ch, {
+        title: 'อนุมัติผู้ใช้งานใหม่อัตโนมัติ',
+        msg: `อนุมัติอัตโนมัติ ${users.length} บัญชี (ครบ ${delay} นาทีหลังลงทะเบียน): ${list.join(', ')}`,
+        subject: '✅ อนุมัติผู้ใช้งานใหม่อัตโนมัติ — ระบบ KPI สสจ.นครราชสีมา',
+        html: `<div style="font-family:Sarabun,sans-serif"><p>ระบบอนุมัติผู้ใช้งานใหม่อัตโนมัติ ${users.length} บัญชี (ครบ ${delay} นาทีหลังลงทะเบียน)</p><ul>${list.map(l => `<li>${esc(l)}</li>`).join('')}</ul>
          <p style="color:#6b7280;font-size:12px">ตรวจสอบ/ปิดใช้งานบัญชีได้ที่หน้าจัดการผู้ใช้</p></div>`,
-        `✅ อนุมัติผู้ใช้งานใหม่อัตโนมัติ ${users.length} บัญชี\n` + list.map(l => '• ' + l).join('\n')
-    ).catch(e => console.error('[UserApproval] notifyAdmins failed:', e.message));
+        text: `✅ อนุมัติผู้ใช้งานใหม่อัตโนมัติ ${users.length} บัญชี\n` + list.map(l => '• ' + l).join('\n'),
+    });
+}
+
+const SYNC_SOURCE = { approve: 'หลังอนุมัติ', schedule: 'ตามรอบเวลา', manual: 'กดส่งเอง' };
+/** แจ้ง super_admin ผลการส่งผู้ใช้ขึ้น KHD — failedOnly = แจ้งเฉพาะเมื่อมีรายการส่งไม่สำเร็จ */
+async function notifySyncResult(users, result, failedSet, source) {
+    const cfg = await getUserApprovalSettings();
+    const ch = cfg.syncNotify;
+    if (!CHANNELS.some(k => ch[k])) return [];
+    if (ch.failedOnly && !result.failed) return [];
+    const ok = users.filter(u => !failedSet.has(u.username)).map(u => u.username);
+    const bad = users.filter(u => failedSet.has(u.username)).map(u => u.username);
+    const head = `ส่งผู้ใช้ใหม่ขึ้น KHD (${SYNC_SOURCE[source] || source}): สำเร็จ ${result.synced} · ไม่สำเร็จ ${result.failed}`;
+    const detail = [ok.length ? 'สำเร็จ: ' + ok.join(', ') : '', bad.length ? `ไม่สำเร็จ: ${bad.join(', ')} — ${result.message || ''}` : ''].filter(Boolean).join(' | ');
+    return notifyChannels(ch, {
+        title: result.failed ? 'ส่งผู้ใช้ใหม่ขึ้น KHD ไม่สำเร็จ' : 'ส่งผู้ใช้ใหม่ขึ้น KHD แล้ว',
+        msg: `${head} — ${detail}`,
+        subject: `${result.failed ? '⚠️' : '☁️'} ${head} — ระบบ KPI สสจ.นครราชสีมา`,
+        html: `<div style="font-family:Sarabun,sans-serif"><p>${esc(head)}</p>${ok.length ? `<p>สำเร็จ: ${esc(ok.join(', '))}</p>` : ''}${bad.length ? `<p style="color:#dc2626">ไม่สำเร็จ: ${esc(bad.join(', '))}<br>${esc(result.message || '')}</p><p style="color:#6b7280;font-size:12px">ระบบจะส่งซ้ำตามรอบเวลาที่ตั้งไว้ หรือกด "ส่งผู้ใช้ใหม่ขึ้น KHD ตอนนี้" ในหน้าตั้งค่าระบบ</p>` : ''}</div>`,
+        text: `${result.failed ? '⚠️' : '☁️'} ${head}\n${detail}`,
+    });
 }
 
 /** ส่งขึ้น KHD ตามรอบ: ผู้ใช้ใหม่ที่อนุมัติแล้วแต่ยังส่งไม่สำเร็จ (ลงทะเบียนหลังเปิดระบบนี้ หรือเคยส่งแล้วล้ม) */
-async function runScheduledKhdSync() {
+async function runScheduledKhdSync(source = 'schedule') {
     const [users] = await db.query(
         `SELECT u.id, u.username FROM users u
          LEFT JOIN user_registrations r ON r.user_id = u.id
@@ -195,7 +269,7 @@ async function runScheduledKhdSync() {
          WHERE u.is_approved = 1 AND (r.user_id IS NOT NULL OR s.user_id IS NOT NULL)
            AND (s.synced_at IS NULL) AND COALESCE(s.attempts, 0) < ?
          ORDER BY u.id LIMIT 500`, [MAX_SYNC_ATTEMPTS]);
-    return syncUsersAndRecord(users);
+    return syncUsersAndRecord(users, { source });
 }
 
 async function saveLastRun(info) {
@@ -216,5 +290,5 @@ async function getStatus() {
 module.exports = {
     getUserApprovalSettings, invalidateUserApprovalSettings, parseSettingsInput, saveUserApprovalSettings,
     recordRegistration, approveUser, syncAfterApprove, syncUsersAndRecord, runAutoApprove, runScheduledKhdSync,
-    saveLastRun, getStatus, MAX_DELAY_MIN, MAX_SYNC_ATTEMPTS, KEYS,
+    saveLastRun, getStatus, notifySuperAdmins, notifySyncResult, MAX_DELAY_MIN, MAX_SYNC_ATTEMPTS, KEYS, DEFAULTS,
 };

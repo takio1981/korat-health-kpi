@@ -6,7 +6,18 @@ import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth';
 import Swal from 'sweetalert2';
 
-export interface UserApprovalSettings { autoApprove: boolean; delay: number; syncOnApprove: boolean; syncSchedule: boolean; syncTime: string; }
+export interface NotifyChannels { inapp: boolean; email: boolean; telegram: boolean; line: boolean; failedOnly?: boolean; }
+export interface UserApprovalSettings {
+  autoApprove: boolean; delay: number; syncOnApprove: boolean; syncSchedule: boolean; syncTime: string;
+  approveNotify: NotifyChannels; syncNotify: NotifyChannels;
+}
+/** ช่องทางแจ้งเตือน super_admin (14 พ.ย. 2569) — อีเมล/Telegram/LINE ส่งถึงผู้รับตามการตั้งค่าการแจ้งเตือนของระบบ */
+export const NOTIFY_CHANNELS = [
+  { key: 'inapp', label: 'แจ้งเตือนในระบบ', icon: 'fa-bell' },
+  { key: 'email', label: 'อีเมล', icon: 'fa-envelope' },
+  { key: 'telegram', label: 'Telegram', icon: 'fa-paper-plane' },
+  { key: 'line', label: 'LINE', icon: 'fa-comment' },
+] as const;
 
 /** "5 นาที" / "2 ชั่วโมง" / "1 วัน 3 ชั่วโมง" */
 export function delayText(min: number): string {
@@ -43,6 +54,10 @@ export function userApprovalLastRunText(r: any): string {
           <input type="number" id="uaDelay" min="1" max="10080" [(ngModel)]="s.delay" name="uaDelay" class="w-24 px-2 py-1 border border-gray-200 rounded-lg bg-white text-sm">
           นาทีหลังลงทะเบียน <span class="text-gray-400">({{ delayText(s.delay) }} — เช่น ลงทะเบียน 12:00 ตั้ง 5 นาที = อนุมัติ 12:05 โดยประมาณ ระบบตรวจทุก 30 วินาที)</span>
         </label>
+        <div class="mt-2"><div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-700" id="uaApproveCh-channels">
+            <span class="font-bold text-gray-600"><i class="fas fa-bell text-amber-500 me-1"></i>แจ้ง super_admin ทาง:</span>
+            <label *ngFor="let c of channels" class="flex items-center gap-1"><input type="checkbox" [(ngModel)]="s.approveNotify[c.key]" [name]="'uaApproveCh-' + c.key" [attr.data-ch]="'uaApproveCh-' + c.key"> <i class="fas" [ngClass]="c.icon"></i> {{ c.label }}</label>
+          </div></div>
         <p *ngIf="s.autoApprove" class="mt-2 text-[11px] text-amber-700"><i class="fas fa-triangle-exclamation me-1"></i>อนุมัติทุกบทบาทรวมผู้ดูแล (admin) โดยไม่มีคนตรวจ — ตรวจรายชื่อจากการแจ้งเตือน และปิดใช้งานบัญชีที่ไม่ถูกต้องได้ที่หน้าจัดการผู้ใช้</p>
       </div>
       <div class="md:col-span-2 rounded-xl border border-sky-200 bg-sky-50/40 p-3 space-y-2">
@@ -51,7 +66,13 @@ export function userApprovalLastRunText(r: any): string {
         <label class="flex flex-wrap items-center gap-2 text-xs text-gray-700"><input type="checkbox" id="uaSyncSch" [(ngModel)]="s.syncSchedule" name="uaSyncSch"> ส่งตามรอบทุกวัน เวลา
           <input type="time" id="uaSyncTime" [(ngModel)]="s.syncTime" name="uaSyncTime" class="px-2 py-1 border border-gray-200 rounded-lg bg-white text-sm">
           <span class="text-gray-400">(ส่งผู้ใช้ใหม่ที่อนุมัติแล้วแต่ยังส่งไม่สำเร็จ — ส่งซ้ำได้ไม่เกิน 20 ครั้งต่อคน)</span></label>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-700" id="uaSyncCh-channels">
+            <span class="font-bold text-gray-600"><i class="fas fa-bell text-amber-500 me-1"></i>แจ้ง super_admin ทาง:</span>
+            <label *ngFor="let c of channels" class="flex items-center gap-1"><input type="checkbox" [(ngModel)]="s.syncNotify[c.key]" [name]="'uaSyncCh-' + c.key" [attr.data-ch]="'uaSyncCh-' + c.key"> <i class="fas" [ngClass]="c.icon"></i> {{ c.label }}</label>
+          </div>
+        <label class="flex items-center gap-2 text-xs text-gray-700 ms-4"><input type="checkbox" id="uaSyncFailedOnly" [(ngModel)]="s.syncNotify.failedOnly" name="uaSyncFailedOnly"> แจ้งเฉพาะเมื่อส่งไม่สำเร็จ</label>
       </div>
+      <p class="md:col-span-2 text-[11px] text-gray-400">อีเมล / Telegram / LINE ส่งถึงผู้รับที่ตั้งไว้ในส่วน "การแจ้งเตือน" ของหน้านี้ (อีเมลผู้ดูแล, Telegram chat, LINE กลุ่ม)</p>
       <div *ngIf="status" class="md:col-span-2 flex flex-wrap gap-3 text-xs" id="ua-status">
         <span class="px-2 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">รอถึงเวลาอนุมัติอัตโนมัติ <b>{{ status.waiting_auto }}</b> คน</span>
         <span class="px-2 py-1 rounded-lg bg-gray-50 border border-gray-200 text-gray-700">รออนุมัติทั้งหมด <b>{{ status.pending_all }}</b> คน</span>
@@ -70,6 +91,7 @@ export class UserApprovalSettingsCardComponent implements OnInit {
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
   readonly delayText = delayText;
+  readonly channels = NOTIFY_CHANNELS;
   s: UserApprovalSettings | null = null;
   status: any = null;
   lastRun = '';
@@ -81,7 +103,8 @@ export class UserApprovalSettingsCardComponent implements OnInit {
   load() {
     this.authService.apiGet('/user-approval/settings').subscribe({
       next: (res: any) => {
-        this.s = res?.data ? { ...res.data } : null;
+        const d = res?.data;
+        this.s = d ? { ...d, approveNotify: { ...d.approveNotify }, syncNotify: { ...d.syncNotify } } : null;
         this.status = res?.status || null;
         this.lastRun = userApprovalLastRunText(res?.status?.last_run);
         this.cdr.detectChanges();
@@ -92,7 +115,9 @@ export class UserApprovalSettingsCardComponent implements OnInit {
 
   payload(): UserApprovalSettings {
     const s = this.s!;
-    return { autoApprove: !!s.autoApprove, delay: Number(s.delay), syncOnApprove: !!s.syncOnApprove, syncSchedule: !!s.syncSchedule, syncTime: String(s.syncTime || '') };
+    const ch = (n: NotifyChannels, withFailed: boolean): NotifyChannels => ({ inapp: !!n?.inapp, email: !!n?.email, telegram: !!n?.telegram, line: !!n?.line, ...(withFailed ? { failedOnly: !!n?.failedOnly } : {}) });
+    return { autoApprove: !!s.autoApprove, delay: Number(s.delay), syncOnApprove: !!s.syncOnApprove, syncSchedule: !!s.syncSchedule, syncTime: String(s.syncTime || ''),
+      approveNotify: ch(s.approveNotify, false), syncNotify: ch(s.syncNotify, true) };
   }
 
   save() {

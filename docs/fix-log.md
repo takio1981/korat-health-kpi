@@ -4,6 +4,15 @@
 
 ---
 
+## 2569-11-14 — ช่องทางแจ้ง super_admin ของการอนุมัติอัตโนมัติ / ส่งผู้ใช้ใหม่ขึ้น KHD
+
+**คำขอ:** ตั้งค่าการแจ้งเตือน super_admin ในทุกช่องทาง ของระบบอนุมัติผู้สมัครใหม่อัตโนมัติ และการส่งผู้ใช้ใหม่ขึ้น KHD อัตโนมัติ
+
+**สิ่งที่ทำ:** system_settings `user_approval_notify` / `user_khd_sync_notify` (JSON ช่องทาง inapp/email/telegram/line + failedOnly ของการส่ง KHD) — `notifyChannels()` ใน services/user-approval.js
+(inapp = notifications ทุก super_admin, ช่องอื่นผ่าน notifyAdmins ตามผู้รับเดิม) | แจ้งผลการส่งขึ้น KHD ทุกแหล่ง (หลังอนุมัติ/ตามรอบ/กดส่งเอง) | การ์ดตั้งค่า: checkbox ช่องทางแยก 2 เรื่อง
+
+**ทดสอบ:** `user-auto-approve.test.js` (+2, รวม 8), `user-approval-settings-card.spec.ts` (ปรับ)
+
 ## 2569-11-13 — อนุมัติผู้สมัครใหม่อัตโนมัติตามเวลา + ส่งผู้ใช้ใหม่ขึ้น KHD อัตโนมัติ
 
 **คำขอ:** ตั้งค่าการอนุมัติผู้สมัครใหม่ให้ตั้งเวลาได้ และส่งข้อมูลผู้ใช้ใหม่ (Data Synchronization) ขึ้น KHD อัตโนมัติ

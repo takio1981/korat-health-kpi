@@ -7,7 +7,8 @@ import { UserApprovalSettingsCardComponent, delayText, userApprovalLastRunText }
 // อนุมัติผู้สมัครใหม่อัตโนมัติ + ส่งผู้ใช้ใหม่ขึ้น KHD (13 พ.ย. 2569)
 describe('UserApprovalSettingsCardComponent', () => {
   let http: HttpTestingController;
-  const DATA = { autoApprove: false, delay: 5, syncOnApprove: false, syncSchedule: false, syncTime: '02:00' };
+  const DATA = { autoApprove: false, delay: 5, syncOnApprove: false, syncSchedule: false, syncTime: '02:00',
+    approveNotify: { inapp: true, email: true, telegram: true, line: true }, syncNotify: { inapp: true, email: false, telegram: false, line: false, failedOnly: true } };
 
   beforeEach(async () => {
     localStorage.setItem('kpi_token', 'test-token');
@@ -37,14 +38,23 @@ describe('UserApprovalSettingsCardComponent', () => {
     const f = make();
     const c = f.componentInstance;
     expect(f.nativeElement.querySelector('#ua-status').textContent).toContain('2');
+    expect(f.nativeElement.querySelectorAll('#uaApproveCh-channels input').length).toBe(4);
+    expect(f.nativeElement.querySelectorAll('#uaSyncCh-channels input').length).toBe(4);
     expect(c.lastRun).toContain('ส่งขึ้น KHD สำเร็จ 3');
     c.s!.delay = 0;
     c.save();
     http.expectNone(r => r.method === 'PUT');
-    c.s = { autoApprove: true, delay: 10, syncOnApprove: true, syncSchedule: true, syncTime: '03:15' };
+    c.s = { ...DATA, autoApprove: true, delay: 10, syncOnApprove: true, syncSchedule: true, syncTime: '03:15',
+      approveNotify: { ...DATA.approveNotify }, syncNotify: { ...DATA.syncNotify } };
+    // ช่องทางแจ้งเตือน (14 พ.ย. 2569): ปิด LINE ของการอนุมัติ, เปิด Telegram + แจ้งทุกครั้งของการส่ง KHD
+    c.s.approveNotify.line = false;
+    c.s.syncNotify.telegram = true;
+    c.s.syncNotify.failedOnly = false;
     c.save();
     const req = http.expectOne(r => r.method === 'PUT' && r.url.endsWith('/user-approval/settings'));
-    expect(req.request.body).toEqual({ autoApprove: true, delay: 10, syncOnApprove: true, syncSchedule: true, syncTime: '03:15' });
+    expect(req.request.body).toEqual({ autoApprove: true, delay: 10, syncOnApprove: true, syncSchedule: true, syncTime: '03:15',
+      approveNotify: { inapp: true, email: true, telegram: true, line: false },
+      syncNotify: { inapp: true, email: false, telegram: true, line: false, failedOnly: false } });
   });
 
   it('ปุ่มตรวจตอนนี้ / ส่งตอนนี้ เรียก /user-approval/run ตามงาน', () => {
