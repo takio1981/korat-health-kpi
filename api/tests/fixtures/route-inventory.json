@@ -66,6 +66,7 @@
   "POST /khupskpi/api/dynamic-data/:table_name :: authenticateToken > handler",
   "DELETE /khupskpi/api/dynamic-data/:table_name/:record_id :: authenticateToken > handler",
   "GET /khupskpi/api/kpi-template :: authenticateToken > handler",
+  "GET /khupskpi/api/kpi-template/added :: authenticateToken > handler",
   "GET /khupskpi/api/kpi-setup-check :: authenticateToken > handler",
   "GET /khupskpi/api/dashboard-stats :: authenticateToken > handler",
   "GET /khupskpi/api/logs/backup :: authenticateToken > isSuperAdmin > handler",

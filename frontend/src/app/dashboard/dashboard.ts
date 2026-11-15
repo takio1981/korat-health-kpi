@@ -126,6 +126,19 @@ export function indicatorOfTypes(i: any, codes: string[]): boolean {
   return codes.some(c => set.has(String(c)));
 }
 
+/** ตัวกรองจากป้ายสรุปจำนวนในหน้าต่างเพิ่มตัวชี้วัด */
+export type AddKpiListFilter = 'all' | 'existing' | 'missing' | 'unset' | 'notarget';
+/** ผลของ GET /kpi-template/added ({ [indicator_id]: hospcode[] }) → Map ตัวชี้วัด → ชุดหน่วยบริการที่เพิ่มแล้ว */
+export function addedMapOf(data: any): Map<number, Set<string>> {
+  const m = new Map<number, Set<string>>();
+  if (!data || typeof data !== 'object') return m;
+  for (const [id, hcs] of Object.entries(data)) {
+    if (!Array.isArray(hcs)) continue;
+    m.set(Number(id), new Set(hcs.map((h: any) => String(h ?? '').trim()).filter(Boolean)));
+  }
+  return m;
+}
+
 @Component({
   selector: 'app-dashboard',
   standalone: true,
@@ -853,6 +866,11 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   private _searchAutoCloseTimer: any = null;
   private _searchCountdownInterval: any = null;
 
+  /** กล่องสถานะการค้นหายังเป็นกล่องที่แสดงอยู่หรือไม่ — กันตัวนับถอยหลังไปเขียนทับ/ปิดกล่องอื่นที่เปิดแทนที่ (เช่น หน้าต่างแจ้งเตือนอื่น) */
+  private isSearchStatusSwalOpen(): boolean {
+    return Swal.isVisible() && Swal.getPopup()?.getAttribute('data-kpi-search-status') === '1';
+  }
+
   private openSearchStatusSwal() {
     // เปิด modal ครั้งเดียว — update title+html+button ด้วย DOM (ไม่ใช้ Swal.update)
     Swal.fire({
@@ -866,22 +884,26 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       showConfirmButton: true,
       confirmButtonText: 'ปิด',
       confirmButtonColor: '#3b82f6',
-      didOpen: () => {
+      didOpen: (popup) => {
+        popup?.setAttribute('data-kpi-search-status', '1');
         const actions = Swal.getActions();
         if (actions) (actions as HTMLElement).style.display = 'none';
       },
-    });
+    }).then(() => this.clearSearchTimers());   // กด "ปิด" ระหว่างนับถอยหลัง = หยุดนับ
   }
 
   private updateSearchStatusSwal() {
-    if (!Swal.isVisible()) return;
+    if (!this.isSearchStatusSwalOpen()) return;
     const container = Swal.getHtmlContainer();
     if (container) container.innerHTML = this.buildSearchStatusHtml();
   }
 
   // จบการค้นหา: update title + html + แสดงปุ่มปิด + นับถอยหลัง 5 วินาที — modal เดียวตลอด
-  private finishSearchStatusSwal(final: { success: boolean; message: string }) {
-    if (!Swal.isVisible()) return;
+  // ไม่พบข้อมูล (15 พ.ย. 2569): นับครบแล้วไม่ปิดเอง — เปลี่ยนเป็นกล่อง "ไม่พบข้อมูล" ที่มีปุ่ม "ปิด" + "เพิ่มข้อมูลตัวชี้วัดนี้ให้หน่วยบริการ…"
+  //   (เดิมเปิดกล่องไม่พบข้อมูลทันทีทับกล่องนี้ แล้วตัวนับถอยหลังเขียนเนื้อหาทับ/ปิดกล่องนั้นใน 5 วินาที)
+  // คืน true เมื่อจัดการแล้ว (กล่องสถานะเปิดอยู่)
+  private finishSearchStatusSwal(final: { success: boolean; message: string }): boolean {
+    if (!this.isSearchStatusSwalOpen()) return false;
     const hasData = this.kpiData.length > 0;
     const color = hasData ? '#10b981' : (final.success ? '#f59e0b' : '#ef4444');
     const iconHtml = final.success
@@ -912,15 +934,19 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
 
     // 4) Countdown tick ทุก 1 วินาที — update DOM แล้วปิดเมื่อถึง 0
     this.clearSearchTimers();
+    const noData = final.success && !hasData;
     this._searchCountdownInterval = setInterval(() => {
+      if (!this.isSearchStatusSwalOpen()) { this.clearSearchTimers(); return; }   // ถูกปิด/แทนที่ไปแล้ว
       this.searchCountdown--;
       if (this.searchCountdown <= 0) {
         this.clearSearchTimers();
-        if (Swal.isVisible()) Swal.close();
+        if (noData) this.showNoDataAlert();
+        else Swal.close();
       } else {
         this.updateSearchStatusSwal();
       }
     }, 1000);
+    return true;
   }
 
   private clearSearchTimers() {
@@ -1054,9 +1080,8 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
             : 'ไม่พบข้อมูล';
           this.searchStage = msg;
           this.cdr.detectChanges();
-          if (!silent) this.finishSearchStatusSwal({ success: true, message: msg });
-
-          if (!silent && this.kpiData.length === 0) this.showNoDataAlert();
+          // ไม่พบข้อมูล: กล่องสถานะนับถอยหลังแล้วเปลี่ยนเป็นกล่อง "ไม่พบข้อมูล" เอง — เปิดตรงเฉพาะเมื่อกล่องสถานะไม่ได้เปิดอยู่
+          if (!silent && !this.finishSearchStatusSwal({ success: true, message: msg }) && this.kpiData.length === 0) this.showNoDataAlert();
         }
       },
       error: (err) => {
@@ -1076,7 +1101,16 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
-  private showNoDataAlert() {
+  /** ตัวชี้วัดที่ค้นหาแล้วไม่พบ (ตัวกรองชื่อตัวชี้วัด หรือคำค้น) — ใช้กับปุ่มเพิ่มตัวชี้วัดในกล่อง "ไม่พบข้อมูล" */
+  get noDataSearchLabel(): string {
+    return (this.selectedIndicator || '').trim() || (this.searchTerm || '').trim();
+  }
+  /** แสดงปุ่ม "เพิ่มข้อมูลตัวชี้วัดนี้ให้หน่วยบริการ…" เมื่อค้นหาตัวชี้วัดแล้วไม่พบ และผู้ใช้เปิดหน้าต่างเพิ่มตัวชี้วัดได้ (เงื่อนไขเดียวกับปุ่ม "เพิ่มตัวชี้วัด") */
+  get canAddFromNoData(): boolean {
+    return !!this.noDataSearchLabel && !this.isEntryLocked && !this.isEditing && !this.isReviewMode && !this.isDeleteMode;
+  }
+
+  showNoDataAlert() {
     const role = this.authService.getUserRole();
     const isAdmin = ['super_admin', 'admin_ssj', 'admin_cup', 'admin_hos', 'admin_sso'].includes(role);
     const adminTip = isAdmin
@@ -1089,6 +1123,8 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
             <li>ตรวจสอบ <b>ปีงบประมาณ</b> ที่เลือก — ข้อมูลอาจอยู่ปีอื่น</li>
           </ol>
         </div>` : '';
+    const canAdd = this.canAddFromNoData;
+    const label = this.noDataSearchLabel;
 
     Swal.fire({
       icon: 'info',
@@ -1104,8 +1140,22 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
           </ul>
         </div>
         ${adminTip}
+        ${canAdd ? `<div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mt-3 text-left text-xs text-emerald-800">
+          <i class="fas fa-plus-circle mr-1"></i>ยังไม่มีตัวชี้วัด <b>${this.escHtml(label)}</b> ในหน้าบันทึกผลงาน —
+          กดปุ่มด้านล่างเพื่อเพิ่มให้หน่วยบริการตามประเภทหน่วยบริการที่ตั้งค่าไว้ในตัวชี้วัด (ตรวจรายการแล้วกดบันทึกอีกครั้ง)
+        </div>` : ''}
       </div>`,
-      confirmButtonColor: '#6366f1'
+      width: canAdd ? 640 : undefined,
+      showConfirmButton: canAdd,
+      confirmButtonText: '<i class="fas fa-plus-circle mr-1"></i> เพิ่มข้อมูลตัวชี้วัดนี้ให้หน่วยบริการตามประเภทหน่วยบริการที่ตั้งค่าไว้แล้ว',
+      confirmButtonColor: '#10b981',
+      showCancelButton: true,
+      cancelButtonText: 'ปิด',
+      cancelButtonColor: '#6b7280',
+      reverseButtons: true,
+      customClass: { confirmButton: 'swal-no-data-add', cancelButton: 'swal-no-data-close' },
+    }).then(r => {
+      if (r.isConfirmed && canAdd) this.openAddModalFromSearch(this.selectedIndicator ? '' : label);
     });
   }
 
@@ -2397,15 +2447,25 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
-  openAddModal() {
+  /** เปิดหน้าต่างเพิ่มตัวชี้วัดจากกล่อง "ไม่พบข้อมูล" ของการค้นหา (15 พ.ย. 2569): นำตัวชี้วัด/คำค้นที่ค้นหามาใช้ และเลือกตัวที่เพิ่มได้ให้
+   *  — ปลายทาง = หน่วยบริการตามประเภทที่ตั้งไว้ในตัวชี้วัด ผู้ใช้ตรวจแล้วกด "บันทึก" เอง (ผ่านหน้ายืนยันเดิม) */
+  openAddModalFromSearch(term: string = '') {
+    this.openAddModal({ search: term, selectFiltered: true });
+  }
+
+  openAddModal(opts: { search?: string; selectFiltered?: boolean } = {}) {
     this._addKpiTemplate = null;
+    this._addKpiAdded = null;
     this.newKpiList = [];
     this.addKpiSelectedIds = new Set<number>();
     this.addKpiSelMains = [];
     this.addKpiSearch = '';
     this.addKpiShowMonths = false;
+    this.addKpiListFilter = 'missing';
     this._addKpiDefaultAll = !(this.isAdmin || this.isLocalAdmin);
+    this._addKpiSelectFiltered = !!opts.selectFiltered;
     this.applyDashboardFiltersToAddKpi();
+    if (opts.search) this.addKpiSearch = opts.search;
     this.calculateAddKpiYears();
     if (this.addKpiYears.includes(this.selectedYear)) {
       this.addKpiSelectedYear = this.selectedYear;
@@ -2612,7 +2672,13 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   addKpiShowMonths = false;          // ซ่อนช่องผลงาน 12 เดือนเป็นค่าเริ่มต้น (ส่วนใหญ่เพิ่มตัวชี้วัดก่อน แล้วบันทึกผลงานทีหลัง)
   addKpiUnsetCount = 0;              // ตัวชี้วัดที่ยังไม่ได้ตั้งประเภทหน่วยบริการ
   addKpiNoTargetCount = 0;           // ตั้งประเภทแล้วแต่ไม่มีหน่วยบริการประเภทนั้นในขอบเขต/อำเภอที่เลือก
+  addKpiMissingCount = 0;            // ตัวชี้วัดที่ยังเพิ่มไม่ครบ (ทั้งหมด − มีอยู่แล้ว — รวมตัวที่ยังไม่ได้ตั้งประเภท/ไม่มีปลายทาง)
+  /** ตัวกรองจากป้ายสรุปจำนวน (15 พ.ย. 2569): all | existing (มีอยู่แล้ว) | missing (ยังไม่มี — ค่าตั้งต้น) | unset | notarget */
+  addKpiListFilter: AddKpiListFilter = 'missing';
   private _addKpiTemplate: any[] | null = null;
+  private _addKpiAdded: Map<number, Set<string>> | null = null;   // indicator_id → หน่วยบริการที่เพิ่มแล้วในปีงบ _addKpiAddedYear
+  private _addKpiAddedYear = '';
+  private _addKpiSelectFiltered = false;   // เปิดจากกล่อง "ไม่พบข้อมูล" → เลือกรายการที่แสดงให้ตอนโหลดครั้งแรก
   private _addKpiDefaultAll = false; // ผู้ใช้ทั่วไป (หน่วยบริการเดียว): เลือกทุกตัวที่เพิ่มได้ให้ตอนเปิดครั้งแรก
   private static readonly ADD_KPI_UNITS_PER_REQUEST = 30;
 
@@ -2642,6 +2708,22 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     const more = (item._targets?.length || 0) - names.length;
     return names.join(', ') + (more > 0 ? ` และอีก ${more} แห่ง` : '');
   }
+  /** tooltip ป้าย "เพิ่มแล้ว": จำนวนหน่วยบริการแยกประเภท (เรียงจากมากไปน้อย) */
+  addKpiAddedTitle(added: string[], hosByCode: Map<string, any>): string {
+    if (!added.length) return '';
+    if (this.addKpiSingleUnit) return 'หน่วยบริการของท่านมีตัวชี้วัดนี้ในหน้าบันทึกผลงานแล้ว';
+    const byType = new Map<string, number>();
+    for (const hc of added) {
+      const ht = String(hosByCode.get(hc)?.hostype || '');
+      const name = ht ? this.addKpiTypeNames([ht]) : 'ไม่ระบุประเภท';
+      byType.set(name, (byType.get(name) || 0) + 1);
+    }
+    const lines = [...byType.entries()].sort((a, b) => b[1] - a[1]).map(([n, c]) => `• ${n}: ${c.toLocaleString()} แห่ง`);
+    return `เพิ่มในหน้าบันทึกผลงานแล้ว ${added.length.toLocaleString()} แห่ง\n` + lines.join('\n');
+  }
+  setAddKpiListFilter(f: AddKpiListFilter) {
+    this.addKpiListFilter = f;
+  }
   addKpiTypeNames(codes: string[] | null): string {
     return (codes || []).map(c => this.addKpiAllHosTypes.find((ht: any) => String(ht.hostypecode) === c)?.hostypename || HOSTYPE_NAMES[c] || c).join(', ');
   }
@@ -2668,8 +2750,11 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   loadAddKpiList() {
-    if (this._addKpiTemplate) {
-      this.buildAddKpiList(this._addKpiTemplate);
+    const year = String(this.addKpiSelectedYear || '');
+    const needTemplate = !this._addKpiTemplate;
+    const needAdded = !this._addKpiAdded || this._addKpiAddedYear !== year;
+    if (!needTemplate && !needAdded) {
+      this.buildAddKpiList(this._addKpiTemplate!);
       this.showAddModal = true;
       this.cdr.detectChanges();
       return;
@@ -2679,20 +2764,47 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       allowOutsideClick: false,
       didOpen: () => Swal.showLoading()
     });
+    const finish = () => {
+      this.buildAddKpiList(this._addKpiTemplate!);
+      Swal.close();
+      if (!this.showAddModal) {
+        setTimeout(() => {
+          this.showAddModal = true;
+          this.cdr.detectChanges();
+        }, 150);
+      } else {
+        this.cdr.detectChanges();
+      }
+    };
+    // หน่วยบริการที่เพิ่มตัวชี้วัดแล้วในปีงบที่เลือก (ป้าย "เพิ่มแล้ว N แห่ง" + สถานะ "มีอยู่แล้ว") — โหลดใหม่เมื่อเปลี่ยนปีงบ
+    const loadAdded = () => {
+      if (!needAdded) { finish(); return; }
+      this.authService.getKpiTemplateAdded(year).subscribe({
+        next: (res) => {
+          this._addKpiAdded = addedMapOf(res?.success ? res.data : null);
+          this._addKpiAddedYear = year;
+          finish();
+        },
+        // โหลดไม่ได้ → ใช้ข้อมูลที่โหลดไว้ในตารางหลักแทน (เฉพาะปีงบเดียวกัน — อาจไม่ครบ แต่ backend ข้ามคู่ที่มีอยู่แล้วเสมอ)
+        error: () => {
+          const m = new Map<number, Set<string>>();
+          this.kpiData.filter(k => String(k.year_bh) === year).forEach(k => {
+            const id = Number(k.indicator_id);
+            if (!m.has(id)) m.set(id, new Set<string>());
+            m.get(id)!.add(String(k.hospcode || '').trim());
+          });
+          this._addKpiAdded = m;
+          this._addKpiAddedYear = year;
+          finish();
+        }
+      });
+    };
+    if (!needTemplate) { loadAdded(); return; }
     this.authService.getKpiTemplate(this.addKpiCanSeeInactive).subscribe({
       next: (res) => {
         if (res.success) {
           this._addKpiTemplate = res.data || [];
-          this.buildAddKpiList(this._addKpiTemplate!);
-          Swal.close();
-          if (!this.showAddModal) {
-            setTimeout(() => {
-              this.showAddModal = true;
-              this.cdr.detectChanges();
-            }, 150);
-          } else {
-            this.cdr.detectChanges();
-          }
+          loadAdded();
         } else {
           Swal.close();
         }
@@ -2722,26 +2834,34 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     this.addKpiTotalTemplateCount = allForDept.length;
 
-    // หน่วยบริการเดียว → ซ่อนตัวที่หน่วยบริการนี้มีอยู่แล้วในปีงบนั้น (หลายแห่ง → backend ข้ามคู่ที่มีอยู่แล้วและสรุปผลให้)
-    let available = allForDept;
-    if (single && singleHc) {
-      const existingIds = new Set(this.kpiData
-        .filter(k => String(k.year_bh) === String(this.addKpiSelectedYear) && (!adminMode || String(k.hospcode) === singleHc))
-        .map(k => Number(k.indicator_id)));
-      available = allForDept.filter((item: any) => !existingIds.has(Number(item.indicator_id)));
-    }
-    this.addKpiExistingCount = allForDept.length - available.length;
-
-    const opts = { districts: single ? [] : this.addKpiTargetDistricts(), singleUnit: single };
+    const districts = single ? [] : this.addKpiTargetDistricts();
+    const opts = { districts, singleUnit: single };
+    // หน่วยบริการที่นับ "เพิ่มแล้ว" (15 พ.ย. 2569): หน่วยเดียว = หน่วยตัวเอง | หลายแห่ง = หน่วยบริการในขอบเขต (+ อำเภอ/โซนที่เลือก)
+    const hosByCode = new Map<string, any>(this.addKpiHospitalList.map((h: any) => [String(h.hoscode), h]));
+    const inScope = (hc: string): boolean => {
+      if (single) return hc === singleHc;
+      const h = hosByCode.get(hc);
+      return !!h && (districts.length === 0 || districts.includes(String(h.distid)));
+    };
+    const addedMap = this._addKpiAdded || new Map<number, Set<string>>();
     // ประเภทหน่วยบริการที่เลือก (หลายแห่งเท่านั้น) จำกัดหน่วยบริการปลายทาง — ไม่เลือก = ทุกประเภทตามที่ตั้งไว้ในตัวชี้วัด
     const targetHospitals = (!single && this.addKpiSelHosTypes.length > 0)
       ? this.addKpiHospitalList.filter((h: any) => this.addKpiSelHosTypes.includes(String(h.hostype)))
       : this.addKpiHospitalList;
     const valueFields = ['target_value', 'oct', 'nov', 'dece', 'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'total_actual', 'last_actual'];
     const prevRows = new Map<number, any>(this.newKpiList.map((i: any) => [Number(i.indicator_id), i]));
-    this.newKpiList = available.map((item: any) => {
+    this.newKpiList = allForDept.map((item: any) => {
       // ค่าเริ่มต้นของเป้าหมาย = เป้าหมายที่ตั้งไว้ในตัวชี้วัด — เก็บใน _original ด้วย เพื่อไฮไลต์เฉพาะช่องที่ผู้ใช้แก้จริง
       const defaultTarget = item.target_percentage != null ? String(item.target_percentage) : '';
+      const setting = indicatorTypeSetting(item);
+      const addedSet = addedMap.get(Number(item.indicator_id)) || new Set<string>();
+      const added = [...addedSet].filter(inScope);
+      // ปลายทาง = หน่วยบริการตามประเภทที่ตั้งไว้ ที่ยังไม่มีตัวชี้วัดนี้ (คู่ที่มีอยู่แล้วไม่ต้องส่ง — backend ข้ามให้อยู่แล้ว)
+      const allTargets = resolveAddKpiTargets(item, targetHospitals, opts);
+      const targets = allTargets.filter((hc: string) => !addedSet.has(hc));
+      const state = setting === 'unset' ? (added.length > 0 && single ? 'existing' : 'unset')
+        : (added.length > 0 && targets.length === 0) ? 'existing'
+        : targets.length === 0 ? 'notarget' : 'new';
       const row: any = {
         ...item,
         year_bh: this.addKpiSelectedYear,
@@ -2751,17 +2871,22 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         apr: '', may: '', jun: '', jul: '', aug: '', sep: '',
         total_actual: 0,
         last_actual: '',
-        _setting: indicatorTypeSetting(item),
+        _setting: setting,
         _autoTypes: autoTargetHostypes(item),
-        _targets: resolveAddKpiTargets(item, targetHospitals, opts),
+        _targets: targets,
+        _added: added.length,
+        _addedTitle: this.addKpiAddedTitle(added, hosByCode),
+        _state: state,
         _original: { target_value: defaultTarget, oct: '', nov: '', dece: '', jan: '', feb: '', mar: '', apr: '', may: '', jun: '', jul: '', aug: '', sep: '' }
       };
       const prev = prevRows.get(Number(item.indicator_id));
       if (prev) valueFields.forEach(f => row[f] = prev[f]);   // คงค่าที่ผู้ใช้กรอกไว้ก่อนเปลี่ยนตัวกรอง
       return row;
     });
-    this.addKpiUnsetCount = this.newKpiList.filter((i: any) => i._setting === 'unset').length;
-    this.addKpiNoTargetCount = this.newKpiList.filter((i: any) => i._setting !== 'unset' && !i._targets.length).length;
+    this.addKpiExistingCount = this.newKpiList.filter((i: any) => i._state === 'existing').length;
+    this.addKpiMissingCount = this.newKpiList.length - this.addKpiExistingCount;
+    this.addKpiUnsetCount = this.newKpiList.filter((i: any) => i._state === 'unset').length;
+    this.addKpiNoTargetCount = this.newKpiList.filter((i: any) => i._state === 'notarget').length;
     // รายการหมวดหมู่หลักสำหรับ filter
     this.addKpiMainList = Array.from(new Set<string>(this.newKpiList.map((i: any) => i.main_indicator_name).filter(Boolean))).sort();
     this.addKpiSelMains = this.addKpiSelMains.filter(m => this.addKpiMainList.includes(m));   // ว่าง = แสดงทุกหมวดหมู่
@@ -2769,7 +2894,12 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.addKpiIndicatorName && !this.addKpiNameList.includes(this.addKpiIndicatorName)) this.addKpiIndicatorName = '';
     // การเลือก: admin เริ่มจากไม่เลือก / ผู้ใช้หน่วยบริการเดียว เลือกทุกตัวที่เพิ่มได้ตอนเปิดครั้งแรก — หลังจากนั้นคงที่ติ๊กไว้ (ตัดตัวที่เลือกไม่ได้แล้วออก)
     const selectable = new Set<number>(this.newKpiList.filter((i: any) => this.isAddKpiSelectable(i)).map((i: any) => Number(i.indicator_id)));
-    if (this._addKpiDefaultAll) {
+    if (this._addKpiSelectFiltered) {
+      // เปิดจากกล่อง "ไม่พบข้อมูล" ของการค้นหา: เลือกตัวชี้วัดที่ค้นหา (รายการที่แสดงตามตัวกรอง) ที่เพิ่มได้ให้เลย — ผู้ใช้ตรวจแล้วกดบันทึกเอง
+      this.addKpiSelectedIds = new Set<number>(this.filteredNewKpiList.filter((i: any) => this.isAddKpiSelectable(i)).map((i: any) => Number(i.indicator_id)));
+      this._addKpiSelectFiltered = false;
+      this._addKpiDefaultAll = false;
+    } else if (this._addKpiDefaultAll) {
       this.addKpiSelectedIds = selectable;
       this._addKpiDefaultAll = false;
     } else {
@@ -2787,6 +2917,26 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // === Add-KPI filter + selection helpers ===
   get filteredNewKpiList(): any[] {
+    const sf = this.addKpiListFilter;
+    const list = this.addKpiBaseList;
+    if (sf === 'existing') return list.filter((i: any) => i._state === 'existing');
+    if (sf === 'missing') return list.filter((i: any) => i._state !== 'existing');
+    if (sf === 'unset' || sf === 'notarget') return list.filter((i: any) => i._state === sf);
+    return list;
+  }
+  /** จำนวนบนป้ายสรุป — นับจากรายการหลังตัวกรองอื่นของหน้าต่าง (สถานะเปิด/ปิด, ชื่อ, หมวดหมู่, คำค้น ฯลฯ) ให้ตรงกับจำนวนแถวที่กดแล้วเห็น */
+  get addKpiChipCounts(): { all: number; existing: number; missing: number; unset: number; notarget: number } {
+    const c = { all: 0, existing: 0, missing: 0, unset: 0, notarget: 0 };
+    for (const i of this.addKpiBaseList) {
+      c.all++;
+      if (i._state === 'existing') c.existing++; else c.missing++;
+      if (i._state === 'unset') c.unset++;
+      if (i._state === 'notarget') c.notarget++;
+    }
+    return c;
+  }
+  /** รายการหลังตัวกรองของหน้าต่าง ยกเว้นตัวกรองจากป้ายสรุป */
+  get addKpiBaseList(): any[] {
     let list = this.newKpiList;
     if (this.addKpiSelMains.length > 0) list = list.filter((i: any) => this.addKpiSelMains.includes(i.main_indicator_name));
     if (this.addKpiStatus) list = list.filter((i: any) => isIndicatorActive(i) === (this.addKpiStatus === 'active'));

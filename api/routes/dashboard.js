@@ -64,6 +64,42 @@ apiRouter.get('/kpi-template', authenticateToken, async (req, res) => {
     }
 });
 
+// หน่วยบริการที่เพิ่มตัวชี้วัดแล้วในปีงบ (15 พ.ย. 2569) — หน้าต่าง "เพิ่มตัวชี้วัดให้หน่วยบริการ": ป้าย "เพิ่มแล้ว N แห่ง" + ตัวกรอง "มีอยู่แล้ว"
+// "เพิ่มแล้ว" = มีแถวใน kpi_results ของคู่ ตัวชี้วัด × หน่วยบริการ × ปีงบ (กติกาเดียวกับการตรวจ "มีอยู่แล้ว" ของ /update-kpi โหมด setup_insert_new)
+// ขอบเขตเดียวกับ GET /hospitals (หน่วยบริการตัวเอง / อำเภอตัวเอง / ทั้งหมด) + ROLE_SCOPE_OWN_DEPT = เฉพาะตัวชี้วัดของหน่วยงานตัวเอง
+apiRouter.get('/kpi-template/added', authenticateToken, async (req, res) => {
+    try {
+        const user = req.user;
+        const yearBh = String(req.query.year_bh || '').trim();
+        if (!/^\d{4}$/.test(yearBh)) return res.status(400).json({ success: false, message: 'กรุณาระบุปีงบประมาณ (year_bh)' });
+        const where = ['r.year_bh = ?'];
+        const params = [yearBh];
+        if (ROLE_SCOPE_HOSPCODE.includes(user.role)) {
+            where.push('r.hospcode = ?');
+            params.push(user.hospcode || '');
+        } else if (ROLE_SCOPE_DISTRICT.includes(user.role)) {
+            const distid = user.hospcode ? await getDistrictId(user.hospcode) : null;
+            where.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)');
+            params.push(distid || '');
+        }
+        if (ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null) {
+            where.push('r.indicator_id IN (SELECT id FROM kpi_indicators WHERE dept_id = ?)');
+            params.push(user.deptId);
+        }
+        const [rows] = await db.query(
+            `SELECT r.indicator_id, r.hospcode FROM kpi_results r WHERE ${where.join(' AND ')} GROUP BY r.indicator_id, r.hospcode`, params);
+        const data = {};
+        for (const r of rows) {
+            const hc = String(r.hospcode || '').trim();
+            if (!hc) continue;
+            (data[r.indicator_id] = data[r.indicator_id] || []).push(hc);
+        }
+        res.json({ success: true, year_bh: yearBh, data });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
 // ตรวจสอบข้อมูล KPI ที่มีอยู่แล้วสำหรับ KPI-Setup
 apiRouter.get('/kpi-setup-check', authenticateToken, async (req, res) => {
     try {

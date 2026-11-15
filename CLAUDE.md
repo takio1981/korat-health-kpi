@@ -381,6 +381,12 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   ประเภทหน่วยบริการ (`addKpiSelHosTypes` **จำกัดหน่วยบริการปลายทาง** — เฉพาะเพิ่มให้หลายแห่ง), ชื่อตัวชี้วัด, ตัวชี้วัดของ (`indicatorOfTypes()` ความหมายเดียวกับตัวกรองตารางหลัก: all_required = ทุกประเภท),
   ประเภทตัวชี้วัด r9/moph/ssj/rmw/other, ปุ่มล้างตัวกรอง — `GET /kpi-template` คืน r9…other + is_active และ `?include_inactive=1` เฉพาะ role ที่เข้าหน้า kpi-manage ได้ (kpi-setup ไม่ส่ง = เปิดใช้งานเท่านั้น)
   — Test: `api/tests/kpi-template-filters.test.js`, `dashboard.spec.ts`
+- **หน่วยบริการที่เพิ่มแล้ว + ป้ายสรุปกดกรอง (15 พ.ย. 2569 — ผู้ใช้สั่ง):** `GET /kpi-template/added?year_bh=` (routes/dashboard.js) คืน `{ [indicator_id]: hospcode[] }` = คู่ที่มีแถวใน kpi_results (ความหมายเดียวกับ "มีอยู่แล้ว" ของ setup_insert_new)
+  ขอบเขตเดียวกับ GET /hospitals + ROLE_SCOPE_OWN_DEPT กรองหน่วยงาน — `loadAddKpiList()` โหลดคู่กับแม่แบบ (โหลดใหม่เมื่อเปลี่ยนปีงบ, ล้มเหลว = ใช้ kpiData) → `buildAddKpiList()` แถวมี `_added`/`_addedTitle` (tooltip แยกประเภท)/`_state`
+  ('existing' | 'new' | 'unset' | 'notarget') และ **`_targets` = ปลายทางที่ยังไม่มีเท่านั้น** (เพิ่มครบแล้ว = existing เลือกไม่ได้) — `newKpiList` รวมตัวที่มีอยู่แล้วด้วย (เดิมหน่วยเดียวซ่อนไป) กรองด้วย `addKpiListFilter` (ค่าตั้งต้น 'missing')
+  ผ่านป้าย `#add-kpi-state-chips` | **กล่องไม่พบข้อมูลของการค้นหา:** `finishSearchStatusSwal()` นับถอยหลังแล้วเรียก `showNoDataAlert()` (ไม่ปิดเอง) ปุ่ม "ปิด" + "เพิ่มข้อมูลตัวชี้วัดนี้…" (`canAddFromNoData` = มีตัวกรองชื่อตัวชี้วัด/คำค้น + เปิดหน้าต่างเพิ่มได้)
+  → `openAddModalFromSearch()` เลือกรายการที่แสดงให้ (`_addKpiSelectFiltered`) — ตัวนับถอยหลังตรวจ `isSearchStatusSwalOpen()` (popup มี `data-kpi-search-status`) ก่อนเขียน/ปิดทุกครั้ง
+  (⚠️ เดิมกล่องไม่พบข้อมูลเปิดทับแล้วถูกตัวนับถอยหลังเขียนเนื้อหาทับ/ปิดใน 5 วินาที) — Test: `api/tests/kpi-template-added.test.js`, `dashboard.spec.ts`
 - Dashboard (`dashboard.ts`): แถวมี `_setting`/`_autoTypes`/`_targets`, ติ๊กได้เมื่อ `isAddKpiSelectable()` (ตั้งค่าแล้ว + มีปลายทาง), unset มีปุ่ม
   "ไปตั้งค่า" (`canSetupIndicatorType` = page kpi-manage + action edit) → `/kpi-manage?editIndicator=<id>` → `openPendingIndicatorEdit()` เปิด modal
   แก้ไข + เลื่อนไป `#indicator-eval-mode` | บันทึก `buildAddKpiBatches()` ชุดละ ≤ 30 หน่วยบริการ (แถวระบุ `hospcode`) — โหลดตารางใหม่**หลัง**ปิดสรุปผล

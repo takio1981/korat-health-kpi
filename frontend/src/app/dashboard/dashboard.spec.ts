@@ -5,7 +5,7 @@ import Swal from 'sweetalert2';
 import { testProviders } from '../testing/test-providers';
 import { parseImportAoa, planImport, buildTemplateAoa, itemKey } from '../shared/kpi-excel';
 import { parseSubImportAoa, planSubImport } from '../shared/kpi-sub-excel';
-import { buildHierRows, recomputeHierRows } from './dashboard';
+import { buildHierRows, recomputeHierRows, addedMapOf } from './dashboard';
 
 function row(year: string, extra: any = {}) {
   return {
@@ -264,6 +264,8 @@ describe('DashboardComponent', () => {
       component.addKpiSelectedIds = new Set<number>();
       component.newKpiList = [];
       (component as any)._addKpiDefaultAll = false;
+      (component as any)._addKpiAdded = new Map();      // GET /kpi-template/added โหลดแล้ว (ยังไม่มีหน่วยบริการใดเพิ่ม)
+      (component as any)._addKpiAddedYear = '2570';
       (component as any)._addKpiTemplate = [
         tpl(1, { evaluation_mode: 'any_one', required_off_types: '["18"]', result_formula: 'SUM(ALL)' }),
         tpl(2, { evaluation_mode: 'all_required' }),
@@ -442,6 +444,89 @@ describe('DashboardComponent', () => {
       expect(component.filteredNewKpiList.map((i: any) => i.indicator_id)).toEqual([1]);
     });
 
+    // ---- ป้าย "เพิ่มแล้ว N แห่ง" + ป้ายสรุปจำนวนกดกรองได้ (15 พ.ย. 2569) ----
+    it('หน่วยบริการที่เพิ่มแล้ว: ป้ายจำนวน + tooltip แยกประเภท, ปลายทางเหลือเฉพาะที่ยังไม่มี, ครบแล้ว = มีอยู่แล้ว', () => {
+      (component as any)._addKpiAdded = addedMapOf({ 1: ['B', 'C'], 2: ['A', 'B', 'X'], 3: [] });
+      component.loadAddKpiList();
+      expect(item(1)._added).toBe(2);
+      expect(item(1)._targets).toEqual([]);
+      expect(item(1)._state).toBe('existing');
+      expect(item(2)._added).toBe(2);                  // X ไม่อยู่ในขอบเขต (ไม่นับ)
+      expect(item(2)._targets).toEqual(['C']);
+      expect(item(2)._state).toBe('new');
+      expect(item(2)._addedTitle).toContain('เพิ่มในหน้าบันทึกผลงานแล้ว 2 แห่ง');
+      expect(item(2)._addedTitle).toContain('โรงพยาบาลชุมชน: 1 แห่ง');
+      expect(item(2)._addedTitle).toContain('รพ.สต.: 1 แห่ง');
+      expect(component.addKpiExistingCount).toBe(1);
+      expect(component.addKpiMissingCount).toBe(3);
+      expect(component.isAddKpiSelectable(item(1))).toBe(false);
+      // อำเภอที่เลือกจำกัดการนับด้วย
+      component.addKpiSelDistricts = ['3002'];
+      component.onAddKpiDistrictChange();
+      expect(item(2)._added).toBe(0);
+      expect(item(1)._added).toBe(1);
+
+      component.addKpiSelDistricts = [];
+      component.onAddKpiDistrictChange();
+      fixture.detectChanges();
+      const el = modalEl();
+      const badge = el.querySelector('.add-kpi-added-badge') as HTMLElement;
+      expect(badge.textContent).toContain('เพิ่มแล้ว 2 แห่ง');
+      expect(badge.getAttribute('title')).toContain('แห่ง');
+    });
+
+    it('ป้ายสรุปจำนวนกดแล้วกรองรายการ: ทั้งหมด / มีอยู่แล้ว / ยังไม่มี (ค่าตั้งต้น) / ยังไม่ได้ตั้งประเภท', () => {
+      (component as any)._addKpiAdded = addedMapOf({ 1: ['B', 'C'] });
+      component.loadAddKpiList();
+      const ids = () => component.filteredNewKpiList.map((i: any) => Number(i.indicator_id));
+      expect(component.addKpiListFilter).toBe('missing');
+      expect(ids()).toEqual([2, 3, 4]);
+      fixture.detectChanges();
+      const click = (id: string) => { (modalEl().querySelector('#' + id) as HTMLButtonElement).click(); fixture.detectChanges(); };
+      click('add-kpi-chip-existing');
+      expect(ids()).toEqual([1]);
+      click('add-kpi-chip-all');
+      expect(ids()).toEqual([1, 2, 3, 4]);
+      click('add-kpi-chip-unset');
+      expect(ids()).toEqual([4]);
+      expect(modalEl().querySelector('#add-kpi-chip-unset')!.className).toContain('ring-red-500');
+      click('add-kpi-chip-missing');
+      expect(ids()).toEqual([2, 3, 4]);
+      // จำนวนบนป้ายนับตามตัวกรองอื่นของหน้าต่าง (เดิมนับรวมตัวชี้วัดที่ปิดใช้งานที่ซ่อนอยู่ — ป้าย 40 แต่เห็น 12 แถว)
+      expect(component.addKpiChipCounts).toEqual({ all: 4, existing: 1, missing: 3, unset: 1, notarget: 0 });
+      component.addKpiStatus = 'inactive';
+      expect(component.addKpiChipCounts.all).toBe(0);
+      component.addKpiStatus = 'active';
+      component.addKpiSearch = 'ตัวชี้วัด';
+      expect(component.addKpiChipCounts).toEqual({ all: 2, existing: 1, missing: 1, unset: 0, notarget: 0 });
+    });
+
+    it('ผู้ใช้หน่วยบริการเดียว: ตัวที่หน่วยตัวเองมีแล้ว = มีอยู่แล้ว (ดูได้จากป้าย) ไม่ถูกเลือกให้', () => {
+      component.isAdmin = false;
+      component.newKpiList = [];
+      component.addKpiHospitalList = [{ hoscode: 'D', hosname: 'สสอ.ง', hostype: '' }];
+      (component as any)._addKpiAdded = addedMapOf({ 2: ['D'], 3: ['Z'] });
+      (component as any)._addKpiDefaultAll = true;
+      component.loadAddKpiList();
+      expect(item(2)._state).toBe('existing');
+      expect(item(3)._state).toBe('new');
+      expect(component.addKpiExistingCount).toBe(1);
+      expect([...component.addKpiSelectedIds].sort()).toEqual([1, 3]);
+      expect(component.filteredNewKpiList.map((i: any) => Number(i.indicator_id))).not.toContain(2);
+    });
+
+    it('เปลี่ยนปีงบ → โหลดหน่วยบริการที่เพิ่มแล้วของปีนั้นใหม่', () => {
+      vi.spyOn(Swal, 'fire').mockResolvedValue({} as any);
+      vi.spyOn(Swal, 'close').mockImplementation(() => {});
+      component.addKpiSelectedYear = '2571';
+      component.loadAddKpiList();
+      const req = http.expectOne(r => r.url.endsWith('/kpi-template/added'));
+      expect(req.request.params.get('year_bh')).toBe('2571');
+      req.flush({ success: true, data: { 2: ['A'] } });
+      expect(item(2)._added).toBe(1);
+      expect(item(2)._targets).toEqual(['B', 'C']);
+    });
+
     it('แสดงป้ายสูตร + จำนวนหน่วยบริการปลายทาง และซ่อนช่องผลงานรายเดือนเป็นค่าเริ่มต้น', () => {
       fixture.detectChanges();
       const el = modalEl();
@@ -454,6 +539,68 @@ describe('DashboardComponent', () => {
       component.addKpiShowMonths = true;
       (component as any).cdr.detectChanges();
       expect(el.textContent).toContain('ต.ค.');
+    });
+  });
+
+  // ---- กล่อง "ไม่พบข้อมูล" หลังค้นหาตัวชี้วัด (15 พ.ย. 2569): ปุ่ม "ปิด" + "เพิ่มข้อมูลตัวชี้วัดนี้ให้หน่วยบริการ…" ----
+  describe('กล่องไม่พบข้อมูลของการค้นหา', () => {
+    beforeEach(() => fixture.detectChanges());
+
+    it('ค้นหาตัวชี้วัดแล้วไม่พบ: มีปุ่มเพิ่ม → เปิดหน้าต่างเพิ่มตัวชี้วัดพร้อมตัวชี้วัดนั้นและเลือกให้', async () => {
+      component.selectedIndicator = 'อัตราการคัดกรอง';
+      const fire = vi.spyOn(Swal, 'fire').mockResolvedValue({ isConfirmed: true } as any);
+      const open = vi.spyOn(component, 'openAddModal').mockImplementation(() => {});
+      expect(component.canAddFromNoData).toBe(true);
+      component.showNoDataAlert();
+      const opts: any = fire.mock.calls[fire.mock.calls.length - 1][0];
+      expect(opts.showConfirmButton).toBe(true);
+      expect(opts.confirmButtonText).toContain('เพิ่มข้อมูลตัวชี้วัดนี้ให้หน่วยบริการตามประเภทหน่วยบริการที่ตั้งค่าไว้แล้ว');
+      expect(opts.showCancelButton).toBe(true);
+      expect(opts.cancelButtonText).toBe('ปิด');
+      expect(opts.html).toContain('อัตราการคัดกรอง');
+      await Promise.resolve(); await Promise.resolve();
+      expect(open).toHaveBeenCalledWith({ search: '', selectFiltered: true });
+    });
+
+    it('คำค้นแทนตัวกรองชื่อ → ส่งคำค้นเข้าหน้าต่าง | ไม่ได้ค้นหาตัวชี้วัด / ปิดการคีย์ = มีแค่ปุ่มปิด', async () => {
+      component.searchTerm = 'คัดกรอง';
+      const fire = vi.spyOn(Swal, 'fire').mockResolvedValue({ isConfirmed: true } as any);
+      const open = vi.spyOn(component, 'openAddModal').mockImplementation(() => {});
+      component.showNoDataAlert();
+      await Promise.resolve(); await Promise.resolve();
+      expect(open).toHaveBeenCalledWith({ search: 'คัดกรอง', selectFiltered: true });
+
+      component.searchTerm = '';
+      fire.mockClear(); open.mockClear();
+      component.showNoDataAlert();
+      expect((fire.mock.calls[0][0] as any).showConfirmButton).toBe(false);
+      await Promise.resolve(); await Promise.resolve();
+      expect(open).not.toHaveBeenCalled();
+
+      component.searchTerm = 'คัดกรอง';
+      component.isAdmin = false;
+      component.isLocalAdmin = false;
+      component.dataEntryLock = { is_locked: true } as any;
+      expect(component.canAddFromNoData).toBe(false);
+    });
+
+    it('เปิดจากกล่องไม่พบข้อมูล: เลือกเฉพาะตัวชี้วัดที่ค้นหาที่เพิ่มได้ให้ตอนโหลด', () => {
+      component.isAdmin = true;
+      component.isLocalAdmin = false;
+      component.kpiData = [];
+      component.addKpiHospitalList = [{ hoscode: 'A', hosname: 'รพ.ก', hostype: '07', distid: '3001' }];
+      (component as any)._addKpiSelectFiltered = true;
+      (component as any)._addKpiAdded = new Map();
+      (component as any)._addKpiAddedYear = '2570';
+      component.addKpiSelectedYear = '2570';
+      component.addKpiSearch = 'คัดกรอง';
+      (component as any)._addKpiTemplate = [
+        { indicator_id: 1, kpi_indicators_name: 'ตัวชี้วัดอื่น', evaluation_mode: 'all_required' },
+        { indicator_id: 3, kpi_indicators_name: 'อัตราการคัดกรอง', evaluation_mode: 'all_required' },
+      ];
+      component.showAddModal = true;
+      component.loadAddKpiList();
+      expect([...component.addKpiSelectedIds]).toEqual([3]);
     });
   });
 

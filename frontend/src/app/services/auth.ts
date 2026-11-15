@@ -533,6 +533,12 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     return this.http.get(`${this.apiUrl}/kpi-template${includeInactive ? '?include_inactive=1' : ''}`, { headers });
   }
 
+  /** หน่วยบริการที่เพิ่มตัวชี้วัดแล้วในปีงบ (ตามขอบเขตสิทธิ์) — data = { [indicator_id]: hospcode[] } */
+  getKpiTemplateAdded(yearBh: string): Observable<any> {
+    const headers = new HttpHeaders({ 'Authorization': `Bearer ${localStorage.getItem('kpi_token')}` });
+    return this.http.get(`${this.apiUrl}/kpi-template/added`, { headers, params: { year_bh: String(yearBh || '') } });
+  }
+
   getSettings(): Observable<any> {
     // ไม่แนบ Authorization ถ้ายังไม่ login (เช่น IdleTimeoutService.start() ที่ทำงานตั้งแต่หน้า login ก่อน login จริง)
     // กัน backend ได้ "Bearer null" แล้วตีความเป็น token ผิดรูปแบบ → 403 TOKEN_EXPIRED ซึ่ง interceptor จะโชว์ popup
