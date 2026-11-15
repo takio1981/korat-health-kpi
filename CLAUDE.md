@@ -565,6 +565,13 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - **ฟีเจอร์ 1 สรุปรายงาน:** `POST /report/ai-summary` (routes/reports.js, สิทธิ์หน้า charts) ใช้ `computeChartStats(user, q)` ตัวเดียวกับ `GET /report/chart-stats` → `services/ai-report.js`
   `buildSummaryInput()` (ภาพรวม/รายเดือน/อันดับบน-ล่าง 5 ของยุทธศาสตร์ หน่วยงาน อำเภอ ประเภท ตัวชี้วัด ≥ 3 คู่) แคช 1 ชม. ต่อชุดข้อมูล (`refresh` = สร้างใหม่) | UI `shared/ai-summary-panel.ts`
   ใต้การ์ดภาพรวมใน chart.html (`aiParams` เปลี่ยน = ล้างสรุป)
+- **ฟีเจอร์ 1.1 วิเคราะห์และสรุปรายงานสรุปผลรายแถบ (15 พ.ย. 2569 — ผู้ใช้สั่ง):** `POST /report/ai-tab-summary { tab, view, year_bh, dept_id, distid, hostype, zone, refresh }` (aiLimiter, prefix /report/ → charts)
+  — ตัวคำนวณของ 7 เส้นทางใน routes/reports.js แยกเป็นฟังก์ชัน (`reportByIndicatorRows`/`reportByHospitalRows`/`reportByDistrictRows`/`reportByYearRows`/`recordingStatusByIndicator`/`recordingStatusByHospital`/`deptSummaryReport` —
+  เนื้อหาเดิม เส้นทางเรียกฟังก์ชัน ผลรูปแบบเดิม; by-hospital เพิ่ม `hostype`) **server คำนวณใหม่ตามขอบเขตผู้เรียก ไม่รับตัวเลขจาก client** และตัดตัวกรองที่แถบไม่ใช้ (รายอำเภอ: distid, รายปี: year_bh, รายหน่วยงาน: dept_id/distid)
+  → `services/ai-report-tabs.js` (ฟังก์ชันล้วน: `tabKey` own-property, `buildTabInput`, `tabSystemPrompt` ต่อแถบ) — **แถบรายหน่วยบริการ/สถานะการบันทึกรายหน่วยบริการไม่ส่งรหัส/ชื่อหน่วยบริการ** (สรุปตามการกระจาย/ประเภท/อำเภอ)
+  | ⚠️ ทดลอง Gemini จริง: ปัด 40016 เป็น 40,000, เรียก `pending_count` (ช่องผลงานรายเดือนที่รอตรวจสอบ) ว่า "คู่", คัดลอก "(2–3 ข้อ)" เป็นหัวข้อ, ใช้ "เปอร์เซ็นต์" ตามป้าย % → prompt บังคับตัวเลขทุกหลัก/"ร้อยละ",
+  ฟิลด์ `pending_review_months`, ป้ายช่วงไม่มี % (หลังแก้ 3 แถบ: ตัวเลขทุกตัวพบในข้อมูล ไม่มีชื่อหน่วยบริการ — มี test คุม) | UI: `<app-ai-summary-panel mode="report-tab">` ใน report.html (`aiTabParams` สร้างใหม่ใน loadReport,
+  `seq` ทิ้งคำตอบที่มาหลังสลับแถบ) — Test: `api/tests/ai-report-tabs.test.js`, `shared/ai-summary-panel.spec.ts`
 - **ฟีเจอร์ 2 ช่วยเขียนสูตร (7 พ.ย. 2569):** `POST /ai/formula-suggest { description, kind: 'result'|'pct', custom_vars, target_condition, indicator_name }`
   (`requireAnyAction('kpi-manage', ['add','edit'])` ใน core/access.js + aiLimiter) → `services/ai-formula.js` `suggestFormula()`: prompt สเปกภาษาสูตร + ค่าเพิ่มเติมที่ประกาศ
   → **คืนเฉพาะสูตรที่ผ่าน `parseFormulaInput()`** (ผิด = ส่งข้อผิดพลาดให้ AI แก้ 1 รอบ, ยังผิด/ว่าง = 422) | UI `shared/ai-formula-helper.ts` ในกล่องสูตรผลงานและสูตรร้อยละของ kpi-manage

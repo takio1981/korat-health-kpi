@@ -20,12 +20,12 @@ export function summaryLines(text: string): { kind: 'head' | 'item' | 'text'; te
   template: `
   <div *ngIf="enabled" class="mb-6 rounded-2xl border border-fuchsia-200 bg-gradient-to-br from-fuchsia-50 to-white shadow-sm p-4">
     <div class="flex items-center justify-between gap-2 flex-wrap">
-      <h3 class="text-sm font-bold text-fuchsia-800"><i class="fas fa-wand-magic-sparkles me-1"></i>สรุปโดย AI</h3>
+      <h3 class="text-sm font-bold text-fuchsia-800"><i class="fas fa-wand-magic-sparkles me-1"></i>{{ heading || 'สรุปโดย AI' }}</h3>
       <div class="flex gap-2">
         <button type="button" (click)="generate(!!summary)" [disabled]="loading"
                 class="px-3 py-1.5 rounded-xl bg-fuchsia-600 hover:bg-fuchsia-700 text-white text-xs font-bold shadow-md disabled:opacity-50">
           <i class="fas" [ngClass]="loading ? 'fa-spinner fa-spin' : (summary ? 'fa-rotate' : 'fa-wand-magic-sparkles')"></i>
-          {{ loading ? 'กำลังสรุป...' : (summary ? 'สรุปใหม่' : 'สร้างสรุป') }}
+          {{ loading ? 'กำลังวิเคราะห์...' : (summary ? 'สรุปใหม่' : (mode === 'report-tab' ? 'วิเคราะห์และสรุป' : 'สร้างสรุป')) }}
         </button>
         <button *ngIf="summary" type="button" (click)="copy()"
                 class="px-3 py-1.5 rounded-xl bg-white border border-fuchsia-300 text-fuchsia-700 hover:bg-fuchsia-50 text-xs font-bold">
@@ -34,7 +34,8 @@ export function summaryLines(text: string): { kind: 'head' | 'item' | 'text'; te
       </div>
     </div>
     <p *ngIf="!summary && !loading && !error" class="text-xs text-gray-500 mt-2">
-      กด "สร้างสรุป" เพื่อให้ AI สรุปตัวเลขตามตัวกรองที่เลือกเป็นข้อความสำหรับรายงานผู้บริหาร (ใช้เฉพาะตัวเลขรวมตามสิทธิ์ของคุณ)
+      <ng-container *ngIf="mode !== 'report-tab'">กด "สร้างสรุป" เพื่อให้ AI สรุปตัวเลขตามตัวกรองที่เลือกเป็นข้อความสำหรับรายงานผู้บริหาร (ใช้เฉพาะตัวเลขรวมตามสิทธิ์ของคุณ)</ng-container>
+      <ng-container *ngIf="mode === 'report-tab'">กด "วิเคราะห์และสรุป" เพื่อให้ AI วิเคราะห์ภาพรวมของรายงานแถบนี้ตามตัวกรองที่เลือก (ใช้เฉพาะตัวเลขรวมตามสิทธิ์ของคุณ ไม่ส่งรหัส/ชื่อหน่วยบริการรายแห่ง)</ng-container>
     </p>
     <div *ngIf="error" class="mt-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-2"><i class="fas fa-triangle-exclamation me-1"></i>{{ error }}</div>
     <div *ngIf="summary" class="mt-3 text-sm text-gray-800 space-y-1">
@@ -54,8 +55,12 @@ export class AiSummaryPanelComponent implements OnInit, OnChanges {
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
 
-  /** ตัวกรองเดียวกับที่ใช้โหลดหน้ากราฟ (buildParams ของ ChartComponent) */
+  /** ตัวกรองเดียวกับที่ใช้โหลดหน้ากราฟ (buildParams ของ ChartComponent) — โหมด report-tab: { tab, view, year_bh, dept_id, distid, hostype, zone } */
   @Input() params: any = {};
+  /** chart = สรุปหน้ากราฟ (POST /report/ai-summary) | report-tab = สรุป/วิเคราะห์รายงานสรุปผลรายแถบ (POST /report/ai-tab-summary — 15 พ.ย. 2569) */
+  @Input() mode: 'chart' | 'report-tab' = 'chart';
+  /** หัวข้อแผง (ว่าง = "สรุปโดย AI") */
+  @Input() heading = '';
 
   enabled = false;
   loading = false;
@@ -76,15 +81,25 @@ export class AiSummaryPanelComponent implements OnInit, OnChanges {
     if (changes['params'] && !changes['params'].firstChange) this.reset();
   }
 
+  /** ลำดับคำขอ — ตัวกรอง/แถบเปลี่ยนระหว่างรอคำตอบ = ทิ้งคำตอบเดิม (กันสรุปของแถบเดิมแสดงในแถบใหม่) */
+  private seq = 0;
+
   reset() {
+    this.seq++;
+    this.loading = false;
     this.summary = ''; this.lines = []; this.error = ''; this.copied = false;
   }
 
   generate(refresh = false) {
+    const my = ++this.seq;
     this.loading = true;
     this.error = '';
-    this.authService.getAiReportSummary(this.params || {}, refresh).subscribe({
+    const req = this.mode === 'report-tab'
+      ? this.authService.getAiReportTabSummary(this.params || {}, refresh)
+      : this.authService.getAiReportSummary(this.params || {}, refresh);
+    req.subscribe({
       next: (res) => {
+        if (my !== this.seq) return;
         this.loading = false;
         this.summary = res?.summary || '';
         this.lines = summaryLines(this.summary);
@@ -95,6 +110,7 @@ export class AiSummaryPanelComponent implements OnInit, OnChanges {
         this.cdr.detectChanges();
       },
       error: (err) => {
+        if (my !== this.seq) return;
         this.loading = false;
         this.error = err.error?.message || 'สร้างสรุปด้วย AI ไม่สำเร็จ';
         this.cdr.detectChanges();

@@ -1247,6 +1247,11 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     return this.http.post(`${this.apiUrl}/report/ai-summary`, { ...params, refresh }, { headers: this.authHeaders() });
   }
 
+  /** AI สรุป/วิเคราะห์รายงานสรุปผลรายแถบ (15 พ.ย. 2569) — params: tab, view (สถานะการบันทึก), year_bh, dept_id, distid, hostype, zone */
+  getAiReportTabSummary(params: any = {}, refresh = false): Observable<any> {
+    return this.http.post(`${this.apiUrl}/report/ai-tab-summary`, { ...params, refresh }, { headers: this.authHeaders() });
+  }
+
   // ระบบเตือนล่วงหน้า (ข้อเสนอแนวคิด — 8 พ.ย. 2569): ตัวชี้วัดเสี่ยงตามขอบเขตสิทธิ์ — params: year_bh, through (ดู ณ เดือน 0–11)
   getReportForecast(params: any = {}): Observable<any> {
     const queryStr = new URLSearchParams(params).toString();

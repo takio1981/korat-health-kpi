@@ -12,11 +12,18 @@ import Swal from 'sweetalert2';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { ZoneBadgeComponent } from '../shared/zone-badge';
 import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
+import { AiSummaryPanelComponent } from '../shared/ai-summary-panel';
+
+/** ชื่อแถบรายงานสรุปผลสำหรับหัวข้อแผง AI */
+export const REPORT_TAB_LABELS: Record<string, string> = {
+  'by-indicator': 'รายตัวชี้วัด', 'by-hospital': 'รายหน่วยบริการ', 'by-district': 'รายอำเภอ', 'by-year': 'รายปีงบประมาณ',
+  'recording-status': 'สถานะการบันทึก', 'by-dept': 'สรุปรายหน่วยงาน',
+};
 
 @Component({
   selector: 'app-report',
   standalone: true,
-  imports: [CommonModule, RouterModule, NgApexchartsModule, FormsModule, SkeletonTableComponent, CriteriaTextPipe, FormulaBadgeComponent, ZoneBadgeComponent],
+  imports: [CommonModule, RouterModule, NgApexchartsModule, FormsModule, SkeletonTableComponent, CriteriaTextPipe, FormulaBadgeComponent, ZoneBadgeComponent, AiSummaryPanelComponent],
   templateUrl: './report.html',
   styleUrl: './report.css'
 })
@@ -52,6 +59,10 @@ export class ReportComponent implements OnInit {
 
   // Report Data
   reportData: any[] = [];
+
+  // AI วิเคราะห์และสรุปรายแถบ (15 พ.ย. 2569) — object ใหม่ทุกครั้งที่โหลดรายงาน (แถบ/มุมมอง/ตัวกรองเปลี่ยน → แผงล้างสรุปเดิม)
+  aiTabParams: any = {};
+  aiTabHeading = '';
 
   // Summary Stats
   summaryStats = {
@@ -299,6 +310,9 @@ export class ReportComponent implements OnInit {
     if (this.selectedDistId) params.distid = this.selectedDistId;
     if (this.selectedHosType) params.hostype = this.selectedHosType;
     if (this.selectedZone) params.zone = this.selectedZone;
+    this.aiTabParams = { ...params, tab: this.activeTab, ...(this.activeTab === 'recording-status' ? { view: this.monitorView } : {}) };
+    const label = REPORT_TAB_LABELS[this.activeTab] || '';
+    this.aiTabHeading = 'AI วิเคราะห์และสรุป — ' + label + (this.activeTab === 'recording-status' ? (this.monitorView === 'by-hospital' ? ' (รายหน่วยบริการ)' : ' (รายตัวชี้วัด)') : '');
 
     let observable;
     switch (this.activeTab) {

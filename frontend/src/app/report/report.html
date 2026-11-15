@@ -89,6 +89,11 @@
         </div>
       </div>
 
+      <!-- AI วิเคราะห์และสรุปภาพรวมของแถบที่เปิดอยู่ (15 พ.ย. 2569) — แสดงเมื่อเปิดผู้ช่วย AI -->
+      <div class="no-print" id="report-ai-tab-panel">
+        <app-ai-summary-panel mode="report-tab" [params]="aiTabParams" [heading]="aiTabHeading"></app-ai-summary-panel>
+      </div>
+
       <!-- Summary Cards (existing 4 reports) -->
       <div *ngIf="activeTab !== 'recording-status' && activeTab !== 'by-dept'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div class="bg-gradient-to-br from-green-500 to-green-700 rounded-2xl p-5 text-white shadow-lg">

@@ -64,4 +64,42 @@ describe('AiSummaryPanelComponent', () => {
     f.detectChanges();
     expect(f.nativeElement.textContent).toContain('ใช้ผู้ช่วย AI ครบ 200 ครั้งของวันนี้แล้ว');
   });
+
+  // ---- รายงานสรุปผลรายแถบ (15 พ.ย. 2569) ----
+  it('โหมด report-tab: หัวข้อตามแถบ + ส่งแถบ/ตัวกรองไป /report/ai-tab-summary', () => {
+    const f = TestBed.createComponent(AiSummaryPanelComponent);
+    f.componentRef.setInput('mode', 'report-tab');
+    f.componentRef.setInput('heading', 'AI วิเคราะห์และสรุป — รายอำเภอ');
+    f.componentRef.setInput('params', { tab: 'by-district', year_bh: '2570', zone: '1' });
+    f.detectChanges();
+    http.expectOne(r => r.url.endsWith('/ai/status')).flush({ success: true, enabled: true });
+    f.detectChanges();
+    const el: HTMLElement = f.nativeElement;
+    expect(el.textContent).toContain('AI วิเคราะห์และสรุป — รายอำเภอ');
+    expect(el.textContent).toContain('วิเคราะห์และสรุป');
+    (el.querySelector('button') as HTMLButtonElement).click();
+    const req = http.expectOne(r => r.url.endsWith('/report/ai-tab-summary'));
+    expect(req.request.body).toEqual({ tab: 'by-district', year_bh: '2570', zone: '1', refresh: false });
+    req.flush({ success: true, summary: '■ ภาพรวม\n• อำเภอ ก ผ่าน 80%', model: 'm', generated_at: '2026-11-15T01:00:00Z' });
+    f.detectChanges();
+    expect(el.textContent).toContain('อำเภอ ก ผ่าน 80%');
+    http.expectNone(r => r.url.endsWith('/report/ai-summary'));
+  });
+
+  it('สลับแถบระหว่างรอคำตอบ = ทิ้งคำตอบของแถบเดิม (ไม่แสดงสรุปผิดแถบ)', () => {
+    const f = TestBed.createComponent(AiSummaryPanelComponent);
+    f.componentRef.setInput('mode', 'report-tab');
+    f.componentRef.setInput('params', { tab: 'by-indicator', year_bh: '2570' });
+    f.detectChanges();
+    http.expectOne(r => r.url.endsWith('/ai/status')).flush({ success: true, enabled: true });
+    f.componentInstance.generate();
+    const old = http.expectOne(r => r.url.endsWith('/report/ai-tab-summary'));
+    f.componentRef.setInput('params', { tab: 'by-hospital', year_bh: '2570' });
+    f.detectChanges();
+    expect(f.componentInstance.loading).toBe(false);
+    old.flush({ success: true, summary: '■ สรุปของแถบรายตัวชี้วัด' });
+    f.detectChanges();
+    expect(f.componentInstance.summary).toBe('');
+    expect(f.nativeElement.textContent).not.toContain('สรุปของแถบรายตัวชี้วัด');
+  });
 });
