@@ -207,7 +207,7 @@
               <!-- Cloud actions -->
               <button *ngIf="!f.cloud_url" (click)="uploadFileToCloud(f)" class="text-sky-600 hover:bg-sky-50 px-2 py-1 rounded ml-1" title="อัพโหลดไป Google Drive"><i class="fas fa-cloud-arrow-up"></i></button>
               <a *ngIf="f.cloud_url" [href]="f.cloud_url" target="_blank" class="text-sky-600 hover:bg-sky-50 px-2 py-1 rounded ml-1 inline-block" title="เปิดใน Google Drive"><i class="fas fa-cloud-arrow-down"></i></a>
-              <button *ngIf="f.cloud_url" (click)="deleteFromCloud(f)" class="text-orange-600 hover:bg-orange-50 px-2 py-1 rounded ml-1" title="ลบจาก cloud (ไฟล์ local ไม่แตะ)"><i class="fas fa-cloud-xmark"></i></button>
+              <button *ngIf="f.cloud_url" (click)="deleteFromCloud(f)" class="text-orange-600 hover:bg-orange-50 px-2 py-1 rounded ml-1" title="ลบจาก cloud (ไฟล์ local ไม่แตะ)"><span class="relative inline-block"><i class="fas fa-cloud"></i><i class="fas fa-xmark absolute -bottom-1 -right-1.5 text-[9px]"></i></span></button>
               <button (click)="deleteFile(f)" class="text-red-600 hover:bg-red-50 px-2 py-1 rounded ml-1" title="Delete"><i class="fas fa-trash"></i></button>
             </td>
           </tr>
