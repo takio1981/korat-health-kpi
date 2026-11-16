@@ -300,6 +300,7 @@
   "POST /khupskpi/api/backup/schedules :: authenticateToken > isSuperAdmin > handler",
   "PUT /khupskpi/api/backup/schedules/:id :: authenticateToken > isSuperAdmin > handler",
   "DELETE /khupskpi/api/backup/schedules/:id :: authenticateToken > isSuperAdmin > handler",
+  "POST /khupskpi/api/backup/schedules/:id/cleanup :: authenticateToken > isSuperAdmin > handler",
   "POST /khupskpi/api/backup/schedules/:id/run-now :: authenticateToken > isSuperAdmin > handler",
   "GET /khupskpi/api/backup/schedules/:id/logs :: authenticateToken > isSuperAdmin > handler",
   "POST /khupskpi/api/backup/schedules/test-notification :: authenticateToken > isSuperAdmin > handler",

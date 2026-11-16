@@ -321,6 +321,8 @@ export class BackupManagerComponent implements OnInit, OnDestroy {
       time_of_day: '02:00',
       compress: true,
       retention_days: 30,
+      keep_last: 0,
+      cleanup_cloud: false,
       notify_email: false,
       notify_email_on_success: true,
       notify_email_on_failure: true,
@@ -351,7 +353,8 @@ export class BackupManagerComponent implements OnInit, OnDestroy {
         name: s.name, is_enabled: !!s.is_enabled, connection_id: s.connection_id,
         days_of_week: days.length ? days : [1, 2, 3, 4, 5, 6, 7],
         time_of_day: s.time_of_day,
-        compress: !!s.compress, retention_days: s.retention_days || 30,
+        compress: !!s.compress, retention_days: s.retention_days ?? 30,
+        keep_last: Number(s.keep_last) || 0, cleanup_cloud: !!s.cleanup_cloud,
         notify_email: !!s.notify_email,
         notify_email_on_success: !!s.notify_email_on_success,
         notify_email_on_failure: !!s.notify_email_on_failure,
@@ -427,6 +430,43 @@ export class BackupManagerComponent implements OnInit, OnDestroy {
         },
         error: (err) => Swal.fire('ผิดพลาด', err.error?.message || '', 'error')
       });
+    });
+  }
+
+  /** ข้อความคอลัมน์ "เก็บไว้": อายุ + จำนวนไฟล์ล่าสุด (16 พ.ย. 2569) */
+  retentionLabel(s: any): string {
+    const days = Number(s.retention_days) || 0, keep = Number(s.keep_last) || 0;
+    const parts = [days ? `${days} วัน` : '', keep ? `ล่าสุด ${keep} ไฟล์` : ''].filter(Boolean);
+    return parts.length ? parts.join(' · ') : 'ไม่ลบอัตโนมัติ';
+  }
+
+  /** ล้างไฟล์เก่าตามการตั้งค่าของตารางเวลาทันที — แสดงรายการที่จะลบก่อนยืนยัน */
+  cleanupScheduleNow(s: any) {
+    this.authService.cleanupBackupSchedule(s.id, true).subscribe({
+      next: (p) => {
+        if (!p.files) {
+          Swal.fire({ icon: 'info', title: 'ไม่มีไฟล์ที่ต้องลบ', text: `ตั้งค่า: ${this.retentionLabel(s)} — มีไฟล์ตามตารางเวลา ${p.kept ?? 0} ไฟล์`, confirmButtonText: 'ปิด' });
+          return;
+        }
+        const esc = (t: any) => this.escapeHtmlPublic(String(t ?? ''));
+        const list = (p.list || []).slice(0, 15).map((f: any) =>
+          `<li><code>${esc(f.file_name)}</code> · ${this.formatBytes(f.size_bytes)} · ${esc(this.formatDate(f.created_at))}${f.on_cloud ? (p.cleanup_cloud ? ' <b style="color:#0284c7">+ Drive</b>' : ' <span style="color:#6b7280">(Drive เก็บไว้)</span>') : ''}</li>`).join('');
+        const more = p.list.length > 15 ? `<p style="font-size:11px;color:#6b7280">... และอีก ${p.list.length - 15} ไฟล์</p>` : '';
+        Swal.fire({
+          title: `ลบไฟล์ backup เก่า ${p.files} ไฟล์?`, icon: 'warning',
+          html: `<div style="text-align:left;font-size:13px">ตารางเวลา: <b>${esc(s.name)}</b> (${esc(this.retentionLabel(s))}) — เหลือ <b>${p.kept}</b> ไฟล์ล่าสุด<br>
+                 รวม ${this.formatBytes(p.bytes)}${p.cloud ? ` · ลบบน Google Drive ${p.cloud} ไฟล์` : ''}
+                 <ul style="margin-top:8px;max-height:220px;overflow:auto;font-size:12px">${list}</ul>${more}</div>`,
+          showCancelButton: true, confirmButtonColor: '#dc2626', confirmButtonText: 'ลบ', cancelButtonText: 'ยกเลิก', width: 640
+        }).then(r => {
+          if (!r.isConfirmed) return;
+          this.authService.cleanupBackupSchedule(s.id, false).subscribe({
+            next: (res) => { Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2500, showConfirmButton: false }); this.loadFiles(); },
+            error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ล้างไฟล์ไม่สำเร็จ', 'error')
+          });
+        });
+      },
+      error: (err) => Swal.fire('ผิดพลาด', err.error?.message || 'ตรวจไฟล์ไม่สำเร็จ', 'error')
     });
   }
 

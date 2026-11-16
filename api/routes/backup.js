@@ -7,7 +7,7 @@ const db = require('../db');
 const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
-const { BACKUP_DIR, MYSQLDUMP_BIN, MYSQL_BIN, bangkokTimestamp, bkEncrypt, buildConnectArgs, cleanStderr, deleteFileFromDrive, getBackupConnection, getDriveSettings, isValidIdent, notifyBackupResult, resetDriveClientCache, runBackupJob, runRestoreJob, runScheduledBackup, testDriveConnection, uploadFileToDrive, verifyBackupPrivileges, listDriveBackupFiles, downloadDriveBackupFile, guessConnectionId } = require('../services/backup');
+const { BACKUP_DIR, MYSQLDUMP_BIN, MYSQL_BIN, bangkokTimestamp, bkEncrypt, buildConnectArgs, cleanStderr, deleteFileFromDrive, getBackupConnection, getDriveSettings, isValidIdent, notifyBackupResult, resetDriveClientCache, runBackupJob, runRestoreJob, runScheduledBackup, testDriveConnection, uploadFileToDrive, verifyBackupPrivileges, listDriveBackupFiles, downloadDriveBackupFile, guessConnectionId, cleanupOldBackups, normRetentionDays, normKeepLast } = require('../services/backup');
 const { apiRouter } = require('../core/router');
 const { authenticateToken, isSuperAdmin } = require('../core/auth');
 const { google } = require('googleapis');
@@ -501,14 +501,14 @@ apiRouter.post('/backup/schedules', authenticateToken, isSuperAdmin, async (req,
         }
         const [r] = await db.query(
             `INSERT INTO backup_schedules
-             (name, is_enabled, connection_id, days_of_week, time_of_day, compress, retention_days,
+             (name, is_enabled, connection_id, days_of_week, time_of_day, compress, retention_days, keep_last, cleanup_cloud,
               notify_email, notify_email_on_success, notify_email_on_failure,
               notify_telegram, notify_telegram_on_success, notify_telegram_on_failure,
               notify_line, notify_line_on_success, notify_line_on_failure,
               auto_upload_cloud, created_by)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
             [b.name, b.is_enabled ? 1 : 0, Number(b.connection_id), b.days_of_week, b.time_of_day,
-             b.compress !== false ? 1 : 0, Number(b.retention_days) || 30,
+             b.compress !== false ? 1 : 0, normRetentionDays(b.retention_days), normKeepLast(b.keep_last), b.cleanup_cloud ? 1 : 0,
              b.notify_email ? 1 : 0, b.notify_email_on_success !== false ? 1 : 0, b.notify_email_on_failure !== false ? 1 : 0,
              b.notify_telegram ? 1 : 0, b.notify_telegram_on_success !== false ? 1 : 0, b.notify_telegram_on_failure !== false ? 1 : 0,
              b.notify_line ? 1 : 0, b.notify_line_on_success !== false ? 1 : 0, b.notify_line_on_failure !== false ? 1 : 0,
@@ -527,14 +527,14 @@ apiRouter.put('/backup/schedules/:id', authenticateToken, isSuperAdmin, async (r
             return res.status(400).json({ success: false, message: 'ข้อมูลไม่ครบ (name/connection_id/days_of_week/time_of_day)' });
         }
         const [upd] = await db.query(
-            `UPDATE backup_schedules SET name=?, is_enabled=?, connection_id=?, days_of_week=?, time_of_day=?, compress=?, retention_days=?,
+            `UPDATE backup_schedules SET name=?, is_enabled=?, connection_id=?, days_of_week=?, time_of_day=?, compress=?, retention_days=?, keep_last=?, cleanup_cloud=?,
              notify_email=?, notify_email_on_success=?, notify_email_on_failure=?,
              notify_telegram=?, notify_telegram_on_success=?, notify_telegram_on_failure=?,
              notify_line=?, notify_line_on_success=?, notify_line_on_failure=?,
              auto_upload_cloud=?
              WHERE id=?`,
             [b.name, b.is_enabled ? 1 : 0, Number(b.connection_id), b.days_of_week, b.time_of_day,
-             b.compress !== false ? 1 : 0, Number(b.retention_days) || 30,
+             b.compress !== false ? 1 : 0, normRetentionDays(b.retention_days), normKeepLast(b.keep_last), b.cleanup_cloud ? 1 : 0,
              b.notify_email ? 1 : 0, b.notify_email_on_success !== false ? 1 : 0, b.notify_email_on_failure !== false ? 1 : 0,
              b.notify_telegram ? 1 : 0, b.notify_telegram_on_success !== false ? 1 : 0, b.notify_telegram_on_failure !== false ? 1 : 0,
              b.notify_line ? 1 : 0, b.notify_line_on_success !== false ? 1 : 0, b.notify_line_on_failure !== false ? 1 : 0,
@@ -550,6 +550,24 @@ apiRouter.delete('/backup/schedules/:id', authenticateToken, isSuperAdmin, async
     try {
         await db.query('DELETE FROM backup_schedules WHERE id=?', [Number(req.params.id)]);
         res.json({ success: true, message: 'ลบสำเร็จ' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// ล้างไฟล์เก่าตามการตั้งค่าของตารางเวลาทันที (16 พ.ย. 2569) — preview = นับ/แสดงรายการโดยไม่ลบ
+apiRouter.post('/backup/schedules/:id/cleanup', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM backup_schedules WHERE id=?', [Number(req.params.id)]);
+        if (rows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบ schedule' });
+        const s = rows[0];
+        const preview = !!req.body?.preview;
+        const r = await cleanupOldBackups(s.connection_id, s.retention_days, { keepLast: s.keep_last, deleteCloud: !!s.cleanup_cloud, preview });
+        if (r.error) return res.status(500).json({ success: false, message: r.error });
+        if (!preview) {
+            try { await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?,?,?,?,?)',
+                [req.user.userId, 'BACKUP_CLEANUP', 'backup_files', JSON.stringify({ schedule_id: s.id, files: r.files, bytes: r.bytes, cloud: r.cloud, ids: r.list.map(f => f.id) }), req.ip]); } catch (_) {}
+        }
+        res.json({ success: true, preview, ...r, retention_days: s.retention_days, keep_last: s.keep_last, cleanup_cloud: !!s.cleanup_cloud,
+            message: preview ? `จะลบ ${r.files} ไฟล์` : `ลบแล้ว ${r.files} ไฟล์` + (r.cloud ? ` (บน Google Drive ${r.cloud} ไฟล์)` : '') });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 

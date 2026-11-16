@@ -73,6 +73,8 @@ CREATE TABLE IF NOT EXISTS `backup_schedules` (
   `time_of_day` varchar(5) NOT NULL,
   `compress` tinyint(1) DEFAULT 1,
   `retention_days` int(11) DEFAULT 30,
+  `keep_last` int(11) DEFAULT 0,
+  `cleanup_cloud` tinyint(1) DEFAULT 0,
   `notify_email` tinyint(1) DEFAULT 0,
   `notify_email_on_success` tinyint(1) DEFAULT 1,
   `notify_email_on_failure` tinyint(1) DEFAULT 1,

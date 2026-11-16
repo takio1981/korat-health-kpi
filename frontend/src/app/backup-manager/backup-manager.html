@@ -372,7 +372,9 @@
             <td class="px-3 py-2 text-gray-600 text-xs">{{ s.connection_name }} <span class="text-gray-400">→ {{ s.db_name }}</span></td>
             <td class="px-3 py-2 text-center text-xs">{{ daysLabel(s) }}</td>
             <td class="px-3 py-2 text-center font-mono">{{ s.time_of_day }}</td>
-            <td class="px-3 py-2 text-center text-xs">{{ s.retention_days }} วัน</td>
+            <td class="px-3 py-2 text-center text-xs">{{ retentionLabel(s) }}
+              <div *ngIf="s.cleanup_cloud" class="text-[10px] text-sky-600"><i class="fab fa-google-drive mr-0.5"></i>ลบบน Drive ด้วย</div>
+            </td>
             <td class="px-3 py-2 text-center text-xs space-x-1">
               <span *ngIf="s.notify_email" class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full" title="email"><i class="fas fa-envelope"></i></span>
               <span *ngIf="s.notify_telegram" class="bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded-full" title="telegram"><i class="fab fa-telegram"></i></span>
@@ -394,6 +396,7 @@
             <td class="px-3 py-2 text-center whitespace-nowrap">
               <button (click)="runScheduleNow(s)" class="text-emerald-600 hover:bg-emerald-50 px-2 py-1 rounded" title="รันทันที"><i class="fas fa-play"></i></button>
               <button (click)="viewScheduleLogs(s)" class="text-purple-600 hover:bg-purple-50 px-2 py-1 rounded ml-1" title="ดู Log"><i class="fas fa-list"></i></button>
+              <button (click)="cleanupScheduleNow(s)" class="text-orange-600 hover:bg-orange-50 px-2 py-1 rounded ml-1" title="ล้างไฟล์เก่าตามการตั้งค่าตอนนี้"><i class="fas fa-broom"></i></button>
               <button (click)="openScheduleModal(s)" class="text-amber-600 hover:bg-amber-50 px-2 py-1 rounded ml-1" title="แก้ไข"><i class="fas fa-edit"></i></button>
               <button (click)="deleteSchedule(s)" class="text-red-600 hover:bg-red-50 px-2 py-1 rounded ml-1" title="ลบ"><i class="fas fa-trash"></i></button>
             </td>
@@ -435,9 +438,22 @@
           </div>
           <div>
             <label class="block text-xs font-medium text-gray-600 mb-1">เก็บไว้ (วัน)</label>
-            <input type="number" [(ngModel)]="scheduleForm.retention_days" min="1" max="365" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-            <p class="text-[10px] text-gray-500 mt-1">ไฟล์ scheduled ที่เก่ากว่านี้จะถูกลบอัตโนมัติ</p>
+            <input type="number" [(ngModel)]="scheduleForm.retention_days" min="0" max="3650" id="schedule-retention-days" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <p class="text-[10px] text-gray-500 mt-1">ไฟล์ที่เก่ากว่านี้จะถูกลบอัตโนมัติ — 0 = ไม่ลบตามอายุ</p>
           </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 p-3 border border-orange-200 bg-orange-50/50 rounded-lg">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">เก็บเฉพาะไฟล์ล่าสุด (จำนวนไฟล์)</label>
+            <input type="number" [(ngModel)]="scheduleForm.keep_last" min="0" max="1000" id="schedule-keep-last" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <p class="text-[10px] text-gray-500 mt-1">ลบไฟล์ที่เก่ากว่า N ไฟล์ล่าสุด — 0 = ไม่จำกัดจำนวน</p>
+          </div>
+          <label class="flex items-start gap-2 text-sm pt-5">
+            <input type="checkbox" [(ngModel)]="scheduleForm.cleanup_cloud" id="schedule-cleanup-cloud" class="w-4 h-4 mt-0.5 accent-sky-600">
+            <span>ลบสำเนาบน Google Drive ของไฟล์ที่ถูกลบด้วย <span class="block text-[10px] text-gray-500">ไม่ติ๊ก = ลบเฉพาะในเซิร์ฟเวอร์ (Drive เก็บไว้ทั้งหมด)</span></span>
+          </label>
+          <p class="col-span-2 text-[10px] text-gray-500">ล้างหลัง backup ตามตารางเวลานี้ทุกครั้ง (ใช้ทั้งอายุและจำนวน — ตรงข้อใดข้อหนึ่งก็ลบ) เฉพาะไฟล์ประเภท scheduled ของการเชื่อมต่อนี้ — ไฟล์ที่กด backup เอง / สำรองก่อนกู้คืน / ดาวน์โหลดจาก Drive ไม่ถูกลบ</p>
         </div>
 
         <div>

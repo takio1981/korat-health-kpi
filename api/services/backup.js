@@ -181,6 +181,9 @@ const backupTablesReady = (async () => {
         try { await db.query('ALTER TABLE backup_schedules ADD COLUMN auto_upload_cloud TINYINT(1) DEFAULT 0'); } catch (e) {}
         try { await db.query('ALTER TABLE backup_schedule_logs ADD COLUMN cloud_uploaded TINYINT(1) DEFAULT 0'); } catch (e) {}
         try { await db.query('ALTER TABLE backup_schedule_logs ADD COLUMN cloud_url VARCHAR(500) NULL'); } catch (e) {}
+        // เก็บเฉพาะ N ไฟล์ล่าสุด + ลบสำเนาบน Drive ตอนล้างไฟล์เก่า (16 พ.ย. 2569) — 0 = ไม่จำกัด / ไม่ลบบน Drive
+        try { await db.query('ALTER TABLE backup_schedules ADD COLUMN keep_last INT DEFAULT 0'); } catch (e) {}
+        try { await db.query('ALTER TABLE backup_schedules ADD COLUMN cleanup_cloud TINYINT(1) DEFAULT 0'); } catch (e) {}
         // ไฟล์ที่ดาวน์โหลดจาก Google Drive เพื่อกู้คืน (16 พ.ย. 2569)
         try { await db.query("ALTER TABLE backup_files MODIFY trigger_type ENUM('manual','scheduled','auto_before_restore','cloud_download') DEFAULT 'manual'"); } catch (e) {}
         try { await db.query('ALTER TABLE backup_files ADD INDEX idx_cloud_file (cloud_file_id)'); } catch (e) {}
@@ -1196,29 +1199,51 @@ async function notifyBackupResult(schedule, result) {
     return { sent_email, sent_telegram, sent_line };
 }
 
-// === Retention cleanup — ลบ backup เก่ากว่า retention_days ของ schedule ===
-async function cleanupOldBackups(connectionId, retentionDays) {
-    if (!retentionDays || retentionDays <= 0) return { files: 0, bytes: 0 };
+// === Retention cleanup — ลบไฟล์ backup ตามอายุ (retention_days) และ/หรือเก็บเฉพาะ N ไฟล์ล่าสุด (keep_last — 16 พ.ย. 2569) ===
+// ขอบเขตเดิม: เฉพาะไฟล์ trigger_type = 'scheduled' ของการเชื่อมต่อนั้น (ไฟล์ที่กด backup เอง / สำรองก่อนกู้คืน / ดาวน์โหลดจาก Drive ไม่ถูกลบ)
+// opts.deleteCloud = ลบสำเนาบน Google Drive ด้วย (ค่าตั้งต้น ไม่ลบ — สำเนาบน Drive เป็นที่เก็บนอกเครื่อง) | opts.preview = คืนรายการ ไม่ลบ
+function normRetentionDays(v) {
+    if (v === undefined || v === null || v === '') return 30;
+    const n = Math.floor(Number(v));
+    return Number.isFinite(n) ? Math.min(Math.max(n, 0), 3650) : 30;
+}
+function normKeepLast(v) {
+    const n = Math.floor(Number(v));
+    return Number.isFinite(n) ? Math.min(Math.max(n, 0), 1000) : 0;
+}
+async function cleanupOldBackups(connectionId, retentionDays, opts = {}) {
+    const days = normRetentionDays(retentionDays);
+    const keepLast = normKeepLast(opts.keepLast);
+    if (!days && !keepLast) return { files: 0, bytes: 0, cloud: 0, list: [] };
     try {
-        const [rows] = await db.query(
-            `SELECT id, file_path, log_path, size_bytes FROM backup_files
-             WHERE connection_id = ? AND trigger_type = 'scheduled'
-             AND created_at < NOW() - INTERVAL ? DAY`,
-            [connectionId, retentionDays]
+        const [all] = await db.query(
+            `SELECT id, file_name, file_path, log_path, size_bytes, cloud_file_id, created_at,
+                    (created_at < NOW() - INTERVAL ? DAY) AS expired
+             FROM backup_files WHERE connection_id = ? AND trigger_type = 'scheduled'
+             ORDER BY created_at DESC, id DESC`,
+            [days || 0, connectionId]
         );
-        let deletedFiles = 0;
-        let deletedBytes = 0;
+        const rows = all.filter((f, i) => (days > 0 && Number(f.expired) === 1) || (keepLast > 0 && i >= keepLast));
+        const list = rows.map(f => ({ id: f.id, file_name: f.file_name, size_bytes: f.size_bytes, created_at: f.created_at, on_cloud: !!f.cloud_file_id }));
+        if (opts.preview) {
+            return { files: rows.length, bytes: rows.reduce((s, f) => s + (Number(f.size_bytes) || 0), 0),
+                cloud: opts.deleteCloud ? rows.filter(f => f.cloud_file_id).length : 0, list, kept: all.length - rows.length };
+        }
+        let deletedFiles = 0, deletedBytes = 0, deletedCloud = 0;
         for (const f of rows) {
             try { if (f.file_path && fs.existsSync(f.file_path)) await fsp.unlink(f.file_path); } catch (_) {}
             try { if (f.log_path && fs.existsSync(f.log_path)) await fsp.unlink(f.log_path); } catch (_) {}
+            if (opts.deleteCloud && f.cloud_file_id) {
+                try { await deleteFileFromDrive(f.cloud_file_id); deletedCloud++; } catch (e) { console.warn('[Scheduler] cleanup: delete from drive failed:', e.message); }
+            }
             await db.query('DELETE FROM backup_files WHERE id = ?', [f.id]);
             deletedFiles++;
-            deletedBytes += f.size_bytes || 0;
+            deletedBytes += Number(f.size_bytes) || 0;
         }
-        return { files: deletedFiles, bytes: deletedBytes };
+        return { files: deletedFiles, bytes: deletedBytes, cloud: deletedCloud, list, kept: all.length - rows.length };
     } catch (e) {
         console.error('[Scheduler] cleanup failed:', e.message);
-        return { files: 0, bytes: 0, error: e.message };
+        return { files: 0, bytes: 0, cloud: 0, list: [], error: e.message };
     }
 }
 
@@ -1267,7 +1292,7 @@ async function runScheduledBackup(schedule) {
         result.warnings = r2.warnings || [];
 
         // Retention cleanup หลัง backup สำเร็จ
-        const cleanup = await cleanupOldBackups(conn.id, schedule.retention_days);
+        const cleanup = await cleanupOldBackups(conn.id, schedule.retention_days, { keepLast: schedule.keep_last, deleteCloud: !!schedule.cleanup_cloud });
         result.cleaned_up_files = cleanup.files;
         result.cleaned_up_bytes = cleanup.bytes;
 
@@ -1563,4 +1588,4 @@ function guessConnectionId(fileName, connections) {
     return hits.length === 1 ? hits[0].id : null;
 }
 
-module.exports = { backupTablesReady, listDriveBackupFiles, downloadDriveBackupFile, guessConnectionId, BACKUP_DIR, _detectBin, MYSQL_BIN, MYSQLDUMP_BIN, MARIADB_COMMON_ARGS, _bkEncKey, bkEncrypt, bkDecrypt, getBackupConnection, sanitizeFilename, sha256File, isValidIdent, cleanStderr, buildConnectArgs, listDbTables, verifyBackupPrivileges, countTableRows, buildBackupLog, buildRestoreLog, runBackupJob, runRestoreJob, notifyBackupResult, cleanupOldBackups, runScheduledBackup, BANGKOK_TZ, _bkkFormatter, getBangkokTime, bangkokTimestamp, startBackupScheduler, getDriveSettings, resetDriveClientCache, getDriveClient, uploadFileToDrive, deleteFileFromDrive, testDriveConnection };
+module.exports = { backupTablesReady, normRetentionDays, normKeepLast, listDriveBackupFiles, downloadDriveBackupFile, guessConnectionId, BACKUP_DIR, _detectBin, MYSQL_BIN, MYSQLDUMP_BIN, MARIADB_COMMON_ARGS, _bkEncKey, bkEncrypt, bkDecrypt, getBackupConnection, sanitizeFilename, sha256File, isValidIdent, cleanStderr, buildConnectArgs, listDbTables, verifyBackupPrivileges, countTableRows, buildBackupLog, buildRestoreLog, runBackupJob, runRestoreJob, notifyBackupResult, cleanupOldBackups, runScheduledBackup, BANGKOK_TZ, _bkkFormatter, getBangkokTime, bangkokTimestamp, startBackupScheduler, getDriveSettings, resetDriveClientCache, getDriveClient, uploadFileToDrive, deleteFileFromDrive, testDriveConnection };

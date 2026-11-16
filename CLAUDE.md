@@ -1156,6 +1156,9 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - `GET /backup/cloud/files` + `POST /backup/cloud/files/:fileId/fetch { connection_id }` (isSuperAdmin) — มีแถว backup_files ที่ cloud_file_id ตรง + ไฟล์อยู่ในเครื่อง = ใช้ไฟล์เดิม,
   ไฟล์หาย = ดาวน์โหลดใหม่ลงแถวเดิม, ไม่มีแถว = ต้องมีการเชื่อมต่อ (ไม่ส่ง = 400 `CONNECTION_REQUIRED`) แล้ว INSERT `trigger_type = 'cloud_download'` (ENUM เพิ่มใน migration ของ services/backup.js + ci schema.sql) — **ไม่กู้คืนเอง**: หน้าจอเปิดแท็บ Restore ด้วยไฟล์นั้นแล้วใช้ POST /backup/restore เดิม
   | log `BACKUP_CLOUD_DOWNLOAD` | `backupTablesReady` (export) = promise ของ migration ตาราง backup | UI: `#drive-restore-modal` ใน backup-manager — Test: `api/tests/backup-cloud-restore.test.js` (jest.mock googleapis + BACKUP_DIR ชั่วคราว), `backup-manager.spec.ts`
+- **ล้างไฟล์ backup เก่า (16 พ.ย. 2569 — ผู้ใช้สั่ง):** `backup_schedules.keep_last` (เก็บ N ไฟล์ล่าสุด 0–1000, 0 = ไม่จำกัด) + `cleanup_cloud` (ลบสำเนาบน Drive ด้วย, ค่าตั้งต้นไม่ลบ) คู่กับ `retention_days` (0 = ไม่ลบตามอายุ — เดิม 0/ว่างกลายเป็น 30; ไม่ส่ง = 30)
+  → `cleanupOldBackups(connId, days, { keepLast, deleteCloud, preview })` ลบเมื่อตรงข้อใดข้อหนึ่ง **เฉพาะ trigger_type scheduled ของการเชื่อมต่อนั้น** (manual/auto_before_restore/cloud_download ไม่ลบ) | `POST /backup/schedules/:id/cleanup { preview }` (isSuperAdmin) log `BACKUP_CLEANUP`
+  | UI: ช่อง `#schedule-keep-last` / `#schedule-cleanup-cloud`, ปุ่มไม้กวาด `cleanupScheduleNow()` แสดงรายการก่อนลบ — Test: `api/tests/backup-keep-last.test.js`, `backup-manager.spec.ts`
 - ⚠️ การกด Backup เอง (POST /backup/run) **ไม่ส่งขึ้น Drive** — ส่งได้ทางปุ่มอัพโหลดรายไฟล์ หรือตารางเวลาที่ติ๊ก auto_upload_cloud | Connect ต้องใช้บัญชีเจ้าของโฟลเดอร์ (scope drive.file)
 
 ### Sync to KHD

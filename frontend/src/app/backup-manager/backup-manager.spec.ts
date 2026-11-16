@@ -57,6 +57,29 @@ describe('BackupManagerComponent — กู้คืนจาก Google Drive', 
     swal.mockRestore();
   });
 
+  it('ป้ายการเก็บไฟล์ + ฟอร์มตารางเวลาโหลด keep_last / cleanup_cloud / อายุ 0 (16 พ.ย. 2569)', () => {
+    expect(component.retentionLabel({ retention_days: 30, keep_last: 7 })).toBe('30 วัน · ล่าสุด 7 ไฟล์');
+    expect(component.retentionLabel({ retention_days: 0, keep_last: 5 })).toBe('ล่าสุด 5 ไฟล์');
+    expect(component.retentionLabel({ retention_days: 0, keep_last: 0 })).toBe('ไม่ลบอัตโนมัติ');
+    component.openScheduleModal({ id: 1, name: 'x', connection_id: 3, days_of_week: '1,2', time_of_day: '02:00', retention_days: 0, keep_last: 7, cleanup_cloud: 1 });
+    expect(component.scheduleForm).toEqual(expect.objectContaining({ retention_days: 0, keep_last: 7, cleanup_cloud: true }));
+  });
+
+  it('ล้างไฟล์เก่าตอนนี้: ดูรายการก่อน (preview) แล้วยืนยันจึงลบ', async () => {
+    const swal = vi.spyOn(Swal, 'fire').mockResolvedValue({ isConfirmed: true } as any);
+    component.cleanupScheduleNow({ id: 9, name: 'รายวัน', retention_days: 0, keep_last: 3 });
+    const p = http.expectOne(r => r.url.endsWith('/backup/schedules/9/cleanup'));
+    expect(p.request.body).toEqual({ preview: true });
+    p.flush({ success: true, preview: true, files: 1, bytes: 10, kept: 3, cloud: 0, cleanup_cloud: false, list: [{ id: 5, file_name: 'a.sql.gz', size_bytes: 10, created_at: '2026-11-01', on_cloud: true }] });
+    expect((swal.mock.calls[0][0] as any).html).toContain('(Drive เก็บไว้)');
+    await Promise.resolve();
+    const run = http.expectOne(r => r.url.endsWith('/backup/schedules/9/cleanup'));
+    expect(run.request.body).toEqual({ preview: false });
+    run.flush({ success: true, files: 1, message: 'ลบแล้ว 1 ไฟล์' });
+    http.match(r => r.url.endsWith('/backup/files'));
+    swal.mockRestore();
+  });
+
   it('ต้องดาวน์โหลด: ยืนยันก่อน แล้วส่ง connection_id ที่เลือก', async () => {
     openWith([{ id: 'b2', name: 'other.sql', size: 5, connection_id: null, local_exists: false }]);
     component.filteredDriveFiles[0]._conn = 3;

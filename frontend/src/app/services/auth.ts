@@ -1703,6 +1703,9 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
   deleteBackupSchedule(id: number): Observable<any> {
     return this.http.delete(`${this.apiUrl}/backup/schedules/${id}`, { headers: this.bkHeaders() });
   }
+  cleanupBackupSchedule(id: number, preview: boolean): Observable<any> {
+    return this.http.post(`${this.apiUrl}/backup/schedules/${id}/cleanup`, { preview }, { headers: this.bkHeaders() });
+  }
   runBackupScheduleNow(id: number): Observable<any> {
     return this.http.post(`${this.apiUrl}/backup/schedules/${id}/run-now`, {}, { headers: this.bkHeaders() });
   }
