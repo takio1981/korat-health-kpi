@@ -86,8 +86,8 @@ const bkDecrypt = (ciphertext) => {
     }
 };
 
-// === Auto-migration: backup tables ===
-(async () => {
+// === Auto-migration: backup tables === (backupTablesReady = promise — ชุดทดสอบรอก่อนเริ่ม)
+const backupTablesReady = (async () => {
     try {
         await db.query(`
             CREATE TABLE IF NOT EXISTS backup_connections (
@@ -181,6 +181,9 @@ const bkDecrypt = (ciphertext) => {
         try { await db.query('ALTER TABLE backup_schedules ADD COLUMN auto_upload_cloud TINYINT(1) DEFAULT 0'); } catch (e) {}
         try { await db.query('ALTER TABLE backup_schedule_logs ADD COLUMN cloud_uploaded TINYINT(1) DEFAULT 0'); } catch (e) {}
         try { await db.query('ALTER TABLE backup_schedule_logs ADD COLUMN cloud_url VARCHAR(500) NULL'); } catch (e) {}
+        // ไฟล์ที่ดาวน์โหลดจาก Google Drive เพื่อกู้คืน (16 พ.ย. 2569)
+        try { await db.query("ALTER TABLE backup_files MODIFY trigger_type ENUM('manual','scheduled','auto_before_restore','cloud_download') DEFAULT 'manual'"); } catch (e) {}
+        try { await db.query('ALTER TABLE backup_files ADD INDEX idx_cloud_file (cloud_file_id)'); } catch (e) {}
 
         // Default settings — ThaiD SSO (DGA imauth.bora.dopa.go.th)
         // auth_url, token_url, client_id, redirect_uri, scope ถูก hardcode ใน constants แล้ว
@@ -1496,4 +1499,68 @@ async function testDriveConnection() {
     };
 }
 
-module.exports = { BACKUP_DIR, _detectBin, MYSQL_BIN, MYSQLDUMP_BIN, MARIADB_COMMON_ARGS, _bkEncKey, bkEncrypt, bkDecrypt, getBackupConnection, sanitizeFilename, sha256File, isValidIdent, cleanStderr, buildConnectArgs, listDbTables, verifyBackupPrivileges, countTableRows, buildBackupLog, buildRestoreLog, runBackupJob, runRestoreJob, notifyBackupResult, cleanupOldBackups, runScheduledBackup, BANGKOK_TZ, _bkkFormatter, getBangkokTime, bangkokTimestamp, startBackupScheduler, getDriveSettings, resetDriveClientCache, getDriveClient, uploadFileToDrive, deleteFileFromDrive, testDriveConnection };
+// === กู้คืนจากไฟล์บน Google Drive (16 พ.ย. 2569) ===
+// รายการไฟล์ backup (.sql / .sql.gz) ในโฟลเดอร์ที่ตั้งไว้ — เฉพาะไฟล์ในโฟลเดอร์นี้ (ไม่ค้นทั้ง Drive)
+const DRIVE_BACKUP_NAME = /\.sql(\.gz)?$/i;
+const DRIVE_FILE_ID = /^[A-Za-z0-9_-]{10,200}$/;
+async function listDriveBackupFiles() {
+    const { drive, folderId } = await getDriveClient();
+    if (!folderId) throw new Error('ยังไม่ได้ตั้ง Folder ID ของ Google Drive');
+    const files = [];
+    let pageToken;
+    do {
+        const r = await drive.files.list({
+            q: `'${folderId.replace(/['\\]/g, '')}' in parents and trashed = false`,
+            pageSize: 200, pageToken, orderBy: 'createdTime desc',
+            fields: 'nextPageToken, files(id, name, size, createdTime, webViewLink)'
+        });
+        for (const f of r.data.files || []) if (DRIVE_BACKUP_NAME.test(f.name || '')) files.push(f);
+        pageToken = r.data.nextPageToken;
+    } while (pageToken && files.length < 1000);
+    return files.map(f => ({ id: f.id, name: f.name, size: Number(f.size) || 0, created_time: f.createdTime, web_url: f.webViewLink || `https://drive.google.com/file/d/${f.id}/view` }));
+}
+
+// ดาวน์โหลดไฟล์ backup จาก Drive ลง BACKUP_DIR — ตรวจว่าอยู่ในโฟลเดอร์ที่ตั้งไว้ + ชื่อเป็นไฟล์ backup ก่อนเสมอ
+// เขียนลงไฟล์ชั่วคราวแล้วค่อยเปลี่ยนชื่อ (ดาวน์โหลดไม่ครบ = ไม่มีไฟล์ค้าง) — ชื่อซ้ำกับไฟล์ที่มีอยู่ = ต่อท้าย _drive
+async function downloadDriveBackupFile(fileId) {
+    if (!DRIVE_FILE_ID.test(String(fileId || ''))) { const e = new Error('รหัสไฟล์ Google Drive ไม่ถูกต้อง'); e.status = 400; throw e; }
+    const { drive, folderId } = await getDriveClient();
+    const meta = (await drive.files.get({ fileId, fields: 'id, name, size, parents, trashed, webViewLink, createdTime' })).data;
+    if (!meta || meta.trashed || !(meta.parents || []).includes(folderId)) { const e = new Error('ไม่พบไฟล์นี้ในโฟลเดอร์ backup ของ Google Drive'); e.status = 404; throw e; }
+    if (!DRIVE_BACKUP_NAME.test(meta.name || '')) { const e = new Error('ไม่ใช่ไฟล์ backup (.sql / .sql.gz)'); e.status = 400; throw e; }
+    let fileName = sanitizeFilename(meta.name);
+    if (!DRIVE_BACKUP_NAME.test(fileName)) fileName += /\.gz$/i.test(meta.name) ? '.sql.gz' : '.sql';
+    if (fs.existsSync(path.join(BACKUP_DIR, fileName))) fileName = fileName.replace(DRIVE_BACKUP_NAME, (m) => `_drive${Date.now()}${m}`);
+    const filePath = path.join(BACKUP_DIR, fileName);
+    const tmpPath = filePath + '.part';
+    await fsp.mkdir(BACKUP_DIR, { recursive: true });
+    try {
+        const res = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'stream' });
+        await new Promise((resolve, reject) => {
+            const out = fs.createWriteStream(tmpPath);
+            res.data.on('error', reject);
+            out.on('error', reject);
+            out.on('finish', resolve);
+            res.data.pipe(out);
+        });
+        await fsp.rename(tmpPath, filePath);
+    } catch (e) {
+        try { await fsp.unlink(tmpPath); } catch (_) {}
+        throw e;
+    }
+    const stat = await fsp.stat(filePath);
+    return {
+        file_path: filePath, file_name: fileName, size: stat.size, checksum: await sha256File(filePath),
+        compressed: /\.gz$/i.test(fileName), drive_file_id: meta.id, drive_name: meta.name,
+        web_url: meta.webViewLink || `https://drive.google.com/file/d/${meta.id}/view`
+    };
+}
+
+// เดาการเชื่อมต่อจากชื่อไฟล์ (`<db_name>_<ชื่อการเชื่อมต่อ>_<เวลา>.sql[.gz]` ตาม runBackupJob) — ไม่พบ/กำกวม = null ให้ผู้ใช้เลือก
+function guessConnectionId(fileName, connections) {
+    const name = String(fileName || '');
+    const hits = (connections || []).filter(c => name.startsWith(`${sanitizeFilename(c.db_name)}_${sanitizeFilename(c.name)}_`));
+    return hits.length === 1 ? hits[0].id : null;
+}
+
+module.exports = { backupTablesReady, listDriveBackupFiles, downloadDriveBackupFile, guessConnectionId, BACKUP_DIR, _detectBin, MYSQL_BIN, MYSQLDUMP_BIN, MARIADB_COMMON_ARGS, _bkEncKey, bkEncrypt, bkDecrypt, getBackupConnection, sanitizeFilename, sha256File, isValidIdent, cleanStderr, buildConnectArgs, listDbTables, verifyBackupPrivileges, countTableRows, buildBackupLog, buildRestoreLog, runBackupJob, runRestoreJob, notifyBackupResult, cleanupOldBackups, runScheduledBackup, BANGKOK_TZ, _bkkFormatter, getBangkokTime, bangkokTimestamp, startBackupScheduler, getDriveSettings, resetDriveClientCache, getDriveClient, uploadFileToDrive, deleteFileFromDrive, testDriveConnection };

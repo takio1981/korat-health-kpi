@@ -7,7 +7,7 @@ const db = require('../db');
 const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
-const { BACKUP_DIR, MYSQLDUMP_BIN, MYSQL_BIN, bangkokTimestamp, bkEncrypt, buildConnectArgs, cleanStderr, deleteFileFromDrive, getBackupConnection, getDriveSettings, isValidIdent, notifyBackupResult, resetDriveClientCache, runBackupJob, runRestoreJob, runScheduledBackup, testDriveConnection, uploadFileToDrive, verifyBackupPrivileges } = require('../services/backup');
+const { BACKUP_DIR, MYSQLDUMP_BIN, MYSQL_BIN, bangkokTimestamp, bkEncrypt, buildConnectArgs, cleanStderr, deleteFileFromDrive, getBackupConnection, getDriveSettings, isValidIdent, notifyBackupResult, resetDriveClientCache, runBackupJob, runRestoreJob, runScheduledBackup, testDriveConnection, uploadFileToDrive, verifyBackupPrivileges, listDriveBackupFiles, downloadDriveBackupFile, guessConnectionId } = require('../services/backup');
 const { apiRouter } = require('../core/router');
 const { authenticateToken, isSuperAdmin } = require('../core/auth');
 const { google } = require('googleapis');
@@ -779,6 +779,76 @@ apiRouter.post('/backup/cloud/test', authenticateToken, isSuperAdmin, async (req
         res.status(400).json({ success: false, message: e.message });
     }
 });
+
+// === กู้คืนจากไฟล์บน Google Drive (16 พ.ย. 2569) ===
+// รายการไฟล์ backup ในโฟลเดอร์ Drive + สถานะในเซิร์ฟเวอร์ (มีไฟล์อยู่แล้ว / ต้องดาวน์โหลด) + การเชื่อมต่อที่ใช้กู้คืน
+apiRouter.get('/backup/cloud/files', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const files = await listDriveBackupFiles();
+        const ids = files.map(f => f.id);
+        const [rows] = ids.length
+            ? await db.query('SELECT id, connection_id, connection_name, db_name, file_path, cloud_file_id FROM backup_files WHERE cloud_file_id IN (?)', [ids])
+            : [[]];
+        const byDrive = new Map(rows.map(r => [r.cloud_file_id, r]));
+        const [conns] = await db.query('SELECT id, name, db_name FROM backup_connections ORDER BY id');
+        const data = files.map(f => {
+            const r = byDrive.get(f.id);
+            return {
+                ...f,
+                local_file_id: r ? r.id : null,
+                local_exists: !!(r && r.file_path && fs.existsSync(r.file_path)),
+                connection_id: r?.connection_id || guessConnectionId(f.name, conns),
+                known_connection: !!r?.connection_id,
+            };
+        });
+        res.json({ success: true, data, connections: conns });
+    } catch (e) {
+        res.status(e.status || 400).json({ success: false, message: e.message });
+    }
+});
+
+// เตรียมไฟล์จาก Drive สำหรับกู้คืน: มีในเซิร์ฟเวอร์แล้ว = ใช้ไฟล์เดิม | ไม่มี = ดาวน์โหลดลงโฟลเดอร์ backup แล้วลงทะเบียนใน backup_files
+// (ใช้ขั้นตอนกู้คืนเดิม POST /backup/restore ต่อ — ทุกการตรวจ/สำรองก่อนกู้คืนเหมือนไฟล์ที่ backup ในเครื่อง)
+apiRouter.post('/backup/cloud/files/:fileId/fetch', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const fileId = String(req.params.fileId || '');
+        const [existing] = await db.query('SELECT * FROM backup_files WHERE cloud_file_id = ? ORDER BY id DESC LIMIT 1', [fileId]);
+        const prev = existing[0] || null;
+        if (prev && prev.file_path && fs.existsSync(prev.file_path)) {
+            return res.json({ success: true, downloaded: false, file: rowForClient(prev), message: 'ใช้ไฟล์ที่มีในเซิร์ฟเวอร์อยู่แล้ว' });
+        }
+        const connId = prev?.connection_id || Number(req.body?.connection_id) || null;
+        const conn = connId ? await getBackupConnection(connId) : null;
+        if (!conn) return res.status(400).json({ success: false, code: 'CONNECTION_REQUIRED', message: 'กรุณาเลือกการเชื่อมต่อฐานข้อมูลที่จะใช้กู้คืนไฟล์นี้' });
+
+        const dl = await downloadDriveBackupFile(fileId);
+        let id;
+        if (prev) {
+            await db.query('UPDATE backup_files SET file_path=?, file_name=?, size_bytes=?, checksum_sha256=?, compressed=? WHERE id=?',
+                [dl.file_path, dl.file_name, dl.size, dl.checksum, dl.compressed ? 1 : 0, prev.id]);
+            id = prev.id;
+        } else {
+            const [r] = await db.query(
+                `INSERT INTO backup_files (connection_id, connection_name, db_name, file_path, file_name, size_bytes, compressed, checksum_sha256, trigger_type, created_by,
+                    cloud_provider, cloud_file_id, cloud_url, cloud_uploaded_at, cloud_size_bytes)
+                 VALUES (?,?,?,?,?,?,?,?, 'cloud_download', ?, 'gdrive', ?, ?, NOW(), ?)`,
+                [conn.id, conn.name, conn.db_name, dl.file_path, dl.file_name, dl.size, dl.compressed ? 1 : 0, dl.checksum, req.user.userId, dl.drive_file_id, dl.web_url, dl.size]);
+            id = r.insertId;
+        }
+        try { await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?,?,?,?,?)',
+            [req.user.userId, 'BACKUP_CLOUD_DOWNLOAD', 'backup_files', JSON.stringify({ id, file_name: dl.file_name, drive_file_id: dl.drive_file_id, size: dl.size, connection_id: conn.id }), req.ip]); } catch (_) {}
+        const [rows] = await db.query('SELECT * FROM backup_files WHERE id = ?', [id]);
+        res.json({ success: true, downloaded: true, file: rowForClient(rows[0]), message: `ดาวน์โหลด ${dl.file_name} จาก Google Drive แล้ว` });
+    } catch (e) {
+        res.status(e.status || 500).json({ success: false, message: e.message });
+    }
+});
+// คอลัมน์เดียวกับ GET /backup/files (ไม่ส่ง file_path/log_path)
+function rowForClient(r) {
+    return { id: r.id, connection_id: r.connection_id, connection_name: r.connection_name, db_name: r.db_name, file_name: r.file_name, size_bytes: r.size_bytes,
+        compressed: r.compressed, checksum_sha256: r.checksum_sha256, trigger_type: r.trigger_type, created_by: r.created_by, created_at: r.created_at,
+        has_log: r.log_path ? 1 : 0, cloud_provider: r.cloud_provider, cloud_url: r.cloud_url, cloud_uploaded_at: r.cloud_uploaded_at, cloud_size_bytes: r.cloud_size_bytes };
+}
 
 // === Manual upload to cloud ===
 apiRouter.post('/backup/files/:id/upload-cloud', authenticateToken, isSuperAdmin, async (req, res) => {

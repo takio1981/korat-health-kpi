@@ -1,4 +1,4 @@
-import { buildKhdDiffRows, typesChangeText, hostypeChangeText, khdDiffAoa, fiscalYearList, fiscalYearMatch, fiscalYearChangeText, fiscalYearChoices, khdOrgMatch, khdOrgUnmatched, khdTpKind, khdTpDetail } from './khd-diff';
+import { buildKhdDiffRows, typesChangeText, hostypeChangeText, khdDiffAoa, fiscalYearList, fiscalYearMatch, fiscalYearChangeText, fiscalYearChoices, khdOrgMatch, khdOrgUnmatched, khdTpKind, khdTpDetail, khdApplicableRows } from './khd-diff';
 
 // รายละเอียดความแตกต่างหลังเทียบกับ KHD (9 พ.ย. 2569)
 describe('khd-diff', () => {
@@ -126,5 +126,15 @@ describe('khd-diff table_process — สถานะของคู่', () => {
     const rows = buildKhdDiffRows(items, { getKhd: (i: any) => khd[i.table_process], criteriaText: () => '-', khdCriteriaText: () => '-' });
     expect(rows.map(r => [r.id, r.khd, r.applicable, r.note])).toEqual([
       [1, 'kpi_x', undefined, undefined], [2, 'kpi_shared', false, 'แก้ที่ KHD'], [3, 'a, b', false, 'ตรวจสอบเอง'], [4, 'c', false, 'ตรวจสอบเอง']]);
+  });
+
+  it('khdApplicableRows: ตัดแถวที่ใช้ค่า KHD ไม่ได้ (รวมปิดส่งออกแล้ว) และ 1 แถวต่อตัวชี้วัด (16 พ.ย. 2569)', () => {
+    const items = [{ id: 1, kpi_indicators_name: 'ก', table_process: 'a', upload_excel: 0 }, { id: 2, kpi_indicators_name: 'ข', table_process: 'b', upload_excel: 1 }];
+    const khd: Record<string, any> = { a: { status: 'match', khd_is_active: 0 }, b: { status: 'match', khd_is_active: '0' } };
+    const rows = buildKhdDiffRows(items, { getKhd: (i: any) => khd[i.table_process], criteriaText: () => '', khdCriteriaText: () => '' });
+    expect(rows.find(r => r.id === 2)).toEqual(expect.objectContaining({ kind: 'status', applicable: false, note: 'ปิดส่งออกแล้ว' }));
+    expect(khdApplicableRows(rows, 'status').map(r => r.id)).toEqual([1]);
+    expect(khdApplicableRows([...rows, rows[0]], 'status').map(r => r.id)).toEqual([1]);
+    expect(khdApplicableRows(rows, 'criteria')).toEqual([]);
   });
 });

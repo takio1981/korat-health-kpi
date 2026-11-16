@@ -1736,6 +1736,13 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
   deleteFileFromCloud(id: number): Observable<any> {
     return this.http.delete(`${this.apiUrl}/backup/files/${id}/cloud`, { headers: this.bkHeaders() });
   }
+  // กู้คืนจากไฟล์บน Google Drive (16 พ.ย. 2569): รายการไฟล์ในโฟลเดอร์ / เตรียมไฟล์ (ดาวน์โหลดถ้ายังไม่มี) แล้วใช้ /backup/restore เดิม
+  listCloudBackupFiles(): Observable<any> {
+    return this.http.get(`${this.apiUrl}/backup/cloud/files`, { headers: this.bkHeaders() });
+  }
+  fetchCloudBackupFile(fileId: string, connectionId: number | null): Observable<any> {
+    return this.http.post(`${this.apiUrl}/backup/cloud/files/${encodeURIComponent(fileId)}/fetch`, connectionId ? { connection_id: connectionId } : {}, { headers: this.bkHeaders() });
+  }
   deleteBackupFileWithCloud(id: number, deleteCloud = false): Observable<any> {
     return this.http.delete(`${this.apiUrl}/backup/files/${id}?delete_cloud=${deleteCloud ? 1 : 0}`, { headers: this.bkHeaders() });
   }

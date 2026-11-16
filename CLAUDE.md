@@ -1013,6 +1013,9 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   — **หน้าต่าง "รายละเอียดความแตกต่าง"** (ปุ่มในแถบผลเทียบ + "ดูรายละเอียด" ในแถว): `shared/khd-diff.ts` `buildKhdDiffRows()` 1 แถว = 1 หัวข้อที่ต่าง (ชื่อ/เกณฑ์/ประเภทตัวชี้วัด/
     ประเภทหน่วยบริการ/สถานะใน KHD) ระบบ ↔ KHD + รายละเอียดทีละจุด ("R9: มี → ไม่มี", "เพิ่ม: … · เอาออก: …"), กรองหัวข้อ/ค้นหา, ดาวน์โหลด Excel, "ใช้ค่า KHD" ใช้เส้นทางเดิม
     — คำนวณใน `refreshKhdDiff()` (ไม่ใช่ getter) และคำนวณใหม่หลัง `runKhdCompare()` เมื่อหน้าต่างเปิดอยู่
+    — **ใช้ค่า KHD ทั้งหมด (16 พ.ย. 2569):** `khdApplyCounts` (ตามการค้นหา + สิทธิ์ `canApplyKhdKind()`: ชื่อ = super_admin, สถานะ = add, อื่น = edit), `applyKhdDiffKind()` (ชิปหัวข้อ) / `applyKhdDiffAllKinds()` (ชิปทั้งหมด — ติ๊กหัวข้อ, table_process/สถานะไม่ติ๊กให้)
+      → `runKhdApplyKinds()` เรียกเส้นทางเดิมของแต่ละหัวข้อตามลำดับ (table_process ทีละตัว ข้ามตัวที่ server ปฏิเสธพร้อมเหตุผล, สถานะ = bulk-upload-excel ปิดส่งออก) แล้ว loadAllData + runKhdCompare ครั้งเดียว
+      | `khdApplicableRows()` (shared/khd-diff.ts) ตัด applicable = false — แถวสถานะที่ปิดส่งออกแล้ว = applicable false
   — **table_process (9 พ.ย. 2569 — ผู้ใช้สั่ง):** (1) table_process เดียวกันแต่ชื่อต่าง = status 'different' เดิม — ปุ่ม "ใช้ชื่อ KHD" ในหน้าต่าง/ทั้งหมด ใช้ `POST /report-compare/sync` เดิม
     (2) **ชื่อเดียวกันแต่ table_process ต่าง:** `pairByNameDifferentTp()` (routes/khd.js) จับคู่ missing_remote ↔ missing_local ด้วยชื่อ (`normName`: ตัดช่องว่างซ้ำ ไม่สนตัวพิมพ์)
     **เฉพาะชื่อที่มีคู่เดียวทั้ง 2 ฝั่ง** → แถว Local status 'tp_different' + `khd_table_process`, แถว KHD ถูกตัดจาก "ยังไม่มีใน Local" (กันเพิ่มซ้ำ), summary `tp_different`
@@ -1146,6 +1149,14 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   — เงื่อนไขค้นหาร่วม `manageWhere()` กับ GET /kpi-results/manage (ต้องได้ชุดเดียวกัน) | bulk-delete รับครั้งละ ≤ `MANAGE_DELETE_BATCH_MAX` 2,000 (เกิน = 400) หน้าจอส่งชุดละ 1,000 (`deleteInBatches()`)
   | หน้าจอคงรายการที่เลือกเมื่อเปลี่ยนหน้า ล้างเมื่อค้นหาใหม่/ลบเสร็จ — Test: `api/tests/kpi-results-manage-select-all.test.js`, `kpi-results-manage.spec.ts`
 - Log: `BULK_DELETE_KPI_MANAGE` ใน system_logs
+
+### กู้คืนจากไฟล์บน Google Drive (16 พ.ย. 2569 — ผู้ใช้สั่ง)
+- `services/backup.js` `listDriveBackupFiles()` (เฉพาะ .sql/.sql.gz ในโฟลเดอร์ gdrive_folder_id ≤ 1000) / `downloadDriveBackupFile(fileId)` (รหัส `[A-Za-z0-9_-]{10,200}`, **ตรวจ parents มีโฟลเดอร์ที่ตั้งไว้ + ชื่อไฟล์ backup ก่อนดาวน์โหลด** — นอกโฟลเดอร์ 404 / ไม่ใช่ไฟล์ backup 400,
+  เขียน `.part` แล้วเปลี่ยนชื่อ, ชื่อซ้ำต่อท้าย `_drive<เวลา>`) / `guessConnectionId()` (ชื่อไฟล์ `<db_name>_<ชื่อการเชื่อมต่อ>_` ตรงเพียงรายการเดียว)
+- `GET /backup/cloud/files` + `POST /backup/cloud/files/:fileId/fetch { connection_id }` (isSuperAdmin) — มีแถว backup_files ที่ cloud_file_id ตรง + ไฟล์อยู่ในเครื่อง = ใช้ไฟล์เดิม,
+  ไฟล์หาย = ดาวน์โหลดใหม่ลงแถวเดิม, ไม่มีแถว = ต้องมีการเชื่อมต่อ (ไม่ส่ง = 400 `CONNECTION_REQUIRED`) แล้ว INSERT `trigger_type = 'cloud_download'` (ENUM เพิ่มใน migration ของ services/backup.js + ci schema.sql) — **ไม่กู้คืนเอง**: หน้าจอเปิดแท็บ Restore ด้วยไฟล์นั้นแล้วใช้ POST /backup/restore เดิม
+  | log `BACKUP_CLOUD_DOWNLOAD` | `backupTablesReady` (export) = promise ของ migration ตาราง backup | UI: `#drive-restore-modal` ใน backup-manager — Test: `api/tests/backup-cloud-restore.test.js` (jest.mock googleapis + BACKUP_DIR ชั่วคราว), `backup-manager.spec.ts`
+- ⚠️ การกด Backup เอง (POST /backup/run) **ไม่ส่งขึ้น Drive** — ส่งได้ทางปุ่มอัพโหลดรายไฟล์ หรือตารางเวลาที่ติ๊ก auto_upload_cloud | Connect ต้องใช้บัญชีเจ้าของโฟลเดอร์ (scope drive.file)
 
 ### Sync to KHD
 - Core function: `performSyncToKhd(tables, userId)` (`services/khd.js`) — ใช้ร่วม: `/sync-to-khd/execute`, ตารางเวลา auto_sync_khd, `/db-compare/sync-to-khd`

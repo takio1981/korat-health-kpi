@@ -200,6 +200,88 @@ describe('KpiManageComponent', () => {
       expect(component.khdDiffAll.map(r => r.id)).toEqual([2]);
     });
 
+    it('ใช้ค่า KHD ทั้งหมดรายหัวข้อ: นับตามสิทธิ์ ส่งเฉพาะ id ของหัวข้อนั้น และหลายหัวข้อเรียกตามลำดับ (16 พ.ย. 2569)', async () => {
+      component.canEditData = true;
+      component.canAddData = false;
+      component.isSuperAdmin = false;
+      component.openKhdDiff();
+      expect(component.khdApplyCounts).toEqual(expect.objectContaining({ all: 2, types: 1, hostype: 1, name: 0, status: 0 }));
+      component.khdDiffSearch = 'tp2';
+      component.refreshKhdDiff();
+      expect(component.khdApplyCounts['all']).toBe(1);   // ตามการค้นหา
+      component.khdDiffSearch = '';
+      component.refreshKhdDiff();
+      component.canEditData = false;
+      component.refreshKhdDiff();
+      expect(component.khdApplyCounts['all']).toBe(0);   // ไม่มีสิทธิ์แก้ไข = ไม่มีปุ่ม
+      component.canEditData = true;
+      component.refreshKhdDiff();
+
+      const http = TestBed.inject(HttpTestingController);
+      const swal = vi.spyOn(Swal, 'fire').mockResolvedValue({} as any);
+      const reload = vi.spyOn(component, 'loadAllData').mockImplementation(() => {});
+      const compare = vi.spyOn(component, 'runKhdCompare').mockImplementation(() => {});
+      fixture.detectChanges();   // ngOnInit (เรียก loadAllData) ก่อนวัด
+      reload.mockClear();
+      const done = component.runKhdApplyKinds(['types', 'hostype']);
+      const r1 = http.expectOne(r => r.url.includes('/indicators/apply-khd-types'));
+      expect(r1.request.body).toEqual(expect.objectContaining({ ids: [1], parts: ['types'] }));
+      r1.flush({ success: true, message: 'ปรับ 1 ตัว' });
+      await new Promise(r => setTimeout(r, 0));
+      const r2 = http.expectOne(r => r.url.includes('/indicators/apply-khd-types'));
+      expect(r2.request.body).toEqual(expect.objectContaining({ ids: [2], parts: ['hostype'] }));
+      r2.flush({ success: false, message: 'KHD ไม่ตั้งค่า' });
+      await done;
+      const last = swal.mock.calls[swal.mock.calls.length - 1][0] as any;
+      expect(last.title).toBe('ปรับได้บางส่วน');
+      expect(last.html).toContain('ประเภทตัวชี้วัด: ปรับ 1 ตัว');
+      expect(last.html).toContain('ประเภทหน่วยบริการ: ไม่สำเร็จ — KHD ไม่ตั้งค่า');
+      expect(reload).toHaveBeenCalledTimes(1);
+      expect(compare).toHaveBeenCalledTimes(1);
+      swal.mockRestore();
+    });
+
+    it('สถานะใน KHD: ปิดส่งออกได้เฉพาะตัวที่ยังส่งออก (ต้องมีสิทธิ์เพิ่ม) ส่งออกปิดแล้ว = ไม่มีปุ่ม', async () => {
+      component.indicators.push(
+        { id: 41, kpi_indicators_name: 'ส่งออกอยู่', table_process: 'tp41', is_active: 1, upload_excel: 0 },
+        { id: 42, kpi_indicators_name: 'ปิดแล้ว', table_process: 'tp42', is_active: 1, upload_excel: 1 });
+      component.khdCompareMap.set('tp41', { status: 'match', table_process: 'tp41', khd_is_active: 0 });
+      component.khdCompareMap.set('tp42', { status: 'match', table_process: 'tp42', khd_is_active: 0 });
+      component.canAddData = false;
+      component.openKhdDiff();
+      expect(component.khdDiffCounts['status']).toBe(2);
+      expect(component.khdApplyCounts['status']).toBe(0);
+      component.canAddData = true;
+      component.refreshKhdDiff();
+      expect(component.khdApplyCounts['status']).toBe(1);
+      const http = TestBed.inject(HttpTestingController);
+      const p = component.runKhdApplyKind('status', component.khdDiffAll.filter(r => r.kind === 'status' && r.applicable !== false));
+      const req = http.expectOne(r => r.url.includes('/indicators/bulk-upload-excel'));
+      expect(req.request.body).toEqual(expect.objectContaining({ ids: [41], upload_excel: 1 }));
+      req.flush({ success: true, affected: 1 });
+      expect(await p).toBe('ปิดส่งออก KHD 1 ตัว');
+    });
+
+    it('table_process ทั้งหัวข้อ: เรียกทีละตัว ตัวที่ server ปฏิเสธถูกข้ามพร้อมเหตุผล', async () => {
+      component.indicators.push(
+        { id: 51, kpi_indicators_name: 'ก', table_process: 'tp51', is_active: 1 },
+        { id: 52, kpi_indicators_name: 'ข', table_process: 'tp52', is_active: 1 });
+      component.khdCompareMap.set('tp51', { status: 'tp_different', table_process: 'tp51', khd_table_process: 'k51', khd_report_id: 91 });
+      component.khdCompareMap.set('tp52', { status: 'tp_different', table_process: 'tp52', khd_table_process: 'k52', khd_report_id: 92 });
+      component.canEditData = true;
+      component.openKhdDiff();
+      const http = TestBed.inject(HttpTestingController);
+      const p = component.runKhdApplyKind('table_process', component.khdDiffAll.filter(r => r.kind === 'table_process'));
+      const a = http.expectOne(r => r.url.includes('/apply-khd-table-process'));
+      expect(a.request.body).toEqual({ id: 51, khd_report_id: 91 });
+      a.flush({ success: true });
+      await new Promise(r => setTimeout(r, 0));
+      const b = http.expectOne(r => r.url.includes('/apply-khd-table-process'));
+      expect(b.request.body).toEqual({ id: 52, khd_report_id: 92 });
+      b.flush({ success: false, message: 'มีตารางชื่อเดิมอยู่' }, { status: 409, statusText: 'Conflict' });
+      expect(await p).toBe('เปลี่ยน 1 ตัว · ข้าม 1 ตัว (tp52: มีตารางชื่อเดิมอยู่)');
+    });
+
     it('table_process ต่างกัน: นับ/กรองเป็นสถานะแยก และส่ง id + khd_report_id ไปเปลี่ยน', () => {
       component.indicators.push({ id: 3, kpi_indicators_name: 'ค', table_process: 'tp3_local', is_active: 1 });
       component.khdCompareMap.set('tp3_local', { status: 'tp_different', table_process: 'tp3_local', khd_table_process: 'tp3_khd', khd_report_id: 77 });

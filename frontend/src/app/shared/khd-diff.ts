@@ -177,10 +177,23 @@ export function buildKhdDiffRows(indicators: any[], ctx: KhdDiffContext): KhdDif
     if (k.khd_is_active === 0 || k.khd_is_active === '0') {
       const exporting = !(it.upload_excel === 1 || it.upload_excel === '1');
       rows.push({ ...base, kind: 'status', local: exporting ? 'ส่งออก KHD อยู่' : 'ปิดส่งออก KHD แล้ว', khd: 'ปิดใช้งาน (inactive)',
-        detail: exporting ? 'แนะนำปิดส่งออก KHD' : '' });
+        detail: exporting ? 'แนะนำปิดส่งออก KHD' : '', ...(exporting ? {} : { applicable: false, note: 'ปิดส่งออกแล้ว' }) });
     }
   }
   return rows;
+}
+
+/**
+ * แถวที่ "ใช้ค่า KHD" ได้ของหัวข้อหนึ่ง (16 พ.ย. 2569 — ปุ่ม "ใช้ค่า KHD ทั้งหมด" รายหัวข้อ):
+ * ตัดแถวที่ applicable = false (ต้องแก้ที่ KHD / ตรวจสอบเอง / ปิดส่งออกแล้ว) และให้ 1 แถวต่อตัวชี้วัด
+ */
+export function khdApplicableRows(rows: KhdDiffRow[], kind: KhdDiffKind): KhdDiffRow[] {
+  const seen = new Set<number>();
+  return (rows || []).filter(r => {
+    if (r.kind !== kind || r.applicable === false || seen.has(r.id)) return false;
+    seen.add(r.id);
+    return true;
+  });
 }
 
 /** ข้อมูลตารางสำหรับดาวน์โหลด Excel */

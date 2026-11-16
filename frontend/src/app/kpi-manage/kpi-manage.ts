@@ -15,7 +15,8 @@ import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { ZoneBadgeComponent, HospitalZoneService } from '../shared/zone-badge';
 import { ZoneManagerComponent } from '../shared/zone-manager';
 import { typesText, hostypeText } from '../shared/khd-types';
-import { buildKhdDiffRows, khdDiffAoa, KhdDiffRow, KhdDiffKind, KHD_DIFF_KIND_LABEL, fiscalYearList, fiscalYearMatch, fiscalYearChoices, khdOrgMatch, khdOrgUnmatched, KhdOrgPart, khdTpKind, khdTpDetail, KhdTpKind } from '../shared/khd-diff';
+import { buildKhdDiffRows, khdDiffAoa, KhdDiffRow, KhdDiffKind, KHD_DIFF_KIND_LABEL, fiscalYearList, fiscalYearMatch, fiscalYearChoices, khdOrgMatch, khdOrgUnmatched, KhdOrgPart, khdTpKind, khdTpDetail, KhdTpKind, khdApplicableRows } from '../shared/khd-diff';
+import { firstValueFrom } from 'rxjs';
 import { AiFormulaHelperComponent } from '../shared/ai-formula-helper';
 import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
 import { TARGET_CONDITIONS, CONDITION_SYMBOL, CONDITION_LABEL, normalizeCondition, evaluateTarget, normalizeTargetMonthly } from '../shared/kpi-target';
@@ -2631,6 +2632,9 @@ export class KpiManageComponent implements OnInit {
   khdDiffAll: KhdDiffRow[] = [];
   khdDiffRows: KhdDiffRow[] = [];
   khdDiffCounts: Record<string, number> = {};
+  /** จำนวนแถวที่ "ใช้ค่า KHD" ได้ต่อหัวข้อ (ตามการค้นหา — ไม่ขึ้นกับชิปหัวข้อที่เลือก, เฉพาะหัวข้อที่ผู้ใช้มีสิทธิ์) + all = รวม */
+  khdApplyCounts: Record<string, number> = {};
+  private khdDiffSearched: KhdDiffRow[] = [];
   readonly khdDiffKinds: KhdDiffKind[] = ['name', 'table_process', 'criteria', 'types', 'hostype', 'fiscal_year', 'dept', 'main', 'status'];
   readonly khdDiffKindLabel = KHD_DIFF_KIND_LABEL;
   /** ตัวเลือกหน่วยนับผลงาน (พิมพ์หน่วยอื่นเองได้ — 13 พ.ย. 2569) */
@@ -2662,9 +2666,119 @@ export class KpiManageComponent implements OnInit {
     this.khdDiffCounts = counts;
     if (this.khdDiffKind && !counts[this.khdDiffKind]) this.khdDiffKind = '';   // ปรับครบแล้ว (ชิปหัวข้อหาย) → กลับไปดูทั้งหมด
     const q = this.khdDiffSearch.trim().toLowerCase();
-    this.khdDiffRows = this.khdDiffAll.filter(r => (!this.khdDiffKind || r.kind === this.khdDiffKind)
-      && (!q || String(r.name || '').toLowerCase().includes(q) || r.table_process.toLowerCase().includes(q)));
+    this.khdDiffSearched = this.khdDiffAll.filter(r => !q || String(r.name || '').toLowerCase().includes(q) || r.table_process.toLowerCase().includes(q));
+    this.khdDiffRows = this.khdDiffSearched.filter(r => !this.khdDiffKind || r.kind === this.khdDiffKind);
+    const ac: Record<string, number> = { all: 0 };
+    for (const k of this.khdDiffKinds) {
+      ac[k] = this.canApplyKhdKind(k) ? khdApplicableRows(this.khdDiffSearched, k).length : 0;
+      ac['all'] += ac[k];
+    }
+    this.khdApplyCounts = ac;
     this.cdr.detectChanges();
+  }
+
+  // ===== ใช้ค่า KHD ทั้งหมดรายหัวข้อ / หลายหัวข้อพร้อมกัน (16 พ.ย. 2569) — เส้นทางเดิมของแต่ละหัวข้อ (server อ่านค่าจาก KHD ใหม่เสมอ) =====
+  /** สิทธิ์ตามเส้นทางของหัวข้อ: ชื่อ = POST /report-compare/sync (super_admin), ปิดส่งออก = bulk-upload-excel (add), อื่น = edit */
+  canApplyKhdKind(kind: KhdDiffKind): boolean {
+    if (kind === 'name') return this.isSuperAdmin;
+    if (kind === 'status') return this.canAddData;
+    return this.canEditData;
+  }
+  khdApplyLabel(kind: KhdDiffKind): string {
+    return kind === 'status' ? 'ปิดส่งออก KHD' : 'ใช้' + this.khdDiffKindLabel[kind] + 'ตาม KHD';
+  }
+
+  /** ปุ่ม "... ทั้งหมด" ของหัวข้อที่เลือก — หน้ายืนยันแสดงรายการ ระบบ → KHD */
+  applyKhdDiffKind(kind: KhdDiffKind) {
+    const rows = khdApplicableRows(this.khdDiffSearched, kind);
+    if (!rows.length || !this.canApplyKhdKind(kind)) { Swal.fire('แจ้งเตือน', 'ไม่มีรายการที่ใช้ค่า KHD ได้ในหัวข้อนี้', 'info'); return; }
+    const esc = (t: any) => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as any)[c]);
+    const list = rows.slice(0, 10).map(r => `<tr><td class="text-left pr-2 py-0.5">${esc(r.name)}</td><td class="px-1 text-gray-600">${esc(r.local)}</td>` +
+      `<td class="px-1">→</td><td class="font-bold text-indigo-700">${esc(r.khd)}</td></tr>`).join('');
+    const more = rows.length > 10 ? `<p class="text-xs text-gray-500 mt-1">... และอีก ${rows.length - 10} ตัว</p>` : '';
+    Swal.fire({
+      title: this.khdApplyLabel(kind) + ' ทั้งหมด',
+      html: `<p class="text-sm">ปรับ <b>${rows.length}</b> ตัวชี้วัด — หัวข้อ <b>${esc(this.khdDiffKindLabel[kind])}</b> (ปีงบ ${esc(this.khdCompareYear)})</p>
+             <div class="max-h-60 overflow-auto mt-2"><table class="w-full text-xs">${list}</table></div>${more}
+             <p class="text-[11px] text-gray-500 mt-2">ระบบอ่านค่าจาก KHD ใหม่ก่อนบันทึก — รายการที่ปรับไม่ได้จะถูกข้ามและแจ้งเหตุผล</p>`,
+      icon: 'question', showCancelButton: true, confirmButtonColor: '#4f46e5',
+      confirmButtonText: '<i class="fas fa-arrow-down mr-1"></i> ' + this.khdApplyLabel(kind), cancelButtonText: 'ยกเลิก'
+    }).then(r => { if (r.isConfirmed) this.runKhdApplyKinds([kind]); });
+  }
+
+  /** ปุ่ม "ใช้ค่า KHD ทุกหัวข้อ…" (ชิปทั้งหมด) — เลือกหัวข้อในหน้ายืนยัน */
+  applyKhdDiffAllKinds() {
+    const kinds = this.khdDiffKinds.filter(k => this.khdApplyCounts[k] > 0);
+    if (!kinds.length) { Swal.fire('แจ้งเตือน', 'ไม่มีรายการที่ใช้ค่า KHD ได้', 'info'); return; }
+    const boxes = kinds.map(k => `<label class="flex items-center gap-2 py-1 text-left text-sm cursor-pointer">
+      <input type="checkbox" class="khd-apply-kind w-4 h-4" value="${k}" ${k === 'table_process' || k === 'status' ? '' : 'checked'}>
+      <span>${this.khdApplyLabel(k)}</span><span class="ml-auto font-bold text-indigo-700">${this.khdApplyCounts[k]} ตัว</span></label>`).join('');
+    Swal.fire({
+      title: 'ใช้ค่า KHD ทุกหัวข้อ',
+      html: `<p class="text-sm mb-2">เลือกหัวข้อที่ต้องการปรับให้ตรงกับ KHD (ปีงบ ${this.khdCompareYear})</p>
+             <div class="border rounded-lg px-3 py-1 divide-y">${boxes}</div>
+             <p class="text-[11px] text-gray-500 mt-2">table_process และการปิดส่งออก KHD ไม่ได้ติ๊กไว้ให้ — การเปลี่ยนชื่อตาราง/สถานะการส่งออกควรตรวจก่อน</p>`,
+      showCancelButton: true, confirmButtonColor: '#4f46e5', confirmButtonText: '<i class="fas fa-arrow-down mr-1"></i> ปรับตาม KHD', cancelButtonText: 'ยกเลิก',
+      preConfirm: () => {
+        const picked = Array.from(document.querySelectorAll<HTMLInputElement>('.khd-apply-kind:checked')).map(el => el.value as KhdDiffKind);
+        if (!picked.length) { Swal.showValidationMessage('เลือกอย่างน้อย 1 หัวข้อ'); return false; }
+        return picked;
+      }
+    }).then(r => { if (r.isConfirmed && Array.isArray(r.value)) this.runKhdApplyKinds(r.value); });
+  }
+
+  /** เรียกเส้นทางของแต่ละหัวข้อตามลำดับ แล้วสรุปผล + โหลด/เทียบใหม่ครั้งเดียว */
+  async runKhdApplyKinds(kinds: KhdDiffKind[]) {
+    const results: string[] = [];
+    let failed = 0;
+    for (const [i, kind] of kinds.entries()) {
+      const rows = khdApplicableRows(this.khdDiffSearched, kind);
+      if (!rows.length) continue;
+      Swal.fire({ title: `กำลังปรับ${this.khdDiffKindLabel[kind]} (${i + 1}/${kinds.length})`, allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      try {
+        results.push(this.khdDiffKindLabel[kind] + ': ' + await this.runKhdApplyKind(kind, rows));
+      } catch (e: any) {
+        failed++;
+        results.push(this.khdDiffKindLabel[kind] + ': ไม่สำเร็จ — ' + (e?.error?.message || e?.message || 'เกิดข้อผิดพลาด'));
+      }
+    }
+    const esc = (t: any) => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as any)[c]);
+    Swal.fire({
+      icon: failed ? 'warning' : 'success', title: failed ? 'ปรับได้บางส่วน' : 'สำเร็จ',
+      html: '<ul class="text-left text-sm space-y-1">' + results.map(t => '<li>• ' + esc(t) + '</li>').join('') + '</ul>',
+      confirmButtonText: 'ปิด'
+    });
+    this.loadAllData();
+    this.runKhdCompare();
+  }
+
+  /** เส้นทางเดิมของหัวข้อ — คืนข้อความสรุป (ล้มเหลวทั้งชุด = throw) */
+  async runKhdApplyKind(kind: KhdDiffKind, rows: KhdDiffRow[]): Promise<string> {
+    const items: any[] = rows.map(r => this.indicators.find(i => i.id === r.id)).filter(Boolean);
+    const ids = items.map(i => i.id);
+    const msg = (res: any) => { if (!res?.success) throw new Error(res?.message || 'ไม่สำเร็จ'); return res.message || `ปรับ ${ids.length} ตัว`; };
+    switch (kind) {
+      case 'name': return msg(await firstValueFrom(this.authService.reportCompareSync(items.map(i => this.getKhdData(i)?.khd_report_id).filter(Boolean))));
+      case 'criteria': return msg(await firstValueFrom(this.authService.applyKhdCriteria(ids, this.khdCompareYear)));
+      case 'types': case 'hostype': return msg(await firstValueFrom(this.authService.applyKhdTypes(ids, this.khdCompareYear, [kind])));
+      case 'fiscal_year': return msg(await firstValueFrom(this.authService.applyKhdFiscalYear(ids)));
+      case 'dept': case 'main': return msg(await firstValueFrom(this.authService.applyKhdOrg(ids, [kind])));
+      case 'status': {
+        const res: any = await firstValueFrom(this.authService.bulkSetUploadExcel(ids, 1));
+        if (!res?.success) throw new Error(res?.message || 'ไม่สำเร็จ');
+        return `ปิดส่งออก KHD ${res.affected ?? ids.length} ตัว`;
+      }
+      case 'table_process': {   // ไม่มีเส้นทางแบบกลุ่ม — ทีละตัว (server ตรวจชื่อ/ซ้ำ/ตารางชื่อเดิมทุกตัว)
+        let ok = 0; const skipped: string[] = [];
+        for (const it of items) {
+          try { await firstValueFrom(this.authService.applyKhdTableProcess(it.id, this.getKhdData(it)?.khd_report_id)); ok++; }
+          catch (e: any) { skipped.push(`${it.table_process}: ${e?.error?.message || 'เปลี่ยนไม่ได้'}`); }
+        }
+        if (!ok && skipped.length) throw new Error(skipped.join('; '));
+        return `เปลี่ยน ${ok} ตัว` + (skipped.length ? ` · ข้าม ${skipped.length} ตัว (${skipped.join('; ')})` : '');
+      }
+    }
+    return '';
   }
 
   /** ปุ่ม "ใช้ค่า KHD" ในแถว — ใช้เส้นทางเดิมของแต่ละหัวข้อ (หน้ายืนยัน + server อ่าน KHD ใหม่) */
@@ -2677,6 +2791,22 @@ export class KpiManageComponent implements OnInit {
     else if (r.kind === 'types' || r.kind === 'hostype') this.applyKhdTypes([item], r.kind);
     else if (r.kind === 'fiscal_year') this.applyKhdFiscalYear([item]);
     else if (r.kind === 'dept' || r.kind === 'main') this.applyKhdOrg([item], r.kind);
+    else if (r.kind === 'status') this.disableKhdExportRow(r);
+  }
+  /** สถานะใน KHD รายแถว: ปิดส่งออก KHD ของตัวชี้วัดที่ KHD ปิดใช้งานแล้ว */
+  private disableKhdExportRow(row: KhdDiffRow) {
+    Swal.fire({
+      title: 'ปิดส่งออก KHD', text: row.name + ' — KHD ปิดใช้งานรายงานนี้แล้ว ระบบจะไม่ส่งออกตัวชี้วัดนี้เข้า KHD อัตโนมัติ',
+      icon: 'question', showCancelButton: true, confirmButtonColor: '#e11d48', confirmButtonText: 'ปิดส่งออก', cancelButtonText: 'ยกเลิก'
+    }).then(async r => {
+      if (!r.isConfirmed) return;
+      try {
+        const text = await this.runKhdApplyKind('status', [row]);
+        Swal.fire({ icon: 'success', title: 'สำเร็จ', text, timer: 2000, showConfirmButton: false });
+        this.loadAllData();
+        this.runKhdCompare();
+      } catch (e: any) { Swal.fire('ผิดพลาด', e?.error?.message || e?.message || 'ไม่สำเร็จ', 'error'); }
+    });
   }
 
   /** ใช้ชื่อของ KHD ทุกตัวที่ table_process เดียวกันแต่ชื่อต่าง (POST /report-compare/sync เดิม — server อ่านชื่อจาก KHD) */

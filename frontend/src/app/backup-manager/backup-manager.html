@@ -160,6 +160,7 @@
   <div *ngIf="activeTab === 'files'" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
     <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
       <h2 class="font-semibold text-gray-700">ไฟล์ Backup ทั้งหมด</h2>
+      <button (click)="openDrivePicker()" id="btn-drive-restore-files" class="ml-auto text-sm bg-sky-600 hover:bg-sky-700 text-white px-3 py-1.5 rounded-lg"><i class="fab fa-google-drive mr-1"></i>กู้คืนจาก Google Drive</button>
       <button (click)="loadFiles()" class="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg"><i class="fas fa-sync mr-1"></i>Refresh</button>
     </div>
 
@@ -196,7 +197,8 @@
                     [ngClass]="{
                       'bg-blue-100 text-blue-700': f.trigger_type === 'manual',
                       'bg-purple-100 text-purple-700': f.trigger_type === 'scheduled',
-                      'bg-amber-100 text-amber-700': f.trigger_type === 'auto_before_restore'
+                      'bg-amber-100 text-amber-700': f.trigger_type === 'auto_before_restore',
+                      'bg-sky-100 text-sky-700': f.trigger_type === 'cloud_download'
                     }">{{ f.trigger_type }}</span>
             </td>
             <td class="px-3 py-2 text-xs text-gray-500">{{ formatDate(f.created_at) }}</td>
@@ -221,12 +223,16 @@
 
   <!-- ============== TAB: RESTORE ============== -->
   <div *ngIf="activeTab === 'restore'" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-    <h2 class="font-semibold text-gray-700 mb-4"><i class="fas fa-undo mr-2 text-emerald-600"></i>กู้คืน Database (Restore)</h2>
+    <div class="flex flex-wrap items-center gap-2 mb-4">
+      <h2 class="font-semibold text-gray-700"><i class="fas fa-undo mr-2 text-emerald-600"></i>กู้คืน Database (Restore)</h2>
+      <button *ngIf="selectedFileForRestore" (click)="openDrivePicker()" id="btn-drive-restore-change" class="ml-auto text-sm bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 px-3 py-1.5 rounded-lg"><i class="fab fa-google-drive mr-1"></i>เลือกไฟล์จาก Google Drive</button>
+    </div>
 
     <div *ngIf="!selectedFileForRestore" class="p-6 bg-amber-50 border border-amber-200 rounded-xl text-center">
       <i class="fas fa-info-circle text-amber-500 text-2xl mb-2"></i>
-      <p class="text-gray-700">กรุณาเลือกไฟล์จากแท็บ <b>Files</b> ก่อน — กดปุ่ม <i class="fas fa-undo text-emerald-600"></i> ที่ไฟล์ที่ต้องการ</p>
+      <p class="text-gray-700">กรุณาเลือกไฟล์จากแท็บ <b>Files</b> หรือจาก <b>Google Drive</b> ก่อน — กดปุ่ม <i class="fas fa-undo text-emerald-600"></i> ที่ไฟล์ที่ต้องการ</p>
       <button (click)="setTab('files')" class="mt-3 bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm">ไปที่ Files</button>
+      <button (click)="openDrivePicker()" id="btn-drive-restore" class="mt-3 ml-2 bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-xl text-sm"><i class="fab fa-google-drive mr-1"></i>เลือกไฟล์จาก Google Drive</button>
     </div>
 
     <div *ngIf="selectedFileForRestore" class="max-w-3xl space-y-4">
@@ -915,6 +921,72 @@
   </div>
 
   <!-- ============== Connection Modal ============== -->
+  <!-- ============== กู้คืนจากไฟล์บน Google Drive (16 พ.ย. 2569) ============== -->
+  <div *ngIf="showDrivePicker" id="drive-restore-modal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-4xl flex flex-col" style="max-height: calc(100vh - 40px)">
+      <div class="flex items-center gap-2 px-5 py-4 border-b border-gray-100">
+        <i class="fab fa-google-drive text-sky-600 text-lg"></i>
+        <h3 class="font-bold text-gray-800">กู้คืนจากไฟล์บน Google Drive</h3>
+        <span *ngIf="cloudSettings.folder_name" class="text-xs text-gray-500">โฟลเดอร์: {{ cloudSettings.folder_name }}</span>
+        <button (click)="closeDrivePicker()" class="ml-auto text-gray-400 hover:text-gray-600 text-xl" title="ปิด"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="flex flex-wrap items-center gap-2 px-5 py-3 border-b border-gray-100">
+        <input [(ngModel)]="driveSearch" (ngModelChange)="refreshDriveFilter()" placeholder="ค้นหาชื่อไฟล์..." class="px-3 py-1.5 border border-gray-200 rounded-lg text-sm w-full sm:w-72">
+        <button (click)="loadDriveFiles()" [disabled]="driveLoading" class="text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg"><i class="fas fa-sync mr-1" [class.fa-spin]="driveLoading"></i>Refresh</button>
+        <span class="text-xs text-gray-500 ml-auto">{{ filteredDriveFiles.length }} ไฟล์</span>
+      </div>
+      <div class="overflow-auto card-scroll flex-1">
+        <div *ngIf="driveLoading" class="p-10 text-center text-gray-400 text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>กำลังโหลดรายการไฟล์จาก Google Drive...</div>
+        <div *ngIf="!driveLoading && driveError" class="m-4 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+          <i class="fas fa-triangle-exclamation mr-1"></i>{{ driveError }}
+          <div class="text-xs text-gray-600 mt-1">ตรวจการตั้งค่าในแท็บ Cloud (เปิดใช้งาน / Connect / Folder ID)</div>
+        </div>
+        <div *ngIf="!driveLoading && !driveError && !filteredDriveFiles.length" class="p-10 text-center text-gray-400 text-sm">ไม่พบไฟล์ backup (.sql / .sql.gz) ในโฟลเดอร์</div>
+        <table *ngIf="!driveLoading && filteredDriveFiles.length" class="min-w-full text-sm">
+          <thead class="bg-gray-50 text-xs text-gray-600 sticky top-0 z-10">
+            <tr>
+              <th class="px-3 py-2 text-left">ไฟล์บน Google Drive</th>
+              <th class="px-3 py-2 text-right">ขนาด</th>
+              <th class="px-3 py-2 text-left">ส่งขึ้นเมื่อ</th>
+              <th class="px-3 py-2 text-left">การเชื่อมต่อที่ใช้กู้คืน</th>
+              <th class="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let f of filteredDriveFiles" class="border-t border-gray-100 align-middle" [attr.data-drive-id]="f.id">
+              <td class="px-3 py-2">
+                <code class="text-xs break-all">{{ f.name }}</code>
+                <div class="text-[10px] mt-0.5" [ngClass]="f.local_exists ? 'text-emerald-600' : 'text-sky-600'">
+                  <i class="fas mr-1" [ngClass]="f.local_exists ? 'fa-server' : 'fa-cloud-arrow-down'"></i>{{ f.local_exists ? 'มีไฟล์ในเซิร์ฟเวอร์แล้ว' : 'ต้องดาวน์โหลดจาก Google Drive' }}
+                  <a [href]="f.web_url" target="_blank" class="ml-2 text-gray-400 hover:text-sky-600" title="เปิดใน Google Drive"><i class="fas fa-external-link-alt"></i></a>
+                </div>
+              </td>
+              <td class="px-3 py-2 text-right font-mono text-xs whitespace-nowrap">{{ formatBytes(f.size) }}</td>
+              <td class="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{{ formatDate(f.created_time) }}</td>
+              <td class="px-3 py-2">
+                <select *ngIf="!f.known_connection" [(ngModel)]="f._conn" class="border border-gray-300 rounded-lg px-2 py-1 text-xs w-full max-w-[220px]"
+                        [ngClass]="f._conn ? '' : 'border-amber-400 bg-amber-50'">
+                  <option [ngValue]="null">— เลือกการเชื่อมต่อ —</option>
+                  <option *ngFor="let c of driveConnections" [ngValue]="c.id">{{ c.name }} ({{ c.db_name }})</option>
+                </select>
+                <span *ngIf="f.known_connection" class="text-xs text-gray-600">{{ connectionLabel(f._conn) }}</span>
+              </td>
+              <td class="px-3 py-2 text-right whitespace-nowrap">
+                <button (click)="restoreFromDrive(f)" [disabled]="driveFetchingId !== null || (!f.local_exists && !f._conn)"
+                        class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold disabled:opacity-50">
+                  <i class="fas mr-1" [ngClass]="driveFetchingId === f.id ? 'fa-spinner fa-spin' : 'fa-undo'"></i>กู้คืนไฟล์นี้
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="px-5 py-3 border-t border-gray-100 text-[11px] text-gray-500">
+        ไฟล์ที่ยังไม่มีในเซิร์ฟเวอร์จะถูกดาวน์โหลดลงโฟลเดอร์ backup (แสดงในแท็บ Files ประเภท cloud_download) แล้วเปิดแท็บกู้คืน — ยังไม่กู้คืนจนกว่าจะเลือกโหมดและกด "เริ่ม Restore"
+      </div>
+    </div>
+  </div>
+
   <div *ngIf="showConnModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6">
       <div class="flex items-center justify-between mb-4">

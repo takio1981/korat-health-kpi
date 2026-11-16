@@ -2799,14 +2799,11 @@
       </ng-container>
       <input [(ngModel)]="khdDiffSearch" (ngModelChange)="refreshKhdDiff()" placeholder="ค้นหาชื่อ / ชื่อตาราง..."
              class="ml-auto px-3 py-1.5 border border-gray-200 rounded-lg bg-white text-sm w-full sm:w-64">
-      <button *ngIf="isSuperAdmin && khdDiffCounts['name']" (click)="syncAllNamesFromKhd()" id="btn-khd-diff-names"
-              class="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold"><i class="fas fa-sync mr-1"></i>ใช้ชื่อ KHD ทั้งหมด ({{ khdDiffCounts['name'] }})</button>
-      <button *ngIf="canEditData && khdDiffCounts['fiscal_year']" (click)="applyKhdFiscalYear(khdFiscalYearDiffItems)" id="btn-khd-diff-fy"
-              class="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-bold"><i class="fas fa-calendar-check mr-1"></i>ใช้ปีงบ KHD ทั้งหมด ({{ khdDiffCounts['fiscal_year'] }})</button>
-      <button *ngIf="canEditData && khdDiffCounts['dept']" (click)="applyKhdOrg(khdDeptDiffItems, 'dept')" id="btn-khd-diff-dept"
-              class="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-bold"><i class="fas fa-building mr-1"></i>ใช้หน่วยงาน KHD ทั้งหมด ({{ khdDiffCounts['dept'] }})</button>
-      <button *ngIf="canEditData && khdDiffCounts['main']" (click)="applyKhdOrg(khdMainDiffItems, 'main')" id="btn-khd-diff-main"
-              class="px-3 py-1.5 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-700 text-white font-bold"><i class="fas fa-folder-tree mr-1"></i>ใช้หมวดหมู่หลัก KHD ทั้งหมด ({{ khdDiffCounts['main'] }})</button>
+      <!-- ใช้ค่า KHD ทั้งหมด (16 พ.ย. 2569): ชิปทั้งหมด = เลือกหลายหัวข้อ / ชิปหัวข้อ = ทั้งหัวข้อนั้น (ตามการค้นหา) -->
+      <button *ngIf="khdDiffKind === '' && khdApplyCounts['all']" (click)="applyKhdDiffAllKinds()" id="btn-khd-diff-apply-all"
+              class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold"><i class="fas fa-arrow-down mr-1"></i>ใช้ค่า KHD ทุกหัวข้อ… ({{ khdApplyCounts['all'] }})</button>
+      <button *ngIf="khdDiffKind !== '' && khdApplyCounts[khdDiffKind]" (click)="applyKhdDiffKind($any(khdDiffKind))" id="btn-khd-diff-apply-kind"
+              class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold"><i class="fas fa-arrow-down mr-1"></i>{{ khdApplyLabel($any(khdDiffKind)) }} ทั้งหมด ({{ khdApplyCounts[khdDiffKind] }})</button>
       <button (click)="downloadKhdDiff()" [disabled]="!khdDiffRows.length" id="btn-khd-diff-excel"
               class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold disabled:opacity-50"><i class="fas fa-file-excel mr-1"></i>Excel</button>
     </div>
@@ -2839,15 +2836,16 @@
             <td class="px-3 py-2 text-xs text-gray-600">{{ r.detail }}</td>
             <td class="px-3 py-2 text-right" *ngIf="canEditData">
               <span *ngIf="r.applicable === false" class="text-[11px] font-bold text-gray-500 whitespace-nowrap"><i class="fas fa-circle-info mr-1"></i>{{ r.note }}</span>
-              <button *ngIf="r.kind !== 'status' && r.applicable !== false" (click)="applyKhdDiffRow(r)" [attr.data-apply-kind]="r.kind"
-                      class="px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold whitespace-nowrap"><i class="fas fa-arrow-down mr-1"></i>ใช้ค่า KHD</button>
+              <button *ngIf="r.applicable !== false && canApplyKhdKind(r.kind)" (click)="applyKhdDiffRow(r)" [attr.data-apply-kind]="r.kind"
+                      class="px-2 py-1 rounded-lg text-white text-[11px] font-bold whitespace-nowrap"
+                      [ngClass]="r.kind === 'status' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-indigo-600 hover:bg-indigo-700'"><i class="fas mr-1" [ngClass]="r.kind === 'status' ? 'fa-toggle-off' : 'fa-arrow-down'"></i>{{ r.kind === 'status' ? 'ปิดส่งออก' : 'ใช้ค่า KHD' }}</button>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
     <div class="px-5 py-3 border-t border-gray-100 text-[11px] text-gray-500">
-      สถานะใน KHD แสดงเพื่อตรวจสอบเท่านั้น — "ใช้ค่า KHD" ปรับชื่อ/table_process/เกณฑ์/ประเภทผ่านหน้ายืนยัน (ระบบอ่านค่าจาก KHD ใหม่ก่อนบันทึก) แล้วเทียบใหม่ให้อัตโนมัติ
+      "ใช้ค่า KHD" (รายแถว / ทั้งหัวข้อ / ทุกหัวข้อ) ผ่านหน้ายืนยัน — ระบบอ่านค่าจาก KHD ใหม่ก่อนบันทึก แล้วเทียบใหม่ให้อัตโนมัติ · สถานะใน KHD = ปิดส่งออก KHD ของตัวชี้วัดที่ KHD ปิดใช้งานแล้ว
     </div>
   </div>
 </div>

@@ -309,6 +309,8 @@
   "GET /khupskpi/api/backup/cloud/oauth/callback :: handler",
   "POST /khupskpi/api/backup/cloud/disconnect :: authenticateToken > isSuperAdmin > handler",
   "POST /khupskpi/api/backup/cloud/test :: authenticateToken > isSuperAdmin > handler",
+  "GET /khupskpi/api/backup/cloud/files :: authenticateToken > isSuperAdmin > handler",
+  "POST /khupskpi/api/backup/cloud/files/:fileId/fetch :: authenticateToken > isSuperAdmin > handler",
   "POST /khupskpi/api/backup/files/:id/upload-cloud :: authenticateToken > isSuperAdmin > handler",
   "DELETE /khupskpi/api/backup/files/:id/cloud :: authenticateToken > isSuperAdmin > handler",
   "GET /khupskpi/api/backup/monitor :: authenticateToken > isSuperAdmin > handler",

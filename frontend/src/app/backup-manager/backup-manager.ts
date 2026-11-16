@@ -696,6 +696,97 @@ export class BackupManagerComponent implements OnInit, OnDestroy {
     if (this._cloudCallbackPoll) clearInterval(this._cloudCallbackPoll);
   }
 
+  // ===== กู้คืนจากไฟล์บน Google Drive (16 พ.ย. 2569) =====
+  showDrivePicker = false;
+  driveFiles: any[] = [];
+  driveConnections: any[] = [];
+  driveLoading = false;
+  driveError = '';
+  driveSearch = '';
+  driveFetchingId: string | null = null;
+
+  openDrivePicker() {
+    this.showDrivePicker = true;
+    this.driveSearch = '';
+    this.loadDriveFiles();
+  }
+  closeDrivePicker() { this.showDrivePicker = false; this.cdr.detectChanges(); }
+
+  loadDriveFiles() {
+    this.driveLoading = true;
+    this.driveError = '';
+    this.authService.listCloudBackupFiles().subscribe({
+      next: (res) => {
+        this.driveLoading = false;
+        this.driveFiles = (res.data || []).map((f: any) => ({ ...f, _conn: f.connection_id || null }));
+        this.driveConnections = res.connections || [];
+        this.refreshDriveFilter();
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.driveLoading = false;
+        this.driveFiles = [];
+        this.refreshDriveFilter();
+        this.driveError = err.error?.message || 'โหลดรายการไฟล์จาก Google Drive ไม่สำเร็จ';
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  /** กรองตามคำค้น (คำนวณเมื่อโหลด/พิมพ์ — ไม่ใช้ getter กันสร้าง array ใหม่ทุกรอบ change detection) */
+  filteredDriveFiles: any[] = [];
+  refreshDriveFilter() {
+    const q = this.driveSearch.trim().toLowerCase();
+    this.filteredDriveFiles = q ? this.driveFiles.filter(f => String(f.name).toLowerCase().includes(q)) : this.driveFiles;
+  }
+  connectionLabel(id: any): string {
+    const c = this.driveConnections.find(x => x.id === Number(id));
+    return c ? c.name + ' (' + c.db_name + ')' : '-';
+  }
+
+  /** เตรียมไฟล์ (มีในเซิร์ฟเวอร์ = ใช้ไฟล์เดิม | ไม่มี = ดาวน์โหลด) แล้วเปิดแท็บกู้คืนด้วยไฟล์นั้น — ขั้นตอนกู้คืน/ยืนยันเดิมทุกอย่าง */
+  restoreFromDrive(f: any) {
+    if (!f.local_exists && !f._conn) {
+      Swal.fire('เลือกการเชื่อมต่อ', 'กรุณาเลือกการเชื่อมต่อฐานข้อมูลที่จะใช้กู้คืนไฟล์นี้', 'warning');
+      return;
+    }
+    const go = () => {
+      this.driveFetchingId = f.id;
+      this.cdr.detectChanges();
+      this.authService.fetchCloudBackupFile(f.id, f.local_exists ? null : f._conn).subscribe({
+        next: (res) => {
+          this.driveFetchingId = null;
+          Swal.close();
+          this.showDrivePicker = false;
+          this.loadFiles();
+          this.openRestore(res.file);
+          this.cdr.detectChanges();
+          Swal.fire({ icon: 'success', title: res.downloaded ? 'ดาวน์โหลดจาก Google Drive แล้ว' : 'ใช้ไฟล์ที่มีในเซิร์ฟเวอร์',
+            text: 'เลือกโหมดกู้คืนแล้วกด "เริ่ม Restore"', timer: 2500, showConfirmButton: false });
+        },
+        error: (err) => {
+          this.driveFetchingId = null;
+          this.cdr.detectChanges();
+          Swal.fire('ผิดพลาด', err.error?.message || 'เตรียมไฟล์จาก Google Drive ไม่สำเร็จ', 'error');
+        }
+      });
+    };
+    if (f.local_exists) { go(); return; }
+    const conn = this.driveConnections.find(c => c.id === Number(f._conn));
+    Swal.fire({
+      title: 'ดาวน์โหลดจาก Google Drive?',
+      html: `<div style="text-align:left;font-size:13px">ไฟล์: <code>${this.escapeHtmlPublic(f.name)}</code><br>ขนาด: <b>${this.formatBytes(f.size)}</b><br>` +
+        `กู้คืนด้วยการเชื่อมต่อ: <b>${this.escapeHtmlPublic(conn ? conn.name + ' (' + conn.db_name + ')' : '-')}</b><br>` +
+        `<span style="color:#6b7280">ไฟล์จะถูกเก็บในโฟลเดอร์ backup ของเซิร์ฟเวอร์ แล้วไปขั้นตอนกู้คืน (ยังไม่กู้คืนจนกว่าจะกด "เริ่ม Restore")</span></div>`,
+      icon: 'question', showCancelButton: true, confirmButtonColor: '#0ea5e9',
+      confirmButtonText: 'ดาวน์โหลด', cancelButtonText: 'ยกเลิก'
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      Swal.fire({ title: 'กำลังดาวน์โหลด...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      go();
+    });
+  }
+
   // ===== Files =====
   loadFiles() {
     this.authService.getBackupFiles().subscribe({

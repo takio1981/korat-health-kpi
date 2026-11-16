@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS `backup_files` (
   `size_bytes` bigint(20) NOT NULL DEFAULT 0,
   `compressed` tinyint(1) DEFAULT 1,
   `checksum_sha256` varchar(64) DEFAULT NULL,
-  `trigger_type` enum('manual','scheduled','auto_before_restore') DEFAULT 'manual',
+  `trigger_type` enum('manual','scheduled','auto_before_restore','cloud_download') DEFAULT 'manual',
   `created_by` int(11) DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT current_timestamp(),
   `log_path` varchar(500) DEFAULT NULL,
