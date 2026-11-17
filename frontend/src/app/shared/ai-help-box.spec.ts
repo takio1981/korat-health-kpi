@@ -46,6 +46,14 @@ describe('AiHelpBoxComponent', () => {
     expect(f.nativeElement.textContent).not.toContain('ถามผู้ช่วย AI');
   });
 
+  it('ปิด AI เฉพาะหน้าคู่มือ (17 พ.ย. 2569) = ไม่แสดงกล่อง แม้ AI เปิดรวม', () => {
+    const f = TestBed.createComponent(AiHelpBoxComponent);
+    f.detectChanges();
+    http.expectOne(r => r.url.endsWith('/ai/status')).flush({ success: true, enabled: true, features: { help: false, formula: true } });
+    f.detectChanges();
+    expect(f.nativeElement.textContent).not.toContain('ถามผู้ช่วย AI');
+  });
+
   it('ถาม → แสดงคำตอบเป็นข้อความล้วน + ป้ายเตือน + กดหัวข้ออ้างอิงแล้วส่ง anchor', () => {
     const f = make(true);
     const c = f.componentInstance;

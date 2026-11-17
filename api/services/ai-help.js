@@ -3,7 +3,7 @@
 // ขั้นตอน: กรองชิ้นตามสิทธิ์ของผู้ถาม → ค้นชิ้นที่เกี่ยวข้อง (ตัดคำไทยด้วย Intl.Segmenter + BM25) → ส่งเฉพาะชิ้นเหล่านั้นให้ AI ตอบพร้อมอ้างเลขชิ้น
 // ไม่พบชิ้นที่เกี่ยวข้อง = ตอบว่าไม่พบโดยไม่เรียก AI | ไม่ส่งข้อมูลผู้ใช้เข้า prompt (มีแค่บทบาทและคำถาม — ตัวเลขยาว/อีเมลในคำถามถูกปิดไว้)
 const path = require('path');
-const { callLlm, extractJson, createAiCache, getAiSettings, AiError } = require('./ai');
+const { callLlm, extractJson, createAiCache, getAiSettings, assertAreaOn, AiError } = require('./ai');
 
 const KB_FILE = path.join(__dirname, '..', 'data', 'help-kb.json');
 const TOP_K = 6;
@@ -191,7 +191,9 @@ async function askHelp({ question }, user) {
     const q = String(question || '').replace(/\s+/g, ' ').trim();
     if (q.length < MIN_QUESTION || q.length > MAX_QUESTION) throw new AiError(400, `กรุณาพิมพ์คำถาม ${MIN_QUESTION}–${MAX_QUESTION} ตัวอักษร`, 'AI_INPUT');
     // ปิดอยู่ = 503 เสมอ (รวมกรณีไม่พบ/แคช ที่ไม่ได้เรียก callLlm)
-    if (!(await getAiSettings()).enabled) throw new AiError(503, 'ผู้ช่วย AI ยังไม่ได้เปิดใช้งาน (ตั้งค่าโดยผู้ดูแลระบบสูงสุด)', 'AI_DISABLED');
+    const s = await getAiSettings();
+    if (!s.enabled) throw new AiError(503, 'ผู้ช่วย AI ยังไม่ได้เปิดใช้งาน (ตั้งค่าโดยผู้ดูแลระบบสูงสุด)', 'AI_DISABLED');
+    assertAreaOn(s, 'help');
     const role = audienceOf(user && user.role);
     const masked = maskQuestion(q);
     const hits = searchHelp(masked, role);

@@ -3,6 +3,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { testProviders } from '../testing/test-providers';
 import { AiSettingsCardComponent, presetOf, modelLabel, AI_PRESETS, presetLabel, isFreeModel } from './ai-settings-card';
 import Swal from 'sweetalert2';
+import { aiFeatureOn } from './ai-feature';
 
 // การ์ดตั้งค่าผู้ช่วย AI (7 พ.ย. 2569)
 describe('AiSettingsCardComponent', () => {
@@ -140,5 +141,30 @@ describe('AiSettingsCardComponent', () => {
     req.flush({ success: true });
     expect(c.apiKey).toBe('');
     http.expectOne(r => r.url.endsWith('/ai/settings') && r.method === 'GET');
+  });
+  // เปิด-ปิด AI รายหน้า (17 พ.ย. 2569)
+  it('เปิด-ปิดรายหน้า: โหลดสถานะแต่ละส่วน ปิดทั้งหมด/ติ๊กกลับ แล้วส่ง features ครบทุกส่วน', () => {
+    const areas = [{ key: 'help', page: 'help', label: 'คู่มือ — ผู้ช่วยตอบคำถาม' }, { key: 'formula', page: 'kpi-manage', label: 'จัดการตัวชี้วัด — ช่วยเขียนสูตร' }];
+    const f = make({ enabled: true, provider: 'anthropic', base_url: '', model: 'claude-opus-5-5', daily_limit: 200, has_api_key: true, areas, features: { help: true, formula: false } });
+    modelsReq().flush({ success: true, models: [] });
+    f.detectChanges();
+    const c = f.componentInstance;
+    expect(c.features).toEqual({ help: true, formula: false });
+    expect(f.nativeElement.querySelector('#ai-features-box').textContent).toContain('เปิด 1/2 ส่วน');
+    c.setAllFeatures(false);
+    c.features['formula'] = true;
+    c.save();
+    const req = http.expectOne(r => r.url.endsWith('/ai/settings') && r.method === 'PUT');
+    expect(req.request.body.features).toEqual({ help: false, formula: true });
+    req.flush({ success: true });
+    http.expectOne(r => r.url.endsWith('/ai/settings') && r.method === 'GET');
+  });
+
+  it('aiFeatureOn: ปิดรวม = ปิดทุกส่วน, ไม่มี features (backend เดิม) = ตามสถานะรวม', () => {
+    expect(aiFeatureOn({ enabled: true, features: { help: false } }, 'help')).toBe(false);
+    expect(aiFeatureOn({ enabled: true, features: { help: false } }, 'formula')).toBe(true);
+    expect(aiFeatureOn({ enabled: true }, 'help')).toBe(true);
+    expect(aiFeatureOn({ enabled: false, features: { help: true } }, 'help')).toBe(false);
+    expect(aiFeatureOn(null, 'help')).toBe(false);
   });
 });

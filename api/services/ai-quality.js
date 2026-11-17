@@ -8,7 +8,7 @@ const db = require('../db');
 const { detectAnomaly, toNumber } = require('../kpi-anomaly');
 const { MONTHS, KIND_LABEL, KIND_ORDER, anomalyHints, withBasisHint } = require('./data-quality');
 const { ROLE_SCOPE_OWN_DEPT } = require('../core/access');
-const { callLlm, extractJson, createAiCache, getAiSettings, AiError } = require('./ai');
+const { callLlm, extractJson, createAiCache, getAiSettings, assertAreaOn, AiError } = require('./ai');
 
 const MAX_ANOMALY_ITEMS = 20;
 const MAX_DQ_EXAMPLES = 30;
@@ -44,9 +44,10 @@ function indicatorTraits(ind) {
     };
 }
 
-async function ensureEnabled() {
+async function ensureEnabled(area) {
     const s = await getAiSettings();
     if (!s.enabled) throw new AiError(503, 'ผู้ช่วย AI ยังไม่เปิดใช้งาน — ติดต่อผู้ดูแลระบบ', 'AI_DISABLED');
+    assertAreaOn(s, area);
 }
 const cacheKey = (feature, input) => feature + ':' + crypto.createHash('sha256').update(JSON.stringify(input)).digest('hex');
 
@@ -100,7 +101,7 @@ const DQ_SYSTEM_PROMPT = [
 const dqPrompt = (input) => 'ผลการตรวจคุณภาพข้อมูล (JSON):\n' + JSON.stringify(input) + '\n\nเขียนสรุปตามรูปแบบที่กำหนด';
 
 async function explainDataQuality(scan, userId, { refresh = false } = {}) {
-    await ensureEnabled();
+    await ensureEnabled('data_quality');
     if (!scan.total) return { summary: '', no_issues: true, year_bh: scan.year_bh };
     const input = buildDqInput(scan);
     const key = cacheKey('dq', input);
@@ -181,7 +182,7 @@ function parseExplanations(text, n) {
 }
 
 async function explainAnomalies(items, user, { refresh = false } = {}) {
-    await ensureEnabled();
+    await ensureEnabled('anomaly');
     const norm = normalizeAnomalyItems(items);
     const ids = [...new Set(norm.map(r => r.indicator_id))];
     let rows = [];

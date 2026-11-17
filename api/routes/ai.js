@@ -10,7 +10,7 @@ const { suggestKhdMappings } = require('../services/ai-khd');
 const { askHelp } = require('../services/ai-help');
 const { scanDataQuality } = require('../services/data-quality');
 const { explainDataQuality, explainAnomalies } = require('../services/ai-quality');
-const { AI_PROVIDERS, getAiSettings, saveAiSetting, encryptApiKey, usedToday, callLlm, sendAiError, listModels, AiError } = require('../services/ai');
+const { AI_PROVIDERS, AI_AREAS, AI_AREA_KEYS, getAiSettings, saveAiSetting, encryptApiKey, usedToday, callLlm, sendAiError, listModels, AiError } = require('../services/ai');
 
 const clientIp = (req) => (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim();
 
@@ -18,9 +18,10 @@ const clientIp = (req) => (req.headers['x-forwarded-for'] || req.ip || '').toStr
 apiRouter.get('/ai/status', authenticateToken, async (req, res) => {
     try {
         const s = await getAiSettings();
-        res.json({ success: true, enabled: s.enabled });
+        // features = ผลรวมแล้ว (ปิดรวม = ทุกส่วนปิด) — หน้าจอซ่อนปุ่ม AI ของส่วนที่ปิด
+        res.json({ success: true, enabled: s.enabled, features: Object.fromEntries(AI_AREA_KEYS.map(k => [k, s.enabled && s.features[k]])) });
     } catch (e) {
-        res.json({ success: true, enabled: false });
+        res.json({ success: true, enabled: false, features: {} });
     }
 });
 
@@ -30,7 +31,8 @@ apiRouter.get('/ai/settings', authenticateToken, isSuperAdmin, async (req, res) 
         const s = await getAiSettings();
         res.json({
             success: true,
-            data: { enabled: s.enabled, provider: s.provider, base_url: s.base_url, model: s.model, daily_limit: s.daily_limit, has_api_key: !!s.api_key, used_today: await usedToday() },
+            data: { enabled: s.enabled, provider: s.provider, base_url: s.base_url, model: s.model, daily_limit: s.daily_limit, has_api_key: !!s.api_key, used_today: await usedToday(),
+                features: s.features, areas: AI_AREAS.map(a => ({ key: a.key, page: a.page, label: a.label })) },
         });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
@@ -52,6 +54,21 @@ apiRouter.put('/ai/settings', authenticateToken, isSuperAdmin, async (req, res) 
         const limit = parseInt(b.daily_limit, 10);
         if (!Number.isFinite(limit) || limit < 1 || limit > 10000) return res.status(400).json({ success: false, message: 'จำนวนครั้งต่อวันต้องอยู่ระหว่าง 1–10,000' });
 
+        // เปิด-ปิดรายส่วน (ไม่ส่ง = คงค่าเดิม, ส่งบางส่วน = รวมกับค่าเดิม) — รับเฉพาะ key ที่รู้จัก ค่าต้องเป็น true/false
+        let featNote = '';
+        if (b.features !== undefined) {
+            if (!b.features || typeof b.features !== 'object' || Array.isArray(b.features)) return res.status(400).json({ success: false, message: 'รูปแบบการเปิด-ปิดรายหน้าไม่ถูกต้อง' });
+            const cur = (await getAiSettings()).features;
+            const next = { ...cur };
+            for (const k of Object.keys(b.features)) {
+                if (!AI_AREA_KEYS.includes(k)) return res.status(400).json({ success: false, message: 'ไม่รู้จักส่วนที่ใช้ AI: ' + String(k).slice(0, 40) });
+                if (typeof b.features[k] !== 'boolean') return res.status(400).json({ success: false, message: 'ค่าการเปิด-ปิดรายหน้าต้องเป็น true/false' });
+                next[k] = b.features[k];
+            }
+            await saveAiSetting('ai_features', JSON.stringify(next));
+            const off = AI_AREAS.filter(a => !next[a.key]).map(a => a.label);
+            featNote = off.length ? ' / ปิดรายหน้า: ' + off.join(', ') : ' / เปิดทุกหน้า';
+        }
         await saveAiSetting('ai_enabled', enabled ? 'true' : 'false');
         await saveAiSetting('ai_provider', b.provider);
         await saveAiSetting('ai_base_url', baseUrl);
@@ -62,7 +79,7 @@ apiRouter.put('/ai/settings', authenticateToken, isSuperAdmin, async (req, res) 
         else if (key) await saveAiSetting('ai_api_key_enc', encryptApiKey(key)); // ส่งว่าง = คงค่าเดิม
 
         await saveLog(req.user.username, 'AI_SETTINGS_UPDATE',
-            `ผู้ช่วย AI: ${enabled ? 'เปิด' : 'ปิด'} / ${b.provider} / ${model} / ${limit} ครั้งต่อวัน${key ? ' / เปลี่ยน API key' : ''}${b.clear_api_key === true ? ' / ลบ API key' : ''}`,
+            `ผู้ช่วย AI: ${enabled ? 'เปิด' : 'ปิด'} / ${b.provider} / ${model} / ${limit} ครั้งต่อวัน${key ? ' / เปลี่ยน API key' : ''}${b.clear_api_key === true ? ' / ลบ API key' : ''}${featNote}`,
             clientIp(req));
         res.json({ success: true, message: 'บันทึกการตั้งค่าผู้ช่วย AI แล้ว' });
     } catch (e) {

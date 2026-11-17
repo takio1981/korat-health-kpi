@@ -20,6 +20,7 @@ import { firstValueFrom } from 'rxjs';
 import { AiFormulaHelperComponent } from '../shared/ai-formula-helper';
 import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
 import { TARGET_CONDITIONS, CONDITION_SYMBOL, CONDITION_LABEL, normalizeCondition, evaluateTarget, normalizeTargetMonthly } from '../shared/kpi-target';
+import { aiFeatureOn } from '../shared/ai-feature';
 
 // วิธีคิด "ผลงาน" แบบสำเร็จรูป ↔ is_cumulative + result_formula (ฟังก์ชันล้วน — ทดสอบใน kpi-manage.spec.ts)
 // 'manual' = ผู้บันทึกกรอกผลงานล่าสุดเอง (kpi_indicators.result_manual — 29 ต.ค. 2569)
@@ -2018,7 +2019,7 @@ export class KpiManageComponent implements OnInit {
   openKhdMapping(kind: string = 'dept') {
     if (!this.isSuperAdmin) return;
     this.khdMapOpen = true;
-    this.authService.getAiStatus().subscribe((res: any) => { this.khdMapAiEnabled = !!res?.enabled; this.cdr.detectChanges(); });
+    this.authService.getAiStatus().subscribe((res: any) => { this.khdMapAiEnabled = aiFeatureOn(res, 'khd_mapping'); this.cdr.detectChanges(); });
     this.loadKhdMapping(kind);
   }
 

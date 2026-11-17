@@ -3,6 +3,7 @@
 import { Component, Input, OnChanges, OnInit, SimpleChanges, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../services/auth';
+import { aiFeatureOn } from './ai-feature';
 
 // แบ่งข้อความสรุปเป็นบรรทัดสำหรับแสดงผล: ■ = หัวข้อ, • = รายการย่อย
 export function summaryLines(text: string): { kind: 'head' | 'item' | 'text'; text: string }[] {
@@ -73,7 +74,7 @@ export class AiSummaryPanelComponent implements OnInit, OnChanges {
   copied = false;
 
   ngOnInit() {
-    this.authService.getAiStatus().subscribe(res => { this.enabled = !!res?.enabled; this.cdr.detectChanges(); });
+    this.authService.getAiStatus().subscribe(res => { this.enabled = aiFeatureOn(res, this.mode === 'report-tab' ? 'report_tab' : 'chart_summary'); this.cdr.detectChanges(); });
   }
 
   // ตัวกรองเปลี่ยน = สรุปเดิมไม่ตรงกับตัวเลขบนหน้าแล้ว — ล้างทิ้ง

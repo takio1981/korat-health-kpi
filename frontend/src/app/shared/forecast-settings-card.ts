@@ -5,6 +5,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth';
 import Swal from 'sweetalert2';
+import { aiFeatureOn } from './ai-feature';
 
 export const DIGEST_DAYS = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
 
@@ -75,7 +76,7 @@ export class ForecastSettingsCardComponent implements OnInit {
 
   ngOnInit() {
     this.load();
-    this.authService.getAiStatus().subscribe((r: any) => { this.aiEnabled = !!r?.enabled; this.cdr.detectChanges(); });
+    this.authService.getAiStatus().subscribe((r: any) => { this.aiEnabled = aiFeatureOn(r, 'forecast'); this.cdr.detectChanges(); });
   }
 
   load() {

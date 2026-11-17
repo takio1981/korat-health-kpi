@@ -5,6 +5,7 @@ import { Component, EventEmitter, OnInit, Output, inject, ChangeDetectorRef } fr
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth';
+import { aiFeatureOn } from './ai-feature';
 
 export interface HelpSource { anchor: string; section: string | null; heading: string | null; }
 export interface HelpAnswer { question: string; found: boolean; answer: string; sources: HelpSource[]; related: HelpSource[]; model: string | null; cached: boolean; }
@@ -92,7 +93,7 @@ export class AiHelpBoxComponent implements OnInit {
   readonly examples = ['ลืมรหัสผ่านทำอย่างไร', 'นำเข้าผลงานจาก Excel อย่างไร', 'ทำไมแก้ไขผลงานไม่ได้'];
 
   ngOnInit() {
-    this.authService.getAiStatus().subscribe(res => { this.enabled = !!res?.enabled; this.cdr.detectChanges(); });
+    this.authService.getAiStatus().subscribe(res => { this.enabled = aiFeatureOn(res, 'help'); this.cdr.detectChanges(); });
   }
 
   linesOf(a: HelpAnswer) { return answerLines(a.answer); }

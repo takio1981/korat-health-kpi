@@ -24,6 +24,7 @@ import { activityValue, rollupMonthly, itemNumber, rollupTree, RollupNode } from
 import { orderSubTree } from '../shared/sub-tree';
 import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
 import { evaluateTarget, normalizeCondition, CONDITION_SYMBOL, CONDITION_LABEL, aggregateMonthlyTarget, normalizeTargetMonthly } from '../shared/kpi-target';
+import { aiFeatureOn } from '../shared/ai-feature';
 
 // ตัวชี้วัดหลายระดับ — แถวลูกใต้แถวตัวชี้วัดหลักในตารางบันทึกผลงาน (ข้อย่อย 1.1 / ข้อย่อยระดับถัดไป 1.1.1 … / กิจกรรม)
 export interface HierRow {
@@ -685,7 +686,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.authService.isLoggedIn()) {
       this.loadColumnPrefs();
       // ผู้ช่วย AI เปิดอยู่ = แสดงปุ่ม "AI อธิบาย" ข้างตัวนับค่าที่อาจผิดปกติ (สถานะแคชใน AuthService)
-      this.authService.getAiStatus().subscribe((res: any) => { this.aiEnabled = !!res?.enabled; this.cdr.detectChanges(); });
+      this.authService.getAiStatus().subscribe((res: any) => { this.aiEnabled = aiFeatureOn(res, 'anomaly'); this.cdr.detectChanges(); });
     }
     const role = this.authService.getUserRole();
     this.isAdmin = ['admin_ssj', 'super_admin'].includes(role);      // admin ส่วนกลาง

@@ -83,6 +83,27 @@ export function presetOf(provider: string, baseUrl: string): string {
         <span class="ms-3 text-sm font-bold text-gray-700">{{ enabled ? 'เปิดใช้งานผู้ช่วย AI' : 'ปิดอยู่ (ไม่แสดงปุ่ม AI ในหน้าใดเลย)' }}</span>
       </label>
 
+      <!-- เปิด-ปิดรายหน้า (17 พ.ย. 2569) — ปิดรวมอยู่ = ทุกส่วนปิด (ช่องเลือกยังตั้งค่าไว้ล่วงหน้าได้) -->
+      <div *ngIf="areas.length" id="ai-features-box" class="rounded-xl border border-fuchsia-100 bg-fuchsia-50/60 p-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <div class="text-sm font-bold text-fuchsia-800"><i class="fas fa-toggle-on me-1"></i>เปิด-ปิดการใช้งาน AI รายหน้า
+            <span class="text-xs font-normal text-gray-500">(เปิด {{ featureOnCount }}/{{ areas.length }} ส่วน)</span></div>
+          <div class="flex gap-2 text-xs">
+            <button type="button" (click)="setAllFeatures(true)" id="btn-ai-features-all" class="px-2 py-1 rounded-lg bg-white border border-fuchsia-200 text-fuchsia-700 hover:bg-fuchsia-100">เปิดทั้งหมด</button>
+            <button type="button" (click)="setAllFeatures(false)" id="btn-ai-features-none" class="px-2 py-1 rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-100">ปิดทั้งหมด</button>
+          </div>
+        </div>
+        <p *ngIf="!enabled" class="text-[11px] text-amber-700 mb-2"><i class="fas fa-circle-info me-1"></i>ผู้ช่วย AI ปิดอยู่ — ทุกส่วนจะไม่แสดงปุ่ม AI จนกว่าจะเปิดใช้งานด้านบน</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+          <label *ngFor="let a of areas" class="flex items-start gap-2 text-sm text-gray-700 cursor-pointer" [attr.data-ai-feature]="a.key">
+            <input type="checkbox" [(ngModel)]="features[a.key]" [name]="'aiFeat_' + a.key" [ngModelOptions]="{ standalone: true }"
+                   class="mt-0.5 rounded text-fuchsia-600 focus:ring-fuchsia-400">
+            <span [class.text-gray-400]="!features[a.key]">{{ a.label }}</span>
+          </label>
+        </div>
+        <p class="text-[11px] text-gray-500 mt-2">ส่วนที่ปิดจะไม่แสดงปุ่ม AI ในหน้านั้น และระบบปฏิเสธคำขอของส่วนนั้นเสมอ (ไม่นับโควตา)</p>
+      </div>
+
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-bold text-gray-700 mb-1">ผู้ให้บริการ</label>
@@ -192,6 +213,10 @@ export class AiSettingsCardComponent implements OnInit {
   saving = false;
   testing = false;
   enabled = false;
+  areas: { key: string; page: string; label: string }[] = [];
+  features: Record<string, boolean> = {};
+  get featureOnCount() { return this.areas.filter(a => this.features[a.key]).length; }
+  setAllFeatures(on: boolean) { for (const a of this.areas) this.features[a.key] = on; }
   presetId = 'claude';
   provider: 'anthropic' | 'openai' = 'anthropic';
   baseUrl = '';
@@ -273,6 +298,8 @@ export class AiSettingsCardComponent implements OnInit {
       next: (res) => {
         const d = res?.data || {};
         this.enabled = !!d.enabled;
+        this.areas = Array.isArray(d.areas) ? d.areas : [];
+        this.features = Object.fromEntries(this.areas.map(a => [a.key, d.features?.[a.key] !== false]));
         this.provider = d.provider === 'openai' ? 'openai' : 'anthropic';
         this.baseUrl = d.base_url || '';
         this.model = d.model || '';
@@ -307,6 +334,8 @@ export class AiSettingsCardComponent implements OnInit {
     return {
       enabled: this.enabled, provider: this.provider, base_url: this.provider === 'openai' ? this.baseUrl.trim() : '',
       model: this.model.trim(), daily_limit: Number(this.dailyLimit), api_key: this.apiKey.trim(), clear_api_key: this.clearKey,
+      // ส่งเฉพาะเมื่อ server แจ้งรายการส่วนมา (backend เดิมไม่รู้จัก features)
+      ...(this.areas.length ? { features: Object.fromEntries(this.areas.map(a => [a.key, !!this.features[a.key]])) } : {}),
     };
   }
 

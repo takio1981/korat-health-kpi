@@ -7,7 +7,27 @@
 const db = require('../db');
 const { bkEncrypt, bkDecrypt } = require('./backup');
 
-const AI_SETTING_KEYS = ['ai_enabled', 'ai_provider', 'ai_base_url', 'ai_model', 'ai_daily_limit', 'ai_api_key_enc'];
+const AI_SETTING_KEYS = ['ai_enabled', 'ai_provider', 'ai_base_url', 'ai_model', 'ai_daily_limit', 'ai_api_key_enc', 'ai_features'];
+// เปิด-ปิด AI รายหน้า (17 พ.ย. 2569 — ผู้ใช้สั่ง): key = ส่วนของหน้าจอ, features = ชื่อ feature ที่ callLlm ใช้ (ai_usage_logs.feature)
+// system_settings 'ai_features' = JSON { key: false } — ไม่มี key = เปิด (ค่าตั้งต้นเหมือนเดิม) | ปิดรวม (ai_enabled) ยังมาก่อนเสมอ
+const AI_AREAS = [
+    { key: 'chart_summary', page: 'charts', label: 'กราฟและสถิติ — สรุปภาพรวมด้วย AI', features: ['report_summary'] },
+    { key: 'report_tab', page: 'charts', label: 'รายงานสรุปผล — วิเคราะห์และสรุปรายแถบ', features: ['report_tab_summary'] },
+    { key: 'forecast', page: 'charts', label: 'ตัวชี้วัดเสี่ยง — อธิบายรายการเสี่ยง + สรุปรายสัปดาห์', features: ['forecast_explain', 'forecast_digest'] },
+    { key: 'anomaly', page: 'dashboard', label: 'บันทึกผลงาน — อธิบายค่าที่อาจผิดปกติ', features: ['anomaly_explain'] },
+    { key: 'formula', page: 'kpi-manage', label: 'จัดการตัวชี้วัด — ช่วยเขียนสูตร', features: ['formula', 'formula_pct'] },
+    { key: 'khd_mapping', page: 'kpi-manage', label: 'จัดการตัวชี้วัด — แนะนำการจับคู่ KHD', features: ['khd_mapping'] },
+    { key: 'help', page: 'help', label: 'คู่มือ — ผู้ช่วยตอบคำถาม', features: ['help_ask'] },
+    { key: 'data_quality', page: 'kpi-results-manage', label: 'จัดการข้อมูลผลงาน — สรุปคุณภาพข้อมูล', features: ['data_quality'] },
+];
+const AI_AREA_KEYS = AI_AREAS.map(a => a.key);
+const areaOfFeature = (feature) => (AI_AREAS.find(a => a.features.includes(feature)) || {}).key || null;
+/** อ่าน JSON ของ ai_features → { key: boolean } ครบทุกส่วน (ค่าเสีย/ไม่มี = เปิด) — รับเฉพาะ key ที่รู้จัก (own-property) */
+function parseAiFeatures(raw) {
+    let obj = {};
+    try { const v = typeof raw === 'string' ? JSON.parse(raw) : raw; if (v && typeof v === 'object' && !Array.isArray(v)) obj = v; } catch (_) { /* เปิดทั้งหมด */ }
+    return Object.fromEntries(AI_AREA_KEYS.map(k => [k, !(Object.prototype.hasOwnProperty.call(obj, k) && obj[k] === false)]));
+}
 const AI_PROVIDERS = ['anthropic', 'openai'];
 const AI_DEFAULTS = { provider: 'anthropic', model: 'claude-opus-5-5', daily_limit: 200 };
 const AI_TIMEOUT_MS = 90000;
@@ -33,6 +53,7 @@ async function getAiSettings() {
         model: s.ai_model || (s.ai_provider === 'openai' ? '' : AI_DEFAULTS.model),
         daily_limit: Number.isFinite(limit) && limit > 0 ? limit : AI_DEFAULTS.daily_limit,
         api_key: s.ai_api_key_enc ? bkDecrypt(s.ai_api_key_enc) : '',
+        features: parseAiFeatures(s.ai_features),
     };
 }
 
@@ -126,9 +147,21 @@ async function callOpenAiCompatible(cfg, { system, prompt, maxTokens }) {
 
 // เรียกโมเดล 1 ครั้ง: ตรวจเปิดใช้งาน + โควตารายวัน → เรียกผู้ให้บริการ → บันทึก ai_usage_logs
 // test = true: ปุ่ม "ทดสอบ" ของผู้ดูแล — ทำงานได้แม้ยังปิดอยู่ และไม่นับโควตา
+function assertAreaOn(cfg, area) {
+    if (area && cfg.features && cfg.features[area] === false) {
+        throw new AiError(503, 'ปิดการใช้ผู้ช่วย AI ในส่วนนี้อยู่ (ตั้งค่าโดยผู้ดูแลระบบสูงสุด)', 'AI_FEATURE_DISABLED');
+    }
+}
+
+/** ตรวจเฉพาะการปิดรายส่วน ก่อนอ่านแคช (เส้นทางที่ไม่ได้ตรวจการปิดรวมก่อนแคชมาแต่เดิม) — ปิดส่วนนี้ = 503 */
+async function ensureAiArea(area) {
+    assertAreaOn(await getAiSettings(), area);
+}
+
 async function callLlm({ feature, userId, system, prompt, maxTokens = 2000, test = false }) {
     const cfg = await getAiSettings();
     if (!test && !cfg.enabled) throw new AiError(503, 'ผู้ช่วย AI ยังไม่ได้เปิดใช้งาน (ตั้งค่าโดยผู้ดูแลระบบสูงสุด)', 'AI_DISABLED');
+    if (!test) assertAreaOn(cfg, areaOfFeature(feature));
     if (!test && await usedToday() >= cfg.daily_limit) throw new AiError(429, `ใช้ผู้ช่วย AI ครบ ${cfg.daily_limit} ครั้งของวันนี้แล้ว`, 'AI_QUOTA');
     const t0 = Date.now();
     try {
@@ -265,6 +298,6 @@ function createAiCache(ttlMs = 60 * 60 * 1000, max = 200) {
 }
 
 module.exports = {
-    AI_SETTING_KEYS, AI_PROVIDERS, AI_DEFAULTS, AiError, getAiSettings, saveAiSetting, encryptApiKey, usedToday,
+    AI_SETTING_KEYS, AI_AREAS, AI_AREA_KEYS, areaOfFeature, parseAiFeatures, ensureAiArea, assertAreaOn, AI_PROVIDERS, AI_DEFAULTS, AiError, getAiSettings, saveAiSetting, encryptApiKey, usedToday,
     callLlm, extractJson, sendAiError, createAiCache, listModels, AI_MODELS_CACHE_KEY, NON_CHAT_MODEL,
 };

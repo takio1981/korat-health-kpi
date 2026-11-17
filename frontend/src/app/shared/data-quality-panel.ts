@@ -9,6 +9,7 @@ import { getCurrentFiscalYear } from './fiscal-year.util';
 import { summaryLines } from './ai-summary-panel';
 import { ZoneBadgeComponent } from './zone-badge';
 import { FormulaBadgeComponent } from './formula-badge';
+import { aiFeatureOn } from './ai-feature';
 
 export const DQ_KINDS: { key: string; label: string; cls: string }[] = [
   { key: 'negative', label: 'ค่าติดลบ', cls: 'bg-red-100 text-red-800 border-red-200' },
@@ -143,7 +144,7 @@ export class DataQualityPanelComponent implements OnInit {
   kindCls(k: string): string { return DQ_KINDS.find(x => x.key === k)?.cls || 'bg-gray-100 text-gray-700 border-gray-200'; }
 
   ngOnInit() {
-    this.authService.getAiStatus().subscribe((res: any) => { this.aiEnabled = !!res?.enabled; this.cdr.detectChanges(); });
+    this.authService.getAiStatus().subscribe((res: any) => { this.aiEnabled = aiFeatureOn(res, 'data_quality'); this.cdr.detectChanges(); });
   }
 
   setKind(k: string) { this.kind = k; this.shownCount = DQ_PAGE; }

@@ -11,7 +11,7 @@ const { addZoneFilter } = require('../core/zones');
 const { districtZoneMap } = require('../services/zones');
 const crypto = require('crypto');
 const { aiLimiter } = require('../core/security');
-const { callLlm, sendAiError, createAiCache, AiError } = require('../services/ai');
+const { callLlm, sendAiError, createAiCache, ensureAiArea, AiError } = require('../services/ai');
 const { buildSummaryInput, SUMMARY_SYSTEM_PROMPT, summaryPrompt } = require('../services/ai-report');
 const { tabKey, buildTabInput, tabSystemPrompt, tabPrompt } = require('../services/ai-report-tabs');
 const { computeForecasts, summarizeByIndicator, summarizeByDistrict } = require('../services/forecast');
@@ -595,6 +595,7 @@ apiRouter.get('/report/chart-stats', authenticateToken, async (req, res) => {
 const _aiSummaryCache = createAiCache();
 apiRouter.post('/report/ai-summary', authenticateToken, aiLimiter, async (req, res) => {
     try {
+        await ensureAiArea('chart_summary');
         const q = {};
         for (const k of ['year_bh', 'yut_id', 'main_id', 'dept_id', 'indicator_id', 'distid', 'hostype', 'zone']) {
             if (req.body?.[k] !== undefined && req.body[k] !== null && req.body[k] !== '') q[k] = String(req.body[k]);
@@ -631,6 +632,7 @@ async function describeReportFilters(q) {
 }
 apiRouter.post('/report/ai-tab-summary', authenticateToken, aiLimiter, async (req, res) => {
     try {
+        await ensureAiArea('report_tab');
         const b = req.body || {};
         const key = tabKey(String(b.tab || ''), String(b.view || ''));
         if (!key) return res.status(400).json({ success: false, message: 'ไม่รู้จักแถบรายงานนี้' });

@@ -3,7 +3,7 @@
 // ข้อมูลที่ส่ง: จำนวนตามระดับ ชื่อตัวชี้วัด/หน่วยงาน/อำเภอ (ระดับกลุ่ม) และร้อยละที่คาด — ไม่มีรหัส/ชื่อหน่วยบริการรายแถว ไม่มีข้อมูลบุคคล
 const crypto = require('crypto');
 const { summarizeByIndicator, summarizeByDistrict } = require('./forecast');
-const { callLlm, createAiCache, getAiSettings, AiError } = require('./ai');
+const { callLlm, createAiCache, getAiSettings, assertAreaOn, AiError } = require('./ai');
 
 const _cache = createAiCache();
 const TOP_IND = 10;
@@ -61,6 +61,7 @@ const forecastPrompt = (input) => 'ผลระบบเตือนล่วง
 async function explainForecast(fc, { userId = null, filters = {}, refresh = false, feature = 'forecast_explain' } = {}) {
     const s = await getAiSettings();
     if (!s.enabled) throw new AiError(503, 'ผู้ช่วย AI ยังไม่เปิดใช้งาน — ติดต่อผู้ดูแลระบบ', 'AI_DISABLED');
+    assertAreaOn(s, 'forecast');
     const items = applyRiskFilters(fc.items, filters);
     if (!items.length) return { summary: '', no_risk: true, year_bh: fc.year_bh };
     const input = buildForecastInput(fc, items, filters);

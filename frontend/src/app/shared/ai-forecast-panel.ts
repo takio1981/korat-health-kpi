@@ -5,6 +5,7 @@ import { Component, Input, OnChanges, OnInit, SimpleChanges, inject, ChangeDetec
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../services/auth';
 import { summaryLines } from './ai-summary-panel';
+import { aiFeatureOn } from './ai-feature';
 
 @Component({
   selector: 'app-ai-forecast-panel',
@@ -55,7 +56,7 @@ export class AiForecastPanelComponent implements OnInit, OnChanges {
   private lastKey = '';
 
   ngOnInit() {
-    this.authService.getAiStatus().subscribe((res: any) => { this.enabled = !!res?.enabled; this.cdr.detectChanges(); });
+    this.authService.getAiStatus().subscribe((res: any) => { this.enabled = aiFeatureOn(res, 'forecast'); this.cdr.detectChanges(); });
   }
 
   ngOnChanges(changes: SimpleChanges) {

@@ -7,6 +7,7 @@ import { Component, EventEmitter, Input, OnInit, Output, inject, ChangeDetectorR
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth';
+import { aiFeatureOn } from './ai-feature';
 
 @Component({
   selector: 'app-ai-formula-helper',
@@ -108,7 +109,7 @@ export class AiFormulaHelperComponent implements OnInit {
   }
 
   ngOnInit() {
-    this.authService.getAiStatus().subscribe(res => { this.enabled = !!res?.enabled; this.cdr.detectChanges(); });
+    this.authService.getAiStatus().subscribe(res => { this.enabled = aiFeatureOn(res, 'formula'); this.cdr.detectChanges(); });
   }
 
   suggest() {
