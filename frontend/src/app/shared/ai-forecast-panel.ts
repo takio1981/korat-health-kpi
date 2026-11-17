@@ -5,7 +5,7 @@ import { Component, Input, OnChanges, OnInit, SimpleChanges, inject, ChangeDetec
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../services/auth';
 import { summaryLines } from './ai-summary-panel';
-import { aiFeatureOn } from './ai-feature';
+import { aiFeatureOn, aiErrorText } from './ai-feature';
 
 @Component({
   selector: 'app-ai-forecast-panel',
@@ -84,7 +84,7 @@ export class AiForecastPanelComponent implements OnInit, OnChanges {
       },
       error: (err: any) => {
         this.loading = false;
-        this.error = err.error?.message || 'AI อธิบายตัวชี้วัดเสี่ยงไม่สำเร็จ';
+        this.error = aiErrorText(err, 'AI อธิบายตัวชี้วัดเสี่ยงไม่สำเร็จ');
         this.cdr.detectChanges();
       },
     });

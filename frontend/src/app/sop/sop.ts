@@ -718,6 +718,7 @@ const SYSTEMS: SopSystem[] = [
   ],
   notes:[
     'ตั้งค่า (super_admin): ตั้งค่าระบบ → ผู้ช่วย AI — GET/PUT /ai/settings, POST /ai/test (ไม่นับโควตา) | API key เข้ารหัส (bkEncrypt) ไม่ส่งกลับหน้าจอ และไม่อยู่ใน GET /settings',
+    'ลองใหม่อัตโนมัติ (17 พ.ย. 2569): callLlm ลองใหม่เมื่อผู้ให้บริการตอบ 5xx / เชื่อมต่อไม่ได้ / ตอบว่าง สูงสุด 3 ครั้ง (รอ 1.5 / 4 วินาที) ภายในเวลารวม 50 วินาที — 4xx/429/ปุ่มทดสอบไม่ลองใหม่ | ai_usage_logs.error_msg เก็บสถานะ/ข้อความจริงของผู้ให้บริการทุกครั้ง',
     'เปิด-ปิด AI รายหน้า (17 พ.ย. 2569): system_settings ai_features = JSON { ส่วน: false } (ไม่มี = เปิด) — AI_AREAS ใน services/ai.js จับคู่ feature ของ callLlm กับส่วน → ส่วนที่ปิด = 503 AI_FEATURE_DISABLED (callLlm + ก่อนอ่านแคช/ค้นคู่มือ) | GET /ai/status คืน features ให้หน้าจอซ่อนปุ่ม (shared/ai-feature.ts aiFeatureOn) | PUT /ai/settings รับ features บางส่วน = รวมกับค่าเดิม',
     'ตัวจำกัด aiLimiter 10 ครั้ง/นาที/ผู้ใช้ + โควตารายวันทั้งระบบ (ai_daily_limit) | ข้อผิดพลาดจากผู้ให้บริการส่งกลับเป็น 502/504 (ไม่ใช้ 401)',
     'ระยะที่ 2 ช่วยเขียนสูตร: POST /ai/formula-suggest (requireAnyAction kpi-manage add|edit) → AI เสนอ → parseFormulaInput ตรวจ (ผิด = ให้ AI แก้ 1 รอบ) → ผู้ใช้กด "ใช้สูตรนี้" + ทดลองคำนวณ → บันทึกตัวชี้วัดเอง | สูตรร้อยละ (13 พ.ย. 2569): ส่งข้อมูลตัวชี้วัด (เป้าหมาย/เกณฑ์/เงื่อนไข/วิธีคิดผลงาน) ไม่ต้องอธิบาย — AI ขอข้อมูลเพิ่ม (need_more) จึงให้อธิบาย',

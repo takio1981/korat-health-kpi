@@ -3,7 +3,7 @@
 import { Component, Input, OnChanges, OnInit, SimpleChanges, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../services/auth';
-import { aiFeatureOn } from './ai-feature';
+import { aiFeatureOn, aiErrorText } from './ai-feature';
 
 // แบ่งข้อความสรุปเป็นบรรทัดสำหรับแสดงผล: ■ = หัวข้อ, • = รายการย่อย
 export function summaryLines(text: string): { kind: 'head' | 'item' | 'text'; text: string }[] {
@@ -113,7 +113,7 @@ export class AiSummaryPanelComponent implements OnInit, OnChanges {
       error: (err) => {
         if (my !== this.seq) return;
         this.loading = false;
-        this.error = err.error?.message || 'สร้างสรุปด้วย AI ไม่สำเร็จ';
+        this.error = aiErrorText(err, 'สร้างสรุปด้วย AI ไม่สำเร็จ');
         this.cdr.detectChanges();
       },
     });

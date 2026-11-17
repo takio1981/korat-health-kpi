@@ -6,6 +6,7 @@ import { CommonModule } from '@angular/common';
 import { AuthService } from '../services/auth';
 import { ZoneBadgeComponent } from './zone-badge';
 import { EXCEL_MONTHS } from './kpi-excel';
+import { aiErrorText } from './ai-feature';
 
 export const AI_ANOMALY_MAX = 20; // เท่ากับ MAX_ANOMALY_ITEMS ของ backend
 
@@ -120,7 +121,7 @@ export class AiAnomalyExplainComponent implements OnInit {
       },
       error: (err) => {
         this.loading = false;
-        this.error = err.error?.message || 'AI อธิบายค่าที่อาจผิดปกติไม่สำเร็จ';
+        this.error = aiErrorText(err, 'AI อธิบายค่าที่อาจผิดปกติไม่สำเร็จ');
         this.cdr.detectChanges();
       },
     });

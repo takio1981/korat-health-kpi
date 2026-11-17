@@ -31,6 +31,14 @@ function parseAiFeatures(raw) {
 const AI_PROVIDERS = ['anthropic', 'openai'];
 const AI_DEFAULTS = { provider: 'anthropic', model: 'claude-opus-5-5', daily_limit: 200 };
 const AI_TIMEOUT_MS = 90000;
+// ลองใหม่เมื่อผู้ให้บริการขัดข้องชั่วคราว (17 พ.ย. 2569 — พบจริงบน production: 502 / HTTP 0 ที่ /report/ai-tab-summary)
+// ผู้ให้บริการตอบ 5xx (เช่น Gemini 503 "overloaded"), เชื่อมต่อไม่ได้/หมดเวลา, ตอบว่าง = ลองใหม่สูงสุด AI_MAX_ATTEMPTS ครั้ง
+// ภายในเวลารวม AI_TOTAL_BUDGET_MS — ต้องน้อยกว่าเวลารอของ gateway หน้าระบบ (ไม่งั้นหน้าจอได้ HTTP 0/502 จาก gateway แทนข้อความของระบบ)
+const AI_MAX_ATTEMPTS = 3;
+const AI_TOTAL_BUDGET_MS = 50000;
+const AI_RETRY_DELAYS_MS = [1500, 4000];
+const isTransientAiError = (e) => e instanceof AiError && (e.code === 'AI_CONNECT' || e.code === 'AI_EMPTY' || (e.code === 'AI_UPSTREAM' && e.status === 502 && e.upstreamStatus >= 500));
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 class AiError extends Error {
     constructor(status, message, code) {
@@ -84,10 +92,21 @@ async function logUsage(row) {
 const supportsEffort = (m) => /^claude-(opus-5|sonnet-5|haiku-5|fable-5)/.test(m);
 const supportsFallback = (m) => ['claude-fable-5-1', 'claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5-5'].includes(m);
 
-async function callAnthropic(cfg, { system, prompt, maxTokens }) {
+/** ผู้ให้บริการตอบผิดพลาด — เก็บสถานะ/ข้อความจริงไว้ใน detail (บันทึกลง ai_usage_logs ช่วยวิเคราะห์) ข้อความหน้าจอเป็นภาษาไทย */
+function upstreamError(status, detail) {
+    const busy = Number(status) >= 500;
+    const e = new AiError(502, busy
+        ? `ผู้ให้บริการ AI ขัดข้องชั่วคราว (${status}) — ระบบลองใหม่แล้วยังไม่สำเร็จ กรุณาลองอีกครั้งภายหลัง`
+        : `ผู้ให้บริการ AI ตอบกลับผิดพลาด (${status || '-'})`, 'AI_UPSTREAM');
+    e.upstreamStatus = Number(status) || 0;
+    e.detail = String(detail || '').slice(0, 300);
+    return e;
+}
+
+async function callAnthropic(cfg, { system, prompt, maxTokens, timeoutMs = AI_TIMEOUT_MS }) {
     const Anthropic = require('@anthropic-ai/sdk');
     if (!cfg.api_key) throw new AiError(400, 'ยังไม่ได้ตั้งค่า API key ของ Claude', 'AI_NO_KEY');
-    const client = new Anthropic({ apiKey: cfg.api_key, timeout: AI_TIMEOUT_MS, maxRetries: 1 });
+    const client = new Anthropic({ apiKey: cfg.api_key, timeout: timeoutMs, maxRetries: 0 }); // ลองใหม่ที่ callLlm (คุมเวลารวม)
     const body = {
         model: cfg.model,
         max_tokens: maxTokens,
@@ -105,7 +124,7 @@ async function callAnthropic(cfg, { system, prompt, maxTokens }) {
         if (e instanceof Anthropic.NotFoundError) throw new AiError(502, `ไม่พบรุ่นโมเดล "${cfg.model}"`, 'AI_MODEL');
         if (e instanceof Anthropic.RateLimitError) throw new AiError(429, 'ผู้ให้บริการ AI จำกัดจำนวนคำขอ กรุณาลองใหม่ภายหลัง', 'AI_UPSTREAM_LIMIT');
         if (e instanceof Anthropic.APIConnectionError) throw new AiError(504, 'เชื่อมต่อผู้ให้บริการ AI ไม่ได้ (เครือข่าย/หมดเวลา)', 'AI_CONNECT');
-        if (e instanceof Anthropic.APIError) throw new AiError(502, `ผู้ให้บริการ AI ตอบกลับผิดพลาด (${e.status || '-'})`, 'AI_UPSTREAM');
+        if (e instanceof Anthropic.APIError) throw upstreamError(e.status, e.message);
         throw e;
     }
     if (resp.stop_reason === 'refusal') throw new AiError(422, 'AI ปฏิเสธคำขอนี้', 'AI_REFUSAL');
@@ -113,7 +132,7 @@ async function callAnthropic(cfg, { system, prompt, maxTokens }) {
     return { text, model: resp.model, input_tokens: resp.usage?.input_tokens || 0, output_tokens: resp.usage?.output_tokens || 0 };
 }
 
-async function callOpenAiCompatible(cfg, { system, prompt, maxTokens }) {
+async function callOpenAiCompatible(cfg, { system, prompt, maxTokens, timeoutMs = AI_TIMEOUT_MS }) {
     const base = String(cfg.base_url || '').replace(/\/+$/, '');
     if (!/^https?:\/\//i.test(base)) throw new AiError(400, 'ยังไม่ได้ตั้งค่า Base URL ของผู้ให้บริการ AI', 'AI_NO_URL');
     if (!cfg.model) throw new AiError(400, 'ยังไม่ได้ระบุรุ่นโมเดล', 'AI_MODEL');
@@ -129,7 +148,7 @@ async function callOpenAiCompatible(cfg, { system, prompt, maxTokens }) {
                 max_tokens: maxTokens,
                 messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }],
             }),
-            signal: AbortSignal.timeout(AI_TIMEOUT_MS),
+            signal: AbortSignal.timeout(timeoutMs),
         });
     } catch (e) {
         throw new AiError(504, 'เชื่อมต่อผู้ให้บริการ AI ไม่ได้ (เครือข่าย/หมดเวลา)', 'AI_CONNECT');
@@ -139,7 +158,7 @@ async function callOpenAiCompatible(cfg, { system, prompt, maxTokens }) {
         if (r.status === 401 || r.status === 403) throw new AiError(502, 'API key ของผู้ให้บริการ AI ไม่ถูกต้อง', 'AI_AUTH');
         if (r.status === 404) throw new AiError(502, `ไม่พบรุ่นโมเดล "${cfg.model}" หรือ Base URL ไม่ถูกต้อง`, 'AI_MODEL');
         if (r.status === 429) throw new AiError(429, 'ผู้ให้บริการ AI จำกัดจำนวนคำขอ (โควตาฟรีอาจหมด) กรุณาลองใหม่ภายหลัง', 'AI_UPSTREAM_LIMIT');
-        throw new AiError(502, `ผู้ให้บริการ AI ตอบกลับผิดพลาด (${r.status})`, 'AI_UPSTREAM');
+        throw upstreamError(r.status, json?.error?.message || (Array.isArray(json) && json[0]?.error?.message) || '');
     }
     const text = String(json?.choices?.[0]?.message?.content || '').trim();
     return { text, model: json?.model || cfg.model, input_tokens: json?.usage?.prompt_tokens || 0, output_tokens: json?.usage?.completion_tokens || 0 };
@@ -164,16 +183,26 @@ async function callLlm({ feature, userId, system, prompt, maxTokens = 2000, test
     if (!test) assertAreaOn(cfg, areaOfFeature(feature));
     if (!test && await usedToday() >= cfg.daily_limit) throw new AiError(429, `ใช้ผู้ช่วย AI ครบ ${cfg.daily_limit} ครั้งของวันนี้แล้ว`, 'AI_QUOTA');
     const t0 = Date.now();
-    try {
-        const out = cfg.provider === 'openai'
-            ? await callOpenAiCompatible(cfg, { system, prompt, maxTokens })
-            : await callAnthropic(cfg, { system, prompt, maxTokens });
-        if (!out.text) throw new AiError(502, 'ผู้ให้บริการ AI ไม่ได้ส่งข้อความกลับมา', 'AI_EMPTY');
-        await logUsage({ user_id: userId, feature: test ? 'test' : feature, provider: cfg.provider, model: out.model, input_tokens: out.input_tokens, output_tokens: out.output_tokens, ok: true, ms: Date.now() - t0 });
-        return { ...out, provider: cfg.provider, ms: Date.now() - t0 };
-    } catch (e) {
-        await logUsage({ user_id: userId, feature: test ? 'test' : feature, provider: cfg.provider, model: cfg.model, ok: false, error: e.message, ms: Date.now() - t0 });
-        throw e;
+    const attempts = [];
+    for (let i = 1; ; i++) {
+        const left = AI_TOTAL_BUDGET_MS - (Date.now() - t0);
+        try {
+            const opts = { system, prompt, maxTokens, timeoutMs: Math.max(5000, Math.min(AI_TIMEOUT_MS, left)) };
+            const out = cfg.provider === 'openai' ? await callOpenAiCompatible(cfg, opts) : await callAnthropic(cfg, opts);
+            if (!out.text) throw new AiError(502, 'ผู้ให้บริการ AI ไม่ได้ส่งข้อความกลับมา', 'AI_EMPTY');
+            await logUsage({ user_id: userId, feature: test ? 'test' : feature, provider: cfg.provider, model: out.model, input_tokens: out.input_tokens, output_tokens: out.output_tokens, ok: true, ms: Date.now() - t0,
+                error: attempts.length ? `สำเร็จในครั้งที่ ${i} (ก่อนหน้า: ${attempts.join(' | ')})` : null });
+            return { ...out, provider: cfg.provider, ms: Date.now() - t0, attempts: i };
+        } catch (e) {
+            attempts.push(`${e.code || 'ERR'}${e.upstreamStatus ? ' ' + e.upstreamStatus : ''}${e.detail ? ': ' + e.detail : ''}`.slice(0, 160));
+            const delay = AI_RETRY_DELAYS_MS[i - 1] || 0;
+            const canRetry = !test && isTransientAiError(e) && i < AI_MAX_ATTEMPTS
+                && (AI_TOTAL_BUDGET_MS - (Date.now() - t0)) > delay + 8000; // เหลือเวลาพอสำหรับอีกครั้ง
+            if (canRetry) { await sleep(delay); continue; }
+            await logUsage({ user_id: userId, feature: test ? 'test' : feature, provider: cfg.provider, model: cfg.model, ok: false,
+                error: `${e.message} [${i} ครั้ง: ${attempts.join(' | ')}]`, ms: Date.now() - t0 });
+            throw e;
+        }
     }
 }
 
@@ -298,6 +327,6 @@ function createAiCache(ttlMs = 60 * 60 * 1000, max = 200) {
 }
 
 module.exports = {
-    AI_SETTING_KEYS, AI_AREAS, AI_AREA_KEYS, areaOfFeature, parseAiFeatures, ensureAiArea, assertAreaOn, AI_PROVIDERS, AI_DEFAULTS, AiError, getAiSettings, saveAiSetting, encryptApiKey, usedToday,
+    AI_MAX_ATTEMPTS, AI_TOTAL_BUDGET_MS, AI_RETRY_DELAYS_MS, isTransientAiError, AI_SETTING_KEYS, AI_AREAS, AI_AREA_KEYS, areaOfFeature, parseAiFeatures, ensureAiArea, assertAreaOn, AI_PROVIDERS, AI_DEFAULTS, AiError, getAiSettings, saveAiSetting, encryptApiKey, usedToday,
     callLlm, extractJson, sendAiError, createAiCache, listModels, AI_MODELS_CACHE_KEY, NON_CHAT_MODEL,
 };

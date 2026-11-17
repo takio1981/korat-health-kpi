@@ -9,7 +9,7 @@ import { getCurrentFiscalYear } from './fiscal-year.util';
 import { summaryLines } from './ai-summary-panel';
 import { ZoneBadgeComponent } from './zone-badge';
 import { FormulaBadgeComponent } from './formula-badge';
-import { aiFeatureOn } from './ai-feature';
+import { aiFeatureOn, aiErrorText } from './ai-feature';
 
 export const DQ_KINDS: { key: string; label: string; cls: string }[] = [
   { key: 'negative', label: 'ค่าติดลบ', cls: 'bg-red-100 text-red-800 border-red-200' },
@@ -186,7 +186,7 @@ export class DataQualityPanelComponent implements OnInit {
       },
       error: (err: any) => {
         this.aiLoading = false;
-        this.aiError = err.error?.message || 'AI สรุปผลตรวจคุณภาพข้อมูลไม่สำเร็จ';
+        this.aiError = aiErrorText(err, 'AI สรุปผลตรวจคุณภาพข้อมูลไม่สำเร็จ');
         this.cdr.detectChanges();
       },
     });

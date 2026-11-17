@@ -309,3 +309,53 @@ describe('extractJson', () => {
         expect(extractJson('{เสีย')).toBeNull();
     });
 });
+
+// ลองใหม่เมื่อผู้ให้บริการขัดข้องชั่วคราว (17 พ.ย. 2569 — production: 502 / HTTP 0 ที่ /report/ai-tab-summary)
+describe('ลองใหม่เมื่อผู้ให้บริการขัดข้องชั่วคราว', () => {
+    const res = (status, body) => ({ ok: status < 400, status, json: async () => body });
+    const OK = res(200, { model: 'test-model', choices: [{ message: { content: 'สรุปได้' } }], usage: { prompt_tokens: 1, completion_tokens: 1 } });
+    const BUSY = res(503, { error: { message: 'The model is overloaded. Please try again later.' } });
+    beforeEach(async () => { await db.query('DELETE FROM ai_usage_logs WHERE user_id = ?', [saId]); await putSettings({ enabled: true, daily_limit: 1000 }); });
+
+    test('503 แล้วสำเร็จ = คืนผลปกติ (เรียก 2 ครั้ง) และบันทึกว่าลองใหม่', async () => {
+        global.fetch = jest.fn().mockResolvedValueOnce(BUSY).mockResolvedValueOnce(OK);
+        const { callLlm } = require('../services/ai');
+        const out = await callLlm({ feature: 'report_tab_summary', userId: saId, system: 's', prompt: 'p' });
+        expect(out.text).toBe('สรุปได้');
+        expect(out.attempts).toBe(2);
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+        const [[log]] = await db.query('SELECT ok, error_msg FROM ai_usage_logs WHERE user_id = ? ORDER BY id DESC LIMIT 1', [saId]);
+        expect(log.ok).toBe(1);
+        expect(log.error_msg).toContain('overloaded');
+    });
+
+    test('503 ทุกครั้ง = 502 ข้อความภาษาไทยหลังลองครบ 3 ครั้ง (บันทึกสถานะจริงของผู้ให้บริการ)', async () => {
+        global.fetch = jest.fn().mockResolvedValue(BUSY);
+        const { callLlm } = require('../services/ai');
+        await expect(callLlm({ feature: 'report_tab_summary', userId: saId, system: 's', prompt: 'p' }))
+            .rejects.toMatchObject({ status: 502, code: 'AI_UPSTREAM' });
+        expect(global.fetch).toHaveBeenCalledTimes(3);
+        const [[log]] = await db.query('SELECT ok, error_msg FROM ai_usage_logs WHERE user_id = ? ORDER BY id DESC LIMIT 1', [saId]);
+        expect(log.ok).toBe(0);
+        expect(log.error_msg).toContain('3 ครั้ง');
+        expect(log.error_msg).toContain('503');
+    }, 30000);
+
+    test('ข้อผิดพลาดที่ไม่ใช่ชั่วคราว (400 / key ผิด / 429) = ไม่ลองใหม่', async () => {
+        const { callLlm } = require('../services/ai');
+        for (const st of [400, 401, 429]) {
+            global.fetch = jest.fn().mockResolvedValue(res(st, { error: { message: 'x' } }));
+            await expect(callLlm({ feature: 'report_tab_summary', userId: saId, system: 's', prompt: 'p' })).rejects.toBeTruthy();
+            expect(global.fetch).toHaveBeenCalledTimes(1);
+        }
+    });
+
+    test('เครือข่ายขาด แล้วสำเร็จ = ลองใหม่ได้ | ปุ่มทดสอบไม่ลองใหม่', async () => {
+        const { callLlm } = require('../services/ai');
+        global.fetch = jest.fn().mockRejectedValueOnce(new Error('ECONNRESET')).mockResolvedValueOnce(OK);
+        expect((await callLlm({ feature: 'report_tab_summary', userId: saId, system: 's', prompt: 'p' })).attempts).toBe(2);
+        global.fetch = jest.fn().mockResolvedValue(BUSY);
+        await expect(callLlm({ feature: 'test', userId: saId, system: 's', prompt: 'p', test: true })).rejects.toBeTruthy();
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+});

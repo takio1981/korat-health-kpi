@@ -7,7 +7,7 @@ import { Component, EventEmitter, Input, OnInit, Output, inject, ChangeDetectorR
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth';
-import { aiFeatureOn } from './ai-feature';
+import { aiFeatureOn, aiErrorText } from './ai-feature';
 
 @Component({
   selector: 'app-ai-formula-helper',
@@ -139,7 +139,7 @@ export class AiFormulaHelperComponent implements OnInit {
       },
       error: (err) => {
         this.loading = false;
-        this.error = err.error?.message || 'AI ช่วยเขียนสูตรไม่สำเร็จ';
+        this.error = aiErrorText(err, 'AI ช่วยเขียนสูตรไม่สำเร็จ');
         this.cdr.detectChanges();
       },
     });
