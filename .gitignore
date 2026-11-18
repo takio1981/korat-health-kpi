@@ -66,3 +66,8 @@ docs/*-ทีร์ฆะ.docx
 
 # สำรองฐานข้อมูล (มีข้อมูลจริง — repo เป็นสาธารณะ ห้าม commit)
 backups/
+
+# วิดีโอคู่มือ (สร้างด้วย tools/video-guide — ไฟล์ใหญ่ เก็บบนเซิร์ฟเวอร์เท่านั้น)
+/videos/
+tools/video-guide/cache/
+tools/video-guide/*.log

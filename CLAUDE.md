@@ -545,6 +545,14 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   — **หน้าใหม่ที่แสดงชื่อหน่วยบริการต้องใส่ป้ายนี้ต่อท้ายเสมอ**
 - Test: `api/tests/zone-filter.test.js`, `shared/zone.spec.ts`, `shared/zone-badge.spec.ts`, `dashboard.spec.ts`
 
+### วิดีโอคู่มือแยกตามสิทธิ์ (18 พ.ย. 2569 — ผู้ใช้สั่ง: ทุกหน้า ภาษาไทย เก็บแยกโฟลเดอร์ ลิงก์ในคู่มือแต่ละหัวข้อ)
+- เครื่องมือ `tools/video-guide/` (README.md): Playwright ถ่ายหน้าจอจริงบน**ฐานทดสอบ** (backend :3710 `start-backend.js` + ng serve :4520, บัญชี `test_vg_<สิทธิ์>` + ผลงานสังเคราะห์จาก `setup-data.js up`) + เสียงบรรยาย Edge Neural (`msedge-tts`) + คำบรรยาย/เคอร์เซอร์/กรอบเน้นที่ฉีดเข้าหน้า (`lib/overlay.js` — เบลอช่องกรอกที่ดูเหมือนรหัสลับ/อีเมล) → ffmpeg-static รวมเป็น MP4
+  — ผลลัพธ์ `videos/<สิทธิ์>/<id หัวข้อ>.mp4` (+ `public/` = overview/register/login ใช้ร่วม) + `videos/manifest.json` — **โฟลเดอร์ videos/ ไม่อยู่ใน git** (gitignore) nginx เสิร์ฟ `/khupskpi/videos/` จาก volume `./videos:/usr/share/nginx/videos:ro` (docker-compose frontend)
+  — สคริปต์รายหัวข้อ `scripts/*.js` (id = id ใน help.ts sections) | เสียง: ค่าตั้งต้นผู้ชาย (Niwat) — `VG_VOICES=alt` สลับหญิง/ชาย (ณ 18 พ.ย. 2569 `th-TH-PremwadeeNeural` ปฏิเสธคำพื้นฐาน เช่น "ตัวชี้วัด" ผู้ใช้เลือกใช้เสียงชายไปก่อน)
+  — ⚠️ **ห้ามแก้ไฟล์ใน frontend/src ระหว่างถ่าย** (ng serve คอมไพล์ใหม่ — คอมไพล์ไม่ผ่าน = error overlay ทับวิดีโอ; engine ตรวจ overlay แล้วโยน error) | อย่ารัน `npm test` ของ api ระหว่างถ่าย (ลบผู้ใช้ test_*)
+- หน้าคู่มือ: `shared/help-video.ts` (`HelpVideoService` อ่าน manifest อิง base href — ไม่มีไฟล์/404 = ไม่แสดงปุ่ม, `findHelpVideo()` ของสิทธิ์ก่อนแล้ว public, `safeVideoFile()` รับเฉพาะ `<สิทธิ์>/<หัวข้อ>.mp4`)
+  — `<app-help-video section="<id>" [role]="videoRole">` ใต้ `<section id="section-<id>">` 23 หัวข้อ + `<app-help-video-list>` ด้านบน (super_admin เลือกดูของสิทธิ์อื่น) — **หัวข้อคู่มือใหม่ที่มีวิดีโอต้องใส่ app-help-video** | Test: `shared/help-video.spec.ts`
+
 ### ผู้ช่วย AI (เริ่ม 7 พ.ย. 2569 — ผู้ใช้สั่ง: ทำตามลำดับ สรุปรายงาน → ช่วยเขียนสูตร → เสนอจับคู่ KHD → ผู้ช่วยคู่มือ → คุณภาพข้อมูล ทีละฟีเจอร์)
 - **หลักการ (ห้ามเปลี่ยน):** AI สรุป/เสนอแนะเท่านั้น — ห้ามให้ AI บันทึก `kpi_results`, อนุมัติ, ส่ง KHD หรือปรับเกณฑ์เอง ผลลัพธ์ต้องผ่านด่านเดิม (validateFormula/saveKhdMap/saveKpiData)
   | ส่งเฉพาะตัวเลขรวม/ชื่อตัวชี้วัด/ข้อความคู่มือตามขอบเขต role ของผู้เรียก — **ห้ามส่ง users/cid/login/รหัสหน่วยบริการรายแถวเข้า prompt** | แสดงผลเป็นข้อความล้วน (ห้าม innerHTML) + ป้าย "ข้อความจาก AI — โปรดตรวจสอบ"

@@ -75,8 +75,16 @@
       <!-- ผู้ช่วย AI ตอบคำถามจากคู่มือ (เฉพาะผู้ที่เข้าสู่ระบบ + ผู้ดูแลเปิดผู้ช่วย AI) -->
       <app-ai-help-box *ngIf="!isPublicView" (pick)="onAiPick($event)"></app-ai-help-box>
 
+      <!-- วิดีโอคู่มือแยกตามสิทธิ์ (tools/video-guide → videos/<สิทธิ์>/<หัวข้อ>.mp4) — ไม่มีไฟล์วิดีโอ = ไม่แสดง -->
+      <app-help-video-list [role]="videoRole" [sections]="videoSections" (pick)="onVideoPick($event)">
+        <select *ngIf="canPickVideoRole" [value]="videoRole" (change)="videoRole = $any($event.target).value" class="ml-auto text-xs border border-gray-200 rounded-lg px-2 py-1" title="ดูวิดีโอของสิทธิ์อื่น">
+          <option *ngFor="let o of videoRoleOptions" [value]="o.value">{{ o.label }}</option>
+        </select>
+      </app-help-video-list>
+
       <!-- ==================== 1. ภาพรวมระบบ ==================== -->
       <section id="section-overview" *ngIf="canSeeSection('overview')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <app-help-video section="overview" [role]="videoRole"></app-help-video>
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center"><i class="fas fa-home text-green-600"></i></div>
           <div>
@@ -101,6 +109,14 @@
             <h4 class="font-bold text-purple-800 mb-2"><i class="fas fa-file-alt mr-2"></i>รายงานสรุป</h4>
             <p class="text-sm text-gray-600">รายงานกราฟ ตาราง แผนที่ แยกตามตัวชี้วัด/หน่วยบริการ/อำเภอ/ปี</p>
           </div>
+        </div>
+
+        <!-- วิดีโอคู่มือ -->
+        <div class="mt-5 bg-rose-50 border border-rose-200 rounded-xl p-4 text-sm text-gray-700">
+          <h4 class="font-bold text-rose-800 mb-2"><i class="fas fa-film mr-2"></i>วิดีโอคู่มือการใช้งาน</h4>
+          <p>แต่ละหัวข้อของคู่มือมีปุ่ม <b>วิดีโอคู่มือ</b> (สีชมพู) ใต้หัวข้อ — กดเพื่อเล่นวิดีโอสาธิตการใช้งานจริงพร้อมเสียงบรรยายและคำบรรยายภาษาไทย
+          วิดีโอเลือกตามสิทธิ์การใช้งานของท่านให้อัตโนมัติ (ขอบเขตข้อมูลและเมนูในวิดีโอตรงกับสิทธิ์ของท่าน) · รายการวิดีโอทั้งหมดอยู่ด้านบนของหน้าคู่มือ · กด "เปิดแท็บใหม่" เพื่อดูแบบเต็มจอ
+          · ข้อมูลในวิดีโอเป็นข้อมูลตัวอย่าง ไม่ใช่ผลงานจริง</p>
         </div>
 
         <!-- ปุ่มลัด / Power-user shortcuts -->
@@ -136,6 +152,7 @@
 
       <!-- ==================== 2. การลงทะเบียน ==================== -->
       <section id="section-register" *ngIf="canSeeSection('register')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <app-help-video section="register" [role]="videoRole"></app-help-video>
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center"><i class="fas fa-user-plus text-blue-600"></i></div>
           <div>
@@ -206,6 +223,7 @@
 
       <!-- ==================== 3. การเข้าสู่ระบบ ==================== -->
       <section id="section-login" *ngIf="canSeeSection('login')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <app-help-video section="login" [role]="videoRole"></app-help-video>
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center"><i class="fas fa-sign-in-alt text-teal-600"></i></div>
           <div>
@@ -331,6 +349,7 @@
 
       <!-- ==================== 4. Dashboard ==================== -->
       <section id="section-dashboard" *ngIf="canSeeSection('dashboard')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <app-help-video section="dashboard" [role]="videoRole"></app-help-video>
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center"><i class="fas fa-th-large text-amber-600"></i></div>
           <div>
@@ -611,6 +630,7 @@
 
       <!-- ==================== 5. กราฟและสถิติ ==================== -->
       <section id="section-charts" *ngIf="canSeeSection('charts')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <app-help-video section="charts" [role]="videoRole"></app-help-video>
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center"><i class="fas fa-chart-bar text-indigo-600"></i></div>
           <div>
@@ -765,6 +785,7 @@
 
       <!-- ==================== 7. แจ้งเตือน ==================== -->
       <section id="section-sop" *ngIf="canSeeSection('sop')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <app-help-video section="sop" [role]="videoRole"></app-help-video>
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center"><i class="fas fa-sitemap text-slate-600"></i></div>
           <div>
@@ -782,6 +803,7 @@
       </section>
 
       <section id="section-notifications" *ngIf="canSeeSection('notifications')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <app-help-video section="notifications" [role]="videoRole"></app-help-video>
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center"><i class="fas fa-bell text-red-500"></i></div>
           <div>
@@ -806,6 +828,7 @@
 
       <!-- ==================== 8. จัดการผู้ใช้งาน ==================== -->
       <section id="section-users" *ngIf="canSeeSection('users')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <app-help-video section="users" [role]="videoRole"></app-help-video>
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center"><i class="fas fa-users-cog text-orange-600"></i></div>
           <div>
@@ -963,6 +986,7 @@
       <!-- Note: สร้างแบบฟอร์ม + Export ย้ายไปอยู่ในหัวข้อ 13 "จัดการข้อมูล KPI" แล้ว -->
 
       <section id="section-kpi-manage" *ngIf="canSeeSection('kpi-manage')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <app-help-video section="kpi-manage" [role]="videoRole"></app-help-video>
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center"><i class="fas fa-tasks text-teal-600"></i></div>
           <div>
@@ -1116,6 +1140,7 @@
 
       <!-- ==================== 10. ตั้งค่าระบบ ==================== -->
       <section id="section-settings" *ngIf="canSeeSection('settings')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <app-help-video section="settings" [role]="videoRole"></app-help-video>
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-gray-200 flex items-center justify-center"><i class="fas fa-sliders-h text-gray-600"></i></div>
           <div>
@@ -1241,6 +1266,7 @@
 
       <!-- ==================== 11. สิทธิ์การใช้งาน ==================== -->
       <section id="section-roles" *ngIf="canSeeSection('roles')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <app-help-video section="roles" [role]="videoRole"></app-help-video>
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center"><i class="fas fa-shield-alt text-emerald-600"></i></div>
           <div>
@@ -1858,6 +1884,7 @@
       </section>
 
       <section id="section-audit-logs" *ngIf="canSeeSection('audit-logs')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <app-help-video section="audit-logs" [role]="videoRole"></app-help-video>
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center"><i class="fas fa-history text-slate-600"></i></div>
           <div>
@@ -1878,6 +1905,7 @@
 
       <!-- ==================== 13. จัดการข้อมูล KPI ==================== -->
       <section id="section-kpi-manager" *ngIf="canSeeSection('kpi-manager')" class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <app-help-video section="kpi-manager" [role]="videoRole" [inset]="true"></app-help-video>
         <div (click)="toggleCollapse('kpi-manager')" class="flex items-center justify-between gap-3 p-6 cursor-pointer hover:bg-gray-50 transition-colors">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center"><i class="fas fa-layer-group text-indigo-600"></i></div>
@@ -2024,6 +2052,7 @@
 
       <!-- ==================== 14. Online Users (Realtime) ==================== -->
       <section id="section-online-users" *ngIf="canSeeSection('online-users')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <app-help-video section="online-users" [role]="videoRole"></app-help-video>
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
             <i class="fas fa-satellite-dish text-green-600"></i>
@@ -2076,6 +2105,7 @@
       </section>
 
       <section id="section-kpi-setup" *ngIf="canSeeSection('kpi-setup')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <app-help-video section="kpi-setup" [role]="videoRole"></app-help-video>
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center"><i class="fas fa-plus-circle text-emerald-600"></i></div>
           <div>
@@ -2096,6 +2126,7 @@
 
       <!-- ==================== 16. สำรอง & กู้คืนข้อมูล (Backup Manager) ==================== -->
       <section id="section-backup" *ngIf="canSeeSection('backup')" class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <app-help-video section="backup" [role]="videoRole" [inset]="true"></app-help-video>
         <div (click)="toggleCollapse('backup')" class="flex items-center justify-between gap-3 p-6 cursor-pointer hover:bg-gray-50 transition-colors">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center"><i class="fas fa-database text-emerald-600"></i></div>
@@ -2213,6 +2244,7 @@
 
       <!-- ==================== 17. แจ้งเตือนการบันทึก KPI ==================== -->
       <section id="section-audit-digest" *ngIf="canSeeSection('audit-digest')" class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <app-help-video section="audit-digest" [role]="videoRole" [inset]="true"></app-help-video>
         <div (click)="toggleCollapse('audit-digest')" class="flex items-center justify-between gap-3 p-6 cursor-pointer hover:bg-gray-50 transition-colors">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center"><i class="fas fa-bullhorn text-amber-600"></i></div>
@@ -2282,6 +2314,7 @@
       </section>
 
       <section id="section-announcements" *ngIf="canSeeSection('announcements')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <app-help-video section="announcements" [role]="videoRole"></app-help-video>
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-pink-100 flex items-center justify-center"><i class="fas fa-bullhorn text-pink-600"></i></div>
           <div>
@@ -2300,6 +2333,7 @@
       </section>
 
       <section id="section-error-logs" *ngIf="canSeeSection('error-logs')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <app-help-video section="error-logs" [role]="videoRole"></app-help-video>
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center"><i class="fas fa-bug text-red-600"></i></div>
           <div>
@@ -2326,6 +2360,7 @@
 
       <!-- ==================== 20. Maintenance Mode ==================== -->
       <section id="section-maintenance" *ngIf="canSeeSection('maintenance')" class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <app-help-video section="maintenance" [role]="videoRole" [inset]="true"></app-help-video>
         <div (click)="toggleCollapse('maintenance')" class="flex items-center justify-between gap-3 p-6 cursor-pointer hover:bg-gray-50 transition-colors">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center"><i class="fas fa-tools text-red-600"></i></div>
@@ -2365,6 +2400,7 @@
 
       <!-- ==================== 21. กระดานข้อเสนอแนะ ==================== -->
       <section id="section-feedback" *ngIf="canSeeSection('feedback')" class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <app-help-video section="feedback" [role]="videoRole" [inset]="true"></app-help-video>
         <div (click)="toggleCollapse('feedback')" class="flex items-center justify-between gap-3 p-6 cursor-pointer hover:bg-gray-50 transition-colors">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center"><i class="fas fa-comments text-teal-600"></i></div>
@@ -2435,6 +2471,7 @@
 
       <!-- ==================== 22. สิทธิ์การเข้าถึงหน้า ==================== -->
       <section id="section-role-page-access" *ngIf="canSeeSection('role-page-access')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <app-help-video section="role-page-access" [role]="videoRole"></app-help-video>
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center"><i class="fas fa-user-lock text-indigo-600"></i></div>
           <div>
@@ -2463,6 +2500,7 @@
 
       <!-- ==================== 23. จัดการข้อมูลผลงานตัวชี้วัด ==================== -->
       <section id="section-kpi-results-manage" *ngIf="canSeeSection('kpi-results-manage')" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <app-help-video section="kpi-results-manage" [role]="videoRole"></app-help-video>
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center"><i class="fas fa-broom text-red-600"></i></div>
           <div>

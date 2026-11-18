@@ -1,15 +1,16 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, QueryList, ViewChildren } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { PdfExportService } from '../services/pdf-export.service';
 import Swal from 'sweetalert2';
 import { AiHelpBoxComponent } from '../shared/ai-help-box';
+import { HelpVideoComponent, HelpVideoListComponent, VIDEO_ROLE_LABELS } from '../shared/help-video';
 
 @Component({
   selector: 'app-help',
   standalone: true,
-  imports: [CommonModule, RouterModule, AiHelpBoxComponent],
+  imports: [CommonModule, RouterModule, AiHelpBoxComponent, HelpVideoComponent, HelpVideoListComponent],
   templateUrl: './help.html'
 })
 export class HelpComponent {
@@ -26,6 +27,24 @@ export class HelpComponent {
     this.currentRole = this.authService.getUserRole();
     // ตรวจว่าเปิดผ่าน /help-public (ไม่ login)
     this.isPublicView = this.router.url.includes('/help-public') || !this.authService.isLoggedIn();
+    this.videoRole = this.isPublicView ? 'public' : this.currentRole;
+  }
+
+  // ===== วิดีโอคู่มือแยกตามสิทธิ์ (18 พ.ย. 2569) — ไฟล์อยู่ที่ <base>/videos/<สิทธิ์>/<หัวข้อ>.mp4 (shared/help-video.ts)
+  @ViewChildren(HelpVideoComponent) private videoBoxes?: QueryList<HelpVideoComponent>;
+  /** สิทธิ์ของวิดีโอที่แสดง — ค่าตั้งต้น = สิทธิ์ของผู้ใช้, super_admin เลือกดูของสิทธิ์อื่นได้ */
+  videoRole = '';
+  readonly videoRoleOptions = Object.keys(VIDEO_ROLE_LABELS).filter(r => r !== 'public').map(r => ({ value: r, label: VIDEO_ROLE_LABELS[r] }));
+  get canPickVideoRole(): boolean { return !this.isPublicView && this.currentRole === 'super_admin'; }
+  get videoSections(): string[] { return this.visibleSections.map(s => s.id); }
+
+  /** กดวิดีโอจากรายการด้านบน → ขยายหัวข้อ เลื่อนไป แล้วเปิดวิดีโอ */
+  onVideoPick(section: string) {
+    this.collapsedSections[section] = false;
+    setTimeout(() => {
+      this.scrollTo(section);
+      this.videoBoxes?.find(b => b.section === section)?.play();
+    });
   }
 
   collapsedSections: { [key: string]: boolean } = {};
