@@ -43,6 +43,7 @@
     "ngx-toastr": "^20.0.5",
     "rxjs": "~7.8.0",
     "sweetalert2": "^11.26.20",
+    "three": "0.187.0",
     "tslib": "^2.3.0",
     "xlsx": "^0.18.5"
   },
@@ -50,6 +51,7 @@
     "@angular/build": "^21.1.4",
     "@angular/cli": "^21.1.4",
     "@angular/compiler-cli": "^21.1.0",
+    "@types/three": "0.187.0",
     "autoprefixer": "^10.4.24",
     "jsdom": "^27.1.0",
     "postcss": "^8.5.6",

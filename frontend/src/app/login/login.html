@@ -32,7 +32,7 @@
   </div>
 
   <!-- น้องโคราชดีบินไปมา (19 พ.ย. 2569) — ระบบเปิด/ปิดได้ + ผู้เข้าชมซ่อนเองได้ -->
-  <app-login-mascot *ngIf="showMascot"></app-login-mascot>
+  <app-login-mascot *ngIf="showMascot" [thaid]="isThaIdEnabled" [providerid]="isProviderIdEnabled"></app-login-mascot>
 
   <!-- Dark Mode toggle (ลอยมุมขวาบน) -->
   <div class="fixed top-4 right-4 z-50 flex items-center gap-2">
@@ -112,11 +112,11 @@
 
           <!-- ลงทะเบียน + คู่มือการใช้งาน — ย้ายมาไว้บนสุด (เหนือชื่อผู้ใช้งาน) ให้สังเกตเห็นง่าย -->
           <div class="flex items-center justify-center gap-3 mb-3.5">
-            <a routerLink="/register"
+            <a routerLink="/register" id="btn-register-link"
                class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs sm:text-sm font-bold transition-all shadow-sm hover:shadow-md">
               <i class="fas fa-user-plus"></i>ลงทะเบียน
             </a>
-            <a routerLink="/help-public"
+            <a routerLink="/help-public" id="btn-help-public"
                class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white/80 hover:bg-white border border-white/80 text-green-800 hover:text-green-900 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-sm hover:shadow-md">
               <i class="fas fa-book-open"></i>คู่มือการใช้งาน
             </a>
@@ -157,7 +157,7 @@
             </div>
 
             <div class="flex items-center justify-end -mt-1">
-              <button type="button" (click)="forgotPassword()" class="text-sm font-semibold text-green-700 hover:text-green-900 transition-colors">
+              <button type="button" id="btn-forgot-password" (click)="forgotPassword()" class="text-sm font-semibold text-green-700 hover:text-green-900 transition-colors">
                 <i class="fas fa-key mr-1"></i>ลืมรหัสผ่าน?
               </button>
             </div>
@@ -184,7 +184,7 @@
 
             <!-- ThaiD Button -->
             <div *ngIf="isThaIdEnabled" class="mb-1.5">
-              <button type="button" (click)="loginWithThaID()" [disabled]="thaidVerifying"
+              <button type="button" id="btn-thaid" (click)="loginWithThaID()" [disabled]="thaidVerifying"
                       class="w-full flex items-center justify-center gap-3 py-1.5 px-4 bg-white/80 hover:bg-white border-2 border-indigo-200 hover:border-indigo-400 text-indigo-800 font-bold rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 backdrop-blur-sm disabled:opacity-60 disabled:cursor-not-allowed">
                 <span *ngIf="thaidVerifying" class="flex items-center gap-2">
                   <i class="fas fa-spinner fa-spin text-indigo-500"></i>

@@ -666,7 +666,16 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - Filter row: อำเภอ + ประเภท (เพิ่มเติมจาก search + count badge)
 - chospital ไม่มี is_active → ซ่อน toggle column สำหรับแท็บนี้
 
-### น้องโคราชดีบินในหน้าเข้าสู่ระบบ (19 พ.ย. 2569 — ผู้ใช้เลือก: 3 มิติด้วย CSS, เปิด-ปิด 2 ชั้น)
+### น้องโคราชดี 3 มิติ + กล่องคำพูดมังงะ (19 พ.ย. 2569 — ผู้ใช้สั่ง 3 ระยะ: 1) ตัวละคร 3D + คุยในหน้า login ✅ 2) ผู้ช่วยทุกหน้าหลัง login 3) ตัวแทน AI ทั่วระบบ)
+- ผู้ใช้เลือก: **ปั้นโมเดล 3D ด้วยโค้ด** (three.js `0.187.0` — ไม่มีไฟล์โมเดล; ต้นแบบหลายมุม `public/mascot/korat-d-3.jpg`/`korat-d-2.gif` ไม่อยู่ใน git) | บทพูดหน้า login **เตรียมไว้ ไม่เรียก AI** (ไม่เปิดช่อง AI ให้ผู้ที่ยังไม่เข้าสู่ระบบ)
+- `frontend/src/app/shared/mascot/`: `mascot-model.ts` (`buildMascot()` ปั้นหัวจอ/หูฟัง/หัวใจ/ลำตัว/ตรา/แขน-ขามีข้อต่อ/ผ้าคลุม, `loadThree()` = dynamic import แยก chunk — **ห้าม import three แบบปกติ** ไม่งั้นเข้า initial bundle)
+  | `mascot-pose.ts` (ท่าทางฟังก์ชันล้วน: idle/wave/point/aimLeft/aimRight/fly/hover/sit/talk/think/shy/cheer/walk + `blendJoints` เปลี่ยนท่าต่อเนื่อง) | `mascot-face.ts` (ใบหน้าวาดลง canvas → texture ของจอ: กะพริบตา ขยับปาก อารมณ์)
+  | `mascot-dialog.ts` (บทสนทนา `DialogScript`/`resolveNode`, `LOGIN_SCRIPT`, `graphemes()` พิมพ์ทีละตัวไม่แยกสระ/วรรณยุกต์ไทย, `bubblePath()` speech/shout/think) | `mascot-motion.ts` (`stepFly`/`poseOf`)
+  | `mascot-stage.ts` `<app-mascot-stage>` (render นอก Angular zone, ข้อความเขียน DOM ตรง, CD เฉพาะเปิด/ปิด/ตัวเลือก; ไม่มี WebGL = ภาพนิ่ง `korat-d-fly.webp`) | `mascot.service.ts` `MascotService.say({ node | text })` ให้หน้าอื่นสั่งพูด
+- บทสนทนา: `pointAt` = บินไปยืนนอกกล่อง `avoid` แล้วชี้ element นั้น (ต้องมี id บนหน้า เช่น `#username`, `#btn-register-link`, `#btn-forgot-password`, `#btn-thaid`), `nav:/path` = เปลี่ยนหน้า, ทักทายครั้งเดียวต่อ session (`greetKey`)
+- **ห้ามใช้อีโมจิในบทพูด** (บางเครื่องแสดงเป็นกล่อง) | Test: `shared/mascot/mascot.spec.ts` (ทุกตัวเลือกชี้บทที่มีจริง, ทุกท่าค่าครบ), `login.spec.ts`, `login-mascot.spec.ts`
+
+### น้องโคราชดีบินในหน้าเข้าสู่ระบบ (19 พ.ย. 2569 — ผู้ใช้เลือก: 3 มิติด้วย CSS, เปิด-ปิด 2 ชั้น — ระยะที่ 1 ด้านบนแทนการแสดงผลแล้ว คงสวิตช์เปิด-ปิดเดิม)
 - `shared/login-mascot.ts` `<app-login-mascot>`: ภาพ `public/mascot/korat-d-fly.webp` (สร้างด้วย `node tools/video-guide/build-mascot.js --full <ไฟล์> 260` — ไม่แก้ด้วยมือ) ซ้อนหลายชั้นตามแกน Z = ความหนา
   + หมุนตามความเร็ว (`poseOf()`) + ย่อ/ขยายตามความลึก + เงาพื้น + ไอพ่น — การเคลื่อนที่ `stepFly()` (ฟังก์ชันล้วน) รันนอก Angular zone ด้วย requestAnimationFrame แก้ style ตรง (ห้ามผูกกับ change detection)
   — ทับ `[data-login-card]` = z-index 5 (หลังเนื้อหา z-10) + pointer-events none (**ห้ามบังช่องกรอก/ปุ่มเข้าสู่ระบบ**) | prefers-reduced-motion = ลอยนิ่ง

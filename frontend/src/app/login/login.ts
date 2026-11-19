@@ -8,6 +8,7 @@ import { firstValueFrom } from 'rxjs';
 import Swal from 'sweetalert2';
 import { environment } from '../../environments/environment';
 import { LoginMascotComponent } from '../shared/login-mascot';
+import { MascotService } from '../shared/mascot/mascot.service';
 
 /** ผู้เข้าชมซ่อนน้องโคราชดีเฉพาะเครื่องตัวเอง (localStorage) — ระบบปิดทั้งหมดได้ด้วย login_mascot_enabled */
 export const LOGIN_MASCOT_KEY = 'kpi_login_mascot';
@@ -22,6 +23,7 @@ export class LoginComponent implements OnInit, OnDestroy {
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private authService = inject(AuthService);
+  private mascot = inject(MascotService);
   private cdr = inject(ChangeDetectorRef);
   private ngZone = inject(NgZone);
   themeService = inject(ThemeService);
@@ -354,6 +356,7 @@ export class LoginComponent implements OnInit, OnDestroy {
             return;
           }
           Swal.fire({ icon: 'error', title: 'เข้าสู่ระบบไม่สำเร็จ', text: err.error?.message || 'เกิดข้อผิดพลาด' });
+          this.mascot.say({ node: 'loginError' }); // น้องโคราชดีแนะนำ (ไม่มีตัวละคร = ไม่มีผล)
         }
       });
     }
