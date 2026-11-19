@@ -86,3 +86,52 @@ describe('MascotService (สถานะผู้ช่วยในเครื�
     expect(s.seen('x')).toBe(false);
   });
 });
+
+import { answerNode } from './mascot-assistant';
+import { MascotCue } from './mascot.service';
+
+describe('ระยะที่ 3: น้องโคราชดีเป็นตัวแทนผู้ช่วย AI', () => {
+  it('เมนูมี "ถามน้องโคราชดี (AI)" เฉพาะเมื่อเปิดผู้ช่วยคู่มือ', () => {
+    const on = assistantMenu({ hasSteps: false, hasVideo: false, page: 'dashboard', quiet: false, hasAi: true });
+    const off = assistantMenu({ hasSteps: false, hasVideo: false, page: 'dashboard', quiet: false, hasAi: false });
+    expect(on.some(c => c.action === 'ask')).toBe(true);
+    expect(off.some(c => c.action === 'ask')).toBe(false);
+  });
+
+  it('answerNode: ข้อความล้วน + ป้ายข้อความจาก AI + ปุ่มหัวข้อคู่มือ (ตัด anchor ที่ไม่ปลอดภัย/ซ้ำ, ≤ 3)', () => {
+    const n = answerNode({
+      found: true, answer: '**ขั้นตอน** 1. เปิดหน้า 2. กดแก้ไข', model: 'm1',
+      sources: [{ anchor: 'dashboard', section: 'บันทึกผลงาน', heading: 'ไตรมาส' }, { anchor: 'dashboard', section: 'x', heading: null },
+        { anchor: 'javascript:alert(1)', section: 'x', heading: null }, { anchor: 'charts', section: 'รายงาน', heading: null },
+        { anchor: 'users', section: 'ผู้ใช้', heading: null }, { anchor: 'sop', section: 'SOP', heading: null }],
+    });
+    expect(n.text).not.toContain('**');
+    expect(n.text).toContain('\n');
+    expect(n.note).toContain('ข้อความจาก AI');
+    expect(n.note).toContain('m1');
+    const topics = n.choices.filter(c => c.action?.startsWith('help:')).map(c => c.action);
+    expect(topics).toEqual(['help:dashboard', 'help:charts', 'help:users']);
+    expect(n.choices.some(c => c.action === 'ask')).toBe(true);
+    expect(n.auto).toBeNull();
+  });
+
+  it('answerNode: ไม่พบคำตอบ = ใช้หัวข้อที่เกี่ยวข้อง และตัดคำตอบยาวเกิน', () => {
+    const n = answerNode({ found: false, answer: 'ก'.repeat(900), sources: [{ anchor: 'a1', section: 's', heading: null }], related: [{ anchor: 'help', section: 'คู่มือ', heading: null }] });
+    expect(n.mood).toBe('think');
+    expect(n.text.length).toBeLessThan(460);
+    expect(n.text).toContain('อ่านต่อในคู่มือ');
+    expect(n.choices.filter(c => c.action?.startsWith('help:')).map(c => c.action)).toEqual(['help:help']);
+    expect(answerNode({}).text).toContain('ยังไม่พบคำตอบ');
+  });
+
+  it('MascotService: aiThinking/aiDone/aiFailed ส่งคำสั่งพูด (นอกจอ = ไม่ชี้)', () => {
+    const s = TestBed.inject(MascotService);
+    const got: MascotCue[] = [];
+    const sub = s.cues.subscribe(c => got.push(c));
+    s.aiThinking(); s.aiDone('เสร็จแล้ว', document.createElement('div')); s.aiFailed();
+    sub.unsubscribe();
+    expect(got.map(c => c.kind || 'speech')).toEqual(['think', 'speech', 'shout']);
+    expect(got[1].text).toBe('เสร็จแล้ว');
+    expect(got[1].pointEl).toBeNull();
+  });
+});

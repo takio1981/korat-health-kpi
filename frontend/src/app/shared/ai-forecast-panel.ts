@@ -1,20 +1,22 @@
 // แผง "AI อธิบายตัวชี้วัดเสี่ยง" (ระบบเตือนล่วงหน้า ระยะที่ 4 — 8 พ.ย. 2569) ในแท็บตัวชี้วัดเสี่ยง
 // ส่งเฉพาะปีงบ/เดือน/ตัวกรอง — server คำนวณรายการเสี่ยงใหม่ตามขอบเขตสิทธิ์เอง (POST /report/forecast/ai-explain)
 // ระดับความเสี่ยงคำนวณด้วยวิธีทางสถิติ AI อธิบายเท่านั้น — ข้อความล้วน (ไม่ใช้ innerHTML) + ป้ายเตือนให้ตรวจสอบ
-import { Component, Input, OnChanges, OnInit, SimpleChanges, inject, ChangeDetectorRef } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, SimpleChanges, inject, ChangeDetectorRef, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../services/auth';
+import { MascotService } from './mascot/mascot.service';
+import { MascotAvatarComponent } from './mascot/mascot-avatar';
 import { summaryLines } from './ai-summary-panel';
 import { aiFeatureOn, aiErrorText } from './ai-feature';
 
 @Component({
   selector: 'app-ai-forecast-panel',
   standalone: true,
-  imports: [CommonModule],
+  imports: [MascotAvatarComponent, CommonModule],
   template: `
   <div *ngIf="enabled" class="rounded-2xl border border-fuchsia-200 bg-gradient-to-br from-fuchsia-50 to-white shadow-sm p-4" id="ai-forecast-panel">
     <div class="flex items-center justify-between gap-2 flex-wrap">
-      <h4 class="text-sm font-bold text-fuchsia-800"><i class="fas fa-wand-magic-sparkles me-1"></i>AI อธิบายตัวชี้วัดเสี่ยง</h4>
+      <h4 class="text-sm font-bold text-fuchsia-800"><app-mascot-avatar></app-mascot-avatar>AI อธิบายตัวชี้วัดเสี่ยง</h4>
       <button type="button" (click)="generate(!!summary)" [disabled]="loading" id="btn-ai-forecast"
               class="px-3 py-1.5 rounded-xl bg-fuchsia-600 hover:bg-fuchsia-700 text-white text-xs font-bold shadow-md disabled:opacity-50">
         <i class="fas" [ngClass]="loading ? 'fa-spinner fa-spin' : (summary ? 'fa-rotate' : 'fa-wand-magic-sparkles')"></i>
@@ -41,6 +43,8 @@ import { aiFeatureOn, aiErrorText } from './ai-feature';
 export class AiForecastPanelComponent implements OnInit, OnChanges {
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
+  private mascot = inject(MascotService); // น้องโคราชดีเป็นตัวแทนผู้ช่วย AI (ระยะที่ 3)
+  private hostEl = inject(ElementRef);
 
   /** { year_bh, through?, status?, yut?, dept?, zone?, district? } — เปลี่ยน = ล้างคำอธิบายเดิม */
   @Input() params: any = {};
@@ -72,6 +76,7 @@ export class AiForecastPanelComponent implements OnInit, OnChanges {
     this.loading = true;
     this.error = '';
     this.noRisk = false;
+    this.mascot.aiThinking();
     this.authService.apiPost('/report/forecast/ai-explain', { ...(this.params || {}), refresh }).subscribe({
       next: (res: any) => {
         this.loading = false;
@@ -81,10 +86,12 @@ export class AiForecastPanelComponent implements OnInit, OnChanges {
         this.model = res?.model || '';
         this.cached = !!res?.cached;
         this.cdr.detectChanges();
+        this.mascot.aiDone(this.noRisk ? 'ไม่พบรายการเสี่ยงตามตัวกรองนี้ครับ' : 'ผมอธิบายตัวชี้วัดเสี่ยงไว้ตรงนี้แล้วครับ เป็นการคาดการณ์ ไม่ใช่ผลประเมินนะครับ', this.hostEl.nativeElement);
       },
       error: (err: any) => {
         this.loading = false;
         this.error = aiErrorText(err, 'AI อธิบายตัวชี้วัดเสี่ยงไม่สำเร็จ');
+        this.mascot.aiFailed();
         this.cdr.detectChanges();
       },
     });

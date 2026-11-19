@@ -4,8 +4,10 @@ import { ActivatedRouteSnapshot, NavigationEnd, Router } from '@angular/router';
 import { Subscription, filter } from 'rxjs';
 import { AuthService } from '../../services/auth';
 import { HelpVideoService, findHelpVideo } from '../help-video';
+import { HelpSource, answerLines, sourceLabel } from '../ai-help-box';
+import { aiErrorText, aiFeatureOn } from '../ai-feature';
 import { MascotStageComponent } from './mascot-stage';
-import { DialogChoice, DialogScript } from './mascot-dialog';
+import { DialogChoice, DialogScript, ResolvedNode } from './mascot-dialog';
 import { GuideRole, GuideStep, PageGuide, findTarget, guideFor, guideRole, introOf } from './mascot-guides';
 import { MascotService } from './mascot.service';
 
@@ -21,9 +23,10 @@ export function pageKeyOf(root: ActivatedRouteSnapshot | null, url: string): str
 }
 
 /** ตัวเลือกในเมนูหลักของผู้ช่วย (ฟังก์ชันล้วน — ทดสอบได้) */
-export function assistantMenu(o: { hasSteps: boolean; hasVideo: boolean; page: string; quiet: boolean }): DialogChoice[] {
+export function assistantMenu(o: { hasSteps: boolean; hasVideo: boolean; page: string; quiet: boolean; hasAi?: boolean }): DialogChoice[] {
   return [
     ...(o.hasSteps ? [{ label: 'แนะนำหน้านี้ทีละขั้น', action: 'tour:start' }] : []),
+    ...(o.hasAi ? [{ label: 'ถามน้องโคราชดี (AI)', action: 'ask' }] : []),
     ...(o.hasVideo ? [{ label: 'ดูวิดีโอคู่มือหน้านี้', action: 'video' }] : []),
     ...(o.page !== 'help' ? [{ label: 'เปิดคู่มือการใช้งาน', action: 'nav:/help' }] : []),
     { label: o.quiet ? 'ทักทายเมื่อเข้าหน้าใหม่' : 'ไม่ต้องทักเมื่อเข้าหน้าใหม่', action: 'quiet' },
@@ -40,6 +43,33 @@ export function stepChoices(i: number, n: number): DialogChoice[] {
     last ? { label: 'จบการแนะนำ', action: 'tour:end' } : { label: 'ถัดไป', action: 'tour:next' },
     ...(!last ? [{ label: 'พอแล้ว', action: 'tour:end' }] : []),
   ];
+}
+
+const ANSWER_MAX = 420;
+
+/**
+ * คำตอบจากผู้ช่วยคู่มือ (POST /ai/help-ask) เป็นกล่องคำพูด (ฟังก์ชันล้วน): ข้อความล้วน ตัดความยาว + ป้ายข้อความจาก AI
+ * + ปุ่มไปหัวข้อคู่มือที่อ้างอิง (ไม่พบ = หัวข้อที่เกี่ยวข้อง) ≤ 3 + ถามต่อ + ปิด
+ */
+export function answerNode(res: any): ResolvedNode {
+  const found = !!res?.found;
+  let text = answerLines(res?.answer || '').join('\n');
+  if (!text) text = 'ผมยังไม่พบคำตอบในคู่มือครับ ลองถามด้วยคำอื่นดูนะครับ';
+  if (text.length > ANSWER_MAX) text = text.slice(0, ANSWER_MAX).trimEnd() + '… (อ่านต่อในคู่มือ)';
+  const src: HelpSource[] = (found ? res?.sources : res?.related) || [];
+  const seen = new Set<string>();
+  const topics = src.filter(s => s && typeof s.anchor === 'string' && /^[a-z0-9-]{1,40}$/.test(s.anchor) && !seen.has(s.anchor) && seen.add(s.anchor)).slice(0, 3);
+  const short = (t: string) => (t.length > 34 ? t.slice(0, 33) + '…' : t);
+  return {
+    id: 'answer', text, kind: 'speech', pose: found ? 'talk' : 'think', mood: found ? 'happy' : 'think',
+    choices: [
+      ...topics.map(s => ({ label: 'คู่มือ: ' + short(sourceLabel(s)), action: 'help:' + s.anchor })),
+      { label: 'ถามต่อ', action: 'ask' },
+      { label: 'ปิด', next: 'bye' },
+    ],
+    auto: null, pointAt: null,
+    note: 'ข้อความจาก AI — โปรดตรวจสอบกับเนื้อหาคู่มือก่อนดำเนินการ' + (res?.model ? ' · รุ่น ' + res.model : ''),
+  };
 }
 
 /**
@@ -70,6 +100,8 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
   private page = '';
   private guide: PageGuide | null = null;
   private videoUrl: string | null = null;
+  private aiHelpOn = false;
+  private asking = false;
   private steps: GuideStep[] = [];
   private stepIdx = -1;
   private subs: Subscription[] = [];
@@ -81,6 +113,8 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
     this.mascot.bindUser(this.auth.getUser()?.id);
     this.subs.push(this.mascot.assistantHidden$.subscribe(h => { this.hidden = h; this.updateShow(); }));
     this.subs.push(this.router.events.pipe(filter(e => e instanceof NavigationEnd)).subscribe(() => this.onPage()));
+    // ระยะที่ 3: ถามคู่มือผ่าน AI — เฉพาะเมื่อผู้ดูแลเปิดส่วน "ผู้ช่วยคู่มือ"
+    this.auth.getAiStatus().subscribe({ next: (res: any) => { this.aiHelpOn = aiFeatureOn(res, 'help'); this.buildScript(); }, error: () => { /* ไม่มี AI */ } });
     this.auth.getMaintenanceStatus().subscribe({
       next: (res: any) => { this.systemOn = res?.mascot_assistant_enabled !== false; this.updateShow(); this.onPage(); },
       error: () => { this.systemOn = true; this.updateShow(); this.onPage(); },
@@ -135,7 +169,7 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
   private buildScript() {
     const g = this.guide, r = this.role;
     const hasSteps = !!g?.steps && g.steps(r).length > 0;
-    const menu = assistantMenu({ hasSteps, hasVideo: !!this.videoUrl, page: this.page, quiet: this.mascot.quiet });
+    const menu = assistantMenu({ hasSteps, hasVideo: !!this.videoUrl, page: this.page, quiet: this.mascot.quiet, hasAi: this.aiHelpOn });
     const intro = g ? introOf(g, r) : 'ผมน้องโคราชดี ผู้ช่วยประจำระบบครับ';
     this.script = {
       start: { text: `${intro} มีอะไรให้ผมช่วยไหมครับ?`, pose: 'wave', mood: 'happy', choices: menu },
@@ -157,13 +191,29 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
       quietOff: { text: 'ได้ครับ เข้าหน้าใหม่เมื่อไหร่ผมจะทักทายนะครับ', pose: 'wave', mood: 'happy', auto: 3500 },
       hide: { text: 'ไปพักก่อนนะครับ เรียกผมกลับได้ที่เมนูโปรไฟล์มุมขวาบนครับ', pose: 'wave', mood: 'happy', auto: 2600 },
       step: { text: '', choices: [] },
+      ask: {
+        text: 'อยากรู้เรื่องไหน พิมพ์ถามได้เลยครับ ผมจะค้นจากคู่มือการใช้งานตามสิทธิ์ของท่าน',
+        pose: 'talk', mood: 'happy', input: { placeholder: 'เช่น บันทึกผลงานรายไตรมาสอย่างไร' },
+        choices: [{ label: 'ปิด', next: 'bye' }],
+      },
     };
   }
 
   onAction(a: string) {
     const stage = this.stage;
     if (!stage) return;
+    if (a.startsWith('ask:')) { this.askAi(a.slice(4)); return; }
+    if (a.startsWith('help:')) {
+      const sec = a.slice(5);
+      stage.close();
+      if (/^[a-z0-9-]{1,40}$/.test(sec)) {
+        this.router.navigate(['/help'], { queryParams: { section: sec } });
+        setTimeout(() => document.getElementById('section-' + sec)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 600);
+      }
+      return;
+    }
     switch (a) {
+      case 'ask': stage.open('ask'); break;
       case 'tour:start':
         // ตัดขั้นที่เป้าหมายไม่มีในหน้าตอนนี้ (สิทธิ์นี้ไม่มีปุ่ม/ต้องเข้าโหมดอื่นก่อน) — ตัวนับ n/N จึงตรงกับที่จะแนะนำจริง
         this.steps = (this.guide?.steps?.(this.role) || []).filter(st => !st.target || !!findTarget(st.target));
@@ -219,6 +269,24 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
     };
     clearTimeout(this.stepTimer);
     this.stepTimer = setTimeout(() => stage.open('step'), el ? 450 : 0);
+  }
+
+  /** ถามคู่มือผ่าน AI (POST /ai/help-ask — server ค้นเฉพาะหัวข้อที่สิทธิ์ผู้ถามเห็น) แล้วตอบเป็นกล่องคำพูด */
+  private askAi(q: string) {
+    const stage = this.stage;
+    if (!stage || this.asking) return;
+    this.asking = true;
+    stage.openResolved({ id: 'thinking', text: 'ขอค้นคู่มือแป๊บนะครับ…', kind: 'think', pose: 'think', mood: 'think', choices: [], auto: 60000, pointAt: null });
+    this.auth.askAiHelp(q.slice(0, 300)).subscribe({
+      next: (res: any) => { this.asking = false; this.stage?.openResolved(answerNode(res)); },
+      error: (err: any) => {
+        this.asking = false;
+        this.stage?.openResolved({
+          id: 'askError', text: 'ขอโทษครับ ' + aiErrorText(err, 'ตอนนี้ผู้ช่วย AI ตอบไม่ได้'), kind: 'shout', pose: 'think', mood: 'sad',
+          choices: [{ label: 'ลองอีกครั้ง', action: 'ask' }, { label: 'ปิด', next: 'bye' }], auto: null, pointAt: null,
+        });
+      },
+    });
   }
 
   private clearTarget() {

@@ -3,21 +3,23 @@
 // แสดงเฉพาะเมื่อผู้ดูแลเปิดผู้ช่วย AI
 // [indicator] (13 พ.ย. 2569 — ใช้กับสูตรร้อยละ): เสนอสูตรจากข้อมูลที่กรอกไว้แล้ว (เป้าหมาย เกณฑ์ เงื่อนไข วิธีคิดผลงาน) ก่อน
 //   ไม่ต้องอธิบาย — AI ตอบว่าข้อมูลไม่พอ (need_more) จึงขอคำอธิบายเพิ่ม (หรือผู้ใช้กด "อธิบายเพิ่มเติม" เอง)
-import { Component, EventEmitter, Input, OnInit, Output, inject, ChangeDetectorRef } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output, inject, ChangeDetectorRef, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth';
+import { MascotService } from './mascot/mascot.service';
+import { MascotAvatarComponent } from './mascot/mascot-avatar';
 import { aiFeatureOn, aiErrorText } from './ai-feature';
 
 @Component({
   selector: 'app-ai-formula-helper',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [MascotAvatarComponent, CommonModule, FormsModule],
   template: `
   <div *ngIf="enabled" class="mt-2">
     <button *ngIf="!open" type="button" (click)="open = true"
             class="text-[11px] px-2 py-1 rounded-lg bg-fuchsia-50 border border-fuchsia-200 text-fuchsia-700 hover:bg-fuchsia-100 font-bold">
-      <i class="fas fa-wand-magic-sparkles mr-1"></i>ให้ AI ช่วยเขียนสูตร
+      <app-mascot-avatar [size]="18"></app-mascot-avatar>ให้ AI ช่วยเขียนสูตร
     </button>
     <div *ngIf="open" class="rounded-lg border border-fuchsia-200 bg-white p-2.5">
       <div *ngIf="indicator" class="mb-1.5" id="ai-formula-context">
@@ -60,6 +62,8 @@ import { aiFeatureOn, aiErrorText } from './ai-feature';
 export class AiFormulaHelperComponent implements OnInit {
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
+  private mascot = inject(MascotService); // น้องโคราชดีเป็นตัวแทนผู้ช่วย AI (ระยะที่ 3)
+  private hostEl = inject(ElementRef);
 
   @Input() kind: 'result' | 'pct' = 'result';
   @Input() customVars: { key: string; label: string }[] = [];
@@ -117,6 +121,7 @@ export class AiFormulaHelperComponent implements OnInit {
     this.error = '';
     this.formula = '';
     this.question = '';
+    this.mascot.aiThinking();
     const custom_vars = (this.customVars || []).filter(v => String(v?.key || '').trim());
     const body: any = { description: this.description.trim(), kind: this.kind, custom_vars, target_condition: this.targetCondition || '', indicator_name: this.indicatorName || '' };
     if (this.indicator) {
@@ -136,10 +141,12 @@ export class AiFormulaHelperComponent implements OnInit {
           this.explanation = res?.explanation || '';
         }
         this.cdr.detectChanges();
+        this.mascot.aiDone(this.question ? 'ผมต้องการข้อมูลเพิ่มอีกนิดครับ อธิบายวิธีคำนวณเพิ่มในช่องนี้ได้เลย' : 'ผมเสนอสูตรไว้แล้วครับ ทดลองคำนวณก่อนบันทึกนะครับ', this.hostEl.nativeElement);
       },
       error: (err) => {
         this.loading = false;
         this.error = aiErrorText(err, 'AI ช่วยเขียนสูตรไม่สำเร็จ');
+        this.mascot.aiFailed();
         this.cdr.detectChanges();
       },
     });

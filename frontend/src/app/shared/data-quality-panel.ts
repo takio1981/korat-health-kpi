@@ -1,10 +1,12 @@
 // แผง "ตรวจคุณภาพข้อมูล" (ผู้ช่วย AI ระยะที่ 5 — 8 พ.ย. 2569) — หน้าจัดการข้อมูลผลงานตัวชี้วัด (super_admin)
 // ตรวจแบบกฎทั้งปีงบ (GET /kpi-results/manage/data-quality — ไม่ใช้ AI) แล้วให้ AI สรุปรูปแบบ/สาเหตุที่เป็นไปได้/สิ่งที่ควรตรวจ (POST /ai/data-quality-explain)
 // อ่านอย่างเดียว ไม่แก้ข้อมูล — ข้อความจาก AI แสดงเป็นข้อความล้วน (ไม่ใช้ innerHTML) พร้อมป้ายเตือนให้ตรวจสอบ
-import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth';
+import { MascotService } from './mascot/mascot.service';
+import { MascotAvatarComponent } from './mascot/mascot-avatar';
 import { getCurrentFiscalYear } from './fiscal-year.util';
 import { summaryLines } from './ai-summary-panel';
 import { ZoneBadgeComponent } from './zone-badge';
@@ -28,7 +30,7 @@ export function filterIssues(issues: any[], kind: string): any[] {
 @Component({
   selector: 'app-data-quality-panel',
   standalone: true,
-  imports: [CommonModule, FormsModule, ZoneBadgeComponent, FormulaBadgeComponent],
+  imports: [MascotAvatarComponent, CommonModule, FormsModule, ZoneBadgeComponent, FormulaBadgeComponent],
   template: `
   <div class="p-4 md:p-6 border-b border-gray-100" id="data-quality-panel">
     <div class="flex items-center gap-2 flex-wrap">
@@ -68,7 +70,7 @@ export function filterIssues(issues: any[], kind: string): any[] {
 
       <!-- สรุปโดย AI -->
       <div *ngIf="summary || aiError" class="mt-3 rounded-2xl border border-fuchsia-200 bg-gradient-to-br from-fuchsia-50 to-white p-4">
-        <h6 class="text-sm font-bold text-fuchsia-800"><i class="fas fa-wand-magic-sparkles me-1"></i>สรุปโดย AI</h6>
+        <h6 class="text-sm font-bold text-fuchsia-800"><app-mascot-avatar></app-mascot-avatar>สรุปโดย AI</h6>
         <div *ngIf="aiError" class="mt-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-2"><i class="fas fa-triangle-exclamation me-1"></i>{{ aiError }}</div>
         <div *ngIf="summary" class="mt-2 text-sm text-gray-800 space-y-1">
           <ng-container *ngFor="let l of lines">
@@ -119,6 +121,8 @@ export function filterIssues(issues: any[], kind: string): any[] {
 export class DataQualityPanelComponent implements OnInit {
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
+  private mascot = inject(MascotService); // น้องโคราชดีเป็นตัวแทนผู้ช่วย AI (ระยะที่ 3)
+  private hostEl = inject(ElementRef);
 
   readonly kinds = DQ_KINDS;
   readonly pageSize = DQ_PAGE;
@@ -174,6 +178,7 @@ export class DataQualityPanelComponent implements OnInit {
     if (!this.result) return;
     this.aiLoading = true;
     this.aiError = '';
+    this.mascot.aiThinking();
     this.authService.explainDataQuality(this.result.year_bh, refresh).subscribe({
       next: (res: any) => {
         this.aiLoading = false;
@@ -183,10 +188,12 @@ export class DataQualityPanelComponent implements OnInit {
         this.cached = !!res?.cached;
         if (res?.no_issues) this.aiError = 'ไม่พบค่าที่อาจผิดปกติแล้ว — ลองกด "ตรวจคุณภาพข้อมูล" ใหม่';
         this.cdr.detectChanges();
+        this.mascot.aiDone('สรุปผลตรวจคุณภาพข้อมูลเสร็จแล้วครับ เป็นข้อสังเกต ไม่ได้ยืนยันว่าค่าผิดจริงนะครับ', this.hostEl.nativeElement);
       },
       error: (err: any) => {
         this.aiLoading = false;
         this.aiError = aiErrorText(err, 'AI สรุปผลตรวจคุณภาพข้อมูลไม่สำเร็จ');
+        this.mascot.aiFailed();
         this.cdr.detectChanges();
       },
     });

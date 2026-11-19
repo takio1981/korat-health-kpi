@@ -12,6 +12,18 @@ export interface MascotCue {
   pose?: PoseName;
   mood?: Mood;
   auto?: number;
+  /** บินไปชี้ element นี้ (เฉพาะเมื่ออยู่ในจอ) */
+  pointEl?: HTMLElement | null;
+}
+
+/** element อยู่ในจอ (เห็นอย่างน้อยครึ่ง) — ไม่อยู่ = พูดอย่างเดียว ไม่บินไปชี้ */
+export function inViewport(el: HTMLElement | null | undefined): boolean {
+  if (!el || typeof window === 'undefined') return false;
+  const r = el.getBoundingClientRect();
+  if (r.width <= 0 || r.height <= 0) return false;
+  const vh = window.innerHeight, vw = window.innerWidth;
+  const visH = Math.min(r.bottom, vh) - Math.max(r.top, 0), visW = Math.min(r.right, vw) - Math.max(r.left, 0);
+  return visH > Math.min(r.height, vh) * 0.5 && visW > 0;
 }
 
 const HIDE_KEY = 'kpi_mascot_assistant_off';
@@ -34,6 +46,17 @@ export class MascotService {
   private uid = '';
 
   say(cue: MascotCue) { this.cues.next(cue); }
+
+  // ===== ตัวแทนผู้ช่วย AI (ระยะที่ 3) — แผง AI เรียกตอนเริ่ม/สำเร็จ/ล้มเหลว (ไม่มีผู้ช่วยแสดงอยู่ = ไม่มีผล) =====
+  aiThinking(text = 'ขอคิดแป๊บนะครับ ผมกำลังให้ AI ช่วยดูให้') {
+    this.say({ text, kind: 'think', pose: 'think', mood: 'think', auto: 2600 });
+  }
+  aiDone(text: string, el?: HTMLElement | null) {
+    this.say({ text, pose: 'point', mood: 'happy', auto: 5500, pointEl: inViewport(el) ? el : null });
+  }
+  aiFailed(text = 'ขอโทษครับ ตอนนี้ผู้ช่วย AI ตอบไม่ได้ ลองใหม่อีกครั้งนะครับ') {
+    this.say({ text, kind: 'shout', pose: 'think', mood: 'sad', auto: 5000 });
+  }
 
   /** เรียกเมื่อรู้ตัวผู้ใช้ (layout) — โหลดค่าที่จำไว้ของบัญชีนั้น */
   bindUser(uid: string | number | null | undefined) {

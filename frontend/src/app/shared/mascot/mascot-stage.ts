@@ -44,6 +44,11 @@ type Mode = 'roam' | 'goto' | 'talk' | 'home';
       <div class="ms-box">
         <div class="ms-name">น้องโคราชดี</div>
         <div class="ms-text"></div>
+        <div class="ms-note" *ngIf="node?.note">{{ node?.note }}</div>
+        <form class="ms-ask" *ngIf="node?.input && showChoices" (submit)="submitAsk($event)">
+          <input class="ms-input" type="text" maxlength="300" autocomplete="off" [attr.placeholder]="node?.input?.placeholder" aria-label="พิมพ์คำถาม">
+          <button type="submit" class="ms-choice ms-send">ถาม</button>
+        </form>
         <div class="ms-choices" *ngIf="node && showChoices && node.choices.length">
           <button type="button" *ngFor="let c of node.choices; let i = index" class="ms-choice" [attr.data-idx]="i" (click)="choose(c, $event)">{{ c.label }}</button>
         </div>
@@ -72,9 +77,13 @@ type Mode = 'roam' | 'goto' | 'talk' | 'home';
     .ms-box { position: relative; max-width: min(300px, 78vw); min-width: 150px; padding: 12px 16px 12px; color: #111; }
     .ms-name { display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: .02em; color: #fff; background: #0f8f80; border: 2px solid #161616;
       border-radius: 6px; padding: 0 7px; margin: -26px 0 4px -6px; transform: rotate(-3deg); box-shadow: 2px 2px 0 #161616; }
-    .ms-text { font-size: 15px; line-height: 1.5; font-weight: 700; min-height: 1.5em; white-space: pre-wrap; }
+    .ms-text { font-size: 15px; line-height: 1.5; font-weight: 700; min-height: 1.5em; white-space: pre-wrap; max-height: 42vh; overflow-y: auto; }
     [data-kind="shout"] .ms-text { font-size: 16px; font-weight: 800; }
     [data-kind="think"] .ms-text { font-weight: 600; font-style: italic; color: #234; }
+    .ms-note { font-size: 11px; color: #555; margin-top: 4px; font-weight: 600; }
+    .ms-ask { display: flex; gap: 6px; margin-top: 8px; animation: ms-in .25s ease-out; }
+    .ms-input { flex: 1; min-width: 0; font: inherit; font-size: 13px; padding: 4px 10px; border: 2px solid #161616; border-radius: 10px; background: #fff; color: #111; outline: none; }
+    .ms-input:focus { box-shadow: 0 0 0 3px #bff3ea; }
     .ms-choices { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; animation: ms-in .25s ease-out; }
     .ms-choice { font: inherit; font-size: 13px; font-weight: 700; padding: 3px 10px; border: 2px solid #161616; border-radius: 999px; background: #e9fbf7;
       color: #0b4f47; cursor: pointer; box-shadow: 2px 2px 0 #161616; transition: transform .08s, box-shadow .08s, background .15s; }
@@ -492,7 +501,22 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
 
   private cue(c: MascotCue) {
     if (c.node) { this.open(c.node); return; }
-    if (c.text) this.openResolved({ id: 'cue', text: c.text, kind: c.kind || 'speech', pose: c.pose || 'talk', mood: c.mood || 'normal', choices: [], auto: c.auto ?? 6000, pointAt: null });
+    if (!c.text) return;
+    // ไม่ขัดจังหวะขณะผู้ใช้กำลังเลือกตัวเลือก/พิมพ์คำถามอยู่ (ยกเว้นข้อความเตือนที่ไม่มีตัวเลือก)
+    if (this.node && (this.node.choices.length || this.node.input) && this.mode === 'talk') return;
+    document.querySelectorAll('[data-mascot-cue]').forEach(e => e.removeAttribute('data-mascot-cue'));
+    let pointAt: string | null = null;
+    if (c.pointEl) { c.pointEl.setAttribute('data-mascot-cue', '1'); pointAt = '[data-mascot-cue="1"]'; }
+    this.openResolved({ id: 'cue', text: c.text, kind: c.kind || 'speech', pose: c.pose || 'talk', mood: c.mood || 'normal', choices: [], auto: c.auto ?? 6000, pointAt });
+  }
+
+  /** ส่งคำถามจากช่องพิมพ์ในกล่องคำพูด */
+  submitAsk(e: Event) {
+    e.preventDefault(); e.stopPropagation();
+    const inp = (this.el.nativeElement as HTMLElement).querySelector('.ms-input') as HTMLInputElement | null;
+    const q = (inp?.value || '').trim();
+    if (q.length < 3) { inp?.focus(); return; }
+    this.zone.run(() => this.action.emit('ask:' + q));
   }
 
   private onFocus(el: Element | null) {
@@ -510,6 +534,7 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
 
   private updateBubble(t: number) {
     const host = this.el.nativeElement as HTMLElement;
+    if (!this.node) return;
     const bub = host.querySelector('.ms-bubble') as HTMLElement | null;
     if (!bub || !this.node) return;
     if (this.mode === 'talk') {
@@ -520,7 +545,10 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
         this.setText(this.chars.slice(0, this.typed).join(''));
       }
       if (this.typed >= this.chars.length) {
-        if (!this.showChoices && this.node.choices.length) { this.showChoices = true; this.cdr.detectChanges(); }
+        if (!this.showChoices && (this.node.choices.length || this.node.input)) {
+          this.showChoices = true; this.cdr.detectChanges();
+          if (this.node.input) (host.querySelector('.ms-input') as HTMLInputElement | null)?.focus();
+        }
         if (this.node.auto && !this.closeAt) this.closeAt = t + this.node.auto / 1000;
         if (this.closeAt && t >= this.closeAt) { this.close(); return; }
       }

@@ -1,10 +1,12 @@
 // กล่อง "ถามผู้ช่วย AI" บนหน้าคู่มือ (ผู้ช่วย AI ระยะที่ 4 — 8 พ.ย. 2569) — POST /ai/help-ask
 // backend ค้นเฉพาะหัวข้อคู่มือที่สิทธิ์ของผู้ถามเห็น แล้วให้ AI ตอบจากเนื้อหานั้นพร้อมอ้างหัวข้อ — กดหัวข้อ = เลื่อนไปอ่านในคู่มือ (pick)
 // แสดงเฉพาะเมื่อผู้ดูแลเปิดผู้ช่วย AI และผู้ใช้เข้าสู่ระบบแล้ว — คำตอบเป็นข้อความล้วน (ไม่ใช้ innerHTML)
-import { Component, EventEmitter, OnInit, Output, inject, ChangeDetectorRef } from '@angular/core';
+import { Component, EventEmitter, OnInit, Output, inject, ChangeDetectorRef, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth';
+import { MascotService } from './mascot/mascot.service';
+import { MascotAvatarComponent } from './mascot/mascot-avatar';
 import { aiFeatureOn, aiErrorText } from './ai-feature';
 
 export interface HelpSource { anchor: string; section: string | null; heading: string | null; }
@@ -35,10 +37,10 @@ const HISTORY_MAX = 5;
 @Component({
   selector: 'app-ai-help-box',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [MascotAvatarComponent, CommonModule, FormsModule],
   template: `
   <div *ngIf="enabled" class="rounded-2xl border border-fuchsia-200 bg-gradient-to-br from-fuchsia-50 to-white shadow-sm p-4">
-    <h3 class="text-sm font-bold text-fuchsia-800"><i class="fas fa-wand-magic-sparkles me-1"></i>ถามผู้ช่วย AI เกี่ยวกับการใช้งาน</h3>
+    <h3 class="text-sm font-bold text-fuchsia-800"><app-mascot-avatar></app-mascot-avatar>ถามผู้ช่วย AI เกี่ยวกับการใช้งาน</h3>
     <p class="text-xs text-gray-500 mt-1">พิมพ์คำถามเป็นภาษาไทย — AI ตอบจากเนื้อหาคู่มือที่สิทธิ์ของคุณเห็นเท่านั้น พร้อมบอกหัวข้อที่ใช้ตอบ</p>
     <form class="mt-3 flex flex-col sm:flex-row gap-2" (ngSubmit)="ask()">
       <input type="text" name="aiHelpQuestion" [(ngModel)]="question" maxlength="500" [disabled]="loading"
@@ -81,6 +83,8 @@ const HISTORY_MAX = 5;
 export class AiHelpBoxComponent implements OnInit {
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
+  private mascot = inject(MascotService); // น้องโคราชดีเป็นตัวแทนผู้ช่วย AI (ระยะที่ 3)
+  private hostEl = inject(ElementRef);
 
   /** กดหัวข้ออ้างอิง → anchor ของหัวข้อ (หน้าคู่มือเลื่อนไป section-<anchor>) */
   @Output() pick = new EventEmitter<string>();
@@ -105,6 +109,7 @@ export class AiHelpBoxComponent implements OnInit {
     if (q.length < 3 || this.loading) return;
     this.loading = true;
     this.error = '';
+    this.mascot.aiThinking('ขอค้นคู่มือแป๊บนะครับ');
     this.authService.askAiHelp(q).subscribe({
       next: (res) => {
         this.loading = false;
@@ -114,10 +119,12 @@ export class AiHelpBoxComponent implements OnInit {
         }, ...this.history].slice(0, HISTORY_MAX);
         this.question = '';
         this.cdr.detectChanges();
+        this.mascot.aiDone(this.history[0]?.found ? 'ได้คำตอบแล้วครับ ดูหัวข้อคู่มือที่อ้างอิงประกอบด้วยนะครับ' : 'ผมยังไม่พบคำตอบในคู่มือครับ ลองถามด้วยคำอื่นดูนะครับ', this.hostEl.nativeElement);
       },
       error: (err) => {
         this.loading = false;
         this.error = aiErrorText(err, 'ผู้ช่วยคู่มือตอบไม่สำเร็จ');
+        this.mascot.aiFailed();
         this.cdr.detectChanges();
       },
     });

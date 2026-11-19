@@ -1,9 +1,11 @@
 // หน้าต่าง "AI อธิบายค่าที่อาจผิดปกติ" (ผู้ช่วย AI ระยะที่ 5 — 8 พ.ย. 2569) — หน้าบันทึกผลงาน โหมดแก้ไข
 // ส่งค่ารายเดือนของแถวที่ถูกเตือน (ยังไม่บันทึก) ให้ POST /ai/anomaly-explain — server คำนวณคำเตือนใหม่เองและไม่ส่งรหัสหน่วยบริการเข้า prompt
 // เตือนเท่านั้น ไม่แก้ค่า ไม่ห้ามบันทึก — ผลเป็นข้อความล้วน (ไม่ใช้ innerHTML) พร้อมป้ายเตือนให้ตรวจสอบ
-import { Component, EventEmitter, Input, OnInit, Output, inject, ChangeDetectorRef } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output, inject, ChangeDetectorRef, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../services/auth';
+import { MascotService } from './mascot/mascot.service';
+import { MascotAvatarComponent } from './mascot/mascot-avatar';
 import { ZoneBadgeComponent } from './zone-badge';
 import { EXCEL_MONTHS } from './kpi-excel';
 import { aiErrorText } from './ai-feature';
@@ -44,12 +46,12 @@ export function applyExplanations(rows: AnomalyExplainRow[], explanations: any[]
 @Component({
   selector: 'app-ai-anomaly-explain',
   standalone: true,
-  imports: [CommonModule, ZoneBadgeComponent],
+  imports: [MascotAvatarComponent, CommonModule, ZoneBadgeComponent],
   template: `
   <div class="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4" (click)="close.emit()">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col" (click)="$event.stopPropagation()">
       <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-2">
-        <h3 class="text-sm font-bold text-fuchsia-800"><i class="fas fa-wand-magic-sparkles me-1"></i>AI อธิบายค่าที่อาจผิดปกติ ({{ shown.length }} ช่อง)</h3>
+        <h3 class="text-sm font-bold text-fuchsia-800"><app-mascot-avatar></app-mascot-avatar>AI อธิบายค่าที่อาจผิดปกติ ({{ shown.length }} ช่อง)</h3>
         <button type="button" (click)="close.emit()" class="w-8 h-8 rounded-lg hover:bg-gray-100 text-gray-500" title="ปิด"><i class="fas fa-times"></i></button>
       </div>
       <div class="p-4 overflow-y-auto card-scroll space-y-3">
@@ -91,6 +93,8 @@ export function applyExplanations(rows: AnomalyExplainRow[], explanations: any[]
 export class AiAnomalyExplainComponent implements OnInit {
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
+  private mascot = inject(MascotService); // น้องโคราชดีเป็นตัวแทนผู้ช่วย AI (ระยะที่ 3)
+  private hostEl = inject(ElementRef);
 
   @Input() rows: AnomalyExplainRow[] = [];
   @Output() close = new EventEmitter<void>();
@@ -111,6 +115,7 @@ export class AiAnomalyExplainComponent implements OnInit {
     this.loading = true;
     this.error = '';
     this.shown = this.shown.map(r => ({ ...r, aiDone: false, aiText: '' }));
+    this.mascot.aiThinking();
     this.authService.explainAnomalies(this.shown.map(r => r.payload), refresh).subscribe({
       next: (res) => {
         this.loading = false;
@@ -118,10 +123,12 @@ export class AiAnomalyExplainComponent implements OnInit {
         this.model = res?.model || '';
         this.cached = !!res?.cached;
         this.cdr.detectChanges();
+        this.mascot.aiDone('ผมดูค่าที่อาจผิดปกติให้แล้วครับ ลองตรวจกับเอกสารต้นทางก่อนแก้ไขนะครับ', this.hostEl.nativeElement);
       },
       error: (err) => {
         this.loading = false;
         this.error = aiErrorText(err, 'AI อธิบายค่าที่อาจผิดปกติไม่สำเร็จ');
+        this.mascot.aiFailed();
         this.cdr.detectChanges();
       },
     });

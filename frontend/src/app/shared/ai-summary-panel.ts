@@ -1,8 +1,10 @@
 // แผง "สรุปโดย AI" (7 พ.ย. 2569) — หน้ากราฟและสถิติ: สรุปผลตามตัวกรองปัจจุบัน (POST /report/ai-summary)
 // แสดงเฉพาะเมื่อผู้ดูแลเปิดผู้ช่วย AI — ผลเป็นข้อความล้วน (ไม่ใช้ innerHTML) พร้อมป้ายเตือนให้ตรวจสอบ
-import { Component, Input, OnChanges, OnInit, SimpleChanges, inject, ChangeDetectorRef } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, SimpleChanges, inject, ChangeDetectorRef, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../services/auth';
+import { MascotService } from './mascot/mascot.service';
+import { MascotAvatarComponent } from './mascot/mascot-avatar';
 import { aiFeatureOn, aiErrorText } from './ai-feature';
 
 // แบ่งข้อความสรุปเป็นบรรทัดสำหรับแสดงผล: ■ = หัวข้อ, • = รายการย่อย
@@ -17,11 +19,11 @@ export function summaryLines(text: string): { kind: 'head' | 'item' | 'text'; te
 @Component({
   selector: 'app-ai-summary-panel',
   standalone: true,
-  imports: [CommonModule],
+  imports: [MascotAvatarComponent, CommonModule],
   template: `
   <div *ngIf="enabled" class="mb-6 rounded-2xl border border-fuchsia-200 bg-gradient-to-br from-fuchsia-50 to-white shadow-sm p-4">
     <div class="flex items-center justify-between gap-2 flex-wrap">
-      <h3 class="text-sm font-bold text-fuchsia-800"><i class="fas fa-wand-magic-sparkles me-1"></i>{{ heading || 'สรุปโดย AI' }}</h3>
+      <h3 class="text-sm font-bold text-fuchsia-800"><app-mascot-avatar></app-mascot-avatar>{{ heading || 'สรุปโดย AI' }}</h3>
       <div class="flex gap-2">
         <button type="button" (click)="generate(!!summary)" [disabled]="loading"
                 class="px-3 py-1.5 rounded-xl bg-fuchsia-600 hover:bg-fuchsia-700 text-white text-xs font-bold shadow-md disabled:opacity-50">
@@ -55,6 +57,8 @@ export function summaryLines(text: string): { kind: 'head' | 'item' | 'text'; te
 export class AiSummaryPanelComponent implements OnInit, OnChanges {
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
+  private mascot = inject(MascotService); // น้องโคราชดีเป็นตัวแทนผู้ช่วย AI (ระยะที่ 3)
+  private hostEl = inject(ElementRef);
 
   /** ตัวกรองเดียวกับที่ใช้โหลดหน้ากราฟ (buildParams ของ ChartComponent) — โหมด report-tab: { tab, view, year_bh, dept_id, distid, hostype, zone } */
   @Input() params: any = {};
@@ -95,6 +99,7 @@ export class AiSummaryPanelComponent implements OnInit, OnChanges {
     const my = ++this.seq;
     this.loading = true;
     this.error = '';
+    this.mascot.aiThinking();
     const req = this.mode === 'report-tab'
       ? this.authService.getAiReportTabSummary(this.params || {}, refresh)
       : this.authService.getAiReportSummary(this.params || {}, refresh);
@@ -109,11 +114,13 @@ export class AiSummaryPanelComponent implements OnInit, OnChanges {
         this.cached = !!res?.cached;
         this.copied = false;
         this.cdr.detectChanges();
+        this.mascot.aiDone('สรุปเสร็จแล้วครับ อ่านในกล่องนี้ได้เลย โปรดตรวจกับตัวเลขในหน้านี้ก่อนนำไปใช้นะครับ', this.hostEl.nativeElement);
       },
       error: (err) => {
         if (my !== this.seq) return;
         this.loading = false;
         this.error = aiErrorText(err, 'สร้างสรุปด้วย AI ไม่สำเร็จ');
+        this.mascot.aiFailed();
         this.cdr.detectChanges();
       },
     });

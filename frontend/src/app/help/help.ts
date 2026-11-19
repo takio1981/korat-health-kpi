@@ -28,6 +28,9 @@ export class HelpComponent {
     // ตรวจว่าเปิดผ่าน /help-public (ไม่ login)
     this.isPublicView = this.router.url.includes('/help-public') || !this.authService.isLoggedIn();
     this.videoRole = this.isPublicView ? 'public' : this.currentRole;
+    // ?section=<id> — มาจากน้องโคราชดี (คำตอบจากคู่มืออ้างหัวข้อ) → ขยายแล้วเลื่อนไปหัวข้อนั้น
+    const sec = this.router.parseUrl(this.router.url).queryParams['section'];
+    if (typeof sec === 'string' && /^[a-z0-9-]{1,40}$/.test(sec)) setTimeout(() => this.onAiPick(sec), 400);
   }
 
   // ===== วิดีโอคู่มือแยกตามสิทธิ์ (18 พ.ย. 2569) — ไฟล์อยู่ที่ <base>/videos/<สิทธิ์>/<หัวข้อ>.mp4 (shared/help-video.ts)

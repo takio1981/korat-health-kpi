@@ -666,7 +666,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - Filter row: อำเภอ + ประเภท (เพิ่มเติมจาก search + count badge)
 - chospital ไม่มี is_active → ซ่อน toggle column สำหรับแท็บนี้
 
-### น้องโคราชดี 3 มิติ + กล่องคำพูดมังงะ (19 พ.ย. 2569 — ผู้ใช้สั่ง 3 ระยะ: 1) ตัวละคร 3D + คุยในหน้า login ✅ 2) ผู้ช่วยทุกหน้าหลัง login ✅ 3) ตัวแทน AI ทั่วระบบ)
+### น้องโคราชดี 3 มิติ + กล่องคำพูดมังงะ (19 พ.ย. 2569 — ผู้ใช้สั่ง 3 ระยะ: 1) ตัวละคร 3D + คุยในหน้า login ✅ 2) ผู้ช่วยทุกหน้าหลัง login ✅ 3) ตัวแทน AI ทั่วระบบ ✅)
 - ผู้ใช้เลือก: **ปั้นโมเดล 3D ด้วยโค้ด** (three.js `0.187.0` — ไม่มีไฟล์โมเดล; ต้นแบบหลายมุม `public/mascot/korat-d-3.jpg`/`korat-d-2.gif` ไม่อยู่ใน git) | บทพูดหน้า login **เตรียมไว้ ไม่เรียก AI** (ไม่เปิดช่อง AI ให้ผู้ที่ยังไม่เข้าสู่ระบบ)
 - `frontend/src/app/shared/mascot/`: `mascot-model.ts` (`buildMascot()` ปั้นหัวจอ/หูฟัง/หัวใจ/ลำตัว/ตรา/แขน-ขามีข้อต่อ/ผ้าคลุม, `loadThree()` = dynamic import แยก chunk — **ห้าม import three แบบปกติ** ไม่งั้นเข้า initial bundle)
   | `mascot-pose.ts` (ท่าทางฟังก์ชันล้วน: idle/wave/point/aimLeft/aimRight/fly/hover/sit/talk/think/shy/cheer/walk + `blendJoints` เปลี่ยนท่าต่อเนื่อง) | `mascot-face.ts` (ใบหน้าวาดลง canvas → texture ของจอ: กะพริบตา ขยับปาก อารมณ์)
@@ -679,6 +679,10 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   — **หน้าใหม่ที่มี pageKey ต้องเพิ่มใน PAGE_GUIDES** (spec ตรวจทุก pageKey ใน app.routes) | วิดีโอคู่มือ = `HelpVideoService` ตามสิทธิ์ (`video` = id หัวข้อ)
   — เปิด-ปิด: `system_settings.mascot_assistant_enabled` (ใน `/system/maintenance-status`, สวิตช์ `#mascot-assistant-enabled`) + ผู้ใช้ซ่อนเองที่เมนูโปรไฟล์ (`#btn-toggle-mascot`)
   + "ไม่ต้องทักเมื่อเข้าหน้าใหม่" — `MascotService` เก็บ localStorage แยกตามบัญชี (`bindUser`) | Test: `shared/mascot/mascot-assistant.spec.ts`, `api/tests/login-mascot.test.js`
+- **ระยะที่ 3 ตัวแทน AI:** แผง AI ทั้ง 6 (ai-summary-panel, ai-forecast-panel, ai-anomaly-explain, ai-formula-helper, ai-help-box, data-quality-panel) ใช้ `<app-mascot-avatar>` ในหัวแผง
+  + `MascotService.aiThinking()` ตอนเริ่ม / `aiDone(ข้อความ, hostEl)` เมื่อสำเร็จ (ชี้เฉพาะเมื่อแผงอยู่ในจอ `inViewport`) / `aiFailed()` — **แผง AI ใหม่ต้องทำแบบเดียวกัน** (ข้อความจาก AI จริงยังแสดงในแผง ไม่ใช่ในกล่องคำพูด)
+  — คำสั่งพูดจากแผงไม่ขัดจังหวะขณะผู้ใช้กำลังเลือกตัวเลือก/พิมพ์คำถาม | "ถามน้องโคราชดี (AI)" ในเมนูผู้ช่วย (เฉพาะ `aiFeatureOn(status,'help')`) → ช่องพิมพ์ในกล่องคำพูด (`DialogNode.input` → action `ask:<ข้อความ>`)
+  → `askAiHelp()` เส้นทางเดิม → `answerNode()`: ข้อความล้วน (textContent) ≤ 420 ตัว + `note` "ข้อความจาก AI — โปรดตรวจสอบ" + ปุ่มหัวข้อ (anchor `[a-z0-9-]` เท่านั้น) → `/help?section=<id>` (help.ts ขยายแล้วเลื่อนไป)
 - **ห้ามใช้อีโมจิในบทพูด** (บางเครื่องแสดงเป็นกล่อง) | Test: `shared/mascot/mascot.spec.ts` (ทุกตัวเลือกชี้บทที่มีจริง, ทุกท่าค่าครบ), `login.spec.ts`, `login-mascot.spec.ts`
 
 ### น้องโคราชดีบินในหน้าเข้าสู่ระบบ (19 พ.ย. 2569 — ผู้ใช้เลือก: 3 มิติด้วย CSS, เปิด-ปิด 2 ชั้น — ระยะที่ 1 ด้านบนแทนการแสดงผลแล้ว คงสวิตช์เปิด-ปิดเดิม)

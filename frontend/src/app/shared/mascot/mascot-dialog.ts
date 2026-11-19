@@ -19,12 +19,17 @@ export interface DialogNode {
   auto?: number;
   /** บินไปชี้ที่ element นี้ (CSS selector) */
   pointAt?: string;
+  /** แสดงช่องพิมพ์ข้อความ (ส่งแล้ว stage ส่งคำสั่ง ask:<ข้อความ>) */
+  input?: { placeholder: string };
+  /** หมายเหตุตัวเล็กใต้ข้อความ (เช่น ป้าย "ข้อความจาก AI — โปรดตรวจสอบ") */
+  note?: string;
 }
 export type DialogScript = Record<string, DialogNode>;
 
 export interface ResolvedNode {
   id: string; text: string; kind: BubbleKind; pose: PoseName; mood: Mood;
   choices: DialogChoice[]; auto: number | null; pointAt: string | null;
+  input?: { placeholder: string } | null; note?: string | null;
 }
 
 export function resolveNode(script: DialogScript, id: string, ctx: DialogCtx): ResolvedNode | null {
@@ -38,8 +43,10 @@ export function resolveNode(script: DialogScript, id: string, ctx: DialogCtx): R
     pose: n.pose || 'talk',
     mood: n.mood || 'normal',
     choices,
-    auto: choices.length ? null : (n.auto ?? 6000),
+    auto: choices.length || n.input ? null : (n.auto ?? 6000),
     pointAt: n.pointAt || null,
+    input: n.input || null,
+    note: n.note || null,
   };
 }
 
