@@ -56,6 +56,19 @@
               "extractLicenses": false,
               "sourceMap": true,
               "baseHref": "/khupskpi/"
+            },
+            "devVideos": {
+              "assets": [
+                {
+                  "glob": "**/*",
+                  "input": "public"
+                },
+                {
+                  "glob": "**/*",
+                  "input": "../videos",
+                  "output": "videos"
+                }
+              ]
             }
           },
           "defaultConfiguration": "production"
@@ -70,7 +83,7 @@
               "buildTarget": "kpi-web:build:production"
             },
             "development": {
-              "buildTarget": "kpi-web:build:development"
+              "buildTarget": "kpi-web:build:development,devVideos"
             }
           },
           "defaultConfiguration": "development"

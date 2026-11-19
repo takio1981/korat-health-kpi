@@ -17,6 +17,7 @@ videos/
 
 - โฟลเดอร์ `videos/` **ไม่อยู่ใน git** (ไฟล์ใหญ่ + repo สาธารณะ) — nginx ของ frontend เสิร์ฟจาก volume `./videos:/usr/share/nginx/videos:ro`
   (docker-compose.yml) ที่ `/khupskpi/videos/` → deploy ไปเซิร์ฟเวอร์อื่นให้คัดลอกโฟลเดอร์ `videos/` ไปไว้ข้าง docker-compose.yml
+- ตอนพัฒนา `ng serve` (:4500) เสิร์ฟโฟลเดอร์เดียวกันผ่าน configuration `devVideos` ใน `frontend/angular.json` (production build และ `ng test` ไม่รวมวิดีโอ)
 - เพิ่ม/แก้วิดีโอไม่ต้อง build frontend ใหม่ (manifest ตรวจซ้ำทุกครั้งด้วย Cache-Control: no-cache)
 
 ## ขั้นตอนสร้าง
