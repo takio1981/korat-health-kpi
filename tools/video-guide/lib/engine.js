@@ -1,4 +1,4 @@
-// ถ่ายวิดีโอ 1 หัวข้อ: เปิดหน้าเว็บจริง (ฐานทดสอบ) ทำตามขั้นตอน + คำบรรยายสลับเสียงหญิง/ชาย → รวมเป็น MP4
+// ถ่ายวิดีโอ 1 หัวข้อ: เปิดหน้าเว็บจริง (ฐานทดสอบ) ทำตามขั้นตอน โดยมี "น้องโคราชดี" เป็นผู้นำเสนอ → รวมเป็น MP4
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
@@ -6,17 +6,64 @@ const { FE, VIEW, guardContext, closeSwal } = require('./browser');
 const { speech, FFMPEG } = require('./tts');
 const overlayInit = require('./overlay');
 
-const OUT = path.resolve(__dirname, '../../../videos');
+const OUT = path.resolve(__dirname, '../../..', process.env.VG_OUT || 'videos');
 const TMP = path.join(__dirname, '..', 'cache', 'rec');
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const GREETING = 'สวัสดีครับ ผมน้องโคราชดี ';
+const OUTRO = 'ขอบคุณที่รับชมครับ ถ้ายังสงสัยตรงไหน ดูหัวข้ออื่นในคู่มือต่อได้เลยนะครับ';
+const CARD_KICKER = 'คู่มือการใช้งาน Korat Health KPI';
 
-function makeHelpers(page, warn) {
+/** ตรวจว่าจุดกลางของเป้าหมายมองเห็นจริงหรือมีสิ่งใดบังอยู่ (พื้นที่ด้านล่างสุดสงวนให้คำบรรยาย) */
+function inspectTarget(el) {
+    const SAFE_TOP = 56, SAFE_BOTTOM = window.innerHeight - 96;
+    let r = el.getBoundingClientRect();
+    const centerY = r.top + r.height / 2;
+    if (r.height < window.innerHeight * 0.7 && (centerY < SAFE_TOP || centerY > SAFE_BOTTOM || r.left < 0 || r.right > window.innerWidth)) {
+        el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+        r = el.getBoundingClientRect();
+    }
+    const x = Math.min(window.innerWidth - 2, Math.max(1, r.left + r.width / 2));
+    const y = Math.min(window.innerHeight - 2, Math.max(1, r.top + r.height / 2));
+    const top = document.elementFromPoint(x, y);
+    if (!top || top === el || el.contains(top) || top.contains(el)) return { ok: true };
+    const describe = (n) => `${n.tagName.toLowerCase()}${n.id ? '#' + n.id : ''}.${String(n.className || '').split(/\s+/).slice(0, 3).join('.')}`;
+    if (top.closest('.swal2-container')) return { ok: false, kind: 'swal', by: describe(top) };
+    const modal = top.closest('.fixed, [role=dialog]');
+    if (modal) {
+        const closer = [...modal.querySelectorAll('button')].find(b => b.offsetParent && (/^(ปิด|ยกเลิก)$/.test(b.innerText.trim()) || b.querySelector('.fa-times, .fa-xmark')));
+        if (closer) { closer.setAttribute('data-vg-close', '1'); return { ok: false, kind: 'modal', by: describe(top) }; }
+        return { ok: false, kind: 'modal-noclose', by: describe(top) };
+    }
+    return { ok: false, kind: 'other', by: describe(top) };
+}
+
+function makeHelpers(page, warn, uncovered) {
     const loc = (t) => {
         if (typeof t !== 'string') return t;            // locator ส่งมาเอง
-        if (/^[#.\[]|^[a-z-]+[#.\[:]|^(button|a|input|select|table|thead|tbody|tr|td|th|h1|h2|h3|nav|aside|header|main|section|app-[a-z-]+)\b/.test(t)) { const m = t.match(/^(.*?)\s*>>\s*nth=(-?\d+)$/); const l = page.locator(m ? m[1] : t).filter({ visible: true }); return m ? l.nth(+m[2]) : l.first(); }
+        if (/^[#.\[]|^[a-z-]+[#.\[:]|^(button|a|input|select|table|thead|tbody|tr|td|th|h1|h2|h3|nav|aside|header|main|section|app-[a-z-]+)\b/.test(t)) {
+            const m = t.match(/^(.*?)\s*>>\s*nth=(-?\d+)$/);
+            const l = page.locator(m ? m[1] : t).filter({ visible: true });
+            return m ? l.nth(+m[2]) : l.first();
+        }
         return page.locator('button:visible, a:visible, [role=tab]:visible', { hasText: t }).first();
     };
-    const box = async (l) => { await l.scrollIntoViewIfNeeded({ timeout: 4000 }).catch(() => {}); return l.boundingBox({ timeout: 4000 }); };
+    /** ทำให้เป้าหมายอยู่บนสุดก่อนวาดกรอบ: ปิดกล่องข้อความ/หน้าต่างที่ค้างบังอยู่ เลื่อนพ้นแถบที่ตรึงไว้ */
+    const reveal = async (l, name) => {
+        await l.scrollIntoViewIfNeeded({ timeout: 4000 }).catch(() => {});
+        let st;
+        for (let i = 0; i < 5; i++) {
+            st = await l.evaluate(inspectTarget, undefined, { timeout: 4000 });
+            if (st.ok) return true;
+            if (i === 0) uncovered.push(`${String(name).slice(0, 40)} ← ${st.by}`);
+            if (st.kind === 'swal') { await closeSwal(page, 2); await sleep(350); continue; }
+            if (st.kind === 'modal') { await page.locator('[data-vg-close]').first().click({ timeout: 2000 }).catch(() => {}); await page.evaluate(() => document.querySelectorAll('[data-vg-close]').forEach(e => e.removeAttribute('data-vg-close'))).catch(() => {}); await sleep(450); continue; }
+            await page.keyboard.press('Escape').catch(() => {}); await sleep(300);
+            await l.evaluate(el => el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' })).catch(() => {}); await sleep(200); // คอลัมน์ตรึงของตารางบังด้านซ้าย
+        }
+        warn(`ถูกบัง ${name}: ${st.by}`);
+        return false;
+    };
+    const box = async (l, name) => { await reveal(l, name); return l.boundingBox({ timeout: 4000 }); };
     const moveTo = async (b) => { await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 18 }); };
     const ring = (b) => page.evaluate(r => window.__vg && window.__vg.ring(r), b).catch(() => {});
     const safe = (name, fn) => async (...a) => { try { return await fn(...a); } catch (e) { warn(`${name}(${String(a[0]).slice(0, 60)}): ${e.message.split('\n')[0]}`); } };
@@ -24,25 +71,25 @@ function makeHelpers(page, warn) {
         page,
         wait: (ms) => sleep(ms),
         go: safe('go', async (p) => { await page.goto(FE + p); await page.waitForTimeout(2500); await closeSwal(page); }),
-        point: safe('point', async (t, ms = 1800) => { const b = await box(loc(t)); if (!b) throw new Error('ไม่พบ'); await moveTo(b); await ring(b); await sleep(ms); await ring(null); }),
+        point: safe('point', async (t, ms = 1800) => { const b = await box(loc(t), t); if (!b) throw new Error('ไม่พบ'); await moveTo(b); await ring(b); await sleep(ms); await ring(null); }),
         click: safe('click', async (t, after = 1200) => {
-            const l = loc(t); const b = await box(l); if (!b) throw new Error('ไม่พบ');
+            const l = loc(t); const b = await box(l, t); if (!b) throw new Error('ไม่พบ');
             await moveTo(b); await ring(b); await sleep(450); await ring(null);
             await l.click({ timeout: 5000 }); await sleep(after);
         }),
         type: safe('type', async (t, text, after = 600) => {
-            const l = loc(t); const b = await box(l); if (b) { await moveTo(b); await ring(b); }
+            const l = loc(t); const b = await box(l, t); if (b) { await moveTo(b); await ring(b); }
             await l.click({ timeout: 5000 }); await l.fill(''); await l.pressSequentially(String(text), { delay: 90 }); await ring(null); await sleep(after);
         }),
         select: safe('select', async (t, opt, after = 1200) => {
-            const l = loc(t); const b = await box(l); if (b) { await moveTo(b); await ring(b); await sleep(500); await ring(null); }
+            const l = loc(t); const b = await box(l, t); if (b) { await moveTo(b); await ring(b); await sleep(500); await ring(null); }
             await l.selectOption(opt, { timeout: 5000 }); await sleep(after);
         }),
-        scroll: safe('scroll', async (t, dy = 400) => {
+        scroll: safe('scroll', async (t) => {
             if (typeof t === 'number') { await page.mouse.wheel(0, t); await sleep(900); return; }
-            await loc(t).scrollIntoViewIfNeeded({ timeout: 4000 }); await sleep(900);
+            await loc(t).evaluate(el => el.scrollIntoView({ block: 'center', behavior: 'instant' }), undefined, { timeout: 4000 }); await sleep(900);
         }),
-        wheelIn: safe('wheelIn', async (t, dy) => { const b = await box(loc(t)); if (b) await moveTo(b); await page.mouse.wheel(0, dy); await sleep(900); }),
+        wheelIn: safe('wheelIn', async (t, dy) => { const b = await box(loc(t), t); if (b) await moveTo(b); await page.mouse.wheel(0, dy); await sleep(900); }),
         key: safe('key', async (k, after = 800) => { await page.keyboard.press(k); await sleep(after); }),
         swal: () => closeSwal(page),
         /** ปิดหน้าต่าง (modal) ที่เปิดอยู่: Escape → กล่องข้อความ → ปุ่มปิด/กากบาทที่มองเห็น */
@@ -53,52 +100,58 @@ function makeHelpers(page, warn) {
                 if (await l.count().catch(() => 0)) { await l.click({ timeout: 3000 }).catch(() => {}); await sleep(500); break; }
             }
         },
-        swalConfirm: safe('swalConfirm', async (after = 1500) => { const b = page.locator('.swal2-confirm:visible').first(); const bb = await box(b); if (bb) { await moveTo(bb); await sleep(300); } await b.click({ timeout: 5000 }); await sleep(after); }),
+        swalConfirm: safe('swalConfirm', async (after = 1500) => { const b = page.locator('.swal2-confirm:visible').first(); const bb = await b.boundingBox({ timeout: 4000 }); if (bb) { await moveTo(bb); await ring(bb); await sleep(300); await ring(null); } await b.click({ timeout: 5000 }); await sleep(after); }),
         exists: async (t) => { try { return (await loc(t).count()) > 0 && await loc(t).isVisible(); } catch { return false; } },
     };
     return h;
 }
 
+const speak = (page, text, audio) => page.evaluate(([t, env, ms]) => { if (!window.__vg) return; window.__vg.caption(t); window.__vg.say(env, ms); }, [text, audio.env, audio.ms]).catch(() => {});
+
 /**
- * spec = { id, title, kicker, role, roleLabel, start, storageState, steps: [{ say, do? }], outName }
- * คืน { file, ms, warnings }
+ * spec = { id, title, kicker, roleLabel, start, storageState, steps: [{ say, do?, keepSwal?, pause? }], outName, mascot }
+ * คืน { file, ms, size, warnings }
  */
 async function record(browser, spec) {
     fs.mkdirSync(TMP, { recursive: true });
     const warnings = [];
     const warn = (m) => { warnings.push(m); console.log('    ⚠', m); };
-    // เตรียมเสียงก่อน — VG_VOICES=alt สลับหญิง/ชาย (เริ่มที่หญิง), ค่าตั้งต้น = เสียงชายทั้งคลิป (เสียงหญิงไทยของ Microsoft ใช้ไม่ได้ ณ 18 พ.ย. 2569)
-const ALT = process.env.VG_VOICES === 'alt';
+    // เตรียมเสียงก่อนถ่าย เพื่อรู้ความยาวของแต่ละขั้นตอน
     const steps = [];
     for (const [i, s] of spec.steps.entries()) {
-        const who = ALT ? (s.who || (i % 2 === 0 ? 'f' : 'm')) : 'm';
-        steps.push({ ...s, who, audio: await speech(who, s.say) });
+        const say = i === 0 ? GREETING + s.say : s.say;
+        steps.push({ ...s, say, audio: await speech(say) });
     }
+    const outro = await speech(OUTRO);
+
     const ctx = await browser.newContext({ viewport: VIEW, locale: 'th-TH', storageState: spec.storageState, recordVideo: { dir: TMP, size: VIEW } });
     await guardContext(ctx);
-    await ctx.addInitScript(overlayInit);
+    await ctx.addInitScript(overlayInit, spec.mascot);
     const page = await ctx.newPage();
     const t0 = Date.now();
-    const h = makeHelpers(page, warn);
+    const uncovered = [];
+    const h = makeHelpers(page, warn, uncovered);
     if (spec.start) { await page.goto(FE + spec.start); await page.waitForTimeout(2500); await closeSwal(page); }
     if (spec.before) await spec.before(h);
     if (await page.locator('vite-error-overlay').count()) { await ctx.close(); throw new Error('frontend แสดง error overlay (คอมไพล์ไม่ผ่าน) — แก้โค้ดแล้วถ่ายใหม่'); }
-    await page.evaluate(([k, t, s]) => window.__vg.card(k, t, s), [spec.kicker || 'คู่มือการใช้งาน Korat Health KPI', spec.title, spec.roleLabel]);
-    await sleep(300);
+    await page.evaluate(([k, t, s]) => window.__vg.card(k, t, s), [spec.kicker || CARD_KICKER, spec.title, spec.roleLabel]);
+    await sleep(700); // ให้ตัวละครเคลื่อนเข้าตำแหน่งก่อนเริ่มภาพ
     const tStart = Date.now() - t0;
     const cues = [];
     for (const [i, s] of steps.entries()) {
-        const at = Date.now() - t0 - tStart;
-        cues.push({ at, file: s.audio.file });
-        await page.evaluate(([t, w]) => window.__vg && window.__vg.caption(t, w), [s.say, ALT ? s.who : '']).catch(() => {});
         if (!s.keepSwal) await closeSwal(page, 2); // ปิดกล่องข้อความที่ค้างจากขั้นก่อน (เว้นขั้นที่ตั้งใจกดในกล่อง)
+        cues.push({ at: Date.now() - t0 - tStart, file: s.audio.file });
+        await speak(page, s.say, s.audio);
         const act = (async () => { if (s.do) { try { await s.do(h); } catch (e) { warn('step ' + i + ': ' + e.message.split('\n')[0]); } } })();
         await Promise.all([act, sleep(s.audio.ms + 150)]);
         if (i === 0) await page.evaluate(() => window.__vg.card()).catch(() => {});
         await sleep(s.pause ?? 350);
     }
-    await page.evaluate(() => { window.__vg.caption(); window.__vg.card('คู่มือการใช้งาน Korat Health KPI', 'จบวิดีโอ', 'ดูหัวข้ออื่นได้ที่เมนู คู่มือการใช้งาน'); }).catch(() => {});
-    await sleep(2200);
+    await page.evaluate(([k]) => window.__vg.card(k, 'ขอบคุณที่รับชมครับ', 'ดูหัวข้ออื่นได้ที่เมนู คู่มือการใช้งาน'), [CARD_KICKER]).catch(() => {});
+    await sleep(500);
+    cues.push({ at: Date.now() - t0 - tStart, file: outro.file });
+    await speak(page, OUTRO, outro);
+    await sleep(outro.ms + 900);
     const total = Date.now() - t0 - tStart;
     if (await page.locator('vite-error-overlay').count()) { await ctx.close(); throw new Error('frontend แสดง error overlay ระหว่างถ่าย — ถ่ายใหม่'); }
     const video = page.video();
@@ -117,7 +170,7 @@ const ALT = process.env.VG_VOICES === 'alt';
         '-c:a', 'aac', '-b:a', '80k', '-ac', '1', '-movflags', '+faststart', out);
     execFileSync(FFMPEG, args, { stdio: 'inherit' });
     fs.unlinkSync(raw);
-    return { file: out, ms: total, size: fs.statSync(out).size, warnings };
+    return { file: out, ms: total, size: fs.statSync(out).size, warnings, uncovered };
 }
 
 module.exports = { record, OUT };

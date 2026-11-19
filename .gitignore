@@ -71,3 +71,5 @@ backups/
 /videos/
 tools/video-guide/cache/
 tools/video-guide/*.log
+/videos-next/
+/videos-backup*/

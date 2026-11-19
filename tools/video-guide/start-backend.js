@@ -8,6 +8,8 @@ const API = path.resolve(__dirname, '../../api');
 const env = { ...process.env };
 const parsed = require(path.join(API, 'node_modules/dotenv')).parse(require('fs').readFileSync(path.join(API, '.env.test')));
 Object.assign(env, parsed, { PORT: '3710', NODE_ENV: 'development' });
+// ปิดช่องทางออกนอกเครื่องตั้งแต่ค่าตั้งต้น: ไม่มี SMTP / แจ้งเตือน / ฐาน KHD จริงระหว่างถ่าย (ซ้อนกับ block-net.js)
+Object.assign(env, { SMTP_HOST: '127.0.0.1', SMTP_PORT: '1', SMTP_USER: 'none', SMTP_PASS: 'none', TELEGRAM_BOT_TOKEN: '', TELEGRAM_CHAT_ID: '', ADMIN_EMAILS: '', KHD_DB_HOST: '127.0.0.1', KHD_DB_PORT: '1', KHD_DB_USER: '', KHD_DB_PASSWORD: '' });
 if (!/test/.test(env.DB_NAME || '')) { console.error('ปฏิเสธ: .env.test ไม่ใช่ฐานทดสอบ'); process.exit(1); }
 env.NODE_OPTIONS = `--require "${path.join(__dirname, 'block-net.js').replace(/\\/g, '/')}"`;
 const p = spawn(process.execPath, ['server.js'], { cwd: API, env, stdio: 'inherit' });

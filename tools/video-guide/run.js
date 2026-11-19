@@ -11,6 +11,7 @@ const { ROLES, ROLE_KEYS } = require('./lib/roles');
 const { resetSessions } = require('./lib/db');
 const { PASSWORD } = require('./setup-data');
 const SCRIPTS = require('./scripts');
+const { loadMascot } = require('./build-mascot');
 
 const arg = (k) => (process.argv.find(a => a.startsWith('--' + k + '=')) || '').split('=')[1];
 const roleFilter = arg('role') ? arg('role').split(',') : null;
@@ -22,6 +23,7 @@ function loadManifest() { try { return JSON.parse(fs.readFileSync(MANIFEST, 'utf
 function saveManifest(m) { for (const [k, v] of Object.entries(m.videos)) if (!fs.existsSync(path.join(OUT, v.file))) delete m.videos[k]; m.generated = new Date().toISOString(); fs.mkdirSync(OUT, { recursive: true }); fs.writeFileSync(MANIFEST, JSON.stringify(m, null, 1)); }
 
 (async () => {
+    const mascot = await loadMascot();
     const browser = await launch();
     const manifest = loadManifest();
     const report = [];
@@ -43,12 +45,13 @@ function saveManifest(m) { for (const [k, v] of Object.entries(m.videos)) if (!f
             try {
                 const res = await record(browser, {
                     id: s.id, title: s.title, roleLabel: roleKey === 'public' ? 'ทุกสิทธิ์การใช้งาน' : 'สิทธิ์: ' + r.label,
-                    start: s.start, before: s.before, storageState: roleKey === 'public' ? undefined : state, steps: s.steps(r, roleKey).filter(Boolean), outName,
+                    start: s.start, before: s.before, storageState: roleKey === 'public' ? undefined : state, steps: s.steps(r, roleKey).filter(Boolean), outName, mascot,
                 });
                 manifest.videos[`${roleKey}/${s.id}`] = { title: s.title, role: roleKey, section: s.id, file: outName, duration: Math.round(res.ms / 1000), size: res.size, updated: new Date().toISOString() };
                 saveManifest(manifest);
                 report.push({ outName, sec: Math.round(res.ms / 1000), mb: (res.size / 1048576).toFixed(1), warnings: res.warnings.length, took: Math.round((Date.now() - t) / 1000) });
                 console.log(`  ✓ ${Math.round(res.ms / 1000)} วินาที ${(res.size / 1048576).toFixed(1)} MB${res.warnings.length ? ' ⚠ ' + res.warnings.length : ''}`);
+                res.uncovered.forEach(u => console.log('    ⛉ แก้การบัง:', u));
             } catch (e) {
                 console.log('  ✗', e.message);
                 report.push({ outName, error: e.message });
