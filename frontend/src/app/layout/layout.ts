@@ -10,11 +10,13 @@ import { filter, map, mergeMap } from 'rxjs/operators';
 import { Title } from '@angular/platform-browser';
 import { CommandPaletteComponent } from '../shared/command-palette/command-palette';
 import { ZoneBadgeComponent, HospitalZoneService } from '../shared/zone-badge';
+import { MascotAssistantComponent } from '../shared/mascot/mascot-assistant';
+import { MascotService } from '../shared/mascot/mascot.service';
 
 @Component({
   selector: 'app-layout',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, RouterOutlet, CommandPaletteComponent, ZoneBadgeComponent],
+  imports: [CommonModule, FormsModule, RouterModule, RouterOutlet, CommandPaletteComponent, ZoneBadgeComponent, MascotAssistantComponent],
   templateUrl: './layout.html',
   styleUrls: ['./layout.css']
 })
@@ -24,6 +26,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private titleService = inject(Title);
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
+  mascot = inject(MascotService); // ผู้ช่วยน้องโคราชดี (เมนูโปรไฟล์ซ่อน/แสดง)
   private ngZone = inject(NgZone);
   private idleTimeoutService = inject(IdleTimeoutService);
 

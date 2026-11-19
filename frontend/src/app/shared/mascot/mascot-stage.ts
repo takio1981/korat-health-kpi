@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, Input, NgZone, OnDestroy, inject } from '@angular/core';
+import { AfterViewInit, ChangeDetectorRef, Component, ElementRef, EventEmitter, Input, NgZone, OnDestroy, Output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
@@ -19,7 +19,7 @@ export function webglAvailable(): boolean {
   } catch { return false; }
 }
 
-type Mode = 'roam' | 'goto' | 'talk';
+type Mode = 'roam' | 'goto' | 'talk' | 'home';
 
 /**
  * เวทีของน้องโคราชดี 3 มิติ (19 พ.ย. 2569): บินไปมา + กล่องคำพูดแบบมังงะ + บทสนทนา
@@ -34,6 +34,7 @@ type Mode = 'roam' | 'goto' | 'talk';
   imports: [CommonModule],
   template: `
     <div class="ms-ground" aria-hidden="true"></div>
+    <div class="ms-ring" aria-hidden="true"></div>
     <div class="ms-fly" title="น้องโคราชดี — คลิกเพื่อคุยกับผม" role="button" tabindex="0" aria-label="คุยกับน้องโคราชดี"
          (click)="onMascotClick()" (keydown.enter)="onMascotClick()">
       <img *ngIf="fallback" class="ms-img" src="mascot/korat-d-fly.webp" alt="" draggable="false">
@@ -57,6 +58,10 @@ type Mode = 'roam' | 'goto' | 'talk';
     .ms-img { width: 62%; margin: 8% auto 0; display: block; filter: drop-shadow(0 6px 8px rgba(15, 60, 55, .35)); }
     .ms-ground { position: absolute; left: 0; bottom: 3vh; width: 90px; height: 16px; border-radius: 50%;
       background: radial-gradient(ellipse, rgba(10, 60, 50, .3), transparent 70%); will-change: transform, opacity; }
+    .ms-ring { position: absolute; left: 0; top: 0; width: 0; height: 0; border: 3px solid #161616; border-radius: 12px; opacity: 0; pointer-events: none;
+      box-shadow: 0 0 0 4px #ffd84d, 0 0 18px 6px rgba(255, 200, 40, .55); transition: opacity .2s; animation: ms-pulse 1.1s ease-in-out infinite; }
+    .ms-ring.ms-on { opacity: 1; }
+    @keyframes ms-pulse { 0%, 100% { box-shadow: 0 0 0 4px #ffd84d, 0 0 14px 4px rgba(255, 200, 40, .45); } 50% { box-shadow: 0 0 0 7px #ffe680, 0 0 26px 10px rgba(255, 200, 40, .6); } }
     .ms-bubble { position: absolute; left: 0; top: 0; opacity: 0; transform: scale(.4); transform-origin: var(--ms-ox, 0) var(--ms-oy, 100%);
       transition: opacity .18s ease-out, transform .28s cubic-bezier(.2, 1.6, .4, 1); pointer-events: none; will-change: left, top; }
     .ms-bubble.ms-open { opacity: 1; transform: scale(1); pointer-events: auto; }
@@ -93,6 +98,10 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
   @Input() ctx: Partial<DialogCtx> = {};
   /** ตัวเลือกช่องรหัสผ่าน — โฟกัสแล้วน้องยกมือปิดจอ */
   @Input() shyOn = 'input[type="password"]';
+  /** โหมดผู้ช่วยในระบบ: จอดมุมขวาล่าง (ไม่บินเล่นทั่วจอ) บินออกไปเฉพาะตอนชี้ */
+  @Input() dock = false;
+  /** ตัวเลือกที่เป็นคำสั่งอื่นนอกจาก nav: (เช่น tour:next, hide) ส่งออกให้ผู้ใช้คอมโพเนนต์จัดการ */
+  @Output() action = new EventEmitter<string>();
 
   node: ResolvedNode | null = null;
   showChoices = false;
@@ -139,12 +148,16 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
   private sub: Subscription | null = null;
   private listeners: [EventTarget, string, EventListener][] = [];
 
-  private get size() { return window.innerWidth < 640 ? 124 : 176; }
+  private get size() { return this.dock ? (window.innerWidth < 640 ? 96 : 128) : (window.innerWidth < 640 ? 124 : 176); }
+  private nextGestureAt = 25;
+  private gesture: PoseName | null = null;
+  private gestureUntil = 0;
   private get maxV() { return Math.max(90, Math.min(window.innerWidth, window.innerHeight) * 0.22); }
 
   ngAfterViewInit() {
     const w = window.innerWidth, h = window.innerHeight;
     this.s = { x: w * 0.12, y: h * 0.72, z: 0.6, vx: 0, vy: 0, vz: 0, tx: w * 0.2, ty: h * 0.35, tz: 0.8, hold: 0 };
+    if (this.dock) { const hm = this.homePos(); this.s = { ...this.s, x: hm.x, y: hm.y + 40, z: 1 }; this.mode = 'home'; }
     this.reduced = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.nextTipAt = 40 + Math.random() * 25;
     this.sub = this.mascot.cues.subscribe(c => this.zone.runOutsideAngular(() => this.cue(c)));
@@ -234,7 +247,10 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
     const W = window.innerWidth, H = window.innerHeight, size = this.size, t = this.clock;
 
     // ---- การเคลื่อนที่
-    if (this.mode === 'roam') {
+    if (this.mode === 'home') {
+      this.anchor = this.homePos();
+      this.seek(dt);
+    } else if (this.mode === 'roam') {
       if (this.reduced) { this.s = { ...this.s, x: size * 0.7, y: H - size * 0.5, vx: 0, vy: 0 }; }
       else this.s = stepFly(this.s, dt, W, H, size);
     } else {
@@ -283,6 +299,7 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
 
     // ---- ตำแหน่งบนจอ
     const scale = this.mode === 'roam' ? 0.66 + s.z * 0.38 : 1;
+    this.updateRing();
     fly.style.setProperty('--ms-size', size + 'px');
     fly.style.transform = `translate(${(s.x - size / 2).toFixed(1)}px, ${(s.y - size * 0.62).toFixed(1)}px) scale(${scale.toFixed(3)})`;
     if (this.fallback) {
@@ -320,6 +337,18 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
 
   private currentPose(speed: number, t: number): PoseName {
     if (this.shyActive()) return 'shy';
+    if (this.mode === 'home') {
+      if (speed > 0.15) return 'fly';
+      if (this.gesture && t < this.gestureUntil) return this.gesture;
+      if (t > this.nextGestureAt && !this.reduced) {
+        const g: PoseName[] = ['wave', 'think', 'cheer', 'sit'];
+        this.gesture = g[Math.floor(Math.random() * g.length)];
+        this.gestureUntil = t + (this.gesture === 'sit' ? 6 : 2.2);
+        this.nextGestureAt = t + 28 + Math.random() * 25;
+        return this.gesture;
+      }
+      return 'idle';
+    }
     if (this.mode === 'goto') return speed > 0.1 ? 'fly' : 'hover';
     if (this.mode === 'talk' && this.node) {
       const el = t - this.nodeStart, p = this.node.pose, typing = this.typed < this.chars.length;
@@ -338,6 +367,22 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
     const vx = s.vx + ax * dt, vy = s.vy + ay * dt;
     const sp = Math.hypot(vx, vy), mv = this.maxV * 2.2, f = sp > mv ? mv / sp : 1;
     this.s = { ...s, vx: vx * f, vy: vy * f, x: s.x + vx * f * dt, y: s.y + vy * f * dt, z: s.z + (1 - s.z) * Math.min(1, dt * 3) };
+  }
+
+  /** ตำแหน่งจอดมุมขวาล่าง */
+  private homePos() { const sz = this.size; return { x: window.innerWidth - sz * 0.62, y: window.innerHeight - sz * 0.32 }; }
+
+  /** วงไฮไลต์รอบสิ่งที่กำลังชี้ (ตามการเลื่อนหน้าจอทุกเฟรม) */
+  private updateRing() {
+    const ring = (this.el.nativeElement as HTMLElement).querySelector('.ms-ring') as HTMLElement | null;
+    if (!ring) return;
+    const sel = this.node?.pointAt;
+    const el = sel && this.mode === 'talk' ? document.querySelector(sel) as HTMLElement | null : null;
+    if (!el || el.offsetParent === null) { ring.classList.remove('ms-on'); return; }
+    const r = el.getBoundingClientRect(), pad = 6;
+    ring.style.left = (r.left - pad).toFixed(1) + 'px'; ring.style.top = (r.top - pad).toFixed(1) + 'px';
+    ring.style.width = (r.width + pad * 2).toFixed(1) + 'px'; ring.style.height = (r.height + pad * 2).toFixed(1) + 'px';
+    ring.classList.add('ms-on');
   }
 
   private avoidRect(): DOMRect | null {
@@ -364,7 +409,7 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
     if (n) this.openResolved(n);
   }
 
-  private openResolved(n: ResolvedNode) {
+  openResolved(n: ResolvedNode) {
     this.node = n;
     this.showChoices = false;
     this.chars = graphemes(n.text);
@@ -413,7 +458,7 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
     if (!this.node) return;
     this.node = null;
     this.showChoices = false;
-    this.mode = 'roam';
+    this.mode = this.dock ? 'home' : 'roam';
     this.s = { ...this.s, hold: 0.8 };
     this.setText('');
     this.cdr.detectChanges();
@@ -428,13 +473,14 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
       this.zone.run(() => this.router.navigateByUrl(url));
       return;
     }
+    if (c.action) { const a = c.action; this.zone.run(() => this.action.emit(a)); return; }
     this.close();
   }
 
   onMascotClick() {
     if (this.node && this.typed < this.chars.length) { this.typed = this.chars.length; return; }
     if (this.node && this.node.choices.length) { this.close(); return; }
-    this.open(this.sessionHas(this.greetKey || '_') ? 'menu' : 'start');
+    this.open(this.greetKey && this.sessionHas(this.greetKey) && this.script['menu'] ? 'menu' : 'start');
     if (this.greetKey) this.sessionSet(this.greetKey);
   }
 

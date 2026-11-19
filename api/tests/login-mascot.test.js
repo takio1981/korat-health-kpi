@@ -36,3 +36,21 @@ test("ตั้ง 'false' = ปิด, 'true' = เปิด", async () => {
     await set('true');
     expect((await request(app).get(URL)).body.login_mascot_enabled).toBe(true);
 });
+
+// ผู้ช่วยน้องโคราชดีทุกหน้า (ระยะที่ 2) — mascot_assistant_enabled แยกจากของหน้าเข้าสู่ระบบ
+test("mascot_assistant_enabled: ไม่มีค่า = เปิด, 'false' = ปิด (ไม่กระทบ login_mascot_enabled)", async () => {
+    const [[r]] = await db.query("SELECT setting_value FROM system_settings WHERE setting_key = 'mascot_assistant_enabled'");
+    const prev = r ? r.setting_value : null;
+    try {
+        await db.query("DELETE FROM system_settings WHERE setting_key = 'mascot_assistant_enabled'");
+        expect((await request(app).get(URL)).body.mascot_assistant_enabled).toBe(true);
+        await set('true');
+        await db.query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('mascot_assistant_enabled', 'false') ON DUPLICATE KEY UPDATE setting_value = 'false'");
+        const body = (await request(app).get(URL)).body;
+        expect(body.mascot_assistant_enabled).toBe(false);
+        expect(body.login_mascot_enabled).toBe(true);
+    } finally {
+        if (prev === null) await db.query("DELETE FROM system_settings WHERE setting_key = 'mascot_assistant_enabled'");
+        else await db.query("UPDATE system_settings SET setting_value = ? WHERE setting_key = 'mascot_assistant_enabled'", [prev]);
+    }
+});
