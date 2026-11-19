@@ -249,6 +249,21 @@
           <app-khd-sso-settings-card></app-khd-sso-settings-card>
         </div>
 
+        <!-- หน้าเข้าสู่ระบบ: น้องโคราชดีบินไปมา (19 พ.ย. 2569) -->
+        <div class="mt-8 pt-6 border-t border-gray-100">
+          <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-robot me-2 text-teal-600"></i>หน้าเข้าสู่ระบบ</h3>
+          <div class="bg-white rounded-lg p-3 border border-gray-200">
+            <label class="inline-flex items-center cursor-pointer w-full">
+              <input type="checkbox" id="login-mascot-enabled" [(ngModel)]="loginMascotEnabled" name="loginMascotEnabled" class="peer" style="width:0;height:0;opacity:0;position:relative;margin:0;padding:0;border:0;">
+              <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600 shrink-0"></div>
+              <div class="ms-3 flex-1 min-w-0">
+                <p class="text-sm font-bold text-gray-700">แสดงน้องโคราชดีบินไปมาในหน้าเข้าสู่ระบบ</p>
+                <p class="text-xs text-gray-500 mt-0.5">ปิด = ไม่แสดงสำหรับทุกคน | เปิด = แสดง และผู้เข้าชมกดปุ่ม <i class="fas fa-robot"></i> มุมขวาบนเพื่อซ่อนเฉพาะเครื่องตัวเองได้</p>
+              </div>
+            </label>
+          </div>
+        </div>
+
         <!-- ตั้งค่าอุทธรณ์ -->
         <!-- ตั้งค่า SSO: ThaID + ProviderID -->
         <div class="mt-8 pt-6 border-t border-gray-100">

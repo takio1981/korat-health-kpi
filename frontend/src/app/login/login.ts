@@ -7,11 +7,15 @@ import { ThemeService } from '../services/theme.service';
 import { firstValueFrom } from 'rxjs';
 import Swal from 'sweetalert2';
 import { environment } from '../../environments/environment';
+import { LoginMascotComponent } from '../shared/login-mascot';
+
+/** ผู้เข้าชมซ่อนน้องโคราชดีเฉพาะเครื่องตัวเอง (localStorage) — ระบบปิดทั้งหมดได้ด้วย login_mascot_enabled */
+export const LOGIN_MASCOT_KEY = 'kpi_login_mascot';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, FormsModule, RouterModule],
+  imports: [CommonModule, ReactiveFormsModule, FormsModule, RouterModule, LoginMascotComponent],
   templateUrl: './login.html'
 })
 export class LoginComponent implements OnInit, OnDestroy {
@@ -42,6 +46,16 @@ export class LoginComponent implements OnInit, OnDestroy {
   private statusPollTimer: any = null;
 
   thaidAutoFilling: boolean = false;
+
+  /** น้องโคราชดี: mascotSystemOn = ค่าจากระบบ (maintenance-status), mascotHidden = ผู้เข้าชมกดซ่อนเอง */
+  mascotSystemOn = false;
+  mascotHidden = LoginComponent.readMascotHidden();
+  get showMascot() { return this.mascotSystemOn && !this.mascotHidden; }
+  static readMascotHidden(): boolean { try { return localStorage.getItem(LOGIN_MASCOT_KEY) === 'off'; } catch { return false; } }
+  toggleMascot() {
+    this.mascotHidden = !this.mascotHidden;
+    try { localStorage.setItem(LOGIN_MASCOT_KEY, this.mascotHidden ? 'off' : 'on'); } catch { /* ไม่มีที่เก็บ = ใช้เฉพาะครั้งนี้ */ }
+  }
 
 
   ngOnInit() {
@@ -238,7 +252,9 @@ export class LoginComponent implements OnInit, OnDestroy {
           || this.maintenanceMessage !== (res.message || '')
           || prevThaid !== !!res.thaid_enabled
           || this.thaidLoginUrl !== (res.thaid_login_url || '')
-          || prevProvider !== !!res.providerid_enabled;
+          || prevProvider !== !!res.providerid_enabled
+          || this.mascotSystemOn !== (res.login_mascot_enabled !== false);
+        this.mascotSystemOn = res.login_mascot_enabled !== false;
         this.maintenanceMode = !!res.maintenance;
         this.maintenanceMessage = res.message || '';
         this.systemVersion = res.system_version || '';

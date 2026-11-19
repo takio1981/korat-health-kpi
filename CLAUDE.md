@@ -666,6 +666,13 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - Filter row: อำเภอ + ประเภท (เพิ่มเติมจาก search + count badge)
 - chospital ไม่มี is_active → ซ่อน toggle column สำหรับแท็บนี้
 
+### น้องโคราชดีบินในหน้าเข้าสู่ระบบ (19 พ.ย. 2569 — ผู้ใช้เลือก: 3 มิติด้วย CSS, เปิด-ปิด 2 ชั้น)
+- `shared/login-mascot.ts` `<app-login-mascot>`: ภาพ `public/mascot/korat-d-fly.webp` (สร้างด้วย `node tools/video-guide/build-mascot.js --full <ไฟล์> 260` — ไม่แก้ด้วยมือ) ซ้อนหลายชั้นตามแกน Z = ความหนา
+  + หมุนตามความเร็ว (`poseOf()`) + ย่อ/ขยายตามความลึก + เงาพื้น + ไอพ่น — การเคลื่อนที่ `stepFly()` (ฟังก์ชันล้วน) รันนอก Angular zone ด้วย requestAnimationFrame แก้ style ตรง (ห้ามผูกกับ change detection)
+  — ทับ `[data-login-card]` = z-index 5 (หลังเนื้อหา z-10) + pointer-events none (**ห้ามบังช่องกรอก/ปุ่มเข้าสู่ระบบ**) | prefers-reduced-motion = ลอยนิ่ง
+- เปิด-ปิด: `system_settings.login_mascot_enabled` (ไม่มีค่า = เปิด) ส่งใน `GET /system/maintenance-status` (public) — สวิตช์ในหน้าตั้งค่าระบบ (`#login-mascot-enabled`)
+  + ผู้เข้าชมซ่อนเองด้วยปุ่ม `#btn-login-mascot` (localStorage `kpi_login_mascot` = off) — Test: `api/tests/login-mascot.test.js`, `shared/login-mascot.spec.ts`, `login.spec.ts`
+
 ### SSO Login (ProviderID MOPH + ThaID DGA)
 - Settings (super_admin): toggle เปิด/ปิด + กรอก OAuth config (client_id, secret, auth_url, token_url, userinfo_url, redirect_uri, scope)
 - เก็บใน `system_settings` keys: `<provider>_{enabled,client_id,client_secret,auth_url,token_url,userinfo_url,redirect_uri,scope}`

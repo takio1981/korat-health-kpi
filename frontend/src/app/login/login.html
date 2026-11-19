@@ -31,8 +31,16 @@
     </div>
   </div>
 
+  <!-- น้องโคราชดีบินไปมา (19 พ.ย. 2569) — ระบบเปิด/ปิดได้ + ผู้เข้าชมซ่อนเองได้ -->
+  <app-login-mascot *ngIf="showMascot"></app-login-mascot>
+
   <!-- Dark Mode toggle (ลอยมุมขวาบน) -->
   <div class="fixed top-4 right-4 z-50 flex items-center gap-2">
+    <button *ngIf="mascotSystemOn" id="btn-login-mascot" type="button" (click)="toggleMascot()"
+            class="w-9 h-9 rounded-full bg-white/90 dark:bg-gray-700 shadow-md flex items-center justify-center hover:scale-110 transition-all"
+            [title]="mascotHidden ? 'แสดงน้องโคราชดี' : 'ซ่อนน้องโคราชดี'" [attr.aria-pressed]="!mascotHidden">
+      <i class="fas fa-robot text-base" [ngClass]="mascotHidden ? 'text-gray-400' : 'text-teal-600'"></i>
+    </button>
     <button (click)="themeService.toggle()" class="w-9 h-9 rounded-full bg-white/90 dark:bg-gray-700 shadow-md flex items-center justify-center hover:scale-110 transition-all" [title]="themeService.isDark ? 'Light Mode' : 'Dark Mode'">
       <i class="fas text-base" [ngClass]="themeService.isDark ? 'fa-sun text-yellow-400' : 'fa-moon text-gray-600'"></i>
     </button>
@@ -90,7 +98,7 @@
         </div>
 
         <!-- Glassmorphism Card -->
-        <div class="bg-white/65 backdrop-blur-xl rounded-3xl shadow-2xl p-5 sm:p-6 border border-white/60 max-h-[92vh] overflow-y-auto card-scroll" style="scrollbar-width: thin; scrollbar-color: rgba(16, 185, 129, 0.5) rgba(229, 231, 235, 0.3);">
+        <div data-login-card class="bg-white/65 backdrop-blur-xl rounded-3xl shadow-2xl p-5 sm:p-6 border border-white/60 max-h-[92vh] overflow-y-auto card-scroll" style="scrollbar-width: thin; scrollbar-color: rgba(16, 185, 129, 0.5) rgba(229, 231, 235, 0.3);">
 
           <div class="text-center mb-3.5">
             <h2 class="text-2xl font-bold text-green-900 dark:text-white">เข้าสู่ระบบ</h2>

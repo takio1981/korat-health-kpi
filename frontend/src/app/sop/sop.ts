@@ -188,6 +188,7 @@ const SYSTEMS: SopSystem[] = [
     ]},
   ],
   notes:[
+    'น้องโคราชดีบินในหน้าเข้าสู่ระบบ (19 พ.ย. 2569): shared/login-mascot.ts (3 มิติด้วย CSS ไม่มีไลบรารีเพิ่ม) — แสดงเมื่อ system_settings.login_mascot_enabled ≠ false (ส่งผ่าน /system/maintenance-status) และผู้เข้าชมไม่ได้ซ่อน (localStorage kpi_login_mascot) — ทับกล่องเข้าสู่ระบบ = อยู่หลังกล่องและไม่รับคลิก',
     'JWT หมดอายุใน 8 ชั่วโมง | sessionId ตรวจสอบทุก request (30s cache)',
     'Login ซ้อน > 5 นาที = 409 Concurrent Login → บังคับ logout',
     'ThaID + ProviderID ใช้ Direct JWT Flow เหมือนกัน — ทั้งคู่ redirect มาที่ /login?token=JWT',

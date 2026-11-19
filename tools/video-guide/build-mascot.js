@@ -91,5 +91,16 @@ async function loadMascot() {
     return { parts, ratio: BOX.width / BOX.height, pivots: { head: pct(360, 680), arm: pct(240, 745), seal: pct(325, 870) }, mouth: pct(370, 522), eyes: [pct(262, 405), pct(516, 462)] };
 }
 
-module.exports = { build, loadMascot };
-if (require.main === module) build().catch(e => { console.error(e); process.exit(1); });
+/** ภาพเต็มตัวชิ้นเดียว (คงปากเดิม) สำหรับหน้าเว็บ เช่น ตัวละครบินในหน้าเข้าสู่ระบบ — node build-mascot.js --full <ไฟล์.webp> [ความกว้าง] */
+async function buildFull(file, width = 240) {
+    const srcPng = await sharp(SRC).removeAlpha().extract(BOX).resize(W, H, { kernel: 'lanczos3' }).png().toBuffer();
+    const all = await cut(srcPng, pathOf(BODY) + pathOf(ARM) + pathOf(HEAD), pathOf(NECK_UNDER, 'fill="#1fa39a"') + pathOf(HEAD_UNDER, 'fill="#eef3f5"'));
+    await sharp(all).trim({ threshold: 1 }).resize({ width, kernel: 'lanczos3' }).webp({ quality: 86, alphaQuality: 95 }).toFile(file);
+    console.log('full', file, Math.round(fs.statSync(file).size / 1024) + 'KB');
+}
+
+module.exports = { build, loadMascot, buildFull };
+if (require.main === module) {
+    const i = process.argv.indexOf('--full');
+    (i > 0 ? buildFull(path.resolve(process.argv[i + 1]), Number(process.argv[i + 2]) || 240) : build()).catch(e => { console.error(e); process.exit(1); });
+}
