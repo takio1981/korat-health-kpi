@@ -165,3 +165,43 @@ describe('ChartComponent', () => {
     expect(el.textContent).toContain('ทั้งหมด 1 อำเภอ');
   });
 });
+
+describe('ChartComponent — ประเภทตัวชี้วัด (20 พ.ย. 2569)', () => {
+  let component: ChartComponent;
+  let http: HttpTestingController;
+  const r = (gkey: string, gname: string, wt: number, p: number) => ({ ...row(gkey, gname, wt, p), months: [] });
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({ imports: [ChartComponent], providers: testProviders }).compileComponents();
+    const fixture = TestBed.createComponent(ChartComponent);
+    component = fixture.componentInstance;
+    http = TestBed.inject(HttpTestingController);
+  });
+  const resp = () => ({
+    success: true, year_bh: '2569',
+    options: { years: ['2569'], yuts: [], mains: [], depts: [], indicators: [], districts: [], hostypes: [], itypes: [] },
+    overall: row(0, 'all', 4, 3), monthly: [], by_yut: [], by_main: [], by_dept: [], by_indicator: [], by_district: [], by_hostype: [],
+    by_itype: [r('r9', 'R9 เขต 9', 4, 3), r('moph', 'MOPH กระทรวง', 0, 0), r('ssj', 'SSJ สสจ.', 2, 2), r('rmw', 'RMW ผู้ว่าฯ', 0, 0), r('other', 'อื่น ๆ', 0, 0)],
+    heatmap_main: [], heatmap_dept: [], distribution: [],
+  });
+
+  it('แสดงครบทุกประเภท มีสีและชื่อย่อ / กราฟใช้เฉพาะประเภทที่มีข้อมูล', () => {
+    component.selectedYear = '2569';
+    component.loadChartStats();
+    http.expectOne(q => q.url.includes('/report/chart-stats')).flush(resp());
+    expect(component.itypeRows.map(t => t.gkey)).toEqual(['r9', 'moph', 'ssj', 'rmw', 'other']);
+    expect(component.itypeRows[0].short).toBe('R9');
+    expect(component.itypeRows[0].color).toBe('#2563eb');
+    expect(component.itypePctChart.series[0].data).toEqual([75, 100]);
+  });
+
+  it('คลิกการ์ดประเภท = ส่ง itype ไป API + ชิปตัวกรอง, คลิกซ้ำ = ยกเลิก', () => {
+    component.selectedYear = '2569';
+    component.pickItype('rmw');
+    http.expectOne(q => q.url.includes('/report/chart-stats') && q.url.includes('itype=rmw')).flush(resp());
+    expect(component.activeFilterChips.some(c => c.label === 'ประเภทตัวชี้วัด' && c.value === 'RMW ผู้ว่าฯ')).toBe(true);
+    component.pickItype('rmw');
+    const req = http.expectOne(q => q.url.includes('/report/chart-stats'));
+    expect(req.request.url).not.toContain('itype=');
+    req.flush(resp());
+  });
+});

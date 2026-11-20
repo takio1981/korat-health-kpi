@@ -19,7 +19,8 @@ function applyRiskFilters(items, f = {}) {
         && (!f.yut || String(it.yut_id ?? '0') === String(f.yut))
         && (!f.dept || String(it.dept_id ?? '') === String(f.dept))
         && (!f.zone || String(it.zone ?? '') === String(f.zone))
-        && (!f.district || String(it.distid ?? '') === String(f.district)));
+        && (!f.district || String(it.distid ?? '') === String(f.district))
+        && (!f.itype || (it.itypes || []).includes(String(f.itype))));
 }
 
 function buildForecastInput(fc, items, filters = {}) {

@@ -94,6 +94,7 @@ export class VoicePlayer {
   level(): number {
     if (this.synth) return -1;
     if (!this.audio || !this.clip || this.audio.paused) return 0;
+    if (!this.clip.e) return -1; // ไฟล์ที่ไม่มีในดัชนี (ไม่มีซองความดัง) = ขยับปากจำลอง
     return envLevel(this.clip, this.audio.currentTime * 1000);
   }
 
@@ -107,8 +108,11 @@ export class VoicePlayer {
       await this.load();
       for (const seg of list) {
         if (my !== this.gen) return;
-        const clip = this.index?.[voiceKey(seg)];
-        const ok = clip ? await this.playClip(clip, my) : await this.playSynth(seg, my);
+        // ไม่มีในดัชนี (เช่น dev server ยังไม่รู้จัก index.json ใหม่) = ลองเปิดไฟล์ตามชื่อคีย์ก่อน ไม่มีไฟล์จริงจึงใช้เสียงเบราว์เซอร์
+        const key = voiceKey(seg);
+        const clip = this.index?.[key] || { f: key + '.mp3', ms: 0, e: '' };
+        let ok = await this.playClip(clip, my);
+        if (ok === 'missing' && my === this.gen) ok = await this.playSynth(seg, my);
         if (ok === 'blocked') { if (my === this.gen) { this.pending = list; this.playing = false; } return; }
       }
       if (my === this.gen) this.playing = false;
@@ -133,19 +137,20 @@ export class VoicePlayer {
     }
   }
 
-  private playClip(clip: VoiceClip, my: number): Promise<true | 'blocked'> {
+  private playClip(clip: VoiceClip, my: number): Promise<true | 'blocked' | 'missing'> {
     return new Promise(resolve => {
       let a: HTMLAudioElement;
       try { a = new Audio(this.base + clip.f); } catch { resolve(true); return; }
       this.audio = a; this.clip = clip;
       const done = () => { if (this.audio === a) { this.audio = null; this.clip = null; } resolve(true); };
-      a.onended = done; a.onerror = done;
+      a.onended = done;
+      a.onerror = () => { if (this.audio === a) { this.audio = null; this.clip = null; } resolve('missing'); };
       a.play().catch(err => {
         if (this.audio === a) { this.audio = null; this.clip = null; }
-        resolve(err?.name === 'NotAllowedError' && !this.unlocked ? 'blocked' : true);
+        resolve(err?.name === 'NotAllowedError' && !this.unlocked ? 'blocked' : err?.name === 'NotSupportedError' ? 'missing' : true);
       });
       // กันค้าง (ไฟล์โหลดไม่ขึ้น)
-      setTimeout(() => { if (this.audio === a && my === this.gen && a.paused && a.currentTime === 0) done(); }, clip.ms + 4000);
+      setTimeout(() => { if (this.audio === a && my === this.gen && a.paused && a.currentTime === 0) done(); }, (clip.ms || 15000) + 4000);
     });
   }
 

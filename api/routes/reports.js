@@ -8,6 +8,7 @@ const { apiRouter } = require('../core/router');
 const { authenticateToken } = require('../core/auth');
 const { getDistrictId, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT } = require('../core/access');
 const { addZoneFilter } = require('../core/zones');
+const { ITYPE_ALL, ITYPE_KEYS, ITYPE_LABELS, itypeCond, addItypeFilter, itypeLabel } = require('../services/indicator-types');
 const { districtZoneMap } = require('../services/zones');
 const crypto = require('crypto');
 const { aiLimiter } = require('../core/security');
@@ -103,6 +104,7 @@ async function reportByIndicatorRows(user, query = {}) {
     if (distid) { whereClauses.push('s.distid = ?'); params.push(distid); }
     if (hostype) { whereClauses.push('s.hostype = ?'); params.push(hostype); }
     addZoneFilter(whereClauses, params, 's.distid', query.zone);
+    addItypeFilter(whereClauses, 's.indicator_id', query.itype); // ประเภทตัวชี้วัด (20 พ.ย. 2569)
     whereClauses.push(activeIndicatorSql('s.indicator_id')); // เฉพาะตัวชี้วัดที่เปิดใช้งาน
 
     const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
@@ -193,6 +195,7 @@ async function reportByHospitalRows(user, query = {}) {
     if (distid) { whereClauses.push('s.distid = ?'); params.push(distid); }
     if (hostype) { whereClauses.push('s.hostype = ?'); params.push(hostype); }
     addZoneFilter(whereClauses, params, 's.distid', query.zone);
+    addItypeFilter(whereClauses, 's.indicator_id', query.itype); // ประเภทตัวชี้วัด (20 พ.ย. 2569)
     whereClauses.push(activeIndicatorSql('s.indicator_id')); // เฉพาะตัวชี้วัดที่เปิดใช้งาน
 
     const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
@@ -268,6 +271,7 @@ async function reportByDistrictRows(user, query = {}) {
     if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
     if (hostype) { whereClauses.push('s.hostype = ?'); params.push(hostype); }
     addZoneFilter(whereClauses, params, 's.distid', query.zone);
+    addItypeFilter(whereClauses, 's.indicator_id', query.itype); // ประเภทตัวชี้วัด (20 พ.ย. 2569)
     whereClauses.push(activeIndicatorSql('s.indicator_id')); // เฉพาะตัวชี้วัดที่เปิดใช้งาน
 
     const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
@@ -337,6 +341,7 @@ async function reportByYearRows(user, query = {}) {
     if (distid) { whereClauses.push('s.distid = ?'); params.push(distid); }
     if (hostype) { whereClauses.push('s.hostype = ?'); params.push(hostype); }
     addZoneFilter(whereClauses, params, 's.distid', query.zone);
+    addItypeFilter(whereClauses, 's.indicator_id', query.itype); // ประเภทตัวชี้วัด (20 พ.ย. 2569)
     whereClauses.push(activeIndicatorSql('s.indicator_id')); // เฉพาะตัวชี้วัดที่เปิดใช้งาน
 
     const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
@@ -513,6 +518,7 @@ async function computeChartStats(user, q) {
         eqFilter('s.distid', distid, false);
         eqFilter('s.hostype', hostype, false);
         addZoneFilter(c, p, 's.distid', q.zone);
+        addItypeFilter(c, 's.indicator_id', q.itype);
         const where = 'WHERE ' + c.join(' AND ');
 
         const groupQuery = (keySql, nameSql, extra = '') => db.query(`
@@ -525,7 +531,8 @@ async function computeChartStats(user, q) {
             groupQuery('COALESCE(mi.id, 0)', "COALESCE(MAX(mi.main_indicator_name), 'ไม่ระบุหมวดหมู่')", ", MAX(y.yut_name) AS yut_name"),
             groupQuery('COALESCE(s.dept_id, 0)', "COALESCE(MAX(s.dept_name), 'ไม่ระบุหน่วยงาน')"),
             groupQuery('s.indicator_id', 'MAX(i.kpi_indicators_name)',
-                ", MAX(mi.main_indicator_name) AS main_indicator_name, MAX(s.dept_name) AS dept_name, MAX(i.criterion) AS criterion, MAX(i.target_condition) AS target_condition, MAX(i.result_formula) AS result_formula"),
+                ", MAX(mi.main_indicator_name) AS main_indicator_name, MAX(s.dept_name) AS dept_name, MAX(i.criterion) AS criterion, MAX(i.target_condition) AS target_condition, MAX(i.result_formula) AS result_formula"
+                + ", MAX(i.r9) AS r9, MAX(i.moph) AS moph, MAX(i.ssj) AS ssj, MAX(i.rmw) AS rmw, MAX(i.`other`) AS `other`"),
             groupQuery("COALESCE(s.distid, '')", "COALESCE(MAX(s.distname), 'ไม่ระบุอำเภอ')"),
             groupQuery("COALESCE(s.hostype, '')", "MAX(s.hostype)"),
             db.query(`SELECT COALESCE(mi.id, 0) AS gkey, COALESCE(MAX(mi.main_indicator_name), 'ไม่ระบุหมวดหมู่') AS gname, COUNT(*) AS pairs, ${CHART_MONTHLY_SQL}
@@ -535,6 +542,10 @@ async function computeChartStats(user, q) {
             // ชื่อประเภทหน่วยบริการแยก query (chostype คนละ collation กับ kpi_summary — ไม่ JOIN ตรง)
             db.query('SELECT hostypecode, hostypename FROM chostype'),
         ]);
+        // แยกตามประเภทตัวชี้วัด (20 พ.ย. 2569) — ตัวชี้วัดหนึ่งตัวอยู่ได้หลายประเภท จึงนับแยกแต่ละประเภท (UNION ALL) ไม่ใช่ GROUP BY
+        const [itypeRows] = await db.query(
+            ITYPE_ALL.map(k => `SELECT '${k}' AS gkey, ${CHART_METRICS_SQL}, ${CHART_MONTHLY_SQL} ${CHART_FROM_SQL} ${where} AND ${itypeCond(k, 'i')}`).join(' UNION ALL '),
+            ITYPE_ALL.flatMap(() => p));
         // โซนของแต่ละอำเภอ (ตัวเลือกโซน + กรองรายการอำเภอตามโซนฝั่งหน้าจอ)
         const [zoneRows] = await db.query("SELECT distid, MAX(zone) AS zone FROM chospital WHERE zone IS NOT NULL AND zone <> '' GROUP BY distid");
         const zoneOfDist = new Map(zoneRows.map(r => [String(r.distid), String(r.zone)]));
@@ -565,6 +576,7 @@ async function computeChartStats(user, q) {
                 indicators: uniq(optRows, 'indicator_id').map(r => ({ id: r.indicator_id, name: r.kpi_indicators_name, main_id: r.main_id, dept_id: r.dept_id })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'th')),
                 districts: uniq(optRows, 'distid').map(r => ({ id: r.distid, name: r.distname, zone: zoneOfDist.get(String(r.distid)) || null })).sort((a, b) => String(a.name).localeCompare(String(b.name), 'th')),
                 zones: [...new Set(uniq(optRows, 'distid').map(r => zoneOfDist.get(String(r.distid))).filter(Boolean))].sort((a, b) => Number(a) - Number(b)),
+                itypes: ITYPE_ALL.map(k => ({ id: k, name: ITYPE_LABELS[k] })),
                 hostypes: uniq(optRows, 'hostype').map(r => ({ id: r.hostype, name: typeName.get(String(r.hostype)) || r.hostype })).sort((a, b) => String(a.id).localeCompare(String(b.id))),
             },
             overall,
@@ -575,6 +587,10 @@ async function computeChartStats(user, q) {
             by_indicator: byIndicator,
             by_district: mapGroup(distRows),
             by_hostype: mapGroup(hostypeRows).map(r => ({ ...r, gname: typeName.get(String(r.gkey)) || (r.gkey ? `ประเภท ${r.gkey}` : 'ไม่ระบุประเภท') })),
+            // ครบทุกประเภท (R9/MOPH/SSJ/RMW/อื่น ๆ) แม้ไม่มีข้อมูล — "ไม่ระบุประเภท" แสดงเมื่อมีข้อมูลเท่านั้น
+            by_itype: ITYPE_ALL.map(k => itypeRows.find(r => r.gkey === k) || { gkey: k })
+                .map(r => ({ ...chartRow(r), gkey: r.gkey, gname: ITYPE_LABELS[r.gkey], months: chartMonthly(r) }))
+                .filter(r => r.gkey !== 'none' || r.pairs > 0),
             heatmap_main: mainMonthRows.map(r => ({ gkey: r.gkey, gname: r.gname, months: chartMonthly(r) })),
             heatmap_dept: deptMonthRows.map(r => ({ gkey: r.gkey, gname: r.gname, months: chartMonthly(r) })),
             distribution: buckets,
@@ -597,7 +613,7 @@ apiRouter.post('/report/ai-summary', authenticateToken, aiLimiter, async (req, r
     try {
         await ensureAiArea('chart_summary');
         const q = {};
-        for (const k of ['year_bh', 'yut_id', 'main_id', 'dept_id', 'indicator_id', 'distid', 'hostype', 'zone']) {
+        for (const k of ['year_bh', 'yut_id', 'main_id', 'dept_id', 'indicator_id', 'distid', 'hostype', 'zone', 'itype']) {
             if (req.body?.[k] !== undefined && req.body[k] !== null && req.body[k] !== '') q[k] = String(req.body[k]);
         }
         const stats = await computeChartStats(req.user, q);
@@ -627,6 +643,7 @@ async function describeReportFilters(q) {
     if (q.dept_id) f['หน่วยงาน'] = (await one('SELECT dept_name FROM departments WHERE id = ?', q.dept_id)) || q.dept_id;
     if (q.zone) f['โซน'] = String(q.zone).split(',').map(z => 'โซน ' + z.trim()).join(', ');
     if (q.distid) f['อำเภอ'] = (await one('SELECT distname FROM co_district WHERE distid = ?', q.distid)) || q.distid;
+    if (q.itype && itypeLabel(q.itype)) f['ประเภทตัวชี้วัด'] = itypeLabel(q.itype);
     if (q.hostype) f['ประเภทหน่วยบริการ'] = (await one('SELECT hostypename FROM chostype WHERE hostypecode = ?', q.hostype)) || q.hostype;
     return f;
 }
@@ -637,7 +654,7 @@ apiRouter.post('/report/ai-tab-summary', authenticateToken, aiLimiter, async (re
         const key = tabKey(String(b.tab || ''), String(b.view || ''));
         if (!key) return res.status(400).json({ success: false, message: 'ไม่รู้จักแถบรายงานนี้' });
         const q = {};
-        for (const k of ['year_bh', 'dept_id', 'distid', 'hostype', 'zone']) {
+        for (const k of ['year_bh', 'dept_id', 'distid', 'hostype', 'zone', 'itype']) {
             if (b[k] !== undefined && b[k] !== null && b[k] !== '') q[k] = String(b[k]);
         }
         if (key !== 'by-year' && !q.year_bh) return res.status(400).json({ success: false, message: 'กรุณาเลือกปีงบประมาณ' });
@@ -698,7 +715,7 @@ apiRouter.post('/report/forecast/ai-explain', authenticateToken, aiLimiter, asyn
         const scope = await chartScopeClauses(req.user);
         const fc = await computeForecasts(scope, { year: b.year_bh || undefined, through: b.through });
         const filters = {};
-        for (const k of ['status', 'yut', 'dept', 'zone', 'district']) if (b[k] !== undefined && b[k] !== null && b[k] !== '') filters[k] = String(b[k]);
+        for (const k of ['status', 'yut', 'dept', 'zone', 'district', 'itype']) if (b[k] !== undefined && b[k] !== null && b[k] !== '') filters[k] = String(b[k]);
         const out = await explainForecast(fc, { userId: req.user.userId, filters, refresh: b.refresh === true });
         res.json({ success: true, ...out });
     } catch (e) {
@@ -742,6 +759,7 @@ async function recordingStatusByIndicator(user, query = {}) {
     if (distid) { indicatorWhere.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)'); params.push(distid); }
     if (hostype) { indicatorWhere.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE hostype = ?)'); params.push(hostype); }
     addZoneFilter(indicatorWhere, params, 'r.hospcode', query.zone, 'hos');
+    addItypeFilter(indicatorWhere, 'r.indicator_id', query.itype);
 
     const whereStr = 'WHERE ' + indicatorWhere.join(' AND ');
 
@@ -851,6 +869,7 @@ async function recordingStatusByHospital(user, query = {}) {
     if (distid) { whereClauses.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)'); params.push(distid); }
     if (hostype) { whereClauses.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE hostype = ?)'); params.push(hostype); }
     addZoneFilter(whereClauses, params, 'r.hospcode', query.zone, 'hos');
+    addItypeFilter(whereClauses, 'r.indicator_id', query.itype);
 
     const whereStr = 'WHERE ' + whereClauses.join(' AND ');
 
@@ -1012,6 +1031,7 @@ async function deptSummaryReport(user, query = {}) {
         cteParams.push(hostype);
     }
     addZoneFilter(cteWhere, cteParams, 'r.hospcode', query.zone, 'hos');
+    addItypeFilter(cteWhere, 'r.indicator_id', query.itype);
 
     const cteWhereStr = cteWhere.join(' AND ');
 
@@ -1140,6 +1160,7 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
             cteParams.push(hostype);
         }
         addZoneFilter(cteWhere, cteParams, 'r.hospcode', req.query.zone, 'hos');
+        addItypeFilter(cteWhere, 'r.indicator_id', req.query.itype);
         const cteWhereStr = cteWhere.join(' AND ');
 
         const sql = `

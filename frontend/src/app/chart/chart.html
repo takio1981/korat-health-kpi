@@ -74,7 +74,7 @@
 
       <!-- Filters -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-5 mb-4">
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-9 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-10 gap-3">
           <div>
             <label class="block text-xs font-bold text-gray-500 mb-1">ปีงบประมาณ</label>
             <select [(ngModel)]="selectedYear" (change)="onFilterChange('selectedYear')" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none">
@@ -122,6 +122,13 @@
             <select [(ngModel)]="selectedDistrict" (change)="onFilterChange('selectedDistrict')" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none">
               <option value="">ทั้งหมด</option>
               <option *ngFor="let o of districtOptions" [value]="o.id">{{ o.name }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-500 mb-1">ประเภทตัวชี้วัด</label>
+            <select id="chart-itype" [(ngModel)]="selectedItype" (change)="onFilterChange('selectedItype')" class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none">
+              <option value="">ทั้งหมด</option>
+              <option *ngFor="let t of itypes" [value]="t.key">{{ t.label }}</option>
             </select>
           </div>
           <div>
@@ -179,29 +186,88 @@
         </div>
       </div>
 
-      <!-- ===== 2. ยุทธศาสตร์ ===== -->
-      <h2 class="text-base font-bold text-gray-700 mb-3 flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-green-600 text-white text-xs flex items-center justify-center">2</span>แยกตามยุทธศาสตร์ ({{ data.by_yut.length }})</h2>
+      <!-- ===== 2. ประเภทตัวชี้วัด (20 พ.ย. 2569) — R9 เขต 9 / MOPH กระทรวง / SSJ สสจ. / RMW ผู้ว่าฯ / อื่น ๆ ===== -->
+      <h2 id="section-itype" class="text-base font-bold text-gray-700 mb-3 flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-green-600 text-white text-xs flex items-center justify-center">2</span>แยกตามประเภทตัวชี้วัด</h2>
+      <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-3">
+        <button *ngFor="let t of itypeRows" type="button" (click)="pickItype(t.gkey)" [attr.data-itype]="t.gkey"
+                class="text-left bg-white rounded-xl border-2 shadow-sm p-3 transition-all hover:shadow-md hover:-translate-y-0.5"
+                [style.border-color]="selectedItype === t.gkey ? t.color : 'transparent'"
+                [title]="'คลิกเพื่อกรองเฉพาะ ' + t.gname + (selectedItype === t.gkey ? ' (คลิกอีกครั้งเพื่อยกเลิก)' : '')">
+          <div class="flex items-center justify-between gap-1 mb-1">
+            <span class="px-2 py-0.5 rounded-md text-[11px] font-extrabold text-white" [style.background]="t.color">{{ t.short }}</span>
+            <span class="text-[11px] text-gray-500 truncate">{{ t.gname }}</span>
+          </div>
+          <p class="text-2xl font-bold" [style.color]="t.with_target > 0 ? getDistrictColor(t.achievement_pct) : '#94a3b8'">{{ t.with_target > 0 ? (t.achievement_pct + '%') : '–' }}</p>
+          <p class="text-[11px] text-gray-500">ผ่าน {{ t.passed | number }} / {{ t.with_target | number }} คู่</p>
+          <p class="text-[11px] text-gray-500">{{ t.indicator_count | number }} ตัวชี้วัด · {{ t.hospital_count | number }} หน่วยบริการ</p>
+          <div class="mt-1.5 h-1.5 rounded-full bg-gray-100 overflow-hidden"><div class="h-full rounded-full" [style.width.%]="t.with_target > 0 ? t.achievement_pct : 0" [style.background]="t.color"></div></div>
+        </button>
+      </div>
+      <p class="text-[11px] text-gray-500 mb-3"><i class="fas fa-circle-info mr-1 text-sky-500"></i>ตัวชี้วัดหนึ่งตัวอาจอยู่ได้หลายประเภท (เช่น ทั้ง R9 และ MOPH) — จำนวนรวมของทุกประเภทจึงอาจมากกว่าภาพรวม · คลิกการ์ดหรือแท่งกราฟเพื่อกรองเฉพาะประเภทนั้น</p>
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><app-apex-box [options]="itypePctChart"></app-apex-box></div>
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><app-apex-box [options]="itypeStackChart"></app-apex-box></div>
+      </div>
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-4"><app-apex-box [options]="itypeMonthlyChart"></app-apex-box></div>
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-8 overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-100 text-sm font-bold text-gray-700"><i class="fas fa-table mr-1 text-green-600"></i>ตารางสรุปรายประเภทตัวชี้วัด</div>
+        <div class="overflow-x-auto card-scroll">
+          <table id="itype-table" class="w-full text-xs min-w-[820px]">
+            <thead class="bg-green-50 text-green-900">
+              <tr>
+                <th class="px-3 py-2 text-left">ประเภทตัวชี้วัด</th>
+                <th class="px-3 py-2 text-right">ตัวชี้วัด</th>
+                <th class="px-3 py-2 text-right">หน่วยบริการ</th>
+                <th class="px-3 py-2 text-right">คู่ทั้งหมด</th>
+                <th class="px-3 py-2 text-right">มีเป้าหมาย</th>
+                <th class="px-3 py-2 text-right">ผ่าน</th>
+                <th class="px-3 py-2 text-right">ไม่ผ่าน</th>
+                <th class="px-3 py-2 text-right">ไม่มีเป้าหมาย</th>
+                <th class="px-3 py-2 text-right">ร้อยละมีผลงาน</th>
+                <th class="px-3 py-2 text-right">ร้อยละผ่าน</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let t of itypeRows" class="border-t border-gray-100 hover:bg-green-50/40 cursor-pointer" (click)="pickItype(t.gkey)" [class.bg-green-50]="selectedItype === t.gkey">
+                <td class="px-3 py-2 font-medium text-gray-800"><span class="px-1.5 py-0.5 rounded text-[10px] font-extrabold text-white mr-1.5" [style.background]="t.color">{{ t.short }}</span>{{ t.gname }}</td>
+                <td class="px-3 py-2 text-right">{{ t.indicator_count | number }}</td>
+                <td class="px-3 py-2 text-right">{{ t.hospital_count | number }}</td>
+                <td class="px-3 py-2 text-right">{{ t.pairs | number }}</td>
+                <td class="px-3 py-2 text-right">{{ t.with_target | number }}</td>
+                <td class="px-3 py-2 text-right text-emerald-700 font-bold">{{ t.passed | number }}</td>
+                <td class="px-3 py-2 text-right text-red-600">{{ t.not_passed | number }}</td>
+                <td class="px-3 py-2 text-right text-gray-400">{{ t.no_target | number }}</td>
+                <td class="px-3 py-2 text-right">{{ t.pairs > 0 ? (t.recording_pct + '%') : '–' }}</td>
+                <td class="px-3 py-2 text-right"><span *ngIf="t.with_target > 0" class="px-2 py-0.5 rounded-full font-bold" [ngClass]="pctClass(t.achievement_pct)">{{ t.achievement_pct }}%</span><span *ngIf="!t.with_target" class="text-gray-400">ไม่มีข้อมูล</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ===== 3. ยุทธศาสตร์ ===== -->
+      <h2 class="text-base font-bold text-gray-700 mb-3 flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-green-600 text-white text-xs flex items-center justify-center">3</span>แยกตามยุทธศาสตร์ ({{ data.by_yut.length }})</h2>
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-8">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><app-apex-box [options]="yutPctChart"></app-apex-box></div>
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><app-apex-box [options]="yutStackChart"></app-apex-box></div>
       </div>
 
       <!-- ===== 3. หมวดหมู่หลัก ===== -->
-      <h2 class="text-base font-bold text-gray-700 mb-3 flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-green-600 text-white text-xs flex items-center justify-center">3</span>แยกตามหมวดหมู่หลัก ({{ data.by_main.length }})</h2>
+      <h2 class="text-base font-bold text-gray-700 mb-3 flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-green-600 text-white text-xs flex items-center justify-center">4</span>แยกตามหมวดหมู่หลัก ({{ data.by_main.length }})</h2>
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-8">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><app-apex-box [options]="mainPctChart"></app-apex-box></div>
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><app-apex-box [options]="mainStackChart"></app-apex-box></div>
       </div>
 
       <!-- ===== 4. หน่วยงาน ===== -->
-      <h2 class="text-base font-bold text-gray-700 mb-3 flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-green-600 text-white text-xs flex items-center justify-center">4</span>แยกตามหน่วยงาน ({{ data.by_dept.length }})</h2>
+      <h2 class="text-base font-bold text-gray-700 mb-3 flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-green-600 text-white text-xs flex items-center justify-center">5</span>แยกตามหน่วยงาน ({{ data.by_dept.length }})</h2>
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-8">
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><app-apex-box [options]="deptPctChart"></app-apex-box></div>
         <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4"><app-apex-box [options]="deptStackChart"></app-apex-box></div>
       </div>
 
       <!-- ===== 5. ตัวชี้วัด ===== -->
-      <h2 class="text-base font-bold text-gray-700 mb-3 flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-green-600 text-white text-xs flex items-center justify-center">5</span>แยกตามตัวชี้วัด ({{ data.by_indicator.length }})</h2>
+      <h2 class="text-base font-bold text-gray-700 mb-3 flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-green-600 text-white text-xs flex items-center justify-center">6</span>แยกตามตัวชี้วัด ({{ data.by_indicator.length }})</h2>
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-4">
         <div class="flex flex-wrap items-center gap-2 mb-3">
           <div class="flex gap-1 bg-gray-100 p-1 rounded-lg">
@@ -237,7 +303,8 @@
             </thead>
             <tbody>
               <tr *ngFor="let r of tableRows" class="border-t border-gray-100 hover:bg-green-50/40 cursor-pointer" (click)="drillDown('selectedIndicator', '' + r.gkey)" title="คลิกเพื่อกรองเฉพาะตัวชี้วัดนี้">
-                <td class="px-3 py-2 font-medium text-gray-800">{{ r.gname }}<app-formula-badge class="ml-1" [formula]="r['result_formula']"></app-formula-badge></td>
+                <td class="px-3 py-2 font-medium text-gray-800">{{ r.gname }}<app-formula-badge class="ml-1" [formula]="r['result_formula']"></app-formula-badge>
+                  <span *ngFor="let k of itypesOfRow(r)" class="ml-1 inline-block px-1.5 py-0 rounded border text-[10px] font-bold align-middle" [ngClass]="itypeInfo(k)?.badge">{{ itypeInfo(k)?.short }}</span></td>
                 <td class="px-3 py-2 text-gray-600">{{ r['main_indicator_name'] || '-' }}</td>
                 <td class="px-3 py-2 text-gray-600">{{ r['dept_name'] || '-' }}</td>
                 <td class="px-3 py-2 text-right">{{ r.hospital_count | number }}</td>
@@ -254,7 +321,7 @@
       </div>
 
       <!-- ===== 6. รายเดือน ===== -->
-      <h2 class="text-base font-bold text-gray-700 mb-3 flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-green-600 text-white text-xs flex items-center justify-center">6</span>แนวโน้มรายเดือน</h2>
+      <h2 class="text-base font-bold text-gray-700 mb-3 flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-green-600 text-white text-xs flex items-center justify-center">7</span>แนวโน้มรายเดือน</h2>
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-4">
         <app-apex-box [options]="monthlyChart"></app-apex-box>
         <p class="text-[11px] text-gray-500 mt-1">
@@ -279,7 +346,7 @@
       </div>
 
       <!-- ===== 7. พื้นที่ ===== -->
-      <h2 class="text-base font-bold text-gray-700 mb-3 flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-green-600 text-white text-xs flex items-center justify-center">7</span>แยกตามพื้นที่และประเภทหน่วยบริการ</h2>
+      <h2 class="text-base font-bold text-gray-700 mb-3 flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-green-600 text-white text-xs flex items-center justify-center">8</span>แยกตามพื้นที่และประเภทหน่วยบริการ</h2>
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
         <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
           <h3 class="text-sm font-bold text-gray-800"><i class="fas fa-map-marked-alt text-green-600 mr-2"></i>แผนที่ผลงานรายอำเภอ — จ.นครราชสีมา</h3>

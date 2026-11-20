@@ -1320,6 +1320,12 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - Frontend: options ของกราฟสร้างใน `chart/chart-builders.ts` (ฟังก์ชันล้วน มี unit test) + แสดงผ่าน `shared/apex-box.ts`
   (bind options object เดียว) — ชื่อยาวใช้ `wrapLabel()` ตัดหลายบรรทัด ไม่ตัดท้ายทิ้ง (ชื่อหมวดหมู่หลายตัวขึ้นต้นเหมือนกัน)
 - Test: `api/tests/chart-stats.test.js`, `frontend/src/app/chart/chart.spec.ts`
+- **แยกตามประเภทตัวชี้วัด (20 พ.ย. 2569 — ผู้ใช้สั่ง: R9 เขต 9 / MOPH กระทรวง / SSJ สสจ. / RMW ผู้ว่าฯ / อื่น ๆ ครบทุกประเภท):** ธง `kpi_indicators.r9/moph/ssj/rmw/other` (หลายประเภทได้, ไม่มีธง = `none`)
+  — `services/indicator-types.js` (`ITYPE_ALL`, `itypeCond()` ชื่อคอลัมน์จากรายการคงที่เท่านั้น, `addItypeFilter(clauses, col, value)` = subquery ไม่ขึ้นกับ alias, คีย์ไม่รู้จักทั้งหมด = `1 = 0`) = frontend `shared/indicator-types.ts` (`ITYPES` สีเดียวกับป้ายหน้าบันทึกผลงาน)
+  | พารามิเตอร์ `itype` ใน `/report/chart-stats`, by-indicator/hospital/district/year, recording-status*, by-dept-summary*, `/report/ai-summary` + `ai-tab-summary` (คำอธิบายตัวกรอง) — **endpoint รายงานใหม่ที่รับ zone/hostype ต้องรับ itype ด้วย**
+  | chart-stats คืน `by_itype` ครบ 5 ประเภทแม้ไม่มีข้อมูล (+ none เมื่อมี) ด้วย UNION ALL ต่อประเภท (ไม่ใช่ GROUP BY — ตัวชี้วัดนับได้หลายประเภท) + `months` รายเดือน, `by_indicator` มีธง, `options.itypes`
+  | หน้าจอ: ตัวกรอง `#chart-itype` / `#report-itype` / `#risk-itype`, ส่วนที่ 2 "แยกตามประเภทตัวชี้วัด" (`itypeRows` คำนวณตอนโหลด, `pickItype()`, `buildTypeMonthly()`), ป้ายประเภทในตารางรายตัวชี้วัด
+  | ตัวชี้วัดเสี่ยง: `services/forecast.js` แนบ `itypes` ต่อรายการ → `filterRiskItems` / `applyRiskFilters` (`itype`) — Test: `api/tests/indicator-types.test.js`, `shared/indicator-types.spec.ts`, `chart.spec.ts`
 - **แผนที่ผลงานรายอำเภอ (เพิ่ม 11 ต.ค. 2569):** `<app-district-map [data] [selected] (pick)>` (`shared/district-map.ts`) วาด SVG choropleth จาก
   `shared/korat-district-shapes.ts` (32 อำเภอ, `distid` ตรงกับ `co_district.distid`, พิกัดฉายลง viewBox แล้ว ~59 KB) — **ไม่ใช้ Leaflet/แผนที่ฐานภายนอก
   โดยเจตนา** (ใช้ได้ในเครือข่ายภายใน ไม่ต้องแก้ CSP ไม่มี dependency ใหม่) ระบายสีจาก `districtMapData` (= `by_district` ที่ `with_target > 0`)

@@ -70,6 +70,9 @@
         <select [(ngModel)]="filter.yut" name="fYut" class="px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white max-w-[220px]">
           <option value="">ทุกยุทธศาสตร์</option><option *ngFor="let o of options.yuts" [value]="o.id">{{ o.label }}</option>
         </select>
+        <select id="risk-itype" [(ngModel)]="filter.itype" name="fItype" class="px-2 py-1.5 border border-indigo-200 rounded-lg text-xs bg-white">
+          <option value="">ทุกประเภทตัวชี้วัด</option><option *ngFor="let t of itypes" [value]="t.key">{{ t.label }}</option>
+        </select>
         <select [(ngModel)]="filter.dept" name="fDept" class="px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white max-w-[200px]">
           <option value="">ทุกหน่วยงาน</option><option *ngFor="let o of options.depts" [value]="o.id">{{ o.label }}</option>
         </select>

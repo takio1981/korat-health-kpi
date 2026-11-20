@@ -32,6 +32,7 @@ function describeFilters(stats, q) {
     if (q.zone) f['โซน'] = q.zone;
     if (q.distid) f['อำเภอ'] = nameOf(o.districts, q.distid) || q.distid;
     if (q.hostype) f['ประเภทหน่วยบริการ'] = nameOf(o.hostypes, q.hostype) || q.hostype;
+    if (q.itype) f['ประเภทตัวชี้วัด'] = String(q.itype).split(',').map(k => nameOf(o.itypes, k.trim()) || k).join(', ');
     return f;
 }
 
@@ -56,6 +57,8 @@ function buildSummaryInput(stats, q = {}) {
         departments: rank(stats.by_dept),
         districts: rank(stats.by_district),
         hospital_types: rank(stats.by_hostype),
+        // ประเภทตัวชี้วัด R9/MOPH/SSJ/RMW/อื่น ๆ (20 พ.ย. 2569) — ตัวชี้วัดหนึ่งตัวอยู่ได้หลายประเภท
+        indicator_types: (stats.by_itype || []).filter(r => r.with_target > 0).map(pick),
         indicators: rank(stats.by_indicator, MIN_TARGET_PAIRS),
         distribution: (stats.distribution || []).map(d => ({ range: d.label, indicators: d.count })),
     };

@@ -12,6 +12,7 @@ import Swal from 'sweetalert2';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { ZoneBadgeComponent } from '../shared/zone-badge';
 import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
+import { ITYPES } from '../shared/indicator-types';
 import { AiSummaryPanelComponent } from '../shared/ai-summary-panel';
 
 /** ชื่อแถบรายงานสรุปผลสำหรับหัวข้อแผง AI */
@@ -52,6 +53,9 @@ export class ReportComponent implements OnInit {
     this.onFilterChange();
   }
   selectedHosType: string = '';
+  /** ประเภทตัวชี้วัด r9/moph/ssj/rmw/other/none (20 พ.ย. 2569) */
+  selectedItype: string = '';
+  readonly itypes = ITYPES;
   filterYears: string[] = [];
   departments: any[] = [];
   districts: any[] = [];
@@ -211,6 +215,7 @@ export class ReportComponent implements OnInit {
     this.hospDrilldownLoading = true;
     const params: any = { year_bh: this.selectedYear, indicator_id: ind.indicator_id, filter };
     if (this.selectedHosType) params.hostype = this.selectedHosType;
+    if (this.selectedItype) params.itype = this.selectedItype;
     if (this.selectedZone) params.zone = this.selectedZone;
     this.authService.getReportByDeptSummaryHospitals(params).subscribe({
       next: (res: any) => {
@@ -236,6 +241,7 @@ export class ReportComponent implements OnInit {
     this.deptDrilldownLoading = true;
     const params: any = { year_bh: this.selectedYear, dept_id: dept.dept_id };
     if (this.selectedHosType) params.hostype = this.selectedHosType;
+    if (this.selectedItype) params.itype = this.selectedItype;
     if (this.selectedZone) params.zone = this.selectedZone;
     this.authService.getReportByDeptSummaryIndicators(params).subscribe({
       next: (res: any) => {
@@ -297,6 +303,7 @@ export class ReportComponent implements OnInit {
     this.selectedYear = this.filterYears.length > 0 ? this.filterYears[0] : '';
     this.selectedDeptId = '';
     this.selectedHosType = '';
+    this.selectedItype = '';
     this.selectedZone = '';
     this.selectedDistId = '';
     this.loadReport();
@@ -309,6 +316,7 @@ export class ReportComponent implements OnInit {
     if (this.selectedDeptId) params.dept_id = this.selectedDeptId;
     if (this.selectedDistId) params.distid = this.selectedDistId;
     if (this.selectedHosType) params.hostype = this.selectedHosType;
+    if (this.selectedItype) params.itype = this.selectedItype;
     if (this.selectedZone) params.zone = this.selectedZone;
     this.aiTabParams = { ...params, tab: this.activeTab, ...(this.activeTab === 'recording-status' ? { view: this.monitorView } : {}) };
     const label = REPORT_TAB_LABELS[this.activeTab] || '';

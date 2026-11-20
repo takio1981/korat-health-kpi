@@ -13,10 +13,11 @@ import { AiSummaryPanelComponent } from '../shared/ai-summary-panel';
 import { zoneLabel, inZone } from '../shared/zone';
 import {
   ChartGroupRow, ChartMonthRow, buildPctBar, buildStatusStack, buildOverallDonut, buildOverallRadial,
-  buildMonthlyCombo, buildHeatmap, buildDistribution, pctColor
+  buildMonthlyCombo, buildHeatmap, buildDistribution, pctColor, buildTypeMonthly
 } from './chart-builders';
+import { ITYPES, itypeInfo, itypesOfRow } from '../shared/indicator-types';
 
-type FilterKey = 'selectedYut' | 'selectedMain' | 'selectedDept' | 'selectedIndicator' | 'selectedZone' | 'selectedDistrict' | 'selectedHostype';
+type FilterKey = 'selectedYut' | 'selectedMain' | 'selectedDept' | 'selectedIndicator' | 'selectedZone' | 'selectedDistrict' | 'selectedHostype' | 'selectedItype';
 
 @Component({
   selector: 'app-chart',
@@ -42,7 +43,12 @@ export class ChartComponent implements OnInit, OnDestroy {
   selectedZone = '';
   selectedDistrict = '';
   selectedHostype = '';
+  /** ประเภทตัวชี้วัด r9/moph/ssj/rmw/other/none (20 พ.ย. 2569) */
+  selectedItype = '';
   zoneLabel = zoneLabel;
+  readonly itypes = ITYPES;
+  itypeInfo = itypeInfo;
+  itypesOfRow = itypesOfRow;
 
   options: any = { years: [], yuts: [], mains: [], depts: [], indicators: [], districts: [], zones: [], hostypes: [] };
   data: any = null; // ผลดิบจาก API
@@ -59,6 +65,9 @@ export class ChartComponent implements OnInit, OnDestroy {
   monthlyChart: any = {};
   heatMainChart: any = {}; heatDeptChart: any = {};
   districtChart: any = {}; hostypeChart: any = {};
+  itypePctChart: any = {}; itypeStackChart: any = {}; itypeMonthlyChart: any = {};
+  /** แถวสรุปรายประเภทตัวชี้วัด (by_itype + สี/ชื่อย่อ) — คำนวณตอนโหลด ไม่ใช่ getter (กัน NG0103) */
+  itypeRows: any[] = [];
 
   heatMetric: 'pass' | 'record' = 'pass';
   indicatorView: 'all' | 'top' | 'bottom' = 'all';
@@ -94,6 +103,7 @@ export class ChartComponent implements OnInit, OnDestroy {
     if (this.selectedZone) p.zone = this.selectedZone;
     if (this.selectedDistrict) p.distid = this.selectedDistrict;
     if (this.selectedHostype) p.hostype = this.selectedHostype;
+    if (this.selectedItype) p.itype = this.selectedItype;
     return p;
   }
 
@@ -148,6 +158,12 @@ export class ChartComponent implements OnInit, OnDestroy {
     this.monthlyChart = buildMonthlyCombo(d.monthly);
     this.districtChart = buildPctBar(d.by_district, 'ร้อยละผ่านเกณฑ์ แยกตามอำเภอ', pick('selectedDistrict', 'gkey'));
     this.hostypeChart = buildPctBar(d.by_hostype, 'ร้อยละผ่านเกณฑ์ แยกตามประเภทหน่วยบริการ', pick('selectedHostype', 'gkey'));
+    // ประเภทตัวชี้วัด (20 พ.ย. 2569) — ครบทุกประเภท แม้ไม่มีข้อมูล
+    this.itypeRows = ((d.by_itype || []) as ChartGroupRow[]).map(r => ({ ...r, color: itypeInfo(String(r.gkey))?.color, short: itypeInfo(String(r.gkey))?.short || r.gname }));
+    const withData = this.itypeRows.filter(r => r.pairs > 0);
+    this.itypePctChart = buildPctBar(withData.filter(r => r.with_target > 0), 'ร้อยละผ่านเกณฑ์ แยกตามประเภทตัวชี้วัด', pick('selectedItype', 'gkey'));
+    this.itypeStackChart = buildStatusStack(withData, 'จำนวนคู่ผ่าน/ไม่ผ่านเกณฑ์ แยกตามประเภทตัวชี้วัด', true, pick('selectedItype', 'gkey'));
+    this.itypeMonthlyChart = buildTypeMonthly(withData);
     this.districtMapData = (d.by_district as ChartGroupRow[])
       .filter(r => r.gkey && r.with_target > 0)
       .map(r => ({ id: r.gkey, name: r.gname, pct: r.achievement_pct, passed: r.passed, total: r.with_target }));
@@ -211,6 +227,11 @@ export class ChartComponent implements OnInit, OnDestroy {
     this.tableSort = this.tableSort.key === key ? { key, dir: (this.tableSort.dir * -1) as 1 | -1 } : { key, dir: key === 'gname' ? 1 : -1 };
   }
 
+  /** คลิกการ์ดประเภทตัวชี้วัด: กรองประเภทนั้น — คลิกซ้ำ = ยกเลิก */
+  pickItype(key: string) {
+    this.drillDown('selectedItype', this.selectedItype === key ? '' : key);
+  }
+
   // คลิกแท่งกราฟ → กรองเจาะลึก
   /** คลิกอำเภอบนแผนที่: กรองอำเภอนั้น — คลิกอำเภอที่กรองอยู่อีกครั้ง = ยกเลิกการกรอง */
   onMapPick(distid: string) {
@@ -246,7 +267,7 @@ export class ChartComponent implements OnInit, OnDestroy {
   }
 
   clearFilters() {
-    this.selectedYut = this.selectedMain = this.selectedDept = this.selectedIndicator = this.selectedZone = this.selectedDistrict = this.selectedHostype = '';
+    this.selectedYut = this.selectedMain = this.selectedDept = this.selectedIndicator = this.selectedZone = this.selectedDistrict = this.selectedHostype = this.selectedItype = '';
     this.indicatorSearch = '';
     this.loadChartStats();
   }
@@ -261,6 +282,7 @@ export class ChartComponent implements OnInit, OnDestroy {
     if (this.selectedZone) chips.push({ key: 'selectedZone', label: 'โซน', value: zoneLabel(this.selectedZone) });
     if (this.selectedDistrict) chips.push({ key: 'selectedDistrict', label: 'อำเภอ', value: name(this.options.districts, this.selectedDistrict) });
     if (this.selectedHostype) chips.push({ key: 'selectedHostype', label: 'ประเภท', value: name(this.options.hostypes, this.selectedHostype) });
+    if (this.selectedItype) chips.push({ key: 'selectedItype', label: 'ประเภทตัวชี้วัด', value: itypeInfo(this.selectedItype)?.label || this.selectedItype });
     return chips;
   }
 

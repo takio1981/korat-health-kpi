@@ -222,3 +222,23 @@ export function buildDistribution(buckets: { key: string; label: string; count: 
     tooltip: { y: { formatter: (v: number) => `${v} ตัวชี้วัด` } },
   };
 }
+
+/** แนวโน้มร้อยละผ่านเกณฑ์รายเดือน แยกตามประเภทตัวชี้วัด (20 พ.ย. 2569) — 1 เส้นต่อประเภท สีตามป้ายประเภท */
+export function buildTypeMonthly(rows: { gname: string; color?: string; months: ChartMonthRow[] }[]): any {
+  const series = (rows || []).filter(r => r.months?.some(m => m.eligible > 0))
+    .map(r => ({ name: r.gname, data: r.months.map(m => (m.eligible > 0 ? m.pass_pct : null)) }));
+  if (!series.length) return { series: [] };
+  const colors = (rows || []).filter(r => r.months?.some(m => m.eligible > 0)).map(r => r.color || '#64748b');
+  return {
+    series,
+    chart: { type: 'line', height: 360, fontFamily: FONT, toolbar: { show: true } },
+    stroke: { width: 3, curve: 'smooth' },
+    markers: { size: 4 },
+    colors,
+    labels: (rows[0]?.months || []).map(m => m.label),
+    yaxis: { min: 0, max: 100, title: { text: 'ร้อยละผ่านเกณฑ์' }, labels: { formatter: (v: number) => `${Math.round(v)}%` } },
+    legend: { position: 'top', horizontalAlign: 'left' },
+    title: { text: 'แนวโน้มร้อยละผ่านเกณฑ์รายเดือน แยกตามประเภทตัวชี้วัด', align: 'left', style: { fontSize: '15px' } },
+    tooltip: { shared: true, intersect: false, y: { formatter: (v: number) => (v == null ? '-' : `${v}%`) } },
+  };
+}

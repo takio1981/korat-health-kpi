@@ -11,6 +11,7 @@ import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { ZoneBadgeComponent } from '../shared/zone-badge';
 import { zoneLabel } from '../shared/zone';
 import { AiForecastPanelComponent } from '../shared/ai-forecast-panel';
+import { ITYPES } from '../shared/indicator-types';
 
 export const RISK_MONTHS = ['ต.ค.', 'พ.ย.', 'ธ.ค.', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.'];
 export const RISK_STATUS: Record<string, { label: string; cls: string; icon: string }> = {
@@ -22,7 +23,7 @@ export const RISK_STATUS: Record<string, { label: string; cls: string; icon: str
 };
 export const CONFIDENCE_LABEL: Record<string, string> = { high: 'สูง', medium: 'ปานกลาง', low: 'ต่ำ', actual: 'ผลจริง' };
 
-export interface RiskFilter { status: string; yut: string; dept: string; zone: string; district: string; search: string }
+export interface RiskFilter { status: string; yut: string; dept: string; zone: string; district: string; search: string; itype?: string }
 
 /** กรองรายการตามตัวกรองบนหน้าจอ (ฟังก์ชันล้วน — ทดสอบได้) */
 export function filterRiskItems(items: any[], f: RiskFilter): any[] {
@@ -30,6 +31,7 @@ export function filterRiskItems(items: any[], f: RiskFilter): any[] {
   return (items || []).filter(it =>
     (!f.status || it.status === f.status)
     && (!f.yut || String(it.yut_id ?? '0') === f.yut)
+    && (!f.itype || (it.itypes || []).includes(f.itype))
     && (!f.dept || String(it.dept_id ?? '') === f.dept)
     && (!f.zone || String(it.zone ?? '') === f.zone)
     && (!f.district || String(it.distid ?? '') === f.district)
@@ -67,7 +69,8 @@ export class RiskViewComponent implements OnInit {
   readonly yearOptions = (() => { const fy = getCurrentFiscalYear(); return [String(fy), String(fy - 1), String(fy - 2)]; })();
   yearBh = String(getCurrentFiscalYear());
   through: string = '';          // '' = เดือนล่าสุดที่ควรรายงานแล้ว
-  filter: RiskFilter = { status: '', yut: '', dept: '', zone: '', district: '', search: '' };
+  filter: RiskFilter = { status: '', yut: '', dept: '', zone: '', district: '', search: '', itype: '' };
+  readonly itypes = ITYPES;
 
   loading = false;
   error = '';
@@ -85,7 +88,7 @@ export class RiskViewComponent implements OnInit {
   get aiParams(): any {
     const p: any = { year_bh: this.data?.year_bh || this.yearBh };
     if (this.through !== '') p.through = this.through;
-    for (const k of ['status', 'yut', 'dept', 'zone', 'district'] as const) if (this.filter[k]) p[k] = this.filter[k];
+    for (const k of ['status', 'yut', 'dept', 'zone', 'district', 'itype'] as const) if (this.filter[k]) p[k] = this.filter[k];
     const key = JSON.stringify(p);
     if (key !== this._aiKey) { this._aiKey = key; this._aiParams = p; }
     return this._aiParams;
@@ -117,7 +120,7 @@ export class RiskViewComponent implements OnInit {
   }
 
   onYearChange() { this.through = ''; this.load(); }
-  clearFilters() { this.filter = { status: '', yut: '', dept: '', zone: '', district: '', search: '' }; this.shownCount = 100; }
+  clearFilters() { this.filter = { status: '', yut: '', dept: '', zone: '', district: '', search: '', itype: '' }; this.shownCount = 100; }
   setStatus(s: string) { this.filter = { ...this.filter, status: this.filter.status === s ? '' : s }; this.shownCount = 100; }
   symbol(cond: string): string { return CONDITION_SYMBOL[normalizeCondition(cond)] || '≥'; }
 }

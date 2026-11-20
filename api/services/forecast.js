@@ -2,6 +2,7 @@
 // แหล่งข้อมูล = kpi_summary (ตารางเดียวกับรายงาน — รวมผลงานข้อย่อย/กิจกรรมแล้ว) + คุณสมบัติตัวชี้วัด — การคาดการณ์อยู่ใน kpi-forecast.js (ไม่ใช้ AI)
 // ผู้เรียกส่ง scope = { c: [...เงื่อนไข SQL], p: [...ค่า] } ที่อ้าง s.* / i.* (route: chartScopeClauses ของรายงาน, งานส่งสรุป: ตามหน่วยงานผู้รับ)
 const db = require('../db');
+const { itypesOf } = require('./indicator-types');
 const kpiFormula = require('../kpi-formula');
 const { forecastPair, throughIndex, MONTH_KEYS, DEFAULTS } = require('../kpi-forecast');
 const { districtZoneMap } = require('./zones');
@@ -82,6 +83,7 @@ async function computeForecasts(scope, opts = {}) {
         SELECT s.indicator_id, s.hospcode, s.hosname, s.distid, s.distname, s.hostype, s.dept_id, s.dept_name, s.target_value,
                ${MONTH_KEYS.map(k => 's.' + k).join(', ')},
                i.kpi_indicators_name, i.target_condition, i.is_cumulative, i.result_formula, i.result_manual, i.target_monthly, i.quarter_mode,
+               i.r9, i.moph, i.ssj, i.rmw, i.other,
                mi.id AS main_id, mi.main_indicator_name, y.id AS yut_id, y.yut_name
         ${FROM_SQL} WHERE ${c.join(' AND ')}`, p);
 
@@ -139,6 +141,7 @@ async function computeForecasts(scope, opts = {}) {
             indicator_id: Number(r.indicator_id), indicator_name: r.kpi_indicators_name, result_formula: r.result_formula || null,
             hospcode: hc, hosname: r.hosname, distid: r.distid, distname: r.distname, zone: distZone.get(String(r.distid)) || null, hostype: r.hostype,
             dept_id: r.dept_id, dept_name: r.dept_name, main_id: r.main_id, main_name: r.main_indicator_name, yut_id: r.yut_id, yut_name: r.yut_name,
+            itypes: itypesOf(r), // ประเภทตัวชี้วัด (20 พ.ย. 2569) — กรองแถบตัวชี้วัดเสี่ยง
             last_actual: f.last_idx !== null ? String(r[MONTH_KEYS[f.last_idx]]) : null, last_month: f.last_idx !== null ? MONTH_LABELS[f.last_idx] : null,
             ...f, periodic: periodic.has(Number(r.indicator_id)),
         });
