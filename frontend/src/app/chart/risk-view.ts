@@ -12,6 +12,7 @@ import { ZoneBadgeComponent } from '../shared/zone-badge';
 import { zoneLabel } from '../shared/zone';
 import { AiForecastPanelComponent } from '../shared/ai-forecast-panel';
 import { ITYPES } from '../shared/indicator-types';
+import { IndicatorBadgesComponent } from '../shared/indicator-badges';
 
 export const RISK_MONTHS = ['ต.ค.', 'พ.ย.', 'ธ.ค.', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.'];
 export const RISK_STATUS: Record<string, { label: string; cls: string; icon: string }> = {
@@ -56,7 +57,7 @@ export function riskOptions(items: any[]) {
 @Component({
   selector: 'app-risk-view',
   standalone: true,
-  imports: [CommonModule, FormsModule, FormulaBadgeComponent, ZoneBadgeComponent, AiForecastPanelComponent],
+  imports: [IndicatorBadgesComponent, CommonModule, FormsModule, FormulaBadgeComponent, ZoneBadgeComponent, AiForecastPanelComponent],
   templateUrl: './risk-view.html',
 })
 export class RiskViewComponent implements OnInit {

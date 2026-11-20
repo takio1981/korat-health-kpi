@@ -16,13 +16,14 @@ import {
   buildMonthlyCombo, buildHeatmap, buildDistribution, pctColor, buildTypeMonthly
 } from './chart-builders';
 import { ITYPES, itypeInfo, itypesOfRow } from '../shared/indicator-types';
+import { IndicatorBadgesComponent } from '../shared/indicator-badges';
 
 type FilterKey = 'selectedYut' | 'selectedMain' | 'selectedDept' | 'selectedIndicator' | 'selectedZone' | 'selectedDistrict' | 'selectedHostype' | 'selectedItype';
 
 @Component({
   selector: 'app-chart',
   standalone: true,
-  imports: [CommonModule, RouterModule, FormsModule, ReportComponent, ApexBoxComponent, FormulaBadgeComponent, DistrictMapComponent, AiSummaryPanelComponent, RiskViewComponent],
+  imports: [CommonModule, RouterModule, FormsModule, ReportComponent, IndicatorBadgesComponent, ApexBoxComponent, FormulaBadgeComponent, DistrictMapComponent, AiSummaryPanelComponent, RiskViewComponent],
   templateUrl: './chart.html'
 })
 export class ChartComponent implements OnInit, OnDestroy {

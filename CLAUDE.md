@@ -1325,6 +1325,10 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   | พารามิเตอร์ `itype` ใน `/report/chart-stats`, by-indicator/hospital/district/year, recording-status*, by-dept-summary*, `/report/ai-summary` + `ai-tab-summary` (คำอธิบายตัวกรอง) — **endpoint รายงานใหม่ที่รับ zone/hostype ต้องรับ itype ด้วย**
   | chart-stats คืน `by_itype` ครบ 5 ประเภทแม้ไม่มีข้อมูล (+ none เมื่อมี) ด้วย UNION ALL ต่อประเภท (ไม่ใช่ GROUP BY — ตัวชี้วัดนับได้หลายประเภท) + `months` รายเดือน, `by_indicator` มีธง, `options.itypes`
   | หน้าจอ: ตัวกรอง `#chart-itype` / `#report-itype` / `#risk-itype`, ส่วนที่ 2 "แยกตามประเภทตัวชี้วัด" (`itypeRows` คำนวณตอนโหลด, `pickItype()`, `buildTypeMonthly()`), ป้ายประเภทในตารางรายตัวชี้วัด
+  | **แถบสีคุณสมบัติตัวชี้วัด (20 พ.ย. 2569 — ผู้ใช้สั่ง: เหมือนหน้าบันทึกผลงาน/จัดการตัวชี้วัด ครบทุกตัวชี้วัด):** `shared/indicator-badges.ts` `<app-indicator-badges [id]="row.indicator_id">`
+    (`indicatorBadges()` ฟังก์ชันล้วน สี/ข้อความเดียวกับ dashboard getIndicatorTypes/getIndicatorOffTypeBadge/getCumulativeBadge/quarterBadgeText/getSourceBadge + ปีงบแบบ kpi-manage, แถบแหล่งที่มามีทุกตัว)
+    อ่านคุณสมบัติจาก `GET /indicators` + `/hostype` ครั้งเดียวผ่าน `IndicatorMetaService` (แชร์ทุกแถว — ไม่ต้องแก้ SQL รายงาน) ไม่แสดง "สูตร" ซ้ำกับ app-formula-badge (ส่ง `[formula]="true"` ถ้าต้องการ)
+    — ใช้ในตารางรายตัวชี้วัดของแถบกราฟ, report.html ทุกจุดที่มีชื่อตัวชี้วัด (ช่องชื่อห่อ `div.min-w-[240px]` — min-width บน td ไม่มีผลในตารางนี้), risk-view | **หน้าใหม่ที่แสดงชื่อตัวชี้วัดในรายงานควรใส่คอมโพเนนต์นี้** — Test: `shared/indicator-badges.spec.ts`
   | ตัวชี้วัดเสี่ยง: `services/forecast.js` แนบ `itypes` ต่อรายการ → `filterRiskItems` / `applyRiskFilters` (`itype`) — Test: `api/tests/indicator-types.test.js`, `shared/indicator-types.spec.ts`, `chart.spec.ts`
 - **แผนที่ผลงานรายอำเภอ (เพิ่ม 11 ต.ค. 2569):** `<app-district-map [data] [selected] (pick)>` (`shared/district-map.ts`) วาด SVG choropleth จาก
   `shared/korat-district-shapes.ts` (32 อำเภอ, `distid` ตรงกับ `co_district.distid`, พิกัดฉายลง viewBox แล้ว ~59 KB) — **ไม่ใช้ Leaflet/แผนที่ฐานภายนอก

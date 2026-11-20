@@ -13,6 +13,7 @@ import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { ZoneBadgeComponent } from '../shared/zone-badge';
 import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
 import { ITYPES } from '../shared/indicator-types';
+import { IndicatorBadgesComponent } from '../shared/indicator-badges';
 import { AiSummaryPanelComponent } from '../shared/ai-summary-panel';
 
 /** ชื่อแถบรายงานสรุปผลสำหรับหัวข้อแผง AI */
@@ -24,7 +25,7 @@ export const REPORT_TAB_LABELS: Record<string, string> = {
 @Component({
   selector: 'app-report',
   standalone: true,
-  imports: [CommonModule, RouterModule, NgApexchartsModule, FormsModule, SkeletonTableComponent, CriteriaTextPipe, FormulaBadgeComponent, ZoneBadgeComponent, AiSummaryPanelComponent],
+  imports: [IndicatorBadgesComponent, CommonModule, RouterModule, NgApexchartsModule, FormsModule, SkeletonTableComponent, CriteriaTextPipe, FormulaBadgeComponent, ZoneBadgeComponent, AiSummaryPanelComponent],
   templateUrl: './report.html',
   styleUrl: './report.css'
 })
