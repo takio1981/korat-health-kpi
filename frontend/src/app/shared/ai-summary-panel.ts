@@ -4,6 +4,7 @@ import { Component, Input, OnChanges, OnInit, SimpleChanges, inject, ChangeDetec
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../services/auth';
 import { MascotService } from './mascot/mascot.service';
+import { AI_SAY } from './mascot/mascot-phrases';
 import { MascotAvatarComponent } from './mascot/mascot-avatar';
 import { aiFeatureOn, aiErrorText } from './ai-feature';
 
@@ -114,7 +115,7 @@ export class AiSummaryPanelComponent implements OnInit, OnChanges {
         this.cached = !!res?.cached;
         this.copied = false;
         this.cdr.detectChanges();
-        this.mascot.aiDone('สรุปเสร็จแล้วครับ อ่านในกล่องนี้ได้เลย โปรดตรวจกับตัวเลขในหน้านี้ก่อนนำไปใช้นะครับ', this.hostEl.nativeElement);
+        this.mascot.aiDone(AI_SAY.summary, this.hostEl.nativeElement);
       },
       error: (err) => {
         if (my !== this.seq) return;

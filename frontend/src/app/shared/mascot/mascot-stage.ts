@@ -9,6 +9,7 @@ import { FACE_H, FACE_W, FaceState, Mood, blinkAt, drawFace, faceChanged, talkMo
 import { DialogChoice, DialogCtx, DialogScript, ResolvedNode, bubblePath, graphemes, resolveNode, thinkDots } from './mascot-dialog';
 import { MascotRig, ThreeLib, applyJoints, buildMascot, loadThree, updateCape } from './mascot-model';
 import { MascotService, MascotCue } from './mascot.service';
+import { VoicePlayer } from './mascot-voice';
 
 /** WebGL ใช้ได้หรือไม่ (jsdom/เบราว์เซอร์เก่า/ปิดการเร่งกราฟิก = ใช้ภาพนิ่งแทน) */
 export function webglAvailable(): boolean {
@@ -53,6 +54,10 @@ type Mode = 'roam' | 'goto' | 'talk' | 'home';
           <button type="button" *ngFor="let c of node.choices; let i = index" class="ms-choice" [attr.data-idx]="i" (click)="choose(c, $event)">{{ c.label }}</button>
         </div>
         <button type="button" class="ms-close" aria-label="ปิดกล่องคำพูด" title="ปิด" (click)="close(); $event.stopPropagation()">×</button>
+        <button *ngIf="voice" type="button" class="ms-mute" [attr.aria-pressed]="muted" [attr.aria-label]="muted ? 'เปิดเสียงน้องโคราชดี' : 'ปิดเสียงน้องโคราชดี'"
+                [title]="muted ? 'เปิดเสียงพูด' : 'ปิดเสียงพูด'" (click)="toggleMute(); $event.stopPropagation()">
+          <i class="fas" [ngClass]="muted ? 'fa-volume-xmark' : 'fa-volume-high'"></i>
+        </button>
       </div>
     </div>
   `,
@@ -92,6 +97,10 @@ type Mode = 'roam' | 'goto' | 'talk' | 'home';
     .ms-close { position: absolute; top: -10px; right: -10px; width: 24px; height: 24px; border-radius: 50%; border: 2px solid #161616; background: #fff;
       font-size: 15px; line-height: 18px; font-weight: 800; color: #161616; cursor: pointer; box-shadow: 2px 2px 0 #161616; padding: 0; }
     .ms-close:hover { background: #ffe1e1; }
+    .ms-mute { position: absolute; top: -10px; right: 20px; width: 24px; height: 24px; border-radius: 50%; border: 2px solid #161616; background: #fff;
+      font-size: 10px; line-height: 18px; color: #0f766e; cursor: pointer; box-shadow: 2px 2px 0 #161616; padding: 0; }
+    .ms-mute[aria-pressed="true"] { color: #9ca3af; }
+    .ms-mute:hover { background: #e9fbf7; }
     @keyframes ms-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
     :host-context(.dark) .ms-ground { background: radial-gradient(ellipse, rgba(0, 0, 0, .45), transparent 70%); }
     @media (prefers-reduced-motion: reduce) { .ms-bubble { transition: none; } }
@@ -111,6 +120,12 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
   @Input() dock = false;
   /** ตัวเลือกที่เป็นคำสั่งอื่นนอกจาก nav: (เช่น tour:next, hide) ส่งออกให้ผู้ใช้คอมโพเนนต์จัดการ */
   @Output() action = new EventEmitter<string>();
+  /** เปิดเสียงพูด (ค่าระบบ mascot_voice_enabled) — ผู้ใช้ปิดเองได้ที่ปุ่มลำโพงในกล่องคำพูด */
+  @Input() voice = true;
+  muted = false;
+  private player: VoicePlayer | null = null;
+  private charDelay = 0.034;
+  private voiced = false;
 
   node: ResolvedNode | null = null;
   showChoices = false;
@@ -170,6 +185,8 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
     this.reduced = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.nextTipAt = 40 + Math.random() * 25;
     this.sub = this.mascot.cues.subscribe(c => this.zone.runOutsideAngular(() => this.cue(c)));
+    this.sub.add(this.mascot.voiceMuted$.subscribe(m => { this.muted = m; if (m) this.player?.stop(); }));
+    if (this.voice && typeof Audio !== 'undefined') { this.player = new VoicePlayer(); this.player.load(); }
 
     this.zone.runOutsideAngular(() => {
       this.listen(window, 'pointermove', (e: Event) => { const p = e as PointerEvent; this.pointer = { x: p.clientX, y: p.clientY }; });
@@ -189,6 +206,7 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy() {
     this.destroyed = true;
+    this.player?.dispose();
     cancelAnimationFrame(this.raf);
     clearTimeout(this.greetTimer);
     this.sub?.unsubscribe();
@@ -280,8 +298,10 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
     // ---- ใบหน้า
     const mood: Mood = this.shyActive() ? 'shy' : (this.node ? this.node.mood : 'normal');
     const typing = !!this.node && this.typed < this.chars.length && this.mode === 'talk';
+    const lv = this.player?.playing ? this.player.level() : 0;
+    const mouth = lv > 0 ? Math.min(1, lv * 1.25) : lv < 0 || (typing && !this.player?.playing) ? talkMouth(t) : (this.node && mood === 'happy' ? 0.35 : 0);
     const face: FaceState = {
-      blink: mood === 'shy' ? 0 : blinkAt(t), mouth: typing ? talkMouth(t) : (this.node && mood === 'happy' ? 0.35 : 0),
+      blink: mood === 'shy' ? 0 : blinkAt(t), mouth,
       lookX, lookY, mood,
     };
 
@@ -419,6 +439,9 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
   }
 
   openResolved(n: ResolvedNode) {
+    this.player?.stop();
+    this.voiced = false;
+    this.charDelay = 0.034;
     this.node = n;
     this.showChoices = false;
     this.chars = graphemes(n.text);
@@ -439,6 +462,24 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
     this.mode = 'talk';
     this.nodeStart = this.clock;
     this.nextCharAt = this.clock + 0.15;
+    this.startVoice();
+  }
+
+  /** พูดบทปัจจุบัน (ไฟล์เสียงที่สร้างไว้ หรือเสียงเบราว์เซอร์) และปรับความเร็วพิมพ์ให้จบพร้อมเสียง */
+  private startVoice() {
+    const n = this.node;
+    if (!n || this.voiced || !this.player || !this.voice || this.muted) return;
+    this.voiced = true;
+    const segs = n.voice?.length ? n.voice : [n.text];
+    const est = this.player.estimate(segs);
+    if (est && this.chars.length) this.charDelay = Math.max(0.025, Math.min(0.12, (est / 1000) / this.chars.length));
+    this.player.speak(segs);
+  }
+
+  toggleMute() {
+    const m = !this.muted;
+    this.mascot.setVoiceMuted(m);
+    if (!m && this.node && this.mode === 'talk') { this.voiced = false; this.startVoice(); }
   }
 
   /** ตำแหน่งยืนพูด: ข้างเป้าหมายที่ชี้ (นอกกล่องที่ห้ามบัง) หรือที่เดิม (ถ้าทับกล่อง = ย้ายออกไปข้างกล่อง) */
@@ -464,6 +505,7 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
   }
 
   close() {
+    this.player?.stop();
     if (!this.node) return;
     this.node = null;
     this.showChoices = false;
@@ -541,7 +583,7 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
       // พิมพ์ทีละตัว (ช้าลงที่เครื่องหมายวรรคตอน)
       while (this.typed < this.chars.length && t >= this.nextCharAt) {
         const ch = this.chars[this.typed++];
-        this.nextCharAt += /[.!?…]/.test(ch) ? 0.22 : ch === ' ' ? 0.06 : 0.034;
+        this.nextCharAt += this.voiced ? this.charDelay : /[.!?…]/.test(ch) ? 0.22 : ch === ' ' ? 0.06 : 0.034;
         this.setText(this.chars.slice(0, this.typed).join(''));
       }
       if (this.typed >= this.chars.length) {
@@ -550,6 +592,7 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
           if (this.node.input) (host.querySelector('.ms-input') as HTMLInputElement | null)?.focus();
         }
         if (this.node.auto && !this.closeAt) this.closeAt = t + this.node.auto / 1000;
+        if (this.closeAt && this.player?.playing) this.closeAt = Math.max(this.closeAt, t + 0.8); // รอพูดจบ
         if (this.closeAt && t >= this.closeAt) { this.close(); return; }
       }
     }

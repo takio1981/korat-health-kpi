@@ -79,6 +79,7 @@ export class SettingsComponent implements OnInit {
   thaidEnabled: boolean = false;
   loginMascotEnabled: boolean = true; // น้องโคราชดีบินในหน้าเข้าสู่ระบบ (ไม่มีค่า = เปิด)
   mascotAssistantEnabled: boolean = true; // ผู้ช่วยน้องโคราชดีทุกหน้าหลังเข้าสู่ระบบ (ไม่มีค่า = เปิด)
+  mascotVoiceEnabled: boolean = true; // เสียงพูดของน้องโคราชดี (ไม่มีค่า = เปิด)
   providerIdEnabled: boolean = false;
   thaidClientSecret: string = '';
   thaidLoginUrl: string = '';
@@ -230,6 +231,7 @@ export class SettingsComponent implements OnInit {
           if (thaidSetting) this.thaidEnabled = thaidSetting.setting_value === 'true';
           this.loginMascotEnabled = this.settings.find(s => s.setting_key === 'login_mascot_enabled')?.setting_value !== 'false';
           this.mascotAssistantEnabled = this.settings.find(s => s.setting_key === 'mascot_assistant_enabled')?.setting_value !== 'false';
+          this.mascotVoiceEnabled = this.settings.find(s => s.setting_key === 'mascot_voice_enabled')?.setting_value !== 'false';
           if (providerSetting) this.providerIdEnabled = providerSetting.setting_value === 'true';
           if (thaidRegEnSetting) this.thaidRegisterEnabled = thaidRegEnSetting.setting_value === 'true';
           if (providerRegEnSetting) this.providerIdRegisterEnabled = providerRegEnSetting.setting_value === 'true';
@@ -297,6 +299,7 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'thaid_enabled', setting_value: this.thaidEnabled.toString() },
       { setting_key: 'login_mascot_enabled', setting_value: this.loginMascotEnabled.toString() },
       { setting_key: 'mascot_assistant_enabled', setting_value: this.mascotAssistantEnabled.toString() },
+      { setting_key: 'mascot_voice_enabled', setting_value: this.mascotVoiceEnabled.toString() },
       { setting_key: 'thaid_client_secret', setting_value: this.thaidClientSecret },
       { setting_key: 'thaid_login_url', setting_value: this.thaidLoginUrl },
       { setting_key: 'thaid_client_id', setting_value: this.thaidClientId },

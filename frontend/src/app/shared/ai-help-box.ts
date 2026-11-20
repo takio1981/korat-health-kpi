@@ -6,6 +6,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth';
 import { MascotService } from './mascot/mascot.service';
+import { AI_SAY } from './mascot/mascot-phrases';
 import { MascotAvatarComponent } from './mascot/mascot-avatar';
 import { aiFeatureOn, aiErrorText } from './ai-feature';
 
@@ -109,7 +110,7 @@ export class AiHelpBoxComponent implements OnInit {
     if (q.length < 3 || this.loading) return;
     this.loading = true;
     this.error = '';
-    this.mascot.aiThinking('ขอค้นคู่มือแป๊บนะครับ');
+    this.mascot.aiThinking(AI_SAY.helpThinking);
     this.authService.askAiHelp(q).subscribe({
       next: (res) => {
         this.loading = false;
@@ -119,7 +120,7 @@ export class AiHelpBoxComponent implements OnInit {
         }, ...this.history].slice(0, HISTORY_MAX);
         this.question = '';
         this.cdr.detectChanges();
-        this.mascot.aiDone(this.history[0]?.found ? 'ได้คำตอบแล้วครับ ดูหัวข้อคู่มือที่อ้างอิงประกอบด้วยนะครับ' : 'ผมยังไม่พบคำตอบในคู่มือครับ ลองถามด้วยคำอื่นดูนะครับ', this.hostEl.nativeElement);
+        this.mascot.aiDone(this.history[0]?.found ? AI_SAY.help : AI_SAY.helpNotFound, this.hostEl.nativeElement);
       },
       error: (err) => {
         this.loading = false;

@@ -13,7 +13,7 @@ export type { FlyState } from './mascot/mascot-motion';
   selector: 'app-login-mascot',
   standalone: true,
   imports: [MascotStageComponent],
-  template: `<app-mascot-stage [script]="script" [tips]="tips" [avoid]="avoid" greetKey="kpi_mascot_greeted_login"
+  template: `<app-mascot-stage [script]="script" [tips]="tips" [avoid]="avoid" [voice]="voice" greetKey="kpi_mascot_greeted_login"
     [ctx]="{ thaid: thaid, providerid: providerid }"></app-mascot-stage>`,
 })
 export class LoginMascotComponent {
@@ -21,6 +21,8 @@ export class LoginMascotComponent {
   @Input() avoid = '[data-login-card]';
   @Input() thaid = false;
   @Input() providerid = false;
+  /** เสียงพูด (ค่าระบบ mascot_voice_enabled) */
+  @Input() voice = true;
   script = LOGIN_SCRIPT;
   tips = LOGIN_TIPS;
 }

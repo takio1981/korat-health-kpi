@@ -8,6 +8,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth';
 import { MascotService } from './mascot/mascot.service';
+import { AI_SAY } from './mascot/mascot-phrases';
 import { MascotAvatarComponent } from './mascot/mascot-avatar';
 import { aiFeatureOn, aiErrorText } from './ai-feature';
 
@@ -141,7 +142,7 @@ export class AiFormulaHelperComponent implements OnInit {
           this.explanation = res?.explanation || '';
         }
         this.cdr.detectChanges();
-        this.mascot.aiDone(this.question ? 'ผมต้องการข้อมูลเพิ่มอีกนิดครับ อธิบายวิธีคำนวณเพิ่มในช่องนี้ได้เลย' : 'ผมเสนอสูตรไว้แล้วครับ ทดลองคำนวณก่อนบันทึกนะครับ', this.hostEl.nativeElement);
+        this.mascot.aiDone(this.question ? AI_SAY.formulaMore : AI_SAY.formula, this.hostEl.nativeElement);
       },
       error: (err) => {
         this.loading = false;

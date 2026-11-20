@@ -135,7 +135,7 @@ apiRouter.get('/sso/connectivity', async (req, res) => {
 apiRouter.get('/system/maintenance-status', async (req, res) => {
     try {
         const [rows] = await db.query(
-            "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message','thaid_enabled','providerid_enabled','thaid_login_url','thaid_register_enabled','providerid_register_enabled','system_version','login_mascot_enabled','mascot_assistant_enabled')"
+            "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message','thaid_enabled','providerid_enabled','thaid_login_url','thaid_register_enabled','providerid_register_enabled','system_version','login_mascot_enabled','mascot_assistant_enabled','mascot_voice_enabled')"
         );
         const s = {};
         rows.forEach(r => s[r.setting_key] = r.setting_value);
@@ -153,6 +153,8 @@ apiRouter.get('/system/maintenance-status', async (req, res) => {
             login_mascot_enabled: s['login_mascot_enabled'] !== 'false',
             // ผู้ช่วยน้องโคราชดีทุกหน้าหลังเข้าสู่ระบบ (19 พ.ย. 2569 ระยะที่ 2) — ไม่มีค่า = เปิด
             mascot_assistant_enabled: s['mascot_assistant_enabled'] !== 'false',
+            // เสียงพูดของน้องโคราชดี (20 พ.ย. 2569) — ไม่มีค่า = เปิด, ผู้ใช้ปิดเองได้ในกล่องคำพูด
+            mascot_voice_enabled: s['mascot_voice_enabled'] !== 'false',
         });
     } catch (error) {
         res.json({ success: true, maintenance: false, message: '', thaid_enabled: false, providerid_enabled: false, system_version: 'v1.0.0' });

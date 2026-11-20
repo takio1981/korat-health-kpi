@@ -3,6 +3,7 @@ import { BehaviorSubject, Subject } from 'rxjs';
 import type { BubbleKind } from './mascot-dialog';
 import type { PoseName } from './mascot-pose';
 import type { Mood } from './mascot-face';
+import { AI_SAY } from './mascot-phrases';
 
 /** คำสั่งให้น้องโคราชดีพูด: บทที่เตรียมไว้ (node) หรือข้อความ (text) */
 export interface MascotCue {
@@ -29,6 +30,7 @@ export function inViewport(el: HTMLElement | null | undefined): boolean {
 const HIDE_KEY = 'kpi_mascot_assistant_off';
 const QUIET_KEY = 'kpi_mascot_assistant_quiet';
 const SEEN_KEY = 'kpi_mascot_seen_pages';
+const VOICE_OFF_KEY = 'kpi_mascot_voice_off';
 
 function lsGet(k: string): string | null { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k: string, v: string | null) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* ไม่มีที่เก็บ */ } }
@@ -43,18 +45,20 @@ export class MascotService {
   readonly cues = new Subject<MascotCue>();
   /** ผู้ใช้ซ่อนผู้ช่วยในเครื่องนี้ */
   readonly assistantHidden$ = new BehaviorSubject<boolean>(false);
+  /** ผู้ใช้ปิดเสียงพูดของน้องในเครื่องนี้ (ไม่แยกบัญชี — ใช้ได้ทั้งก่อนและหลังเข้าสู่ระบบ) */
+  readonly voiceMuted$ = new BehaviorSubject<boolean>(lsGet(VOICE_OFF_KEY) === '1');
   private uid = '';
 
   say(cue: MascotCue) { this.cues.next(cue); }
 
   // ===== ตัวแทนผู้ช่วย AI (ระยะที่ 3) — แผง AI เรียกตอนเริ่ม/สำเร็จ/ล้มเหลว (ไม่มีผู้ช่วยแสดงอยู่ = ไม่มีผล) =====
-  aiThinking(text = 'ขอคิดแป๊บนะครับ ผมกำลังให้ AI ช่วยดูให้') {
+  aiThinking(text: string = AI_SAY.thinking) {
     this.say({ text, kind: 'think', pose: 'think', mood: 'think', auto: 2600 });
   }
   aiDone(text: string, el?: HTMLElement | null) {
     this.say({ text, pose: 'point', mood: 'happy', auto: 5500, pointEl: inViewport(el) ? el : null });
   }
-  aiFailed(text = 'ขอโทษครับ ตอนนี้ผู้ช่วย AI ตอบไม่ได้ ลองใหม่อีกครั้งนะครับ') {
+  aiFailed(text: string = AI_SAY.failed) {
     this.say({ text, kind: 'shout', pose: 'think', mood: 'sad', auto: 5000 });
   }
 
@@ -65,6 +69,7 @@ export class MascotService {
   }
   setAssistantHidden(v: boolean) { lsSet(this.key(HIDE_KEY), v ? '1' : null); this.assistantHidden$.next(v); }
   toggleAssistant() { this.setAssistantHidden(!this.assistantHidden$.value); }
+  setVoiceMuted(v: boolean) { lsSet(VOICE_OFF_KEY, v ? '1' : null); this.voiceMuted$.next(v); }
 
   get quiet(): boolean { return lsGet(this.key(QUIET_KEY)) === '1'; }
   setQuiet(v: boolean) { lsSet(this.key(QUIET_KEY), v ? '1' : null); }

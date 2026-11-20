@@ -7,8 +7,10 @@ import { HelpVideoService, findHelpVideo } from '../help-video';
 import { HelpSource, answerLines, sourceLabel } from '../ai-help-box';
 import { aiErrorText, aiFeatureOn } from '../ai-feature';
 import { MascotStageComponent } from './mascot-stage';
-import { DialogChoice, DialogScript, ResolvedNode } from './mascot-dialog';
-import { GuideRole, GuideStep, PageGuide, findTarget, guideFor, guideRole, introOf } from './mascot-guides';
+import { DialogScript, ResolvedNode } from './mascot-dialog';
+import { GuideRole, GuideStep, PageGuide, findTarget, guideFor, guideRole } from './mascot-guides';
+import { assistantScript, stepChoices } from './mascot-assistant-script';
+import { AI_SAY } from './mascot-phrases';
 import { MascotService } from './mascot.service';
 
 const TARGET_ATTR = 'data-mascot-target';
@@ -22,28 +24,7 @@ export function pageKeyOf(root: ActivatedRouteSnapshot | null, url: string): str
   return seg;
 }
 
-/** ตัวเลือกในเมนูหลักของผู้ช่วย (ฟังก์ชันล้วน — ทดสอบได้) */
-export function assistantMenu(o: { hasSteps: boolean; hasVideo: boolean; page: string; quiet: boolean; hasAi?: boolean }): DialogChoice[] {
-  return [
-    ...(o.hasSteps ? [{ label: 'แนะนำหน้านี้ทีละขั้น', action: 'tour:start' }] : []),
-    ...(o.hasAi ? [{ label: 'ถามน้องโคราชดี (AI)', action: 'ask' }] : []),
-    ...(o.hasVideo ? [{ label: 'ดูวิดีโอคู่มือหน้านี้', action: 'video' }] : []),
-    ...(o.page !== 'help' ? [{ label: 'เปิดคู่มือการใช้งาน', action: 'nav:/help' }] : []),
-    { label: o.quiet ? 'ทักทายเมื่อเข้าหน้าใหม่' : 'ไม่ต้องทักเมื่อเข้าหน้าใหม่', action: 'quiet' },
-    { label: 'ซ่อนน้องโคราชดี', action: 'hide' },
-    { label: 'ปิด', next: 'bye' },
-  ];
-}
-
-/** ตัวเลือกของขั้นที่ i จากทั้งหมด n ขั้น */
-export function stepChoices(i: number, n: number): DialogChoice[] {
-  const last = i >= n - 1;
-  return [
-    ...(i > 0 ? [{ label: 'ย้อนกลับ', action: 'tour:prev' }] : []),
-    last ? { label: 'จบการแนะนำ', action: 'tour:end' } : { label: 'ถัดไป', action: 'tour:next' },
-    ...(!last ? [{ label: 'พอแล้ว', action: 'tour:end' }] : []),
-  ];
-}
+export { assistantMenu, stepChoices } from './mascot-assistant-script';
 
 const ANSWER_MAX = 420;
 
@@ -81,7 +62,7 @@ export function answerNode(res: any): ResolvedNode {
   selector: 'app-mascot-assistant',
   standalone: true,
   imports: [CommonModule, MascotStageComponent],
-  template: `<app-mascot-stage *ngIf="show" [dock]="true" [script]="script" (action)="onAction($event)"></app-mascot-stage>`,
+  template: `<app-mascot-stage *ngIf="show" [dock]="true" [voice]="voiceOn" [script]="script" (action)="onAction($event)"></app-mascot-stage>`,
 })
 export class MascotAssistantComponent implements OnInit, OnDestroy {
   @ViewChild(MascotStageComponent) stage?: MascotStageComponent;
@@ -93,6 +74,7 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
   private zone = inject(NgZone);
 
   show = false;
+  voiceOn = true;
   script: DialogScript = {};
   private systemOn = false;
   private hidden = false;
@@ -116,7 +98,7 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
     // ระยะที่ 3: ถามคู่มือผ่าน AI — เฉพาะเมื่อผู้ดูแลเปิดส่วน "ผู้ช่วยคู่มือ"
     this.auth.getAiStatus().subscribe({ next: (res: any) => { this.aiHelpOn = aiFeatureOn(res, 'help'); this.buildScript(); }, error: () => { /* ไม่มี AI */ } });
     this.auth.getMaintenanceStatus().subscribe({
-      next: (res: any) => { this.systemOn = res?.mascot_assistant_enabled !== false; this.updateShow(); this.onPage(); },
+      next: (res: any) => { this.systemOn = res?.mascot_assistant_enabled !== false; this.voiceOn = res?.mascot_voice_enabled !== false; this.updateShow(); this.onPage(); },
       error: () => { this.systemOn = true; this.updateShow(); this.onPage(); },
     });
   }
@@ -167,36 +149,7 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
   }
 
   private buildScript() {
-    const g = this.guide, r = this.role;
-    const hasSteps = !!g?.steps && g.steps(r).length > 0;
-    const menu = assistantMenu({ hasSteps, hasVideo: !!this.videoUrl, page: this.page, quiet: this.mascot.quiet, hasAi: this.aiHelpOn });
-    const intro = g ? introOf(g, r) : 'ผมน้องโคราชดี ผู้ช่วยประจำระบบครับ';
-    this.script = {
-      start: { text: `${intro} มีอะไรให้ผมช่วยไหมครับ?`, pose: 'wave', mood: 'happy', choices: menu },
-      first: {
-        text: g ? `หน้า${g.title} — ${intro} ให้ผมแนะนำการใช้งานไหมครับ?` : intro,
-        kind: 'think', pose: 'wave', mood: 'happy',
-        choices: [
-          ...(hasSteps ? [{ label: 'แนะนำเลย', action: 'tour:start' }] : []),
-          ...(this.videoUrl ? [{ label: 'ดูวิดีโอคู่มือ', action: 'video' }] : []),
-          { label: 'ไว้ทีหลัง', next: 'later' },
-          { label: 'ไม่ต้องทักอีก', action: 'quiet:on' },
-        ],
-      },
-      later: { text: 'ได้เลยครับ คลิกที่ตัวผมเมื่อต้องการให้ช่วยนะครับ', pose: 'wave', auto: 3200 },
-      bye: { text: 'ได้เลยครับ ผมอยู่ตรงนี้ คลิกที่ตัวผมได้ทุกเมื่อครับ', pose: 'wave', mood: 'happy', auto: 3000 },
-      tourEnd: { text: 'จบการแนะนำแล้วครับ! สงสัยตรงไหนคลิกที่ตัวผมได้เลย', kind: 'shout', pose: 'cheer', mood: 'happy', auto: 3500 },
-      noStep: { text: 'ตอนนี้ยังไม่เห็นปุ่มที่จะแนะนำในหน้านี้ ลองเลือกข้อมูลหรือรอให้หน้าโหลดเสร็จก่อนนะครับ', pose: 'think', mood: 'think', auto: 5000 },
-      quietOn: { text: 'รับทราบครับ ผมจะไม่ทักเมื่อเข้าหน้าใหม่ แต่ยังอยู่ตรงนี้ถ้าต้องการให้ช่วย', pose: 'idle', auto: 4000 },
-      quietOff: { text: 'ได้ครับ เข้าหน้าใหม่เมื่อไหร่ผมจะทักทายนะครับ', pose: 'wave', mood: 'happy', auto: 3500 },
-      hide: { text: 'ไปพักก่อนนะครับ เรียกผมกลับได้ที่เมนูโปรไฟล์มุมขวาบนครับ', pose: 'wave', mood: 'happy', auto: 2600 },
-      step: { text: '', choices: [] },
-      ask: {
-        text: 'อยากรู้เรื่องไหน พิมพ์ถามได้เลยครับ ผมจะค้นจากคู่มือการใช้งานตามสิทธิ์ของท่าน',
-        pose: 'talk', mood: 'happy', input: { placeholder: 'เช่น บันทึกผลงานรายไตรมาสอย่างไร' },
-        choices: [{ label: 'ปิด', next: 'bye' }],
-      },
-    };
+    this.script = assistantScript(this.guide, this.role, { page: this.page, quiet: this.mascot.quiet, hasVideo: !!this.videoUrl, hasAi: this.aiHelpOn });
   }
 
   onAction(a: string) {
@@ -265,6 +218,7 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
       text: `(${i + 1}/${this.steps.length}) ${st.text}`,
       pose: st.pose || (el ? 'point' : 'talk'),
       pointAt: el ? `[${TARGET_ATTR}="1"]` : undefined,
+      voice: [st.text],
       choices: stepChoices(i, this.steps.length),
     };
     clearTimeout(this.stepTimer);
@@ -276,7 +230,7 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
     const stage = this.stage;
     if (!stage || this.asking) return;
     this.asking = true;
-    stage.openResolved({ id: 'thinking', text: 'ขอค้นคู่มือแป๊บนะครับ…', kind: 'think', pose: 'think', mood: 'think', choices: [], auto: 60000, pointAt: null });
+    stage.openResolved({ id: 'thinking', text: AI_SAY.helpThinking + '…', voice: [AI_SAY.helpThinking], kind: 'think', pose: 'think', mood: 'think', choices: [], auto: 60000, pointAt: null });
     this.auth.askAiHelp(q.slice(0, 300)).subscribe({
       next: (res: any) => { this.asking = false; this.stage?.openResolved(answerNode(res)); },
       error: (err: any) => {

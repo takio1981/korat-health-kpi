@@ -5,6 +5,7 @@ import { Component, EventEmitter, Input, OnInit, Output, inject, ChangeDetectorR
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../services/auth';
 import { MascotService } from './mascot/mascot.service';
+import { AI_SAY } from './mascot/mascot-phrases';
 import { MascotAvatarComponent } from './mascot/mascot-avatar';
 import { ZoneBadgeComponent } from './zone-badge';
 import { EXCEL_MONTHS } from './kpi-excel';
@@ -123,7 +124,7 @@ export class AiAnomalyExplainComponent implements OnInit {
         this.model = res?.model || '';
         this.cached = !!res?.cached;
         this.cdr.detectChanges();
-        this.mascot.aiDone('ผมดูค่าที่อาจผิดปกติให้แล้วครับ ลองตรวจกับเอกสารต้นทางก่อนแก้ไขนะครับ', this.hostEl.nativeElement);
+        this.mascot.aiDone(AI_SAY.anomaly, this.hostEl.nativeElement);
       },
       error: (err) => {
         this.loading = false;

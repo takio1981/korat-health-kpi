@@ -6,6 +6,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth';
 import { MascotService } from './mascot/mascot.service';
+import { AI_SAY } from './mascot/mascot-phrases';
 import { MascotAvatarComponent } from './mascot/mascot-avatar';
 import { getCurrentFiscalYear } from './fiscal-year.util';
 import { summaryLines } from './ai-summary-panel';
@@ -188,7 +189,7 @@ export class DataQualityPanelComponent implements OnInit {
         this.cached = !!res?.cached;
         if (res?.no_issues) this.aiError = 'ไม่พบค่าที่อาจผิดปกติแล้ว — ลองกด "ตรวจคุณภาพข้อมูล" ใหม่';
         this.cdr.detectChanges();
-        this.mascot.aiDone('สรุปผลตรวจคุณภาพข้อมูลเสร็จแล้วครับ เป็นข้อสังเกต ไม่ได้ยืนยันว่าค่าผิดจริงนะครับ', this.hostEl.nativeElement);
+        this.mascot.aiDone(AI_SAY.quality, this.hostEl.nativeElement);
       },
       error: (err: any) => {
         this.aiLoading = false;

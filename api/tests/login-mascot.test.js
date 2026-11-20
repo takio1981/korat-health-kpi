@@ -54,3 +54,18 @@ test("mascot_assistant_enabled: ไม่มีค่า = เปิด, 'false'
         else await db.query("UPDATE system_settings SET setting_value = ? WHERE setting_key = 'mascot_assistant_enabled'", [prev]);
     }
 });
+
+// เสียงพูด (20 พ.ย. 2569) — mascot_voice_enabled ไม่มีค่า = เปิด, 'false' = ปิด
+test("mascot_voice_enabled: ไม่มีค่า = เปิด, 'false' = ปิด", async () => {
+    const [[r]] = await db.query("SELECT setting_value FROM system_settings WHERE setting_key = 'mascot_voice_enabled'");
+    const prev = r ? r.setting_value : null;
+    try {
+        await db.query("DELETE FROM system_settings WHERE setting_key = 'mascot_voice_enabled'");
+        expect((await request(app).get(URL)).body.mascot_voice_enabled).toBe(true);
+        await db.query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('mascot_voice_enabled', 'false') ON DUPLICATE KEY UPDATE setting_value = 'false'");
+        expect((await request(app).get(URL)).body.mascot_voice_enabled).toBe(false);
+    } finally {
+        if (prev === null) await db.query("DELETE FROM system_settings WHERE setting_key = 'mascot_voice_enabled'");
+        else await db.query("UPDATE system_settings SET setting_value = ? WHERE setting_key = 'mascot_voice_enabled'", [prev]);
+    }
+});

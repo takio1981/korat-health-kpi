@@ -5,6 +5,7 @@ import { Component, Input, OnChanges, OnInit, SimpleChanges, inject, ChangeDetec
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../services/auth';
 import { MascotService } from './mascot/mascot.service';
+import { AI_SAY } from './mascot/mascot-phrases';
 import { MascotAvatarComponent } from './mascot/mascot-avatar';
 import { summaryLines } from './ai-summary-panel';
 import { aiFeatureOn, aiErrorText } from './ai-feature';
@@ -86,7 +87,7 @@ export class AiForecastPanelComponent implements OnInit, OnChanges {
         this.model = res?.model || '';
         this.cached = !!res?.cached;
         this.cdr.detectChanges();
-        this.mascot.aiDone(this.noRisk ? 'ไม่พบรายการเสี่ยงตามตัวกรองนี้ครับ' : 'ผมอธิบายตัวชี้วัดเสี่ยงไว้ตรงนี้แล้วครับ เป็นการคาดการณ์ ไม่ใช่ผลประเมินนะครับ', this.hostEl.nativeElement);
+        this.mascot.aiDone(this.noRisk ? AI_SAY.forecastNoRisk : AI_SAY.forecast, this.hostEl.nativeElement);
       },
       error: (err: any) => {
         this.loading = false;

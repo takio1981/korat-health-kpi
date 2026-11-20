@@ -51,6 +51,8 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   /** น้องโคราชดี: mascotSystemOn = ค่าจากระบบ (maintenance-status), mascotHidden = ผู้เข้าชมกดซ่อนเอง */
   mascotSystemOn = false;
+  /** เสียงพูดของน้อง (ค่าระบบ mascot_voice_enabled — ไม่มีค่า = เปิด) */
+  mascotVoiceOn = true;
   mascotHidden = LoginComponent.readMascotHidden();
   get showMascot() { return this.mascotSystemOn && !this.mascotHidden; }
   static readMascotHidden(): boolean { try { return localStorage.getItem(LOGIN_MASCOT_KEY) === 'off'; } catch { return false; } }
@@ -257,6 +259,7 @@ export class LoginComponent implements OnInit, OnDestroy {
           || prevProvider !== !!res.providerid_enabled
           || this.mascotSystemOn !== (res.login_mascot_enabled !== false);
         this.mascotSystemOn = res.login_mascot_enabled !== false;
+        this.mascotVoiceOn = res.mascot_voice_enabled !== false;
         this.maintenanceMode = !!res.maintenance;
         this.maintenanceMessage = res.message || '';
         this.systemVersion = res.system_version || '';
