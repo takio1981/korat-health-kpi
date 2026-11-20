@@ -694,6 +694,9 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   | ไอพ่น `updateJets()` (กรวยเรืองแสง 3 ชั้นใต้รองเท้า แรงตามความเร็ว ดับเมื่อไม่ได้ลอย) — **กล้องเว้นที่ใต้เท้า** (`cam (0,0.9,4.85)` + canvas ใหญ่ขึ้น) ถ้าปรับกล้องต้องแก้ `groundYOf` ตาม
   | ท่า `sleep` (นอนตะแคงหันหน้า + `rootX`) / `drag` + หน้า `sleep` + Zzz (`.ms-zzz`) | ลาก: pointer events บน `.ms-fly` (ขยับ > 6px = ลาก, `suppressClick`), วางใกล้ขอบล่าง = ยืน, กลางจอ = ลอย (ผู้ช่วยจำตำแหน่ง + เมนู `home:reset` "กลับไปมุมขวาล่าง")
   — Test: `shared/mascot/mascot-activity.spec.ts`
+- **ขนาด 3 ขนาด + สเกลตามจอ (20 พ.ย. 2569 — ผู้ใช้สั่ง):** `mascot-size.ts` `mascotPx(size, dock, w, h)` = `SIZE_BASE` (dock 112/146/186, roam 150/200/250 — "กลาง" = ขนาดเดิม) × `viewportScale()` (กว้าง ≤ 375 = 0.68 → ≥ 1280 = 1 เส้นตรง, จำกัดด้วยสูง × 1.8) ≤ 45% ของด้านสั้น
+  — ขนาดที่ใช้ = `MascotService.size$` (ผู้ใช้เลือก, localStorage `kpi_mascot_size`, ไม่แยกบัญชี) ก่อน แล้ว `system_settings.mascot_size` (maintenance-status, ค่าผิด/ไม่มี = medium, ปุ่ม `#mascot-size` ในหน้าตั้งค่าระบบ) → stage `[sizeDefault]`
+  | stage คำนวณขนาดทุกเฟรมและ `renderer.setSize()` เมื่อเปลี่ยน (หมุนจอ/ปรับหน้าต่าง/เลือกขนาด) | เมนู "ปรับขนาดน้องโคราชดี" = `sizeNodes()` ใน mascot-dialog (ใส่ทั้ง LOGIN_SCRIPT และ assistantScript) คำสั่ง `size:*` จัดการใน stage — Test: `shared/mascot/mascot-size.spec.ts`, `api/tests/login-mascot.test.js`
 - **ห้ามใช้อีโมจิในบทพูด** (บางเครื่องแสดงเป็นกล่อง) | Test: `shared/mascot/mascot.spec.ts` (ทุกตัวเลือกชี้บทที่มีจริง, ทุกท่าค่าครบ), `login.spec.ts`, `login-mascot.spec.ts`
 
 ### น้องโคราชดีบินในหน้าเข้าสู่ระบบ (19 พ.ย. 2569 — ผู้ใช้เลือก: 3 มิติด้วย CSS, เปิด-ปิด 2 ชั้น — ระยะที่ 1 ด้านบนแทนการแสดงผลแล้ว คงสวิตช์เปิด-ปิดเดิม)

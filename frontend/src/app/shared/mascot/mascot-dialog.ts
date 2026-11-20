@@ -7,7 +7,11 @@ import type { Mood } from './mascot-face';
 
 export type BubbleKind = 'speech' | 'shout' | 'think';
 
-export interface DialogCtx { hour: number; thaid?: boolean; providerid?: boolean; }
+export interface DialogCtx {
+  hour: number; thaid?: boolean; providerid?: boolean;
+  /** ขนาดที่ผู้ใช้เลือกไว้ ('' = ตามค่าตั้งต้นของระบบ) — ใช้ทำเครื่องหมาย "(ตอนนี้)" ในตัวเลือกขนาด */
+  size?: string;
+}
 export interface DialogChoice { label: string; next?: string; action?: string; }
 export interface DialogNode {
   text: string | ((c: DialogCtx) => string);
@@ -69,11 +73,36 @@ export function graphemes(text: string): string[] {
   return Array.from(text);
 }
 
+// ===== ปรับขนาดน้องโคราชดี (20 พ.ย. 2569) — ใช้ทั้งหน้าเข้าสู่ระบบและผู้ช่วยในระบบ; stage จัดการคำสั่ง size:* เอง =====
+export const SIZE_ASK = 'อยากให้ผมตัวขนาดไหนครับ? บนมือถือและแท็บเล็ต ผมจะย่อลงตามขนาดจอให้เองนะครับ';
+export const SIZE_DONE = 'ปรับขนาดแล้วครับ!';
+export const SIZE_MENU_LABEL = 'ปรับขนาดน้องโคราชดี';
+
+export function sizeChoices(current: string | undefined, backNext: string): DialogChoice[] {
+  const mark = (v: string, label: string) => (current || '') === v ? `${label} (ตอนนี้)` : label;
+  return [
+    { label: mark('small', 'เล็ก'), action: 'size:small' },
+    { label: mark('medium', 'กลาง'), action: 'size:medium' },
+    { label: mark('large', 'ใหญ่'), action: 'size:large' },
+    { label: mark('', 'ตามค่าตั้งต้นของระบบ'), action: 'size:default' },
+    { label: 'ไว้ก่อน', next: backNext },
+  ];
+}
+
+/** บท size + sizeDone สำหรับใส่รวมในบทสนทนา */
+export function sizeNodes(backNext: string): DialogScript {
+  return {
+    size: { text: SIZE_ASK, pose: 'talk', mood: 'happy', choices: c => sizeChoices(c.size, backNext) },
+    sizeDone: { text: SIZE_DONE, kind: 'shout', pose: 'cheer', mood: 'happy', auto: 2600 },
+  };
+}
+
 const MENU: DialogChoice[] = [
   { label: 'เข้าสู่ระบบยังไง?', next: 'login' },
   { label: 'ยังไม่มีบัญชี', next: 'register' },
   { label: 'ลืมรหัสผ่าน', next: 'forgot' },
   { label: 'ระบบนี้คืออะไร?', next: 'about' },
+  { label: SIZE_MENU_LABEL, next: 'size' },
   { label: 'ไว้ก่อนนะ', next: 'bye' },
 ];
 
@@ -120,6 +149,7 @@ export const LOGIN_SCRIPT: DialogScript = {
     text: 'อุ๊ย! เข้าสู่ระบบไม่สำเร็จ ลองตรวจชื่อผู้ใช้ ตัวพิมพ์เล็ก-ใหญ่ และปุ่ม Caps Lock ดูนะครับ',
     kind: 'shout', pose: 'think', mood: 'surprised', auto: 6500,
   },
+  ...sizeNodes('menu'),
 };
 
 /** เกร็ดความรู้ที่พูดเป็นระยะระหว่างบินเล่น (กล่องความคิด) */

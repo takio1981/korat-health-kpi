@@ -77,7 +77,7 @@ describe('mascot-dialog', () => {
       const n = resolveNode(LOGIN_SCRIPT, id, { hour: 10, thaid: true, providerid: true })!;
       for (const c of n.choices) {
         if (c.next) expect(LOGIN_SCRIPT[c.next]).toBeTruthy();
-        else expect(c.action).toMatch(/^nav:\//);
+        else expect(c.action).toMatch(/^(nav:\/|size:(small|medium|large|default)$)/);
       }
     }
   });

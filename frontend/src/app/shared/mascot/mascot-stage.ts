@@ -10,6 +10,7 @@ import { DialogChoice, DialogCtx, DialogScript, ResolvedNode, bubblePath, graphe
 import { MascotRig, ThreeLib, applyJoints, buildMascot, loadThree, updateCape, updateJets } from './mascot-model';
 import { Activity, HOME_KEY, groundYOf, loadHome, planRest, saveHome } from './mascot-activity';
 import { MascotService, MascotCue } from './mascot.service';
+import { MascotSize, mascotPx, normalizeMascotSize } from './mascot-size';
 import { VoicePlayer } from './mascot-voice';
 
 /** WebGL ใช้ได้หรือไม่ (jsdom/เบราว์เซอร์เก่า/ปิดการเร่งกราฟิก = ใช้ภาพนิ่งแทน) */
@@ -182,7 +183,12 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
   private sub: Subscription | null = null;
   private listeners: [EventTarget, string, EventListener][] = [];
 
-  private get size() { return this.dock ? (window.innerWidth < 640 ? 110 : 146) : (window.innerWidth < 640 ? 142 : 200); }
+  /** ขนาดตั้งต้นของระบบ (system_settings.mascot_size) — ผู้ใช้เลือกเองได้ในเมนูของน้อง (MascotService.size$ มาก่อน) */
+  @Input() sizeDefault: MascotSize = 'medium';
+  private userSize: MascotSize | '' = '';
+  private renderedSize = 0;
+  /** ขนาดจริงตามขนาดที่เลือก × สเกลของจอ (มือถือ/แท็บเล็ตย่อลงแบบต่อเนื่อง) */
+  private get size() { return mascotPx(this.userSize || normalizeMascotSize(this.sizeDefault), this.dock, window.innerWidth, window.innerHeight); }
   private nextGestureAt = 25;
   private gesture: PoseName | null = null;
   private gestureUntil = 0;
@@ -211,6 +217,7 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
     this.nextTipAt = 40 + Math.random() * 25;
     this.sub = this.mascot.cues.subscribe(c => this.zone.runOutsideAngular(() => this.cue(c)));
     this.sub.add(this.mascot.voiceMuted$.subscribe(m => { this.muted = m; if (m) this.player?.stop(); }));
+    this.sub.add(this.mascot.size$.subscribe(v => { this.userSize = v; }));
     if (this.voice && typeof Audio !== 'undefined') { this.player = new VoicePlayer(); this.player.load(); }
 
     this.zone.runOutsideAngular(() => {
@@ -268,7 +275,8 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
       this.fallback = true; this.cdr.detectChanges(); this.startLoop(); return;
     }
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
-    renderer.setSize(this.size, this.size, false);
+    this.renderedSize = this.size;
+    renderer.setSize(this.renderedSize, this.renderedSize, false);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     fly.appendChild(renderer.domElement);
@@ -363,6 +371,8 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
       this.jetLevel += (jetT - this.jetLevel) * (1 - Math.exp(-dt * 8));
       updateJets(this.rig, this.jetLevel, t);
       this.rig.heart.rotation.z = Math.sin(t * 3.1) * 0.12;
+      // ขนาดเปลี่ยน (ผู้ใช้เลือกขนาด / หมุนจอ / ปรับขนาดหน้าต่าง) = ปรับความละเอียดของภาพตาม ไม่งั้นภาพแตก
+      if (size !== this.renderedSize) { this.renderer.setSize(size, size, false); this.renderedSize = size; }
       this.renderer.render(this.scene, this.camera);
     }
 
@@ -392,7 +402,7 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
     const ground = host.querySelector('.ms-ground') as HTMLElement | null;
     if (ground) {
       const hh = Math.max(0, H - s.y) / H;
-      const g = (1 - hh * 0.7) * scale;
+      const g = (1 - hh * 0.7) * scale * (size / 180);
       ground.style.transform = `translateX(${(s.x - 45).toFixed(1)}px) scale(${g.toFixed(3)}, ${(g * 0.9).toFixed(3)})`;
       ground.style.opacity = (0.25 + (1 - hh) * 0.6).toFixed(2);
     }
@@ -562,7 +572,7 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
     if (!z) return;
     const on = this.isSleeping() && this.mode !== 'talk';
     z.classList.toggle('ms-on', on);
-    if (on) z.style.transform = `translate(${(s.x - size * 0.42).toFixed(1)}px, ${(s.y - size * 0.42).toFixed(1)}px)`;
+    if (on) z.style.transform = `translate(${(s.x - size * 0.42).toFixed(1)}px, ${(s.y - size * 0.42).toFixed(1)}px) scale(${Math.max(0.6, Math.min(1.3, size / 170)).toFixed(2)})`;
   }
 
   // ===================== ลากด้วยเมาส์ =====================
@@ -634,7 +644,7 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
   }
 
   // ===================== บทสนทนา =====================
-  private dialogCtx(): DialogCtx { return { hour: new Date().getHours(), ...this.ctx }; }
+  private dialogCtx(): DialogCtx { return { hour: new Date().getHours(), ...this.ctx, size: this.userSize }; }
 
   open(id: string) {
     const n = resolveNode(this.script, id, this.dialogCtx());
@@ -728,6 +738,13 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
       const url = c.action.slice(4);
       this.close();
       this.zone.run(() => this.router.navigateByUrl(url));
+      return;
+    }
+    if (c.action?.startsWith('size:')) {
+      // ปรับขนาด (ใช้ได้ทุกหน้าที่มีน้อง — จำในเครื่อง)
+      const v = c.action.slice(5);
+      this.mascot.setSize(v === 'default' ? '' : normalizeMascotSize(v));
+      this.open('sizeDone');
       return;
     }
     if (c.action) { const a = c.action; this.zone.run(() => this.action.emit(a)); return; }

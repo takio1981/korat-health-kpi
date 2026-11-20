@@ -9,6 +9,7 @@ import { ForecastSettingsCardComponent } from '../shared/forecast-settings-card'
 import { UserApprovalSettingsCardComponent } from '../shared/user-approval-settings-card';
 import { KhdSsoSettingsCardComponent } from '../shared/khd-sso-settings-card';
 import Swal from 'sweetalert2';
+import { MASCOT_SIZES, MascotSize, SIZE_LABELS, normalizeMascotSize } from '../shared/mascot/mascot-size';
 
 @Component({
   selector: 'app-settings',
@@ -80,6 +81,8 @@ export class SettingsComponent implements OnInit {
   loginMascotEnabled: boolean = true; // น้องโคราชดีบินในหน้าเข้าสู่ระบบ (ไม่มีค่า = เปิด)
   mascotAssistantEnabled: boolean = true; // ผู้ช่วยน้องโคราชดีทุกหน้าหลังเข้าสู่ระบบ (ไม่มีค่า = เปิด)
   mascotVoiceEnabled: boolean = true; // เสียงพูดของน้องโคราชดี (ไม่มีค่า = เปิด)
+  mascotSize: MascotSize = 'medium'; // ขนาดตั้งต้นของน้องโคราชดี (ไม่มีค่า = กลาง)
+  readonly mascotSizeOptions = MASCOT_SIZES.map(value => ({ value, label: SIZE_LABELS[value] }));
   providerIdEnabled: boolean = false;
   thaidClientSecret: string = '';
   thaidLoginUrl: string = '';
@@ -232,6 +235,7 @@ export class SettingsComponent implements OnInit {
           this.loginMascotEnabled = this.settings.find(s => s.setting_key === 'login_mascot_enabled')?.setting_value !== 'false';
           this.mascotAssistantEnabled = this.settings.find(s => s.setting_key === 'mascot_assistant_enabled')?.setting_value !== 'false';
           this.mascotVoiceEnabled = this.settings.find(s => s.setting_key === 'mascot_voice_enabled')?.setting_value !== 'false';
+          this.mascotSize = normalizeMascotSize(this.settings.find(s => s.setting_key === 'mascot_size')?.setting_value);
           if (providerSetting) this.providerIdEnabled = providerSetting.setting_value === 'true';
           if (thaidRegEnSetting) this.thaidRegisterEnabled = thaidRegEnSetting.setting_value === 'true';
           if (providerRegEnSetting) this.providerIdRegisterEnabled = providerRegEnSetting.setting_value === 'true';
@@ -300,6 +304,7 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'login_mascot_enabled', setting_value: this.loginMascotEnabled.toString() },
       { setting_key: 'mascot_assistant_enabled', setting_value: this.mascotAssistantEnabled.toString() },
       { setting_key: 'mascot_voice_enabled', setting_value: this.mascotVoiceEnabled.toString() },
+      { setting_key: 'mascot_size', setting_value: normalizeMascotSize(this.mascotSize) },
       { setting_key: 'thaid_client_secret', setting_value: this.thaidClientSecret },
       { setting_key: 'thaid_login_url', setting_value: this.thaidLoginUrl },
       { setting_key: 'thaid_client_id', setting_value: this.thaidClientId },

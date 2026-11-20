@@ -2,6 +2,7 @@
  * บทสนทนาของผู้ช่วยน้องโคราชดีทุกหน้า (ฟังก์ชันล้วน — ไม่พึ่ง Angular) ใช้ทั้งคอมโพเนนต์ผู้ช่วยและตัวสร้างไฟล์เสียง
  * (tools/video-guide/build-mascot-voice.js) — `voice` = ประโยคที่พูดจริง (ข้อความในกล่องอาจมีชื่อหน้า/ลำดับขั้นเพิ่ม)
  */
+import { SIZE_MENU_LABEL, sizeNodes } from './mascot-dialog';
 import type { DialogChoice, DialogScript } from './mascot-dialog';
 import { GuideRole, PageGuide, introOf } from './mascot-guides';
 
@@ -18,6 +19,7 @@ export function assistantMenu(o: { hasSteps: boolean; hasVideo: boolean; page: s
     ...(o.hasVideo ? [{ label: 'ดูวิดีโอคู่มือหน้านี้', action: 'video' }] : []),
     ...(o.page !== 'help' ? [{ label: 'เปิดคู่มือการใช้งาน', action: 'nav:/help' }] : []),
     { label: o.quiet ? 'ทักทายเมื่อเข้าหน้าใหม่' : 'ไม่ต้องทักเมื่อเข้าหน้าใหม่', action: 'quiet' },
+    { label: SIZE_MENU_LABEL, next: 'size' },
     ...(o.movedHome ? [{ label: 'กลับไปมุมขวาล่าง', action: 'home:reset' }] : []),
     { label: 'ซ่อนน้องโคราชดี', action: 'hide' },
     { label: 'ปิด', next: 'bye' },
@@ -63,5 +65,6 @@ export function assistantScript(g: PageGuide | null, r: GuideRole, o: { page: st
       text: ASK_PROMPT, pose: 'talk', mood: 'happy', input: { placeholder: 'เช่น บันทึกผลงานรายไตรมาสอย่างไร' },
       choices: [{ label: 'ปิด', next: 'bye' }],
     },
+    ...sizeNodes('start'),
   };
 }

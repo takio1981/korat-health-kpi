@@ -4,6 +4,7 @@ import type { BubbleKind } from './mascot-dialog';
 import type { PoseName } from './mascot-pose';
 import type { Mood } from './mascot-face';
 import { AI_SAY } from './mascot-phrases';
+import { MASCOT_SIZES, MascotSize } from './mascot-size';
 
 /** คำสั่งให้น้องโคราชดีพูด: บทที่เตรียมไว้ (node) หรือข้อความ (text) */
 export interface MascotCue {
@@ -31,6 +32,12 @@ const HIDE_KEY = 'kpi_mascot_assistant_off';
 const QUIET_KEY = 'kpi_mascot_assistant_quiet';
 const SEEN_KEY = 'kpi_mascot_seen_pages';
 const VOICE_OFF_KEY = 'kpi_mascot_voice_off';
+export const SIZE_KEY = 'kpi_mascot_size';
+
+function readSize(): MascotSize | '' {
+  const v = lsGet(SIZE_KEY);
+  return v && (MASCOT_SIZES as string[]).includes(v) ? v as MascotSize : '';
+}
 
 function lsGet(k: string): string | null { try { return localStorage.getItem(k); } catch { return null; } }
 function lsSet(k: string, v: string | null) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* ไม่มีที่เก็บ */ } }
@@ -47,6 +54,8 @@ export class MascotService {
   readonly assistantHidden$ = new BehaviorSubject<boolean>(false);
   /** ผู้ใช้ปิดเสียงพูดของน้องในเครื่องนี้ (ไม่แยกบัญชี — ใช้ได้ทั้งก่อนและหลังเข้าสู่ระบบ) */
   readonly voiceMuted$ = new BehaviorSubject<boolean>(lsGet(VOICE_OFF_KEY) === '1');
+  /** ขนาดที่ผู้ใช้เลือกในเครื่องนี้ ('' = ตามค่าตั้งต้นของระบบ) — ไม่แยกบัญชี ใช้ได้ทั้งหน้าเข้าสู่ระบบและหลังเข้าสู่ระบบ */
+  readonly size$ = new BehaviorSubject<MascotSize | ''>(readSize());
   private uid = '';
 
   say(cue: MascotCue) { this.cues.next(cue); }
@@ -70,6 +79,11 @@ export class MascotService {
   setAssistantHidden(v: boolean) { lsSet(this.key(HIDE_KEY), v ? '1' : null); this.assistantHidden$.next(v); }
   toggleAssistant() { this.setAssistantHidden(!this.assistantHidden$.value); }
   setVoiceMuted(v: boolean) { lsSet(VOICE_OFF_KEY, v ? '1' : null); this.voiceMuted$.next(v); }
+  /** '' = กลับไปใช้ค่าตั้งต้นของระบบ */
+  setSize(v: MascotSize | '') {
+    const s = (MASCOT_SIZES as string[]).includes(v) ? v : '';
+    lsSet(SIZE_KEY, s || null); this.size$.next(s);
+  }
 
   get quiet(): boolean { return lsGet(this.key(QUIET_KEY)) === '1'; }
   setQuiet(v: boolean) { lsSet(this.key(QUIET_KEY), v ? '1' : null); }

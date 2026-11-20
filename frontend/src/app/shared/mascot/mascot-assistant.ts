@@ -13,6 +13,7 @@ import { assistantScript, stepChoices } from './mascot-assistant-script';
 import { AI_SAY } from './mascot-phrases';
 import { loadHome } from './mascot-activity';
 import { MascotService } from './mascot.service';
+import { MascotSize, normalizeMascotSize } from './mascot-size';
 
 const TARGET_ATTR = 'data-mascot-target';
 
@@ -63,7 +64,7 @@ export function answerNode(res: any): ResolvedNode {
   selector: 'app-mascot-assistant',
   standalone: true,
   imports: [CommonModule, MascotStageComponent],
-  template: `<app-mascot-stage *ngIf="show" [dock]="true" [voice]="voiceOn" [script]="script" (action)="onAction($event)"></app-mascot-stage>`,
+  template: `<app-mascot-stage *ngIf="show" [dock]="true" [voice]="voiceOn" [sizeDefault]="sizeDefault" [script]="script" (action)="onAction($event)"></app-mascot-stage>`,
 })
 export class MascotAssistantComponent implements OnInit, OnDestroy {
   @ViewChild(MascotStageComponent) stage?: MascotStageComponent;
@@ -76,6 +77,8 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
 
   show = false;
   voiceOn = true;
+  /** ขนาดตั้งต้นของระบบ (mascot_size) */
+  sizeDefault: MascotSize = 'medium';
   script: DialogScript = {};
   private systemOn = false;
   private hidden = false;
@@ -99,7 +102,7 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
     // ระยะที่ 3: ถามคู่มือผ่าน AI — เฉพาะเมื่อผู้ดูแลเปิดส่วน "ผู้ช่วยคู่มือ"
     this.auth.getAiStatus().subscribe({ next: (res: any) => { this.aiHelpOn = aiFeatureOn(res, 'help'); this.buildScript(); }, error: () => { /* ไม่มี AI */ } });
     this.auth.getMaintenanceStatus().subscribe({
-      next: (res: any) => { this.systemOn = res?.mascot_assistant_enabled !== false; this.voiceOn = res?.mascot_voice_enabled !== false; this.updateShow(); this.onPage(); },
+      next: (res: any) => { this.systemOn = res?.mascot_assistant_enabled !== false; this.voiceOn = res?.mascot_voice_enabled !== false; this.sizeDefault = normalizeMascotSize(res?.mascot_size); this.updateShow(); this.onPage(); },
       error: () => { this.systemOn = true; this.updateShow(); this.onPage(); },
     });
   }

@@ -9,6 +9,7 @@ import Swal from 'sweetalert2';
 import { environment } from '../../environments/environment';
 import { LoginMascotComponent } from '../shared/login-mascot';
 import { MascotService } from '../shared/mascot/mascot.service';
+import { MascotSize, normalizeMascotSize } from '../shared/mascot/mascot-size';
 
 /** ผู้เข้าชมซ่อนน้องโคราชดีเฉพาะเครื่องตัวเอง (localStorage) — ระบบปิดทั้งหมดได้ด้วย login_mascot_enabled */
 export const LOGIN_MASCOT_KEY = 'kpi_login_mascot';
@@ -53,6 +54,8 @@ export class LoginComponent implements OnInit, OnDestroy {
   mascotSystemOn = false;
   /** เสียงพูดของน้อง (ค่าระบบ mascot_voice_enabled — ไม่มีค่า = เปิด) */
   mascotVoiceOn = true;
+  /** ขนาดตั้งต้นของน้อง (ค่าระบบ mascot_size) — ผู้เข้าชมเลือกเองได้ในเมนูของน้อง */
+  mascotSize: MascotSize = 'medium';
   mascotHidden = LoginComponent.readMascotHidden();
   get showMascot() { return this.mascotSystemOn && !this.mascotHidden; }
   static readMascotHidden(): boolean { try { return localStorage.getItem(LOGIN_MASCOT_KEY) === 'off'; } catch { return false; } }
@@ -257,9 +260,11 @@ export class LoginComponent implements OnInit, OnDestroy {
           || prevThaid !== !!res.thaid_enabled
           || this.thaidLoginUrl !== (res.thaid_login_url || '')
           || prevProvider !== !!res.providerid_enabled
-          || this.mascotSystemOn !== (res.login_mascot_enabled !== false);
+          || this.mascotSystemOn !== (res.login_mascot_enabled !== false)
+          || this.mascotSize !== normalizeMascotSize(res.mascot_size);
         this.mascotSystemOn = res.login_mascot_enabled !== false;
         this.mascotVoiceOn = res.mascot_voice_enabled !== false;
+        this.mascotSize = normalizeMascotSize(res.mascot_size);
         this.maintenanceMode = !!res.maintenance;
         this.maintenanceMessage = res.message || '';
         this.systemVersion = res.system_version || '';

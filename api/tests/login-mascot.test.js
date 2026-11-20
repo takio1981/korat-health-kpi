@@ -69,3 +69,23 @@ test("mascot_voice_enabled: ไม่มีค่า = เปิด, 'false' = �
         else await db.query("UPDATE system_settings SET setting_value = ? WHERE setting_key = 'mascot_voice_enabled'", [prev]);
     }
 });
+
+// ขนาดตั้งต้น (20 พ.ย. 2569) — ไม่มีค่า/ค่าผิด = medium, small/large ส่งตามที่ตั้ง
+test('mascot_size: ไม่มีค่า/ค่าผิด = medium, small/large ตามที่ตั้ง', async () => {
+    const [[r]] = await db.query("SELECT setting_value FROM system_settings WHERE setting_key = 'mascot_size'");
+    const prev = r ? r.setting_value : null;
+    const set = v => db.query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('mascot_size', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)", [v]);
+    try {
+        await db.query("DELETE FROM system_settings WHERE setting_key = 'mascot_size'");
+        expect((await request(app).get(URL)).body.mascot_size).toBe('medium');
+        await set('large');
+        expect((await request(app).get(URL)).body.mascot_size).toBe('large');
+        await set('small');
+        expect((await request(app).get(URL)).body.mascot_size).toBe('small');
+        await set('<script>');
+        expect((await request(app).get(URL)).body.mascot_size).toBe('medium');
+    } finally {
+        if (prev === null) await db.query("DELETE FROM system_settings WHERE setting_key = 'mascot_size'");
+        else await db.query("UPDATE system_settings SET setting_value = ? WHERE setting_key = 'mascot_size'", [prev]);
+    }
+});

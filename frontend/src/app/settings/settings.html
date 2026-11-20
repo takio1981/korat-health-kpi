@@ -282,6 +282,16 @@
               </div>
             </label>
           </div>
+          <div class="bg-white rounded-lg p-3 border border-gray-200 mt-3">
+            <p class="text-sm font-bold text-gray-700">ขนาดตั้งต้นของน้องโคราชดี</p>
+            <p class="text-xs text-gray-500 mt-0.5">ใช้ทั้งหน้าเข้าสู่ระบบและผู้ช่วยในระบบ — บนมือถือและแท็บเล็ตน้องจะย่อลงตามความกว้างจอให้เอง ผู้ใช้เลือกขนาดของตัวเองได้ที่เมนูของน้อง ("ปรับขนาดน้องโคราชดี")</p>
+            <div id="mascot-size" class="mt-2 inline-flex rounded-xl border border-gray-200 overflow-hidden" role="radiogroup" aria-label="ขนาดตั้งต้นของน้องโคราชดี">
+              <button type="button" *ngFor="let o of mascotSizeOptions" role="radio" [attr.aria-checked]="mascotSize === o.value" [attr.data-size]="o.value"
+                      (click)="mascotSize = o.value"
+                      class="px-4 py-1.5 text-sm font-bold transition-colors border-r border-gray-200 last:border-r-0"
+                      [ngClass]="mascotSize === o.value ? 'bg-teal-600 text-white' : 'bg-white text-gray-600 hover:bg-teal-50'">{{ o.label }}</button>
+            </div>
+          </div>
         </div>
 
         <!-- ตั้งค่าอุทธรณ์ -->

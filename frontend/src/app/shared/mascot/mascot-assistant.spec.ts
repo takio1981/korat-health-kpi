@@ -48,9 +48,9 @@ describe('mascot-assistant (ระยะที่ 2)', () => {
 
   it('assistantMenu: มีตัวเลือกตามความพร้อม (ขั้นตอน/วิดีโอ/คู่มือ)', () => {
     const full = assistantMenu({ hasSteps: true, hasVideo: true, page: 'dashboard', quiet: false }).map(c => c.action || c.next);
-    expect(full).toEqual(['tour:start', 'video', 'nav:/help', 'quiet', 'hide', 'bye']);
+    expect(full).toEqual(['tour:start', 'video', 'nav:/help', 'quiet', 'size', 'hide', 'bye']);
     const bare = assistantMenu({ hasSteps: false, hasVideo: false, page: 'help', quiet: true });
-    expect(bare.map(c => c.action || c.next)).toEqual(['quiet', 'hide', 'bye']);
+    expect(bare.map(c => c.action || c.next)).toEqual(['quiet', 'size', 'hide', 'bye']);
     expect(bare[0].label).toContain('ทักทาย');
   });
 
