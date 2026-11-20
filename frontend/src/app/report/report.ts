@@ -130,6 +130,7 @@ export class ReportComponent implements OnInit {
     this.showDrilldown = true;
     const params: any = { year_bh: this.selectedYear };
     if (this.selectedDeptId) params.dept_id = this.selectedDeptId;
+    if (this.selectedItype) params.itype = this.selectedItype;
     this.authService.getReportRecordingMissingByHospital(item.hospcode, params).subscribe({
       next: (res: any) => {
         this.drilldownLoading = false;

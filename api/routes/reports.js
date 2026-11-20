@@ -967,6 +967,7 @@ apiRouter.get('/report/recording-missing/by-hospital/:hospcode', authenticateTok
             if (user.role === 'user_cup' && user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
         }
         if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
+        addItypeFilter(whereClauses, 'r.indicator_id', req.query.itype); // ประเภทตัวชี้วัด (20 พ.ย. 2569)
 
         const whereStr = 'WHERE ' + whereClauses.join(' AND ');
 
@@ -1034,6 +1035,8 @@ async function deptSummaryReport(user, query = {}) {
     addItypeFilter(cteWhere, 'r.indicator_id', query.itype);
 
     const cteWhereStr = cteWhere.join(' AND ');
+    // ประเภทตัวชี้วัด: กรองรายการตัวชี้วัดของหน่วยงานด้วย (เดิมกรองเฉพาะส่วนนับการบันทึก — จำนวนตัวชี้วัดไม่เปลี่ยน 20 พ.ย. 2569)
+    const indItype = []; addItypeFilter(indItype, 'i.id', query.itype);
 
     // params สำหรับ query หลัก
     const queryParams = [...cteParams];
@@ -1062,7 +1065,7 @@ async function deptSummaryReport(user, query = {}) {
         FROM departments d
         JOIN kpi_indicators i ON i.dept_id = d.id AND i.is_active = 1
         LEFT JOIN ind_stats ist ON ist.indicator_id = i.id
-        WHERE 1=1 ${deptFilter}
+        WHERE 1=1 ${deptFilter} ${indItype.map(c => 'AND ' + c).join(' ')}
         GROUP BY d.id, d.dept_name
         ORDER BY d.dept_name
     `;
@@ -1162,6 +1165,7 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
         addZoneFilter(cteWhere, cteParams, 'r.hospcode', req.query.zone, 'hos');
         addItypeFilter(cteWhere, 'r.indicator_id', req.query.itype);
         const cteWhereStr = cteWhere.join(' AND ');
+        const indItype = []; addItypeFilter(indItype, 'i.id', req.query.itype); // รายการตัวชี้วัดของหน่วยงานตามประเภทด้วย
 
         const sql = `
             WITH ind_stats AS (
@@ -1188,7 +1192,7 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
             FROM kpi_indicators i
             LEFT JOIN ind_stats ist ON ist.indicator_id = i.id
             LEFT JOIN kpi_main_indicators mi ON mi.id = i.main_indicator_id
-            WHERE i.dept_id = ? AND i.is_active = 1
+            WHERE i.dept_id = ? AND i.is_active = 1 ${indItype.map(c => 'AND ' + c).join(' ')}
             ORDER BY recording_pct DESC, mi.main_indicator_name, i.kpi_indicators_name
         `;
         const queryParams = [...cteParams, dept_id];
