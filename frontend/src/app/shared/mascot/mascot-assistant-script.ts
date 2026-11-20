@@ -11,13 +11,14 @@ export const FIRST_TAIL = 'ให้ผมแนะนำการใช้ง�
 export const NO_GUIDE_INTRO = 'ผมน้องโคราชดี ผู้ช่วยประจำระบบครับ';
 
 /** ตัวเลือกในเมนูหลักของผู้ช่วย */
-export function assistantMenu(o: { hasSteps: boolean; hasVideo: boolean; page: string; quiet: boolean; hasAi?: boolean }): DialogChoice[] {
+export function assistantMenu(o: { hasSteps: boolean; hasVideo: boolean; page: string; quiet: boolean; hasAi?: boolean; movedHome?: boolean }): DialogChoice[] {
   return [
     ...(o.hasSteps ? [{ label: 'แนะนำหน้านี้ทีละขั้น', action: 'tour:start' }] : []),
     ...(o.hasAi ? [{ label: 'ถามน้องโคราชดี (AI)', action: 'ask' }] : []),
     ...(o.hasVideo ? [{ label: 'ดูวิดีโอคู่มือหน้านี้', action: 'video' }] : []),
     ...(o.page !== 'help' ? [{ label: 'เปิดคู่มือการใช้งาน', action: 'nav:/help' }] : []),
     { label: o.quiet ? 'ทักทายเมื่อเข้าหน้าใหม่' : 'ไม่ต้องทักเมื่อเข้าหน้าใหม่', action: 'quiet' },
+    ...(o.movedHome ? [{ label: 'กลับไปมุมขวาล่าง', action: 'home:reset' }] : []),
     { label: 'ซ่อนน้องโคราชดี', action: 'hide' },
     { label: 'ปิด', next: 'bye' },
   ];
@@ -33,9 +34,9 @@ export function stepChoices(i: number, n: number): DialogChoice[] {
   ];
 }
 
-export function assistantScript(g: PageGuide | null, r: GuideRole, o: { page: string; quiet: boolean; hasVideo: boolean; hasAi: boolean }): DialogScript {
+export function assistantScript(g: PageGuide | null, r: GuideRole, o: { page: string; quiet: boolean; hasVideo: boolean; hasAi: boolean; movedHome?: boolean }): DialogScript {
   const hasSteps = !!g?.steps && g.steps(r).length > 0;
-  const menu = assistantMenu({ hasSteps, hasVideo: o.hasVideo, page: o.page, quiet: o.quiet, hasAi: o.hasAi });
+  const menu = assistantMenu({ hasSteps, hasVideo: o.hasVideo, page: o.page, quiet: o.quiet, hasAi: o.hasAi, movedHome: o.movedHome });
   const intro = g ? introOf(g, r) : NO_GUIDE_INTRO;
   return {
     start: { text: `${intro} ${MENU_TAIL}`, voice: [intro, MENU_TAIL], pose: 'wave', mood: 'happy', choices: menu },

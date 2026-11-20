@@ -689,6 +689,11 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   — **แก้/เพิ่มข้อความในบทพูด (LOGIN_SCRIPT, PAGE_GUIDES, assistantScript, AI_SAY) ต้องรัน `node tools/video-guide/build-mascot-voice.js` แล้ว commit ไฟล์ใน public/mascot/voice/** (spec ล้มถ้าประโยคใดไม่มีไฟล์เสียง)
   ประโยคที่ประกอบจากหลายส่วนให้ระบุ `voice: [...]` เป็นช่วงที่ใช้ซ้ำได้ (เช่น คำแนะนำหน้า + "มีอะไรให้ผมช่วยไหมครับ?") | `speakable()` ขยายคำย่อ (ต.ค., ThaID, KHD) ก่อนสังเคราะห์
   — เปิด-ปิด: `system_settings.mascot_voice_enabled` (maintenance-status, สวิตช์ `#mascot-voice-enabled`) + ปุ่มลำโพง `.ms-mute` ในกล่อง (`MascotService.voiceMuted$`, localStorage `kpi_mascot_voice_off`) | Test: `shared/mascot/mascot-voice.spec.ts`
+- **กิจกรรม + ไอพ่น + ลาก (20 พ.ย. 2569 — ผู้ใช้สั่ง):** `mascot-activity.ts` (`Activity` air/hover/land/stand/walk/sit/sleep, `planRest()`, `groundYOf()` = เท้าแตะขอบล่างจอ, `loadHome/saveHome` localStorage `kpi_mascot_home`)
+  — stage `updateActivity()`/`nextAct()`: หน้า login บินแล้วลงจอดเป็นระยะ (เดิน → นั่ง/นอน → บินขึ้น), ผู้ช่วยยืนที่จุดจอด (บางรอบเดินออกแล้วกลับ/นั่ง/นอน) — มีบทพูด/คลิก/ลาก = `wake()`
+  | ไอพ่น `updateJets()` (กรวยเรืองแสง 3 ชั้นใต้รองเท้า แรงตามความเร็ว ดับเมื่อไม่ได้ลอย) — **กล้องเว้นที่ใต้เท้า** (`cam (0,0.9,4.85)` + canvas ใหญ่ขึ้น) ถ้าปรับกล้องต้องแก้ `groundYOf` ตาม
+  | ท่า `sleep` (นอนตะแคงหันหน้า + `rootX`) / `drag` + หน้า `sleep` + Zzz (`.ms-zzz`) | ลาก: pointer events บน `.ms-fly` (ขยับ > 6px = ลาก, `suppressClick`), วางใกล้ขอบล่าง = ยืน, กลางจอ = ลอย (ผู้ช่วยจำตำแหน่ง + เมนู `home:reset` "กลับไปมุมขวาล่าง")
+  — Test: `shared/mascot/mascot-activity.spec.ts`
 - **ห้ามใช้อีโมจิในบทพูด** (บางเครื่องแสดงเป็นกล่อง) | Test: `shared/mascot/mascot.spec.ts` (ทุกตัวเลือกชี้บทที่มีจริง, ทุกท่าค่าครบ), `login.spec.ts`, `login-mascot.spec.ts`
 
 ### น้องโคราชดีบินในหน้าเข้าสู่ระบบ (19 พ.ย. 2569 — ผู้ใช้เลือก: 3 มิติด้วย CSS, เปิด-ปิด 2 ชั้น — ระยะที่ 1 ด้านบนแทนการแสดงผลแล้ว คงสวิตช์เปิด-ปิดเดิม)

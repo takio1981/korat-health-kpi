@@ -2,8 +2,8 @@
  * ใบหน้าบนจอของน้องโคราชดี — วาดลง canvas แล้วใช้เป็น texture ของจอ (ตาโต ม่านตาสีเขียวน้ำทะเล แก้มชมพู ปากชมพู ตามภาพต้นแบบ)
  * วาดใหม่เฉพาะเมื่อค่าเปลี่ยนเกินเกณฑ์ (faceChanged) ประหยัดการส่ง texture เข้า GPU
  */
-export type Mood = 'normal' | 'happy' | 'surprised' | 'shy' | 'think' | 'wink' | 'sad';
-export const MOODS: Mood[] = ['normal', 'happy', 'surprised', 'shy', 'think', 'wink', 'sad'];
+export type Mood = 'normal' | 'happy' | 'surprised' | 'shy' | 'think' | 'wink' | 'sad' | 'sleep';
+export const MOODS: Mood[] = ['normal', 'happy', 'surprised', 'shy', 'think', 'wink', 'sad', 'sleep'];
 
 export interface FaceState {
   /** 0 = ลืมตา, 1 = หลับตา */
@@ -76,7 +76,7 @@ export function drawFace(ctx: CanvasRenderingContext2D, s: FaceState, w = FACE_W
   };
   for (const [i, x] of ex.entries()) {
     if (mood === 'happy') { closedArc(x, true); continue; }
-    if (mood === 'shy') { closedArc(x, false); continue; }
+    if (mood === 'shy' || mood === 'sleep') { closedArc(x, false); continue; }
     if (mood === 'wink' && i === 1) { closedArc(x, true); continue; }
     const open = Math.max(0, 1 - s.blink);
     if (open < 0.12) { closedArc(x, false); continue; }

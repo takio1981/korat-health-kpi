@@ -4,15 +4,15 @@
  * เปลี่ยนท่า = ค่อยๆ เข้าหาค่าเป้าหมาย (blendJoints) จึงต่อเนื่องไม่กระตุก
  */
 export const JOINT_KEYS = [
-  'rootY', 'bodyPitch', 'bodyRoll', 'headPitch', 'headYaw', 'headRoll',
+  'rootY', 'rootX', 'bodyPitch', 'bodyRoll', 'headPitch', 'headYaw', 'headRoll',
   'armRRaise', 'armRFwd', 'armRElbow', 'armRBend', 'armLRaise', 'armLFwd', 'armLElbow', 'armLBend',
   'legRFwd', 'legLFwd', 'legRKnee', 'legLKnee', 'legSpread', 'finger', 'cape',
 ] as const;
 export type JointKey = typeof JOINT_KEYS[number];
 export type Joints = Record<JointKey, number>;
 
-export type PoseName = 'idle' | 'wave' | 'point' | 'aimLeft' | 'aimRight' | 'fly' | 'hover' | 'sit' | 'talk' | 'think' | 'shy' | 'cheer' | 'walk';
-export const POSE_NAMES: PoseName[] = ['idle', 'wave', 'point', 'aimLeft', 'aimRight', 'fly', 'hover', 'sit', 'talk', 'think', 'shy', 'cheer', 'walk'];
+export type PoseName = 'idle' | 'wave' | 'point' | 'aimLeft' | 'aimRight' | 'fly' | 'hover' | 'sit' | 'talk' | 'think' | 'shy' | 'cheer' | 'walk' | 'sleep' | 'drag';
+export const POSE_NAMES: PoseName[] = ['idle', 'wave', 'point', 'aimLeft', 'aimRight', 'fly', 'hover', 'sit', 'talk', 'think', 'shy', 'cheer', 'walk', 'sleep', 'drag'];
 
 export interface PoseParams {
   /** ความเร็วสัมพัทธ์ 0–1 (ท่าบิน) */
@@ -91,6 +91,23 @@ export function poseTargets(name: PoseName, t: number, p: PoseParams = {}): Join
       j.armRRaise = 2.7; j.armLRaise = 2.7; j.armRElbow = 0.2; j.armLElbow = 0.2;
       j.rootY = Math.abs(Math.sin(t * 6)) * 0.14; j.headPitch = -0.1;
       break;
+    case 'sleep': { // นอนตะแคงหันหน้าเข้าหาผู้ชม ขางอเล็กน้อย หายใจช้าๆ (เห็นหน้าหลับตา)
+      const b = Math.sin(t * 1.1);
+      j.rootY = 0.1; j.rootX = 0.38; j.bodyRoll = 1.48 + 0.015 * b; j.bodyPitch = 0;
+      j.headPitch = 0.05; j.headYaw = 0; j.headRoll = -0.1;
+      j.legRFwd = 0.55; j.legLFwd = 0.35; j.legRKnee = 0.7; j.legLKnee = 0.5; j.legSpread = 0;
+      j.armRRaise = 0.25; j.armRFwd = 0.9; j.armRElbow = 1.2; // แขนล่างหนุนหัว
+      j.armLRaise = 0.1; j.armLFwd = 0.5 + 0.03 * b; j.armLElbow = 0.6;
+      j.cape = 0;
+      break;
+    }
+    case 'drag': { // ถูกจับลาก: แขนชูดิ้น ขาแกว่ง
+      const k = Math.sin(t * 9);
+      j.armRRaise = 2.4 + 0.25 * k; j.armLRaise = 2.4 - 0.25 * k; j.armRElbow = 0.3; j.armLElbow = 0.3;
+      j.legRFwd = 0.45 * k; j.legLFwd = -0.45 * k; j.legRKnee = 0.4; j.legLKnee = 0.4;
+      j.headPitch = 0.06; j.headYaw = 0; j.cape = 0.5;
+      break;
+    }
     case 'walk': {
       const w = Math.sin(t * 7);
       j.legRFwd = 0.5 * w; j.legLFwd = -0.5 * w; j.legRKnee = Math.max(0, -w) * 0.5; j.legLKnee = Math.max(0, w) * 0.5;

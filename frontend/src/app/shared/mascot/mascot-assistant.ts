@@ -11,6 +11,7 @@ import { DialogScript, ResolvedNode } from './mascot-dialog';
 import { GuideRole, GuideStep, PageGuide, findTarget, guideFor, guideRole } from './mascot-guides';
 import { assistantScript, stepChoices } from './mascot-assistant-script';
 import { AI_SAY } from './mascot-phrases';
+import { loadHome } from './mascot-activity';
 import { MascotService } from './mascot.service';
 
 const TARGET_ATTR = 'data-mascot-target';
@@ -149,7 +150,7 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
   }
 
   private buildScript() {
-    this.script = assistantScript(this.guide, this.role, { page: this.page, quiet: this.mascot.quiet, hasVideo: !!this.videoUrl, hasAi: this.aiHelpOn });
+    this.script = assistantScript(this.guide, this.role, { page: this.page, quiet: this.mascot.quiet, hasVideo: !!this.videoUrl, hasAi: this.aiHelpOn, movedHome: !!loadHome() });
   }
 
   onAction(a: string) {
@@ -167,6 +168,8 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
     }
     switch (a) {
       case 'ask': stage.open('ask'); break;
+      case 'home:reset': stage.resetHome(); stage.close(); this.buildScript(); break;
+      case 'moved': this.buildScript(); break;
       case 'tour:start':
         // ตัดขั้นที่เป้าหมายไม่มีในหน้าตอนนี้ (สิทธิ์นี้ไม่มีปุ่ม/ต้องเข้าโหมดอื่นก่อน) — ตัวนับ n/N จึงตรงกับที่จะแนะนำจริง
         this.steps = (this.guide?.steps?.(this.role) || []).filter(st => !st.target || !!findTarget(st.target));

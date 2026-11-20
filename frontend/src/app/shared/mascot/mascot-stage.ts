@@ -7,7 +7,8 @@ import { FlyState, stepFly } from './mascot-motion';
 import { Joints, PoseName, autoPose, blendJoints, neutralJoints, poseTargets } from './mascot-pose';
 import { FACE_H, FACE_W, FaceState, Mood, blinkAt, drawFace, faceChanged, talkMouth } from './mascot-face';
 import { DialogChoice, DialogCtx, DialogScript, ResolvedNode, bubblePath, graphemes, resolveNode, thinkDots } from './mascot-dialog';
-import { MascotRig, ThreeLib, applyJoints, buildMascot, loadThree, updateCape } from './mascot-model';
+import { MascotRig, ThreeLib, applyJoints, buildMascot, loadThree, updateCape, updateJets } from './mascot-model';
+import { Activity, HOME_KEY, groundYOf, loadHome, planRest, saveHome } from './mascot-activity';
 import { MascotService, MascotCue } from './mascot.service';
 import { VoicePlayer } from './mascot-voice';
 
@@ -36,7 +37,8 @@ type Mode = 'roam' | 'goto' | 'talk' | 'home';
   template: `
     <div class="ms-ground" aria-hidden="true"></div>
     <div class="ms-ring" aria-hidden="true"></div>
-    <div class="ms-fly" title="น้องโคราชดี — คลิกเพื่อคุยกับผม" role="button" tabindex="0" aria-label="คุยกับน้องโคราชดี"
+    <div class="ms-zzz" aria-hidden="true"><span>Z</span><span>z</span><span>z</span></div>
+    <div class="ms-fly" title="น้องโคราชดี — คลิกเพื่อคุยกับผม · ลากเพื่อย้ายตำแหน่ง" role="button" tabindex="0" aria-label="คุยกับน้องโคราชดี"
          (click)="onMascotClick()" (keydown.enter)="onMascotClick()">
       <img *ngIf="fallback" class="ms-img" src="mascot/korat-d-fly.webp" alt="" draggable="false">
     </div>
@@ -63,7 +65,15 @@ type Mode = 'roam' | 'goto' | 'talk' | 'home';
   `,
   styles: [`
     :host { position: fixed; inset: 0; pointer-events: none; z-index: 40; overflow: hidden; font-family: 'Sarabun', sans-serif; }
-    .ms-fly { position: absolute; left: 0; top: 0; width: var(--ms-size, 150px); height: var(--ms-size, 150px); will-change: transform; pointer-events: auto; cursor: pointer; outline: none; }
+    .ms-fly { position: absolute; left: 0; top: 0; width: var(--ms-size, 150px); height: var(--ms-size, 150px); will-change: transform; pointer-events: auto; cursor: grab; outline: none; touch-action: none; user-select: none; }
+    .ms-fly.ms-dragging { cursor: grabbing; }
+    .ms-zzz { position: absolute; left: 0; top: 0; z-index: 3; opacity: 0; pointer-events: none; font-weight: 900; color: #0f766e; -webkit-text-stroke: 1px #fff; text-shadow: 0 2px 4px rgba(0,0,0,.18); transition: opacity .4s; }
+    .ms-zzz.ms-on { opacity: 1; }
+    .ms-zzz span { position: absolute; animation: ms-z 2.4s ease-in infinite; opacity: 0; }
+    .ms-zzz span:nth-child(1) { font-size: 30px; animation-delay: 0s; }
+    .ms-zzz span:nth-child(2) { font-size: 24px; animation-delay: .8s; }
+    .ms-zzz span:nth-child(3) { font-size: 18px; animation-delay: 1.6s; }
+    @keyframes ms-z { 0% { transform: translate(0, 0) rotate(-8deg); opacity: 0; } 20% { opacity: 1; } 100% { transform: translate(26px, -46px) rotate(12deg); opacity: 0; } }
     .ms-fly canvas { width: 100% !important; height: 100% !important; display: block; filter: drop-shadow(0 8px 10px rgba(10, 70, 60, .28)); }
     .ms-img { width: 62%; margin: 8% auto 0; display: block; filter: drop-shadow(0 6px 8px rgba(15, 60, 55, .35)); }
     .ms-ground { position: absolute; left: 0; bottom: 3vh; width: 90px; height: 16px; border-radius: 50%;
@@ -172,16 +182,31 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
   private sub: Subscription | null = null;
   private listeners: [EventTarget, string, EventListener][] = [];
 
-  private get size() { return this.dock ? (window.innerWidth < 640 ? 96 : 128) : (window.innerWidth < 640 ? 124 : 176); }
+  private get size() { return this.dock ? (window.innerWidth < 640 ? 110 : 146) : (window.innerWidth < 640 ? 142 : 200); }
   private nextGestureAt = 25;
   private gesture: PoseName | null = null;
   private gestureUntil = 0;
+  /** กิจกรรมปัจจุบัน — ในอากาศ / ลงจอด / ยืน / เดิน / นั่ง / นอน (ระหว่างคุยหรือถูกลากใช้ mode/drag แทน) */
+  private act: Activity = 'air';
+  private actUntil = 0;
+  private plan: Activity[] = [];
+  private walkTo = 0;
+  private nextRestAt = 20;
+  private jetLevel = 0;
+  private drag: { id: number; sx: number; sy: number; ox: number; oy: number; moved: boolean; lx: number; ly: number } | null = null;
+  private suppressClick = false;
+  private customHome: { fx: number; fy: number; ground: boolean } | null = null;
   private get maxV() { return Math.max(90, Math.min(window.innerWidth, window.innerHeight) * 0.22); }
 
   ngAfterViewInit() {
     const w = window.innerWidth, h = window.innerHeight;
     this.s = { x: w * 0.12, y: h * 0.72, z: 0.6, vx: 0, vy: 0, vz: 0, tx: w * 0.2, ty: h * 0.35, tz: 0.8, hold: 0 };
-    if (this.dock) { const hm = this.homePos(); this.s = { ...this.s, x: hm.x, y: hm.y + 40, z: 1 }; this.mode = 'home'; }
+    if (this.dock) {
+      this.customHome = loadHome();
+      const hm = this.homePos(); this.s = { ...this.s, x: hm.x, y: hm.y + 40, z: 1 }; this.mode = 'home';
+      this.act = this.homeOnGround() ? 'stand' : 'hover';
+    }
+    this.nextRestAt = (this.dock ? 35 : 18) + Math.random() * 20;
     this.reduced = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.nextTipAt = 40 + Math.random() * 25;
     this.sub = this.mascot.cues.subscribe(c => this.zone.runOutsideAngular(() => this.cue(c)));
@@ -192,6 +217,14 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
       this.listen(window, 'pointermove', (e: Event) => { const p = e as PointerEvent; this.pointer = { x: p.clientX, y: p.clientY }; });
       this.listen(document, 'focusin', (e: Event) => this.onFocus(e.target as Element | null));
       this.listen(document, 'keydown', (e: Event) => { if ((e as KeyboardEvent).key === 'Escape' && this.node) this.close(); });
+      // ลากด้วยเมาส์/นิ้ว (ขยับเกิน 6px = ลาก ไม่ใช่คลิก)
+      const flyEl = (this.el.nativeElement as HTMLElement).querySelector('.ms-fly') as HTMLElement | null;
+      if (flyEl) {
+        flyEl.addEventListener('pointerdown', (e: PointerEvent) => this.onDragStart(e, flyEl));
+        this.listen(window, 'pointermove', (e: Event) => this.onDragMove(e as PointerEvent));
+        this.listen(window, 'pointerup', (e: Event) => this.onDragEnd(e as PointerEvent, flyEl));
+        this.listen(window, 'pointercancel', (e: Event) => this.onDragEnd(e as PointerEvent, flyEl));
+      }
       if (this.greetKey && !this.sessionHas(this.greetKey)) {
         this.greetTimer = setTimeout(() => { this.sessionSet(this.greetKey); this.open('start'); }, 1400);
       }
@@ -249,7 +282,7 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
     const rig = buildMascot(L, this.faceCanvas, sealOk ? seal : null);
     scene.add(rig.root);
     const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
-    cam.position.set(0, 1.04, 4.1); cam.lookAt(0, 1.0, 0);
+    cam.position.set(0, 0.9, 4.85); cam.lookAt(0, 0.85, 0); // เว้นที่ใต้เท้าให้เห็นเปลวไอพ่น (20 พ.ย. 2569)
     this.renderer = renderer; this.scene = scene; this.camera = cam; this.rig = rig;
     this.startLoop();
   }
@@ -274,12 +307,11 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
     const W = window.innerWidth, H = window.innerHeight, size = this.size, t = this.clock;
 
     // ---- การเคลื่อนที่
-    if (this.mode === 'home') {
-      this.anchor = this.homePos();
-      this.seek(dt);
-    } else if (this.mode === 'roam') {
-      if (this.reduced) { this.s = { ...this.s, x: size * 0.7, y: H - size * 0.5, vx: 0, vy: 0 }; }
-      else this.s = stepFly(this.s, dt, W, H, size);
+    const groundY = groundYOf(H, size);
+    if (this.drag?.moved) {
+      // ถูกลาก: ตามเมาส์ (ความเร็วจากระยะที่ขยับ ใช้เอียงตัว/แกว่งผ้าคลุม)
+    } else if (this.mode === 'home' || this.mode === 'roam') {
+      this.updateActivity(dt, t, W, H, size, groundY);
     } else {
       this.seek(dt);
       if (this.mode === 'goto' && Math.hypot(this.anchor.x - this.s.x, this.anchor.y - this.s.y) < 26) this.beginTalk();
@@ -296,18 +328,21 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
     this.joints = blendJoints(this.joints, target, dt);
 
     // ---- ใบหน้า
-    const mood: Mood = this.shyActive() ? 'shy' : (this.node ? this.node.mood : 'normal');
+    const mood: Mood = this.drag?.moved ? 'surprised' : this.isSleeping() ? 'sleep' : this.shyActive() ? 'shy' : (this.node ? this.node.mood : 'normal');
     const typing = !!this.node && this.typed < this.chars.length && this.mode === 'talk';
     const lv = this.player?.playing ? this.player.level() : 0;
     const mouth = lv > 0 ? Math.min(1, lv * 1.25) : lv < 0 || (typing && !this.player?.playing) ? talkMouth(t) : (this.node && mood === 'happy' ? 0.35 : 0);
     const face: FaceState = {
-      blink: mood === 'shy' ? 0 : blinkAt(t), mouth,
+      blink: mood === 'shy' || mood === 'sleep' ? 0 : blinkAt(t), mouth: mood === 'sleep' ? 0 : mouth,
       lookX, lookY, mood,
     };
 
     // ---- หันตัว: บิน = หันตามทิศ, คุย = หันหาผู้ใช้ (เอียงไปทางกล่องคำพูดเล็กน้อย)
     let yawT = 0;
     if (this.mode === 'talk') yawT = this.pointDir ? this.pointDir * 0.25 : this.bubbleSide() * 0.3;
+    else if (this.drag?.moved || this.isSleeping()) yawT = 0;
+    else if (this.act === 'walk' && this.isRestMode()) yawT = Math.sign(this.walkTo - s.x || 1) * 1.25;
+    else if (this.act === 'sit' && this.isRestMode()) yawT = lookX * 0.2;
     else if (speed > 0.12) yawT = Math.max(-1, Math.min(1, s.vx / this.maxV)) * 1.35;
     else yawT = lookX * 0.35;
     this.yaw += (yawT - this.yaw) * (1 - Math.exp(-dt * 4.5));
@@ -318,16 +353,23 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
         if (ctx) { drawFace(ctx, face); this.rig.faceTexture.needsUpdate = true; }
         this.lastFace = face;
       }
-      const flying = this.mode !== 'talk' && speed > 0.12;
+      const airborne = this.isAirborne(groundY);
+      const flying = this.mode !== 'talk' && speed > 0.12 && airborne;
       this.rig.root.rotation.set(flying ? -s.vy / this.maxV * 0.25 : 0, this.yaw, flying ? -s.vx / this.maxV * 0.18 : 0);
       applyJoints(this.rig, this.joints);
       updateCape(this.rig, 0.12 + 0.88 * speed, t);
+      // ไอพ่นใต้เท้า: ติดเมื่อลอยอยู่ (แรงตามความเร็ว) ดับเมื่อยืน/เดิน/นั่ง/นอน/ถูกลาก
+      const jetT = airborne && !this.drag?.moved ? 0.55 + 0.45 * speed : 0;
+      this.jetLevel += (jetT - this.jetLevel) * (1 - Math.exp(-dt * 8));
+      updateJets(this.rig, this.jetLevel, t);
       this.rig.heart.rotation.z = Math.sin(t * 3.1) * 0.12;
       this.renderer.render(this.scene, this.camera);
     }
 
     // ---- ตำแหน่งบนจอ
-    const scale = this.mode === 'roam' ? 0.66 + s.z * 0.38 : 1;
+    const scale = this.mode === 'roam' && this.act === 'air' && !this.drag?.moved ? 0.66 + s.z * 0.38 : 1;
+    this.updateZzz(s, size);
+    fly.classList.toggle('ms-dragging', !!this.drag?.moved);
     this.updateRing();
     fly.style.setProperty('--ms-size', size + 'px');
     fly.style.transform = `translate(${(s.x - size / 2).toFixed(1)}px, ${(s.y - size * 0.62).toFixed(1)}px) scale(${scale.toFixed(3)})`;
@@ -336,8 +378,8 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
       if (img) img.style.transform = `rotate(${(Math.max(-1, Math.min(1, s.vx / this.maxV)) * 12).toFixed(1)}deg) translateY(${(Math.sin(t * 2.6) * 5).toFixed(1)}px)`;
     }
     let behind = false;
-    if (this.mode === 'roam') {
-      behind = s.z < 0.28;
+    if (this.mode === 'roam' && !this.drag?.moved) {
+      behind = this.act === 'air' && s.z < 0.28;
       const r = this.avoidRect();
       if (r) {
         const half = (size * scale) / 2;
@@ -357,7 +399,7 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
 
     // ---- กล่องคำพูด
     this.updateBubble(t);
-    if (!this.node && this.tips.length && this.tipsShown < 4 && t > this.nextTipAt && this.mode === 'roam' && !this.shyActive()) {
+    if (!this.node && this.tips.length && this.tipsShown < 4 && t > this.nextTipAt && this.mode === 'roam' && this.act === 'air' && !this.drag && !this.shyActive()) {
       this.tipsShown++; this.nextTipAt = t + 55 + Math.random() * 30;
       const tip = this.tips[Math.floor(Math.random() * this.tips.length)];
       this.openResolved({ id: 'tip', text: tip, kind: 'think', pose: 'hover', mood: 'normal', choices: [], auto: 5200, pointAt: null });
@@ -365,14 +407,22 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
   }
 
   private currentPose(speed: number, t: number): PoseName {
+    if (this.drag?.moved) return 'drag';
     if (this.shyActive()) return 'shy';
+    if (this.isRestMode()) {
+      if (this.act === 'land') return speed > 0.1 ? 'fly' : 'hover';
+      if (this.act === 'walk') return 'walk';
+      if (this.act === 'sit') return 'sit';
+      if (this.act === 'sleep') return 'sleep';
+      if (this.act === 'hover') return speed > 0.15 ? 'fly' : 'hover';
+    }
     if (this.mode === 'home') {
       if (speed > 0.15) return 'fly';
       if (this.gesture && t < this.gestureUntil) return this.gesture;
       if (t > this.nextGestureAt && !this.reduced) {
-        const g: PoseName[] = ['wave', 'think', 'cheer', 'sit'];
+        const g: PoseName[] = ['wave', 'think', 'cheer'];
         this.gesture = g[Math.floor(Math.random() * g.length)];
-        this.gestureUntil = t + (this.gesture === 'sit' ? 6 : 2.2);
+        this.gestureUntil = t + 2.2;
         this.nextGestureAt = t + 28 + Math.random() * 25;
         return this.gesture;
       }
@@ -399,7 +449,160 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
   }
 
   /** ตำแหน่งจอดมุมขวาล่าง */
-  private homePos() { const sz = this.size; return { x: window.innerWidth - sz * 0.62, y: window.innerHeight - sz * 0.32 }; }
+  private homePos() {
+    const sz = this.size, W = window.innerWidth, H = window.innerHeight, gy = groundYOf(H, sz);
+    const h = this.customHome;
+    if (!h) return { x: W - sz * 0.62, y: gy };
+    return { x: Math.max(sz * 0.5, Math.min(W - sz * 0.5, h.fx * W)), y: h.ground ? gy : Math.max(sz * 0.7, Math.min(gy, h.fy * H)) };
+  }
+  private homeOnGround() { return !this.customHome || this.customHome.ground; }
+  /** กลับไปจอดมุมขวาล่าง (ล้างตำแหน่งที่ลากไว้) */
+  resetHome() { this.customHome = null; saveHome(null); this.act = 'stand'; }
+
+  // ===================== กิจกรรม: บิน → ลงจอด → ยืน/เดิน/นั่ง/นอน → บินต่อ =====================
+  private isRestMode() { return this.mode === 'home' || this.mode === 'roam'; }
+  private isSleeping() { return this.isRestMode() && this.act === 'sleep' && !this.drag?.moved; }
+  private isAirborne(groundY: number) { return this.s.y < groundY - 10 || this.mode === 'goto' || (this.isRestMode() && (this.act === 'air' || this.act === 'land' || this.act === 'hover')); }
+
+  private updateActivity(dt: number, t: number, W: number, H: number, size: number, groundY: number) {
+    const s = this.s;
+    const startRest = () => { this.plan = planRest(Math.random, this.dock); this.nextAct(t, W, size, groundY); };
+    if (this.reduced) {
+      if (this.mode === 'roam') this.s = { ...s, x: size * 0.7, y: groundY, vx: 0, vy: 0 };
+      else { this.anchor = this.homePos(); this.seek(dt); }
+      this.act = this.mode === 'home' && !this.homeOnGround() ? 'hover' : 'stand';
+      return;
+    }
+    switch (this.act) {
+      case 'air':
+        if (this.mode === 'home') { this.act = this.homeOnGround() ? 'land' : 'hover'; this.anchor = this.homePos(); return; }
+        this.s = stepFly(s, dt, W, H, size);
+        if (t > this.nextRestAt && !this.node && !this.shyActive()) {
+          this.act = 'land';
+          this.anchor = { x: this.groundSpotX(W, size), y: groundY };
+        }
+        return;
+      case 'hover': // จอดลอยกลางอากาศตามที่ผู้ใช้ลากไว้ (ไม่มีกิจกรรมบนพื้น)
+        this.anchor = this.homePos(); this.seek(dt);
+        return;
+      case 'land':
+        if (this.mode === 'home') this.anchor = this.homePos();
+        this.seek(dt);
+        if (Math.hypot(this.anchor.x - this.s.x, this.anchor.y - this.s.y) < 8) {
+          this.s = { ...this.s, y: this.anchor.y, vx: 0, vy: 0, z: 1 };
+          this.act = 'stand'; this.actUntil = t + (this.mode === 'home' ? 0 : 1.2);
+          if (this.mode === 'roam') this.plan = [];
+        }
+        return;
+      case 'stand':
+        this.s = { ...s, y: s.y + (groundY - s.y) * Math.min(1, dt * 8), vx: 0, vy: 0, z: 1 };
+        if (this.mode === 'home') {
+          this.s = { ...this.s, x: s.x + (this.homePos().x - s.x) * Math.min(1, dt * 4) };
+          if (t > this.nextRestAt && !this.node && !this.shyActive() && this.homeOnGround()) startRest();
+        } else if (t > this.actUntil) {
+          if (!this.plan.length) startRest(); else this.nextAct(t, W, size, groundY);
+        }
+        return;
+      case 'walk': {
+        const dir = Math.sign(this.walkTo - s.x), step = 70 * dt;
+        const x = Math.abs(this.walkTo - s.x) <= step ? this.walkTo : s.x + dir * step;
+        this.s = { ...s, x, y: groundY, vx: 0, vy: 0, z: 1 };
+        if (x === this.walkTo) this.nextAct(t, W, size, groundY);
+        return;
+      }
+      case 'sit': case 'sleep':
+        this.s = { ...s, y: groundY, vx: 0, vy: 0, z: 1 };
+        if (t > this.actUntil) this.nextAct(t, W, size, groundY);
+        return;
+    }
+  }
+
+  /** ทำกิจกรรมถัดไปตามแผน หมดแผน = บินขึ้น (หน้า login) หรือกลับมายืนที่เดิม (ผู้ช่วย) */
+  private nextAct(t: number, W: number, size: number, groundY: number) {
+    const a = this.plan.shift();
+    if (!a) {
+      this.nextRestAt = t + (this.dock ? 40 : 22) + Math.random() * 25;
+      if (this.mode === 'roam') { this.act = 'air'; this.s = { ...this.s, vy: -this.maxV, tx: this.s.x, ty: this.s.y - 200, hold: 0 }; }
+      else { this.act = 'walk'; this.walkTo = this.homePos().x; this.plan = []; if (Math.abs(this.walkTo - this.s.x) < 4) this.act = 'stand'; }
+      return;
+    }
+    this.act = a;
+    if (a === 'walk') {
+      const span = this.dock ? 90 + Math.random() * 80 : 120 + Math.random() * 160;
+      const base = this.mode === 'home' ? this.homePos().x : this.s.x;
+      let to = base + (Math.random() < 0.5 ? -span : span);
+      if (this.mode === 'home') to = Math.min(to, base); // ผู้ช่วยเดินออกด้านซ้ายจากมุมจอดแล้วเดินกลับ
+      this.walkTo = Math.max(size * 0.5, Math.min(W - size * 0.5, to));
+    } else if (a === 'sit') this.actUntil = t + 6 + Math.random() * 6;
+    else if (a === 'sleep') this.actUntil = t + (this.dock ? 20 : 10) + Math.random() * 15;
+    else if (a === 'stand') this.actUntil = t + 1.2;
+  }
+
+  /** จุดลงจอดบนพื้น (หน้า login: หลีกจากใต้กล่องเข้าสู่ระบบถ้ามีที่ว่าง) */
+  private groundSpotX(W: number, size: number) {
+    const r = this.avoidRect();
+    for (let i = 0; i < 6; i++) {
+      const x = size * 0.6 + Math.random() * Math.max(1, W - size * 1.2);
+      if (!r || x < r.left - size * 0.5 || x > r.right + size * 0.5) return x;
+    }
+    return size * 0.7;
+  }
+
+  /** ปลุก/เลิกพัก เมื่อมีบทพูด ถูกคลิก หรือถูกลาก */
+  private wake() {
+    if (this.act === 'sit' || this.act === 'sleep' || this.act === 'walk' || this.act === 'land') {
+      this.plan = [];
+      this.act = this.mode === 'roam' ? 'air' : (this.homeOnGround() ? 'stand' : 'hover');
+      this.nextRestAt = this.clock + (this.dock ? 40 : 22) + Math.random() * 20;
+    }
+  }
+
+  private updateZzz(s: FlyState, size: number) {
+    const z = (this.el.nativeElement as HTMLElement).querySelector('.ms-zzz') as HTMLElement | null;
+    if (!z) return;
+    const on = this.isSleeping() && this.mode !== 'talk';
+    z.classList.toggle('ms-on', on);
+    if (on) z.style.transform = `translate(${(s.x - size * 0.42).toFixed(1)}px, ${(s.y - size * 0.42).toFixed(1)}px)`;
+  }
+
+  // ===================== ลากด้วยเมาส์ =====================
+  private onDragStart(e: PointerEvent, el: HTMLElement) {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    this.drag = { id: e.pointerId, sx: e.clientX, sy: e.clientY, ox: e.clientX - this.s.x, oy: e.clientY - this.s.y, moved: false, lx: e.clientX, ly: e.clientY };
+    try { el.setPointerCapture(e.pointerId); } catch { /* */ }
+  }
+  private onDragMove(e: PointerEvent) {
+    const d = this.drag;
+    if (!d || e.pointerId !== d.id) return;
+    if (!d.moved && Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 6) return;
+    if (!d.moved) { d.moved = true; this.wake(); if (this.node) this.close(); }
+    const W = window.innerWidth, H = window.innerHeight, size = this.size;
+    const x = Math.max(size * 0.3, Math.min(W - size * 0.3, e.clientX - d.ox));
+    const y = Math.max(size * 0.5, Math.min(groundYOf(H, size), e.clientY - d.oy));
+    this.s = { ...this.s, x, y, vx: (e.clientX - d.lx) * 30, vy: (e.clientY - d.ly) * 30, z: 1 };
+    d.lx = e.clientX; d.ly = e.clientY;
+  }
+  private onDragEnd(e: PointerEvent, el: HTMLElement) {
+    const d = this.drag;
+    if (!d || e.pointerId !== d.id) return;
+    try { el.releasePointerCapture(e.pointerId); } catch { /* */ }
+    this.drag = null;
+    if (!d.moved) return; // คลิกธรรมดา — ให้ click handler ทำงาน
+    this.suppressClick = true; setTimeout(() => (this.suppressClick = false), 0);
+    const W = window.innerWidth, H = window.innerHeight, size = this.size, gy = groundYOf(H, size);
+    const onGround = this.s.y >= gy - size * 0.35;
+    this.s = { ...this.s, vx: 0, vy: 0, y: onGround ? gy : this.s.y, tx: this.s.x, ty: this.s.y, hold: onGround ? 0 : 6 };
+    if (this.dock) {
+      this.customHome = { fx: this.s.x / W, fy: this.s.y / H, ground: onGround };
+      saveHome(this.customHome);
+      this.act = onGround ? 'stand' : 'hover';
+      this.zone.run(() => this.action.emit('moved')); // ผู้ช่วยปรับเมนู (กลับไปมุมขวาล่าง)
+    } else {
+      this.act = onGround ? 'stand' : 'air';
+      this.actUntil = this.clock + 1.5; this.plan = [];
+      this.nextRestAt = this.clock + (onGround ? 0 : 18);
+    }
+  }
 
   /** วงไฮไลต์รอบสิ่งที่กำลังชี้ (ตามการเลื่อนหน้าจอทุกเฟรม) */
   private updateRing() {
@@ -439,6 +642,7 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
   }
 
   openResolved(n: ResolvedNode) {
+    this.wake();
     this.player?.stop();
     this.voiced = false;
     this.charDelay = 0.034;
@@ -510,6 +714,8 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
     this.node = null;
     this.showChoices = false;
     this.mode = this.dock ? 'home' : 'roam';
+    if (this.mode === 'roam') this.act = 'air';
+    else this.act = this.homeOnGround() ? 'land' : 'hover';
     this.s = { ...this.s, hold: 0.8 };
     this.setText('');
     this.cdr.detectChanges();
@@ -529,6 +735,8 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
   }
 
   onMascotClick() {
+    if (this.suppressClick) return;
+    this.wake();
     if (this.node && this.typed < this.chars.length) { this.typed = this.chars.length; return; }
     if (this.node && this.node.choices.length) { this.close(); return; }
     this.open(this.greetKey && this.sessionHas(this.greetKey) && this.script['menu'] ? 'menu' : 'start');

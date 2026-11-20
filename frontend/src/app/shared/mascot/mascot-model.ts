@@ -32,6 +32,8 @@ export interface MascotRig {
   armR: ArmRig; armL: ArmRig;
   legR: LegRig; legL: LegRig;
   fingers: THREE_NS.Object3D[];
+  /** ไอพ่นใต้รองเท้า (ซ้าย/ขวา) — scale.y = แรงไอพ่น, ซ่อนเมื่อยืน/เดิน/นั่ง/นอน */
+  jets: THREE_NS.Group[];
   heart: THREE_NS.Group;
   cape: THREE_NS.Mesh;
   capeBase: Float32Array;
@@ -196,6 +198,23 @@ export function buildMascot(L: ThreeLib, faceCanvas: HTMLCanvasElement, sealImag
   };
   const legR = makeLeg(-1), legL = makeLeg(1);
 
+  // ===== ไอพ่นใต้เท้า ===== (กรวยเรืองแสง 2 ชั้น: นอกส้ม-ฟ้า ในขาว — additive ไม่บังตัวละคร)
+  // สีทึบพอมองเห็นบนพื้นหลังสว่าง (additive บน canvas โปร่งใสจางเกินไป — ทดสอบภาพ 20 พ.ย. 2569)
+  const flameOuter = keep(new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.78, depthWrite: false, toneMapped: false }));
+  const flameMid = keep(new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false }));
+  const flameCore = keep(new THREE.MeshBasicMaterial({ color: 0xfffbe6, transparent: true, opacity: 0.95, depthWrite: false, toneMapped: false }));
+  const nozzle = keep(new THREE.MeshPhysicalMaterial({ color: 0x5b6b70, roughness: 0.35, metalness: 0.6 }));
+  const jets = [legR, legL].map(l => {
+    const g = new THREE.Group(); g.position.set(0, -0.285, 0.04); l.knee.add(g);
+    const noz = mesh(new THREE.CylinderGeometry(0.075, 0.06, 0.04, 20), nozzle); noz.position.y = -0.005; l.knee.add(noz); noz.position.set(0, -0.29, 0.04);
+    const mk = (r: number, h: number, m: THREE_NS.Material) => { const c = mesh(new THREE.ConeGeometry(r, h, 20, 1, true), m); c.rotation.x = Math.PI; c.position.y = -h / 2; return c; };
+    const o = mk(0.105, 0.6, flameOuter), md = mk(0.075, 0.42, flameMid), c = mk(0.04, 0.24, flameCore);
+    o.renderOrder = 1; md.renderOrder = 2; c.renderOrder = 3;
+    g.add(o, md, c);
+    g.scale.set(1, 0.001, 1); g.visible = false;
+    return g;
+  });
+
   // ===== ผ้าคลุม ===== (ปลายแคบที่ไหล่ ผายออกด้านล่าง — ขยับตามความเร็วใน updateCape)
   const capeGeo = new THREE.PlaneGeometry(0.66, 0.68, 8, 12);
   const cp = capeGeo.attributes['position'];
@@ -207,7 +226,7 @@ export function buildMascot(L: ThreeLib, faceCanvas: HTMLCanvasElement, sealImag
   const cape = mesh(capeGeo, tealSoft); cape.position.set(0, 0.16, -0.235); body.add(cape);
 
   return {
-    root, body, neck, armR, armL, legR, legL, fingers, heart, cape, capeBase, faceTexture,
+    root, body, neck, armR, armL, legR, legL, fingers, jets, heart, cape, capeBase, faceTexture,
     dispose: () => { for (const d of disposables) d.dispose(); },
   };
 }
@@ -215,6 +234,7 @@ export function buildMascot(L: ThreeLib, faceCanvas: HTMLCanvasElement, sealImag
 /** วางข้อต่อตามค่าท่าทาง */
 export function applyJoints(rig: MascotRig, j: Joints) {
   rig.root.position.y = j.rootY;
+  rig.root.position.x = j.rootX;
   rig.body.rotation.set(j.bodyPitch, 0, j.bodyRoll);
   rig.neck.rotation.set(j.headPitch, j.headYaw, j.headRoll);
   const arm = (a: ArmRig, raise: number, fwd: number, elbow: number, side: number) => {
@@ -244,4 +264,15 @@ export function updateCape(rig: MascotRig, flow: number, t: number) {
   }
   pos.needsUpdate = true;
   rig.cape.geometry.computeVertexNormals();
+}
+
+/** แรงไอพ่น 0–1 (0 = ซ่อน) + เปลวไฟสั่นตามเวลา */
+export function updateJets(rig: MascotRig, level: number, t: number) {
+  rig.jets.forEach((g, i) => {
+    const on = level > 0.03;
+    g.visible = on;
+    if (!on) return;
+    const flick = 0.82 + 0.18 * Math.sin(t * 38 + i * 1.7) * Math.sin(t * 23 + i);
+    g.scale.set(0.8 + 0.25 * level, Math.max(0.05, level * flick * 1.15), 0.8 + 0.25 * level);
+  });
 }
