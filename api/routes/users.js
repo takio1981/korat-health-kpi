@@ -131,11 +131,31 @@ apiRouter.get('/sso/connectivity', async (req, res) => {
     res.json({ success: true, thaid, providerid });
 });
 
+// ชุดเทศกาลของน้องโคราชดี — ตรวจรูปแบบอย่างเดียว (รายชื่อเทศกาลจริงอยู่ฝั่ง frontend: shared/mascot/mascot-festival.ts ตรวจซ้ำอีกชั้น)
+function sanitizeOutfitMode(v) {
+    return typeof v === 'string' && /^[a-z]{2,20}$/.test(v) ? v : 'auto';
+}
+function sanitizeFestivalDates(raw) {
+    let src;
+    try { src = JSON.parse(raw || '{}'); } catch (e) { return {}; }
+    const out = {};
+    if (!src || typeof src !== 'object' || Array.isArray(src)) return out;
+    for (const y of Object.keys(src).slice(0, 50)) {
+        const row = src[y];
+        if (!/^2[01]\d\d$/.test(y) || !row || typeof row !== 'object' || Array.isArray(row)) continue;
+        for (const id of Object.keys(row).slice(0, 30)) {
+            const d = row[id];
+            if (/^[a-z]{2,20}$/.test(id) && typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && d.slice(0, 4) === y) (out[y] = out[y] || {})[id] = d;
+        }
+    }
+    return out;
+}
+
 // ตรวจสอบสถานะ maintenance mode (public — ไม่ต้อง login)
 apiRouter.get('/system/maintenance-status', async (req, res) => {
     try {
         const [rows] = await db.query(
-            "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message','thaid_enabled','providerid_enabled','thaid_login_url','thaid_register_enabled','providerid_register_enabled','system_version','login_mascot_enabled','mascot_assistant_enabled','mascot_voice_enabled','mascot_size')"
+            "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message','thaid_enabled','providerid_enabled','thaid_login_url','thaid_register_enabled','providerid_register_enabled','system_version','login_mascot_enabled','mascot_assistant_enabled','mascot_voice_enabled','mascot_size','mascot_outfit','mascot_festival_dates')"
         );
         const s = {};
         rows.forEach(r => s[r.setting_key] = r.setting_value);
@@ -157,6 +177,9 @@ apiRouter.get('/system/maintenance-status', async (req, res) => {
             mascot_voice_enabled: s['mascot_voice_enabled'] !== 'false',
             // ขนาดตั้งต้นของน้องโคราชดี (20 พ.ย. 2569) — small | medium | large (ค่าอื่น/ไม่มีค่า = medium) ผู้ใช้เลือกเองได้ในเมนูของน้อง
             mascot_size: ['small', 'medium', 'large'].includes(s['mascot_size']) ? s['mascot_size'] : 'medium',
+            // ชุดเทศกาลของน้องโคราชดี (21 พ.ย. 2569) — auto (ตามเทศกาล, ค่าตั้งต้น) | none | id เทศกาล + วันที่จันทรคติที่ผู้ดูแลกรอก
+            mascot_outfit: sanitizeOutfitMode(s['mascot_outfit']),
+            mascot_festival_dates: sanitizeFestivalDates(s['mascot_festival_dates']),
         });
     } catch (error) {
         res.json({ success: true, maintenance: false, message: '', thaid_enabled: false, providerid_enabled: false, system_version: 'v1.0.0' });

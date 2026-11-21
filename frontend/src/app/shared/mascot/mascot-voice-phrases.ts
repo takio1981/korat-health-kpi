@@ -7,6 +7,7 @@ import { LOGIN_SCRIPT, LOGIN_TIPS, resolveNode } from './mascot-dialog';
 import { PAGE_GUIDES, guideFor, guideRole } from './mascot-guides';
 import { assistantScript } from './mascot-assistant-script';
 import { AI_SAY } from './mascot-phrases';
+import { FESTIVALS } from './mascot-festival';
 import { normVoice, speakable, voiceKey } from './mascot-voice';
 
 export { normVoice, speakable, voiceKey };
@@ -39,5 +40,6 @@ export function collectVoicePhrases(): string[] {
     }
   }
   Object.values(AI_SAY).forEach(add);
+  FESTIVALS.forEach(f => add(f.greet));
   return [...out].sort();
 }

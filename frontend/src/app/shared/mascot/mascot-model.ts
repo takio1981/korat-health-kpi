@@ -35,7 +35,12 @@ export interface MascotRig {
   /** ไอพ่นใต้รองเท้า (ซ้าย/ขวา) — scale.y = แรงไอพ่น, ซ่อนเมื่อยืน/เดิน/นั่ง/นอน */
   jets: THREE_NS.Group[];
   heart: THREE_NS.Group;
+  /** หัว (ใส่หมวก/ผ้าคาดหัว) และมือ [ขวา, ซ้าย] (ถือของ) — ชุดเทศกาล mascot-outfit.ts */
+  head: THREE_NS.Group;
+  hands: THREE_NS.Group[];
   cape: THREE_NS.Mesh;
+  capeMat: THREE_NS.MeshPhysicalMaterial;
+  capeColor: number;
   capeBase: Float32Array;
   faceTexture: THREE_NS.CanvasTexture;
   dispose(): void;
@@ -227,6 +232,7 @@ export function buildMascot(L: ThreeLib, faceCanvas: HTMLCanvasElement, sealImag
 
   return {
     root, body, neck, armR, armL, legR, legL, fingers, jets, heart, cape, capeBase, faceTexture,
+    head, hands: [armR, armL].map(a => a.elbow.children[2] as THREE_NS.Group), capeMat: tealSoft, capeColor: 0x12988a,
     dispose: () => { for (const d of disposables) d.dispose(); },
   };
 }

@@ -11,6 +11,15 @@ import { MascotRig, ThreeLib, applyJoints, buildMascot, loadThree, updateCape, u
 import { Activity, HOME_KEY, groundYOf, loadHome, planRest, saveHome } from './mascot-activity';
 import { MascotService, MascotCue } from './mascot.service';
 import { MascotSize, mascotPx, normalizeMascotSize } from './mascot-size';
+import { Festival, activeFestival, thaiDateKey } from './mascot-festival';
+import type { Outfit } from './mascot-outfit';
+
+/** ตัวสร้างชุดเทศกาลโหลดแยกไฟล์ (เหมือน three.js) — ไม่เพิ่มขนาด initial bundle */
+let outfitModule: Promise<typeof import('./mascot-outfit')> | null = null;
+const loadOutfitModule = () => (outfitModule ||= import('./mascot-outfit'));
+
+/** คีย์ localStorage: อวยพรเทศกาลไปแล้ว (id|วันที่) */
+export const FEST_GREET_KEY = 'kpi_mascot_fest_greeted';
 import { VoicePlayer } from './mascot-voice';
 
 /** WebGL ใช้ได้หรือไม่ (jsdom/เบราว์เซอร์เก่า/ปิดการเร่งกราฟิก = ใช้ภาพนิ่งแทน) */
@@ -178,6 +187,10 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
   private nextTipAt = 0;
   private tipsShown = 0;
   private greetTimer: any = null;
+  private festTimer: any = null;
+  private outfit: Outfit | null = null;
+  private outfitId = '';
+  private nextOutfitCheck = 60;
   private destroyed = false;
   private reduced = false;
   private sub: Subscription | null = null;
@@ -218,6 +231,10 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
     this.sub = this.mascot.cues.subscribe(c => this.zone.runOutsideAngular(() => this.cue(c)));
     this.sub.add(this.mascot.voiceMuted$.subscribe(m => { this.muted = m; if (m) this.player?.stop(); }));
     this.sub.add(this.mascot.size$.subscribe(v => { this.userSize = v; }));
+    // ชุดเทศกาล: ค่าระบบ/ลองชุดเปลี่ยน = ใส่ชุดใหม่ทันที, อวยพรเทศกาลหลังเปิดหน้าสักพัก (วันละครั้งต่อเครื่อง)
+    this.sub.add(this.mascot.outfit$.subscribe(() => this.zone.runOutsideAngular(() => this.refreshOutfit())));
+    this.sub.add(this.mascot.outfitPreview$.subscribe(() => this.zone.runOutsideAngular(() => this.refreshOutfit())));
+    this.zone.runOutsideAngular(() => { this.festTimer = setTimeout(() => this.festivalGreet(), this.dock ? 9000 : 7000); });
     if (this.voice && typeof Audio !== 'undefined') { this.player = new VoicePlayer(); this.player.load(); }
 
     this.zone.runOutsideAngular(() => {
@@ -249,8 +266,10 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
     this.player?.dispose();
     cancelAnimationFrame(this.raf);
     clearTimeout(this.greetTimer);
+    clearTimeout(this.festTimer);
     this.sub?.unsubscribe();
     for (const [t, n, f] of this.listeners) t.removeEventListener(n, f);
+    this.outfit?.dispose();
     this.rig?.dispose();
     this.envTex?.dispose();
     this.renderer?.dispose();
@@ -292,7 +311,43 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
     const cam = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
     cam.position.set(0, 0.9, 4.85); cam.lookAt(0, 0.85, 0); // เว้นที่ใต้เท้าให้เห็นเปลวไอพ่น (20 พ.ย. 2569)
     this.renderer = renderer; this.scene = scene; this.camera = cam; this.rig = rig;
+    this.refreshOutfit();
     this.startLoop();
+  }
+
+  // ===================== ชุดเทศกาล =====================
+  /** เทศกาลที่ควรแสดงตอนนี้: ลองชุด (หน้าตั้งค่า) มาก่อน แล้วจึงค่าระบบ (auto = ตามวันที่เวลาไทย) */
+  private wantedFestival(): Festival | null {
+    const cfg = this.mascot.outfit$.value, pv = this.mascot.outfitPreview$.value;
+    return activeFestival(pv ?? cfg.mode, thaiDateKey(), cfg.dates);
+  }
+  /** ใส่/ถอดชุดให้ตรงกับเทศกาลปัจจุบัน (เรียกเมื่อค่าเปลี่ยน + ทุก 1 นาที — ข้ามเที่ยงคืนแล้วเปลี่ยนเอง) */
+  private refreshOutfit() {
+    if (!this.L || !this.rig) return;
+    const f = this.wantedFestival(), id = f?.id || '';
+    if (id === this.outfitId) return;
+    this.outfit?.dispose(); this.outfit = null; this.outfitId = id;
+    if (!f) return;
+    loadOutfitModule().then(m => {
+      // ระหว่างรอโหลด เทศกาลอาจเปลี่ยนอีก/คอมโพเนนต์ถูกทำลาย = ทิ้ง
+      if (this.destroyed || this.outfitId !== id || this.outfit || !this.L || !this.rig) return;
+      try { this.outfit = m.dressMascot(this.L, this.rig, f.outfit); } catch { this.outfit = null; }
+    }).catch(() => { /* โหลดไม่ได้ = ชุดปกติ */ });
+  }
+  /** อวยพรเทศกาลวันละครั้งต่อเครื่อง (ไม่ขัดจังหวะบทที่กำลังพูดอยู่ — รอแล้วลองใหม่) */
+  private festivalGreet(tries = 0) {
+    if (this.destroyed || this.mascot.outfitPreview$.value) return;
+    const cfg = this.mascot.outfit$.value;
+    const f = activeFestival(cfg.mode, thaiDateKey(), cfg.dates);
+    if (!f) return;
+    const key = `${f.id}|${thaiDateKey()}`;
+    let seen = '';
+    try { seen = localStorage.getItem(FEST_GREET_KEY) || ''; } catch { /* ไม่มีที่เก็บ */ }
+    if (seen === key) return;
+    if (this.node || this.drag) { if (tries < 6) this.festTimer = setTimeout(() => this.festivalGreet(tries + 1), 6000); return; }
+    try { localStorage.setItem(FEST_GREET_KEY, key); } catch { /* ไม่มีที่เก็บ */ }
+    this.wake();
+    this.openResolved({ id: 'festival', text: f.greet, voice: [f.greet], kind: 'shout', pose: 'cheer', mood: 'happy', choices: [], auto: 6500, pointAt: null });
   }
 
   private startLoop() {
@@ -370,6 +425,8 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
       const jetT = airborne && !this.drag?.moved ? 0.55 + 0.45 * speed : 0;
       this.jetLevel += (jetT - this.jetLevel) * (1 - Math.exp(-dt * 8));
       updateJets(this.rig, this.jetLevel, t);
+      if (t > this.nextOutfitCheck) { this.nextOutfitCheck = t + 60; this.refreshOutfit(); }
+      this.outfit?.update(t);
       this.rig.heart.rotation.z = Math.sin(t * 3.1) * 0.12;
       // ขนาดเปลี่ยน (ผู้ใช้เลือกขนาด / หมุนจอ / ปรับขนาดหน้าต่าง) = ปรับความละเอียดของภาพตาม ไม่งั้นภาพแตก
       if (size !== this.renderedSize) { this.renderer.setSize(size, size, false); this.renderedSize = size; }

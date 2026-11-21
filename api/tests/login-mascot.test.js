@@ -70,6 +70,36 @@ test("mascot_voice_enabled: ไม่มีค่า = เปิด, 'false' = �
     }
 });
 
+// ชุดเทศกาล (21 พ.ย. 2569) — ค่าผิด = auto, ตารางวันที่ตัดค่าที่ผิดรูปแบบ
+test('mascot_outfit + mascot_festival_dates: ค่าผิด = auto / ตัดค่าที่ผิดรูปแบบ', async () => {
+    const keys = ['mascot_outfit', 'mascot_festival_dates'];
+    const [rows] = await db.query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN (?)", [keys]);
+    const prev = Object.fromEntries(rows.map(r => [r.setting_key, r.setting_value]));
+    const set = (k, v) => db.query("INSERT INTO system_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)", [k, v]);
+    try {
+        await db.query("DELETE FROM system_settings WHERE setting_key IN (?)", [keys]);
+        let b = (await request(app).get(URL)).body;
+        expect(b.mascot_outfit).toBe('auto');
+        expect(b.mascot_festival_dates).toEqual({});
+        await set('mascot_outfit', 'christmas');
+        await set('mascot_festival_dates', JSON.stringify({
+            2028: { loykrathong: '2028-11-02', bad_id: '2028-01-01', makha: '2029-02-01', visakha: 'x' },
+            '1999': { makha: '1999-02-01' }, foo: 'bar',
+        }));
+        b = (await request(app).get(URL)).body;
+        expect(b.mascot_outfit).toBe('christmas');
+        expect(b.mascot_festival_dates).toEqual({ 2028: { loykrathong: '2028-11-02' } });
+        await set('mascot_outfit', '<img src=x>');
+        await set('mascot_festival_dates', 'not json');
+        b = (await request(app).get(URL)).body;
+        expect(b.mascot_outfit).toBe('auto');
+        expect(b.mascot_festival_dates).toEqual({});
+    } finally {
+        await db.query("DELETE FROM system_settings WHERE setting_key IN (?)", [keys]);
+        for (const k of Object.keys(prev)) await set(k, prev[k]);
+    }
+});
+
 // ขนาดตั้งต้น (20 พ.ย. 2569) — ไม่มีค่า/ค่าผิด = medium, small/large ส่งตามที่ตั้ง
 test('mascot_size: ไม่มีค่า/ค่าผิด = medium, small/large ตามที่ตั้ง', async () => {
     const [[r]] = await db.query("SELECT setting_value FROM system_settings WHERE setting_key = 'mascot_size'");

@@ -10,11 +10,14 @@ import { UserApprovalSettingsCardComponent } from '../shared/user-approval-setti
 import { KhdSsoSettingsCardComponent } from '../shared/khd-sso-settings-card';
 import Swal from 'sweetalert2';
 import { MASCOT_SIZES, MascotSize, SIZE_LABELS, normalizeMascotSize } from '../shared/mascot/mascot-size';
+import { FestivalDates, normalizeOutfitMode, sanitizeFestivalDates } from '../shared/mascot/mascot-festival';
+import { MascotService } from '../shared/mascot/mascot.service';
+import { MascotFestivalCardComponent } from '../shared/mascot-festival-card';
 
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, AiSettingsCardComponent, ForecastSettingsCardComponent, KhdSsoSettingsCardComponent, UserApprovalSettingsCardComponent],
+  imports: [CommonModule, FormsModule, RouterLink, AiSettingsCardComponent, ForecastSettingsCardComponent, KhdSsoSettingsCardComponent, UserApprovalSettingsCardComponent, MascotFestivalCardComponent],
   templateUrl: './settings.html'
 })
 export class SettingsComponent implements OnInit {
@@ -83,6 +86,9 @@ export class SettingsComponent implements OnInit {
   mascotVoiceEnabled: boolean = true; // เสียงพูดของน้องโคราชดี (ไม่มีค่า = เปิด)
   mascotSize: MascotSize = 'medium'; // ขนาดตั้งต้นของน้องโคราชดี (ไม่มีค่า = กลาง)
   readonly mascotSizeOptions = MASCOT_SIZES.map(value => ({ value, label: SIZE_LABELS[value] }));
+  mascotOutfit = 'auto'; // ชุดเทศกาลของน้องโคราชดี: auto | none | id เทศกาล
+  mascotFestivalDates: FestivalDates = {}; // วันที่เทศกาลตามจันทรคติที่ผู้ดูแลกรอก
+  private mascotSvc = inject(MascotService);
   providerIdEnabled: boolean = false;
   thaidClientSecret: string = '';
   thaidLoginUrl: string = '';
@@ -236,6 +242,8 @@ export class SettingsComponent implements OnInit {
           this.mascotAssistantEnabled = this.settings.find(s => s.setting_key === 'mascot_assistant_enabled')?.setting_value !== 'false';
           this.mascotVoiceEnabled = this.settings.find(s => s.setting_key === 'mascot_voice_enabled')?.setting_value !== 'false';
           this.mascotSize = normalizeMascotSize(this.settings.find(s => s.setting_key === 'mascot_size')?.setting_value);
+          this.mascotOutfit = normalizeOutfitMode(this.settings.find(s => s.setting_key === 'mascot_outfit')?.setting_value);
+          this.mascotFestivalDates = sanitizeFestivalDates(this.settings.find(s => s.setting_key === 'mascot_festival_dates')?.setting_value);
           if (providerSetting) this.providerIdEnabled = providerSetting.setting_value === 'true';
           if (thaidRegEnSetting) this.thaidRegisterEnabled = thaidRegEnSetting.setting_value === 'true';
           if (providerRegEnSetting) this.providerIdRegisterEnabled = providerRegEnSetting.setting_value === 'true';
@@ -305,6 +313,8 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'mascot_assistant_enabled', setting_value: this.mascotAssistantEnabled.toString() },
       { setting_key: 'mascot_voice_enabled', setting_value: this.mascotVoiceEnabled.toString() },
       { setting_key: 'mascot_size', setting_value: normalizeMascotSize(this.mascotSize) },
+      { setting_key: 'mascot_outfit', setting_value: normalizeOutfitMode(this.mascotOutfit) },
+      { setting_key: 'mascot_festival_dates', setting_value: JSON.stringify(sanitizeFestivalDates(this.mascotFestivalDates)) },
       { setting_key: 'thaid_client_secret', setting_value: this.thaidClientSecret },
       { setting_key: 'thaid_login_url', setting_value: this.thaidLoginUrl },
       { setting_key: 'thaid_client_id', setting_value: this.thaidClientId },
@@ -321,6 +331,8 @@ export class SettingsComponent implements OnInit {
 
     this.authService.updateSettings(settingsToSave).subscribe({
       next: (res) => {
+        this.mascotSvc.setOutfitConfig(this.mascotOutfit, this.mascotFestivalDates);
+        this.mascotSvc.outfitPreview$.next(null);
         Swal.fire({
           title: 'สำเร็จ',
           text: 'บันทึกการตั้งค่าเรียบร้อยแล้ว (มีผลเมื่อรีเฟรชหน้าจอ)',

@@ -102,7 +102,7 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
     // ระยะที่ 3: ถามคู่มือผ่าน AI — เฉพาะเมื่อผู้ดูแลเปิดส่วน "ผู้ช่วยคู่มือ"
     this.auth.getAiStatus().subscribe({ next: (res: any) => { this.aiHelpOn = aiFeatureOn(res, 'help'); this.buildScript(); }, error: () => { /* ไม่มี AI */ } });
     this.auth.getMaintenanceStatus().subscribe({
-      next: (res: any) => { this.systemOn = res?.mascot_assistant_enabled !== false; this.voiceOn = res?.mascot_voice_enabled !== false; this.sizeDefault = normalizeMascotSize(res?.mascot_size); this.updateShow(); this.onPage(); },
+      next: (res: any) => { this.systemOn = res?.mascot_assistant_enabled !== false; this.voiceOn = res?.mascot_voice_enabled !== false; this.sizeDefault = normalizeMascotSize(res?.mascot_size); this.mascot.setOutfitConfig(res?.mascot_outfit, res?.mascot_festival_dates); this.updateShow(); this.onPage(); },
       error: () => { this.systemOn = true; this.updateShow(); this.onPage(); },
     });
   }

@@ -265,6 +265,7 @@ export class LoginComponent implements OnInit, OnDestroy {
         this.mascotSystemOn = res.login_mascot_enabled !== false;
         this.mascotVoiceOn = res.mascot_voice_enabled !== false;
         this.mascotSize = normalizeMascotSize(res.mascot_size);
+        this.mascot.setOutfitConfig(res.mascot_outfit, res.mascot_festival_dates);
         this.maintenanceMode = !!res.maintenance;
         this.maintenanceMessage = res.message || '';
         this.systemVersion = res.system_version || '';
