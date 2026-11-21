@@ -965,6 +965,66 @@ const migrationsReady = (async () => {
             console.error('⚠️ เปลี่ยน FK kpi_results.user_id เป็น RESTRICT ไม่สำเร็จ (ยังเป็น CASCADE — ห้ามลบผู้ใช้จนกว่าจะแก้):', e.message);
         }
 
+        // ประวัติการส่งเข้า KHD + ค่าก่อน-หลัง (ย้อนกลับได้) + สถานะรายตาราง (22 พ.ย. 2569 — ระยะ 3 lean งานผู้ดูแล)
+        try {
+            await db.query(`CREATE TABLE IF NOT EXISTS khd_sync_runs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                trigger_type VARCHAR(20) NOT NULL DEFAULT 'manual' COMMENT 'manual|schedule|quick|db_compare|rollback',
+                user_id INT NULL,
+                year_bh VARCHAR(10) NULL,
+                policy VARCHAR(20) NULL,
+                status VARCHAR(30) NOT NULL DEFAULT 'running' COMMENT 'running|success|partial|failed|rolled_back|partially_rolled_back',
+                tables_total INT NOT NULL DEFAULT 0,
+                tables_success INT NOT NULL DEFAULT 0,
+                tables_skipped INT NOT NULL DEFAULT 0,
+                tables_error INT NOT NULL DEFAULT 0,
+                rows_inserted INT NOT NULL DEFAULT 0,
+                rows_updated INT NOT NULL DEFAULT 0,
+                cells_updated INT NOT NULL DEFAULT 0,
+                summary_json MEDIUMTEXT NULL,
+                error_msg TEXT NULL,
+                started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                finished_at DATETIME NULL,
+                duration_ms INT NULL,
+                rollback_of INT NULL,
+                rolled_back_by INT NULL,
+                rolled_back_at DATETIME NULL,
+                INDEX idx_khd_sync_runs_started (started_at)
+            ) COMMENT 'รอบการส่งข้อมูลเข้า KHD'`);
+            await db.query(`CREATE TABLE IF NOT EXISTS khd_sync_audit (
+                id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                run_id INT NOT NULL,
+                table_name VARCHAR(64) NOT NULL,
+                hospcode VARCHAR(20) NOT NULL,
+                byear VARCHAR(10) NOT NULL,
+                op VARCHAR(10) NOT NULL COMMENT 'insert|update',
+                col_name VARCHAR(64) NULL,
+                before_value TEXT NULL,
+                after_value TEXT NULL,
+                ts_col VARCHAR(64) NULL,
+                before_ts VARCHAR(40) NULL,
+                after_ts VARCHAR(40) NULL,
+                applied TINYINT(1) NOT NULL DEFAULT 0,
+                revert_status VARCHAR(20) NULL COMMENT 'reverted|skipped_changed|kept_insert',
+                INDEX idx_khd_sync_audit_run (run_id),
+                INDEX idx_khd_sync_audit_table (table_name, run_id)
+            ) COMMENT 'ค่าก่อน-หลังของทุกช่องที่เขียนลง KHD (ย้อนกลับได้)'`);
+            await db.query(`CREATE TABLE IF NOT EXISTS khd_table_sync_status (
+                table_name VARCHAR(64) PRIMARY KEY,
+                last_run_id INT NULL,
+                last_attempt_at DATETIME NULL,
+                last_success_at DATETIME NULL,
+                last_status VARCHAR(20) NULL,
+                last_inserted INT NOT NULL DEFAULT 0,
+                last_updated INT NOT NULL DEFAULT 0,
+                last_error TEXT NULL,
+                synced_watermark TEXT NULL COMMENT 'JSON { ปีงบ: update_date สูงสุดของ local ที่ส่งครบแล้ว }'
+            ) COMMENT 'สถานะการส่งเข้า KHD ล่าสุดรายตาราง'`);
+            try { await db.query('ALTER TABLE export_schedule_logs ADD COLUMN sync_run_id INT NULL'); } catch (e) {}
+        } catch (e) {
+            console.error('⚠️ KHD sync history tables error:', e.message);
+        }
+
         console.log('✅ login_logs, system_logs, notifications, rejection & appeal tables + indexes ready');
     } catch (err) {
         console.error('⚠️ Auto-create tables error:', err.message);

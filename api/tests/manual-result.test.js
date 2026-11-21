@@ -137,7 +137,8 @@ test('ร้อยละไม่ใช่ตัวเลข → 400 / ไม่
     expect(v.length).toBe(0);
 });
 
-test('Export: result = ผลงานที่กรอกเอง (ตรวจการเปลี่ยนแปลงตรงกับการส่งออก)', async () => {
+test('Export: result = ผลงานที่กรอกเอง (ตรวจการเปลี่ยนแปลงตรงกับการส่งออก)', () => require('./helpers').withKhdPolicy(db, 'all', async () => {
+    // ทดสอบการคำนวณ result ของการส่งออกด้วยข้อมูลที่ยังไม่อนุมัติ → กติกา "ส่งทั้งหมด" (ค่าตั้งต้น approved_only ทดสอบใน khd-send-policy.test.js)
     const ex = await as(saToken)(request(app).post(api('/export-kpi-tables'))).send({ year_bh: YEAR, indicator_ids: [indId] });
     expect(ex.status).toBe(200);
     const [rows] = await db.query(`SELECT hospcode, result FROM \`${TP}\` WHERE byear = ? ORDER BY hospcode`, [YEAR]);
@@ -147,7 +148,7 @@ test('Export: result = ผลงานที่กรอกเอง (ตรว�
     const chk = await as(saToken)(request(app).post(api('/check-kpi-export'))).send({ year_bh: YEAR, indicator_ids: [indId] });
     const st = (chk.body.data || chk.body.results || []).find(x => Number(x.indicator_id || x.id) === indId);
     expect(st && st.status).not.toBe('has_changes');
-});
+}));
 
 test('เปลี่ยนกลับเป็นคำนวณ → ตารางสรุปคำนวณตามเดิม (manual_pct = NULL, ผลงานเดือนล่าสุด)', async () => {
     const [[cur]] = await db.query('SELECT * FROM kpi_indicators WHERE id = ?', [indId]);

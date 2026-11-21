@@ -257,14 +257,15 @@ apiRouter.post('/db-compare/sync-to-khd', authenticateToken, requireSuperAdminSt
     const { tables } = req.body;
     if (!Array.isArray(tables) || tables.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตาราง' });
 
-    const out = await performSyncToKhd(tables.map(t => ({ table: t })), req.user.userId);
+    const out = await performSyncToKhd(tables.map(t => ({ table: t })), req.user.userId, { trigger: 'db_compare' });
+    if (out.code === 'KHD_SYNC_BUSY') return res.status(409).json({ success: false, code: out.code, message: out.message });
     const synced = (out.results || []).filter(r => r.status === 'success');
     const errors = (out.results || []).filter(r => r.status !== 'success').map(r => ({ table: r.table, error: r.reason }));
 
     await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
         [req.user.userId, 'DB_COMPARE_SYNC_TO_KHD', 'MULTIPLE', JSON.stringify({ synced: synced.length, total_rows: synced.reduce((s, t) => s + t.rows, 0) }), req.ip]).catch(() => {});
 
-    res.json({ success: true, message: `Sync → KHD สำเร็จ ${synced.length} ตาราง`, synced, errors });
+    res.json({ success: true, message: `Sync → KHD สำเร็จ ${synced.length} ตาราง`, synced, errors, run_id: out.run_id || null });
 });
 
 // ========== Users Data Sync (Local ↔ KHD) ==========

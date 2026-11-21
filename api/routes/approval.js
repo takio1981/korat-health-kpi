@@ -114,7 +114,15 @@ async function latestResultOrd(conn, item, hospcode, mainWhere, mainParams) {
          item.indicator_id, item.year_bh, ...(hospcode ? [hospcode] : []),
          item.indicator_id, item.year_bh, ...(hospcode ? [hospcode] : [])]
     );
-    return Number(m && m.o) || 0;
+    const o = Number(m && m.o) || 0;
+    if (o) return o;
+    // ผลงาน/ร้อยละกรอกเอง (ระดับปี ไม่มีค่ารายเดือน) — กรอกแล้ว = อนุมัติทั้งปี (ไม่งั้นอนุมัติตัวชี้วัดกรอกเองไม่ได้เลย)
+    const [[mv]] = await conn.query(
+        `SELECT COUNT(*) AS c FROM kpi_base_values WHERE indicator_id = ? AND year_bh = ?${hospcode ? ' AND hospcode = ?' : ''}
+           AND var_key IN ('__result', '__pct') AND TRIM(COALESCE(base_value, '')) <> ''`,
+        [item.indicator_id, item.year_bh, ...(hospcode ? [hospcode] : [])]
+    );
+    return Number(mv && mv.c) > 0 ? 12 : 0;
 }
 
 // ปลดล็อคข้อมูล KPI (เฉพาะ super_admin)

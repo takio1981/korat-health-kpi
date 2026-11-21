@@ -7,11 +7,12 @@ import { CriteriaTextPipe } from '../shared/criteria-text.pipe';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import Swal from 'sweetalert2';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
+import { KhdQuickSendComponent } from '../shared/khd-quick-send';
 
 @Component({
   selector: 'app-export-kpi',
   standalone: true,
-  imports: [CommonModule, FormsModule, CriteriaTextPipe, FormulaBadgeComponent],
+  imports: [CommonModule, FormsModule, CriteriaTextPipe, FormulaBadgeComponent, KhdQuickSendComponent],
   templateUrl: './export-kpi.html'
 })
 export class ExportKpiComponent implements OnInit {
@@ -22,6 +23,8 @@ export class ExportKpiComponent implements OnInit {
 
   // Filters
   exportYear: string = '';
+  // ส่งเข้า KHD ขั้นเดียว (22 พ.ย. 2569) — เฉพาะ super_admin (backend ตรวจแบบเข้มซ้ำ)
+  isSuperAdminStrict = this.authService.getUserRole() === 'super_admin';
   yearOptions: string[] = [];
   filterMainIndicator: string = '';
   filterDept: string = '';

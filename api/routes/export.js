@@ -13,6 +13,75 @@ const { checkKpiChanges, performKpiExport } = require('../services/export');
 const { getRemotePool } = require('../db-remote');
 const { performSyncToKhd, planKhdTableSync } = require('../services/khd');
 const { runScheduledExport } = require('../jobs/export-scheduler');
+const { KHD_SEND_POLICIES, getKhdSyncSettings, validateKhdSyncSettings, saveKhdSyncSettings } = require('../services/khd-policy');
+const { quickSend, listRuns, getRun, listTableStatus, rollbackRun, khdSyncBusyInfo } = require('../services/khd-sync');
+const { khdLimiter } = require('../core/security');
+
+// ========== กติกาการส่ง KHD + ค่าควบคุมภาระ (ระยะ 3 ของแผน lean งานผู้ดูแล — 22 พ.ย. 2569) ==========
+// เฉพาะ super_admin แบบเข้ม (มีผลกับสิ่งที่ถูกส่งเข้า KHD)
+apiRouter.get('/khd-sync/settings', authenticateToken, requireSuperAdminStrict, async (req, res) => {
+    try {
+        res.json({ success: true, data: await getKhdSyncSettings(), policies: KHD_SEND_POLICIES });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+apiRouter.put('/khd-sync/settings', authenticateToken, requireSuperAdminStrict, async (req, res) => {
+    const v = validateKhdSyncSettings(req.body);
+    if (v.error) return res.status(400).json({ success: false, message: v.error });
+    try {
+        const before = await getKhdSyncSettings();
+        await saveKhdSyncSettings(v.values);
+        await db.query(
+            'INSERT INTO system_logs (user_id, action_type, table_name, old_value, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
+            [req.user.userId, 'KHD_SYNC_SETTINGS_UPDATE', 'system_settings',
+             JSON.stringify(Object.fromEntries(Object.keys(v.values).map(k => [k, before[k]]))), JSON.stringify(v.values), req.ip]
+        ).catch(() => {});
+        res.json({ success: true, data: await getKhdSyncSettings(), message: 'บันทึกการตั้งค่าการส่ง KHD แล้ว' });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+// ข้อผิดพลาดจาก services/khd-sync.js (มี status/code) → ตอบกลับตามนั้น
+function sendKhdSyncError(res, e) {
+    if (e && e.status) return res.status(e.status).json({ success: false, code: e.code, message: e.message, ...(e.extra || {}) });
+    return res.status(500).json({ success: false, message: e && e.message });
+}
+
+// POST /khd-sync/quick { year_bh, dry_run, plan_token } — ส่งเข้า KHD ขั้นเดียว (ตรวจ → เตรียม → แสดงสิ่งที่จะส่ง → ยืนยัน → ส่ง)
+apiRouter.post('/khd-sync/quick', authenticateToken, requireSuperAdminStrict, khdLimiter, async (req, res) => {
+    try {
+        const b = req.body || {};
+        const out = await quickSend({ yearBh: b.year_bh, dryRun: b.dry_run !== false, planToken: b.plan_token, userId: req.user.userId, ip: req.ip });
+        res.json({ success: out.success !== false, ...out });
+    } catch (e) { sendKhdSyncError(res, e); }
+});
+
+// ประวัติรอบการส่ง / รายละเอียด / สถานะรายตาราง (อ่านอย่างเดียว)
+apiRouter.get('/khd-sync/runs', authenticateToken, requireSuperAdminStrict, async (req, res) => {
+    try { res.json({ success: true, data: await listRuns(req.query.limit), busy: khdSyncBusyInfo() }); } catch (e) { sendKhdSyncError(res, e); }
+});
+apiRouter.get('/khd-sync/tables', authenticateToken, requireSuperAdminStrict, async (req, res) => {
+    try { res.json({ success: true, data: await listTableStatus() }); } catch (e) { sendKhdSyncError(res, e); }
+});
+apiRouter.get('/khd-sync/runs/:id', authenticateToken, requireSuperAdminStrict, async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ success: false, message: 'รหัสรอบไม่ถูกต้อง' });
+        const out = await getRun(id);
+        if (!out) return res.status(404).json({ success: false, message: 'ไม่พบรอบการส่ง' });
+        res.json({ success: true, data: out });
+    } catch (e) { sendKhdSyncError(res, e); }
+});
+
+// POST /khd-sync/runs/:id/rollback { confirm: '<เลขรอบ>' } — ย้อนกลับเฉพาะช่องที่ KHD ยังเป็นค่าที่ระบบเขียน (ไม่ลบแถวที่เพิ่ม)
+apiRouter.post('/khd-sync/runs/:id/rollback', authenticateToken, requireSuperAdminStrict, khdLimiter, async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ success: false, message: 'รหัสรอบไม่ถูกต้อง' });
+        if (String((req.body || {}).confirm ?? '') !== String(id)) {
+            return res.status(400).json({ success: false, code: 'CONFIRM_REQUIRED', message: `กรุณาพิมพ์เลขรอบ ${id} เพื่อยืนยันการย้อนกลับ` });
+        }
+        res.json({ success: true, data: await rollbackRun(id, req.user.userId) });
+    } catch (e) { sendKhdSyncError(res, e); }
+});
 
 // ========== Export KPI Tables ==========
 
@@ -195,7 +264,8 @@ apiRouter.post('/sync-to-khd/preview', authenticateToken, isSuperAdmin, async (r
 apiRouter.post('/sync-to-khd/execute', authenticateToken, requireSuperAdminStrict, async (req, res) => {
     const { tables } = req.body;
     if (!Array.isArray(tables) || tables.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตารางที่ต้องการ' });
-    const out = await performSyncToKhd(tables, req.user.userId);
+    const out = await performSyncToKhd(tables, req.user.userId, { trigger: 'manual' });
+    if (out.code === 'KHD_SYNC_BUSY') return res.status(409).json(out);
     if (!out.success && out.results.length === 0) return res.status(400).json(out);
     res.json(out);
 });

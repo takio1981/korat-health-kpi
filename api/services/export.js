@@ -11,6 +11,7 @@ const { isValidIdentifier } = require('../core/sql');
 const { isManualResult, loadManualValues, manualKey } = require('./manual-result');
 const { resolveIndicatorHostypes } = require('./indicator-scope');
 const { normalizeTargetMonthly, aggregateMonthlyTarget } = require('../kpi-target');
+const { getKhdSendPolicy } = require('./khd-policy');
 
 // เป้าหมายรายเดือน (29 ต.ค. 2569): เป้าหมายรวม = ล่าสุด/สะสม ถึงเดือนของผลงานล่าสุด (เหมือนหน้าบันทึกผลงาน/ตารางสรุป)
 // d._mt = เป้าหมายรายเดือน { m10: …, … } จาก kpi_results — ไม่มี = เป้าหมายเดิม (เดือน ต.ค. / ข้อย่อย)
@@ -198,7 +199,37 @@ async function writeItemsTable(conn, indicator, yearBh, name) {
 }
 
 // Core: ตรวจสอบเปรียบเทียบข้อมูล KPI — ใช้ทั้ง HTTP endpoint และ scheduler
-async function checkKpiChanges(year_bh, indicator_ids) {
+// ===== ส่งเฉพาะที่อนุมัติ (กติกาส่ง KHD — ระยะ 3 ของแผน lean งานผู้ดูแล 22 พ.ย. 2569) =====
+// ⚠️ ทั้ง checkKpiChanges และ performKpiExport ต้องกรองด้วยฟังก์ชันชุดเดียวกันนี้ (ไม่งั้นตรวจแล้ว "ไม่เปลี่ยน" แต่ส่งออกจริงต่างกัน)
+const EXPORT_MONTH_KEYS = ['m10', 'm11', 'm12', 'm01', 'm02', 'm03', 'm04', 'm05', 'm06', 'm07', 'm08', 'm09'];
+const monthKeyOf = (m) => 'm' + String(m).padStart(2, '0');
+/** hospcode → Set(เดือนที่อนุมัติ/ล็อคแล้ว 'm10'…) จากแถว kpi_results ที่มี is_locked */
+function approvedMonthsOfRows(rows) {
+    const out = new Map();
+    for (const r of rows) {
+        if (Number(r.is_locked) !== 1) continue;
+        const hc = r.hospcode != null ? String(r.hospcode).trim() : '';
+        if (!hc) continue;
+        if (!out.has(hc)) out.set(hc, new Set());
+        out.get(hc).add(monthKeyOf(r.month_bh));
+    }
+    return out;
+}
+/** ล้างเดือนที่ยังไม่อนุมัติ — หน่วยบริการที่ไม่มีเดือนอนุมัติเลย: ล้างเป้าหมาย/ค่าฟอร์ม และทำเครื่องหมาย _approvedNone (ผลงานกรอกเอง = ไม่ส่ง) */
+function applyApprovedOnly(dataMap, approved, dynFieldKeys = []) {
+    for (const [hc, entry] of dataMap) {
+        const ok = approved.get(String(hc).trim()) || new Set();
+        for (const m of EXPORT_MONTH_KEYS) if (!ok.has(m)) entry[m] = null;
+        if (entry._mt) for (const m of Object.keys(entry._mt)) if (!ok.has(m)) entry._mt[m] = null;
+        if (!ok.size) {
+            entry.target = null;
+            for (const k of dynFieldKeys) delete entry['_dyn_' + k];
+            entry._approvedNone = true;
+        }
+    }
+}
+
+async function checkKpiChanges(year_bh, indicator_ids, opts = {}) {
     if (!year_bh || !/^\d{4}$/.test(year_bh)) {
         return { success: false, message: 'กรุณาระบุปีงบประมาณ (year_bh) เป็นตัวเลข 4 หลัก' };
     }
@@ -214,6 +245,8 @@ async function checkKpiChanges(year_bh, indicator_ids) {
             indicatorParams = indicator_ids;
         }
         const [indicators] = await db.query(indicatorQuery, indicatorParams);
+        const policy = opts.policy || await getKhdSendPolicy();
+        const approvedOnly = policy === 'approved_only';
 
         // ดึงรายชื่อหน่วยบริการทั้งหมดครั้งเดียว — เหมือน performKpiExport (resolveIndicatorHostypes ต่อตัวชี้วัด)
         const [allHospitals] = await db.query('SELECT hoscode, hostype FROM chospital');
@@ -256,6 +289,8 @@ async function checkKpiChanges(year_bh, indicator_ids) {
 
                 // ค่ารายเดือนที่มีผลของแต่ละข้อ (ข้อย่อยที่คำนวณจากกิจกรรม = ค่าจากกิจกรรม) — ตรงกับ loadSubAggregates() เสมอ
                 const bySubHospcode = await loadSubExportMonthMap(db, indicator.id, year_bh);
+                // ส่งเฉพาะที่อนุมัติ: เดือนของข้อย่อยตามเดือนที่ตัวชี้วัดหลักอนุมัติแล้ว (การอนุมัติรายเดือน cascade ลงข้อย่อย)
+                const approvedSub = approvedOnly ? approvedMonthsOfRows((await db.query('SELECT hospcode, month_bh, is_locked FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND is_locked = 1', [indicator.id, year_bh]))[0]) : null;
                 const subResultRows = [...bySubHospcode.keys()].map(k => ({ hospcode: k.slice(k.indexOf('_') + 1) }));
 
                 const isCumulativeSub = Number(indicator.is_cumulative) === 1;
@@ -278,7 +313,8 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                     const entry = {};
                     for (const c of subCols) {
                         const monthEntry = bySubHospcode.get(`${c.id}_${hc}`) || {};
-                        const monthVals = months.map(m => (monthEntry[m] !== undefined ? monthEntry[m] : null));
+                        const okSub = approvedSub ? (approvedSub.get(hc) || new Set()) : null;
+                        const monthVals = months.map(m => (okSub && !okSub.has(m)) ? null : (monthEntry[m] !== undefined ? monthEntry[m] : null));
                         entry[c.colName] = computeResultValueSub(monthVals);
                     }
                     dataMapSub.set(hc, entry);
@@ -320,7 +356,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                 for (const [hc, entry] of dataMapSub) {
                     // ไม่ข้าม hospcode ที่ยังไม่มีผลงานแล้ว — ต้องนับเป็น new/unchanged ด้วยเพื่อให้ scheduler
                     // เห็นว่ามีแถวในขอบเขตที่ยังไม่ถูกสร้าง (mirror performKpiExport)
-                    const target = targetByHospcodeSub.get(hc) || null;
+                    const target = (approvedSub && !approvedSub.has(hc)) ? null : (targetByHospcodeSub.get(hc) || null);
                     const resultVal = entry._avgResult;
                     const subValues = subColNames.map(k => entry[k]);
                     const existing = existingSubMap.get(hc);
@@ -351,7 +387,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
 
             // ตรวจสอบว่ามีข้อมูลใน kpi_results หรือ kpi_sub_results
             const [kpiRows] = await db.query(
-                'SELECT hospcode, month_bh, target_value, actual_value FROM kpi_results WHERE indicator_id = ? AND year_bh = ?',
+                'SELECT hospcode, month_bh, target_value, actual_value, is_locked FROM kpi_results WHERE indicator_id = ? AND year_bh = ?',
                 [indicator.id, year_bh]
             );
 
@@ -398,6 +434,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                     }
                 }
             } catch (_) {}
+            if (approvedOnly) applyApprovedOnly(dataMap, approvedMonthsOfRows(kpiRows));
 
             // ไม่ early-exit เมื่อ dataMap ว่างอีกต่อไป — ปกติจะไม่ว่างเพราะ seed จาก scopeHospcodes ไว้แล้ว
             // (resolveIndicatorHostypes คืนค่า default เสมอ) เหลือแค่กรณี chospital ไม่มีหน่วยบริการที่ hostype ตรงเลยจริงๆ
@@ -450,7 +487,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
                     const lastActual = reverseMonths.find(v => v !== null && v !== undefined);
                     resultVal = lastActual !== undefined ? lastActual : null;
                 }
-                if (manualMapX) resultVal = emptyToNull((manualMapX.get(manualKey(indicator.id, year_bh, hc)) || {}).result);
+                if (manualMapX) resultVal = d._approvedNone ? null : emptyToNull((manualMapX.get(manualKey(indicator.id, year_bh, hc)) || {}).result);
 
                 const existing = existingMap.get(hc);
                 if (!existing) {
@@ -498,6 +535,7 @@ async function checkKpiChanges(year_bh, indicator_ids) {
             success: true,
             check_date: new Date().toISOString(),
             year_bh,
+            policy, // กติกาการส่ง KHD ที่ใช้ตรวจ (approved_only | all)
             summary: { total: results.length, with_data: totalWithData, has_changes: totalChanges, up_to_date: totalUpToDate, no_data: totalNoData },
             details: results
         };
@@ -516,6 +554,8 @@ function sanitizeSubIndicatorColName(name) {
 }
 
 async function performKpiExport(year_bh, indicator_ids, userId, meta = {}) {
+    const policy = meta.policy || await getKhdSendPolicy();
+    const approvedOnly = policy === 'approved_only';
     if (!year_bh || !/^\d{4}$/.test(year_bh)) {
         return { success: false, message: 'กรุณาระบุปีงบประมาณ (year_bh) เป็นตัวเลข 4 หลัก' };
     }
@@ -646,6 +686,8 @@ async function performKpiExport(year_bh, indicator_ids, userId, meta = {}) {
                     // ดึงผลงานย่อยทั้งหมดของปีนี้ สำหรับข้อย่อยที่ active
                     // ค่ารายเดือนที่มีผลของแต่ละข้อ (ข้อย่อยที่คำนวณจากกิจกรรม = ค่าจากกิจกรรม) — ตรงกับ loadSubAggregates() เสมอ
                     const bySubHospcode = await loadSubExportMonthMap(conn, indicator.id, year_bh);
+                    // ส่งเฉพาะที่อนุมัติ — ⚠️ ต้องตรงกับ checkKpiChanges
+                    const approvedSub = approvedOnly ? approvedMonthsOfRows((await conn.query('SELECT hospcode, month_bh, is_locked FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND is_locked = 1', [indicator.id, year_bh]))[0]) : null;
                     const subResultRows = [...bySubHospcode.keys()].map(k => ({ hospcode: k.slice(k.indexOf('_') + 1) }));
 
                     // result ต่อข้อย่อย: is_cumulative ของตัวชี้วัดหลัก → SUM ทุกเดือน, ปกติ → ค่าล่าสุดที่คีย์ (เหมือน logic เดิมบรรทัด ~7265-7274)
@@ -672,7 +714,8 @@ async function performKpiExport(year_bh, indicator_ids, userId, meta = {}) {
                         const entry = {};
                         for (const c of subCols) {
                             const monthEntry = bySubHospcode.get(`${c.id}_${hc}`) || {};
-                            const monthVals = months.map(m => (monthEntry[m] !== undefined ? monthEntry[m] : null));
+                            const okSub = approvedSub ? (approvedSub.get(hc) || new Set()) : null;
+                        const monthVals = months.map(m => (okSub && !okSub.has(m)) ? null : (monthEntry[m] !== undefined ? monthEntry[m] : null));
                             entry[c.colName] = computeResultValue(monthVals);
                         }
                         dataMap.set(hc, entry);
@@ -720,7 +763,7 @@ async function performKpiExport(year_bh, indicator_ids, userId, meta = {}) {
                     for (const [hc, entry] of dataMap) {
                         // ไม่ข้ามแถวที่ยังไม่มีผลงานแล้ว (ต้อง export ครบทุกหน่วยบริการในขอบเขต) — นับไว้รายงานเฉยๆ
                         if (!hasActualDataSub(entry)) noDataCount++;
-                        const target = targetByHospcode.get(hc) || null;
+                        const target = (approvedSub && !approvedSub.has(hc)) ? null : (targetByHospcode.get(hc) || null); // ⚠️ ตรงกับ checkKpiChanges
                         const resultVal = entry._avgResult;
                         const subValues = subColNames.map(k => entry[k]);
 
@@ -817,9 +860,10 @@ async function performKpiExport(year_bh, indicator_ids, userId, meta = {}) {
 
                 // Fetch kpi_results for this indicator + year
                 const [results] = await conn.query(
-                    'SELECT hospcode, month_bh, target_value, actual_value FROM kpi_results WHERE indicator_id = ? AND year_bh = ?',
+                    'SELECT hospcode, month_bh, target_value, actual_value, is_locked FROM kpi_results WHERE indicator_id = ? AND year_bh = ?',
                     [indicator.id, year_bh]
                 );
+                const approvedMap = approvedMonthsOfRows(results); // ส่งเฉพาะที่อนุมัติ
                 // Build hospcode -> month data map
                 // ⚠️ แปลง '' → null ทันที — ป้องกันบล็อก merge sub_results ภายหลัง (string '' ไม่ใช่ null/undefined)
                 const dataMap = new Map();
@@ -901,6 +945,11 @@ async function performKpiExport(year_bh, indicator_ids, userId, meta = {}) {
                         for (const row of dynRows) {
                             const hc = row.hospcode != null ? String(row.hospcode).trim() : '';
                             if (!hc) continue;
+                            // ส่งเฉพาะที่อนุมัติ: แถวฟอร์มของเดือนที่ยังไม่อนุมัติไม่ส่ง (ตารางไม่มีคอลัมน์เดือน = ต้องมีเดือนอนุมัติอย่างน้อย 1)
+                            if (approvedOnly) {
+                                const ok = approvedMap.get(hc);
+                                if (!ok || (hasMonth && !ok.has(monthKeyOf(row.month_bh)))) continue;
+                            }
                             if (!dataMap.has(hc)) dataMap.set(hc, {});
                             const entry = dataMap.get(hc);
                             for (const f of formFields) {
@@ -914,6 +963,8 @@ async function performKpiExport(year_bh, indicator_ids, userId, meta = {}) {
                         console.error(`⚠️ [Export] ดึง dynamic data ของ ${dynamicTableName} ล้มเหลว:`, e.message);
                     }
                 }
+
+                if (approvedOnly) applyApprovedOnly(dataMap, approvedMap, formFields.map(f => f.field_name));
 
                 // Build upsert rows
                 const upsertRows = [];
@@ -993,7 +1044,7 @@ async function performKpiExport(year_bh, indicator_ids, userId, meta = {}) {
                         const lastActual = reverseMonths.find(v => v !== null && v !== undefined);
                         resultVal = lastActual !== undefined ? lastActual : null;
                     }
-                    if (manualMapX) resultVal = emptyToNull((manualMapX.get(manualKey(indicator.id, year_bh, hc)) || {}).result);
+                    if (manualMapX) resultVal = d._approvedNone ? null : emptyToNull((manualMapX.get(manualKey(indicator.id, year_bh, hc)) || {}).result);
 
                     // เปรียบเทียบค่าเดิม vs ใหม่ ทีละคอลัมน์
                     const existing = existingDataMap.get(hc);
@@ -1065,7 +1116,8 @@ async function performKpiExport(year_bh, indicator_ids, userId, meta = {}) {
 
         return {
             success: true,
-            message: `สร้าง/อัปเดตตารางสำเร็จ ${created.length} ตาราง`,
+            message: `สร้าง/อัปเดตตารางสำเร็จ ${created.length} ตาราง` + (approvedOnly ? ' (เฉพาะเดือนที่อนุมัติแล้ว)' : ''),
+            policy,
             created_tables: created,
             skipped,
             summary: { inserted: totalInserted, updated: totalUpdated, unchanged: totalUnchanged, no_data: totalNoData }

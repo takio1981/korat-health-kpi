@@ -73,6 +73,7 @@ frontend/src/app/
   | `services/export.js` | performKpiExport, checkKpiChanges, buildItemExportRows/ensureItemsTable/writeItemsTable (`_items`) |
   | `services/khd.js` | performSyncToKhd, getKhdEffectiveCriteriaFor, loadKhdResolver, insertIndicatorFromKhd, diffTableColumns, listKhdMappings (รายการของ GET /khd-mappings) |
   | `services/backup.js` | runBackupJob/runRestoreJob, startBackupScheduler, การเชื่อมต่อ (bkEncrypt/bkDecrypt), Google Drive (resetDriveClientCache), migration ตารางสำรองข้อมูล |
+  | `services/khd-policy.js` / `services/khd-sync.js` | getKhdSyncSettings/getKhdSendPolicy (กติกาการส่ง KHD) / runKhdSync, withKhdSyncLock, rollbackRun, quickSend, listRuns/getRun |
   | `services/kpi-audit.js` | logKpiSaveAudit, getUserAuditInfo, getAuditSettings/invalidateAuditSettingsCache |
   | `services/indicator-fields.js` | normTargetCondition, normalizeOffTypes, normalizeEvalMode, _actorLabel |
   | `services/manual-result.js` | ผลงานล่าสุด/ร้อยละ กรอกเอง: loadManualValues, applyManualToSummary, normalizeManualPct |
@@ -95,7 +96,7 @@ frontend/src/app/
   ห้าม export ตรงๆ (ค่าจะค้าง) — เก็บไว้ในโมดูลเดียวกับผู้ใช้ หรือเปลี่ยนเป็น object; Map/Set แชร์ได้ (object เดียวกัน)
 - `core/env.js` ต้องเป็น require แรกของ server.js
   (ตัวดัก unhandledRejection/uncaughtException เรียก `captureError` แบบ lazy จาก core/errors)
-- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (309 เส้นทาง: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
+- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (339 เส้นทาง — app 9 + api 330: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
   ตั้งใจเพิ่ม/แก้ route → `node tests/lib/route-inventory.js --write` แล้วตรวจ diff), `tests/lint.test.js` (ESLint no-undef ฯลฯ — จับชื่อที่ลืม require),
   `tests/build.test.js` (ไล่ require ทุกชั้นต้องอยู่ในชุดที่ build คัดลอก + build ลงโฟลเดอร์ชั่วคราว), `tests/startup.test.js` (เริ่มระบบ + โหลดผลลัพธ์ build ใน process แยก)
   — middleware ที่สร้างจาก factory/ไลบรารีต้องมีชื่อ (`requireAction(page,action)`, loginIpLimiter/loginLimiter/apiLimiter) ให้ snapshot แยกได้
@@ -1251,6 +1252,18 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   `/sync-to-khd/execute`, `/db-compare/sync-data|create-remote|sync-to-khd`, `/users/sync-to-khd`, POST/PUT `/export-schedules` + `run-now` — เดิม `isSuperAdmin` ปล่อย role ที่เปิดหน้า kpi-manager ผ่าน → ส่งข้อมูลเข้า KHD ได้
   — **เส้นทางใหม่ที่เขียนข้อมูลลง KHD ต้องใช้ด่านนี้เสมอ** | Test: `api/tests/safety-fixes.test.js`
 - `khdExportableTables()` กรอง `is_active = 1` ด้วย (เดิมหน้าตัวอย่างกรองแต่ตอนส่งจริงไม่กรอง)
+- **กติกาการส่ง (22 พ.ย. 2569 — ผู้ใช้เลือก: ตั้งค่าได้ ค่าตั้งต้นส่งเฉพาะที่อนุมัติ):** `services/khd-policy.js` `system_settings.khd_send_policy` = `approved_only` (ไม่มีค่า = ค่านี้) | `all`
+  + `khd_sync_batch_size/pause_ms/max_rows/max_seconds`, `khd_query_timeout_ms`, `khd_sync_audit_keep_days` (แคช 60 วินาที, `GET|PUT /khd-sync/settings` requireSuperAdminStrict)
+  — approved_only: `checkKpiChanges` + `performKpiExport` (ตรงกัน) เก็บเฉพาะเดือน `is_locked = 1` เดือนอื่น null, หน่วยบริการที่ไม่มีเดือนอนุมัติ = ล้างเป้าหมาย/ฟอร์ม/ผลงานกรอกเอง → ค่าว่างไม่ทับ KHD
+  — **ชุดทดสอบที่ตรวจการคำนวณส่งออกด้วยข้อมูลที่ยังไม่อนุมัติต้องครอบ `withKhdPolicy(db, 'all', fn)`** (tests/helpers.js)
+- **ส่งปลอดภัย + ประวัติ/ย้อนกลับ (`services/khd-sync.js` — `performSyncToKhd(tables, userId, { trigger, yearBh })` เรียก `runKhdSync()`):**
+  `withKhdSyncLock()` ครั้งละงานเดียว (ตัวแปรใน process + `GET_LOCK('khupskpi_khd_sync')`) ชน = `code: 'KHD_SYNC_BUSY'` (route = 409) | เขียนเป็นชุด + พัก + เพดานแถว/เวลาต่อรอบ (เกิน = `partial`, ตารางที่เหลือ `deferred`)
+  + timeout ต่อคำสั่ง (`timedRemote` — Promise.race, mock KHD ในชุดทดสอบรองรับแค่ `query(string, params)`) | ตาราง `khd_sync_runs` / `khd_sync_audit` (ค่าก่อน-หลังรายช่อง **บันทึกก่อนเขียนจริง**, แถวที่เพิ่ม = op insert JSON) / `khd_table_sync_status` (watermark = update_date สูงสุดต่อปีงบที่ส่งครบ)
+  — `planKhdTableSync(remote, tp, cols, { byear })` คืน `before` (แถว KHD) + `watermark` | ย้อนกลับ `POST /khd-sync/runs/:id/rollback { confirm: '<เลขรอบ>' }`: เฉพาะรอบล่าสุดของทุกตารางที่แตะ (409 `NOT_LATEST`),
+  คืนเฉพาะแถวที่ค่า**และ**เวลาใน KHD ยังเป็นของเรา (`WHERE ts = ค่าที่อ่าน`) ไม่งั้น `skipped_changed`, **แถวที่เพิ่มไม่ลบ** (`kept_insert`) | `GET /khd-sync/runs|runs/:id|tables`
+  — ส่งขั้นเดียว `POST /khd-sync/quick { year_bh, dry_run, plan_token }` (requireSuperAdminStrict + `khdLimiter` 6/นาที): checkKpiChanges → performKpiExport เฉพาะ has_changes → `tablesNeedingSync()` → วางแผนปีงบนั้น → dry_run คืน `plan_token` (10 นาที, ผูกผู้ใช้+ปี)
+  → ส่งจริงต้องแนบ token + ลายเซ็นแผนต้องตรง (ต่าง = 409 `PLAN_CHANGED` + preview ใหม่) — UI `shared/khd-quick-send.ts` ในหน้า export-kpi (super_admin) | Test: `api/tests/khd-sync-audit.test.js`, `khd-send-policy.test.js`, `shared/khd-quick-send.spec.ts`
+  — **เส้นทาง/งานใหม่ที่เขียน KHD ต้องผ่าน `performSyncToKhd()`/`runKhdSync()` เสมอ** (ห้ามเขียน remote ตรง — จะไม่มีล็อค/บันทึก/ย้อนกลับ)
 
 ### Export Scheduler (ตารางเวลา Export อัตโนมัติ)
 - ตาราง `export_schedules` — metadata schedule (name, days_of_week, time_of_day, indicator_scope, auto_sync_khd, notify_email/telegram)
@@ -1263,7 +1276,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   - `'changes_only'` (default/แนะนำ — ค่าตั้งต้นของ API + ตารางเวลาตั้งแต่ 22 พ.ย. 2569 เดิม API ตั้ง 'all') — เรียก `checkKpiChanges()` ก่อน → export เฉพาะ `status === 'has_changes'`
   - `'all'` — export ทุกตัวชี้วัด
   - `'selected'` — ใช้ `indicator_ids` ที่เก็บไว้ (JSON array)
-- `auto_sync_khd` — ถ้า `=1` → หลัง export สำเร็จเรียก `performSyncToKhd()` ต่อทันที → รวมผลใน notification
+- `auto_sync_khd` — ถ้า `=1` → หลัง export สำเร็จเรียก `performSyncToKhd(…, { trigger: 'schedule', yearBh })` ต่อทันที (เฉพาะปีงบที่ส่งออก) → รวมผลใน notification + `export_schedule_logs.sync_run_id`
 - Notification recipients: ดึงจาก `system_settings` (keys: `admin_emails`, `telegram_chat_id`, `telegram_bot_token`) ผ่าน `getNotifSettings()` helper
 - CRUD: `GET/POST/PUT/DELETE /export-schedules` + `/run-now` + `/logs` (super_admin — เขียน/รัน = `requireSuperAdminStrict`)
 - ปีที่ไม่ระบุ = `currentFiscalYear()` (core/fiscal-year.js — เดิม "ปีปฏิทิน + 543" ผิดช่วง ต.ค.–ธ.ค.) | log การส่งออก = `system_logs.action_type = 'EXPORT_KPI_TABLES'` (เดิมเขียนคอลัมน์ที่ไม่มี — ไม่เคยบันทึก)

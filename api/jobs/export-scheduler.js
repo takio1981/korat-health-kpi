@@ -184,9 +184,10 @@ async function runScheduledExport(schedule) {
         if (Number(schedule.auto_sync_khd) === 1 && result.success && (result.created_tables || []).length > 0) {
             try {
                 const syncTables = result.created_tables.map(t => ({ table: t.table, sync_columns: null }));
-                const syncOut = await performSyncToKhd(syncTables, schedule.created_by);
+                const syncOut = await performSyncToKhd(syncTables, schedule.created_by, { trigger: 'schedule', yearBh: year_bh });
                 result.sync = syncOut;
-                if (!syncOut.success) { status = 'partial'; errorMsg = 'Export สำเร็จแต่ sync KHD มีข้อผิดพลาด'; }
+                if (syncOut.code === 'KHD_SYNC_BUSY') { status = 'partial'; errorMsg = 'Export สำเร็จ — ยังไม่ส่ง KHD เพราะมีงานส่งอื่นกำลังทำงาน'; }
+                else if (!syncOut.success) { status = 'partial'; errorMsg = 'Export สำเร็จแต่ sync KHD มีข้อผิดพลาด'; }
             } catch (e) {
                 result.sync = { success: false, message: e.message, summary: { total: 0, success: 0, error: 0, skipped: 0, rows: 0 }, results: [] };
                 status = 'partial'; errorMsg = `Sync KHD failed: ${e.message}`;
@@ -206,11 +207,11 @@ async function runScheduledExport(schedule) {
     await db.query('UPDATE export_schedules SET last_run_at=NOW(), last_status=? WHERE id=?', [status, schedule.id]);
     const summary = result.summary || { inserted: 0, updated: 0, unchanged: 0, no_data: 0 };
     await db.query(
-        `INSERT INTO export_schedule_logs (schedule_id, status, inserted, updated_count, unchanged, no_data, tables_count, skipped_count, duration_ms, notified_email, notified_telegram, notified_line, error_msg)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO export_schedule_logs (schedule_id, status, inserted, updated_count, unchanged, no_data, tables_count, skipped_count, duration_ms, notified_email, notified_telegram, notified_line, error_msg, sync_run_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [schedule.id, status, summary.inserted, summary.updated, summary.unchanged, summary.no_data,
          (result.created_tables || []).length, (result.skipped || []).length, duration,
-         notif.sentEmail ? 1 : 0, notif.sentTelegram ? 1 : 0, notif.sentLine ? 1 : 0, errorMsg]
+         notif.sentEmail ? 1 : 0, notif.sentTelegram ? 1 : 0, notif.sentLine ? 1 : 0, errorMsg, (result.sync && result.sync.run_id) || null]
     );
     return result;
 }

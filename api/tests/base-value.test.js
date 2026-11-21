@@ -77,7 +77,8 @@ test('ตารางสรุป/รายงานใช้ค่าฐาน 
     expect([Number(rep.hospitals_with_target), Number(rep.hospitals_passed)]).toEqual([2, 2]);
 });
 
-test('Export ใช้ค่าฐาน (ผลงาน result ตรงหน้าบันทึกผลงาน)', async () => {
+test('Export ใช้ค่าฐาน (ผลงาน result ตรงหน้าบันทึกผลงาน)', () => require('./helpers').withKhdPolicy(db, 'all', async () => {
+    // ทดสอบการคำนวณด้วยข้อมูลที่ยังไม่อนุมัติ → กติกา "ส่งทั้งหมด"
     const tp = 'test_base_exp_' + Date.now();
     await db.query('UPDATE kpi_indicators SET table_process = ? WHERE id = ?', [tp, indId]);
     try {
@@ -91,7 +92,7 @@ test('Export ใช้ค่าฐาน (ผลงาน result ตรงหน
     } finally {
         await db.query(`DROP TABLE IF EXISTS \`${tp}\``).catch(() => {});
     }
-});
+}));
 
 test('ผู้ใช้ไม่มีสิทธิ์แก้เป้าหมาย → แก้ค่าฐานไม่ได้ (ค่าเดิมคงอยู่)', async () => {
     await db.query('UPDATE users SET can_edit_target = 0 WHERE id = ?', [userId]);

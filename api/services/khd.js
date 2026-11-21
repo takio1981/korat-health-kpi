@@ -61,8 +61,9 @@ async function khdExportableTables(names) {
 }
 
 // วางแผนการส่ง 1 ตาราง (อ่านอย่างเดียว) — ใช้ทั้งหน้าตัวอย่าง (preview) และตอนส่งจริง
-// คืน { skip: 'เหตุผล' } หรือ { cols, hasTs, inserts: [row], updates: [{ row, cols }], counts }
-async function planKhdTableSync(remoteDb, tp, requestedCols) {
+// คืน { skip: 'เหตุผล' } หรือ { cols, hasTs, inserts: [row], updates: [{ row, cols, before }], counts, watermark }
+// opts.byear (22 พ.ย. 2569) = วางแผนเฉพาะปีงบนั้น (ส่งขั้นเดียว — อ่าน KHD น้อยลง) | before = แถวใน KHD ก่อนเขียน (บันทึกค่าก่อน-หลังเพื่อย้อนกลับ)
+async function planKhdTableSync(remoteDb, tp, requestedCols, opts = {}) {
     let localCols, remoteCols, keyRows;
     try { [localCols] = await db.query(`SHOW COLUMNS FROM \`${tp}\``); } catch (e) { return { skip: 'ไม่มีตารางใน local' }; }
     try { [remoteCols] = await remoteDb.query(`SHOW COLUMNS FROM \`${tp}\``); } catch (e) { return { skip: 'ตาราง KHD ยังไม่มี' }; }
@@ -82,7 +83,8 @@ async function planKhdTableSync(remoteDb, tp, requestedCols) {
     const counts = { local_rows: 0, insert: 0, update: 0, unchanged: 0, khd_newer: 0, kept_blank: 0, no_time: 0, bad_key: 0 };
 
     const selLocal = [...new Set([...cols, ...(hasTs ? ['update_date'] : [])])];
-    const [localRows] = await db.query(`SELECT ${selLocal.map(c => `\`${c}\``).join(', ')} FROM \`${tp}\``);
+    const byear = opts.byear ? String(opts.byear).trim() : null;
+    const [localRows] = await db.query(`SELECT ${selLocal.map(c => `\`${c}\``).join(', ')} FROM \`${tp}\`${byear ? ' WHERE `byear` = ?' : ''}`, byear ? [byear] : []);
     counts.local_rows = localRows.length;
     const years = [...new Set(localRows.map(r => String(r.byear ?? '').trim()).filter(Boolean))];
     const remoteMap = new Map();
@@ -102,9 +104,17 @@ async function planKhdTableSync(remoteDb, tp, requestedCols) {
         if (rt !== null && lt <= rt) { counts.khd_newer++; continue; }
         const changed = dataCols.filter(c => !isBlankVal(l[c]) && !sameKhdVal(l[c], r[c]));
         if (dataCols.some(c => isBlankVal(l[c]) && !isBlankVal(r[c]))) counts.kept_blank++;
-        if (changed.length) { updates.push({ row: l, cols: changed }); counts.update++; } else counts.unchanged++;
+        if (changed.length) { updates.push({ row: l, cols: changed, before: r }); counts.update++; } else counts.unchanged++;
     }
-    return { cols, hasTs, remoteTs, inserts, updates, counts };
+    // update_date สูงสุดของ local ต่อปีงบ (จุดอ้างอิงว่าส่งครบแล้ว — ส่งขั้นเดียวรอบถัดไปข้ามตารางที่ไม่เปลี่ยน)
+    const watermark = {};
+    if (lset.has('update_date')) {
+        for (const l of localRows) {
+            const y = String(l.byear ?? '').trim(), t = timeOf(l.update_date);
+            if (y && t !== null && (watermark[y] === undefined || t > watermark[y])) watermark[y] = t;
+        }
+    }
+    return { cols, hasTs, remoteTs, inserts, updates, counts, watermark };
 }
 
 // เขียนตามแผน — UPDATE ตรวจเวลาซ้ำใน WHERE กันกรณี KHD ถูกแก้ระหว่างวางแผนกับเขียน
@@ -134,41 +144,10 @@ async function applyKhdTableSync(remoteDb, tp, plan) {
 }
 
 // Core: sync export tables to KHD — ใช้ร่วมกัน (HTTP + scheduler auto_sync_khd + DB Compare)
-async function performSyncToKhd(tables, userId) {
-    const remoteDb = getRemotePool();
-    if (!remoteDb) return { success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)', results: [] };
-    if (!Array.isArray(tables) || tables.length === 0) return { success: false, message: 'ไม่มีตารางที่จะ sync', results: [] };
-    const results = [];
-    const allowed = await khdExportableTables(tables.map(t => t && t.table).filter(n => typeof n === 'string' && KHD_IDENT.test(n)));
-    for (const t of tables) {
-        const tp = t && t.table;
-        if (typeof tp !== 'string' || !KHD_IDENT.test(tp)) { results.push({ table: tp, status: 'skipped', reason: 'ชื่อตารางไม่ถูกต้อง' }); continue; }
-        if (!allowed.has(tp)) { results.push({ table: tp, status: 'skipped', reason: 'ไม่ใช่ตารางของตัวชี้วัดที่เปิดส่งออก KHD' }); continue; }
-        try {
-            const plan = await planKhdTableSync(remoteDb, tp, t.sync_columns);
-            if (plan.skip) { results.push({ table: tp, status: 'skipped', reason: plan.skip }); continue; }
-            if (plan.counts.local_rows === 0) { results.push({ table: tp, status: 'skipped', reason: 'ไม่มีข้อมูลใน local', rows: 0 }); continue; }
-            const { inserted, updated } = await applyKhdTableSync(remoteDb, tp, plan);
-            results.push({ table: tp, status: 'success', rows: inserted + updated, inserted, updated, ...plan.counts });
-        } catch (e) {
-            results.push({ table: tp, status: 'error', reason: e.message });
-        }
-    }
-    try {
-        await db.query(
-            'INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?,?,?,?,?)',
-            [userId || null, 'SYNC_TO_KHD', 'multiple', JSON.stringify({ tables: results.length, success: results.filter(r => r.status === 'success').length }), null]
-        );
-    } catch (_) {}
-    const successCount = results.filter(r => r.status === 'success').length;
-    const errorCount = results.filter(r => r.status === 'error').length;
-    const totalRows = results.filter(r => r.status === 'success').reduce((s, r) => s + r.rows, 0);
-    return {
-        success: errorCount === 0,
-        message: `ส่งข้อมูลสำเร็จ ${successCount}/${results.length} ตาราง (${totalRows} rows)`,
-        results,
-        summary: { total: results.length, success: successCount, error: errorCount, skipped: results.length - successCount - errorCount, rows: totalRows }
-    };
+// 22 พ.ย. 2569: ทำงานผ่าน services/khd-sync.js (ครั้งละงานเดียว, เพดานเวลา/จำนวนแถว, บันทึกค่าก่อน-หลังให้ย้อนกลับได้)
+// opts = { trigger: 'manual'|'schedule'|'db_compare', yearBh } — คืนรูปแบบเดิม + run_id (+ code 'KHD_SYNC_BUSY' เมื่อมีงานส่งอื่นอยู่)
+async function performSyncToKhd(tables, userId, opts = {}) {
+    return require('./khd-sync').runKhdSync(tables, userId, opts);
 }
 
 // POST /report-compare/add-from-khd — เพิ่มตัวชี้วัดจาก KHD เข้า Local พร้อม dept_id + main_indicator_id
@@ -288,4 +267,4 @@ function diffTableColumns(localColumns, remoteColumns) {
     return diff;
 }
 
-module.exports = { performSyncToKhd, planKhdTableSync, khdExportableTables, hasHospYearKeyOnly, getKhdEffectiveCriteriaFor, loadKhdResolver, insertIndicatorFromKhd, diffTableColumns, listKhdMappings, KHD_MAP_COLUMN };
+module.exports = { performSyncToKhd, planKhdTableSync, applyKhdTableSync, isBlankVal, sameKhdVal, timeOf, khdRowKey, KHD_IDENT, khdExportableTables, hasHospYearKeyOnly, getKhdEffectiveCriteriaFor, loadKhdResolver, insertIndicatorFromKhd, diffTableColumns, listKhdMappings, KHD_MAP_COLUMN };

@@ -16,6 +16,9 @@
         </div>
       </div>
 
+      <!-- ส่งเข้า KHD ขั้นเดียว + กติกาการส่ง + ประวัติ/ย้อนกลับ (super_admin) -->
+      <app-khd-quick-send *ngIf="isSuperAdminStrict" [year]="exportYear"></app-khd-quick-send>
+
       <!-- คำแนะนำขั้นตอน (ซ่อนได้) — ครอบคลุมฟีเจอร์ทั้งหมด -->
       @if (showGuide) {
         <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-4">

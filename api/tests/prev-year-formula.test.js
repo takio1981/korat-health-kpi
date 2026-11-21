@@ -145,7 +145,8 @@ describe('สูตรอ้างผลงานปีงบประมาณ�
         expect((await dashboardRow(id, Y2)).last_actual).toBe('50');
     });
 
-    test('✅ Export: ผลงาน (result) ตามสูตรที่อ้างปีที่แล้ว ตรงกับหน้าบันทึกผลงาน', async () => {
+    test('✅ Export: ผลงาน (result) ตามสูตรที่อ้างปีที่แล้ว ตรงกับหน้าบันทึกผลงาน', () => require('./helpers').withKhdPolicy(db, 'all', async () => {
+        // ข้อมูลยังไม่อนุมัติ → ทดสอบการคำนวณภายใต้กติกา "ส่งทั้งหมด"
         const tp = 'test_prevf_' + Date.now();
         exportTables.push(tp);
         const id = await createIndicator(GROWTH, tp);
@@ -158,5 +159,5 @@ describe('สูตรอ้างผลงานปีงบประมาณ�
         const [[r]] = await db.query(`SELECT result FROM \`${tp}\` WHERE byear = ? AND hospcode = ?`, [Y2, hospcode]);
         expect(Number(r.result)).toBe(50); // (75 - 50) / 50 * 100
         expect((await dashboardRow(id, Y2)).last_actual).toBe('50');
-    });
+    }));
 });

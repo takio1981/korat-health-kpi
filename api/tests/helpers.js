@@ -54,7 +54,25 @@ async function cleanupErrorLogs(db) {
     await db.query("DELETE FROM error_logs WHERE source IN ('backend','frontend','http')");
 }
 
+/**
+ * รันฟังก์ชันภายใต้กติกาการส่ง KHD ที่กำหนด แล้วคืนค่าเดิม (22 พ.ย. 2569 — ค่าตั้งต้น approved_only ส่งออกเฉพาะเดือนที่อนุมัติ)
+ * ใช้กับชุดทดสอบที่ตรวจ "การคำนวณ" ของการส่งออกด้วยข้อมูลที่ยังไม่อนุมัติ
+ */
+async function withKhdPolicy(db, policy, fn) {
+    const { invalidateKhdSyncSettings } = require('../services/khd-policy');
+    const [[p]] = await db.query("SELECT setting_value FROM system_settings WHERE setting_key = 'khd_send_policy'");
+    const prev = p ? p.setting_value : null;
+    await db.query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('khd_send_policy', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)", [policy]);
+    invalidateKhdSyncSettings();
+    try { return await fn(); } finally {
+        if (prev === null) await db.query("DELETE FROM system_settings WHERE setting_key = 'khd_send_policy'");
+        else await db.query("UPDATE system_settings SET setting_value = ? WHERE setting_key = 'khd_send_policy'", [prev]);
+        invalidateKhdSyncSettings();
+    }
+}
+
 module.exports = {
+    withKhdPolicy,
     makeToken,
     ensureTestUser,
     cleanupTestUsers,

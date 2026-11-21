@@ -136,7 +136,8 @@ test('บันทึกแถวที่ไม่ส่งเป้าหม�
     expect([t['10'], t['11'], t['12'], t['1']]).toEqual(['80', '100', '120', '']);
 });
 
-test('Export: คอลัมน์ target = เป้าหมายรวม (ตรวจการเปลี่ยนแปลงตรงกับการส่งออก)', async () => {
+test('Export: คอลัมน์ target = เป้าหมายรวม (ตรวจการเปลี่ยนแปลงตรงกับการส่งออก)', () => require('./helpers').withKhdPolicy(db, 'all', async () => {
+    // ข้อมูลยังไม่อนุมัติ → ทดสอบการคำนวณภายใต้กติกา "ส่งทั้งหมด"
     await summaryRefreshIdle();
     const ex = await as(saToken)(request(app).post(api('/export-kpi-tables'))).send({ year_bh: YEAR, indicator_ids: [indId] });
     expect(ex.status).toBe(200);
@@ -145,4 +146,4 @@ test('Export: คอลัมน์ target = เป้าหมายรวม (
     const chk = await as(saToken)(request(app).post(api('/check-kpi-export'))).send({ year_bh: YEAR, indicator_ids: [indId] });
     const st = (chk.body.data || chk.body.results || []).find(x => Number(x.indicator_id || x.id) === indId);
     expect(st && st.status).not.toBe('has_changes');
-});
+}));

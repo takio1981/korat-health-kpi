@@ -104,8 +104,17 @@ const aiLimiter = rateLimit({
     legacyHeaders: false,
     message: { success: false, code: 'AI_RATE_LIMIT', message: 'เรียกผู้ช่วย AI ถี่เกินไป กรุณารอ 1 นาที' }
 });
+// khdLimiter (22 พ.ย. 2569): ส่งข้อมูลเข้า KHD ขั้นเดียว / ย้อนกลับ — งานหนักที่แตะระบบภายนอก จำกัด 6 ครั้ง/นาที/ผู้ใช้ (ใช้หลัง authenticateToken)
+const khdLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 6,
+    keyGenerator: (req) => `khd-user:${req.user?.userId ?? 'anon'}`,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, code: 'KHD_RATE_LIMIT', message: 'สั่งส่งข้อมูลเข้า KHD ถี่เกินไป กรุณารอ 1 นาที' }
+});
 // ตั้งชื่อฟังก์ชัน middleware (ไม่เปลี่ยนการทำงาน) — ให้ tests/route-inventory.test.js แยกได้ว่าเส้นทางใดใช้ตัวจำกัดตัวไหน
-for (const [n, fn] of Object.entries({ loginIpLimiter, loginLimiter, apiLimiter, aiLimiter })) Object.defineProperty(fn, 'name', { value: n });
+for (const [n, fn] of Object.entries({ loginIpLimiter, loginLimiter, apiLimiter, aiLimiter, khdLimiter })) Object.defineProperty(fn, 'name', { value: n });
 
 const SECRET_KEY = process.env.SECRET_KEY;
 if (!SECRET_KEY) {
@@ -113,4 +122,4 @@ if (!SECRET_KEY) {
     process.exit(1);
 }
 
-module.exports = { updateSystemSettings, loginIpLimiter, loginLimiter, apiLimiter, aiLimiter, SECRET_KEY };
+module.exports = { updateSystemSettings, loginIpLimiter, loginLimiter, apiLimiter, aiLimiter, khdLimiter, SECRET_KEY };
