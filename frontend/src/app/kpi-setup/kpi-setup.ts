@@ -392,6 +392,7 @@ export class KpiSetupComponent implements OnInit {
                     <tr><td class="py-1 text-gray-600">ปีงบประมาณ</td><td class="font-bold">${r.year_bh}</td></tr>
                     <tr><td class="py-1 text-gray-600">ตัวชี้วัด</td><td class="font-bold">${r.indicatorCount} รายการ</td></tr>
                     <tr><td class="py-1 text-gray-600">หน่วยบริการ</td><td class="font-bold">${r.hospitalCount} แห่ง</td></tr>
+                    ${r.skipped_unset ? `<tr><td class="py-1 text-yellow-700">ข้าม (ยังไม่ตั้งประเภทหน่วยบริการ)</td><td class="font-bold text-yellow-700">${r.skipped_unset} ตัวชี้วัด</td></tr>` : ''}
                   </table>
                 </div>
                 <div class="grid grid-cols-2 gap-2">

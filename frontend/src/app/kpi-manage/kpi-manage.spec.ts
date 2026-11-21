@@ -22,6 +22,34 @@ describe('KpiManageComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  // ---- ความพร้อมของตัวชี้วัด (22 พ.ย. 2569 — ระยะ 5 lean งานผู้ดูแล) ----
+  describe('ความพร้อมของตัวชี้วัด', () => {
+    it('โหลด /indicators/readiness → ป้ายเฉพาะ block/warn, ตัวกรอง และนับตัวชี้วัดที่ยังไม่ตั้งประเภท', () => {
+      const http = TestBed.inject(HttpTestingController);
+      component.loadReadiness();
+      http.expectOne(r => r.url.includes('/indicators/readiness')).flush({ success: true, data: {
+        counts: { ok: 1, info: 1, warn: 1, block: 1 }, by_code: { hostype_unset: 1, not_assigned: 2 },
+        items: [
+          { id: 1, level: 'block', issues: [{ code: 'hostype_unset', level: 'block', text: 'ยังไม่ตั้งประเภทหน่วยบริการ', field: 'indicator-eval-mode' }, { code: 'not_assigned', level: 'warn', text: 'ยังไม่ได้เพิ่ม', field: null }] },
+          { id: 2, level: 'warn', issues: [{ code: 'no_criterion', level: 'warn', text: 'ยังไม่ตั้งเกณฑ์', field: 'indicator-criterion' }] },
+          { id: 3, level: 'info', issues: [{ code: 'no_khd_link', level: 'info', text: 'ยังไม่เชื่อม', field: null }] },
+          { id: 4, level: 'ok', issues: [] },
+        ] } });
+      expect(component.readinessCounts).toEqual({ block: 1, warn: 1, hostype_unset: 1, not_assigned: 2 });
+      expect(component.readinessOf({ id: 1 })).toMatchObject({ level: 'block', count: 1 });
+      expect(component.readinessOf({ id: 2 })).toMatchObject({ level: 'warn', count: 1 });
+      expect(component.readinessOf({ id: 3 })).toBeNull();
+      expect(component.readinessOf({ id: 4 })).toBeNull();
+      expect(component.readinessTitle(component.readinessOf({ id: 1 })!)).toContain('ยังไม่ตั้งประเภทหน่วยบริการ');
+      component.filterReadiness = 'block';
+      expect([1, 2, 3, 4].filter(id => component.matchReadiness({ id }))).toEqual([1]);
+      component.filterReadiness = 'not_assigned';
+      expect([1, 2, 3, 4].filter(id => component.matchReadiness({ id }))).toEqual([1]);
+      component.filterReadiness = '';
+      expect([1, 2, 3, 4].filter(id => component.matchReadiness({ id }))).toEqual([1, 2, 3, 4]);
+    });
+  });
+
   // ---- รหัสของตัวชี้วัดสร้างให้อัตโนมัติ (11 ต.ค. 2569) — เดิมผู้ใช้ต้องคิด/กรอก รหัสอ้างอิง + รหัสตัวชี้วัด + ชื่อตาราง เอง ----
   describe('รหัสอัตโนมัติใน modal เพิ่มตัวชี้วัด', () => {
     let http: HttpTestingController;

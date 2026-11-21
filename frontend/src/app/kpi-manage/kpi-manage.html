@@ -52,6 +52,19 @@
                 <option *ngFor="let y of fiscalYearOptions" [value]="y">ปีงบ {{ y }}</option>
               </select>
             </div>
+            <!-- ความพร้อมของตัวชี้วัด (22 พ.ย. 2569) -->
+            <div class="relative w-44 sm:w-52" *ngIf="readinessCounts">
+              <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">ความพร้อม ปีงบ {{ readinessYear }}</label>
+              <select id="filter-readiness" [(ngModel)]="filterReadiness" (change)="applyFilter()"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none truncate"
+                      title="ตรวจความพร้อมของตัวชี้วัดที่เปิดใช้งาน (ตั้งค่าครบหรือไม่)">
+                <option value="">ทั้งหมด</option>
+                <option value="block">ยังไม่พร้อม ({{ readinessCounts.block }})</option>
+                <option value="warn">ควรตรวจ ({{ readinessCounts.warn }})</option>
+                <option value="hostype_unset">ยังไม่ตั้งประเภทหน่วยบริการ ({{ readinessCounts.hostype_unset }})</option>
+                <option value="not_assigned">ยังไม่ได้เพิ่มให้หน่วยบริการ ({{ readinessCounts.not_assigned }})</option>
+              </select>
+            </div>
             <button *ngIf="canEditData && unsetFiscalYearCount > 0" (click)="openSetFiscalYearForUnset()" id="btn-set-fiscal-year"
                     class="px-3 py-2 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold whitespace-nowrap"
                     title="ตั้งปีงบประมาณให้ตัวชี้วัดในรายการที่ยังไม่ระบุปีงบ">
@@ -578,7 +591,14 @@
                 <span *ngFor="let t of getIndicatorTypes(item)" class="inline-flex items-center px-1.5 py-0.5 rounded font-bold" [ngClass]="t.color" [title]="'ประเภทตัวชี้วัด: ' + t.label">
                   {{ t.label }}
                 </span>
-                <ng-container *ngIf="getOffTypeBadge(item) as off">
+                <span *ngIf="!getOffTypeBadge(item)" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-yellow-50 border border-yellow-300 text-yellow-800 font-bold" title="ยังไม่ตั้งประเภทหน่วยบริการ — เพิ่มตัวชี้วัดนี้ให้หน่วยบริการไม่ได้ (ตั้งที่ เกณฑ์การประเมิน)">
+                      <i class="fas fa-hospital text-[9px]"></i>ยังไม่ตั้งประเภท
+                    </span>
+                    <button *ngIf="readinessOf(item) as r" type="button" (click)="fixReadiness(item); $event.stopPropagation()" [title]="readinessTitle(r)"
+                            class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold" [ngClass]="r.level === 'block' ? 'bg-red-50 border-red-300 text-red-700' : 'bg-amber-50 border-amber-300 text-amber-800'">
+                      <i class="fas text-[9px]" [ngClass]="r.level === 'block' ? 'fa-circle-exclamation' : 'fa-triangle-exclamation'"></i>{{ r.level === 'block' ? 'ยังไม่พร้อม' : 'ควรตรวจ' }} {{ r.count }}
+                    </button>
+                    <ng-container *ngIf="getOffTypeBadge(item) as off">
                   <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-700" [title]="'ประเภทหน่วยบริการ: ' + off.title">
                     <i class="fas fa-hospital text-[9px]"></i>{{ off.label }}
                   </span>
@@ -727,6 +747,13 @@
                     <span *ngFor="let t of getIndicatorTypes(item)" class="inline-flex items-center px-1.5 py-0.5 rounded font-bold" [ngClass]="t.color" [title]="'ประเภทตัวชี้วัด: ' + t.label">
                       {{ t.label }}
                     </span>
+                    <span *ngIf="!getOffTypeBadge(item)" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-yellow-50 border border-yellow-300 text-yellow-800 font-bold" title="ยังไม่ตั้งประเภทหน่วยบริการ — เพิ่มตัวชี้วัดนี้ให้หน่วยบริการไม่ได้ (ตั้งที่ เกณฑ์การประเมิน)">
+                      <i class="fas fa-hospital text-[9px]"></i>ยังไม่ตั้งประเภท
+                    </span>
+                    <button *ngIf="readinessOf(item) as r" type="button" (click)="fixReadiness(item); $event.stopPropagation()" [title]="readinessTitle(r)"
+                            class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold" [ngClass]="r.level === 'block' ? 'bg-red-50 border-red-300 text-red-700' : 'bg-amber-50 border-amber-300 text-amber-800'">
+                      <i class="fas text-[9px]" [ngClass]="r.level === 'block' ? 'fa-circle-exclamation' : 'fa-triangle-exclamation'"></i>{{ r.level === 'block' ? 'ยังไม่พร้อม' : 'ควรตรวจ' }} {{ r.count }}
+                    </button>
                     <ng-container *ngIf="getOffTypeBadge(item) as off">
                       <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-50 border border-indigo-200 text-indigo-700" [title]="'ประเภทหน่วยบริการ: ' + off.title">
                         <i class="fas fa-hospital text-[9px]"></i>{{ off.label }}
@@ -1900,7 +1927,7 @@
       <ng-container *ngIf="activeTab === 'indicators'">
         <div>
           <label class="block text-xs font-bold text-gray-600 mb-1">ชื่อตัวชี้วัด <span class="text-red-500">*</span></label>
-          <textarea [(ngModel)]="currentItem.kpi_indicators_name" rows="2" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm"></textarea>
+          <textarea id="indicator-name" [(ngModel)]="currentItem.kpi_indicators_name" rows="2" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm"></textarea>
         </div>
         <div>
           <label class="block text-xs font-bold text-gray-600 mb-1">เลขข้อ <span class="text-gray-400 font-normal">(ไม่จำเป็น เช่น 1 — ตัวชี้วัดย่อยแสดงเป็น 1.1, 1.2 และกิจกรรมเป็น 1.1.1 อัตโนมัติ)</span></label>
@@ -1916,14 +1943,14 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label class="block text-xs font-bold text-gray-600 mb-1">หมวดหมู่หลัก</label>
-            <select [(ngModel)]="currentItem.main_indicator_id" (change)="onMainIndicatorChangeInModal()" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm">
+            <select id="indicator-main" [(ngModel)]="currentItem.main_indicator_id" (change)="onMainIndicatorChangeInModal()" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm">
               <option [ngValue]="null">-- ไม่ระบุ --</option>
               <option *ngFor="let m of filteredMainForModal" [ngValue]="m.id">{{ m.main_indicator_name }}</option>
             </select>
           </div>
           <div>
             <label class="block text-xs font-bold text-gray-600 mb-1">หน่วยงาน</label>
-            <select [(ngModel)]="currentItem.dept_id" (change)="onDeptChangeInModal()" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm">
+            <select id="indicator-dept" [(ngModel)]="currentItem.dept_id" (change)="onDeptChangeInModal()" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm">
               <option [ngValue]="null">-- ไม่ระบุ --</option>
               <option *ngFor="let d of departments" [ngValue]="d.id">{{ d.dept_name }}</option>
             </select>
@@ -1934,7 +1961,7 @@
           <label class="block text-xs font-bold text-gray-700 mb-2">
             <i class="fas fa-flag-checkered text-emerald-600 mr-1"></i>เป้าหมาย (ค่าเริ่มต้น)
           </label>
-          <input type="text" [(ngModel)]="currentItem.target_percentage"
+          <input id="indicator-target" type="text" [(ngModel)]="currentItem.target_percentage"
                  class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white"
                  placeholder="เช่น 80">
           <!-- หน่วยนับผลงาน (13 พ.ย. 2569 — ไม่บังคับ) -->
@@ -2008,7 +2035,7 @@
           <div class="grid grid-cols-3 gap-3">
             <div>
               <label class="block text-xs font-bold text-gray-600 mb-1">เกณฑ์ (%)</label>
-              <input type="text" [(ngModel)]="currentItem.criterion" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm bg-white">
+              <input id="indicator-criterion" type="text" [(ngModel)]="currentItem.criterion" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm bg-white">
             </div>
             <div>
               <label class="block text-xs font-bold text-gray-600 mb-1">เงื่อนไข</label>
@@ -2052,7 +2079,7 @@
               ไม่กรอก = ใช้วิธีเดิม (ค่าเดือนล่าสุดที่คีย์ หรือผลรวมถ้าเป็นตัวชี้วัดสะสม) — กรอกสูตรแล้วระบบใช้สูตรนี้คำนวณ "ผลงาน"
               ทุกหน้า (บันทึกผลงาน, กราฟ, รายงาน, ส่งออก KHD) ส่วนร้อยละ/ผ่านเกณฑ์คิดตามเงื่อนไขเป้าหมายด้านบน
             </p>
-            <input #formulaInput type="text" [(ngModel)]="currentItem.result_formula" maxlength="500"
+            <input #formulaInput id="indicator-formula" type="text" [(ngModel)]="currentItem.result_formula" maxlength="500"
                    placeholder="เช่น AVG(ALL)  หรือ  (m10+m11+m12)/3"
                    class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 text-sm bg-white font-mono"
                    [ngClass]="formulaError ? 'border-red-400 focus:ring-red-300' : (hasFormula ? 'border-violet-400 focus:ring-violet-300' : 'focus:ring-violet-300')">
@@ -2306,7 +2333,7 @@
                 <span class="text-xs text-gray-400 font-normal ml-1">a-z, 0-9, _ เท่านั้น</span>
               </label>
               <p class="text-[11px] text-gray-500 mb-1">ชื่อตารางที่ใช้เก็บ/ส่งออกผลงานของตัวชี้วัดนี้ไปยัง KHD และใช้จับคู่กับตัวชี้วัดใน KHD — ไม่ควรซ้ำกับตัวชี้วัดอื่น</p>
-              <input type="text" [(ngModel)]="currentItem.table_process" (ngModelChange)="onCodeManualEdit()"
+              <input id="indicator-table-process" type="text" [(ngModel)]="currentItem.table_process" (ngModelChange)="onCodeManualEdit()"
                      class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-400 font-mono text-sm"
                      [ngClass]="currentItem.table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(currentItem.table_process) ? 'border-red-400 bg-red-50' : ''"
                      placeholder="เช่น kpi_ncd_001">

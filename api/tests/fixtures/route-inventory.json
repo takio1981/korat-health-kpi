@@ -133,6 +133,7 @@
   "DELETE /khupskpi/api/main-indicators/:id :: authenticateToken > isSuperAdmin > handler",
   "GET /khupskpi/api/indicators :: authenticateToken > handler",
   "POST /khupskpi/api/indicators/bulk-import :: authenticateToken > requireAction(kpi-manage,add) > handler",
+  "GET /khupskpi/api/indicators/readiness :: authenticateToken > handler",
   "GET /khupskpi/api/indicators/suggest-code :: authenticateToken > requireAction(kpi-manage,add) > handler",
   "POST /khupskpi/api/indicators :: authenticateToken > requireAction(kpi-manage,add) > handler",
   "PUT /khupskpi/api/indicators/:id :: authenticateToken > requireAction(kpi-manage,edit) > handler",

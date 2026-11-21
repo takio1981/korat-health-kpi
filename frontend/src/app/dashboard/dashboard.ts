@@ -2458,6 +2458,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
                   <tr><td class="py-1 text-gray-600">หน่วยบริการ (รพ./สสอ./รพ.สต.)</td><td class="font-bold">${p.hospitalCount} แห่ง</td></tr>
                   <tr><td class="py-1 text-gray-600">ชุดที่เป็นไปได้ทั้งหมด</td><td class="font-bold">${p.totalPossible.toLocaleString()}</td></tr>
                   <tr><td class="py-1 text-gray-600">มีอยู่แล้ว</td><td class="font-bold text-gray-500">${p.existingCount.toLocaleString()}</td></tr>
+                  ${p.skipped_unset ? `<tr><td class="py-1 text-yellow-700">ข้าม (ยังไม่ตั้งประเภทหน่วยบริการ)</td><td class="font-bold text-yellow-700">${p.skipped_unset} ตัวชี้วัด</td></tr>` : ''}
                   <tr class="border-t"><td class="py-1 text-green-700 font-bold">ต้องเพิ่มใหม่</td><td class="font-bold text-green-700">${p.toAdd.toLocaleString()} ชุด (${(p.toAdd * 12).toLocaleString()} records)</td></tr>
                 </table>
               </div>
@@ -2473,7 +2474,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
               this.authService.bulkAddKpi(year).subscribe({
                 next: (res: any) => {
                   Swal.fire({ icon: 'success', title: 'เพิ่มสำเร็จ',
-                    html: `เพิ่มใหม่ <b>${res.inserted}</b> ชุด (${res.totalRecords} records)<br>ข้าม <b>${res.skipped}</b> ชุดที่มีอยู่แล้ว`,
+                    html: `เพิ่มใหม่ <b>${res.inserted}</b> ชุด (${res.totalRecords} records)<br>ข้าม <b>${res.skipped}</b> ชุดที่มีอยู่แล้ว${res.skipped_unset ? `<br>ข้าม <b>${res.skipped_unset}</b> ตัวชี้วัดที่ยังไม่ตั้งประเภทหน่วยบริการ (ตั้งที่หน้าจัดการตัวชี้วัด)` : ''}`,
                     confirmButtonColor: '#10b981' });
                   this.loadKpiData();
                 },

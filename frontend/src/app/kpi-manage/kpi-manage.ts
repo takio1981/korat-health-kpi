@@ -132,6 +132,11 @@ export class KpiManageComponent implements OnInit {
   filterDept: string = '';
   // กรองปีงบประมาณ — ค่าเดียวจาก dropdown, match กับ khd_fiscal_year ของแต่ละตัวชี้วัด (comma-list เช่น "2569,2570")
   filterFiscalYear: string = '';
+  // ความพร้อมของตัวชี้วัด (ระยะ 5) — ปีงบปัจจุบัน
+  readiness = new Map<number, any>();
+  readinessCounts: { block: number; warn: number; hostype_unset: number; not_assigned: number } | null = null;
+  readinessYear = String(getCurrentFiscalYear());
+  filterReadiness = '';
 
   // Modal
   showModal: boolean = false;
@@ -292,6 +297,7 @@ export class KpiManageComponent implements OnInit {
         this.filteredIndicators = [...this.indicators];
         if (this.activeTab === 'indicators') this.applyFilter();
         this.openPendingIndicatorEdit();
+        this.loadReadiness();
       }
       this.cdr.detectChanges();
     });
@@ -577,6 +583,55 @@ export class KpiManageComponent implements OnInit {
   }
 
   // ประเภทหน่วยบริการ — 'all_required' = ทุกประเภท, 'any_one' + required_off_types = รายชื่อ
+  // ===== ความพร้อมของตัวชี้วัด (22 พ.ย. 2569 — ระยะ 5 lean งานผู้ดูแล) — GET /indicators/readiness ตรวจแบบกฎ อ่านอย่างเดียว =====
+  loadReadiness() {
+    this.authService.apiGet('/indicators/readiness', { year_bh: this.readinessYear }).subscribe({
+      next: (res: any) => {
+        if (!res?.success) return;
+        const map = new Map<number, any>();
+        for (const it of res.data.items || []) map.set(Number(it.id), it);
+        this.readiness = map;
+        const c = res.data.counts || {}, by = res.data.by_code || {};
+        this.readinessCounts = { block: c.block || 0, warn: c.warn || 0, hostype_unset: by.hostype_unset || 0, not_assigned: by.not_assigned || 0 };
+        if (this.filterReadiness && this.activeTab === 'indicators') this.applyFilter();
+        this.cdr.detectChanges();
+      },
+      error: () => { /* ไม่มีสิทธิ์/ผิดพลาด = ไม่แสดงป้ายความพร้อม */ },
+    });
+  }
+  /** ป้ายความพร้อม: แสดงเฉพาะ block/warn — คืน { level, count, issues } (count = จำนวนข้อของระดับนั้น) */
+  readinessOf(item: any): { level: string; count: number; issues: any[] } | null {
+    const r = this.readiness.get(Number(item?.id));
+    if (!r || (r.level !== 'block' && r.level !== 'warn')) return null;
+    if (r._badge) return r._badge;
+    r._badge = { level: r.level, count: r.issues.filter((i: any) => i.level === r.level).length, issues: r.issues };
+    return r._badge;
+  }
+  readinessTitle(r: { issues: any[] }): string {
+    const mark: Record<string, string> = { block: '✖', warn: '⚠', info: 'ℹ' };
+    return r.issues.map(i => `${mark[i.level] || '-'} ${i.text}`).join('\n') + (this.canEditData ? '\n— คลิกเพื่อแก้ไข' : '');
+  }
+  /** แก้ด่วน: เปิดหน้าต่างแก้ไขแล้วเลื่อนไปช่องแรกที่ต้องแก้ */
+  fixReadiness(item: any) {
+    const r = this.readiness.get(Number(item?.id));
+    if (!r || !this.canEditData) return;
+    this.openModal(item);
+    this.cdr.detectChanges();
+    const field = (r.issues.find((i: any) => i.field && i.level === r.level) || r.issues.find((i: any) => i.field))?.field;
+    if (field) setTimeout(() => {
+      const el = document.getElementById(field);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      (el as HTMLElement | null)?.focus?.();
+    }, 200);
+  }
+  matchReadiness(item: any): boolean {
+    if (!this.filterReadiness) return true;
+    const r = this.readiness.get(Number(item?.id));
+    if (!r) return false;
+    if (this.filterReadiness === 'block' || this.filterReadiness === 'warn') return r.level === this.filterReadiness;
+    return r.issues.some((i: any) => i.code === this.filterReadiness);
+  }
+
   getOffTypeBadge(item: any): { label: string; title: string } | null {
     const mode = item?.evaluation_mode;
     if (mode === 'all_required') return { label: 'ทุกประเภท', title: 'บังคับทุกประเภทหน่วยบริการ' };
@@ -946,6 +1001,7 @@ export class KpiManageComponent implements OnInit {
         if (this.filterDept && String(i.dept_id) !== this.filterDept) return false;
         if (this.filterFiscalYear === '__none') { if (this.getFiscalYears(i).length) return false; }
         else if (this.filterFiscalYear && !this.getFiscalYears(i).includes(this.filterFiscalYear)) return false;
+        if (!this.matchReadiness(i)) return false;
         // KHD compare filter
         if (this.filterKhdStatus) {
           const cmp = this.getKhdCompareStatus(i);
@@ -1035,7 +1091,7 @@ export class KpiManageComponent implements OnInit {
   // ใช้ตัดสินข้อความ empty-state: "ไม่พบข้อมูลที่ค้นหา" (มีตัวกรองอยู่) vs "ยังไม่มีข้อมูล" (list ว่างจริงๆ)
   hasActiveFilter(): boolean {
     if (this.searchTerm) return true;
-    if (this.activeTab === 'indicators') return !!(this.filterActive || this.filterMainIndicator || this.filterDept || this.filterFiscalYear);
+    if (this.activeTab === 'indicators') return !!(this.filterActive || this.filterMainIndicator || this.filterDept || this.filterFiscalYear || this.filterReadiness);
     if (this.activeTab === 'hospitals') return !!(this.hospFilterZone || this.hospFilterDistid || this.hospFilterHostype);
     return !!this.filterActive;
   }
@@ -1049,6 +1105,7 @@ export class KpiManageComponent implements OnInit {
     this.filterMainIndicator = '';
     this.filterDept = '';
     this.filterFiscalYear = '';
+    this.filterReadiness = '';
     this.hospFilterZone = '';
     this.hospFilterDistid = '';
     this.hospFilterHostype = '';

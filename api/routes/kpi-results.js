@@ -274,8 +274,10 @@ apiRouter.get('/bulk-add-kpi/preview', authenticateToken, isAdmin, async (req, r
         const existSet = new Set(existing.map(r => `${r.indicator_id}_${r.hospcode}`));
 
         // นับ totalPossible/toAdd จริงต่อตัวชี้วัด (กรองตาม hostype ที่ใช้ได้ของแต่ละตัว) ให้ตรงกับที่จะ insert จริง
-        let totalPossible = 0, toAdd = 0;
+        // ตัวชี้วัดที่ยังไม่ตั้งประเภทหน่วยบริการ = ข้าม (22 พ.ย. 2569 — กฎเดียวกับหน้าเพิ่มตัวชี้วัดให้หน่วยบริการ; เดิม = 4 ประเภทหลัก)
+        let totalPossible = 0, toAdd = 0, unsetCount = 0;
         for (const ind of indicators) {
+            if (indicatorTypeSetting(ind) === 'unset') { unsetCount++; continue; }
             const allowedTypes = resolveIndicatorHostypes(ind);
             for (const hos of hospitals) {
                 if (!allowedTypes.has(String(hos.hostype))) continue;
@@ -290,6 +292,7 @@ apiRouter.get('/bulk-add-kpi/preview', authenticateToken, isAdmin, async (req, r
             existingCount: existing.length,
             totalPossible,
             toAdd,
+            skipped_unset: unsetCount,
             year_bh
         });
     } catch (e) {
@@ -317,11 +320,13 @@ apiRouter.post('/bulk-add-kpi', authenticateToken, isAdmin, async (req, res) => 
         const [existing] = await db.query('SELECT indicator_id, hospcode FROM kpi_results WHERE year_bh = ? GROUP BY indicator_id, hospcode', [year_bh]);
         const existSet = new Set(existing.map(r => `${r.indicator_id}_${r.hospcode}`));
 
-        let inserted = 0, skipped = 0;
+        let inserted = 0, skipped = 0, skippedUnset = 0;
         const connection = await db.getConnection();
         try {
             await connection.beginTransaction();
             for (const ind of indicators) {
+                // ยังไม่ตั้งประเภทหน่วยบริการ = ข้าม (กฎเดียวกับหน้าเพิ่มตัวชี้วัดให้หน่วยบริการ — ตั้งค่าที่หน้าจัดการตัวชี้วัดก่อน)
+                if (indicatorTypeSetting(ind) === 'unset') { skippedUnset++; continue; }
                 const allowedTypes = resolveIndicatorHostypes(ind);
                 const hospsForThisIndicator = hospitals.filter(h => allowedTypes.has(String(h.hostype)));
                 for (const hos of hospsForThisIndicator) {
@@ -341,7 +346,7 @@ apiRouter.post('/bulk-add-kpi', authenticateToken, isAdmin, async (req, res) => 
             }
             await connection.query(
                 'INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?,?,?,?,?)',
-                [req.user.userId, 'BULK_ADD_KPI', 'kpi_results', JSON.stringify({ year_bh, indicators: indicators.length, hospitals: hospitals.length, inserted, skipped }), req.ip]
+                [req.user.userId, 'BULK_ADD_KPI', 'kpi_results', JSON.stringify({ year_bh, indicators: indicators.length, hospitals: hospitals.length, inserted, skipped, skipped_unset: skippedUnset }), req.ip]
             );
             await connection.commit();
         } catch (e) { await connection.rollback(); throw e; }
@@ -350,7 +355,7 @@ apiRouter.post('/bulk-add-kpi', authenticateToken, isAdmin, async (req, res) => 
         res.json({
             success: true,
             message: `เพิ่ม KPI สำเร็จ`,
-            inserted, skipped,
+            inserted, skipped, skipped_unset: skippedUnset,
             totalRecords: inserted * 12,
             indicatorCount: indicators.length,
             hospitalCount: hospitals.length,

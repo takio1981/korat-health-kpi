@@ -18,6 +18,8 @@ const { getUserAuditInfo, logKpiSaveAudit } = require('../services/kpi-audit');
 const { notifyLineAction } = require('../core/notify');
 const { refreshSummaryAfterSubSave, scheduleSummaryRefresh } = require('../services/summary');
 const { normalizeFiscalYears, invalidFiscalYears } = require('../services/fiscal-years');
+const { indicatorReadiness } = require('../services/indicator-readiness');
+const { currentFiscalYear } = require('../core/fiscal-year');
 
 // --- CRUD Main Yut (ยุทธศาสตร์) ---
 apiRouter.get('/main-yut', authenticateToken, async (req, res) => {
@@ -223,6 +225,21 @@ async function suggestIndicatorCodes(conn, deptId) {
     const table_process = prefix + String(max + 1).padStart(3, '0');
     return { table_process, kpi_indicators_code: table_process.replace(/_/g, '-') };
 }
+
+// GET /indicators/readiness?year_bh= — ความพร้อมของตัวชี้วัดที่เปิดใช้งาน (22 พ.ย. 2569 — ระยะ 5 lean งานผู้ดูแล)
+// ตรวจแบบกฎ อ่านอย่างเดียว (services/indicator-readiness.js) — ผู้ที่เข้าหน้าจัดการตัวชี้วัดได้, ROLE_SCOPE_OWN_DEPT เห็นเฉพาะหน่วยงานตัวเอง
+apiRouter.get('/indicators/readiness', authenticateToken, async (req, res) => {
+    const user = req.user;
+    if (!hasPageAccess(user.role, 'kpi-manage')) return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์เข้าถึงหน้าจัดการตัวชี้วัด' });
+    const year = req.query.year_bh ? String(req.query.year_bh) : String(currentFiscalYear());
+    if (!/^\d{4}$/.test(year)) return res.status(400).json({ success: false, message: 'ปีงบประมาณต้องเป็นตัวเลข 4 หลัก' });
+    try {
+        const deptId = ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null ? user.deptId : null;
+        res.json({ success: true, data: await indicatorReadiness({ yearBh: year, deptId }) });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
 
 apiRouter.get('/indicators/suggest-code', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
     try {

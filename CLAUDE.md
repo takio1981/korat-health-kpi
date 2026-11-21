@@ -97,7 +97,7 @@ frontend/src/app/
   ห้าม export ตรงๆ (ค่าจะค้าง) — เก็บไว้ในโมดูลเดียวกับผู้ใช้ หรือเปลี่ยนเป็น object; Map/Set แชร์ได้ (object เดียวกัน)
 - `core/env.js` ต้องเป็น require แรกของ server.js
   (ตัวดัก unhandledRejection/uncaughtException เรียก `captureError` แบบ lazy จาก core/errors)
-- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (347 เส้นทาง — app 9 + api 338: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
+- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (348 เส้นทาง — app 9 + api 339: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
   ตั้งใจเพิ่ม/แก้ route → `node tests/lib/route-inventory.js --write` แล้วตรวจ diff), `tests/lint.test.js` (ESLint no-undef ฯลฯ — จับชื่อที่ลืม require),
   `tests/build.test.js` (ไล่ require ทุกชั้นต้องอยู่ในชุดที่ build คัดลอก + build ลงโฟลเดอร์ชั่วคราว), `tests/startup.test.js` (เริ่มระบบ + โหลดผลลัพธ์ build ใน process แยก)
   — middleware ที่สร้างจาก factory/ไลบรารีต้องมีชื่อ (`requireAction(page,action)`, loginIpLimiter/loginLimiter/apiLimiter) ให้ snapshot แยกได้
@@ -397,7 +397,10 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   DISTRICT → 403, เดิมไม่ตรวจ), ตรวจ "มีอยู่แล้ว" query เดียว (คู่ที่ล็อค = ข้าม ไม่ล้มทั้งคำขอ), นับ `skipped` / `skipped_type` / `skipped_unset`,
   INSERT bulk — ผู้ดูแลที่ทุกแถวมี hospcode ไม่ต้องส่ง `targetHospcode` | `GET /kpi-template` = active + หมวดหมู่หลัก/หน่วยงานไม่ถูกปิด + `hostype_setting`
   (ROLE_SCOPE_HOSPCODE ซ่อน any_one ที่ไม่ตรงประเภท แต่**คงแถว unset** ให้เห็นว่าต้องตั้งค่า) — kpi-setup ใช้โหมดเดียวกัน (ข้าม unset ด้วย)
-- ⚠️ โหมดอื่นของ `/update-kpi` และ `/bulk-add-kpi` ไม่ได้ใช้กฎนี้ (`/bulk-add-kpi` มี `resolveIndicatorHostypes()` ของตัวเอง — unset = 4 ประเภทหลัก)
+- ⚠️ โหมดอื่นของ `/update-kpi` ไม่ได้ใช้กฎนี้ | `/bulk-add-kpi` (+ preview) **ข้ามตัวชี้วัด unset ตั้งแต่ 22 พ.ย. 2569** (`skipped_unset` — เดิม unset = 4 ประเภทหลัก) ตัวที่ตั้งแล้วใช้ `resolveIndicatorHostypes()` เดิม
+- **ความพร้อมของตัวชี้วัด (22 พ.ย. 2569 — ระยะ 5 lean งานผู้ดูแล):** `services/indicator-readiness.js` `evaluateReadiness(ind, { year_bh, assigned })` ฟังก์ชันล้วน → `{ level: ok|info|warn|block, issues: [{ code, level, text, field }] }`
+  (field = id ช่องในหน้าต่างแก้ไขตัวชี้วัด: indicator-name / -eval-mode / -table-process / -formula / -target / -criterion / -dept / -main / -fiscal-year) — `GET /indicators/readiness?year_bh=` (สิทธิ์หน้า kpi-manage, ROLE_SCOPE_OWN_DEPT)
+  | kpi-manage `loadReadiness()` (หลังโหลดตัวชี้วัด) `readinessOf()`/`fixReadiness()`/`matchReadiness()` ตัวกรอง `#filter-readiness` | Test: `api/tests/indicator-readiness.test.js`, `kpi-manage.spec.ts`
 - Test: `api/tests/add-kpi-auto-target.test.js`, `indicator-codes-scope.test.js`, `shared/indicator-scope.spec.ts`, `dashboard.spec.ts`, `kpi-manage.spec.ts`
 
 ### ป้ายสูตรในทุกหน้าที่มีรายชื่อตัวชี้วัด
