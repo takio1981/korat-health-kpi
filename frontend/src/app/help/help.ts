@@ -87,7 +87,8 @@ export class HelpComponent {
     { id: 'feedback',       icon: 'fa-comments',         label: '21. กระดานข้อเสนอแนะ',               roles: 'all' },
     { id: 'role-page-access', icon: 'fa-user-lock',      label: '22. สิทธิ์การเข้าถึงหน้า',            roles: HelpComponent.SUPER_ONLY },
     { id: 'kpi-results-manage', icon: 'fa-broom',        label: '23. จัดการข้อมูลผลงานตัวชี้วัด',      roles: HelpComponent.SUPER_ONLY },
-    { id: 'faq',            icon: 'fa-question-circle',  label: '24. คำถามที่พบบ่อย',                 roles: 'all' }
+    { id: 'work-center',    icon: 'fa-clipboard-list',   label: '24. ศูนย์งานผู้ดูแล',                roles: HelpComponent.ANY_ADMIN },
+    { id: 'faq',            icon: 'fa-question-circle',  label: '25. คำถามที่พบบ่อย',                 roles: 'all' }
   ];
 
   /** sections ที่ user role ปัจจุบันเห็น (sidebar/menu ใช้ตัวนี้) */

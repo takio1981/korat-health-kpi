@@ -73,6 +73,7 @@ frontend/src/app/
   | `services/export.js` | performKpiExport, checkKpiChanges, buildItemExportRows/ensureItemsTable/writeItemsTable (`_items`) |
   | `services/khd.js` | performSyncToKhd, getKhdEffectiveCriteriaFor, loadKhdResolver, insertIndicatorFromKhd, diffTableColumns, listKhdMappings (รายการของ GET /khd-mappings) |
   | `services/backup.js` | runBackupJob/runRestoreJob, startBackupScheduler, การเชื่อมต่อ (bkEncrypt/bkDecrypt), Google Drive (resetDriveClientCache), migration ตารางสำรองข้อมูล |
+  | `services/report-scope.js` / `services/work-center.js` | chartScopeClauses, resultScopeFor / findMissingPairs, missingReport, reviewQueue, isReminderDue, getReminderSettings |
   | `services/khd-policy.js` / `services/khd-sync.js` | getKhdSyncSettings/getKhdSendPolicy (กติกาการส่ง KHD) / runKhdSync, withKhdSyncLock, rollbackRun, quickSend, listRuns/getRun |
   | `services/kpi-audit.js` | logKpiSaveAudit, getUserAuditInfo, getAuditSettings/invalidateAuditSettingsCache |
   | `services/indicator-fields.js` | normTargetCondition, normalizeOffTypes, normalizeEvalMode, _actorLabel |
@@ -96,7 +97,7 @@ frontend/src/app/
   ห้าม export ตรงๆ (ค่าจะค้าง) — เก็บไว้ในโมดูลเดียวกับผู้ใช้ หรือเปลี่ยนเป็น object; Map/Set แชร์ได้ (object เดียวกัน)
 - `core/env.js` ต้องเป็น require แรกของ server.js
   (ตัวดัก unhandledRejection/uncaughtException เรียก `captureError` แบบ lazy จาก core/errors)
-- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (339 เส้นทาง — app 9 + api 330: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
+- **ตาข่ายกันพัง (ต้องผ่านทุกครั้ง):** `tests/route-inventory.test.js` (347 เส้นทาง — app 9 + api 338: method + path + ชื่อ middleware + ลำดับ เทียบ fixture —
   ตั้งใจเพิ่ม/แก้ route → `node tests/lib/route-inventory.js --write` แล้วตรวจ diff), `tests/lint.test.js` (ESLint no-undef ฯลฯ — จับชื่อที่ลืม require),
   `tests/build.test.js` (ไล่ require ทุกชั้นต้องอยู่ในชุดที่ build คัดลอก + build ลงโฟลเดอร์ชั่วคราว), `tests/startup.test.js` (เริ่มระบบ + โหลดผลลัพธ์ build ใน process แยก)
   — middleware ที่สร้างจาก factory/ไลบรารีต้องมีชื่อ (`requireAction(page,action)`, loginIpLimiter/loginLimiter/apiLimiter) ให้ snapshot แยกได้
@@ -660,6 +661,18 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   — UI `shared/ai-forecast-panel.ts` ในแท็บตัวชี้วัดเสี่ยง (`aiParams` คืน object เดิมเมื่อค่าไม่เปลี่ยน กัน NG0100)
 - Test: `api/tests/kpi-forecast.test.js`, `api/tests/forecast-route.test.js`, `api/tests/forecast-digest.test.js`, `api/tests/ai-forecast.test.js`, `shared/ai-forecast-panel.spec.ts`, `chart/risk-view.spec.ts`, `shared/forecast-settings-card.spec.ts`
 
+### ศูนย์งานผู้ดูแล + แจ้งเตือนหน่วยบริการที่ยังไม่ส่งผลงาน (22 พ.ย. 2569 — ระยะ 4 ของแผน lean งานผู้ดูแล; ผู้ใช้เลือก: หน้าใหม่ในเมนูข้าง เปิดผู้ดูแลทุกระดับ, เตือนในระบบ + LINE/อีเมล, กำหนดส่ง = วันที่ N ของเดือนถัดไป)
+- pageKey `work-center` (`PAGE_ACCESS_DEFAULT_ENABLED` = ROLES_ANY_ADMIN, rule prefix `/work-center/`) — หน้า `frontend/src/app/work-center/` (lazy), เมนูข้างทั้ง 2 แบบ, `PAGE_GUIDES['work-center']`
+- `services/report-scope.js`: **`chartScopeClauses()` ย้ายจาก routes/reports.js** (ใช้ร่วม) + `resultScopeFor(user)` ขอบเขตเดียวกันบน `kpi_results r` / `kpi_indicators i` (user = null = ทั้งจังหวัด; รายชื่อหน่วยบริการของอำเภอดึงแยก ไม่ JOIN chospital)
+- `services/work-center.js`: วันที่ (เวลาไทย) `defaultTargetMonth()` = เดือนก่อนหน้า, `dueDateOf(ปีงบ, เดือน, N)`, `isReminderDue(cfg, now)` = กำหนดส่ง − k วัน ณ เวลาที่ตั้ง (ช่วง 2 นาที) |
+  `findMissingPairs(user, ปีงบ, เดือน)` = คู่ที่มีแถวใน kpi_results ปีงบนั้นแต่เดือนนั้นผลงานว่าง — **0 = ส่งแล้ว**, ผลงานข้อย่อย/กิจกรรมเดือนนั้น = ส่งแล้ว, ไม่นับ `result_manual`, `quarter_mode = 'quarter'` เดือนกลางไตรมาส, ตัวชี้วัดรายงานเป็นรอบ (`PERIODIC_MAX_MONTHS` ของ forecast)
+  — ⚠️ คอลัมน์ ธ.ค. ของ kpi_summary ชื่อ **`dece`** (ไม่ใช่ `dec` — คำสงวน SQL)
+- `routes/work-center.js`: `GET /work-center/summary|review-queue|missing` (ตามขอบเขตผู้เรียก) | `GET /work-center/data-quality` + `PUT /work-center/reminder-settings` + `POST /work-center/reminders/preview|send-now` = **requireSuperAdminStrict**
+  — การอนุมัติ/ส่งกลับไม่มีเส้นทางใหม่: ปุ่มในหน้าเปิด `/dashboard?q=<รหัสหน่วยบริการ ชื่อตัวชี้วัด>&year=` (`applyDeepLinkParams()` ใน dashboard — ค้นหาด้วย q เดิม) แล้วใช้ /approve-kpi, /reject-kpi เดิม
+- `jobs/result-reminder.js` (เริ่มใน server.js เฉพาะ require.main): ค่าตั้งค่า `reminder_enabled` (ค่าตั้งต้น false) / `_due_day` 10 (1–28) / `_days_before` [3,1] / `_time` 09:00 / `_channels` {inapp,line,email} / `_max_messages` 500 + `reminder_last_run`
+  — ในระบบ = 1 แจ้งเตือนต่อหน่วยบริการ (notifications ระดับ hospcode, type info), LINE `sendLineToUser` (เคารพสวิตช์ผู้ใช้), อีเมล — ผู้รับ = ผู้ใช้ที่ hospcode ตรง + role ใน `RECIPIENT_ROLES` | **กันส่งซ้ำด้วย `kpi_reminder_log` (INSERT IGNORE ก่อนส่ง)** stage `d<k>` / `m<วันที่>` (สั่งเอง)
+- Test: `api/tests/work-center.test.js` (mock core/notify — ฐานทดสอบมีโทเคนจริง), `work-center/work-center.spec.ts`, `dashboard.spec.ts`
+
 ### kpi-manage Hospitals tab
 - 5 tabs: ตัวชี้วัด / หมวดหมู่หลัก / ยุทธศาสตร์ / หน่วยงาน / **หน่วยบริการ**
 - CRUD endpoints `/hospitals` (super_admin): GET/POST/PUT/DELETE
@@ -940,9 +953,9 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   Super Admin เปิด/ปิดการเข้าถึงแต่ละหน้าของระบบ แยกตาม role ได้ทั้ง 8 role (ไม่รวม super_admin ซึ่งเข้าได้ทุกหน้าเสมอ)
 - ตาราง `role_page_access` (role, page_key, is_enabled) UNIQUE(role, page_key) — auto-seed ตอน startup ให้ตรงกับ
   พฤติกรรม route guard/middleware **เดิม** เป๊ะ (ไม่เปลี่ยนพฤติกรรมจนกว่า super_admin จะแก้เอง)
-- `pageKey` ต้องตรงกับ `route.data['pageKey']` ใน `app.routes.ts` เสมอ (20 หน้า: dashboard, charts, notifications, sop,
+- `pageKey` ต้องตรงกับ `route.data['pageKey']` ใน `app.routes.ts` เสมอ (21 หน้า: dashboard, charts, notifications, sop,
   feedback, help, changelog, users, kpi-manage, kpi-setup, audit-logs, kpi-manager, settings, announcements,
-  online-users, backup-manager, kpi-audit-digest, error-logs, sso-logs, kpi-results-manage)
+  online-users, backup-manager, kpi-audit-digest, error-logs, sso-logs, kpi-results-manage, work-center)
 - **Backend enforcement** (`api/server.js`):
   - `PAGE_ACCESS_RULES` (exact/regex/prefix ผสมกัน) + `resolvePageKeyFromPath(method, path)` → เช็คใน
     `authenticateToken` กลาง (ก่อน session check) + OR เพิ่มใน `isAdmin`/`isAnyAdmin`/`isSuperAdmin` (ให้ role ที่ถูก

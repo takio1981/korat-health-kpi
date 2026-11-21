@@ -47,6 +47,7 @@ export const routes: Routes = [
       { path: 'kpi-manager', component: KpiManagerComponent, canActivate: [pageAccessGuard], data: { title: 'จัดการข้อมูล KPI', pageKey: 'kpi-manager' } },
       { path: 'settings', component: SettingsComponent, canActivate: [pageAccessGuard], data: { title: 'ตั้งค่าระบบ', pageKey: 'settings' } },
       { path: 'role-page-access', component: RolePageAccessComponent, canActivate: [superAdminGuard], data: { title: 'สิทธิ์การเข้าถึงหน้า' } },
+      { path: 'work-center', loadComponent: () => import('./work-center/work-center').then(m => m.WorkCenterComponent), canActivate: [pageAccessGuard], data: { title: 'ศูนย์งานผู้ดูแล', pageKey: 'work-center' } },
       { path: 'kpi-results-manage', component: KpiResultsManageComponent, canActivate: [pageAccessGuard], data: { title: 'จัดการข้อมูลผลงานตัวชี้วัด', pageKey: 'kpi-results-manage' } },
       { path: 'announcements', component: AnnouncementsComponent, canActivate: [pageAccessGuard], data: { title: 'ประกาศระบบ', pageKey: 'announcements' } },
       { path: 'online-users', component: OnlineUsersComponent, canActivate: [pageAccessGuard], data: { title: 'ผู้ใช้งานออนไลน์', pageKey: 'online-users' } },

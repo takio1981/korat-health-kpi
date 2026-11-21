@@ -25,6 +25,7 @@ const { startKpiAuditScheduler } = require('./jobs/kpi-audit');
 const { startForecastDigestScheduler } = require('./jobs/forecast-digest');
 const { startUserApprovalScheduler } = require('./jobs/user-approval');
 const { startMascotFestivalJob } = require('./jobs/mascot-festival');
+const { startResultReminderScheduler } = require('./jobs/result-reminder');
 const { forecastAiSummarizer } = require('./services/ai-forecast');
 
 const app = express();
@@ -101,6 +102,7 @@ require('./routes/backup');          // สำรอง & กู้คืนข�
 require('./routes/kpi-audit');       // แจ้งเตือนการบันทึก KPI
 require('./routes/ai');              // ผู้ช่วย AI: สถานะ + ตั้งค่าผู้ให้บริการ (ฟีเจอร์ AI อยู่ในไฟล์ของโดเมนนั้น)
 require('./routes/forecast');        // ระบบเตือนล่วงหน้า: ตั้งค่า + สรุปรายสัปดาห์ (รายการเสี่ยงอยู่ใน routes/reports.js)
+require('./routes/work-center');     // ศูนย์งานผู้ดูแล: รออนุมัติ / ยังไม่ส่ง / คุณภาพข้อมูล / แจ้งเตือนหน่วยบริการ
 
 // Mount Router ที่ path /khupskpi/api
 app.use('/khupskpi/api', apiRouter);
@@ -137,6 +139,7 @@ if (require.main === module) {
         try { startForecastDigestScheduler(forecastAiSummarizer(null)); } catch (e) { console.error('[Forecast] start failed:', e.message); }
         try { startUserApprovalScheduler(); } catch (e) { console.error('[UserApproval] start failed:', e.message); }
         try { startMascotFestivalJob(); } catch (e) { console.error('[MascotFestival] start failed:', e.message); }
+        try { startResultReminderScheduler(); } catch (e) { console.error('[Reminder] start failed:', e.message); }
         startSessionCleanupJob();
     });
 }

@@ -741,8 +741,10 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     this.setDefaultYear();
     this.extractFilterLists();
 
+    // ลิงก์จากศูนย์งานผู้ดูแล (22 พ.ย. 2569): /dashboard?q=<คำค้น>&year=<ปีงบ> → ค้นหาให้ทันที (ขอบเขตสิทธิ์เดิมของ server)
+    const deep = this.applyDeepLinkParams();
     // super_admin + admin_ssj ไม่โหลดข้อมูลอัตโนมัติ — ให้เลือกตัวกรองก่อน
-    if (!this.isSuperAdmin && !this.isAdmin) {
+    if (deep || (!this.isSuperAdmin && !this.isAdmin)) {
       this.loadKpiData();
     }
     this.loadSavedViews();    // โหลด preset filter ของ user
@@ -1417,6 +1419,18 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     if (this.selectedIndicator && !this.indicatorNames.includes(this.selectedIndicator)) this.selectedIndicator = '';
     if (this.selectedMain && !this.mainCategories.includes(this.selectedMain)) this.selectedMain = '';
+  }
+
+  /** อ่าน ?q= / ?year= จาก URL (ลิงก์ของศูนย์งานผู้ดูแล) — คืน true เมื่อมีคำค้นที่ค้นได้ */
+  applyDeepLinkParams(): boolean {
+    let qp: any = {};
+    try { qp = this.router.parseUrl(this.router.url || '/').queryParams || {}; } catch { qp = {}; }
+    if (typeof qp.year === 'string' && /^\d{4}$/.test(qp.year)) this.selectedYear = qp.year;
+    if (typeof qp.q === 'string' && qp.q.trim().length >= 2) {
+      this.searchTerm = qp.q.trim().slice(0, 200);
+      return true;
+    }
+    return false;
   }
 
   /** คำค้นที่ส่งให้ server (≥ 2 ตัวอักษร) — ตรงกับเงื่อนไขของ GET /kpi-results ?q= */

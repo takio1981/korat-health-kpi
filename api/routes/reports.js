@@ -17,6 +17,7 @@ const { buildSummaryInput, SUMMARY_SYSTEM_PROMPT, summaryPrompt } = require('../
 const { tabKey, buildTabInput, tabSystemPrompt, tabPrompt } = require('../services/ai-report-tabs');
 const { computeForecasts, summarizeByIndicator, summarizeByDistrict } = require('../services/forecast');
 const { explainForecast } = require('../services/ai-forecast');
+const { chartScopeClauses } = require('../services/report-scope');
 
 // GET /kpi-summary — ดึงข้อมูลจาก summary table (เร็วมาก ไม่ต้อง JOIN)
 // ผลงานรายเดือนของปีงบที่แล้ว (year_bh - 1) จาก kpi_summary ตามขอบเขตสิทธิ์เดียวกับรายงาน (chartScopeClauses)
@@ -456,29 +457,7 @@ function chartMonthly(r) {
     });
 }
 
-// ขอบเขตตาม role บน kpi_summary (เหมือน /report/by-indicator ทุกประการ)
-async function chartScopeClauses(user) {
-    const c = [], p = [];
-    if (user.role === 'super_admin') {
-        // เห็นทั้งหมด
-    } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
-        if (user.deptId != null) { c.push('s.dept_id = ?'); p.push(user.deptId); }
-    } else if (user.role === 'admin_cup') {
-        const d = await getDistrictId(user.hospcode);
-        if (d) { c.push('s.distid = ?'); p.push(d); } else if (user.hospcode) { c.push('s.hospcode = ?'); p.push(user.hospcode); }
-    } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
-        if (user.hospcode) { c.push('s.hospcode = ?'); p.push(user.hospcode); }
-    } else if (user.role === 'user_cup') {
-        const d = await getDistrictId(user.hospcode);
-        if (d) { c.push('s.distid = ?'); p.push(d); }
-        if (user.deptId != null) { c.push('s.dept_id = ?'); p.push(user.deptId); }
-    } else {
-        if (user.hospcode) { c.push('s.hospcode = ?'); p.push(user.hospcode); }
-        if (user.deptId != null) { c.push('s.dept_id = ?'); p.push(user.deptId); }
-    }
-    c.push('i.is_active = 1'); // เฉพาะตัวชี้วัดที่เปิดใช้งาน
-    return { c, p };
-}
+// chartScopeClauses ย้ายไป services/report-scope.js (22 พ.ย. 2569 — ใช้ร่วมกับศูนย์งานผู้ดูแล)
 
 const CHART_FROM_SQL = `
     FROM kpi_summary s

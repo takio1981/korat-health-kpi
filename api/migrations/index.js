@@ -1021,6 +1021,19 @@ const migrationsReady = (async () => {
                 synced_watermark TEXT NULL COMMENT 'JSON { ปีงบ: update_date สูงสุดของ local ที่ส่งครบแล้ว }'
             ) COMMENT 'สถานะการส่งเข้า KHD ล่าสุดรายตาราง'`);
             try { await db.query('ALTER TABLE export_schedule_logs ADD COLUMN sync_run_id INT NULL'); } catch (e) {}
+            // แจ้งเตือนหน่วยบริการที่ยังไม่ส่งผลงาน (ระยะ 4) — กันส่งซ้ำ: 1 แถว = ปีงบ × เดือน × หน่วยบริการ × ผู้รับ × ช่องทาง × รอบ
+            await db.query(`CREATE TABLE IF NOT EXISTS kpi_reminder_log (
+                id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                year_bh VARCHAR(10) NOT NULL,
+                month_bh TINYINT NOT NULL,
+                hospcode VARCHAR(20) NOT NULL,
+                user_id INT NOT NULL DEFAULT 0 COMMENT '0 = แจ้งเตือนในระบบระดับหน่วยบริการ',
+                channel VARCHAR(10) NOT NULL COMMENT 'inapp|line|email',
+                stage VARCHAR(20) NOT NULL COMMENT 'd<วันก่อนกำหนด> | m<YYYYMMDD> (สั่งส่งเอง)',
+                sent_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uk_kpi_reminder (year_bh, month_bh, hospcode, user_id, channel, stage),
+                INDEX idx_kpi_reminder_sent (sent_at)
+            ) COMMENT 'ประวัติการแจ้งเตือนส่งผลงาน (กันส่งซ้ำ)'`);
         } catch (e) {
             console.error('⚠️ KHD sync history tables error:', e.message);
         }

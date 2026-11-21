@@ -31,6 +31,7 @@ const PAGE_ACCESS_PAGES = [
     { key: 'error-logs', label: 'Error Logs' },
     { key: 'sso-logs', label: 'SSO Audit Logs' },
     { key: 'kpi-results-manage', label: 'จัดการข้อมูลผลงานตัวชี้วัด' },
+    { key: 'work-center', label: 'ศูนย์งานผู้ดูแล' },
 ];
 // ค่าเริ่มต้น (seed ครั้งแรกเท่านั้น) — สะท้อนพฤติกรรมเดิมของระบบก่อนมี feature นี้ทุกประการ
 // (route guard เดิมใน app.routes.ts + isAdmin/isAnyAdmin/isSuperAdmin เดิมในแต่ละ endpoint)
@@ -57,6 +58,7 @@ const PAGE_ACCESS_DEFAULT_ENABLED = {
     'kpi-audit-digest': [],
     'error-logs': [],
     'sso-logs': [],
+    'work-center': ROLES_ANY_ADMIN, // ศูนย์งานผู้ดูแล (22 พ.ย. 2569 — ผู้ใช้เลือก: ผู้ดูแลทุกระดับ)
     'kpi-results-manage': [], // super_admin เท่านั้น (ตามที่ผู้ใช้ระบุไว้ชัดเจน) — หน้าใหม่จึงเริ่มปิดสำหรับ role อื่นทั้งหมด
 };
 
@@ -113,6 +115,8 @@ const PAGE_ACCESS_RULES = [
     { method: 'GET', path: '/notifications', pageKey: 'notifications' },
     { method: 'GET', path: '/feedback', pageKey: 'feedback' },
     { prefix: '/report/', pageKey: 'charts' },
+    // ศูนย์งานผู้ดูแล — ทุกเส้นทางใต้ /work-center/ เป็นของหน้านี้ (ตั้งค่า/ส่งเตือน/คุณภาพข้อมูล = requireSuperAdminStrict ที่เส้นทางเอง ไม่ขยายผ่านสิทธิ์หน้า)
+    { prefix: '/work-center/', pageKey: 'work-center' },
 
     // ผู้ช่วย AI (7 พ.ย. 2569) — exact path เท่านั้น ไม่ใช้ prefix '/ai/' (มีทั้ง endpoint ของทุก role และของ super_admin ปนกัน)
     // /ai/status ไม่มี rule (ทุก role ที่เข้าสู่ระบบ) | ตั้งค่า/ทดสอบ = หน้า settings (isSuperAdmin + สิทธิ์หน้าที่เปิดเพิ่ม)

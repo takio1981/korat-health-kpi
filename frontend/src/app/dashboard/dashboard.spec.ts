@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { DashboardComponent } from './dashboard';
+import { Router } from '@angular/router';
 import Swal from 'sweetalert2';
 import { testProviders } from '../testing/test-providers';
 import { parseImportAoa, planImport, buildTemplateAoa, itemKey } from '../shared/kpi-excel';
@@ -65,6 +66,18 @@ describe('DashboardComponent', () => {
 
   // การตั้งค่าคอลัมน์หน่วงการบันทึกด้วย timer — ล้างทิ้งหลังแต่ละ test กันยิง API หลัง TestBed ถูกทำลาย
   afterEach(() => clearTimeout((component as any)._saveColumnsTimer));
+
+  it('ลิงก์จากศูนย์งานผู้ดูแล: ?q=&year= ตั้งคำค้น/ปีงบ (คำค้นสั้นเกิน = ไม่ค้นอัตโนมัติ)', () => {
+    const router = TestBed.inject(Router);
+    Object.defineProperty(router, 'url', { get: () => '/dashboard?q=10669%20KPI&year=2569', configurable: true });
+    expect(component.applyDeepLinkParams()).toBe(true);
+    expect(component.searchTerm).toBe('10669 KPI');
+    expect(component.selectedYear).toBe('2569');
+    Object.defineProperty(router, 'url', { get: () => '/dashboard?q=a&year=25x9', configurable: true });
+    component.selectedYear = '2570';
+    expect(component.applyDeepLinkParams()).toBe(false);
+    expect(component.selectedYear).toBe('2570');
+  });
 
   it('should create', () => {
     expect(component).toBeTruthy();

@@ -340,6 +340,14 @@
   "POST /khupskpi/api/ai/test :: authenticateToken > isSuperAdmin > aiLimiter > handler",
   "GET /khupskpi/api/forecast/settings :: authenticateToken > isSuperAdmin > handler",
   "PUT /khupskpi/api/forecast/settings :: authenticateToken > isSuperAdmin > handler",
-  "POST /khupskpi/api/forecast/digest/run :: authenticateToken > isSuperAdmin > handler"
+  "POST /khupskpi/api/forecast/digest/run :: authenticateToken > isSuperAdmin > handler",
+  "GET /khupskpi/api/work-center/summary :: authenticateToken > handler",
+  "GET /khupskpi/api/work-center/review-queue :: authenticateToken > handler",
+  "GET /khupskpi/api/work-center/missing :: authenticateToken > handler",
+  "GET /khupskpi/api/work-center/data-quality :: authenticateToken > requireSuperAdminStrict > handler",
+  "GET /khupskpi/api/work-center/reminder-settings :: authenticateToken > handler",
+  "PUT /khupskpi/api/work-center/reminder-settings :: authenticateToken > requireSuperAdminStrict > handler",
+  "POST /khupskpi/api/work-center/reminders/preview :: authenticateToken > requireSuperAdminStrict > handler",
+  "POST /khupskpi/api/work-center/reminders/send-now :: authenticateToken > requireSuperAdminStrict > handler"
  ]
 }

@@ -1,0 +1,167 @@
+<div class="p-6">
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100">
+    <div class="p-5 overflow-auto card-scroll" style="max-height: calc(100vh - 140px)">
+      <!-- หัวเรื่อง + ช่วงเวลา -->
+      <div class="flex flex-wrap items-center gap-3 mb-4">
+        <h2 class="text-lg font-bold text-gray-800"><i class="fas fa-clipboard-list text-green-600 me-2"></i>ศูนย์งานผู้ดูแล</h2>
+        <div class="flex-1"></div>
+        <label class="text-xs text-gray-600">ปีงบ
+          <select id="wc-year" [ngModel]="year" (ngModelChange)="year = $event; loadSummary()" class="ml-1 px-2 py-1.5 border border-gray-200 rounded-lg bg-white text-sm">
+            <option *ngFor="let y of years" [value]="y">{{ y }}</option>
+          </select>
+        </label>
+        <label class="text-xs text-gray-600">ผลงานเดือน
+          <select id="wc-month" [ngModel]="month" (ngModelChange)="month = $event; loadSummary()" class="ml-1 px-2 py-1.5 border border-gray-200 rounded-lg bg-white text-sm">
+            <option *ngFor="let m of months" [ngValue]="m.value">{{ m.label }}</option>
+          </select>
+        </label>
+        <button type="button" (click)="loadSummary()" [disabled]="loading" class="px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-xs font-bold hover:bg-gray-50">
+          <i class="fas fa-rotate me-1" [class.fa-spin]="loading"></i>รีเฟรช
+        </button>
+      </div>
+      <p class="text-xs text-gray-500 -mt-2 mb-4">สรุปงานที่ต้องทำตามขอบเขตสิทธิ์ของคุณ — กดรายการเพื่อเปิดหน้าบันทึกผลงานที่กรองให้แล้ว (อนุมัติ/ส่งกลับในหน้านั้นตามขั้นตอนเดิม)</p>
+      <div *ngIf="loadError" class="mb-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">{{ loadError }}</div>
+
+      <!-- การ์ด -->
+      <div *ngIf="summary" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4" id="wc-cards">
+        <button type="button" (click)="setTab('review')" class="text-left p-4 rounded-2xl border border-amber-200 bg-amber-50 hover:shadow-md transition">
+          <div class="text-xs font-bold text-amber-800"><i class="fas fa-hourglass-half me-1"></i>รอตรวจสอบ (ปีงบ {{ summary.year_bh }})</div>
+          <div class="text-2xl font-extrabold text-amber-900 mt-1" id="wc-pending">{{ summary.review.pending_pairs | number }} <span class="text-sm font-bold">คู่</span></div>
+          <div class="text-[11px] text-amber-700">{{ summary.review.pending_months | number }} เดือนที่มีผลงานรอตรวจ · อุทธรณ์ {{ summary.review.appeal_pairs | number }} คู่</div>
+        </button>
+        <button type="button" (click)="setTab('missing')" class="text-left p-4 rounded-2xl border border-rose-200 bg-rose-50 hover:shadow-md transition">
+          <div class="text-xs font-bold text-rose-800"><i class="fas fa-calendar-xmark me-1"></i>ยังไม่ส่งผลงานเดือน {{ summary.month_label }}</div>
+          <div class="text-2xl font-extrabold text-rose-900 mt-1" id="wc-missing">{{ summary.missing.hospitals | number }} <span class="text-sm font-bold">หน่วยบริการ</span></div>
+          <div class="text-[11px] text-rose-700">{{ summary.missing.pairs | number }} คู่ · กำหนดส่ง {{ summary.due_text }} ({{ daysLeft(summary.days_left) }})</div>
+        </button>
+        <div class="p-4 rounded-2xl border border-sky-200 bg-sky-50">
+          <div class="text-xs font-bold text-sky-800"><i class="fas fa-bell me-1"></i>แจ้งเตือนหน่วยบริการ</div>
+          <div class="text-base font-extrabold text-sky-900 mt-1">{{ summary.reminder.enabled ? 'เปิดอัตโนมัติ' : 'ปิดอยู่' }}</div>
+          <div class="text-[11px] text-sky-700">กำหนดส่งวันที่ {{ summary.reminder.due_day }} ของเดือนถัดไป
+            <span *ngIf="summary.reminder.last_run"> · ส่งล่าสุด {{ summary.reminder.last_run.ran_at | date:'d MMM yy HH:mm' }}</span></div>
+          <div *ngIf="isSuperAdmin" class="mt-2 flex gap-2">
+            <button type="button" id="btn-wc-remind" (click)="sendReminderNow()" class="px-2 py-1 rounded-lg bg-sky-600 text-white text-[11px] font-bold hover:bg-sky-700"><i class="fas fa-paper-plane me-1"></i>ส่งเตือนตอนนี้</button>
+            <button type="button" (click)="toggleReminder()" class="px-2 py-1 rounded-lg bg-white border border-sky-200 text-sky-700 text-[11px] font-bold hover:bg-sky-100"><i class="fas fa-sliders me-1"></i>ตั้งค่า</button>
+          </div>
+        </div>
+        <div class="p-4 rounded-2xl border border-indigo-200 bg-indigo-50" *ngIf="summary.khd; else noKhd">
+          <div class="text-xs font-bold text-indigo-800"><i class="fas fa-paper-plane me-1"></i>ส่งเข้า KHD</div>
+          <div class="text-sm font-extrabold text-indigo-900 mt-1">{{ policyLabel(summary.khd.policy) }}</div>
+          <div class="text-[11px] text-indigo-700" *ngIf="summary.khd.last_run as lr">ล่าสุด #{{ lr.id }} {{ trigger(lr.trigger_type) }} · {{ runStatus(lr.status) }} · {{ lr.started_at | date:'d MMM yy HH:mm' }}</div>
+          <div class="text-[11px] text-indigo-700" *ngIf="!summary.khd.last_run">ยังไม่มีประวัติการส่ง</div>
+          <div class="text-[11px] text-amber-700" *ngIf="summary.khd.busy">มีงานส่งกำลังทำงานอยู่</div>
+        </div>
+        <ng-template #noKhd>
+          <div class="p-4 rounded-2xl border border-gray-200 bg-gray-50">
+            <div class="text-xs font-bold text-gray-700"><i class="fas fa-circle-info me-1"></i>ขอบเขตของคุณ</div>
+            <div class="text-[11px] text-gray-600 mt-1">ตัวเลขทั้งหมดนับเฉพาะตัวชี้วัดที่เปิดใช้งานและหน่วยบริการ/หน่วยงานในขอบเขตสิทธิ์ของคุณ<span *ngIf="!summary.can_review"> — การอนุมัติทำโดยผู้ดูแลระดับจังหวัด</span></div>
+          </div>
+        </ng-template>
+      </div>
+
+      <!-- ตั้งค่าแจ้งเตือน (super_admin) -->
+      <div *ngIf="showReminder && reminder" id="wc-reminder-settings" class="mb-4 p-4 rounded-2xl border border-sky-200 bg-white text-sm space-y-3">
+        <div class="flex items-center gap-2">
+          <input type="checkbox" id="wcRemEnabled" [(ngModel)]="reminder.reminder_enabled" class="w-4 h-4">
+          <label for="wcRemEnabled" class="font-bold text-gray-700">ส่งเตือนหน่วยบริการที่ยังไม่ส่งผลงานอัตโนมัติ</label>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+          <label>กำหนดส่ง = วันที่ (ของเดือนถัดไป)
+            <input type="number" min="1" max="28" [(ngModel)]="reminder.reminder_due_day" name="wcDue" class="mt-1 w-full px-2 py-1.5 border border-gray-200 rounded-lg bg-white"></label>
+          <label>เวลาส่ง (เวลาไทย)
+            <input type="time" [(ngModel)]="reminder.reminder_time" name="wcTime" class="mt-1 w-full px-2 py-1.5 border border-gray-200 rounded-lg bg-white"></label>
+          <label>เพดาน LINE/อีเมลต่อรอบ
+            <input type="number" min="0" max="5000" [(ngModel)]="reminder.reminder_max_messages" name="wcMax" class="mt-1 w-full px-2 py-1.5 border border-gray-200 rounded-lg bg-white"></label>
+        </div>
+        <div class="text-xs text-gray-700">
+          <span class="font-bold me-2">ส่งก่อนกำหนด:</span>
+          <label *ngFor="let d of dayChoices" class="inline-flex items-center gap-1 me-3"><input type="checkbox" [checked]="hasDay(d)" (change)="toggleDay(d)"> {{ d === 0 ? 'วันครบกำหนด' : d + ' วัน' }}</label>
+        </div>
+        <div class="text-xs text-gray-700">
+          <span class="font-bold me-2">ช่องทาง:</span>
+          <label class="inline-flex items-center gap-1 me-3"><input type="checkbox" [(ngModel)]="reminder.reminder_channels.inapp" name="wcInapp"> ในระบบ (ระดับหน่วยบริการ)</label>
+          <label class="inline-flex items-center gap-1 me-3"><input type="checkbox" [(ngModel)]="reminder.reminder_channels.line" name="wcLine"> LINE (ผู้ใช้ที่ผูก LINE และเปิดรับ)</label>
+          <label class="inline-flex items-center gap-1 me-3"><input type="checkbox" [(ngModel)]="reminder.reminder_channels.email" name="wcEmail"> อีเมล</label>
+        </div>
+        <button type="button" id="btn-wc-reminder-save" (click)="saveReminder()" class="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold"><i class="fas fa-save me-1"></i>บันทึกการตั้งค่า</button>
+      </div>
+
+      <!-- ส่งเข้า KHD ขั้นเดียว (super_admin) -->
+      <app-khd-quick-send *ngIf="isSuperAdmin && summary" [year]="year"></app-khd-quick-send>
+
+      <!-- คุณภาพข้อมูล (super_admin) -->
+      <div *ngIf="isSuperAdmin && summary" class="mb-4 p-4 rounded-2xl border border-purple-200 bg-purple-50" id="wc-dq">
+        <div class="flex flex-wrap items-center gap-2">
+          <h4 class="text-sm font-bold text-purple-900"><i class="fas fa-magnifying-glass-chart me-1"></i>คุณภาพข้อมูลปีงบ {{ year }}</h4>
+          <div class="flex-1"></div>
+          <button type="button" (click)="loadDataQuality(!!dq)" [disabled]="dqLoading" class="px-3 py-1.5 rounded-lg bg-purple-600 text-white text-xs font-bold hover:bg-purple-700 disabled:opacity-50">
+            <i class="fas me-1" [ngClass]="dqLoading ? 'fa-spinner fa-spin' : 'fa-play'"></i>{{ dq ? 'ตรวจใหม่' : 'ตรวจคุณภาพข้อมูล' }}</button>
+          <button type="button" (click)="openManage()" class="text-xs text-purple-700 underline">ดูรายละเอียด</button>
+        </div>
+        <div *ngIf="dq" class="mt-2 text-xs text-purple-900">
+          พบ <b>{{ dq.total | number }}</b> รายการที่ควรตรวจ (ตรวจ {{ dq.scanned?.pairs | number }} คู่)
+          <span *ngFor="let k of dqKinds()" class="inline-block ms-2 px-2 py-0.5 rounded-full bg-white border border-purple-200">{{ dqLabel[k.key] || k.key }} {{ k.n | number }}</span>
+        </div>
+      </div>
+
+      <!-- แท็บรายการ -->
+      <div *ngIf="summary" class="flex gap-2 mb-2">
+        <button type="button" (click)="setTab('missing')" class="px-3 py-1.5 rounded-lg text-xs font-bold border" [ngClass]="tab === 'missing' ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-rose-700 border-rose-200'">ยังไม่ส่งผลงาน</button>
+        <button type="button" (click)="setTab('review')" class="px-3 py-1.5 rounded-lg text-xs font-bold border" [ngClass]="tab === 'review' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-amber-700 border-amber-200'">รอตรวจสอบ</button>
+        <ng-container *ngIf="tab === 'missing'">
+          <div class="flex-1"></div>
+          <button type="button" (click)="setGroup('hospital')" class="px-2 py-1 rounded-lg text-[11px] border" [ngClass]="missingGroup === 'hospital' ? 'bg-gray-700 text-white' : 'bg-white'">รายหน่วยบริการ</button>
+          <button type="button" (click)="setGroup('indicator')" class="px-2 py-1 rounded-lg text-[11px] border" [ngClass]="missingGroup === 'indicator' ? 'bg-gray-700 text-white' : 'bg-white'">รายตัวชี้วัด</button>
+        </ng-container>
+      </div>
+
+      <!-- ยังไม่ส่ง -->
+      <div *ngIf="tab === 'missing'" class="rounded-xl border border-gray-100 overflow-auto card-scroll" style="max-height: 50vh" id="wc-missing-list">
+        <table class="w-full text-xs">
+          <thead class="bg-rose-100 text-rose-900 sticky top-0 z-20 shadow-md">
+            <tr *ngIf="missingGroup === 'hospital'"><th class="px-3 py-2 text-left">หน่วยบริการ</th><th class="px-3 py-2 text-center">ตัวชี้วัดที่ยังไม่ส่ง</th><th class="px-3 py-2"></th></tr>
+            <tr *ngIf="missingGroup === 'indicator'"><th class="px-3 py-2 text-left">ตัวชี้วัด</th><th class="px-3 py-2 text-left">หน่วยงาน</th><th class="px-3 py-2 text-center">หน่วยบริการที่ยังไม่ส่ง</th><th class="px-3 py-2"></th></tr>
+          </thead>
+          <tbody>
+            <ng-container *ngIf="missingGroup === 'hospital'">
+              <tr *ngFor="let h of missing?.items || []" class="border-t border-gray-100 hover:bg-rose-50/50">
+                <td class="px-3 py-2">{{ h.hosname || h.hospcode }} <span class="text-gray-400">({{ h.hospcode }})</span> <app-zone-badge [hospcode]="h.hospcode"></app-zone-badge></td>
+                <td class="px-3 py-2 text-center font-bold text-rose-700">{{ h.count }}</td>
+                <td class="px-3 py-2 text-right"><button type="button" (click)="openDashboard(h.hospcode, null)" class="px-2 py-1 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-100 font-bold"><i class="fas fa-arrow-up-right-from-square me-1"></i>เปิด</button></td>
+              </tr>
+            </ng-container>
+            <ng-container *ngIf="missingGroup === 'indicator'">
+              <tr *ngFor="let it of missing?.items || []" class="border-t border-gray-100 hover:bg-rose-50/50">
+                <td class="px-3 py-2">{{ it.indicator_name }} <app-formula-badge [formula]="it.result_formula"></app-formula-badge></td>
+                <td class="px-3 py-2 text-gray-600">{{ it.dept_name || '-' }}</td>
+                <td class="px-3 py-2 text-center font-bold text-rose-700">{{ it.count }}</td>
+                <td class="px-3 py-2 text-right"><button type="button" (click)="openDashboard(null, it.indicator_name)" class="px-2 py-1 rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-100 font-bold"><i class="fas fa-arrow-up-right-from-square me-1"></i>เปิด</button></td>
+              </tr>
+            </ng-container>
+            <tr *ngIf="missing && !missing.items.length"><td colspan="4" class="px-3 py-4 text-center text-green-700"><i class="fas fa-circle-check me-1"></i>ทุกหน่วยบริการในขอบเขตส่งผลงานเดือน {{ missing.month_label }} แล้ว</td></tr>
+          </tbody>
+        </table>
+        <div *ngIf="missing?.excluded_periodic_indicators" class="px-3 py-2 text-[11px] text-gray-500">ไม่นับตัวชี้วัดที่รายงานเป็นรอบ {{ missing.excluded_periodic_indicators }} ตัว (ปีงบที่แล้วรายงานไม่ถึง 6 เดือน), ตัวชี้วัดกรอกผลงานเอง และเดือนกลางไตรมาสของตัวชี้วัดรายไตรมาส</div>
+      </div>
+
+      <!-- รอตรวจสอบ -->
+      <div *ngIf="tab === 'review'" class="rounded-xl border border-gray-100 overflow-auto card-scroll" style="max-height: 50vh" id="wc-review-list">
+        <table class="w-full text-xs">
+          <thead class="bg-amber-100 text-amber-900 sticky top-0 z-20 shadow-md">
+            <tr><th class="px-3 py-2 text-left">ตัวชี้วัด</th><th class="px-3 py-2 text-left">หน่วยบริการ</th><th class="px-3 py-2 text-center">เดือนที่รอตรวจ</th><th class="px-3 py-2"></th></tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let r of review?.items || []" class="border-t border-gray-100 hover:bg-amber-50/50">
+              <td class="px-3 py-2">{{ r.kpi_indicators_name }} <app-formula-badge [formula]="r.result_formula"></app-formula-badge><div class="text-[10px] text-gray-400">{{ r.dept_name }}</div></td>
+              <td class="px-3 py-2">{{ r.hosname || r.hospcode }} <app-zone-badge [hospcode]="r.hospcode"></app-zone-badge></td>
+              <td class="px-3 py-2 text-center font-bold text-amber-700">{{ r.pending_count }}</td>
+              <td class="px-3 py-2 text-right"><button type="button" (click)="openDashboard(r.hospcode, r.kpi_indicators_name)" class="px-2 py-1 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-100 font-bold"><i class="fas fa-arrow-up-right-from-square me-1"></i>{{ summary?.can_review ? 'ตรวจ' : 'เปิด' }}</button></td>
+            </tr>
+            <tr *ngIf="review && !review.items.length"><td colspan="4" class="px-3 py-4 text-center text-green-700"><i class="fas fa-circle-check me-1"></i>ไม่มีผลงานรอตรวจสอบในขอบเขตของคุณ</td></tr>
+          </tbody>
+        </table>
+        <div *ngIf="review?.truncated" class="px-3 py-2 text-[11px] text-gray-500">แสดง 500 รายการแรก (เรียงจากรอตรวจมากที่สุด)</div>
+      </div>
+    </div>
+  </div>
+</div>

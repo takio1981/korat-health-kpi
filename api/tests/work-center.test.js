@@ -1,0 +1,187 @@
+/**
+ * ศูนย์งานผู้ดูแล + แจ้งเตือนหน่วยบริการที่ยังไม่ส่งผลงาน (ระยะ 4 ของแผน lean งานผู้ดูแล — 22 พ.ย. 2569)
+ *   - กติกาวันที่ (เวลาไทย): เดือนที่ควรส่งแล้ว = เดือนก่อนหน้า (ข้ามปีงบ ต.ค.), กำหนดส่ง = วันที่ N ของเดือนถัดไป, ถึงเวลาเตือน = กำหนดส่ง − k วัน ณ เวลาที่ตั้ง
+ *   - ยังไม่ส่ง: เดือนนั้นผลงานว่าง (0 = ส่งแล้ว), มีผลงานข้อย่อยของเดือนนั้น = ส่งแล้ว, ตัวชี้วัดปิดใช้งาน/กรอกเอง = ไม่นับ — ตามขอบเขต role
+ *   - คิวรออนุมัติตามขอบเขต (admin_ssj เฉพาะหน่วยงานตัวเอง) | สิทธิ์หน้า work-center (ผู้ใช้ทั่วไป = 403)
+ *   - ส่งเตือน: ในระบบ 1 รายการต่อหน่วยบริการ + LINE/อีเมลถึงผู้ใช้ของหน่วยบริการ, สั่งซ้ำวันเดียวกัน = ไม่ส่งซ้ำ, ดูตัวอย่างไม่ส่ง,
+ *     ตั้งค่า/ส่ง = super_admin แบบเข้ม (admin_ssj ที่เข้าหน้าได้ = 403)
+ */
+const mockSent = { line: [], email: [] };
+jest.mock('../core/notify', () => {
+    const actual = jest.requireActual('../core/notify');
+    return {
+        ...actual,
+        // ฐานทดสอบมีโทเคน LINE/Telegram/SMTP จริง — ห้ามส่งออกนอกเครื่อง
+        sendLineToUser: jest.fn(async (id, msg) => { mockSent.line.push({ id, msg }); return true; }),
+        sendMail: jest.fn(async (to, subject) => { mockSent.email.push({ to, subject }); }),
+        sendTelegramDirect: jest.fn(async () => {}),
+        sendLineDirect: jest.fn(async () => {}),
+        sendLineMulticast: jest.fn(async () => {}),
+        notifyAdmins: jest.fn(async () => {}),
+    };
+});
+
+require('./setup');
+const request = require('supertest');
+const { ensureTestUser, makeToken, cleanupTestUsers } = require('./helpers');
+
+const api = (p) => '/khupskpi/api' + p;
+const YEAR = '2501';
+let app, db, wc, T = {}, ids = {}, hos = [], deptA, deptB, saId;
+
+beforeAll(async () => {
+    let migrationsReady;
+    ({ app, migrationsReady } = require('../server'));
+    db = require('../db');
+    wc = require('../services/work-center');
+    await migrationsReady;
+    await cleanupTestUsers(db, 'test\\_wc\\_');
+    const [deps] = await db.query('SELECT id FROM departments ORDER BY id LIMIT 2');
+    deptA = deps[0].id; deptB = deps[1].id;
+    hos = (await db.query("SELECT hoscode FROM chospital WHERE hostype IS NOT NULL ORDER BY hoscode LIMIT 4"))[0].map(r => r.hoscode);
+    const mk = async (name, role, extra = {}) => {
+        const u = await ensureTestUser(db, { username: name, role, ...extra });
+        return { id: u.id, tok: makeToken({ userId: u.id, username: name, role, deptId: extra.dept_id ?? null, hospcode: extra.hospcode ?? null }) };
+    };
+    const sa = await mk('test_wc_sa', 'super_admin');
+    saId = sa.id; T.sa = sa.tok;
+    T.ssjA = (await mk('test_wc_ssja', 'admin_ssj', { dept_id: deptA })).tok;
+    T.ssjB = (await mk('test_wc_ssjb', 'admin_ssj', { dept_id: deptB })).tok;
+    T.hos1 = (await mk('test_wc_hos1', 'admin_hos', { hospcode: hos[1] })).tok;
+    T.user = (await mk('test_wc_user', 'user_hos', { hospcode: hos[0], dept_id: deptA })).tok;
+    await mk('test_wc_rcpt', 'user_hos', { hospcode: hos[1], dept_id: deptA, email: 'test_wc_rcpt@example.test' }); // ผู้รับเตือนของหน่วยบริการ hos[1]
+    const ind = async (name, extra = '') => (await db.query(
+        `INSERT INTO kpi_indicators (kpi_indicators_name, dept_id, is_active${extra ? ', ' + extra.split('=')[0] : ''}) VALUES (?, ?, 1${extra ? ', ' + extra.split('=')[1] : ''})`, [name, deptA]))[0].insertId;
+    ids.main = await ind('test_wc_main');
+    ids.manual = await ind('test_wc_manual', 'result_manual=1');
+    ids.inactive = await ind('test_wc_inactive');
+    await db.query('UPDATE kpi_indicators SET is_active = 0 WHERE id = ?', [ids.inactive]);
+    ids.sub = await ind('test_wc_sub');
+    const r = (indId, hc, m, actual) => db.query(
+        `INSERT INTO kpi_results (indicator_id, year_bh, month_bh, target_value, actual_value, user_id, status, hospcode) VALUES (?, ?, ?, '10', ?, ?, 'Pending', ?)`,
+        [indId, YEAR, m, actual, saId, hc]);
+    await r(ids.main, hos[0], 10, '5');   // ส่งแล้ว
+    await r(ids.main, hos[1], 10, '');    // ยังไม่ส่ง (มีแต่เป้าหมาย)
+    await r(ids.main, hos[2], 10, '0');   // 0 = ส่งแล้ว
+    await r(ids.manual, hos[1], 10, '');  // กรอกผลงานเอง — ไม่นับ
+    await r(ids.inactive, hos[1], 10, ''); // ปิดใช้งาน — ไม่นับ
+    await r(ids.sub, hos[3], 10, '');     // หลักว่าง แต่มีผลงานข้อย่อยเดือนนี้ = ส่งแล้ว
+    const sub = (await db.query('INSERT INTO kpi_sub_indicators (indicator_id, sub_indicator_name, is_active) VALUES (?, ?, 1)', [ids.sub, 'test_wc_sub_1']))[0].insertId;
+    await db.query("INSERT INTO kpi_sub_results (sub_indicator_id, year_bh, hospcode, month_bh, actual_value) VALUES (?, ?, ?, 10, '3')", [sub, YEAR, hos[3]]);
+    // คิวรออนุมัติ (kpi_summary)
+    await db.query('INSERT INTO kpi_summary (indicator_id, year_bh, hospcode, dept_id, pending_count) VALUES (?, ?, ?, ?, 2)', [ids.main, YEAR, hos[0], deptA]);
+}, 60000);
+
+afterAll(async () => {
+    const all = Object.values(ids);
+    await db.query('DELETE FROM kpi_summary WHERE year_bh = ?', [YEAR]);
+    await db.query('DELETE FROM kpi_results WHERE indicator_id IN (?)', [all]);
+    await db.query('DELETE FROM kpi_indicators WHERE id IN (?)', [all]);
+    await db.query('DELETE FROM notifications WHERE year_bh = ?', [YEAR]);
+    await db.query('DELETE FROM kpi_reminder_log WHERE year_bh = ?', [YEAR]);
+    await db.query("DELETE FROM system_settings WHERE setting_key LIKE 'reminder\\_%'");
+    await cleanupTestUsers(db, 'test\\_wc\\_');
+});
+
+describe('กติกาวันที่ (เวลาไทย)', () => {
+    const at = (iso) => new Date(iso);
+    test('เดือนที่ควรส่งแล้ว = เดือนก่อนหน้า ข้ามปีงบตอน ต.ค./ม.ค.', () => {
+        expect(wc.defaultTargetMonth(at('2026-11-21T05:00:00Z'))).toEqual({ year_bh: '2570', month_bh: 10 });
+        expect(wc.defaultTargetMonth(at('2026-10-05T05:00:00Z'))).toEqual({ year_bh: '2569', month_bh: 9 });
+        expect(wc.defaultTargetMonth(at('2027-01-03T05:00:00Z'))).toEqual({ year_bh: '2570', month_bh: 12 });
+        // 1 พ.ย. 00:30 เวลาไทย = 31 ต.ค. 17:30 UTC → ยังเป็นเดือน พ.ย. ตามเวลาไทย
+        expect(wc.defaultTargetMonth(at('2026-10-31T17:30:00Z'))).toEqual({ year_bh: '2570', month_bh: 10 });
+    });
+    test('กำหนดส่ง = วันที่ N ของเดือนถัดไป (เกินจำนวนวัน = วันสุดท้าย)', () => {
+        expect(wc.dueDateOf('2570', 10, 10)).toBe('2026-11-10');
+        expect(wc.dueDateOf('2570', 12, 10)).toBe('2027-01-10');
+        expect(wc.dueDateOf('2570', 1, 31)).toBe('2027-02-28');
+        expect(wc.thaiDateText('2026-11-10')).toBe('10 พ.ย. 2569');
+        expect(wc.monthLabel('2570', 10)).toBe('ต.ค. 2569');
+    });
+    test('ถึงเวลาเตือน = กำหนดส่ง − k วัน ณ เวลาที่ตั้ง (ช่วง 2 นาที)', () => {
+        const cfg = { enabled: true, due_day: 10, days_before: [3, 1], time: '09:00' };
+        expect(wc.isReminderDue(cfg, at('2026-11-07T02:00:00Z'))).toMatchObject({ year_bh: '2570', month_bh: 10, stage: 'd3' });
+        expect(wc.isReminderDue(cfg, at('2026-11-07T02:01:30Z'))).toMatchObject({ stage: 'd3' });
+        expect(wc.isReminderDue(cfg, at('2026-11-07T02:02:30Z'))).toBeNull();
+        expect(wc.isReminderDue(cfg, at('2026-11-09T02:00:00Z'))).toMatchObject({ stage: 'd1' });
+        expect(wc.isReminderDue(cfg, at('2026-11-08T02:00:00Z'))).toBeNull();
+        expect(wc.isReminderDue({ ...cfg, enabled: false }, at('2026-11-07T02:00:00Z'))).toBeNull();
+    });
+});
+
+describe('ภาพรวม / ยังไม่ส่ง / คิวรออนุมัติ', () => {
+    const get = (tok, p) => request(app).get(api(p)).set('Authorization', `Bearer ${tok}`);
+    test('ยังไม่ส่ง: เฉพาะคู่ที่เดือนนั้นว่าง — 0 = ส่งแล้ว, ข้อย่อยมีผลงาน = ส่งแล้ว, กรอกเอง/ปิดใช้งาน = ไม่นับ', async () => {
+        const res = await get(T.sa, `/work-center/missing?year_bh=${YEAR}&month_bh=10`);
+        expect(res.status).toBe(200);
+        expect(res.body.data.totals).toEqual({ pairs: 1, hospitals: 1, indicators: 1 });
+        expect(res.body.data.items[0]).toMatchObject({ hospcode: hos[1], count: 1 });
+        const byInd = await get(T.sa, `/work-center/missing?year_bh=${YEAR}&month_bh=10&group=indicator`);
+        expect(byInd.body.data.items[0]).toMatchObject({ indicator_id: ids.main, indicator_name: 'test_wc_main' });
+    });
+    test('ตามขอบเขต: admin_hos เห็นเฉพาะหน่วยบริการตัวเอง / admin_ssj หน่วยงานอื่นไม่เห็น', async () => {
+        expect((await get(T.hos1, `/work-center/summary?year_bh=${YEAR}&month_bh=10`)).body.data.missing.pairs).toBe(1);
+        const ssjB = await get(T.ssjB, `/work-center/summary?year_bh=${YEAR}&month_bh=10`);
+        expect(ssjB.body.data.missing.pairs).toBe(0);
+        expect(ssjB.body.data.review.pending_pairs).toBe(0);
+    });
+    test('คิวรออนุมัติ + การ์ดภาพรวม (admin_ssj หน่วยงานตัวเอง)', async () => {
+        const sum = await get(T.ssjA, `/work-center/summary?year_bh=${YEAR}&month_bh=10`);
+        expect(sum.status).toBe(200);
+        expect(sum.body.data).toMatchObject({ can_review: true, is_super_admin: false, khd: null, review: { pending_pairs: 1, pending_months: 2 } });
+        expect(sum.body.data.due_date).toBe('1957-11-10'); // ปีงบ 2501 เดือน ต.ค. 2500 → ส่งภายใน 10 พ.ย. 2500 (ค.ศ. 1957)
+        const q = await get(T.ssjA, `/work-center/review-queue?year_bh=${YEAR}`);
+        expect(q.body.items).toEqual([expect.objectContaining({ indicator_id: ids.main, hospcode: hos[0], pending_count: 2 })]);
+        expect((await get(T.ssjB, `/work-center/review-queue?year_bh=${YEAR}`)).body.items).toEqual([]);
+        expect((await get(T.sa, `/work-center/summary?year_bh=${YEAR}&month_bh=10`)).body.data.khd).toMatchObject({ policy: expect.any(String) });
+    });
+    test('สิทธิ์หน้า: ผู้ใช้ทั่วไป = 403 / ค่าผิด = 400 / คุณภาพข้อมูลเฉพาะ super_admin', async () => {
+        expect((await get(T.user, `/work-center/summary?year_bh=${YEAR}`)).status).toBe(403);
+        expect((await get(T.sa, '/work-center/summary?year_bh=25x1')).status).toBe(400);
+        expect((await get(T.sa, `/work-center/missing?year_bh=${YEAR}&month_bh=13`)).status).toBe(400);
+        expect((await get(T.ssjA, `/work-center/data-quality?year_bh=${YEAR}`)).status).toBe(403);
+        expect((await get(T.sa, `/work-center/data-quality?year_bh=${YEAR}`)).status).toBe(200);
+    });
+});
+
+describe('แจ้งเตือนหน่วยบริการที่ยังไม่ส่ง', () => {
+    const post = (tok, p, body) => request(app).post(api(p)).set('Authorization', `Bearer ${tok}`).send(body);
+    const put = (tok, body) => request(app).put(api('/work-center/reminder-settings')).set('Authorization', `Bearer ${tok}`).send(body);
+    const notifCount = async () => Number((await db.query("SELECT COUNT(*) n FROM notifications WHERE year_bh = ? AND hospcode IS NOT NULL", [YEAR]))[0][0].n);
+
+    test('ตั้งค่า: super_admin เท่านั้น + ตรวจค่า', async () => {
+        expect((await put(T.ssjA, { reminder_enabled: true })).status).toBe(403);
+        expect((await put(T.sa, { reminder_due_day: 31 })).status).toBe(400);
+        expect((await put(T.sa, { reminder_time: '9am' })).status).toBe(400);
+        expect((await put(T.sa, { reminder_enabled: 'yes' })).status).toBe(400);
+        const ok = await put(T.sa, { reminder_due_day: 12, reminder_days_before: [1, 3], reminder_channels: { inapp: true, line: true, email: true } });
+        expect(ok.status).toBe(200);
+        expect(ok.body.data).toMatchObject({ reminder_due_day: 12, reminder_days_before: [3, 1], reminder_enabled: false });
+    });
+
+    test('ดูตัวอย่างไม่ส่ง / ส่งทันที: ในระบบ 1 ต่อหน่วยบริการ + LINE/อีเมลถึงผู้ใช้ / สั่งซ้ำวันเดียวกันไม่ส่งซ้ำ', async () => {
+        expect((await post(T.ssjA, '/work-center/reminders/send-now', { year_bh: YEAR, month_bh: 10 })).status).toBe(403);
+        const pre = await post(T.sa, '/work-center/reminders/preview', { year_bh: YEAR, month_bh: 10 });
+        expect(pre.status).toBe(200);
+        expect(pre.body.data).toMatchObject({ hospitals: 1, pairs: 1, sent: { inapp: 0, line: 0, email: 0 } });
+        expect(await notifCount()).toBe(0);
+        expect(mockSent.line.length + mockSent.email.length).toBe(0);
+
+        const go = await post(T.sa, '/work-center/reminders/send-now', { year_bh: YEAR, month_bh: 10 });
+        expect(go.status).toBe(200);
+        // ผู้รับของ hos[1] = test_wc_rcpt + test_wc_hos1 (admin_hos ก็ได้รับเตือนของหน่วยบริการตัวเอง)
+        expect(go.body.data.sent).toEqual({ inapp: 1, line: 2, email: 2 });
+        expect(await notifCount()).toBe(1);
+        const [[n]] = await db.query('SELECT hospcode, title, message FROM notifications WHERE year_bh = ? AND hospcode IS NOT NULL', [YEAR]);
+        expect(n.hospcode).toBe(hos[1]);
+        expect(n.message).toMatch(/1 ตัวชี้วัด/);
+        expect(mockSent.email.map(e => e.to)).toContain('test_wc_rcpt@example.test');
+
+        const again = await post(T.sa, '/work-center/reminders/send-now', { year_bh: YEAR, month_bh: 10 });
+        expect(again.body.data.sent).toEqual({ inapp: 0, line: 0, email: 0 });
+        expect(again.body.data.skipped_duplicate).toBe(5);
+        expect(await notifCount()).toBe(1);
+        expect(mockSent.line.length).toBe(2);
+    });
+});
