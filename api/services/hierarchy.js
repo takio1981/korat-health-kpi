@@ -230,13 +230,26 @@ async function loadSubExportMonthMap(conn, indicatorId, yearBh, { allLevels = fa
 // อนุมัติผล KPI และ Lock ข้อมูล (รองรับทั้งรายการเดียวและหลายรายการ)
 // Cascade สถานะ/ล็อคจากตัวชี้วัดหลักไปตัวชี้วัดย่อยทั้งหมดของ indicator นั้น (join ผ่าน kpi_sub_indicators)
 // ใช้โดย approve/reject/unlock/appeal ทุกจุด — ให้ kpi_sub_results.status/is_locked mirror ค่าที่ตั้งบน kpi_results เสมอ
-async function cascadeSubResultsStatus(dbOrConn, indicator_id, year_bh, hospcode, status, is_locked) {
+/**
+ * ส่งต่อสถานะ/ล็อคจากตัวชี้วัดหลักไปข้อย่อย + กิจกรรม
+ * opts (อนุมัติรายเดือน — 22 พ.ย. 2569): months = เฉพาะเลขเดือนเหล่านี้, onlyStatus = เฉพาะแถวที่สถานะในรายการ,
+ * unlockedOnly = เฉพาะแถวที่ยังไม่ล็อค — ไม่ส่ง opts = ทั้งปี (พฤติกรรมเดิม)
+ */
+async function cascadeSubResultsStatus(dbOrConn, indicator_id, year_bh, hospcode, status, is_locked, opts = {}) {
+    const extra = (alias, params) => {
+        let w = '';
+        if (Array.isArray(opts.months) && opts.months.length) { w += ` AND ${alias}.month_bh IN (?)`; params.push(opts.months); }
+        if (Array.isArray(opts.onlyStatus) && opts.onlyStatus.length) { w += ` AND ${alias}.status IN (?)`; params.push(opts.onlyStatus); }
+        if (opts.unlockedOnly) w += ` AND (${alias}.is_locked IS NULL OR ${alias}.is_locked <> 1)`;
+        return w;
+    };
     let sql = `UPDATE kpi_sub_results sr
                JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
                SET sr.status = ?, sr.is_locked = ?
                WHERE si.indicator_id = ? AND sr.year_bh = ?`;
     const params = [status, is_locked, indicator_id, year_bh];
     if (hospcode) { sql += ' AND sr.hospcode = ?'; params.push(hospcode); }
+    sql += extra('sr', params);
     await dbOrConn.query(sql, params);
     // ระดับกิจกรรม (ตัวชี้วัด 3 ระดับ) — mirror เหมือนข้อย่อย
     let asql = `UPDATE kpi_activity_results ar
@@ -246,6 +259,7 @@ async function cascadeSubResultsStatus(dbOrConn, indicator_id, year_bh, hospcode
                WHERE si.indicator_id = ? AND ar.year_bh = ?`;
     const aparams = [status, is_locked, indicator_id, year_bh];
     if (hospcode) { asql += ' AND ar.hospcode = ?'; aparams.push(hospcode); }
+    asql += extra('ar', aparams);
     await dbOrConn.query(asql, aparams);
 }
 

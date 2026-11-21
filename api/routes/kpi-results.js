@@ -3,10 +3,12 @@
 // ลงทะเบียนเส้นทางกับ apiRouter ตอนถูก require — server.js require ไฟล์นี้ที่ตำแหน่งเดิมของเส้นทางชุดนี้ (ลำดับเส้นทางสำคัญ)
 
 const db = require('../db');
+const { pendingReviewSumSql, rowStatusSql } = require('../core/sql');
 const kpiFormula = require('../kpi-formula');
 const { TARGET_MONTHLY_MODES, normalizeTargetMonthly, aggregateMonthlyTarget } = require('../kpi-target');
 const { ROLE_ADMIN_ALL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, foreignWriteHospcodes, getDistrictId, getPermsForUser, hospcodesOutOfWriteScope } = require('../core/access');
 const { getDataEntryLockState, DATA_ENTRY_LOCKED_MESSAGE } = require('../services/data-entry-lock');
+const { FISCAL_ORD_SQL } = require('../services/review-status');
 const { apiRouter } = require('../core/router');
 const { authenticateToken, isAdmin, isSuperAdmin } = require('../core/auth');
 const { baseKey, loadBaseValues, loadPrevYearData, refreshKpiSummaryForIndicatorYears, scheduleSummaryRefresh, withSummaryLock } = require('../services/summary');
@@ -137,9 +139,12 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 MAX(CASE WHEN r.month_bh = 7  THEN r.actual_value END) AS jul,
                 MAX(CASE WHEN r.month_bh = 8  THEN r.actual_value END) AS aug,
                 MAX(CASE WHEN r.month_bh = 9  THEN r.actual_value END) AS sep,
-                SUM(CASE WHEN r.status = 'Pending' THEN 1 ELSE 0 END) AS pending_count,
-                MAX(r.status) AS indicator_status,
-                MAX(CASE WHEN r.is_locked = 1 THEN 1 ELSE 0 END) AS is_locked,
+                ${pendingReviewSumSql('r')} AS pending_count, -- เดือนที่รอตรวจ (มีผลงาน) — อนุมัติรายเดือน 22 พ.ย. 2569
+                ${rowStatusSql('r')} AS indicator_status,
+                MAX(CASE WHEN r.is_locked = 1 THEN ${FISCAL_ORD_SQL('r.month_bh')} END) AS approved_through, -- ลำดับปีงบของเดือนล่าสุดที่อนุมัติ/ล็อค (1 = ต.ค.)
+                GROUP_CONCAT(DISTINCT CASE WHEN r.is_locked = 1 THEN r.month_bh END) AS locked_months,
+                -- ล็อคทั้งแถว = ทุกเดือนล็อค (คู่ที่อนุมัติทั้งปีแบบเดิม) — อนุมัติบางเดือนดู locked_months (หน้าจอล็อครายช่อง) — 22 พ.ย. 2569
+                MIN(CASE WHEN r.is_locked = 1 THEN 1 ELSE 0 END) AS is_locked,
                 MIN(i.table_process) AS table_process,
                 MIN(i.criterion) AS criterion,
                 MIN(i.target_condition) AS target_condition, -- เงื่อนไขเป้าหมาย ≥ > ≤ < = (ร้อยละ/ผ่านเกณฑ์ในหน้าบันทึกผลงาน) — เดิมไม่ได้ส่งมา 22 ต.ค. 2569
@@ -620,6 +625,48 @@ apiRouter.post('/kpi-results/manage/bulk-delete', authenticateToken, isSuperAdmi
     }
 }));
 
+const MONTH_TH = { 10: 'ต.ค.', 11: 'พ.ย.', 12: 'ธ.ค.', 1: 'ม.ค.', 2: 'ก.พ.', 3: 'มี.ค.', 4: 'เม.ย.', 5: 'พ.ค.', 6: 'มิ.ย.', 7: 'ก.ค.', 8: 'ส.ค.', 9: 'ก.ย.' };
+
+/**
+ * แถวผลงานเดิมของคู่ (ตัวชี้วัด_ปีงบ_หน่วยบริการ) ทั้งหมดในคำขอ → Map(key → แถว[]) (22 พ.ย. 2569)
+ * IN แยกคอลัมน์ (ใช้ดัชนี indicator_id, year_bh, hospcode ได้ — row constructor IN ใช้ดัชนีไม่ได้ในบางรุ่น) แล้วกรองคู่ใน JS — ชุดละ 300 คู่
+ */
+async function loadExistingResultRows(conn, keys) {
+    const out = new Map();
+    const want = new Set(keys);
+    for (let i = 0; i < keys.length; i += 300) {
+        const chunk = keys.slice(i, i + 300).map(k => { const [ind, y, ...h] = k.split('_'); return { ind: Number(ind), y, h: h.join('_') }; });
+        const [rows] = await conn.query(
+            'SELECT indicator_id, year_bh, hospcode, month_bh, actual_value, target_value, status, is_locked FROM kpi_results WHERE indicator_id IN (?) AND year_bh IN (?) AND hospcode IN (?)',
+            [[...new Set(chunk.map(c => c.ind))], [...new Set(chunk.map(c => c.y))], [...new Set(chunk.map(c => c.h))]]
+        );
+        for (const r of rows) {
+            const k = `${r.indicator_id}_${r.year_bh}_${r.hospcode}`;
+            if (!want.has(k)) continue;
+            if (!out.has(k)) out.set(k, []);
+            out.get(k).push(r);
+        }
+    }
+    return out;
+}
+
+/**
+ * ค่าระดับปีของคู่ (ค่าฐาน/ค่าเพิ่มเติมของสูตร, ผลงาน/ร้อยละที่กรอกเอง) — คู่ที่มีเดือนอนุมัติ/ล็อคแล้ว เปลี่ยนไม่ได้ (super_admin ข้ามได้)
+ * ค่าที่ส่งมาเท่าเดิม = ผ่าน (หน้าจอส่งค่าเดิมกลับมาได้) — อนุมัติรายเดือน 22 พ.ย. 2569 (เดิมคู่ที่ล็อคบันทึกไม่ได้ทั้งคำขอ)
+ */
+async function assertPairValuesUnlocked(conn, user, existingRows, row, hospcode, entries) {
+    if (user.role === 'super_admin' || !entries.length) return;
+    if (!(existingRows || []).some(r => Number(r.is_locked) === 1)) return;
+    const [stored] = await conn.query('SELECT var_key, base_value FROM kpi_base_values WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?',
+        [row.indicator_id, row.year_bh, hospcode]);
+    const cur = new Map(stored.map(s => [s.var_key, String(s.base_value ?? '').trim()]));
+    for (const [key, raw] of entries) {
+        if (String(raw ?? '').trim() !== (cur.get(key) || '')) {
+            throw Object.assign(new Error(`ตัวชี้วัด ID ${row.indicator_id} มีเดือนที่อนุมัติแล้ว — ค่าที่ใช้คำนวณผลงานทั้งปี (ค่าฐาน/ค่าเพิ่มเติม/ผลงานที่กรอกเอง) แก้ไขไม่ได้`), { status: 403, code: 'PAIR_LOCKED' });
+        }
+    }
+}
+
 // authenticateToken: เดิม route นี้ verify JWT เองอย่างเดียว ข้ามการตรวจ single session — ผู้ใช้ที่ถูกบังคับ logout
 // หรือ login ซ้อนจากเครื่องอื่นแล้ว ยังบันทึกผลงานด้วย token เก่าได้จนหมดอายุ (8 ชม.) — ต้องผ่าน middleware กลางเสมอ
 apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
@@ -808,16 +855,17 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
             });
         }
 
-        // ตรวจสอบล็อค (super_admin ข้ามได้)
-        if (user.role !== 'super_admin') {
+        // โหลดแถวเดิมของทุกคู่ในคำขอครั้งเดียว (22 พ.ย. 2569 — เดิม query ทีละคู่ 2–4 รอบ ช้าเมื่อนำเข้า Excel หลายร้อยแถว)
+        const rowKeyOf = (row) => `${row.indicator_id}_${row.year_bh}_${(ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave}`;
+        const existingByKey = await loadExistingResultRows(connection, uniqueKeys);
+        const isLockedRow = (r) => Number(r.is_locked) === 1;
+
+        // setup_overwrite (เขียนทับทั้งคู่): มีเดือนที่ล็อค = แก้ไม่ได้ทั้งคู่ (super_admin ข้ามได้)
+        // โหมดปกติตรวจ "รายเดือน" ก่อนลบ-เพิ่มด้านล่าง (อนุมัติรายเดือน — 22 พ.ย. 2569)
+        if (saveMode === 'setup_overwrite' && user.role !== 'super_admin') {
             for (const key of uniqueKeys) {
-                const [indId, ybh, hc] = key.split('_');
-                const [lockedRows] = await connection.query(
-                    'SELECT COUNT(*) as cnt FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? AND is_locked = 1',
-                    [indId, ybh, hc]
-                );
-                if (lockedRows[0].cnt > 0) {
-                    throw new Error(`ไม่สามารถแก้ไขได้ ข้อมูลตัวชี้วัด ID ${indId} ถูกล็อคอยู่`);
+                if ((existingByKey.get(key) || []).some(isLockedRow)) {
+                    throw Object.assign(new Error(`ไม่สามารถแก้ไขได้ ข้อมูลตัวชี้วัด ID ${key.split('_')[0]} มีเดือนที่อนุมัติ/ล็อคแล้ว`), { status: 403, code: 'LOCKED' });
                 }
             }
         }
@@ -830,11 +878,7 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
                 // โหลดค่าเดิมจาก DB ทำ preserveMap: key → { target, months: {monthVal: actual} }
                 const preserveMap = {};
                 for (const key of uniqueKeys) {
-                    const [indId, ybh, hc] = key.split('_');
-                    const [existing] = await connection.query(
-                        'SELECT month_bh, actual_value, target_value FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?',
-                        [indId, ybh, hc]
-                    );
+                    const existing = existingByKey.get(key) || [];
                     const entry = { target: null, months: {}, targets: {} };
                     for (const r of existing) {
                         if (entry.target === null && r.target_value != null && r.target_value !== '') entry.target = r.target_value;
@@ -925,8 +969,7 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
             const qIds = new Set(qRows.map(r => Number(r.id)));
             for (const row of updates) {
                 if (!qIds.has(Number(row.indicator_id))) continue;
-                const hc = (ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
-                const [old] = await connection.query('SELECT month_bh, actual_value FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?', [row.indicator_id, row.year_bh, hc]);
+                const old = existingByKey.get(rowKeyOf(row)) || [];
                 for (const m of months) {
                     if (kpiFormula.isQuarterEntryMonth('quarter', m.val)) continue;
                     const nv = String(row[m.col] ?? '').trim();
@@ -942,34 +985,71 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
         // ไม่ให้ target_value (เป้าหมายรวม) ถูกเขียนทับทุกเดือน — เป้าหมายรายเดือนเปลี่ยนได้ผ่าน t_* เท่านั้น
         for (const row of updates) {
             if (!monthlyTargetIds.has(Number(row.indicator_id)) || usesMonthlyTargets(row)) continue;
-            const hc = (ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
-            const [old] = await connection.query('SELECT month_bh, target_value FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?', [row.indicator_id, row.year_bh, hc]);
+            const old = existingByKey.get(rowKeyOf(row)) || [];
             if (!old.length) continue;   // คู่ใหม่ = ใช้ target_value ทุกเดือนแบบเดิม
             for (const m of months) row['t_' + m.col] = (old.find(o => Number(o.month_bh) === m.val) || {}).target_value ?? '';
         }
 
         // สถานะ "ส่งกลับแก้ไขแล้ว" (Resubmit) รับได้เฉพาะคู่ที่ถูกส่งกลับแก้ไขอยู่จริง (22 พ.ย. 2569)
         // เดิมใช้ row.preserve_status ตรงๆ — ส่ง 'Approved' มาเองก็ได้สถานะอนุมัติ (ข้ามการตรวจของผู้ดูแล)
-        const rowKeyOf = (row) => `${row.indicator_id}_${row.year_bh}_${(ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave}`;
         const resubmitOk = new Set();
-        const wantResubmit = [...new Set(updates.filter(r => r && r.preserve_status === 'Resubmit').map(rowKeyOf))];
-        if (wantResubmit.length) {
-            const tuples = wantResubmit.map(k => { const [i, y, ...h] = k.split('_'); return [Number(i), y, h.join('_')]; });
-            const [st] = await connection.query(
-                "SELECT DISTINCT indicator_id, year_bh, hospcode FROM kpi_results WHERE (indicator_id, year_bh, hospcode) IN (?) AND status IN ('Rejected', 'Resubmit')",
-                [tuples]
-            );
-            for (const r of st) resubmitOk.add(`${r.indicator_id}_${r.year_bh}_${r.hospcode}`);
+        for (const key of new Set(updates.filter(r => r && r.preserve_status === 'Resubmit').map(rowKeyOf))) {
+            if ((existingByKey.get(key) || []).some(r => r.status === 'Rejected' || r.status === 'Resubmit')) resubmitOk.add(key);
+        }
+
+        // ===== อนุมัติรายเดือน (22 พ.ย. 2569): เดือนที่อนุมัติ/ล็อคแล้วคงไว้ทั้งแถว — บันทึกเดือนอื่นต่อได้ =====
+        // ผลงานของเดือนที่ล็อคต้องเท่าเดิม (ผู้ใช้/ผู้ดูแลทั่วไป: ต่าง = 403 ระบุเดือน | super_admin: ต่าง = เดือนนั้นกลับเป็นรอตรวจสอบ)
+        // เป้าหมายแก้ได้ทุกเดือน (การอนุมัติล็อค "ผลงาน") — เดือนที่ล็อคปรับเป้าหมายในแถวเดิม
+        const normV = (v) => String(v ?? '').trim();
+        const rowTargetOf = (row, m) => {
+            const raw = usesMonthlyTargets(row) ? row['t_' + m.col] : row.target_value;
+            return (raw !== undefined && raw !== null && raw !== '') ? String(raw).trim() : '';
+        };
+        const keepLocked = new Map();          // key → Map(month_bh → แถวเดิมที่ล็อค)
+        const lockedTargetUpdates = [];        // [target, indicator_id, year_bh, hospcode, month_bh]
+        for (const row of updates) {
+            const key = rowKeyOf(row);
+            const locked = (existingByKey.get(key) || []).filter(isLockedRow);
+            if (!locked.length) continue;
+            const keep = keepLocked.get(key) || new Map();
+            for (const r of locked) {
+                const m = months.find(x => x.val === Number(r.month_bh));
+                if (!m) continue;
+                const sent = row[m.col];
+                const changed = sent !== undefined && normV(sent) !== normV(r.actual_value);
+                if (!changed) {
+                    keep.set(Number(r.month_bh), r);
+                    const tv = rowTargetOf(row, m);
+                    if (tv !== normV(r.target_value) && (tv !== '' || Object.prototype.hasOwnProperty.call(row, 'target_value'))) {
+                        lockedTargetUpdates.push([tv, r.indicator_id, r.year_bh, r.hospcode, r.month_bh]);
+                    }
+                } else if (user.role !== 'super_admin') {
+                    throw Object.assign(new Error(`เดือน ${MONTH_TH[m.val]} ของตัวชี้วัด ID ${row.indicator_id} อนุมัติแล้ว แก้ไขผลงานไม่ได้ — ติดต่อผู้ดูแลเพื่อส่งคืนแก้ไข`), { status: 403, code: 'MONTH_LOCKED' });
+                }
+            }
+            keepLocked.set(key, keep);
         }
 
         // --- Mode: default → Dashboard ปกติ (DELETE + INSERT เฉพาะ row ที่มีค่า) ---
         // Batch DELETE: ลบข้อมูลเก่าทั้งหมดของแต่ละ indicator/year/hospcode
         for (const key of uniqueKeys) {
-            const [indId, ybh, hc] = key.split('_');
-            await connection.query(
-                'DELETE FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?',
-                [indId, ybh, hc]
-            );
+            const [indId, ybh, ...hcParts] = key.split('_');
+            const hc = hcParts.join('_');
+            const keepMonths = [...(keepLocked.get(key) || new Map()).keys()];
+            if (keepMonths.length) {
+                await connection.query(
+                    'DELETE FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? AND NOT (is_locked = 1 AND month_bh IN (?))',
+                    [indId, ybh, hc, keepMonths]
+                );
+            } else {
+                await connection.query(
+                    'DELETE FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?',
+                    [indId, ybh, hc]
+                );
+            }
+        }
+        for (const p of lockedTargetUpdates) {
+            await connection.query('UPDATE kpi_results SET target_value = ? WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? AND month_bh = ? AND is_locked = 1', p);
         }
 
         // Batch INSERT: รวมข้อมูลทั้งหมดแล้ว INSERT ทีเดียว (ข้าม row ที่ค่า 0 ทั้งหมด)
@@ -989,7 +1069,9 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
             };
             // มีเป้าหมาย (≠ 0) อย่างน้อย 1 เดือน = บันทึกครบ 12 เดือน (เหมือนเป้าหมายเดียวแบบเดิม) ไม่งั้นเฉพาะเดือนที่มีผลงาน
             const anyTarget = months.some(m => { const t = targetOf(m); return t && t !== '0'; });
+            const keep = keepLocked.get(rowKeyOf(row));
             for (const m of months) {
+                if (keep && keep.has(m.val)) continue; // เดือนที่อนุมัติ/ล็อคแล้ว — คงแถวเดิม
                 const rawActual = row[m.col];
                 const actualValue = (rawActual !== undefined && rawActual !== null && rawActual !== '') ? String(rawActual).trim() : null;
                 const tv = targetOf(m);
@@ -1033,6 +1115,9 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
                         const m = /^cv_([a-z][a-z0-9_]{0,19})$/.exec(k);
                         if (m && !(m[1] === 'base' && Object.prototype.hasOwnProperty.call(row, 'base_value'))) entries.push([m[1], row[k]]);
                     }
+                    // ค่าฐาน/ค่าเพิ่มเติมเป็นตัวแปรของสูตรผลงาน (ระดับปี) — คู่ที่มีเดือนอนุมัติแล้ว แก้ไม่ได้ (ผลงานที่อนุมัติจะเปลี่ยน) super_admin ข้ามได้
+                    await assertPairValuesUnlocked(connection, user, existingByKey.get(rowKeyOf(row)), row, hc,
+                        entries.filter(([k]) => allowed.has(k)));
                     for (const [key, raw] of entries) {
                         if (!allowed.has(key)) continue;   // ชื่อที่ตัวชี้วัดไม่ได้ประกาศ — ข้าม
                         const v = String(raw ?? '').trim();
@@ -1074,6 +1159,8 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
                     if (v === null) throw Object.assign(new Error(`ร้อยละต้องเป็นตัวเลข (ได้รับ "${String(row.manual_pct).slice(0, 20)}")`), { status: 400 });
                     entries.push([MANUAL_PCT_KEY, v]);
                 }
+                // ผลงาน/ร้อยละที่กรอกเองของคู่ที่มีเดือนอนุมัติแล้ว แก้ไม่ได้ (อนุมัติรายเดือน — 22 พ.ย. 2569)
+                await assertPairValuesUnlocked(connection, user, existingByKey.get(rowKeyOf(row)), row, hc, entries);
                 for (const [key, v] of entries) {
                     if (!v) {
                         await connection.query('DELETE FROM kpi_base_values WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? AND var_key = ?', [row.indicator_id, row.year_bh, hc, key]);
@@ -1131,7 +1218,7 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
         await connection.rollback();
         console.error('Update Error:', error);
         // ข้อผิดพลาดที่ระบุสถานะเอง (ข้อมูลผิด/ไม่มีสิทธิ์ — ผลงาน/ร้อยละที่กรอกเอง) ตอบตามนั้น ไม่ใช่ 500
-        res.status(error.status === 400 || error.status === 403 ? error.status : 500).json({ success: false, message: error.message || 'เกิดข้อผิดพลาดในการบันทึก' });
+        res.status(error.status === 400 || error.status === 403 ? error.status : 500).json({ success: false, code: error.code, message: error.message || 'เกิดข้อผิดพลาดในการบันทึก' });
     } finally {
         connection.release();
     }

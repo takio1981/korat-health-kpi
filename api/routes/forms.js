@@ -439,6 +439,14 @@ apiRouter.post('/dynamic-data/:table_name', authenticateToken, async (req, res) 
                     actualValue = data[avField] !== undefined && data[avField] !== null && data[avField] !== '' ? String(data[avField]) : null;
                 }
                 if (actualValue !== null) {
+                    // เดือนที่อนุมัติแล้ว (ล็อค) แก้ไม่ได้ (22 พ.ย. 2569 — เดิมลบ-เพิ่มทับแถวที่ล็อคเงียบๆ = ผลงานที่อนุมัติแล้วเปลี่ยนได้)
+                    if (req.user.role !== 'super_admin') {
+                        const [[lk]] = await connection.query(
+                            'SELECT COUNT(*) AS cnt FROM kpi_results WHERE indicator_id=? AND year_bh=? AND month_bh=? AND hospcode=? AND is_locked = 1',
+                            [indicatorId, yearBh, monthBh, hospcode]
+                        );
+                        if (Number(lk.cnt) > 0) throw Object.assign(new Error('เดือนนี้ได้รับการอนุมัติแล้ว (ล็อค) — แก้ไขไม่ได้'), { status: 403, code: 'MONTH_LOCKED' });
+                    }
                     // ดึง target_value เดิมก่อน DELETE (เก็บจากเดือน 10 แต่ใช้ร่วมทุกเดือน)
                     const [tRows] = await connection.query(
                         'SELECT MAX(target_value) AS tv FROM kpi_results WHERE indicator_id=? AND year_bh=? AND hospcode=?',
@@ -496,7 +504,7 @@ apiRouter.post('/dynamic-data/:table_name', authenticateToken, async (req, res) 
         else if (e.code === 'ER_TRUNCATED_WRONG_VALUE' || e.code === 'ER_DATA_TOO_LONG') userMsg = 'ข้อมูลที่กรอกไม่ถูกต้องหรือยาวเกินกำหนด — กรุณาตรวจสอบ';
         else if (e.code === 'ER_BAD_NULL_ERROR') userMsg = 'มีฟิลด์ที่จำเป็นต้องกรอก — กรุณาตรวจสอบ';
         else if (e.code === 'ER_NO_SUCH_TABLE') userMsg = 'ไม่พบตารางในฐานข้อมูล — กรุณาสร้างแบบฟอร์มก่อน';
-        res.status(500).json({ success: false, message: userMsg, code: e.code });
+        res.status(e.status === 403 ? 403 : 500).json({ success: false, message: userMsg, code: e.code });
     } finally { connection.release(); }
 });
 

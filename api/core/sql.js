@@ -31,7 +31,19 @@ function targetPassSql(aCol, tCol, condExpr, pctCol) {
     return pctCol ? `(CASE WHEN ${pctCol} IS NULL THEN ${base} ELSE (${_pctHas(pctCol)} AND ${_tDec(pctCol)} >= 100) END)` : base;
 }
 
+// === อนุมัติรายเดือน (22 พ.ย. 2569) ===
+// จำนวน "เดือนที่รอตรวจสอบ" = Pending/Resubmit ที่มีผลงาน — เดือนว่างที่มีแต่เป้าหมาย (เดือนถัดไปหลังอนุมัติถึงเดือน M) ไม่นับ
+// (เดิมนับ Pending ทุกแถว → หลังอนุมัติรายเดือนทุกคู่ที่มีเป้าหมายจะค้าง "รอตรวจ" ตลอดปี)
+const pendingReviewSumSql = (a = 'r') =>
+    `SUM(CASE WHEN ${a}.status IN ('Pending','Resubmit') AND ${a}.actual_value IS NOT NULL AND TRIM(${a}.actual_value) <> '' THEN 1 ELSE 0 END)`;
+// สถานะรวมของคู่จากหลายเดือน ตามลำดับความสำคัญ (อุทธรณ์ > ส่งคืน > แก้ไขส่งกลับ > รอตรวจ > อนุมัติ)
+// เดิม MAX(status) เรียงตามตัวอักษร: อนุมัติบางเดือน + อุทธรณ์ = แสดง "อนุมัติ"
+const rowStatusSql = (a = 'r') =>
+    `(CASE WHEN SUM(${a}.status = 'Appeal') > 0 THEN 'Appeal' WHEN SUM(${a}.status = 'Rejected') > 0 THEN 'Rejected'` +
+    ` WHEN SUM(${a}.status = 'Resubmit') > 0 THEN 'Resubmit' WHEN ${pendingReviewSumSql(a)} > 0 THEN 'Pending'` +
+    ` WHEN SUM(${a}.status = 'Approved') > 0 THEN 'Approved' ELSE MAX(${a}.status) END)`;
+
 // ตรวจสอบชื่อตาราง/คอลัมน์ (ป้องกัน SQL Injection) — ย้ายจาก server.js (ส่วน Form Builder) 25 ต.ค. 2569
 const isValidIdentifier = (name) => /^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(name);
 
-module.exports = { activeIndicatorSql, targetCondOf, targetHasSql, targetPassSql, isValidIdentifier };
+module.exports = { activeIndicatorSql, targetCondOf, targetHasSql, targetPassSql, isValidIdentifier, pendingReviewSumSql, rowStatusSql };

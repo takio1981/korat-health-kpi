@@ -7,7 +7,7 @@ const { apiRouter } = require('../core/router');
 const { authenticateToken, isAdmin } = require('../core/auth');
 const { indicatorsOutsideOwnDept, OUTSIDE_DEPT_MESSAGE, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, hospcodesOutOfWriteScope } = require('../core/access');
 const { cascadeSubResultsStatus } = require('../services/hierarchy');
-const { reviewStatusConflicts } = require('../services/review-status');
+const { reviewStatusConflicts, reviewItemWhere, monthList, LOCKED_SQL } = require('../services/review-status');
 const { scheduleSummaryRefresh } = require('../services/summary');
 
 // ========== Rejection & Notification APIs ==========
@@ -32,7 +32,10 @@ apiRouter.post('/reject-kpi', authenticateToken, isAdmin, async (req, res) => {
     }
     // ตรวจสถานะก่อนส่งคืน (22 พ.ย. 2569): อยู่ระหว่างอุทธรณ์ = ใช้ขั้นตอนอุทธรณ์ | อนุมัติแล้ว (ล็อค) = เฉพาะ super_admin
     // (เดิมส่งคืนรายการที่อนุมัติแล้วได้ = ปลดล็อคโดยไม่ผ่านสิทธิ์ปลดล็อคของ super_admin)
-    const blocked = await reviewStatusConflicts(db, user, items, { allowLocked: user.role === 'super_admin' });
+    // อนุมัติรายเดือน (22 พ.ย. 2569): reject_months = ส่งคืนเฉพาะเดือนนั้น | ไม่ระบุ = เดือนที่ยังไม่อนุมัติทั้งหมด (เดือนที่อนุมัติแล้วคงล็อค)
+    const isSa = user.role === 'super_admin';
+    const monthsOf = (i) => monthList(i && i.reject_months);
+    const blocked = await reviewStatusConflicts(db, user, items, { allowLocked: isSa, monthsOf });
     if (blocked) return res.status(409).json({ success: false, code: blocked.code, message: blocked.message });
 
     const connection = await db.getConnection();
@@ -46,27 +49,17 @@ apiRouter.post('/reject-kpi', authenticateToken, isAdmin, async (req, res) => {
                 throw new Error('กรุณาระบุเหตุผลการส่งคืนแก้ไข');
             }
 
-            let whereClause = 'indicator_id = ? AND year_bh = ?';
-            let params = [indicator_id, year_bh];
+            // ใช้ hospcode จาก request body (ของหน่วยบริการเป้าหมาย) ถ้ามี — ไม่มีและไม่ใช่ super_admin = hospcode ของ admin เอง (reviewItemWhere)
+            const rejMonths = monthsOf(item);
+            const { where: whereClause, params, hospcode: cascadeHospcode } = reviewItemWhere(user, item, rejMonths);
 
-            // ใช้ hospcode จาก request body (ของหน่วยบริการเป้าหมาย) ถ้ามี
-            // ถ้าไม่มีและไม่ใช่ super_admin ให้ใช้ hospcode ของ admin เอง
-            if (hospcode) {
-                whereClause += ' AND hospcode = ?';
-                params.push(hospcode);
-            } else if (user.role !== 'super_admin') {
-                whereClause += ' AND hospcode = ?';
-                params.push(user.hospcode);
-            }
-
-            // Update status to Rejected and unlock
+            // Update status to Rejected and unlock — ผู้ดูแลทั่วไปไม่แตะเดือนที่อนุมัติแล้ว (ตรวจขัดแย้งด้านบน), super_admin ส่งคืนเดือนที่อนุมัติได้ (= ปลดล็อค)
             await connection.query(
-                `UPDATE kpi_results SET status = 'Rejected', is_locked = 0 WHERE ${whereClause}`,
+                `UPDATE kpi_results SET status = 'Rejected', is_locked = 0 WHERE ${whereClause}` + (isSa ? '' : ` AND NOT ${LOCKED_SQL}`),
                 params
             );
-            // Cascade ไปตัวชี้วัดย่อย (ถ้ามี) — hospcode เดียวกับที่ใช้ตัดสินใน whereClause ด้านบน
-            const cascadeHospcode = hospcode || (user.role !== 'super_admin' ? user.hospcode : null);
-            await cascadeSubResultsStatus(connection, indicator_id, year_bh, cascadeHospcode, 'Rejected', 0);
+            // Cascade ไปตัวชี้วัดย่อย (ถ้ามี) — เดือนเดียวกัน
+            await cascadeSubResultsStatus(connection, indicator_id, year_bh, cascadeHospcode, 'Rejected', 0, { months: rejMonths, unlockedOnly: !isSa });
 
             // Save rejection comment with reject_months
             const targetHospcode = hospcode || user.hospcode;

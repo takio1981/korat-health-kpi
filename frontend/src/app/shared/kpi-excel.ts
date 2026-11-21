@@ -152,6 +152,31 @@ export function parseImportAoa(aoa: any[][]): ParsedImport {
   return { rows, fields: fieldCols.map(f => f.field) };
 }
 
+/** คอลัมน์ผลงานรายเดือน → เลขเดือน */
+export const MONTH_FIELD_NUM: Record<string, number> = { oct: 10, nov: 11, dece: 12, jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9 };
+const MONTH_TH_OF: Record<number, string> = { 10: 'ต.ค.', 11: 'พ.ย.', 12: 'ธ.ค.', 1: 'ม.ค.', 2: 'ก.พ.', 3: 'มี.ค.', 4: 'เม.ย.', 5: 'พ.ค.', 6: 'มิ.ย.', 7: 'ก.ค.', 8: 'ส.ค.', 9: 'ก.ย.' };
+const fiscalOrdOf = (m: number) => (m >= 10 ? m - 9 : m + 3);
+
+/** เดือนที่อนุมัติ/ล็อคแล้วของแถว (อนุมัติรายเดือน — 22 พ.ย. 2569) จาก locked_months ของ GET /kpi-results ("10,11" หรือ array) */
+export function lockedMonthsOf(item: any): Set<number> {
+  const raw = item?.locked_months;
+  if (raw === null || raw === undefined || raw === '') return new Set();
+  const arr = Array.isArray(raw) ? raw : String(raw).split(',');
+  return new Set(arr.map((x: any) => Number(x)).filter((n: number) => n >= 1 && n <= 12));
+}
+/** ช่องผลงานรายเดือนที่อนุมัติแล้ว (แก้ไม่ได้) — เป้าหมาย/ช่องอื่นไม่ล็อค (การอนุมัติล็อคผลงาน) */
+export function isMonthLocked(item: any, field: string): boolean {
+  const m = MONTH_FIELD_NUM[field];
+  return !!m && lockedMonthsOf(item).has(m);
+}
+/** ป้าย "อนุมัติถึง ก.พ." — null = ยังไม่อนุมัติเดือนใด */
+export function approvedThroughText(item: any): string | null {
+  const ms = [...lockedMonthsOf(item)];
+  if (!ms.length) return null;
+  const last = ms.sort((a, b) => fiscalOrdOf(a) - fiscalOrdOf(b)).slice(-1)[0];
+  return `อนุมัติถึง ${MONTH_TH_OF[last]}`;
+}
+
 export interface CellChange { item: any; field: string; oldVal: string; newVal: string }
 // rowLocked = นับเหมือนแถวล็อค (เช่น หน่วยบริการอื่น) | cellLocked = ช่องที่ปิดการกรอก (เช่น เดือนกลางไตรมาสของตัวชี้วัดที่บันทึกรายไตรมาส) นับเป็น "ไม่มีสิทธิ์"
 export interface EditPerms { canEditActual: boolean; canEditTarget: boolean; rowLocked?: (item: any) => boolean; cellLocked?: (item: any, field: string) => boolean }
@@ -188,7 +213,7 @@ function considerCell(plan: ChangePlan, item: any, field: string, raw: any, perm
   // เทียบค่าเดิมก่อน — ค่าที่ไม่ได้แก้ในไฟล์ (เท่าเดิม) ของแถวล็อค/ช่องที่ไม่มีสิทธิ์ ไม่ถือว่า "ถูกข้าม" (ไม่ทำให้ผู้ใช้ตกใจ)
   const oldVal = String(item[field] ?? '').trim();
   if (sameValue(oldVal, newVal)) { plan.same++; return; }
-  if (item.is_locked || perms.rowLocked?.(item)) { plan.locked++; return; }
+  if (item.is_locked || perms.rowLocked?.(item) || isMonthLocked(item, field)) { plan.locked++; return; }
   const allowed = field === 'target_value' || field.startsWith('cv_') || field.startsWith('t_') ? perms.canEditTarget : perms.canEditActual;  // ค่าฐาน/ค่าเพิ่มเติม/เป้าหมายรายเดือน = สิทธิ์เดียวกับเป้าหมาย
   if (!allowed || perms.cellLocked?.(item, field)) { plan.noPerm++; return; }
   if (newVal.length > MAX_VALUE_LENGTH) { plan.tooLong++; return; }

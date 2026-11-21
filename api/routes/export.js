@@ -3,6 +3,7 @@
 // ลงทะเบียนเส้นทางกับ apiRouter ตอนถูก require — server.js require ไฟล์นี้ที่ตำแหน่งเดิมของเส้นทางชุดนี้ (ลำดับเส้นทางสำคัญ)
 
 const db = require('../db');
+const { pendingReviewSumSql, rowStatusSql } = require('../core/sql');
 const { apiRouter } = require('../core/router');
 const { applyFormulaToSummary, mergeSubIntoSummary, withSummaryLock } = require('../services/summary');
 const { applyManualToSummary } = require('../services/manual-result');
@@ -266,8 +267,8 @@ apiRouter.post('/refresh-summary/batch', authenticateToken, isSuperAdmin, async 
                 MAX(CASE WHEN r.month_bh=7  THEN r.actual_value END),
                 MAX(CASE WHEN r.month_bh=8  THEN r.actual_value END),
                 MAX(CASE WHEN r.month_bh=9  THEN r.actual_value END),
-                SUM(CASE WHEN r.status='Pending' THEN 1 ELSE 0 END),
-                MAX(r.status),
+                ${pendingReviewSumSql('r')},
+                ${rowStatusSql('r')},
                 MAX(CASE WHEN r.is_locked=1 THEN 1 ELSE 0 END),
                 NOW()
             FROM kpi_results r

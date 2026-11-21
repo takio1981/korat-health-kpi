@@ -746,19 +746,30 @@ apiRouter.get('/hierarchy-results', authenticateToken, async (req, res) => {
                     [acts.map(a => a.id), year_bh, hospcode]);
             }
         }
+        // อนุมัติรายเดือน (22 พ.ย. 2569): locked_months = เดือนที่ล็อค (ของข้อนั้น ∪ ตัวชี้วัดหลัก) — หน้าจอปิดเฉพาะช่องเดือนนั้น
+        // locked = ทุก 12 เดือนล็อค (เดิม: มีเดือนใดล็อค = ล็อคทั้งแถว → อนุมัติรายเดือนแล้วบันทึกเดือนถัดไปไม่ได้)
+        const [mainLocked] = await db.query(
+            'SELECT DISTINCT month_bh FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? AND is_locked = 1',
+            [indicator_id, year_bh, hospcode]);
+        const mainLockedMonths = mainLocked.map(r => Number(r.month_bh));
         const pack = (rows, idKey) => {
             const m = new Map();
             for (const r of rows) {
-                if (!m.has(r[idKey])) m.set(r[idKey], { months: {}, target: null, locked: false });
+                if (!m.has(r[idKey])) m.set(r[idKey], { months: {}, target: null, lockedSet: new Set(mainLockedMonths) });
                 const e = m.get(r[idKey]);
                 e.months[Number(r.month_bh)] = r.actual_value != null ? String(r.actual_value) : '';
                 if (Number(r.month_bh) === 10 && r.target_value != null && r.target_value !== '') e.target = String(r.target_value);
-                if (Number(r.is_locked) === 1) e.locked = true;
+                if (Number(r.is_locked) === 1) e.lockedSet.add(Number(r.month_bh));
+            }
+            for (const e of m.values()) {
+                e.locked_months = [...e.lockedSet].sort((a, b) => a - b);
+                e.locked = e.locked_months.length >= 12;
+                delete e.lockedSet;
             }
             return m;
         };
         const subMap = pack(subRes, 'sub_indicator_id'), actMap = pack(actRes, 'activity_id');
-        const empty = { months: {}, target: null, locked: false };
+        const empty = { months: {}, target: null, locked: mainLockedMonths.length >= 12, locked_months: mainLockedMonths };
         res.json({
             success: true,
             data: {
@@ -822,19 +833,26 @@ apiRouter.post('/hierarchy-results/save', authenticateToken, async (req, res) =>
             const [allowed] = await conn.query('SELECT id FROM kpi_indicators WHERE id IN (?) AND dept_id = ?', [indicatorIds, user.deptId]);
             if (allowed.length !== indicatorIds.length) throw Object.assign(new Error('ไม่มีสิทธิ์แก้ไขข้อมูลหน่วยงานอื่น'), { status: 403 });
         }
-        // ล็อคจากการอนุมัติ — ตัวชี้วัดหลักที่ล็อคแล้ว ข้อย่อย/กิจกรรมของมันแก้ไม่ได้ (super_admin ข้ามได้)
+        // ล็อคจากการอนุมัติ "รายเดือน" (22 พ.ย. 2569) — เดือนที่ตัวชี้วัดหลัก/ข้อย่อย/กิจกรรมอนุมัติแล้ว แก้ไม่ได้ เดือนอื่นบันทึกได้ (super_admin ข้ามได้)
+        // (เดิม: มีเดือนใดล็อค = แก้ไม่ได้ทั้งปี)
         if (user.role !== 'super_admin') {
+            const reqMonths = [...new Set([...subItems, ...actItems].map(x => Number(x.month_bh)))];
             const [locked] = await conn.query(
-                'SELECT DISTINCT indicator_id FROM kpi_results WHERE indicator_id IN (?) AND year_bh = ? AND hospcode = ? AND is_locked = 1',
-                [indicatorIds, year_bh, hospcode]);
+                'SELECT DISTINCT indicator_id, month_bh FROM kpi_results WHERE indicator_id IN (?) AND year_bh = ? AND hospcode = ? AND is_locked = 1 AND month_bh IN (?)',
+                [indicatorIds, year_bh, hospcode, reqMonths]);
             const [subLocked] = subIds.length ? await conn.query(
-                'SELECT COUNT(*) AS cnt FROM kpi_sub_results WHERE sub_indicator_id IN (?) AND year_bh = ? AND hospcode = ? AND is_locked = 1',
-                [subIds, year_bh, hospcode]) : [[{ cnt: 0 }]];
+                'SELECT DISTINCT sub_indicator_id AS id, month_bh FROM kpi_sub_results WHERE sub_indicator_id IN (?) AND year_bh = ? AND hospcode = ? AND is_locked = 1 AND month_bh IN (?)',
+                [subIds, year_bh, hospcode, reqMonths]) : [[]];
             const [actLocked] = actIds.length ? await conn.query(
-                'SELECT COUNT(*) AS cnt FROM kpi_activity_results WHERE activity_id IN (?) AND year_bh = ? AND hospcode = ? AND is_locked = 1',
-                [actIds, year_bh, hospcode]) : [[{ cnt: 0 }]];
-            if (locked.length || subLocked[0].cnt > 0 || actLocked[0].cnt > 0) {
-                throw Object.assign(new Error('ไม่สามารถแก้ไขได้ ตัวชี้วัดนี้ถูกล็อคอยู่ (ได้รับการอนุมัติแล้ว)'), { status: 403 });
+                'SELECT DISTINCT activity_id AS id, month_bh FROM kpi_activity_results WHERE activity_id IN (?) AND year_bh = ? AND hospcode = ? AND is_locked = 1 AND month_bh IN (?)',
+                [actIds, year_bh, hospcode, reqMonths]) : [[]];
+            const mainSet = new Set(locked.map(r => `${r.indicator_id}|${Number(r.month_bh)}`));
+            const subSet = new Set(subLocked.map(r => `${r.id}|${Number(r.month_bh)}`));
+            const actSet = new Set(actLocked.map(r => `${r.id}|${Number(r.month_bh)}`));
+            const hit = subItems.some(x => mainSet.has(`${subById.get(Number(x.sub_indicator_id)).indicator_id}|${Number(x.month_bh)}`) || subSet.has(`${Number(x.sub_indicator_id)}|${Number(x.month_bh)}`))
+                || actItems.some(x => mainSet.has(`${actById.get(Number(x.activity_id)).indicator_id}|${Number(x.month_bh)}`) || actSet.has(`${Number(x.activity_id)}|${Number(x.month_bh)}`));
+            if (hit) {
+                throw Object.assign(new Error('ไม่สามารถแก้ไขได้ เดือนนี้ได้รับการอนุมัติแล้ว (ล็อค) — บันทึกได้เฉพาะเดือนที่ยังไม่อนุมัติ'), { status: 403, code: 'MONTH_LOCKED' });
             }
         }
         const perms = await getPermsForUser(user.userId, user.role);
@@ -956,13 +974,16 @@ apiRouter.post('/sub-results/upsert', authenticateToken, async (req, res) => {
             }
         }
         // ตรวจสอบล็อค (super_admin ข้ามได้) — mirror /update-kpi (ล็อคจะถูก cascade มาจากตัวชี้วัดหลักตอนอนุมัติ)
+        // อนุมัติรายเดือน (22 พ.ย. 2569): ตรวจเฉพาะเดือนที่บันทึก — ข้อย่อยเดือนนั้นล็อค หรือตัวชี้วัดหลักเดือนนั้นอนุมัติแล้ว = แก้ไม่ได้ (เดิม: เดือนใดล็อค = ทั้งปี)
         if (req.user.role !== 'super_admin') {
-            const [lockedRows] = await db.query(
-                'SELECT COUNT(*) as cnt FROM kpi_sub_results WHERE sub_indicator_id = ? AND year_bh = ? AND hospcode = ? AND is_locked = 1',
-                [sub_indicator_id, year_bh, hospcode]
+            const [[lk]] = await db.query(
+                `SELECT (SELECT COUNT(*) FROM kpi_sub_results WHERE sub_indicator_id = ? AND year_bh = ? AND hospcode = ? AND month_bh = ? AND is_locked = 1)
+                      + (SELECT COUNT(*) FROM kpi_results r JOIN kpi_sub_indicators si ON si.indicator_id = r.indicator_id
+                         WHERE si.id = ? AND r.year_bh = ? AND r.hospcode = ? AND r.month_bh = ? AND r.is_locked = 1) AS cnt`,
+                [sub_indicator_id, year_bh, hospcode, month_bh, sub_indicator_id, year_bh, hospcode, month_bh]
             );
-            if (lockedRows[0].cnt > 0) {
-                return res.status(403).json({ success: false, message: 'ไม่สามารถแก้ไขได้ ตัวชี้วัดย่อยนี้ถูกล็อคอยู่ (ตัวชี้วัดหลักได้รับการอนุมัติแล้ว)' });
+            if (Number(lk.cnt) > 0) {
+                return res.status(403).json({ success: false, code: 'MONTH_LOCKED', message: 'ไม่สามารถแก้ไขได้ เดือนนี้ได้รับการอนุมัติแล้ว (ล็อค) — บันทึกได้เฉพาะเดือนที่ยังไม่อนุมัติ' });
             }
         }
         await db.query(

@@ -61,7 +61,8 @@ afterAll(async () => {
 const post = (t, p, body) => request(app).post(api(p)).set('Authorization', `Bearer ${t}`).send(body);
 const row = (hospcode, extra = {}) => ({ indicator_id: ind, year_bh: YEAR, hospcode, target_value: '80', oct: '90', ...extra });
 const statusOf = async (hospcode) => {
-    const r = (await db.query('SELECT status, is_locked FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? ORDER BY month_bh LIMIT 1', [ind, YEAR, hospcode]))[0][0];
+    // เดือน ต.ค. (เดือนที่มีผลงาน) — อนุมัติรายเดือน: เดือนว่างอื่นยังเปิดอยู่
+    const r = (await db.query('SELECT status, is_locked FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? AND month_bh = 10 LIMIT 1', [ind, YEAR, hospcode]))[0][0];
     return r && { status: r.status, is_locked: Number(r.is_locked) }; // is_locked เป็นข้อความในบางฐาน ("1")
 };
 const setStatus = (hospcode, status, locked) => db.query('UPDATE kpi_results SET status = ?, is_locked = ? WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?', [status, locked, ind, YEAR, hospcode]);

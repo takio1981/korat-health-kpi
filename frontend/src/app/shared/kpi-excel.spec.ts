@@ -2,7 +2,28 @@ import * as XLSX from 'xlsx';
 import {
   EXCEL_HEADERS, EXCEL_MONTHS, buildTemplateAoa, normalizeCell, parseImportAoa, planImport,
   parseClipboardGrid, isMultiCell, planPaste, applyCellChanges, monthTargetHeader, templateFileName,
+  lockedMonthsOf, isMonthLocked, approvedThroughText,
 } from './kpi-excel';
+
+// อนุมัติรายเดือน (22 พ.ย. 2569): เดือนที่อนุมัติแล้วนำเข้า/วางไม่ได้ เดือนอื่นได้
+describe('kpi-excel — อนุมัติรายเดือน', () => {
+  const item = { indicator_id: 7, hospcode: '10001', year_bh: '2570', locked_months: '10,11', oct: '5', nov: '6', dece: '', target_value: '10' };
+  it('อ่านเดือนที่ล็อค / ป้ายอนุมัติถึง', () => {
+    expect([...lockedMonthsOf(item)].sort()).toEqual([10, 11]);
+    expect(lockedMonthsOf({ locked_months: null }).size).toBe(0);
+    expect(isMonthLocked(item, 'nov')).toBe(true);
+    expect(isMonthLocked(item, 'dece')).toBe(false);
+    expect(isMonthLocked(item, 'target_value')).toBe(false); // เป้าหมายไม่ล็อค
+    expect(approvedThroughText(item)).toBe('อนุมัติถึง พ.ย.');
+    expect(approvedThroughText({ locked_months: '1,12' })).toBe('อนุมัติถึง ม.ค.'); // เรียงตามปีงบ
+    expect(approvedThroughText({})).toBeNull();
+  });
+  it('นำเข้า: เดือนที่อนุมัติแล้วนับเป็น "ล็อค", เดือนที่ยังเปิดเปลี่ยนได้', () => {
+    const plan = planImport([{ rowNo: 1, indicator_id: 7, hospcode: '10001', year_bh: '2570', values: { nov: '9', dece: '12' } }], [item], { canEditActual: true, canEditTarget: true });
+    expect(plan.locked).toBe(1);
+    expect(plan.changes.map(c => c.field)).toEqual(['dece']);
+  });
+});
 
 const PERMS = { canEditActual: true, canEditTarget: true };
 function row(id: number, hospcode: string, extra: any = {}) {

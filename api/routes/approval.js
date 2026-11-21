@@ -11,7 +11,7 @@ const { getPermsForUser, invalidateUserPermCache, requireAction, indicatorsOutsi
     ROLE_SCOPE_OWN_DEPT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_DISTRICT, getDistrictId } = require('../core/access');
 const { currentFiscalYear } = require('../core/fiscal-year');
 const { scheduleSummaryRefresh } = require('../services/summary');
-const { reviewItemWhere, reviewStatusConflicts } = require('../services/review-status');
+const { reviewItemWhere, reviewStatusConflicts, FISCAL_ORD_SQL, MONTH_TH, monthNum, fiscalOrd, monthsThrough } = require('../services/review-status');
 
 apiRouter.post('/approve-kpi', authenticateToken, isAdmin, async (req, res) => {
     const user = req.user;
@@ -36,19 +36,29 @@ apiRouter.post('/approve-kpi', authenticateToken, isAdmin, async (req, res) => {
     try {
         await connection.beginTransaction();
 
-        // อนุมัติเฉพาะเดือนที่รอตรวจสอบ (Pending/Resubmit) — อนุมัติแล้ว = ข้าม, ส่งคืนแก้ไข (Rejected) = รอหน่วยบริการแก้ก่อน
+        // อนุมัติรายเดือน (22 พ.ย. 2569): อนุมัติ "ถึงเดือน M" = ล็อคเฉพาะเดือนที่ลำดับปีงบ ≤ M และรอตรวจสอบ (Pending/Resubmit)
+        // M = through_month ที่ส่งมา (รหัส 'oct' หรือเลขเดือน) ไม่ส่ง = เดือนล่าสุดที่มีผลงาน — เดือนหลัง M หน่วยบริการบันทึกต่อได้ทันที
+        // (เดิมล็อคทั้งปี: บันทึกเดือนถัดไปไม่ได้จนกว่า super_admin ปลดล็อค ซึ่งทำให้ทุกเดือนกลับเป็นรอตรวจ)
+        // อนุมัติแล้ว = ข้าม, ส่งคืนแก้ไข (Rejected) = รอหน่วยบริการแก้ก่อน
         const changed = [];
-        let skipped = 0;
+        let skipped = 0, monthsApproved = 0;
         for (const item of items) {
             const { where: whereClause, params, hospcode: cascadeHospcode } = reviewItemWhere(user, item);
+            let through = item.through_month != null && item.through_month !== '' ? fiscalOrd(monthNum(item.through_month) || 0) : 0;
+            if (item.through_month != null && item.through_month !== '' && !monthNum(item.through_month)) {
+                throw Object.assign(new Error('เดือนที่อนุมัติถึงไม่ถูกต้อง'), { status: 400 });
+            }
+            if (!through) through = await latestResultOrd(connection, item, cascadeHospcode, whereClause, params);
+            if (!through) { skipped++; continue; }
             const [upd] = await connection.query(
-                `UPDATE kpi_results SET status = 'Approved', is_locked = 1 WHERE ${whereClause} AND status IN ('Pending', 'Resubmit')`,
-                params
+                `UPDATE kpi_results SET status = 'Approved', is_locked = 1 WHERE ${whereClause} AND status IN ('Pending', 'Resubmit') AND ${FISCAL_ORD_SQL()} <= ?`,
+                [...params, through]
             );
             if (!upd.affectedRows) { skipped++; continue; }
-            changed.push(item);
-            // Cascade ไปตัวชี้วัดย่อย (ถ้ามี) — hospcode เดียวกับที่ใช้ตัดสินใน whereClause ด้านบน
-            await cascadeSubResultsStatus(connection, item.indicator_id, item.year_bh, cascadeHospcode, 'Approved', 1);
+            monthsApproved += upd.affectedRows;
+            changed.push({ ...item, _through: through });
+            // Cascade ไปตัวชี้วัดย่อย (ถ้ามี) — เฉพาะเดือนเดียวกัน (hospcode เดียวกับที่ใช้ตัดสินใน whereClause ด้านบน)
+            await cascadeSubResultsStatus(connection, item.indicator_id, item.year_bh, cascadeHospcode, 'Approved', 1, { months: monthsThrough(through), unlockedOnly: true });
         }
 
         // Create notifications for approved items (เฉพาะที่อนุมัติจริง)
@@ -58,45 +68,75 @@ apiRouter.post('/approve-kpi', authenticateToken, isAdmin, async (req, res) => {
             const indName = indRows.length > 0 ? indRows[0].kpi_indicators_name : `ตัวชี้วัด #${item.indicator_id}`;
             await connection.query(
                 'INSERT INTO notifications (hospcode, type, title, message, indicator_id, year_bh, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                [targetHospcode, 'approve', 'ตัวชี้วัดได้รับการอนุมัติ', `"${indName}" ปีงบ ${item.year_bh} ได้รับการอนุมัติและล็อคข้อมูลแล้ว`, item.indicator_id, item.year_bh, user.userId]
+                [targetHospcode, 'approve', 'ตัวชี้วัดได้รับการอนุมัติ', `"${indName}" ปีงบ ${item.year_bh} ได้รับการอนุมัติถึงเดือน ${MONTH_TH[monthsThrough(item._through).slice(-1)[0]]} และล็อคข้อมูลเดือนนั้นแล้ว (เดือนถัดไปบันทึกต่อได้)`, item.indicator_id, item.year_bh, user.userId]
             );
         }
 
         await connection.query(
             'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
-            [user.userId, user.deptId, 'APPROVE', 'kpi_results', JSON.stringify({ count: changed.length, skipped, message: `อนุมัติและล็อคข้อมูล ${changed.length} รายการ (ข้าม ${skipped})` }), req.ip]
+            [user.userId, user.deptId, 'APPROVE', 'kpi_results', JSON.stringify({ count: changed.length, skipped, months: monthsApproved, items: changed.slice(0, 50).map(c => ({ indicator_id: c.indicator_id, hospcode: c.hospcode, through: c._through })), message: `อนุมัติและล็อคข้อมูล ${changed.length} รายการ ${monthsApproved} เดือน (ข้าม ${skipped})` }), req.ip]
         );
 
         await connection.commit();
         if (changed.length) scheduleSummaryRefresh(changed); // อัปเดต kpi_summary ทันที (สถานะ/ล็อค/ผลงานในรายงาน)
         res.json({
-            success: true, approved: changed.length, skipped,
-            message: `อนุมัติและล็อคข้อมูลเรียบร้อยแล้ว ${changed.length} รายการ` + (skipped ? ` (ข้าม ${skipped} รายการที่ไม่ได้รอตรวจสอบ)` : ''),
+            success: true, approved: changed.length, skipped, months: monthsApproved,
+            message: `อนุมัติและล็อคข้อมูลเรียบร้อยแล้ว ${changed.length} รายการ (${monthsApproved} เดือน)` + (skipped ? ` — ข้าม ${skipped} รายการที่ไม่มีเดือนรอตรวจสอบ` : ''),
         });
     } catch (error) {
         await connection.rollback();
-        res.status(500).json({ success: false, message: error.message });
+        res.status(error.status === 400 ? 400 : 500).json({ success: false, message: error.message });
     } finally {
         connection.release();
     }
 });
 
+/**
+ * ลำดับปีงบของเดือนล่าสุดที่มีผลงาน — รวมผลงานข้อย่อย/กิจกรรม (ตัวชี้วัดหลายระดับบันทึกที่ระดับล่าง แถวหลักอาจว่าง) | 0 = ไม่มีผลงาน
+ * ใช้เป็นค่าตั้งต้นของ "อนุมัติถึงเดือน" (อนุมัติรายเดือน — 22 พ.ย. 2569)
+ */
+async function latestResultOrd(conn, item, hospcode, mainWhere, mainParams) {
+    const hasVal = (a) => `${a}.actual_value IS NOT NULL AND TRIM(${a}.actual_value) <> ''`;
+    const hc = hospcode ? ' AND x.hospcode = ?' : '';
+    const sub = (sql) => sql.replace(/x\./g, 'sr.');
+    const [[m]] = await conn.query(
+        `SELECT MAX(o) AS o FROM (
+            SELECT ${FISCAL_ORD_SQL('r.month_bh')} AS o FROM kpi_results r WHERE ${mainWhere.replace(/(^|\s)(indicator_id|year_bh|hospcode)/g, '$1r.$2')} AND ${hasVal('r')}
+            UNION ALL
+            SELECT ${FISCAL_ORD_SQL('sr.month_bh')} FROM kpi_sub_results sr JOIN kpi_sub_indicators si ON si.id = sr.sub_indicator_id
+             WHERE si.indicator_id = ? AND sr.year_bh = ?${sub(hc)} AND ${hasVal('sr')}
+            UNION ALL
+            SELECT ${FISCAL_ORD_SQL('ar.month_bh')} FROM kpi_activity_results ar JOIN kpi_sub_activities a ON a.id = ar.activity_id
+             JOIN kpi_sub_indicators si ON si.id = a.sub_indicator_id
+             WHERE si.indicator_id = ? AND ar.year_bh = ?${hc.replace(/x\./g, 'ar.')} AND ${hasVal('ar')}
+         ) t`,
+        [...mainParams,
+         item.indicator_id, item.year_bh, ...(hospcode ? [hospcode] : []),
+         item.indicator_id, item.year_bh, ...(hospcode ? [hospcode] : [])]
+    );
+    return Number(m && m.o) || 0;
+}
+
 // ปลดล็อคข้อมูล KPI (เฉพาะ super_admin)
 apiRouter.post('/unlock-kpi', authenticateToken, isSuperAdmin, async (req, res) => {
     const { indicator_id, year_bh, hospcode } = req.body;
     const user = req.user;
+    // อนุมัติรายเดือน (22 พ.ย. 2569): from_month = ปลดล็อคตั้งแต่เดือนนี้ถึง ก.ย. (ไม่ส่ง = ทั้งปี — เดิม)
+    const fromM = monthNum(req.body.from_month);
+    if (req.body.from_month != null && req.body.from_month !== '' && !fromM) return res.status(400).json({ success: false, message: 'เดือนไม่ถูกต้อง' });
+    const unlockMonths = fromM ? [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9].filter(m => fiscalOrd(m) >= fiscalOrd(fromM)) : null;
 
     try {
         await db.query(
-            "UPDATE kpi_results SET is_locked = 0, status = 'Pending' WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?",
-            [indicator_id, year_bh, hospcode]
+            "UPDATE kpi_results SET is_locked = 0, status = 'Pending' WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?" + (unlockMonths ? ' AND month_bh IN (?)' : ''),
+            unlockMonths ? [indicator_id, year_bh, hospcode, unlockMonths] : [indicator_id, year_bh, hospcode]
         );
-        // Cascade ไปตัวชี้วัดย่อย (ถ้ามี)
-        await cascadeSubResultsStatus(db, indicator_id, year_bh, hospcode, 'Pending', 0);
+        // Cascade ไปตัวชี้วัดย่อย (ถ้ามี) — เดือนเดียวกัน
+        await cascadeSubResultsStatus(db, indicator_id, year_bh, hospcode, 'Pending', 0, unlockMonths ? { months: unlockMonths } : {});
 
         await db.query(
             'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
-            [user.userId, user.deptId, 'UNLOCK', 'kpi_results', JSON.stringify({ indicator_id, year_bh, hospcode, message: 'ปลดล็อคข้อมูล' }), req.ip]
+            [user.userId, user.deptId, 'UNLOCK', 'kpi_results', JSON.stringify({ indicator_id, year_bh, hospcode, from_month: fromM, message: fromM ? `ปลดล็อคข้อมูลตั้งแต่เดือน ${MONTH_TH[fromM]}` : 'ปลดล็อคข้อมูล' }), req.ip]
         );
 
         scheduleSummaryRefresh([{ indicator_id, year_bh }]); // อัปเดต kpi_summary ทันที (สถานะ/ล็อค/ผลงานในรายงาน)
@@ -269,14 +309,16 @@ apiRouter.post('/appeal-kpi', authenticateToken, async (req, res) => {
         }
 
         // ตรวจสอบว่า KPI ต้อง Approved + locked (ดูจาก row ใดก็ได้ ไม่จำกัดเดือน)
-        const [kpiRows] = await db.query(
-            "SELECT status, is_locked, created_at FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? ORDER BY month_bh LIMIT 1",
+        // อนุมัติรายเดือน (22 พ.ย. 2569): ต้องมีเดือนที่อนุมัติ + ล็อคแล้วอย่างน้อย 1 เดือน (เดิมดูแถวแรกตามเลขเดือน = ม.ค.)
+        const [allRows] = await db.query(
+            "SELECT status, is_locked, created_at FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? ORDER BY (status = 'Approved' AND is_locked = 1) DESC, month_bh",
             [indicator_id, year_bh, hospcode]
         );
-        if (kpiRows.length === 0) {
+        if (allRows.length === 0) {
             return res.status(404).json({ success: false, message: 'ไม่พบข้อมูล KPI' });
         }
-        if (kpiRows[0].status !== 'Approved' || !kpiRows[0].is_locked) {
+        const kpiRows = allRows;
+        if (kpiRows[0].status !== 'Approved' || Number(kpiRows[0].is_locked) !== 1) {
             return res.status(400).json({ success: false, message: 'สามารถยื่นอุทธรณ์ได้เฉพาะ KPI ที่ถูกอนุมัติและล็อคแล้วเท่านั้น' });
         }
 
@@ -305,20 +347,21 @@ apiRouter.post('/appeal-kpi', authenticateToken, async (req, res) => {
         }
 
         // อัปเดตสถานะเป็น Appeal (ยังคง locked)
+        // เฉพาะเดือนที่อนุมัติแล้ว (เดือนที่ยังเปิดอยู่ไม่เกี่ยวกับการอุทธรณ์)
         await db.query(
-            "UPDATE kpi_results SET status = 'Appeal' WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?",
+            "UPDATE kpi_results SET status = 'Appeal' WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? AND status = 'Approved' AND is_locked = 1",
             [indicator_id, year_bh, hospcode]
         );
-        // Cascade สถานะไปตัวชี้วัดย่อย (ไม่แตะ lock เหมือน kpi_results)
+        // Cascade สถานะไปตัวชี้วัดย่อย (ไม่แตะ lock เหมือน kpi_results) — เฉพาะแถวที่ล็อคแล้ว
         await db.query(
             `UPDATE kpi_sub_results sr JOIN kpi_sub_indicators si ON sr.sub_indicator_id = si.id
-             SET sr.status = 'Appeal' WHERE si.indicator_id = ? AND sr.year_bh = ? AND sr.hospcode = ?`,
+             SET sr.status = 'Appeal' WHERE si.indicator_id = ? AND sr.year_bh = ? AND sr.hospcode = ? AND sr.is_locked = 1`,
             [indicator_id, year_bh, hospcode]
         );
         await db.query(
             `UPDATE kpi_activity_results ar JOIN kpi_sub_activities a ON ar.activity_id = a.id
              JOIN kpi_sub_indicators si ON a.sub_indicator_id = si.id
-             SET ar.status = 'Appeal' WHERE si.indicator_id = ? AND ar.year_bh = ? AND ar.hospcode = ?`,
+             SET ar.status = 'Appeal' WHERE si.indicator_id = ? AND ar.year_bh = ? AND ar.hospcode = ? AND ar.is_locked = 1`,
             [indicator_id, year_bh, hospcode]
         );
 
@@ -367,12 +410,13 @@ apiRouter.post('/appeal-approve', authenticateToken, isAdmin, async (req, res) =
 
     try {
         // ปลดล็อคและเปลี่ยนสถานะเป็น Pending
+        // เฉพาะเดือนที่อยู่ระหว่างอุทธรณ์ (อนุมัติรายเดือน — 22 พ.ย. 2569)
         await db.query(
-            "UPDATE kpi_results SET status = 'Pending', is_locked = 0 WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?",
+            "UPDATE kpi_results SET status = 'Pending', is_locked = 0 WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? AND status = 'Appeal'",
             [indicator_id, year_bh, hospcode]
         );
         // Cascade ไปตัวชี้วัดย่อย
-        await cascadeSubResultsStatus(db, indicator_id, year_bh, hospcode, 'Pending', 0);
+        await cascadeSubResultsStatus(db, indicator_id, year_bh, hospcode, 'Pending', 0, { onlyStatus: ['Appeal'] });
 
         // บันทึก comment
         await db.query(
@@ -415,12 +459,13 @@ apiRouter.post('/appeal-reject', authenticateToken, isAdmin, async (req, res) =>
 
     try {
         // กลับสถานะ Approved + locked
+        // เฉพาะเดือนที่อยู่ระหว่างอุทธรณ์ (เดิมล็อคทั้งปี รวมเดือนที่ยังไม่อนุมัติ — 22 พ.ย. 2569)
         await db.query(
-            "UPDATE kpi_results SET status = 'Approved', is_locked = 1 WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?",
+            "UPDATE kpi_results SET status = 'Approved', is_locked = 1 WHERE indicator_id = ? AND year_bh = ? AND hospcode = ? AND status = 'Appeal'",
             [indicator_id, year_bh, hospcode]
         );
         // Cascade ไปตัวชี้วัดย่อย
-        await cascadeSubResultsStatus(db, indicator_id, year_bh, hospcode, 'Approved', 1);
+        await cascadeSubResultsStatus(db, indicator_id, year_bh, hospcode, 'Approved', 1, { onlyStatus: ['Appeal'] });
 
         // บันทึก comment
         await db.query(
@@ -683,7 +728,9 @@ apiRouter.get('/notifications/pending-kpi', authenticateToken, isAdmin, async (r
         const currentFY = /^\d{4}$/.test(String(req.query.year_bh || '')) ? String(req.query.year_bh) : String(currentFiscalYear());
 
         // รอตรวจสอบ = Pending + Resubmit (หน่วยบริการแก้ไขส่งกลับมาแล้ว) — อุทธรณ์นับแยก
-        let whereClause = `WHERE r.status IN ('Pending', 'Resubmit', 'Appeal') AND r.year_bh = ? AND ${activeIndicatorSql('r.indicator_id')}`;
+        // นับเฉพาะเดือนที่มีผลงาน (อนุมัติรายเดือน — เดือนว่างที่มีแต่เป้าหมายหลังเดือนที่อนุมัติไม่ใช่งานรอตรวจ)
+        let whereClause = `WHERE r.status IN ('Pending', 'Resubmit', 'Appeal') AND r.year_bh = ? AND ${activeIndicatorSql('r.indicator_id')}
+            AND (r.status = 'Appeal' OR (r.actual_value IS NOT NULL AND TRIM(r.actual_value) <> ''))`;
         let params = [currentFY];
 
         // ขอบเขตตามบทบาท (22 พ.ย. 2569 — เดิมกรองหน่วยงานกับทุก role ที่ไม่ใช่ super_admin: admin_cup/admin_hos เห็นแค่หน่วยงานที่บัญชีบังเอิญมี)

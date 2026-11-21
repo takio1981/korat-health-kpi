@@ -101,13 +101,16 @@ test('ผู้ใช้ไม่มีสิทธิ์แก้เป้า�
         expect(await baseOf(hospA)).toBe('4.6');
     } finally {
         await db.query('UPDATE users SET can_edit_target = NULL WHERE id = ?', [userId]);
+        require('../core/access').invalidateUserPermCache(userId); // สิทธิ์ถูกแคช 60 วินาที — คืนสิทธิ์ให้กรณีถัดไปทันที
     }
 });
 
 test('ล็อคแล้วแก้ค่าฐานไม่ได้ / ส่งค่าว่าง = ลบค่าฐาน → ผลงานว่าง', async () => {
     await db.query('UPDATE kpi_results SET is_locked = 1 WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?', [indId, YEAR, hospA]);
     const locked = await saveAs(asUser, hospA, { base_value: '10', oct: '1' });
-    expect(locked.status).toBe(500);
+    // อนุมัติรายเดือน (22 พ.ย. 2569): คู่ที่มีเดือนอนุมัติแล้ว ค่าฐานแก้ไม่ได้ = 403 PAIR_LOCKED (เดิม 500 จาก error ล็อคทั้งคู่)
+    expect(locked.status).toBe(403);
+    expect(locked.body.code).toBe('PAIR_LOCKED');
     expect(await baseOf(hospA)).toBe('4.6');
     await db.query('UPDATE kpi_results SET is_locked = 0 WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?', [indId, YEAR, hospA]);
     expect((await saveAs(asSa, hospA, { base_value: '', oct: '1' })).status).toBe(200);

@@ -6,6 +6,7 @@
 // - kpi_summary.last_actual = ผลงานที่กรอก (result_manual), kpi_summary.manual_pct = ร้อยละที่กรอก ('' = ยังไม่กรอก, NULL = ตัวชี้วัดคำนวณร้อยละเอง)
 //   → targetHasSql/targetPassSql (core/sql.js) ใช้ manual_pct เมื่อไม่ใช่ NULL
 const db = require('../db');
+const { pendingReviewSumSql, rowStatusSql } = require('../core/sql');
 
 const MANUAL_RESULT_KEY = '__result';
 const MANUAL_PCT_KEY = '__pct';
@@ -69,7 +70,7 @@ async function applyManualToSummary(conn, opts = {}) {
                     pending_count, indicator_status, is_locked, updated_at)
                 SELECT i.id, r.year_bh, r.hospcode, IFNULL(mi.main_indicator_name, 'ยังไม่กำหนด'), i.kpi_indicators_name, i.dept_id, d.dept_name,
                     h.hosname, h.distid, h.hostype, dist.distname, i.table_process, MAX(r.target_value),
-                    SUM(CASE WHEN r.status='Pending' THEN 1 ELSE 0 END), MAX(r.status), MAX(CASE WHEN r.is_locked=1 THEN 1 ELSE 0 END), NOW()
+                    ${pendingReviewSumSql('r')}, ${rowStatusSql('r')}, MAX(CASE WHEN r.is_locked=1 THEN 1 ELSE 0 END), NOW()
                 FROM kpi_results r
                 JOIN kpi_indicators i ON r.indicator_id = i.id
                 LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id

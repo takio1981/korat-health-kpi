@@ -654,6 +654,7 @@
                   <span *ngIf="item.indicator_status === 'appeal' || item.indicator_status === 'Appeal'" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 cursor-pointer" (click)="viewRejectionHistory(item)">
                     <i class="fas fa-gavel"></i> ยื่นอุทธรณ์
                   </span>
+                  <span *ngIf="!item.is_locked && approvedThroughText(item)" class="status-badge status-locked" title="อนุมัติรายเดือน — เดือนหลังจากนี้บันทึกต่อได้"><i class="fas fa-calendar-check mr-1"></i>{{ approvedThroughText(item) }}</span>
                   <span *ngIf="item.is_locked" class="status-badge status-locked" title="เป้าหมายถูกล็อค">
                     <i class="fas fa-lock"></i> ล็อค
                   </span>
@@ -770,10 +771,10 @@
                 <div class="grid grid-cols-3 gap-2 text-xs" *ngIf="isEditing">
                   <div *ngFor="let month of [{key: 'oct', name: 'ต.ค.'}, {key: 'nov', name: 'พ.ย.'}, {key: 'dece', name: 'ธ.ค.'}, {key: 'jan', name: 'ม.ค.'}, {key: 'feb', name: 'ก.พ.'}, {key: 'mar', name: 'มี.ค.'}, {key: 'apr', name: 'เม.ย.'}, {key: 'may', name: 'พ.ค.'}, {key: 'jun', name: 'มิ.ย.'}, {key: 'jul', name: 'ก.ค.'}, {key: 'aug', name: 'ส.ค.'}, {key: 'sep', name: 'ก.ย.'}]"
                        class="text-center p-1 rounded relative"
-                       [ngClass]="item.is_locked ? 'bg-gray-100 border border-gray-200' : ((item[month.key] && item[month.key] !== '0') ? 'bg-green-100' : 'bg-gray-50')">
+                       [ngClass]="isCellLocked(item, month.key) ? 'bg-gray-100 border border-gray-200' : ((item[month.key] && item[month.key] !== '0') ? 'bg-green-100' : 'bg-gray-50')">
                     <div class="text-gray-600 mb-1 flex items-center justify-center gap-1">
                       {{ month.name }}
-                      <i *ngIf="item.is_locked" class="fas fa-lock text-amber-500 text-[9px]" title="ล็อค — แก้ไขไม่ได้"></i>
+                      <i *ngIf="isCellLocked(item, month.key)" class="fas fa-lock text-amber-500 text-[9px]" title="อนุมัติแล้ว (ล็อค) — แก้ไขไม่ได้"></i>
                     </div>
                     <!-- เป้าหมายรายเดือน (29 ต.ค. 2569) -->
                     <div *ngIf="isMonthlyTarget(item)" class="mb-1 text-[10px] text-amber-700">
@@ -782,7 +783,7 @@
                              [ngClass]="isMonthTargetChanged(item, month.key) ? '!bg-orange-100 !text-orange-700 ring-2 ring-orange-400 font-bold' : ''">
                       <span *ngIf="!canShowMonthTargetInput(item)">เป้า {{ item['t_' + month.key] || '-' }}</span>
                     </div>
-                    <div *ngIf="!isRowLocked(item) && canEditActual && !isQuarterOffMonth(item, month.key)" class="flex items-center gap-0.5">
+                    <div *ngIf="!isCellLocked(item, month.key) && canEditActual && !isQuarterOffMonth(item, month.key)" class="flex items-center gap-0.5">
                       <input type="text" [(ngModel)]="item[month.key]" (ngModelChange)="onValueChange(item, month.key)"
                              class="w-full min-w-0 border border-gray-300 rounded px-1 py-1 text-center text-xs focus:outline-none focus:border-green-500 hover:border-green-400 transition-colors"
                              [ngClass]="item._anomaly?.[month.key] ? 'bg-red-100 font-bold text-red-700 ring-2 ring-red-500' : (isModified(item, month.key) ? 'bg-orange-200 font-bold text-red-600 ring-2 ring-orange-400' : (isPendingValue(item[month.key]) ? 'bg-amber-100 text-amber-700 text-[9px] font-bold' : 'bg-white'))">
@@ -794,7 +795,7 @@
                       </button>
                     </div>
                     <p *ngIf="item._anomaly?.[month.key] as an" class="mt-0.5 text-[9px] leading-tight text-red-600 text-left"><i class="fas fa-exclamation-triangle mr-0.5"></i>{{ an.message }}</p>
-                    <span *ngIf="isRowLocked(item) || !canEditActual || isQuarterOffMonth(item, month.key)" class="block font-bold text-gray-600" [title]="isQuarterOffMonth(item, month.key) ? 'ตัวชี้วัดนี้บันทึกรายไตรมาส — กรอกที่เดือนสุดท้ายของไตรมาส' : ''">{{ (item[month.key] && item[month.key] !== '0') ? item[month.key] : '-' }}</span>
+                    <span *ngIf="isCellLocked(item, month.key) || !canEditActual || isQuarterOffMonth(item, month.key)" class="block font-bold text-gray-600" [title]="isQuarterOffMonth(item, month.key) ? 'ตัวชี้วัดนี้บันทึกรายไตรมาส — กรอกที่เดือนสุดท้ายของไตรมาส' : ''">{{ (item[month.key] && item[month.key] !== '0') ? item[month.key] : '-' }}</span>
                     <p *ngIf="quarterCellText(item, month.key)" class="mt-0.5 text-[9px] text-sky-700 font-bold">{{ quarterCellText(item, month.key) }}</p>
                   </div>
                 </div>
@@ -1191,6 +1192,7 @@
                       <span *ngIf="item.indicator_status === 'appeal' || item.indicator_status === 'Appeal'" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 cursor-pointer shrink-0 mt-0.5" (click)="viewRejectionHistory(item)" title="คลิกดูรายละเอียด">
                         <i class="fas fa-gavel"></i> ยื่นอุทธรณ์
                       </span>
+                      <span *ngIf="!item.is_locked && approvedThroughText(item)" class="status-badge status-locked shrink-0 mt-0.5" title="อนุมัติรายเดือน — เดือนหลังจากนี้บันทึกต่อได้"><i class="fas fa-calendar-check mr-1"></i>{{ approvedThroughText(item) }}</span>
                       <span *ngIf="item.is_locked" class="status-badge status-locked shrink-0 mt-0.5">
                         <i class="fas fa-lock"></i> ล็อค
                       </span>
@@ -1318,7 +1320,7 @@
                            [ngClass]="isMonthTargetChanged(item, m) ? '!bg-orange-100 !text-orange-700 ring-2 ring-orange-400 font-bold' : ''">
                     <span *ngIf="!canShowMonthTargetInput(item)">เป้า {{ item['t_' + m] || '-' }}</span>
                   </div>
-                  <span *ngIf="(!isEditing && !isSingleEditing(item)) || isRowLocked(item) || !canEditActual || isQuarterOffMonth(item, m)"
+                  <span *ngIf="(!isEditing && !isSingleEditing(item)) || isCellLocked(item, m) || !canEditActual || isQuarterOffMonth(item, m)"
                         [title]="isQuarterOffMonth(item, m) && (isEditing || isSingleEditing(item)) ? 'ตัวชี้วัดนี้บันทึกรายไตรมาส — กรอกที่เดือนสุดท้ายของไตรมาส (ธ.ค./มี.ค./มิ.ย./ก.ย.)' : ''">
                     <span *ngIf="isPendingValue(item[m])" class="inline-flex items-center gap-0.5 px-1 py-0.5 bg-amber-100 text-amber-700 border border-amber-300 rounded text-[9px] font-bold" title="กำลังดำเนินการ">
                       <i class="fas fa-hourglass-half text-[8px]"></i>กำลังดำเนินการ
@@ -1326,7 +1328,7 @@
                     <ng-container *ngIf="!isPendingValue(item[m])">{{ (item[m] && item[m] !== '0') ? item[m] : '-' }}</ng-container>
                     <i *ngIf="hasFormData(item, m)" class="fas fa-clipboard-check text-purple-400 text-[8px] ml-0.5" title="ข้อมูลจากแบบฟอร์ม"></i>
                   </span>
-                  <div *ngIf="(isEditing || isSingleEditing(item)) && !isRowLocked(item) && canEditActual && !isQuarterOffMonth(item, m)" class="flex items-center gap-0.5">
+                  <div *ngIf="(isEditing || isSingleEditing(item)) && !isCellLocked(item, m) && canEditActual && !isQuarterOffMonth(item, m)" class="flex items-center gap-0.5">
                     <!-- ช่องเดือนแคบ — ค่า "กำลังดำเนินการ" แสดงเป็นป้าย 2 บรรทัดแทน input (กด ⏳ อีกครั้งเพื่อล้างแล้วกรอกค่าใหม่) -->
                     <span *ngIf="isPendingValue(item[m])"
                           class="flex-1 min-w-0 px-0.5 py-0.5 rounded border text-[9px] leading-tight font-bold text-center whitespace-normal"

@@ -5,7 +5,19 @@ import Swal from 'sweetalert2';
 import { testProviders } from '../testing/test-providers';
 import { parseImportAoa, planImport, buildTemplateAoa, itemKey } from '../shared/kpi-excel';
 import { parseSubImportAoa, planSubImport } from '../shared/kpi-sub-excel';
-import { buildHierRows, recomputeHierRows, addedMapOf, bulkRejectReasonError, bulkRejectPayload } from './dashboard';
+import { buildHierRows, recomputeHierRows, addedMapOf, bulkRejectReasonError, bulkRejectPayload, approvableMonths, escapeHtml } from './dashboard';
+
+// อนุมัติรายเดือน (22 พ.ย. 2569)
+describe('อนุมัติรายเดือน — ตัวเลือกเดือน', () => {
+  it('เดือนที่ยังเปิด ตั้งแต่ต้นปีงบถึงเดือนล่าสุดที่มีผลงาน (ข้ามเดือนที่อนุมัติแล้ว)', () => {
+    expect(approvableMonths({ oct: '1', nov: '2', dece: '', jan: '4', locked_months: '10' }).map(o => o.value)).toEqual(['nov', 'dece', 'jan']);
+    expect(approvableMonths({ oct: '1', locked_months: '10' })).toEqual([]);   // ไม่มีผลงานในเดือนที่ยังเปิด
+    expect(approvableMonths({ oct: '0' }).map(o => o.label)).toEqual(['ต.ค.']); // 0 = มีผลงาน
+  });
+  it('escapeHtml กันชื่อตัวชี้วัดฝังแท็ก', () => {
+    expect(escapeHtml('<b>"x"</b>')).toBe('&lt;b&gt;&quot;x&quot;&lt;/b&gt;');
+  });
+});
 
 // ตีกลับหลายรายการ (22 พ.ย. 2569): เดิมหน้าจอบอก "เหตุผลไม่บังคับ" แต่ server ตอบ 400 → ตีกลับทั้งชุดไม่สำเร็จ
 describe('ตีกลับหลายรายการ — เหตุผลบังคับ', () => {

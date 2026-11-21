@@ -2,6 +2,7 @@
 // ย้ายจาก server.js (การแยกโมดูล — 25 ต.ค. 2569) แบบคำต่อคำ: ห้ามแก้ตรรกะในการย้าย
 
 const db = require('../db');
+const { pendingReviewSumSql, rowStatusSql } = require('../core/sql');
 const kpiFormula = require('../kpi-formula');
 const { formulaOk } = require('./formula-vars');
 const { loadSubAggregates } = require('./hierarchy');
@@ -44,12 +45,12 @@ async function mergeSubIntoSummary(conn, { indicatorIds, yearBh } = {}) {
             } else {
                 // สถานะ/ล็อคของคู่ที่มีเฉพาะผลงานย่อย — จากผลงานข้อย่อยและกิจกรรม (cascade จากการอนุมัติตัวชี้วัดหลัก)
                 const [[st]] = await conn.query(`
-                    SELECT MAX(x.status) AS status, MAX(x.is_locked) AS is_locked, SUM(x.status = 'Pending') AS pending
+                    SELECT ${rowStatusSql('x')} AS status, MAX(x.is_locked) AS is_locked, ${pendingReviewSumSql('x')} AS pending
                     FROM (
-                        SELECT sr.status, sr.is_locked FROM kpi_sub_results sr JOIN kpi_sub_indicators si ON si.id = sr.sub_indicator_id
+                        SELECT sr.status, sr.is_locked, sr.actual_value FROM kpi_sub_results sr JOIN kpi_sub_indicators si ON si.id = sr.sub_indicator_id
                         WHERE si.indicator_id = ? AND sr.year_bh = ? AND sr.hospcode = ?
                         UNION ALL
-                        SELECT ar.status, ar.is_locked FROM kpi_activity_results ar JOIN kpi_sub_activities a ON a.id = ar.activity_id
+                        SELECT ar.status, ar.is_locked, ar.actual_value FROM kpi_activity_results ar JOIN kpi_sub_activities a ON a.id = ar.activity_id
                         JOIN kpi_sub_indicators si ON si.id = a.sub_indicator_id
                         WHERE si.indicator_id = ? AND ar.year_bh = ? AND ar.hospcode = ?
                     ) x`, [indicator_id, r.year_bh, r.hospcode, indicator_id, r.year_bh, r.hospcode]);
@@ -232,8 +233,8 @@ async function refreshSummaryPairs(connection, pairs) {
                 MAX(CASE WHEN r.month_bh=7  THEN r.actual_value END),
                 MAX(CASE WHEN r.month_bh=8  THEN r.actual_value END),
                 MAX(CASE WHEN r.month_bh=9  THEN r.actual_value END),
-                SUM(CASE WHEN r.status='Pending' THEN 1 ELSE 0 END),
-                MAX(r.status),
+                ${pendingReviewSumSql('r')},
+                ${rowStatusSql('r')},
                 MAX(CASE WHEN r.is_locked=1 THEN 1 ELSE 0 END),
                 NOW()
             FROM kpi_results r

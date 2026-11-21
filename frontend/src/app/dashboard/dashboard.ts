@@ -16,7 +16,7 @@ import { isManualResult, isManualPct, manualPctNumber, manualPctPass, normalizeM
 import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { ZoneBadgeComponent } from '../shared/zone-badge';
 import { indicatorTypeSetting, autoTargetHostypes, resolveAddKpiTargets, HOSTYPE_NAMES } from '../shared/indicator-scope';
-import { EXCEL_MONTHS, ChangePlan, EditPerms, buildTemplateAoa, templateFileName, parseImportAoa, planImport, parseClipboardGrid, isMultiCell, planPaste, applyCellChanges, itemKey } from '../shared/kpi-excel';
+import { EXCEL_MONTHS, ChangePlan, EditPerms, buildTemplateAoa, templateFileName, parseImportAoa, planImport, parseClipboardGrid, isMultiCell, planPaste, applyCellChanges, itemKey, isMonthLocked, approvedThroughText, MONTH_FIELD_NUM } from '../shared/kpi-excel';
 import { Anomaly, detectAnomaly } from '../shared/anomaly';
 import { AiAnomalyExplainComponent, AnomalyExplainRow, anomalyPayload } from '../shared/ai-anomaly-explain';
 import { SUB_EXCEL_MONTHS, SubChangePlan, buildSubTemplateAoa, parseSubImportAoa, planSubImport, applySubChanges, subFieldLabel, subTemplateFileName } from '../shared/kpi-sub-excel';
@@ -39,6 +39,8 @@ export interface HierRow {
   auto: boolean;            // ข้อย่อยที่คำนวณจากระดับล่าง (มีข้อลูก/กิจกรรมเปิดใช้งาน) — กรอกเองไม่ได้
   target: string;
   locked: boolean;
+  /** เดือนที่อนุมัติ/ล็อคแล้ว (เลขเดือน) — อนุมัติรายเดือน 22 พ.ย. 2569 */
+  lockedMonths?: number[];
   months: { [k: string]: string };   // oct … sep
   _orig: { [k: string]: string };
 }
@@ -75,13 +77,14 @@ export function buildHierRows(data: any, parentNo: string): HierRow[] {
       const sm = toMonths(s);
       rows.push({ kind: 'sub', id, subId: id, parentSubId: p, level, no, name: s.sub_indicator_name, valueType: 'number',
         auto: s.rollup_mode === 'auto' && kids.length + myActs.length > 0, target: s.target ?? s.target_percentage ?? '', locked: !!s.locked,
-        months: sm, _orig: { ...sm } });
+        lockedMonths: (s.locked_months || []).map(Number), months: sm, _orig: { ...sm } });
       walk(id, no, level + 1, seen);
       myActs.forEach((a: any, ai: number) => {
         const am = toMonths(a);
         rows.push({ kind: 'activity', id: Number(a.id), subId: id, parentSubId: id, level: level + 1, no: itemNumber(a.item_no, no, kids.length + ai),
           name: a.activity_name, valueType: a.value_type === 'check' ? 'check' : 'number', auto: false,
-          target: a.value_type === 'check' ? '' : (a.target ?? a.target_percentage ?? ''), locked: !!a.locked, months: am, _orig: { ...am } });
+          target: a.value_type === 'check' ? '' : (a.target ?? a.target_percentage ?? ''), locked: !!a.locked,
+          lockedMonths: (a.locked_months || []).map(Number), months: am, _orig: { ...am } });
       });
     });
   };
@@ -130,6 +133,23 @@ export function indicatorOfTypes(i: any, codes: string[]): boolean {
 /** ตัวกรองจากป้ายสรุปจำนวนในหน้าต่างเพิ่มตัวชี้วัด */
 export type AddKpiListFilter = 'all' | 'existing' | 'missing' | 'unset' | 'notarget';
 /** ผลของ GET /kpi-template/added ({ [indicator_id]: hospcode[] }) → Map ตัวชี้วัด → ชุดหน่วยบริการที่เพิ่มแล้ว */
+export function escapeHtml(s: string): string {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as Record<string, string>)[c]);
+}
+
+/**
+ * ตัวเลือก "อนุมัติถึงเดือน" (อนุมัติรายเดือน — 22 พ.ย. 2569): เดือนที่ยังไม่อนุมัติ ตั้งแต่เดือนแรกที่ยังเปิด ถึงเดือนล่าสุดที่มีผลงาน (เรียงตามปีงบ)
+ * ไม่มีผลงานในเดือนที่ยังเปิด = [] (ไม่มีอะไรให้อนุมัติ)
+ */
+export function approvableMonths(item: any): { value: string; label: string }[] {
+  const order = HIER_MONTHS;
+  let last = -1;
+  order.forEach((hm, i) => { const v = String(item?.[hm.key] ?? '').trim(); if (v !== '' && !isMonthLocked(item, hm.key)) last = i; });
+  if (last < 0) return [];
+  const TH: Record<string, string> = { oct: 'ต.ค.', nov: 'พ.ย.', dece: 'ธ.ค.', jan: 'ม.ค.', feb: 'ก.พ.', mar: 'มี.ค.', apr: 'เม.ย.', may: 'พ.ค.', jun: 'มิ.ย.', jul: 'ก.ค.', aug: 'ส.ค.', sep: 'ก.ย.' };
+  return order.slice(0, last + 1).filter(hm => !isMonthLocked(item, hm.key)).map(hm => ({ value: hm.key, label: TH[hm.key] }));
+}
+
 /** ตีกลับหลายรายการ: เหตุผลบังคับ (server ตอบ 400 เมื่อว่าง) — null = ผ่าน */
 export function bulkRejectReasonError(value: string | null | undefined): string | null {
   return String(value ?? '').trim() ? null : 'กรุณาระบุเหตุผลในการตีกลับ';
@@ -783,6 +803,12 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     return !!own && String(item.hospcode ?? '').trim() !== own;
   }
   /** แก้ไขแถวนี้ไม่ได้: ล็อคจากการอนุมัติ หรือเป็นแถวของหน่วยบริการอื่น */
+  /** ช่องผลงานเดือนนี้แก้ไม่ได้: แถวล็อค/หน่วยบริการอื่น หรือเดือนนี้อนุมัติแล้ว (อนุมัติรายเดือน — 22 พ.ย. 2569) */
+  isCellLocked(item: any, monthKey: string): boolean {
+    return this.isRowLocked(item) || isMonthLocked(item, monthKey);
+  }
+  approvedThroughText = approvedThroughText;
+
   isRowLocked(item: any): boolean {
     return !!item?.is_locked || this.isForeignRow(item);
   }
@@ -2129,9 +2155,16 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   approveKpi(item: any) {
+    // อนุมัติรายเดือน (22 พ.ย. 2569): เลือก "อนุมัติถึงเดือน" (ค่าตั้งต้น = เดือนล่าสุดที่มีผลงาน) — เดือนหลังจากนั้นหน่วยบริการบันทึกต่อได้
+    const opts = approvableMonths(item);
     Swal.fire({
       title: 'ยืนยันการรับรอง',
-      text: `คุณต้องการรับรองและล็อคข้อมูลของ ${item.kpi_indicators_name} ใช่หรือไม่?`,
+      html: `<p class="text-sm">รับรองและล็อคผลงานของ <b>${escapeHtml(item.kpi_indicators_name || '')}</b></p>`
+        + (opts.length ? '<p class="text-xs text-gray-500 mt-1">ล็อคเฉพาะเดือนที่เลือกและก่อนหน้า — เดือนถัดไปหน่วยบริการบันทึกต่อได้</p>' : ''),
+      ...(opts.length ? {
+        input: 'select' as const, inputLabel: 'อนุมัติถึงเดือน',
+        inputOptions: Object.fromEntries(opts.map(o => [o.value, o.label])), inputValue: opts[opts.length - 1].value,
+      } : {}),
       icon: 'info',
       showCancelButton: true,
       confirmButtonColor: '#10b981',
@@ -2139,10 +2172,10 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       cancelButtonText: 'ยกเลิก'
     }).then((result) => {
       if (result.isConfirmed) {
-        this.authService.approveKpi(item.indicator_id, item.year_bh, item.hospcode).subscribe({
+        this.authService.approveKpi(item.indicator_id, item.year_bh, item.hospcode, opts.length ? String(result.value || '') || undefined : undefined).subscribe({
           next: (res) => {
             if (res.success) {
-              this.toast.success('รับรองและล็อคข้อมูลเรียบร้อยแล้ว');
+              this.toast.success(res.message || 'รับรองและล็อคข้อมูลเรียบร้อยแล้ว');
               this.loadKpiData();
             }
           },
@@ -3514,6 +3547,10 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   }
   // ข้อย่อย/กิจกรรมใช้รอบการวัดผลของตัวชี้วัดหลัก (11 พ.ย. 2569) — บันทึกรายไตรมาส: ช่องเดือนกลางไตรมาสปิด (backend ตรวจซ้ำ)
   canEditHierCell(item: any, row: HierRow, m: string): boolean {
+    // อนุมัติรายเดือน: เดือนที่ข้อนี้หรือตัวชี้วัดหลักอนุมัติแล้ว = แก้ไม่ได้ (เดือนอื่นแก้ได้)
+    const mn = MONTH_FIELD_NUM[m];
+    if (mn && (row.lockedMonths || []).includes(mn)) return false;
+    if (isMonthLocked(item, m)) return false;
     return this.canEditHierRow(item, row) && !this.isQuarterOffMonth(item, m);
   }
   /** ค่าไตรมาสของแถวลูก (บันทึกรายเดือน) ใต้เดือนสุดท้ายของไตรมาส — ไม่ใช่ = '' */

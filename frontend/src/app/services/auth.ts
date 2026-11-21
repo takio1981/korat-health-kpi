@@ -781,10 +781,11 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
   }
 
   // --- KPI Approval & Lock APIs ---
-  approveKpi(indicatorId: number, yearBh: string, hospcode?: string): Observable<any> {
+  /** throughMonth = อนุมัติถึงเดือน ('oct' … 'sep') — ไม่ส่ง = เดือนล่าสุดที่มีผลงาน (อนุมัติรายเดือน 22 พ.ย. 2569) */
+  approveKpi(indicatorId: number, yearBh: string, hospcode?: string, throughMonth?: string): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.post(`${this.apiUrl}/approve-kpi`, { indicator_id: indicatorId, year_bh: yearBh, hospcode }, { headers });
+    return this.http.post(`${this.apiUrl}/approve-kpi`, { indicator_id: indicatorId, year_bh: yearBh, hospcode, ...(throughMonth ? { through_month: throughMonth } : {}) }, { headers });
   }
 
   unlockKpi(indicatorId: number, yearBh: string, hospcode: string): Observable<any> {
