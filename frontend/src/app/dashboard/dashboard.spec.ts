@@ -5,7 +5,24 @@ import Swal from 'sweetalert2';
 import { testProviders } from '../testing/test-providers';
 import { parseImportAoa, planImport, buildTemplateAoa, itemKey } from '../shared/kpi-excel';
 import { parseSubImportAoa, planSubImport } from '../shared/kpi-sub-excel';
-import { buildHierRows, recomputeHierRows, addedMapOf } from './dashboard';
+import { buildHierRows, recomputeHierRows, addedMapOf, bulkRejectReasonError, bulkRejectPayload } from './dashboard';
+
+// ตีกลับหลายรายการ (22 พ.ย. 2569): เดิมหน้าจอบอก "เหตุผลไม่บังคับ" แต่ server ตอบ 400 → ตีกลับทั้งชุดไม่สำเร็จ
+describe('ตีกลับหลายรายการ — เหตุผลบังคับ', () => {
+  it('เหตุผลว่าง/ช่องว่าง = ไม่ผ่าน, มีข้อความ = ผ่าน', () => {
+    expect(bulkRejectReasonError('')).toBeTruthy();
+    expect(bulkRejectReasonError('   ')).toBeTruthy();
+    expect(bulkRejectReasonError(undefined)).toBeTruthy();
+    expect(bulkRejectReasonError('ตัวเลขไม่ตรงทะเบียน')).toBeNull();
+  });
+  it('ส่งเหตุผลเดียวกัน (ตัดช่องว่าง) ให้ทุกรายการ', () => {
+    const p = bulkRejectPayload([{ indicator_id: 1, year_bh: '2570', hospcode: '10001', x: 1 }, { indicator_id: 2, year_bh: '2570', hospcode: '10002' }], '  แก้ไข  ');
+    expect(p).toEqual([
+      { indicator_id: 1, year_bh: '2570', hospcode: '10001', comment: 'แก้ไข' },
+      { indicator_id: 2, year_bh: '2570', hospcode: '10002', comment: 'แก้ไข' },
+    ]);
+  });
+});
 
 function row(year: string, extra: any = {}) {
   return {

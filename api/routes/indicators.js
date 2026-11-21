@@ -6,7 +6,8 @@ const db = require('../db');
 const kpiRollup = require('../kpi-rollup');
 const { normalizeTargetMonthly } = require('../kpi-target');
 const { normalizeQuarterMode, isQuarterEntryMonth } = require('../kpi-formula');
-const { ROLE_ADMIN_ALL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, foreignWriteHospcodes, getDistrictId, getPermsForUser, hasPageAccess, requireAction } = require('../core/access');
+const { ROLE_ADMIN_ALL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, foreignWriteHospcodes, getDistrictId, getPermsForUser, hasPageAccess, requireAction, canAccessHospcode, hospcodesOutOfWriteScope } = require('../core/access');
+const { getDataEntryLockState, DATA_ENTRY_LOCKED_MESSAGE } = require('../services/data-entry-lock');
 const { ROLLED_SUB_MESSAGE, activeSubTree, getHierarchyMaxLevels, loadSubAggregates, rolledSubIds, subLevelIn } = require('../services/hierarchy');
 const { _actorLabel, normTargetCondition, normalizeEvalMode, normalizeOffTypes } = require('../services/indicator-fields');
 const { apiRouter } = require('../core/router');
@@ -234,6 +235,8 @@ apiRouter.get('/indicators/suggest-code', authenticateToken, requireAction('kpi-
 
 apiRouter.post('/indicators', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
     const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, criterion, weight, kpi_indicators_code, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export, result_formula } = req.body;
+    // ชื่อตัวชี้วัดต้องมี (22 พ.ย. 2569 — เดิมบันทึกตัวชี้วัดไม่มีชื่อได้ ตรวจเฉพาะตอนนำเข้า Excel)
+    if (!String(kpi_indicators_name ?? '').trim()) return res.status(400).json({ success: false, code: 'NAME_REQUIRED', message: 'กรุณาระบุชื่อตัวชี้วัด' });
     if (table_process && !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(table_process)) {
         return res.status(400).json({ success: false, message: 'table_process ต้องเป็น a-z, A-Z, 0-9, _ ขึ้นต้นด้วยตัวอักษร' });
     }
@@ -282,6 +285,8 @@ apiRouter.post('/indicators', authenticateToken, requireAction('kpi-manage', 'ad
 
 apiRouter.put('/indicators/:id', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     const { kpi_indicators_name, kpi_indicators_id, main_indicator_id, dept_id, target_percentage, target_condition, criterion, weight, kpi_indicators_code, is_active, table_process, description, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_cumulative, use_sub_indicator_export, result_formula } = req.body;
+    // ชื่อตัวชี้วัดต้องมี — UPDATE ด้านล่างเขียนชื่อทุกครั้ง: ไม่ส่ง/ว่าง = ชื่อหาย (22 พ.ย. 2569)
+    if (!String(kpi_indicators_name ?? '').trim()) return res.status(400).json({ success: false, code: 'NAME_REQUIRED', message: 'กรุณาระบุชื่อตัวชี้วัด' });
     // ค่าเพิ่มเติมที่ตั้งชื่อเอง + สูตรร้อยละ — ไม่ส่ง custom_vars/pct_formula มา = ใช้ค่าเดิม (ผู้เรียกเดิมไม่กระทบ)
     let cvKeys;
     let pctRaw = req.body.pct_formula;
@@ -710,35 +715,7 @@ apiRouter.delete('/sub-activities/:id', authenticateToken, isSuperAdmin, async (
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-// ขอบเขตหน่วยบริการตามบทบาท (ROLE_SCOPE_HOSPCODE = หน่วยบริการตัวเอง, ROLE_SCOPE_DISTRICT = อำเภอตัวเอง, อื่นๆ = ทุกหน่วย)
-async function canAccessHospcode(user, hospcode) {
-    if (!hospcode) return false;
-    if (ROLE_SCOPE_HOSPCODE.includes(user.role)) return String(user.hospcode || '') === String(hospcode);
-    if (ROLE_SCOPE_DISTRICT.includes(user.role)) {
-        const [mine, target] = await Promise.all([getDistrictId(user.hospcode), getDistrictId(hospcode)]);
-        return !!mine && mine === target;
-    }
-    return true;
-}
-
-// สถานะ "ล็อคการคีย์ข้อมูล" ของระบบ (ตั้งค่าที่หน้า settings) — ใช้ร่วม GET /data-entry-lock และการบันทึกผลงานระดับย่อย/กิจกรรม
-async function getDataEntryLockState() {
-    const keys = ['data_entry_locked', 'data_entry_lock_start', 'data_entry_lock_end', 'data_entry_lock_days'];
-    const [rows] = await db.query('SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN (?)', [keys]);
-    const st = {};
-    for (const r of rows) st[r.setting_key] = r.setting_value;
-    const manualLock = st.data_entry_locked === 'true';
-    const startDate = st.data_entry_lock_start || '';
-    let effectiveEnd = st.data_entry_lock_end || '';
-    const lockDays = parseInt(st.data_entry_lock_days) || 0;
-    if (startDate && lockDays > 0) {
-        const d = new Date(startDate);
-        d.setDate(d.getDate() + lockDays);
-        effectiveEnd = d.toISOString().split('T')[0];
-    }
-    const today = new Date().toISOString().split('T')[0];
-    return manualLock || !!(startDate && effectiveEnd && today >= startDate && today <= effectiveEnd);
-}
+// canAccessHospcode → core/access.js, getDataEntryLockState → services/data-entry-lock.js (ย้าย 22 พ.ย. 2569 — ใช้ร่วมกับ /update-kpi)
 
 // GET /hierarchy-results?indicator_id=&year_bh=&hospcode= — โครงสร้างข้อย่อย + กิจกรรม + ผลงานรายเดือนของ 1 แถวในหน้าบันทึกผลงาน
 // (โหลดเมื่อผู้ใช้กดขยายแถว) — หน้าจอคำนวณค่าระดับบนเองด้วย shared/kpi-rollup.ts (กติกาเดียวกับ backend)
@@ -958,6 +935,13 @@ apiRouter.post('/sub-results/upsert', authenticateToken, async (req, res) => {
         }
         if (foreignWriteHospcodes(req.user, [hospcode]).length > 0) {
             return res.status(403).json({ success: false, code: 'FOREIGN_HOSPCODE', message: 'บันทึกได้เฉพาะหน่วยบริการของตัวเอง' });
+        }
+        // ผู้ดูแลระดับพื้นที่บันทึกได้เฉพาะขอบเขตตัวเอง + ปิดการคีย์ของระบบ (22 พ.ย. 2569 — เดิมไม่ตรวจที่เส้นทางนี้)
+        if ((await hospcodesOutOfWriteScope(req.user, [hospcode])).length > 0) {
+            return res.status(403).json({ success: false, code: 'OUT_OF_SCOPE_HOSPCODE', message: 'ไม่มีสิทธิ์บันทึกข้อมูลหน่วยบริการนี้' });
+        }
+        if (!ROLE_ADMIN_ALL.includes(req.user.role) && await getDataEntryLockState()) {
+            return res.status(403).json({ success: false, code: 'DATA_ENTRY_LOCKED', message: DATA_ENTRY_LOCKED_MESSAGE });
         }
         // ข้อย่อยที่คำนวณจากระดับล่าง (ข้อลูก/กิจกรรม) กรอกเองไม่ได้ — บันทึกที่ระดับล่างแทน
         if ((await rolledSubIds(db, [sub_indicator_id])).size > 0) return res.status(400).json({ success: false, message: ROLLED_SUB_MESSAGE });

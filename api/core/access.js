@@ -311,6 +311,41 @@ const getDistrictId = async (hospcode) => {
     return rows.length > 0 ? rows[0].distid : null;
 };
 
+// ขอบเขตหน่วยบริการตามบทบาท (ROLE_SCOPE_HOSPCODE = หน่วยบริการตัวเอง, ROLE_SCOPE_DISTRICT = อำเภอตัวเอง, อื่นๆ = ทุกหน่วย)
+// ย้ายจาก routes/indicators.js (22 พ.ย. 2569) — ไฟล์ routes ห้าม require routes อื่น
+async function canAccessHospcode(user, hospcode) {
+    if (!hospcode) return false;
+    if (ROLE_SCOPE_HOSPCODE.includes(user.role)) return String(user.hospcode || '') === String(hospcode);
+    if (ROLE_SCOPE_DISTRICT.includes(user.role)) {
+        const [mine, target] = await Promise.all([getDistrictId(user.hospcode), getDistrictId(hospcode)]);
+        return !!mine && mine === target;
+    }
+    return true;
+}
+
+/**
+ * หน่วยบริการที่ผู้ใช้ "บันทึก/แก้ผลงาน" ไม่ได้ (22 พ.ย. 2569) — [] = ผ่าน
+ * ผู้ใช้ทั่วไป = เฉพาะหน่วยบริการตัวเอง (foreignWriteHospcodes), admin_hos/admin_sso = หน่วยบริการตัวเอง, admin_cup = อำเภอตัวเอง,
+ * admin_ssj/super_admin = ทุกหน่วยบริการ — เดิม /update-kpi ตรวจขอบเขตผู้ดูแลเฉพาะโหมด setup_insert_new
+ */
+async function hospcodesOutOfWriteScope(user, hospcodes) {
+    if (!user) return [];
+    const list = [...new Set((hospcodes || []).map(h => String(h ?? '').trim()).filter(Boolean))];
+    if (!ROLE_ADMIN_ALL.includes(user.role)) return foreignWriteHospcodes(user, list);
+    if (ROLE_SCOPE_HOSPCODE.includes(user.role)) {
+        const own = String(user.hospcode || '').trim();
+        return list.filter(h => h !== own);
+    }
+    if (ROLE_SCOPE_DISTRICT.includes(user.role)) {
+        const myDist = await getDistrictId(user.hospcode);
+        if (!myDist) return list;
+        const [rows] = list.length ? await db.query('SELECT hoscode, distid FROM chospital WHERE hoscode IN (?)', [list]) : [[]];
+        const ok = new Set(rows.filter(r => String(r.distid) === String(myDist)).map(r => String(r.hoscode).trim()));
+        return list.filter(h => !ok.has(h));
+    }
+    return [];
+}
+
 // === User Permissions cache (userId → perms, TTL 60s) ===
 const _userPermCache = new Map();
 const USER_PERM_TTL = 60 * 1000;
@@ -341,4 +376,4 @@ setInterval(() => {
     for (const [k, v] of _userPermCache.entries()) if (v.expiry < now) _userPermCache.delete(k);
 }, 5 * 60 * 1000);
 
-module.exports = { ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, foreignWriteHospcodes, PAGE_ACCESS_ROLES, PAGE_ACCESS_PAGES, PAGE_ACCESS_DEFAULT_ENABLED, loadRolePageAccessCache, hasPageAccess, PAGE_ACCESS_RULES, resolvePageKeyFromPath, ACTION_ACCESS_ROLES, ACTION_ACCESS_PAGES, ACTION_TYPES, ACTION_ACCESS_DEFAULT_ENABLED, loadRoleActionAccessCache, hasActionAccess, requireAction, requireAnyAction, ROLE_ADMIN_ALL, ROLE_ADMIN_CENTRAL, ROLE_ADMIN_LOCAL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, getDistrictId, getPermsForUser, invalidateUserPermCache, indicatorsOutsideOwnDept, OUTSIDE_DEPT_MESSAGE };
+module.exports = { ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, foreignWriteHospcodes, PAGE_ACCESS_ROLES, PAGE_ACCESS_PAGES, PAGE_ACCESS_DEFAULT_ENABLED, loadRolePageAccessCache, hasPageAccess, PAGE_ACCESS_RULES, resolvePageKeyFromPath, ACTION_ACCESS_ROLES, ACTION_ACCESS_PAGES, ACTION_TYPES, ACTION_ACCESS_DEFAULT_ENABLED, loadRoleActionAccessCache, hasActionAccess, requireAction, requireAnyAction, ROLE_ADMIN_ALL, ROLE_ADMIN_CENTRAL, ROLE_ADMIN_LOCAL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, getDistrictId, getPermsForUser, invalidateUserPermCache, indicatorsOutsideOwnDept, OUTSIDE_DEPT_MESSAGE, canAccessHospcode, hospcodesOutOfWriteScope };

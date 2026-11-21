@@ -147,6 +147,14 @@ const isSuperAdmin = (req, res, next) => {
     }
 };
 
+// Super Admin เท่านั้น แบบเข้ม — ไม่ขยายผ่าน "สิทธิ์การเข้าถึงหน้า" (22 พ.ย. 2569)
+// ใช้กับเส้นทางที่เขียนข้อมูลลง KHD / สั่งสร้างตารางใน KHD / ทับข้อมูลของระบบด้วยข้อมูลจาก KHD:
+// isSuperAdmin ปล่อย role ที่เปิดสิทธิ์หน้า kpi-manager ผ่าน → ผู้ดูแลที่ได้สิทธิ์ดูหน้าจะส่งข้อมูลเข้า KHD ได้ด้วย ซึ่งกระทบระบบภายนอก
+function requireSuperAdminStrict(req, res, next) {
+    if (req.user && req.user.role === 'super_admin') return next();
+    res.status(403).json({ success: false, code: 'SUPER_ADMIN_ONLY', message: 'การส่ง/แก้ข้อมูลในระบบ KHD ทำได้เฉพาะผู้ดูแลระบบสูงสุด (Super Admin) เท่านั้น' });
+}
+
 const saveLog = async (username, action, details, ip) => {
     try {
         await db.query(
@@ -158,4 +166,4 @@ const saveLog = async (username, action, details, ip) => {
     }
 };
 
-module.exports = { _sessionCache, authenticateToken, isAdmin, isAnyAdmin, isSuperAdmin, saveLog };
+module.exports = { _sessionCache, authenticateToken, isAdmin, isAnyAdmin, isSuperAdmin, requireSuperAdminStrict, saveLog };

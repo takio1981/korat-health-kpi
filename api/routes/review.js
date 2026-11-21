@@ -5,8 +5,9 @@
 const db = require('../db');
 const { apiRouter } = require('../core/router');
 const { authenticateToken, isAdmin } = require('../core/auth');
-const { indicatorsOutsideOwnDept, OUTSIDE_DEPT_MESSAGE, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT } = require('../core/access');
+const { indicatorsOutsideOwnDept, OUTSIDE_DEPT_MESSAGE, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, hospcodesOutOfWriteScope } = require('../core/access');
 const { cascadeSubResultsStatus } = require('../services/hierarchy');
+const { reviewStatusConflicts } = require('../services/review-status');
 const { scheduleSummaryRefresh } = require('../services/summary');
 
 // ========== Rejection & Notification APIs ==========
@@ -26,6 +27,13 @@ apiRouter.post('/reject-kpi', authenticateToken, isAdmin, async (req, res) => {
     if ((await indicatorsOutsideOwnDept(user, items.map(i => i.indicator_id))).length) {
         return res.status(403).json({ success: false, message: OUTSIDE_DEPT_MESSAGE });
     }
+    if ((await hospcodesOutOfWriteScope(user, items.map(i => i.hospcode))).length) {
+        return res.status(403).json({ success: false, code: 'OUT_OF_SCOPE_HOSPCODE', message: 'ไม่มีสิทธิ์ดำเนินการกับหน่วยบริการนอกขอบเขตของท่าน' });
+    }
+    // ตรวจสถานะก่อนส่งคืน (22 พ.ย. 2569): อยู่ระหว่างอุทธรณ์ = ใช้ขั้นตอนอุทธรณ์ | อนุมัติแล้ว (ล็อค) = เฉพาะ super_admin
+    // (เดิมส่งคืนรายการที่อนุมัติแล้วได้ = ปลดล็อคโดยไม่ผ่านสิทธิ์ปลดล็อคของ super_admin)
+    const blocked = await reviewStatusConflicts(db, user, items, { allowLocked: user.role === 'super_admin' });
+    if (blocked) return res.status(409).json({ success: false, code: blocked.code, message: blocked.message });
 
     const connection = await db.getConnection();
     try {

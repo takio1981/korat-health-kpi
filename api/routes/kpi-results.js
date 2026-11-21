@@ -5,7 +5,8 @@
 const db = require('../db');
 const kpiFormula = require('../kpi-formula');
 const { TARGET_MONTHLY_MODES, normalizeTargetMonthly, aggregateMonthlyTarget } = require('../kpi-target');
-const { ROLE_ADMIN_ALL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, foreignWriteHospcodes, getDistrictId, getPermsForUser } = require('../core/access');
+const { ROLE_ADMIN_ALL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, foreignWriteHospcodes, getDistrictId, getPermsForUser, hospcodesOutOfWriteScope } = require('../core/access');
+const { getDataEntryLockState, DATA_ENTRY_LOCKED_MESSAGE } = require('../services/data-entry-lock');
 const { apiRouter } = require('../core/router');
 const { authenticateToken, isAdmin, isSuperAdmin } = require('../core/auth');
 const { baseKey, loadBaseValues, loadPrevYearData, refreshKpiSummaryForIndicatorYears, scheduleSummaryRefresh, withSummaryLock } = require('../services/summary');
@@ -651,6 +652,18 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
     if (foreignHc.length > 0) {
         return res.status(403).json({ success: false, code: 'FOREIGN_HOSPCODE', message: `บันทึกได้เฉพาะหน่วยบริการของตัวเอง (พบ: ${foreignHc.slice(0, 5).join(', ')})` });
     }
+    // ผู้ดูแลระดับพื้นที่ (admin_hos/admin_sso = หน่วยบริการตัวเอง, admin_cup = อำเภอตัวเอง) — ทุกโหมด (22 พ.ย. 2569)
+    // เดิมตรวจเฉพาะโหมด setup_insert_new: admin_hos ส่ง targetHospcode/hospcode ของหน่วยบริการอื่นแล้วเขียนผลงานได้
+    if (ROLE_ADMIN_ALL.includes(user.role)) {
+        const outHc = await hospcodesOutOfWriteScope(user, [...updates.map(r => r && r.hospcode), targetHospcode]);
+        if (outHc.length > 0) {
+            return res.status(403).json({ success: false, code: 'OUT_OF_SCOPE_HOSPCODE', message: `ไม่มีสิทธิ์บันทึกผลงานของหน่วยบริการนอกขอบเขตของท่าน (พบ: ${outHc.slice(0, 5).join(', ')})` });
+        }
+    }
+    // ปิดการคีย์ข้อมูลของระบบ (22 พ.ย. 2569) — เดิมตรวจเฉพาะหน้าจอและข้อย่อย/กิจกรรม: เรียก API ตรงแล้วบันทึกได้แม้ปิดการคีย์
+    if (!ROLE_ADMIN_ALL.includes(user.role) && await getDataEntryLockState()) {
+        return res.status(403).json({ success: false, code: 'DATA_ENTRY_LOCKED', message: DATA_ENTRY_LOCKED_MESSAGE });
+    }
 
     const connection = await db.getConnection();
     try {
@@ -935,6 +948,20 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
             for (const m of months) row['t_' + m.col] = (old.find(o => Number(o.month_bh) === m.val) || {}).target_value ?? '';
         }
 
+        // สถานะ "ส่งกลับแก้ไขแล้ว" (Resubmit) รับได้เฉพาะคู่ที่ถูกส่งกลับแก้ไขอยู่จริง (22 พ.ย. 2569)
+        // เดิมใช้ row.preserve_status ตรงๆ — ส่ง 'Approved' มาเองก็ได้สถานะอนุมัติ (ข้ามการตรวจของผู้ดูแล)
+        const rowKeyOf = (row) => `${row.indicator_id}_${row.year_bh}_${(ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave}`;
+        const resubmitOk = new Set();
+        const wantResubmit = [...new Set(updates.filter(r => r && r.preserve_status === 'Resubmit').map(rowKeyOf))];
+        if (wantResubmit.length) {
+            const tuples = wantResubmit.map(k => { const [i, y, ...h] = k.split('_'); return [Number(i), y, h.join('_')]; });
+            const [st] = await connection.query(
+                "SELECT DISTINCT indicator_id, year_bh, hospcode FROM kpi_results WHERE (indicator_id, year_bh, hospcode) IN (?) AND status IN ('Rejected', 'Resubmit')",
+                [tuples]
+            );
+            for (const r of st) resubmitOk.add(`${r.indicator_id}_${r.year_bh}_${r.hospcode}`);
+        }
+
         // --- Mode: default → Dashboard ปกติ (DELETE + INSERT เฉพาะ row ที่มีค่า) ---
         // Batch DELETE: ลบข้อมูลเก่าทั้งหมดของแต่ละ indicator/year/hospcode
         for (const key of uniqueKeys) {
@@ -951,7 +978,7 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
         for (const row of updates) {
             const { indicator_id, year_bh } = row;
             const rowHospcode = (ROLE_ADMIN_ALL.includes(user.role) && row.hospcode) ? row.hospcode : hospcodeToSave;
-            const rowStatus = row.preserve_status || 'Pending';
+            const rowStatus = (row.preserve_status === 'Resubmit' && resubmitOk.has(rowKeyOf(row))) ? 'Resubmit' : 'Pending';
 
             const rawTarget3 = row.target_value;
             // เป้าหมายของแต่ละเดือน: ตัวชี้วัดเป้าหมายรายเดือน = t_<เดือน>, อื่นๆ = target_value ค่าเดียวทุกเดือน (วิธีเดิม)

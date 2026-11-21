@@ -60,7 +60,7 @@ async function saveForecastSetting(key, value) {
 
 /** ปีงบปัจจุบัน (พ.ศ.) — ต.ค. ขึ้นปีงบใหม่ (กติกาเดียวกับ getCurrentFiscalYear ฝั่ง frontend) */
 function currentFiscalYear(now = new Date()) {
-    return now.getFullYear() + 543 + (now.getMonth() + 1 >= 10 ? 1 : 0);
+    return require('../core/fiscal-year').currentFiscalYear(now); // เวลาไทย — ตัวกลาง core/fiscal-year (22 พ.ย. 2569)
 }
 
 /**

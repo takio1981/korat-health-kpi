@@ -50,12 +50,13 @@ function hasHospYearKeyOnly(keyRows) {
 }
 const keySignature = (keyRows) => Object.entries(uniqueKeysOf(keyRows)).map(([n, c]) => `${n === 'PRIMARY' ? 'PK' : n}(${c.join(', ')})`).join(', ') || 'ไม่มีคีย์';
 
-// ตารางที่ส่งได้ = มีตัวชี้วัด (ใช้ table_process นี้) ที่เปิดส่งออก KHD อย่างน้อย 1 ตัว
+// ตารางที่ส่งได้ = มีตัวชี้วัด (ใช้ table_process นี้) ที่เปิดใช้งาน + เปิดส่งออก KHD อย่างน้อย 1 ตัว
+// (is_active เพิ่ม 22 พ.ย. 2569 — เดิมหน้าตัวอย่างกรองแต่ตอนส่งจริงไม่กรอง: ตัวชี้วัดที่ปิดใช้งานยังถูกส่ง)
 async function khdExportableTables(names) {
     if (!names.length) return new Set();
     const [rows] = await db.query(
         `SELECT DISTINCT TRIM(table_process) AS tp FROM kpi_indicators
-         WHERE TRIM(table_process) IN (?) AND (upload_excel IS NULL OR upload_excel = 0)`, [names]);
+         WHERE TRIM(table_process) IN (?) AND is_active = 1 AND (upload_excel IS NULL OR upload_excel = 0)`, [names]);
     return new Set(rows.map(r => r.tp));
 }
 

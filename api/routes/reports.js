@@ -636,7 +636,7 @@ apiRouter.post('/report/ai-summary', authenticateToken, aiLimiter, async (req, r
 // AI สรุป/วิเคราะห์รายงานสรุปผลรายแถบ (15 พ.ย. 2569) — server คำนวณรายงานของแถบนั้นใหม่ด้วยตัวคำนวณเดียวกับหน้าจอ (ขอบเขต role + ตัวกรอง)
 // ไม่รับตัวเลขจาก client | ไม่ส่งรหัส/ชื่อหน่วยบริการรายแห่งเข้า prompt (services/ai-report-tabs.js) | สิทธิ์หน้า charts (prefix /report/) | แคช 1 ชม. ต่อชุดข้อมูล
 const _aiTabCache = createAiCache();
-const _thaiFiscalYear = (d = new Date()) => d.getFullYear() + 543 + (d.getMonth() >= 9 ? 1 : 0);
+const _thaiFiscalYear = (d = new Date()) => require('../core/fiscal-year').currentFiscalYear(d); // เวลาไทย (core/fiscal-year)
 async function describeReportFilters(q) {
     const f = {};
     const one = async (sql, v) => { try { const [[r]] = await db.query(sql, [v]); return r ? Object.values(r)[0] : null; } catch { return null; } };

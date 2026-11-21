@@ -515,7 +515,7 @@ function sanitizeSubIndicatorColName(name) {
     return n || 'sub_col';
 }
 
-async function performKpiExport(year_bh, indicator_ids, userId) {
+async function performKpiExport(year_bh, indicator_ids, userId, meta = {}) {
     if (!year_bh || !/^\d{4}$/.test(year_bh)) {
         return { success: false, message: 'กรุณาระบุปีงบประมาณ (year_bh) เป็นตัวเลข 4 หลัก' };
     }
@@ -1048,13 +1048,15 @@ async function performKpiExport(year_bh, indicator_ids, userId) {
 
         conn.release();
 
-        // Log action
+        // Log action — เดิมเขียนคอลัมน์ action/details ที่ไม่มีใน system_logs (error ถูกกลืน = ไม่เคยบันทึกเลย — แก้ 22 พ.ย. 2569)
         try {
             await db.query(
-                'INSERT INTO system_logs (user_id, action, details, ip_address) VALUES (?, ?, ?, ?)',
-                [userId || null, 'export_kpi_tables', `Export ${created.length} tables for year ${year_bh}`, 'scheduler']
+                'INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+                [userId || null, 'EXPORT_KPI_TABLES', 'kpi_export',
+                 JSON.stringify({ year_bh, tables: created.length, skipped: skipped.length, message: `ส่งออกตารางตัวชี้วัด ${created.length} ตาราง ปีงบ ${year_bh}` }),
+                 (meta && meta.ip) || 'scheduler']
             );
-        } catch (_) {}
+        } catch (e) { console.warn('[Export] log failed:', e.message); }
 
         const totalInserted = created.reduce((s, t) => s + t.inserted, 0);
         const totalUpdated = created.reduce((s, t) => s + t.updated, 0);

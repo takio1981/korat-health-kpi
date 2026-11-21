@@ -130,6 +130,15 @@ export function indicatorOfTypes(i: any, codes: string[]): boolean {
 /** ตัวกรองจากป้ายสรุปจำนวนในหน้าต่างเพิ่มตัวชี้วัด */
 export type AddKpiListFilter = 'all' | 'existing' | 'missing' | 'unset' | 'notarget';
 /** ผลของ GET /kpi-template/added ({ [indicator_id]: hospcode[] }) → Map ตัวชี้วัด → ชุดหน่วยบริการที่เพิ่มแล้ว */
+/** ตีกลับหลายรายการ: เหตุผลบังคับ (server ตอบ 400 เมื่อว่าง) — null = ผ่าน */
+export function bulkRejectReasonError(value: string | null | undefined): string | null {
+  return String(value ?? '').trim() ? null : 'กรุณาระบุเหตุผลในการตีกลับ';
+}
+export function bulkRejectPayload(items: any[], reason: string | null | undefined) {
+  const comment = String(reason ?? '').trim();
+  return items.map(i => ({ indicator_id: i.indicator_id, year_bh: i.year_bh, hospcode: i.hospcode, comment }));
+}
+
 export function addedMapOf(data: any): Map<number, Set<string>> {
   const m = new Map<number, Set<string>>();
   if (!data || typeof data !== 'object') return m;
@@ -2310,8 +2319,10 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         Swal.fire({ title: 'กำลังอนุมัติ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         const approvals = items.map(i => ({ indicator_id: i.indicator_id, year_bh: i.year_bh, hospcode: i.hospcode }));
         this.authService.approveKpiResults(approvals).subscribe({
-          next: () => {
-            Swal.fire({ icon: 'success', title: 'อนุมัติสำเร็จ', text: `อนุมัติ ${items.length} รายการเรียบร้อย`, timer: 2000, showConfirmButton: false });
+          next: (res: any) => {
+            // server อนุมัติเฉพาะรายการที่รอตรวจสอบจริง (22 พ.ย. 2569) — แสดงจำนวนที่อนุมัติ/ข้าม
+            const done = res?.approved ?? items.length, skip = res?.skipped || 0;
+            Swal.fire({ icon: 'success', title: 'อนุมัติสำเร็จ', text: `อนุมัติ ${done} รายการเรียบร้อย` + (skip ? ` (ข้าม ${skip} รายการที่ไม่ได้รอตรวจสอบ)` : ''), timer: 2500, showConfirmButton: false });
             this.isReviewMode = false; this.reviewSelected.clear();
             this.loadKpiData(); this.loadDashboardStats();
           },
@@ -2327,13 +2338,15 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     Swal.fire({
       title: 'ตีกลับรายการที่เลือก',
       html: `<p class="text-sm">ตีกลับ <b>${items.length}</b> รายการ?</p>`,
-      input: 'textarea', inputLabel: 'เหตุผล (ไม่บังคับ)', inputPlaceholder: 'ระบุเหตุผลในการตีกลับ...',
+      // เหตุผลบังคับ (22 พ.ย. 2569) — server ตอบ 400 เมื่อไม่มีเหตุผล เดิมหน้าจอบอก "ไม่บังคับ" จึงตีกลับหลายรายการไม่สำเร็จทั้งชุด
+      input: 'textarea', inputLabel: 'เหตุผล (จำเป็น)', inputPlaceholder: 'ระบุเหตุผลในการตีกลับ...',
+      inputValidator: (value: string) => bulkRejectReasonError(value),
       icon: 'warning', showCancelButton: true, confirmButtonColor: '#dc2626',
       confirmButtonText: '<i class="fas fa-undo-alt mr-1"></i> ตีกลับที่เลือก', cancelButtonText: 'ยกเลิก'
     }).then(r => {
       if (r.isConfirmed) {
         Swal.fire({ title: 'กำลังตีกลับ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        const rejections = items.map(i => ({ indicator_id: i.indicator_id, year_bh: i.year_bh, hospcode: i.hospcode, comment: r.value || '' }));
+        const rejections = bulkRejectPayload(items, r.value);
         this.authService.rejectKpiResults(rejections).subscribe({
           next: () => {
             Swal.fire({ icon: 'success', title: 'ตีกลับสำเร็จ', text: `ตีกลับ ${items.length} รายการเรียบร้อย`, timer: 2000, showConfirmButton: false });

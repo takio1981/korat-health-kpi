@@ -7,7 +7,7 @@ const { apiRouter } = require('../core/router');
 const { applyFormulaToSummary, mergeSubIntoSummary, withSummaryLock } = require('../services/summary');
 const { applyManualToSummary } = require('../services/manual-result');
 const { applyMonthlyTargetToSummary } = require('../services/monthly-target');
-const { authenticateToken, isSuperAdmin } = require('../core/auth');
+const { authenticateToken, isSuperAdmin, requireSuperAdminStrict } = require('../core/auth');
 const { checkKpiChanges, performKpiExport } = require('../services/export');
 const { getRemotePool } = require('../db-remote');
 const { performSyncToKhd, planKhdTableSync } = require('../services/khd');
@@ -44,7 +44,8 @@ apiRouter.post('/check-kpi-export', authenticateToken, isSuperAdmin, async (req,
 
 // HTTP endpoint เรียก core function
 apiRouter.post('/export-kpi-tables', authenticateToken, isSuperAdmin, async (req, res) => {
-    const result = await performKpiExport(req.body.year_bh, req.body.indicator_ids, req.user.id);
+    // req.user.userId (token ไม่มี id — เดิมส่ง req.user.id = ผู้ส่งออกว่างในบันทึก)
+    const result = await performKpiExport(req.body.year_bh, req.body.indicator_ids, req.user.userId, { ip: req.ip });
     if (!result.success) return res.status(result.message?.includes('กรุณา') ? 400 : 500).json(result);
     res.json(result);
 });
@@ -57,27 +58,29 @@ apiRouter.get('/export-schedules', authenticateToken, isSuperAdmin, async (req, 
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-apiRouter.post('/export-schedules', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/export-schedules', authenticateToken, requireSuperAdminStrict, async (req, res) => {
     try {
         const { name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, auto_sync_khd, notify_email, notify_telegram, notify_line } = req.body;
         if (!name || !days_of_week || !time_of_day) return res.status(400).json({ success: false, message: 'ข้อมูลไม่ครบ' });
-        const scope = ['all', 'selected', 'changes_only'].includes(indicator_scope) ? indicator_scope : 'all';
+        // ค่าตั้งต้น = เฉพาะที่เปลี่ยน (22 พ.ย. 2569 — เดิม 'all' ส่งออกทุกตัวชี้วัดทุกรอบ ภาระสูงและไม่ตรงคู่มือ)
+        const scope = ['all', 'selected', 'changes_only'].includes(indicator_scope) ? indicator_scope : 'changes_only';
         const [r] = await db.query(
             `INSERT INTO export_schedules (name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, auto_sync_khd, notify_email, notify_telegram, notify_line, created_by)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [name, is_enabled ? 1 : 0, days_of_week, time_of_day, year_bh || null,
              scope === 'selected' && Array.isArray(indicator_ids) ? JSON.stringify(indicator_ids) : null,
              scope, auto_sync_khd ? 1 : 0,
-             notify_email ? 1 : 0, notify_telegram ? 1 : 0, notify_line ? 1 : 0, req.user.id]
+             notify_email ? 1 : 0, notify_telegram ? 1 : 0, notify_line ? 1 : 0, req.user.userId]
         );
         res.json({ success: true, id: r.insertId, message: 'สร้าง schedule สำเร็จ' });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-apiRouter.put('/export-schedules/:id', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.put('/export-schedules/:id', authenticateToken, requireSuperAdminStrict, async (req, res) => {
     try {
         const { name, is_enabled, days_of_week, time_of_day, year_bh, indicator_ids, indicator_scope, auto_sync_khd, notify_email, notify_telegram, notify_line } = req.body;
-        const scope = ['all', 'selected', 'changes_only'].includes(indicator_scope) ? indicator_scope : 'all';
+        // ค่าตั้งต้น = เฉพาะที่เปลี่ยน (22 พ.ย. 2569 — เดิม 'all' ส่งออกทุกตัวชี้วัดทุกรอบ ภาระสูงและไม่ตรงคู่มือ)
+        const scope = ['all', 'selected', 'changes_only'].includes(indicator_scope) ? indicator_scope : 'changes_only';
         await db.query(
             `UPDATE export_schedules SET name=?, is_enabled=?, days_of_week=?, time_of_day=?, year_bh=?, indicator_ids=?, indicator_scope=?, auto_sync_khd=?, notify_email=?, notify_telegram=?, notify_line=? WHERE id=?`,
             [name, is_enabled ? 1 : 0, days_of_week, time_of_day, year_bh || null,
@@ -96,7 +99,7 @@ apiRouter.delete('/export-schedules/:id', authenticateToken, isSuperAdmin, async
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-apiRouter.post('/export-schedules/:id/run-now', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/export-schedules/:id/run-now', authenticateToken, requireSuperAdminStrict, async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM export_schedules WHERE id=?', [req.params.id]);
         if (rows.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบ schedule' });
@@ -188,7 +191,7 @@ apiRouter.post('/sync-to-khd/preview', authenticateToken, isSuperAdmin, async (r
 });
 
 // POST /sync-to-khd/execute — ส่งข้อมูลจาก local export tables เข้า KHD
-apiRouter.post('/sync-to-khd/execute', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/sync-to-khd/execute', authenticateToken, requireSuperAdminStrict, async (req, res) => {
     const { tables } = req.body;
     if (!Array.isArray(tables) || tables.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตารางที่ต้องการ' });
     const out = await performSyncToKhd(tables, req.user.userId);

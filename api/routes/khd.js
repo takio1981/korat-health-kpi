@@ -6,6 +6,7 @@ const db = require('../db');
 const khdMapping = require('../khd-mapping');
 const { _actorLabel } = require('../services/indicator-fields');
 const { apiRouter } = require('../core/router');
+const { currentFiscalYear } = require('../core/fiscal-year');
 const { authenticateToken, isSuperAdmin } = require('../core/auth');
 const { getKhdEffectiveCriteriaFor, insertIndicatorFromKhd, loadKhdResolver, listKhdMappings, KHD_MAP_COLUMN } = require('../services/khd');
 const { getRemotePool } = require('../db-remote');
@@ -83,10 +84,7 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
     if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
     try {
         // ปีงบประมาณที่ใช้เทียบเกณฑ์ — จาก query param หรือ default ปีงบปัจจุบัน (ต.ค. ขึ้นปีใหม่)
-        const today = new Date();
-        let fyYear = today.getFullYear();
-        if (today.getMonth() >= 9) fyYear += 1;
-        const currentFY = (fyYear + 543).toString();
+        const currentFY = String(currentFiscalYear()); // เวลาไทย (core/fiscal-year)
         const year_bh = req.query.year_bh ? String(req.query.year_bh) : currentFY;
 
         // ดึง reports จาก KHD
@@ -339,8 +337,7 @@ apiRouter.post('/indicators/apply-khd-criteria', authenticateToken, requireActio
     if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
     const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.map(Number).filter(n => Number.isInteger(n) && n > 0))] : [];
     if (ids.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตัวชี้วัด' });
-    const now = new Date();
-    const yearBh = req.body?.year_bh ? String(req.body.year_bh) : String(now.getFullYear() + 543 + (now.getMonth() >= 9 ? 1 : 0)); // ปีงบปัจจุบัน (ต.ค. ขึ้นปีใหม่)
+    const yearBh = req.body?.year_bh ? String(req.body.year_bh) : String(currentFiscalYear()); // ปีงบปัจจุบัน (เวลาไทย)
     const fmt = (v) => (v === null || v === undefined || String(v).trim() === '') ? null
         : (Number.isFinite(Number(v)) ? String(Number(v)) : String(v).trim());
     try {
@@ -383,8 +380,7 @@ apiRouter.post('/indicators/apply-khd-types', authenticateToken, requireAction('
     if (ids.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตัวชี้วัด' });
     const parts = Array.isArray(req.body?.parts) ? [...new Set(req.body.parts.filter(p => p === 'types' || p === 'hostype'))] : [];
     if (parts.length === 0) return res.status(400).json({ success: false, message: 'กรุณาระบุสิ่งที่จะปรับ (ประเภทตัวชี้วัด / ประเภทหน่วยบริการ)' });
-    const now = new Date();
-    const yearBh = req.body?.year_bh ? String(req.body.year_bh) : String(now.getFullYear() + 543 + (now.getMonth() >= 9 ? 1 : 0));
+    const yearBh = req.body?.year_bh ? String(req.body.year_bh) : String(currentFiscalYear());
     try {
         const [locals] = await db.query(`SELECT id, kpi_indicators_name, table_process, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types
             FROM kpi_indicators WHERE id IN (?)`, [ids]);

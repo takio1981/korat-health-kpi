@@ -3,7 +3,8 @@
 // ลงทะเบียนเส้นทางกับ apiRouter ตอนถูก require — server.js require ไฟล์นี้ที่ตำแหน่งเดิมของเส้นทางชุดนี้ (ลำดับเส้นทางสำคัญ)
 
 const db = require('../db');
-const { ROLE_ADMIN_ALL, requireAction, foreignWriteHospcodes } = require('../core/access');
+const { ROLE_ADMIN_ALL, requireAction, foreignWriteHospcodes, hospcodesOutOfWriteScope } = require('../core/access');
+const { getDataEntryLockState, DATA_ENTRY_LOCKED_MESSAGE } = require('../services/data-entry-lock');
 const { apiRouter } = require('../core/router');
 const { authenticateToken, isSuperAdmin } = require('../core/auth');
 const { getUserAuditInfo, logKpiSaveAudit } = require('../services/kpi-audit');
@@ -334,6 +335,13 @@ apiRouter.post('/dynamic-data/:table_name', authenticateToken, async (req, res) 
     }
     if (!data.hospcode) data.hospcode = req.user.hospcode;
     if (!ROLE_ADMIN_ALL.includes(req.user.role)) data.hospcode = req.user.hospcode;
+    // ผู้ดูแลระดับพื้นที่ = ขอบเขตตัวเอง + ปิดการคีย์ของระบบ (22 พ.ย. 2569 — แบบฟอร์มนี้ sync เข้า kpi_results ด้วย)
+    if ((await hospcodesOutOfWriteScope(req.user, [data.hospcode])).length > 0) {
+        return res.status(403).json({ success: false, code: 'OUT_OF_SCOPE_HOSPCODE', message: 'ไม่มีสิทธิ์บันทึกข้อมูลหน่วยบริการนี้' });
+    }
+    if (!ROLE_ADMIN_ALL.includes(req.user.role) && await getDataEntryLockState()) {
+        return res.status(403).json({ success: false, code: 'DATA_ENTRY_LOCKED', message: DATA_ENTRY_LOCKED_MESSAGE });
+    }
 
     const connection = await db.getConnection();
     try {

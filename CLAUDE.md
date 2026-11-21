@@ -13,7 +13,7 @@
   **ห้ามคำนวณเองแยกจุดหรือ hardcode ปีตรงๆ** — เคยเป็นบั๊กมาก่อนจริง (หลายหน้าคำนวณไม่ตรงกัน: บางหน้า hardcode
   `'2569'` ตรงๆ ทำให้ค้างปีเดิมตลอดไป, บางหน้าคำนวณแบบไม่คำนึงเดือนเลยผิดช่วง ต.ค.-ธ.ค. ของทุกปี, kpi-setup เดิม
   ใช้สูตร "ปีปัจจุบัน+1" ตรงๆ ไม่ผ่าน `getCurrentFiscalYear()` ก่อน ทำให้ช่วง ต.ค.-ธ.ค. ได้ปีงบปัจจุบันแทนที่จะเป็น
-  ปีงบถัดไปที่ควรตั้งค่าใหม่)
+  ปีงบถัดไปที่ควรตั้งค่าใหม่) — **ฝั่ง backend ใช้ `currentFiscalYear()` จาก `api/core/fiscal-year.js` (เวลาไทย) เสมอ** (22 พ.ย. 2569: แก้ /dashboard-stats + ตารางเวลา Export ที่ใช้ "ปีปฏิทิน + 543")
 
 ## 2. Architecture
 
@@ -516,6 +516,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - จุดที่ใช้สูตร (ทุกจุดที่เคยมี branch `is_cumulative`): `GET /kpi-results`, `performKpiExport` + `checkKpiChanges` (ต้องตรงกัน),
   kpi_summary ผ่าน `applyFormulaToSummary()` (เรียกท้าย `/refresh-summary/finalize` และ `refreshKpiSummaryForIndicatorYears()`
   หลัง UPDATE SQL เดิม — สูตรคำนวณใน SQL ไม่ได้), dashboard `onValueChange()` + `applySubSummaryToKpiData()`
+- POST/PUT `/indicators` ชื่อตัวชี้วัดว่าง = 400 `NAME_REQUIRED` (22 พ.ย. 2569 — PUT เขียนชื่อทุกครั้ง: ไม่ส่งชื่อ = ชื่อหาย)
 - `/indicators` POST/PUT/bulk-import ตรวจสูตรด้วย `parseFormulaInput()` → **400 ถ้าผิด** (ห้ามบันทึกสูตรที่คำนวณไม่ได้) —
   PUT ที่สูตร/สะสมเปลี่ยน → `refreshKpiSummaryForIndicatorYears()` ของตัวชี้วัดนั้นทุกปีที่มีใน kpi_summary ทันที
 - ไม่ใช้กับ: คอลัมน์ข้อย่อยในโหมด `use_sub_indicator_export`, kpi-setup (แสดงผลรวม 12 เดือนตามออกแบบเดิม)
@@ -1246,6 +1247,10 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   - `sync_columns` จากผู้เรียก: ตัดชื่อที่ไม่ใช่ identifier/ไม่มีทั้ง 2 ฝั่ง และเติม hospcode/byear เสมอ — คอลัมน์เวลาไม่อยู่ในชุดข้อมูล (ส่งเป็นเวลาของ KHD)
   - ผลรายตาราง: inserted, updated, unchanged, khd_newer, kept_blank, no_time, bad_key — Test: `api/tests/khd-sync-guard.test.js` (KHD จำลอง = ตาราง `<ชื่อ>__khd`), `export-kpi.spec.ts`
 - Log: `SYNC_TO_KHD` ใน system_logs
+- **ด่าน super_admin แบบเข้ม (22 พ.ย. 2569):** `requireSuperAdminStrict` (core/auth.js — role === 'super_admin' เท่านั้น **ไม่ขยายผ่านสิทธิ์การเข้าถึงหน้า**) ใช้กับทุกเส้นทางที่เขียน KHD/สร้างตารางใน KHD/ทับข้อมูลระบบด้วย KHD:
+  `/sync-to-khd/execute`, `/db-compare/sync-data|create-remote|sync-to-khd`, `/users/sync-to-khd`, POST/PUT `/export-schedules` + `run-now` — เดิม `isSuperAdmin` ปล่อย role ที่เปิดหน้า kpi-manager ผ่าน → ส่งข้อมูลเข้า KHD ได้
+  — **เส้นทางใหม่ที่เขียนข้อมูลลง KHD ต้องใช้ด่านนี้เสมอ** | Test: `api/tests/safety-fixes.test.js`
+- `khdExportableTables()` กรอง `is_active = 1` ด้วย (เดิมหน้าตัวอย่างกรองแต่ตอนส่งจริงไม่กรอง)
 
 ### Export Scheduler (ตารางเวลา Export อัตโนมัติ)
 - ตาราง `export_schedules` — metadata schedule (name, days_of_week, time_of_day, indicator_scope, auto_sync_khd, notify_email/telegram)
@@ -1255,12 +1260,13 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   - Dedup: `last_run_at + 120s` + UPDATE `last_run_at` ทันทีก่อน execute (atomic lock กัน overlapping ticks)
   - Log ชัด: `🚀 Running` / `Skip (day mismatch)` / `check() failed` + timezone offset ตอน start
 - `indicator_scope` (3 โหมด):
-  - `'changes_only'` (default/แนะนำ) — เรียก `checkKpiChanges()` ก่อน → export เฉพาะ `status === 'has_changes'`
+  - `'changes_only'` (default/แนะนำ — ค่าตั้งต้นของ API + ตารางเวลาตั้งแต่ 22 พ.ย. 2569 เดิม API ตั้ง 'all') — เรียก `checkKpiChanges()` ก่อน → export เฉพาะ `status === 'has_changes'`
   - `'all'` — export ทุกตัวชี้วัด
   - `'selected'` — ใช้ `indicator_ids` ที่เก็บไว้ (JSON array)
 - `auto_sync_khd` — ถ้า `=1` → หลัง export สำเร็จเรียก `performSyncToKhd()` ต่อทันที → รวมผลใน notification
 - Notification recipients: ดึงจาก `system_settings` (keys: `admin_emails`, `telegram_chat_id`, `telegram_bot_token`) ผ่าน `getNotifSettings()` helper
-- CRUD: `GET/POST/PUT/DELETE /export-schedules` + `/run-now` + `/logs` (super_admin)
+- CRUD: `GET/POST/PUT/DELETE /export-schedules` + `/run-now` + `/logs` (super_admin — เขียน/รัน = `requireSuperAdminStrict`)
+- ปีที่ไม่ระบุ = `currentFiscalYear()` (core/fiscal-year.js — เดิม "ปีปฏิทิน + 543" ผิดช่วง ต.ค.–ธ.ค.) | log การส่งออก = `system_logs.action_type = 'EXPORT_KPI_TABLES'` (เดิมเขียนคอลัมน์ที่ไม่มี — ไม่เคยบันทึก)
 - UI: ปุ่ม gradient ม่วง-คราม "ตารางเวลา Export อัตโนมัติ" ใน export-kpi → modal รายการ + modal เพิ่ม/แก้
 
 ## 6. Role System (9 Roles)
@@ -1310,7 +1316,13 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   - **บันทึกผลงาน: ผู้ใช้ที่ไม่ใช่ผู้ดูแล (ไม่อยู่ใน ROLE_ADMIN_ALL) บันทึกได้เฉพาะ hospcode ตัวเอง** — `foreignWriteHospcodes(user, hospcodes)` (core/access.js) → 403 `FOREIGN_HOSPCODE`
     ที่ `/update-kpi`, `/sub-results/upsert`, `/hierarchy-results/save`, `POST /dynamic-data/:table` (เดิม /update-kpi และ dynamic-data แทน hospcode ของแถวด้วยของผู้ใช้เงียบๆ
     → ค่าที่แก้ในแถวหน่วยบริการอื่นของ user_cup ลงหน่วยบริการตัวเอง) | frontend: `isForeignRow()`/`isRowLocked()` ใน dashboard (แถวหน่วยบริการอื่น = แก้ไม่ได้, Excel ข้าม `EditPerms.rowLocked`)
-    — **endpoint ใหม่ที่บันทึกผลงานต้องเรียก `foreignWriteHospcodes()` ด้วย** | Test: `api/tests/user-ssj-scope.test.js`, `dashboard.spec.ts`, `kpi-excel.spec.ts`
+    — **endpoint ใหม่ที่บันทึกผลงานต้องเรียก `foreignWriteHospcodes()` ด้วย**
+  - **ผู้ดูแลระดับพื้นที่ + ปิดการคีย์ (22 พ.ย. 2569):** `hospcodesOutOfWriteScope(user, hospcodes)` (core/access.js — admin_hos/admin_sso = หน่วยบริการตัวเอง, admin_cup = อำเภอตัวเอง, ผู้ใช้ทั่วไป = foreignWriteHospcodes) → 403 `OUT_OF_SCOPE_HOSPCODE`
+    และ `getDataEntryLockState()` (ย้ายไป services/data-entry-lock.js, เทียบวันที่เวลาไทย) → 403 `DATA_ENTRY_LOCKED` สำหรับ role นอก ROLE_ADMIN_ALL ที่ `/update-kpi` ทุกโหมด, `/sub-results/upsert`, `POST /dynamic-data/:table`
+    (เดิม `/update-kpi` ไม่ตรวจทั้งคู่: เรียก API ตรงบันทึกได้แม้ปิดการคีย์ และ admin_hos เขียนหน่วยบริการอื่นได้) | `canAccessHospcode()` ย้ายไป core/access.js
+    — `preserve_status` รับเฉพาะ `'Resubmit'` ของคู่ที่ถูกส่งคืน (Rejected/Resubmit) อยู่จริง (เดิมส่ง 'Approved' มาเองได้)
+  - **อนุมัติ/ส่งคืนตรวจสถานะ (`services/review-status.js`):** approve-kpi อนุมัติเฉพาะ Pending/Resubmit (คืน `approved`/`skipped`), อยู่ระหว่างอุทธรณ์ = 409 `APPEAL_PENDING`,
+    reject-kpi รายการที่อนุมัติ/ล็อคแล้ว = เฉพาะ super_admin (อื่น 409 `ALREADY_APPROVED`), ทั้งคู่ตรวจขอบเขตหน่วยบริการ | `/notifications/pending-kpi` นับ Pending+Resubmit (+ `pairCount`/`resubmitCount`/`appealCount`), ขอบเขต ROLE_SCOPE_*, รับ `year_bh` | Test: `api/tests/user-ssj-scope.test.js`, `dashboard.spec.ts`, `kpi-excel.spec.ts`
   - `ROLE_SCOPE_DISTRICT` = `['user_cup','admin_cup']` — เห็นทุกหน่วยบริการในอำเภอตัวเอง (ผ่าน `getDistrictId(hospcode)` → `chospital.distid`)
   - role ที่ไม่อยู่ใน constant ไหนเลย (`super_admin`, `admin_ssj` สำหรับ hospcode/อำเภอ, `admin_cup`/`admin_hos`/`admin_sso` สำหรับ dept) เห็น "ทุก" ตามที่ตาราง Role System กำหนด แม้ user record จะมี `dept_id`/`hospcode` ติดตัวอยู่ก็ตาม
   - **ห้ามเช็คแค่ `user.deptId != null`/`user.hospcode` เฉยๆ โดยไม่เช็ค role ก่อนเด็ดขาด** — ต้องเช็คผ่าน constant ทั้ง 3 นี้เท่านั้น กันบั๊กแบบเดียวกันเกิดซ้ำ

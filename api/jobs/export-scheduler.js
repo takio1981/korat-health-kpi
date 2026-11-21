@@ -5,6 +5,7 @@ const db = require('../db');
 const { checkKpiChanges, performKpiExport } = require('../services/export');
 const { getNotifSettings, sendLineMulticast, sendMail, sendTelegramDirect } = require('../core/notify');
 const { performSyncToKhd } = require('../services/khd');
+const { currentFiscalYear } = require('../core/fiscal-year');
 
 // ========== Export Scheduler (run automatically) ==========
 
@@ -151,8 +152,9 @@ async function runScheduledExport(schedule) {
     const startTime = Date.now();
     let result, status = 'success', errorMsg = null;
     try {
-        const year_bh = schedule.year_bh || String(new Date().getFullYear() + 543);
-        const scope = schedule.indicator_scope || 'all';
+        // ปีงบปัจจุบันตามเวลาไทย (22 พ.ย. 2569 — เดิม "ปีปฏิทิน + 543" ผิดช่วง ต.ค.–ธ.ค.: ส่งออกปีงบที่แล้วแทนปีงบปัจจุบัน)
+        const year_bh = schedule.year_bh || String(currentFiscalYear());
+        const scope = schedule.indicator_scope || 'changes_only';
         let indicator_ids = 'all';
 
         if (scope === 'changes_only') {

@@ -4,7 +4,7 @@
 
 const db = require('../db');
 const { apiRouter } = require('../core/router');
-const { authenticateToken, isSuperAdmin } = require('../core/auth');
+const { authenticateToken, isSuperAdmin, requireSuperAdminStrict } = require('../core/auth');
 const { diffTableColumns, performSyncToKhd } = require('../services/khd');
 const { getRemotePool } = require('../db-remote');
 const { getUsersSyncConfig, syncUsersToKhd } = require('../services/users-khd-sync');
@@ -146,7 +146,7 @@ apiRouter.post('/db-compare/create-local', authenticateToken, isSuperAdmin, asyn
 });
 
 // POST /db-compare/sync-data — Sync ข้อมูลจาก remote (khd) เข้า local
-apiRouter.post('/db-compare/sync-data', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/db-compare/sync-data', authenticateToken, requireSuperAdminStrict, async (req, res) => {
     const remoteDb = getRemotePool();
     if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (KHD)' });
 
@@ -194,7 +194,7 @@ apiRouter.post('/db-compare/sync-data', authenticateToken, isSuperAdmin, async (
 });
 
 // POST /db-compare/create-remote — สร้าง/แก้ไขตารางใน KHD จาก DDL ของ Local (สำหรับ missing_remote)
-apiRouter.post('/db-compare/create-remote', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/db-compare/create-remote', authenticateToken, requireSuperAdminStrict, async (req, res) => {
     const remoteDb = getRemotePool();
     if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (KHD)' });
 
@@ -250,7 +250,7 @@ apiRouter.post('/db-compare/create-remote', authenticateToken, isSuperAdmin, asy
 // POST /db-compare/sync-to-khd — Sync ข้อมูลจาก Local → KHD
 // ใช้ performSyncToKhd() กติกาเดียวกับหน้าส่งออก (6 พ.ย. 2569 — เดิม UPSERT ทุกคอลัมน์โดยไม่ตรวจคีย์/เวลา/ค่าว่าง):
 // คีย์ KHD ต้องเป็น hospcode + byear, แถวที่มีแล้วทับเฉพาะเมื่อ update_date ของ local ใหม่กว่า, ค่าว่างไม่ทับค่าใน KHD
-apiRouter.post('/db-compare/sync-to-khd', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/db-compare/sync-to-khd', authenticateToken, requireSuperAdminStrict, async (req, res) => {
     const remoteDb = getRemotePool();
     if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (KHD)' });
 
@@ -324,7 +324,7 @@ apiRouter.get('/users/sync-compare', authenticateToken, isSuperAdmin, async (req
 });
 
 // POST /users/sync-to-khd — ส่ง users จาก Local → KHD (UPSERT)
-apiRouter.post('/users/sync-to-khd', authenticateToken, isSuperAdmin, async (req, res) => {
+apiRouter.post('/users/sync-to-khd', authenticateToken, requireSuperAdminStrict, async (req, res) => {
     const r = await syncUsersToKhd({ usernames: req.body?.usernames, actorId: req.user.userId, ip: req.ip });
     res.status(r.status).json(r.body);
 });

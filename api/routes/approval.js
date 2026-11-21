@@ -7,8 +7,11 @@ const { activeIndicatorSql } = require('../core/sql');
 const { apiRouter } = require('../core/router');
 const { authenticateToken, isAdmin, isAnyAdmin, isSuperAdmin } = require('../core/auth');
 const { cascadeSubResultsStatus } = require('../services/hierarchy');
-const { getPermsForUser, invalidateUserPermCache, requireAction, indicatorsOutsideOwnDept, OUTSIDE_DEPT_MESSAGE } = require('../core/access');
+const { getPermsForUser, invalidateUserPermCache, requireAction, indicatorsOutsideOwnDept, OUTSIDE_DEPT_MESSAGE, hospcodesOutOfWriteScope,
+    ROLE_SCOPE_OWN_DEPT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_DISTRICT, getDistrictId } = require('../core/access');
+const { currentFiscalYear } = require('../core/fiscal-year');
 const { scheduleSummaryRefresh } = require('../services/summary');
+const { reviewItemWhere, reviewStatusConflicts } = require('../services/review-status');
 
 apiRouter.post('/approve-kpi', authenticateToken, isAdmin, async (req, res) => {
     const user = req.user;
@@ -22,36 +25,34 @@ apiRouter.post('/approve-kpi', authenticateToken, isAdmin, async (req, res) => {
     if ((await indicatorsOutsideOwnDept(user, items.map(i => i.indicator_id))).length) {
         return res.status(403).json({ success: false, message: OUTSIDE_DEPT_MESSAGE });
     }
+    if ((await hospcodesOutOfWriteScope(user, items.map(i => i.hospcode))).length) {
+        return res.status(403).json({ success: false, code: 'OUT_OF_SCOPE_HOSPCODE', message: 'ไม่มีสิทธิ์ดำเนินการกับหน่วยบริการนอกขอบเขตของท่าน' });
+    }
+    // อยู่ระหว่างอุทธรณ์ = ใช้ "รับ/ไม่รับอุทธรณ์" (22 พ.ย. 2569 — เดิมอนุมัติทับได้ ปิดอุทธรณ์ทิ้งเงียบๆ)
+    const conflict = await reviewStatusConflicts(db, user, items, { allowLocked: true });
+    if (conflict) return res.status(409).json({ success: false, code: conflict.code, message: conflict.message });
 
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
 
+        // อนุมัติเฉพาะเดือนที่รอตรวจสอบ (Pending/Resubmit) — อนุมัติแล้ว = ข้าม, ส่งคืนแก้ไข (Rejected) = รอหน่วยบริการแก้ก่อน
+        const changed = [];
+        let skipped = 0;
         for (const item of items) {
-            let whereClause = 'indicator_id = ? AND year_bh = ?';
-            let params = [item.indicator_id, item.year_bh];
-
-            // ใช้ hospcode จาก request body (ของหน่วยบริการเป้าหมาย) ถ้ามี
-            // ถ้าไม่มีและไม่ใช่ super_admin ให้ใช้ hospcode ของ admin เอง
-            if (item.hospcode) {
-                whereClause += ' AND hospcode = ?';
-                params.push(item.hospcode);
-            } else if (user.role !== 'super_admin') {
-                whereClause += ' AND hospcode = ?';
-                params.push(user.hospcode);
-            }
-
-            await connection.query(
-                `UPDATE kpi_results SET status = 'Approved', is_locked = 1 WHERE ${whereClause}`,
+            const { where: whereClause, params, hospcode: cascadeHospcode } = reviewItemWhere(user, item);
+            const [upd] = await connection.query(
+                `UPDATE kpi_results SET status = 'Approved', is_locked = 1 WHERE ${whereClause} AND status IN ('Pending', 'Resubmit')`,
                 params
             );
+            if (!upd.affectedRows) { skipped++; continue; }
+            changed.push(item);
             // Cascade ไปตัวชี้วัดย่อย (ถ้ามี) — hospcode เดียวกับที่ใช้ตัดสินใน whereClause ด้านบน
-            const cascadeHospcode = item.hospcode || (user.role !== 'super_admin' ? user.hospcode : null);
             await cascadeSubResultsStatus(connection, item.indicator_id, item.year_bh, cascadeHospcode, 'Approved', 1);
         }
 
-        // Create notifications for approved items
-        for (const item of items) {
+        // Create notifications for approved items (เฉพาะที่อนุมัติจริง)
+        for (const item of changed) {
             const targetHospcode = item.hospcode || user.hospcode;
             const [indRows] = await connection.query('SELECT kpi_indicators_name FROM kpi_indicators WHERE id = ?', [item.indicator_id]);
             const indName = indRows.length > 0 ? indRows[0].kpi_indicators_name : `ตัวชี้วัด #${item.indicator_id}`;
@@ -63,12 +64,15 @@ apiRouter.post('/approve-kpi', authenticateToken, isAdmin, async (req, res) => {
 
         await connection.query(
             'INSERT INTO system_logs (user_id, dept_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
-            [user.userId, user.deptId, 'APPROVE', 'kpi_results', JSON.stringify({ count: items.length, message: `อนุมัติและล็อคข้อมูล ${items.length} รายการ` }), req.ip]
+            [user.userId, user.deptId, 'APPROVE', 'kpi_results', JSON.stringify({ count: changed.length, skipped, message: `อนุมัติและล็อคข้อมูล ${changed.length} รายการ (ข้าม ${skipped})` }), req.ip]
         );
 
         await connection.commit();
-        scheduleSummaryRefresh(items); // อัปเดต kpi_summary ทันที (สถานะ/ล็อค/ผลงานในรายงาน)
-        res.json({ success: true, message: `อนุมัติและล็อคข้อมูลเรียบร้อยแล้ว ${items.length} รายการ` });
+        if (changed.length) scheduleSummaryRefresh(changed); // อัปเดต kpi_summary ทันที (สถานะ/ล็อค/ผลงานในรายงาน)
+        res.json({
+            success: true, approved: changed.length, skipped,
+            message: `อนุมัติและล็อคข้อมูลเรียบร้อยแล้ว ${changed.length} รายการ` + (skipped ? ` (ข้าม ${skipped} รายการที่ไม่ได้รอตรวจสอบ)` : ''),
+        });
     } catch (error) {
         await connection.rollback();
         res.status(500).json({ success: false, message: error.message });
@@ -675,39 +679,50 @@ apiRouter.post('/target-edit-complete', authenticateToken, isAnyAdmin, async (re
 apiRouter.get('/notifications/pending-kpi', authenticateToken, isAdmin, async (req, res) => {
     const user = req.user;
     try {
-        // คำนวณปีงบประมาณปัจจุบัน (ต.ค. = เดือน 9 ของ JS → ปี+1+543)
-        const today = new Date();
-        let fyYear = today.getFullYear();
-        if (today.getMonth() >= 9) fyYear += 1; // เดือน ต.ค. ขึ้นปีใหม่
-        const currentFY = (fyYear + 543).toString();
+        // ปีงบปัจจุบันตามเวลาไทย (core/fiscal-year) — ระบุ year_bh ได้ (22 พ.ย. 2569)
+        const currentFY = /^\d{4}$/.test(String(req.query.year_bh || '')) ? String(req.query.year_bh) : String(currentFiscalYear());
 
-        let whereClause = `WHERE r.status = 'Pending' AND r.year_bh = ? AND ${activeIndicatorSql('r.indicator_id')}`;
+        // รอตรวจสอบ = Pending + Resubmit (หน่วยบริการแก้ไขส่งกลับมาแล้ว) — อุทธรณ์นับแยก
+        let whereClause = `WHERE r.status IN ('Pending', 'Resubmit', 'Appeal') AND r.year_bh = ? AND ${activeIndicatorSql('r.indicator_id')}`;
         let params = [currentFY];
 
-        // admin: เฉพาะหน่วยงานตัวเอง (ทุก hospcode)
-        if (user.role !== 'super_admin' && user.deptId !== null && user.deptId !== undefined) {
-            whereClause += " AND i.dept_id = ?";
+        // ขอบเขตตามบทบาท (22 พ.ย. 2569 — เดิมกรองหน่วยงานกับทุก role ที่ไม่ใช่ super_admin: admin_cup/admin_hos เห็นแค่หน่วยงานที่บัญชีบังเอิญมี)
+        if (ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null) {
+            whereClause += ' AND i.dept_id = ?';
             params.push(user.deptId);
+        }
+        if (ROLE_SCOPE_HOSPCODE.includes(user.role)) {
+            whereClause += ' AND r.hospcode = ?';
+            params.push(user.hospcode || '');
+        } else if (ROLE_SCOPE_DISTRICT.includes(user.role)) {
+            whereClause += ' AND r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)';
+            params.push((await getDistrictId(user.hospcode)) || '');
         }
 
         const [rows] = await db.query(
             `SELECT
-                COUNT(DISTINCT i.dept_id) AS dept_count,
-                COUNT(DISTINCT r.hospcode) AS hos_count,
-                COUNT(DISTINCT r.indicator_id) AS indicator_count
+                COUNT(DISTINCT CASE WHEN r.status <> 'Appeal' THEN i.dept_id END) AS dept_count,
+                COUNT(DISTINCT CASE WHEN r.status <> 'Appeal' THEN r.hospcode END) AS hos_count,
+                COUNT(DISTINCT CASE WHEN r.status <> 'Appeal' THEN r.indicator_id END) AS indicator_count,
+                COUNT(DISTINCT CASE WHEN r.status <> 'Appeal' THEN CONCAT(r.indicator_id, '|', r.hospcode) END) AS pair_count,
+                COUNT(DISTINCT CASE WHEN r.status = 'Resubmit' THEN CONCAT(r.indicator_id, '|', r.hospcode) END) AS resubmit_count,
+                COUNT(DISTINCT CASE WHEN r.status = 'Appeal' THEN CONCAT(r.indicator_id, '|', r.hospcode) END) AS appeal_count
              FROM kpi_results r
              LEFT JOIN kpi_indicators i ON r.indicator_id = i.id
              ${whereClause}`,
             params
         );
-        const data = rows[0] || { dept_count: 0, hos_count: 0, indicator_count: 0 };
+        const data = rows[0] || {};
         res.json({
             success: true,
-            count: data.indicator_count, // backward compat
+            count: Number(data.indicator_count) || 0, // backward compat
             data: {
-                deptCount: data.dept_count,
-                hosCount: data.hos_count,
-                indicatorCount: data.indicator_count,
+                deptCount: Number(data.dept_count) || 0,
+                hosCount: Number(data.hos_count) || 0,
+                indicatorCount: Number(data.indicator_count) || 0,
+                pairCount: Number(data.pair_count) || 0,
+                resubmitCount: Number(data.resubmit_count) || 0,
+                appealCount: Number(data.appeal_count) || 0,
                 yearBh: currentFY
             }
         });

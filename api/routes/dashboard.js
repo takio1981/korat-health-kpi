@@ -6,6 +6,7 @@ const db = require('../db');
 const { ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, getDistrictId, hasPageAccess } = require('../core/access');
 const { activeIndicatorSql, targetCondOf, targetHasSql, targetPassSql } = require('../core/sql');
 const { apiRouter } = require('../core/router');
+const { currentFiscalYear } = require('../core/fiscal-year');
 const { authenticateToken } = require('../core/auth');
 const { indicatorAllowsHostype, indicatorTypeSetting } = require('../services/indicator-scope');
 
@@ -145,7 +146,8 @@ apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
     try {
         const user = req.user;
 
-        const year = req.query.year || (new Date().getFullYear() + 543).toString();
+        // ปีงบปัจจุบันตามเวลาไทย (22 พ.ย. 2569 — เดิม "ปีปฏิทิน + 543" ช่วง ต.ค.–ธ.ค. การ์ดสถิติแสดงปีงบที่แล้ว)
+        const year = req.query.year || String(currentFiscalYear());
         let whereClause = '';
         let filterParams = [];
 
