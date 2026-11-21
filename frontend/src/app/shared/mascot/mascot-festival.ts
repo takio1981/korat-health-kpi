@@ -8,7 +8,9 @@
  *  - lunar  = ตามจันทรคติไทย/จีน — ราชการประกาศล่วงหน้าเพียง 1–2 ปี จึงเก็บเป็นตาราง LUNAR_DATES (ตรวจกับประกาศ/ปฏิทินแล้ว)
  *             + ผู้ดูแลระบบกรอกปีถัดไปเองได้ที่หน้าตั้งค่าระบบ (system_settings.mascot_festival_dates) — ปีที่ไม่มีวันที่ = ไม่เปลี่ยนชุด
  * วันที่ทั้งหมดคิดตามเวลาประเทศไทย (UTC+7)
+ * ปรับวันที่อัตโนมัติ (22 พ.ย. 2569): FestivalExtra — วันที่จากปฏิทินวันหยุดราชการ + คำนวณ (mascot-lunar.ts)
  */
+import { chineseFestivalDates, datesFromAsalha } from './mascot-lunar';
 
 export type HatKind = 'party' | 'propeller' | 'hearts' | 'chinese' | 'sunglasses' | 'witch' | 'santa' | 'bunny';
 export type NeckKind = 'bowtie' | 'jasmine' | 'marigold';
@@ -111,6 +113,8 @@ export const LUNAR_DATES: Record<string, Record<string, string>> = {
   '2028': { cny: '2028-01-26' },
   '2029': { cny: '2029-02-13' },
   '2030': { cny: '2030-02-03' },
+  // ปัญหาปฏิทินจีนปี 2033 (เดือน 11 อธิกมาส) — สูตรดาราศาสตร์ทั่วไปได้ 20 ม.ค. ซึ่งผิด วันจริง = 19 ก.พ. 2034
+  '2034': { cny: '2034-02-19' },
 };
 
 export type FestivalDates = Record<string, Record<string, string>>;
@@ -179,31 +183,58 @@ export function childrenDay(y: number): string {
   return ymd(y, 1, firstSat + 7);
 }
 
-export interface FestivalSource { date: string; source: 'fixed' | 'rule' | 'table' | 'admin' }
+export interface FestivalSource { date: string; source: 'fixed' | 'rule' | 'table' | 'admin' | 'auto' | 'derived' | 'astro' }
 
-/** วันหลักของเทศกาลในปี ค.ศ. y (null = ยังไม่มีวันที่ในปีนั้น) */
-export function festivalMainDate(f: Festival, y: number, dates: FestivalDates = {}): FestivalSource | null {
+/**
+ * แหล่งวันที่เพิ่มเติมเมื่อเปิด "ปรับวันที่อัตโนมัติ" (system_settings.mascot_festival_auto — 22 พ.ย. 2569)
+ * auto = วันที่จากปฏิทินวันหยุดราชการที่ระบบดึงมา (jobs/mascot-festival), compute = คำนวณวันที่เหลือ (mascot-lunar.ts)
+ */
+export interface FestivalExtra { auto?: FestivalDates; compute?: boolean }
+
+const DERIVED_FROM_ASALHA = ['khaophansa', 'okphansa', 'loykrathong'];
+const CHINESE = ['cny', 'midautumn', 'vegetarian'];
+const chineseCache = new Map<number, ReturnType<typeof chineseFestivalDates>>();
+function chineseOf(y: number) {
+  let v = chineseCache.get(y);
+  if (!v) { v = chineseFestivalDates(y); chineseCache.set(y, v); }
+  return v;
+}
+
+/**
+ * วันหลักของเทศกาลในปี ค.ศ. y (null = ยังไม่มีวันที่ในปีนั้น)
+ * ลำดับแหล่งของเทศกาลจันทรคติ: ผู้ดูแลกรอก → ปฏิทินวันหยุดราชการ (อัตโนมัติ) → ตารางในระบบ → คำนวณ (จากวันอาสาฬหบูชา / ดาราศาสตร์)
+ */
+export function festivalMainDate(f: Festival, y: number, dates: FestivalDates = {}, ext: FestivalExtra = {}): FestivalSource | null {
   if (f.kind === 'fixed' && f.md) return { date: ymd(y, f.md[0], f.md[1]), source: 'fixed' };
   if (f.kind === 'rule') return { date: f.id === 'easter' ? easterDate(y) : childrenDay(y), source: 'rule' };
   const ys = String(y);
-  if (own(dates, ys) && own(dates[ys], f.id) && validDate(dates[ys][f.id])) return { date: dates[ys][f.id], source: 'admin' };
-  if (own(LUNAR_DATES, ys) && own(LUNAR_DATES[ys], f.id)) return { date: LUNAR_DATES[ys][f.id], source: 'table' };
+  const pick = (src: FestivalDates | undefined, source: FestivalSource['source']): FestivalSource | null =>
+    src && own(src, ys) && src[ys] && own(src[ys], f.id) && validDate(src[ys][f.id]) && src[ys][f.id].startsWith(ys) ? { date: src[ys][f.id], source } : null;
+  const found = pick(dates, 'admin') || pick(ext.auto, 'auto') || pick(LUNAR_DATES, 'table');
+  if (found || !ext.compute) return found;
+  if (DERIVED_FROM_ASALHA.includes(f.id)) {
+    const asalha = festivalMainDate(festivalById('asalha')!, y, dates, { auto: ext.auto });
+    if (!asalha) return null;
+    const d = (datesFromAsalha(asalha.date) as Record<string, string>)[f.id];
+    return d.startsWith(ys) ? { date: d, source: 'derived' } : null;
+  }
+  if (CHINESE.includes(f.id) && y >= 1950 && y <= 2150) return { date: (chineseOf(y) as Record<string, string>)[f.id], source: 'astro' };
   return null;
 }
 
 /** ช่วงที่แสดงชุด [เริ่ม, สิ้นสุด] ของเทศกาลที่วันหลักอยู่ในปี y */
-export function festivalRange(f: Festival, y: number, dates: FestivalDates = {}): [string, string] | null {
-  const m = festivalMainDate(f, y, dates);
+export function festivalRange(f: Festival, y: number, dates: FestivalDates = {}, ext: FestivalExtra = {}): [string, string] | null {
+  const m = festivalMainDate(f, y, dates, ext);
   return m ? [addDays(m.date, -f.before), addDays(m.date, f.after)] : null;
 }
 
 /** เทศกาลของวันนี้ (เวลาไทย) — ช่วงของปีก่อน/ปีถัดไปที่คร่อมปี (ปีใหม่) นับด้วย */
-export function festivalOn(dateKey: string, dates: FestivalDates = {}): Festival | null {
+export function festivalOn(dateKey: string, dates: FestivalDates = {}, ext: FestivalExtra = {}): Festival | null {
   if (!validDate(dateKey)) return null;
   const y = +dateKey.slice(0, 4);
   for (const f of FESTIVALS) {
     for (const yy of [y - 1, y, y + 1]) {
-      const r = festivalRange(f, yy, dates);
+      const r = festivalRange(f, yy, dates, ext);
       if (r && dateKey >= r[0] && dateKey <= r[1]) return f;
     }
   }
@@ -217,14 +248,14 @@ export function normalizeOutfitMode(v: unknown): string {
 }
 
 /** เทศกาลที่จะแสดงตอนนี้ (null = ชุดปกติ) */
-export function activeFestival(mode: string, dateKey: string, dates: FestivalDates = {}): Festival | null {
+export function activeFestival(mode: string, dateKey: string, dates: FestivalDates = {}, ext: FestivalExtra = {}): Festival | null {
   const m = normalizeOutfitMode(mode);
   if (m === 'none') return null;
   if (m !== 'auto') return festivalById(m);
-  return festivalOn(dateKey, dates);
+  return festivalOn(dateKey, dates, ext);
 }
 
 /** ปี ค.ศ. ที่ยังไม่มีวันที่ของเทศกาลจันทรคติบางรายการ (ใช้เตือนในหน้าตั้งค่า) */
-export function missingLunar(y: number, dates: FestivalDates = {}): Festival[] {
-  return FESTIVALS.filter(f => f.kind === 'lunar' && !festivalMainDate(f, y, dates));
+export function missingLunar(y: number, dates: FestivalDates = {}, ext: FestivalExtra = {}): Festival[] {
+  return FESTIVALS.filter(f => f.kind === 'lunar' && !festivalMainDate(f, y, dates, ext));
 }

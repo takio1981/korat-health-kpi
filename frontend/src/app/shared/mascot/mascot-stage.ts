@@ -319,7 +319,7 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
   /** เทศกาลที่ควรแสดงตอนนี้: ลองชุด (หน้าตั้งค่า) มาก่อน แล้วจึงค่าระบบ (auto = ตามวันที่เวลาไทย) */
   private wantedFestival(): Festival | null {
     const cfg = this.mascot.outfit$.value, pv = this.mascot.outfitPreview$.value;
-    return activeFestival(pv ?? cfg.mode, thaiDateKey(), cfg.dates);
+    return activeFestival(pv ?? cfg.mode, thaiDateKey(), cfg.dates, this.mascot.outfitExtra(cfg));
   }
   /** ใส่/ถอดชุดให้ตรงกับเทศกาลปัจจุบัน (เรียกเมื่อค่าเปลี่ยน + ทุก 1 นาที — ข้ามเที่ยงคืนแล้วเปลี่ยนเอง) */
   private refreshOutfit() {
@@ -338,7 +338,7 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
   private festivalGreet(tries = 0) {
     if (this.destroyed || this.mascot.outfitPreview$.value) return;
     const cfg = this.mascot.outfit$.value;
-    const f = activeFestival(cfg.mode, thaiDateKey(), cfg.dates);
+    const f = activeFestival(cfg.mode, thaiDateKey(), cfg.dates, this.mascot.outfitExtra(cfg));
     if (!f) return;
     const key = `${f.id}|${thaiDateKey()}`;
     let seen = '';

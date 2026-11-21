@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -12,7 +12,7 @@ import Swal from 'sweetalert2';
 import { MASCOT_SIZES, MascotSize, SIZE_LABELS, normalizeMascotSize } from '../shared/mascot/mascot-size';
 import { FestivalDates, normalizeOutfitMode, sanitizeFestivalDates } from '../shared/mascot/mascot-festival';
 import { MascotService } from '../shared/mascot/mascot.service';
-import { MascotFestivalCardComponent } from '../shared/mascot-festival-card';
+import { MascotFestivalCardComponent, isHttpsUrl } from '../shared/mascot-festival-card';
 
 @Component({
   selector: 'app-settings',
@@ -88,6 +88,9 @@ export class SettingsComponent implements OnInit {
   readonly mascotSizeOptions = MASCOT_SIZES.map(value => ({ value, label: SIZE_LABELS[value] }));
   mascotOutfit = 'auto'; // ชุดเทศกาลของน้องโคราชดี: auto | none | id เทศกาล
   mascotFestivalDates: FestivalDates = {}; // วันที่เทศกาลตามจันทรคติที่ผู้ดูแลกรอก
+  mascotFestivalAuto = true; // ปรับวันที่เปลี่ยนชุดอัตโนมัติเมื่อขึ้นปีใหม่ (ไม่มีค่า = เปิด)
+  mascotFestivalIcsUrl = ''; // ที่อยู่ปฏิทินวันหยุด (ว่าง = ค่าตั้งต้น)
+  @ViewChild('festivalCard') festivalCard?: MascotFestivalCardComponent;
   private mascotSvc = inject(MascotService);
   providerIdEnabled: boolean = false;
   thaidClientSecret: string = '';
@@ -244,6 +247,8 @@ export class SettingsComponent implements OnInit {
           this.mascotSize = normalizeMascotSize(this.settings.find(s => s.setting_key === 'mascot_size')?.setting_value);
           this.mascotOutfit = normalizeOutfitMode(this.settings.find(s => s.setting_key === 'mascot_outfit')?.setting_value);
           this.mascotFestivalDates = sanitizeFestivalDates(this.settings.find(s => s.setting_key === 'mascot_festival_dates')?.setting_value);
+          this.mascotFestivalAuto = this.settings.find(s => s.setting_key === 'mascot_festival_auto')?.setting_value !== 'false';
+          this.mascotFestivalIcsUrl = this.settings.find(s => s.setting_key === 'mascot_festival_ics_url')?.setting_value || '';
           if (providerSetting) this.providerIdEnabled = providerSetting.setting_value === 'true';
           if (thaidRegEnSetting) this.thaidRegisterEnabled = thaidRegEnSetting.setting_value === 'true';
           if (providerRegEnSetting) this.providerIdRegisterEnabled = providerRegEnSetting.setting_value === 'true';
@@ -315,6 +320,8 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'mascot_size', setting_value: normalizeMascotSize(this.mascotSize) },
       { setting_key: 'mascot_outfit', setting_value: normalizeOutfitMode(this.mascotOutfit) },
       { setting_key: 'mascot_festival_dates', setting_value: JSON.stringify(sanitizeFestivalDates(this.mascotFestivalDates)) },
+      { setting_key: 'mascot_festival_auto', setting_value: String(!!this.mascotFestivalAuto) },
+      { setting_key: 'mascot_festival_ics_url', setting_value: isHttpsUrl(this.mascotFestivalIcsUrl) ? this.mascotFestivalIcsUrl : '' },
       { setting_key: 'thaid_client_secret', setting_value: this.thaidClientSecret },
       { setting_key: 'thaid_login_url', setting_value: this.thaidLoginUrl },
       { setting_key: 'thaid_client_id', setting_value: this.thaidClientId },
@@ -331,7 +338,7 @@ export class SettingsComponent implements OnInit {
 
     this.authService.updateSettings(settingsToSave).subscribe({
       next: (res) => {
-        this.mascotSvc.setOutfitConfig(this.mascotOutfit, this.mascotFestivalDates);
+        this.mascotSvc.setOutfitConfig(this.mascotOutfit, this.mascotFestivalDates, this.mascotFestivalAuto, this.festivalCard?.autoDates || {});
         this.mascotSvc.outfitPreview$.next(null);
         Swal.fire({
           title: 'สำเร็จ',

@@ -5,9 +5,10 @@ import type { PoseName } from './mascot-pose';
 import type { Mood } from './mascot-face';
 import { AI_SAY } from './mascot-phrases';
 import { MASCOT_SIZES, MascotSize } from './mascot-size';
-import { FestivalDates, normalizeOutfitMode, sanitizeFestivalDates } from './mascot-festival';
+import { FestivalDates, FestivalExtra, normalizeOutfitMode, sanitizeFestivalDates } from './mascot-festival';
 
-export interface OutfitConfig { mode: string; dates: FestivalDates }
+/** mode = auto | none | id เทศกาล, dates = ผู้ดูแลกรอก, auto = ปฏิทินวันหยุดราชการ, compute = คำนวณวันที่ที่เหลือ */
+export interface OutfitConfig { mode: string; dates: FestivalDates; auto: FestivalDates; compute: boolean }
 
 /** คำสั่งให้น้องโคราชดีพูด: บทที่เตรียมไว้ (node) หรือข้อความ (text) */
 export interface MascotCue {
@@ -60,7 +61,7 @@ export class MascotService {
   /** ขนาดที่ผู้ใช้เลือกในเครื่องนี้ ('' = ตามค่าตั้งต้นของระบบ) — ไม่แยกบัญชี ใช้ได้ทั้งหน้าเข้าสู่ระบบและหลังเข้าสู่ระบบ */
   readonly size$ = new BehaviorSubject<MascotSize | ''>(readSize());
   /** ชุดเทศกาลจากค่าระบบ (maintenance-status): mode = auto | none | id เทศกาล, dates = วันที่จันทรคติที่ผู้ดูแลกรอก */
-  readonly outfit$ = new BehaviorSubject<OutfitConfig>({ mode: 'auto', dates: {} });
+  readonly outfit$ = new BehaviorSubject<OutfitConfig>({ mode: 'auto', dates: {}, auto: {}, compute: true });
   /** ลองชุดในหน้าตั้งค่า (ไม่บันทึก) — null = ไม่ลอง */
   readonly outfitPreview$ = new BehaviorSubject<string | null>(null);
   private uid = '';
@@ -86,12 +87,20 @@ export class MascotService {
   setAssistantHidden(v: boolean) { lsSet(this.key(HIDE_KEY), v ? '1' : null); this.assistantHidden$.next(v); }
   toggleAssistant() { this.setAssistantHidden(!this.assistantHidden$.value); }
   setVoiceMuted(v: boolean) { lsSet(VOICE_OFF_KEY, v ? '1' : null); this.voiceMuted$.next(v); }
-  /** ค่าชุดเทศกาลจาก maintenance-status (ตรวจค่าแล้ว) — ไม่เปลี่ยน = ไม่แจ้งซ้ำ */
-  setOutfitConfig(mode: unknown, dates: unknown) {
-    const next: OutfitConfig = { mode: normalizeOutfitMode(mode), dates: sanitizeFestivalDates(dates) };
-    const cur = this.outfit$.value;
-    if (cur.mode !== next.mode || JSON.stringify(cur.dates) !== JSON.stringify(next.dates)) this.outfit$.next(next);
+  /**
+   * ค่าชุดเทศกาลจาก maintenance-status (ตรวจค่าแล้ว) — ไม่เปลี่ยน = ไม่แจ้งซ้ำ
+   * autoOn = ปรับวันที่อัตโนมัติ (ไม่ส่ง = เปิด), autoDates = วันที่จากปฏิทินวันหยุดราชการที่ระบบดึงมา
+   */
+  setOutfitConfig(mode: unknown, dates: unknown, autoOn: unknown = true, autoDates: unknown = {}) {
+    const compute = autoOn !== false;
+    const next: OutfitConfig = {
+      mode: normalizeOutfitMode(mode), dates: sanitizeFestivalDates(dates),
+      auto: compute ? sanitizeFestivalDates(autoDates) : {}, compute,
+    };
+    if (JSON.stringify(this.outfit$.value) !== JSON.stringify(next)) this.outfit$.next(next);
   }
+  /** แหล่งวันที่เพิ่มเติมสำหรับ activeFestival()/festivalOn() */
+  outfitExtra(cfg: OutfitConfig = this.outfit$.value): FestivalExtra { return { auto: cfg.auto, compute: cfg.compute }; }
   /** '' = กลับไปใช้ค่าตั้งต้นของระบบ */
   setSize(v: MascotSize | '') {
     const s = (MASCOT_SIZES as string[]).includes(v) ? v : '';

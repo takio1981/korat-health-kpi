@@ -292,7 +292,7 @@
                       [ngClass]="mascotSize === o.value ? 'bg-teal-600 text-white' : 'bg-white text-gray-600 hover:bg-teal-50'">{{ o.label }}</button>
             </div>
           </div>
-          <app-mascot-festival-card [(mode)]="mascotOutfit" [(dates)]="mascotFestivalDates"></app-mascot-festival-card>
+          <app-mascot-festival-card #festivalCard [(mode)]="mascotOutfit" [(dates)]="mascotFestivalDates" [(autoOn)]="mascotFestivalAuto" [(icsUrl)]="mascotFestivalIcsUrl"></app-mascot-festival-card>
         </div>
 
         <!-- ตั้งค่าอุทธรณ์ -->

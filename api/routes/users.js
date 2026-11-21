@@ -11,6 +11,7 @@ const { authenticateToken, isAdmin, isAnyAdmin, isSuperAdmin, _sessionCache } = 
 const { parseActiveFlag, ACTIVE_FLAG_REQUIRED } = require('../core/validate');
 const { cleanupPendingApprovalNotifications, sendLineToUser, sendMail } = require('../core/notify');
 const { getProviderIdSettings, getThaidSettings } = require('../services/sso');
+const { refreshFestivalDates, getFestivalAutoState, DEFAULT_ICS_URL } = require('../services/mascot-festival');
 const { countUserKpiResults, userHasResultsMessage, ALL_ROLES, ASSIGNABLE_ROLES, hospcodeInAdminScope } = require('../services/users');
 const { recordRegistration, approveUser, syncAfterApprove, getUserApprovalSettings, parseSettingsInput, saveUserApprovalSettings,
     runAutoApprove, runScheduledKhdSync, saveLastRun, getStatus } = require('../services/user-approval');
@@ -151,11 +152,42 @@ function sanitizeFestivalDates(raw) {
     return out;
 }
 
+/** วันที่จากปฏิทินอัตโนมัติ: ค่าที่เก็บ = { dates, fetched_at, ... } → เฉพาะ dates (ตรวจรูปแบบแล้ว) */
+function autoDatesOf(raw) {
+    try {
+        const st = JSON.parse(raw || '{}');
+        return st && st.dates ? sanitizeFestivalDates(JSON.stringify(st.dates)) : {};
+    } catch (e) { return {}; }
+}
+
+// ปรับวันที่ชุดเทศกาลอัตโนมัติ — สถานะ + อัปเดตตอนนี้ (super_admin; path ไม่อยู่ใน PAGE_ACCESS_RULES)
+apiRouter.get('/mascot/festival-dates/status', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const { enabled, url, state } = await getFestivalAutoState();
+        res.json({
+            success: true, enabled, url, default_url: DEFAULT_ICS_URL,
+            fetched_at: state.fetched_at || null, last_try: state.last_try || null, error: state.error || null,
+            count: state.count || 0, dates: autoDatesOf(JSON.stringify(state)),
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+apiRouter.post('/mascot/festival-dates/refresh', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const r = await refreshFestivalDates({ force: true });
+        if (!r.ok) return res.status(502).json({ success: false, message: r.error || 'ดึงปฏิทินไม่สำเร็จ' });
+        res.json({ success: true, count: r.count, years: r.years });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
 // ตรวจสอบสถานะ maintenance mode (public — ไม่ต้อง login)
 apiRouter.get('/system/maintenance-status', async (req, res) => {
     try {
         const [rows] = await db.query(
-            "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message','thaid_enabled','providerid_enabled','thaid_login_url','thaid_register_enabled','providerid_register_enabled','system_version','login_mascot_enabled','mascot_assistant_enabled','mascot_voice_enabled','mascot_size','mascot_outfit','mascot_festival_dates')"
+            "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message','thaid_enabled','providerid_enabled','thaid_login_url','thaid_register_enabled','providerid_register_enabled','system_version','login_mascot_enabled','mascot_assistant_enabled','mascot_voice_enabled','mascot_size','mascot_outfit','mascot_festival_dates','mascot_festival_auto','mascot_festival_dates_auto')"
         );
         const s = {};
         rows.forEach(r => s[r.setting_key] = r.setting_value);
@@ -180,6 +212,9 @@ apiRouter.get('/system/maintenance-status', async (req, res) => {
             // ชุดเทศกาลของน้องโคราชดี (21 พ.ย. 2569) — auto (ตามเทศกาล, ค่าตั้งต้น) | none | id เทศกาล + วันที่จันทรคติที่ผู้ดูแลกรอก
             mascot_outfit: sanitizeOutfitMode(s['mascot_outfit']),
             mascot_festival_dates: sanitizeFestivalDates(s['mascot_festival_dates']),
+            // ปรับวันที่อัตโนมัติ (22 พ.ย. 2569) — ไม่มีค่า = เปิด: วันที่จากปฏิทินวันหยุดราชการ (jobs/mascot-festival) + frontend คำนวณวันที่เหลือ
+            mascot_festival_auto: s['mascot_festival_auto'] !== 'false',
+            mascot_festival_dates_auto: s['mascot_festival_auto'] === 'false' ? {} : autoDatesOf(s['mascot_festival_dates_auto']),
         });
     } catch (error) {
         res.json({ success: true, maintenance: false, message: '', thaid_enabled: false, providerid_enabled: false, system_version: 'v1.0.0' });

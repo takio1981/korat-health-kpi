@@ -2,14 +2,30 @@ import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, i
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MascotService } from './mascot/mascot.service';
+import { AuthService } from '../services/auth';
 import {
-  FESTIVALS, Festival, FestivalDates, activeFestival, festivalMainDate, festivalRange, missingLunar,
+  FESTIVALS, Festival, FestivalDates, FestivalExtra, activeFestival, festivalMainDate, festivalRange, missingLunar,
   normalizeOutfitMode, sanitizeFestivalDates, thaiDateKey, validDate,
 } from './mascot/mascot-festival';
 
 const TH_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
 export const GROUP_LABELS: Record<Festival['group'], string> = { thai: 'ไทย', buddhist: 'พุทธ', chinese: 'จีน', intl: 'สากล', korat: 'โคราช' };
-const SOURCE_LABELS = { fixed: 'วันเดิมทุกปี', rule: 'คำนวณอัตโนมัติ', table: 'ตารางในระบบ', admin: 'ผู้ดูแลกรอก' } as const;
+const SOURCE_LABELS = {
+  fixed: 'วันเดิมทุกปี', rule: 'คำนวณอัตโนมัติ', table: 'ตารางในระบบ', admin: 'ผู้ดูแลกรอก',
+  auto: 'ปฏิทินวันหยุดราชการ (อัตโนมัติ)', derived: 'คำนวณจากวันอาสาฬหบูชา', astro: 'คำนวณตามปฏิทินจีน (ดาราศาสตร์)',
+} as const;
+
+/** วันที่ + เวลาไทยแบบสั้น สำหรับสถานะการดึงปฏิทิน */
+export function thaiDateTimeText(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const t = new Date(iso);
+  if (isNaN(t.getTime())) return '';
+  const th = new Date(t.getTime() + 7 * 3600000).toISOString();
+  return `${thaiDateText(th.slice(0, 10))} ${th.slice(11, 16)} น.`;
+}
+export function isHttpsUrl(u: string): boolean {
+  try { const x = new URL(u); return x.protocol === 'https:' && !!x.hostname; } catch { return false; }
+}
 
 /** "2026-11-23" → "23 พ.ย. 2569" */
 export function thaiDateText(d: string): string {
@@ -27,9 +43,9 @@ export interface FestivalRow {
 }
 
 /** แถวปฏิทินเทศกาลของปี ค.ศ. y (ฟังก์ชันล้วน — ทดสอบได้) */
-export function festivalRows(y: number, dates: FestivalDates, today: string): FestivalRow[] {
+export function festivalRows(y: number, dates: FestivalDates, today: string, ext: FestivalExtra = {}): FestivalRow[] {
   return FESTIVALS.map(f => {
-    const m = festivalMainDate(f, y, dates), r = festivalRange(f, y, dates);
+    const m = festivalMainDate(f, y, dates, ext), r = festivalRange(f, y, dates, ext);
     return {
       f, group: GROUP_LABELS[f.group], range: rangeText(r), source: m ? SOURCE_LABELS[m.source] : 'ยังไม่มีวันที่',
       lunar: f.kind === 'lunar', date: m?.date || '', missing: !m, today: !!r && today >= r[0] && today <= r[1],
@@ -62,6 +78,29 @@ export function festivalRows(y: number, dates: FestivalDates, today: string): Fe
         </span>
         <button *ngIf="preview" type="button" id="btn-festival-preview-stop" (click)="setPreview(null)"
                 class="text-xs px-2 py-1 rounded-lg bg-amber-100 text-amber-800 font-bold"><i class="fas fa-rotate-left mr-1"></i>เลิกลองชุด</button>
+      </div>
+      <div class="mt-3 rounded-lg border border-teal-100 bg-teal-50 p-2" id="mascot-festival-auto-box">
+        <label class="inline-flex items-center cursor-pointer gap-2">
+          <input type="checkbox" id="mascot-festival-auto" class="w-4 h-4 accent-teal-600" [ngModel]="autoOn" (ngModelChange)="setAuto($event)">
+          <span class="text-xs font-bold text-gray-700">ปรับวันที่เปลี่ยนชุดอัตโนมัติเมื่อขึ้นปีใหม่</span>
+        </label>
+        <p class="text-[11px] text-gray-500 mt-0.5 ml-6">ระบบดึงวันหยุดราชการ (มาฆบูชา วิสาขบูชา อาสาฬหบูชา ตรุษจีน) จากปฏิทินสาธารณะเมื่อขึ้นปีใหม่ และทุก 7 วัน (ราชการประกาศปีถัดไประหว่างปี)
+          แล้วคำนวณวันที่เหลือเอง: เข้าพรรษา ออกพรรษา ลอยกระทง จากวันอาสาฬหบูชา, ไหว้พระจันทร์ กินเจ ตามปฏิทินจีน — วันที่ที่ผู้ดูแลกรอกเองมาก่อนเสมอ</p>
+        <div class="ml-6 mt-1 flex flex-wrap items-center gap-2 text-[11px]" id="mascot-festival-auto-status">
+          <span *ngIf="status && status.fetched_at" class="text-teal-700"><i class="fas fa-circle-check mr-1"></i>อัปเดตล่าสุด {{ fetchedText }} ({{ status.count }} รายการ)</span>
+          <span *ngIf="status && !status.fetched_at && !status.error" class="text-gray-500">ยังไม่เคยดึงปฏิทิน</span>
+          <span *ngIf="status && status.error" class="text-red-600"><i class="fas fa-triangle-exclamation mr-1"></i>ครั้งล่าสุดไม่สำเร็จ: {{ status.error }}</span>
+          <button type="button" id="btn-festival-refresh" (click)="refreshNow()" [disabled]="refreshing"
+                  class="px-2 py-0.5 rounded-lg bg-teal-600 text-white font-bold disabled:opacity-50">
+            <i class="fas" [ngClass]="refreshing ? 'fa-spinner fa-spin' : 'fa-rotate'"></i> อัปเดตวันที่ตอนนี้</button>
+          <button type="button" class="text-gray-500 underline" (click)="showUrl = !showUrl">แหล่งปฏิทิน</button>
+        </div>
+        <div *ngIf="showUrl" class="ml-6 mt-1">
+          <input type="url" id="mascot-festival-ics-url" class="w-full text-[11px] border border-gray-200 rounded px-2 py-1 bg-white"
+                 [ngModel]="icsUrl" (ngModelChange)="setUrl($event)" [placeholder]="status?.default_url || 'https://…/basic.ics'" aria-label="ที่อยู่ไฟล์ปฏิทินวันหยุด (iCalendar)">
+          <p class="text-[11px] mt-0.5" [ngClass]="icsUrl && !urlOk ? 'text-red-600' : 'text-gray-400'">
+            ไฟล์ iCalendar (.ics) แบบ https เว้นว่าง = ปฏิทินวันหยุดในไทยของ Google — มีผลหลังกดบันทึกการตั้งค่า</p>
+        </div>
       </div>
       <div class="mt-3 flex flex-wrap items-center gap-2">
         <label for="mascot-festival-year" class="text-xs font-bold text-gray-600">ปฏิทินเทศกาลปี</label>
@@ -103,7 +142,7 @@ export function festivalRows(y: number, dates: FestivalDates, today: string): Fe
           </tbody>
         </table>
       </div>
-      <p class="text-[11px] text-gray-400 mt-1">วันที่ตามจันทรคติ (วันพระ ลอยกระทง ตรุษจีน ไหว้พระจันทร์ กินเจ) มีในระบบถึงปีที่ราชการประกาศแล้ว — ปีถัดไปกรอกวันหลักของเทศกาลได้เอง (กินเจ = วันแรกของเทศกาล) เว้นว่าง = ใช้ค่าในระบบ</p>
+      <p class="text-[11px] text-gray-400 mt-1">กรอกวันหลักของเทศกาลตามจันทรคติเองได้ (กินเจ = วันแรกของเทศกาล) เว้นว่าง = ใช้วันที่อัตโนมัติ/ค่าในระบบ</p>
     </div>
   `,
 })
@@ -113,6 +152,20 @@ export class MascotFestivalCardComponent implements OnInit, OnChanges, OnDestroy
   @Output() modeChange = new EventEmitter<string>();
   @Input() dates: FestivalDates = {};
   @Output() datesChange = new EventEmitter<FestivalDates>();
+  /** ปรับวันที่อัตโนมัติ (mascot_festival_auto) + ที่อยู่ปฏิทิน (mascot_festival_ics_url, ว่าง = ค่าตั้งต้น) */
+  @Input() autoOn = true;
+  @Output() autoOnChange = new EventEmitter<boolean>();
+  @Input() icsUrl = '';
+  @Output() icsUrlChange = new EventEmitter<string>();
+  private auth = inject(AuthService);
+  status: { fetched_at: string | null; error: string | null; count: number; default_url: string; dates: FestivalDates } | null = null;
+  /** วันที่จากปฏิทินวันหยุดราชการที่ระบบดึงมาแล้ว (ใช้ร่วมกับหน้าตั้งค่าตอนบันทึก) */
+  autoDates: FestivalDates = {};
+  refreshing = false;
+  showUrl = false;
+  get urlOk() { return !this.icsUrl || isHttpsUrl(this.icsUrl); }
+  get fetchedText() { return thaiDateTimeText(this.status?.fetched_at); }
+  private get ext(): FestivalExtra { return this.autoOn ? { auto: this.autoDates, compute: true } : {}; }
 
   readonly festivals = FESTIVALS;
   today = thaiDateKey();
@@ -123,7 +176,7 @@ export class MascotFestivalCardComponent implements OnInit, OnChanges, OnDestroy
   todayFestival: Festival | null = null;
   preview: string | null = null;
 
-  ngOnInit() { this.ngOnChanges(); }
+  ngOnInit() { this.ngOnChanges(); this.loadStatus(); }
   /** ค่าจากหน้าตั้งค่ามาถึงทีหลัง (โหลด settings แบบ async) */
   ngOnChanges() { this.mode = normalizeOutfitMode(this.mode); this.dates = sanitizeFestivalDates(this.dates); this.refresh(); }
   ngOnDestroy() { this.mascotSvc.outfitPreview$.next(null); }
@@ -135,6 +188,32 @@ export class MascotFestivalCardComponent implements OnInit, OnChanges, OnDestroy
     this.refresh();
   }
   setYear(y: number) { this.year = y; this.refresh(); }
+  setAuto(v: boolean) { this.autoOn = !!v; this.autoOnChange.emit(this.autoOn); this.pushPreviewConfig(); this.refresh(); }
+  setUrl(v: string) { this.icsUrl = (v || '').trim(); this.icsUrlChange.emit(this.icsUrl); }
+
+  loadStatus() {
+    this.auth.apiGet('/mascot/festival-dates/status').subscribe({
+      next: (r: any) => {
+        this.status = r?.success ? r : null;
+        this.autoDates = sanitizeFestivalDates(r?.dates);
+        this.refresh();
+      },
+      error: () => { this.status = null; },
+    });
+  }
+  refreshNow() {
+    this.refreshing = true;
+    this.auth.apiPost('/mascot/festival-dates/refresh', {}).subscribe({
+      next: () => { this.refreshing = false; this.loadStatus(); this.pushPreviewConfig(); },
+      // ข้อผิดพลาดถูกบันทึกในสถานะ (status.error) — โหลดสถานะใหม่เพื่อแสดง
+      error: () => { this.refreshing = false; this.loadStatus(); },
+    });
+  }
+  /** ให้น้องในหน้านี้ใช้ค่าปรับวันที่อัตโนมัติที่เลือก (ยังไม่บันทึก) */
+  private pushPreviewConfig() {
+    const cfg = this.mascotSvc.outfit$.value;
+    this.mascotSvc.setOutfitConfig(cfg.mode, cfg.dates, this.autoOn, this.autoDates);
+  }
   setPreview(id: string | null) { this.preview = id && id !== 'auto' ? id : null; this.mascotSvc.outfitPreview$.next(id); }
   setDate(id: string, d: string) {
     const ys = String(this.year), next: FestivalDates = JSON.parse(JSON.stringify(this.dates));
@@ -147,8 +226,8 @@ export class MascotFestivalCardComponent implements OnInit, OnChanges, OnDestroy
   trackRow = (_: number, r: FestivalRow) => r.f.id;
 
   private refresh() {
-    this.rows = festivalRows(this.year, this.dates, this.today);
-    this.missing = missingLunar(this.year, this.dates);
-    this.todayFestival = activeFestival(this.mode, this.today, this.dates);
+    this.rows = festivalRows(this.year, this.dates, this.today, this.ext);
+    this.missing = missingLunar(this.year, this.dates, this.ext);
+    this.todayFestival = activeFestival(this.mode, this.today, this.dates, this.ext);
   }
 }

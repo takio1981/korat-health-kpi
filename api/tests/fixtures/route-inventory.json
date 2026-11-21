@@ -96,6 +96,8 @@
   "POST /khupskpi/api/users :: authenticateToken > requireAction(users,add) > handler",
   "PUT /khupskpi/api/users/change-password :: authenticateToken > handler",
   "GET /khupskpi/api/sso/connectivity :: handler",
+  "GET /khupskpi/api/mascot/festival-dates/status :: authenticateToken > isSuperAdmin > handler",
+  "POST /khupskpi/api/mascot/festival-dates/refresh :: authenticateToken > isSuperAdmin > handler",
   "GET /khupskpi/api/system/maintenance-status :: handler",
   "PUT /khupskpi/api/system/maintenance-mode :: authenticateToken > isSuperAdmin > handler",
   "PUT /khupskpi/api/users/bulk-toggle-active :: authenticateToken > isSuperAdmin > handler",
