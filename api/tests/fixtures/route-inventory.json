@@ -352,6 +352,7 @@
   "PUT /khupskpi/api/work-center/reminder-settings :: authenticateToken > requireSuperAdminStrict > handler",
   "POST /khupskpi/api/work-center/reminders/preview :: authenticateToken > requireSuperAdminStrict > handler",
   "POST /khupskpi/api/work-center/reminders/send-now :: authenticateToken > requireSuperAdminStrict > handler",
+  "GET /khupskpi/api/work-center/reminders/status :: authenticateToken > requireSuperAdminStrict > handler",
   "GET /khupskpi/api/work-center/locked-future :: authenticateToken > requireSuperAdminStrict > handler",
   "POST /khupskpi/api/work-center/unlock-future-months :: authenticateToken > requireSuperAdminStrict > handler",
   "GET /khupskpi/api/my-departments :: authenticateToken > handler",

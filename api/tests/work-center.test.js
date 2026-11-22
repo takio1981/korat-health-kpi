@@ -12,7 +12,7 @@ jest.mock('../core/notify', () => {
     return {
         ...actual,
         // ฐานทดสอบมีโทเคน LINE/Telegram/SMTP จริง — ห้ามส่งออกนอกเครื่อง
-        sendLineToUser: jest.fn(async (id, msg) => { mockSent.line.push({ id, msg }); return true; }),
+        sendLineToUser: jest.fn(async (id, msg) => { mockSent.line.push({ id, msg }); if (mockSent.hold) await mockSent.hold; return true; }),
         sendMail: jest.fn(async (to, subject) => { mockSent.email.push({ to, subject }); }),
         sendTelegramDirect: jest.fn(async () => {}),
         sendLineDirect: jest.fn(async () => {}),
@@ -148,6 +148,18 @@ describe('ภาพรวม / ยังไม่ส่ง / คิวรออ�
 describe('แจ้งเตือนหน่วยบริการที่ยังไม่ส่ง', () => {
     const post = (tok, p, body) => request(app).post(api(p)).set('Authorization', `Bearer ${tok}`).send(body);
     const put = (tok, body) => request(app).put(api('/work-center/reminder-settings')).set('Authorization', `Bearer ${tok}`).send(body);
+    const getStatus = (tok) => request(app).get(api('/work-center/reminders/status')).set('Authorization', `Bearer ${tok}`);
+    const waitFor = async (fn, ms = 10000) => {
+        const end = Date.now() + ms;
+        while (!(await fn())) { if (Date.now() > end) throw new Error('timeout'); await new Promise(r => setTimeout(r, 50)); }
+    };
+    /** รอให้งานส่งเตือนเสร็จ → ผลของรอบนั้น */
+    const waitJob = async () => {
+        let job;
+        await waitFor(async () => { job = (await getStatus(T.sa)).body.data.job; return job && job.status !== 'running'; });
+        expect(job.status).toBe('done');
+        return job.result;
+    };
     const notifCount = async () => Number((await db.query("SELECT COUNT(*) n FROM notifications WHERE year_bh = ? AND hospcode IS NOT NULL", [YEAR]))[0][0].n);
 
     test('ตั้งค่า: super_admin เท่านั้น + ตรวจค่า', async () => {
@@ -168,17 +180,33 @@ describe('แจ้งเตือนหน่วยบริการที่�
         expect(await notifCount()).toBe(0);
         expect(mockSent.line.length + mockSent.email.length).toBe(0);
 
-        const go = await post(T.sa, '/work-center/reminders/send-now', { year_bh: YEAR, month_bh: 10 });
-        expect(go.status).toBe(200);
+        // ส่งทันที = งานเบื้องหลัง (เดิม await ทั้งรอบในคำขอ → production 504) — คืน 202 แล้วดูผลที่ /reminders/status
+        mockSent.hold = new Promise(r => { mockSent.release = r; });
+        const start = await post(T.sa, '/work-center/reminders/send-now', { year_bh: YEAR, month_bh: 10 });
+        expect(start.status).toBe(202);
+        expect(start.body.data.job).toMatchObject({ status: 'running', year_bh: YEAR, month_bh: 10 });
+        await waitFor(() => mockSent.line.length >= 1);
+        const busy = await post(T.sa, '/work-center/reminders/send-now', { year_bh: YEAR, month_bh: 10 });
+        expect(busy.status).toBe(409);
+        expect(busy.body.code).toBe('REMINDER_BUSY');
+        expect((await getStatus(T.ssjA)).status).toBe(403);
+        mockSent.release();
+        const go = { body: { data: await waitJob() } };
+        mockSent.hold = null;
         // ผู้รับของ hos[1] = test_wc_rcpt + test_wc_hos1 (admin_hos ก็ได้รับเตือนของหน่วยบริการตัวเอง)
         expect(go.body.data.sent).toEqual({ inapp: 1, line: 2, email: 2 });
+        const st = (await getStatus(T.sa)).body.data.job;
+        expect(st.progress).toMatchObject({ hospitals_done: 1, hospitals_total: 1, messages_done: 4, messages_total: 4 });
+        const [[last]] = await db.query("SELECT setting_value v FROM system_settings WHERE setting_key = 'reminder_last_run'");
+        expect(JSON.parse(last.v)).toMatchObject({ manual: true, year_bh: YEAR });
         expect(await notifCount()).toBe(1);
         const [[n]] = await db.query('SELECT hospcode, title, message FROM notifications WHERE year_bh = ? AND hospcode IS NOT NULL', [YEAR]);
         expect(n.hospcode).toBe(hos[1]);
         expect(n.message).toMatch(/1 ตัวชี้วัด/);
         expect(mockSent.email.map(e => e.to)).toContain('test_wc_rcpt@example.test');
 
-        const again = await post(T.sa, '/work-center/reminders/send-now', { year_bh: YEAR, month_bh: 10 });
+        expect((await post(T.sa, '/work-center/reminders/send-now', { year_bh: YEAR, month_bh: 10 })).status).toBe(202);
+        const again = { body: { data: await waitJob() } };
         expect(again.body.data.sent).toEqual({ inapp: 0, line: 0, email: 0 });
         expect(again.body.data.skipped_duplicate).toBe(5);
         expect(await notifCount()).toBe(1);

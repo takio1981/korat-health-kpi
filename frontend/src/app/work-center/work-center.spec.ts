@@ -2,7 +2,16 @@ import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { Router } from '@angular/router';
 import { testProviders } from '../testing/test-providers';
-import { WorkCenterComponent, daysLeftText, fiscalYearChoices, dashboardQuery, monthsText, chunk, buildApprovePayload, buildRejectPayload, reviewKey } from './work-center';
+import { WorkCenterComponent, daysLeftText, fiscalYearChoices, dashboardQuery, monthsText, chunk, buildApprovePayload, buildRejectPayload, reviewKey, reminderProgressText } from './work-center';
+
+describe('ศูนย์งานผู้ดูแล — ความคืบหน้าการส่งเตือน (งานเบื้องหลัง)', () => {
+  it('reminderProgressText: ยังไม่มีรายการ / หน่วยบริการ / ข้อความ LINE-อีเมล', () => {
+    expect(reminderProgressText(null)).toBe('กำลังเตรียมรายการ...');
+    expect(reminderProgressText({ progress: { hospitals_done: 3, hospitals_total: 10, messages_done: 0, messages_total: 0 } })).toBe('หน่วยบริการ 3 / 10 แห่ง');
+    expect(reminderProgressText({ progress: { hospitals_done: 10, hospitals_total: 10, messages_done: 4, messages_total: 20 } }))
+      .toBe('หน่วยบริการ 10 / 10 แห่ง<br>LINE/อีเมล 4 / 20 ข้อความ');
+  });
+});
 
 describe('ศูนย์งานผู้ดูแล — อนุมัติ/ส่งคืนจากคิว (ฟังก์ชันล้วน)', () => {
   it('รายการอนุมัติ: ไม่เลือกเดือน = ไม่ส่ง through_month (server ใช้เดือนล่าสุดที่มีผลงาน)', () => {

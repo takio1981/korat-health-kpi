@@ -63,6 +63,13 @@ export function buildRejectPayload(items: any[], year: string, comment: string):
   return items.map(r => ({ indicator_id: Number(r.indicator_id), year_bh: String(year), hospcode: String(r.hospcode), comment: String(comment || '').trim() }));
 }
 export const REVIEW_BATCH = 100;
+/** ข้อความความคืบหน้าของงานส่งเตือน (GET /work-center/reminders/status) */
+export function reminderProgressText(job: any): string {
+  const p = job?.progress;
+  if (!p || !Number(p.hospitals_total)) return 'กำลังเตรียมรายการ...';
+  const h = `หน่วยบริการ ${Number(p.hospitals_done) || 0} / ${Number(p.hospitals_total)} แห่ง`;
+  return Number(p.messages_total) ? `${h}<br>LINE/อีเมล ${Number(p.messages_done) || 0} / ${Number(p.messages_total)} ข้อความ` : h;
+}
 
 @Component({
   selector: 'app-work-center',
@@ -210,17 +217,38 @@ export class WorkCenterComponent implements OnInit {
             <div style="font-size:11px;color:#6b7280">สั่งซ้ำวันเดียวกันจะไม่ส่งซ้ำถึงหน่วยบริการเดิม</div></div>`,
         }).then(r => {
           if (!r.isConfirmed) return;
+          Swal.fire({ title: 'กำลังส่งเตือน...', html: reminderProgressText(null), allowOutsideClick: false, didOpen: () => Swal.showLoading() });
           this.authService.apiPost('/work-center/reminders/send-now', body).subscribe({
-            next: (res: any) => {
-              const s = res?.data?.sent || {};
-              Swal.fire({ icon: 'success', title: 'ส่งเตือนแล้ว', html: `ในระบบ ${Number(s.inapp) || 0} · LINE ${Number(s.line) || 0} · อีเมล ${Number(s.email) || 0}${res?.data?.skipped_duplicate ? `<br><small>ข้ามที่เคยส่งแล้ว ${Number(res.data.skipped_duplicate)}</small>` : ''}` });
-              this.loadSummary();
-            },
-            error: (e: any) => Swal.fire('ผิดพลาด', e?.error?.message || 'ส่งไม่สำเร็จ', 'error'),
+            next: () => this.pollReminderJob(),
+            // กำลังส่งรอบเดิมอยู่ (เช่น กดจากอีกหน้าต่าง) = ติดตามรอบนั้นแทน
+            error: (e: any) => e?.error?.code === 'REMINDER_BUSY' ? this.pollReminderJob() : Swal.fire('ผิดพลาด', e?.error?.message || 'ส่งไม่สำเร็จ', 'error'),
           });
         });
       },
       error: (e: any) => Swal.fire('ผิดพลาด', e?.error?.message || 'ตรวจไม่สำเร็จ', 'error'),
+    });
+  }
+
+  /** ส่งเตือนเป็นงานเบื้องหลังของ server — ดูความคืบหน้าทุก 2 วินาทีจนเสร็จ (คำขอเดียวรอทั้งรอบเคยได้ 504 จาก gateway) */
+  pollReminderJob(delay = 2000) {
+    this.authService.apiGet('/work-center/reminders/status').subscribe({
+      next: (r: any) => {
+        const job = r?.data?.job;
+        if (!job || job.status === 'running') {
+          if (Swal.isVisible()) Swal.update({ html: reminderProgressText(job) });
+          setTimeout(() => this.pollReminderJob(delay), delay);
+          return;
+        }
+        if (job.status === 'failed') { Swal.fire('ผิดพลาด', job.error || 'ส่งไม่สำเร็จ', 'error'); return; }
+        const d = job.result || {};
+        const s = d.sent || {};
+        Swal.fire({ icon: 'success', title: 'ส่งเตือนแล้ว', html: `ในระบบ ${Number(s.inapp) || 0} · LINE ${Number(s.line) || 0} · อีเมล ${Number(s.email) || 0}`
+          + (d.skipped_duplicate ? `<br><small>ข้ามที่เคยส่งแล้ว ${Number(d.skipped_duplicate)}</small>` : '')
+          + (d.capped ? `<br><small>เกินเพดานข้อความต่อรอบ ${Number(d.capped)}</small>` : '') });
+        this.loadSummary();
+      },
+      // เครือข่ายสะดุดชั่วคราว — งานยังทำต่อที่ server ลองดูใหม่
+      error: () => setTimeout(() => this.pollReminderJob(delay), delay * 2),
     });
   }
 

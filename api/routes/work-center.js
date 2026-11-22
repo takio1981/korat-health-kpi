@@ -12,7 +12,7 @@ const { chartScopeClauses } = require('../services/report-scope');
 const { scanDataQuality } = require('../services/data-quality');
 const { getKhdSendPolicy } = require('../services/khd-policy');
 const { listRuns, khdSyncBusyInfo } = require('../services/khd-sync');
-const { runResultReminders, saveLastRun } = require('../jobs/result-reminder');
+const { runResultReminders, saveLastRun, startReminderJob, reminderJob } = require('../jobs/result-reminder');
 const { findLockedFutureMonths, summarizeLockedFuture, unlockFutureMonths } = require('../services/unlock-future');
 const { scheduleSummaryRefresh } = require('../services/summary');
 
@@ -106,22 +106,34 @@ apiRouter.put('/work-center/reminder-settings', authenticateToken, requireSuperA
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 
-// ดูตัวอย่าง / ส่งเตือนทันที (สั่งเอง = ครั้งเดียวต่อวันต่อเดือนผลงาน — กันกดซ้ำ)
-const reminderHandler = (preview) => async (req, res) => {
+// ดูตัวอย่าง (ตอบทันที) / ส่งเตือนทันที (งานเบื้องหลัง — สั่งเอง = ครั้งเดียวต่อวันต่อเดือนผลงาน กันกดซ้ำ)
+// ⚠️ ห้ามกลับไป await การส่งทั้งรอบในคำขอ: LINE/อีเมลหลายร้อยข้อความเกินเวลารอของ gateway → 504 (production 22 พ.ย. 2569)
+apiRouter.post('/work-center/reminders/preview', authenticateToken, requireSuperAdminStrict, async (req, res) => {
     const per = periodOf(req.body || {});
     if (per.error) return res.status(400).json({ success: false, message: per.error });
     try {
-        const out = await runResultReminders({ yearBh: per.year, monthBh: per.month, preview });
-        if (!preview) {
+        res.json({ success: true, data: await runResultReminders({ yearBh: per.year, monthBh: per.month, preview: true }) });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+apiRouter.post('/work-center/reminders/send-now', authenticateToken, requireSuperAdminStrict, async (req, res) => {
+    const per = periodOf(req.body || {});
+    if (per.error) return res.status(400).json({ success: false, message: per.error });
+    const userId = req.user.userId, ip = req.ip;
+    try {
+        const job = startReminderJob({ yearBh: per.year, monthBh: per.month, userId }, async (out) => {
             await saveLastRun(out, true);
             await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
-                [req.user.userId, 'RESULT_REMINDER_SEND', 'notifications', JSON.stringify({ ...out, sample: undefined }), req.ip]).catch(() => {});
-        }
-        res.json({ success: true, data: out });
-    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
-};
-apiRouter.post('/work-center/reminders/preview', authenticateToken, requireSuperAdminStrict, reminderHandler(true));
-apiRouter.post('/work-center/reminders/send-now', authenticateToken, requireSuperAdminStrict, reminderHandler(false));
+                [userId, 'RESULT_REMINDER_SEND', 'notifications', JSON.stringify({ ...out, sample: undefined }), ip]).catch(() => {});
+        });
+        res.status(202).json({ success: true, data: { job: reminderJob(), job_id: job.id }, message: 'เริ่มส่งเตือนแล้ว' });
+    } catch (e) {
+        if (e.code === 'REMINDER_BUSY') return res.status(409).json({ success: false, code: e.code, message: e.message, data: { job: e.job } });
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+apiRouter.get('/work-center/reminders/status', authenticateToken, requireSuperAdminStrict, (req, res) => {
+    res.json({ success: true, data: { job: reminderJob() } });
+});
 
 // ปลดล็อคเดือนที่ยังไม่มีผลงานหลังเดือนล่าสุด (คู่ที่อนุมัติทั้งปีตามระบบเดิม — ก่อนมีการอนุมัติรายเดือน)
 // ดูตัวอย่างก่อนเสมอ แล้วพิมพ์ปีงบยืนยัน — server คำนวณรายการใหม่เองตอนปลดล็อค (ไม่รับรายการจาก client)
