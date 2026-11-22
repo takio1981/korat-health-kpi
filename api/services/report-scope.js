@@ -3,7 +3,7 @@
 // resultScopeFor = ขอบเขตเดียวกันบน kpi_results r + kpi_indicators i (รายชื่อหน่วยบริการของอำเภอดึงแยก — ไม่ JOIN chospital: คนละ collation)
 
 const db = require('../db');
-const { getDistrictId, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT } = require('../core/access');
+const { getDistrictId, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, deptIdsOf } = require('../core/access');
 
 // ขอบเขตตาม role บน kpi_summary (เหมือน /report/by-indicator ทุกประการ)
 async function chartScopeClauses(user) {
@@ -11,7 +11,7 @@ async function chartScopeClauses(user) {
     if (user.role === 'super_admin') {
         // เห็นทั้งหมด
     } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
-        if (user.deptId != null) { c.push('s.dept_id = ?'); p.push(user.deptId); }
+        if (user.deptId != null) { c.push('s.dept_id IN (?)'); p.push(deptIdsOf(user)); }
     } else if (user.role === 'admin_cup') {
         const d = await getDistrictId(user.hospcode);
         if (d) { c.push('s.distid = ?'); p.push(d); } else if (user.hospcode) { c.push('s.hospcode = ?'); p.push(user.hospcode); }
@@ -20,10 +20,10 @@ async function chartScopeClauses(user) {
     } else if (user.role === 'user_cup') {
         const d = await getDistrictId(user.hospcode);
         if (d) { c.push('s.distid = ?'); p.push(d); }
-        if (user.deptId != null) { c.push('s.dept_id = ?'); p.push(user.deptId); }
+        if (user.deptId != null) { c.push('s.dept_id IN (?)'); p.push(deptIdsOf(user)); }
     } else {
         if (user.hospcode) { c.push('s.hospcode = ?'); p.push(user.hospcode); }
-        if (user.deptId != null) { c.push('s.dept_id = ?'); p.push(user.deptId); }
+        if (user.deptId != null) { c.push('s.dept_id IN (?)'); p.push(deptIdsOf(user)); }
     }
     c.push('i.is_active = 1'); // เฉพาะตัวชี้วัดที่เปิดใช้งาน
     return { c, p };
@@ -45,7 +45,7 @@ async function resultScopeFor(user) {
     if (!user || user.role === 'super_admin') {
         // ทั้งหมด
     } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
-        if (user.deptId != null) { c.push('i.dept_id = ?'); p.push(user.deptId); }
+        if (user.deptId != null) { c.push('i.dept_id IN (?)'); p.push(deptIdsOf(user)); }
     } else if (user.role === 'admin_cup') {
         const ok = await inHos(await getDistrictId(user.hospcode));
         if (!ok) { c.push('r.hospcode = ?'); p.push(user.hospcode || ''); }
@@ -54,10 +54,10 @@ async function resultScopeFor(user) {
     } else if (user.role === 'user_cup') {
         const ok = await inHos(await getDistrictId(user.hospcode));
         if (!ok) { c.push('r.hospcode = ?'); p.push(user.hospcode || ''); }
-        if (user.deptId != null) { c.push('i.dept_id = ?'); p.push(user.deptId); }
+        if (user.deptId != null) { c.push('i.dept_id IN (?)'); p.push(deptIdsOf(user)); }
     } else {
         c.push('r.hospcode = ?'); p.push(user.hospcode || '');
-        if (user.deptId != null) { c.push('i.dept_id = ?'); p.push(user.deptId); }
+        if (user.deptId != null) { c.push('i.dept_id IN (?)'); p.push(deptIdsOf(user)); }
     }
     c.push('i.is_active = 1');
     return { c, p };

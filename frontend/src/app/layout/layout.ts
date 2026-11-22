@@ -11,12 +11,13 @@ import { Title } from '@angular/platform-browser';
 import { CommandPaletteComponent } from '../shared/command-palette/command-palette';
 import { ZoneBadgeComponent, HospitalZoneService } from '../shared/zone-badge';
 import { MascotAssistantComponent } from '../shared/mascot/mascot-assistant';
+import { MyDepartmentsComponent, ROLE_MULTI_DEPT } from '../shared/my-departments';
 import { MascotService } from '../shared/mascot/mascot.service';
 
 @Component({
   selector: 'app-layout',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, RouterOutlet, CommandPaletteComponent, ZoneBadgeComponent, MascotAssistantComponent],
+  imports: [CommonModule, FormsModule, RouterModule, RouterOutlet, CommandPaletteComponent, ZoneBadgeComponent, MascotAssistantComponent, MyDepartmentsComponent],
   templateUrl: './layout.html',
   styleUrls: ['./layout.css']
 })
@@ -53,6 +54,10 @@ export class LayoutComponent implements OnInit, OnDestroy {
   isAdmin: boolean = false;       // admin_ssj + super_admin (ส่วนกลาง)
   isAnyAdmin: boolean = false;    // admin_cup + admin_ssj + super_admin (ทุกระดับ admin)
   isSuperAdmin: boolean = false;
+  /** ผู้ใช้ทั่วไป — มีกลุ่มงานเพิ่มเติมได้ (เมนู กลุ่มงานของฉัน) */
+  get canMultiDept(): boolean { return ROLE_MULTI_DEPT.includes(this.authService.getUserRole()); }
+  @ViewChild('myDepts') myDepts?: MyDepartmentsComponent;
+  openMyDepartments() { this.showProfileDropdown = false; this.myDepts?.open(); }
   currentUser: any = null;
   systemVersion: string = 'v1.0.0';
   pendingKpiCount: number = 0;

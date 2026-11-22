@@ -4,7 +4,15 @@
 const db = require('../db');
 const jwt = require('jsonwebtoken');
 const { SECRET_KEY } = require('./security');
-const { ROLE_ADMIN_ALL, ROLE_ADMIN_CENTRAL, hasPageAccess, resolvePageKeyFromPath } = require('./access');
+const { ROLE_ADMIN_ALL, ROLE_ADMIN_CENTRAL, ROLE_MULTI_DEPT, hasPageAccess, resolvePageKeyFromPath } = require('./access');
+
+/** กลุ่มงานเพิ่มเติมที่อนุมัติแล้วของผู้ใช้ (ตาราง user_departments) — ยังไม่มีตาราง/ผิดพลาด = [] (ใช้กลุ่มงานหลักอย่างเดียวเหมือนเดิม) */
+async function loadExtraDeptIds(uid) {
+    try {
+        const [r] = await db.query("SELECT dept_id FROM user_departments WHERE user_id = ? AND status = 'approved'", [uid]);
+        return r.map(x => Number(x.dept_id)).filter(Number.isFinite);
+    } catch (_) { return []; }
+}
 
 // Middleware ตรวจสอบ JWT Token
 // Throttle cache สำหรับ update last_seen — userId → timestamp ของ update ล่าสุด
@@ -64,6 +72,7 @@ const authenticateToken = async (req, res, next) => {
                     sessionId: rows[0]?.active_session_id || null,
                     exists: rows.length > 0,
                     isActive: rows.length > 0 && Number(rows[0].is_active) !== 0,
+                    extraDeptIds: ROLE_MULTI_DEPT.includes(user.role) ? await loadExtraDeptIds(uid) : [],
                     expiry: now + SESSION_CACHE_TTL,
                 };
                 _sessionCache.set(uid, cached);
@@ -73,6 +82,12 @@ const authenticateToken = async (req, res, next) => {
                 console.error('   👉 ตรวจสอบว่ามีคอลัมน์ active_session_id ใน users table หรือไม่');
                 cached = { sessionId: user.sessionId || null, exists: true, isActive: true, dbError: true, expiry: now + SESSION_CACHE_TTL };
             }
+        }
+        // กลุ่มงานที่ผู้ใช้ทั่วไปเห็น/บันทึกได้ = กลุ่มงานหลัก (ใน token) + กลุ่มงานเพิ่มเติมที่อนุมัติแล้ว (22 พ.ย. 2569) — ใช้ผ่าน deptIdsOf(user)
+        // เปลี่ยนกลุ่มงานเพิ่มเติมแล้วต้อง _sessionCache.delete(uid) ให้มีผลทันที (ไม่งั้นรอแคช 2 นาที)
+        if (ROLE_MULTI_DEPT.includes(user.role)) {
+            const extra = (cached.extraDeptIds || []).filter(d => Number(d) !== Number(user.deptId));
+            user.deptIds = [...(user.deptId != null ? [Number(user.deptId)] : []), ...extra.map(Number)];
         }
         if (!cached.exists || !cached.isActive) {
             return res.status(401).json({ success: false, code: 'ACCOUNT_DISABLED', message: 'บัญชีนี้ถูกปิดใช้งานหรือไม่มีอยู่ในระบบแล้ว กรุณาติดต่อผู้ดูแลระบบ' });

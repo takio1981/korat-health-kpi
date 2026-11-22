@@ -3,7 +3,7 @@
 // ลงทะเบียนเส้นทางกับ apiRouter ตอนถูก require — server.js require ไฟล์นี้ที่ตำแหน่งเดิมของเส้นทางชุดนี้ (ลำดับเส้นทางสำคัญ)
 
 const db = require('../db');
-const { ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, getDistrictId, hasPageAccess } = require('../core/access');
+const { ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, getDistrictId, hasPageAccess, deptIdsOf } = require('../core/access');
 const { activeIndicatorSql, targetCondOf, targetHasSql, targetPassSql } = require('../core/sql');
 const { apiRouter } = require('../core/router');
 const { currentFiscalYear } = require('../core/fiscal-year');
@@ -22,8 +22,8 @@ apiRouter.get('/kpi-template', authenticateToken, async (req, res) => {
         // กรองตาม dept เฉพาะ role ที่ scope = หน่วยงานตัวเอง (ROLE_SCOPE_OWN_DEPT) — admin_cup/hos/sso เห็นทุกหน่วยงาน
         // แม้บัญชีจะมี dept_id ติดอยู่ก็ตาม (ตาราง Role System ใน CLAUDE.md)
         if (ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null) {
-            deptFilter = 'AND i.dept_id = ?';
-            params.push(user.deptId);
+            deptFilter = 'AND i.dept_id IN (?)';
+            params.push(deptIdsOf(user));
         }
         const sql = `
             SELECT
@@ -84,8 +84,8 @@ apiRouter.get('/kpi-template/added', authenticateToken, async (req, res) => {
             params.push(distid || '');
         }
         if (ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null) {
-            where.push('r.indicator_id IN (SELECT id FROM kpi_indicators WHERE dept_id = ?)');
-            params.push(user.deptId);
+            where.push('r.indicator_id IN (SELECT id FROM kpi_indicators WHERE dept_id IN (?))');
+            params.push(deptIdsOf(user));
         }
         const [rows] = await db.query(
             `SELECT r.indicator_id, r.hospcode FROM kpi_results r WHERE ${where.join(' AND ')} GROUP BY r.indicator_id, r.hospcode`, params);
@@ -156,19 +156,19 @@ apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
         if (user.role === 'super_admin') {
             // no filter
         } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
-            if (user.deptId != null) { whereClause = 'AND i.dept_id = ?'; filterParams.push(user.deptId); }
+            if (user.deptId != null) { whereClause = 'AND i.dept_id IN (?)'; filterParams.push(deptIdsOf(user)); }
         } else if (ROLE_SCOPE_DISTRICT.includes(user.role)) {
             const distid = await getDistrictId(user.hospcode);
             if (distid) {
                 whereClause = 'AND h.distid = ?'; filterParams.push(distid);
-                if (user.role === 'user_cup' && user.deptId != null) { whereClause += ' AND i.dept_id = ?'; filterParams.push(user.deptId); }
+                if (user.role === 'user_cup' && user.deptId != null) { whereClause += ' AND i.dept_id IN (?)'; filterParams.push(deptIdsOf(user)); }
             } else { whereClause = 'AND r.hospcode = ?'; filterParams.push(user.hospcode); }
         } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
             // ทุก dept แต่เฉพาะ hospcode ตัวเอง
             if (user.hospcode) { whereClause += ' AND r.hospcode = ?'; filterParams.push(user.hospcode); }
         } else {
             if (user.hospcode) { whereClause += ' AND r.hospcode = ?'; filterParams.push(user.hospcode); }
-            if (user.deptId != null) { whereClause += ' AND i.dept_id = ?'; filterParams.push(user.deptId); }
+            if (user.deptId != null) { whereClause += ' AND i.dept_id IN (?)'; filterParams.push(deptIdsOf(user)); }
         }
 
         const queryParams = [year, ...filterParams];
@@ -183,18 +183,18 @@ apiRouter.get('/dashboard-stats', authenticateToken, async (req, res) => {
         if (user.role === 'super_admin') {
             // เห็นทั้งหมด
         } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
-            if (user.deptId != null) { summaryWhereClauses.push('s.dept_id = ?'); summaryParams.push(user.deptId); }
+            if (user.deptId != null) { summaryWhereClauses.push('s.dept_id IN (?)'); summaryParams.push(deptIdsOf(user)); }
         } else if (ROLE_SCOPE_DISTRICT.includes(user.role)) {
             const distid = await getDistrictId(user.hospcode);
             if (distid) {
                 summaryWhereClauses.push('s.distid = ?'); summaryParams.push(distid);
-                if (user.role === 'user_cup' && user.deptId != null) { summaryWhereClauses.push('s.dept_id = ?'); summaryParams.push(user.deptId); }
+                if (user.role === 'user_cup' && user.deptId != null) { summaryWhereClauses.push('s.dept_id IN (?)'); summaryParams.push(deptIdsOf(user)); }
             } else if (user.hospcode) { summaryWhereClauses.push('s.hospcode = ?'); summaryParams.push(user.hospcode); }
         } else if (['admin_hos', 'admin_sso'].includes(user.role)) {
             if (user.hospcode) { summaryWhereClauses.push('s.hospcode = ?'); summaryParams.push(user.hospcode); }
         } else {
             if (user.hospcode) { summaryWhereClauses.push('s.hospcode = ?'); summaryParams.push(user.hospcode); }
-            if (user.deptId != null) { summaryWhereClauses.push('s.dept_id = ?'); summaryParams.push(user.deptId); }
+            if (user.deptId != null) { summaryWhereClauses.push('s.dept_id IN (?)'); summaryParams.push(deptIdsOf(user)); }
         }
         const summaryWhere = summaryWhereClauses.join(' AND ');
 

@@ -3,7 +3,7 @@
 // ลงทะเบียนเส้นทางกับ apiRouter ตอนถูก require — server.js require ไฟล์นี้ที่ตำแหน่งเดิมของเส้นทางชุดนี้ (ลำดับเส้นทางสำคัญ)
 
 const db = require('../db');
-const { ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, getDistrictId, requireAction } = require('../core/access');
+const { ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, getDistrictId, requireAction, deptIdsOf } = require('../core/access');
 const { apiRouter } = require('../core/router');
 const { authenticateToken, isSuperAdmin } = require('../core/auth');
 const { isZoneCode } = require('../core/zones');
@@ -24,8 +24,8 @@ apiRouter.get('/departments', authenticateToken, async (req, res) => {
         let where = '';
         const params = [];
         if (ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null) {
-            where = 'WHERE id = ?';
-            params.push(user.deptId);
+            where = 'WHERE id IN (?)';
+            params.push(deptIdsOf(user)); // กลุ่มงานหลัก + กลุ่มงานเพิ่มเติม (22 พ.ย. 2569)
         }
         const [depts] = await db.query(`SELECT * FROM departments ${where} ORDER BY dept_name`, params);
         res.json({ success: true, data: depts });

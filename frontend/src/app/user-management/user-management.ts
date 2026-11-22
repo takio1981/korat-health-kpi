@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -6,6 +6,7 @@ import { AuthService } from '../services/auth';
 import { ToastService } from '../services/toast.service';
 import Swal from 'sweetalert2';
 import { ZoneBadgeComponent } from '../shared/zone-badge';
+import { UserDeptAdminComponent, canHaveExtraDepts } from '../shared/user-dept-admin';
 import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
 
 interface UsersFieldDiff { field: string; khd_field?: string; local_value: any; khd_value: any; }
@@ -14,7 +15,7 @@ interface UsersSyncMappingRow { field: string; khd_field: string; excluded: bool
 @Component({
   selector: 'app-user-management',
   standalone: true,
-  imports: [CommonModule, FormsModule, ZoneBadgeComponent],
+  imports: [CommonModule, FormsModule, ZoneBadgeComponent, UserDeptAdminComponent],
   templateUrl: './user-management.html'
 })
 export class UserManagementComponent implements OnInit {
@@ -105,11 +106,18 @@ export class UserManagementComponent implements OnInit {
   // ไม่ครอบคลุม: อนุมัติ/ตีกลับ/ตั้งค่าสิทธิ์แก้ไขข้อมูล/sync KHD (ยังคง hardcode admin_ssj+super_admin หรือ super_admin ตามเดิม)
   canAddData: boolean = false;
   canEditData: boolean = false;
+  /** กลุ่มงานเพิ่มเติมของผู้ใช้ (22 พ.ย. 2569): กำหนด/อนุมัติได้เฉพาะ super_admin (ทุกกลุ่มงาน) และ admin_ssj (กลุ่มงานของตนเอง) — backend ตรวจซ้ำ */
+  isCentralAdmin = false;
+  deptPending = 0;
+  onDeptPending(n: number) { this.deptPending = n; this.cdr.detectChanges(); }
+  readonly canHaveExtraDepts = canHaveExtraDepts;
+  @ViewChild('deptAdmin') deptAdmin?: UserDeptAdminComponent;
 
   ngOnInit() {
     const role = this.authService.getUserRole();
     this.isAdmin = ['admin_hos', 'admin_sso', 'admin_cup', 'admin_ssj', 'super_admin'].includes(role);
     this.isSuperAdmin = role === 'super_admin';
+    this.isCentralAdmin = ['admin_ssj', 'super_admin'].includes(role);
     this.canAddData = this.authService.canPerformAction('users', 'add');
     this.canEditData = this.authService.canPerformAction('users', 'edit');
     this.loggedInUser = this.authService.getUser();
@@ -122,6 +130,7 @@ export class UserManagementComponent implements OnInit {
     });
 
     this.loadUsers();
+    if (this.isCentralAdmin) setTimeout(() => this.deptAdmin?.loadRequests());
     this.loadDepartments();
     this.loadHospitals();
     this.loadDistricts();

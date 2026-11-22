@@ -6,7 +6,7 @@ const db = require('../db');
 const { pendingReviewSumSql, rowStatusSql } = require('../core/sql');
 const kpiFormula = require('../kpi-formula');
 const { TARGET_MONTHLY_MODES, normalizeTargetMonthly, aggregateMonthlyTarget } = require('../kpi-target');
-const { ROLE_ADMIN_ALL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, foreignWriteHospcodes, getDistrictId, getPermsForUser, hospcodesOutOfWriteScope } = require('../core/access');
+const { ROLE_ADMIN_ALL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, foreignWriteHospcodes, getDistrictId, getPermsForUser, hospcodesOutOfWriteScope, deptIdsOf } = require('../core/access');
 const { getDataEntryLockState, DATA_ENTRY_LOCKED_MESSAGE } = require('../services/data-entry-lock');
 const { FISCAL_ORD_SQL } = require('../services/review-status');
 const { apiRouter } = require('../core/router');
@@ -30,7 +30,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
             // เห็นทั้งหมด
         } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
             // admin_ssj / user_ssj: เห็นทุก hospcode แต่เฉพาะหน่วยงานตัวเอง
-            if (user.deptId != null) { whereClause = 'WHERE i.dept_id = ?'; params.push(user.deptId); }
+            if (user.deptId != null) { whereClause = 'WHERE i.dept_id IN (?)'; params.push(deptIdsOf(user)); }
         } else if (ROLE_SCOPE_DISTRICT.includes(user.role)) {
             // admin_cup / user_cup: ทุกตัวชี้วัด ทุก hospcode ในอำเภอ
             const distid = await getDistrictId(user.hospcode);
@@ -39,7 +39,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
                 params.push(distid);
                 // user_cup เห็นเฉพาะ dept ตัวเอง, admin_cup เห็นทุก dept
                 if (user.role === 'user_cup' && user.deptId != null) {
-                    whereClause += ' AND i.dept_id = ?'; params.push(user.deptId);
+                    whereClause += ' AND i.dept_id IN (?)'; params.push(deptIdsOf(user));
                 }
             } else {
                 whereClause = 'WHERE r.hospcode = ?'; params.push(user.hospcode);
@@ -51,7 +51,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
             // user_hos / user_sso: hospcode + dept ตัวเอง
             const conditions = [];
             if (user.hospcode) { conditions.push('r.hospcode = ?'); params.push(user.hospcode); }
-            if (user.deptId != null) { conditions.push('i.dept_id = ?'); params.push(user.deptId); }
+            if (user.deptId != null) { conditions.push('i.dept_id IN (?)'); params.push(deptIdsOf(user)); }
             if (conditions.length > 0) whereClause = 'WHERE ' + conditions.join(' AND ');
         }
 
@@ -726,8 +726,8 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
             const indicatorIds = [...new Set(updates.map(u => u.indicator_id))];
             if (indicatorIds.length > 0) {
                 const [allowed] = await connection.query(
-                    'SELECT id FROM kpi_indicators WHERE id IN (?) AND dept_id = ?',
-                    [indicatorIds, user.deptId]
+                    'SELECT id FROM kpi_indicators WHERE id IN (?) AND dept_id IN (?)',
+                    [indicatorIds, deptIdsOf(user).length ? deptIdsOf(user) : [-1]] // กลุ่มงานหลัก + เพิ่มเติม (22 พ.ย. 2569)
                 );
                 const allowedIds = allowed.map(a => a.id);
                 const unauthorizedIds = indicatorIds.filter(id => !allowedIds.includes(id));

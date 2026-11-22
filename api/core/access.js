@@ -286,6 +286,17 @@ const ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT = ['admin_ssj', 'user_ssj'];
 // เห็นเฉพาะ dept ตัวเอง (ตรงข้ามกับ admin_cup/admin_hos/admin_sso ที่เห็น "ทุก dept" แม้จะมี dept_id ติดตัวอยู่ก็ตาม)
 // ใช้แยกจาก ROLE_SCOPE_HOSPCODE เพราะ admin_hos/admin_sso อยู่ใน HOSPCODE (ล็อค hospcode) แต่ไม่ล็อค dept
 const ROLE_SCOPE_OWN_DEPT = ['admin_ssj', 'user_ssj', 'user_hos', 'user_sso', 'user_cup', 'user'];
+// ผู้ใช้ทั่วไปที่มีกลุ่มงานเพิ่มเติมได้ (ดูแลตัวชี้วัดข้ามกลุ่มงาน — 22 พ.ย. 2569, ผู้ใช้เลือก: ผู้ใช้ทั่วไปทุกระดับ ไม่รวม admin_ssj)
+const ROLE_MULTI_DEPT = ['user_ssj', 'user_hos', 'user_sso', 'user_cup', 'user'];
+/**
+ * กลุ่มงานที่ผู้ใช้เห็น/บันทึกได้ = กลุ่มงานหลัก + กลุ่มงานเพิ่มเติมที่อนุมัติแล้ว (authenticateToken ใส่ user.deptIds) — [] = ไม่มีกลุ่มงาน
+ * ⚠️ ทุกจุดที่กรองตาม ROLE_SCOPE_OWN_DEPT ต้องใช้ `dept_id IN (?)` + deptIdsOf(user) ไม่ใช่ `= user.deptId` (กลุ่มงานเพิ่มเติมจะหาย)
+ */
+function deptIdsOf(user) {
+    if (!user) return [];
+    if (Array.isArray(user.deptIds) && user.deptIds.length) return user.deptIds;
+    return user.deptId != null ? [Number(user.deptId)] : [];
+}
 
 // ผู้ใช้ที่ไม่ใช่ผู้ดูแลบันทึกผลงานได้เฉพาะหน่วยบริการตัวเอง แม้จะเห็นข้อมูลกว้างกว่านั้น (user_ssj = ทุกหน่วยบริการ, user_cup = ทั้งอำเภอ)
 // คืนรายการ hospcode ที่บันทึกไม่ได้ ([] = ผ่าน) — เดิม /update-kpi แทน hospcode ของแถวด้วยของผู้ใช้เงียบๆ ค่าที่แก้ในแถวหน่วยบริการอื่นจึงไปลงหน่วยบริการตัวเอง
@@ -304,7 +315,8 @@ async function indicatorsOutsideOwnDept(user, indicatorIds) {
     const ids = [...new Set((indicatorIds || []).map(Number).filter(Boolean))];
     if (!ids.length) return [];
     const [rows] = await db.query('SELECT id, dept_id FROM kpi_indicators WHERE id IN (?)', [ids]);
-    const ok = new Set(rows.filter(r => String(r.dept_id) === String(user.deptId)).map(r => Number(r.id)));
+    const mine = new Set(deptIdsOf(user).map(String));
+    const ok = new Set(rows.filter(r => mine.has(String(r.dept_id))).map(r => Number(r.id)));
     return ids.filter(id => !ok.has(id));
 }
 const OUTSIDE_DEPT_MESSAGE = 'ไม่มีสิทธิ์ดำเนินการกับตัวชี้วัดของหน่วยงานอื่น';
@@ -380,4 +392,4 @@ setInterval(() => {
     for (const [k, v] of _userPermCache.entries()) if (v.expiry < now) _userPermCache.delete(k);
 }, 5 * 60 * 1000);
 
-module.exports = { ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, foreignWriteHospcodes, PAGE_ACCESS_ROLES, PAGE_ACCESS_PAGES, PAGE_ACCESS_DEFAULT_ENABLED, loadRolePageAccessCache, hasPageAccess, PAGE_ACCESS_RULES, resolvePageKeyFromPath, ACTION_ACCESS_ROLES, ACTION_ACCESS_PAGES, ACTION_TYPES, ACTION_ACCESS_DEFAULT_ENABLED, loadRoleActionAccessCache, hasActionAccess, requireAction, requireAnyAction, ROLE_ADMIN_ALL, ROLE_ADMIN_CENTRAL, ROLE_ADMIN_LOCAL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, getDistrictId, getPermsForUser, invalidateUserPermCache, indicatorsOutsideOwnDept, OUTSIDE_DEPT_MESSAGE, canAccessHospcode, hospcodesOutOfWriteScope };
+module.exports = { ROLE_MULTI_DEPT, deptIdsOf, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, foreignWriteHospcodes, PAGE_ACCESS_ROLES, PAGE_ACCESS_PAGES, PAGE_ACCESS_DEFAULT_ENABLED, loadRolePageAccessCache, hasPageAccess, PAGE_ACCESS_RULES, resolvePageKeyFromPath, ACTION_ACCESS_ROLES, ACTION_ACCESS_PAGES, ACTION_TYPES, ACTION_ACCESS_DEFAULT_ENABLED, loadRoleActionAccessCache, hasActionAccess, requireAction, requireAnyAction, ROLE_ADMIN_ALL, ROLE_ADMIN_CENTRAL, ROLE_ADMIN_LOCAL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, getDistrictId, getPermsForUser, invalidateUserPermCache, indicatorsOutsideOwnDept, OUTSIDE_DEPT_MESSAGE, canAccessHospcode, hospcodesOutOfWriteScope };

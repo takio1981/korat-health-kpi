@@ -6,7 +6,7 @@ const db = require('../db');
 const kpiRollup = require('../kpi-rollup');
 const { normalizeTargetMonthly } = require('../kpi-target');
 const { normalizeQuarterMode, isQuarterEntryMonth } = require('../kpi-formula');
-const { ROLE_ADMIN_ALL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, foreignWriteHospcodes, getDistrictId, getPermsForUser, hasPageAccess, requireAction, canAccessHospcode, hospcodesOutOfWriteScope } = require('../core/access');
+const { ROLE_ADMIN_ALL, ROLE_SCOPE_DISTRICT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_OWN_DEPT, foreignWriteHospcodes, getDistrictId, getPermsForUser, hasPageAccess, requireAction, canAccessHospcode, hospcodesOutOfWriteScope, deptIdsOf } = require('../core/access');
 const { getDataEntryLockState, DATA_ENTRY_LOCKED_MESSAGE } = require('../services/data-entry-lock');
 const { ROLLED_SUB_MESSAGE, activeSubTree, getHierarchyMaxLevels, loadSubAggregates, rolledSubIds, subLevelIn } = require('../services/hierarchy');
 const { _actorLabel, normTargetCondition, normalizeEvalMode, normalizeOffTypes } = require('../services/indicator-fields');
@@ -135,8 +135,8 @@ apiRouter.get('/indicators', authenticateToken, async (req, res) => {
         // เวลาบัญชีของ role เหล่านั้นบังเอิญมี dept_id ติดตัวอยู่ (พบจริงจากข้อมูล — admin_cup 11/20 บัญชีมี dept_id)
         const conds = [];
         if (ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null) {
-            conds.push('i.dept_id = ?');
-            params.push(user.deptId);
+            conds.push('i.dept_id IN (?)');
+            params.push(deptIdsOf(user));
         }
         // ค่าเริ่มต้น: เฉพาะตัวชี้วัดที่เปิดใช้งาน (dropdown ทั่วระบบ) — ?include_inactive=1 ให้หน้าจัดการตัวชี้วัดเห็นทุกตัว
         // (เฉพาะ role ที่เข้าหน้า kpi-manage ได้ — role อื่นส่งมาก็ได้แค่ตัวที่เปิดใช้งาน)
@@ -863,7 +863,7 @@ apiRouter.post('/hierarchy-results/save', authenticateToken, async (req, res) =>
         const indicatorIds = [...new Set([...subRows.map(r => r.indicator_id), ...actRows.map(r => r.indicator_id)])];
         // user ทั่วไปบันทึกได้เฉพาะตัวชี้วัดของหน่วยงานตัวเอง (เหมือน /update-kpi)
         if (!ROLE_ADMIN_ALL.includes(user.role)) {
-            const [allowed] = await conn.query('SELECT id FROM kpi_indicators WHERE id IN (?) AND dept_id = ?', [indicatorIds, user.deptId]);
+            const [allowed] = await conn.query('SELECT id FROM kpi_indicators WHERE id IN (?) AND dept_id IN (?)', [indicatorIds, deptIdsOf(user).length ? deptIdsOf(user) : [-1]]);
             if (allowed.length !== indicatorIds.length) throw Object.assign(new Error('ไม่มีสิทธิ์แก้ไขข้อมูลหน่วยงานอื่น'), { status: 403 });
         }
         // ล็อคจากการอนุมัติ "รายเดือน" (22 พ.ย. 2569) — เดือนที่ตัวชี้วัดหลัก/ข้อย่อย/กิจกรรมอนุมัติแล้ว แก้ไม่ได้ เดือนอื่นบันทึกได้ (super_admin ข้ามได้)

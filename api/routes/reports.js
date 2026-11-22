@@ -6,7 +6,7 @@ const db = require('../db');
 const { activeIndicatorSql, targetCondOf, targetHasSql, targetPassSql } = require('../core/sql');
 const { apiRouter } = require('../core/router');
 const { authenticateToken } = require('../core/auth');
-const { getDistrictId, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT } = require('../core/access');
+const { getDistrictId, ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT, deptIdsOf } = require('../core/access');
 const { addZoneFilter } = require('../core/zones');
 const { ITYPE_ALL, ITYPE_KEYS, ITYPE_LABELS, itypeCond, addItypeFilter, itypeLabel } = require('../services/indicator-types');
 const { districtZoneMap } = require('../services/zones');
@@ -58,8 +58,8 @@ apiRouter.get('/kpi-summary', authenticateToken, async (req, res) => {
 
         // Role-based filter
         if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role) && user.deptId != null) {
-            conditions.push('s.dept_name = (SELECT dept_name FROM departments WHERE id = ?)');
-            params.push(user.deptId);
+            conditions.push('s.dept_name IN (SELECT dept_name FROM departments WHERE id IN (?))');
+            params.push(deptIdsOf(user));
         } else if (user.role !== 'super_admin' && !ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role) && user.hospcode) {
             conditions.push('s.hospcode = ?');
             params.push(user.hospcode);
@@ -85,7 +85,7 @@ async function reportByIndicatorRows(user, query = {}) {
     if (user.role === 'super_admin') {
         // เห็นทั้งหมด
     } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
-        if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
+        if (user.deptId != null) { whereClauses.push('s.dept_id IN (?)'); params.push(deptIdsOf(user)); }
     } else if (user.role === 'admin_cup') {
         const distid_auto = await getDistrictId(user.hospcode);
         if (distid_auto) { whereClauses.push('s.distid = ?'); params.push(distid_auto); }
@@ -95,10 +95,10 @@ async function reportByIndicatorRows(user, query = {}) {
     } else if (user.role === 'user_cup') {
         const distid_auto = await getDistrictId(user.hospcode);
         if (distid_auto) { whereClauses.push('s.distid = ?'); params.push(distid_auto); }
-        if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
+        if (user.deptId != null) { whereClauses.push('s.dept_id IN (?)'); params.push(deptIdsOf(user)); }
     } else {
         if (user.hospcode) { whereClauses.push('s.hospcode = ?'); params.push(user.hospcode); }
-        if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
+        if (user.deptId != null) { whereClauses.push('s.dept_id IN (?)'); params.push(deptIdsOf(user)); }
     }
     if (year_bh) { whereClauses.push('s.year_bh = ?'); params.push(year_bh); }
     if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
@@ -176,7 +176,7 @@ async function reportByHospitalRows(user, query = {}) {
     if (user.role === 'super_admin') {
         // เห็นทั้งหมด
     } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
-        if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
+        if (user.deptId != null) { whereClauses.push('s.dept_id IN (?)'); params.push(deptIdsOf(user)); }
     } else if (user.role === 'admin_cup') {
         const distid_auto = await getDistrictId(user.hospcode);
         if (distid_auto) { whereClauses.push('s.distid = ?'); params.push(distid_auto); }
@@ -186,10 +186,10 @@ async function reportByHospitalRows(user, query = {}) {
     } else if (user.role === 'user_cup') {
         const distid_auto = await getDistrictId(user.hospcode);
         if (distid_auto) { whereClauses.push('s.distid = ?'); params.push(distid_auto); }
-        if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
+        if (user.deptId != null) { whereClauses.push('s.dept_id IN (?)'); params.push(deptIdsOf(user)); }
     } else {
         if (user.hospcode) { whereClauses.push('s.hospcode = ?'); params.push(user.hospcode); }
-        if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
+        if (user.deptId != null) { whereClauses.push('s.dept_id IN (?)'); params.push(deptIdsOf(user)); }
     }
     if (year_bh) { whereClauses.push('s.year_bh = ?'); params.push(year_bh); }
     if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
@@ -253,7 +253,7 @@ async function reportByDistrictRows(user, query = {}) {
     if (user.role === 'super_admin') {
         // เห็นทั้งหมด
     } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
-        if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
+        if (user.deptId != null) { whereClauses.push('s.dept_id IN (?)'); params.push(deptIdsOf(user)); }
     } else if (user.role === 'admin_cup') {
         const distid_auto = await getDistrictId(user.hospcode);
         if (distid_auto) { whereClauses.push('s.distid = ?'); params.push(distid_auto); }
@@ -263,10 +263,10 @@ async function reportByDistrictRows(user, query = {}) {
     } else if (user.role === 'user_cup') {
         const distid_auto = await getDistrictId(user.hospcode);
         if (distid_auto) { whereClauses.push('s.distid = ?'); params.push(distid_auto); }
-        if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
+        if (user.deptId != null) { whereClauses.push('s.dept_id IN (?)'); params.push(deptIdsOf(user)); }
     } else {
         if (user.hospcode) { whereClauses.push('s.hospcode = ?'); params.push(user.hospcode); }
-        if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
+        if (user.deptId != null) { whereClauses.push('s.dept_id IN (?)'); params.push(deptIdsOf(user)); }
     }
     if (year_bh) { whereClauses.push('s.year_bh = ?'); params.push(year_bh); }
     if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
@@ -323,7 +323,7 @@ async function reportByYearRows(user, query = {}) {
     if (user.role === 'super_admin') {
         // เห็นทั้งหมด
     } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
-        if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
+        if (user.deptId != null) { whereClauses.push('s.dept_id IN (?)'); params.push(deptIdsOf(user)); }
     } else if (user.role === 'admin_cup') {
         const distid_auto = await getDistrictId(user.hospcode);
         if (distid_auto) { whereClauses.push('s.distid = ?'); params.push(distid_auto); }
@@ -333,10 +333,10 @@ async function reportByYearRows(user, query = {}) {
     } else if (user.role === 'user_cup') {
         const distid_auto = await getDistrictId(user.hospcode);
         if (distid_auto) { whereClauses.push('s.distid = ?'); params.push(distid_auto); }
-        if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
+        if (user.deptId != null) { whereClauses.push('s.dept_id IN (?)'); params.push(deptIdsOf(user)); }
     } else {
         if (user.hospcode) { whereClauses.push('s.hospcode = ?'); params.push(user.hospcode); }
-        if (user.deptId != null) { whereClauses.push('s.dept_id = ?'); params.push(user.deptId); }
+        if (user.deptId != null) { whereClauses.push('s.dept_id IN (?)'); params.push(deptIdsOf(user)); }
     }
     if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
     if (distid) { whereClauses.push('s.distid = ?'); params.push(distid); }
@@ -720,7 +720,7 @@ async function recordingStatusByIndicator(user, query = {}) {
     if (user.role === 'super_admin') {
         // เห็นทั้งหมด
     } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
-        if (user.deptId != null) { indicatorWhere.push('i.dept_id = ?'); params.push(user.deptId); }
+        if (user.deptId != null) { indicatorWhere.push('i.dept_id IN (?)'); params.push(deptIdsOf(user)); }
     } else if (user.role === 'admin_cup') {
         const distid_auto = await getDistrictId(user.hospcode);
         if (distid_auto) { indicatorWhere.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)'); params.push(distid_auto); }
@@ -729,10 +729,10 @@ async function recordingStatusByIndicator(user, query = {}) {
     } else if (user.role === 'user_cup') {
         const distid_auto = await getDistrictId(user.hospcode);
         if (distid_auto) { indicatorWhere.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)'); params.push(distid_auto); }
-        if (user.deptId != null) { indicatorWhere.push('i.dept_id = ?'); params.push(user.deptId); }
+        if (user.deptId != null) { indicatorWhere.push('i.dept_id IN (?)'); params.push(deptIdsOf(user)); }
     } else {
         if (user.hospcode) { indicatorWhere.push('r.hospcode = ?'); params.push(user.hospcode); }
-        if (user.deptId != null) { indicatorWhere.push('i.dept_id = ?'); params.push(user.deptId); }
+        if (user.deptId != null) { indicatorWhere.push('i.dept_id IN (?)'); params.push(deptIdsOf(user)); }
     }
     if (dept_id) { indicatorWhere.push('i.dept_id = ?'); params.push(dept_id); }
     if (distid) { indicatorWhere.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)'); params.push(distid); }
@@ -830,7 +830,7 @@ async function recordingStatusByHospital(user, query = {}) {
     if (user.role === 'super_admin') {
         // เห็นทั้งหมด
     } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
-        if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+        if (user.deptId != null) { whereClauses.push('i.dept_id IN (?)'); params.push(deptIdsOf(user)); }
     } else if (user.role === 'admin_cup') {
         const distid_auto = await getDistrictId(user.hospcode);
         if (distid_auto) { whereClauses.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)'); params.push(distid_auto); }
@@ -839,10 +839,10 @@ async function recordingStatusByHospital(user, query = {}) {
     } else if (user.role === 'user_cup') {
         const distid_auto = await getDistrictId(user.hospcode);
         if (distid_auto) { whereClauses.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)'); params.push(distid_auto); }
-        if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+        if (user.deptId != null) { whereClauses.push('i.dept_id IN (?)'); params.push(deptIdsOf(user)); }
     } else {
         if (user.hospcode) { whereClauses.push('r.hospcode = ?'); params.push(user.hospcode); }
-        if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+        if (user.deptId != null) { whereClauses.push('i.dept_id IN (?)'); params.push(deptIdsOf(user)); }
     }
     if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
     if (distid) { whereClauses.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)'); params.push(distid); }
@@ -935,7 +935,7 @@ apiRouter.get('/report/recording-missing/by-hospital/:hospcode', authenticateTok
         if (user.role === 'super_admin') {
             // ผ่าน
         } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
-            if (user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+            if (user.deptId != null) { whereClauses.push('i.dept_id IN (?)'); params.push(deptIdsOf(user)); }
         } else if (['admin_hos', 'admin_sso', 'user_hos', 'user_sso'].includes(user.role)) {
             if (user.hospcode && user.hospcode !== hospcode) {
                 return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์ดูหน่วยบริการอื่น' });
@@ -943,7 +943,7 @@ apiRouter.get('/report/recording-missing/by-hospital/:hospcode', authenticateTok
         } else if (['admin_cup', 'user_cup'].includes(user.role)) {
             const distid_auto = await getDistrictId(user.hospcode);
             if (distid_auto) { whereClauses.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)'); params.push(distid_auto); }
-            if (user.role === 'user_cup' && user.deptId != null) { whereClauses.push('i.dept_id = ?'); params.push(user.deptId); }
+            if (user.role === 'user_cup' && user.deptId != null) { whereClauses.push('i.dept_id IN (?)'); params.push(deptIdsOf(user)); }
         }
         if (dept_id) { whereClauses.push('i.dept_id = ?'); params.push(dept_id); }
         addItypeFilter(whereClauses, 'r.indicator_id', req.query.itype); // ประเภทตัวชี้วัด (20 พ.ย. 2569)
@@ -998,10 +998,10 @@ async function deptSummaryReport(user, query = {}) {
     if (user.role === 'super_admin') {
         // เห็นทุก dept
     } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
-        if (user.deptId != null) { deptFilter = 'AND i.dept_id = ?'; deptFilterParam = user.deptId; }
+        if (user.deptId != null) { deptFilter = 'AND i.dept_id IN (?)'; deptFilterParam = deptIdsOf(user); }
     } else {
         // role อื่นไม่ควรเห็น dept summary แต่ให้กรองตาม dept ตัวเองไว้
-        if (user.deptId != null) { deptFilter = 'AND i.dept_id = ?'; deptFilterParam = user.deptId; }
+        if (user.deptId != null) { deptFilter = 'AND i.dept_id IN (?)'; deptFilterParam = deptIdsOf(user); }
     }
 
     let hostypeJoin = '';
@@ -1129,7 +1129,7 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
         }
 
         // Role check: admin_ssj ดูได้เฉพาะ dept ตัวเอง
-        if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role) && user.deptId != null && String(user.deptId) !== String(dept_id)) {
+        if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role) && user.deptId != null && !deptIdsOf(user).map(String).includes(String(dept_id))) {
             return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์ดูหน่วยงานอื่น' });
         }
 

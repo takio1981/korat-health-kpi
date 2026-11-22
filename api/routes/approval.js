@@ -8,7 +8,7 @@ const { apiRouter } = require('../core/router');
 const { authenticateToken, isAdmin, isAnyAdmin, isSuperAdmin } = require('../core/auth');
 const { cascadeSubResultsStatus } = require('../services/hierarchy');
 const { getPermsForUser, invalidateUserPermCache, requireAction, indicatorsOutsideOwnDept, OUTSIDE_DEPT_MESSAGE, hospcodesOutOfWriteScope,
-    ROLE_SCOPE_OWN_DEPT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_DISTRICT, getDistrictId } = require('../core/access');
+    ROLE_SCOPE_OWN_DEPT, ROLE_SCOPE_HOSPCODE, ROLE_SCOPE_DISTRICT, getDistrictId, deptIdsOf } = require('../core/access');
 const { currentFiscalYear } = require('../core/fiscal-year');
 const { scheduleSummaryRefresh } = require('../services/summary');
 const { reviewItemWhere, reviewStatusConflicts, FISCAL_ORD_SQL, MONTH_TH, monthNum, fiscalOrd, monthsThrough } = require('../services/review-status');
@@ -743,8 +743,8 @@ apiRouter.get('/notifications/pending-kpi', authenticateToken, isAdmin, async (r
 
         // ขอบเขตตามบทบาท (22 พ.ย. 2569 — เดิมกรองหน่วยงานกับทุก role ที่ไม่ใช่ super_admin: admin_cup/admin_hos เห็นแค่หน่วยงานที่บัญชีบังเอิญมี)
         if (ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null) {
-            whereClause += ' AND i.dept_id = ?';
-            params.push(user.deptId);
+            whereClause += ' AND i.dept_id IN (?)';
+            params.push(deptIdsOf(user));
         }
         if (ROLE_SCOPE_HOSPCODE.includes(user.role)) {
             whereClause += ' AND r.hospcode = ?';

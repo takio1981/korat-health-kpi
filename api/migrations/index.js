@@ -1034,6 +1034,41 @@ const migrationsReady = (async () => {
                 UNIQUE KEY uk_kpi_reminder (year_bh, month_bh, hospcode, user_id, channel, stage),
                 INDEX idx_kpi_reminder_sent (sent_at)
             ) COMMENT 'ประวัติการแจ้งเตือนส่งผลงาน (กันส่งซ้ำ)'`);
+            // กลุ่มงานเพิ่มเติมของผู้ใช้ (22 พ.ย. 2569) — users.dept_id = กลุ่มงานหลัก ไม่อยู่ในตารางนี้ | status approved | pending | rejected
+            {
+                const ddl = `CREATE TABLE IF NOT EXISTS user_departments (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                dept_id INT NOT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'approved',
+                request_note VARCHAR(500) NULL,
+                decision_note VARCHAR(500) NULL,
+                requested_by INT NULL,
+                requested_at DATETIME NULL,
+                decided_by INT NULL,
+                decided_at DATETIME NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uk_user_dept (user_id, dept_id),
+                INDEX idx_user_dept_status (status, dept_id),
+                CONSTRAINT fk_user_departments_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            ) COMMENT 'กลุ่มงานเพิ่มเติมของผู้ใช้ (ดูแลตัวชี้วัดข้ามกลุ่มงาน)'`;
+                // FK สร้างไม่ได้ (เช่น ชนิดตาราง users ไม่รองรับ) = สร้างโดยไม่มี FK — ไม่ให้ตารางถัดไปของบล็อกนี้ไม่ถูกสร้าง
+                try { await db.query(ddl); } catch (e) { console.warn("⚠️ user_departments FK:", e.message); await db.query(`CREATE TABLE IF NOT EXISTS user_departments (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                dept_id INT NOT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'approved',
+                request_note VARCHAR(500) NULL,
+                decision_note VARCHAR(500) NULL,
+                requested_by INT NULL,
+                requested_at DATETIME NULL,
+                decided_by INT NULL,
+                decided_at DATETIME NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uk_user_dept (user_id, dept_id),
+                INDEX idx_user_dept_status (status, dept_id)
+            ) COMMENT 'กลุ่มงานเพิ่มเติมของผู้ใช้ (ดูแลตัวชี้วัดข้ามกลุ่มงาน)'`); }
+            }
             // สำเนาสถานะรายงาน KHD (ความพร้อมของตัวชี้วัด — อ่าน KHD วันละครั้ง/กดปุ่ม ไม่อ่านทุกคำขอ)
             await db.query(`CREATE TABLE IF NOT EXISTS khd_reports_snapshot (
                 report_id INT PRIMARY KEY,

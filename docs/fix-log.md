@@ -4,6 +4,24 @@
 
 ---
 
+## 2569-11-22 — กลุ่มงานเพิ่มเติมของผู้ใช้ (ดูแลตัวชี้วัดข้ามกลุ่มงาน)
+
+**ความต้องการ:** ผู้ใช้ทั่วไปที่รับผิดชอบตัวชี้วัดหลายข้อข้ามกลุ่มงาน บันทึกผลงานได้เฉพาะกลุ่มงานหลัก (users.dept_id ค่าเดียว ผูกไว้ ~60 จุด)
+
+**ผู้ใช้เลือก:** ผู้ดูแลกำหนดให้ได้ + ผู้ใช้ขอเองแล้วผู้ดูแลอนุมัติ | สิทธิ์ = ผู้ใช้ทั่วไปทุกระดับ | มีผลทุกหน้า
+— ผู้กำหนด/อนุมัติ (กำหนดตามขอบเขตจัดการผู้ใช้เดิม): super_admin ทุกกลุ่มงาน, admin_ssj เฉพาะกลุ่มงานของตนเอง
+
+**สิ่งที่ทำ:**
+- ตาราง `user_departments` (user_id, dept_id UNIQUE, status approved/pending/rejected) — กลุ่มงานหลักยังอยู่ที่ users.dept_id
+- `authenticateToken` โหลดกลุ่มงานเพิ่มเติมที่อนุมัติแล้วพร้อมการตรวจ session (แคช 2 นาที, เปลี่ยนแล้วล้างแคชทันที) → `req.user.deptIds`; `deptIdsOf(user)` (core/access.js)
+- แทน `dept_id = ? + user.deptId` ด้วย `dept_id IN (?) + deptIdsOf(user)` ทุกจุดที่กรองตามกลุ่มงานของผู้ใช้ (dashboard, kpi-results, รายงานทุกแถบ, กราฟ, report-scope, lookups /departments, review, approval pending, ai-quality, indicatorsOutsideOwnDept) รวมด่านบันทึก /update-kpi และ /hierarchy-results/save
+- `services/user-departments.js` + `routes/user-departments.js` (8 เส้นทาง) + แจ้งเตือนผู้อนุมัติ/ผู้ขอ + system_logs USER_DEPT_*
+- หน้าจอ: เมนูโปรไฟล์ "กลุ่มงานของฉัน" (`shared/my-departments.ts`), หน้าจัดการผู้ใช้งาน: ปุ่ม "กลุ่มงานเพิ่มเติม" (คำขอ + ผู้ได้รับ) และปุ่มในแถว (`shared/user-dept-admin.ts`), แสดงกลุ่มงานเพิ่มเติมในตาราง
+
+**ทดสอบ:** `api/tests/user-departments.test.js` 7 กรณี (ก่อนอนุมัติบันทึกไม่ได้ → ขอ → admin_ssj กลุ่มงานอื่นอนุมัติไม่ได้ → อนุมัติแล้วเห็น/บันทึกได้ → admin_ssj เอาออกได้เฉพาะกลุ่มงานตนเอง → ผู้ดูแลไม่ใช้กลุ่มงานเพิ่มเติม), `shared/user-dept-admin.spec.ts`
+
+---
+
 ## 2569-11-22 — วิดีโอคู่มือหัวข้อ 24 ศูนย์งานผู้ดูแล
 
 **ทำ:** `tools/video-guide/scripts/work-center.js` (5 สิทธิ์ผู้ดูแล, คำบรรยายตามสิทธิ์: ผู้ดูแลจังหวัดอนุมัติ/ส่งคืน, ผู้ดูแลหน่วยบริการเดียว, super_admin แจ้งเตือน/ปลดล็อค/KHD) + `<app-help-video section="work-center">` ใน help.html

@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const db = require('../db');
 const { detectAnomaly, toNumber } = require('../kpi-anomaly');
 const { MONTHS, KIND_LABEL, KIND_ORDER, anomalyHints, withBasisHint } = require('./data-quality');
-const { ROLE_SCOPE_OWN_DEPT } = require('../core/access');
+const { ROLE_SCOPE_OWN_DEPT, deptIdsOf } = require('../core/access');
 const { callLlm, extractJson, createAiCache, getAiSettings, assertAreaOn, AiError } = require('./ai');
 
 const MAX_ANOMALY_ITEMS = 20;
@@ -189,7 +189,7 @@ async function explainAnomalies(items, user, { refresh = false } = {}) {
     if (ids.length) {
         const params = [...ids];
         let deptSql = '';
-        if (ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null) { deptSql = ' AND dept_id = ?'; params.push(user.deptId); }
+        if (ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null) { deptSql = ' AND dept_id IN (?)'; params.push(deptIdsOf(user)); }
         const [r] = await db.query(`SELECT id, kpi_indicators_name AS name, target_condition, is_cumulative, result_formula, target_monthly
             FROM kpi_indicators WHERE is_active = 1 AND id IN (${ids.map(() => '?').join(',')})${deptSql}`, params);
         rows = r;

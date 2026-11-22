@@ -154,8 +154,8 @@ res.status(500).json({ success: false, message: e.message });
 (admin_cup/admin_hos/admin_sso เห็นทุก dept แม้บัญชีมี dept_id ติดอยู่ — ดู "Role-based Scoping" ในหัวข้อ 6):
 ```javascript
 if (ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null) {
-    whereClause = 'WHERE i.dept_id = ?';
-    params.push(user.deptId);
+    whereClause = 'WHERE i.dept_id IN (?)';
+    params.push(deptIdsOf(user)); // กลุ่มงานหลัก + กลุ่มงานเพิ่มเติม (22 พ.ย. 2569) — ห้าม push(user.deptId)
 }
 ```
 ❌ ห้ามใช้ `if (user.role !== 'super_admin' && user.deptId != null)` — ตัวอย่างนี้เคยอยู่ในไฟล์นี้และเป็นต้นเหตุบั๊กสิทธิ์จริง
@@ -1341,6 +1341,17 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - **admin_ssj / super_admin**: ไม่โหลดข้อมูล dashboard อัตโนมัติ ต้องกด "ค้นหา"
 - **ช่องค้นหาหน้าบันทึกผลงาน (13 พ.ย. 2569):** คำค้น ≥ 2 ตัวอักษร + Enter = ค้นได้โดยไม่เลือกตัวกรอง (`hasSearchQuery` ใน `doSearch()`) → `GET /kpi-results?q=`
   กรองที่ server (ทุกคำต้องพบใน ชื่อตัวชี้วัด/หมวดหมู่หลัก/หน่วยงาน/หน่วยบริการ/อำเภอ หรือ = รหัสหน่วยบริการ, % _ escape) **ต่อท้ายขอบเขตสิทธิ์ของ role เสมอ ไม่ขยายสิทธิ์** — Test: `api/tests/kpi-results-search.test.js`, `dashboard.spec.ts`
+
+### กลุ่มงานเพิ่มเติมของผู้ใช้ (22 พ.ย. 2569 — ผู้ใช้เลือก: ผู้ดูแลกำหนด + ผู้ใช้ขอแล้วผู้ดูแลอนุมัติ, ผู้ใช้ทั่วไปทุกระดับ, มีผลทุกหน้า)
+- ตาราง `user_departments` (user_id, dept_id UNIQUE, status approved|pending|rejected, FK users CASCADE) — users.dept_id = กลุ่มงานหลัก (ไม่อยู่ในตาราง), สูงสุด 10
+- `ROLE_MULTI_DEPT` = user_ssj/user_hos/user_sso/user_cup/user (ไม่รวม admin_ssj) | `authenticateToken` โหลดกลุ่มงานที่อนุมัติพร้อมแคช session → `req.user.deptIds`
+  — **ทุกจุดที่กรองกลุ่มงานของผู้ใช้ต้องใช้ `dept_id IN (?)` + `deptIdsOf(user)` (core/access.js) ห้าม `= user.deptId`** (กลุ่มงานเพิ่มเติมจะหาย) รวมด่านบันทึก /update-kpi, /hierarchy-results/save, `indicatorsOutsideOwnDept`
+  — เปลี่ยนกลุ่มงานเพิ่มเติมแล้วต้อง `_sessionCache.delete(uid)` (routes/user-departments.js ทำแล้ว)
+- `services/user-departments.js`: `grantableDepts(actor)` super_admin = ทุกกลุ่มงาน (null), admin_ssj = [กลุ่มงานตัวเอง] | `setApprovedDepts` (admin_ssj แตะเฉพาะกลุ่มงานตัวเอง ที่เหลือคงเดิม → DEPT_OUT_OF_SCOPE), `requestDept`, `decideRequest` (ไม่อนุมัติต้องมีเหตุผล)
+- เส้นทาง: `GET /my-departments` (+ available), `POST /my-departments/request|cancel`, `GET|PUT /users/:id/departments`, `GET /user-dept-requests` ({ requests, members }), `POST /user-dept-requests/:id/approve|reject` (isAdmin + ตรวจขอบเขตใน service)
+  — admin_ssj ไม่เห็นผู้ใช้กลุ่มงานอื่นในรายชื่อผู้ใช้ (เดิม — แก้ไขผู้ใช้ของ admin_ssj บังคับย้ายกลุ่มงานหลัก) จึงจัดการผ่านคำขอ + แถบ "ได้รับกลุ่มงานแล้ว"
+- หน้าจอ: `shared/my-departments.ts` (เมนูโปรไฟล์ `#btn-my-departments`), `shared/user-dept-admin.ts` (`#btn-dept-requests` + ปุ่มในแถว), GET /users คืน extra_dept_names/pending_dept_requests
+- Test: `api/tests/user-departments.test.js`, `shared/user-dept-admin.spec.ts`
 
 ### Role-based Scoping ของรายการตัวกรอง (dept/hospcode/อำเภอ ตัวเอง) — Backend เป็นหลัก
 - Endpoint ที่คืนรายการให้ dropdown ใช้ร่วมกันทั้งระบบ (`GET /departments`, `/hospitals`, `/hostype`, `/districts`,

@@ -355,6 +355,7 @@
       </main>
       <!-- ผู้ช่วยน้องโคราชดี (19 พ.ย. 2569 ระยะที่ 2) — จอดมุมขวาล่าง แนะนำการใช้งานหน้านั้น -->
       <app-mascot-assistant></app-mascot-assistant>
+      <app-my-departments #myDepts></app-my-departments>
 
     </div>
   </div>
@@ -607,6 +608,9 @@
     <div class="p-2 space-y-0.5">
       <button (click)="openLineModal(); showProfileDropdown = false" class="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
         <i class="fab fa-line w-4 text-center text-emerald-500"></i>ตั้งค่า LINE แจ้งเตือนส่วนตัว
+      </button>
+      <button *ngIf="canMultiDept" id="btn-my-departments" (click)="openMyDepartments()" class="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
+        <i class="fas fa-building w-4 text-center text-blue-500"></i>กลุ่มงานของฉัน / ขอเพิ่มกลุ่มงาน
       </button>
       <button (click)="openChangePasswordModal(); showProfileDropdown = false" class="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
         <i class="fas fa-key w-4 text-center text-orange-500"></i>เปลี่ยนรหัสผ่าน
