@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { KpiSetupComponent } from './kpi-setup';
+import { KpiSetupComponent, buildSetupBatches } from './kpi-setup';
 import { testProviders } from '../testing/test-providers';
 
 describe('KpiSetupComponent', () => {
@@ -41,5 +41,37 @@ describe('KpiSetupComponent', () => {
     expect(component.quarterText(n, 'dece')).toBe('');
     expect(component.quarterBadgeText(q)).toBe('รายไตรมาส');
     expect(component.quarterBadgeText(n)).toBe('');
+  });
+
+  it('เลือกหลายหน่วยบริการ: ค้นหา/เลือกทั้งหมดที่แสดง/คงที่เลือกเมื่อเปลี่ยนอำเภอ (22 พ.ย. 2569)', () => {
+    component.hospitals = [
+      { hoscode: '10669', hosname: 'รพ.ก', distid: '3001' }, { hoscode: '10670', hosname: 'รพ.ข', distid: '3001' },
+      { hoscode: '20001', hosname: 'รพ.สต.ค', distid: '3002' }];
+    component.selectedDistrict = '3001';
+    component.onDistrictChange();
+    expect(component.pickerList.map(h => h.hoscode)).toEqual(['10669', '10670']);
+    component.selectAllShown();
+    expect(component.hosPickerText).toBe('เลือกแล้ว 2 แห่ง');
+    component.selectedDistrict = '3002';
+    component.onDistrictChange();
+    component.toggleHos('20001');
+    expect(component.selectedHospitalList).toEqual(['10669', '10670', '20001']);
+    component.hosSearch = 'สต';
+    component.refreshPicker();
+    expect(component.pickerList.map(h => h.hoscode)).toEqual(['20001']);
+    component.toggleHos('10669'); component.toggleHos('10670');
+    expect(component.hosPickerText).toBe('20001: รพ.สต.ค');
+    component.clearHospitals();
+    expect(component.hosPickerText).toBe('-- เลือกหน่วยบริการ --');
+  });
+
+  it('แบ่งคำขอชุดละ ≤ 30 หน่วยบริการ แถวระบุ hospcode', () => {
+    const rows = [{ indicator_id: 1 }, { indicator_id: 2 }];
+    const hcs = Array.from({ length: 65 }, (_, i) => String(10000 + i));
+    const b = buildSetupBatches(rows, [...hcs, '10000']);
+    expect(b.map(x => x.hospcodes.length)).toEqual([30, 30, 5]);
+    expect(b[0].rows.length).toBe(60);
+    expect(b[0].rows[0]).toEqual({ indicator_id: 1, hospcode: '10000' });
+    expect(b[2].rows.at(-1)).toEqual({ indicator_id: 2, hospcode: '10064' });
   });
 });

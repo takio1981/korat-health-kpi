@@ -136,6 +136,9 @@ export class KpiManageComponent implements OnInit {
   readiness = new Map<number, any>();
   readinessCounts: { block: number; warn: number; hostype_unset: number; not_assigned: number } | null = null;
   readinessYear = String(getCurrentFiscalYear());
+  readinessKhdCount = 0;
+  khdSnapshot: { available: boolean; refreshed_at: string | null; count: number; error: string | null } | null = null;
+  khdSnapshotBusy = false;
   filterReadiness = '';
 
   // Modal
@@ -593,6 +596,9 @@ export class KpiManageComponent implements OnInit {
         this.readiness = map;
         const c = res.data.counts || {}, by = res.data.by_code || {};
         this.readinessCounts = { block: c.block || 0, warn: c.warn || 0, hostype_unset: by.hostype_unset || 0, not_assigned: by.not_assigned || 0 };
+        // สถานะรายงานใน KHD (จากสำเนาที่อ่านวันละครั้ง — ไม่อ่าน KHD ทุกครั้งที่เปิดหน้า)
+        this.readinessKhdCount = (by.khd_inactive || 0) + (by.khd_report_missing || 0);
+        this.khdSnapshot = res.data.khd_snapshot || null;
         if (this.filterReadiness && this.activeTab === 'indicators') this.applyFilter();
         this.cdr.detectChanges();
       },
@@ -624,11 +630,33 @@ export class KpiManageComponent implements OnInit {
       (el as HTMLElement | null)?.focus?.();
     }, 200);
   }
+  /** ข้อความสถานะสำเนารายงาน KHD (ใต้ตัวกรองความพร้อม) */
+  get khdSnapshotText(): string {
+    const s = this.khdSnapshot;
+    if (!s) return '';
+    if (!s.available) return 'ยังไม่ได้อ่านสถานะรายงานจาก KHD';
+    const t = s.refreshed_at ? new Date(s.refreshed_at) : null;
+    return `สถานะรายงาน KHD ณ ${t && !isNaN(t.getTime()) ? t.toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : '-'}` + (s.error ? ' (อ่านครั้งล่าสุดไม่สำเร็จ)' : '');
+  }
+  /** อ่านสถานะรายงาน KHD ใหม่ทันที (super_admin — อ่าน KHD อย่างเดียว) แล้วตรวจความพร้อมใหม่ */
+  refreshKhdSnapshot() {
+    if (this.khdSnapshotBusy) return;
+    this.khdSnapshotBusy = true;
+    this.authService.apiPost('/khd-snapshot/refresh', {}).subscribe({
+      next: (r: any) => {
+        this.khdSnapshotBusy = false;
+        Swal.fire({ icon: 'success', title: 'สำเร็จ', text: r?.message || 'อัปเดตแล้ว', timer: 2000, showConfirmButton: false });
+        this.loadReadiness();
+      },
+      error: (e: any) => { this.khdSnapshotBusy = false; Swal.fire('ผิดพลาด', e?.error?.message || 'อ่าน KHD ไม่สำเร็จ', 'error'); this.cdr.detectChanges(); },
+    });
+  }
   matchReadiness(item: any): boolean {
     if (!this.filterReadiness) return true;
     const r = this.readiness.get(Number(item?.id));
     if (!r) return false;
     if (this.filterReadiness === 'block' || this.filterReadiness === 'warn') return r.level === this.filterReadiness;
+    if (this.filterReadiness === 'khd_status') return r.issues.some((i: any) => i.code === 'khd_inactive' || i.code === 'khd_report_missing');
     return r.issues.some((i: any) => i.code === this.filterReadiness);
   }
 

@@ -580,20 +580,20 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     return this.http.post(`${this.apiUrl}/db-compare/create-local`, { tables }, { headers });
   }
-  dbCompareSyncData(tables: string[]): Observable<any> {
+  dbCompareSyncData(tables: string[], confirmText: string = ''): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.post(`${this.apiUrl}/db-compare/sync-data`, { tables }, { headers });
+    return this.http.post(`${this.apiUrl}/db-compare/sync-data`, { tables, confirm_text: confirmText }, { headers });
   }
-  dbCompareCreateRemote(tables: string[]): Observable<any> {
+  dbCompareCreateRemote(tables: string[], confirmText: string = ''): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.post(`${this.apiUrl}/db-compare/create-remote`, { tables }, { headers });
+    return this.http.post(`${this.apiUrl}/db-compare/create-remote`, { tables, confirm_text: confirmText }, { headers });
   }
-  dbCompareSyncToKhd(tables: string[]): Observable<any> {
+  dbCompareSyncToKhd(tables: string[], confirmText: string = ''): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.post(`${this.apiUrl}/db-compare/sync-to-khd`, { tables }, { headers });
+    return this.http.post(`${this.apiUrl}/db-compare/sync-to-khd`, { tables, confirm_text: confirmText }, { headers });
   }
 
   reportCompare(year_bh?: string): Observable<any> {

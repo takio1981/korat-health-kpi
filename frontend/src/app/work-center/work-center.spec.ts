@@ -2,7 +2,25 @@ import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { Router } from '@angular/router';
 import { testProviders } from '../testing/test-providers';
-import { WorkCenterComponent, daysLeftText, fiscalYearChoices, dashboardQuery } from './work-center';
+import { WorkCenterComponent, daysLeftText, fiscalYearChoices, dashboardQuery, monthsText, chunk, buildApprovePayload, buildRejectPayload, reviewKey } from './work-center';
+
+describe('ศูนย์งานผู้ดูแล — อนุมัติ/ส่งคืนจากคิว (ฟังก์ชันล้วน)', () => {
+  it('รายการอนุมัติ: ไม่เลือกเดือน = ไม่ส่ง through_month (server ใช้เดือนล่าสุดที่มีผลงาน)', () => {
+    const items = [{ indicator_id: '5', hospcode: '10669', pending_count: 2 }];
+    expect(buildApprovePayload(items, '2570', '')).toEqual([{ indicator_id: 5, year_bh: '2570', hospcode: '10669' }]);
+    expect(buildApprovePayload(items, '2570', 11)).toEqual([{ indicator_id: 5, year_bh: '2570', hospcode: '10669', through_month: 11 }]);
+  });
+  it('รายการส่งคืน: เหตุผลตัดช่องว่าง ไม่ระบุเดือน (= เฉพาะเดือนที่ยังไม่อนุมัติ)', () => {
+    expect(buildRejectPayload([{ indicator_id: 5, hospcode: '10669' }], '2570', '  แก้ค่า ต.ค. ')).toEqual([
+      { indicator_id: 5, year_bh: '2570', hospcode: '10669', comment: 'แก้ค่า ต.ค.' }]);
+  });
+  it('แบ่งชุด / ชื่อเดือน / คีย์รายการ', () => {
+    expect(chunk([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]]);
+    expect(monthsText([10, 11, 1])).toBe('ต.ค., พ.ย., ม.ค.');
+    expect(monthsText(null)).toBe('');
+    expect(reviewKey({ indicator_id: '5', hospcode: '10669' })).toBe('5|10669');
+  });
+});
 
 describe('ศูนย์งานผู้ดูแล — ฟังก์ชันล้วน', () => {
   it('ข้อความวันถึงกำหนดส่ง', () => {
@@ -62,5 +80,22 @@ describe('WorkCenterComponent', () => {
     f.componentInstance.setTab('review');
     http.expectOne(r => r.url.includes('/work-center/review-queue')).flush({ success: true, items: [{ indicator_id: 1, hospcode: '10669', kpi_indicators_name: 'KPI ก', pending_count: 2 }] });
     expect(f.componentInstance.review.items.length).toBe(1);
+  });
+
+  it('เลือกรายการในคิว + ส่งอนุมัติเป็นชุดผ่าน /approve-kpi เดิม แล้วรวมผล', async () => {
+    const { f, http } = await setup();
+    const c = f.componentInstance;
+    c.review = { items: [{ indicator_id: 1, hospcode: '10669' }, { indicator_id: 2, hospcode: '10670' }] };
+    c.toggleAll();
+    expect(c.allSelected).toBe(true);
+    c.toggleSel(c.review.items[1]);
+    expect(c.selectedItems.map((r: any) => r.indicator_id)).toEqual([1]);
+    let agg: any = null;
+    c.runBatches('/approve-kpi', [buildApprovePayload(c.selectedItems, '2570', ''), [{ indicator_id: 9 }]], (a) => agg = a);
+    const r1 = http.expectOne(r => r.url.includes('/approve-kpi'));
+    expect(r1.request.body).toEqual([{ indicator_id: 1, year_bh: '2570', hospcode: '10669' }]);
+    r1.flush({ success: true, approved: 1, skipped: 0, months: 3 });
+    http.expectOne(r => r.url.includes('/approve-kpi')).flush({ success: false, message: 'ไม่มีสิทธิ์' }, { status: 403, statusText: 'Forbidden' });
+    expect(agg).toMatchObject({ ok: 1, months: 3, failed: 1, errors: ['ไม่มีสิทธิ์'] });
   });
 });

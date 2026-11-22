@@ -10,4 +10,14 @@ function parseActiveFlag(v) {
 
 const ACTIVE_FLAG_REQUIRED = 'กรุณาระบุสถานะเปิด/ปิดใช้งาน (is_active)';
 
-module.exports = { parseActiveFlag, ACTIVE_FLAG_REQUIRED };
+// ยืนยันด้วยการพิมพ์ (ปุ่มเสี่ยงของ DB Compare — 22 พ.ย. 2569): 1 ตาราง = พิมพ์ชื่อตาราง | หลายตาราง = พิมพ์ "<จำนวน> ตาราง"
+// ตรวจที่ server (หน้าจอตรวจซ้ำ) — กันกดยืนยันผิดตารางหรือเรียก API ตรงโดยไม่ตั้งใจ | คู่กับ frontend db-compare.ts confirmTextFor()
+function typedConfirmText(tables) {
+    const list = Array.isArray(tables) ? tables : [];
+    return list.length === 1 ? String(list[0]) : `${list.length} ตาราง`;
+}
+function typedConfirmOk(tables, confirm) {
+    return String(confirm == null ? '' : confirm).trim() === typedConfirmText(tables);
+}
+
+module.exports = { parseActiveFlag, ACTIVE_FLAG_REQUIRED, typedConfirmText, typedConfirmOk };

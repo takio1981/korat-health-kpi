@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { testProviders } from '../testing/test-providers';
-import { KhdQuickSendComponent, quickPreviewHtml, canRollback, runStatusText, triggerText, escapeHtml } from './khd-quick-send';
+import { KhdQuickSendComponent, quickPreviewHtml, canRollback, runStatusText, triggerText, escapeHtml, unapprovedReportHtml } from './khd-quick-send';
 
 describe('ส่งเข้า KHD ขั้นเดียว — ฟังก์ชันล้วน', () => {
   it('สรุปสิ่งที่จะส่ง: ตัวเลขรวม + รายตาราง + ตารางที่ส่งไม่ได้ และกันข้อความ HTML', () => {
@@ -27,6 +27,19 @@ describe('ส่งเข้า KHD ขั้นเดียว — ฟังก
     expect(canRollback(null)).toBe(false);
   });
 
+  it('รายงานค่าใน KHD ที่ยังไม่อนุมัติ: ไม่พบ / รายตาราง + ตัวอย่าง และกันข้อความ HTML', () => {
+    expect(unapprovedReportHtml({ year_bh: '2570', totals: { cells: 0 }, tables_checked: 12 })).toContain('ไม่พบค่าใน KHD');
+    const html = unapprovedReportHtml({
+      year_bh: '2570', tables_with_unapproved: 1, tables_checked: 5,
+      totals: { cells: 3, pending: 1, rejected: 0, empty: 2, same_as_local: 1 },
+      tables: [{ table: 'kpi_a', indicator_names: ['<i>ตัวชี้วัด</i>'], cells: 3, hospitals: 2, by_kind: { pending: 1, rejected: 0, empty: 2 },
+        sample: [{ hospcode: '10669', month_bh: 11, khd_value: '7', local_value: null, kind: 'empty' }] }],
+    });
+    expect(html).toContain('kpi_a');
+    expect(html).toContain('พ.ย.: KHD 7 / ระบบ -');
+    expect(html).toContain('ระบบไม่มีผลงาน');
+    expect(html).not.toContain('<i>ตัวชี้วัด</i>');
+  });
   it('ข้อความสถานะ/ที่มา', () => {
     expect(runStatusText('partially_rolled_back')).toBe('ย้อนกลับบางส่วน');
     expect(triggerText('schedule')).toBe('ตารางเวลา');

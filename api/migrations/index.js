@@ -1034,6 +1034,16 @@ const migrationsReady = (async () => {
                 UNIQUE KEY uk_kpi_reminder (year_bh, month_bh, hospcode, user_id, channel, stage),
                 INDEX idx_kpi_reminder_sent (sent_at)
             ) COMMENT 'ประวัติการแจ้งเตือนส่งผลงาน (กันส่งซ้ำ)'`);
+            // สำเนาสถานะรายงาน KHD (ความพร้อมของตัวชี้วัด — อ่าน KHD วันละครั้ง/กดปุ่ม ไม่อ่านทุกคำขอ)
+            await db.query(`CREATE TABLE IF NOT EXISTS khd_reports_snapshot (
+                report_id INT PRIMARY KEY,
+                report_name VARCHAR(500) NULL,
+                table_process VARCHAR(100) NULL,
+                data_source VARCHAR(20) NULL,
+                is_active TINYINT(1) NULL,
+                fy_active TEXT NULL COMMENT 'JSON { ปีงบ: 0|1 } จาก report_fiscal_year_config',
+                refreshed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            ) COMMENT 'สำเนาสถานะรายงาน KHD (reports + report_fiscal_year_config)'`);
         } catch (e) {
             console.error('⚠️ KHD sync history tables error:', e.message);
         }

@@ -52,6 +52,30 @@ export function quickPreviewHtml(p: any): string {
   </div>`;
 }
 
+const UA_MONTH: Record<number, string> = { 10: 'ต.ค.', 11: 'พ.ย.', 12: 'ธ.ค.', 1: 'ม.ค.', 2: 'ก.พ.', 3: 'มี.ค.', 4: 'เม.ย.', 5: 'พ.ค.', 6: 'มิ.ย.', 7: 'ก.ค.', 8: 'ส.ค.', 9: 'ก.ย.' };
+const UA_KIND: Record<string, string> = { pending: 'รอตรวจในระบบ', rejected: 'ส่งคืนแก้ไขในระบบ', empty: 'ระบบไม่มีผลงาน' };
+
+/** HTML รายงาน "ค่าใน KHD ที่ระบบยังไม่อนุมัติ" (อ่านอย่างเดียว) — ข้อความทุกช่องผ่าน escapeHtml */
+export function unapprovedReportHtml(d: any): string {
+  const t = d?.totals || {};
+  if (!Number(t.cells)) {
+    return `<div style="font-size:13px">ปีงบ <b>${escapeHtml(d?.year_bh)}</b>: ไม่พบค่าใน KHD ของเดือนที่ระบบยังไม่อนุมัติ (ตรวจ ${Number(d?.tables_checked) || 0} ตาราง)${d?.partial ? ' — ตรวจไม่ครบ (หมดเวลา)' : ''}</div>`;
+  }
+  const rows = (d.tables || []).slice(0, 40).map((x: any) =>
+    `<tr><td style="text-align:left;padding:2px 6px">${escapeHtml(x.table)}<div style="font-size:10px;color:#6b7280">${escapeHtml((x.indicator_names || []).join(', '))}</div></td><td>${Number(x.cells) || 0}</td><td>${Number(x.hospitals) || 0}</td><td>${Number(x.by_kind?.pending) || 0}</td><td>${Number(x.by_kind?.rejected) || 0}</td><td>${Number(x.by_kind?.empty) || 0}</td></tr>`).join('');
+  const s0 = (d.tables || [])[0]?.sample || [];
+  const sample = s0.slice(0, 5).map((c: any) => `${escapeHtml(c.hospcode)} ${escapeHtml(UA_MONTH[c.month_bh] || c.month_bh)}: KHD ${escapeHtml(c.khd_value)} / ระบบ ${escapeHtml(c.local_value ?? '-')} (${escapeHtml(UA_KIND[c.kind] || c.kind)})`).join('<br>');
+  return `<div style="text-align:left;font-size:13px">
+    <div>ปีงบ <b>${escapeHtml(d.year_bh)}</b>: KHD มีค่า <b>${Number(t.cells)}</b> ช่อง ใน <b>${Number(d.tables_with_unapproved) || 0}</b> ตาราง ที่ระบบยังไม่อนุมัติเดือนนั้น
+      (รอตรวจ ${Number(t.pending) || 0} · ส่งคืนแก้ไข ${Number(t.rejected) || 0} · ระบบไม่มีผลงาน ${Number(t.empty) || 0} · ค่าเท่ากับในระบบ ${Number(t.same_as_local) || 0})</div>
+    <div style="font-size:11px;color:#6b7280;margin-top:2px">ค่าเหล่านี้ส่งไปก่อนใช้กติกา "ส่งเฉพาะที่อนุมัติ" — ระบบไม่ล้างค่าใน KHD เอง: อนุมัติในระบบแล้วส่งใหม่ ค่าที่อนุมัติจะทับให้</div>
+    <table style="width:100%;margin-top:8px;font-size:12px;text-align:center;border-collapse:collapse"><thead><tr style="background:#eef2ff"><th style="text-align:left;padding:2px 6px">ตาราง</th><th>ช่อง</th><th>หน่วยบริการ</th><th>รอตรวจ</th><th>ส่งคืน</th><th>ระบบไม่มี</th></tr></thead><tbody>${rows}</tbody></table>
+    ${(d.tables || []).length > 40 ? `<div style="font-size:11px;color:#6b7280">…และอีก ${(d.tables || []).length - 40} ตาราง</div>` : ''}
+    ${sample ? `<div style="font-size:11px;color:#4338ca;margin-top:6px">ตัวอย่าง (${escapeHtml(d.tables[0].table)}):<br>${sample}</div>` : ''}
+    ${d.partial ? '<div style="font-size:11px;color:#b45309;margin-top:4px">ตรวจไม่ครบทุกตาราง (เกินเพดานเวลาต่อรอบ)</div>' : ''}
+  </div>`;
+}
+
 @Component({
   selector: 'app-khd-quick-send',
   standalone: true,
@@ -65,6 +89,9 @@ export function quickPreviewHtml(p: any): string {
       <button type="button" id="btn-khd-quick-send" (click)="startQuickSend()" [disabled]="busy || !year"
               class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md disabled:opacity-50">
         <i class="fas fa-paper-plane me-1"></i>ส่งเข้า KHD (เฉพาะที่เปลี่ยน)
+      </button>
+      <button type="button" id="btn-khd-unapproved" (click)="showUnapproved()" [disabled]="busy || !year" class="px-3 py-2 rounded-xl bg-white border border-indigo-200 text-indigo-700 text-xs font-bold hover:bg-indigo-100 disabled:opacity-50" title="อ่าน KHD อย่างเดียว: ค่าที่ส่งไปก่อนแล้วแต่ระบบยังไม่อนุมัติเดือนนั้น">
+        <i class="fas fa-magnifying-glass me-1"></i>ค่าใน KHD ที่ยังไม่อนุมัติ
       </button>
       <button type="button" (click)="toggleHistory()" class="px-3 py-2 rounded-xl bg-white border border-indigo-200 text-indigo-700 text-xs font-bold hover:bg-indigo-100">
         <i class="fas fa-clock-rotate-left me-1"></i>ประวัติการส่ง
@@ -246,6 +273,26 @@ export class KhdQuickSendComponent implements OnInit {
         },
         error: (e: any) => Swal.fire('ย้อนกลับไม่ได้', e.error?.message || 'เกิดข้อผิดพลาด', 'error'),
       });
+    });
+  }
+
+  /** รายงานอ่านอย่างเดียว: ค่าใน KHD ของเดือนที่ระบบยังไม่อนุมัติ */
+  showUnapproved(refresh = false) {
+    if (this.busy || !this.year) return;
+    this.busy = true;
+    Swal.fire({ title: 'กำลังอ่านข้อมูลจาก KHD...', html: 'อ่านอย่างเดียว ทีละตาราง (ไม่เขียน KHD)', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    this.authService.apiPost('/khd-sync/unapproved-report', { year_bh: this.year, refresh }).subscribe({
+      next: (r: any) => {
+        this.busy = false;
+        const d = r?.data || {};
+        Swal.fire({
+          title: 'ค่าใน KHD ที่ระบบยังไม่อนุมัติ', html: unapprovedReportHtml(d), width: 720, icon: Number(d?.totals?.cells) ? 'info' : 'success',
+          showDenyButton: !!r?.data?.cached, denyButtonText: 'ตรวจใหม่', denyButtonColor: '#4f46e5', confirmButtonText: 'ปิด',
+          footer: r?.data?.cached ? 'ผลที่ตรวจไว้ไม่เกิน 10 นาที' : '',
+        }).then(x => { if (x.isDenied) this.showUnapproved(true); });
+        this.cdr.detectChanges();
+      },
+      error: (e: any) => this.fail(e),
     });
   }
 }

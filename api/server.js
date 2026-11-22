@@ -26,6 +26,7 @@ const { startForecastDigestScheduler } = require('./jobs/forecast-digest');
 const { startUserApprovalScheduler } = require('./jobs/user-approval');
 const { startMascotFestivalJob } = require('./jobs/mascot-festival');
 const { startResultReminderScheduler } = require('./jobs/result-reminder');
+const { startKhdSnapshotJob } = require('./jobs/khd-snapshot');
 const { forecastAiSummarizer } = require('./services/ai-forecast');
 
 const app = express();
@@ -140,6 +141,7 @@ if (require.main === module) {
         try { startUserApprovalScheduler(); } catch (e) { console.error('[UserApproval] start failed:', e.message); }
         try { startMascotFestivalJob(); } catch (e) { console.error('[MascotFestival] start failed:', e.message); }
         try { startResultReminderScheduler(); } catch (e) { console.error('[Reminder] start failed:', e.message); }
+        try { startKhdSnapshotJob(); } catch (e) { console.error('[KhdSnapshot] start failed:', e.message); }
         startSessionCleanupJob();
     });
 }

@@ -8,6 +8,14 @@ const { authenticateToken, isSuperAdmin, requireSuperAdminStrict } = require('..
 const { diffTableColumns, performSyncToKhd } = require('../services/khd');
 const { getRemotePool } = require('../db-remote');
 const { getUsersSyncConfig, syncUsersToKhd } = require('../services/users-khd-sync');
+const { typedConfirmOk, typedConfirmText } = require('../core/validate');
+
+// ปุ่มเสี่ยง (เขียน/สร้างตารางใน KHD, ทับข้อมูลระบบด้วย KHD) ต้องพิมพ์ยืนยัน — 22 พ.ย. 2569
+function confirmMissing(req, res, tables) {
+    if (typedConfirmOk(tables, req.body && req.body.confirm_text)) return false;
+    res.status(400).json({ success: false, code: 'CONFIRM_REQUIRED', message: `กรุณาพิมพ์ "${typedConfirmText(tables)}" เพื่อยืนยัน`, expected: typedConfirmText(tables) });
+    return true;
+}
 
 // GET /db-compare — เปรียบเทียบ structure ตาราง table_process ระหว่าง local กับ khd
 apiRouter.get('/db-compare', authenticateToken, isSuperAdmin, async (req, res) => {
@@ -152,6 +160,7 @@ apiRouter.post('/db-compare/sync-data', authenticateToken, requireSuperAdminStri
 
     const { tables } = req.body;
     if (!Array.isArray(tables) || tables.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตาราง' });
+    if (confirmMissing(req, res, tables)) return;
 
     const synced = [], errors = [];
 
@@ -200,6 +209,7 @@ apiRouter.post('/db-compare/create-remote', authenticateToken, requireSuperAdmin
 
     const { tables } = req.body;
     if (!Array.isArray(tables) || tables.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตาราง' });
+    if (confirmMissing(req, res, tables)) return;
 
     const created = [], altered = [], errors = [];
 
@@ -256,6 +266,7 @@ apiRouter.post('/db-compare/sync-to-khd', authenticateToken, requireSuperAdminSt
 
     const { tables } = req.body;
     if (!Array.isArray(tables) || tables.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตาราง' });
+    if (confirmMissing(req, res, tables)) return;
 
     const out = await performSyncToKhd(tables.map(t => ({ table: t })), req.user.userId, { trigger: 'db_compare' });
     if (out.code === 'KHD_SYNC_BUSY') return res.status(409).json({ success: false, code: out.code, message: out.message });

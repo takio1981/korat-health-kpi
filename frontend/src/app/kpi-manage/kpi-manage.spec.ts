@@ -48,6 +48,25 @@ describe('KpiManageComponent', () => {
       component.filterReadiness = '';
       expect([1, 2, 3, 4].filter(id => component.matchReadiness({ id }))).toEqual([1, 2, 3, 4]);
     });
+
+    it('สถานะรายงาน KHD จากสำเนา: นับ/กรองรายงานที่ปิดใช้งานหรือไม่พบ + ข้อความเวลาที่อ่าน', () => {
+      const http = TestBed.inject(HttpTestingController);
+      component.loadReadiness();
+      http.expectOne(r => r.url.includes('/indicators/readiness')).flush({ success: true, data: {
+        counts: { warn: 2 }, by_code: { khd_inactive: 1, khd_report_missing: 1 },
+        khd_snapshot: { available: true, refreshed_at: '2026-11-22T02:00:00Z', count: 150, error: null },
+        items: [
+          { id: 1, level: 'warn', issues: [{ code: 'khd_inactive', level: 'warn', text: 'รายงานใน KHD ปิดใช้งานในปีงบนี้', field: null }] },
+          { id: 2, level: 'warn', issues: [{ code: 'khd_report_missing', level: 'warn', text: 'ไม่พบรายงาน', field: null }] },
+          { id: 3, level: 'warn', issues: [{ code: 'no_criterion', level: 'warn', text: 'ยังไม่ตั้งเกณฑ์', field: 'indicator-criterion' }] },
+        ] } });
+      expect(component.readinessKhdCount).toBe(2);
+      expect(component.khdSnapshotText).toContain('สถานะรายงาน KHD ณ');
+      component.filterReadiness = 'khd_status';
+      expect([1, 2, 3].filter(id => component.matchReadiness({ id }))).toEqual([1, 2]);
+      component.khdSnapshot = { available: false, refreshed_at: null, count: 0, error: null };
+      expect(component.khdSnapshotText).toBe('ยังไม่ได้อ่านสถานะรายงานจาก KHD');
+    });
   });
 
   // ---- รหัสของตัวชี้วัดสร้างให้อัตโนมัติ (11 ต.ค. 2569) — เดิมผู้ใช้ต้องคิด/กรอก รหัสอ้างอิง + รหัสตัวชี้วัด + ชื่อตาราง เอง ----

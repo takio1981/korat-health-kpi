@@ -401,6 +401,8 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - **ความพร้อมของตัวชี้วัด (22 พ.ย. 2569 — ระยะ 5 lean งานผู้ดูแล):** `services/indicator-readiness.js` `evaluateReadiness(ind, { year_bh, assigned })` ฟังก์ชันล้วน → `{ level: ok|info|warn|block, issues: [{ code, level, text, field }] }`
   (field = id ช่องในหน้าต่างแก้ไขตัวชี้วัด: indicator-name / -eval-mode / -table-process / -formula / -target / -criterion / -dept / -main / -fiscal-year) — `GET /indicators/readiness?year_bh=` (สิทธิ์หน้า kpi-manage, ROLE_SCOPE_OWN_DEPT)
   | kpi-manage `loadReadiness()` (หลังโหลดตัวชี้วัด) `readinessOf()`/`fixReadiness()`/`matchReadiness()` ตัวกรอง `#filter-readiness` | Test: `api/tests/indicator-readiness.test.js`, `kpi-manage.spec.ts`
+  — **สถานะรายงานใน KHD (warn `khd_inactive` / `khd_report_missing`):** อ่านจากสำเนา `khd_reports_snapshot` (services/khd-snapshot.js — reports + report_fiscal_year_config, is_active ของปีงบมาก่อน) **ไม่อ่าน KHD ทุกคำขอ**
+    `jobs/khd-snapshot.js` ทุก 1 ชม. อ่านเมื่อสำเนาเก่าเกิน 24 ชม. (`isSnapshotDue`, ล้มเหลวพัก 6 ชม.) + `POST /khd-snapshot/refresh` (requireSuperAdminStrict + khdLimiter, ปุ่ม `#btn-khd-snapshot`) — ยังไม่มีสำเนา = ไม่ตรวจข้อนี้ | readiness คืน `khd_snapshot` | Test: `lean-extras.test.js`
 - Test: `api/tests/add-kpi-auto-target.test.js`, `indicator-codes-scope.test.js`, `shared/indicator-scope.spec.ts`, `dashboard.spec.ts`, `kpi-manage.spec.ts`
 
 ### ป้ายสูตรในทุกหน้าที่มีรายชื่อตัวชี้วัด
@@ -491,6 +493,8 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   (save = ทั้งคำขอ), `GET /hierarchy-results` แนบ `quarter_mode` | dashboard: แถวลูก `canEditHierCell()` / `hierQuarterText()` / `hierLastValue(row, item)` (month_sum/avg = ค่าไตรมาสล่าสุด), หน้าต่างบันทึกผลงานย่อย `isSubQuarterOff()` / `subQuarterText()` /
   `subLastRaw()` (`subResultContext.quarter_mode`), Excel ข้อย่อย `planSubImport` นับ `offQuarter` | **kpi-setup:** `GET /kpi-template` คืน `quarter_mode`, `isQuarterOff()` ช่องเดือนกลางไตรมาส = ค่าว่าง (ไม่ใช่ 0) + `quarterText()`
   — **`/update-kpi` โหมด setup_* ล้างเดือนกลางไตรมาสของตัวชี้วัด 'quarter' เป็นค่าว่างเสมอ** (kpi-setup เดิมส่ง 0 ทุกเดือน → ผลงานล่าสุด = 0 ของ ก.ย.)
+  | **kpi-setup เลือกหลายหน่วยบริการ (22 พ.ย. 2569):** `selectedHospitals` (Set, คงไว้เมื่อเปลี่ยนโซน/อำเภอ) + หน้าต่างเลือก `#setup-hos-panel` (`refreshPicker()` คำนวณ `pickerList` ไม่ใช่ getter) — 1 แห่ง = เดิม (เขียนทับ/เพิ่มเฉพาะที่ยังไม่มี),
+    หลายแห่ง = setup_insert_new เท่านั้น `buildSetupBatches()` ชุดละ `SETUP_UNITS_PER_REQUEST` 30 แห่ง แถวระบุ hospcode | Test: `kpi-setup.spec.ts`
   | **กราฟร้อยละรายเดือน (11 พ.ย. 2569):** `routes/reports.js` `_cNormal` ไม่รวมตัวชี้วัดที่ตั้ง quarter_mode, `_cQuarter` (ไม่มีสูตร หรือสูตร LASTQ(SUM|AVG|LAST) เท่านั้น — สูตรอื่นยังไม่นับ)
   นับเฉพาะเดือนสุดท้ายของไตรมาส ด้วย `chartQuarterValueSql()` (กติกาเดียวกับ `quarterValues()`: quarter = ค่าเดือนสุดท้าย, sum, avg ของเดือนที่มีค่า, last = ค่าล่าสุดในไตรมาส) — อ่าน i.quarter_mode ตอนคิวรี ไม่ต้อง refresh summary
   | **ตาราง `_items`:** `itemResult(vals, isCum, quarterMode)` month_sum/month_avg = ค่าไตรมาสล่าสุด (กิจกรรมแบบ check ไม่ใช้, สะสมมาก่อน) — performKpiExport/checkKpiChanges SELECT quarter_mode
@@ -671,7 +675,10 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   `findMissingPairs(user, ปีงบ, เดือน)` = คู่ที่มีแถวใน kpi_results ปีงบนั้นแต่เดือนนั้นผลงานว่าง — **0 = ส่งแล้ว**, ผลงานข้อย่อย/กิจกรรมเดือนนั้น = ส่งแล้ว, ไม่นับ `result_manual`, `quarter_mode = 'quarter'` เดือนกลางไตรมาส, ตัวชี้วัดรายงานเป็นรอบ (`PERIODIC_MAX_MONTHS` ของ forecast)
   — ⚠️ คอลัมน์ ธ.ค. ของ kpi_summary ชื่อ **`dece`** (ไม่ใช่ `dec` — คำสงวน SQL)
 - `routes/work-center.js`: `GET /work-center/summary|review-queue|missing` (ตามขอบเขตผู้เรียก) | `GET /work-center/data-quality` + `PUT /work-center/reminder-settings` + `POST /work-center/reminders/preview|send-now` = **requireSuperAdminStrict**
-  — การอนุมัติ/ส่งกลับไม่มีเส้นทางใหม่: ปุ่มในหน้าเปิด `/dashboard?q=<รหัสหน่วยบริการ ชื่อตัวชี้วัด>&year=` (`applyDeepLinkParams()` ใน dashboard — ค้นหาด้วย q เดิม) แล้วใช้ /approve-kpi, /reject-kpi เดิม
+  — การอนุมัติ/ส่งกลับไม่มีเส้นทางใหม่: ติ๊กเลือกในแท็บรอตรวจสอบ (`approveSelected()`/`rejectSelected()` → `buildApprovePayload`/`buildRejectPayload` ชุดละ `REVIEW_BATCH` 100 ผ่าน /approve-kpi, /reject-kpi เดิม; คิวแนบ `pending_months`)
+    หรือปุ่ม "ตรวจ" เปิด `/dashboard?q=<รหัสหน่วยบริการ ชื่อตัวชี้วัด>&year=` (`applyDeepLinkParams()` ใน dashboard — ค้นหาด้วย q เดิม) | เมนูข้างแสดง pendingKpiCount (`#wc-menu-badge`)
+  — **ปลดล็อคเดือนที่ยังไม่มีผลงาน** (ข้อมูลที่อนุมัติทั้งปีก่อนมีอนุมัติรายเดือน): `services/unlock-future.js` `findLockedFutureMonths()` = เดือนล็อค + ผลงานว่าง + หลังเดือนล่าสุดที่มีผลงาน (รวมข้อย่อย/กิจกรรม) ข้ามคู่ผลงาน/ร้อยละกรอกเอง และ Appeal
+    | `GET /work-center/locked-future` (ตัวอย่าง) + `POST /work-center/unlock-future-months { year_bh, confirm: ปีงบ }` (requireSuperAdminStrict) คำนวณใหม่ในธุรกรรม ไม่รับรายการจาก client, log `UNLOCK_FUTURE_MONTHS` — ไม่แก้อัตโนมัติ | Test: `api/tests/lean-extras.test.js`
 - `jobs/result-reminder.js` (เริ่มใน server.js เฉพาะ require.main): ค่าตั้งค่า `reminder_enabled` (ค่าตั้งต้น false) / `_due_day` 10 (1–28) / `_days_before` [3,1] / `_time` 09:00 / `_channels` {inapp,line,email} / `_max_messages` 500 + `reminder_last_run`
   — ในระบบ = 1 แจ้งเตือนต่อหน่วยบริการ (notifications ระดับ hospcode, type info), LINE `sendLineToUser` (เคารพสวิตช์ผู้ใช้), อีเมล — ผู้รับ = ผู้ใช้ที่ hospcode ตรง + role ใน `RECIPIENT_ROLES` | **กันส่งซ้ำด้วย `kpi_reminder_log` (INSERT IGNORE ก่อนส่ง)** stage `d<k>` / `m<วันที่>` (สั่งเอง)
 - Test: `api/tests/work-center.test.js` (mock core/notify — ฐานทดสอบมีโทเคนจริง), `work-center/work-center.spec.ts`, `dashboard.spec.ts`
@@ -1280,6 +1287,9 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   — ส่งขั้นเดียว `POST /khd-sync/quick { year_bh, dry_run, plan_token }` (requireSuperAdminStrict + `khdLimiter` 6/นาที): checkKpiChanges → performKpiExport เฉพาะ has_changes → `tablesNeedingSync()` → วางแผนปีงบนั้น → dry_run คืน `plan_token` (10 นาที, ผูกผู้ใช้+ปี)
   → ส่งจริงต้องแนบ token + ลายเซ็นแผนต้องตรง (ต่าง = 409 `PLAN_CHANGED` + preview ใหม่) — UI `shared/khd-quick-send.ts` ในหน้า export-kpi (super_admin) | Test: `api/tests/khd-sync-audit.test.js`, `khd-send-policy.test.js`, `shared/khd-quick-send.spec.ts`
   — **เส้นทาง/งานใหม่ที่เขียน KHD ต้องผ่าน `performSyncToKhd()`/`runKhdSync()` เสมอ** (ห้ามเขียน remote ตรง — จะไม่มีล็อค/บันทึก/ย้อนกลับ)
+  — **รายงานค่าใน KHD ที่ยังไม่อนุมัติ** `POST /khd-sync/unapproved-report { year_bh, refresh }` (requireSuperAdminStrict + khdLimiter): `services/khd-unapproved.js` อ่าน KHD `SELECT * WHERE byear` ทีละตาราง (timedRemote + พัก + เพดานเวลา, แคช 10 นาที) เทียบ m10–m09 ที่ KHD มีค่ากับเดือนที่ยังไม่ล็อคใน kpi_results
+    (`compareTable()` แยก pending/rejected/empty + same_as_local) — **อ่านอย่างเดียว ไม่ล้างค่าใน KHD** | ปุ่ม `#btn-khd-unapproved` ในกล่องส่งขั้นเดียว (`unapprovedReportHtml()`)
+  — **DB Compare ปุ่มเสี่ยงต้องพิมพ์ยืนยัน:** `/db-compare/sync-data|create-remote|sync-to-khd` ต้องส่ง `confirm_text` = `typedConfirmText(tables)` (core/validate.js: 1 ตาราง = ชื่อตาราง, หลายตาราง = "N ตาราง") ไม่ตรง = 400 `CONFIRM_REQUIRED` — หน้าจอ `typedConfirmSwal()` (db-compare.ts)
 
 ### Export Scheduler (ตารางเวลา Export อัตโนมัติ)
 - ตาราง `export_schedules` — metadata schedule (name, days_of_week, time_of_day, indicator_scope, auto_sync_khd, notify_email/telegram)

@@ -175,7 +175,7 @@ describe('POST /sync-to-khd/preview + DB Compare', () => {
     });
 
     test('POST /db-compare/sync-to-khd ใช้กติกาเดียวกัน', async () => {
-        const res = await as(request(app).post(api('/db-compare/sync-to-khd'))).send({ tables: [T.a, T.b] });
+        const res = await as(request(app).post(api('/db-compare/sync-to-khd'))).send({ tables: [T.a, T.b], confirm_text: '2 ตาราง' });
         expect(res.status).toBe(200);
         expect(res.body.synced.map(s => s.table)).toEqual([T.a]);
         expect(res.body.errors[0].table).toBe(T.b);

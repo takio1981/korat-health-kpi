@@ -38,6 +38,32 @@ export function dashboardQuery(hospcode: string | null, indicatorName: string | 
   return { q: [hospcode || '', name].filter(Boolean).join(' ').trim(), year };
 }
 
+const MONTH_SHORT: Record<number, string> = Object.fromEntries(WC_MONTHS.map(m => [m.value, m.label]));
+/** เดือนที่รอตรวจ → "ต.ค., พ.ย." */
+export function monthsText(ms: number[] | null | undefined): string {
+  return (ms || []).map(m => MONTH_SHORT[Number(m)] || String(m)).join(', ');
+}
+export const reviewKey = (r: any) => `${Number(r.indicator_id)}|${String(r.hospcode)}`;
+/** แบ่งรายการเป็นชุด (ส่งทีละชุด กันคำขอใหญ่เกิน) */
+export function chunk<T>(arr: T[], n: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+  return out;
+}
+/** รายการอนุมัติ (ใช้ /approve-kpi เดิม): through = '' → เดือนล่าสุดที่มีผลงานของแต่ละคู่ (server ตัดสิน) */
+export function buildApprovePayload(items: any[], year: string, through: number | '' | null): any[] {
+  return items.map(r => {
+    const o: any = { indicator_id: Number(r.indicator_id), year_bh: String(year), hospcode: String(r.hospcode) };
+    if (through) o.through_month = Number(through);
+    return o;
+  });
+}
+/** รายการส่งคืนแก้ไข (ใช้ /reject-kpi เดิม — ไม่ระบุเดือน = เฉพาะเดือนที่ยังไม่อนุมัติ) */
+export function buildRejectPayload(items: any[], year: string, comment: string): any[] {
+  return items.map(r => ({ indicator_id: Number(r.indicator_id), year_bh: String(year), hospcode: String(r.hospcode), comment: String(comment || '').trim() }));
+}
+export const REVIEW_BATCH = 100;
+
 @Component({
   selector: 'app-work-center',
   standalone: true,
@@ -70,6 +96,10 @@ export class WorkCenterComponent implements OnInit {
   reminder: any = null;
   dayChoices = [7, 3, 2, 1, 0];
   showReminder = false;
+  readonly monthsText = monthsText;
+  selected = new Set<string>();
+  approveThrough: number | '' = '';
+  reviewBusy = false;
 
   ngOnInit() {
     if (!this.authService.canAccessPage('work-center')) { this.router.navigate(['/dashboard']); return; }
@@ -107,7 +137,7 @@ export class WorkCenterComponent implements OnInit {
       });
     } else {
       this.authService.apiGet('/work-center/review-queue', { year_bh: this.year }).subscribe({
-        next: (r: any) => { this.review = r || null; this.cdr.detectChanges(); },
+        next: (r: any) => { this.review = r || null; this.selected.clear(); this.cdr.detectChanges(); },
         error: () => { this.review = null; this.cdr.detectChanges(); },
       });
     }
@@ -187,6 +217,120 @@ export class WorkCenterComponent implements OnInit {
               this.loadSummary();
             },
             error: (e: any) => Swal.fire('ผิดพลาด', e?.error?.message || 'ส่งไม่สำเร็จ', 'error'),
+          });
+        });
+      },
+      error: (e: any) => Swal.fire('ผิดพลาด', e?.error?.message || 'ตรวจไม่สำเร็จ', 'error'),
+    });
+  }
+
+  // ===== อนุมัติ / ส่งคืนจากคิวรอตรวจ (เส้นทางเดิม /approve-kpi, /reject-kpi — ด่านขอบเขต/สถานะเดิมทุกข้อ) =====
+  get reviewItems(): any[] { return this.review?.items || []; }
+  isSel(r: any) { return this.selected.has(reviewKey(r)); }
+  toggleSel(r: any) { const k = reviewKey(r); if (this.selected.has(k)) this.selected.delete(k); else this.selected.add(k); }
+  get allSelected(): boolean { return this.reviewItems.length > 0 && this.reviewItems.every(r => this.selected.has(reviewKey(r))); }
+  toggleAll() {
+    if (this.allSelected) this.selected.clear();
+    else this.reviewItems.forEach(r => this.selected.add(reviewKey(r)));
+  }
+  get selectedItems(): any[] { return this.reviewItems.filter(r => this.selected.has(reviewKey(r))); }
+
+  /** ส่งทีละชุดต่อกัน → รวมผล */
+  runBatches(path: string, batches: any[][], done: (agg: { ok: number; skipped: number; months: number; failed: number; errors: string[] }) => void) {
+    const agg = { ok: 0, skipped: 0, months: 0, failed: 0, errors: [] as string[] };
+    const step = (i: number) => {
+      if (i >= batches.length) { done(agg); return; }
+      if (Swal.isVisible()) Swal.update({ html: `ดำเนินการแล้ว ${i} / ${batches.length} ชุด` });
+      this.authService.apiPost(path, batches[i]).subscribe({
+        next: (r: any) => {
+          agg.ok += Number(r?.approved ?? batches[i].length) || 0;
+          agg.skipped += Number(r?.skipped) || 0;
+          agg.months += Number(r?.months) || 0;
+          step(i + 1);
+        },
+        error: (e: any) => { agg.failed += batches[i].length; agg.errors.push(e?.error?.message || 'ผิดพลาด'); step(i + 1); },
+      });
+    };
+    step(0);
+  }
+
+  private batchResultHtml(main: string, agg: { errors: string[] }) {
+    return main + (agg.errors.length ? `<br><small style="color:#b91c1c">${escapeHtml(agg.errors.slice(0, 3).join(' / '))}</small>` : '');
+  }
+
+  approveSelected() {
+    const items = this.selectedItems;
+    if (!items.length || this.reviewBusy) return;
+    const thr = this.approveThrough ? `ถึงเดือน <b>${escapeHtml(monthsText([Number(this.approveThrough)]))}</b>` : 'ถึง<b>เดือนล่าสุดที่มีผลงาน</b>ของแต่ละรายการ';
+    Swal.fire({
+      title: `อนุมัติ ${items.length} รายการ`, icon: 'question', showCancelButton: true,
+      confirmButtonColor: '#10b981', confirmButtonText: 'อนุมัติ', cancelButtonText: 'ยกเลิก',
+      html: `<div style="text-align:left;font-size:13px">อนุมัติและล็อค${thr} — เดือนหลังจากนั้นหน่วยบริการบันทึกต่อได้ทันที<br><span style="font-size:11px;color:#6b7280">รายการที่อยู่ระหว่างอุทธรณ์ ระบบจะไม่อนุมัติให้ (ใช้ "รับ/ไม่รับอุทธรณ์" ในหน้าบันทึกผลงาน)</span></div>`,
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      this.reviewBusy = true;
+      Swal.fire({ title: 'กำลังอนุมัติ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      this.runBatches('/approve-kpi', chunk(buildApprovePayload(items, this.year, this.approveThrough), REVIEW_BATCH), (agg) => {
+        this.reviewBusy = false;
+        Swal.fire({
+          icon: agg.errors.length ? 'warning' : 'success', title: agg.errors.length ? 'เสร็จสิ้น (มีบางชุดผิดพลาด)' : 'อนุมัติแล้ว',
+          html: this.batchResultHtml(`อนุมัติ ${agg.ok} รายการ (${agg.months} เดือน)${agg.skipped ? ` · ข้าม ${agg.skipped} รายการที่ไม่มีเดือนรอตรวจ` : ''}`, agg),
+        });
+        this.loadSummary();
+      });
+    });
+  }
+
+  rejectSelected() {
+    const items = this.selectedItems;
+    if (!items.length || this.reviewBusy) return;
+    Swal.fire({
+      title: `ส่งคืนแก้ไข ${items.length} รายการ`, icon: 'warning', input: 'textarea', inputPlaceholder: 'เหตุผลการส่งคืนแก้ไข (ส่งถึงหน่วยบริการ)',
+      showCancelButton: true, confirmButtonColor: '#dc2626', confirmButtonText: 'ส่งคืนแก้ไข', cancelButtonText: 'ยกเลิก',
+      html: '<div style="font-size:12px;color:#6b7280">ส่งคืนเฉพาะเดือนที่ยังไม่อนุมัติ — เดือนที่อนุมัติแล้วคงล็อค</div>',
+      inputValidator: (v: string) => (String(v || '').trim() ? null : 'กรุณาระบุเหตุผล'),
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      this.reviewBusy = true;
+      Swal.fire({ title: 'กำลังส่งคืน...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      this.runBatches('/reject-kpi', chunk(buildRejectPayload(items, this.year, r.value), REVIEW_BATCH), (agg) => {
+        this.reviewBusy = false;
+        Swal.fire({
+          icon: agg.errors.length ? 'warning' : 'success', title: agg.errors.length ? 'เสร็จสิ้น (มีบางชุดผิดพลาด)' : 'ส่งคืนแก้ไขแล้ว',
+          html: this.batchResultHtml(`ส่งคืน ${items.length - agg.failed} รายการ`, agg),
+        });
+        this.loadSummary();
+      });
+    });
+  }
+
+  // ===== ปลดล็อคเดือนที่ยังไม่มีผลงาน (คู่ที่อนุมัติทั้งปีตามระบบเดิม) — super_admin =====
+  checkLockedFuture() {
+    const year = this.year;
+    Swal.fire({ title: 'กำลังตรวจ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    this.authService.apiGet('/work-center/locked-future', { year_bh: year }).subscribe({
+      next: (r: any) => {
+        const d = r?.data || {};
+        if (!d.pairs) { Swal.fire({ icon: 'success', title: 'ไม่มีเดือนที่ล็อคค้าง', text: `ปีงบ ${year}: ทุกเดือนหลังผลงานล่าสุดเปิดบันทึกได้แล้ว` }); return; }
+        const top = (d.by_indicator || []).slice(0, 8).map((t: any) => `<li>${escapeHtml(t.indicator_name)} — ${Number(t.pairs)} หน่วยบริการ</li>`).join('');
+        const bm = (d.by_month || []).map((m: any) => `${escapeHtml(m.label)} ${Number(m.pairs)}`).join(' · ');
+        Swal.fire({
+          title: `ปลดล็อคเดือนที่ยังไม่มีผลงาน (ปีงบ ${escapeHtml(year)})`, icon: 'warning', width: 620,
+          html: `<div style="text-align:left;font-size:13px">พบ <b>${Number(d.pairs)}</b> คู่ (${Number(d.indicators)} ตัวชี้วัด · ${Number(d.hospitals)} หน่วยบริการ) รวม <b>${Number(d.months)}</b> เดือน
+            ที่ล็อคอยู่ ผลงานว่าง และอยู่หลังเดือนล่าสุดที่มีผลงาน (เกิดจากการอนุมัติทั้งปีแบบเดิม)
+            <div style="font-size:11px;color:#6b7280;margin-top:4px">รายเดือน: ${bm}</div>
+            <ul style="margin-top:6px;padding-left:18px">${top}</ul>
+            <div style="font-size:11px;color:#6b7280">เดือนที่มีผลงานและเดือนว่างก่อนเดือนล่าสุดคงล็อค · ผลงานกรอกเอง (ระดับปี) ไม่แตะ</div>
+            <div style="margin-top:8px">พิมพ์ปีงบ <b>${escapeHtml(year)}</b> เพื่อยืนยัน</div></div>`,
+          input: 'text', inputPlaceholder: year, showCancelButton: true, confirmButtonColor: '#dc2626',
+          confirmButtonText: 'ปลดล็อค', cancelButtonText: 'ยกเลิก',
+          inputValidator: (v: string) => (String(v || '').trim() === String(year) ? null : `พิมพ์ ${year} ให้ตรง`),
+        }).then(res => {
+          if (!res.isConfirmed) return;
+          Swal.fire({ title: 'กำลังปลดล็อค...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+          this.authService.apiPost('/work-center/unlock-future-months', { year_bh: year, confirm: String(res.value).trim() }).subscribe({
+            next: (u: any) => { Swal.fire({ icon: 'success', title: 'ปลดล็อคแล้ว', text: u?.message || '' }); this.loadSummary(); },
+            error: (e: any) => Swal.fire('ผิดพลาด', e?.error?.message || 'ปลดล็อคไม่สำเร็จ', 'error'),
           });
         });
       },

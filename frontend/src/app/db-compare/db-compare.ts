@@ -4,6 +4,23 @@ import { FormsModule } from '@angular/forms';
 import { AuthService } from '../services/auth';
 import Swal from 'sweetalert2';
 
+/** ข้อความที่ต้องพิมพ์ยืนยันปุ่มเสี่ยง (ตรงกับ api core/validate.js typedConfirmText): 1 ตาราง = ชื่อตาราง | หลายตาราง = "<จำนวน> ตาราง" */
+export function confirmTextFor(tables: string[]): string {
+  return tables.length === 1 ? String(tables[0]) : `${tables.length} ตาราง`;
+}
+/** ส่วนเพิ่มของ Swal: ช่องพิมพ์ยืนยัน (server ตรวจซ้ำ) */
+export function typedConfirmSwal(tables: string[]) {
+  const expected = confirmTextFor(tables);
+  const esc = expected.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as any)[c]);
+  return {
+    expected,
+    footerHtml: `<p class="text-xs text-gray-600 mt-3">พิมพ์ <b>${esc}</b> เพื่อยืนยัน</p>`,
+    input: 'text' as const,
+    inputPlaceholder: expected,
+    inputValidator: (v: string) => (String(v || '').trim() === expected ? null : `กรุณาพิมพ์ "${expected}" ให้ตรง`),
+  };
+}
+
 @Component({
   selector: 'app-db-compare',
   standalone: true,
@@ -153,15 +170,17 @@ export class DbCompareComponent implements OnInit {
   syncData() {
     const tables = [...this.selectedTables];
     if (tables.length === 0) { Swal.fire('แจ้งเตือน', 'กรุณาเลือกตารางอย่างน้อย 1 ตาราง', 'warning'); return; }
+    const tc = typedConfirmSwal(tables);
     Swal.fire({
       title: 'ยืนยัน Sync ข้อมูล',
-      html: `<p>ดึงข้อมูลจาก KHD มาใส่ Local <b>${tables.length}</b> ตาราง</p><p class="text-xs text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>ข้อมูลเดิมที่มี key ซ้ำจะถูกเขียนทับ</p>`,
+      html: `<p>ดึงข้อมูลจาก KHD มาใส่ Local <b>${tables.length}</b> ตาราง</p><p class="text-xs text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>ข้อมูลเดิมที่มี key ซ้ำจะถูกเขียนทับ</p>${tc.footerHtml}`,
+      input: tc.input, inputPlaceholder: tc.inputPlaceholder, inputValidator: tc.inputValidator,
       icon: 'warning', showCancelButton: true, confirmButtonColor: '#16a34a',
       confirmButtonText: '<i class="fas fa-sync mr-1"></i> Sync ข้อมูล', cancelButtonText: 'ยกเลิก'
     }).then((r) => {
       if (!r.isConfirmed) return;
       Swal.fire({ title: 'กำลัง Sync...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-      this.authService.dbCompareSyncData(tables).subscribe({
+      this.authService.dbCompareSyncData(tables, tc.expected).subscribe({
         next: (res: any) => {
           const detail = res.synced?.map((s: any) => `${s.table}: ${s.rows} rows`).join('<br>') || '';
           Swal.fire({ icon: 'success', title: 'Sync สำเร็จ', html: `${res.message}<br><div class="text-xs mt-2 text-gray-500">${detail}</div>` });
@@ -175,15 +194,17 @@ export class DbCompareComponent implements OnInit {
   createRemote() {
     const tables = [...this.selectedTables];
     if (tables.length === 0) { Swal.fire('แจ้งเตือน', 'กรุณาเลือกตารางอย่างน้อย 1 ตาราง', 'warning'); return; }
+    const tc = typedConfirmSwal(tables);
     Swal.fire({
       title: 'ยืนยันสร้าง/แก้ไขใน KHD',
-      html: `<p>สร้าง/แก้ไข <b>${tables.length}</b> ตารางใน KHD ให้ตรงกับ Local</p><p class="text-xs text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>ต้องมีสิทธิ์ write ใน KHD — ตรวจสอบให้ดีก่อนยืนยัน</p>`,
+      html: `<p>สร้าง/แก้ไข <b>${tables.length}</b> ตารางใน KHD ให้ตรงกับ Local</p><p class="text-xs text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>ต้องมีสิทธิ์ write ใน KHD — ตรวจสอบให้ดีก่อนยืนยัน</p>${tc.footerHtml}`,
+      input: tc.input, inputPlaceholder: tc.inputPlaceholder, inputValidator: tc.inputValidator,
       icon: 'warning', showCancelButton: true, confirmButtonColor: '#7c3aed',
       confirmButtonText: '<i class="fas fa-hammer mr-1"></i> สร้างใน KHD', cancelButtonText: 'ยกเลิก'
     }).then((r) => {
       if (!r.isConfirmed) return;
       Swal.fire({ title: 'กำลังสร้างใน KHD...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-      this.authService.dbCompareCreateRemote(tables).subscribe({
+      this.authService.dbCompareCreateRemote(tables, tc.expected).subscribe({
         next: (res: any) => {
           const errDetail = res.errors?.length ? `<br><div class="text-xs mt-2 text-red-500">${res.errors.map((e: any) => `${e.table}: ${e.error}`).join('<br>')}</div>` : '';
           Swal.fire({ icon: 'success', title: 'สำเร็จ', html: `${res.message}${errDetail}`, timer: 4000 });
@@ -197,15 +218,17 @@ export class DbCompareComponent implements OnInit {
   syncToKhd() {
     const tables = [...this.selectedTables];
     if (tables.length === 0) { Swal.fire('แจ้งเตือน', 'กรุณาเลือกตารางอย่างน้อย 1 ตาราง', 'warning'); return; }
+    const tc = typedConfirmSwal(tables);
     Swal.fire({
       title: 'ยืนยัน Sync → KHD',
-      html: `<p>ส่งข้อมูลจาก Local ไปยัง KHD <b>${tables.length}</b> ตาราง</p><p class="text-xs text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>ส่งได้เฉพาะตารางที่ KHD ใช้คีย์ hospcode + byear — แถวที่มีแล้วทับเฉพาะเมื่อข้อมูลในระบบใหม่กว่า (update_date) และช่องว่างไม่ทับค่าใน KHD</p>`,
+      input: tc.input, inputPlaceholder: tc.inputPlaceholder, inputValidator: tc.inputValidator,
+      html: `<p>ส่งข้อมูลจาก Local ไปยัง KHD <b>${tables.length}</b> ตาราง</p><p class="text-xs text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>ส่งได้เฉพาะตารางที่ KHD ใช้คีย์ hospcode + byear — แถวที่มีแล้วทับเฉพาะเมื่อข้อมูลในระบบใหม่กว่า (update_date) และช่องว่างไม่ทับค่าใน KHD</p>${tc.footerHtml}`,
       icon: 'warning', showCancelButton: true, confirmButtonColor: '#dc2626',
       confirmButtonText: '<i class="fas fa-cloud-upload-alt mr-1"></i> Sync → KHD', cancelButtonText: 'ยกเลิก'
     }).then((r) => {
       if (!r.isConfirmed) return;
       Swal.fire({ title: 'กำลัง Sync ไป KHD...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-      this.authService.dbCompareSyncToKhd(tables).subscribe({
+      this.authService.dbCompareSyncToKhd(tables, tc.expected).subscribe({
         next: (res: any) => {
           const detail = res.synced?.map((s: any) => `${s.table}: เพิ่ม ${s.inserted || 0} · อัปเดต ${s.updated || 0} · คงค่า KHD ${(s.khd_newer || 0) + (s.no_time || 0)}`).join('<br>') || '';
           const errDetail = res.errors?.length ? `<br><div class="text-xs mt-2 text-red-500">${res.errors.map((e: any) => `${e.table}: ${e.error}`).join('<br>')}</div>` : '';

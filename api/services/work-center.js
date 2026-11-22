@@ -248,6 +248,19 @@ async function reviewQueue(yearBh, chartScope, limit = 500) {
     const items = rows.slice(0, limit).map(r => ({ ...r, indicator_id: Number(r.indicator_id), hospcode: String(r.hospcode).trim(), pending_count: Number(r.pending_count) }));
     const { hos } = await namesFor(items.map(r => ({ indicator_id: r.indicator_id, hospcode: r.hospcode })));
     for (const r of items) r.hosname = hos.get(r.hospcode)?.hosname || null;
+    // เดือนที่มีผลงานรอตรวจ (แถวหลัก) — ให้ผู้ดูแลเลือก "อนุมัติถึงเดือน" ได้ในหน้าศูนย์งาน
+    if (items.length) {
+        const [pm] = await db.query(
+            `SELECT indicator_id, hospcode, GROUP_CONCAT(month_bh) AS ms FROM kpi_results
+             WHERE year_bh = ? AND indicator_id IN (?) AND hospcode IN (?) AND status IN ('Pending', 'Resubmit')
+               AND TRIM(COALESCE(actual_value, '')) <> '' GROUP BY indicator_id, hospcode`,
+            [String(yearBh), [...new Set(items.map(r => r.indicator_id))], [...new Set(items.map(r => r.hospcode))]]);
+        const pmMap = new Map(pm.map(x => [`${Number(x.indicator_id)}|${String(x.hospcode).trim()}`, x.ms]));
+        for (const r of items) {
+            const ms = String(pmMap.get(`${r.indicator_id}|${r.hospcode}`) || '').split(',').map(Number).filter(m => m >= 1 && m <= 12);
+            r.pending_months = [...new Set(ms)].sort((a, b) => fiscalMonthOrdinal(a) - fiscalMonthOrdinal(b));
+        }
+    }
     return { items, truncated: rows.length > limit };
 }
 

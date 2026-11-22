@@ -12,7 +12,7 @@ const { ROLLED_SUB_MESSAGE, activeSubTree, getHierarchyMaxLevels, loadSubAggrega
 const { _actorLabel, normTargetCondition, normalizeEvalMode, normalizeOffTypes } = require('../services/indicator-fields');
 const { apiRouter } = require('../core/router');
 const { parseActiveFlag, ACTIVE_FLAG_REQUIRED } = require('../core/validate');
-const { authenticateToken, isSuperAdmin } = require('../core/auth');
+const { authenticateToken, isSuperAdmin, requireSuperAdminStrict } = require('../core/auth');
 const { customVarsOf, normalizeCustomVars, parseFormulaInput } = require('../services/formula-vars');
 const { getUserAuditInfo, logKpiSaveAudit } = require('../services/kpi-audit');
 const { notifyLineAction } = require('../core/notify');
@@ -20,6 +20,8 @@ const { refreshSummaryAfterSubSave, scheduleSummaryRefresh } = require('../servi
 const { normalizeFiscalYears, invalidFiscalYears } = require('../services/fiscal-years');
 const { indicatorReadiness } = require('../services/indicator-readiness');
 const { currentFiscalYear } = require('../core/fiscal-year');
+const { refreshKhdReportsSnapshot, getSnapshotStatus } = require('../services/khd-snapshot');
+const { khdLimiter } = require('../core/security');
 
 // --- CRUD Main Yut (ยุทธศาสตร์) ---
 apiRouter.get('/main-yut', authenticateToken, async (req, res) => {
@@ -236,6 +238,20 @@ apiRouter.get('/indicators/readiness', authenticateToken, async (req, res) => {
     try {
         const deptId = ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null ? user.deptId : null;
         res.json({ success: true, data: await indicatorReadiness({ yearBh: year, deptId }) });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// POST /khd-snapshot/refresh — อ่านสถานะรายงาน KHD ใหม่ทันที (ปกติอ่านวันละครั้งโดย jobs/khd-snapshot.js) — อ่าน KHD อย่างเดียว
+// path ไม่อยู่ใต้ /indicators/ (กันชนกับ /indicators/:id/...) และไม่อยู่ใน PAGE_ACCESS_RULES
+apiRouter.post('/khd-snapshot/refresh', authenticateToken, requireSuperAdminStrict, khdLimiter, async (req, res) => {
+    try {
+        const r = await refreshKhdReportsSnapshot();
+        if (!r.ok) return res.status(502).json({ success: false, message: `อ่านสถานะรายงาน KHD ไม่สำเร็จ: ${r.error}` });
+        await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+            [req.user.userId, 'KHD_SNAPSHOT_REFRESH', 'khd_reports_snapshot', JSON.stringify({ count: r.count }), req.ip]).catch(() => {});
+        res.json({ success: true, data: await getSnapshotStatus(), message: `อัปเดตสถานะรายงาน KHD ${r.count} รายการ` });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }

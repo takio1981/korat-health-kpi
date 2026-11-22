@@ -13,6 +13,8 @@ const { scanDataQuality } = require('../services/data-quality');
 const { getKhdSendPolicy } = require('../services/khd-policy');
 const { listRuns, khdSyncBusyInfo } = require('../services/khd-sync');
 const { runResultReminders, saveLastRun } = require('../jobs/result-reminder');
+const { findLockedFutureMonths, summarizeLockedFuture, unlockFutureMonths } = require('../services/unlock-future');
+const { scheduleSummaryRefresh } = require('../services/summary');
 
 /** ปีงบ/เดือนจาก query — ไม่ส่ง = เดือนที่ควรส่งผลงานแล้ว (เดือนก่อนหน้า) */
 function periodOf(q) {
@@ -120,3 +122,29 @@ const reminderHandler = (preview) => async (req, res) => {
 };
 apiRouter.post('/work-center/reminders/preview', authenticateToken, requireSuperAdminStrict, reminderHandler(true));
 apiRouter.post('/work-center/reminders/send-now', authenticateToken, requireSuperAdminStrict, reminderHandler(false));
+
+// ปลดล็อคเดือนที่ยังไม่มีผลงานหลังเดือนล่าสุด (คู่ที่อนุมัติทั้งปีตามระบบเดิม — ก่อนมีการอนุมัติรายเดือน)
+// ดูตัวอย่างก่อนเสมอ แล้วพิมพ์ปีงบยืนยัน — server คำนวณรายการใหม่เองตอนปลดล็อค (ไม่รับรายการจาก client)
+apiRouter.get('/work-center/locked-future', authenticateToken, requireSuperAdminStrict, async (req, res) => {
+    const per = periodOf({ year_bh: req.query.year_bh });
+    if (per.error) return res.status(400).json({ success: false, message: per.error });
+    try {
+        const pairs = await findLockedFutureMonths(per.year);
+        res.json({ success: true, data: await summarizeLockedFuture(per.year, pairs) });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+apiRouter.post('/work-center/unlock-future-months', authenticateToken, requireSuperAdminStrict, async (req, res) => {
+    const per = periodOf({ year_bh: req.body && req.body.year_bh });
+    if (per.error) return res.status(400).json({ success: false, message: per.error });
+    if (String((req.body && req.body.confirm) || '').trim() !== per.year) {
+        return res.status(400).json({ success: false, code: 'CONFIRM_REQUIRED', message: `กรุณาพิมพ์ปีงบ ${per.year} เพื่อยืนยัน` });
+    }
+    try {
+        const out = await unlockFutureMonths(per.year);
+        await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+            [req.user.userId, 'UNLOCK_FUTURE_MONTHS', 'kpi_results', JSON.stringify({ year_bh: per.year, pairs: out.pairs, months: out.months, hospitals: out.hospitals }), req.ip]).catch(() => {});
+        if (out.indicator_years.length) scheduleSummaryRefresh(out.indicator_years);
+        res.json({ success: true, data: { year_bh: per.year, pairs: out.pairs, months: out.months, hospitals: out.hospitals },
+            message: `ปลดล็อค ${out.months} เดือน ของ ${out.pairs} คู่ (${out.hospitals} หน่วยบริการ) — หน่วยบริการบันทึกเดือนเหล่านี้ได้แล้ว` });
+    } catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});

@@ -534,5 +534,5 @@ async function listTableStatus() {
 
 module.exports = {
     runKhdSync, withKhdSyncLock, khdSyncBusyInfo, rollbackRun, quickSend, listRuns, getRun, listTableStatus,
-    tablesNeedingSync, planSignature, valText,
+    tablesNeedingSync, planSignature, valText, timedRemote, exportableTableNames,
 };

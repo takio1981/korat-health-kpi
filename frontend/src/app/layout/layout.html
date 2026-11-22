@@ -43,7 +43,7 @@
          [ngClass]="isMobileMenuOpen ? 'max-h-[75vh] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'">
       <nav class="px-3 py-3 space-y-0.5 text-sm">
         <a *ngIf="canAccess('dashboard')" routerLink="/dashboard" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-th-large text-base mr-3 min-w-[20px]"></i>บันทึกผลงานตัวชี้วัด <span *ngIf="pendingKpiCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px] font-bold">{{ pendingKpiCount }}</span></a>
-        <a *ngIf="canAccess('work-center')" routerLink="/work-center" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-clipboard-list text-base mr-3 min-w-[20px]"></i>ศูนย์งานผู้ดูแล</a>
+        <a *ngIf="canAccess('work-center')" routerLink="/work-center" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-clipboard-list text-base mr-3 min-w-[20px]"></i>ศูนย์งานผู้ดูแล <span *ngIf="(isAdmin || isSuperAdmin) && pendingKpiCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px] font-bold" title="ตัวชี้วัดรอตรวจสอบ">{{ pendingKpiCount }}</span></a>
         <a *ngIf="canAccess('charts')" routerLink="/charts" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-chart-bar text-base mr-3 min-w-[20px]"></i>รายงานสถิติ</a>
         <a *ngIf="canAccess('sop')" routerLink="/sop" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-sitemap text-base mr-3 min-w-[20px]"></i>ผังกระบวนการ SOP</a>
         <a *ngIf="canAccess('notifications')" routerLink="/notifications" (click)="closeSidebar()" class="flex items-center px-4 py-2.5 text-green-800 hover:bg-green-100/70 rounded-xl"><i class="fas fa-bell text-base mr-3 min-w-[20px]" [class.bell-shake]="unreadNotifCount > 0"></i>แจ้งเตือน <span *ngIf="unreadNotifCount > 0" class="ml-auto px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px] font-bold">{{ unreadNotifCount }}</span></a>
@@ -80,10 +80,17 @@
         <!-- ศูนย์งานผู้ดูแล (22 พ.ย. 2569) -->
         <a *ngIf="canAccess('work-center')" routerLink="/work-center" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"
            [title]="isSidebarCollapsed ? 'ศูนย์งานผู้ดูแล' : ''"
-           class="flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
+           class="relative flex items-center py-2.5 text-green-800 hover:bg-green-100/70 hover:text-green-900 rounded-xl transition-all cursor-pointer"
            [ngClass]="isSidebarCollapsed ? 'justify-center px-1' : 'px-4'">
           <i class="fas fa-clipboard-list text-lg min-w-[24px]" [ngClass]="isSidebarCollapsed ? 'text-center' : 'mr-3'"></i>
-          <span *ngIf="!isSidebarCollapsed" class="truncate">ศูนย์งานผู้ดูแล</span>
+          <span *ngIf="!isSidebarCollapsed" class="truncate flex justify-between items-center w-full">
+            ศูนย์งานผู้ดูแล
+            <span *ngIf="(isAdmin || isSuperAdmin) && pendingKpiCount > 0" id="wc-menu-badge"
+                  class="flex h-5 min-w-[20px] px-1 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white ml-2 shadow"
+                  [title]="'รอตรวจสอบ ' + pendingStats.indicatorCount + ' ตัวชี้วัด — อนุมัติ/ส่งคืนได้ที่ศูนย์งานผู้ดูแล'">{{ pendingKpiCount }}</span>
+          </span>
+          <span *ngIf="isSidebarCollapsed && (isAdmin || isSuperAdmin) && pendingKpiCount > 0"
+                class="absolute top-0.5 right-0.5 flex h-4 min-w-[16px] px-0.5 items-center justify-center rounded-full bg-amber-500 text-[9px] font-bold text-white">{{ pendingKpiCount }}</span>
         </a>
         <!-- บันทึกผลงานตัวชี้วัด -->
         <a *ngIf="canAccess('dashboard')" routerLink="/dashboard" routerLinkActive="bg-green-200/70 text-green-900 font-bold shadow-sm" [routerLinkActiveOptions]="{exact: true}"

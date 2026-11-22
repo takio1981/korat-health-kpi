@@ -134,6 +134,7 @@
   "GET /khupskpi/api/indicators :: authenticateToken > handler",
   "POST /khupskpi/api/indicators/bulk-import :: authenticateToken > requireAction(kpi-manage,add) > handler",
   "GET /khupskpi/api/indicators/readiness :: authenticateToken > handler",
+  "POST /khupskpi/api/khd-snapshot/refresh :: authenticateToken > requireSuperAdminStrict > khdLimiter > handler",
   "GET /khupskpi/api/indicators/suggest-code :: authenticateToken > requireAction(kpi-manage,add) > handler",
   "POST /khupskpi/api/indicators :: authenticateToken > requireAction(kpi-manage,add) > handler",
   "PUT /khupskpi/api/indicators/:id :: authenticateToken > requireAction(kpi-manage,edit) > handler",
@@ -194,6 +195,7 @@
   "GET /khupskpi/api/khd-sync/tables :: authenticateToken > requireSuperAdminStrict > handler",
   "GET /khupskpi/api/khd-sync/runs/:id :: authenticateToken > requireSuperAdminStrict > handler",
   "POST /khupskpi/api/khd-sync/runs/:id/rollback :: authenticateToken > requireSuperAdminStrict > khdLimiter > handler",
+  "POST /khupskpi/api/khd-sync/unapproved-report :: authenticateToken > requireSuperAdminStrict > khdLimiter > handler",
   "GET /khupskpi/api/exportable-indicators :: authenticateToken > isSuperAdmin > handler",
   "POST /khupskpi/api/check-kpi-export :: authenticateToken > isSuperAdmin > handler",
   "POST /khupskpi/api/export-kpi-tables :: authenticateToken > isSuperAdmin > handler",
@@ -349,6 +351,8 @@
   "GET /khupskpi/api/work-center/reminder-settings :: authenticateToken > handler",
   "PUT /khupskpi/api/work-center/reminder-settings :: authenticateToken > requireSuperAdminStrict > handler",
   "POST /khupskpi/api/work-center/reminders/preview :: authenticateToken > requireSuperAdminStrict > handler",
-  "POST /khupskpi/api/work-center/reminders/send-now :: authenticateToken > requireSuperAdminStrict > handler"
+  "POST /khupskpi/api/work-center/reminders/send-now :: authenticateToken > requireSuperAdminStrict > handler",
+  "GET /khupskpi/api/work-center/locked-future :: authenticateToken > requireSuperAdminStrict > handler",
+  "POST /khupskpi/api/work-center/unlock-future-months :: authenticateToken > requireSuperAdminStrict > handler"
  ]
 }

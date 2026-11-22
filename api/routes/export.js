@@ -16,6 +16,7 @@ const { runScheduledExport } = require('../jobs/export-scheduler');
 const { KHD_SEND_POLICIES, getKhdSyncSettings, validateKhdSyncSettings, saveKhdSyncSettings } = require('../services/khd-policy');
 const { quickSend, listRuns, getRun, listTableStatus, rollbackRun, khdSyncBusyInfo } = require('../services/khd-sync');
 const { khdLimiter } = require('../core/security');
+const { khdUnapprovedReport } = require('../services/khd-unapproved');
 
 // ========== กติกาการส่ง KHD + ค่าควบคุมภาระ (ระยะ 3 ของแผน lean งานผู้ดูแล — 22 พ.ย. 2569) ==========
 // เฉพาะ super_admin แบบเข้ม (มีผลกับสิ่งที่ถูกส่งเข้า KHD)
@@ -80,6 +81,14 @@ apiRouter.post('/khd-sync/runs/:id/rollback', authenticateToken, requireSuperAdm
             return res.status(400).json({ success: false, code: 'CONFIRM_REQUIRED', message: `กรุณาพิมพ์เลขรอบ ${id} เพื่อยืนยันการย้อนกลับ` });
         }
         res.json({ success: true, data: await rollbackRun(id, req.user.userId) });
+    } catch (e) { sendKhdSyncError(res, e); }
+});
+
+// POST /khd-sync/unapproved-report { year_bh, refresh } — ค่าใน KHD ของเดือนที่ระบบยังไม่อนุมัติ (อ่าน KHD อย่างเดียว, แคช 10 นาที)
+apiRouter.post('/khd-sync/unapproved-report', authenticateToken, requireSuperAdminStrict, khdLimiter, async (req, res) => {
+    try {
+        const b = req.body || {};
+        res.json({ success: true, data: await khdUnapprovedReport(b.year_bh, { refresh: !!b.refresh }) });
     } catch (e) { sendKhdSyncError(res, e); }
 });
 
