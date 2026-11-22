@@ -710,7 +710,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   → `askAiHelp()` เส้นทางเดิม → `answerNode()`: ข้อความล้วน (textContent) ≤ 420 ตัว + `note` "ข้อความจาก AI — โปรดตรวจสอบ" + ปุ่มหัวข้อ (anchor `[a-z0-9-]` เท่านั้น) → `/help?section=<id>` (help.ts ขยายแล้วเลื่อนไป)
 - **เสียงพูด (20 พ.ย. 2569 — ผู้ใช้เลือก: ไฟล์เสียงสร้างล่วงหน้า + เสียงเบราว์เซอร์สำรอง, เปิดเป็นค่าตั้งต้นมีปุ่มปิด):** `mascot-voice.ts` `VoicePlayer` เล่น `public/mascot/voice/<voiceKey>.mp3`
   (เสียง th-TH-NiwatNeural ตัวเดียวกับวิดีโอคู่มือ) ตาม `ResolvedNode.voice` (ช่วงประโยค — ไม่ระบุ = ข้อความในกล่อง) ปากขยับตามซองความดังใน index.json, ความเร็วพิมพ์ปรับให้จบพร้อมเสียง, ปิดเองรอพูดจบ
-  — ไม่มีไฟล์ (คำตอบ AI/ข้อความผิดพลาด) = `speechSynthesis` เสียงไทยของเบราว์เซอร์ (ไม่มีเสียงไทย = ไม่อ่าน) | เบราว์เซอร์บล็อกเสียงก่อนคลิกแรก → เก็บไว้เล่นเมื่อผู้ใช้คลิก/กดแป้น
+  — ไม่มีไฟล์ (คำตอบ AI/ข้อความผิดพลาด) = `speechSynthesis` ทันที (`clipFor()`: ดัชนีโหลดแล้วแต่ไม่มีคีย์ = ไม่ขอไฟล์ — เดิม 404 ใน console) เสียงไทยของเบราว์เซอร์ (ไม่มีเสียงไทย = ไม่อ่าน) | เบราว์เซอร์บล็อกเสียงก่อนคลิกแรก → เก็บไว้เล่นเมื่อผู้ใช้คลิก/กดแป้น
   — **แก้/เพิ่มข้อความในบทพูด (LOGIN_SCRIPT, PAGE_GUIDES, assistantScript, AI_SAY) ต้องรัน `node tools/video-guide/build-mascot-voice.js` แล้ว commit ไฟล์ใน public/mascot/voice/** (spec ล้มถ้าประโยคใดไม่มีไฟล์เสียง)
   ประโยคที่ประกอบจากหลายส่วนให้ระบุ `voice: [...]` เป็นช่วงที่ใช้ซ้ำได้ (เช่น คำแนะนำหน้า + "มีอะไรให้ผมช่วยไหมครับ?") | `speakable()` ขยายคำย่อ (ต.ค., ThaID, KHD) ก่อนสังเคราะห์
   — เปิด-ปิด: `system_settings.mascot_voice_enabled` (maintenance-status, สวิตช์ `#mascot-voice-enabled`) + ปุ่มลำโพง `.ms-mute` ในกล่อง (`MascotService.voiceMuted$`, localStorage `kpi_mascot_voice_off`) | Test: `shared/mascot/mascot-voice.spec.ts`

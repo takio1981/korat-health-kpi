@@ -53,6 +53,17 @@ export function estimateMs(index: VoiceIndex | null, segs: string[]): number | n
   return t;
 }
 
+/**
+ * ไฟล์เสียงของประโยค: อยู่ในดัชนี = ไฟล์นั้น | ดัชนีโหลดได้แต่ไม่มีประโยคนี้ = null (ใช้เสียงเบราว์เซอร์ ไม่ขอไฟล์)
+ * | ดัชนีว่าง/โหลดไม่ได้ = ลองเปิดไฟล์ตามชื่อคีย์ (ไฟล์อาจมีอยู่แม้อ่านดัชนีไม่ได้)
+ */
+export function clipFor(index: VoiceIndex | null, seg: string): VoiceClip | null {
+  const key = voiceKey(seg);
+  if (index && Object.prototype.hasOwnProperty.call(index, key)) return index[key];
+  if (index && Object.keys(index).length) return null;
+  return { f: key + '.mp3', ms: 0, e: '' };
+}
+
 /** เล่นเสียงประโยคตามลำดับ (ไฟล์ก่อน ไม่มีไฟล์ = เสียงเบราว์เซอร์) */
 export class VoicePlayer {
   index: VoiceIndex | null = null;
@@ -108,10 +119,9 @@ export class VoicePlayer {
       await this.load();
       for (const seg of list) {
         if (my !== this.gen) return;
-        // ไม่มีในดัชนี (เช่น dev server ยังไม่รู้จัก index.json ใหม่) = ลองเปิดไฟล์ตามชื่อคีย์ก่อน ไม่มีไฟล์จริงจึงใช้เสียงเบราว์เซอร์
-        const key = voiceKey(seg);
-        const clip = this.index?.[key] || { f: key + '.mp3', ms: 0, e: '' };
-        let ok = await this.playClip(clip, my);
+        const clip = clipFor(this.index, seg);
+        // ไม่มีไฟล์ (ข้อความที่สร้างตอนใช้งาน เช่น คำตอบ AI) = เสียงเบราว์เซอร์ทันที — ไม่ขอไฟล์ที่ไม่มี (เดิมขอทุกครั้ง → 404 ใน console)
+        let ok: true | 'blocked' | 'missing' = clip ? await this.playClip(clip, my) : 'missing';
         if (ok === 'missing' && my === this.gen) ok = await this.playSynth(seg, my);
         if (ok === 'blocked') { if (my === this.gen) { this.pending = list; this.playing = false; } return; }
       }

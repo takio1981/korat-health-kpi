@@ -1,4 +1,4 @@
-import { VoiceIndex, envLevel, estimateMs, normVoice, speakable, voiceKey } from './mascot-voice';
+import { VoiceIndex, clipFor, envLevel, estimateMs, normVoice, speakable, voiceKey } from './mascot-voice';
 import { collectVoicePhrases } from './mascot-voice-phrases';
 import voiceIndex from '../../../../public/mascot/voice/index.json';
 
@@ -9,6 +9,15 @@ describe('mascot-voice (เสียงพูดของน้องโคร�
     expect(voiceKey('ทดสอบ')).toMatch(/^[0-9a-f]{8}-[0-9a-z]+$/);
     // ค่าคงที่ — ถ้าเปลี่ยนสูตร ไฟล์เสียงทั้งหมดจะหาไม่เจอ (ตัวสร้างไฟล์ใช้ฟังก์ชันเดียวกัน)
     expect(voiceKey('น้องโคราชดี')).toBe(voiceKey('น้องโคราชดี'));
+  });
+
+  it('clipFor: ประโยคที่ไม่มีไฟล์ (เช่น คำตอบ AI) ไม่ขอไฟล์ = ไม่เกิด 404 — ดัชนีอ่านไม่ได้จึงลองชื่อคีย์', () => {
+    const idx = { [voiceKey('สวัสดีครับ')]: { f: 'a.mp3', ms: 500, e: '1' } } as VoiceIndex;
+    expect(clipFor(idx, 'สวัสดีครับ')).toEqual({ f: 'a.mp3', ms: 500, e: '1' });
+    expect(clipFor(idx, 'คำตอบจาก AI ที่สร้างตอนใช้งาน')).toBeNull();
+    expect(clipFor({}, 'ก')!.f).toBe(voiceKey('ก') + '.mp3');
+    expect(clipFor(null, 'ก')!.f).toBe(voiceKey('ก') + '.mp3');
+    expect(clipFor(idx, 'toString')).toBeNull();
   });
 
   it('speakable: ขยายชื่อเดือนย่อ/คำย่อ และตัดลำดับขั้น', () => {
