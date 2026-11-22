@@ -126,6 +126,15 @@ async function record(browser, spec) {
 
     const ctx = await browser.newContext({ viewport: VIEW, locale: 'th-TH', storageState: spec.storageState, recordVideo: { dir: TMP, size: VIEW } });
     await guardContext(ctx);
+    // ซ่อนผู้ช่วยน้องโคราชดีของระบบ (ใส่ 20 พ.ย. 2569 — หลังวิดีโอชุดแรก) วิดีโอมีผู้นำเสนอของตัวเองแล้ว:
+    // เดิมผู้ช่วยทักทายเมื่อเข้าหน้าใหม่ กล่องคำพูดค้างบังตาราง และมีตัวละคร 2 ตัวในภาพ (22 พ.ย. 2569) — ใช้กลไกซ่อนของผู้ใช้เอง (localStorage แยกตามบัญชี)
+    await ctx.addInitScript(() => {
+        try {
+            const u = JSON.parse(localStorage.getItem('kpi_user') || 'null');
+            localStorage.setItem('kpi_mascot_assistant_off', '1');
+            if (u && u.id != null) localStorage.setItem('kpi_mascot_assistant_off_' + u.id, '1');
+        } catch (e) { /* หน้าไม่มี localStorage */ }
+    });
     await ctx.addInitScript(overlayInit, spec.mascot);
     const page = await ctx.newPage();
     const t0 = Date.now();

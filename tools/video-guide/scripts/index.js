@@ -5,5 +5,6 @@ module.exports = [
     require('./dashboard'),
     ...require('./common'),
     ...require('./admin'),
+    ...require('./work-center'),
     ...require('./super'),
 ];

@@ -51,6 +51,7 @@ async function up(c) {
     await c.query('DELETE FROM kpi_results WHERE user_id IN (?)', [Object.values(ids)]);
     const r = rnd(2570);
     const rows = [];
+    const oldYearLock = (ind, hos) => ind === INDICATORS[0] && hos === '23839';
     for (const ind of INDICATORS) for (const [hi, hos] of HOSPITALS.entries()) {
         const target = [55, 80, 80, 80, 25, 70][INDICATORS.indexOf(ind)];
         for (const m of MONTHS) { // ปีงบ 2569 ทั้งปี
@@ -59,10 +60,11 @@ async function up(c) {
         }
         for (const m of [10, 11]) { // ปีงบ 2570 (ปัจจุบัน) 2 เดือนแรก — บางแห่งยังไม่บันทึก พ.ย.
             const v = (m === 11 && hi % 3 === 0) ? '' : String(Math.round(target * (0.7 + r() * 0.5) * 100) / 100);
-            const lock = m === 10 && ['23839', '02537', '02539'].includes(hos);
+            const lock = (m === 10 && ['23839', '02537', '02539'].includes(hos)) || oldYearLock(ind, hos);
             rows.push([ind, '2570', hos, m, target, v, lock ? 'Approved' : 'Pending', lock ? 1 : 0, ids.super_admin]);
         }
-        for (const m of MONTHS.slice(2)) rows.push([ind, '2570', hos, m, target, '', 'Pending', 0, ids.super_admin]);
+        // คู่ที่อนุมัติทั้งปีแบบเดิม (ก่อนมีอนุมัติรายเดือน) — ใช้แสดง "ปลดล็อคเดือนที่ยังไม่มีผลงาน" ในวิดีโอศูนย์งานผู้ดูแล
+        for (const m of MONTHS.slice(2)) rows.push([ind, '2570', hos, m, target, '', oldYearLock(ind, hos) ? 'Approved' : 'Pending', oldYearLock(ind, hos) ? 1 : 0, ids.super_admin]);
     }
     for (let i = 0; i < rows.length; i += 500) {
         await c.query('INSERT INTO kpi_results (indicator_id, year_bh, hospcode, month_bh, target_value, actual_value, status, is_locked, user_id) VALUES ?', [rows.slice(i, i + 500)]);
