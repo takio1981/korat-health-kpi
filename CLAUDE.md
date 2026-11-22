@@ -735,6 +735,9 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   — ⚠️ **ปัญหาปฏิทินจีนปี 2033**: สูตรได้ตรุษจีน 2034 ผิด → ตาราง `LUNAR_DATES['2034']` แก้ไว้ (ตารางมาก่อนคำนวณ) | ลำดับแหล่ง `festivalMainDate(f, y, dates, ext)`: admin → auto → table → derived/astro (`ext.compute` = เปิดอัตโนมัติ)
   | maintenance-status คืน `mascot_festival_auto` + `mascot_festival_dates_auto` (อ่านใน query เดียวกัน — ถูกเรียกทุก 3 วินาทีจากหน้า login) | `GET /mascot/festival-dates/status` + `POST /mascot/festival-dates/refresh` (isSuperAdmin, ไม่อยู่ใน PAGE_ACCESS_RULES)
   — Test: `api/tests/mascot-festival-dates.test.js` (fetchImpl/global.fetch stub — **ห้ามดึงปฏิทินจริงในชุดทดสอบ**), `shared/mascot/mascot-lunar.spec.ts`
+- **แจ้งข่าว (22 พ.ย. 2569 — ผู้ใช้สั่ง):** `mascot-news.ts` (ฟังก์ชันล้วน) `newsQueue()` = ประกาศ `is_active` + `mascot_announce` (คีย์ `a:id:updated_at` — แก้ประกาศ = แจ้งใหม่) → รุ่นล่าสุดของ `CHANGELOG` (`changelog/changelog-data.ts`) ภายใน `UPDATE_NEWS_DAYS` 30 วัน
+  — ผู้ช่วยตรวจหลังเข้าระบบ 2.5 วินาที + `NEWS_POLL_MS` 10 นาที (GET /announcement/active), กำลังพูดอยู่ = ลองใหม่ 20 วินาที, รอผลรอบแรก = ไม่ทักหน้าใหม่ | "รับทราบ" = `MascotService.markNewsSeen()` (localStorage `kpi_mascot_news_seen_<id>`; ข่าวอัปเดตบันทึกทุกรุ่น), "ไว้ทีหลัง" = ไม่แจ้งซ้ำรอบนี้ | เมนู `news:open` แสดงเสมอ
+  — ⚠️ ผู้ช่วยโหลด CHANGELOG ด้วย dynamic import (นำเข้าตรง = initial bundle +470 KB เพราะผู้ช่วยอยู่ใน layout) | พูดเฉพาะ `NEWS_SAY` (มีไฟล์เสียง) เนื้อหาในกล่อง | `system_announcements.mascot_announce/mascot_text` (≤ 300 ข้อความล้วน — `mascotFields()` routes/announcements.js), `system_settings.mascot_news_enabled` (ปิดเฉพาะข่าวอัปเดต) | Test: `mascot-news.spec.ts`, `api/tests/mascot-news.test.js`
 - **ห้ามใช้อีโมจิในบทพูด** (บางเครื่องแสดงเป็นกล่อง) | Test: `shared/mascot/mascot.spec.ts` (ทุกตัวเลือกชี้บทที่มีจริง, ทุกท่าค่าครบ), `login.spec.ts`, `login-mascot.spec.ts`
 
 ### น้องโคราชดีบินในหน้าเข้าสู่ระบบ (19 พ.ย. 2569 — ผู้ใช้เลือก: 3 มิติด้วย CSS, เปิด-ปิด 2 ชั้น — ระยะที่ 1 ด้านบนแทนการแสดงผลแล้ว คงสวิตช์เปิด-ปิดเดิม)
@@ -1674,7 +1677,7 @@ docker builder prune -af
 - เพิ่ม auto-migration ใน server.js สำหรับ column/table ใหม่
 - ใช้ `Swal.fire()` สำหรับ dialog ทุกที่ (ไม่ใช่ alert/confirm)
 - เพิ่มคำแนะนำขั้นตอน (ซ่อนได้) ในหน้าที่ซับซ้อน
-- อัปเดต help.html + changelog.ts ทุกครั้งที่เพิ่มฟีเจอร์
+- อัปเดต help.html + `changelog/changelog-data.ts` (CHANGELOG — ย้ายจาก changelog.ts 22 พ.ย. 2569, น้องโคราชดีแจ้งรุ่นล่าสุดจากไฟล์นี้) ทุกครั้งที่เพิ่มฟีเจอร์
 - อัปเดตเล่มผลงาน `docs/ชำนาญการ.docx` ทุกครั้งที่แก้ไข/เพิ่มฟีเจอร์ **และทดสอบความถูกต้องเรียบร้อยแล้ว** (ดูหัวข้อ 13)
 
 ### DON'T

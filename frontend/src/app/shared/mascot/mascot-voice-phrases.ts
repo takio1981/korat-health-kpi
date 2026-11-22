@@ -8,6 +8,7 @@ import { PAGE_GUIDES, guideFor, guideRole } from './mascot-guides';
 import { assistantScript } from './mascot-assistant-script';
 import { AI_SAY } from './mascot-phrases';
 import { FESTIVALS } from './mascot-festival';
+import { NEWS_SAY } from './mascot-news';
 import { normVoice, speakable, voiceKey } from './mascot-voice';
 
 export { normVoice, speakable, voiceKey };
@@ -41,5 +42,6 @@ export function collectVoicePhrases(): string[] {
   }
   Object.values(AI_SAY).forEach(add);
   FESTIVALS.forEach(f => add(f.greet));
+  Object.values(NEWS_SAY).forEach(add); // แจ้งข่าวอัปเดต/ประกาศ (22 พ.ย. 2569) — พูดเฉพาะประโยคเปิด เนื้อหาข่าวแสดงในกล่อง
   return [...out].sort();
 }

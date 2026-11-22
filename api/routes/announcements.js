@@ -9,6 +9,11 @@ const { mailTransporter, sendMail } = require('../core/notify');
 const { requireAction } = require('../core/access');
 
 // ========== System Announcements (ประกาศระบบ) ==========
+// ให้น้องโคราชดีแจ้งข่าวประกาศนี้ (22 พ.ย. 2569): mascot_announce 0/1 + mascot_text = ข้อความสั้นที่น้องพูด (ว่าง = ใช้ข้อความประกาศ, ≤ 300 ตัวอักษร ข้อความล้วน)
+function mascotFields(b) {
+    const text = String((b && b.mascot_text) || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
+    return { mascot_announce: b && (b.mascot_announce === true || b.mascot_announce === 1 || b.mascot_announce === '1') ? 1 : 0, mascot_text: text || null };
+}
 apiRouter.get('/announcement/active', authenticateToken, async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM system_announcements WHERE is_active = 1 ORDER BY updated_at DESC LIMIT 1');
@@ -32,15 +37,16 @@ apiRouter.post('/announcements', authenticateToken, requireAction('announcements
     try {
         const { title, content_html, content_text, bg_color, text_color, blink_enabled, show_on_header, show_on_login, is_active } = req.body;
         if (!content_html) return res.status(400).json({ success: false, message: 'กรุณากรอกข้อความ' });
+        const m = mascotFields(req.body);
         // Limit content_text ≤ 500 chars
         const textTruncated = (content_text || '').substring(0, 500);
         // ถ้า is_active=1 → ปิด active อื่นๆ ทั้งหมด
         if (is_active) await db.query('UPDATE system_announcements SET is_active = 0');
         const [r] = await db.query(
-            `INSERT INTO system_announcements (title, content_html, content_text, bg_color, text_color, blink_enabled, show_on_header, show_on_login, is_active, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO system_announcements (title, content_html, content_text, bg_color, text_color, blink_enabled, show_on_header, show_on_login, is_active, created_by, mascot_announce, mascot_text)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [title || 'ประกาศระบบ', content_html, textTruncated, bg_color || '#dc2626', text_color || '#ffffff',
-             blink_enabled ? 1 : 0, show_on_header ? 1 : 0, show_on_login ? 1 : 0, is_active ? 1 : 0, req.user.userId]
+             blink_enabled ? 1 : 0, show_on_header ? 1 : 0, show_on_login ? 1 : 0, is_active ? 1 : 0, req.user.userId, m.mascot_announce, m.mascot_text]
         );
         res.json({ success: true, id: r.insertId, message: 'สร้างประกาศสำเร็จ' });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -51,12 +57,13 @@ apiRouter.put('/announcements/:id', authenticateToken, requireAction('announceme
         const { title, content_html, content_text, bg_color, text_color, blink_enabled, show_on_header, show_on_login, is_active } = req.body;
         if (!content_html) return res.status(400).json({ success: false, message: 'กรุณากรอกข้อความ' });
         const textTruncated = (content_text || '').substring(0, 500);
+        const m = mascotFields(req.body);
         if (is_active) await db.query('UPDATE system_announcements SET is_active = 0 WHERE id != ?', [req.params.id]);
         await db.query(
             `UPDATE system_announcements SET title=?, content_html=?, content_text=?, bg_color=?, text_color=?,
-             blink_enabled=?, show_on_header=?, show_on_login=?, is_active=? WHERE id=?`,
+             blink_enabled=?, show_on_header=?, show_on_login=?, is_active=?, mascot_announce=?, mascot_text=? WHERE id=?`,
             [title || 'ประกาศระบบ', content_html, textTruncated, bg_color || '#dc2626', text_color || '#ffffff',
-             blink_enabled ? 1 : 0, show_on_header ? 1 : 0, show_on_login ? 1 : 0, is_active ? 1 : 0, req.params.id]
+             blink_enabled ? 1 : 0, show_on_header ? 1 : 0, show_on_login ? 1 : 0, is_active ? 1 : 0, m.mascot_announce, m.mascot_text, req.params.id]
         );
         res.json({ success: true, message: 'แก้ไขประกาศสำเร็จ' });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }

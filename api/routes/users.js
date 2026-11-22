@@ -187,7 +187,7 @@ apiRouter.post('/mascot/festival-dates/refresh', authenticateToken, isSuperAdmin
 apiRouter.get('/system/maintenance-status', async (req, res) => {
     try {
         const [rows] = await db.query(
-            "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message','thaid_enabled','providerid_enabled','thaid_login_url','thaid_register_enabled','providerid_register_enabled','system_version','login_mascot_enabled','mascot_assistant_enabled','mascot_voice_enabled','mascot_size','mascot_outfit','mascot_festival_dates','mascot_festival_auto','mascot_festival_dates_auto')"
+            "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message','thaid_enabled','providerid_enabled','thaid_login_url','thaid_register_enabled','providerid_register_enabled','system_version','login_mascot_enabled','mascot_assistant_enabled','mascot_voice_enabled','mascot_size','mascot_outfit','mascot_festival_dates','mascot_festival_auto','mascot_festival_dates_auto','mascot_news_enabled')"
         );
         const s = {};
         rows.forEach(r => s[r.setting_key] = r.setting_value);
@@ -207,6 +207,8 @@ apiRouter.get('/system/maintenance-status', async (req, res) => {
             mascot_assistant_enabled: s['mascot_assistant_enabled'] !== 'false',
             // เสียงพูดของน้องโคราชดี (20 พ.ย. 2569) — ไม่มีค่า = เปิด, ผู้ใช้ปิดเองได้ในกล่องคำพูด
             mascot_voice_enabled: s['mascot_voice_enabled'] !== 'false',
+            // น้องโคราชดีแจ้งข่าวอัปเดตการพัฒนาระบบ (22 พ.ย. 2569) — ไม่มีค่า = เปิด (ประกาศที่ติ๊ก "ให้น้องโคราชดีแจ้งข่าว" แจ้งเสมอ)
+            mascot_news_enabled: s['mascot_news_enabled'] !== 'false',
             // ขนาดตั้งต้นของน้องโคราชดี (20 พ.ย. 2569) — small | medium | large (ค่าอื่น/ไม่มีค่า = medium) ผู้ใช้เลือกเองได้ในเมนูของน้อง
             mascot_size: ['small', 'medium', 'large'].includes(s['mascot_size']) ? s['mascot_size'] : 'medium',
             // ชุดเทศกาลของน้องโคราชดี (21 พ.ย. 2569) — auto (ตามเทศกาล, ค่าตั้งต้น) | none | id เทศกาล + วันที่จันทรคติที่ผู้ดูแลกรอก

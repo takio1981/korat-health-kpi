@@ -84,6 +84,7 @@ export class SettingsComponent implements OnInit {
   loginMascotEnabled: boolean = true; // น้องโคราชดีบินในหน้าเข้าสู่ระบบ (ไม่มีค่า = เปิด)
   mascotAssistantEnabled: boolean = true; // ผู้ช่วยน้องโคราชดีทุกหน้าหลังเข้าสู่ระบบ (ไม่มีค่า = เปิด)
   mascotVoiceEnabled: boolean = true; // เสียงพูดของน้องโคราชดี (ไม่มีค่า = เปิด)
+  mascotNewsEnabled: boolean = true; // น้องโคราชดีแจ้งข่าวอัปเดตการพัฒนาระบบ (ไม่มีค่า = เปิด — 22 พ.ย. 2569)
   mascotSize: MascotSize = 'medium'; // ขนาดตั้งต้นของน้องโคราชดี (ไม่มีค่า = กลาง)
   readonly mascotSizeOptions = MASCOT_SIZES.map(value => ({ value, label: SIZE_LABELS[value] }));
   mascotOutfit = 'auto'; // ชุดเทศกาลของน้องโคราชดี: auto | none | id เทศกาล
@@ -244,6 +245,7 @@ export class SettingsComponent implements OnInit {
           this.loginMascotEnabled = this.settings.find(s => s.setting_key === 'login_mascot_enabled')?.setting_value !== 'false';
           this.mascotAssistantEnabled = this.settings.find(s => s.setting_key === 'mascot_assistant_enabled')?.setting_value !== 'false';
           this.mascotVoiceEnabled = this.settings.find(s => s.setting_key === 'mascot_voice_enabled')?.setting_value !== 'false';
+          this.mascotNewsEnabled = this.settings.find(s => s.setting_key === 'mascot_news_enabled')?.setting_value !== 'false';
           this.mascotSize = normalizeMascotSize(this.settings.find(s => s.setting_key === 'mascot_size')?.setting_value);
           this.mascotOutfit = normalizeOutfitMode(this.settings.find(s => s.setting_key === 'mascot_outfit')?.setting_value);
           this.mascotFestivalDates = sanitizeFestivalDates(this.settings.find(s => s.setting_key === 'mascot_festival_dates')?.setting_value);
@@ -317,6 +319,7 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'login_mascot_enabled', setting_value: this.loginMascotEnabled.toString() },
       { setting_key: 'mascot_assistant_enabled', setting_value: this.mascotAssistantEnabled.toString() },
       { setting_key: 'mascot_voice_enabled', setting_value: this.mascotVoiceEnabled.toString() },
+      { setting_key: 'mascot_news_enabled', setting_value: this.mascotNewsEnabled.toString() },
       { setting_key: 'mascot_size', setting_value: normalizeMascotSize(this.mascotSize) },
       { setting_key: 'mascot_outfit', setting_value: normalizeOutfitMode(this.mascotOutfit) },
       { setting_key: 'mascot_festival_dates', setting_value: JSON.stringify(sanitizeFestivalDates(this.mascotFestivalDates)) },

@@ -5,6 +5,7 @@
 import { SIZE_MENU_LABEL, sizeNodes } from './mascot-dialog';
 import type { DialogChoice, DialogScript } from './mascot-dialog';
 import { GuideRole, PageGuide, introOf } from './mascot-guides';
+import { NEWS_MENU_LABEL } from './mascot-news';
 
 export const ASK_PROMPT = 'อยากรู้เรื่องไหน พิมพ์ถามได้เลยครับ ผมจะค้นจากคู่มือการใช้งานตามสิทธิ์ของท่าน';
 export const MENU_TAIL = 'มีอะไรให้ผมช่วยไหมครับ?';
@@ -18,6 +19,7 @@ export function assistantMenu(o: { hasSteps: boolean; hasVideo: boolean; page: s
     ...(o.hasAi ? [{ label: 'ถามน้องโคราชดี (AI)', action: 'ask' }] : []),
     ...(o.hasVideo ? [{ label: 'ดูวิดีโอคู่มือหน้านี้', action: 'video' }] : []),
     ...(o.page !== 'help' ? [{ label: 'เปิดคู่มือการใช้งาน', action: 'nav:/help' }] : []),
+    { label: NEWS_MENU_LABEL, action: 'news:open' },
     { label: o.quiet ? 'ทักทายเมื่อเข้าหน้าใหม่' : 'ไม่ต้องทักเมื่อเข้าหน้าใหม่', action: 'quiet' },
     { label: SIZE_MENU_LABEL, next: 'size' },
     ...(o.movedHome ? [{ label: 'กลับไปมุมขวาล่าง', action: 'home:reset' }] : []),

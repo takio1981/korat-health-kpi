@@ -36,6 +36,7 @@ const HIDE_KEY = 'kpi_mascot_assistant_off';
 const QUIET_KEY = 'kpi_mascot_assistant_quiet';
 const SEEN_KEY = 'kpi_mascot_seen_pages';
 const VOICE_OFF_KEY = 'kpi_mascot_voice_off';
+const NEWS_KEY = 'kpi_mascot_news_seen';
 export const SIZE_KEY = 'kpi_mascot_size';
 
 function readSize(): MascotSize | '' {
@@ -117,6 +118,17 @@ export class MascotService {
   }
   private seenList(): string[] {
     try { const v = JSON.parse(lsGet(this.key(SEEN_KEY)) || '[]'); return Array.isArray(v) ? v.filter(x => typeof x === 'string') : []; } catch { return []; }
+  }
+
+  // ===== ข่าวที่แจ้งแล้ว (ข่าวอัปเดต/ประกาศ — 22 พ.ย. 2569) แยกตามบัญชีในเครื่อง =====
+  newsSeen(k: string): boolean { return this.newsList().includes(k); }
+  markNewsSeen(keys: string[]) {
+    const l = this.newsList();
+    const add = keys.filter(k => k && !l.includes(k));
+    if (add.length) lsSet(this.key(NEWS_KEY), JSON.stringify([...l, ...add].slice(-200)));
+  }
+  private newsList(): string[] {
+    try { const v = JSON.parse(lsGet(this.key(NEWS_KEY)) || '[]'); return Array.isArray(v) ? v.filter(x => typeof x === 'string') : []; } catch { return []; }
   }
   private key(k: string) { return this.uid ? `${k}_${this.uid}` : k; }
 }

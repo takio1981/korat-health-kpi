@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
 import Swal from 'sweetalert2';
+import { MascotService } from '../shared/mascot/mascot.service';
+import { announcementNode } from '../shared/mascot/mascot-news';
 
 @Component({
   selector: 'app-announcements',
@@ -15,6 +17,7 @@ export class AnnouncementsComponent implements OnInit {
   private authService = inject(AuthService);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
+  private mascot = inject(MascotService);
 
   @ViewChild('editor') editor!: ElementRef<HTMLDivElement>;
 
@@ -29,8 +32,11 @@ export class AnnouncementsComponent implements OnInit {
     blink_enabled: true,
     show_on_header: true,
     show_on_login: true,
-    is_active: false
+    is_active: false,
+    mascot_announce: false,
+    mascot_text: ''
   };
+  readonly MASCOT_TEXT_MAX = 300;
   charCount: number = 0;
   readonly MAX_CHARS = 200;
 
@@ -92,7 +98,9 @@ export class AnnouncementsComponent implements OnInit {
       blink_enabled: true,
       show_on_header: true,
       show_on_login: true,
-      is_active: false
+      is_active: false,
+      mascot_announce: false,
+      mascot_text: ''
     };
     this.charCount = 0;
     this.showModal = true;
@@ -106,7 +114,9 @@ export class AnnouncementsComponent implements OnInit {
       blink_enabled: Number(item.blink_enabled) === 1,
       show_on_header: Number(item.show_on_header) === 1,
       show_on_login: Number(item.show_on_login) === 1,
-      is_active: Number(item.is_active) === 1
+      is_active: Number(item.is_active) === 1,
+      mascot_announce: Number(item.mascot_announce) === 1,
+      mascot_text: item.mascot_text || ''
     };
     this.charCount = (item.content_text || '').length;
     this.showModal = true;
@@ -115,6 +125,12 @@ export class AnnouncementsComponent implements OnInit {
 
   closeModal() {
     this.showModal = false;
+  }
+
+  /** ทดลองฟัง: น้องโคราชดีของหน้านี้พูดข้อความประกาศ (ไม่บันทึก ไม่แจ้งผู้ใช้อื่น) */
+  previewMascot() {
+    const n = announcementNode({ ...this.current, content_text: this.editor?.nativeElement?.innerText || this.current.content_text });
+    this.mascot.say({ text: n.text, kind: 'shout', pose: 'wave', mood: 'happy', auto: 9000 });
   }
 
   // === Editor toolbar commands ===

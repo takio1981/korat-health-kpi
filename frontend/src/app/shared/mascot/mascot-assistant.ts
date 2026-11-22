@@ -14,6 +14,12 @@ import { AI_SAY } from './mascot-phrases';
 import { loadHome } from './mascot-activity';
 import { MascotService } from './mascot.service';
 import { MascotSize, normalizeMascotSize } from './mascot-size';
+import { newsQueue, noNewsNode, updateKey } from './mascot-news';
+import type { ChangelogEntry } from '../../changelog/changelog-data';
+import Swal from 'sweetalert2';
+
+/** ตรวจประกาศใหม่ทุกกี่นาที (แจ้งข่าวเป็นระยะ) */
+export const NEWS_POLL_MS = 10 * 60 * 1000;
 
 const TARGET_ATTR = 'data-mascot-target';
 
@@ -93,6 +99,19 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
   private subs: Subscription[] = [];
   private greetTimer: any = null;
   private stepTimer: any = null;
+  // ===== แจ้งข่าว (22 พ.ย. 2569) =====
+  /** ผู้ดูแลเปิดแจ้งข่าวอัปเดต (system_settings.mascot_news_enabled — ประกาศที่ติ๊กให้แจ้งยังแจ้งเสมอ) */
+  private updatesOn = true;
+  /** รอผลตรวจข่าวรอบแรก — ระหว่างนี้ไม่ทักทายหน้าใหม่ (ข่าวมาก่อน) */
+  private newsPending = true;
+  private news: { key: string; node: ResolvedNode }[] = [];
+  private announcement: any = null;
+  private newsTimer: any = null;
+  private newsPoll: any = null;
+  /** ประวัติการอัปเดต — โหลดแบบ lazy (ข้อมูลใหญ่ ไม่ให้เข้า initial bundle ของ layout) */
+  private changelog: ChangelogEntry[] | null = null;
+  /** ข่าวที่ผู้ใช้กด "ไว้ทีหลัง" ในรอบการใช้งานนี้ — การตรวจเป็นระยะไม่แจ้งซ้ำ (เข้าระบบครั้งหน้าแจ้งอีก) */
+  private snoozed = new Set<string>();
 
   ngOnInit() {
     this.role = guideRole(this.auth.getUserRole() || '');
@@ -102,14 +121,16 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
     // ระยะที่ 3: ถามคู่มือผ่าน AI — เฉพาะเมื่อผู้ดูแลเปิดส่วน "ผู้ช่วยคู่มือ"
     this.auth.getAiStatus().subscribe({ next: (res: any) => { this.aiHelpOn = aiFeatureOn(res, 'help'); this.buildScript(); }, error: () => { /* ไม่มี AI */ } });
     this.auth.getMaintenanceStatus().subscribe({
-      next: (res: any) => { this.systemOn = res?.mascot_assistant_enabled !== false; this.voiceOn = res?.mascot_voice_enabled !== false; this.sizeDefault = normalizeMascotSize(res?.mascot_size); this.mascot.setOutfitConfig(res?.mascot_outfit, res?.mascot_festival_dates, res?.mascot_festival_auto, res?.mascot_festival_dates_auto); this.updateShow(); this.onPage(); },
+      next: (res: any) => { this.systemOn = res?.mascot_assistant_enabled !== false; this.voiceOn = res?.mascot_voice_enabled !== false; this.updatesOn = res?.mascot_news_enabled !== false; this.sizeDefault = normalizeMascotSize(res?.mascot_size); this.mascot.setOutfitConfig(res?.mascot_outfit, res?.mascot_festival_dates, res?.mascot_festival_auto, res?.mascot_festival_dates_auto); this.updateShow(); this.onPage(); },
       error: () => { this.systemOn = true; this.updateShow(); this.onPage(); },
     });
+    this.newsTimer = setTimeout(() => this.checkNews(false), 2500);
+    this.newsPoll = setInterval(() => this.checkNews(false), NEWS_POLL_MS);
   }
 
   ngOnDestroy() {
     this.subs.forEach(s => s.unsubscribe());
-    clearTimeout(this.greetTimer); clearTimeout(this.stepTimer);
+    clearTimeout(this.greetTimer); clearTimeout(this.stepTimer); clearTimeout(this.newsTimer); clearInterval(this.newsPoll);
     this.clearTarget();
   }
 
@@ -145,7 +166,7 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
     }
     if (this.show && g && !this.mascot.quiet && !this.mascot.seen(page)) {
       this.greetTimer = setTimeout(() => {
-        if (this.page !== page || !this.stage || this.stage.node) return;
+        if (this.page !== page || !this.stage || this.stage.node || this.newsPending) return;
         this.mascot.markSeen(page);
         this.stage.open('first');
       }, 1800);
@@ -160,6 +181,7 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
     const stage = this.stage;
     if (!stage) return;
     if (a.startsWith('ask:')) { this.askAi(a.slice(4)); return; }
+    if (a.startsWith('news:')) { this.onNewsAction(a); return; }
     if (a.startsWith('help:')) {
       const sec = a.slice(5);
       stage.close();
@@ -247,6 +269,74 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
         });
       },
     });
+  }
+
+  // ===== แจ้งข่าวอัปเดต/ประกาศ =====
+  /** ตรวจข่าว: ประกาศที่เปิดใช้งานและติ๊ก "ให้น้องโคราชดีแจ้งข่าว" + รุ่นล่าสุดในประวัติการอัปเดต (ยังไม่เคยแจ้ง) — force = เปิดจากเมนู */
+  checkNews(force: boolean) {
+    if (!this.changelog) {
+      import('../../changelog/changelog-data')
+        .then(m => { this.changelog = m.CHANGELOG; this.checkNews(force); })
+        .catch(() => { this.changelog = []; this.checkNews(force); });
+      return;
+    }
+    this.auth.getActiveAnnouncement().subscribe({
+      next: (res: any) => this.queueNews(res?.data || null, force),
+      error: () => this.queueNews(null, force),
+    });
+  }
+
+  private queueNews(announcement: any, force: boolean) {
+    this.announcement = announcement;
+    this.news = newsQueue({ announcement, changelog: this.changelog || [], seen: k => this.mascot.newsSeen(k) || (!force && this.snoozed.has(k)), force, updatesOn: force || this.updatesOn });
+    this.newsPending = false;
+    const stage = this.stage;
+    if (!this.show || !stage) { this.news = []; return; }
+    if (!this.news.length) { if (force) stage.openResolved(noNewsNode()); return; }
+    // กำลังพูดเรื่องอื่น (แนะนำหน้า/คำตอบ AI) = ลองใหม่อีก 20 วินาที ไม่ขัดจังหวะ
+    if (stage.node && !force) { clearTimeout(this.newsTimer); this.newsTimer = setTimeout(() => this.checkNews(false), 20000); return; }
+    stage.openResolved(this.news[0].node);
+  }
+
+  /** ข่าวที่แสดงอยู่ถูกรับทราบ — ข่าวอัปเดต = รับทราบรุ่นก่อนหน้าที่นับรวมไว้ด้วย */
+  private ackCurrent() {
+    const cur = this.news.shift();
+    if (!cur) return;
+    this.mascot.markNewsSeen(cur.key.startsWith('u:') ? (this.changelog || []).map(updateKey) : [cur.key]);
+  }
+  private nextNews() {
+    const stage = this.stage;
+    if (!stage) return;
+    if (this.news.length) stage.openResolved(this.news[0].node); else stage.close();
+  }
+
+  private onNewsAction(a: string) {
+    const stage = this.stage;
+    if (!stage) return;
+    switch (a) {
+      case 'news:open': this.checkNews(true); break;
+      case 'news:ack': this.ackCurrent(); this.nextNews(); break;
+      case 'news:later': this.news.forEach(n => this.snoozed.add(n.key)); this.news = []; stage.close(); break; // ไม่บันทึกว่าแจ้งแล้ว — เข้าระบบครั้งหน้าแจ้งอีก
+      case 'news:changelog':
+        if (this.news[0]?.key.startsWith('u:')) this.ackCurrent();
+        this.news = [];
+        stage.close();
+        this.router.navigate(['/changelog']);
+        break;
+      case 'news:announce': {
+        const an = this.announcement;
+        this.ackCurrent();
+        stage.close();
+        if (an) {
+          // ข้อความประกาศเป็น HTML ที่ผู้ดูแลระบบเขียน (แสดงแบบเดียวกับแถบประกาศ/หน้าเข้าสู่ระบบ)
+          this.zone.run(() => Swal.fire({
+            title: an.title || 'ประกาศระบบ', confirmButtonText: 'รับทราบ', confirmButtonColor: '#10b981',
+            html: `<div style="border-radius:8px;padding:14px;background:${an.bg_color || '#dc2626'};color:${an.text_color || '#fff'}">${an.content_html || ''}</div>`,
+          }).then(() => this.nextNews()));
+        }
+        break;
+      }
+    }
   }
 
   private clearTarget() {
