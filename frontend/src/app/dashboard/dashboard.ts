@@ -115,6 +115,14 @@ export function recomputeHierRows(rows: HierRow[]) {
   }
 }
 
+/** คำค้นของตาราง: ทุกคำ (คั่นด้วยช่องว่าง) ต้องพบในช่องใดช่องหนึ่ง — ว่าง = ผ่าน (ความหมายเดียวกับ GET /kpi-results ?q=) */
+export function matchesSearchTerm(fields: any[], term: string): boolean {
+  const words = String(term || '').toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const hay = fields.map(f => String(f ?? '').toLowerCase());
+  return words.every(w => hay.some(h => h.includes(w)));
+}
+
 /** ตัวชี้วัดเปิดใช้งานหรือไม่ (แม่แบบที่ไม่มีฟิลด์ is_active = เปิด) */
 export function isIndicatorActive(i: any): boolean {
   return i?.is_active === undefined || i?.is_active === null || Number(i.is_active) === 1;
@@ -1678,13 +1686,9 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
       const recorderName = item.recorder_name || '';
       const hosname = item.hosname || '';
       const distname = item.distname || '';
-      const search = this.searchTerm.toLowerCase();
-      const matchSearch = indicatorName.toLowerCase().includes(search) ||
-                        recorderName.toLowerCase().includes(search) ||
-                        deptName.toLowerCase().includes(search) ||
-                        mainindicatorName.toLowerCase().includes(search) ||
-                        hosname.toLowerCase().includes(search) ||
-                        distname.toLowerCase().includes(search);
+      // กติกาเดียวกับ GET /kpi-results ?q= (ทุกคำต้องพบ + รหัสหน่วยบริการ) — เดิมเทียบทั้งวลีและไม่ดูรหัสหน่วยบริการ
+      // → เปิดจากศูนย์งานผู้ดูแล (q = "<รหัส> <ชื่อตัวชี้วัด>") server พบข้อมูลแต่ตารางแสดง 0 แถว (24 พ.ย. 2569)
+      const matchSearch = matchesSearchTerm([indicatorName, recorderName, deptName, mainindicatorName, hosname, distname, item.hospcode], this.searchTerm);
       const matchMain = this.selectedMain === '' || item.main_indicator_name === this.selectedMain;
       const matchIndicator = this.selectedIndicator === '' || item.kpi_indicators_name === this.selectedIndicator;
       const matchdept = this.selectedDepts.length === 0 || this.selectedDepts.includes(item.dept_name);

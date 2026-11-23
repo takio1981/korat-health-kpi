@@ -6,7 +6,7 @@ import Swal from 'sweetalert2';
 import { testProviders } from '../testing/test-providers';
 import { parseImportAoa, planImport, buildTemplateAoa, itemKey } from '../shared/kpi-excel';
 import { parseSubImportAoa, planSubImport } from '../shared/kpi-sub-excel';
-import { buildHierRows, recomputeHierRows, addedMapOf, bulkRejectReasonError, bulkRejectPayload, approvableMonths, escapeHtml } from './dashboard';
+import { buildHierRows, recomputeHierRows, addedMapOf, bulkRejectReasonError, bulkRejectPayload, approvableMonths, escapeHtml, matchesSearchTerm } from './dashboard';
 
 // อนุมัติรายเดือน (22 พ.ย. 2569)
 describe('อนุมัติรายเดือน — ตัวเลือกเดือน', () => {
@@ -77,6 +77,24 @@ describe('DashboardComponent', () => {
     component.selectedYear = '2570';
     expect(component.applyDeepLinkParams()).toBe(false);
     expect(component.selectedYear).toBe('2570');
+  });
+
+  it('คำค้นจากศูนย์งานผู้ดูแล (รหัสหน่วยบริการ + ชื่อตัวชี้วัด): แถวที่ server พบต้องแสดงในตาราง (เดิม 0 แถว)', () => {
+    const row = { kpi_indicators_name: 'ร้อยละ ผู้ป่วยเบาหวาน', hosname: 'รพ.สต.ทดสอบ', hospcode: '10669', year_bh: '2570', main_indicator_name: 'หมวด', dept_name: 'NCD' };
+    const other = { ...row, hospcode: '10670', hosname: 'รพ.สต.อื่น' };
+    component.kpiData = [row, other];
+    component.selectedYear = '2570';
+    component.searchTerm = '10669 ร้อยละ ผู้ป่วย';
+    component.applyFilters();
+    expect(component.filteredData).toEqual([row]);
+    component.searchTerm = '10669';          // ยังไม่ส่ง (รายหน่วยบริการ) = รหัสอย่างเดียว
+    component.applyFilters();
+    expect(component.filteredData).toEqual([row]);
+    component.searchTerm = 'เบาหวาน';        // คำเดียวแบบเดิมยังใช้ได้
+    component.applyFilters();
+    expect(component.filteredData.length).toBe(2);
+    expect(matchesSearchTerm(['a b'], '  ')).toBe(true);
+    expect(matchesSearchTerm(['abc', 'xyz'], 'ab zz')).toBe(false);
   });
 
   it('should create', () => {

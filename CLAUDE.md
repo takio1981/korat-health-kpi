@@ -1345,7 +1345,8 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - **admin_ssj / user_ssj**: ล็อค dropdown หน่วยงาน เห็นเฉพาะ dept ตัวเอง
 - **admin_ssj / super_admin**: ไม่โหลดข้อมูล dashboard อัตโนมัติ ต้องกด "ค้นหา"
 - **ช่องค้นหาหน้าบันทึกผลงาน (13 พ.ย. 2569):** คำค้น ≥ 2 ตัวอักษร + Enter = ค้นได้โดยไม่เลือกตัวกรอง (`hasSearchQuery` ใน `doSearch()`) → `GET /kpi-results?q=`
-  กรองที่ server (ทุกคำต้องพบใน ชื่อตัวชี้วัด/หมวดหมู่หลัก/หน่วยงาน/หน่วยบริการ/อำเภอ หรือ = รหัสหน่วยบริการ, % _ escape) **ต่อท้ายขอบเขตสิทธิ์ของ role เสมอ ไม่ขยายสิทธิ์** — Test: `api/tests/kpi-results-search.test.js`, `dashboard.spec.ts`
+  กรองที่ server (ทุกคำต้องพบใน ชื่อตัวชี้วัด/หมวดหมู่หลัก/หน่วยงาน/หน่วยบริการ/อำเภอ หรือ = รหัสหน่วยบริการ, % _ escape) **ต่อท้ายขอบเขตสิทธิ์ของ role เสมอ ไม่ขยายสิทธิ์**
+  — `applyFilters()` กรองซ้ำฝั่งหน้าจอด้วย `matchesSearchTerm()` กติกาเดียวกัน (ทุกคำ + รหัสหน่วยบริการ) ⚠️ เดิมเทียบทั้งวลี → ลิงก์จากศูนย์งานผู้ดูแล (`q=<รหัส> <ชื่อ>`) server พบแต่ตาราง 0 แถว (แก้ 24 พ.ย. 2569) — Test: `api/tests/kpi-results-search.test.js`, `dashboard.spec.ts`
 
 ### กลุ่มงานเพิ่มเติมของผู้ใช้ (22 พ.ย. 2569 — ผู้ใช้เลือก: ผู้ดูแลกำหนด + ผู้ใช้ขอแล้วผู้ดูแลอนุมัติ, ผู้ใช้ทั่วไปทุกระดับ, มีผลทุกหน้า)
 - ตาราง `user_departments` (user_id, dept_id UNIQUE, status approved|pending|rejected, FK users CASCADE) — users.dept_id = กลุ่มงานหลัก (ไม่อยู่ในตาราง), สูงสุด 10
