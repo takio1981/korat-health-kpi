@@ -3,7 +3,8 @@
  *   - กติกาวันที่ (เวลาไทย): เดือนที่ควรส่งแล้ว = เดือนก่อนหน้า (ข้ามปีงบ ต.ค.), กำหนดส่ง = วันที่ N ของเดือนถัดไป, ถึงเวลาเตือน = กำหนดส่ง − k วัน ณ เวลาที่ตั้ง
  *   - ยังไม่ส่ง: เดือนนั้นผลงานว่าง (0 = ส่งแล้ว), มีผลงานข้อย่อยของเดือนนั้น = ส่งแล้ว, ตัวชี้วัดปิดใช้งาน/กรอกเอง = ไม่นับ — ตามขอบเขต role
  *   - คิวรออนุมัติตามขอบเขต (admin_ssj เฉพาะหน่วยงานตัวเอง) | สิทธิ์หน้า work-center (ผู้ใช้ทั่วไป = 403)
- *   - ส่งเตือน: ในระบบ 1 รายการต่อหน่วยบริการ + LINE/อีเมลถึงผู้ใช้ของหน่วยบริการ, สั่งซ้ำวันเดียวกัน = ไม่ส่งซ้ำ, ดูตัวอย่างไม่ส่ง,
+ *   - ส่งเตือน (24 พ.ย. 2569): ปีงบปัจจุบันเท่านั้น, ผู้รับแต่ละคนได้เฉพาะตัวชี้วัดของหน่วยบริการ + กลุ่มงานตนเอง (กลุ่มงานเพิ่มเติมนับด้วย,
+ *     admin_hos ทุกกลุ่มงาน, ไม่มีกลุ่มงาน = ไม่ได้รับ) ในระบบ/LINE/อีเมลรายผู้รับ, สั่งซ้ำวันเดียวกัน = ไม่ส่งซ้ำ, ดูตัวอย่างไม่ส่ง,
  *     ตั้งค่า/ส่ง = super_admin แบบเข้ม (admin_ssj ที่เข้าหน้าได้ = 403)
  */
 const mockSent = { line: [], email: [] };
@@ -27,7 +28,7 @@ const { ensureTestUser, makeToken, cleanupTestUsers } = require('./helpers');
 
 const api = (p) => '/khupskpi/api' + p;
 const YEAR = '2501';
-let app, db, wc, T = {}, ids = {}, hos = [], deptA, deptB, saId;
+let app, db, wc, T = {}, ids = {}, hos = [], deptA, deptB, saId, fySpy, U = {};
 
 beforeAll(async () => {
     let migrationsReady;
@@ -35,6 +36,8 @@ beforeAll(async () => {
     db = require('../db');
     wc = require('../services/work-center');
     await migrationsReady;
+    // ข้อมูลทดสอบอยู่ปีงบ 2501 — ให้ "ปีงบปัจจุบัน" ของการส่งเตือน = 2501
+    fySpy = jest.spyOn(require('../core/fiscal-year'), 'currentFiscalYear').mockReturnValue(Number(YEAR));
     await cleanupTestUsers(db, 'test\\_wc\\_');
     const [deps] = await db.query('SELECT id FROM departments ORDER BY id LIMIT 2');
     deptA = deps[0].id; deptB = deps[1].id;
@@ -49,7 +52,12 @@ beforeAll(async () => {
     T.ssjB = (await mk('test_wc_ssjb', 'admin_ssj', { dept_id: deptB })).tok;
     T.hos1 = (await mk('test_wc_hos1', 'admin_hos', { hospcode: hos[1] })).tok;
     T.user = (await mk('test_wc_user', 'user_hos', { hospcode: hos[0], dept_id: deptA })).tok;
-    await mk('test_wc_rcpt', 'user_hos', { hospcode: hos[1], dept_id: deptA, email: 'test_wc_rcpt@example.test' }); // ผู้รับเตือนของหน่วยบริการ hos[1]
+    U.rcpt = (await mk('test_wc_rcpt', 'user_hos', { hospcode: hos[1], dept_id: deptA, email: 'test_wc_rcpt@example.test' })).id; // ผู้รับเตือนของหน่วยบริการ hos[1]
+    U.rcptB = (await mk('test_wc_rcptb', 'user_hos', { hospcode: hos[1], dept_id: deptB, email: 'test_wc_rcptb@example.test' })).id; // กลุ่มงานอื่น = ไม่ได้รับ
+    U.extra = (await mk('test_wc_extra', 'user_hos', { hospcode: hos[1], dept_id: deptB, email: 'test_wc_extra@example.test' })).id; // กลุ่มงานเพิ่มเติม = deptA
+    await db.query("INSERT INTO user_departments (user_id, dept_id, status) VALUES (?, ?, 'approved')", [U.extra, deptA]);
+    U.nodept = (await mk('test_wc_nodept', 'user_hos', { hospcode: hos[1], email: 'test_wc_nodept@example.test' })).id;
+    await db.query('UPDATE users SET dept_id = NULL WHERE id = ?', [U.nodept]); // ไม่มีกลุ่มงาน = ไม่ได้รับ
     const ind = async (name, extra = '') => (await db.query(
         `INSERT INTO kpi_indicators (kpi_indicators_name, dept_id, is_active${extra ? ', ' + extra.split('=')[0] : ''}) VALUES (?, ?, 1${extra ? ', ' + extra.split('=')[1] : ''})`, [name, deptA]))[0].insertId;
     ids.main = await ind('test_wc_main');
@@ -73,6 +81,7 @@ beforeAll(async () => {
 }, 60000);
 
 afterAll(async () => {
+    if (fySpy) fySpy.mockRestore();
     const all = Object.values(ids);
     await db.query('DELETE FROM kpi_summary WHERE year_bh = ?', [YEAR]);
     await db.query('DELETE FROM kpi_results WHERE indicator_id IN (?)', [all]);
@@ -160,7 +169,7 @@ describe('แจ้งเตือนหน่วยบริการที่�
         expect(job.status).toBe('done');
         return job.result;
     };
-    const notifCount = async () => Number((await db.query("SELECT COUNT(*) n FROM notifications WHERE year_bh = ? AND hospcode IS NOT NULL", [YEAR]))[0][0].n);
+    const notifCount = async () => Number((await db.query("SELECT COUNT(*) n FROM notifications WHERE year_bh = ? AND title LIKE 'เตือนส่งผลงาน%'", [YEAR]))[0][0].n);
 
     test('ตั้งค่า: super_admin เท่านั้น + ตรวจค่า', async () => {
         expect((await put(T.ssjA, { reminder_enabled: true })).status).toBe(403);
@@ -172,11 +181,12 @@ describe('แจ้งเตือนหน่วยบริการที่�
         expect(ok.body.data).toMatchObject({ reminder_due_day: 12, reminder_days_before: [3, 1], reminder_enabled: false });
     });
 
-    test('ดูตัวอย่างไม่ส่ง / ส่งทันที: ในระบบ 1 ต่อหน่วยบริการ + LINE/อีเมลถึงผู้ใช้ / สั่งซ้ำวันเดียวกันไม่ส่งซ้ำ', async () => {
+    test('ดูตัวอย่างไม่ส่ง / ส่งทันที: รายผู้รับตามหน่วยบริการ + กลุ่มงาน / สั่งซ้ำวันเดียวกันไม่ส่งซ้ำ', async () => {
         expect((await post(T.ssjA, '/work-center/reminders/send-now', { year_bh: YEAR, month_bh: 10 })).status).toBe(403);
         const pre = await post(T.sa, '/work-center/reminders/preview', { year_bh: YEAR, month_bh: 10 });
         expect(pre.status).toBe(200);
-        expect(pre.body.data).toMatchObject({ hospitals: 1, pairs: 1, sent: { inapp: 0, line: 0, email: 0 } });
+        expect(pre.body.data).toMatchObject({ hospitals: 1, pairs: 1, recipients: 3, no_dept_users: 1, unassigned_pairs: 0, sent: { inapp: 0, line: 0, email: 0 } });
+        expect(pre.body.data.sample[0]).toMatchObject({ hospcode: hos[1], count: 1, recipients: 3 });
         expect(await notifCount()).toBe(0);
         expect(mockSent.line.length + mockSent.email.length).toBe(0);
 
@@ -193,23 +203,60 @@ describe('แจ้งเตือนหน่วยบริการที่�
         mockSent.release();
         const go = { body: { data: await waitJob() } };
         mockSent.hold = null;
-        // ผู้รับของ hos[1] = test_wc_rcpt + test_wc_hos1 (admin_hos ก็ได้รับเตือนของหน่วยบริการตัวเอง)
-        expect(go.body.data.sent).toEqual({ inapp: 1, line: 2, email: 2 });
+        // ผู้รับของ hos[1] = test_wc_rcpt (กลุ่มงาน A) + test_wc_extra (กลุ่มงานเพิ่มเติม A) + test_wc_hos1 (admin_hos ทุกกลุ่มงาน)
+        // ไม่ได้รับ: test_wc_rcptb (กลุ่มงาน B), test_wc_nodept (ไม่มีกลุ่มงาน)
+        expect(go.body.data.sent).toEqual({ inapp: 3, line: 3, email: 3 });
         const st = (await getStatus(T.sa)).body.data.job;
-        expect(st.progress).toMatchObject({ hospitals_done: 1, hospitals_total: 1, messages_done: 4, messages_total: 4 });
+        expect(st.progress).toMatchObject({ recipients_done: 3, recipients_total: 3, messages_done: 6, messages_total: 6 });
         const [[last]] = await db.query("SELECT setting_value v FROM system_settings WHERE setting_key = 'reminder_last_run'");
         expect(JSON.parse(last.v)).toMatchObject({ manual: true, year_bh: YEAR });
-        expect(await notifCount()).toBe(1);
-        const [[n]] = await db.query('SELECT hospcode, title, message FROM notifications WHERE year_bh = ? AND hospcode IS NOT NULL', [YEAR]);
-        expect(n.hospcode).toBe(hos[1]);
-        expect(n.message).toMatch(/1 ตัวชี้วัด/);
-        expect(mockSent.email.map(e => e.to)).toContain('test_wc_rcpt@example.test');
+        expect(await notifCount()).toBe(3);
+        const [ns] = await db.query("SELECT user_id, hospcode, message FROM notifications WHERE year_bh = ? AND title LIKE 'เตือนส่งผลงาน%'", [YEAR]);
+        expect(ns.map(n => n.user_id)).toEqual(expect.arrayContaining([U.rcpt, U.extra]));
+        expect(ns.map(n => n.user_id)).not.toContain(U.rcptB);
+        expect(ns.every(n => n.hospcode === null)).toBe(true); // รายผู้รับ ไม่ใช่ระดับหน่วยบริการ (ผู้ใช้กลุ่มงานอื่นจะเห็น)
+        expect(ns[0].message).toMatch(/1 ตัวชี้วัดที่ท่านรับผิดชอบ/);
+        expect(ns[0].message).toMatch(/• test_wc_main/);
+        const to = mockSent.email.map(e => e.to);
+        expect(to).toEqual(expect.arrayContaining(['test_wc_rcpt@example.test', 'test_wc_extra@example.test']));
+        expect(to).not.toContain('test_wc_rcptb@example.test');
+        expect(to).not.toContain('test_wc_nodept@example.test');
+        expect(mockSent.line.map(l => l.id)).not.toContain(U.rcptB);
 
         expect((await post(T.sa, '/work-center/reminders/send-now', { year_bh: YEAR, month_bh: 10 })).status).toBe(202);
         const again = { body: { data: await waitJob() } };
         expect(again.body.data.sent).toEqual({ inapp: 0, line: 0, email: 0 });
-        expect(again.body.data.skipped_duplicate).toBe(5);
-        expect(await notifCount()).toBe(1);
-        expect(mockSent.line.length).toBe(2);
+        expect(again.body.data.skipped_duplicate).toBe(9);
+        expect(await notifCount()).toBe(3);
+        expect(mockSent.line.length).toBe(3);
+    });
+
+    test('ปีงบอื่นที่ไม่ใช่ปีงบปัจจุบัน = ไม่ส่ง (ดูตัวอย่าง/ส่งทันที 400, งานตามเวลา reason not_current_fy)', async () => {
+        const pre = await post(T.sa, '/work-center/reminders/preview', { year_bh: '2502', month_bh: 10 });
+        expect(pre.status).toBe(400);
+        expect(pre.body.code).toBe('NOT_CURRENT_FY');
+        expect((await post(T.sa, '/work-center/reminders/send-now', { year_bh: '2500', month_bh: 10 })).status).toBe(400);
+        const { runResultReminders } = require('../jobs/result-reminder');
+        const r = await runResultReminders({ yearBh: '2500', monthBh: 9, settings: await wc.getReminderSettings() });
+        expect(r).toMatchObject({ reason: 'not_current_fy', pairs: 0, sent: { inapp: 0, line: 0, email: 0 } });
+    });
+});
+
+describe('assignPairs (แบ่งรายการให้ผู้รับ)', () => {
+    const { assignPairs } = require('../jobs/result-reminder');
+    const u = (id, role, hospcode, deptIds) => ({ id, role, hospcode, deptIds });
+    test('หน่วยบริการตนเอง + กลุ่มงานตนเอง / admin_hos ทุกกลุ่มงาน / ตัวชี้วัดไม่ระบุกลุ่มงาน = เฉพาะผู้ดูแล', () => {
+        const pairs = [
+            { indicator_id: 1, hospcode: 'H1' }, { indicator_id: 2, hospcode: 'H1' }, { indicator_id: 3, hospcode: 'H1' },
+            { indicator_id: 1, hospcode: 'H2' }, { indicator_id: 2, hospcode: 'H9' },
+        ];
+        const deptOf = new Map([[1, 10], [2, 20], [3, null]]);
+        const rc = [u(1, 'user_hos', 'H1', [10]), u(2, 'user_hos', 'H1', [20, 10]), u(3, 'admin_hos', 'H1', [10]),
+            u(4, 'user_hos', 'H1', []), u(5, 'admin_cup', 'H2', []), u(6, 'user_cup', 'H2', [20])];
+        const out = assignPairs(pairs, rc, deptOf);
+        const by = Object.fromEntries(out.perUser.map(x => [x.user.id, x.ids]));
+        expect(by).toEqual({ 1: [1], 2: [1, 2], 3: [1, 2, 3], 5: [1] });
+        expect(out.noDept).toBe(1);
+        expect(out.unassigned).toBe(1); // H9 ไม่มีผู้รับ
     });
 });

@@ -4,6 +4,7 @@
 // ตั้งค่า/สั่งส่งเตือน + คุณภาพข้อมูล + สถานะ KHD = super_admin แบบเข้ม (ไม่ขยายผ่านสิทธิ์หน้า)
 
 const db = require('../db');
+const fy = require('../core/fiscal-year');
 const { apiRouter } = require('../core/router');
 const { authenticateToken, requireSuperAdminStrict } = require('../core/auth');
 const { ROLE_ADMIN_CENTRAL } = require('../core/access');
@@ -15,6 +16,12 @@ const { listRuns, khdSyncBusyInfo } = require('../services/khd-sync');
 const { runResultReminders, saveLastRun, startReminderJob, reminderJob } = require('../jobs/result-reminder');
 const { findLockedFutureMonths, summarizeLockedFuture, unlockFutureMonths } = require('../services/unlock-future');
 const { scheduleSummaryRefresh } = require('../services/summary');
+
+/** ส่งเตือนได้เฉพาะปีงบปัจจุบัน (24 พ.ย. 2569 — ผู้ใช้สั่ง) → ข้อความผิดพลาด | null */
+function reminderYearError(year) {
+    const cur = String(fy.currentFiscalYear());
+    return year === cur ? null : `ส่งเตือนได้เฉพาะปีงบประมาณปัจจุบัน (${cur})`;
+}
 
 /** ปีงบ/เดือนจาก query — ไม่ส่ง = เดือนที่ควรส่งผลงานแล้ว (เดือนก่อนหน้า) */
 function periodOf(q) {
@@ -111,6 +118,8 @@ apiRouter.put('/work-center/reminder-settings', authenticateToken, requireSuperA
 apiRouter.post('/work-center/reminders/preview', authenticateToken, requireSuperAdminStrict, async (req, res) => {
     const per = periodOf(req.body || {});
     if (per.error) return res.status(400).json({ success: false, message: per.error });
+    const fyErr = reminderYearError(per.year);
+    if (fyErr) return res.status(400).json({ success: false, code: 'NOT_CURRENT_FY', message: fyErr });
     try {
         res.json({ success: true, data: await runResultReminders({ yearBh: per.year, monthBh: per.month, preview: true }) });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
@@ -118,6 +127,8 @@ apiRouter.post('/work-center/reminders/preview', authenticateToken, requireSuper
 apiRouter.post('/work-center/reminders/send-now', authenticateToken, requireSuperAdminStrict, async (req, res) => {
     const per = periodOf(req.body || {});
     if (per.error) return res.status(400).json({ success: false, message: per.error });
+    const fyErr = reminderYearError(per.year);
+    if (fyErr) return res.status(400).json({ success: false, code: 'NOT_CURRENT_FY', message: fyErr });
     const userId = req.user.userId, ip = req.ip;
     try {
         const job = startReminderJob({ yearBh: per.year, monthBh: per.month, userId }, async (out) => {

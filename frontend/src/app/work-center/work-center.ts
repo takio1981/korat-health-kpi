@@ -66,8 +66,8 @@ export const REVIEW_BATCH = 100;
 /** ข้อความความคืบหน้าของงานส่งเตือน (GET /work-center/reminders/status) */
 export function reminderProgressText(job: any): string {
   const p = job?.progress;
-  if (!p || !Number(p.hospitals_total)) return 'กำลังเตรียมรายการ...';
-  const h = `หน่วยบริการ ${Number(p.hospitals_done) || 0} / ${Number(p.hospitals_total)} แห่ง`;
+  if (!p || !Number(p.recipients_total)) return 'กำลังเตรียมรายการ...';
+  const h = `ผู้รับ ${Number(p.recipients_done) || 0} / ${Number(p.recipients_total)} คน`;
   return Number(p.messages_total) ? `${h}<br>LINE/อีเมล ${Number(p.messages_done) || 0} / ${Number(p.messages_total)} ข้อความ` : h;
 }
 
@@ -199,7 +199,14 @@ export class WorkCenterComponent implements OnInit {
   }
 
   /** ดูตัวอย่างแล้วยืนยันส่งเตือนทันที (เดือนที่เลือก) */
+  /** ส่งเตือนได้เฉพาะปีงบประมาณปัจจุบัน (24 พ.ย. 2569 — backend ตรวจซ้ำ NOT_CURRENT_FY) */
+  get canRemindYear(): boolean { return String(this.year) === String(getCurrentFiscalYear()); }
+
   sendReminderNow() {
+    if (!this.canRemindYear) {
+      Swal.fire({ icon: 'info', title: 'ส่งเตือนได้เฉพาะปีงบประมาณปัจจุบัน', text: `ปีงบปัจจุบัน = ${getCurrentFiscalYear()}` });
+      return;
+    }
     const body = { year_bh: this.year, month_bh: this.month };
     Swal.fire({ title: 'กำลังตรวจ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     this.authService.apiPost('/work-center/reminders/preview', body).subscribe({
@@ -207,14 +214,16 @@ export class WorkCenterComponent implements OnInit {
         const d = p?.data || {};
         if (!d.hospitals) { Swal.fire({ icon: 'info', title: 'ทุกหน่วยบริการส่งผลงานแล้ว', text: `เดือน ${d.month_label || ''}` }); return; }
         const ch = d.channels || {};
-        const sample = (d.sample || []).map((s: any) => `<li>${escapeHtml(s.hosname || s.hospcode)} — ${Number(s.count)} ตัวชี้วัด</li>`).join('');
+        if (!d.recipients) { Swal.fire({ icon: 'info', title: 'ไม่มีผู้รับเตือน', text: `ยังไม่ส่ง ${Number(d.pairs)} คู่ แต่ไม่มีผู้ใช้ของหน่วยบริการ/กลุ่มงานที่รับผิดชอบ` }); return; }
+        const sample = (d.sample || []).map((s: any) => `<li>${escapeHtml(s.hosname || s.hospcode)} — ${Number(s.count)} ตัวชี้วัด · ผู้รับ ${Number(s.recipients) || 0} คน</li>`).join('');
         Swal.fire({
           title: `ส่งเตือนผลงานเดือน ${escapeHtml(d.month_label)}`, icon: 'question', showCancelButton: true,
           confirmButtonText: 'ส่งเตือน', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#10b981',
-          html: `<div style="text-align:left;font-size:13px">หน่วยบริการที่ยังไม่ส่ง <b>${Number(d.hospitals)}</b> แห่ง (${Number(d.pairs)} คู่) · กำหนดส่ง ${escapeHtml(d.due_date)}
+          html: `<div style="text-align:left;font-size:13px">ปีงบ ${escapeHtml(d.year_bh)} · หน่วยบริการที่ยังไม่ส่ง <b>${Number(d.hospitals)}</b> แห่ง (${Number(d.pairs)} คู่) · ผู้รับ <b>${Number(d.recipients)}</b> คน · กำหนดส่ง ${escapeHtml(d.due_date)}
+            <br>แต่ละคนได้รับเฉพาะตัวชี้วัดที่ยังไม่มีผลงานของหน่วยบริการและกลุ่มงานตนเอง${d.unassigned_pairs ? ` · <span style="color:#b45309">ไม่มีผู้รับผิดชอบ ${Number(d.unassigned_pairs)} คู่</span>` : ''}${d.no_dept_users ? ` · ผู้ใช้ไม่มีกลุ่มงาน ${Number(d.no_dept_users)} คน (ไม่ได้รับ)` : ''}
             <br>ช่องทาง: ${[ch.inapp ? 'ในระบบ' : '', ch.line ? 'LINE' : '', ch.email ? 'อีเมล' : ''].filter(Boolean).join(', ') || '-'}
             <ul style="margin-top:6px;padding-left:18px">${sample}</ul>
-            <div style="font-size:11px;color:#6b7280">สั่งซ้ำวันเดียวกันจะไม่ส่งซ้ำถึงหน่วยบริการเดิม</div></div>`,
+            <div style="font-size:11px;color:#6b7280">สั่งซ้ำวันเดียวกันจะไม่ส่งซ้ำถึงผู้รับเดิม</div></div>`,
         }).then(r => {
           if (!r.isConfirmed) return;
           Swal.fire({ title: 'กำลังส่งเตือน...', html: reminderProgressText(null), allowOutsideClick: false, didOpen: () => Swal.showLoading() });

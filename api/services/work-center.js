@@ -190,7 +190,7 @@ async function namesFor(pairs) {
     const ind = new Map(), hos = new Map();
     if (ids.length) {
         const [r] = await db.query(
-            `SELECT i.id, i.kpi_indicators_name, i.result_formula, d.dept_name FROM kpi_indicators i LEFT JOIN departments d ON d.id = i.dept_id WHERE i.id IN (?)`, [ids]);
+            `SELECT i.id, i.kpi_indicators_name, i.result_formula, i.dept_id, d.dept_name FROM kpi_indicators i LEFT JOIN departments d ON d.id = i.dept_id WHERE i.id IN (?)`, [ids]);
         for (const x of r) ind.set(Number(x.id), x);
     }
     for (let i = 0; i < codes.length; i += 1000) {

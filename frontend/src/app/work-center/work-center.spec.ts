@@ -2,14 +2,15 @@ import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { Router } from '@angular/router';
 import { testProviders } from '../testing/test-providers';
+import Swal from 'sweetalert2';
 import { WorkCenterComponent, daysLeftText, fiscalYearChoices, dashboardQuery, monthsText, chunk, buildApprovePayload, buildRejectPayload, reviewKey, reminderProgressText } from './work-center';
 
 describe('ศูนย์งานผู้ดูแล — ความคืบหน้าการส่งเตือน (งานเบื้องหลัง)', () => {
   it('reminderProgressText: ยังไม่มีรายการ / หน่วยบริการ / ข้อความ LINE-อีเมล', () => {
     expect(reminderProgressText(null)).toBe('กำลังเตรียมรายการ...');
-    expect(reminderProgressText({ progress: { hospitals_done: 3, hospitals_total: 10, messages_done: 0, messages_total: 0 } })).toBe('หน่วยบริการ 3 / 10 แห่ง');
-    expect(reminderProgressText({ progress: { hospitals_done: 10, hospitals_total: 10, messages_done: 4, messages_total: 20 } }))
-      .toBe('หน่วยบริการ 10 / 10 แห่ง<br>LINE/อีเมล 4 / 20 ข้อความ');
+    expect(reminderProgressText({ progress: { recipients_done: 3, recipients_total: 10, messages_done: 0, messages_total: 0 } })).toBe('ผู้รับ 3 / 10 คน');
+    expect(reminderProgressText({ progress: { recipients_done: 10, recipients_total: 10, messages_done: 4, messages_total: 20 } }))
+      .toBe('ผู้รับ 10 / 10 คน<br>LINE/อีเมล 4 / 20 ข้อความ');
   });
 });
 
@@ -57,6 +58,21 @@ describe('WorkCenterComponent', () => {
     return { f, http: TestBed.inject(HttpTestingController), router: TestBed.inject(Router) };
   };
   afterEach(() => localStorage.removeItem('kpi_user'));
+
+  it('ส่งเตือนได้เฉพาะปีงบประมาณปัจจุบัน (ปีอื่น = ไม่เรียก preview)', async () => {
+    const { f, http } = await setup();
+    const c = f.componentInstance;
+    const cur = fiscalYearChoices()[0];
+    c.year = cur;
+    expect(c.canRemindYear).toBe(true);
+    c.year = String(Number(cur) - 1);
+    expect(c.canRemindYear).toBe(false);
+    const sw = vi.spyOn(Swal, 'fire').mockResolvedValue({} as any);
+    c.sendReminderNow();
+    expect(sw).toHaveBeenCalled();
+    sw.mockRestore();
+    http.expectNone(r => r.url.includes('/work-center/reminders/preview'));
+  });
 
   it('โหลดภาพรวม → การ์ด + รายการยังไม่ส่ง และเปิดหน้าบันทึกผลงานที่กรองให้', async () => {
     const { f, http, router } = await setup();
