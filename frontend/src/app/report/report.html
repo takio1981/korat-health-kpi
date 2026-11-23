@@ -226,9 +226,26 @@
       <!-- Data Table -->
       <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
 
+        <!-- ค้นหาในตารางของแถบนี้ (23 พ.ย. 2569) — คำค้นแยกตามแถบ, การ์ดสรุป/กราฟคงคำนวณจากข้อมูลทั้งหมด -->
+        <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2 no-print">
+          <div class="relative flex-1 min-w-[220px] max-w-lg">
+            <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+            <input id="report-search" type="text" [ngModel]="searchQuery" (ngModelChange)="onSearchChange($event)" [placeholder]="searchPlaceholder"
+                   class="w-full pl-9 pr-9 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 outline-none hover:border-green-400 transition-colors">
+            <button *ngIf="searchQuery" id="btn-report-search-clear" type="button" (click)="onSearchChange('')" title="ล้างคำค้น"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+              <i class="fas fa-times text-xs"></i>
+            </button>
+          </div>
+          <span id="report-search-count" class="text-xs text-gray-500">
+            <ng-container *ngIf="searchQuery; else allCount">พบ <strong class="text-green-700">{{ viewData.length }}</strong> จาก {{ reportData.length }} รายการ</ng-container>
+            <ng-template #allCount>ทั้งหมด {{ reportData.length }} รายการ</ng-template>
+          </span>
+        </div>
+
         <!-- === Mobile Card View (ทุก tab) === -->
         <div class="md:hidden p-3 space-y-2">
-          <div *ngFor="let item of reportData; let i = index" class="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+          <div *ngFor="let item of viewData; let i = index" class="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
             <!-- by-indicator -->
             <ng-container *ngIf="activeTab === 'by-indicator'">
               <p class="font-bold text-gray-900 text-sm whitespace-normal break-words">{{ item.kpi_indicators_name }}<span *ngIf="item | criteriaText as crit" class="text-xs font-normal text-amber-600 ml-1">({{ crit }})</span><app-formula-badge class="ml-1" [formula]="item.result_formula"></app-formula-badge><app-indicator-badges class="block mt-0.5" [id]="item.indicator_id ?? item.id"></app-indicator-badges></p>
@@ -298,8 +315,8 @@
               </button>
             </ng-container>
           </div>
-          <div *ngIf="reportData.length === 0" class="text-center py-10 text-gray-400">
-            <i class="fas fa-inbox text-3xl mb-2"></i><p class="text-sm">ไม่พบข้อมูล</p>
+          <div *ngIf="viewData.length === 0" class="text-center py-10 text-gray-400">
+            <i class="fas fa-inbox text-3xl mb-2"></i><p class="text-sm">{{ searchQuery ? 'ไม่พบรายการที่ตรงกับคำค้น' : 'ไม่พบข้อมูล' }}</p>
           </div>
         </div>
 
@@ -332,7 +349,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let item of reportData; let i = index" class="border-b border-gray-50 hover:bg-green-50/30 transition-colors">
+              <tr *ngFor="let item of viewData; let i = index" class="border-b border-gray-50 hover:bg-green-50/30 transition-colors">
                 <td class="px-4 py-2.5 text-gray-500">{{ i + 1 }}</td>
                 <td class="px-4 py-2.5 text-gray-700 whitespace-normal break-words">{{ item.main_indicator_name }}</td>
                 <td class="px-4 py-2.5 text-gray-800 font-medium whitespace-normal break-words"><div class="min-w-[240px]">{{ item.kpi_indicators_name }}<span *ngIf="item | criteriaText as crit" class="text-xs font-normal text-amber-600 ml-1">({{ crit }})</span><app-formula-badge class="ml-1" [formula]="item.result_formula"></app-formula-badge><app-indicator-badges class="block mt-0.5" [id]="item.indicator_id ?? item.id"></app-indicator-badges></div></td>
@@ -357,8 +374,8 @@
                 </td>
                 <td class="px-4 py-2.5 text-center text-gray-600">{{ item.hospital_count }}</td>
               </tr>
-              <tr *ngIf="reportData.length === 0">
-                <td colspan="20" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>ไม่พบข้อมูล</td>
+              <tr *ngIf="viewData.length === 0">
+                <td colspan="20" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>{{ searchQuery ? 'ไม่พบรายการที่ตรงกับคำค้น' : 'ไม่พบข้อมูล' }}</td>
               </tr>
             </tbody>
           </table>
@@ -382,7 +399,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let item of reportData; let i = index" class="border-b border-gray-50 hover:bg-blue-50/30 transition-colors">
+              <tr *ngFor="let item of viewData; let i = index" class="border-b border-gray-50 hover:bg-blue-50/30 transition-colors">
                 <td class="px-4 py-2.5 text-gray-500">{{ i + 1 }}</td>
                 <td class="px-4 py-2.5 text-gray-600 font-mono text-xs">{{ item.hospcode }}</td>
                 <td class="px-4 py-2.5 text-gray-800 font-medium">{{ item.hosname }} <app-zone-badge [hospcode]="item.hospcode"></app-zone-badge></td>
@@ -396,8 +413,8 @@
                 <td class="px-4 py-2.5 text-right text-green-600">{{ item.approved_count }}</td>
                 <td class="px-4 py-2.5 text-right text-orange-500">{{ item.pending_count }}</td>
               </tr>
-              <tr *ngIf="reportData.length === 0">
-                <td colspan="10" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>ไม่พบข้อมูล</td>
+              <tr *ngIf="viewData.length === 0">
+                <td colspan="10" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>{{ searchQuery ? 'ไม่พบรายการที่ตรงกับคำค้น' : 'ไม่พบข้อมูล' }}</td>
               </tr>
             </tbody>
           </table>
@@ -418,7 +435,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let item of reportData; let i = index" class="border-b border-gray-50 hover:bg-indigo-50/30 transition-colors">
+              <tr *ngFor="let item of viewData; let i = index" class="border-b border-gray-50 hover:bg-indigo-50/30 transition-colors">
                 <td class="px-4 py-2.5 text-gray-500">{{ i + 1 }}</td>
                 <td class="px-4 py-2.5 text-gray-800 font-medium">{{ item.distname || item.distid }}</td>
                 <td class="px-4 py-2.5 text-right text-gray-700">{{ item.hospital_count }}</td>
@@ -429,8 +446,8 @@
                   {{ (item.achievement_pct | number:'1.2-2') || '0.00' }}%
                 </td>
               </tr>
-              <tr *ngIf="reportData.length === 0">
-                <td colspan="7" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>ไม่พบข้อมูล</td>
+              <tr *ngIf="viewData.length === 0">
+                <td colspan="7" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>{{ searchQuery ? 'ไม่พบรายการที่ตรงกับคำค้น' : 'ไม่พบข้อมูล' }}</td>
               </tr>
             </tbody>
           </table>
@@ -453,7 +470,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let item of reportData; let i = index" class="border-b border-gray-50 hover:bg-amber-50/30 transition-colors">
+              <tr *ngFor="let item of viewData; let i = index" class="border-b border-gray-50 hover:bg-amber-50/30 transition-colors">
                 <td class="px-4 py-2.5 text-gray-500">{{ i + 1 }}</td>
                 <td class="px-4 py-2.5 text-gray-800 font-bold text-base">{{ item.year_bh }}</td>
                 <td class="px-4 py-2.5 text-right text-gray-700">{{ item.indicator_count }}</td>
@@ -466,8 +483,8 @@
                 <td class="px-4 py-2.5 text-right text-green-600">{{ item.approved_count }}</td>
                 <td class="px-4 py-2.5 text-right text-orange-500">{{ item.pending_count }}</td>
               </tr>
-              <tr *ngIf="reportData.length === 0">
-                <td colspan="9" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>ไม่พบข้อมูล</td>
+              <tr *ngIf="viewData.length === 0">
+                <td colspan="9" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>{{ searchQuery ? 'ไม่พบรายการที่ตรงกับคำค้น' : 'ไม่พบข้อมูล' }}</td>
               </tr>
             </tbody>
           </table>
@@ -490,7 +507,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let item of reportData; let i = index" class="border-b border-gray-50 hover:bg-fuchsia-50/30 transition-colors">
+              <tr *ngFor="let item of viewData; let i = index" class="border-b border-gray-50 hover:bg-fuchsia-50/30 transition-colors">
                 <td class="px-4 py-2.5 text-gray-500">{{ i + 1 }}</td>
                 <td class="px-4 py-2.5 text-gray-700 whitespace-normal break-words">{{ item.main_indicator_name }}</td>
                 <td class="px-4 py-2.5 text-gray-800 font-medium whitespace-normal break-words"><div class="min-w-[240px]">{{ item.kpi_indicators_name }}<span *ngIf="item | criteriaText as crit" class="text-xs font-normal text-amber-600 ml-1">({{ crit }})</span><app-formula-badge class="ml-1" [formula]="item.result_formula"></app-formula-badge><app-indicator-badges class="block mt-0.5" [id]="item.indicator_id ?? item.id"></app-indicator-badges></div></td>
@@ -510,8 +527,8 @@
                   <span *ngIf="item.recording_pct === 0" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700"><i class="fas fa-times mr-1"></i>ยังไม่บันทึก</span>
                 </td>
               </tr>
-              <tr *ngIf="reportData.length === 0">
-                <td colspan="9" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>ไม่พบข้อมูล</td>
+              <tr *ngIf="viewData.length === 0">
+                <td colspan="9" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>{{ searchQuery ? 'ไม่พบรายการที่ตรงกับคำค้น' : 'ไม่พบข้อมูล' }}</td>
               </tr>
             </tbody>
           </table>
@@ -536,7 +553,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let item of reportData; let i = index" class="border-b border-gray-50 hover:bg-rose-50/30 transition-colors">
+              <tr *ngFor="let item of viewData; let i = index" class="border-b border-gray-50 hover:bg-rose-50/30 transition-colors">
                 <td class="px-4 py-2.5 text-gray-500">{{ i + 1 }}</td>
                 <td class="px-4 py-2.5 text-gray-600 font-mono text-xs">{{ item.hospcode }}</td>
                 <td class="px-4 py-2.5 text-gray-800 font-medium">{{ item.hosname || '-' }} <app-zone-badge [hospcode]="item.hospcode"></app-zone-badge></td>
@@ -564,8 +581,8 @@
                   <span *ngIf="item.missing_indicators === 0" class="text-emerald-500 text-xs"><i class="fas fa-check-circle"></i></span>
                 </td>
               </tr>
-              <tr *ngIf="reportData.length === 0">
-                <td colspan="11" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>ไม่พบข้อมูล</td>
+              <tr *ngIf="viewData.length === 0">
+                <td colspan="11" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>{{ searchQuery ? 'ไม่พบรายการที่ตรงกับคำค้น' : 'ไม่พบข้อมูล' }}</td>
               </tr>
             </tbody>
           </table>
@@ -653,6 +670,21 @@
           <span class="text-xs text-gray-400 ml-1">ปีงบ {{ selectedYear || 'ทั้งหมด' }}</span>
           <span class="ml-auto text-xs text-violet-600 font-medium">คลิกแถวเพื่อดูตัวชี้วัดแต่ละตัว</span>
         </div>
+        <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2 no-print">
+          <div class="relative flex-1 min-w-[220px] max-w-lg">
+            <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+            <input id="report-dept-search" type="text" [ngModel]="searchQuery" (ngModelChange)="onSearchChange($event)" [placeholder]="searchPlaceholder"
+                   class="w-full pl-9 pr-9 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 outline-none hover:border-violet-400 transition-colors">
+            <button *ngIf="searchQuery" type="button" (click)="onSearchChange('')" title="ล้างคำค้น"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+              <i class="fas fa-times text-xs"></i>
+            </button>
+          </div>
+          <span id="report-dept-search-count" class="text-xs text-gray-500">
+            <ng-container *ngIf="searchQuery; else deptAllCount">พบ <strong class="text-violet-700">{{ deptViewData.length }}</strong> จาก {{ deptSummaryData.length }} หน่วยงาน</ng-container>
+            <ng-template #deptAllCount>ทั้งหมด {{ deptSummaryData.length }} หน่วยงาน</ng-template>
+          </span>
+        </div>
 
         <!-- Desktop table -->
         <div class="hidden md:block overflow-x-auto">
@@ -669,7 +701,7 @@
               </tr>
             </thead>
             <tbody>
-              <ng-container *ngFor="let dept of deptSummaryData; let i = index">
+              <ng-container *ngFor="let dept of deptViewData; let i = index">
                 <!-- แถวหน่วยงาน -->
                 <tr (click)="openDeptDrilldown(dept)"
                     class="cursor-pointer transition-colors hover:bg-violet-50"
@@ -841,9 +873,9 @@
                   </td>
                 </tr>
               </ng-container>
-              <tr *ngIf="deptSummaryData.length === 0">
+              <tr *ngIf="deptViewData.length === 0">
                 <td colspan="7" class="px-4 py-8 text-center text-gray-400">
-                  <i class="fas fa-inbox text-3xl mb-2 block"></i>ไม่พบข้อมูล — กรุณาเลือกปีงบประมาณ
+                  <i class="fas fa-inbox text-3xl mb-2 block"></i>{{ searchQuery ? 'ไม่พบหน่วยงานที่ตรงกับคำค้น' : 'ไม่พบข้อมูล — กรุณาเลือกปีงบประมาณ' }}
                 </td>
               </tr>
             </tbody>
@@ -852,7 +884,7 @@
 
         <!-- Mobile cards (accordion) -->
         <div class="md:hidden divide-y divide-gray-50">
-          <ng-container *ngFor="let dept of deptSummaryData; let i = index">
+          <ng-container *ngFor="let dept of deptViewData; let i = index">
             <!-- dept card header -->
             <div (click)="openDeptDrilldown(dept)"
                  class="p-4 cursor-pointer hover:bg-violet-50 transition-colors"
@@ -984,8 +1016,8 @@
               </div>
             </div>
           </ng-container>
-          <div *ngIf="deptSummaryData.length === 0" class="p-8 text-center text-gray-400">
-            <i class="fas fa-inbox text-3xl mb-2 block"></i>ไม่พบข้อมูล
+          <div *ngIf="deptViewData.length === 0" class="p-8 text-center text-gray-400">
+            <i class="fas fa-inbox text-3xl mb-2 block"></i>{{ searchQuery ? 'ไม่พบหน่วยงานที่ตรงกับคำค้น' : 'ไม่พบข้อมูล' }}
           </div>
         </div>
       </div>

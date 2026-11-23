@@ -22,6 +22,38 @@ export const REPORT_TAB_LABELS: Record<string, string> = {
   'recording-status': 'สถานะการบันทึก', 'by-dept': 'สรุปรายหน่วยงาน',
 };
 
+/** ช่องที่ค้นหาในแต่ละแถบ (23 พ.ย. 2569) — key = แถบ หรือ 'recording-status:<มุมมอง>' */
+export const REPORT_SEARCH_FIELDS: Record<string, string[]> = {
+  'by-indicator': ['kpi_indicators_name', 'main_indicator_name', 'dept_name'],
+  'by-hospital': ['hosname', 'hospcode', 'distname', 'hostypename'],
+  'by-district': ['distname', 'distid'],
+  'by-year': ['year_bh'],
+  'recording-status:by-indicator': ['kpi_indicators_name', 'main_indicator_name', 'dept_name'],
+  'recording-status:by-hospital': ['hosname', 'hospcode', 'distname', 'hostypename'],
+  'by-dept': ['dept_name', 'dept_code'],
+};
+
+export const REPORT_SEARCH_PLACEHOLDER: Record<string, string> = {
+  'by-indicator': 'ค้นหาชื่อตัวชี้วัด / หมวดหมู่หลัก / หน่วยงาน',
+  'by-hospital': 'ค้นหาชื่อหรือรหัสหน่วยบริการ / อำเภอ',
+  'by-district': 'ค้นหาชื่ออำเภอ',
+  'by-year': 'ค้นหาปีงบประมาณ',
+  'recording-status:by-indicator': 'ค้นหาชื่อตัวชี้วัด / หมวดหมู่หลัก / หน่วยงาน',
+  'recording-status:by-hospital': 'ค้นหาชื่อหรือรหัสหน่วยบริการ / อำเภอ / ประเภท',
+  'by-dept': 'ค้นหาชื่อหน่วยงาน',
+};
+
+/** กรองแถวรายงานด้วยคำค้น — ทุกคำ (คั่นด้วยช่องว่าง) ต้องพบในช่องของแถบนั้น ไม่สนตัวพิมพ์ — ไม่มีคำค้น = คืน array เดิม */
+export function filterReportRows(rows: any[], key: string, q: string): any[] {
+  const words = String(q || '').toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (!words.length || !Array.isArray(rows)) return rows || [];
+  const fields = REPORT_SEARCH_FIELDS[key] || [];
+  return rows.filter(r => {
+    const hay = fields.map(f => (r && r[f] != null ? String(r[f]) : '')).join(' ').toLowerCase();
+    return words.every(w => hay.includes(w));
+  });
+}
+
 @Component({
   selector: 'app-report',
   standalone: true,
@@ -64,6 +96,22 @@ export class ReportComponent implements OnInit {
 
   // Report Data
   reportData: any[] = [];
+  /** แถวที่แสดงในตาราง (กรองด้วยคำค้นของแถบ) — คำนวณใน applySearch() ไม่ใช่ getter */
+  viewData: any[] = [];
+  deptViewData: any[] = [];
+  /** คำค้นแยกตามแถบ (สลับแถบแล้วกลับมา คำค้นเดิมยังอยู่) */
+  searchByTab: Record<string, string> = {};
+  get searchKey(): string { return this.activeTab === 'recording-status' ? 'recording-status:' + this.monitorView : this.activeTab; }
+  get searchQuery(): string { return this.searchByTab[this.searchKey] || ''; }
+  get searchPlaceholder(): string { return REPORT_SEARCH_PLACEHOLDER[this.searchKey] || 'ค้นหา'; }
+  onSearchChange(q: string) {
+    this.searchByTab[this.searchKey] = q || '';
+    this.applySearch();
+  }
+  applySearch() {
+    this.viewData = filterReportRows(this.reportData, this.searchKey, this.searchQuery);
+    this.deptViewData = filterReportRows(this.deptSummaryData, 'by-dept', this.searchByTab['by-dept'] || '');
+  }
 
   // AI วิเคราะห์และสรุปรายแถบ (15 พ.ย. 2569) — object ใหม่ทุกครั้งที่โหลดรายงาน (แถบ/มุมมอง/ตัวกรองเปลี่ยน → แผงล้างสรุปเดิม)
   aiTabParams: any = {};
@@ -340,6 +388,7 @@ export class ReportComponent implements OnInit {
           this.isLoading = false;
           this.deptSummaryData = [];
           this.deptSummarySummary = { total_depts: 0, fully_covered: 0, not_entered: 0, avg_coverage_pct: 0 };
+          this.applySearch();
           this.cdr.detectChanges();
           return;
         }
@@ -369,6 +418,7 @@ export class ReportComponent implements OnInit {
               item.recorded_indicators = Number(item.recorded_indicators) || 0;
               item.missing_indicators = Number(item.missing_indicators) || 0;
             });
+            this.applySearch();
             this.cdr.detectChanges();
             return;
           }
@@ -386,6 +436,7 @@ export class ReportComponent implements OnInit {
             this.deptDrilldownData = [];
             this.selectedIndForHospDrilldown = null;
             this.hospDrilldownData = [];
+            this.applySearch();
             this.cdr.detectChanges();
             return;
           }
@@ -409,6 +460,7 @@ export class ReportComponent implements OnInit {
           });
           this.calculateSummary();
           this.updateChart();
+          this.applySearch();
         }
         this.cdr.detectChanges();
       },
@@ -549,7 +601,8 @@ export class ReportComponent implements OnInit {
         'recording-status': 'สถานะการบันทึก',
         'by-dept': 'สรุปรายหน่วยงาน'
       };
-      const exportData = this.activeTab === 'by-dept' ? this.deptSummaryData : this.reportData;
+      // ส่งออกตามที่แสดงในตาราง (มีคำค้น = เฉพาะแถวที่ตรง)
+      const exportData = this.activeTab === 'by-dept' ? this.deptViewData : this.viewData;
       const ws = XLSX.utils.json_to_sheet(exportData);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, tabNames[this.activeTab] || 'Report');

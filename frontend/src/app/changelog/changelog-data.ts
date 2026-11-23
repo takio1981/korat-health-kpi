@@ -5,6 +5,13 @@ export interface ChangelogEntry { version: string; date: string; changes: Change
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2569.11.23',
+    date: '23 พฤศจิกายน 2569',
+    changes: [
+      { type: 'feature', text: 'รายงานสรุปผล: กล่องค้นหาในทุกแถบ (รายข้อตัวชี้วัด, รายหน่วยบริการ, รายอำเภอ, รายปีงบประมาณ, สถานะการบันทึก, สรุปรายหน่วยงาน) กรองตารางทันทีพร้อมจำนวนที่พบ — คำค้นจำแยกตามแถบ และ Excel ส่งออกเฉพาะแถวที่แสดง' },
+    ],
+  },
+  {
     version: '2569.11.22',
     date: '22 พฤศจิกายน 2569',
     changes: [

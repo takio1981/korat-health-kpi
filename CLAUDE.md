@@ -1405,6 +1405,8 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 ### Chart + Report
 - รวมเป็นหน้าเดียว (/charts) → 2 tabs: กราฟและสถิติ / รายงานสรุปผล
 - ใช้ `[hidden]` เก็บ state ทั้ง 2 view (ไม่ destroy component)
+- **ค้นหาในตารางรายงานสรุปผล (23 พ.ย. 2569):** `#report-search` / `#report-dept-search` กรองฝั่งหน้าจอด้วย `filterReportRows(rows, key, q)` (report.ts — ช่องต่อแถบใน `REPORT_SEARCH_FIELDS`, key สถานะการบันทึก = `recording-status:<มุมมอง>`)
+  คำค้นแยกตามแถบ `searchByTab`, ตารางใช้ `viewData`/`deptViewData` (คำนวณใน `applySearch()` หลังโหลด — ไม่ใช่ getter) การ์ดสรุป/กราฟ/แผง AI ใช้ข้อมูลทั้งหมด, Excel ส่งออกเฉพาะแถวที่แสดง | Test: `report/report.spec.ts`
 - **แท็บกราฟใช้ `GET /report/chart-stats` เท่านั้น** (ไม่ใช่ `/kpi-summary` ที่ LIMIT 500 — เดิมกราฟคำนวณจาก 500 แถวแรก
   และ SUM ค่าดิบต่างหน่วยนับข้ามตัวชี้วัด ผิดทั้งคู่ แก้แล้ว 7 ต.ค. 2569) — aggregate ใน SQL ทุกมิติในคำขอเดียว: overall,
   by_yut/by_main/by_dept/by_indicator/by_district/by_hostype, monthly, heatmap_main/heatmap_dept, distribution + options
