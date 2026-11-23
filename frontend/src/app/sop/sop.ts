@@ -753,7 +753,7 @@ const SYSTEMS: SopSystem[] = [
   nodes:[
     {id:'s',  r:0,c:0,t:'start',   l:'เปิด Settings'},
     {id:'n1', r:1,c:0,t:'process', l:'GET /settings\nโหลด system_settings'},
-    {id:'d1', r:0,c:1,t:'decision',l:'Section?'},
+    {id:'d1', r:0,c:1,t:'decision',l:'Section?\n(เมนูหัวข้อซ้าย)'},
     {id:'sa', r:0,c:2,t:'process', l:'General\n(name, email, Line, TG)'},
     {id:'sb', r:1,c:2,t:'process', l:'SSO Config\n(ThaiD, ProviderID)'},
     {id:'sc', r:2,c:2,t:'process', l:'Maintenance Mode\nON / OFF'},

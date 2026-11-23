@@ -1,8 +1,40 @@
-<div class="p-6 overflow-y-auto card-scroll" style="max-height: calc(100vh - 100px);">
+<div #scrollBox id="settings-scroll" class="p-6 overflow-y-auto card-scroll" style="max-height: calc(100vh - 100px);" (scroll)="onScroll()">
+  <!-- เมนูหัวข้อด้านซ้าย (23 พ.ย. 2569) — แบบเดียวกับหน้าคู่มือ: กดแล้วเลื่อนไปหัวข้อ + ไฮไลต์หัวข้อที่กำลังดู -->
+  <div class="flex gap-6">
+  <nav class="hidden lg:block w-56 shrink-0 sticky top-0 self-start" id="settings-nav">
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 space-y-1 max-h-[calc(100vh-150px)] overflow-y-auto card-scroll">
+      <p class="text-xs font-bold text-gray-400 uppercase px-3 mb-2">หัวข้อ</p>
+      <button *ngFor="let s of visibleSections" type="button" (click)="scrollToSection(s.id)" [attr.data-section]="s.id"
+              class="w-full text-left px-3 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 settings-nav-item"
+              [ngClass]="activeSection === s.id ? 'bg-green-100 text-green-800 font-bold' : 'text-gray-600 hover:bg-gray-50'">
+        <i class="fas {{ s.icon }} w-5 text-center" [ngClass]="activeSection === s.id ? 'text-green-600' : 'text-gray-400'"></i>
+        <span class="min-w-0">{{ s.label }}</span>
+      </button>
+    </div>
+  </nav>
+
+  <div class="flex-1 min-w-0">
+  <!-- เมนูหัวข้อ (มือถือ/แท็บเล็ต) -->
+  <div class="lg:hidden bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden sticky top-0 z-30 mb-4">
+    <button type="button" (click)="showMobileTopics = !showMobileTopics" id="settings-mobile-topics"
+            class="w-full px-4 py-3 flex items-center justify-between text-left bg-gradient-to-r from-green-50 to-teal-50">
+      <span class="flex items-center gap-2 font-bold text-gray-700 text-sm">
+        <i class="fas fa-list-ul text-green-600"></i><span>หัวข้อ: {{ activeLabel }}</span>
+      </span>
+      <i class="fas text-gray-400" [ngClass]="showMobileTopics ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+    </button>
+    <div *ngIf="showMobileTopics" class="p-2 max-h-[60vh] overflow-y-auto card-scroll border-t border-gray-100">
+      <button *ngFor="let s of visibleSections" type="button" (click)="scrollToSection(s.id); showMobileTopics = false"
+              class="w-full text-left px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-2"
+              [ngClass]="activeSection === s.id ? 'bg-green-100 text-green-800 font-bold' : 'text-gray-600 hover:bg-gray-50'">
+        <i class="fas {{ s.icon }} w-5 text-center" [ngClass]="activeSection === s.id ? 'text-green-600' : 'text-gray-400'"></i>{{ s.label }}
+      </button>
+    </div>
+  </div>
 
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-6">
     <div class="p-6 border-b border-gray-100">
-      <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-cog me-2 text-green-600"></i>การตั้งค่าทั่วไป</h3>
+      <h3 id="set-general" data-settings-section class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-cog me-2 text-green-600"></i>การตั้งค่าทั่วไป</h3>
 
       <form (ngSubmit)="saveSettings()">
         <!-- Toggle switches -->
@@ -88,7 +120,7 @@
         </div>
 
         <!-- เพิ่มส่วนการจัดการ Logs -->
-        <div class="mt-8 pt-6 border-t border-gray-100">
+        <div id="set-logs" data-settings-section class="mt-8 pt-6 border-t border-gray-100">
           <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-history me-2 text-blue-600"></i>การจัดการ Logs</h3>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
@@ -114,7 +146,7 @@
         </div>
 
         <!-- สำรอง + ล้างข้อมูลผลงาน -->
-        <div class="mt-8 pt-6 border-t border-gray-100">
+        <div id="set-data" data-settings-section class="mt-8 pt-6 border-t border-gray-100">
           <h3 class="text-lg font-bold text-gray-800 mb-2"><i class="fas fa-eraser me-2 text-red-600"></i>สำรองและล้างข้อมูลผลงาน</h3>
           <p class="text-xs text-gray-500 mb-4">สำรองข้อมูลผลงาน KPI + ข้อมูลแบบฟอร์มทั้งหมดเป็น JSON แล้วลบออกจากระบบ</p>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -143,7 +175,7 @@
         </div>
 
         <!-- ล็อคการคีย์ข้อมูล -->
-        <div class="mt-8 pt-6 border-t border-gray-100">
+        <div id="set-entry-lock" data-settings-section class="mt-8 pt-6 border-t border-gray-100">
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-lock me-2 text-red-600"></i>ล็อคการคีย์ข้อมูล</h3>
             <button type="button" (click)="resetDataEntryLock()" class="px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition-colors">
@@ -194,7 +226,7 @@
         </div>
 
         <!-- ล็อคการแก้ไขเป้าหมาย -->
-        <div class="mt-8 pt-6 border-t border-gray-100">
+        <div id="set-target-lock" data-settings-section class="mt-8 pt-6 border-t border-gray-100">
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-bullseye me-2 text-orange-600"></i>ล็อคการแก้ไขเป้าหมาย</h3>
             <button type="button" (click)="targetEditLocked = false" class="px-3 py-1.5 text-xs font-bold text-orange-600 hover:bg-orange-50 border border-orange-200 rounded-lg transition-colors">
@@ -217,7 +249,7 @@
         </div>
 
         <!-- จำนวนระดับตัวชี้วัดสูงสุด (ตัวชี้วัดหลายระดับ — 19 ต.ค. 2569) -->
-        <div class="mt-8 pt-6 border-t border-gray-100">
+        <div id="set-levels" data-settings-section class="mt-8 pt-6 border-t border-gray-100">
           <h3 class="text-lg font-bold text-gray-800 mb-2"><i class="fas fa-sitemap me-2 text-indigo-600"></i>จำนวนระดับตัวชี้วัดสูงสุด</h3>
           <p class="text-xs text-gray-500 mb-3">นับรวมตัวชี้วัดหลักและกิจกรรม — ค่าตั้งต้น 4 ระดับ: หลัก 1 → ย่อย 1.1 → ย่อยระดับถัดไป 1.1.1 → กิจกรรม 1.1.1.1
             (ระดับสุดท้ายสงวนไว้สำหรับกิจกรรม) — ลดจำนวนระดับไม่ลบข้อที่มีอยู่แล้ว แต่จะเพิ่มข้อใหม่เกินระดับไม่ได้</p>
@@ -230,27 +262,27 @@
         </div>
 
         <!-- ผู้ช่วย AI (7 พ.ย. 2569) — คอมโพเนนต์แยก โหลด/บันทึกผ่าน /ai/settings เอง (ไม่รวมในปุ่มบันทึกของฟอร์มนี้) -->
-        <div *ngIf="isSuperAdmin" class="mt-8 pt-6 border-t border-gray-100">
+        <div id="set-ai" data-settings-section *ngIf="isSuperAdmin" class="mt-8 pt-6 border-t border-gray-100">
           <app-ai-settings-card></app-ai-settings-card>
         </div>
 
         <!-- ระบบเตือนล่วงหน้า (8 พ.ย. 2569) — คอมโพเนนต์แยก โหลด/บันทึกผ่าน /forecast/settings เอง -->
-        <div *ngIf="isSuperAdmin" class="mt-8 pt-6 border-t border-gray-100">
+        <div id="set-forecast" data-settings-section *ngIf="isSuperAdmin" class="mt-8 pt-6 border-t border-gray-100">
           <app-forecast-settings-card></app-forecast-settings-card>
         </div>
 
         <!-- อนุมัติผู้สมัครใหม่อัตโนมัติ + ส่งผู้ใช้ใหม่ขึ้น KHD (13 พ.ย. 2569) — คอมโพเนนต์แยก โหลด/บันทึกผ่าน /user-approval/settings เอง -->
-        <div *ngIf="isSuperAdmin" class="mt-8 pt-6 border-t border-gray-100">
+        <div id="set-user-approval" data-settings-section *ngIf="isSuperAdmin" class="mt-8 pt-6 border-t border-gray-100">
           <app-user-approval-settings-card></app-user-approval-settings-card>
         </div>
 
         <!-- เข้าสู่ระบบอัตโนมัติจาก KHD (9 พ.ย. 2569) — คอมโพเนนต์แยก โหลด/บันทึกผ่าน /auth/khd/settings เอง (URL ตั้งได้) -->
-        <div *ngIf="isSuperAdmin" class="mt-8 pt-6 border-t border-gray-100">
+        <div id="set-khd-sso" data-settings-section *ngIf="isSuperAdmin" class="mt-8 pt-6 border-t border-gray-100">
           <app-khd-sso-settings-card></app-khd-sso-settings-card>
         </div>
 
         <!-- หน้าเข้าสู่ระบบ: น้องโคราชดีบินไปมา (19 พ.ย. 2569) -->
-        <div class="mt-8 pt-6 border-t border-gray-100">
+        <div id="set-login-page" data-settings-section class="mt-8 pt-6 border-t border-gray-100">
           <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-robot me-2 text-teal-600"></i>หน้าเข้าสู่ระบบ</h3>
           <div class="bg-white rounded-lg p-3 border border-gray-200">
             <label class="inline-flex items-center cursor-pointer w-full">
@@ -307,7 +339,7 @@
 
         <!-- ตั้งค่าอุทธรณ์ -->
         <!-- ตั้งค่า SSO: ThaID + ProviderID -->
-        <div class="mt-8 pt-6 border-t border-gray-100">
+        <div id="set-sso-login" data-settings-section class="mt-8 pt-6 border-t border-gray-100">
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-id-card me-2 text-blue-600"></i>ตั้งค่าการเข้าสู่ระบบด้วย SSO</h3>
             <a routerLink="/sso-logs"
@@ -448,7 +480,7 @@
         </div>
 
         <!-- ทดสอบถอดรหัส JWT — วาง token จริงเพื่อดู raw payload + ผลที่ extraction logic ดึงได้ -->
-        <div class="mt-8 pt-6 border-t border-gray-100">
+        <div id="set-jwt-test" data-settings-section class="mt-8 pt-6 border-t border-gray-100">
           <h3 class="text-lg font-bold text-gray-800 mb-2"><i class="fas fa-magnifying-glass me-2 text-purple-600"></i>ทดสอบถอดรหัส JWT (ThaID / ProviderID)</h3>
           <p class="text-xs text-gray-500 mb-3">วาง token จริงที่ได้จาก ThaID/ProviderID เพื่อดูว่าระบบดึงข้อมูล ชื่อ/นามสกุล/เลขบัตรประชาชน/อำเภอ/หน่วยบริการ ได้ถูกต้องหรือไม่ — ไม่บันทึกหรือ log token/ข้อมูลนี้ที่ใดทั้งสิ้น (super_admin เท่านั้น)</p>
           <textarea [(ngModel)]="ssoDecodeTokenInput" name="ssoDecodeTokenInput" rows="3"
@@ -491,7 +523,7 @@
         </div>
 
         <!-- ตั้งค่า SSO Register: ThaID + ProviderID (แยกจาก Login) -->
-        <div class="mt-8 pt-6 border-t border-gray-100">
+        <div id="set-sso-register" data-settings-section class="mt-8 pt-6 border-t border-gray-100">
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-user-plus me-2 text-emerald-600"></i>ตั้งค่าการลงทะเบียนด้วย SSO</h3>
           </div>
@@ -552,7 +584,7 @@
           </div>
         </div>
 
-        <div class="mt-8 pt-6 border-t border-gray-100">
+        <div id="set-appeal" data-settings-section class="mt-8 pt-6 border-t border-gray-100">
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-gavel me-2 text-purple-600"></i>ตั้งค่าระบบอุทธรณ์</h3>
             <button type="button" (click)="resetAppealSettings()" class="px-3 py-1.5 text-xs font-bold text-purple-600 hover:bg-purple-50 border border-purple-200 rounded-lg transition-colors">
@@ -601,7 +633,7 @@
         </div>
 
         <!-- ตั้งค่าการแจ้งเตือนผู้สมัครใหม่ -->
-        <div class="mt-8 pt-6 border-t border-gray-100">
+        <div id="set-notif" data-settings-section class="mt-8 pt-6 border-t border-gray-100">
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-bell me-2 text-blue-600"></i>แจ้งเตือนผู้สมัครใหม่</h3>
           </div>
@@ -814,6 +846,8 @@
         </div>
       </form>
     </div>
+  </div>
+  </div>
   </div>
 
 

@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, ChangeDetectorRef, ViewChild } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -14,6 +14,43 @@ import { FestivalDates, normalizeOutfitMode, sanitizeFestivalDates } from '../sh
 import { MascotService } from '../shared/mascot/mascot.service';
 import { MascotFestivalCardComponent, isHttpsUrl } from '../shared/mascot-festival-card';
 
+export interface SettingsSection { id: string; label: string; icon: string; superOnly?: boolean; }
+/** หัวข้อของหน้าตั้งค่าระบบ เรียงตามลำดับในหน้า — เพิ่มส่วนใหม่ในหน้า = เพิ่มที่นี่ + ใส่ id="set-<id>" data-settings-section ที่ส่วนนั้น */
+export const SETTINGS_SECTIONS: SettingsSection[] = [
+  { id: 'general', label: 'การตั้งค่าทั่วไป', icon: 'fa-cog' },
+  { id: 'logs', label: 'การจัดการ Logs', icon: 'fa-history' },
+  { id: 'data', label: 'สำรองและล้างข้อมูลผลงาน', icon: 'fa-eraser' },
+  { id: 'entry-lock', label: 'ล็อคการคีย์ข้อมูล', icon: 'fa-lock' },
+  { id: 'target-lock', label: 'ล็อคการแก้ไขเป้าหมาย', icon: 'fa-bullseye' },
+  { id: 'levels', label: 'จำนวนระดับตัวชี้วัด', icon: 'fa-sitemap' },
+  { id: 'ai', label: 'ผู้ช่วย AI', icon: 'fa-wand-magic-sparkles', superOnly: true },
+  { id: 'forecast', label: 'ระบบเตือนล่วงหน้า', icon: 'fa-triangle-exclamation', superOnly: true },
+  { id: 'user-approval', label: 'อนุมัติผู้สมัครอัตโนมัติ', icon: 'fa-user-check', superOnly: true },
+  { id: 'khd-sso', label: 'เข้าสู่ระบบจาก KHD', icon: 'fa-right-to-bracket', superOnly: true },
+  { id: 'login-page', label: 'หน้าเข้าสู่ระบบ / น้องโคราชดี', icon: 'fa-robot' },
+  { id: 'sso-login', label: 'เข้าสู่ระบบด้วย SSO', icon: 'fa-id-card' },
+  { id: 'jwt-test', label: 'ทดสอบถอดรหัส JWT', icon: 'fa-magnifying-glass' },
+  { id: 'sso-register', label: 'ลงทะเบียนด้วย SSO', icon: 'fa-user-plus' },
+  { id: 'appeal', label: 'ระบบอุทธรณ์', icon: 'fa-gavel' },
+  { id: 'notif', label: 'แจ้งเตือนผู้สมัครใหม่', icon: 'fa-bell' },
+];
+
+/** หัวข้อที่กำลังดู: หัวข้อสุดท้ายที่ขอบบนอยู่เหนือเส้น (ขอบบนกล่อง + 120px) — เลื่อนถึงล่างสุด = หัวข้อสุดท้าย (ฟังก์ชันแยกไว้ทดสอบ) */
+export function activeSectionAt(box: HTMLElement, ids: string[]): string | null {
+  if (!ids.length) return null;
+  if (box.scrollTop + box.clientHeight >= box.scrollHeight - 4) {
+    for (let i = ids.length - 1; i >= 0; i--) if (box.querySelector('#set-' + ids[i])) return ids[i];
+  }
+  const line = box.getBoundingClientRect().top + 120;
+  let cur: string | null = null;
+  for (const id of ids) {
+    const el = box.querySelector('#set-' + id) as HTMLElement | null;
+    if (!el) continue;
+    if (el.getBoundingClientRect().top <= line) cur = id; else break;
+  }
+  return cur || ids[0];
+}
+
 @Component({
   selector: 'app-settings',
   standalone: true,
@@ -21,6 +58,32 @@ import { MascotFestivalCardComponent, isHttpsUrl } from '../shared/mascot-festiv
   templateUrl: './settings.html'
 })
 export class SettingsComponent implements OnInit {
+  // ===== เมนูหัวข้อด้านซ้าย (23 พ.ย. 2569) — id ในหน้า = 'set-' + id, superOnly = แสดงเฉพาะ super_admin (ตรงกับ *ngIf ของส่วนนั้น) =====
+  readonly sections = SETTINGS_SECTIONS;
+  visibleSections: SettingsSection[] = SETTINGS_SECTIONS.filter(s => !s.superOnly);
+  activeSection = 'general';
+  showMobileTopics = false;
+  get activeLabel(): string { return this.sections.find(s => s.id === this.activeSection)?.label || ''; }
+  @ViewChild('scrollBox') scrollBox?: ElementRef<HTMLElement>;
+  private _scrollLockUntil = 0;
+
+  scrollToSection(id: string) {
+    this.activeSection = id;
+    const el = document.getElementById('set-' + id);
+    // ระหว่างเลื่อนแบบนุ่มนวล ไม่ให้ตัวติดตามการเลื่อนเปลี่ยนหัวข้อกลับไปมา
+    this._scrollLockUntil = Date.now() + 800;
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /** ไฮไลต์หัวข้อที่กำลังดู = หัวข้อสุดท้ายที่ขอบบนเลื่อนผ่านเส้นบนของกล่องเลื่อนแล้ว */
+  onScroll() {
+    if (Date.now() < this._scrollLockUntil) return;
+    const box = this.scrollBox?.nativeElement;
+    if (!box) return;
+    const id = activeSectionAt(box, this.visibleSections.map(s => s.id));
+    if (id && id !== this.activeSection) { this.activeSection = id; this.cdr.detectChanges(); }
+  }
+
   private authService = inject(AuthService);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
@@ -121,6 +184,7 @@ export class SettingsComponent implements OnInit {
     const role = this.authService.getUserRole();
     this.isAdmin = role === 'admin_ssj' || role === 'super_admin';
     this.isSuperAdmin = role === 'super_admin';
+    this.visibleSections = SETTINGS_SECTIONS.filter(s => this.isSuperAdmin || !s.superOnly);
 
     // เดิม hardcode เช็ค isSuperAdmin ตรงๆ ที่นี่ ซ้ำซ้อนกับ pageAccessGuard ที่ route และขัดกับระบบ
     // Role × Page Access — ถ้า super_admin เปิดสิทธิ์หน้านี้ให้ role อื่นผ่าน guard แล้ว ก็ยังโดนเตะออก

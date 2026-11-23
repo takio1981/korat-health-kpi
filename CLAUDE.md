@@ -1486,7 +1486,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   - online-users: `100vh - 280px` | sticky thead
   - kpi-manage: `100vh - 280px` desktop / `100vh - 320px` mobile
   - announcements: `100vh - 250px`
-  - settings: `100vh - 100px`
+  - settings: `100vh - 100px` (กล่องเลื่อน `#settings-scroll`) + **เมนูหัวข้อซ้าย** (23 พ.ย. 2569) `SETTINGS_SECTIONS` ใน settings.ts — ส่วนใหม่ในหน้าตั้งค่าต้องเพิ่มในรายการ + `id="set-<id>" data-settings-section` (superOnly = ส่วนที่อยู่ใต้ `*ngIf="isSuperAdmin"`; spec ตรวจลำดับตรงกับหน้า)
   - charts: `100vh - 200px` (chart + report views)
 - Sticky thead pattern: `<thead class="... sticky top-0 z-20 shadow-md">`
 
