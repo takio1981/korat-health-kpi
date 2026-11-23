@@ -12,12 +12,13 @@ import { CommandPaletteComponent } from '../shared/command-palette/command-palet
 import { ZoneBadgeComponent, HospitalZoneService } from '../shared/zone-badge';
 import { MascotAssistantComponent } from '../shared/mascot/mascot-assistant';
 import { MyDepartmentsComponent, ROLE_MULTI_DEPT } from '../shared/my-departments';
+import { MyRoleRequestComponent } from '../shared/my-role-request';
 import { MascotService } from '../shared/mascot/mascot.service';
 
 @Component({
   selector: 'app-layout',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, RouterOutlet, CommandPaletteComponent, ZoneBadgeComponent, MascotAssistantComponent, MyDepartmentsComponent],
+  imports: [CommonModule, FormsModule, RouterModule, RouterOutlet, CommandPaletteComponent, ZoneBadgeComponent, MascotAssistantComponent, MyDepartmentsComponent, MyRoleRequestComponent],
   templateUrl: './layout.html',
   styleUrls: ['./layout.css']
 })
@@ -58,6 +59,10 @@ export class LayoutComponent implements OnInit, OnDestroy {
   get canMultiDept(): boolean { return ROLE_MULTI_DEPT.includes(this.authService.getUserRole()); }
   @ViewChild('myDepts') myDepts?: MyDepartmentsComponent;
   openMyDepartments() { this.showProfileDropdown = false; this.myDepts?.open(); }
+  /** ขอเปลี่ยนสิทธิ์การใช้งาน (23 พ.ย. 2569) — ทุกสิทธิ์ยกเว้น super_admin */
+  get canRequestRole(): boolean { const r = this.authService.getUserRole(); return !!r && r !== 'super_admin'; }
+  @ViewChild('myRoleReq') myRoleReq?: MyRoleRequestComponent;
+  openMyRoleRequest() { this.showProfileDropdown = false; this.myRoleReq?.open(); }
   currentUser: any = null;
   systemVersion: string = 'v1.0.0';
   pendingKpiCount: number = 0;

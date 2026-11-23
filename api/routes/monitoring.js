@@ -80,7 +80,8 @@ apiRouter.get('/users', authenticateToken, isAnyAdmin, async (req, res) => {
                    approver.firstname AS approved_by_name, approver.lastname AS approved_by_lastname,
                    (SELECT GROUP_CONCAT(d2.dept_name ORDER BY d2.dept_name SEPARATOR ', ') FROM user_departments ud JOIN departments d2 ON d2.id = ud.dept_id
                      WHERE ud.user_id = u.id AND ud.status = 'approved') AS extra_dept_names,
-                   (SELECT COUNT(*) FROM user_departments ud WHERE ud.user_id = u.id AND ud.status = 'pending') AS pending_dept_requests
+                   (SELECT COUNT(*) FROM user_departments ud WHERE ud.user_id = u.id AND ud.status = 'pending') AS pending_dept_requests,
+                   (SELECT rr.to_role FROM user_role_requests rr WHERE rr.user_id = u.id AND rr.status = 'pending' ORDER BY rr.id DESC LIMIT 1) AS pending_role_request
             FROM users u
             LEFT JOIN departments d ON u.dept_id = d.id
             LEFT JOIN chospital h ON u.hospcode = h.hoscode

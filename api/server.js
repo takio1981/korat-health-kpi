@@ -105,6 +105,7 @@ require('./routes/ai');              // ผู้ช่วย AI: สถาน�
 require('./routes/forecast');        // ระบบเตือนล่วงหน้า: ตั้งค่า + สรุปรายสัปดาห์ (รายการเสี่ยงอยู่ใน routes/reports.js)
 require('./routes/work-center');     // ศูนย์งานผู้ดูแล: รออนุมัติ / ยังไม่ส่ง / คุณภาพข้อมูล / แจ้งเตือนหน่วยบริการ
 require('./routes/user-departments'); // กลุ่มงานเพิ่มเติมของผู้ใช้: ขอ / กำหนด / อนุมัติ
+require('./routes/user-role-requests'); // คำขอเปลี่ยนสิทธิ์การใช้งาน (Role): ขอเอง / ยื่นแทน / อนุมัติตามขอบเขต
 
 // Mount Router ที่ path /khupskpi/api
 app.use('/khupskpi/api', apiRouter);

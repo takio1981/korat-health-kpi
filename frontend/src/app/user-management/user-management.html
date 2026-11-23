@@ -39,6 +39,10 @@
           <i class="fas fa-building mr-1"></i> กลุ่มงานเพิ่มเติม
           <span *ngIf="deptPending > 0" id="dept-requests-badge" class="absolute -top-2 -right-2 px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px] font-bold">{{ deptPending }}</span>
         </button>
+        <button *ngIf="isAdmin" id="btn-role-requests" (click)="roleReqAdmin?.openList()" class="relative px-3 py-2 bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 rounded-lg text-xs font-bold shadow-sm" title="คำขอเปลี่ยนสิทธิ์การใช้งานที่รอท่านพิจารณา">
+          <i class="fas fa-user-shield mr-1"></i> คำขอเปลี่ยนสิทธิ์
+          <span *ngIf="rolePending > 0" id="role-requests-badge" class="absolute -top-2 -right-2 px-1.5 py-0.5 bg-red-500 text-white rounded-full text-[10px] font-bold">{{ rolePending }}</span>
+        </button>
         <button *ngIf="canAddData" (click)="openModal()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold">
           <i class="fas fa-user-plus mr-2"></i> เพิ่มผู้ใช้งาน
         </button>
@@ -171,7 +175,7 @@
         </div>
         <!-- Info grid -->
         <div class="grid grid-cols-2 gap-1 text-xs">
-          <div class="text-gray-500"><i class="fas fa-building mr-1 w-4 text-center"></i>{{ user.dept_name || '-' }}<span *ngIf="user.extra_dept_names" class="ml-1 px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold" [title]="'กลุ่มงานเพิ่มเติม: ' + user.extra_dept_names">+{{ user.extra_dept_names.split(', ').length }} กลุ่มงาน</span><span *ngIf="user.pending_dept_requests > 0" class="ml-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-bold">ขอกลุ่มงาน {{ user.pending_dept_requests }}</span></div>
+          <div class="text-gray-500"><i class="fas fa-building mr-1 w-4 text-center"></i>{{ user.dept_name || '-' }}<span *ngIf="user.extra_dept_names" class="ml-1 px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold" [title]="'กลุ่มงานเพิ่มเติม: ' + user.extra_dept_names">+{{ user.extra_dept_names.split(', ').length }} กลุ่มงาน</span><span *ngIf="user.pending_dept_requests > 0" class="ml-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-bold">ขอกลุ่มงาน {{ user.pending_dept_requests }}</span><span *ngIf="user.pending_role_request" class="ml-1 px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] font-bold">ขอสิทธิ์ {{ user.pending_role_request }}</span></div>
           <div class="text-gray-500"><i class="fas fa-hospital mr-1 w-4 text-center"></i>{{ user.hosname || '-' }} <app-zone-badge [hospcode]="user.hospcode"></app-zone-badge></div>
           <div class="text-gray-500"><i class="fas fa-phone mr-1 w-4 text-center"></i>{{ formatPhoneDisplay(user.phone) || '-' }}</div>
           <div class="text-gray-500"><i class="fas fa-envelope mr-1 w-4 text-center"></i>{{ user.email || '-' }}</div>
@@ -194,6 +198,7 @@
           <button *ngIf="isAdmin && user.is_approved === -1" (click)="allowReRegister(user)" class="px-2.5 py-1 bg-blue-500 text-white rounded-lg text-[10px] font-bold"><i class="fas fa-user-plus mr-1"></i>สมัครใหม่</button>
           <button *ngIf="canEditData" (click)="openModal(user)" class="px-2.5 py-1 bg-yellow-500 text-white rounded-lg text-[10px] font-bold"><i class="fas fa-edit mr-1"></i>แก้ไข</button>
           <button *ngIf="isCentralAdmin && canHaveExtraDepts(user.role)" (click)="deptAdmin?.openForUser(user)" class="px-2.5 py-1 bg-blue-500 text-white rounded-lg text-[10px] font-bold"><i class="fas fa-building mr-1"></i>กลุ่มงาน</button>
+          <button *ngIf="canFileRoleFor(user)" (click)="roleReqAdmin?.openFile(user)" class="px-2.5 py-1 bg-indigo-500 text-white rounded-lg text-[10px] font-bold"><i class="fas fa-user-shield mr-1"></i>ขอเปลี่ยนสิทธิ์</button>
           <button *ngIf="canEditData" (click)="resetPassword(user)" class="px-2.5 py-1 bg-orange-500 text-white rounded-lg text-[10px] font-bold"><i class="fas fa-key mr-1"></i>รีเซ็ต</button>
           <button *ngIf="isSuperAdmin && user.role !== 'super_admin'" (click)="openPermModal(user)" class="px-2.5 py-1 bg-indigo-600 text-white rounded-lg text-[10px] font-bold" title="จัดการสิทธิ์การแก้ไข"><i class="fas fa-user-shield mr-1"></i>สิทธิ์</button>
           <button *ngIf="isSuperAdmin" (click)="openLineModal(user)" class="px-2.5 py-1 bg-emerald-600 text-white rounded-lg text-[10px] font-bold relative" [title]="user.line_user_id ? 'จัดการ LINE userId (ผูกแล้ว)' : 'ตั้ง LINE userId'">
@@ -255,6 +260,7 @@
             <td class="px-4 py-3 text-gray-600 text-sm">{{ user.dept_name || '-' }}
               <div *ngIf="user.extra_dept_names" class="text-[10px] text-blue-700 font-bold" [title]="'กลุ่มงานเพิ่มเติม: ' + user.extra_dept_names"><i class="fas fa-plus mr-0.5"></i>{{ user.extra_dept_names }}</div>
               <div *ngIf="user.pending_dept_requests > 0" class="text-[10px] text-amber-700 font-bold">ขอกลุ่มงานเพิ่ม {{ user.pending_dept_requests }} รายการ</div>
+              <div *ngIf="user.pending_role_request" class="text-[10px] text-indigo-700 font-bold role-req-pending-badge" [title]="'รออนุมัติเปลี่ยนสิทธิ์เป็น ' + roleRequestLabel(user.pending_role_request)"><i class="fas fa-user-shield mr-0.5"></i>ขอเปลี่ยนสิทธิ์เป็น {{ user.pending_role_request }}</div>
             </td>
             <td class="px-4 py-3 text-gray-600 text-xs">{{ user.hosname || user.hospcode || '-' }} <app-zone-badge [hospcode]="user.hospcode"></app-zone-badge></td>
             <td class="px-4 py-3 text-gray-600 text-sm">{{ formatPhoneDisplay(user.phone) || '-' }}</td>
@@ -327,6 +333,7 @@
               <button *ngIf="canEditData" (click)="resetPassword(user)" class="text-orange-500 hover:text-orange-600 mx-1" title="รีเซ็ตรหัสผ่าน"><i class="fas fa-key"></i></button>
               <button *ngIf="canEditData" (click)="openModal(user)" class="text-yellow-500 hover:text-yellow-600 mx-1" title="แก้ไข"><i class="fas fa-edit"></i></button>
               <button *ngIf="isCentralAdmin && canHaveExtraDepts(user.role)" (click)="deptAdmin?.openForUser(user)" class="text-blue-500 hover:text-blue-700 mx-1 btn-user-depts" title="กลุ่มงานเพิ่มเติม (ดูแลตัวชี้วัดข้ามกลุ่มงาน)"><i class="fas fa-building"></i></button>
+              <button *ngIf="canFileRoleFor(user)" (click)="roleReqAdmin?.openFile(user)" class="text-indigo-500 hover:text-indigo-700 mx-1 btn-role-file" title="ยื่นคำขอเปลี่ยนสิทธิ์แทนผู้ใช้ (ผู้ดูแลระดับสูงกว่าอนุมัติ)"><i class="fas fa-user-tag"></i></button>
               <button *ngIf="isSuperAdmin && user.role !== 'super_admin'" (click)="openPermModal(user)" class="text-indigo-600 hover:text-indigo-800 mx-1" title="จัดการสิทธิ์การแก้ไข"><i class="fas fa-user-shield"></i></button>
               <button *ngIf="isSuperAdmin" (click)="openLineModal(user)" [title]="user.line_user_id ? 'จัดการ LINE userId (ผูกแล้ว)' : 'ตั้ง LINE userId'"
                       class="relative mx-1" [ngClass]="user.line_user_id ? 'text-emerald-600 hover:text-emerald-800' : 'text-gray-400 hover:text-emerald-600'">
@@ -1323,3 +1330,4 @@
 
 <!-- กลุ่มงานเพิ่มเติมของผู้ใช้ (22 พ.ย. 2569) -->
 <app-user-dept-admin #deptAdmin (changed)="loadUsers()" (pendingChange)="onDeptPending($event)"></app-user-dept-admin>
+<app-role-request-admin #roleReqAdmin (changed)="loadUsers()" (pendingChange)="onRolePending($event)"></app-role-request-admin>

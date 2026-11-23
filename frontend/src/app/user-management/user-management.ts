@@ -7,6 +7,8 @@ import { ToastService } from '../services/toast.service';
 import Swal from 'sweetalert2';
 import { ZoneBadgeComponent } from '../shared/zone-badge';
 import { UserDeptAdminComponent, canHaveExtraDepts } from '../shared/user-dept-admin';
+import { RoleRequestAdminComponent, ROLE_ON_BEHALF } from '../shared/role-request-admin';
+import { roleRequestLabel } from '../shared/my-role-request';
 import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
 
 interface UsersFieldDiff { field: string; khd_field?: string; local_value: any; khd_value: any; }
@@ -15,7 +17,7 @@ interface UsersSyncMappingRow { field: string; khd_field: string; excluded: bool
 @Component({
   selector: 'app-user-management',
   standalone: true,
-  imports: [CommonModule, FormsModule, ZoneBadgeComponent, UserDeptAdminComponent],
+  imports: [CommonModule, FormsModule, ZoneBadgeComponent, UserDeptAdminComponent, RoleRequestAdminComponent],
   templateUrl: './user-management.html'
 })
 export class UserManagementComponent implements OnInit {
@@ -112,6 +114,16 @@ export class UserManagementComponent implements OnInit {
   onDeptPending(n: number) { this.deptPending = n; this.cdr.detectChanges(); }
   readonly canHaveExtraDepts = canHaveExtraDepts;
   @ViewChild('deptAdmin') deptAdmin?: UserDeptAdminComponent;
+  /** คำขอเปลี่ยนสิทธิ์ (23 พ.ย. 2569): ผู้ดูแลทุกระดับพิจารณาตามขอบเขต, ผู้ดูแลระดับพื้นที่ยื่นแทนได้ — backend ตรวจซ้ำ */
+  @ViewChild('roleReqAdmin') roleReqAdmin?: RoleRequestAdminComponent;
+  rolePending = 0;
+  canFileRoleRequest = false;
+  readonly roleRequestLabel = roleRequestLabel;
+  onRolePending(n: number) { this.rolePending = n; this.cdr.detectChanges(); }
+  /** ยื่นคำขอแทนได้: ผู้ดูแลระดับพื้นที่ กับผู้ใช้คนอื่นที่ไม่ใช่ super_admin และยังไม่มีคำขอรออนุมัติ */
+  canFileRoleFor(u: any): boolean {
+    return this.canFileRoleRequest && !!u && u.role !== 'super_admin' && Number(u.id) !== Number(this.loggedInUser?.id) && !u.pending_role_request;
+  }
 
   ngOnInit() {
     const role = this.authService.getUserRole();
@@ -131,6 +143,8 @@ export class UserManagementComponent implements OnInit {
 
     this.loadUsers();
     if (this.isCentralAdmin) setTimeout(() => this.deptAdmin?.loadRequests());
+    this.canFileRoleRequest = ROLE_ON_BEHALF.includes(role);
+    if (this.isAdmin) setTimeout(() => this.roleReqAdmin?.load());
     this.loadDepartments();
     this.loadHospitals();
     this.loadDistricts();

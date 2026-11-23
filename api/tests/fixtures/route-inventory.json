@@ -362,6 +362,13 @@
   "PUT /khupskpi/api/users/:id/departments :: authenticateToken > isAdmin > handler",
   "GET /khupskpi/api/user-dept-requests :: authenticateToken > isAdmin > handler",
   "POST /khupskpi/api/user-dept-requests/:id/approve :: authenticateToken > isAdmin > handler",
-  "POST /khupskpi/api/user-dept-requests/:id/reject :: authenticateToken > isAdmin > handler"
+  "POST /khupskpi/api/user-dept-requests/:id/reject :: authenticateToken > isAdmin > handler",
+  "GET /khupskpi/api/my-role-request :: authenticateToken > handler",
+  "POST /khupskpi/api/my-role-request :: authenticateToken > handler",
+  "GET /khupskpi/api/role-requests :: authenticateToken > isAnyAdmin > handler",
+  "POST /khupskpi/api/role-requests :: authenticateToken > isAnyAdmin > handler",
+  "POST /khupskpi/api/role-requests/:id/cancel :: authenticateToken > handler",
+  "POST /khupskpi/api/role-requests/:id/approve :: authenticateToken > isAnyAdmin > handler",
+  "POST /khupskpi/api/role-requests/:id/reject :: authenticateToken > isAnyAdmin > handler"
  ]
 }

@@ -1357,6 +1357,17 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - หน้าจอ: `shared/my-departments.ts` (เมนูโปรไฟล์ `#btn-my-departments`), `shared/user-dept-admin.ts` (`#btn-dept-requests` + ปุ่มในแถว), GET /users คืน extra_dept_names/pending_dept_requests
 - Test: `api/tests/user-departments.test.js`, `shared/user-dept-admin.spec.ts`
 
+### คำขอเปลี่ยนสิทธิ์การใช้งาน (Role) (23 พ.ย. 2569 — ผู้ใช้เลือก: ผู้ดูแลทุกระดับอนุมัติตามขอบเขต, ขอได้ทุก Role ยกเว้น super_admin, ผู้ใช้ขอเอง + ผู้ดูแลระดับพื้นที่ยื่นแทน)
+- ตาราง `user_role_requests` (user_id, from_role, to_role, status pending|approved|rejected|cancelled, request_note บังคับ, requested_by, decided_by/at, decision_note) — รออนุมัติได้ครั้งละ 1 ต่อผู้ใช้ (409 `ALREADY_PENDING`)
+- `services/user-role-requests.js`: `ROLE_RANK` ผู้ใช้ 1 < admin_hos/admin_sso 2 < admin_cup 3 < admin_ssj 4 < super_admin 5 | `canDecideSync(actor, target, toRole, ctx, requestedBy)` (ฟังก์ชันล้วน) =
+  super_admin ทุกคำขอ / อื่น: ขอบเขต (`inScopeSync`: admin_ssj กลุ่มงานหลักของผู้ใช้ = ของตน, admin_cup อำเภอ, admin_hos/sso หน่วยบริการ) **และ** rank(สิทธิ์ที่ขอ) < rank(ผู้อนุมัติ) **และ** rank(สิทธิ์ปัจจุบัน) < rank(ผู้อนุมัติ)
+  — ผู้ขอ/ผู้ยื่นแทนพิจารณาคำขอนั้นไม่ได้ (รวม super_admin) | `REQUESTABLE_ROLES` = `ASSIGNABLE_ROLES` (services/users.js) | ยื่นแทน = `ON_BEHALF_ROLES` admin_hos/admin_sso/admin_cup เท่านั้น (ส่วนกลางแก้ Role ตรงได้อยู่แล้ว)
+  — อนุมัติ (ธุรกรรม + FOR UPDATE): สิทธิ์ผู้ใช้ต้องยังเป็น from_role (ไม่งั้น 409 `ROLE_CHANGED`) → `UPDATE users SET role, active_session_id = NULL` + `_sessionCache.delete` (**Role อยู่ใน JWT — ต้องเข้าสู่ระบบใหม่**)
+- เส้นทาง (routes/user-role-requests.js, ไม่อยู่ใน PAGE_ACCESS_RULES): `GET|POST /my-role-request`, `GET /role-requests` ({ requests ที่ผู้เรียกตัดสินได้, filed ที่ยื่นแทน, can_file }), `POST /role-requests` (ยื่นแทน),
+  `POST /role-requests/:id/cancel` (ผู้ใช้หรือผู้ยื่น), `POST /role-requests/:id/approve|reject` (isAnyAdmin + ตรวจใน service) | log `ROLE_REQUEST*` | GET /users คืน `pending_role_request`
+- หน้าจอ: `shared/my-role-request.ts` (เมนูโปรไฟล์ `#btn-my-role-request-menu`), `shared/role-request-admin.ts` (`#btn-role-requests` ในหน้าจัดการผู้ใช้ + ปุ่มยื่นแทนในแถว `canFileRoleFor()`)
+- Test: `api/tests/user-role-requests.test.js`, `shared/role-request.spec.ts`
+
 ### Role-based Scoping ของรายการตัวกรอง (dept/hospcode/อำเภอ ตัวเอง) — Backend เป็นหลัก
 - Endpoint ที่คืนรายการให้ dropdown ใช้ร่วมกันทั้งระบบ (`GET /departments`, `/hospitals`, `/hostype`, `/districts`,
   `/indicators`) **ต้องกรองตาม role scope เสมอ** — ห้ามคืนรายการทั้งหมดแบบไม่กรองอีก (เคยเป็นบั๊กมาก่อน: 4

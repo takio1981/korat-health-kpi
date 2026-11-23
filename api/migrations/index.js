@@ -1072,6 +1072,22 @@ const migrationsReady = (async () => {
                 INDEX idx_user_dept_status (status, dept_id)
             ) COMMENT 'กลุ่มงานเพิ่มเติมของผู้ใช้ (ดูแลตัวชี้วัดข้ามกลุ่มงาน)'`); }
             }
+            // คำขอเปลี่ยนสิทธิ์การใช้งาน (Role) (23 พ.ย. 2569) — status pending | approved | rejected | cancelled (ไม่ใส่ FK: ใช้ได้ทุกชนิดตาราง users)
+            await db.query(`CREATE TABLE IF NOT EXISTS user_role_requests (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                from_role VARCHAR(30) NOT NULL,
+                to_role VARCHAR(30) NOT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                request_note VARCHAR(500) NULL,
+                decision_note VARCHAR(500) NULL,
+                requested_by INT NOT NULL,
+                requested_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                decided_by INT NULL,
+                decided_at DATETIME NULL,
+                INDEX idx_role_req_user (user_id, status),
+                INDEX idx_role_req_status (status, requested_at)
+            ) COMMENT 'คำขอเปลี่ยนสิทธิ์การใช้งาน (Role) — ผู้ดูแลตามขอบเขตอนุมัติ'`);
             // สำเนาสถานะรายงาน KHD (ความพร้อมของตัวชี้วัด — อ่าน KHD วันละครั้ง/กดปุ่ม ไม่อ่านทุกคำขอ)
             await db.query(`CREATE TABLE IF NOT EXISTS khd_reports_snapshot (
                 report_id INT PRIMARY KEY,
