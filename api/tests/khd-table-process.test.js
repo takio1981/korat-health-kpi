@@ -21,9 +21,11 @@ jest.mock('../db-remote', () => ({
     getRemotePool: () => ({
         query: async (sql, params = []) => {
             const s = sql.replace(/\s+/g, ' ');
+            const mockY = require('./lib/khd-year-mock').khdYearQuery(s, params, mockReports, mockReports.map(r => ({ report_id: r.report_id, fiscal_year: 2570 })));
+            if (mockY) return mockY;
             if (/FROM report_fiscal_year_config/.test(s)) return [[]];
             if (/SELECT \* FROM reports WHERE data_source = 'excel'/.test(s)) return [mockReports];
-            if (/FROM reports WHERE report_id = \? AND data_source = 'excel'/.test(s)) return [mockReports.filter(r => r.report_id === Number(params[0]))];
+            if (/FROM reports WHERE report_id = \?$/.test(s.trim())) return [mockReports.filter(r => r.report_id === Number(params[0]))];
             if (/SELECT COUNT\(\*\) AS n FROM reports WHERE table_process = \?/.test(s)) return [[{ n: mockReports.filter(r => r.table_process === params[0]).length }]];
             throw new Error('KHD จำลองไม่รองรับคำสั่ง: ' + s.slice(0, 120));
         }

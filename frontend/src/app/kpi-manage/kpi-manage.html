@@ -198,6 +198,27 @@
           <span class="font-bold text-teal-800 flex items-center gap-1">
             <i class="fas fa-cloud text-teal-500"></i> KHD ↔ Local:
           </span>
+          <!-- ตารางหลัก = รายงานของปีงบใน KHD (report_fiscal_year_config) — 24 พ.ย. 2569 -->
+          <span *ngIf="khdCompareSummary.khd_year_total != null" id="khd-year-summary" class="basis-full text-[11px] text-teal-800">
+            KHD ปีงบ {{ khdCompareSummary.year_bh }}: <b>{{ khdCompareSummary.khd_year_total }}</b> รายงาน
+            (ใช้งาน {{ khdCompareSummary.khd_year_active }} · key_in {{ khdCompareSummary.by_source?.excel || 0 }} · hdc {{ khdCompareSummary.by_source?.hdc || 0 }})
+            · ยังไม่มีในระบบ {{ khdCompareSummary.missing_local }} · จับคู่ด้วยรหัสอ้างอิง → ลิงก์ KHD → table_process → ชื่อ
+          </span>
+          <button (click)="filterKhdStatus = filterKhdStatus === 'ref' ? '' : 'ref'; applyFilter()" id="btn-khd-filter-ref"
+                  [ngClass]="filterKhdStatus === 'ref' ? 'bg-orange-700 text-white' : 'bg-orange-50 text-orange-800 border border-orange-200'"
+                  class="px-2.5 py-1 rounded-lg font-bold transition-all" title="รหัสอ้างอิง (kpi_indicators_id) ไม่ตรงกับ report_id ของ KHD">
+            <i class="fas fa-hashtag mr-1"></i>รหัสอ้างอิงไม่ตรง ({{ khdCounts.ref }})
+          </button>
+          <button *ngIf="khdCounts.ref > 0 && canEditData" (click)="applyKhdRef(filteredIndicators)" id="btn-khd-apply-ref"
+                  class="px-2.5 py-1 rounded-lg font-bold bg-orange-600 text-white hover:bg-orange-700 transition-all" title="ตั้งรหัสอ้างอิงตาม report_id ของ KHD (เฉพาะรายการที่แสดง)">
+            <i class="fas fa-arrow-down mr-1"></i>ใช้รหัส KHD
+          </button>
+          <select [(ngModel)]="filterKhdSource" (ngModelChange)="applyFilter()" id="filter-khd-source"
+                  class="px-2 py-1 rounded-lg border border-gray-200 bg-white text-xs" title="แหล่งข้อมูลของรายงาน KHD">
+            <option value="">ทุกแหล่งข้อมูล</option>
+            <option value="excel">key_in</option>
+            <option value="hdc">hdc</option>
+          </select>
           <button (click)="filterKhdStatus = ''; applyFilter()"
                   [ngClass]="filterKhdStatus === '' ? 'bg-teal-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'"
                   class="px-2.5 py-1 rounded-lg font-bold transition-all">
@@ -221,7 +242,7 @@
           <button (click)="filterKhdStatus = filterKhdStatus === 'missing_remote' ? '' : 'missing_remote'; applyFilter()"
                   [ngClass]="filterKhdStatus === 'missing_remote' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 border border-purple-200'"
                   class="px-2.5 py-1 rounded-lg font-bold transition-all">
-            <i class="fas fa-arrow-up mr-1"></i>ไม่มีใน KHD ({{ khdCounts.missing_remote }})
+            <i class="fas fa-arrow-up mr-1"></i>ไม่อยู่ในปีงบ KHD ({{ khdCounts.missing_remote }})
           </button>
           <button (click)="filterKhdStatus = filterKhdStatus === 'inactive' ? '' : 'inactive'; applyFilter()"
                   [ngClass]="filterKhdStatus === 'inactive' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-700 border border-rose-200'"
@@ -800,11 +821,33 @@
                           [title]="khdTpDetail(item)">
                       <i class="fas fa-table mr-1"></i>table_process ต่างกัน
                     </span>
-                    <span *ngSwitchCase="'missing_remote'" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700" title="ไม่มีใน KHD">
-                      <i class="fas fa-arrow-up mr-1"></i>ไม่มีใน KHD
+                    <span *ngSwitchCase="'missing_remote'" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700"
+                          [title]="getKhdData(item)?.khd_other_year?.length ? 'KHD ตั้งรายงานนี้ไว้ในปีงบ ' + getKhdData(item).khd_other_year.join(', ') : 'ไม่พบรายงานนี้ในปีงบที่เลือกของ KHD'">
+                      <i class="fas fa-arrow-up mr-1"></i>ไม่อยู่ในปีงบ KHD
                     </span>
                     <span *ngSwitchDefault class="text-gray-300 text-[10px]">-</span>
                   </ng-container>
+                  <!-- ปีงบอื่นที่ KHD ตั้งรายงานไว้ (ไม่อยู่ในปีงบที่เลือก) -->
+                  <div *ngIf="getKhdData(item)?.status === 'missing_remote' && getKhdData(item)?.khd_other_year?.length" class="mt-1 text-[10px] text-purple-700">
+                    KHD ปีงบ {{ getKhdData(item).khd_other_year.join(', ') }}
+                  </div>
+                  <!-- รหัสอ้างอิง vs report_id ของ KHD (24 พ.ย. 2569) -->
+                  <ng-container [ngSwitch]="khdRefState(item)">
+                    <div *ngSwitchCase="'match'" class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700" title="รหัสอ้างอิงตรงกับ report_id ของ KHD">
+                      <i class="fas fa-hashtag mr-1"></i>{{ getKhdData(item)?.khd_report_id }}
+                    </div>
+                    <button *ngSwitchCase="'mismatch'" type="button" (click)="canEditData && applyKhdRef([item]); $event.stopPropagation()"
+                            class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-800"
+                            [title]="'รหัสอ้างอิงไม่ตรงกับ KHD' + (khdMatchByText(item) ? ' (' + khdMatchByText(item) + ')' : '') + (canEditData ? ' — กดเพื่อใช้รหัส KHD' : '')">
+                      <i class="fas fa-hashtag mr-1"></i>{{ item.kpi_indicators_id || 'ว่าง' }} → {{ getKhdData(item)?.khd_report_id }}
+                    </button>
+                    <button *ngSwitchCase="'conflict'" type="button" (click)="canEditData && applyKhdRef([item]); $event.stopPropagation()"
+                            class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700"
+                            title="รหัสอ้างอิงกับลิงก์ KHD (khd_report_id) ชี้คนละรายงานของปีงบ — ตรวจสอบแล้วกดเพื่อใช้รหัสที่จับคู่ได้">
+                      <i class="fas fa-triangle-exclamation mr-1"></i>รหัสขัดกัน {{ item.kpi_indicators_id }} / {{ item.khd_report_id }}
+                    </button>
+                  </ng-container>
+                  <div *ngIf="getKhdData(item)?.khd_data_source === 'hdc'" class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700" title="รายงาน KHD แหล่งข้อมูล hdc">hdc</div>
                   <!-- KHD inactive badge -->
                   <div *ngIf="getKhdData(item)?.khd_is_active === 0 || getKhdData(item)?.khd_is_active === '0'"
                        class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700"

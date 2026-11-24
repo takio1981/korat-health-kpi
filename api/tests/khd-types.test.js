@@ -10,10 +10,14 @@ const mockReports = [
       r9: 0, moph: 1, ssj: 1, rmw: 0, other: '0', evaluation_mode: 'any_one', required_off_types: null },
 ];
 const mockFy = [{ report_id: 970001, fiscal_year: 2570, r9: 0, moph: 1, ssj: 1, rmw: null }];
+// ปีงบ 2571 ไม่มีค่าเฉพาะปี (null) = ใช้ค่าทั่วไปของ reports
+const mockFyMore = [{ report_id: 970001, fiscal_year: 2571 }, { report_id: 970002, fiscal_year: 2571 }];
 jest.mock('../db-remote', () => ({
     getRemotePool: () => ({
         query: async (sql, params = []) => {
             const s = sql.replace(/\s+/g, ' ');
+            const mockY = require('./lib/khd-year-mock').khdYearQuery(s, params, mockReports, mockFy.concat(mockFyMore));
+            if (mockY) return mockY;
             if (/FROM report_fiscal_year_config WHERE fiscal_year = \? AND report_id IN \(\?\)/.test(s))
                 return [mockFy.filter(r => String(r.fiscal_year) === String(params[0]) && params[1].includes(r.report_id))];
             if (/FROM reports WHERE data_source = 'excel' AND LENGTH\(report_code\) = LENGTH\(table_process\) AND table_process IN \(\?\)/.test(s))
@@ -89,7 +93,7 @@ describe('POST /indicators/apply-khd-types', () => {
         expect(a).toEqual({ r9: 1, moph: 0, ssj: 0, rmw: 0, other: 0, evaluation_mode: 'any_one', required_off_types: '["05","07"]' });
         const b = await row(ids.b);
         expect([b.moph, b.ssj, b.rmw, b.evaluation_mode]).toEqual([1, 1, 0, 'all_required']);   // ประเภทตัวชี้วัดปรับ, ประเภทหน่วยบริการคงเดิม
-        expect(res.body.skipped.map(s => s.reason)).toEqual(['ไม่พบใน KHD']);
+        expect(res.body.skipped.map(s => s.reason)).toEqual(['ไม่อยู่ในปีงบ 2571 ของ KHD']);
         const again = await apply(saToken, { ids: [ids.a], year_bh: '2571', parts: ['types', 'hostype'] });
         expect(again.body.updated).toEqual([]);
         expect(again.body.skipped[0].reason).toBe('ตรงกันอยู่แล้ว');

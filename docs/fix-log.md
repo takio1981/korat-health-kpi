@@ -2877,3 +2877,13 @@ Build + redeploy ทั้ง backend และ frontend Docker container เร
 - **สาเหตุ:** ลิงก์ส่ง `q=<รหัสหน่วยบริการ> <ชื่อตัวชี้วัด>` — server (GET /kpi-results ?q=) ค้นแบบทุกคำ + รหัสหน่วยบริการ แต่ `applyFilters()` ฝั่งหน้าจอกรองซ้ำด้วยคำค้นทั้งวลี
   ในช่องชื่อ (ไม่มีช่องรหัสหน่วยบริการ) → ทุกแถวถูกตัดทิ้ง
 - **แก้:** `matchesSearchTerm()` (dashboard.ts) กติกาเดียวกับ server ใช้ใน applyFilters — Test: `dashboard.spec.ts`
+
+
+## 24 พ.ย. 2569 — เทียบตัวชี้วัดกับ KHD: ตั้งต้นจาก report_fiscal_year_config + จับคู่ด้วย report_id ↔ รหัสอ้างอิง
+- **ผู้ใช้สั่ง:** ใช้ KHD report_fiscal_year_config ของปีงบปัจจุบันเป็นตารางหลัก, report_id เป็นคีย์ JOIN reports, ตรวจให้ kpi_indicators.kpi_indicators_id ตรงกับ KHD
+- **เดิม:** GET /report-compare ดึง reports ทั้งหมด (excel + heuristic LENGTH) จับคู่ด้วย table_process — เห็นรายงานทุกปีปน, รหัสอ้างอิงไม่เคยถูกตรวจ, หน้าจอเก็บผลเทียบด้วยคีย์ table_process (ตัวชี้วัด tp ซ้ำทับกัน)
+  และปุ่มปรับค่าแต่ละปุ่มจับคู่ด้วย table_process แยกเอง
+- **แก้:** services/khd-match.js (loadKhdYearReports / matchLocalsToKhd / findKhdForLocals) ใช้ร่วมทั้งหน้าเทียบและทุกปุ่มปรับค่า + POST /indicators/apply-khd-ref "ใช้รหัส KHD"
+  + หน้าจอ: ชิป "รหัสอ้างอิงไม่ตรง", ป้ายในแถว, "ไม่อยู่ในปีงบ KHD", ตัวกรอง key_in/hdc, แถว ref ในหน้าต่างรายละเอียด
+- ข้อมูลจริง (อ่านอย่างเดียว) ปีงบ 2570: 211 รายงาน (excel 137 / hdc 74), จับคู่ด้วยรหัสอ้างอิง 34 / ลิงก์ KHD 104 / table_process 5, รหัสอ้างอิงไม่ตรง 109
+- Test: api/tests/khd-match.test.js + ปรับ KHD จำลองของชุด khd-* (tests/lib/khd-year-mock.js), khd-diff.spec.ts, kpi-manage.spec.ts

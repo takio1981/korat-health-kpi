@@ -21,6 +21,8 @@ jest.mock('../db-remote', () => ({
     getRemotePool: () => ({
         query: async (sql, params = []) => {
             const s = sql.replace(/\s+/g, ' ');
+            const mockY = require('./lib/khd-year-mock').khdYearQuery(s, params, mockReports, mockReports.map(r => ({ report_id: r.report_id, fiscal_year: 2570 })));
+            if (mockY) return mockY;
             if (/FROM report_fiscal_year_config/.test(s)) return [[]];
             if (/FROM departments/.test(s)) return [[{ dept_code: 'TKMX', dept_name: 'test_khdmap กลุ่มงานใน KHD' }]];
             if (/FROM reports WHERE report_id = \?/.test(s)) return [mockReports.filter(r => r.report_id === Number(params[0]))];
@@ -91,6 +93,8 @@ describe('เพิ่มตัวชี้วัดจาก KHD — นำห�
             .send({ khd_report_id: 990001, dept_id: L.d2, main_indicator_id: L.m1, year_bh: '2570' });
         expect(res.status).toBe(200);
         expect(await indByTp(TP.r1)).toEqual(expect.objectContaining({ dept_id: L.d1, main_indicator_id: L.m1, main_yut: L.y1 }));
+        const [[ref]] = await db.query('SELECT kpi_indicators_id, khd_report_id FROM kpi_indicators WHERE table_process = ?', [TP.r1]);
+        expect(ref).toEqual({ kpi_indicators_id: '990001', khd_report_id: 990001 });
         // ประเภทตัวชี้วัด + ประเภทหน่วยบริการจาก KHD (9 พ.ย. 2569 — เดิมไม่คัดลอก ตัวชี้วัดที่เพิ่มจาก KHD จึงเพิ่มให้หน่วยบริการไม่ได้จนกว่าจะตั้งเอง)
         const [[t]] = await db.query('SELECT r9, moph, ssj, rmw, other, evaluation_mode, required_off_types FROM kpi_indicators WHERE table_process = ?', [TP.r1]);
         expect(t).toEqual({ r9: 1, moph: 0, ssj: 1, rmw: 0, other: 0, evaluation_mode: 'any_one', required_off_types: '["07","18"]' });

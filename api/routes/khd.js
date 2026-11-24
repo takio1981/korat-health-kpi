@@ -8,7 +8,7 @@ const { _actorLabel } = require('../services/indicator-fields');
 const { apiRouter } = require('../core/router');
 const { currentFiscalYear } = require('../core/fiscal-year');
 const { authenticateToken, isSuperAdmin } = require('../core/auth');
-const { getKhdEffectiveCriteriaFor, insertIndicatorFromKhd, loadKhdResolver, listKhdMappings, KHD_MAP_COLUMN } = require('../services/khd');
+const { insertIndicatorFromKhd, loadKhdResolver, listKhdMappings, KHD_MAP_COLUMN } = require('../services/khd');
 const { getRemotePool } = require('../db-remote');
 const { notifyLineAction } = require('../core/notify');
 const { requireAction } = require('../core/access');
@@ -17,6 +17,7 @@ const { isValidIdentifier } = require('../core/sql');
 const { compareFiscalYears, buildKhdFiscalYearMap, normalizeFiscalYears, invalidFiscalYears } = require('../services/fiscal-years');
 const { compareKhdOrg, khdOrgUpdate, KHD_ORG_PARTS } = require('../services/khd-org');
 const { scheduleSummaryRefresh } = require('../services/summary');
+const { loadKhdYearReports, matchLocalsToKhd, findKhdForLocals, refOf, linkOf, notInYearReason } = require('../services/khd-match');
 
 // === Test Telegram (super_admin) ===
 // ============================================================
@@ -87,29 +88,16 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
         const currentFY = String(currentFiscalYear()); // เวลาไทย (core/fiscal-year)
         const year_bh = req.query.year_bh ? String(req.query.year_bh) : currentFY;
 
-        // ดึง reports จาก KHD
-        const [khdRows] = await remoteDb.query(`
-            SELECT *
-            FROM reports
-            WHERE data_source = 'excel'
-            AND LENGTH(report_code) = LENGTH(table_process)
-            ORDER BY report_id
-        `);
-        // ดึง override เกณฑ์รายปีงบจาก report_fiscal_year_config (เฉพาะปีที่กำลังเทียบ)
-        const [fyRows] = await remoteDb.query(
-            `SELECT report_id, fiscal_year, target_percentage, target_condition, is_active, r9, moph, ssj, rmw
-             FROM report_fiscal_year_config WHERE fiscal_year = ?`,
-            [year_bh]
-        );
-        const fyConfigMap = new Map();
-        fyRows.forEach(r => fyConfigMap.set(r.report_id, r));
+        // ตารางหลัก = รายงานของปีงบใน KHD report_fiscal_year_config JOIN reports (24 พ.ย. 2569 — ทั้ง excel และ hdc)
+        // เดิม: reports ทั้งหมดเฉพาะ excel + LENGTH(report_code) = LENGTH(table_process) จับคู่ด้วย table_process (เห็นรายงานทุกปีปนกัน)
+        const { khdRows, fyConfigMap } = await loadKhdYearReports(remoteDb, year_bh);
         // ปีงบทั้งหมดที่ KHD ตั้งค่าไว้ให้แต่ละรายงาน (เทียบกับปีงบของตัวชี้วัด — 9 พ.ย. 2569)
         const [fyAllRows] = await remoteDb.query('SELECT DISTINCT report_id, fiscal_year FROM report_fiscal_year_config');
         const khdYearsMap = buildKhdFiscalYearMap(fyAllRows);
 
         // ดึง kpi_indicators จาก Local (เพิ่ม dept_id, main_indicator_id, upload_excel, เกณฑ์ + data_source/khd_report_id เพื่อ frontend)
         const [localRows] = await db.query(`
-            SELECT i.id, i.kpi_indicators_name, i.table_process, i.kpi_indicators_code, i.is_active,
+            SELECT i.id, i.kpi_indicators_name, i.table_process, i.kpi_indicators_code, i.kpi_indicators_id, i.is_active,
                    i.dept_id, i.main_indicator_id, i.upload_excel,
                    i.criterion, i.target_condition, i.data_source, i.khd_report_id,
                    i.r9, i.moph, i.ssj, i.rmw, i.other, i.evaluation_mode, i.required_off_types, i.khd_fiscal_year AS local_fy,
@@ -120,16 +108,17 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
             ORDER BY i.id
         `);
         const khdResolver = await loadKhdResolver(db); // จับคู่หน่วยงาน/หมวดหมู่หลัก/ยุทธศาสตร์ของแถวที่ยังไม่มีใน Local
-        // สร้าง map โดยใช้ table_process เป็น key
-        const khdMap = new Map();
-        khdRows.forEach(r => { if (r.table_process) khdMap.set(r.table_process, r); });
-        const localMap = new Map();
-        localRows.forEach(r => { if (r.table_process) localMap.set(r.table_process, r); });
+        // จับคู่: รหัสอ้างอิง (kpi_indicators_id) → khd_report_id → table_process (services/khd-match.js) — ชื่อ = pairByNameDifferentTp ด้านล่าง
+        const matched = matchLocalsToKhd(localRows, khdRows);
+        const khdByTp = new Map();
+        khdRows.forEach(r => { const tp = String(r.table_process || '').trim(); if (tp) { if (!khdByTp.has(tp)) khdByTp.set(tp, []); khdByTp.get(tp).push(r); } });
+        const localByTp = new Map();
+        localRows.forEach(r => { const tp = String(r.table_process || '').trim(); if (tp && !localByTp.has(tp)) localByTp.set(tp, r); });
 
         const items = [];
         let match = 0, different = 0, missing_local = 0, missing_remote = 0, criteria_different = 0;
         let khd_inactive_count = 0, suggest_disable_count = 0, types_different = 0, hostype_different = 0, fiscal_year_different = 0;
-        let dept_different = 0, main_different = 0, org_unmatched = 0;
+        let dept_different = 0, main_different = 0, org_unmatched = 0, ref_different = 0, ref_conflict = 0;
 
         // Helper: ถ้า KHD report inactive (=0) แต่ Local ยัง upload_excel=0 → suggest = ปิด upload_excel
         const computeSuggest = (khdIsActive, localUploadExcel) => {
@@ -145,24 +134,16 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
             }
             return { target_percentage: khd.target_percentage, target_condition: khd.target_condition, source: 'reports' };
         };
+        const refFields = (khd, local) => {
+            const rid = Number(khd.report_id), ref = refOf(local), link = linkOf(local);
+            const conflict = ref !== null && link !== null && ref !== link && fyConfigMap.has(ref) && fyConfigMap.has(link);
+            if (ref !== rid) ref_different++;
+            if (conflict) ref_conflict++;
+            return { local_kpi_indicators_id: local.kpi_indicators_id ?? null, local_khd_report_id: local.khd_report_id ?? null,
+                ref_match: ref === rid, link_match: link === rid, ref_conflict: conflict };
+        };
 
-        // KHD หลายรายงานใช้ table_process เดียวกันได้ (ข้อมูลจริง 11 พ.ย. 2569: excellence_indicator_2_38_4 = 6 รายงาน) — เทียบกับตัวชี้วัดในระบบ
-        // เฉพาะรายงานหลักของ table_process นั้น (เชื่อมไว้ด้วย khd_report_id → ชื่อตรงกัน → รายการท้ายสุด = พฤติกรรมเดิมของ khdMap)
-        // รายงานที่เหลือ = "ยังไม่มีใน Local" (เดิมทุกรายงานถูกเทียบกับตัวชี้วัดเดียวกัน → "ชื่อต่างกัน" ปลอม) แล้วไปจับคู่ด้วยชื่อใน pairByNameDifferentTp
-        const khdByTp = new Map();
-        khdRows.forEach(r => { if (r.table_process) { if (!khdByTp.has(r.table_process)) khdByTp.set(r.table_process, []); khdByTp.get(r.table_process).push(r); } });
-        const primaryOf = new Map();
-        for (const [tp, rows] of khdByTp) {
-            const local = localMap.get(tp);
-            if (!local) continue;
-            // ชื่อตรงมาก่อน khd_report_id: ลิงก์เดิมของตัวชี้วัดที่ใช้ table_process ซ้ำมาจากการเลือก "รายการท้ายสุด" (ข้อมูลจริง #136 ↔ KHD #2386 ชื่อไม่ตรง)
-            const linked = (r) => local.khd_report_id != null && Number(r.report_id) === Number(local.khd_report_id);
-            const named = rows.filter(r => normName(r.report_name) === normName(local.kpi_indicators_name));
-            primaryOf.set(tp, named.find(linked) || named.find(r => normCode(r.report_code) === normCode(tp)) || named[0]
-                || rows.find(linked) || rows[rows.length - 1]);
-        }
-
-        // ค่าเทียบทุกหัวข้อของคู่ รายงาน KHD × ตัวชี้วัด (ใช้ทั้งคู่ table_process เดียวกัน และคู่ชื่อเดียวกันแต่ table_process ต่าง)
+        // ค่าเทียบทุกหัวข้อของคู่ รายงาน KHD × ตัวชี้วัด (ใช้ทั้งคู่ที่จับคู่ด้วยรหัส/table_process และคู่ชื่อเดียวกันแต่ table_process ต่าง)
         const pairFields = (khd, local) => {
             const tp = khd.table_process;
             const fyConfig = fyConfigMap.get(khd.report_id) || null;
@@ -205,85 +186,99 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                     ...typeCmp,
                     ...fyCmp,
                     ...orgCmp,
+                    ...refFields(khd, local),
                     local_main_indicator_name: local.main_indicator_name || null,
                     suggest_disable_upload: suggest
                 };
         };
 
-        // เทียบจาก KHD
-        for (const khd of khdRows) {
-            const tp = khd.table_process;
-            const local = tp && primaryOf.get(tp) === khd ? localMap.get(tp) : null;
-            const fyConfig = fyConfigMap.get(khd.report_id) || null;
-            const effective = getEffectiveKhdCriteria(khd, fyConfig);
-            // effectiveIsActive: ใช้ report_fiscal_year_config.is_active ของปีงบที่กำลังเทียบก่อนเสมอ (ถ้ามี override
-            // ปีนั้น) ไม่งั้น fallback ไปที่ reports.is_active (ค่าทั่วไป ไม่ผูกปี) — เดิมโค้ดใช้ khd.is_active (reports)
-            // ตรงๆ ทุกจุด ทำให้ badge "HDC inactive"/คำแนะนำปิด upload_excel ผิดพลาดเมื่อ 2 ค่านี้ไม่ตรงกัน (ยืนยันจริงว่า
-            // มีเคสแบบนี้อยู่จริงบน remote — ไม่ใช่แค่ทฤษฎี)
-            const effectiveIsActive = (fyConfig && fyConfig.is_active != null) ? fyConfig.is_active : khd.is_active;
-            if (!local) {
-                const sharedN = tp ? (khdByTp.get(tp) || []).length : 0;
-                const usedBy = tp ? localMap.get(tp) : null;
-                items.push({
-                    _khd: khd,
-                    khd_tp_shared: sharedN > 1 ? sharedN : 0,   // จำนวนรายงาน KHD ที่ใช้ table_process เดียวกัน (> 1 = ข้อมูลใน KHD ซ้ำ)
-                    khd_tp_used_by: usedBy ? { id: usedBy.id, name: usedBy.kpi_indicators_name } : null,
-                    status: 'missing_local',
-                    khd_report_id: khd.report_id, khd_name: khd.report_name, khd_dept: khd.dept, khd_main_yut: khd.main_yut,
-                    khd_main_indicator: khd.main_indicator || null,
-                    khd_resolved: khdResolver.resolveIndicator(khd),
-                    // ประเภทตัวชี้วัด/หน่วยบริการของ KHD (แสดงในรายการที่ยังไม่มีใน Local — เพิ่มเข้าระบบแล้วได้ค่าเหล่านี้)
-                    khd_types: khdIndicatorTypes(khd, fyConfig), khd_eval_mode: hostypeSetting(khd.evaluation_mode, khd.required_off_types).mode,
-                    khd_off_types: hostypeSetting(khd.evaluation_mode, khd.required_off_types).types,
-                    khd_fiscal_years: khdYearsMap.get(khd.report_id) || [],
-                    report_code: khd.report_code, table_process: tp, khd_is_active: effectiveIsActive,
-                    khd_data_source: khd.data_source,
-                    khd_target_percentage: effective.target_percentage, khd_target_condition: effective.target_condition,
-                    khd_criteria_source: effective.source, khd_fiscal_year: fyConfig ? year_bh : null,
-                    local_id: null, local_name: null,
-                    local_dept_id: null, local_main_indicator_id: null, local_is_active: null,
-                    local_upload_excel: null,
-                    local_criterion: null, local_target_condition: null, local_data_source: null,
-                    criteria_match: null,
-                    suggest_disable_upload: false
-                });
-                if (effectiveIsActive === 0 || effectiveIsActive === '0') khd_inactive_count++;
-                missing_local++;
-            } else {
+        // คู่ที่จับได้ (รหัสอ้างอิง / khd_report_id / table_process)
+        for (const p of matched.pairs) {
+            const { khd, local } = p;
+            const fields = pairFields(khd, local);
+            if (p.tp_match) {
                 const nameMatch = (khd.report_name || '').trim() === (local.kpi_indicators_name || '').trim();
-                const status = nameMatch ? 'match' : 'different';
-                if (status === 'match') match++; else different++;
-                items.push({ status, ...pairFields(khd, local) });
+                if (nameMatch) match++; else different++;
+                items.push({ status: nameMatch ? 'match' : 'different', match_by: p.match_by, ...fields });
+            } else {
+                // จับคู่ด้วยรหัสแต่ table_process ต่างกัน — ใช้ปุ่ม "ใช้ table_process ของ KHD" เดิม (ตรวจชื่อ/ตารางเดิมที่ server)
+                const khdTp = String(khd.table_process || '').trim();
+                const usedBy = khdTp ? localByTp.get(khdTp) : null;
+                items.push({
+                    status: 'tp_different', match_by: p.match_by, ...fields, name_match: p.name_match,
+                    table_process: local.table_process, khd_table_process: khd.table_process,
+                    khd_tp_shared: khdTp && (khdByTp.get(khdTp) || []).length > 1 ? khdByTp.get(khdTp).length : 0,
+                    khd_tp_used_by: usedBy && usedBy.id !== local.id ? { id: usedBy.id, name: usedBy.kpi_indicators_name } : null,
+                    khd_code_matches_tp: normCode(khd.report_code) === normCode(local.table_process),
+                });
             }
         }
-        // เทียบจาก Local ที่ไม่มีใน KHD
-        for (const local of localRows) {
-            if (local.table_process && !khdMap.has(local.table_process)) {
-                items.push({
-                    _local: local,
-                    status: 'missing_remote',
-                    khd_report_id: null, khd_name: null, khd_dept: null, khd_main_yut: null,
-                    report_code: null, table_process: local.table_process, khd_is_active: null,
-                    khd_data_source: null, khd_target_percentage: null, khd_target_condition: null,
-                    khd_criteria_source: null, khd_fiscal_year: null,
-                    local_id: local.id, local_name: local.kpi_indicators_name, local_dept: local.dept_name,
-                    local_dept_id: local.dept_id, local_main_indicator_id: local.main_indicator_id, local_is_active: local.is_active,
-                    local_upload_excel: local.upload_excel || 0,
-                    local_criterion: local.criterion, local_target_condition: local.target_condition,
-                    local_data_source: local.data_source,
-                    local_fiscal_years: compareFiscalYears(local.local_fy, []).local_fiscal_years,
-                    criteria_match: null,
-                    suggest_disable_upload: false
-                });
-                missing_remote++;
-            }
+        // รายงานของปีงบที่ยังไม่มีในระบบ
+        for (const khd of matched.unmatchedKhd) {
+            const tp = khd.table_process;
+            const fyConfig = fyConfigMap.get(khd.report_id) || null;
+            const effective = getEffectiveKhdCriteria(khd, fyConfig);
+            const effectiveIsActive = (fyConfig && fyConfig.is_active != null) ? fyConfig.is_active : khd.is_active;
+            const tpKey = String(tp || '').trim();
+            const sharedN = tpKey ? (khdByTp.get(tpKey) || []).length : 0;
+            const usedBy = tpKey ? localByTp.get(tpKey) : null;
+            items.push({
+                _khd: khd,
+                khd_tp_shared: sharedN > 1 ? sharedN : 0,   // จำนวนรายงาน KHD ที่ใช้ table_process เดียวกัน (> 1 = ข้อมูลใน KHD ซ้ำ)
+                khd_tp_used_by: usedBy ? { id: usedBy.id, name: usedBy.kpi_indicators_name } : null,
+                status: 'missing_local',
+                khd_report_id: khd.report_id, khd_name: khd.report_name, khd_dept: khd.dept, khd_main_yut: khd.main_yut,
+                khd_main_indicator: khd.main_indicator || null,
+                khd_resolved: khdResolver.resolveIndicator(khd),
+                // ประเภทตัวชี้วัด/หน่วยบริการของ KHD (แสดงในรายการที่ยังไม่มีใน Local — เพิ่มเข้าระบบแล้วได้ค่าเหล่านี้)
+                khd_types: khdIndicatorTypes(khd, fyConfig), khd_eval_mode: hostypeSetting(khd.evaluation_mode, khd.required_off_types).mode,
+                khd_off_types: hostypeSetting(khd.evaluation_mode, khd.required_off_types).types,
+                khd_fiscal_years: khdYearsMap.get(khd.report_id) || [],
+                report_code: khd.report_code, table_process: tp, khd_is_active: effectiveIsActive,
+                khd_data_source: khd.data_source,
+                khd_target_percentage: effective.target_percentage, khd_target_condition: effective.target_condition,
+                khd_criteria_source: effective.source, khd_fiscal_year: fyConfig ? year_bh : null,
+                local_id: null, local_name: null,
+                local_dept_id: null, local_main_indicator_id: null, local_is_active: null,
+                local_upload_excel: null,
+                local_criterion: null, local_target_condition: null, local_data_source: null,
+                criteria_match: null,
+                suggest_disable_upload: false
+            });
+            if (effectiveIsActive === 0 || effectiveIsActive === '0') khd_inactive_count++;
+            missing_local++;
+        }
+        // ตัวชี้วัดของระบบที่ไม่อยู่ในปีงบนี้ของ KHD (missing_remote) — khd_other_year = ปีงบอื่นที่ KHD ตั้งรายงานตามรหัสอ้างอิง/khd_report_id ไว้
+        for (const local of matched.unmatchedLocals) {
+            const otherYears = [...new Set([refOf(local), linkOf(local)].filter(x => x !== null).flatMap(id => khdYearsMap.get(id) || []))].sort();
+            items.push({
+                _local: local,
+                status: 'missing_remote',
+                khd_report_id: null, khd_name: null, khd_dept: null, khd_main_yut: null,
+                report_code: null, table_process: local.table_process, khd_is_active: null,
+                khd_data_source: null, khd_target_percentage: null, khd_target_condition: null,
+                khd_criteria_source: null, khd_fiscal_year: null,
+                khd_other_year: otherYears,
+                local_id: local.id, local_name: local.kpi_indicators_name, local_dept: local.dept_name,
+                local_dept_id: local.dept_id, local_main_indicator_id: local.main_indicator_id, local_is_active: local.is_active,
+                local_kpi_indicators_id: local.kpi_indicators_id ?? null, local_khd_report_id: local.khd_report_id ?? null,
+                local_upload_excel: local.upload_excel || 0,
+                local_criterion: local.criterion, local_target_condition: local.target_condition,
+                local_data_source: local.data_source,
+                local_fiscal_years: compareFiscalYears(local.local_fy, []).local_fiscal_years,
+                criteria_match: null,
+                suggest_disable_upload: false
+            });
+            missing_remote++;
         }
         // ชื่อเดียวกันแต่ table_process ต่างกัน (9 พ.ย. 2569): จับคู่ "ไม่มีใน KHD" (Local) กับ "ยังไม่มีใน Local" (KHD) ด้วยชื่อ (ตัดช่องว่างซ้ำ/ไม่สนตัวพิมพ์)
         // เฉพาะชื่อที่มีคู่เดียวทั้ง 2 ฝั่ง (ไม่เดา) → แถว Local เป็น status 'tp_different' + ค่าฝั่ง KHD, แถว KHD ถูกตัดออกจากรายการ "ยังไม่มีใน Local" (กันเพิ่มซ้ำ)
         const remoteBefore = items.filter(it => it.status === 'missing_remote').length;
-        const tpDiff = pairByNameDifferentTp(items, pairFields);
+        const tpById = items.filter(it => it.status === 'tp_different').length;
+        const tpByName = pairByNameDifferentTp(items, pairFields) - tpById;
+        const tpDiff = tpById + tpByName;
         const pairedKhd = items.filter(it => it._paired).length;
-        missing_remote = remoteBefore - tpDiff; missing_local -= pairedKhd;
+        missing_remote = remoteBefore - tpByName; missing_local -= pairedKhd;
         const tp_ambiguous = items.filter(it => it.tp_ambiguous).length, tp_linked_other = items.filter(it => it.tp_note === 'linked_other').length;
         for (let i = items.length - 1; i >= 0; i--) if (items[i]._paired) items.splice(i, 1);
         for (const it of items) { delete it._khd; delete it._local; }
@@ -294,7 +289,13 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                 total: items.length, match, different, missing_local, missing_remote, tp_different: tpDiff, tp_ambiguous, tp_linked_other,
                 khd_inactive: khd_inactive_count, suggest_disable: suggest_disable_count,
                 criteria_different, types_different, hostype_different, fiscal_year_different,
-                dept_different, main_different, org_unmatched, year_bh
+                dept_different, main_different, org_unmatched, year_bh,
+                // ตารางหลัก = รายงานของปีงบใน KHD (24 พ.ย. 2569)
+                khd_year_total: khdRows.length,
+                khd_year_active: [...fyConfigMap.values()].filter(f => !(f.is_active === 0 || f.is_active === '0')).length,
+                by_source: { excel: khdRows.filter(r => r.data_source === 'excel').length, hdc: khdRows.filter(r => r.data_source === 'hdc').length },
+                ref_different, ref_conflict, not_in_year: missing_remote,
+                match_by: matched.pairs.reduce((m, p) => { m[p.match_by] = (m[p.match_by] || 0) + 1; return m; }, {}),
             },
             items
         });
@@ -330,7 +331,7 @@ apiRouter.put('/indicators/:id/upload-excel', authenticateToken, requireAction('
 // POST /indicators/bulk-upload-excel — set upload_excel แบบ batch (ใช้ตอน "ปิดทั้งหมดที่ KHD inactive")
 // POST /indicators/apply-khd-criteria — ปรับ "เกณฑ์" (criterion + target_condition) ของตัวชี้วัดให้เท่ากับ KHD (19 ต.ค. 2569)
 // body { ids: number[], year_bh } — อ่านเกณฑ์จาก KHD ใหม่ที่ฝั่ง server เสมอ (ไม่เชื่อค่าจาก client) ด้วยการจับคู่เดียวกับ GET /report-compare
-// (table_process, data_source='excel', LENGTH(report_code)=LENGTH(table_process), report_id มากสุดชนะ) และเกณฑ์ของปีงบที่เลือก
+// (services/khd-match.js: รายงานของปีงบที่เลือก จับคู่ด้วยรหัสอ้างอิง → khd_report_id → table_process — 24 พ.ย. 2569) และเกณฑ์ของปีงบที่เลือก
 // (report_fiscal_year_config ก่อน แล้วจึง reports) — ไม่แตะ "เป้าหมาย" (target_percentage) และข้ามตัวที่ KHD ไม่มีเกณฑ์ (ไม่ล้างค่าเดิม)
 apiRouter.post('/indicators/apply-khd-criteria', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     const remoteDb = getRemotePool();
@@ -342,19 +343,17 @@ apiRouter.post('/indicators/apply-khd-criteria', authenticateToken, requireActio
         : (Number.isFinite(Number(v)) ? String(Number(v)) : String(v).trim());
     try {
         const [locals] = await db.query('SELECT id, kpi_indicators_name, table_process, criterion, target_condition FROM kpi_indicators WHERE id IN (?)', [ids]);
-        const tps = [...new Set(locals.map(l => String(l.table_process || '').trim()).filter(Boolean))];
-        const khdByTp = new Map();
-        if (tps.length) {
-            const [khdRows] = await remoteDb.query(
-                `SELECT report_id, table_process, target_percentage, target_condition FROM reports
-                 WHERE data_source = 'excel' AND LENGTH(report_code) = LENGTH(table_process) AND table_process IN (?) ORDER BY report_id`, [tps]);
-            khdRows.forEach(r => khdByTp.set(String(r.table_process).trim(), r));
-        }
+        // จับคู่เดียวกับ GET /report-compare: รายงานของปีงบ (report_fiscal_year_config) ด้วยรหัสอ้างอิง → khd_report_id → table_process (24 พ.ย. 2569)
+        const found = await findKhdForLocals(remoteDb, db, ids, yearBh);
         const updated = [], skipped = [];
         for (const l of locals) {
-            const khd = khdByTp.get(String(l.table_process || '').trim());
-            if (!khd) { skipped.push({ id: l.id, reason: 'ไม่พบใน KHD' }); continue; }
-            const eff = await getKhdEffectiveCriteriaFor(remoteDb, khd.report_id, khd.target_percentage, khd.target_condition, yearBh);
+            const m = found.get(Number(l.id));
+            if (!m) { skipped.push({ id: l.id, reason: notInYearReason(yearBh) }); continue; }
+            const khd = m.khd, fyc = m.fy;
+            // ค่าของปีงบ (report_fiscal_year_config) ก่อน แล้วจึง reports — กติกาเดียวกับ getKhdEffectiveCriteriaFor
+            const eff = fyc && fyc.target_percentage != null
+                ? { target_percentage: fyc.target_percentage, target_condition: fyc.target_condition }
+                : { target_percentage: khd.target_percentage, target_condition: khd.target_condition };
             const criterion = fmt(eff.target_percentage);
             const cond = eff.target_condition ? String(eff.target_condition) : null;
             if (criterion === null) { skipped.push({ id: l.id, reason: 'KHD ไม่มีเกณฑ์' }); continue; }
@@ -384,26 +383,13 @@ apiRouter.post('/indicators/apply-khd-types', authenticateToken, requireAction('
     try {
         const [locals] = await db.query(`SELECT id, kpi_indicators_name, table_process, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types
             FROM kpi_indicators WHERE id IN (?)`, [ids]);
-        const tps = [...new Set(locals.map(l => String(l.table_process || '').trim()).filter(Boolean))];
-        const khdByTp = new Map();
-        const fyById = new Map();
-        if (tps.length) {
-            const [khdRows] = await remoteDb.query(
-                `SELECT report_id, table_process, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types FROM reports
-                 WHERE data_source = 'excel' AND LENGTH(report_code) = LENGTH(table_process) AND table_process IN (?) ORDER BY report_id`, [tps]);
-            khdRows.forEach(r => khdByTp.set(String(r.table_process).trim(), r));
-            const rids = khdRows.map(r => r.report_id);
-            if (rids.length) {
-                const [fy] = await remoteDb.query('SELECT report_id, r9, moph, ssj, rmw FROM report_fiscal_year_config WHERE fiscal_year = ? AND report_id IN (?)', [yearBh, rids]);
-                fy.forEach(r => fyById.set(r.report_id, r));
-            }
-        }
+        const found = await findKhdForLocals(remoteDb, db, ids, yearBh);   // จับคู่เดียวกับ GET /report-compare (24 พ.ย. 2569)
         const updated = [], skipped = [];
         let hostypeChanged = false;
         for (const l of locals) {
-            const khd = khdByTp.get(String(l.table_process || '').trim());
-            if (!khd) { skipped.push({ id: l.id, reason: 'ไม่พบใน KHD' }); continue; }
-            const fy = fyById.get(khd.report_id) || null;
+            const m = found.get(Number(l.id));
+            if (!m) { skipped.push({ id: l.id, reason: notInYearReason(yearBh) }); continue; }
+            const khd = m.khd, fy = m.fy;
             const cmp = compareKhdTypes(khd, fy, l);
             const set = {};
             if (parts.includes('types') && !cmp.types_match) Object.assign(set, khdTypeUpdate(khd, fy, 'types'));
@@ -437,21 +423,16 @@ apiRouter.post('/indicators/apply-khd-org', authenticateToken, requireAction('kp
     if (ids.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตัวชี้วัด' });
     const parts = Array.isArray(req.body?.parts) ? [...new Set(req.body.parts.filter(p => KHD_ORG_PARTS.includes(p)))] : [];
     if (parts.length === 0) return res.status(400).json({ success: false, message: 'กรุณาระบุสิ่งที่จะปรับ (หน่วยงาน / หมวดหมู่หลัก)' });
+    const yearBh = req.body?.year_bh ? String(req.body.year_bh) : String(currentFiscalYear());
     try {
         const [locals] = await db.query('SELECT id, kpi_indicators_name, table_process, dept_id, main_indicator_id FROM kpi_indicators WHERE id IN (?)', [ids]);
-        const tps = [...new Set(locals.map(l => String(l.table_process || '').trim()).filter(Boolean))];
-        const khdByTp = new Map();
-        if (tps.length) {
-            const [khdRows] = await remoteDb.query(
-                `SELECT report_id, table_process, dept, main_indicator FROM reports
-                 WHERE data_source = 'excel' AND LENGTH(report_code) = LENGTH(table_process) AND table_process IN (?) ORDER BY report_id`, [tps]);
-            khdRows.forEach(r => khdByTp.set(String(r.table_process).trim(), r));
-        }
+        const found = await findKhdForLocals(remoteDb, db, ids, yearBh);   // จับคู่เดียวกับ GET /report-compare (24 พ.ย. 2569)
         const resolver = await loadKhdResolver(db);
         const updated = [], skipped = [];
         for (const l of locals) {
-            const khd = khdByTp.get(String(l.table_process || '').trim());
-            if (!khd) { skipped.push({ id: l.id, reason: 'ไม่พบใน KHD' }); continue; }
+            const m = found.get(Number(l.id));
+            if (!m) { skipped.push({ id: l.id, reason: notInYearReason(yearBh) }); continue; }
+            const khd = m.khd;
             const { set, reason } = khdOrgUpdate(resolver, khd, l, parts);
             const cols = Object.keys(set);
             if (!cols.length) { skipped.push({ id: l.id, reason }); continue; }
@@ -479,26 +460,21 @@ apiRouter.post('/indicators/apply-khd-fiscal-year', authenticateToken, requireAc
     if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
     const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.map(Number).filter(n => Number.isInteger(n) && n > 0))] : [];
     if (ids.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตัวชี้วัด' });
+    const yearBh = req.body?.year_bh ? String(req.body.year_bh) : String(currentFiscalYear());
     try {
         const [locals] = await db.query('SELECT id, kpi_indicators_name, table_process, khd_fiscal_year FROM kpi_indicators WHERE id IN (?)', [ids]);
-        const tps = [...new Set(locals.map(l => String(l.table_process || '').trim()).filter(Boolean))];
-        const khdByTp = new Map();
+        const found = await findKhdForLocals(remoteDb, db, ids, yearBh);   // จับคู่เดียวกับ GET /report-compare (24 พ.ย. 2569)
         let yearsMap = new Map();
-        if (tps.length) {
-            const [khdRows] = await remoteDb.query(
-                `SELECT report_id, table_process FROM reports
-                 WHERE data_source = 'excel' AND LENGTH(report_code) = LENGTH(table_process) AND table_process IN (?) ORDER BY report_id`, [tps]);
-            khdRows.forEach(r => khdByTp.set(String(r.table_process).trim(), r));
-            const rids = khdRows.map(r => r.report_id);
-            if (rids.length) {
-                const [fy] = await remoteDb.query('SELECT DISTINCT report_id, fiscal_year FROM report_fiscal_year_config WHERE report_id IN (?)', [rids]);
-                yearsMap = buildKhdFiscalYearMap(fy);
-            }
+        const rids = [...new Set([...found.values()].map(m => m.khd.report_id))];
+        if (rids.length) {
+            const [fy] = await remoteDb.query('SELECT DISTINCT report_id, fiscal_year FROM report_fiscal_year_config WHERE report_id IN (?)', [rids]);
+            yearsMap = buildKhdFiscalYearMap(fy);
         }
         const updated = [], skipped = [];
         for (const l of locals) {
-            const khd = khdByTp.get(String(l.table_process || '').trim());
-            if (!khd) { skipped.push({ id: l.id, reason: 'ไม่พบใน KHD' }); continue; }
+            const m = found.get(Number(l.id));
+            if (!m) { skipped.push({ id: l.id, reason: notInYearReason(yearBh) }); continue; }
+            const khd = m.khd;
             const cmp = compareFiscalYears(l.khd_fiscal_year, yearsMap.get(khd.report_id));
             if (cmp.fiscal_year_match === null) { skipped.push({ id: l.id, reason: 'KHD ไม่ได้ตั้งปีงบ' }); continue; }
             if (cmp.fiscal_year_match) { skipped.push({ id: l.id, reason: 'ตรงกันอยู่แล้ว' }); continue; }
@@ -509,6 +485,41 @@ apiRouter.post('/indicators/apply-khd-fiscal-year', authenticateToken, requireAc
         await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
             [req.user.userId, 'APPLY_KHD_FISCAL_YEAR', 'kpi_indicators', JSON.stringify({ updated, skipped }).slice(0, 60000), req.ip]);
         res.json({ success: true, message: `ปรับปีงบประมาณให้เท่ากับ KHD ${updated.length} ตัวชี้วัด` + (skipped.length ? ` (ข้าม ${skipped.length})` : ''), updated, skipped });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// POST /indicators/apply-khd-ref { ids, year_bh } — "ใช้รหัส KHD" (24 พ.ย. 2569): ตั้งรหัสอ้างอิง (kpi_indicators_id) + khd_report_id + data_source
+// = รายงาน KHD ของปีงบที่จับคู่ได้ — server จับคู่ใหม่เอง (ไม่เชื่อค่าจาก client) | ไม่อยู่ในปีงบ / ตรงอยู่แล้ว / ตัวชี้วัดอื่นใช้รหัสนี้แล้ว = ข้าม (ไม่เขียนทับ)
+apiRouter.post('/indicators/apply-khd-ref', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
+    const remoteDb = getRemotePool();
+    if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
+    const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.map(Number).filter(n => Number.isInteger(n) && n > 0))] : [];
+    if (ids.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตัวชี้วัด' });
+    if (ids.length > 1000) return res.status(400).json({ success: false, message: 'เลือกได้ไม่เกิน 1000 ตัวชี้วัดต่อครั้ง' });
+    const yearBh = req.body?.year_bh ? String(req.body.year_bh) : String(currentFiscalYear());
+    try {
+        const [locals] = await db.query('SELECT id, kpi_indicators_name, kpi_indicators_id, khd_report_id, data_source FROM kpi_indicators WHERE id IN (?)', [ids]);
+        const found = await findKhdForLocals(remoteDb, db, ids, yearBh);
+        const updated = [], skipped = [];
+        for (const l of locals) {
+            const m = found.get(Number(l.id));
+            if (!m) { skipped.push({ id: l.id, reason: notInYearReason(yearBh) }); continue; }
+            const rid = Number(m.khd.report_id);
+            if (refOf(l) === rid && linkOf(l) === rid) { skipped.push({ id: l.id, reason: 'ตรงกันอยู่แล้ว' }); continue; }
+            // กันซ้ำ (ตัวจับคู่ให้รหัสอ้างอิงมาก่อนอยู่แล้ว — เผื่อข้อมูลเปลี่ยนระหว่างคำขอ)
+            const [dup] = await db.query("SELECT id FROM kpi_indicators WHERE TRIM(kpi_indicators_id) = ? AND id <> ? LIMIT 1", [String(rid), l.id]);
+            if (dup.length) { skipped.push({ id: l.id, reason: `รหัส ${rid} ใช้โดยตัวชี้วัด #${dup[0].id} แล้ว` }); continue; }
+            await db.query('UPDATE kpi_indicators SET kpi_indicators_id = ?, khd_report_id = ?, data_source = ? WHERE id = ?',
+                [String(rid), rid, m.khd.data_source || null, l.id]);
+            updated.push({ id: l.id, name: l.kpi_indicators_name, match_by: m.match_by,
+                before: { kpi_indicators_id: l.kpi_indicators_id, khd_report_id: l.khd_report_id, data_source: l.data_source },
+                after: { kpi_indicators_id: String(rid), khd_report_id: rid, data_source: m.khd.data_source || null } });
+        }
+        await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
+            [req.user.userId, 'APPLY_KHD_REF', 'kpi_indicators', JSON.stringify({ year_bh: yearBh, updated, skipped }).slice(0, 60000), req.ip]);
+        res.json({ success: true, message: `ตั้งรหัสอ้างอิงตาม KHD ${updated.length} ตัวชี้วัด` + (skipped.length ? ` (ข้าม ${skipped.length})` : ''), updated, skipped, year_bh: yearBh });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
@@ -555,7 +566,7 @@ apiRouter.post('/indicators/apply-khd-table-process', authenticateToken, require
         const [[local]] = await db.query('SELECT id, kpi_indicators_name, table_process FROM kpi_indicators WHERE id = ?', [id]);
         if (!local) return res.status(404).json({ success: false, message: 'ไม่พบตัวชี้วัด' });
         const [[khd]] = await remoteDb.query(
-            `SELECT report_id, report_name, report_code, table_process, data_source FROM reports WHERE report_id = ? AND data_source = 'excel'`, [rid]);
+            `SELECT report_id, report_name, report_code, table_process, data_source FROM reports WHERE report_id = ?`, [rid]);
         if (!khd) return res.status(404).json({ success: false, message: 'ไม่พบรายการนี้ใน KHD' });
         if (normName(khd.report_name) !== normName(local.kpi_indicators_name)) {
             return res.status(400).json({ success: false, code: 'NAME_MISMATCH', message: 'ชื่อตัวชี้วัดในระบบไม่ตรงกับ KHD — ใช้ได้เฉพาะกรณีชื่อเดียวกัน' });
@@ -567,7 +578,7 @@ apiRouter.post('/indicators/apply-khd-table-process', authenticateToken, require
         const [dup] = await db.query('SELECT id, kpi_indicators_name FROM kpi_indicators WHERE table_process = ? AND id <> ?', [newTp, id]);
         if (dup.length) {
             // รายงาน KHD ที่ใช้ table_process ร่วมกันหลายรายงาน = ข้อมูลใน KHD ซ้ำ (11 พ.ย. 2569) — แจ้งให้แก้ที่ KHD
-            const [[sh]] = await remoteDb.query(`SELECT COUNT(*) AS n FROM reports WHERE table_process = ? AND data_source = 'excel'`, [newTp]);
+            const [[sh]] = await remoteDb.query(`SELECT COUNT(*) AS n FROM reports WHERE table_process = ?`, [newTp]);
             if (Number(sh?.n) > 1) {
                 return res.status(409).json({ success: false, code: 'KHD_TP_SHARED',
                     message: `KHD ใช้ table_process "${newTp}" ร่วมกัน ${sh.n} รายงาน และตัวชี้วัด #${dup[0].id} ${dup[0].kpi_indicators_name} ของระบบใช้อยู่แล้ว — ควรแก้ table_process ของรายงาน KHD #${khd.report_id} ที่ KHD` });

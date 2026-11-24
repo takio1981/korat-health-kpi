@@ -2,9 +2,9 @@
 // 1 แถว = 1 หัวข้อที่ต่างกันของตัวชี้วัด 1 ตัว (ชื่อ / เกณฑ์ / ประเภทตัวชี้วัด / ประเภทหน่วยบริการ / หน่วยงาน / หมวดหมู่หลัก / สถานะใน KHD)
 import { KHD_TYPE_KEYS, KHD_TYPE_LABEL, typesText, hostypeText } from './khd-types';
 
-export type KhdDiffKind = 'name' | 'table_process' | 'criteria' | 'types' | 'hostype' | 'fiscal_year' | 'dept' | 'main' | 'status';
+export type KhdDiffKind = 'ref' | 'name' | 'table_process' | 'criteria' | 'types' | 'hostype' | 'fiscal_year' | 'dept' | 'main' | 'status';
 export const KHD_DIFF_KIND_LABEL: Record<KhdDiffKind, string> = {
-  name: 'ชื่อตัวชี้วัด', table_process: 'table_process', criteria: 'เกณฑ์', types: 'ประเภทตัวชี้วัด', hostype: 'ประเภทหน่วยบริการ', fiscal_year: 'ปีงบประมาณ',
+  ref: 'รหัสอ้างอิง', name: 'ชื่อตัวชี้วัด', table_process: 'table_process', criteria: 'เกณฑ์', types: 'ประเภทตัวชี้วัด', hostype: 'ประเภทหน่วยบริการ', fiscal_year: 'ปีงบประมาณ',
   dept: 'หน่วยงาน', main: 'หมวดหมู่หลัก', status: 'สถานะใน KHD',
 };
 
@@ -44,6 +44,16 @@ export function khdTpDetail(k: any): string {
   if (k.khd_tp_shared > 1) parts.push('KHD ใช้ table_process นี้ร่วมกัน ' + k.khd_tp_shared + ' รายงาน');
   if (k.khd_tp_used_by) parts.push('ตัวชี้วัด #' + k.khd_tp_used_by.id + ' ' + (k.khd_tp_used_by.name || '') + ' ของระบบใช้ table_process นี้แล้ว → ควรแก้ table_process ของรายงานนี้ที่ KHD');
   return parts.join(' · ');
+}
+
+/** ป้ายวิธีจับคู่กับรายงาน KHD (services/khd-match.js) */
+export function khdMatchByDetail(by: any): string {
+  return by === 'kpi_indicators_id' ? 'จับคู่ด้วยรหัสอ้างอิง' : by === 'khd_report_id' ? 'จับคู่ด้วยลิงก์ KHD (khd_report_id)'
+    : by === 'table_process' ? 'จับคู่ด้วย table_process' : 'จับคู่ด้วยชื่อตัวชี้วัด';
+}
+/** ข้อความสำหรับใส่ใน HTML ของกล่องยืนยัน */
+export function escapeHtmlText(t: any): string {
+  return String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as any)[c]);
 }
 
 export interface KhdDiffContext {
@@ -139,8 +149,18 @@ export function buildKhdDiffRows(indicators: any[], ctx: KhdDiffContext): KhdDif
     const k = ctx.getKhd(it);
     if (!k || k.status === 'missing_remote' || k.status === 'missing_local') continue;
     const base = { id: it.id, name: it.kpi_indicators_name, table_process: it.table_process || '' };
+    // รหัสอ้างอิง (kpi_indicators_id) ต้องเท่ากับ report_id ของ KHD (24 พ.ย. 2569) — เทียบจากค่าปัจจุบัน
+    if (k.khd_report_id && String(it.kpi_indicators_id ?? '').trim() !== String(k.khd_report_id)) {
+      rows.push({ ...base, kind: 'ref', local: String(it.kpi_indicators_id ?? '').trim() || 'ว่าง', khd: String(k.khd_report_id),
+        detail: (k.ref_conflict ? 'รหัสอ้างอิงกับลิงก์ KHD ชี้คนละรายงาน · ' : '') + khdMatchByDetail(k.match_by) });
+    }
     if (k.status === 'different') {
       rows.push({ ...base, kind: 'name', local: it.kpi_indicators_name || '-', khd: k.khd_name || '-', detail: 'table_process เดียวกัน: ' + (it.table_process || '-') });
+    }
+    // จับคู่ด้วยรหัสแต่ทั้งชื่อและ table_process ต่าง — ชื่อปรับตาม KHD ด้วยปุ่มเดิมไม่ได้ (ปุ่มเดิมค้นด้วย table_process)
+    if (k.status === 'tp_different' && k.name_match === false) {
+      rows.push({ ...base, kind: 'name', local: it.kpi_indicators_name || '-', khd: k.khd_name || '-', detail: 'table_process ต่างกันด้วย',
+        applicable: false, note: 'ปรับ table_process ก่อน / แก้ชื่อในหน้าต่างตัวชี้วัด' });
     }
     if (k.status === 'tp_different') {
       const tk = khdTpKind(k);

@@ -15,7 +15,7 @@ import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { ZoneBadgeComponent, HospitalZoneService } from '../shared/zone-badge';
 import { ZoneManagerComponent } from '../shared/zone-manager';
 import { typesText, hostypeText } from '../shared/khd-types';
-import { buildKhdDiffRows, khdDiffAoa, KhdDiffRow, KhdDiffKind, KHD_DIFF_KIND_LABEL, fiscalYearList, fiscalYearMatch, fiscalYearChoices, khdOrgMatch, khdOrgUnmatched, KhdOrgPart, khdTpKind, khdTpDetail, KhdTpKind, khdApplicableRows } from '../shared/khd-diff';
+import { escapeHtmlText, buildKhdDiffRows, khdDiffAoa, KhdDiffRow, KhdDiffKind, KHD_DIFF_KIND_LABEL, fiscalYearList, fiscalYearMatch, fiscalYearChoices, khdOrgMatch, khdOrgUnmatched, KhdOrgPart, khdTpKind, khdTpDetail, KhdTpKind, khdApplicableRows } from '../shared/khd-diff';
 import { firstValueFrom } from 'rxjs';
 import { AiFormulaHelperComponent } from '../shared/ai-formula-helper';
 import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
@@ -195,6 +195,7 @@ export class KpiManageComponent implements OnInit {
     return [String(fy + 1), String(fy), String(fy - 1)];
   })();
   // filter เพิ่มสำหรับ indicators tab — กรองตามสถานะ compare กับ KHD
+  filterKhdSource: string = '';      // '' | 'excel' | 'hdc' — แหล่งข้อมูลของรายงาน KHD ที่จับคู่ (24 พ.ย. 2569)
   filterKhdStatus: string = '';      // '' | 'match' | 'different' | 'missing_remote' | 'not_compared' | 'inactive'
   // filter ตามสถานะการบันทึกผลงาน (ใช้ร่วมกับ filterKhdStatus ได้ — คนละมิติกัน)
   filterResultStatus: string = '';   // '' | 'has_results' | 'no_results'
@@ -536,7 +537,7 @@ export class KpiManageComponent implements OnInit {
       confirmButtonText: '<i class="fas fa-arrow-down mr-1"></i> ใช้ปีงบ KHD', cancelButtonText: 'ยกเลิก'
     }).then(r => {
       if (!r.isConfirmed) return;
-      this.authService.applyKhdFiscalYear(items.map(i => i.id)).subscribe({
+      this.authService.applyKhdFiscalYear(items.map(i => i.id), this.khdCompareYear).subscribe({
         next: (res: any) => {
           if (!res.success) { Swal.fire('ผิดพลาด', res.message, 'error'); return; }
           this.applyFiscalYearUpdates(res.updated);
@@ -1044,12 +1045,15 @@ export class KpiManageComponent implements OnInit {
           } else if (this.filterKhdStatus === 'dept' || this.filterKhdStatus === 'main') {
             if (this.khdOrgMatch(i, this.filterKhdStatus) !== false) return false;
           } else if (this.filterKhdStatus === 'inactive') {
-            const khd = this.khdCompareMap.get(i.table_process || '');
+            const khd = this.getKhdData(i);
             if (!(khd && (khd.khd_is_active === 0 || khd.khd_is_active === '0'))) return false;
+          } else if (this.filterKhdStatus === 'ref') {
+            if (this.khdRefState(i) !== 'mismatch' && this.khdRefState(i) !== 'conflict') return false;
           } else if (cmp !== this.filterKhdStatus) {
             return false;
           }
         }
+        if (this.filterKhdSource && this.khdCompareMap.size && this.getKhdData(i)?.khd_data_source !== this.filterKhdSource) return false;
         // Result status filter (มีผลงาน / ยังไม่มีผลงาน)
         if (this.filterResultStatus === 'has_results' && !(i.result_count > 0)) return false;
         if (this.filterResultStatus === 'no_results' && i.result_count > 0) return false;
@@ -1764,8 +1768,10 @@ export class KpiManageComponent implements OnInit {
         this.khdCompareLoading = false;
         if (res.success) {
           this.khdCompareMap.clear();
+          // 24 พ.ย. 2569: จับคู่ด้วย report_id ↔ รหัสอ้างอิง (ไม่ใช่ table_process แล้ว) — แถวของตัวชี้วัด = 'L<id>', รายงานที่ยังไม่มีในระบบ = 'K<report_id>'
           for (const it of (res.items || [])) {
-            if (it.table_process) this.khdCompareMap.set(it.table_process, it);
+            const key = it.local_id != null ? 'L' + it.local_id : (it.khd_report_id != null ? 'K' + it.khd_report_id : null);
+            if (key) this.khdCompareMap.set(key, it);
           }
           this.khdCompareSummary = res.summary;
           this.khdCompareLastRun = new Date();
@@ -1810,7 +1816,7 @@ export class KpiManageComponent implements OnInit {
   /** สถานะ compare ของ indicator แต่ละตัว — ใช้กับ badge + filter */
   getKhdCompareStatus(item: any): 'not_compared' | 'match' | 'different' | 'tp_different' | 'missing_remote' {
     if (!this.khdCompareMap.size) return 'not_compared';
-    const khd = item.table_process ? this.khdCompareMap.get(item.table_process) : null;
+    const khd = this.getKhdData(item);
     if (!khd) return 'missing_remote';
     if (khd.status === 'tp_different') return 'tp_different';   // ชื่อเดียวกันแต่ table_process ต่างกัน (9 พ.ย. 2569)
     return khd.status === 'match' ? 'match' : (khd.status === 'different' ? 'different' : 'missing_remote');
@@ -1818,7 +1824,55 @@ export class KpiManageComponent implements OnInit {
 
   /** ข้อมูล KHD ดิบของ indicator (ใช้แสดง diff inline) */
   getKhdData(item: any): any | null {
-    return item.table_process ? (this.khdCompareMap.get(item.table_process) || null) : null;
+    // คีย์ตามตัวชี้วัด (L<id>) — คีย์ table_process เดิมยังอ่านได้ (ข้อมูลเก่า/ชุดทดสอบ)
+    return this.khdCompareMap.get('L' + item.id) || (item.table_process ? (this.khdCompareMap.get(item.table_process) || null) : null);
+  }
+
+  /**
+   * รหัสอ้างอิง (kpi_indicators_id) เทียบกับ report_id ของ KHD (24 พ.ย. 2569) — เทียบจากค่าปัจจุบันของตัวชี้วัด (ใช้รหัส KHD แล้วเห็นผลทันที)
+   * 'match' | 'mismatch' | 'conflict' (รหัสอ้างอิงกับลิงก์ KHD ชี้คนละรายงานของปีงบ) | null = ยังไม่เทียบ / ไม่มีคู่ในปีงบ
+   */
+  khdRefState(item: any): 'match' | 'mismatch' | 'conflict' | null {
+    const k = this.getKhdData(item);
+    if (!k || !k.khd_report_id || k.status === 'missing_remote' || k.status === 'missing_local') return null;
+    if (k.ref_conflict) return 'conflict';
+    return String(item.kpi_indicators_id ?? '').trim() === String(k.khd_report_id) ? 'match' : 'mismatch';
+  }
+
+  /** ป้ายวิธีจับคู่ เมื่อไม่ได้จับคู่ด้วยรหัสอ้างอิง */
+  khdMatchByText(item: any): string {
+    const by = this.getKhdData(item)?.match_by;
+    return by === 'khd_report_id' ? 'จับคู่ด้วยลิงก์ KHD' : by === 'table_process' ? 'จับคู่ด้วย table_process' : '';
+  }
+
+  /** ใช้รหัส KHD: ตั้งรหัสอ้างอิง + khd_report_id ให้เท่ากับ report_id ของ KHD (server จับคู่ใหม่เอง) */
+  applyKhdRef(list: any[]) {
+    const items = (list || []).filter(i => this.khdRefState(i) === 'mismatch' || this.khdRefState(i) === 'conflict');
+    if (!items.length) { Swal.fire('แจ้งเตือน', 'ไม่มีตัวชี้วัดที่รหัสอ้างอิงไม่ตรงกับ KHD', 'info'); return; }
+    const sample = items.slice(0, 8).map(i => `<li>${escapeHtmlText(i.kpi_indicators_name)}: ${escapeHtmlText(i.kpi_indicators_id || 'ว่าง')} → <b>${escapeHtmlText(this.getKhdData(i)?.khd_report_id)}</b></li>`).join('');
+    Swal.fire({
+      title: 'ใช้รหัส KHD', icon: 'question', showCancelButton: true, confirmButtonColor: '#10b981',
+      confirmButtonText: 'ปรับรหัสอ้างอิง', cancelButtonText: 'ยกเลิก',
+      html: `<div style="text-align:left;font-size:13px">ตั้งรหัสอ้างอิงของ <b>${items.length}</b> ตัวชี้วัดให้เท่ากับ report_id ของ KHD ปีงบ ${escapeHtmlText(this.khdCompareYear)}
+        <ul style="margin-top:6px;padding-left:18px">${sample}</ul>${items.length > 8 ? '<div>… และอีก ' + (items.length - 8) + ' ตัว</div>' : ''}</div>`,
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      this.authService.applyKhdRef(items.map(i => i.id), this.khdCompareYear).subscribe({
+        next: (res: any) => {
+          for (const u of (res.updated || [])) {
+            const ind = this.indicators.find(x => x.id === u.id);
+            if (ind) Object.assign(ind, u.after);
+            const k = ind ? this.getKhdData(ind) : null;
+            if (k) Object.assign(k, { ref_match: true, link_match: true, ref_conflict: false });
+          }
+          Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2500, showConfirmButton: false });
+          this.applyFilter();
+          if (this.showKhdDiff) this.refreshKhdDiff();
+          this.cdr.detectChanges();
+        },
+        error: (e: any) => Swal.fire('ผิดพลาด', e?.error?.message || 'ปรับรหัสไม่สำเร็จ', 'error'),
+      });
+    });
   }
 
   /** Sync ชื่อจาก KHD → Local 1 ตัว (POST /report-compare/sync ด้วย khd_report_id เดียว) */
@@ -1890,7 +1944,7 @@ export class KpiManageComponent implements OnInit {
    * ตัวนี้ iterate this.indicators (ที่ table แสดงจริง) — ตรงกันการนับ
    */
   get khdCounts() {
-    const counts = { match: 0, different: 0, tp_different: 0, missing_remote: 0, inactive: 0, criteria: 0, types: 0, hostype: 0, fiscal_year: 0, dept: 0, main: 0, total: 0 };
+    const counts = { match: 0, different: 0, tp_different: 0, missing_remote: 0, inactive: 0, criteria: 0, types: 0, hostype: 0, fiscal_year: 0, dept: 0, main: 0, ref: 0, total: 0 };
     if (!this.khdCompareMap.size) return counts;
     for (const i of this.indicators) {
       counts.total++;
@@ -1907,6 +1961,8 @@ export class KpiManageComponent implements OnInit {
       if (this.khdFiscalYearMatch(i) === false) counts.fiscal_year++;
       if (this.khdOrgMatch(i, 'dept') === false) counts.dept++;
       if (this.khdOrgMatch(i, 'main') === false) counts.main++;
+      const rs = this.khdRefState(i);
+      if (rs === 'mismatch' || rs === 'conflict') counts.ref++;
     }
     return counts;
   }
@@ -2687,7 +2743,7 @@ export class KpiManageComponent implements OnInit {
       confirmButtonText: '<i class="fas fa-arrow-down mr-1"></i> ปรับตาม KHD', cancelButtonText: 'ยกเลิก'
     }).then(r => {
       if (!r.isConfirmed) return;
-      this.authService.applyKhdOrg(items.map(i => i.id), [part]).subscribe({
+      this.authService.applyKhdOrg(items.map(i => i.id), [part], this.khdCompareYear).subscribe({
         next: (res: any) => {
           if (!res.success) { Swal.fire('ผิดพลาด', res.message, 'error'); return; }
           this.applyOrgUpdates(res.updated);
@@ -2721,7 +2777,7 @@ export class KpiManageComponent implements OnInit {
   /** จำนวนแถวที่ "ใช้ค่า KHD" ได้ต่อหัวข้อ (ตามการค้นหา — ไม่ขึ้นกับชิปหัวข้อที่เลือก, เฉพาะหัวข้อที่ผู้ใช้มีสิทธิ์) + all = รวม */
   khdApplyCounts: Record<string, number> = {};
   private khdDiffSearched: KhdDiffRow[] = [];
-  readonly khdDiffKinds: KhdDiffKind[] = ['name', 'table_process', 'criteria', 'types', 'hostype', 'fiscal_year', 'dept', 'main', 'status'];
+  readonly khdDiffKinds: KhdDiffKind[] = ['ref', 'name', 'table_process', 'criteria', 'types', 'hostype', 'fiscal_year', 'dept', 'main', 'status'];
   readonly khdDiffKindLabel = KHD_DIFF_KIND_LABEL;
   /** ตัวเลือกหน่วยนับผลงาน (พิมพ์หน่วยอื่นเองได้ — 13 พ.ย. 2569) */
   readonly UNIT_OPTIONS = ['ร้อยละ', 'ราย', 'คน', 'แห่ง', 'ครั้ง', 'อำเภอ', 'ตำบล', 'หมู่บ้าน', 'ชุมชน', 'โรงเรียน', 'ครัวเรือน', 'เรื่อง', 'โครงการ', 'ระดับ', 'คะแนน', 'อัตราต่อแสนประชากร', 'อัตราต่อพันประชากร', 'อัตราต่อพันการเกิดมีชีพ', 'วัน', 'บาท'];
@@ -2845,10 +2901,11 @@ export class KpiManageComponent implements OnInit {
     const msg = (res: any) => { if (!res?.success) throw new Error(res?.message || 'ไม่สำเร็จ'); return res.message || `ปรับ ${ids.length} ตัว`; };
     switch (kind) {
       case 'name': return msg(await firstValueFrom(this.authService.reportCompareSync(items.map(i => this.getKhdData(i)?.khd_report_id).filter(Boolean))));
+      case 'ref': return msg(await firstValueFrom(this.authService.applyKhdRef(ids, this.khdCompareYear)));
       case 'criteria': return msg(await firstValueFrom(this.authService.applyKhdCriteria(ids, this.khdCompareYear)));
       case 'types': case 'hostype': return msg(await firstValueFrom(this.authService.applyKhdTypes(ids, this.khdCompareYear, [kind])));
-      case 'fiscal_year': return msg(await firstValueFrom(this.authService.applyKhdFiscalYear(ids)));
-      case 'dept': case 'main': return msg(await firstValueFrom(this.authService.applyKhdOrg(ids, [kind])));
+      case 'fiscal_year': return msg(await firstValueFrom(this.authService.applyKhdFiscalYear(ids, this.khdCompareYear)));
+      case 'dept': case 'main': return msg(await firstValueFrom(this.authService.applyKhdOrg(ids, [kind], this.khdCompareYear)));
       case 'status': {
         const res: any = await firstValueFrom(this.authService.bulkSetUploadExcel(ids, 1));
         if (!res?.success) throw new Error(res?.message || 'ไม่สำเร็จ');
@@ -2871,7 +2928,8 @@ export class KpiManageComponent implements OnInit {
   applyKhdDiffRow(r: KhdDiffRow) {
     const item = this.indicators.find(i => i.id === r.id);
     if (!item) return;
-    if (r.kind === 'name') this.syncSingleNameFromKhd(item);
+    if (r.kind === 'ref') this.applyKhdRef([item]);
+    else if (r.kind === 'name') this.syncSingleNameFromKhd(item);
     else if (r.kind === 'table_process') this.applyKhdTableProcess(item);
     else if (r.kind === 'criteria') this.applyKhdCriteria([item]);
     else if (r.kind === 'types' || r.kind === 'hostype') this.applyKhdTypes([item], r.kind);

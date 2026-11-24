@@ -192,10 +192,11 @@ async function insertIndicatorFromKhd(remoteDb, resolver, khd, fallback, yearBh)
     const fiscalYears = normalizeFiscalYears((fyAll || []).map(x => x.fiscal_year)) || effective.khd_fiscal_year;
     const [ins] = await db.query(
         `INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_code, dept_id, main_indicator_id, main_yut, is_active,
-            data_source, khd_report_id, criterion, target_condition, khd_fiscal_year, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types)
-         VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            data_source, khd_report_id, kpi_indicators_id, criterion, target_condition, khd_fiscal_year, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types)
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [khd.report_name, khd.table_process, khd.report_code || null, r.dept_id, r.main_indicator_id, r.main_yut,
-         khd.data_source || null, khd.report_id, effective.target_percentage || null, effective.target_condition || null, fiscalYears,
+         // รหัสอ้างอิง = report_id ของ KHD (24 พ.ย. 2569 — คีย์จับคู่หลักของ GET /report-compare)
+         khd.data_source || null, khd.report_id, String(khd.report_id), effective.target_percentage || null, effective.target_condition || null, fiscalYears,
          t.r9, t.moph, t.ssj, t.rmw, t.other, h.evaluation_mode, h.required_off_types]
     );
     return { id: ins.insertId, resolved: r };

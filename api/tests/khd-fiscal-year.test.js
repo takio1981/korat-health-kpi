@@ -19,6 +19,8 @@ jest.mock('../db-remote', () => ({
     getRemotePool: () => ({
         query: async (sql, params = []) => {
             const s = sql.replace(/\s+/g, ' ');
+            const mockY = require('./lib/khd-year-mock').khdYearQuery(s, params, mockReports, mockFyAll);
+            if (mockY) return mockY;
             if (/SELECT DISTINCT report_id, fiscal_year FROM report_fiscal_year_config WHERE report_id IN \(\?\)/.test(s))
                 return [mockFyAll.filter(r => params[0].includes(r.report_id))];
             if (/SELECT DISTINCT report_id, fiscal_year FROM report_fiscal_year_config/.test(s)) return [mockFyAll];
@@ -87,23 +89,23 @@ describe('GET /report-compare — ปีงบประมาณ', () => {
         const byTp = (tp) => res.body.items.find(i => i.table_process === tp);
         expect(byTp('test_khdfy_a')).toEqual(expect.objectContaining({ fiscal_year_match: false, khd_fiscal_years: ['2569', '2570'], local_fiscal_years: ['2570'] }));
         expect(byTp('test_khdfy_b').fiscal_year_match).toBe(true);
-        expect(byTp('test_khdfy_c').fiscal_year_match).toBeNull();
+        expect(byTp('test_khdfy_c')).toEqual(expect.objectContaining({ status: 'missing_remote', khd_other_year: [] }));
         expect(byTp('test_khdfy_local')).toEqual(expect.objectContaining({ status: 'missing_remote', local_fiscal_years: [] }));
         expect(res.body.summary.fiscal_year_different).toBeGreaterThanOrEqual(1);
     });
 });
 
 describe('POST /indicators/apply-khd-fiscal-year', () => {
-    test('ใช้ปีงบของ KHD — ข้ามตัวที่ตรงแล้ว/KHD ไม่มีปีงบ/ไม่พบใน KHD (ไม่ล้างค่าเดิม)', async () => {
-        const res = await post(saToken, '/indicators/apply-khd-fiscal-year', { ids: [ids.a, ids.b, ids.c, ids.l] });
+    test('ใช้ปีงบของ KHD — ข้ามตัวที่ตรงแล้ว/ไม่อยู่ในปีงบ KHD (ไม่ล้างค่าเดิม)', async () => {
+        const res = await post(saToken, '/indicators/apply-khd-fiscal-year', { ids: [ids.a, ids.b, ids.c, ids.l], year_bh: '2570' });
         expect(res.status).toBe(200);
         expect(res.body.updated.map(u => u.id)).toEqual([ids.a]);
         expect(await yearsOf(ids.a)).toBe('2569,2570');
         expect(await yearsOf(ids.c)).toBe('2568');
         const reasons = Object.fromEntries(res.body.skipped.map(s => [s.id, s.reason]));
         expect(reasons[ids.b]).toBe('ตรงกันอยู่แล้ว');
-        expect(reasons[ids.c]).toBe('KHD ไม่ได้ตั้งปีงบ');
-        expect(reasons[ids.l]).toBe('ไม่พบใน KHD');
+        expect(reasons[ids.c]).toBe('ไม่อยู่ในปีงบ 2570 ของ KHD');
+        expect(reasons[ids.l]).toBe('ไม่อยู่ในปีงบ 2570 ของ KHD');
         const [[log]] = await db.query("SELECT COUNT(*) AS n FROM system_logs WHERE action_type = 'APPLY_KHD_FISCAL_YEAR' AND new_value LIKE ?", [`%"id":${ids.a}%`]);
         expect(log.n).toBeGreaterThanOrEqual(1);
     });

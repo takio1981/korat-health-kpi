@@ -7,11 +7,15 @@ const mockReports = [
     { report_id: 980001, table_process: 'test_khdcrit_a', report_code: 'TEST_KHDCRIT_A', data_source: 'excel', target_percentage: '80.00', target_condition: 'GTE' },
     { report_id: 980002, table_process: 'test_khdcrit_b', report_code: 'TEST_KHDCRIT_B', data_source: 'excel', target_percentage: null, target_condition: null },
 ];
-const mockFy = [{ report_id: 980001, fiscal_year: 2570, target_percentage: '85.50', target_condition: 'LTE' }];
+const mockFy = [{ report_id: 980001, fiscal_year: 2570, target_percentage: '85.50', target_condition: 'LTE' },
+    { report_id: 980002, fiscal_year: 2570, target_percentage: null, target_condition: null },
+    { report_id: 980001, fiscal_year: 2571, target_percentage: null, target_condition: null }];
 jest.mock('../db-remote', () => ({
     getRemotePool: () => ({
         query: async (sql, params = []) => {
             const s = sql.replace(/\s+/g, ' ');
+            const mockY = require('./lib/khd-year-mock').khdYearQuery(s, params, mockReports, mockFy);
+            if (mockY) return mockY;
             if (/FROM report_fiscal_year_config WHERE report_id = \? AND fiscal_year = \?/.test(s))
                 return [mockFy.filter(r => r.report_id === Number(params[0]) && String(r.fiscal_year) === String(params[1]))];
             if (/FROM reports WHERE data_source = 'excel' AND LENGTH\(report_code\) = LENGTH\(table_process\) AND table_process IN \(\?\)/.test(s))
@@ -62,7 +66,7 @@ describe('ปรับเกณฑ์ให้เท่ากับ KHD', () => 
         const res = await apply(saToken, { ids: [ids.a, ids.b, ids.c], year_bh: '2570' });
         expect(res.status).toBe(200);
         expect(res.body.updated.map(u => u.id)).toEqual([ids.a]);
-        expect(res.body.skipped.map(s => s.reason).sort()).toEqual(['KHD ไม่มีเกณฑ์', 'ไม่พบใน KHD']);
+        expect(res.body.skipped.map(s => s.reason).sort()).toEqual(['KHD ไม่มีเกณฑ์', 'ไม่อยู่ในปีงบ 2570 ของ KHD']);
         expect(await row(ids.a)).toEqual({ criterion: '85.5', target_condition: 'LTE', target_percentage: '60' });
         expect(await row(ids.b)).toEqual(expect.objectContaining({ criterion: '70', target_condition: 'GTE' }));
     });

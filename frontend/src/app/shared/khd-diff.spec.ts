@@ -1,4 +1,4 @@
-import { buildKhdDiffRows, typesChangeText, hostypeChangeText, khdDiffAoa, fiscalYearList, fiscalYearMatch, fiscalYearChangeText, fiscalYearChoices, khdOrgMatch, khdOrgUnmatched, khdTpKind, khdTpDetail, khdApplicableRows } from './khd-diff';
+import { buildKhdDiffRows, typesChangeText, hostypeChangeText, khdDiffAoa, fiscalYearList, fiscalYearMatch, fiscalYearChangeText, fiscalYearChoices, khdOrgMatch, khdOrgUnmatched, khdTpKind, khdTpDetail, khdApplicableRows, khdMatchByDetail, escapeHtmlText } from './khd-diff';
 
 // รายละเอียดความแตกต่างหลังเทียบกับ KHD (9 พ.ย. 2569)
 describe('khd-diff', () => {
@@ -41,6 +41,25 @@ describe('khd-diff', () => {
 });
 
 // ปีงบประมาณเทียบกับ KHD (9 พ.ย. 2569)
+describe('khd-diff รหัสอ้างอิง (24 พ.ย. 2569)', () => {
+  const ctx = { getKhd: (i: any) => i._k, criteriaText: () => '', khdCriteriaText: () => '' };
+  it('รหัสอ้างอิงไม่ตรง report_id = แถว ref | ตรง = ไม่มีแถว | tp_different + ชื่อต่าง = แถวชื่อที่ปรับไม่ได้', () => {
+    const rows = buildKhdDiffRows([
+      { id: 1, kpi_indicators_name: 'ก', kpi_indicators_id: '10', _k: { status: 'match', khd_report_id: 10 } },
+      { id: 2, kpi_indicators_name: 'ข', kpi_indicators_id: '', _k: { status: 'match', khd_report_id: 20, match_by: 'table_process' } },
+      { id: 3, kpi_indicators_name: 'ค', kpi_indicators_id: '5', table_process: 'a', _k: { status: 'tp_different', khd_report_id: 30, khd_table_process: 'b', name_match: false, khd_name: 'ค KHD', match_by: 'khd_report_id', ref_conflict: true } },
+    ], ctx);
+    const ref = rows.filter(r => r.kind === 'ref');
+    expect(ref.map(r => [r.id, r.local, r.khd])).toEqual([[2, 'ว่าง', '20'], [3, '5', '30']]);
+    expect(ref[0].detail).toBe('จับคู่ด้วย table_process');
+    expect(ref[1].detail).toContain('ชี้คนละรายงาน');
+    const name = rows.find(r => r.kind === 'name' && r.id === 3)!;
+    expect([name.applicable, name.khd]).toEqual([false, 'ค KHD']);
+    expect(khdMatchByDetail('kpi_indicators_id')).toBe('จับคู่ด้วยรหัสอ้างอิง');
+    expect(escapeHtmlText('<a href="x">')).toBe('&lt;a href=&quot;x&quot;&gt;');
+  });
+});
+
 describe('khd-diff fiscal year', () => {
   it('fiscalYearList / fiscalYearMatch / fiscalYearChangeText / fiscalYearChoices', () => {
     expect(fiscalYearList('2570, 2569,2570,x')).toEqual(['2569', '2570']);
@@ -57,7 +76,8 @@ describe('khd-diff fiscal year', () => {
       { id: 2, kpi_indicators_name: 'ข', table_process: 'b', khd_fiscal_year: '2570' },
     ];
     const khd: Record<string, any> = { a: { status: 'match', khd_fiscal_years: ['2570'] }, b: { status: 'match', khd_fiscal_years: [] } };
-    const rows = buildKhdDiffRows(items, { getKhd: (i: any) => khd[i.table_process], criteriaText: () => '-', khdCriteriaText: () => '-' });
+    // แถวรหัสอ้างอิง (24 พ.ย. 2569) ทดสอบแยก — ที่นี่ดูเฉพาะชื่อ/table_process
+    const rows = buildKhdDiffRows(items, { getKhd: (i: any) => khd[i.table_process], criteriaText: () => '-', khdCriteriaText: () => '-' }).filter(r => r.kind !== 'ref');
     expect(rows).toEqual([expect.objectContaining({ id: 1, kind: 'fiscal_year', local: 'ไม่ระบุปีงบ', khd: '2570', detail: 'เพิ่ม: 2570' })]);
   });
 });
@@ -73,7 +93,8 @@ describe('khd-diff table_process', () => {
       kpi_local_7: { status: 'tp_different', khd_table_process: 'kpi_khd_7', khd_report_id: 501, report_code: 'R-7' },
       kpi_same_8: { status: 'different', khd_name: 'ร้อยละ ข (ใหม่)' },
     };
-    const rows = buildKhdDiffRows(items, { getKhd: (i: any) => khd[i.table_process], criteriaText: () => '-', khdCriteriaText: () => '-' });
+    // แถวรหัสอ้างอิง (24 พ.ย. 2569) ทดสอบแยก — ที่นี่ดูเฉพาะชื่อ/table_process
+    const rows = buildKhdDiffRows(items, { getKhd: (i: any) => khd[i.table_process], criteriaText: () => '-', khdCriteriaText: () => '-' }).filter(r => r.kind !== 'ref');
     expect(rows).toEqual([
       expect.objectContaining({ id: 7, kind: 'table_process', local: 'kpi_local_7', khd: 'kpi_khd_7', detail: 'ชื่อเดียวกัน (KHD #501 · รหัส R-7)' }),
       expect.objectContaining({ id: 8, kind: 'name', local: 'ร้อยละ ข', khd: 'ร้อยละ ข (ใหม่)', detail: 'table_process เดียวกัน: kpi_same_8' }),
@@ -123,7 +144,7 @@ describe('khd-diff table_process — สถานะของคู่', () => {
     expect(khdTpDetail(khd['tp_4'])).toContain('#31 c (ใช้กับตัวชี้วัด #5 ในระบบ)');
   });
   it('แถวในหน้าต่างรายละเอียด: ใช้ได้เฉพาะคู่ที่ปรับได้ ที่เหลือมีหมายเหตุแทนปุ่ม', () => {
-    const rows = buildKhdDiffRows(items, { getKhd: (i: any) => khd[i.table_process], criteriaText: () => '-', khdCriteriaText: () => '-' });
+    const rows = buildKhdDiffRows(items, { getKhd: (i: any) => khd[i.table_process], criteriaText: () => '-', khdCriteriaText: () => '-' }).filter(r => r.kind !== 'ref');
     expect(rows.map(r => [r.id, r.khd, r.applicable, r.note])).toEqual([
       [1, 'kpi_x', undefined, undefined], [2, 'kpi_shared', false, 'แก้ที่ KHD'], [3, 'a, b', false, 'ตรวจสอบเอง'], [4, 'c', false, 'ตรวจสอบเอง']]);
   });

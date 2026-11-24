@@ -1078,6 +1078,13 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   - log: `admin_force_logout` ใน system_logs
 
 ### Report Compare — เทียบตัวชี้วัดกับ KHD (`GET /report-compare`)
+- **ตารางหลักเปลี่ยน (24 พ.ย. 2569 — ผู้ใช้สั่ง):** ตั้งต้นจาก KHD `report_fiscal_year_config` ของปีงบที่เทียบ (ค่าตั้งต้น `currentFiscalYear()`) JOIN `reports` ด้วย `report_id` **ทั้ง excel และ hdc** (เลิกใช้ `data_source='excel'` + heuristic LENGTH)
+  — `services/khd-match.js`: `loadKhdYearReports()` (alias `fy_*` แยกคอลัมน์ชื่อซ้ำ → `fyConfigMap`), `matchLocalsToKhd()` ฟังก์ชันล้วน: **รหัสอ้างอิง `kpi_indicators_id` = report_id → `khd_report_id` → table_process** (ร่วมกันหลายรายงาน = ชื่อตรง → report_code ตรง → ท้ายสุด) แล้ว `pairByNameDifferentTp()` ด้วยชื่อ — ตัวชี้วัด 1 ตัว = รายงาน 1 รายการ (id น้อยได้ก่อน)
+  — **ทุกปุ่มปรับค่า (apply-khd-criteria/types/org/fiscal-year/ref) ใช้ `findKhdForLocals(remote, db, ids, yearBh)` ตัวเดียวกัน** (จับคู่กับตัวชี้วัดทั้งระบบ — ผลเดียวกับหน้าจอ; นอกปีงบ = ข้าม `notInYearReason`) — **ห้ามจับคู่ด้วย table_process แยกเองในเส้นทางใหม่** | apply-khd-org/fiscal-year รับ `year_bh` แล้ว
+  — แถวคู่: `match_by`, `ref_match`/`link_match`/`ref_conflict`, `local_kpi_indicators_id`; จับด้วยรหัสแต่ table_process ต่าง = `tp_different` (+ `name_match`) | `missing_remote` = **ไม่อยู่ในปีงบ KHD** + `khd_other_year` | summary `khd_year_total/khd_year_active/by_source/ref_different/ref_conflict/match_by`
+  — `POST /indicators/apply-khd-ref { ids, year_bh }` (requireAction edit) ตั้ง `kpi_indicators_id` + `khd_report_id` + `data_source` = รายงานที่จับคู่ได้ (รหัสที่ตัวอื่นใช้แล้ว = ข้าม) log `APPLY_KHD_REF` | `insertIndicatorFromKhd()` ตั้งรหัสอ้างอิง = report_id ด้วย
+  — frontend `khdCompareMap` คีย์ `L<local_id>` / `K<report_id>` (เดิม table_process — ตัวชี้วัด tp เดียวกันทับกัน), `khdRefState()`, ชิป `filterKhdStatus = 'ref'`, `filterKhdSource`, KhdDiffKind `'ref'` | ⚠️ ข้อมูลจริง 24 พ.ย. 2569 ปีงบ 2570: 211 รายงาน, จับคู่ด้วยรหัส/ลิงก์/tp 143 คู่ รหัสอ้างอิงไม่ตรง 109
+  — Test: `api/tests/khd-match.test.js`, KHD จำลองร่วม `tests/lib/khd-year-mock.js` (ชุด khd-* ทุกชุด), `khd-diff.spec.ts`, `kpi-manage.spec.ts`
 - **แหล่งข้อมูลบน remote KHD**: ตาราง `reports` (พหูพจน์ — ไม่ใช่ `report` เอกพจน์) เป็นตารางหลักเก็บรายละเอียด
   ตัวชี้วัดทั้งหมด มีคอลัมน์ `report_id, report_name, report_code, dept, main_yut, table_process, data_source
   ENUM('hdc','excel'), target_percentage, target_condition, is_active` — query เฉพาะ `data_source = 'excel'`

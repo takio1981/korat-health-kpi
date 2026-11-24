@@ -8,10 +8,13 @@ const mockReports = [
     { report_id: 980001, table_process: 'test_khdorg_a', report_code: 'TEST_KHDORG_A', data_source: 'excel', dept: 'TESTORG', main_indicator: 'test_khdorg หมวด X' },
     { report_id: 980002, table_process: 'test_khdorg_b', report_code: 'TEST_KHDORG_B', data_source: 'excel', dept: 'ไม่มีในระบบ_test_khdorg', main_indicator: '' },
 ];
+const mockFyOrg = [{ report_id: 980001, fiscal_year: 2570 }, { report_id: 980002, fiscal_year: 2570 }];
 jest.mock('../db-remote', () => ({
     getRemotePool: () => ({
         query: async (sql, params = []) => {
             const s = sql.replace(/\s+/g, ' ');
+            const mockY = require('./lib/khd-year-mock').khdYearQuery(s, params, mockReports, mockFyOrg);
+            if (mockY) return mockY;
             if (/FROM reports WHERE data_source = 'excel' AND LENGTH\(report_code\) = LENGTH\(table_process\) AND table_process IN \(\?\)/.test(s))
                 return [mockReports.filter(r => params[0].includes(r.table_process))];
             throw new Error('KHD จำลองไม่รองรับคำสั่ง: ' + s.slice(0, 120));
@@ -53,7 +56,7 @@ let app, db, saToken, hosToken, deptId, mainId, otherDept;
 const ids = {};
 const api = (p) => '/khupskpi/api' + p;
 const row = async (id) => (await db.query('SELECT dept_id, main_indicator_id FROM kpi_indicators WHERE id = ?', [id]))[0][0];
-const apply = (token, body) => request(app).post(api('/indicators/apply-khd-org')).set('Authorization', `Bearer ${token}`).send(body);
+const apply = (token, body) => request(app).post(api('/indicators/apply-khd-org')).set('Authorization', `Bearer ${token}`).send({ year_bh: '2570', ...body });
 
 describe('POST /indicators/apply-khd-org', () => {
     beforeAll(async () => {
@@ -99,7 +102,7 @@ describe('POST /indicators/apply-khd-org', () => {
         expect(await row(ids.b)).toEqual({ dept_id: otherDept, main_indicator_id: null });
         const why = Object.fromEntries(res.body.skipped.map(s => [s.id, s.reason]));
         expect(why[ids.b]).toMatch(/ยังจับคู่กับระบบไม่ได้/);
-        expect(why[ids.c]).toBe('ไม่พบใน KHD');
+        expect(why[ids.c]).toBe('ไม่อยู่ในปีงบ 2570 ของ KHD');
         const [[log]] = await db.query("SELECT COUNT(*) AS n FROM system_logs WHERE action_type = 'APPLY_KHD_ORG' AND new_value LIKE ?", [`%"id":${ids.a}%`]);
         expect(log.n).toBeGreaterThan(0);
     });
