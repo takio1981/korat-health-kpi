@@ -88,7 +88,7 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
         const currentFY = String(currentFiscalYear()); // เวลาไทย (core/fiscal-year)
         const year_bh = req.query.year_bh ? String(req.query.year_bh) : currentFY;
 
-        // ตารางหลัก = รายงานของปีงบใน KHD report_fiscal_year_config JOIN reports (24 พ.ย. 2569 — ทั้ง excel และ hdc)
+        // ตารางหลัก = รายงานของปีงบใน KHD report_fiscal_year_config JOIN reports (24 พ.ย. 2569) — เฉพาะ data_source = 'excel' (key_in)
         // เดิม: reports ทั้งหมดเฉพาะ excel + LENGTH(report_code) = LENGTH(table_process) จับคู่ด้วย table_process (เห็นรายงานทุกปีปนกัน)
         const { khdRows, fyConfigMap } = await loadKhdYearReports(remoteDb, year_bh);
         // ปีงบทั้งหมดที่ KHD ตั้งค่าไว้ให้แต่ละรายงาน (เทียบกับปีงบของตัวชี้วัด — 9 พ.ย. 2569)
@@ -249,7 +249,10 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
             missing_local++;
         }
         // ตัวชี้วัดของระบบที่ไม่อยู่ในปีงบนี้ของ KHD (missing_remote) — khd_other_year = ปีงบอื่นที่ KHD ตั้งรายงานตามรหัสอ้างอิง/khd_report_id ไว้
+        // ตัวชี้วัด hdc ของระบบ (data_source = 'hdc') ไม่นำมาเทียบ — ไม่ใช่ key_in (ไม่แสดงเป็น "ไม่อยู่ในปีงบ KHD")
+        const localHdc = matched.unmatchedLocals.filter(l => String(l.data_source || '').trim().toLowerCase() === 'hdc');
         for (const local of matched.unmatchedLocals) {
+            if (localHdc.includes(local)) continue;
             const otherYears = [...new Set([refOf(local), linkOf(local)].filter(x => x !== null).flatMap(id => khdYearsMap.get(id) || []))].sort();
             items.push({
                 _local: local,
@@ -293,7 +296,7 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                 // ตารางหลัก = รายงานของปีงบใน KHD (24 พ.ย. 2569)
                 khd_year_total: khdRows.length,
                 khd_year_active: [...fyConfigMap.values()].filter(f => !(f.is_active === 0 || f.is_active === '0')).length,
-                by_source: { excel: khdRows.filter(r => r.data_source === 'excel').length, hdc: khdRows.filter(r => r.data_source === 'hdc').length },
+                by_source: { excel: khdRows.length }, local_hdc_skipped: localHdc.length,
                 ref_different, ref_conflict, not_in_year: missing_remote,
                 match_by: matched.pairs.reduce((m, p) => { m[p.match_by] = (m[p.match_by] || 0) + 1; return m; }, {}),
             },
@@ -566,7 +569,7 @@ apiRouter.post('/indicators/apply-khd-table-process', authenticateToken, require
         const [[local]] = await db.query('SELECT id, kpi_indicators_name, table_process FROM kpi_indicators WHERE id = ?', [id]);
         if (!local) return res.status(404).json({ success: false, message: 'ไม่พบตัวชี้วัด' });
         const [[khd]] = await remoteDb.query(
-            `SELECT report_id, report_name, report_code, table_process, data_source FROM reports WHERE report_id = ?`, [rid]);
+            `SELECT report_id, report_name, report_code, table_process, data_source FROM reports WHERE report_id = ? AND data_source = 'excel'`, [rid]);
         if (!khd) return res.status(404).json({ success: false, message: 'ไม่พบรายการนี้ใน KHD' });
         if (normName(khd.report_name) !== normName(local.kpi_indicators_name)) {
             return res.status(400).json({ success: false, code: 'NAME_MISMATCH', message: 'ชื่อตัวชี้วัดในระบบไม่ตรงกับ KHD — ใช้ได้เฉพาะกรณีชื่อเดียวกัน' });
@@ -578,7 +581,7 @@ apiRouter.post('/indicators/apply-khd-table-process', authenticateToken, require
         const [dup] = await db.query('SELECT id, kpi_indicators_name FROM kpi_indicators WHERE table_process = ? AND id <> ?', [newTp, id]);
         if (dup.length) {
             // รายงาน KHD ที่ใช้ table_process ร่วมกันหลายรายงาน = ข้อมูลใน KHD ซ้ำ (11 พ.ย. 2569) — แจ้งให้แก้ที่ KHD
-            const [[sh]] = await remoteDb.query(`SELECT COUNT(*) AS n FROM reports WHERE table_process = ?`, [newTp]);
+            const [[sh]] = await remoteDb.query(`SELECT COUNT(*) AS n FROM reports WHERE table_process = ? AND data_source = 'excel'`, [newTp]);
             if (Number(sh?.n) > 1) {
                 return res.status(409).json({ success: false, code: 'KHD_TP_SHARED',
                     message: `KHD ใช้ table_process "${newTp}" ร่วมกัน ${sh.n} รายงาน และตัวชี้วัด #${dup[0].id} ${dup[0].kpi_indicators_name} ของระบบใช้อยู่แล้ว — ควรแก้ table_process ของรายงาน KHD #${khd.report_id} ที่ KHD` });

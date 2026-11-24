@@ -1,7 +1,8 @@
 /**
  * เทียบตัวชี้วัดกับ KHD โดยตั้งต้นจาก report_fiscal_year_config ของปีงบ + จับคู่ด้วย report_id (24 พ.ย. 2569) — KHD จำลอง (ห้ามเชื่อม KHD จริง)
  *   - services/khd-match.js matchLocalsToKhd: รหัสอ้างอิง (kpi_indicators_id) → khd_report_id → table_process, ตัวชี้วัด 1 ตัว = รายงาน 1 รายการ
- *   - GET /report-compare: เฉพาะรายงานของปีงบ (ปีอื่นไม่แสดง) ทั้ง excel/hdc, ref_match/ref_conflict, ตัวชี้วัดนอกปีงบ = missing_remote + khd_other_year
+ *   - GET /report-compare: เฉพาะรายงานของปีงบ (ปีอื่นไม่แสดง) และเฉพาะ data_source = 'excel' (key_in — รายงาน hdc ไม่แสดง, ตัวชี้วัด hdc ของระบบไม่นำมาเทียบ),
+ *     ref_match/ref_conflict, ตัวชี้วัดนอกปีงบ = missing_remote + khd_other_year
  *   - POST /indicators/apply-khd-ref: ตั้งรหัสอ้างอิง + khd_report_id + data_source, ข้ามรหัสที่ตัวอื่นใช้แล้ว/นอกปีงบ, log, สิทธิ์แก้ไขตัวชี้วัด
  */
 const mockReports = [
@@ -84,6 +85,8 @@ beforeAll(async () => {
     ids.d = await add('test_khdmatch D2', 'test_khdmatch_zz', null, 940004);         // จับด้วย khd_report_id, table_process ต่าง
     ids.old = await add('test_khdmatch OLD', 'test_khdmatch_old', '940009', 940009); // รายงานปีงบที่แล้ว
     ids.dupRef = await add('test_khdmatch dup', 'test_khdmatch_dup', '940003', null); // ใช้รหัส 940003 อยู่แล้ว (แต่ชื่อ/tp ไม่ตรง C)
+    ids.hdc = await add('test_khdmatch H', 'test_khdmatch_h', null, 940002);            // ตัวชี้วัด hdc ของระบบ (ลิงก์รายงาน hdc)
+    await db.query("UPDATE kpi_indicators SET data_source = 'hdc' WHERE id = ?", [ids.hdc]);
 }, 60000);
 afterAll(async () => {
     await db.query("DELETE FROM kpi_indicators WHERE kpi_indicators_name LIKE 'test\\_khdmatch%'");
@@ -91,12 +94,14 @@ afterAll(async () => {
 });
 
 describe('GET /report-compare — ตารางหลัก report_fiscal_year_config', () => {
-    test('เฉพาะรายงานของปีงบ (excel + hdc), จับคู่ด้วยรหัส, ตัวชี้วัดนอกปีงบ = missing_remote + khd_other_year', async () => {
+    test('เฉพาะรายงานของปีงบ + เฉพาะ excel (key_in), จับคู่ด้วยรหัส, ตัวชี้วัดนอกปีงบ = missing_remote + khd_other_year', async () => {
         const res = await request(app).get(api('/report-compare?year_bh=2570')).set('Authorization', `Bearer ${saToken}`);
         expect(res.status).toBe(200);
         const items = res.body.items;
         expect(items.some(i => i.khd_report_id === 940009)).toBe(false);   // รายงานปีงบ 2569 ไม่แสดง
-        expect(res.body.summary).toEqual(expect.objectContaining({ khd_year_total: 4, khd_year_active: 3, by_source: { excel: 3, hdc: 1 } }));
+        expect(items.some(i => i.khd_report_id === 940002)).toBe(false);   // รายงาน hdc ไม่แสดง
+        expect(res.body.summary).toEqual(expect.objectContaining({ khd_year_total: 3, khd_year_active: 2, by_source: { excel: 3 } }));
+        expect(res.body.summary.local_hdc_skipped).toBeGreaterThanOrEqual(1);
         const byLocal = (id) => items.find(i => i.local_id === id);
         expect(byLocal(ids.a)).toEqual(expect.objectContaining({ status: 'match', match_by: 'kpi_indicators_id', ref_match: true, link_match: true }));
         // รหัสอ้างอิง 940003 ของ dupRef ชนะ table_process ของ C → C ไม่ได้คู่ (ตัวชี้วัด 1 ตัว = รายงาน 1 รายการ)
@@ -104,9 +109,11 @@ describe('GET /report-compare — ตารางหลัก report_fiscal_year
         expect(byLocal(ids.d)).toEqual(expect.objectContaining({ khd_report_id: 940004, match_by: 'khd_report_id', ref_match: false, status: 'tp_different', khd_table_process: 'test_khdmatch_d' }));
         expect(byLocal(ids.old)).toEqual(expect.objectContaining({ status: 'missing_remote', khd_other_year: ['2569'] }));
         expect(byLocal(ids.c)).toEqual(expect.objectContaining({ status: 'missing_remote', khd_other_year: [] }));
-        // B: รหัสอ้างอิงผิด (123) + table_process ต่าง → จับคู่ด้วยชื่อขั้นสุดท้าย (รายงาน hdc) — แสดงว่ารหัสอ้างอิงไม่ตรง
-        expect(byLocal(ids.b)).toEqual(expect.objectContaining({ status: 'tp_different', khd_report_id: 940002, khd_data_source: 'hdc', ref_match: false }));
-        expect(items.some(i => i.status === 'missing_local' && i.khd_report_id === 940002)).toBe(false);
+        // B: ชื่อตรงกับรายงาน hdc เท่านั้น → ไม่จับคู่ (hdc ไม่นำมาเทียบ) = ไม่อยู่ในปีงบ KHD
+        expect(byLocal(ids.b)).toEqual(expect.objectContaining({ status: 'missing_remote', khd_report_id: null }));
+        // ตัวชี้วัด hdc ของระบบไม่แสดงในผลเทียบ
+        expect(byLocal(ids.hdc)).toBeUndefined();
+        expect(items.every(i => i.khd_data_source == null || i.khd_data_source === 'excel')).toBe(true);
         expect(res.body.summary.ref_different).toBeGreaterThanOrEqual(1);
     });
 });

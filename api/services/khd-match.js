@@ -1,5 +1,6 @@
 // จับคู่ตัวชี้วัดของระบบ (kpi_indicators) กับรายงาน KHD ของปีงบ (24 พ.ย. 2569 — ผู้ใช้สั่ง)
-// ตารางหลัก = KHD report_fiscal_year_config ของปีงบ (ค่าตั้งต้น = ปีงบปัจจุบัน) JOIN reports ด้วย report_id — ทั้ง excel และ hdc
+// ตารางหลัก = KHD report_fiscal_year_config ของปีงบ (ค่าตั้งต้น = ปีงบปัจจุบัน) JOIN reports ด้วย report_id
+//   เฉพาะ reports.data_source = 'excel' (= key_in ของระบบ — 24 พ.ย. 2569 ผู้ใช้สั่ง; รายงาน hdc ไม่นำมาเทียบ)
 // ลำดับจับคู่ (ตัวชี้วัด 1 ตัว = รายงาน 1 รายการ): kpi_indicators_id ("รหัสอ้างอิง") = report_id → khd_report_id = report_id → table_process เดียวกัน
 //   (ชื่อเดียวกันแต่ table_process ต่าง = pairByNameDifferentTp ใน routes/khd.js ขั้นสุดท้าย)
 // ใช้ร่วมกันทั้ง GET /report-compare และทุกปุ่มปรับค่า (apply-khd-*) — ห้ามจับคู่ด้วย table_process แยกเองในเส้นทางใหม่
@@ -17,7 +18,7 @@ const linkOf = (local) => (local?.khd_report_id === null || local?.khd_report_id
 const FY_COLS = ['target_percentage', 'target_condition', 'is_active', 'r9', 'moph', 'ssj', 'rmw'];
 const YEAR_REPORTS_SQL = `SELECT r.*, f.fiscal_year AS fy_fiscal_year, ${FY_COLS.map(c => `f.${c} AS fy_${c}`).join(', ')}
      FROM report_fiscal_year_config f JOIN reports r ON r.report_id = f.report_id
-     WHERE f.fiscal_year = ? ORDER BY r.report_id`;
+     WHERE f.fiscal_year = ? AND r.data_source = 'excel' ORDER BY r.report_id`;
 
 /**
  * รายงาน KHD ของปีงบ → { khdRows (แถว reports), fyConfigMap: Map(report_id → ค่าของปีงบ รูปเดียวกับแถว report_fiscal_year_config) }

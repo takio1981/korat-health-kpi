@@ -6,9 +6,10 @@ const FY_COLS = ['target_percentage', 'target_condition', 'is_active', 'r9', 'mo
 function khdYearQuery(s, params, reports, fy) {
     if (/FROM report_fiscal_year_config f JOIN reports r ON r\.report_id = f\.report_id WHERE f\.fiscal_year = \?/.test(s)) {
         const year = String(params[0]);
+        const excelOnly = /r\.data_source = 'excel'/.test(s);
         const rows = fy.filter(f => String(f.fiscal_year) === year).map(f => {
             const r = reports.find(x => Number(x.report_id) === Number(f.report_id));
-            if (!r) return null;
+            if (!r || (excelOnly && r.data_source !== 'excel')) return null;
             const row = { ...r, fy_fiscal_year: f.fiscal_year };
             for (const c of FY_COLS) row['fy_' + c] = f[c] === undefined ? null : f[c];
             return row;

@@ -25,7 +25,7 @@ jest.mock('../db-remote', () => ({
             if (mockY) return mockY;
             if (/FROM report_fiscal_year_config/.test(s)) return [[]];
             if (/SELECT \* FROM reports WHERE data_source = 'excel'/.test(s)) return [mockReports];
-            if (/FROM reports WHERE report_id = \?$/.test(s.trim())) return [mockReports.filter(r => r.report_id === Number(params[0]))];
+            if (/FROM reports WHERE report_id = \? AND data_source = 'excel'$/.test(s.trim())) return [mockReports.filter(r => r.report_id === Number(params[0]) && r.data_source === 'excel')];
             if (/SELECT COUNT\(\*\) AS n FROM reports WHERE table_process = \?/.test(s)) return [[{ n: mockReports.filter(r => r.table_process === params[0]).length }]];
             throw new Error('KHD จำลองไม่รองรับคำสั่ง: ' + s.slice(0, 120));
         }

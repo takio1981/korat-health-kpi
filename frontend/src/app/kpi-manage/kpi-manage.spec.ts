@@ -215,14 +215,14 @@ describe('KpiManageComponent', () => {
       // คีย์ตามตัวชี้วัด (L<id>) — 2 ตัวชี้วัด table_process เดียวกันได้ผลเทียบคนละรายการ (เดิมคีย์ table_process ทับกัน)
       component.khdCompareMap = new Map<string, any>([
         ['L1', { status: 'match', local_id: 1, khd_report_id: 500, match_by: 'kpi_indicators_id', khd_data_source: 'excel' }],
-        ['L2', { status: 'match', local_id: 2, khd_report_id: 601, match_by: 'table_process', khd_data_source: 'hdc' }],
+        ['L2', { status: 'match', local_id: 2, khd_report_id: 601, match_by: 'table_process', khd_data_source: 'excel' }],
         ['L3', { status: 'tp_different', local_id: 3, khd_report_id: 602, match_by: 'khd_report_id', khd_data_source: 'excel', ref_conflict: true }],
         ['L4', { status: 'missing_remote', local_id: 4, khd_report_id: null, khd_other_year: ['2569'] }],
         ['K700', { status: 'missing_local', khd_report_id: 700 }],
       ]);
     });
 
-    it('khdRefState / นับ / กรอง "รหัสอ้างอิงไม่ตรง" + กรองแหล่งข้อมูล', () => {
+    it('khdRefState / นับ / กรอง "รหัสอ้างอิงไม่ตรง"', () => {
       const [a, b, c, d] = component.indicators;
       expect([component.khdRefState(a), component.khdRefState(b), component.khdRefState(c), component.khdRefState(d)]).toEqual(['match', 'mismatch', 'conflict', null]);
       expect(component.getKhdData(b).khd_report_id).toBe(601);
@@ -232,10 +232,6 @@ describe('KpiManageComponent', () => {
       component.filterKhdStatus = 'ref';
       component.applyFilter();
       expect(component.filteredIndicators.map((i: any) => i.id)).toEqual([2, 3]);
-      component.filterKhdStatus = '';
-      component.filterKhdSource = 'hdc';
-      component.applyFilter();
-      expect(component.filteredIndicators.map((i: any) => i.id)).toEqual([2]);
       expect(component.khdMatchByText(b)).toBe('จับคู่ด้วย table_process');
     });
 
@@ -248,7 +244,7 @@ describe('KpiManageComponent', () => {
       await Promise.resolve(); await Promise.resolve();
       const req = http.expectOne(r => r.method === 'POST' && r.url.includes('/indicators/apply-khd-ref'));
       expect(req.request.body).toEqual({ ids: [2, 3], year_bh: '2570' });
-      req.flush({ success: true, message: 'ok', updated: [{ id: 2, after: { kpi_indicators_id: '601', khd_report_id: 601, data_source: 'hdc' } }], skipped: [] });
+      req.flush({ success: true, message: 'ok', updated: [{ id: 2, after: { kpi_indicators_id: '601', khd_report_id: 601, data_source: 'excel' } }], skipped: [] });
       expect(component.indicators[1].kpi_indicators_id).toBe('601');
       expect(component.khdRefState(component.indicators[1])).toBe('match');
       sw.mockRestore();

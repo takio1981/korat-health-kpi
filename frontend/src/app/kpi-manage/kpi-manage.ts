@@ -195,7 +195,6 @@ export class KpiManageComponent implements OnInit {
     return [String(fy + 1), String(fy), String(fy - 1)];
   })();
   // filter เพิ่มสำหรับ indicators tab — กรองตามสถานะ compare กับ KHD
-  filterKhdSource: string = '';      // '' | 'excel' | 'hdc' — แหล่งข้อมูลของรายงาน KHD ที่จับคู่ (24 พ.ย. 2569)
   filterKhdStatus: string = '';      // '' | 'match' | 'different' | 'missing_remote' | 'not_compared' | 'inactive'
   // filter ตามสถานะการบันทึกผลงาน (ใช้ร่วมกับ filterKhdStatus ได้ — คนละมิติกัน)
   filterResultStatus: string = '';   // '' | 'has_results' | 'no_results'
@@ -1053,7 +1052,6 @@ export class KpiManageComponent implements OnInit {
             return false;
           }
         }
-        if (this.filterKhdSource && this.khdCompareMap.size && this.getKhdData(i)?.khd_data_source !== this.filterKhdSource) return false;
         // Result status filter (มีผลงาน / ยังไม่มีผลงาน)
         if (this.filterResultStatus === 'has_results' && !(i.result_count > 0)) return false;
         if (this.filterResultStatus === 'no_results' && i.result_count > 0) return false;

@@ -2879,6 +2879,14 @@ Build + redeploy ทั้ง backend และ frontend Docker container เร
 - **แก้:** `matchesSearchTerm()` (dashboard.ts) กติกาเดียวกับ server ใช้ใน applyFilters — Test: `dashboard.spec.ts`
 
 
+## 24 พ.ย. 2569 — เทียบกับ KHD: เฉพาะรายงาน key_in (KHD reports.data_source = 'excel')
+
+- **ผู้ใช้สั่ง:** หน้าเทียบกับ KHD ให้ดึงเฉพาะตัวชี้วัดที่ `khd.reports.data_source = 'excel'` (ระบบเรียก key_in) — รอบก่อนแสดงทั้ง excel และ hdc
+- `services/khd-match.js` `YEAR_REPORTS_SQL` เพิ่ม `AND r.data_source = 'excel'` → มีผลทั้ง GET /report-compare และทุกปุ่ม apply-khd-* (ตัวจับคู่เดียวกัน)
+- ตัวชี้วัดของระบบที่ `data_source = 'hdc'` และไม่ได้คู่ = ไม่แสดงเป็น "ไม่อยู่ในปีงบ KHD" (summary `local_hdc_skipped`)
+- `apply-khd-table-process` กลับไปกรอง `data_source = 'excel'` (รายงาน + นับ table_process ซ้ำ) | หน้าจอเอาตัวกรอง key_in/hdc + ป้าย hdc ออก แถบสรุปบอกว่าเทียบเฉพาะ key_in
+- Test: `khd-match.test.js` (รายงาน hdc ไม่แสดง, ตัวชี้วัด hdc ไม่แสดง, summary), mock `khd-year-mock.js` กรอง excel ตามคำสั่ง, `khd-table-process.test.js`, `kpi-manage.spec.ts`
+
 ## 24 พ.ย. 2569 — เทียบตัวชี้วัดกับ KHD: ตั้งต้นจาก report_fiscal_year_config + จับคู่ด้วย report_id ↔ รหัสอ้างอิง
 - **ผู้ใช้สั่ง:** ใช้ KHD report_fiscal_year_config ของปีงบปัจจุบันเป็นตารางหลัก, report_id เป็นคีย์ JOIN reports, ตรวจให้ kpi_indicators.kpi_indicators_id ตรงกับ KHD
 - **เดิม:** GET /report-compare ดึง reports ทั้งหมด (excel + heuristic LENGTH) จับคู่ด้วย table_process — เห็นรายงานทุกปีปน, รหัสอ้างอิงไม่เคยถูกตรวจ, หน้าจอเก็บผลเทียบด้วยคีย์ table_process (ตัวชี้วัด tp ซ้ำทับกัน)
