@@ -1,3 +1,4 @@
+import { FestivalBackdropComponent } from '../shared/festival-backdrop';
 import { Component, inject, OnInit, OnDestroy, ChangeDetectorRef, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormsModule, FormGroup, FormControl, Validators } from '@angular/forms';
@@ -17,7 +18,7 @@ export const LOGIN_MASCOT_KEY = 'kpi_login_mascot';
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, FormsModule, RouterModule, LoginMascotComponent],
+  imports: [CommonModule, ReactiveFormsModule, FormsModule, RouterModule, LoginMascotComponent, FestivalBackdropComponent],
   templateUrl: './login.html'
 })
 export class LoginComponent implements OnInit, OnDestroy {
@@ -266,6 +267,7 @@ export class LoginComponent implements OnInit, OnDestroy {
         this.mascotVoiceOn = res.mascot_voice_enabled !== false;
         this.mascotSize = normalizeMascotSize(res.mascot_size);
         this.mascot.setOutfitConfig(res.mascot_outfit, res.mascot_festival_dates, res.mascot_festival_auto, res.mascot_festival_dates_auto);
+        this.mascot.setBackdropEnabled(res.festival_backdrop_enabled);
         this.maintenanceMode = !!res.maintenance;
         this.maintenanceMessage = res.message || '';
         this.systemVersion = res.system_version || '';

@@ -1,3 +1,4 @@
+import { FestivalBackdropComponent } from '../shared/festival-backdrop';
 import { Component, OnInit, OnDestroy, inject, ChangeDetectorRef, NgZone, ViewChild } from '@angular/core';
 import { Router, RouterModule, RouterOutlet, NavigationEnd, ActivatedRoute } from '@angular/router';
 import { AuthService } from '../services/auth';
@@ -18,7 +19,7 @@ import { MascotService } from '../shared/mascot/mascot.service';
 @Component({
   selector: 'app-layout',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, RouterOutlet, CommandPaletteComponent, ZoneBadgeComponent, MascotAssistantComponent, MyDepartmentsComponent, MyRoleRequestComponent],
+  imports: [CommonModule, FormsModule, RouterModule, RouterOutlet, CommandPaletteComponent, ZoneBadgeComponent, MascotAssistantComponent, MyDepartmentsComponent, MyRoleRequestComponent, FestivalBackdropComponent],
   templateUrl: './layout.html',
   styleUrls: ['./layout.css']
 })

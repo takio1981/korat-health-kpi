@@ -187,7 +187,7 @@ apiRouter.post('/mascot/festival-dates/refresh', authenticateToken, isSuperAdmin
 apiRouter.get('/system/maintenance-status', async (req, res) => {
     try {
         const [rows] = await db.query(
-            "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message','thaid_enabled','providerid_enabled','thaid_login_url','thaid_register_enabled','providerid_register_enabled','system_version','login_mascot_enabled','mascot_assistant_enabled','mascot_voice_enabled','mascot_size','mascot_outfit','mascot_festival_dates','mascot_festival_auto','mascot_festival_dates_auto','mascot_news_enabled')"
+            "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('maintenance_mode','maintenance_message','thaid_enabled','providerid_enabled','thaid_login_url','thaid_register_enabled','providerid_register_enabled','system_version','login_mascot_enabled','mascot_assistant_enabled','mascot_voice_enabled','mascot_size','mascot_outfit','mascot_festival_dates','mascot_festival_auto','mascot_festival_dates_auto','mascot_news_enabled','festival_backdrop_enabled')"
         );
         const s = {};
         rows.forEach(r => s[r.setting_key] = r.setting_value);
@@ -216,6 +216,8 @@ apiRouter.get('/system/maintenance-status', async (req, res) => {
             mascot_festival_dates: sanitizeFestivalDates(s['mascot_festival_dates']),
             // ปรับวันที่อัตโนมัติ (22 พ.ย. 2569) — ไม่มีค่า = เปิด: วันที่จากปฏิทินวันหยุดราชการ (jobs/mascot-festival) + frontend คำนวณวันที่เหลือ
             mascot_festival_auto: s['mascot_festival_auto'] !== 'false',
+            // ลายน้ำพื้นหลังตามเทศกาล (24 พ.ย. 2569 — ไม่มีค่า = เปิด)
+            festival_backdrop_enabled: s['festival_backdrop_enabled'] !== 'false',
             mascot_festival_dates_auto: s['mascot_festival_auto'] === 'false' ? {} : autoDatesOf(s['mascot_festival_dates_auto']),
         });
     } catch (error) {

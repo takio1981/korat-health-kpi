@@ -65,7 +65,11 @@ export class MascotService {
   readonly outfit$ = new BehaviorSubject<OutfitConfig>({ mode: 'auto', dates: {}, auto: {}, compute: true });
   /** ลองชุดในหน้าตั้งค่า (ไม่บันทึก) — null = ไม่ลอง */
   readonly outfitPreview$ = new BehaviorSubject<string | null>(null);
+  /** ลายน้ำพื้นหลังตามเทศกาล (system_settings.festival_backdrop_enabled — ไม่มีค่า = เปิด, 24 พ.ย. 2569) */
+  readonly backdropOn$ = new BehaviorSubject<boolean>(true);
   private uid = '';
+
+  setBackdropEnabled(v: unknown) { const on = v !== false; if (on !== this.backdropOn$.value) this.backdropOn$.next(on); }
 
   say(cue: MascotCue) { this.cues.next(cue); }
 

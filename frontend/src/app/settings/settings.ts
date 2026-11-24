@@ -147,6 +147,7 @@ export class SettingsComponent implements OnInit {
   loginMascotEnabled: boolean = true; // น้องคิดดีบินในหน้าเข้าสู่ระบบ (ไม่มีค่า = เปิด)
   mascotAssistantEnabled: boolean = true; // ผู้ช่วยน้องคิดดีทุกหน้าหลังเข้าสู่ระบบ (ไม่มีค่า = เปิด)
   mascotVoiceEnabled: boolean = true; // เสียงพูดของน้องคิดดี (ไม่มีค่า = เปิด)
+  festivalBackdropEnabled: boolean = true; // ลายน้ำพื้นหลังตามเทศกาล (ไม่มีค่า = เปิด — 24 พ.ย. 2569)
   mascotNewsEnabled: boolean = true; // น้องคิดดีแจ้งข่าวอัปเดตการพัฒนาระบบ (ไม่มีค่า = เปิด — 22 พ.ย. 2569)
   mascotSize: MascotSize = 'medium'; // ขนาดตั้งต้นของน้องคิดดี (ไม่มีค่า = กลาง)
   readonly mascotSizeOptions = MASCOT_SIZES.map(value => ({ value, label: SIZE_LABELS[value] }));
@@ -156,6 +157,8 @@ export class SettingsComponent implements OnInit {
   mascotFestivalIcsUrl = ''; // ที่อยู่ปฏิทินวันหยุด (ว่าง = ค่าตั้งต้น)
   @ViewChild('festivalCard') festivalCard?: MascotFestivalCardComponent;
   private mascotSvc = inject(MascotService);
+  /** สวิตช์ลายน้ำพื้นหลังตามเทศกาล — เห็นผลทันทีในหน้านี้ (ยังไม่บันทึกจนกด "บันทึกการตั้งค่า") */
+  onBackdropToggle(v: boolean) { this.mascotSvc.setBackdropEnabled(!!v); }
   providerIdEnabled: boolean = false;
   thaidClientSecret: string = '';
   thaidLoginUrl: string = '';
@@ -310,6 +313,7 @@ export class SettingsComponent implements OnInit {
           this.mascotAssistantEnabled = this.settings.find(s => s.setting_key === 'mascot_assistant_enabled')?.setting_value !== 'false';
           this.mascotVoiceEnabled = this.settings.find(s => s.setting_key === 'mascot_voice_enabled')?.setting_value !== 'false';
           this.mascotNewsEnabled = this.settings.find(s => s.setting_key === 'mascot_news_enabled')?.setting_value !== 'false';
+          this.festivalBackdropEnabled = this.settings.find(s => s.setting_key === 'festival_backdrop_enabled')?.setting_value !== 'false';
           this.mascotSize = normalizeMascotSize(this.settings.find(s => s.setting_key === 'mascot_size')?.setting_value);
           this.mascotOutfit = normalizeOutfitMode(this.settings.find(s => s.setting_key === 'mascot_outfit')?.setting_value);
           this.mascotFestivalDates = sanitizeFestivalDates(this.settings.find(s => s.setting_key === 'mascot_festival_dates')?.setting_value);
@@ -384,6 +388,7 @@ export class SettingsComponent implements OnInit {
       { setting_key: 'mascot_assistant_enabled', setting_value: this.mascotAssistantEnabled.toString() },
       { setting_key: 'mascot_voice_enabled', setting_value: this.mascotVoiceEnabled.toString() },
       { setting_key: 'mascot_news_enabled', setting_value: this.mascotNewsEnabled.toString() },
+      { setting_key: 'festival_backdrop_enabled', setting_value: String(!!this.festivalBackdropEnabled) },
       { setting_key: 'mascot_size', setting_value: normalizeMascotSize(this.mascotSize) },
       { setting_key: 'mascot_outfit', setting_value: normalizeOutfitMode(this.mascotOutfit) },
       { setting_key: 'mascot_festival_dates', setting_value: JSON.stringify(sanitizeFestivalDates(this.mascotFestivalDates)) },
@@ -407,6 +412,7 @@ export class SettingsComponent implements OnInit {
       next: (res) => {
         this.mascotSvc.setOutfitConfig(this.mascotOutfit, this.mascotFestivalDates, this.mascotFestivalAuto, this.festivalCard?.autoDates || {});
         this.mascotSvc.outfitPreview$.next(null);
+        this.mascotSvc.setBackdropEnabled(!!this.festivalBackdropEnabled);
         Swal.fire({
           title: 'สำเร็จ',
           text: 'บันทึกการตั้งค่าเรียบร้อยแล้ว (มีผลเมื่อรีเฟรชหน้าจอ)',

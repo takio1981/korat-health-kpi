@@ -70,6 +70,21 @@ test("mascot_voice_enabled: ไม่มีค่า = เปิด, 'false' = �
     }
 });
 
+// ลายน้ำพื้นหลังตามเทศกาล (24 พ.ย. 2569) — festival_backdrop_enabled ไม่มีค่า = เปิด, 'false' = ปิด
+test("festival_backdrop_enabled: ไม่มีค่า = เปิด, 'false' = ปิด", async () => {
+    const [[r]] = await db.query("SELECT setting_value FROM system_settings WHERE setting_key = 'festival_backdrop_enabled'");
+    const prev = r ? r.setting_value : null;
+    try {
+        await db.query("DELETE FROM system_settings WHERE setting_key = 'festival_backdrop_enabled'");
+        expect((await request(app).get(URL)).body.festival_backdrop_enabled).toBe(true);
+        await db.query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('festival_backdrop_enabled', 'false') ON DUPLICATE KEY UPDATE setting_value = 'false'");
+        expect((await request(app).get(URL)).body.festival_backdrop_enabled).toBe(false);
+    } finally {
+        if (prev === null) await db.query("DELETE FROM system_settings WHERE setting_key = 'festival_backdrop_enabled'");
+        else await db.query("UPDATE system_settings SET setting_value = ? WHERE setting_key = 'festival_backdrop_enabled'", [prev]);
+    }
+});
+
 // ชุดเทศกาล (21 พ.ย. 2569) — ค่าผิด = auto, ตารางวันที่ตัดค่าที่ผิดรูปแบบ
 test('mascot_outfit + mascot_festival_dates: ค่าผิด = auto / ตัดค่าที่ผิดรูปแบบ', async () => {
     const keys = ['mascot_outfit', 'mascot_festival_dates'];
