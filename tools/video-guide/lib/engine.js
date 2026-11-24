@@ -1,4 +1,4 @@
-// ถ่ายวิดีโอ 1 หัวข้อ: เปิดหน้าเว็บจริง (ฐานทดสอบ) ทำตามขั้นตอน โดยมี "น้องโคราชดี" เป็นผู้นำเสนอ → รวมเป็น MP4
+// ถ่ายวิดีโอ 1 หัวข้อ: เปิดหน้าเว็บจริง (ฐานทดสอบ) ทำตามขั้นตอน โดยมี "น้องคิดดี" เป็นผู้นำเสนอ → รวมเป็น MP4
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
@@ -9,7 +9,7 @@ const overlayInit = require('./overlay');
 const OUT = path.resolve(__dirname, '../../..', process.env.VG_OUT || 'videos');
 const TMP = path.join(__dirname, '..', 'cache', 'rec');
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const GREETING = 'สวัสดีครับ ผมน้องโคราชดี ';
+const GREETING = 'สวัสดีครับ ผมน้องคิดดี ';
 const OUTRO = 'ขอบคุณที่รับชมครับ ถ้ายังสงสัยตรงไหน ดูหัวข้ออื่นในคู่มือต่อได้เลยนะครับ';
 const CARD_KICKER = 'คู่มือการใช้งาน Korat Health KPI';
 
@@ -126,7 +126,7 @@ async function record(browser, spec) {
 
     const ctx = await browser.newContext({ viewport: VIEW, locale: 'th-TH', storageState: spec.storageState, recordVideo: { dir: TMP, size: VIEW } });
     await guardContext(ctx);
-    // ซ่อนผู้ช่วยน้องโคราชดีของระบบ (ใส่ 20 พ.ย. 2569 — หลังวิดีโอชุดแรก) วิดีโอมีผู้นำเสนอของตัวเองแล้ว:
+    // ซ่อนผู้ช่วยน้องคิดดีของระบบ (ใส่ 20 พ.ย. 2569 — หลังวิดีโอชุดแรก) วิดีโอมีผู้นำเสนอของตัวเองแล้ว:
     // เดิมผู้ช่วยทักทายเมื่อเข้าหน้าใหม่ กล่องคำพูดค้างบังตาราง และมีตัวละคร 2 ตัวในภาพ (22 พ.ย. 2569) — ใช้กลไกซ่อนของผู้ใช้เอง (localStorage แยกตามบัญชี)
     await ctx.addInitScript(() => {
         try {

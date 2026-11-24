@@ -1,5 +1,5 @@
 /**
- * ปรับวันที่ชุดเทศกาลของน้องโคราชดีอัตโนมัติ (22 พ.ย. 2569) — services/mascot-festival.js + เส้นทาง /mascot/festival-dates/*
+ * ปรับวันที่ชุดเทศกาลของน้องคิดดีอัตโนมัติ (22 พ.ย. 2569) — services/mascot-festival.js + เส้นทาง /mascot/festival-dates/*
  * ห้ามเรียกปฏิทินจริง: ส่ง fetchImpl / stub global.fetch ทุกกรณี — คืนค่า system_settings เดิมหลังทดสอบ
  */
 require('./setup');

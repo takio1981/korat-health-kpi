@@ -353,7 +353,7 @@
           <router-outlet></router-outlet>
         </div>
       </main>
-      <!-- ผู้ช่วยน้องโคราชดี (19 พ.ย. 2569 ระยะที่ 2) — จอดมุมขวาล่าง แนะนำการใช้งานหน้านั้น -->
+      <!-- ผู้ช่วยน้องคิดดี (19 พ.ย. 2569 ระยะที่ 2) — จอดมุมขวาล่าง แนะนำการใช้งานหน้านั้น -->
       <app-mascot-assistant></app-mascot-assistant>
       <app-my-departments #myDepts></app-my-departments>
       <app-my-role-request #myRoleReq></app-my-role-request>
@@ -620,7 +620,7 @@
         <i class="fas fa-key w-4 text-center text-orange-500"></i>เปลี่ยนรหัสผ่าน
       </button>
       <button id="btn-toggle-mascot" (click)="mascot.toggleAssistant(); showProfileDropdown = false" class="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
-        <i class="fas fa-robot w-4 text-center text-teal-600"></i>{{ (mascot.assistantHidden$ | async) ? 'แสดงผู้ช่วยน้องโคราชดี' : 'ซ่อนผู้ช่วยน้องโคราชดี' }}
+        <i class="fas fa-robot w-4 text-center text-teal-600"></i>{{ (mascot.assistantHidden$ | async) ? 'แสดงผู้ช่วยน้องคิดดี' : 'ซ่อนผู้ช่วยน้องคิดดี' }}
       </button>
       <button (click)="logout()" class="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors font-bold">
         <i class="fas fa-sign-out-alt w-4 text-center"></i>ออกจากระบบ
@@ -654,14 +654,14 @@
       <!-- Body -->
       <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
 
-        <!-- Mascot (น้องโคราชดี) -->
+        <!-- Mascot (น้องคิดดี) -->
         <div class="bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 rounded-2xl p-4 border border-emerald-200 flex items-center justify-center">
-          <img src="korat-d.png" alt="น้องโคราชดี (KORAT-D)"
+          <img src="korat-d.png" alt="น้องคิดดี (KORAT-D)"
                onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"
                class="max-h-72 w-auto object-contain"/>
           <div style="display:none" class="flex-col items-center text-center text-emerald-700 p-6">
             <i class="fas fa-robot text-6xl mb-2"></i>
-            <p class="font-bold">น้องโคราชดี (KORAT-D)</p>
+            <p class="font-bold">น้องคิดดี (KORAT-D)</p>
             <p class="text-xs text-gray-500 mt-1">ผู้ช่วยอัจฉริยะด้านสุขภาพดิจิทัล</p>
           </div>
         </div>

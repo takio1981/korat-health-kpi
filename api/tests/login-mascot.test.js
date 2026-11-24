@@ -1,5 +1,5 @@
 /**
- * น้องโคราชดีบินในหน้าเข้าสู่ระบบ (19 พ.ย. 2569) — ค่าระบบ login_mascot_enabled ส่งผ่าน /system/maintenance-status (public)
+ * น้องคิดดีบินในหน้าเข้าสู่ระบบ (19 พ.ย. 2569) — ค่าระบบ login_mascot_enabled ส่งผ่าน /system/maintenance-status (public)
  * ไม่มีค่า = เปิด, 'false' = ปิด — ตั้งผ่าน POST /settings (super_admin) — คืนค่าเดิมหลังทดสอบ
  */
 require('./setup');
@@ -37,7 +37,7 @@ test("ตั้ง 'false' = ปิด, 'true' = เปิด", async () => {
     expect((await request(app).get(URL)).body.login_mascot_enabled).toBe(true);
 });
 
-// ผู้ช่วยน้องโคราชดีทุกหน้า (ระยะที่ 2) — mascot_assistant_enabled แยกจากของหน้าเข้าสู่ระบบ
+// ผู้ช่วยน้องคิดดีทุกหน้า (ระยะที่ 2) — mascot_assistant_enabled แยกจากของหน้าเข้าสู่ระบบ
 test("mascot_assistant_enabled: ไม่มีค่า = เปิด, 'false' = ปิด (ไม่กระทบ login_mascot_enabled)", async () => {
     const [[r]] = await db.query("SELECT setting_value FROM system_settings WHERE setting_key = 'mascot_assistant_enabled'");
     const prev = r ? r.setting_value : null;

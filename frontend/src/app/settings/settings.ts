@@ -27,7 +27,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: 'forecast', label: 'ระบบเตือนล่วงหน้า', icon: 'fa-triangle-exclamation', superOnly: true },
   { id: 'user-approval', label: 'อนุมัติผู้สมัครอัตโนมัติ', icon: 'fa-user-check', superOnly: true },
   { id: 'khd-sso', label: 'เข้าสู่ระบบจาก KHD', icon: 'fa-right-to-bracket', superOnly: true },
-  { id: 'login-page', label: 'หน้าเข้าสู่ระบบ / น้องโคราชดี', icon: 'fa-robot' },
+  { id: 'login-page', label: 'หน้าเข้าสู่ระบบ / น้องคิดดี', icon: 'fa-robot' },
   { id: 'sso-login', label: 'เข้าสู่ระบบด้วย SSO', icon: 'fa-id-card' },
   { id: 'jwt-test', label: 'ทดสอบถอดรหัส JWT', icon: 'fa-magnifying-glass' },
   { id: 'sso-register', label: 'ลงทะเบียนด้วย SSO', icon: 'fa-user-plus' },
@@ -144,13 +144,13 @@ export class SettingsComponent implements OnInit {
 
   // SSO toggles (ThaID + ProviderID)
   thaidEnabled: boolean = false;
-  loginMascotEnabled: boolean = true; // น้องโคราชดีบินในหน้าเข้าสู่ระบบ (ไม่มีค่า = เปิด)
-  mascotAssistantEnabled: boolean = true; // ผู้ช่วยน้องโคราชดีทุกหน้าหลังเข้าสู่ระบบ (ไม่มีค่า = เปิด)
-  mascotVoiceEnabled: boolean = true; // เสียงพูดของน้องโคราชดี (ไม่มีค่า = เปิด)
-  mascotNewsEnabled: boolean = true; // น้องโคราชดีแจ้งข่าวอัปเดตการพัฒนาระบบ (ไม่มีค่า = เปิด — 22 พ.ย. 2569)
-  mascotSize: MascotSize = 'medium'; // ขนาดตั้งต้นของน้องโคราชดี (ไม่มีค่า = กลาง)
+  loginMascotEnabled: boolean = true; // น้องคิดดีบินในหน้าเข้าสู่ระบบ (ไม่มีค่า = เปิด)
+  mascotAssistantEnabled: boolean = true; // ผู้ช่วยน้องคิดดีทุกหน้าหลังเข้าสู่ระบบ (ไม่มีค่า = เปิด)
+  mascotVoiceEnabled: boolean = true; // เสียงพูดของน้องคิดดี (ไม่มีค่า = เปิด)
+  mascotNewsEnabled: boolean = true; // น้องคิดดีแจ้งข่าวอัปเดตการพัฒนาระบบ (ไม่มีค่า = เปิด — 22 พ.ย. 2569)
+  mascotSize: MascotSize = 'medium'; // ขนาดตั้งต้นของน้องคิดดี (ไม่มีค่า = กลาง)
   readonly mascotSizeOptions = MASCOT_SIZES.map(value => ({ value, label: SIZE_LABELS[value] }));
-  mascotOutfit = 'auto'; // ชุดเทศกาลของน้องโคราชดี: auto | none | id เทศกาล
+  mascotOutfit = 'auto'; // ชุดเทศกาลของน้องคิดดี: auto | none | id เทศกาล
   mascotFestivalDates: FestivalDates = {}; // วันที่เทศกาลตามจันทรคติที่ผู้ดูแลกรอก
   mascotFestivalAuto = true; // ปรับวันที่เปลี่ยนชุดอัตโนมัติเมื่อขึ้นปีใหม่ (ไม่มีค่า = เปิด)
   mascotFestivalIcsUrl = ''; // ที่อยู่ปฏิทินวันหยุด (ว่าง = ค่าตั้งต้น)

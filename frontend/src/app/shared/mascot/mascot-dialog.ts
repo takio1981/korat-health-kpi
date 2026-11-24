@@ -1,5 +1,5 @@
 /**
- * บทสนทนาของน้องโคราชดี (ฟังก์ชันล้วน — ไม่เรียก AI) + รูปกล่องคำพูดแบบมังงะ (SVG path)
+ * บทสนทนาของน้องคิดดี (ฟังก์ชันล้วน — ไม่เรียก AI) + รูปกล่องคำพูดแบบมังงะ (SVG path)
  * บทพูดหน้าเข้าสู่ระบบเป็นบทที่เตรียมไว้ (ผู้ใช้เลือก 19 พ.ย. 2569: ไม่เปิดช่อง AI ให้ผู้ที่ยังไม่เข้าสู่ระบบ)
  */
 import type { PoseName } from './mascot-pose';
@@ -73,10 +73,10 @@ export function graphemes(text: string): string[] {
   return Array.from(text);
 }
 
-// ===== ปรับขนาดน้องโคราชดี (20 พ.ย. 2569) — ใช้ทั้งหน้าเข้าสู่ระบบและผู้ช่วยในระบบ; stage จัดการคำสั่ง size:* เอง =====
+// ===== ปรับขนาดน้องคิดดี (20 พ.ย. 2569) — ใช้ทั้งหน้าเข้าสู่ระบบและผู้ช่วยในระบบ; stage จัดการคำสั่ง size:* เอง =====
 export const SIZE_ASK = 'อยากให้ผมตัวขนาดไหนครับ? บนมือถือและแท็บเล็ต ผมจะย่อลงตามขนาดจอให้เองนะครับ';
 export const SIZE_DONE = 'ปรับขนาดแล้วครับ!';
-export const SIZE_MENU_LABEL = 'ปรับขนาดน้องโคราชดี';
+export const SIZE_MENU_LABEL = 'ปรับขนาดน้องคิดดี';
 
 export function sizeChoices(current: string | undefined, backNext: string): DialogChoice[] {
   const mark = (v: string, label: string) => (current || '') === v ? `${label} (ตอนนี้)` : label;
@@ -108,7 +108,7 @@ const MENU: DialogChoice[] = [
 
 export const LOGIN_SCRIPT: DialogScript = {
   start: {
-    text: c => `${greetingFor(c.hour)} ผมน้องโคราชดี ผู้ช่วยประจำระบบบันทึกผลงาน KPI ด้านสุขภาพ วันนี้ให้ผมช่วยอะไรดีครับ?`,
+    text: c => `${greetingFor(c.hour)} ผมน้องคิดดี ผู้ช่วยประจำระบบบันทึกผลงาน KPI ด้านสุขภาพ วันนี้ให้ผมช่วยอะไรดีครับ?`,
     pose: 'wave', mood: 'happy', choices: MENU,
   },
   menu: { text: 'อยากรู้เรื่องไหนอีกครับ?', pose: 'talk', choices: MENU },

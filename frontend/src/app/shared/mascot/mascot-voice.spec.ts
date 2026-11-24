@@ -2,13 +2,13 @@ import { VoiceIndex, clipFor, envLevel, estimateMs, normVoice, speakable, voiceK
 import { collectVoicePhrases } from './mascot-voice-phrases';
 import voiceIndex from '../../../../public/mascot/voice/index.json';
 
-describe('mascot-voice (เสียงพูดของน้องโคราชดี)', () => {
+describe('mascot-voice (เสียงพูดของน้องคิดดี)', () => {
   it('voiceKey: คงที่ ไม่สนช่องว่างซ้ำ และต่างกันเมื่อข้อความต่าง', () => {
     expect(voiceKey('สวัสดี  ครับ ')).toBe(voiceKey('สวัสดี ครับ'));
     expect(voiceKey('ก')).not.toBe(voiceKey('ข'));
     expect(voiceKey('ทดสอบ')).toMatch(/^[0-9a-f]{8}-[0-9a-z]+$/);
     // ค่าคงที่ — ถ้าเปลี่ยนสูตร ไฟล์เสียงทั้งหมดจะหาไม่เจอ (ตัวสร้างไฟล์ใช้ฟังก์ชันเดียวกัน)
-    expect(voiceKey('น้องโคราชดี')).toBe(voiceKey('น้องโคราชดี'));
+    expect(voiceKey('น้องคิดดี')).toBe(voiceKey('น้องคิดดี'));
   });
 
   it('clipFor: ประโยคที่ไม่มีไฟล์ (เช่น คำตอบ AI) ไม่ขอไฟล์ = ไม่เกิด 404 — ดัชนีอ่านไม่ได้จึงลองชื่อคีย์', () => {

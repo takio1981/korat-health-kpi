@@ -63,7 +63,7 @@ import { aiFeatureOn, aiErrorText } from './ai-feature';
 export class AiFormulaHelperComponent implements OnInit {
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
-  private mascot = inject(MascotService); // น้องโคราชดีเป็นตัวแทนผู้ช่วย AI (ระยะที่ 3)
+  private mascot = inject(MascotService); // น้องคิดดีเป็นตัวแทนผู้ช่วย AI (ระยะที่ 3)
   private hostEl = inject(ElementRef);
 
   @Input() kind: 'result' | 'pct' = 'result';

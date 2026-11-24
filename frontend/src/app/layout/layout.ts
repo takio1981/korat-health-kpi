@@ -28,7 +28,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   private titleService = inject(Title);
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
-  mascot = inject(MascotService); // ผู้ช่วยน้องโคราชดี (เมนูโปรไฟล์ซ่อน/แสดง)
+  mascot = inject(MascotService); // ผู้ช่วยน้องคิดดี (เมนูโปรไฟล์ซ่อน/แสดง)
   private ngZone = inject(NgZone);
   private idleTimeoutService = inject(IdleTimeoutService);
 

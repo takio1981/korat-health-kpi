@@ -1,5 +1,5 @@
 /**
- * สร้างไฟล์เสียงพูดของน้องโคราชดี (20 พ.ย. 2569) — node build-mascot-voice.js
+ * สร้างไฟล์เสียงพูดของน้องคิดดี (20 พ.ย. 2569) — node build-mascot-voice.js
  * อ่านทุกประโยคจาก frontend/src/app/shared/mascot/mascot-voice-phrases.ts (collectVoicePhrases)
  * → เสียง th-TH-NiwatNeural (lib/tts.js ตัวเดียวกับวิดีโอคู่มือ — ส่งเฉพาะข้อความบทพูด ไม่มีข้อมูลผู้ใช้)
  * → แปลงเป็น mp3 ขนาดเล็ก frontend/public/mascot/voice/<key>.mp3 + index.json { key: { f, ms, e } } (e = ซองความดัง 0-9 ราย 1/25 วินาที)
@@ -44,7 +44,7 @@ async function main() {
     const sorted = Object.fromEntries(Object.keys(index).sort().map(k => [k, index[k]]));
     fs.writeFileSync(path.join(OUT, 'index.json'), JSON.stringify(sorted) + '\n');
     const size = fs.readdirSync(OUT).reduce((s, f) => s + fs.statSync(path.join(OUT, f)).size, 0);
-    console.log(`เสียงน้องโคราชดี: ${phrases.length} ประโยค | สร้างใหม่ ${made} | ลบ ${removed} | รวม ${(size / 1048576).toFixed(2)} MB`);
+    console.log(`เสียงน้องคิดดี: ${phrases.length} ประโยค | สร้างใหม่ ${made} | ลบ ${removed} | รวม ${(size / 1048576).toFixed(2)} MB`);
 }
 
 main().catch(e => { console.error(e); process.exit(1); });

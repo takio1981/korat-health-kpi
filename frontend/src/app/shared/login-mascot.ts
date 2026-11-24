@@ -4,7 +4,7 @@ import { LOGIN_SCRIPT, LOGIN_TIPS } from './mascot/mascot-dialog';
 import type { MascotSize } from './mascot/mascot-size';
 
 /**
- * น้องโคราชดีในหน้าเข้าสู่ระบบ (19 พ.ย. 2569 — ระยะที่ 1): ตัวละคร 3 มิติ (three.js) บินไปมา + กล่องคำพูดแบบมังงะ
+ * น้องคิดดีในหน้าเข้าสู่ระบบ (19 พ.ย. 2569 — ระยะที่ 1): ตัวละคร 3 มิติ (three.js) บินไปมา + กล่องคำพูดแบบมังงะ
  * ทักทายครั้งเดียวต่อการเปิดเบราว์เซอร์ คลิกที่ตัวน้องเพื่อคุย บทพูดเตรียมไว้ใน LOGIN_SCRIPT (ไม่เรียก AI)
  */
 export { stepFly, poseOf } from './mascot/mascot-motion';

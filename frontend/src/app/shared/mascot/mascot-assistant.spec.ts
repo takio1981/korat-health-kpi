@@ -90,8 +90,8 @@ describe('MascotService (สถานะผู้ช่วยในเครื�
 import { answerNode } from './mascot-assistant';
 import { MascotCue } from './mascot.service';
 
-describe('ระยะที่ 3: น้องโคราชดีเป็นตัวแทนผู้ช่วย AI', () => {
-  it('เมนูมี "ถามน้องโคราชดี (AI)" เฉพาะเมื่อเปิดผู้ช่วยคู่มือ', () => {
+describe('ระยะที่ 3: น้องคิดดีเป็นตัวแทนผู้ช่วย AI', () => {
+  it('เมนูมี "ถามน้องคิดดี (AI)" เฉพาะเมื่อเปิดผู้ช่วยคู่มือ', () => {
     const on = assistantMenu({ hasSteps: false, hasVideo: false, page: 'dashboard', quiet: false, hasAi: true });
     const off = assistantMenu({ hasSteps: false, hasVideo: false, page: 'dashboard', quiet: false, hasAi: false });
     expect(on.some(c => c.action === 'ask')).toBe(true);

@@ -1,6 +1,6 @@
 /**
- * น้องโคราชดีแจ้งข่าว (22 พ.ย. 2569)
- *   - ประกาศมีตัวเลือก "ให้น้องโคราชดีแจ้งข่าว" (mascot_announce) + ข้อความที่น้องพูด (mascot_text ≤ 300 ตัวอักษร ข้อความล้วน)
+ * น้องคิดดีแจ้งข่าว (22 พ.ย. 2569)
+ *   - ประกาศมีตัวเลือก "ให้น้องคิดดีแจ้งข่าว" (mascot_announce) + ข้อความที่น้องพูด (mascot_text ≤ 300 ตัวอักษร ข้อความล้วน)
  *   - GET /announcement/active คืนสองช่องนี้ให้ผู้ช่วยในระบบ
  *   - GET /system/maintenance-status คืน mascot_news_enabled (ไม่มีค่า = เปิด, ตั้ง 'false' = ปิด)
  */
@@ -34,7 +34,7 @@ afterAll(async () => {
     await cleanupTestUsers(db, 'test\\_mn\\_');
 });
 
-test('สร้าง/แก้ไขประกาศพร้อมตัวเลือกให้น้องโคราชดีแจ้ง — ผู้ใช้ทั่วไปได้รับผ่าน /announcement/active', async () => {
+test('สร้าง/แก้ไขประกาศพร้อมตัวเลือกให้น้องคิดดีแจ้ง — ผู้ใช้ทั่วไปได้รับผ่าน /announcement/active', async () => {
     const c = await request(app).post(api('/announcements')).set('Authorization', `Bearer ${saToken}`).send({
         title: 'test_mn ประกาศ', content_html: '<b>ปิดระบบ</b>', content_text: 'ปิดระบบ', is_active: true,
         mascot_announce: true, mascot_text: '<script>x</script>คืนนี้ปิดระบบ ' + 'ก'.repeat(400),

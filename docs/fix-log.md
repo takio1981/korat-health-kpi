@@ -2887,3 +2887,9 @@ Build + redeploy ทั้ง backend และ frontend Docker container เร
   + หน้าจอ: ชิป "รหัสอ้างอิงไม่ตรง", ป้ายในแถว, "ไม่อยู่ในปีงบ KHD", ตัวกรอง key_in/hdc, แถว ref ในหน้าต่างรายละเอียด
 - ข้อมูลจริง (อ่านอย่างเดียว) ปีงบ 2570: 211 รายงาน (excel 137 / hdc 74), จับคู่ด้วยรหัสอ้างอิง 34 / ลิงก์ KHD 104 / table_process 5, รหัสอ้างอิงไม่ตรง 109
 - Test: api/tests/khd-match.test.js + ปรับ KHD จำลองของชุด khd-* (tests/lib/khd-year-mock.js), khd-diff.spec.ts, kpi-manage.spec.ts
+
+
+## 24 พ.ย. 2569 — เปลี่ยนชื่อผู้ช่วยประจำระบบ "น้องโคราชดี" → "น้องคิดดี" (ผู้ใช้สั่ง: ทั้งระบบ)
+- แทนข้อความทุกไฟล์ใน repo (frontend/api/tools/CLAUDE.md/help-kb — ไม่แก้บันทึกเดิมในไฟล์นี้) + สร้างไฟล์เสียงใหม่ด้วย `node tools/video-guide/build-mascot-voice.js` (ประโยคที่มีชื่อ 5 ประโยค)
+- ชื่อไฟล์ภาพ/คีย์ localStorage/ชื่อคอมโพเนนต์ (korat-d-*.webp, kpi_mascot_*, app-mascot-*) ไม่เปลี่ยน — ไม่แสดงต่อผู้ใช้ และค่าที่ผู้ใช้ตั้งไว้ยังอยู่
+- ยังไม่ได้ทำ: วิดีโอคู่มือ (videos/ ไม่อยู่ใน git) ที่บรรยายชื่อเดิม ต้องถ่ายใหม่ถ้าต้องการ

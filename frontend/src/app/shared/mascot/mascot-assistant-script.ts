@@ -1,5 +1,5 @@
 /**
- * บทสนทนาของผู้ช่วยน้องโคราชดีทุกหน้า (ฟังก์ชันล้วน — ไม่พึ่ง Angular) ใช้ทั้งคอมโพเนนต์ผู้ช่วยและตัวสร้างไฟล์เสียง
+ * บทสนทนาของผู้ช่วยน้องคิดดีทุกหน้า (ฟังก์ชันล้วน — ไม่พึ่ง Angular) ใช้ทั้งคอมโพเนนต์ผู้ช่วยและตัวสร้างไฟล์เสียง
  * (tools/video-guide/build-mascot-voice.js) — `voice` = ประโยคที่พูดจริง (ข้อความในกล่องอาจมีชื่อหน้า/ลำดับขั้นเพิ่ม)
  */
 import { SIZE_MENU_LABEL, sizeNodes } from './mascot-dialog';
@@ -10,20 +10,20 @@ import { NEWS_MENU_LABEL } from './mascot-news';
 export const ASK_PROMPT = 'อยากรู้เรื่องไหน พิมพ์ถามได้เลยครับ ผมจะค้นจากคู่มือการใช้งานตามสิทธิ์ของท่าน';
 export const MENU_TAIL = 'มีอะไรให้ผมช่วยไหมครับ?';
 export const FIRST_TAIL = 'ให้ผมแนะนำการใช้งานไหมครับ?';
-export const NO_GUIDE_INTRO = 'ผมน้องโคราชดี ผู้ช่วยประจำระบบครับ';
+export const NO_GUIDE_INTRO = 'ผมน้องคิดดี ผู้ช่วยประจำระบบครับ';
 
 /** ตัวเลือกในเมนูหลักของผู้ช่วย */
 export function assistantMenu(o: { hasSteps: boolean; hasVideo: boolean; page: string; quiet: boolean; hasAi?: boolean; movedHome?: boolean }): DialogChoice[] {
   return [
     ...(o.hasSteps ? [{ label: 'แนะนำหน้านี้ทีละขั้น', action: 'tour:start' }] : []),
-    ...(o.hasAi ? [{ label: 'ถามน้องโคราชดี (AI)', action: 'ask' }] : []),
+    ...(o.hasAi ? [{ label: 'ถามน้องคิดดี (AI)', action: 'ask' }] : []),
     ...(o.hasVideo ? [{ label: 'ดูวิดีโอคู่มือหน้านี้', action: 'video' }] : []),
     ...(o.page !== 'help' ? [{ label: 'เปิดคู่มือการใช้งาน', action: 'nav:/help' }] : []),
     { label: NEWS_MENU_LABEL, action: 'news:open' },
     { label: o.quiet ? 'ทักทายเมื่อเข้าหน้าใหม่' : 'ไม่ต้องทักเมื่อเข้าหน้าใหม่', action: 'quiet' },
     { label: SIZE_MENU_LABEL, next: 'size' },
     ...(o.movedHome ? [{ label: 'กลับไปมุมขวาล่าง', action: 'home:reset' }] : []),
-    { label: 'ซ่อนน้องโคราชดี', action: 'hide' },
+    { label: 'ซ่อนน้องคิดดี', action: 'hide' },
     { label: 'ปิด', next: 'bye' },
   ];
 }

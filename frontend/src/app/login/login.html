@@ -31,14 +31,14 @@
     </div>
   </div>
 
-  <!-- น้องโคราชดีบินไปมา (19 พ.ย. 2569) — ระบบเปิด/ปิดได้ + ผู้เข้าชมซ่อนเองได้ -->
+  <!-- น้องคิดดีบินไปมา (19 พ.ย. 2569) — ระบบเปิด/ปิดได้ + ผู้เข้าชมซ่อนเองได้ -->
   <app-login-mascot *ngIf="showMascot" [thaid]="isThaIdEnabled" [providerid]="isProviderIdEnabled" [voice]="mascotVoiceOn" [size]="mascotSize"></app-login-mascot>
 
   <!-- Dark Mode toggle (ลอยมุมขวาบน) -->
   <div class="fixed top-4 right-4 z-50 flex items-center gap-2">
     <button *ngIf="mascotSystemOn" id="btn-login-mascot" type="button" (click)="toggleMascot()"
             class="w-9 h-9 rounded-full bg-white/90 dark:bg-gray-700 shadow-md flex items-center justify-center hover:scale-110 transition-all"
-            [title]="mascotHidden ? 'แสดงน้องโคราชดี' : 'ซ่อนน้องโคราชดี'" [attr.aria-pressed]="!mascotHidden">
+            [title]="mascotHidden ? 'แสดงน้องคิดดี' : 'ซ่อนน้องคิดดี'" [attr.aria-pressed]="!mascotHidden">
       <i class="fas fa-robot text-base" [ngClass]="mascotHidden ? 'text-gray-400' : 'text-teal-600'"></i>
     </button>
     <button (click)="themeService.toggle()" class="w-9 h-9 rounded-full bg-white/90 dark:bg-gray-700 shadow-md flex items-center justify-center hover:scale-110 transition-all" [title]="themeService.isDark ? 'Light Mode' : 'Dark Mode'">

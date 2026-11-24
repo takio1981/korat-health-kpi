@@ -34,7 +34,7 @@ export function webglAvailable(): boolean {
 type Mode = 'roam' | 'goto' | 'talk' | 'home';
 
 /**
- * เวทีของน้องโคราชดี 3 มิติ (19 พ.ย. 2569): บินไปมา + กล่องคำพูดแบบมังงะ + บทสนทนา
+ * เวทีของน้องคิดดี 3 มิติ (19 พ.ย. 2569): บินไปมา + กล่องคำพูดแบบมังงะ + บทสนทนา
  * — โมเดล three.js (mascot-model) วาดลง canvas เล็กที่เคลื่อนที่ด้วย CSS transform → หันตัวจริงตามทิศที่บิน
  * — ทำงานนอก Angular zone ทั้งหมด (requestAnimationFrame แก้ DOM ตรง) ข้อความพิมพ์ทีละตัวเขียนลง DOM ตรง
  *   เรียก change detection เฉพาะตอนเปิด/ปิดกล่องและแสดงตัวเลือก
@@ -48,14 +48,14 @@ type Mode = 'roam' | 'goto' | 'talk' | 'home';
     <div class="ms-ground" aria-hidden="true"></div>
     <div class="ms-ring" aria-hidden="true"></div>
     <div class="ms-zzz" aria-hidden="true"><span>Z</span><span>z</span><span>z</span></div>
-    <div class="ms-fly" title="น้องโคราชดี — คลิกเพื่อคุยกับผม · ลากเพื่อย้ายตำแหน่ง" role="button" tabindex="0" aria-label="คุยกับน้องโคราชดี"
+    <div class="ms-fly" title="น้องคิดดี — คลิกเพื่อคุยกับผม · ลากเพื่อย้ายตำแหน่ง" role="button" tabindex="0" aria-label="คุยกับน้องคิดดี"
          (click)="onMascotClick()" (keydown.enter)="onMascotClick()">
       <img *ngIf="fallback" class="ms-img" src="mascot/korat-d-fly.webp" alt="" draggable="false">
     </div>
     <div class="ms-bubble" [class.ms-open]="!!node" [attr.data-kind]="node?.kind" role="status" aria-live="polite" (click)="onBubbleClick($event)">
       <svg class="ms-svg" aria-hidden="true"><path class="ms-shadow"></path><path class="ms-path"></path><g class="ms-dots"></g></svg>
       <div class="ms-box">
-        <div class="ms-name">น้องโคราชดี</div>
+        <div class="ms-name">น้องคิดดี</div>
         <div class="ms-text"></div>
         <div class="ms-note" *ngIf="node?.note">{{ node?.note }}</div>
         <form class="ms-ask" *ngIf="node?.input && showChoices" (submit)="submitAsk($event)">
@@ -66,7 +66,7 @@ type Mode = 'roam' | 'goto' | 'talk' | 'home';
           <button type="button" *ngFor="let c of node.choices; let i = index" class="ms-choice" [attr.data-idx]="i" (click)="choose(c, $event)">{{ c.label }}</button>
         </div>
         <button type="button" class="ms-close" aria-label="ปิดกล่องคำพูด" title="ปิด" (click)="close(); $event.stopPropagation()">×</button>
-        <button *ngIf="voice" type="button" class="ms-mute" [attr.aria-pressed]="muted" [attr.aria-label]="muted ? 'เปิดเสียงน้องโคราชดี' : 'ปิดเสียงน้องโคราชดี'"
+        <button *ngIf="voice" type="button" class="ms-mute" [attr.aria-pressed]="muted" [attr.aria-label]="muted ? 'เปิดเสียงน้องคิดดี' : 'ปิดเสียงน้องคิดดี'"
                 [title]="muted ? 'เปิดเสียงพูด' : 'ปิดเสียงพูด'" (click)="toggleMute(); $event.stopPropagation()">
           <i class="fas" [ngClass]="muted ? 'fa-volume-xmark' : 'fa-volume-high'"></i>
         </button>

@@ -9,7 +9,7 @@ const { mailTransporter, sendMail } = require('../core/notify');
 const { requireAction } = require('../core/access');
 
 // ========== System Announcements (ประกาศระบบ) ==========
-// ให้น้องโคราชดีแจ้งข่าวประกาศนี้ (22 พ.ย. 2569): mascot_announce 0/1 + mascot_text = ข้อความสั้นที่น้องพูด (ว่าง = ใช้ข้อความประกาศ, ≤ 300 ตัวอักษร ข้อความล้วน)
+// ให้น้องคิดดีแจ้งข่าวประกาศนี้ (22 พ.ย. 2569): mascot_announce 0/1 + mascot_text = ข้อความสั้นที่น้องพูด (ว่าง = ใช้ข้อความประกาศ, ≤ 300 ตัวอักษร ข้อความล้วน)
 function mascotFields(b) {
     const text = String((b && b.mascot_text) || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
     return { mascot_announce: b && (b.mascot_announce === true || b.mascot_announce === 1 || b.mascot_announce === '1') ? 1 : 0, mascot_text: text || null };

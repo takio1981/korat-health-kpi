@@ -59,7 +59,7 @@ describe('mascot-dialog', () => {
   });
   it('บทเริ่มต้นมีคำทักทาย + ตัวเลือก, บทที่ไม่มี = null, ชื่อของ Object.prototype ไม่ใช่บท', () => {
     const n = resolveNode(LOGIN_SCRIPT, 'start', { hour: 9 })!;
-    expect(n.text).toContain('น้องโคราชดี');
+    expect(n.text).toContain('น้องคิดดี');
     expect(n.choices.length).toBeGreaterThan(2);
     expect(n.auto).toBeNull();
     expect(resolveNode(LOGIN_SCRIPT, 'nope', { hour: 9 })).toBeNull();
@@ -82,8 +82,8 @@ describe('mascot-dialog', () => {
     }
   });
   it('graphemes ไม่แยกสระ/วรรณยุกต์ไทยออกจากพยัญชนะ', () => {
-    const g = graphemes('น้องโคราชดี');
-    expect(g.join('')).toBe('น้องโคราชดี');
+    const g = graphemes('น้องคิดดี');
+    expect(g.join('')).toBe('น้องคิดดี');
     expect(g).toContain('น้');
     expect(g).toContain('ดี');
   });

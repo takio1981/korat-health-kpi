@@ -7,7 +7,7 @@ import { buildMascot, loadThree } from './mascot-model';
 import { dressMascot } from './mascot-outfit';
 import { collectVoicePhrases, normVoice } from './mascot-voice-phrases';
 
-// ชุดเทศกาลของน้องโคราชดี (21 พ.ย. 2569)
+// ชุดเทศกาลของน้องคิดดี (21 พ.ย. 2569)
 describe('mascot-festival', () => {
   const on = (d: string, dates = {}) => festivalOn(d, dates)?.id ?? null;
 

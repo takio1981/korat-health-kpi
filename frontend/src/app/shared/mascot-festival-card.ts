@@ -54,7 +54,7 @@ export function festivalRows(y: number, dates: FestivalDates, today: string, ext
 }
 
 /**
- * การ์ดตั้งค่าชุดเทศกาลของน้องโคราชดี (หน้าตั้งค่าระบบ — 21 พ.ย. 2569)
+ * การ์ดตั้งค่าชุดเทศกาลของน้องคิดดี (หน้าตั้งค่าระบบ — 21 พ.ย. 2569)
  * โหมด auto/none/บังคับชุด + ปฏิทินเทศกาลรายปี (กรอกวันที่เทศกาลตามจันทรคติของปีถัดไปได้) + ลองชุด (เห็นที่น้องในหน้านี้ทันที ไม่บันทึก)
  * ค่าบันทึกพร้อมปุ่ม "บันทึกการตั้งค่า" ของหน้าตั้งค่า (mascot_outfit, mascot_festival_dates)
  */
@@ -64,7 +64,7 @@ export function festivalRows(y: number, dates: FestivalDates, today: string, ext
   imports: [CommonModule, FormsModule],
   template: `
     <div class="bg-white rounded-lg p-3 border border-gray-200 mt-3" id="mascot-festival-card">
-      <p class="text-sm font-bold text-gray-700"><i class="fas fa-gifts text-pink-500 mr-1"></i>ชุดเทศกาลของน้องโคราชดี</p>
+      <p class="text-sm font-bold text-gray-700"><i class="fas fa-gifts text-pink-500 mr-1"></i>ชุดเทศกาลของน้องคิดดี</p>
       <p class="text-xs text-gray-500 mt-0.5">น้องเปลี่ยนชุดและเครื่องประดับเองตามเทศกาลไทยและสากล (คิดตามวันที่เวลาไทย) และกล่าวอวยพรวันละครั้ง — กดปุ่ม <i class="fas fa-eye"></i> เพื่อลองชุด (น้องมุมขวาล่างเปลี่ยนชุดทันที ยังไม่บันทึก)</p>
       <div class="mt-2 flex flex-wrap items-center gap-2">
         <label for="mascot-outfit-mode" class="text-xs font-bold text-gray-600">การแต่งตัว</label>

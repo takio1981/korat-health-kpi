@@ -1,5 +1,5 @@
 /**
- * การเคลื่อนที่ของน้องโคราชดี (ฟังก์ชันล้วน — ทดสอบได้) ย้ายจาก login-mascot.ts (19 พ.ย. 2569)
+ * การเคลื่อนที่ของน้องคิดดี (ฟังก์ชันล้วน — ทดสอบได้) ย้ายจาก login-mascot.ts (19 พ.ย. 2569)
  */
 export interface FlyState { x: number; y: number; z: number; vx: number; vy: number; vz: number; tx: number; ty: number; tz: number; hold: number; }
 

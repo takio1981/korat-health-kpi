@@ -559,8 +559,8 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - เครื่องมือ `tools/video-guide/` (README.md): Playwright ถ่ายหน้าจอจริงบน**ฐานทดสอบ** (backend :3710 `start-backend.js` + ng serve :4520, บัญชี `test_vg_<สิทธิ์>` + ผลงานสังเคราะห์จาก `setup-data.js up`) + เสียงบรรยาย Edge Neural (`msedge-tts`) + คำบรรยาย/เคอร์เซอร์/กรอบเน้นที่ฉีดเข้าหน้า (`lib/overlay.js` — เบลอช่องกรอกที่ดูเหมือนรหัสลับ/อีเมล) → ffmpeg-static รวมเป็น MP4
   — ผลลัพธ์ `videos/<สิทธิ์>/<id หัวข้อ>.mp4` (+ `public/` = overview/register/login ใช้ร่วม) + `videos/manifest.json` — **โฟลเดอร์ videos/ ไม่อยู่ใน git** (gitignore) nginx เสิร์ฟ `/khupskpi/videos/` จาก volume `./videos:/usr/share/nginx/videos:ro` (docker-compose frontend)
   — **ตอนพัฒนา:** `ng serve` (:4500) เสิร์ฟ `../videos` ผ่าน build configuration `devVideos` ใน angular.json (`kpi-web:build:development,devVideos` — แก้แล้วต้องเริ่ม ng serve ใหม่; ไม่มีโฟลเดอร์ = ไม่แสดงปุ่ม ไม่ error; production build/`ng test` ไม่รวมวิดีโอ)
-  — สคริปต์รายหัวข้อ `scripts/*.js` (id = id ใน help.ts sections) | ผู้นำเสนอ "น้องโคราชดี" ภาพเคลื่อนไหว (19 พ.ย. 2569 — `build-mascot.js` ตัดจาก korat-d.png + `lib/overlay.js` ปากขยับตามเสียง) | เสียง: `th-TH-NiwatNeural` ไม่แปลง (ผู้ใช้ฟังเสียงเด็กที่แปลงแล้วไม่ใช้; เสียงหญิงไทยของบริการใช้ไม่ได้)
-  — **ซ่อนผู้ช่วยน้องโคราชดีของระบบระหว่างถ่าย** (lib/engine.js init script ตั้ง localStorage `kpi_mascot_assistant_off[_<id>]` — เดิมผู้ช่วยทักทายเมื่อเข้าหน้า กล่องคำพูดบังตาราง มีตัวละคร 2 ตัว) | `setup-data.js` มีคู่ที่อนุมัติทั้งปีแบบเดิม 1 คู่ (ตัวชี้วัดแรก × 23839) ใช้แสดงปลดล็อคเดือน
+  — สคริปต์รายหัวข้อ `scripts/*.js` (id = id ใน help.ts sections) | ผู้นำเสนอ "น้องคิดดี" ภาพเคลื่อนไหว (19 พ.ย. 2569 — `build-mascot.js` ตัดจาก korat-d.png + `lib/overlay.js` ปากขยับตามเสียง) | เสียง: `th-TH-NiwatNeural` ไม่แปลง (ผู้ใช้ฟังเสียงเด็กที่แปลงแล้วไม่ใช้; เสียงหญิงไทยของบริการใช้ไม่ได้)
+  — **ซ่อนผู้ช่วยน้องคิดดีของระบบระหว่างถ่าย** (lib/engine.js init script ตั้ง localStorage `kpi_mascot_assistant_off[_<id>]` — เดิมผู้ช่วยทักทายเมื่อเข้าหน้า กล่องคำพูดบังตาราง มีตัวละคร 2 ตัว) | `setup-data.js` มีคู่ที่อนุมัติทั้งปีแบบเดิม 1 คู่ (ตัวชี้วัดแรก × 23839) ใช้แสดงปลดล็อคเดือน
   — **กรอบเน้นต้องไม่อยู่หลังภาพที่ค้าง:** `reveal()` ใน lib/engine.js ตรวจ elementFromPoint ก่อนวาดทุกครั้ง (ปิดกล่องข้อความ/หน้าต่างที่บัง, เลื่อนพ้นคอลัมน์/แถบที่ตรึง) ไม่สำเร็จ = `⚠ ถูกบัง` ต้องถ่ายใหม่
   — ⚠️ **block-net.js เดิมรั่ว** (`net.connect()` ส่ง array) — SMTP ของ .env.test ส่งอีเมลแจ้งเข้าสู่ระบบของ test_vg_* ถึง @example.test ได้ (19 พ.ย. 2569) แก้แล้ว + start-backend ตั้ง SMTP/KHD เป็นค่าปลอม
   — ⚠️ **ห้ามแก้ไฟล์ใน frontend/src ระหว่างถ่าย** (ng serve คอมไพล์ใหม่ — คอมไพล์ไม่ผ่าน = error overlay ทับวิดีโอ; engine ตรวจ overlay แล้วโยน error) | อย่ารัน `npm test` ของ api ระหว่างถ่าย (ลบผู้ใช้ test_*)
@@ -694,7 +694,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - Filter row: อำเภอ + ประเภท (เพิ่มเติมจาก search + count badge)
 - chospital ไม่มี is_active → ซ่อน toggle column สำหรับแท็บนี้
 
-### น้องโคราชดี 3 มิติ + กล่องคำพูดมังงะ (19 พ.ย. 2569 — ผู้ใช้สั่ง 3 ระยะ: 1) ตัวละคร 3D + คุยในหน้า login ✅ 2) ผู้ช่วยทุกหน้าหลัง login ✅ 3) ตัวแทน AI ทั่วระบบ ✅)
+### น้องคิดดี 3 มิติ + กล่องคำพูดมังงะ (19 พ.ย. 2569 — ผู้ใช้สั่ง 3 ระยะ: 1) ตัวละคร 3D + คุยในหน้า login ✅ 2) ผู้ช่วยทุกหน้าหลัง login ✅ 3) ตัวแทน AI ทั่วระบบ ✅)
 - ผู้ใช้เลือก: **ปั้นโมเดล 3D ด้วยโค้ด** (three.js `0.187.0` — ไม่มีไฟล์โมเดล; ต้นแบบหลายมุม `public/mascot/korat-d-3.jpg`/`korat-d-2.gif` ไม่อยู่ใน git) | บทพูดหน้า login **เตรียมไว้ ไม่เรียก AI** (ไม่เปิดช่อง AI ให้ผู้ที่ยังไม่เข้าสู่ระบบ)
 - `frontend/src/app/shared/mascot/`: `mascot-model.ts` (`buildMascot()` ปั้นหัวจอ/หูฟัง/หัวใจ/ลำตัว/ตรา/แขน-ขามีข้อต่อ/ผ้าคลุม, `loadThree()` = dynamic import แยก chunk — **ห้าม import three แบบปกติ** ไม่งั้นเข้า initial bundle)
   | `mascot-pose.ts` (ท่าทางฟังก์ชันล้วน: idle/wave/point/aimLeft/aimRight/fly/hover/sit/talk/think/shy/cheer/walk + `blendJoints` เปลี่ยนท่าต่อเนื่อง) | `mascot-face.ts` (ใบหน้าวาดลง canvas → texture ของจอ: กะพริบตา ขยับปาก อารมณ์)
@@ -709,7 +709,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   + "ไม่ต้องทักเมื่อเข้าหน้าใหม่" — `MascotService` เก็บ localStorage แยกตามบัญชี (`bindUser`) | Test: `shared/mascot/mascot-assistant.spec.ts`, `api/tests/login-mascot.test.js`
 - **ระยะที่ 3 ตัวแทน AI:** แผง AI ทั้ง 6 (ai-summary-panel, ai-forecast-panel, ai-anomaly-explain, ai-formula-helper, ai-help-box, data-quality-panel) ใช้ `<app-mascot-avatar>` ในหัวแผง
   + `MascotService.aiThinking()` ตอนเริ่ม / `aiDone(ข้อความ, hostEl)` เมื่อสำเร็จ (ชี้เฉพาะเมื่อแผงอยู่ในจอ `inViewport`) / `aiFailed()` — **แผง AI ใหม่ต้องทำแบบเดียวกัน** (ข้อความจาก AI จริงยังแสดงในแผง ไม่ใช่ในกล่องคำพูด)
-  — คำสั่งพูดจากแผงไม่ขัดจังหวะขณะผู้ใช้กำลังเลือกตัวเลือก/พิมพ์คำถาม | "ถามน้องโคราชดี (AI)" ในเมนูผู้ช่วย (เฉพาะ `aiFeatureOn(status,'help')`) → ช่องพิมพ์ในกล่องคำพูด (`DialogNode.input` → action `ask:<ข้อความ>`)
+  — คำสั่งพูดจากแผงไม่ขัดจังหวะขณะผู้ใช้กำลังเลือกตัวเลือก/พิมพ์คำถาม | "ถามน้องคิดดี (AI)" ในเมนูผู้ช่วย (เฉพาะ `aiFeatureOn(status,'help')`) → ช่องพิมพ์ในกล่องคำพูด (`DialogNode.input` → action `ask:<ข้อความ>`)
   → `askAiHelp()` เส้นทางเดิม → `answerNode()`: ข้อความล้วน (textContent) ≤ 420 ตัว + `note` "ข้อความจาก AI — โปรดตรวจสอบ" + ปุ่มหัวข้อ (anchor `[a-z0-9-]` เท่านั้น) → `/help?section=<id>` (help.ts ขยายแล้วเลื่อนไป)
 - **เสียงพูด (20 พ.ย. 2569 — ผู้ใช้เลือก: ไฟล์เสียงสร้างล่วงหน้า + เสียงเบราว์เซอร์สำรอง, เปิดเป็นค่าตั้งต้นมีปุ่มปิด):** `mascot-voice.ts` `VoicePlayer` เล่น `public/mascot/voice/<voiceKey>.mp3`
   (เสียง th-TH-NiwatNeural ตัวเดียวกับวิดีโอคู่มือ) ตาม `ResolvedNode.voice` (ช่วงประโยค — ไม่ระบุ = ข้อความในกล่อง) ปากขยับตามซองความดังใน index.json, ความเร็วพิมพ์ปรับให้จบพร้อมเสียง, ปิดเองรอพูดจบ
@@ -724,7 +724,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   — Test: `shared/mascot/mascot-activity.spec.ts`
 - **ขนาด 3 ขนาด + สเกลตามจอ (20 พ.ย. 2569 — ผู้ใช้สั่ง):** `mascot-size.ts` `mascotPx(size, dock, w, h)` = `SIZE_BASE` (dock 112/146/186, roam 150/200/250 — "กลาง" = ขนาดเดิม) × `viewportScale()` (กว้าง ≤ 375 = 0.68 → ≥ 1280 = 1 เส้นตรง, จำกัดด้วยสูง × 1.8) ≤ 45% ของด้านสั้น
   — ขนาดที่ใช้ = `MascotService.size$` (ผู้ใช้เลือก, localStorage `kpi_mascot_size`, ไม่แยกบัญชี) ก่อน แล้ว `system_settings.mascot_size` (maintenance-status, ค่าผิด/ไม่มี = medium, ปุ่ม `#mascot-size` ในหน้าตั้งค่าระบบ) → stage `[sizeDefault]`
-  | stage คำนวณขนาดทุกเฟรมและ `renderer.setSize()` เมื่อเปลี่ยน (หมุนจอ/ปรับหน้าต่าง/เลือกขนาด) | เมนู "ปรับขนาดน้องโคราชดี" = `sizeNodes()` ใน mascot-dialog (ใส่ทั้ง LOGIN_SCRIPT และ assistantScript) คำสั่ง `size:*` จัดการใน stage — Test: `shared/mascot/mascot-size.spec.ts`, `api/tests/login-mascot.test.js`
+  | stage คำนวณขนาดทุกเฟรมและ `renderer.setSize()` เมื่อเปลี่ยน (หมุนจอ/ปรับหน้าต่าง/เลือกขนาด) | เมนู "ปรับขนาดน้องคิดดี" = `sizeNodes()` ใน mascot-dialog (ใส่ทั้ง LOGIN_SCRIPT และ assistantScript) คำสั่ง `size:*` จัดการใน stage — Test: `shared/mascot/mascot-size.spec.ts`, `api/tests/login-mascot.test.js`
 - **ชุดเทศกาล (21 พ.ย. 2569 — ผู้ใช้สั่ง: เปลี่ยนชุด/เครื่องประดับตามเทศกาลไทยและสากลให้ครบ):** `mascot-festival.ts` `FESTIVALS` 19 เทศกาล (ลำดับ = ความสำคัญเมื่อช่วงซ้อน — ย่าโมมาก่อนอีสเตอร์) แต่ละเทศกาลมี before/after (ช่วงวัน), `greet` (พูดออกเสียง — เพิ่ม/แก้ต้องรัน build-mascot-voice), `outfit` (cape/shell/hat/neck/sash/flag/prop)
   — วันที่: fixed / rule (`childrenDay()`, `easterDate()`) / lunar = `LUNAR_DATES` (ตรวจกับประกาศ 21 พ.ย. 2569: พุทธ+ลอยกระทง+ไหว้พระจันทร์+กินเจ ถึง ค.ศ. 2027, ตรุษจีนถึง 2030) **ทับด้วย `system_settings.mascot_festival_dates`** ที่ผู้ดูแลกรอก (JSON {ปี ค.ศ.: {id: YYYY-MM-DD}}) — ปีที่ไม่มีวันที่ = ไม่เปลี่ยนชุดในวันนั้น **ห้ามเดาวันที่จันทรคติใส่ตาราง** (ราชการประกาศล่วงหน้า 1–2 ปี — ตรวจกับประกาศก่อนเพิ่ม)
   | `thaiDateKey()` = วันที่ UTC+7 | `system_settings.mascot_outfit` = auto (ค่าตั้งต้น) | none | id เทศกาล — maintenance-status ส่งทั้ง 2 ค่า (ตรวจรูปแบบใน routes/users.js, frontend ตรวจซ้ำ `sanitizeFestivalDates()`) → `MascotService.setOutfitConfig()` (login + assistant) / `outfitPreview$` (ลองชุดในหน้าตั้งค่า ไม่บันทึก)
@@ -742,7 +742,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   — ⚠️ ผู้ช่วยโหลด CHANGELOG ด้วย dynamic import (นำเข้าตรง = initial bundle +470 KB เพราะผู้ช่วยอยู่ใน layout) | พูดเฉพาะ `NEWS_SAY` (มีไฟล์เสียง) เนื้อหาในกล่อง | `system_announcements.mascot_announce/mascot_text` (≤ 300 ข้อความล้วน — `mascotFields()` routes/announcements.js), `system_settings.mascot_news_enabled` (ปิดเฉพาะข่าวอัปเดต) | Test: `mascot-news.spec.ts`, `api/tests/mascot-news.test.js`
 - **ห้ามใช้อีโมจิในบทพูด** (บางเครื่องแสดงเป็นกล่อง) | Test: `shared/mascot/mascot.spec.ts` (ทุกตัวเลือกชี้บทที่มีจริง, ทุกท่าค่าครบ), `login.spec.ts`, `login-mascot.spec.ts`
 
-### น้องโคราชดีบินในหน้าเข้าสู่ระบบ (19 พ.ย. 2569 — ผู้ใช้เลือก: 3 มิติด้วย CSS, เปิด-ปิด 2 ชั้น — ระยะที่ 1 ด้านบนแทนการแสดงผลแล้ว คงสวิตช์เปิด-ปิดเดิม)
+### น้องคิดดีบินในหน้าเข้าสู่ระบบ (19 พ.ย. 2569 — ผู้ใช้เลือก: 3 มิติด้วย CSS, เปิด-ปิด 2 ชั้น — ระยะที่ 1 ด้านบนแทนการแสดงผลแล้ว คงสวิตช์เปิด-ปิดเดิม)
 - `shared/login-mascot.ts` `<app-login-mascot>`: ภาพ `public/mascot/korat-d-fly.webp` (สร้างด้วย `node tools/video-guide/build-mascot.js --full <ไฟล์> 260` — ไม่แก้ด้วยมือ) ซ้อนหลายชั้นตามแกน Z = ความหนา
   + หมุนตามความเร็ว (`poseOf()`) + ย่อ/ขยายตามความลึก + เงาพื้น + ไอพ่น — การเคลื่อนที่ `stepFly()` (ฟังก์ชันล้วน) รันนอก Angular zone ด้วย requestAnimationFrame แก้ style ตรง (ห้ามผูกกับ change detection)
   — ทับ `[data-login-card]` = z-index 5 (หลังเนื้อหา z-10) + pointer-events none (**ห้ามบังช่องกรอก/ปุ่มเข้าสู่ระบบ**) | prefers-reduced-motion = ลอยนิ่ง
@@ -1700,7 +1700,7 @@ docker builder prune -af
 - เพิ่ม auto-migration ใน server.js สำหรับ column/table ใหม่
 - ใช้ `Swal.fire()` สำหรับ dialog ทุกที่ (ไม่ใช่ alert/confirm)
 - เพิ่มคำแนะนำขั้นตอน (ซ่อนได้) ในหน้าที่ซับซ้อน
-- อัปเดต help.html + `changelog/changelog-data.ts` (CHANGELOG — ย้ายจาก changelog.ts 22 พ.ย. 2569, น้องโคราชดีแจ้งรุ่นล่าสุดจากไฟล์นี้) ทุกครั้งที่เพิ่มฟีเจอร์
+- อัปเดต help.html + `changelog/changelog-data.ts` (CHANGELOG — ย้ายจาก changelog.ts 22 พ.ย. 2569, น้องคิดดีแจ้งรุ่นล่าสุดจากไฟล์นี้) ทุกครั้งที่เพิ่มฟีเจอร์
 - อัปเดตเล่มผลงาน `docs/ชำนาญการ.docx` ทุกครั้งที่แก้ไข/เพิ่มฟีเจอร์ **และทดสอบความถูกต้องเรียบร้อยแล้ว** (ดูหัวข้อ 13)
 
 ### DON'T

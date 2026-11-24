@@ -11,7 +11,7 @@ import { LoginMascotComponent } from '../shared/login-mascot';
 import { MascotService } from '../shared/mascot/mascot.service';
 import { MascotSize, normalizeMascotSize } from '../shared/mascot/mascot-size';
 
-/** ผู้เข้าชมซ่อนน้องโคราชดีเฉพาะเครื่องตัวเอง (localStorage) — ระบบปิดทั้งหมดได้ด้วย login_mascot_enabled */
+/** ผู้เข้าชมซ่อนน้องคิดดีเฉพาะเครื่องตัวเอง (localStorage) — ระบบปิดทั้งหมดได้ด้วย login_mascot_enabled */
 export const LOGIN_MASCOT_KEY = 'kpi_login_mascot';
 
 @Component({
@@ -50,7 +50,7 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   thaidAutoFilling: boolean = false;
 
-  /** น้องโคราชดี: mascotSystemOn = ค่าจากระบบ (maintenance-status), mascotHidden = ผู้เข้าชมกดซ่อนเอง */
+  /** น้องคิดดี: mascotSystemOn = ค่าจากระบบ (maintenance-status), mascotHidden = ผู้เข้าชมกดซ่อนเอง */
   mascotSystemOn = false;
   /** เสียงพูดของน้อง (ค่าระบบ mascot_voice_enabled — ไม่มีค่า = เปิด) */
   mascotVoiceOn = true;
@@ -365,7 +365,7 @@ export class LoginComponent implements OnInit, OnDestroy {
             return;
           }
           Swal.fire({ icon: 'error', title: 'เข้าสู่ระบบไม่สำเร็จ', text: err.error?.message || 'เกิดข้อผิดพลาด' });
-          this.mascot.say({ node: 'loginError' }); // น้องโคราชดีแนะนำ (ไม่มีตัวละคร = ไม่มีผล)
+          this.mascot.say({ node: 'loginError' }); // น้องคิดดีแนะนำ (ไม่มีตัวละคร = ไม่มีผล)
         }
       });
     }

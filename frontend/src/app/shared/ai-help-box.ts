@@ -84,7 +84,7 @@ const HISTORY_MAX = 5;
 export class AiHelpBoxComponent implements OnInit {
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
-  private mascot = inject(MascotService); // น้องโคราชดีเป็นตัวแทนผู้ช่วย AI (ระยะที่ 3)
+  private mascot = inject(MascotService); // น้องคิดดีเป็นตัวแทนผู้ช่วย AI (ระยะที่ 3)
   private hostEl = inject(ElementRef);
 
   /** กดหัวข้ออ้างอิง → anchor ของหัวข้อ (หน้าคู่มือเลื่อนไป section-<anchor>) */

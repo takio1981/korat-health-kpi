@@ -2,7 +2,7 @@ import { HOME_KEY, groundYOf, loadHome, planRest, saveHome } from './mascot-acti
 import { assistantMenu } from './mascot-assistant-script';
 import { POSE_NAMES, poseTargets } from './mascot-pose';
 
-// กิจกรรมของน้องโคราชดี (20 พ.ย. 2569): ไอพ่น / ลงเดิน / นั่ง / นอน / ลากด้วยเมาส์
+// กิจกรรมของน้องคิดดี (20 พ.ย. 2569): ไอพ่น / ลงเดิน / นั่ง / นอน / ลากด้วยเมาส์
 describe('mascot-activity', () => {
   beforeEach(() => localStorage.removeItem(HOME_KEY));
 

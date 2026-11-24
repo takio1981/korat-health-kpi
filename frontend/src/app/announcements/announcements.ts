@@ -127,7 +127,7 @@ export class AnnouncementsComponent implements OnInit {
     this.showModal = false;
   }
 
-  /** ทดลองฟัง: น้องโคราชดีของหน้านี้พูดข้อความประกาศ (ไม่บันทึก ไม่แจ้งผู้ใช้อื่น) */
+  /** ทดลองฟัง: น้องคิดดีของหน้านี้พูดข้อความประกาศ (ไม่บันทึก ไม่แจ้งผู้ใช้อื่น) */
   previewMascot() {
     const n = announcementNode({ ...this.current, content_text: this.editor?.nativeElement?.innerText || this.current.content_text });
     this.mascot.say({ text: n.text, kind: 'shout', pose: 'wave', mood: 'happy', auto: 9000 });

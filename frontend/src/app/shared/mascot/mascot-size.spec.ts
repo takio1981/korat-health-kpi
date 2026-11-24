@@ -4,7 +4,7 @@ import { assistantMenu, assistantScript } from './mascot-assistant-script';
 import { MascotService, SIZE_KEY } from './mascot.service';
 import { guideRole } from './mascot-guides';
 
-describe('ขนาดน้องโคราชดี (mascot-size)', () => {
+describe('ขนาดน้องคิดดี (mascot-size)', () => {
   it('normalizeMascotSize: ค่าผิด/ว่าง = medium', () => {
     expect(normalizeMascotSize('small')).toBe('small');
     expect(normalizeMascotSize('large')).toBe('large');

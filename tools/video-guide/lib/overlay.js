@@ -1,4 +1,4 @@
-// สคริปต์ที่ฉีดเข้าหน้าเว็บระหว่างถ่าย: น้องโคราชดี (ภาพเคลื่อนไหว), คำบรรยาย, เคอร์เซอร์, กรอบเน้น, การ์ดชื่อเรื่อง (ไม่แก้โค้ดระบบ)
+// สคริปต์ที่ฉีดเข้าหน้าเว็บระหว่างถ่าย: น้องคิดดี (ภาพเคลื่อนไหว), คำบรรยาย, เคอร์เซอร์, กรอบเน้น, การ์ดชื่อเรื่อง (ไม่แก้โค้ดระบบ)
 module.exports = function overlayInit(M) {
     const VW = () => window.innerWidth, H_SMALL = 232, H_CARD = 500, FPS = 25;
     const S = { side: 'right', card: false, env: null, start: 0, dur: 0, point: 0, wave: 0, hop: 0, open: 0, blinkAt: 1800, blinkEnd: 0 };
@@ -86,7 +86,7 @@ module.exports = function overlayInit(M) {
         caption(text) {
             const el = $('#vg-cap'); if (!el) return;
             if (!text) { el.style.display = 'none'; return; }
-            el.innerHTML = '<b>น้องโคราชดี</b>';
+            el.innerHTML = '<b>น้องคิดดี</b>';
             el.appendChild(document.createTextNode(text));
             el.style.display = 'block';
         },

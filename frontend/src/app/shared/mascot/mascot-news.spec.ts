@@ -5,7 +5,7 @@ import { CHANGELOG } from '../../changelog/changelog-data';
 
 const e = (version: string, n = 2) => ({ version, date: version, changes: Array.from({ length: n }, (_, i) => ({ type: 'feature', text: `รายการ ${i + 1}: รายละเอียดยาว` })) });
 
-describe('น้องโคราชดีแจ้งข่าว — ฟังก์ชันล้วน', () => {
+describe('น้องคิดดีแจ้งข่าว — ฟังก์ชันล้วน', () => {
   it('versionDate / isRecentUpdate: รุ่น พ.ศ. → วันที่, แจ้งเฉพาะรุ่นภายใน 30 วัน', () => {
     expect(versionDate('2569.11.22')?.toISOString().slice(0, 10)).toBe('2026-11-22');
     expect(versionDate('2569.10.11.c')?.toISOString().slice(0, 10)).toBe('2026-10-11');

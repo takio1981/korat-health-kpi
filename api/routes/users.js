@@ -132,7 +132,7 @@ apiRouter.get('/sso/connectivity', async (req, res) => {
     res.json({ success: true, thaid, providerid });
 });
 
-// ชุดเทศกาลของน้องโคราชดี — ตรวจรูปแบบอย่างเดียว (รายชื่อเทศกาลจริงอยู่ฝั่ง frontend: shared/mascot/mascot-festival.ts ตรวจซ้ำอีกชั้น)
+// ชุดเทศกาลของน้องคิดดี — ตรวจรูปแบบอย่างเดียว (รายชื่อเทศกาลจริงอยู่ฝั่ง frontend: shared/mascot/mascot-festival.ts ตรวจซ้ำอีกชั้น)
 function sanitizeOutfitMode(v) {
     return typeof v === 'string' && /^[a-z]{2,20}$/.test(v) ? v : 'auto';
 }
@@ -201,17 +201,17 @@ apiRouter.get('/system/maintenance-status', async (req, res) => {
             thaid_register_enabled: s['thaid_register_enabled'] === 'true',
             providerid_register_enabled: s['providerid_register_enabled'] === 'true',
             system_version: s['system_version'] || 'v1.0.0',
-            // น้องโคราชดีบินในหน้าเข้าสู่ระบบ (19 พ.ย. 2569) — ไม่มีค่า = เปิด, super_admin ปิดได้ที่หน้าตั้งค่าระบบ
+            // น้องคิดดีบินในหน้าเข้าสู่ระบบ (19 พ.ย. 2569) — ไม่มีค่า = เปิด, super_admin ปิดได้ที่หน้าตั้งค่าระบบ
             login_mascot_enabled: s['login_mascot_enabled'] !== 'false',
-            // ผู้ช่วยน้องโคราชดีทุกหน้าหลังเข้าสู่ระบบ (19 พ.ย. 2569 ระยะที่ 2) — ไม่มีค่า = เปิด
+            // ผู้ช่วยน้องคิดดีทุกหน้าหลังเข้าสู่ระบบ (19 พ.ย. 2569 ระยะที่ 2) — ไม่มีค่า = เปิด
             mascot_assistant_enabled: s['mascot_assistant_enabled'] !== 'false',
-            // เสียงพูดของน้องโคราชดี (20 พ.ย. 2569) — ไม่มีค่า = เปิด, ผู้ใช้ปิดเองได้ในกล่องคำพูด
+            // เสียงพูดของน้องคิดดี (20 พ.ย. 2569) — ไม่มีค่า = เปิด, ผู้ใช้ปิดเองได้ในกล่องคำพูด
             mascot_voice_enabled: s['mascot_voice_enabled'] !== 'false',
-            // น้องโคราชดีแจ้งข่าวอัปเดตการพัฒนาระบบ (22 พ.ย. 2569) — ไม่มีค่า = เปิด (ประกาศที่ติ๊ก "ให้น้องโคราชดีแจ้งข่าว" แจ้งเสมอ)
+            // น้องคิดดีแจ้งข่าวอัปเดตการพัฒนาระบบ (22 พ.ย. 2569) — ไม่มีค่า = เปิด (ประกาศที่ติ๊ก "ให้น้องคิดดีแจ้งข่าว" แจ้งเสมอ)
             mascot_news_enabled: s['mascot_news_enabled'] !== 'false',
-            // ขนาดตั้งต้นของน้องโคราชดี (20 พ.ย. 2569) — small | medium | large (ค่าอื่น/ไม่มีค่า = medium) ผู้ใช้เลือกเองได้ในเมนูของน้อง
+            // ขนาดตั้งต้นของน้องคิดดี (20 พ.ย. 2569) — small | medium | large (ค่าอื่น/ไม่มีค่า = medium) ผู้ใช้เลือกเองได้ในเมนูของน้อง
             mascot_size: ['small', 'medium', 'large'].includes(s['mascot_size']) ? s['mascot_size'] : 'medium',
-            // ชุดเทศกาลของน้องโคราชดี (21 พ.ย. 2569) — auto (ตามเทศกาล, ค่าตั้งต้น) | none | id เทศกาล + วันที่จันทรคติที่ผู้ดูแลกรอก
+            // ชุดเทศกาลของน้องคิดดี (21 พ.ย. 2569) — auto (ตามเทศกาล, ค่าตั้งต้น) | none | id เทศกาล + วันที่จันทรคติที่ผู้ดูแลกรอก
             mascot_outfit: sanitizeOutfitMode(s['mascot_outfit']),
             mascot_festival_dates: sanitizeFestivalDates(s['mascot_festival_dates']),
             // ปรับวันที่อัตโนมัติ (22 พ.ย. 2569) — ไม่มีค่า = เปิด: วันที่จากปฏิทินวันหยุดราชการ (jobs/mascot-festival) + frontend คำนวณวันที่เหลือ

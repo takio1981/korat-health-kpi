@@ -10,7 +10,7 @@ import { FestivalDates, FestivalExtra, normalizeOutfitMode, sanitizeFestivalDate
 /** mode = auto | none | id เทศกาล, dates = ผู้ดูแลกรอก, auto = ปฏิทินวันหยุดราชการ, compute = คำนวณวันที่ที่เหลือ */
 export interface OutfitConfig { mode: string; dates: FestivalDates; auto: FestivalDates; compute: boolean }
 
-/** คำสั่งให้น้องโคราชดีพูด: บทที่เตรียมไว้ (node) หรือข้อความ (text) */
+/** คำสั่งให้น้องคิดดีพูด: บทที่เตรียมไว้ (node) หรือข้อความ (text) */
 export interface MascotCue {
   node?: string;
   text?: string;
@@ -48,7 +48,7 @@ function lsGet(k: string): string | null { try { return localStorage.getItem(k);
 function lsSet(k: string, v: string | null) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* ไม่มีที่เก็บ */ } }
 
 /**
- * ช่องทางให้ส่วนอื่นของระบบสั่งน้องโคราชดีพูด (เช่น หน้าเข้าสู่ระบบแจ้งเข้าสู่ระบบไม่สำเร็จ)
+ * ช่องทางให้ส่วนอื่นของระบบสั่งน้องคิดดีพูด (เช่น หน้าเข้าสู่ระบบแจ้งเข้าสู่ระบบไม่สำเร็จ)
  * + สถานะผู้ช่วยในระบบ (ระยะที่ 2): ผู้ใช้ซ่อนเอง / ไม่ต้องทักเมื่อเข้าหน้าใหม่ / หน้าที่เคยทักแล้ว — เก็บในเครื่องแยกตามบัญชี
  * ไม่มีตัวละครแสดงอยู่ = คำสั่งพูดถูกทิ้ง (ไม่มีผลข้างเคียง)
  */

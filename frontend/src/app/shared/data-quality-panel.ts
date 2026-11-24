@@ -122,7 +122,7 @@ export function filterIssues(issues: any[], kind: string): any[] {
 export class DataQualityPanelComponent implements OnInit {
   private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
-  private mascot = inject(MascotService); // น้องโคราชดีเป็นตัวแทนผู้ช่วย AI (ระยะที่ 3)
+  private mascot = inject(MascotService); // น้องคิดดีเป็นตัวแทนผู้ช่วย AI (ระยะที่ 3)
   private hostEl = inject(ElementRef);
 
   readonly kinds = DQ_KINDS;

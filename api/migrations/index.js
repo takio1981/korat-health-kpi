@@ -904,7 +904,7 @@ const migrationsReady = (async () => {
                     INDEX idx_active (is_active)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             `);
-            // ให้น้องโคราชดีแจ้งข่าวประกาศ (22 พ.ย. 2569)
+            // ให้น้องคิดดีแจ้งข่าวประกาศ (22 พ.ย. 2569)
             try { await db.query('ALTER TABLE system_announcements ADD COLUMN mascot_announce TINYINT(1) NOT NULL DEFAULT 0'); } catch (e) {}
             try { await db.query('ALTER TABLE system_announcements ADD COLUMN mascot_text VARCHAR(300) NULL'); } catch (e) {}
             // seed ข้อความเริ่มต้น ถ้ายังไม่มีเลย

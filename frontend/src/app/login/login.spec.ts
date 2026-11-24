@@ -51,8 +51,8 @@ describe('LoginComponent', () => {
   });
 });
 
-// น้องโคราชดีบินในหน้าเข้าสู่ระบบ (19 พ.ย. 2569)
-describe('LoginComponent — น้องโคราชดี', () => {
+// น้องคิดดีบินในหน้าเข้าสู่ระบบ (19 พ.ย. 2569)
+describe('LoginComponent — น้องคิดดี', () => {
   let component: LoginComponent;
   let fixture: ComponentFixture<LoginComponent>;
   beforeEach(async () => {
