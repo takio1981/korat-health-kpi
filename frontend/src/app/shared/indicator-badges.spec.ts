@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
-import { IndicatorBadgesComponent, indicatorBadges } from './indicator-badges';
+import { IndicatorBadgesComponent, indicatorBadges, withTableProcess } from './indicator-badges';
 import { testProviders } from '../testing/test-providers';
 
 // แถบสีคุณสมบัติตัวชี้วัดในหน้ารายงานสถิติ (20 พ.ย. 2569) — สี/ข้อความเดียวกับหน้าบันทึกผลงาน
@@ -45,12 +45,32 @@ describe('IndicatorBadgesComponent', () => {
     f1.componentInstance.id = 7; f1.detectChanges();
     const f2 = TestBed.createComponent(IndicatorBadgesComponent);
     f2.componentInstance.id = 8; f2.detectChanges();
-    http.expectOne(r => r.url.endsWith('/indicators')).flush([{ id: 7, r9: 1, unit: 'ราย' }, { id: 8, rmw: 1 }]);
+    http.expectOne(r => r.url.endsWith('/indicators')).flush([{ id: 7, r9: 1, unit: 'ราย', table_process: 'kpi_ncd_001' }, { id: 8, rmw: 1 }]);
     http.expectOne(r => r.url.endsWith('/hostype')).flush([]);
     f1.detectChanges(); f2.detectChanges();
     expect(f1.nativeElement.textContent).toContain('R9');
     expect(f1.nativeElement.textContent).toContain('หน่วย: ราย');
     expect(f2.nativeElement.textContent).toContain('RMW');
     expect(f2.nativeElement.textContent).toContain('local-only');
+    // table_process ใต้ชื่อตัวชี้วัด (26 พ.ย. 2569) — ไม่มีค่า = ไม่แสดง, [tp]=false = ไม่แสดง
+    expect(f1.nativeElement.querySelector('[data-badge="tp"]')?.textContent.trim()).toBe('kpi_ncd_001');
+    expect(f2.nativeElement.querySelector('[data-badge="tp"]')).toBeNull();
+    f1.componentRef.setInput('tp', false); f1.detectChanges();
+    expect(f1.nativeElement.querySelector('[data-badge="tp"]')).toBeNull();
+  });
+});
+
+describe('withTableProcess (ไฟล์ Excel รายงานสถิติ)', () => {
+  it('ใส่ table_process ต่อจากชื่อตัวชี้วัด — ค่าในแถวมาก่อน, ไม่มีชื่อตัวชี้วัด = คงเดิม', () => {
+    const meta: Record<number, any> = { 1: { table_process: 'kpi_a' }, 2: { table_process: 'kpi_b' } };
+    const out = withTableProcess([
+      { indicator_id: 1, kpi_indicators_name: 'ก', total: 5 },
+      { id: 2, kpi_indicators_name: 'ข', table_process: 'kpi_row' },
+      { indicator_id: 9, kpi_indicators_name: 'ค' },
+      { dept_name: 'กลุ่มงาน', total: 3 },
+    ], id => meta[id]);
+    expect(Object.keys(out[0])).toEqual(['indicator_id', 'kpi_indicators_name', 'table_process', 'total']);
+    expect(out.map(r => r.table_process)).toEqual(['kpi_a', 'kpi_row', '', undefined]);
+    expect(Object.keys(out[3])).toEqual(['dept_name', 'total']);
   });
 });

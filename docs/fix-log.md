@@ -2879,6 +2879,13 @@ Build + redeploy ทั้ง backend และ frontend Docker container เร
 - **แก้:** `matchesSearchTerm()` (dashboard.ts) กติกาเดียวกับ server ใช้ใน applyFilters — Test: `dashboard.spec.ts`
 
 
+## 26 พ.ย. 2569 — รายงานสถิติ: table_process ใต้ชื่อตัวชี้วัด + คอลัมน์ใน Excel
+
+- **ผู้ใช้สั่ง:** เพิ่มชื่อ table_process ที่คอลัมน์ชื่อตัวชี้วัดของแต่ละเมนูในหน้ารายงานสถิติ และเพิ่มคอลัมน์ table_process ในไฟล์ที่ส่งออก
+- ทุกช่องชื่อตัวชี้วัดของหน้านี้ใช้ `<app-indicator-badges>` อยู่แล้ว → เพิ่มป้าย table_process ในคอมโพเนนต์ (ไม่ต้องแก้ SQL รายงาน — อ่านจาก GET /indicators ที่โหลดครั้งเดียว)
+- ปุ่มส่งออกมีเฉพาะ Excel ของแถบรายงานสรุปผล → `withTableProcess()` ใส่คอลัมน์ต่อจากชื่อตัวชี้วัด (แถวสรุปรายหน่วยงานไม่มีชื่อตัวชี้วัด = คงเดิม)
+- Test: `shared/indicator-badges.spec.ts`
+
 ## 26 พ.ย. 2569 — เทียบกับ KHD: คีย์จับคู่ = report_id ↔ รหัสอ้างอิง อย่างเดียว
 
 - **ผู้ใช้สั่ง:** ใช้ `reports.report_id` / `report_fiscal_year_config.report_id` เทียบกับ `kpi_indicators.kpi_indicators_id` เป็นคีย์หลัก เพราะไม่ซ้ำ — table_process ซ้ำกันได้ (ใช้ตารางเดียวกันส่งออก KHD)

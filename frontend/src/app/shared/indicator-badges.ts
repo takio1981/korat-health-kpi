@@ -73,6 +73,25 @@ export function indicatorBadges(ind: any, hostypeName: (code: string) => string 
   return out;
 }
 
+/**
+ * แถวรายงาน → ใส่คอลัมน์ table_process ต่อจากชื่อตัวชี้วัด (ไฟล์ Excel ของรายงานสถิติ — 26 พ.ย. 2569)
+ * ค่าจากแถว (table_process) ก่อน แล้วจึงจากคุณสมบัติตัวชี้วัด (lookup ด้วย indicator_id ?? id) | แถวที่ไม่มีชื่อตัวชี้วัด = คงเดิม
+ */
+export function withTableProcess(rows: any[], lookup: (id: number) => any): any[] {
+  return (rows || []).map(r => {
+    if (!r || typeof r !== 'object' || !('kpi_indicators_name' in r)) return r;
+    const id = Number(r.indicator_id ?? r.id);
+    const tp = r.table_process ?? (Number.isFinite(id) ? lookup(id)?.table_process : null) ?? '';
+    const out: any = {};
+    for (const [k, v] of Object.entries(r)) {
+      if (k === 'table_process') continue;
+      out[k] = v;
+      if (k === 'kpi_indicators_name') out.table_process = tp;
+    }
+    return out;
+  });
+}
+
 /** คุณสมบัติตัวชี้วัด (GET /indicators) + ชื่อประเภทหน่วยบริการ — โหลดครั้งเดียวแล้วแชร์ทุกแถบสี */
 @Injectable({ providedIn: 'root' })
 export class IndicatorMetaService {
@@ -104,7 +123,10 @@ export class IndicatorMetaService {
   selector: 'app-indicator-badges',
   standalone: true,
   imports: [CommonModule],
-  template: `<span class="inline-flex flex-wrap items-center gap-1 align-middle" *ngIf="badges.length">
+  // table_process ใต้ชื่อตัวชี้วัด (26 พ.ย. 2569 — ผู้ใช้สั่ง: ทุกเมนูของหน้ารายงานสถิติ) — [tp]="false" = ไม่แสดง
+  template: `<span class="inline-flex flex-wrap items-center gap-1 align-middle" *ngIf="badges.length || tableProcess">
+    <span *ngIf="tableProcess" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold whitespace-nowrap leading-none bg-slate-100 text-slate-600 border border-slate-200"
+          title="table_process (ชื่อตารางส่งออก)" data-badge="tp"><i class="fas fa-table text-[8px]"></i>{{ tableProcess }}</span>
     <span *ngFor="let b of badges; trackBy: track" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap leading-none"
           [ngClass]="b.color" [title]="b.title" [attr.data-badge]="b.key"><i *ngIf="b.icon" class="fas text-[8px]" [ngClass]="b.icon"></i>{{ b.label }}</span>
   </span>`,
@@ -116,7 +138,10 @@ export class IndicatorBadgesComponent implements OnInit, OnChanges, OnDestroy {
   @Input() ind: any = null;
   /** แสดงแถบ "สูตร" ด้วย (ค่าตั้งต้นไม่แสดง — หน้าที่ใช้มีป้ายสูตร app-formula-badge อยู่แล้ว) */
   @Input() formula = false;
+  /** แสดงชื่อ table_process (ค่าตั้งต้น = แสดง) */
+  @Input() tp = true;
   badges: IndicatorBadge[] = [];
+  tableProcess = '';
   private meta = inject(IndicatorMetaService);
   private cdr = inject(ChangeDetectorRef);
   private sub: Subscription | null = null;
@@ -135,5 +160,6 @@ export class IndicatorBadgesComponent implements OnInit, OnChanges, OnDestroy {
     const fromMeta = this.id != null && m ? m.byId.get(Number(this.id)) : null;
     const ind = fromMeta ? { ...fromMeta, ...(this.ind || {}) } : this.ind;
     this.badges = indicatorBadges(ind, c => m?.hostype.get(c) || c, { formula: this.formula });
+    this.tableProcess = this.tp && ind?.table_process ? String(ind.table_process).trim() : '';
   }
 }

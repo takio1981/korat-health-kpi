@@ -13,7 +13,7 @@ import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { ZoneBadgeComponent } from '../shared/zone-badge';
 import { zoneOptions, zoneLabel, inZone } from '../shared/zone';
 import { ITYPES } from '../shared/indicator-types';
-import { IndicatorBadgesComponent } from '../shared/indicator-badges';
+import { withTableProcess, IndicatorMetaService, IndicatorBadgesComponent } from '../shared/indicator-badges';
 import { AiSummaryPanelComponent } from '../shared/ai-summary-panel';
 
 /** ชื่อแถบรายงานสรุปผลสำหรับหัวข้อแผง AI */
@@ -66,6 +66,7 @@ export class ReportComponent implements OnInit {
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
   private toast = inject(ToastService);
+  private indicatorMeta = inject(IndicatorMetaService);   // table_process ในไฟล์ Excel
 
   isLoading: boolean = false;
 
@@ -602,7 +603,9 @@ export class ReportComponent implements OnInit {
         'by-dept': 'สรุปรายหน่วยงาน'
       };
       // ส่งออกตามที่แสดงในตาราง (มีคำค้น = เฉพาะแถวที่ตรง)
-      const exportData = this.activeTab === 'by-dept' ? this.deptViewData : this.viewData;
+      // + คอลัมน์ table_process ต่อจากชื่อตัวชี้วัด (26 พ.ย. 2569)
+      const byId = this.indicatorMeta.meta$.value?.byId;
+      const exportData = withTableProcess(this.activeTab === 'by-dept' ? this.deptViewData : this.viewData, id => byId?.get(id));
       const ws = XLSX.utils.json_to_sheet(exportData);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, tabNames[this.activeTab] || 'Report');
