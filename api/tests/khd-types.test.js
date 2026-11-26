@@ -53,9 +53,11 @@ let app, db, saToken, hosToken;
 const ids = {};
 const api = (p) => '/khupskpi/api' + p;
 const row = async (id) => (await db.query('SELECT r9, moph, ssj, rmw, other, evaluation_mode, required_off_types FROM kpi_indicators WHERE id = ?', [id]))[0][0];
+// รหัสอ้างอิง = report_id ของรายงานจำลอง (คีย์จับคู่กับ KHD — 26 พ.ย. 2569)
+const refFor = (tp) => { const r = mockReports.find(x => x.table_process === tp); return r ? String(r.report_id) : null; };
 const add = async (name, tp) => (await db.query(
-    `INSERT INTO kpi_indicators (kpi_indicators_name, table_process, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_active)
-     VALUES (?, ?, 0, 0, 0, 1, 0, 'all_required', NULL, 1)`, [name, tp]))[0].insertId;
+    `INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_id, r9, moph, ssj, rmw, other, evaluation_mode, required_off_types, is_active)
+     VALUES (?, ?, ?, 0, 0, 0, 1, 0, 'all_required', NULL, 1)`, [name, tp, refFor(tp)]))[0].insertId;
 const apply = (token, body) => request(app).post(api('/indicators/apply-khd-types')).set('Authorization', `Bearer ${token}`).send(body);
 
 describe('POST /indicators/apply-khd-types', () => {

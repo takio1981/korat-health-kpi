@@ -28,7 +28,7 @@ jest.mock('../db-remote', () => ({
             if (/SELECT \* FROM reports WHERE data_source = 'excel'/.test(s)) return [mockReports];
             if (/FROM reports WHERE data_source = 'excel' AND LENGTH\(report_code\) = LENGTH\(table_process\) AND table_process IN \(\?\)/.test(s))
                 return [mockReports.filter(r => params[0].includes(r.table_process))];
-            if (/SELECT report_id, table_process, data_source FROM reports/.test(s)) return [mockReports];
+            if (/SELECT report_id, data_source FROM reports ORDER BY report_id/.test(s)) return [mockReports];
             throw new Error('KHD จำลองไม่รองรับคำสั่ง: ' + s.slice(0, 120));
         }
     })
@@ -42,7 +42,9 @@ const fy = require('../services/fiscal-years');
 let app, db, saToken, hosToken;
 const ids = {};
 const api = (p) => '/khupskpi/api' + p;
-const add = async (name, tp, years) => (await db.query('INSERT INTO kpi_indicators (kpi_indicators_name, table_process, is_active, khd_fiscal_year) VALUES (?, ?, 1, ?)', [name, tp, years]))[0].insertId;
+// รหัสอ้างอิง = report_id ของรายงานจำลอง (คีย์จับคู่กับ KHD — 26 พ.ย. 2569)
+const refFor = (tp) => { const r = mockReports.find(x => x.table_process === tp); return r ? String(r.report_id) : null; };
+const add = async (name, tp, years) => (await db.query('INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_id, is_active, khd_fiscal_year) VALUES (?, ?, ?, 1, ?)', [name, tp, refFor(tp), years]))[0].insertId;
 const yearsOf = async (id) => (await db.query('SELECT khd_fiscal_year AS y FROM kpi_indicators WHERE id = ?', [id]))[0][0].y;
 const post = (t, p, body) => request(app).post(api(p)).set('Authorization', `Bearer ${t}`).send(body);
 

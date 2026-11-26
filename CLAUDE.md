@@ -1081,6 +1081,10 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   - log: `admin_force_logout` ใน system_logs
 
 ### Report Compare — เทียบตัวชี้วัดกับ KHD (`GET /report-compare`)
+- **คีย์จับคู่ = report_id ↔ `kpi_indicators_id` อย่างเดียว (26 พ.ย. 2569 — ผู้ใช้สั่ง: report_id ไม่ซ้ำ แต่ table_process ซ้ำได้ เพราะใช้ตารางส่งออกเดียวกัน):** `matchLocalsToKhd()` ไม่ใช้ khd_report_id/table_process/ชื่อจับคู่แล้ว
+  — ตัวที่ยังไม่จับคู่: `suggestions` (khd_report_id → ชื่อตรงกันรายการเดียวทั้ง 2 ฝั่ง) → แถว missing_remote `ref_suggest` + KHD `suggested_for`, รหัสซ้ำ = `refTaken` → `ref_taken_by` | `findRefTargets()` ใช้ใน apply-khd-ref (คู่ = แก้ลิงก์, แนะนำ = ตั้งรหัส)
+  — **ห้ามใช้ table_process เป็นคีย์หาตัวชี้วัดของรายงาน KHD**: `/report-compare/sync` (ใช้ชื่อ KHD), add-from-khd/bulk (มีแล้ว = รหัสซ้ำ), sync-khd-link ค้นด้วยรหัสอ้างอิง | apply-khd-table-process: `REF_MISMATCH` (เดิม NAME_MISMATCH), เลิก TP_IN_USE/KHD_TP_SHARED, OLD_TABLES_EXIST เฉพาะเมื่อไม่มีตัวชี้วัดอื่นใช้ tp เดิม
+  — frontend `khdRefTarget()`, `KhdTpKind = 'apply'` (tp_ambiguous/linked_other ไม่มีแล้ว) | ข้อมูลจริง 26 พ.ย. 2569: มีรหัส 270/279 ไม่ซ้ำ, ปีงบ 2570 key_in จับคู่ได้ 137/141, table_process ใช้ร่วม ระบบ 4 / KHD 12
 - **ตารางหลักเปลี่ยน (24 พ.ย. 2569 — ผู้ใช้สั่ง):** ตั้งต้นจาก KHD `report_fiscal_year_config` ของปีงบที่เทียบ (ค่าตั้งต้น `currentFiscalYear()`) JOIN `reports` ด้วย `report_id` **เฉพาะ `reports.data_source = 'excel'`** (= key_in ของระบบ — ผู้ใช้สั่งรอบสอง 24 พ.ย. 2569; เลิกใช้ heuristic LENGTH)
   — รายงาน hdc ไม่แสดง/ไม่จับคู่, ตัวชี้วัดของระบบ `data_source = 'hdc'` ที่ไม่ได้คู่ = ไม่แสดงในผลเทียบ (summary `local_hdc_skipped`), apply-khd-table-process ก็กรอง excel
   — `services/khd-match.js`: `loadKhdYearReports()` (alias `fy_*` แยกคอลัมน์ชื่อซ้ำ → `fyConfigMap`), `matchLocalsToKhd()` ฟังก์ชันล้วน: **รหัสอ้างอิง `kpi_indicators_id` = report_id → `khd_report_id` → table_process** (ร่วมกันหลายรายงาน = ชื่อตรง → report_code ตรง → ท้ายสุด) แล้ว `pairByNameDifferentTp()` ด้วยชื่อ — ตัวชี้วัด 1 ตัว = รายงาน 1 รายการ (id น้อยได้ก่อน)

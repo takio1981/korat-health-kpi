@@ -1827,27 +1827,36 @@ export class KpiManageComponent implements OnInit {
   }
 
   /**
-   * รหัสอ้างอิง (kpi_indicators_id) เทียบกับ report_id ของ KHD (24 พ.ย. 2569) — เทียบจากค่าปัจจุบันของตัวชี้วัด (ใช้รหัส KHD แล้วเห็นผลทันที)
-   * 'match' | 'mismatch' | 'conflict' (รหัสอ้างอิงกับลิงก์ KHD ชี้คนละรายงานของปีงบ) | null = ยังไม่เทียบ / ไม่มีคู่ในปีงบ
+   * รหัสอ้างอิง (kpi_indicators_id) เทียบกับ report_id ของ KHD (24 พ.ย. 2569, คีย์จับคู่อย่างเดียว 26 พ.ย. 2569) — เทียบจากค่าปัจจุบัน (ใช้รหัส KHD แล้วเห็นผลทันที)
+   * 'match' | 'mismatch' (ยังไม่ตั้งรหัส — มีรหัสที่แนะนำ ref_suggest) | 'conflict' (คู่แล้วแต่ลิงก์ khd_report_id ชี้รายงานอื่น) | null = ยังไม่เทียบ / ไม่มีรายงานที่แนะนำ
    */
   khdRefState(item: any): 'match' | 'mismatch' | 'conflict' | null {
     const k = this.getKhdData(item);
-    if (!k || !k.khd_report_id || k.status === 'missing_remote' || k.status === 'missing_local') return null;
-    if (k.ref_conflict) return 'conflict';
-    return String(item.kpi_indicators_id ?? '').trim() === String(k.khd_report_id) ? 'match' : 'mismatch';
+    const target = this.khdRefTarget(item);
+    if (!k || target == null || k.status === 'missing_local') return null;
+    if (String(item.kpi_indicators_id ?? '').trim() !== String(target)) return 'mismatch';
+    if (k.ref_conflict && item.khd_report_id != null && String(item.khd_report_id) !== String(target)) return 'conflict';
+    return 'match';
+  }
+  /** report_id ของ KHD ที่รหัสอ้างอิงควรเป็น: คู่ = รายงานของคู่, ยังไม่จับคู่ = รหัสที่แนะนำ */
+  khdRefTarget(item: any): number | null {
+    const k = this.getKhdData(item);
+    if (!k) return null;
+    if (k.status === 'missing_remote') return k.ref_suggest?.report_id ?? null;
+    return k.khd_report_id ?? null;
   }
 
-  /** ป้ายวิธีจับคู่ เมื่อไม่ได้จับคู่ด้วยรหัสอ้างอิง */
+  /** ที่มาของรหัสที่แนะนำ (ยังไม่จับคู่) */
   khdMatchByText(item: any): string {
-    const by = this.getKhdData(item)?.match_by;
-    return by === 'khd_report_id' ? 'จับคู่ด้วยลิงก์ KHD' : by === 'table_process' ? 'จับคู่ด้วย table_process' : '';
+    const by = this.getKhdData(item)?.ref_suggest?.by;
+    return by === 'khd_report_id' ? 'แนะนำจากลิงก์ KHD' : by === 'name' ? 'แนะนำจากชื่อที่ตรงกัน' : '';
   }
 
-  /** ใช้รหัส KHD: ตั้งรหัสอ้างอิง + khd_report_id ให้เท่ากับ report_id ของ KHD (server จับคู่ใหม่เอง) */
+  /** ใช้รหัส KHD: ตั้งรหัสอ้างอิง + khd_report_id ตามรหัสที่แนะนำ / แก้ลิงก์ของคู่ (server คำนวณใหม่เอง) — หัวข้ออื่นเทียบหลังกดเทียบ KHD อีกครั้ง */
   applyKhdRef(list: any[]) {
     const items = (list || []).filter(i => this.khdRefState(i) === 'mismatch' || this.khdRefState(i) === 'conflict');
     if (!items.length) { Swal.fire('แจ้งเตือน', 'ไม่มีตัวชี้วัดที่รหัสอ้างอิงไม่ตรงกับ KHD', 'info'); return; }
-    const sample = items.slice(0, 8).map(i => `<li>${escapeHtmlText(i.kpi_indicators_name)}: ${escapeHtmlText(i.kpi_indicators_id || 'ว่าง')} → <b>${escapeHtmlText(this.getKhdData(i)?.khd_report_id)}</b></li>`).join('');
+    const sample = items.slice(0, 8).map(i => `<li>${escapeHtmlText(i.kpi_indicators_name)}: ${escapeHtmlText(i.kpi_indicators_id || 'ว่าง')} → <b>${escapeHtmlText(this.khdRefTarget(i))}</b></li>`).join('');
     Swal.fire({
       title: 'ใช้รหัส KHD', icon: 'question', showCancelButton: true, confirmButtonColor: '#10b981',
       confirmButtonText: 'ปรับรหัสอ้างอิง', cancelButtonText: 'ยกเลิก',
@@ -1861,7 +1870,7 @@ export class KpiManageComponent implements OnInit {
             const ind = this.indicators.find(x => x.id === u.id);
             if (ind) Object.assign(ind, u.after);
             const k = ind ? this.getKhdData(ind) : null;
-            if (k) Object.assign(k, { ref_match: true, link_match: true, ref_conflict: false });
+            if (k && k.status !== 'missing_remote') Object.assign(k, { ref_match: true, link_match: true, ref_conflict: false });
           }
           Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2500, showConfirmButton: false });
           this.applyFilter();
@@ -1880,7 +1889,7 @@ export class KpiManageComponent implements OnInit {
       Swal.fire('แจ้งเตือน', 'ไม่พบ KHD report — กดเทียบกับ KHD ก่อน', 'info');
       return;
     }
-    if (khd.status !== 'different') {
+    if (khd.status !== 'different' && !(khd.status === 'tp_different' && khd.name_match === false)) {
       Swal.fire('แจ้งเตือน', 'ตัวชี้วัดนี้ตรงกับ KHD อยู่แล้ว', 'info');
       return;
     }
@@ -2701,11 +2710,11 @@ export class KpiManageComponent implements OnInit {
   get khdDeptDiffItems(): any[] { return this.indicators.filter(i => this.khdOrgMatch(i, 'dept') === false); }
   get khdMainDiffItems(): any[] { return this.indicators.filter(i => this.khdOrgMatch(i, 'main') === false); }
   /** ค่าหน่วยงาน/หมวดหมู่หลักใน KHD ที่ยังจับคู่กับระบบไม่ได้ (เทียบไม่ได้จนกว่าจะตั้งที่ "จับคู่ข้อมูล KHD") */
-  /** ชื่อเดียวกันแต่ table_process ต่างกัน (11 พ.ย. 2569): ใช้ได้ / ต้องแก้ที่ KHD / ชื่อตรงหลายรายการ / อาจซ้ำในระบบ */
+  /** รหัสอ้างอิงตรงแต่ table_process ต่างกัน (ใช้ table_process ของ KHD ได้ทุกคู่ — ใช้ตารางร่วมกันได้) */
   khdTpKind(item: any): KhdTpKind | null { return khdTpKind(this.getKhdData(item)); }
   khdTpDetail(item: any): string { return khdTpDetail(this.getKhdData(item)); }
   get khdTpCounts(): Record<KhdTpKind, number> {
-    const c: Record<KhdTpKind, number> = { apply: 0, khd_fix: 0, ambiguous: 0, linked_other: 0 };
+    const c: Record<KhdTpKind, number> = { apply: 0 };
     for (const i of this.indicators) { const k = this.khdTpKind(i); if (k) c[k]++; }
     return c;
   }
@@ -2951,9 +2960,12 @@ export class KpiManageComponent implements OnInit {
     });
   }
 
-  /** ใช้ชื่อของ KHD ทุกตัวที่ table_process เดียวกันแต่ชื่อต่าง (POST /report-compare/sync เดิม — server อ่านชื่อจาก KHD) */
+  /** ใช้ชื่อของ KHD ทุกคู่ที่ชื่อต่าง (POST /report-compare/sync — server อ่านชื่อจาก KHD ค้นตัวชี้วัดด้วยรหัสอ้างอิง) */
   syncAllNamesFromKhd() {
-    const items = this.indicators.filter(i => this.getKhdCompareStatus(i) === 'different' && this.getKhdData(i)?.khd_report_id);
+    const items = this.indicators.filter(i => {
+      const k = this.getKhdData(i);
+      return !!k?.khd_report_id && (k.status === 'different' || (k.status === 'tp_different' && k.name_match === false));
+    });
     if (!items.length) { Swal.fire('แจ้งเตือน', 'ไม่มีตัวชี้วัดที่ชื่อต่างจาก KHD', 'info'); return; }
     const esc = (t: any) => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as any)[c]);
     const list = items.slice(0, 10).map(i => `<tr><td class="text-left pr-2 py-0.5 text-gray-600">${esc(i.kpi_indicators_name)}</td><td class="px-1">→</td>` +
@@ -2978,7 +2990,7 @@ export class KpiManageComponent implements OnInit {
     });
   }
 
-  /** ชื่อเดียวกันแต่ table_process ต่างกัน: เปลี่ยน table_process ของระบบเป็นของ KHD (ทีละตัว — server ตรวจชื่อ/ซ้ำ/ตารางชื่อเดิม) */
+  /** รหัสอ้างอิงตรงแต่ table_process ต่างกัน: เปลี่ยน table_process ของระบบเป็นของ KHD (ทีละตัว — server ตรวจรหัสอ้างอิง/ตารางชื่อเดิม) */
   applyKhdTableProcess(item: any) {
     const k = this.getKhdData(item);
     if (!k || k.status !== 'tp_different') return;
@@ -2992,8 +3004,8 @@ export class KpiManageComponent implements OnInit {
       html: `<div class="text-left text-sm space-y-2">
         <p><b>${esc(item.kpi_indicators_name)}</b></p>
         <p><code class="bg-gray-100 px-1 rounded">${esc(item.table_process)}</code> → <code class="bg-emerald-50 px-1 rounded font-bold">${esc(k.khd_table_process)}</code></p>
-        <p class="text-xs text-gray-500">เชื่อมกับ KHD #${esc(k.khd_report_id)} และใช้รหัสตัวชี้วัดของ KHD — ระบบจะไม่เปลี่ยนถ้ายังมีตารางส่งออก/ตารางแบบฟอร์มที่ใช้ชื่อเดิม
-        หรือมีตัวชี้วัดอื่นใช้ table_process นี้อยู่แล้ว (ผลงานที่บันทึกไม่ได้ผูกกับ table_process จึงไม่หาย)</p></div>`,
+        <p class="text-xs text-gray-500">เชื่อมกับ KHD #${esc(k.khd_report_id)} และใช้รหัสตัวชี้วัดของ KHD — table_process ใช้ร่วมกับตัวชี้วัดอื่นได้ (ตารางส่งออกเดียวกัน)
+        ระบบจะไม่เปลี่ยนถ้ายังมีตารางส่งออก/ตารางแบบฟอร์มที่ใช้ชื่อเดิมและไม่มีตัวชี้วัดอื่นใช้ (ผลงานที่บันทึกไม่ได้ผูกกับ table_process จึงไม่หาย)</p></div>`,
       icon: 'warning', showCancelButton: true, confirmButtonColor: '#0d9488',
       confirmButtonText: '<i class="fas fa-arrow-down mr-1"></i> เปลี่ยน table_process', cancelButtonText: 'ยกเลิก'
     }).then(r => {

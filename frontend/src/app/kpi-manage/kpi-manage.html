@@ -502,7 +502,7 @@
         </div>
       </div>
 
-      <!-- Banner: ชื่อเดียวกันแต่ table_process ต่างกัน (11 พ.ย. 2569) -->
+      <!-- Banner: รหัสอ้างอิงตรงกับ KHD แต่ table_process ต่างกัน (11 พ.ย. 2569, ปรับ 26 พ.ย. 2569) -->
       <div *ngIf="activeTab === 'indicators' && khdCounts.tp_different > 0" id="khd-tp-banner"
            class="mb-4 bg-teal-50 border-2 border-teal-200 rounded-xl p-4">
         <div class="flex flex-wrap items-start gap-3">
@@ -510,12 +510,9 @@
             <i class="fas fa-table text-teal-600 text-lg"></i>
           </div>
           <div class="flex-1 min-w-0">
-            <h4 class="text-sm font-bold text-teal-900">ชื่อตัวชี้วัดเหมือนกับ KHD แต่ table_process ต่างกัน ({{ khdCounts.tp_different }} ตัว)</h4>
+            <h4 class="text-sm font-bold text-teal-900">รหัสอ้างอิงตรงกับ KHD แต่ table_process ต่างกัน ({{ khdCounts.tp_different }} ตัว)</h4>
             <p class="text-xs text-teal-700 mt-1">
-              ใช้ table_process ของ KHD ได้ <b>{{ khdTpCounts.apply }}</b> ตัว (ปุ่มในแถว)
-              · ต้องแก้ที่ KHD <b>{{ khdTpCounts.khd_fix }}</b> ตัว (KHD ใช้ table_process เดียวกันหลายรายงาน และระบบใช้ table_process นั้นกับตัวชี้วัดอื่นแล้ว)
-              · ชื่อตรงกับ KHD หลายรายการ <b>{{ khdTpCounts.ambiguous }}</b> ตัว
-              · อาจเป็นตัวชี้วัดซ้ำในระบบ <b>{{ khdTpCounts.linked_other }}</b> ตัว
+              ใช้ table_process ของ KHD ได้ <b>{{ khdTpCounts.apply }}</b> ตัว (ปุ่มในแถว) — table_process ใช้ร่วมกับตัวชี้วัดอื่นได้ (ตารางส่งออกเดียวกัน) จึงไม่ใช้จับคู่กับ KHD
             </p>
             <p class="text-[11px] text-teal-600 mt-1">ค่าหัวข้ออื่น (เกณฑ์ ประเภท ปีงบ หน่วยงาน หมวดหมู่หลัก) ของคู่ที่จับได้ เทียบกับรายงาน KHD ที่ชื่อเดียวกันแล้ว — ดูได้ในหน้าต่างรายละเอียด</p>
           </div>
@@ -598,7 +595,7 @@
                       [title]="'ระบบ: ' + localOrgText(item, 'main')"><i class="fas fa-folder-tree text-[9px]"></i>KHD: {{ khdOrgText(item, 'main') }}</span>
                 <button *ngIf="canEditData && khdOrgMatch(item, 'main') === false" (click)="applyKhdOrg([item], 'main')" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-fuchsia-600 text-white font-bold"><i class="fas fa-arrow-down text-[9px]"></i>ใช้หมวดหมู่หลัก KHD</button>
                 <span *ngIf="khdTpKind(item)" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-50 border border-teal-300 text-teal-700 font-bold" [title]="khdTpDetail(item)">
-                  <i class="fas fa-table text-[9px]"></i>{{ khdTpKind(item) === 'apply' || khdTpKind(item) === 'khd_fix' ? 'KHD: ' + getKhdData(item)?.khd_table_process : (khdTpKind(item) === 'ambiguous' ? 'ชื่อตรงกับ KHD หลายรายการ' : 'อาจซ้ำในระบบ') }}</span>
+                  <i class="fas fa-table text-[9px]"></i>KHD: {{ getKhdData(item)?.khd_table_process }}</span>
                 <button *ngIf="canEditData && khdTpKind(item) === 'apply'" (click)="applyKhdTableProcess(item)" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-600 text-white font-bold"><i class="fas fa-arrow-down text-[9px]"></i>ใช้ table_process KHD</button>
                 <span *ngIf="item.weight" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-50 border border-orange-200 text-orange-700" title="น้ำหนัก">
                   <i class="fas fa-weight-hanging text-[9px]"></i>{{ item.weight }}
@@ -833,15 +830,19 @@
                     </div>
                     <button *ngSwitchCase="'mismatch'" type="button" (click)="canEditData && applyKhdRef([item]); $event.stopPropagation()"
                             class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-800"
-                            [title]="'รหัสอ้างอิงไม่ตรงกับ KHD' + (khdMatchByText(item) ? ' (' + khdMatchByText(item) + ')' : '') + (canEditData ? ' — กดเพื่อใช้รหัส KHD' : '')">
-                      <i class="fas fa-hashtag mr-1"></i>{{ item.kpi_indicators_id || 'ว่าง' }} → {{ getKhdData(item)?.khd_report_id }}
+                            [title]="'รหัสอ้างอิงยังไม่ตรงกับ KHD' + (khdMatchByText(item) ? ' (' + khdMatchByText(item) + ')' : '') + (canEditData ? ' — กดเพื่อใช้รหัส KHD' : '')">
+                      <i class="fas fa-hashtag mr-1"></i>{{ item.kpi_indicators_id || 'ว่าง' }} → {{ khdRefTarget(item) }}
                     </button>
                     <button *ngSwitchCase="'conflict'" type="button" (click)="canEditData && applyKhdRef([item]); $event.stopPropagation()"
                             class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700"
-                            title="รหัสอ้างอิงกับลิงก์ KHD (khd_report_id) ชี้คนละรายงานของปีงบ — ตรวจสอบแล้วกดเพื่อใช้รหัสที่จับคู่ได้">
-                      <i class="fas fa-triangle-exclamation mr-1"></i>รหัสขัดกัน {{ item.kpi_indicators_id }} / {{ item.khd_report_id }}
+                            title="ลิงก์ KHD (khd_report_id) ชี้รายงานอื่นของปีงบ — กดเพื่อแก้ลิงก์ให้ตรงกับรหัสอ้างอิง">
+                      <i class="fas fa-triangle-exclamation mr-1"></i>ลิงก์ไม่ตรง {{ item.khd_report_id }} → {{ item.kpi_indicators_id }}
                     </button>
                   </ng-container>
+                  <div *ngIf="getKhdData(item)?.ref_taken_by as t" class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700"
+                       [title]="'รหัสอ้างอิงซ้ำกับตัวชี้วัด #' + t.id + ' ' + t.name + ' ที่จับคู่กับ KHD แล้ว — แก้รหัสอ้างอิงในหน้าต่างตัวชี้วัด'">
+                    <i class="fas fa-clone mr-1"></i>รหัสซ้ำกับ #{{ t.id }}
+                  </div>
                   <!-- KHD inactive badge -->
                   <div *ngIf="getKhdData(item)?.khd_is_active === 0 || getKhdData(item)?.khd_is_active === '0'"
                        class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700"
@@ -905,9 +906,6 @@
                           [title]="'ปรับเป็น ' + khdOrgText(item, 'main')">
                     <i class="fas fa-arrow-down mr-1"></i>ใช้หมวดหมู่หลัก KHD
                   </button>
-                  <div *ngIf="khdTpKind(item) && khdTpKind(item) !== 'apply'" class="mt-1 text-[10px] font-bold text-teal-700" [title]="khdTpDetail(item)">
-                    <i class="fas fa-circle-info mr-1"></i>{{ khdTpKind(item) === 'khd_fix' ? 'ต้องแก้ที่ KHD' : khdTpKind(item) === 'ambiguous' ? 'ชื่อตรง KHD หลายรายการ' : 'อาจซ้ำในระบบ' }}
-                  </div>
                   <button *ngIf="canEditData && khdTpKind(item) === 'apply'" (click)="applyKhdTableProcess(item)"
                           class="mt-1 block mx-auto px-2 py-0.5 bg-teal-600 hover:bg-teal-700 text-white rounded text-[10px] font-bold whitespace-nowrap"
                           [title]="'เปลี่ยนเป็น ' + getKhdData(item)?.khd_table_process">
@@ -1185,6 +1183,9 @@
                   <div *ngIf="item.khd_tp_shared > 1" class="mt-0.5 font-sans text-[10px] font-bold text-amber-700"
                        [title]="item.khd_tp_used_by ? 'ระบบใช้ table_process นี้กับตัวชี้วัด #' + item.khd_tp_used_by.id + ' ' + item.khd_tp_used_by.name + ' แล้ว — เพิ่มเข้าระบบด้วย table_process นี้ไม่ได้ ควรแก้ที่ KHD' : ''">
                     <i class="fas fa-triangle-exclamation mr-1"></i>KHD ใช้ซ้ำ {{ item.khd_tp_shared }} รายงาน<span *ngIf="item.khd_tp_used_by"> · ระบบใช้แล้ว (#{{ item.khd_tp_used_by.id }})</span></div>
+                  <div *ngIf="item.suggested_for as sf" class="mt-0.5 font-sans text-[10px] font-bold text-orange-700"
+                       [title]="'ตัวชี้วัด #' + sf.id + ' ' + sf.name + ' น่าจะเป็นรายงานนี้แต่ยังไม่ได้ตั้งรหัสอ้างอิง — ใช้รหัส KHD ที่ตัวชี้วัดนั้นแทนการเพิ่มใหม่'">
+                    <i class="fas fa-hashtag mr-1"></i>น่าจะเป็นตัวชี้วัด #{{ sf.id }} (ยังไม่ตั้งรหัส)</div>
                 </td>
                 <td class="px-3 py-2 text-gray-800 font-medium">{{ item.khd_name }}</td>
                 <td class="px-3 py-2 align-top">

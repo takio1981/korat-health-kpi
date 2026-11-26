@@ -5,6 +5,13 @@ export interface ChangelogEntry { version: string; date: string; changes: Change
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '2569.11.26',
+    date: '26 พฤศจิกายน 2569',
+    changes: [
+      { type: 'improve', text: 'จัดการตัวชี้วัด — เทียบกับ KHD: จับคู่ด้วยรหัสอ้างอิง (= report_id ของ KHD) อย่างเดียว ไม่ใช้ table_process จับคู่แล้ว (หลายตัวชี้วัดใช้ตารางส่งออกเดียวกันได้) · ตัวชี้วัดที่ยังไม่ตั้งรหัสแสดงรหัสที่แนะนำให้กด "ใช้รหัส KHD" · ป้าย "รหัสซ้ำ" · ใช้ table_process ของ KHD ได้แม้ตัวชี้วัดอื่นใช้อยู่ · "ใช้ชื่อ KHD" เปลี่ยนเฉพาะตัวชี้วัดที่รหัสตรง' },
+    ],
+  },
+  {
     version: '2569.11.24',
     date: '24 พฤศจิกายน 2569',
     changes: [

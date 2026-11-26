@@ -2879,6 +2879,16 @@ Build + redeploy ทั้ง backend และ frontend Docker container เร
 - **แก้:** `matchesSearchTerm()` (dashboard.ts) กติกาเดียวกับ server ใช้ใน applyFilters — Test: `dashboard.spec.ts`
 
 
+## 26 พ.ย. 2569 — เทียบกับ KHD: คีย์จับคู่ = report_id ↔ รหัสอ้างอิง อย่างเดียว
+
+- **ผู้ใช้สั่ง:** ใช้ `reports.report_id` / `report_fiscal_year_config.report_id` เทียบกับ `kpi_indicators.kpi_indicators_id` เป็นคีย์หลัก เพราะไม่ซ้ำ — table_process ซ้ำกันได้ (ใช้ตารางเดียวกันส่งออก KHD)
+- **ปัญหาเดิม:** จับคู่ลำดับ รหัสอ้างอิง → khd_report_id → table_process → ชื่อ ทำให้ตัวชี้วัดที่ไม่มีรหัสถูกจับคู่กับรายงานอื่นที่ใช้ตารางเดียวกัน แล้วปุ่มปรับเกณฑ์/ประเภทใช้ค่าของรายงานผิดตัว;
+  "ใช้ชื่อ KHD" (`/report-compare/sync`) เปลี่ยนชื่อ `WHERE table_process = ?` = ทุกตัวชี้วัดที่ใช้ตารางร่วมกัน; apply-khd-table-process ปฏิเสธ table_process ที่ตัวอื่นใช้อยู่ (TP_IN_USE)
+- **แก้:** `services/khd-match.js` จับคู่ด้วยรหัสอ้างอิงอย่างเดียว + รหัสที่แนะนำ (khd_report_id → ชื่อตรงรายการเดียว) ให้กด "ใช้รหัส KHD" | sync/add-from-khd/sync-khd-link ค้นด้วยรหัสอ้างอิง |
+  apply-khd-table-process ตรวจรหัสอ้างอิง (REF_MISMATCH) ใช้ table_process ร่วมได้ | หน้าจอ: ป้ายรหัสที่แนะนำ/รหัสซ้ำ/น่าจะเป็นตัวชี้วัด #…, แถบ table_process ไม่มีกรณี "ต้องแก้ที่ KHD" แล้ว
+- ข้อมูลจริง (อ่านอย่างเดียว): ตัวชี้วัดมีรหัสอ้างอิง 270/279 ไม่ซ้ำกัน, ปีงบ 2570 รายงาน key_in 141 จับคู่ด้วยรหัสได้ 137
+- Test: `khd-match.test.js` (เขียนใหม่), `khd-table-process.test.js` (เขียนใหม่ — tp ร่วมกัน, REF_MISMATCH, sync ตามรหัส), ชุด khd-* ตั้งรหัสอ้างอิงให้ตัวชี้วัดทดสอบ, `khd-diff.spec.ts`, `kpi-manage.spec.ts`
+
 ## 24 พ.ย. 2569 — เทียบกับ KHD: เฉพาะรายงาน key_in (KHD reports.data_source = 'excel')
 
 - **ผู้ใช้สั่ง:** หน้าเทียบกับ KHD ให้ดึงเฉพาะตัวชี้วัดที่ `khd.reports.data_source = 'excel'` (ระบบเรียก key_in) — รอบก่อนแสดงทั้ง excel และ hdc

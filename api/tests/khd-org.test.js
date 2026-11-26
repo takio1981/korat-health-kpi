@@ -76,8 +76,10 @@ describe('POST /indicators/apply-khd-org', () => {
         const [[h]] = await db.query('SELECT hoscode FROM chospital ORDER BY hoscode LIMIT 1');
         const ah = await ensureTestUser(db, { username: 'test_khdorg_hos', role: 'admin_hos', hospcode: h.hoscode });
         hosToken = makeToken({ userId: ah.id, username: ah.username, role: 'admin_hos', deptId: 1, hospcode: h.hoscode });
+        // รหัสอ้างอิง = report_id ของรายงานจำลอง (คีย์จับคู่กับ KHD — 26 พ.ย. 2569)
+        const refFor = (tp) => { const r = mockReports.find(x => x.table_process === tp); return r ? String(r.report_id) : null; };
         const add = async (name, tp) => (await db.query(
-            'INSERT INTO kpi_indicators (kpi_indicators_name, table_process, dept_id, main_indicator_id, is_active) VALUES (?, ?, ?, NULL, 1)', [name, tp, otherDept]))[0].insertId;
+            'INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_id, dept_id, main_indicator_id, is_active) VALUES (?, ?, ?, ?, NULL, 1)', [name, tp, refFor(tp), otherDept]))[0].insertId;
         ids.a = await add('test_khdorg A', 'test_khdorg_a');
         ids.b = await add('test_khdorg B', 'test_khdorg_b');
         ids.c = await add('test_khdorg C', 'test_khdorg_c');

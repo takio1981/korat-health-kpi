@@ -1,8 +1,9 @@
 // จับคู่ตัวชี้วัดของระบบ (kpi_indicators) กับรายงาน KHD ของปีงบ (24 พ.ย. 2569 — ผู้ใช้สั่ง)
 // ตารางหลัก = KHD report_fiscal_year_config ของปีงบ (ค่าตั้งต้น = ปีงบปัจจุบัน) JOIN reports ด้วย report_id
 //   เฉพาะ reports.data_source = 'excel' (= key_in ของระบบ — 24 พ.ย. 2569 ผู้ใช้สั่ง; รายงาน hdc ไม่นำมาเทียบ)
-// ลำดับจับคู่ (ตัวชี้วัด 1 ตัว = รายงาน 1 รายการ): kpi_indicators_id ("รหัสอ้างอิง") = report_id → khd_report_id = report_id → table_process เดียวกัน
-//   (ชื่อเดียวกันแต่ table_process ต่าง = pairByNameDifferentTp ใน routes/khd.js ขั้นสุดท้าย)
+// คีย์จับคู่ = report_id ของ KHD (reports.report_id = report_fiscal_year_config.report_id) ↔ kpi_indicators.kpi_indicators_id ("รหัสอ้างอิง") **อย่างเดียว**
+//   (26 พ.ย. 2569 ผู้ใช้สั่ง — report_id ไม่ซ้ำกัน แต่ table_process ซ้ำกันได้: หลายตัวชี้วัด/รายงานใช้ตารางส่งออกเดียวกัน จึงห้ามใช้ table_process/ชื่อเป็นคีย์)
+//   ตัวชี้วัดที่รหัสอ้างอิงยังไม่ตรง = ไม่จับคู่ (ไม่เทียบหัวข้ออื่น) แต่มี "รหัสที่แนะนำ" (suggestions) จาก khd_report_id → ชื่อที่ตรงกันรายการเดียว ให้กด "ใช้รหัส KHD"
 // ใช้ร่วมกันทั้ง GET /report-compare และทุกปุ่มปรับค่า (apply-khd-*) — ห้ามจับคู่ด้วย table_process แยกเองในเส้นทางใหม่
 
 const normName = (s) => String(s ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -39,60 +40,56 @@ async function loadKhdYearReports(remote, yearBh) {
 }
 
 /**
- * จับคู่ (ฟังก์ชันล้วน) — locals เรียงตาม id ก่อน (ตัวที่เก่ากว่าได้สิทธิ์ก่อนเมื่อชี้รายงานเดียวกัน)
- * → { pairs: [{ khd, local, match_by, ref_match, link_match, ref_conflict, name_match, tp_match }], unmatchedKhd, unmatchedLocals }
- *   ref_conflict = รหัสอ้างอิงกับ khd_report_id ชี้คนละรายงานที่อยู่ในปีงบทั้งคู่
+ * จับคู่ (ฟังก์ชันล้วน) — รหัสอ้างอิง (kpi_indicators_id) = report_id เท่านั้น, ตัวชี้วัด 1 ตัว = รายงาน 1 รายการ
+ * (รหัสเดียวกันหลายตัว — กันไว้ที่ apply-khd-ref แล้ว — ตัวที่ id น้อยได้คู่ ที่เหลือ refTaken)
+ * → { pairs: [{ khd, local, match_by: 'kpi_indicators_id', ref_match, link_match, ref_conflict, name_match, tp_match }],
+ *     unmatchedKhd, unmatchedLocals, suggestions: Map(local → { khd, by: 'khd_report_id' | 'name' }), refTaken: Map(local → local ที่ได้คู่) }
+ *   ref_conflict = khd_report_id ชี้รายงานอื่นของปีงบ (ลิงก์เก่าค้าง) | table_process ไม่ใช้จับคู่ (tp_match = ข้อมูลประกอบเท่านั้น)
  */
 function matchLocalsToKhd(locals, khdRows) {
     const ls = [...(locals || [])].sort((a, b) => Number(a.id) - Number(b.id));
     const byRid = new Map();
     for (const k of khdRows || []) byRid.set(Number(k.report_id), k);
-    const khdOf = new Map(), localOf = new Map(), by = new Map();
-    const claim = (l, k, how) => { khdOf.set(l, k); localOf.set(k, l); by.set(l, how); };
-    // 1) รหัสอ้างอิง 2) khd_report_id
-    for (const [how, get] of [['kpi_indicators_id', refOf], ['khd_report_id', linkOf]]) {
-        for (const l of ls) {
-            if (khdOf.has(l)) continue;
-            const id = get(l);
-            const k = id === null ? null : byRid.get(id);
-            if (k && !localOf.has(k)) claim(l, k, how);
-        }
-    }
-    // 3) table_process เดียวกัน — KHD หลายรายงานใช้ table_process ร่วมกันได้: ชื่อตรง (+ รหัสรายงานตรง) → รหัสรายงานตรง → รายการท้ายสุด (พฤติกรรมเดิม)
-    const byTp = new Map();
-    for (const k of khdRows || []) {
-        const tp = tpOf(k.table_process);
-        if (!tp || localOf.has(k)) continue;
-        if (!byTp.has(tp)) byTp.set(tp, []);
-        byTp.get(tp).push(k);
-    }
+    const khdOf = new Map(), localOf = new Map(), refTaken = new Map();
     for (const l of ls) {
-        const tp = tpOf(l.table_process);
-        if (khdOf.has(l) || !tp) continue;
-        const rows = (byTp.get(tp) || []).filter(k => !localOf.has(k));
-        if (!rows.length) continue;
-        const named = rows.filter(k => normName(k.report_name) === normName(l.kpi_indicators_name));
-        const code = (r) => normCode(r.report_code) === normCode(tp);
-        claim(l, named.find(code) || named[0] || rows.find(code) || rows[rows.length - 1], 'table_process');
+        const id = refOf(l);
+        const k = id === null ? null : byRid.get(id);
+        if (!k) continue;
+        if (localOf.has(k)) { refTaken.set(l, localOf.get(k)); continue; }
+        khdOf.set(l, k); localOf.set(k, l);
     }
     const pairs = [];
     for (const l of ls) {
         const k = khdOf.get(l);
         if (!k) continue;
-        const rid = Number(k.report_id), ref = refOf(l), link = linkOf(l);
+        const rid = Number(k.report_id), link = linkOf(l);
         pairs.push({
-            khd: k, local: l, match_by: by.get(l),
-            ref_match: ref === rid, link_match: link === rid,
-            ref_conflict: ref !== null && link !== null && ref !== link && byRid.has(ref) && byRid.has(link),
+            khd: k, local: l, match_by: 'kpi_indicators_id',
+            ref_match: true, link_match: link === rid,
+            ref_conflict: link !== null && link !== rid && byRid.has(link),
             name_match: normName(k.report_name) === normName(l.kpi_indicators_name),
             tp_match: tpOf(k.table_process) === tpOf(l.table_process),
         });
     }
-    return {
-        pairs,
-        unmatchedKhd: (khdRows || []).filter(k => !localOf.has(k)),
-        unmatchedLocals: ls.filter(l => !khdOf.has(l)),
-    };
+    const unmatchedKhd = (khdRows || []).filter(k => !localOf.has(k));
+    const unmatchedLocals = ls.filter(l => !khdOf.has(l));
+    // รหัสที่แนะนำ (ยังไม่จับคู่ — ผู้ดูแลกด "ใช้รหัส KHD" ก่อน): khd_report_id เดิม → ชื่อตรงกันรายการเดียวทั้ง 2 ฝั่ง | ไม่ใช้ table_process
+    const suggestions = new Map(), used = new Set();
+    for (const l of unmatchedLocals) {
+        if (refTaken.has(l)) continue;
+        const k = byRid.get(linkOf(l));
+        if (k && !localOf.has(k) && !used.has(k)) { suggestions.set(l, { khd: k, by: 'khd_report_id' }); used.add(k); }
+    }
+    const nameCount = (arr, f) => { const m = new Map(); for (const x of arr) { const n = normName(f(x)); if (n) m.set(n, (m.get(n) || 0) + 1); } return m; };
+    const freeKhd = unmatchedKhd.filter(k => !used.has(k));
+    const freeLocals = unmatchedLocals.filter(l => !suggestions.has(l) && !refTaken.has(l));
+    const kn = nameCount(freeKhd, k => k.report_name), ln = nameCount(freeLocals, l => l.kpi_indicators_name);
+    for (const l of freeLocals) {
+        const n = normName(l.kpi_indicators_name);
+        if (!n || kn.get(n) !== 1 || ln.get(n) !== 1) continue;
+        suggestions.set(l, { khd: freeKhd.find(k => normName(k.report_name) === n), by: 'name' });
+    }
+    return { pairs, unmatchedKhd, unmatchedLocals, suggestions, refTaken };
 }
 
 /**
@@ -112,4 +109,16 @@ async function findKhdForLocals(remote, db, ids, yearBh) {
 
 const notInYearReason = (yearBh) => `ไม่อยู่ในปีงบ ${yearBh} ของ KHD`;
 
-module.exports = { loadKhdYearReports, matchLocalsToKhd, findKhdForLocals, refOf, linkOf, normName, normCode, notInYearReason, YEAR_REPORTS_SQL };
+/** ใช้รหัส KHD: ตัวชี้วัดที่เลือก → Map(local.id → { khd, by }) = คู่ที่ลิงก์ khd_report_id ไม่ตรง + รหัสที่แนะนำ (จับคู่กับตัวชี้วัดทั้งระบบ) */
+async function findRefTargets(remote, db, ids, yearBh) {
+    const { khdRows } = await loadKhdYearReports(remote, yearBh);
+    const [all] = await db.query('SELECT id, kpi_indicators_name, kpi_indicators_id, khd_report_id, table_process FROM kpi_indicators');
+    const want = new Set((ids || []).map(Number));
+    const m = matchLocalsToKhd(all, khdRows), out = new Map();
+    for (const p of m.pairs) if (want.has(Number(p.local.id))) out.set(Number(p.local.id), { khd: p.khd, by: 'kpi_indicators_id' });
+    for (const [l, s] of m.suggestions) if (want.has(Number(l.id))) out.set(Number(l.id), s);
+    for (const [l, owner] of m.refTaken) if (want.has(Number(l.id))) out.set(Number(l.id), { taken_by: owner });
+    return out;
+}
+
+module.exports = { loadKhdYearReports, matchLocalsToKhd, findKhdForLocals, findRefTargets, refOf, linkOf, normName, normCode, notInYearReason, YEAR_REPORTS_SQL };

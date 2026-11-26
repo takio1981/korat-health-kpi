@@ -209,14 +209,15 @@ describe('KpiManageComponent', () => {
       component.indicators = [
         { id: 1, kpi_indicators_name: 'ก', table_process: 'tp1', kpi_indicators_id: '500', is_active: 1 },
         { id: 2, kpi_indicators_name: 'ข', table_process: 'tp_same', kpi_indicators_id: '123', is_active: 1 },
-        { id: 3, kpi_indicators_name: 'ค', table_process: 'tp_same', kpi_indicators_id: null, is_active: 1 },
+        { id: 3, kpi_indicators_name: 'ค', table_process: 'tp_same', kpi_indicators_id: '602', khd_report_id: 9, is_active: 1 },
         { id: 4, kpi_indicators_name: 'ง', table_process: 'tp4', kpi_indicators_id: '9', is_active: 1 },
       ];
       // คีย์ตามตัวชี้วัด (L<id>) — 2 ตัวชี้วัด table_process เดียวกันได้ผลเทียบคนละรายการ (เดิมคีย์ table_process ทับกัน)
       component.khdCompareMap = new Map<string, any>([
         ['L1', { status: 'match', local_id: 1, khd_report_id: 500, match_by: 'kpi_indicators_id', khd_data_source: 'excel' }],
-        ['L2', { status: 'match', local_id: 2, khd_report_id: 601, match_by: 'table_process', khd_data_source: 'excel' }],
-        ['L3', { status: 'tp_different', local_id: 3, khd_report_id: 602, match_by: 'khd_report_id', khd_data_source: 'excel', ref_conflict: true }],
+        // ยังไม่จับคู่ — รหัสที่แนะนำ 601 / คู่ 602 แต่ลิงก์ khd_report_id ชี้รายงานอื่น (คีย์จับคู่ = รหัสอ้างอิง — 26 พ.ย. 2569)
+        ['L2', { status: 'missing_remote', local_id: 2, khd_report_id: null, ref_suggest: { report_id: 601, report_name: 'ข', by: 'name' } }],
+        ['L3', { status: 'tp_different', local_id: 3, khd_report_id: 602, match_by: 'kpi_indicators_id', khd_data_source: 'excel', ref_conflict: true }],
         ['L4', { status: 'missing_remote', local_id: 4, khd_report_id: null, khd_other_year: ['2569'] }],
         ['K700', { status: 'missing_local', khd_report_id: 700 }],
       ]);
@@ -225,14 +226,14 @@ describe('KpiManageComponent', () => {
     it('khdRefState / นับ / กรอง "รหัสอ้างอิงไม่ตรง"', () => {
       const [a, b, c, d] = component.indicators;
       expect([component.khdRefState(a), component.khdRefState(b), component.khdRefState(c), component.khdRefState(d)]).toEqual(['match', 'mismatch', 'conflict', null]);
-      expect(component.getKhdData(b).khd_report_id).toBe(601);
-      expect(component.getKhdData(c).khd_report_id).toBe(602);
+      expect(component.khdRefTarget(b)).toBe(601);
+      expect(component.khdRefTarget(c)).toBe(602);
       expect(component.khdCounts.ref).toBe(2);
       expect(component.khdMissingLocalItems.map((x: any) => x.khd_report_id)).toEqual([700]);
       component.filterKhdStatus = 'ref';
       component.applyFilter();
       expect(component.filteredIndicators.map((i: any) => i.id)).toEqual([2, 3]);
-      expect(component.khdMatchByText(b)).toBe('จับคู่ด้วย table_process');
+      expect(component.khdMatchByText(b)).toBe('แนะนำจากชื่อที่ตรงกัน');
     });
 
     it('ใช้รหัส KHD: ส่งเฉพาะตัวที่ไม่ตรง + ปีงบที่เทียบ แล้วอัปเดตค่าปัจจุบัน', async () => {
@@ -392,21 +393,19 @@ describe('KpiManageComponent', () => {
       expect(req.request.body).toEqual({ id: 3, khd_report_id: 77 });
     });
 
-    it('table_process ต่างกัน: นับแยกตามสถานะ แถบสรุปเปิดหน้าต่างเฉพาะหัวข้อ และคู่ที่ต้องแก้ที่ KHD ไม่เรียก API (11 พ.ย. 2569)', () => {
+    it('table_process ต่างกัน: ทุกคู่ใช้ table_process ของ KHD ได้ (รวมที่ใช้ร่วมกับตัวชี้วัดอื่น) + แถบสรุปเปิดหน้าต่างเฉพาะหัวข้อ (26 พ.ย. 2569)', () => {
       component.indicators.push(
         { id: 31, kpi_indicators_name: 'ก', table_process: 'tp31', is_active: 1 },
         { id: 32, kpi_indicators_name: 'ข', table_process: 'tp32', is_active: 1 });
       component.khdCompareMap.set('tp31', { status: 'tp_different', table_process: 'tp31', khd_table_process: 'kx', khd_report_id: 81 });
-      component.khdCompareMap.set('tp32', { status: 'tp_different', table_process: 'tp32', khd_table_process: 'ks', khd_report_id: 82, khd_tp_shared: 3, khd_tp_used_by: { id: 1, name: 'ค' } });
-      expect(component.khdTpCounts).toEqual({ apply: 1, khd_fix: 1, ambiguous: 0, linked_other: 0 });
+      component.khdCompareMap.set('tp32', { status: 'tp_different', table_process: 'tp32', khd_table_process: 'ks', khd_report_id: 82, khd_tp_shared: 3, khd_tp_used_by: { id: 1, name: 'ค', count: 1 } });
+      expect(component.khdTpCounts).toEqual({ apply: 2 });
       component.openKhdTpDiff();
       expect(component.khdDiffKind).toBe('table_process');
-      expect(component.khdDiffRows.map(r => [r.id, r.applicable])).toEqual([[31, undefined], [32, false]]);
-      const http = TestBed.inject(HttpTestingController);
+      expect(component.khdDiffRows.map(r => [r.id, r.applicable])).toEqual([[31, undefined], [32, undefined]]);
       const swal = vi.spyOn(Swal, 'fire').mockResolvedValue({} as any);
       component.applyKhdTableProcess(component.indicators.find((i: any) => i.id === 32));
-      expect(swal).toHaveBeenCalledWith(expect.objectContaining({ title: 'ใช้ table_process ของ KHD ไม่ได้' }));
-      http.expectNone(r => r.url.includes('/indicators/apply-khd-table-process'));
+      expect(swal).toHaveBeenCalledWith(expect.objectContaining({ title: 'ใช้ table_process ของ KHD' }));
       swal.mockRestore();
     });
 

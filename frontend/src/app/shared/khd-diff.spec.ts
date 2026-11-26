@@ -43,18 +43,21 @@ describe('khd-diff', () => {
 // ปีงบประมาณเทียบกับ KHD (9 พ.ย. 2569)
 describe('khd-diff รหัสอ้างอิง (24 พ.ย. 2569)', () => {
   const ctx = { getKhd: (i: any) => i._k, criteriaText: () => '', khdCriteriaText: () => '' };
-  it('รหัสอ้างอิงไม่ตรง report_id = แถว ref | ตรง = ไม่มีแถว | tp_different + ชื่อต่าง = แถวชื่อที่ปรับไม่ได้', () => {
+  it('ยังไม่จับคู่ + รหัสที่แนะนำ = แถว ref | คู่ที่ลิงก์ชี้รายงานอื่น = แถว ref | ชื่อ+table_process ต่าง = แถวชื่อที่ปรับได้ (26 พ.ย. 2569)', () => {
     const rows = buildKhdDiffRows([
-      { id: 1, kpi_indicators_name: 'ก', kpi_indicators_id: '10', _k: { status: 'match', khd_report_id: 10 } },
-      { id: 2, kpi_indicators_name: 'ข', kpi_indicators_id: '', _k: { status: 'match', khd_report_id: 20, match_by: 'table_process' } },
-      { id: 3, kpi_indicators_name: 'ค', kpi_indicators_id: '5', table_process: 'a', _k: { status: 'tp_different', khd_report_id: 30, khd_table_process: 'b', name_match: false, khd_name: 'ค KHD', match_by: 'khd_report_id', ref_conflict: true } },
+      { id: 1, kpi_indicators_name: 'ก', kpi_indicators_id: '10', khd_report_id: 10, _k: { status: 'match', khd_report_id: 10, match_by: 'kpi_indicators_id' } },
+      { id: 2, kpi_indicators_name: 'ข', kpi_indicators_id: '', _k: { status: 'missing_remote', ref_suggest: { report_id: 20, report_name: 'ข KHD', by: 'name' } } },
+      { id: 3, kpi_indicators_name: 'ค', kpi_indicators_id: '30', khd_report_id: 5, table_process: 'a', _k: { status: 'tp_different', khd_report_id: 30, khd_table_process: 'b', name_match: false, khd_name: 'ค KHD', match_by: 'kpi_indicators_id', ref_conflict: true } },
+      { id: 4, kpi_indicators_name: 'ง', kpi_indicators_id: '', _k: { status: 'missing_remote', ref_suggest: null } },
     ], ctx);
     const ref = rows.filter(r => r.kind === 'ref');
-    expect(ref.map(r => [r.id, r.local, r.khd])).toEqual([[2, 'ว่าง', '20'], [3, '5', '30']]);
-    expect(ref[0].detail).toBe('จับคู่ด้วย table_process');
-    expect(ref[1].detail).toContain('ชี้คนละรายงาน');
+    expect(ref.map(r => [r.id, r.local, r.khd])).toEqual([[2, 'ว่าง', '20'], [3, 'ลิงก์ KHD 5', '30']]);
+    expect(ref[0].detail).toBe('แนะนำจากชื่อตัวชี้วัดที่ตรงกัน · ข KHD');
+    expect(ref[1].detail).toContain('ลิงก์ KHD');
+    expect(rows.filter(r => r.id === 2).map(r => r.kind)).toEqual(['ref']);   // หัวข้ออื่นเทียบหลังตั้งรหัส
+    expect(rows.some(r => r.id === 4)).toBe(false);
     const name = rows.find(r => r.kind === 'name' && r.id === 3)!;
-    expect([name.applicable, name.khd]).toEqual([false, 'ค KHD']);
+    expect([name.applicable, name.khd]).toEqual([undefined, 'ค KHD']);
     expect(khdMatchByDetail('kpi_indicators_id')).toBe('จับคู่ด้วยรหัสอ้างอิง');
     expect(escapeHtmlText('<a href="x">')).toBe('&lt;a href=&quot;x&quot;&gt;');
   });
@@ -96,7 +99,7 @@ describe('khd-diff table_process', () => {
     // แถวรหัสอ้างอิง (24 พ.ย. 2569) ทดสอบแยก — ที่นี่ดูเฉพาะชื่อ/table_process
     const rows = buildKhdDiffRows(items, { getKhd: (i: any) => khd[i.table_process], criteriaText: () => '-', khdCriteriaText: () => '-' }).filter(r => r.kind !== 'ref');
     expect(rows).toEqual([
-      expect.objectContaining({ id: 7, kind: 'table_process', local: 'kpi_local_7', khd: 'kpi_khd_7', detail: 'ชื่อเดียวกัน (KHD #501 · รหัส R-7)' }),
+      expect.objectContaining({ id: 7, kind: 'table_process', local: 'kpi_local_7', khd: 'kpi_khd_7', detail: 'รหัสอ้างอิงตรงกับ KHD #501 (รหัสรายงาน R-7)' }),
       expect.objectContaining({ id: 8, kind: 'name', local: 'ร้อยละ ข', khd: 'ร้อยละ ข (ใหม่)', detail: 'table_process เดียวกัน: kpi_same_8' }),
     ]);
   });
@@ -128,25 +131,21 @@ describe('khd-diff หน่วยงาน/หมวดหมู่หลัก
   });
 });
 
-// ชื่อเดียวกันแต่ table_process ต่าง — ใช้ได้ / ต้องแก้ที่ KHD / ชื่อตรงหลายรายการ / อาจซ้ำในระบบ (11 พ.ย. 2569)
+// รหัสอ้างอิงตรงแต่ table_process ต่าง — ใช้ table_process ของ KHD ได้ทุกคู่ (ใช้ตารางร่วมกันได้ — 26 พ.ย. 2569)
 describe('khd-diff table_process — สถานะของคู่', () => {
-  const items = [1, 2, 3, 4].map(id => ({ id, kpi_indicators_name: 'ก', table_process: 'tp_' + id }));
+  const items = [1, 2].map(id => ({ id, kpi_indicators_name: 'ก', table_process: 'tp_' + id }));
   const khd: Record<string, any> = {
     tp_1: { status: 'tp_different', khd_report_id: 11, khd_table_process: 'kpi_x' },
-    tp_2: { status: 'tp_different', khd_report_id: 12, report_code: 'tp-2', khd_table_process: 'kpi_shared', khd_tp_shared: 6, khd_code_matches_tp: true, khd_tp_used_by: { id: 9, name: 'ข' } },
-    tp_3: { status: 'tp_different', khd_report_id: null, tp_ambiguous: true, tp_candidates: [{ report_id: 21, table_process: 'a' }, { report_id: 22, table_process: 'b' }] },
-    tp_4: { status: 'tp_different', tp_note: 'linked_other', tp_candidates: [{ report_id: 31, table_process: 'c', used_by_id: 5 }] },
+    tp_2: { status: 'tp_different', khd_report_id: 12, report_code: 'tp-2', khd_table_process: 'kpi_shared', khd_tp_shared: 6, khd_code_matches_tp: true, khd_tp_used_by: { id: 9, name: 'ข', count: 2 } },
   };
   it('khdTpKind + ข้อความอธิบาย', () => {
-    expect(['tp_1', 'tp_2', 'tp_3', 'tp_4'].map(t => khdTpKind(khd[t]))).toEqual(['apply', 'khd_fix', 'ambiguous', 'linked_other']);
+    expect(['tp_1', 'tp_2'].map(t => khdTpKind(khd[t]))).toEqual(['apply', 'apply']);
     expect(khdTpKind({ status: 'match' })).toBeNull();
-    expect(khdTpDetail(khd['tp_2'])).toBe('ชื่อเดียวกัน (KHD #12 · รหัส tp-2) · รหัสรายงาน KHD ตรงกับ table_process ของระบบ · KHD ใช้ table_process นี้ร่วมกัน 6 รายงาน · ตัวชี้วัด #9 ข ของระบบใช้ table_process นี้แล้ว → ควรแก้ table_process ของรายงานนี้ที่ KHD');
-    expect(khdTpDetail(khd['tp_4'])).toContain('#31 c (ใช้กับตัวชี้วัด #5 ในระบบ)');
+    expect(khdTpDetail(khd['tp_2'])).toBe('รหัสอ้างอิงตรงกับ KHD #12 (รหัสรายงาน tp-2) · รหัสรายงาน KHD ตรงกับ table_process ของระบบ · KHD ใช้ table_process นี้ร่วมกัน 6 รายงาน · ตัวชี้วัดอื่นของระบบใช้ table_process นี้อยู่แล้ว 2 ตัว (#9) — ใช้ตารางส่งออกร่วมกันได้');
   });
-  it('แถวในหน้าต่างรายละเอียด: ใช้ได้เฉพาะคู่ที่ปรับได้ ที่เหลือมีหมายเหตุแทนปุ่ม', () => {
+  it('แถวในหน้าต่างรายละเอียด: ใช้ table_process ของ KHD ได้ทุกคู่ (รวม table_process ที่ใช้ร่วมกัน)', () => {
     const rows = buildKhdDiffRows(items, { getKhd: (i: any) => khd[i.table_process], criteriaText: () => '-', khdCriteriaText: () => '-' }).filter(r => r.kind !== 'ref');
-    expect(rows.map(r => [r.id, r.khd, r.applicable, r.note])).toEqual([
-      [1, 'kpi_x', undefined, undefined], [2, 'kpi_shared', false, 'แก้ที่ KHD'], [3, 'a, b', false, 'ตรวจสอบเอง'], [4, 'c', false, 'ตรวจสอบเอง']]);
+    expect(rows.map(r => [r.id, r.khd, r.applicable, r.note])).toEqual([[1, 'kpi_x', undefined, undefined], [2, 'kpi_shared', undefined, undefined]]);
   });
 
   it('khdApplicableRows: ตัดแถวที่ใช้ค่า KHD ไม่ได้ (รวมปิดส่งออกแล้ว) และ 1 แถวต่อตัวชี้วัด (16 พ.ย. 2569)', () => {

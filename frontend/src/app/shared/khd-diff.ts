@@ -20,36 +20,27 @@ export interface KhdDiffRow {
 }
 
 /**
- * ชื่อเดียวกันแต่ table_process ต่างกัน (11 พ.ย. 2569) — สถานะของคู่จาก GET /report-compare:
- * 'apply' = ใช้ table_process ของ KHD ได้ | 'khd_fix' = table_process ของ KHD ถูกตัวชี้วัดอื่นของระบบใช้แล้ว (KHD ใช้ซ้ำหลายรายงาน → ควรแก้ที่ KHD)
- * | 'ambiguous' = ชื่อตรงกับ KHD หลายรายการ เลือกไม่ได้ | 'linked_other' = ชื่อตรงกับรายงาน KHD ที่เชื่อมกับตัวชี้วัดอื่นแล้ว (อาจเป็นตัวชี้วัดซ้ำ)
+ * รหัสอ้างอิงตรงกับ KHD แต่ table_process ต่างกัน (11 พ.ย. 2569, ปรับ 26 พ.ย. 2569) — คู่มาจากรหัสอ้างอิง = report_id เสมอ
+ * table_process ใช้ร่วมกับตัวชี้วัด/รายงานอื่นได้ (ตารางส่งออกเดียวกัน) จึงใช้ table_process ของ KHD ได้ทุกคู่ ('apply')
  */
-export type KhdTpKind = 'apply' | 'khd_fix' | 'ambiguous' | 'linked_other';
+export type KhdTpKind = 'apply';
 export function khdTpKind(k: any): KhdTpKind | null {
-  if (!k || k.status !== 'tp_different') return null;
-  if (k.tp_note === 'linked_other') return 'linked_other';
-  if (k.tp_ambiguous || !k.khd_report_id) return 'ambiguous';
-  if (k.khd_tp_used_by) return 'khd_fix';
-  return 'apply';
+  return k && k.status === 'tp_different' && k.khd_report_id ? 'apply' : null;
 }
-const tpCand = (c: any) => '#' + c.report_id + ' ' + (c.table_process || '-') + (c.used_by_id ? ' (ใช้กับตัวชี้วัด #' + c.used_by_id + ' ในระบบ)' : '');
-/** ข้อความอธิบายคู่ชื่อเดียวกันแต่ table_process ต่าง (หน้าต่างรายละเอียด / ป้ายในแถว) */
+/** ข้อความอธิบายคู่ที่ table_process ต่าง (หน้าต่างรายละเอียด / ป้ายในแถว) */
 export function khdTpDetail(k: any): string {
-  const kind = khdTpKind(k);
-  if (!kind) return '';
-  if (kind === 'ambiguous') return 'ชื่อตรงกับรายงาน KHD หลายรายการ: ' + (k.tp_candidates || []).map(tpCand).join(', ') + ' — ระบบไม่เลือกให้ (ตรวจสอบว่าเป็นรายการใด)';
-  if (kind === 'linked_other') return 'ชื่อตรงกับรายงาน KHD ที่เชื่อมกับตัวชี้วัดอื่นของระบบแล้ว: ' + (k.tp_candidates || []).map(tpCand).join(', ') + ' — อาจเป็นตัวชี้วัดซ้ำในระบบ';
-  const parts = ['ชื่อเดียวกัน (KHD #' + k.khd_report_id + (k.report_code ? ' · รหัส ' + k.report_code : '') + ')'];
+  if (!khdTpKind(k)) return '';
+  const parts = ['รหัสอ้างอิงตรงกับ KHD #' + k.khd_report_id + (k.report_code ? ' (รหัสรายงาน ' + k.report_code + ')' : '')];
   if (k.khd_code_matches_tp) parts.push('รหัสรายงาน KHD ตรงกับ table_process ของระบบ');
   if (k.khd_tp_shared > 1) parts.push('KHD ใช้ table_process นี้ร่วมกัน ' + k.khd_tp_shared + ' รายงาน');
-  if (k.khd_tp_used_by) parts.push('ตัวชี้วัด #' + k.khd_tp_used_by.id + ' ' + (k.khd_tp_used_by.name || '') + ' ของระบบใช้ table_process นี้แล้ว → ควรแก้ table_process ของรายงานนี้ที่ KHD');
+  if (k.khd_tp_used_by) parts.push('ตัวชี้วัดอื่นของระบบใช้ table_process นี้อยู่แล้ว ' + (k.khd_tp_used_by.count || 1) + ' ตัว (#' + k.khd_tp_used_by.id + ') — ใช้ตารางส่งออกร่วมกันได้');
   return parts.join(' · ');
 }
 
-/** ป้ายวิธีจับคู่กับรายงาน KHD (services/khd-match.js) */
+/** ป้ายวิธีจับคู่/ที่มาของรหัสที่แนะนำ (services/khd-match.js) */
 export function khdMatchByDetail(by: any): string {
-  return by === 'kpi_indicators_id' ? 'จับคู่ด้วยรหัสอ้างอิง' : by === 'khd_report_id' ? 'จับคู่ด้วยลิงก์ KHD (khd_report_id)'
-    : by === 'table_process' ? 'จับคู่ด้วย table_process' : 'จับคู่ด้วยชื่อตัวชี้วัด';
+  return by === 'kpi_indicators_id' ? 'จับคู่ด้วยรหัสอ้างอิง' : by === 'khd_report_id' ? 'แนะนำจากลิงก์ KHD (khd_report_id)'
+    : by === 'name' ? 'แนะนำจากชื่อตัวชี้วัดที่ตรงกัน' : '';
 }
 /** ข้อความสำหรับใส่ใน HTML ของกล่องยืนยัน */
 export function escapeHtmlText(t: any): string {
@@ -147,26 +138,33 @@ export function buildKhdDiffRows(indicators: any[], ctx: KhdDiffContext): KhdDif
   const rows: KhdDiffRow[] = [];
   for (const it of indicators || []) {
     const k = ctx.getKhd(it);
-    if (!k || k.status === 'missing_remote' || k.status === 'missing_local') continue;
+    if (!k || k.status === 'missing_local') continue;
     const base = { id: it.id, name: it.kpi_indicators_name, table_process: it.table_process || '' };
-    // รหัสอ้างอิง (kpi_indicators_id) ต้องเท่ากับ report_id ของ KHD (24 พ.ย. 2569) — เทียบจากค่าปัจจุบัน
-    if (k.khd_report_id && String(it.kpi_indicators_id ?? '').trim() !== String(k.khd_report_id)) {
-      rows.push({ ...base, kind: 'ref', local: String(it.kpi_indicators_id ?? '').trim() || 'ว่าง', khd: String(k.khd_report_id),
-        detail: (k.ref_conflict ? 'รหัสอ้างอิงกับลิงก์ KHD ชี้คนละรายงาน · ' : '') + khdMatchByDetail(k.match_by) });
+    const ref = String(it.kpi_indicators_id ?? '').trim();
+    // ยังไม่จับคู่ (รหัสอ้างอิงไม่ตรงรายงานใดของปีงบ) แต่มีรหัสที่แนะนำ — แถว ref เท่านั้น (หัวข้ออื่นเทียบหลังตั้งรหัสแล้ว — 26 พ.ย. 2569)
+    if (k.status === 'missing_remote') {
+      if (k.ref_suggest && ref !== String(k.ref_suggest.report_id)) {
+        rows.push({ ...base, kind: 'ref', local: ref || 'ว่าง', khd: String(k.ref_suggest.report_id),
+          detail: khdMatchByDetail(k.ref_suggest.by) + (k.ref_suggest.report_name ? ' · ' + k.ref_suggest.report_name : '') });
+      }
+      continue;
+    }
+    // คู่ (รหัสอ้างอิง = report_id): รหัสถูกแก้หลังเทียบ หรือลิงก์ khd_report_id ชี้รายงานอื่น
+    if (k.khd_report_id && ref !== String(k.khd_report_id)) {
+      rows.push({ ...base, kind: 'ref', local: ref || 'ว่าง', khd: String(k.khd_report_id), detail: khdMatchByDetail(k.match_by) });
+    } else if (k.ref_conflict && it.khd_report_id != null && String(it.khd_report_id) !== String(k.khd_report_id)) {
+      rows.push({ ...base, kind: 'ref', local: 'ลิงก์ KHD ' + it.khd_report_id, khd: String(k.khd_report_id),
+        detail: 'ลิงก์ KHD (khd_report_id) ชี้รายงานอื่น — ใช้รหัส KHD เพื่อแก้ลิงก์ให้ตรงกับรหัสอ้างอิง' });
     }
     if (k.status === 'different') {
       rows.push({ ...base, kind: 'name', local: it.kpi_indicators_name || '-', khd: k.khd_name || '-', detail: 'table_process เดียวกัน: ' + (it.table_process || '-') });
     }
-    // จับคู่ด้วยรหัสแต่ทั้งชื่อและ table_process ต่าง — ชื่อปรับตาม KHD ด้วยปุ่มเดิมไม่ได้ (ปุ่มเดิมค้นด้วย table_process)
+    // ชื่อและ table_process ต่างกันทั้งคู่ — "ใช้ชื่อ KHD" ค้นตัวชี้วัดด้วยรหัสอ้างอิง (26 พ.ย. 2569) จึงปรับได้
     if (k.status === 'tp_different' && k.name_match === false) {
-      rows.push({ ...base, kind: 'name', local: it.kpi_indicators_name || '-', khd: k.khd_name || '-', detail: 'table_process ต่างกันด้วย',
-        applicable: false, note: 'ปรับ table_process ก่อน / แก้ชื่อในหน้าต่างตัวชี้วัด' });
+      rows.push({ ...base, kind: 'name', local: it.kpi_indicators_name || '-', khd: k.khd_name || '-', detail: 'table_process ต่างกันด้วย' });
     }
     if (k.status === 'tp_different') {
-      const tk = khdTpKind(k);
-      const khdTp = tk === 'ambiguous' || tk === 'linked_other' ? (k.tp_candidates || []).map((c: any) => c.table_process || '-').join(', ') || '-' : (k.khd_table_process || '-');
-      rows.push({ ...base, kind: 'table_process', local: it.table_process || '-', khd: khdTp, detail: khdTpDetail(k),
-        ...(tk === 'apply' ? {} : { applicable: false, note: tk === 'khd_fix' ? 'แก้ที่ KHD' : 'ตรวจสอบเอง' }) });
+      rows.push({ ...base, kind: 'table_process', local: it.table_process || '-', khd: k.khd_table_process || '-', detail: khdTpDetail(k) });
     }
     if (k.criteria_match === false) {
       rows.push({ ...base, kind: 'criteria', local: ctx.criteriaText(it), khd: ctx.khdCriteriaText(k), detail: '' });

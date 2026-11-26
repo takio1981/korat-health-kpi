@@ -1,21 +1,17 @@
 /**
- * เทียบ table_process กับ KHD (9 พ.ย. 2569) — KHD จำลอง (ห้ามเชื่อม KHD จริง)
- *   - GET /report-compare: ชื่อเดียวกัน (ไม่สนช่องว่าง/ตัวพิมพ์) แต่ table_process ต่าง → แถว Local status 'tp_different' + khd_table_process,
- *     แถว KHD ไม่อยู่ใน "ยังไม่มีใน Local" | เลือกไม่ได้ = tp_ambiguous (ไม่เดา) | KHD ใช้ table_process ซ้ำหลายรายงาน (11 พ.ย. 2569)
- *   - POST /indicators/apply-khd-table-process: ตรวจชื่อตรง, table_process ไม่ซ้ำ, ไม่มีตารางที่ใช้ชื่อเดิม, สิทธิ์แก้ไขตัวชี้วัด
+ * เทียบ table_process กับ KHD (9 พ.ย. 2569, ปรับ 26 พ.ย. 2569: คีย์จับคู่ = report_id ↔ รหัสอ้างอิง, table_process ใช้ร่วมกันได้) — KHD จำลอง
+ *   - GET /report-compare: คู่ที่รหัสอ้างอิงตรงแต่ table_process ต่าง = 'tp_different' + khd_table_process (ข้อมูลประกอบ ไม่ใช่คีย์)
+ *     | KHD หลายรายงาน/ตัวชี้วัดหลายตัวใช้ table_process เดียวกันได้ — แต่ละตัวเทียบกับรายงานตามรหัสของตัวเอง (ไม่เกิด "ชื่อต่างกัน" ปลอม)
+ *   - POST /indicators/apply-khd-table-process: รหัสอ้างอิงต้องตรงกับรายงาน (REF_MISMATCH), ใช้ table_process ร่วมกับตัวชี้วัดอื่นได้,
+ *     ตารางชื่อเดิมที่ไม่มีตัวชี้วัดอื่นใช้ = 409 OLD_TABLES_EXIST, สิทธิ์แก้ไขตัวชี้วัด
+ *   - POST /report-compare/sync ("ใช้ชื่อ KHD"): เปลี่ยนชื่อเฉพาะตัวชี้วัดที่รหัสอ้างอิงตรง (ไม่ใช่ทุกตัวที่ใช้ table_process เดียวกัน)
  */
 const mockReports = [
-    { report_id: 950001, report_name: 'test_khdtp  ตัวชี้วัด X', report_code: 'KHD_TP_X', table_process: 'test_khdtp_khd_x', data_source: 'excel', is_active: 1 },
-    { report_id: 950002, report_name: 'test_khdtp ตัวชี้วัด Y', report_code: 'KHD_TP_Y', table_process: 'test_khdtp_khd_y', data_source: 'excel', is_active: 1 },
+    { report_id: 950001, report_name: 'test_khdtp ตัวชี้วัด X', report_code: 'KHD_TP_X', table_process: 'test_khdtp_khd_x', data_source: 'excel', is_active: 1 },
     { report_id: 950003, report_name: 'test_khdtp ตัวชี้วัด Z', report_code: 'KHD_TP_Z', table_process: 'test_khdtp_khd_z', data_source: 'excel', is_active: 1 },
-    { report_id: 950004, report_name: 'test_khdtp ตัวชี้วัด W', report_code: 'KHD_TP_W', table_process: 'test_khdtp_dup', data_source: 'excel', is_active: 1 },
-    // KHD หลายรายงานใช้ table_process เดียวกัน (11 พ.ย. 2569 — ข้อมูลจริง excellence_indicator_2_38_4 = 6 รายงาน)
+    // KHD หลายรายงานใช้ table_process เดียวกัน (ข้อมูลจริง excellence_indicator_2_38_4 = 6 รายงาน) — ระบบก็ใช้ตารางเดียวกันได้
     { report_id: 950011, report_name: 'test_khdtp ตัวชี้วัด S1', report_code: 'test-khdtp-shared', table_process: 'test_khdtp_shared', data_source: 'excel', is_active: 1, target_percentage: 80, target_condition: 'GTE' },
-    { report_id: 950012, report_name: 'test_khdtp ตัวชี้วัด S2', report_code: 'test-khdtp-local-s2', table_process: 'test_khdtp_shared', data_source: 'excel', is_active: 1, target_percentage: 90, target_condition: 'GTE' },
-    // ชื่อเดียวกัน 3 รายงาน: Q1 เชื่อมกับตัวชี้วัดในระบบแล้ว, Q2/Q3 เลือกด้วยรหัสรายงาน = table_process ของระบบ
-    { report_id: 950021, report_name: 'test_khdtp ตัวชี้วัด Q', report_code: 'test-khdtp-q', table_process: 'test_khdtp_q', data_source: 'excel', is_active: 1 },
-    { report_id: 950022, report_name: 'test_khdtp ตัวชี้วัด Q', report_code: 'test-khdtp-local-q2', table_process: 'test_khdtp_q', data_source: 'excel', is_active: 1 },
-    { report_id: 950023, report_name: 'test_khdtp ตัวชี้วัด Q', report_code: 'test_khdtp_local_q3', table_process: 'test_khdtp_q', data_source: 'excel', is_active: 1 },
+    { report_id: 950012, report_name: 'test_khdtp ตัวชี้วัด S2', report_code: 'test-khdtp-s2', table_process: 'test_khdtp_shared', data_source: 'excel', is_active: 1, target_percentage: 90, target_condition: 'GTE' },
 ];
 jest.mock('../db-remote', () => ({
     getRemotePool: () => ({
@@ -24,9 +20,8 @@ jest.mock('../db-remote', () => ({
             const mockY = require('./lib/khd-year-mock').khdYearQuery(s, params, mockReports, mockReports.map(r => ({ report_id: r.report_id, fiscal_year: 2570 })));
             if (mockY) return mockY;
             if (/FROM report_fiscal_year_config/.test(s)) return [[]];
-            if (/SELECT \* FROM reports WHERE data_source = 'excel'/.test(s)) return [mockReports];
             if (/FROM reports WHERE report_id = \? AND data_source = 'excel'$/.test(s.trim())) return [mockReports.filter(r => r.report_id === Number(params[0]) && r.data_source === 'excel')];
-            if (/SELECT COUNT\(\*\) AS n FROM reports WHERE table_process = \?/.test(s)) return [[{ n: mockReports.filter(r => r.table_process === params[0]).length }]];
+            if (/FROM reports WHERE report_id IN \(\?\)$/.test(s.trim())) return [mockReports.filter(r => params[0].map(Number).includes(r.report_id))];
             throw new Error('KHD จำลองไม่รองรับคำสั่ง: ' + s.slice(0, 120));
         }
     })
@@ -39,8 +34,9 @@ const { ensureTestUser, makeToken, cleanupTestUsers } = require('./helpers');
 let app, db, saToken, hosToken;
 const ids = {};
 const api = (p) => '/khupskpi/api' + p;
-const add = async (name, tp) => (await db.query('INSERT INTO kpi_indicators (kpi_indicators_name, table_process, is_active) VALUES (?, ?, 1)', [name, tp]))[0].insertId;
+const add = async (name, tp, ref) => (await db.query('INSERT INTO kpi_indicators (kpi_indicators_name, table_process, kpi_indicators_id, is_active) VALUES (?, ?, ?, 1)', [name, tp, ref]))[0].insertId;
 const apply = (t, body) => request(app).post(api('/indicators/apply-khd-table-process')).set('Authorization', `Bearer ${t}`).send(body);
+const rowOf = async (id) => (await db.query('SELECT kpi_indicators_name AS name, table_process, kpi_indicators_code, khd_report_id FROM kpi_indicators WHERE id = ?', [id]))[0][0];
 
 beforeAll(async () => {
     let migrationsReady;
@@ -55,18 +51,12 @@ beforeAll(async () => {
     const [[h]] = await db.query('SELECT hoscode FROM chospital ORDER BY hoscode LIMIT 1');
     const ah = await ensureTestUser(db, { username: 'test_khdtp_hos', role: 'admin_hos', hospcode: h.hoscode });
     hosToken = makeToken({ userId: ah.id, username: ah.username, role: 'admin_hos', deptId: 1, hospcode: h.hoscode });
-    ids.x = await add('test_khdtp ตัวชี้วัด x', 'test_khdtp_local_x');      // ชื่อเดียวกับ KHD (ต่างช่องว่าง/ตัวพิมพ์)
-    ids.y1 = await add('test_khdtp ตัวชี้วัด Y', 'test_khdtp_local_y1');    // ชื่อซ้ำ 2 ตัว → ไม่จับคู่
-    ids.y2 = await add('test_khdtp ตัวชี้วัด Y', 'test_khdtp_local_y2');
-    ids.z = await add('test_khdtp ตัวชี้วัด Z', 'test_khdtp_local_z');      // มีตารางชื่อเดิม → เปลี่ยนไม่ได้
-    ids.w = await add('test_khdtp ตัวชี้วัด W', 'test_khdtp_local_w');      // table_process ของ KHD ถูกตัวอื่นใช้แล้ว
-    ids.dup = await add('test_khdtp อื่น', 'test_khdtp_dup');
-    ids.s1 = await add('test_khdtp ตัวชี้วัด S1', 'test_khdtp_shared');
-    ids.s2 = await add('test_khdtp ตัวชี้วัด S2', 'test_khdtp_local_s2');
-    ids.q1 = await add('test_khdtp ตัวชี้วัด Q', 'test_khdtp_q');
-    await db.query('UPDATE kpi_indicators SET khd_report_id = 950021 WHERE id = ?', [ids.q1]);
-    ids.q2 = await add('test_khdtp ตัวชี้วัด Q', 'test_khdtp_local_q2');
-    ids.q3 = await add('test_khdtp ตัวชี้วัด Q', 'test_khdtp_local_q3');
+    ids.x = await add('test_khdtp ชื่อในระบบ X', 'test_khdtp_local_x', '950001');   // รหัสตรง ชื่อ+table_process ต่าง
+    ids.z = await add('test_khdtp ตัวชี้วัด Z', 'test_khdtp_local_z', '950003');     // มีตารางชื่อเดิม (ไม่มีตัวอื่นใช้) → เปลี่ยนไม่ได้
+    ids.z2 = await add('test_khdtp ตัวชี้วัด Z2', 'test_khdtp_local_zz', null);      // ไม่มีรหัส → เปลี่ยนไม่ได้
+    ids.s1 = await add('test_khdtp ตัวชี้วัด S1', 'test_khdtp_shared', '950011');    // ใช้ตารางเดียวกับ S2
+    ids.s2 = await add('test_khdtp ตัวชี้วัด S2', 'test_khdtp_local_s2', '950012');
+    ids.n = await add('test_khdtp ไม่ได้ตั้งรหัส', 'test_khdtp_khd_x', null);         // table_process ตรงกับ X แต่ไม่มีรหัส = ไม่จับคู่
     await db.query('CREATE TABLE test_khdtp_local_z (hospcode VARCHAR(5))');
 });
 afterAll(async () => {
@@ -75,77 +65,52 @@ afterAll(async () => {
     await cleanupTestUsers(db);
 });
 
-describe('GET /report-compare — ชื่อเดียวกันแต่ table_process ต่างกัน', () => {
-    test('จับคู่ด้วยชื่อ (ไม่สนช่องว่าง/ตัวพิมพ์) และตัดแถว KHD ออกจาก "ยังไม่มีใน Local" | ชื่อซ้ำ = ไม่จับคู่', async () => {
-        const res = await request(app).get(api('/report-compare?year_bh=2570')).set('Authorization', `Bearer ${saToken}`);
-        expect(res.status).toBe(200);
-        const byTp = (tp) => res.body.items.find(i => i.table_process === tp);
-        expect(byTp('test_khdtp_local_x')).toEqual(expect.objectContaining({ status: 'tp_different', khd_report_id: 950001, khd_table_process: 'test_khdtp_khd_x' }));
-        expect(byTp('test_khdtp_khd_x')).toBeUndefined();
-        // ตัวชี้วัดในระบบชื่อซ้ำ 2 ตัว → ยังเลือกไม่ได้ (tp_ambiguous + รายการ KHD ที่ชื่อตรง) แถว KHD ยังอยู่ใน "ยังไม่มีใน Local"
-        expect(byTp('test_khdtp_local_y1')).toEqual(expect.objectContaining({ status: 'tp_different', tp_ambiguous: true,
-            tp_candidates: [expect.objectContaining({ report_id: 950002, table_process: 'test_khdtp_khd_y' })] }));
-        expect(byTp('test_khdtp_local_y1').khd_report_id).toBeNull();
-        expect(byTp('test_khdtp_khd_y').status).toBe('missing_local');
-        expect(byTp('test_khdtp_local_z').status).toBe('tp_different');
-        // KHD W ใช้ table_process เดียวกับตัวชี้วัดอื่นในระบบ → จับคู่ด้วย table_process ก่อน (= ชื่อต่างกัน) ไม่จับคู่ซ้ำด้วยชื่อ
-        expect(byTp('test_khdtp_dup').status).toBe('different');
-        // W ชื่อตรงกับรายงาน KHD ที่เชื่อมกับตัวชี้วัดอื่นของระบบแล้ว → แจ้งเพื่อตรวจ (อาจซ้ำ) ไม่มีค่าให้ปรับ
-        expect(byTp('test_khdtp_local_w')).toEqual(expect.objectContaining({ status: 'tp_different', tp_note: 'linked_other',
-            tp_candidates: [expect.objectContaining({ report_id: 950004, table_process: 'test_khdtp_dup', used_by_id: ids.dup })] }));
-        expect(res.body.summary.tp_different).toBeGreaterThanOrEqual(2);   // x, z
-    });
-});
-
-describe('POST /indicators/apply-khd-table-process', () => {
-    test('✅ ใช้ table_process ของ KHD + รหัส + ลิงก์ KHD', async () => {
-        const res = await apply(saToken, { id: ids.x, khd_report_id: 950001 });
-        expect(res.status).toBe(200);
-        const [[r]] = await db.query('SELECT table_process, kpi_indicators_code, khd_report_id FROM kpi_indicators WHERE id = ?', [ids.x]);
-        expect(r).toEqual({ table_process: 'test_khdtp_khd_x', kpi_indicators_code: 'KHD_TP_X', khd_report_id: 950001 });
-        expect((await apply(saToken, { id: ids.x, khd_report_id: 950001 })).status).toBe(400);   // ตรงกันอยู่แล้ว
-    });
-    test('ด่านตรวจ: ชื่อไม่ตรง 400 | มีตารางชื่อเดิม 409 | table_process ถูกใช้แล้ว 409 | ไม่มีสิทธิ์ 403 — ไม่เปลี่ยนค่า', async () => {
-        expect((await apply(saToken, { id: ids.y1, khd_report_id: 950003 })).body.code).toBe('NAME_MISMATCH');
-        const z = await apply(saToken, { id: ids.z, khd_report_id: 950003 });
-        expect([z.status, z.body.code, z.body.tables]).toEqual([409, 'OLD_TABLES_EXIST', ['test_khdtp_local_z']]);
-        const w = await apply(saToken, { id: ids.w, khd_report_id: 950004 });
-        expect([w.status, w.body.code]).toEqual([409, 'TP_IN_USE']);
-        expect((await apply(hosToken, { id: ids.w, khd_report_id: 950004 })).status).toBe(403);
-        const [[zr]] = await db.query('SELECT table_process FROM kpi_indicators WHERE id = ?', [ids.z]);
-        expect(zr.table_process).toBe('test_khdtp_local_z');
-    });
-});
-
-describe('KHD หลายรายงานใช้ table_process เดียวกัน + ชื่อตรงหลายรายการ (11 พ.ย. 2569)', () => {
+describe('GET /report-compare — table_process เป็นข้อมูลประกอบ (ไม่ใช่คีย์)', () => {
     let res;
-    const byTp = (tp) => res.body.items.filter(i => i.table_process === tp);
+    const byLocal = (id) => res.body.items.find(i => i.local_id === id);
     beforeAll(async () => {
         res = await request(app).get(api('/report-compare?year_bh=2570')).set('Authorization', `Bearer ${saToken}`);
         expect(res.status).toBe(200);
     });
-    test('เทียบตัวชี้วัดกับรายงานหลักของ table_process เท่านั้น (ไม่เกิด "ชื่อต่างกัน" ปลอมจากรายงานอื่นที่ใช้ table_process ซ้ำ)', () => {
-        expect(byTp('test_khdtp_shared')).toEqual([expect.objectContaining({ status: 'match', khd_report_id: 950011, local_id: ids.s1 })]);
-        expect(byTp('test_khdtp_q')).toEqual([expect.objectContaining({ status: 'match', khd_report_id: 950021, local_id: ids.q1 })]);
+    test('คู่จากรหัสอ้างอิง: table_process ต่าง = tp_different | table_process ตรงแต่ไม่มีรหัส = ไม่จับคู่', () => {
+        expect(byLocal(ids.x)).toEqual(expect.objectContaining({ status: 'tp_different', khd_report_id: 950001, khd_table_process: 'test_khdtp_khd_x', name_match: false }));
+        expect(byLocal(ids.n)).toEqual(expect.objectContaining({ status: 'missing_remote', khd_report_id: null }));
     });
-    test('รายงานที่ใช้ table_process ซ้ำจับคู่กับตัวชี้วัดชื่อเดียวกัน + เทียบทุกหัวข้อ + บอกว่า table_process ของ KHD ถูกใช้แล้ว', () => {
-        const [s2] = byTp('test_khdtp_local_s2');
-        expect(s2).toEqual(expect.objectContaining({ status: 'tp_different', khd_report_id: 950012, khd_table_process: 'test_khdtp_shared',
-            khd_tp_shared: 2, khd_tp_used_by: { id: ids.s1, name: 'test_khdtp ตัวชี้วัด S1' }, khd_code_matches_tp: true,
-            criteria_match: false, khd_target_percentage: 90 }));
-        expect(s2).not.toHaveProperty('_local');
-        expect(res.body.items.find(i => i.status === 'missing_local' && i.khd_report_id === 950012)).toBeUndefined();
+    test('ตัวชี้วัด 2 ตัวกับรายงาน KHD 2 รายการที่ใช้ table_process เดียวกัน — เทียบตามรหัสของตัวเอง', () => {
+        expect(byLocal(ids.s1)).toEqual(expect.objectContaining({ status: 'match', khd_report_id: 950011, criteria_match: false, khd_target_percentage: 80 }));
+        expect(byLocal(ids.s2)).toEqual(expect.objectContaining({ status: 'tp_different', khd_report_id: 950012, khd_table_process: 'test_khdtp_shared',
+            khd_tp_shared: 2, khd_tp_used_by: expect.objectContaining({ id: ids.s1, count: 1 }), khd_code_matches_tp: false, khd_target_percentage: 90 }));
+        expect(byLocal(ids.s2)).not.toHaveProperty('_local');
+        expect(res.body.items.some(i => i.status === 'missing_local' && [950011, 950012].includes(i.khd_report_id))).toBe(false);
+        expect(res.body.summary.tp_different).toBeGreaterThanOrEqual(3);   // x, z, s2
     });
-    test('ชื่อตรงหลายรายการ → เลือกด้วยรหัสรายงาน KHD = table_process ของระบบ', () => {
-        expect(byTp('test_khdtp_local_q2')[0]).toEqual(expect.objectContaining({ status: 'tp_different', khd_report_id: 950022 }));
-        expect(byTp('test_khdtp_local_q3')[0]).toEqual(expect.objectContaining({ status: 'tp_different', khd_report_id: 950023 }));
-        expect(res.body.summary.tp_ambiguous).toBeGreaterThanOrEqual(2);   // y1, y2
-        expect(res.body.summary.tp_linked_other).toBeGreaterThanOrEqual(1); // w
+});
+
+describe('POST /indicators/apply-khd-table-process', () => {
+    test('✅ table_process ที่ตัวชี้วัดอื่นใช้อยู่แล้ว = ใช้ร่วมกันได้ + รหัส + ลิงก์ KHD', async () => {
+        const res = await apply(saToken, { id: ids.s2, khd_report_id: 950012 });
+        expect(res.status).toBe(200);
+        expect(await rowOf(ids.s2)).toEqual(expect.objectContaining({ table_process: 'test_khdtp_shared', kpi_indicators_code: 'test-khdtp-s2', khd_report_id: 950012 }));
+        expect((await apply(saToken, { id: ids.s2, khd_report_id: 950012 })).status).toBe(400);   // ตรงกันอยู่แล้ว
+        // x: ชื่อต่างจาก KHD ก็ปรับได้ (คู่จากรหัสอ้างอิง) และ table_process ใหม่ซ้ำกับตัวชี้วัด n ได้
+        expect((await apply(saToken, { id: ids.x, khd_report_id: 950001 })).status).toBe(200);
+        expect((await rowOf(ids.x)).table_process).toBe('test_khdtp_khd_x');
     });
-    test('ใช้ table_process ของ KHD ที่ใช้ร่วมกันหลายรายงาน → 409 KHD_TP_SHARED (ต้องแก้ที่ KHD) ไม่เปลี่ยนค่า', async () => {
-        const r = await apply(saToken, { id: ids.s2, khd_report_id: 950012 });
-        expect([r.status, r.body.code]).toEqual([409, 'KHD_TP_SHARED']);
-        const [[row]] = await db.query('SELECT table_process FROM kpi_indicators WHERE id = ?', [ids.s2]);
-        expect(row.table_process).toBe('test_khdtp_local_s2');
+    test('ด่านตรวจ: รหัสไม่ตรง 400 | ตารางชื่อเดิม 409 | ไม่มีสิทธิ์ 403 — ไม่เปลี่ยนค่า', async () => {
+        expect((await apply(saToken, { id: ids.z2, khd_report_id: 950003 })).body.code).toBe('REF_MISMATCH');
+        const z = await apply(saToken, { id: ids.z, khd_report_id: 950003 });
+        expect([z.status, z.body.code, z.body.tables]).toEqual([409, 'OLD_TABLES_EXIST', ['test_khdtp_local_z']]);
+        expect((await apply(hosToken, { id: ids.z, khd_report_id: 950003 })).status).toBe(403);
+        expect((await rowOf(ids.z)).table_process).toBe('test_khdtp_local_z');
+    });
+});
+
+describe('POST /report-compare/sync — ใช้ชื่อ KHD ตามรหัสอ้างอิง', () => {
+    test('เปลี่ยนชื่อเฉพาะตัวชี้วัดที่รหัสตรง — ตัวอื่นที่ใช้ table_process เดียวกันไม่เปลี่ยน', async () => {
+        const res = await request(app).post(api('/report-compare/sync')).set('Authorization', `Bearer ${saToken}`).send({ khd_report_ids: [950001] });
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual(expect.objectContaining({ updated: 1, inserted: 0 }));
+        expect((await rowOf(ids.x)).name).toBe('test_khdtp ตัวชี้วัด X');
+        expect((await rowOf(ids.n)).name).toBe('test_khdtp ไม่ได้ตั้งรหัส');   // table_process เดียวกัน แต่ไม่มีรหัส
     });
 });
