@@ -57,6 +57,12 @@ async function synthGemini(text, file) {
             return;
         } catch (e) {
             // เกินโควตา = รอตามที่บริการบอก (หรือ 30 วินาที) แล้วลองใหม่ — คีย์ผิด/รุ่นผิด = หยุดทันที (ไม่ลองซ้ำ)
+            // โควตารายวันเต็ม (ต้องรอนานเกิน 10 นาที เช่น Free Tier 10 ครั้ง/วัน) = หยุดทันที ไม่รอวน
+            if (e.code === 'TTS_RATE_LIMIT' && e.retryMs > 10 * 60000) {
+                const h = Math.floor(e.retryMs / 3600000), m = Math.round((e.retryMs % 3600000) / 60000);
+                e.fatal = true; e.message = `โควตารายวันของคีย์ Gemini เต็ม ใช้ได้อีกในอีก ${h} ชม. ${m} นาที (คีย์ Free Tier จำกัดเสียงรุ่นนี้วันละไม่กี่ครั้ง — เปิดการชำระเงินที่ aistudio.google.com เพื่อเพิ่มโควตา) | ${e.message}`;
+                throw e;
+            }
             if (e.code === 'TTS_RATE_LIMIT' && attempt < 60) {
                 const ms = Math.max(e.retryMs || 0, 30000);
                 console.log(`    ⏳ โควตา Gemini เต็ม รอ ${Math.round(ms / 1000)} วินาที`);

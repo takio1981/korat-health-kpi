@@ -96,6 +96,9 @@ describe('lib/gemini-tts', () => {
         const fail = (status, j) => jest.fn(async () => ({ ok: false, status, json: async () => j }));
         await expect(gtts.synthesize({ apiKey: 'k'.repeat(30), text: 'x', fetchImpl: fail(429, { error: { message: 'quota', details: [{ retryDelay: '7s' }] } }) }))
             .rejects.toMatchObject({ code: 'TTS_RATE_LIMIT', status: 429, retryMs: 7000 });
+        // โควตารายวัน: เวลารออยู่ในข้อความ (ไม่มี retryDelay) — ข้อความจริงจาก Gemini Free Tier 26 พ.ย. 2569
+        await expect(gtts.synthesize({ apiKey: 'k'.repeat(30), text: 'x', fetchImpl: fail(429, { error: { message: 'Rate limit exceeded for model gemini-3.8-flash-tts (limit: 10 requests per day on Free Tier). Please retry in 18h20m58s or upgrade your tier' } }) }))
+            .rejects.toMatchObject({ code: 'TTS_RATE_LIMIT', retryMs: (18 * 3600 + 20 * 60 + 58) * 1000 });
         await expect(gtts.synthesize({ apiKey: 'k'.repeat(30), text: 'x', fetchImpl: fail(403, {}) })).rejects.toMatchObject({ code: 'TTS_AUTH', status: 502 });
         await expect(gtts.synthesize({ apiKey: 'k'.repeat(30), text: 'x', fetchImpl: ttsFetch(() => ({ steps: [] })) })).rejects.toMatchObject({ code: 'TTS_EMPTY_AUDIO' });
         await expect(gtts.synthesize({ apiKey: '', text: 'x' })).rejects.toMatchObject({ code: 'TTS_NO_KEY' });

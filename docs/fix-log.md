@@ -2888,6 +2888,9 @@ Build + redeploy ทั้ง backend และ frontend Docker container เร
 - PAGE_GUIDES 22 หน้าเขียนใหม่ตามผังการทำงาน (ชื่อปุ่มจาก probe-all บนฐานทดสอบ) + ขั้น `soft` ของหน้าต่าง/โหมดแก้ไข | สคริปต์วิดีโอเพิ่มขั้นของปุ่มที่ขาด (dashboard, charts, notifications, feedback, users, kpi-manage, settings, audit-logs, kpi-manager, kpi-setup, announcements, error-logs)
 - พบระหว่างทดสอบ: ng serve :4520 ค้างจาก 22 พ.ย. แสดง error overlay (คอมไพล์ใหม่สะอาด) — เริ่มใหม่ก่อน probe/ถ่ายทุกครั้งที่ไม่แน่ใจ
 - Test: `api/tests/tts.test.js` 8 กรณี, `mascot-voice.spec.ts` (+1), `tts-settings-card.spec.ts` 2 กรณี
+- **ใส่คีย์แล้ว (26 พ.ย. 2569):** ทดสอบกับ Google จริงสำเร็จ (ตัวอย่าง 4 เสียง ~9 วินาที/ประโยค) ผู้ใช้เลือก **Achird** เป็นค่าตั้งต้น
+  — ⚠️ คีย์ Free Tier: `gemini-3.8-flash-tts` จำกัด **10 ครั้ง/วัน** (429 "Please retry in 18h…") สร้างไฟล์เสียง 254 + บรรยายวิดีโอ ~1,000 ประโยคไม่ได้ ต้องเปิดการชำระเงิน
+  → `upstreamInfo()` อ่านเวลารอจากข้อความ, เครื่องมือหยุดทันทีเมื่อต้องรอเกิน 10 นาที (เดิมรอวน 30 วินาที × 60 ครั้ง) | ไฟล์เสียงในระบบคืนเป็นชุดเดิม (git checkout) ระหว่างรอ
 
 ## 26 พ.ย. 2569 — เล่มผลงาน + แบบประเมินผลงาน ฉบับข้อมูลถึง 30 ต.ค. 2569 (เก็บในเครื่อง)
 

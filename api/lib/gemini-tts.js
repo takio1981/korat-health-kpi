@@ -6,8 +6,8 @@
 
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const DEFAULT_MODEL = 'gemini-3.8-flash-tts';
-// ผู้ใช้เลือก: ชายวัยหนุ่ม สดใส เป็นกันเอง — Puck (Upbeat, เสียงผู้ชาย)
-const DEFAULT_VOICE = 'Puck';
+// ผู้ใช้เลือก: ชายวัยหนุ่ม สดใส เป็นกันเอง — ฟังตัวอย่าง 4 เสียงแล้วเลือก Achird (Friendly, เสียงผู้ชาย — 26 พ.ย. 2569)
+const DEFAULT_VOICE = 'Achird';
 const DEFAULT_STYLE = 'พูดภาษาไทยด้วยน้ำเสียงชายหนุ่มอารมณ์ดี สดใส เป็นกันเอง เหมือนเพื่อนร่วมงานที่กำลังอธิบายให้ฟังอย่างใจเย็น '
     + 'จังหวะเป็นธรรมชาติแบบคนพูดจริง เว้นวรรคตามความหมาย ออกเสียงชัดถ้อยชัดคำ ไม่เร่งรีบ';
 // เสียงสำเร็จรูปของ Gemini (ชื่อ: ลักษณะ, เพศของเสียงโดยประมาณ) — ใช้แสดงตัวเลือกในหน้าตั้งค่า
@@ -131,6 +131,9 @@ function upstreamInfo(j) {
         const m = d && typeof d.retryDelay === 'string' && /^([\d.]+)s$/.exec(d.retryDelay);
         if (m) retryMs = Math.round(Number(m[1]) * 1000);
     }
+    // ข้อความแบบ "Please retry in 18h20m58s" (โควตารายวันของ Free Tier — พบจริง 26 พ.ย. 2569: เสียงรุ่นนี้ 10 ครั้ง/วัน)
+    const t = /retry in\s+(?:(\d+)h)?(?:(\d+)m)?(?:([\d.]+)s)?/i.exec(msg);
+    if (!retryMs && t && (t[1] || t[2] || t[3])) retryMs = Math.round(((+t[1] || 0) * 3600 + (+t[2] || 0) * 60 + (+t[3] || 0)) * 1000);
     return { msg, retryMs };
 }
 
