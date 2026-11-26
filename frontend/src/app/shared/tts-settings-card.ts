@@ -29,7 +29,7 @@ export function keySourceText(src: string): string {
   imports: [CommonModule, FormsModule],
   template: `
   <div id="tts-settings-card">
-    <h3 class="text-base font-bold text-gray-800"><i class="fas fa-volume-high text-violet-500 me-1"></i>เสียงพูดน้องคิดดี (Google Gemini TTS)</h3>
+    <h3 class="text-base font-bold text-gray-800"><i class="fas fa-volume-high text-violet-500 me-1"></i>คีย์และเสียงพูดน้องคิดดี (Google Gemini TTS)</h3>
     <p class="text-xs text-gray-500 mt-1">ประโยคที่เตรียมไว้ใช้ไฟล์เสียงที่สร้างล่วงหน้า — ส่วนนี้คือเสียงแบบสดสำหรับข้อความที่สร้างระหว่างใช้งาน เช่น คำตอบจาก AI
       (ส่งเฉพาะข้อความที่จะอ่านไปยัง Google ไม่ส่งข้อมูลผู้ใช้) ปิดอยู่หรือไม่มีคีย์ = ใช้เสียงของเบราว์เซอร์</p>
     <div *ngIf="loadError" class="mt-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-2">{{ loadError }}</div>
@@ -39,6 +39,13 @@ export function keySourceText(src: string): string {
         <label for="tts-enabled" class="font-bold text-gray-700">เปิดใช้เสียงแบบสด</label>
         <span class="text-[11px] px-2 py-0.5 rounded-full" [ngClass]="s.key_source === 'none' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'" id="tts-key-source">{{ keySource }}</span>
       </div>
+      <label class="block md:col-span-2">
+        <span class="text-xs font-bold text-gray-600"><i class="fas fa-key text-violet-500 me-1"></i>คีย์เสียง Google Gemini (API key)</span>
+        <span class="block text-[11px] text-gray-400">รับคีย์ได้ที่ aistudio.google.com → Get API key | เว้นว่าง = ใช้คีย์ของผู้ช่วย AI เมื่อผู้ช่วย AI ตั้งเป็น Google Gemini อยู่แล้ว | ระบบเข้ารหัสก่อนเก็บ และไม่แสดงคีย์ที่บันทึกแล้ว</span>
+        <input id="tts-api-key" type="password" [(ngModel)]="apiKey" name="ttsKey" autocomplete="new-password" class="mt-1 w-full px-3 py-2 border border-gray-200 rounded-xl bg-white"
+               [placeholder]="s.has_api_key ? 'บันทึกไว้แล้ว — เว้นว่างเพื่อใช้ค่าเดิม' : 'เว้นว่าง = ใช้คีย์ของผู้ช่วย AI'">
+        <label *ngIf="s.has_api_key" class="flex items-center gap-1 text-[11px] text-gray-500 mt-1"><input type="checkbox" [(ngModel)]="clearKey" name="ttsClear"> ลบคีย์ที่บันทึกไว้</label>
+      </label>
       <label class="block">
         <span class="text-xs font-bold text-gray-600">เสียง</span>
         <select id="tts-voice" [(ngModel)]="s.voice" name="ttsVoice" class="mt-1 w-full px-3 py-2 border border-gray-200 rounded-xl bg-white">
@@ -54,12 +61,6 @@ export function keySourceText(src: string): string {
         <span class="text-xs font-bold text-gray-600">คำกำกับน้ำเสียง (บอกบุคลิก จังหวะ อารมณ์ — ไม่ถูกอ่านออกเสียง)</span>
         <textarea id="tts-style" [(ngModel)]="s.style" name="ttsStyle" rows="2" maxlength="500" class="mt-1 w-full px-3 py-2 border border-gray-200 rounded-xl bg-white text-xs"></textarea>
         <button type="button" class="text-[11px] text-violet-600 hover:underline" (click)="s.style = s.default_style">ใช้ค่าตั้งต้น</button>
-      </label>
-      <label class="block">
-        <span class="text-xs font-bold text-gray-600">API key (Google AI Studio)</span>
-        <input id="tts-api-key" type="password" [(ngModel)]="apiKey" name="ttsKey" autocomplete="new-password" class="mt-1 w-full px-3 py-2 border border-gray-200 rounded-xl bg-white"
-               [placeholder]="s.has_api_key ? 'บันทึกไว้แล้ว — เว้นว่างเพื่อใช้ค่าเดิม' : 'เว้นว่าง = ใช้คีย์ของผู้ช่วย AI'">
-        <label *ngIf="s.has_api_key" class="flex items-center gap-1 text-[11px] text-gray-500 mt-1"><input type="checkbox" [(ngModel)]="clearKey" name="ttsClear"> ลบคีย์ที่บันทึกไว้</label>
       </label>
       <label class="block">
         <span class="text-xs font-bold text-gray-600">โควตาต่อวัน (ประโยค)</span>

@@ -266,11 +266,6 @@
           <app-ai-settings-card></app-ai-settings-card>
         </div>
 
-        <!-- เสียงพูดน้องคิดดีแบบสด Gemini TTS (26 พ.ย. 2569) — คอมโพเนนต์แยก โหลด/บันทึกผ่าน /tts/settings เอง -->
-        <div id="set-tts" data-settings-section *ngIf="isSuperAdmin" class="mt-8 pt-6 border-t border-gray-100">
-          <app-tts-settings-card></app-tts-settings-card>
-        </div>
-
         <!-- ระบบเตือนล่วงหน้า (8 พ.ย. 2569) — คอมโพเนนต์แยก โหลด/บันทึกผ่าน /forecast/settings เอง -->
         <div id="set-forecast" data-settings-section *ngIf="isSuperAdmin" class="mt-8 pt-6 border-t border-gray-100">
           <app-forecast-settings-card></app-forecast-settings-card>
@@ -318,6 +313,10 @@
                 <p class="text-xs text-gray-500 mt-0.5">น้องอ่านข้อความในกล่องคำพูดออกเสียง (เบราว์เซอร์จะเริ่มเล่นเสียงหลังผู้ใช้คลิกหน้าเว็บครั้งแรก) — ผู้ใช้ปิดเสียงเองได้ที่ปุ่มลำโพงในกล่องคำพูด</p>
               </div>
             </label>
+          </div>
+          <!-- คีย์และเสียง Google Gemini ของน้องคิดดี (26 พ.ย. 2569 — ผู้ใช้สั่งให้อยู่ในส่วนน้องคิดดี) โหลด/บันทึกผ่าน /tts/settings เอง (ไม่รวมในปุ่มบันทึกของฟอร์มนี้) -->
+          <div id="set-tts" data-settings-section *ngIf="isSuperAdmin" class="bg-white rounded-lg p-3 border border-violet-200 mt-3">
+            <app-tts-settings-card></app-tts-settings-card>
           </div>
           <div class="bg-white rounded-lg p-3 border border-gray-200 mt-3">
             <label class="inline-flex items-center cursor-pointer w-full">
