@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execFileSync } = require('child_process');
-const { speech, FFMPEG } = require('./lib/tts');
+const { speech, FFMPEG, PROVIDER, VOICE } = require('./lib/tts');
 
 const ROOT = path.resolve(__dirname, '../..');
 const FE = path.join(ROOT, 'frontend');
@@ -24,17 +24,22 @@ async function main() {
 
     const phrases = collectVoicePhrases();
     fs.mkdirSync(OUT, { recursive: true });
+    let old = {};
+    try { old = JSON.parse(fs.readFileSync(path.join(OUT, 'index.json'), 'utf8')); } catch { /* ยังไม่มีดัชนี */ }
+    console.log('เสียง: ' + (PROVIDER === 'gemini' ? `Google Gemini ${VOICE.model} / ${VOICE.voice}` : 'Microsoft Edge ' + VOICE.id));
     const index = {};
     let made = 0, i = 0;
     for (const p of phrases) {
         i++;
         const key = voiceKey(p), file = key + '.mp3', dest = path.join(OUT, file);
         const clip = await speech(speakable(p));
-        if (!fs.existsSync(dest)) {
+        // s = ไฟล์เสียงต้นฉบับในแคช (ขึ้นกับข้อความ + ค่าเสียง) — เปลี่ยนเสียง/ผู้ให้บริการ = แปลงไฟล์ใหม่ทับชื่อเดิม (26 พ.ย. 2569)
+        const src = path.basename(clip.file, '.mp3');
+        if (!fs.existsSync(dest) || (old[key] && old[key].s !== src)) {
             execFileSync(FFMPEG, ['-v', 'error', '-y', '-i', clip.file, '-ac', '1', '-ar', '24000', '-b:a', '40k', dest]);
             made++;
         }
-        index[key] = { f: file, ms: Math.round(clip.ms), e: clip.env.map(v => Math.round(Math.max(0, Math.min(1, v)) * 9)).join('') };
+        index[key] = { f: file, s: src, ms: Math.round(clip.ms), e: clip.env.map(v => Math.round(Math.max(0, Math.min(1, v)) * 9)).join('') };
         if (i % 25 === 0) console.log(`  ${i}/${phrases.length}`);
     }
     let removed = 0;

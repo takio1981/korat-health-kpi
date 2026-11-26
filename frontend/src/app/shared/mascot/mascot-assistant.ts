@@ -1,7 +1,7 @@
 import { ChangeDetectorRef, Component, NgZone, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRouteSnapshot, NavigationEnd, Router } from '@angular/router';
-import { Subscription, filter } from 'rxjs';
+import { Subscription, filter, firstValueFrom } from 'rxjs';
 import { AuthService } from '../../services/auth';
 import { HelpVideoService, findHelpVideo } from '../help-video';
 import { HelpSource, answerLines, sourceLabel } from '../ai-help-box';
@@ -124,11 +124,22 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
       next: (res: any) => { this.systemOn = res?.mascot_assistant_enabled !== false; this.voiceOn = res?.mascot_voice_enabled !== false; this.updatesOn = res?.mascot_news_enabled !== false; this.sizeDefault = normalizeMascotSize(res?.mascot_size); this.mascot.setOutfitConfig(res?.mascot_outfit, res?.mascot_festival_dates, res?.mascot_festival_auto, res?.mascot_festival_dates_auto); this.mascot.setBackdropEnabled(res?.festival_backdrop_enabled); this.updateShow(); this.onPage(); },
       error: () => { this.systemOn = true; this.updateShow(); this.onPage(); },
     });
+    this.initLiveTts();
     this.newsTimer = setTimeout(() => this.checkNews(false), 2500);
     this.newsPoll = setInterval(() => this.checkNews(false), NEWS_POLL_MS);
   }
 
+  /** เสียง Gemini แบบสดสำหรับข้อความที่ไม่มีไฟล์เสียง (คำตอบ AI ฯลฯ) — ผู้ดูแลปิด/ไม่มีคีย์ = ใช้เสียงเบราว์เซอร์ (26 พ.ย. 2569) */
+  private initLiveTts() {
+    this.auth.apiGet('/tts/status').subscribe({
+      next: (res: any) => this.mascot.setLiveTts(res?.enabled ? (text: string) =>
+        firstValueFrom(this.auth.apiPost('/tts/speak', { text })).then((r: any) => (r?.success && r.audio ? r : null)).catch(() => null) : null),
+      error: () => this.mascot.setLiveTts(null),
+    });
+  }
+
   ngOnDestroy() {
+    this.mascot.setLiveTts(null);
     this.subs.forEach(s => s.unsubscribe());
     clearTimeout(this.greetTimer); clearTimeout(this.stepTimer); clearTimeout(this.newsTimer); clearInterval(this.newsPoll);
     this.clearTarget();
@@ -197,7 +208,7 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
       case 'moved': this.buildScript(); break;
       case 'tour:start':
         // ตัดขั้นที่เป้าหมายไม่มีในหน้าตอนนี้ (สิทธิ์นี้ไม่มีปุ่ม/ต้องเข้าโหมดอื่นก่อน) — ตัวนับ n/N จึงตรงกับที่จะแนะนำจริง
-        this.steps = (this.guide?.steps?.(this.role) || []).filter(st => !st.target || !!findTarget(st.target));
+        this.steps = (this.guide?.steps?.(this.role) || []).filter(st => !st.target || st.soft || !!findTarget(st.target));
         this.stepIdx = -1;
         this.goStep(1);
         break;
@@ -227,7 +238,7 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
     while (i >= 0 && i < this.steps.length) {
       const st = this.steps[i];
       el = st.target ? findTarget(st.target) : null;
-      if (!st.target || el) break;
+      if (!st.target || el || st.soft) break;
       i += dir;
     }
     if (i < 0 || i >= this.steps.length) {
@@ -243,7 +254,7 @@ export class MascotAssistantComponent implements OnInit, OnDestroy {
       try { el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' }); } catch { el.scrollIntoView(); }
     }
     this.script['step'] = {
-      text: `(${i + 1}/${this.steps.length}) ${st.text}`,
+      text: `(${i + 1}/${this.steps.length}) ${st.flow ? st.flow + ' — ' : ''}${st.text}`,
       pose: st.pose || (el ? 'point' : 'talk'),
       pointAt: el ? `[${TARGET_ATTR}="1"]` : undefined,
       voice: [st.text],

@@ -2,13 +2,17 @@
  * เสียงพูดของน้องคิดดี (20 พ.ย. 2569 — ผู้ใช้เลือก: ไฟล์เสียงสร้างล่วงหน้า + เสียงเบราว์เซอร์สำรอง, เปิดเสียงเป็นค่าตั้งต้น มีปุ่มปิด)
  * — ประโยคที่เตรียมไว้: ไฟล์ public/mascot/voice/<key>.mp3 เสียง th-TH-NiwatNeural (ตัวเดียวกับวิดีโอคู่มือ) สร้างด้วย
  *   tools/video-guide/build-mascot-voice.js + index.json (ความยาว + ซองความดัง 25 ครั้ง/วินาที → ปากขยับตามเสียงจริง)
- * — ข้อความที่ไม่มีไฟล์ (เช่น คำตอบจาก AI) = เสียงภาษาไทยของเบราว์เซอร์ (speechSynthesis) ถ้าเครื่องไม่มีเสียงไทย = ไม่อ่าน
+ * — ข้อความที่ไม่มีไฟล์ (เช่น คำตอบจาก AI) = เสียง Gemini แบบสดผ่าน backend (POST /tts/speak — 26 พ.ย. 2569, เฉพาะหลังเข้าสู่ระบบและผู้ดูแลเปิดไว้)
+ *   ขอไม่ได้/ยังไม่เข้าสู่ระบบ = เสียงภาษาไทยของเบราว์เซอร์ (speechSynthesis) ถ้าเครื่องไม่มีเสียงไทย = ไม่อ่าน
  * — เบราว์เซอร์ไม่ยอมเล่นเสียงก่อนผู้ใช้คลิกหน้าเว็บ: เก็บประโยคไว้ แล้วเริ่มพูดเมื่อผู้ใช้คลิก/กดแป้นครั้งแรก
  */
 export interface VoiceClip { f: string; ms: number; e: string; }
 export type VoiceIndex = Record<string, VoiceClip>;
 
 export const VOICE_BASE = 'mascot/voice/';
+/** เสียงแบบสด: ข้อความ → { audio: base64, mime, ms, e } | null (ไม่มี/ล้มเหลว = ใช้เสียงเบราว์เซอร์) */
+export interface LiveClip { audio: string; mime?: string; ms: number; e: string; }
+export type LiveTts = (text: string) => Promise<LiveClip | null>;
 export const VOICE_FPS = 25;
 
 /** ข้อความมาตรฐานก่อนทำคีย์ (ช่องว่างซ้ำ/หัวท้าย) */
@@ -75,6 +79,8 @@ export class VoicePlayer {
   private gen = 0;
   private unlocked = false;
   private pending: string[] | null = null;
+  /** เสียง Gemini แบบสด (ตั้งโดยผู้ช่วยหลังเข้าสู่ระบบ) — null = ไม่มี */
+  live: (() => LiveTts | null) | null = null;
   private onGesture = () => {
     this.unlocked = true;
     document.removeEventListener('pointerdown', this.onGesture, true);
@@ -117,11 +123,20 @@ export class VoicePlayer {
     this.playing = true;
     const run = async () => {
       await this.load();
+      // ประโยคที่ไม่มีไฟล์: ขอเสียงแบบสดของทุกประโยคพร้อมกันตั้งแต่ต้น (ลดช่วงเงียบระหว่างประโยค)
+      const liveFn = this.live ? this.live() : null;
+      const liveP = new Map<string, Promise<LiveClip | null>>();
+      if (liveFn) for (const seg of list) if (!clipFor(this.index, seg) && !liveP.has(seg)) liveP.set(seg, liveFn(speakable(seg)).catch(() => null));
       for (const seg of list) {
         if (my !== this.gen) return;
         const clip = clipFor(this.index, seg);
-        // ไม่มีไฟล์ (ข้อความที่สร้างตอนใช้งาน เช่น คำตอบ AI) = เสียงเบราว์เซอร์ทันที — ไม่ขอไฟล์ที่ไม่มี (เดิมขอทุกครั้ง → 404 ใน console)
+        // ไม่มีไฟล์ (ข้อความที่สร้างตอนใช้งาน เช่น คำตอบ AI) = เสียงแบบสด → เสียงเบราว์เซอร์ — ไม่ขอไฟล์ที่ไม่มี (เดิมขอทุกครั้ง → 404 ใน console)
         let ok: true | 'blocked' | 'missing' = clip ? await this.playClip(clip, my) : 'missing';
+        if (ok === 'missing' && my === this.gen && liveP.has(seg)) {
+          const lc = await liveP.get(seg)!;
+          if (my !== this.gen) return;
+          if (lc && lc.audio) ok = await this.playClip({ f: '', ms: lc.ms, e: lc.e || '' }, my, `data:${lc.mime || 'audio/wav'};base64,${lc.audio}`);
+        }
         if (ok === 'missing' && my === this.gen) ok = await this.playSynth(seg, my);
         if (ok === 'blocked') { if (my === this.gen) { this.pending = list; this.playing = false; } return; }
       }
@@ -147,10 +162,10 @@ export class VoicePlayer {
     }
   }
 
-  private playClip(clip: VoiceClip, my: number): Promise<true | 'blocked' | 'missing'> {
+  private playClip(clip: VoiceClip, my: number, src?: string): Promise<true | 'blocked' | 'missing'> {
     return new Promise(resolve => {
       let a: HTMLAudioElement;
-      try { a = new Audio(this.base + clip.f); } catch { resolve(true); return; }
+      try { a = new Audio(src || this.base + clip.f); } catch { resolve(true); return; }
       this.audio = a; this.clip = clip;
       const done = () => { if (this.audio === a) { this.audio = null; this.clip = null; } resolve(true); };
       a.onended = done;

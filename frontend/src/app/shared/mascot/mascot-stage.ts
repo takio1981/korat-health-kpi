@@ -235,7 +235,7 @@ export class MascotStageComponent implements AfterViewInit, OnDestroy {
     this.sub.add(this.mascot.outfit$.subscribe(() => this.zone.runOutsideAngular(() => this.refreshOutfit())));
     this.sub.add(this.mascot.outfitPreview$.subscribe(() => this.zone.runOutsideAngular(() => this.refreshOutfit())));
     this.zone.runOutsideAngular(() => { this.festTimer = setTimeout(() => this.festivalGreet(), this.dock ? 9000 : 7000); });
-    if (this.voice && typeof Audio !== 'undefined') { this.player = new VoicePlayer(); this.player.load(); }
+    if (this.voice && typeof Audio !== 'undefined') { this.player = new VoicePlayer(); this.player.live = () => this.mascot.liveTts; this.player.load(); }
 
     this.zone.runOutsideAngular(() => {
       this.listen(window, 'pointermove', (e: Event) => { const p = e as PointerEvent; this.pointer = { x: p.clientX, y: p.clientY }; });

@@ -4,6 +4,7 @@ import type { BubbleKind } from './mascot-dialog';
 import type { PoseName } from './mascot-pose';
 import type { Mood } from './mascot-face';
 import { AI_SAY } from './mascot-phrases';
+import type { LiveTts } from './mascot-voice';
 import { MASCOT_SIZES, MascotSize } from './mascot-size';
 import { FestivalDates, FestivalExtra, normalizeOutfitMode, sanitizeFestivalDates } from './mascot-festival';
 
@@ -67,6 +68,9 @@ export class MascotService {
   readonly outfitPreview$ = new BehaviorSubject<string | null>(null);
   /** ลายน้ำพื้นหลังตามเทศกาล (system_settings.festival_backdrop_enabled — ไม่มีค่า = เปิด, 24 พ.ย. 2569) */
   readonly backdropOn$ = new BehaviorSubject<boolean>(true);
+  /** เสียง Gemini แบบสด (26 พ.ย. 2569) — ผู้ช่วยในระบบตั้งเมื่อ /tts/status เปิดอยู่, หน้าเข้าสู่ระบบไม่มี (null) */
+  liveTts: LiveTts | null = null;
+  setLiveTts(fn: LiveTts | null) { this.liveTts = fn; }
   private uid = '';
 
   setBackdropEnabled(v: unknown) { const on = v !== false; if (on !== this.backdropOn$.value) this.backdropOn$.next(on); }

@@ -122,6 +122,9 @@ const PAGE_ACCESS_RULES = [
     // /ai/status ไม่มี rule (ทุก role ที่เข้าสู่ระบบ) | ตั้งค่า/ทดสอบ = หน้า settings (isSuperAdmin + สิทธิ์หน้าที่เปิดเพิ่ม)
     { path: '/ai/settings', pageKey: 'settings' },
     { method: 'POST', path: '/ai/test', pageKey: 'settings' },
+    // เสียงพูด Gemini TTS (26 พ.ย. 2569) — ตั้งค่า/ทดสอบ = หน้า settings | /tts/status, /tts/speak ไม่มี rule (ทุก role ที่เข้าสู่ระบบ)
+    { path: '/tts/settings', pageKey: 'settings' },
+    { method: 'POST', path: '/tts/test', pageKey: 'settings' },
     { method: 'POST', path: '/ai/models', pageKey: 'settings' },
     { method: 'POST', path: '/ai/help-ask', pageKey: 'help' },
     { method: 'POST', path: '/ai/anomaly-explain', pageKey: 'dashboard' },          // ระยะที่ 5: อธิบายคำเตือนค่าผิดปกติตอนบันทึกผลงาน

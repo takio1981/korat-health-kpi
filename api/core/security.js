@@ -113,8 +113,17 @@ const khdLimiter = rateLimit({
     legacyHeaders: false,
     message: { success: false, code: 'KHD_RATE_LIMIT', message: 'สั่งส่งข้อมูลเข้า KHD ถี่เกินไป กรุณารอ 1 นาที' }
 });
+// ttsLimiter (26 พ.ย. 2569): เสียงพูดน้องคิดดีแบบสด (Gemini TTS) — 1 คำขอ = 1 ประโยค จำกัด 40 ครั้ง/นาที/ผู้ใช้ (ใช้หลัง authenticateToken)
+const ttsLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 40,
+    keyGenerator: (req) => `tts-user:${req.user?.userId ?? 'anon'}`,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, code: 'TTS_RATE_LIMIT', message: 'ขอเสียงพูดถี่เกินไป กรุณารอ 1 นาที' }
+});
 // ตั้งชื่อฟังก์ชัน middleware (ไม่เปลี่ยนการทำงาน) — ให้ tests/route-inventory.test.js แยกได้ว่าเส้นทางใดใช้ตัวจำกัดตัวไหน
-for (const [n, fn] of Object.entries({ loginIpLimiter, loginLimiter, apiLimiter, aiLimiter, khdLimiter })) Object.defineProperty(fn, 'name', { value: n });
+for (const [n, fn] of Object.entries({ loginIpLimiter, loginLimiter, apiLimiter, aiLimiter, khdLimiter, ttsLimiter })) Object.defineProperty(fn, 'name', { value: n });
 
 const SECRET_KEY = process.env.SECRET_KEY;
 if (!SECRET_KEY) {
@@ -122,4 +131,4 @@ if (!SECRET_KEY) {
     process.exit(1);
 }
 
-module.exports = { updateSystemSettings, loginIpLimiter, loginLimiter, apiLimiter, aiLimiter, khdLimiter, SECRET_KEY };
+module.exports = { updateSystemSettings, loginIpLimiter, loginLimiter, apiLimiter, aiLimiter, khdLimiter, ttsLimiter, SECRET_KEY };

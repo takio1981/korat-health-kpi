@@ -1,4 +1,4 @@
-import { VoiceIndex, clipFor, envLevel, estimateMs, normVoice, speakable, voiceKey } from './mascot-voice';
+import { VoiceIndex, VoicePlayer, clipFor, envLevel, estimateMs, normVoice, speakable, voiceKey } from './mascot-voice';
 import { collectVoicePhrases } from './mascot-voice-phrases';
 import voiceIndex from '../../../../public/mascot/voice/index.json';
 
@@ -36,6 +36,35 @@ describe('mascot-voice (เสียงพูดของน้องคิด�
     expect(estimateMs(idx, ['ก'])).toBe(320);
     expect(estimateMs(idx, ['ก', 'ข'])).toBeNull();
     expect(estimateMs(null, ['ก'])).toBeNull();
+  });
+
+  it('VoicePlayer: ประโยคที่ไม่มีไฟล์ใช้เสียงแบบสด (Gemini) ก่อนเสียงเบราว์เซอร์ — ขอทุกประโยคพร้อมกัน ส่งข้อความที่อ่านออกเสียงได้', async () => {
+    const played: string[] = [];
+    const RealAudio = (globalThis as any).Audio;
+    (globalThis as any).Audio = class {
+      onended: any = null; onerror: any = null; paused = true; currentTime = 0;
+      constructor(public src: string) { played.push(src); }
+      play() { this.paused = false; setTimeout(() => this.onended?.(), 0); return Promise.resolve(); }
+      pause() { this.paused = true; }
+    };
+    try {
+      const p = new VoicePlayer('voice/');
+      p.index = { [voiceKey('มีไฟล์ครับ')]: { f: 'have.mp3', ms: 500, e: '5' } };
+      (p as any).loadP = Promise.resolve();
+      const asked: string[] = [];
+      const live = vi.fn(async (t: string) => { asked.push(t); return { audio: 'QUJD', mime: 'audio/wav', ms: 300, e: '9' }; });
+      p.live = () => live;
+      p.speak(['คำตอบที่ 1 เรื่อง KHD', 'มีไฟล์ครับ', 'คำตอบที่ 2']);
+      await vi.waitFor(() => expect(p.playing).toBe(false));
+      expect(asked).toEqual(['คำตอบที่ 1 เรื่อง เค เอช ดี', 'คำตอบที่ 2']);
+      expect(played).toEqual(['data:audio/wav;base64,QUJD', 'voice/have.mp3', 'data:audio/wav;base64,QUJD']);
+      // ไม่มีเสียงแบบสด (ผู้ดูแลปิด / ยังไม่เข้าสู่ระบบ) = ไม่ขอ
+      p.live = () => null; played.length = 0;
+      p.speak(['มีไฟล์ครับ']);
+      await vi.waitFor(() => expect(p.playing).toBe(false));
+      expect(played).toEqual(['voice/have.mp3']);
+      p.dispose();
+    } finally { (globalThis as any).Audio = RealAudio; }
   });
 
   it('ทุกประโยคในบทพูดมีไฟล์เสียงแล้ว (แก้บทพูด → รัน node tools/video-guide/build-mascot-voice.js)', () => {

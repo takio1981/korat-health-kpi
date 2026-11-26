@@ -2,7 +2,8 @@
 // ฟีเจอร์ที่ใช้ AI อยู่ในไฟล์ของโดเมนนั้น (เช่น /report/ai-summary ใน routes/reports.js) และเรียก services/ai.js
 const { apiRouter } = require('../core/router');
 const { authenticateToken, isSuperAdmin, saveLog } = require('../core/auth');
-const { aiLimiter } = require('../core/security');
+const { aiLimiter, ttsLimiter } = require('../core/security');
+const tts = require('../services/tts');
 const { parseActiveFlag } = require('../core/validate');
 const { requireAnyAction } = require('../core/access');
 const { suggestFormula } = require('../services/ai-formula');
@@ -172,4 +173,49 @@ apiRouter.post('/ai/test', authenticateToken, isSuperAdmin, aiLimiter, async (re
     } catch (e) {
         sendAiError(res, e, 'ทดสอบผู้ช่วย AI ไม่สำเร็จ');
     }
+});
+
+// ---------------------------------------------------------------- เสียงพูด Gemini TTS (26 พ.ย. 2569)
+// ทุก role ที่เข้าสู่ระบบ: หน้าจอใช้ตัดสินว่าจะขอเสียงแบบสดหรือใช้เสียงเบราว์เซอร์
+apiRouter.get('/tts/status', authenticateToken, async (req, res) => {
+    try {
+        const s = await tts.getTtsSettings();
+        res.json({ success: true, enabled: s.enabled && s.key_source !== 'none', max_chars: tts.TTS_MAX_CHARS });
+    } catch (e) { res.json({ success: true, enabled: false }); }
+});
+
+// อ่านข้อความ 1 ประโยค (≤ 600 ตัวอักษร) → WAV base64 + ซองความดัง (ปากขยับตามเสียง) — ไม่เก็บข้อความ
+apiRouter.post('/tts/speak', authenticateToken, ttsLimiter, async (req, res) => {
+    try {
+        const out = await tts.speak({ text: req.body && req.body.text, userId: req.user.userId });
+        res.json({ success: true, ...out });
+    } catch (e) { tts.sendTtsError(res, e); }
+});
+
+apiRouter.get('/tts/settings', authenticateToken, isSuperAdmin, async (req, res) => {
+    try { res.json({ success: true, data: tts.publicSettings(await tts.getTtsSettings({ fresh: true })) }); }
+    catch (e) { res.status(500).json({ success: false, message: e.message }); }
+});
+
+apiRouter.put('/tts/settings', authenticateToken, isSuperAdmin, async (req, res) => {
+    try {
+        const changed = await tts.updateTtsSettings(req.body || {});
+        tts._clearAudioCache();
+        await saveLog(req.user.username, 'TTS_SETTINGS_UPDATE', 'ตั้งค่าเสียงพูด Gemini: ' + (changed.join(', ') || '-'), clientIp(req));
+        res.json({ success: true, message: 'บันทึกการตั้งค่าเสียงพูดแล้ว', data: tts.publicSettings(await tts.getTtsSettings({ fresh: true })) });
+    } catch (e) { tts.sendTtsError(res, e); }
+});
+
+// ทดสอบเสียง (ทำงานได้แม้ปิดอยู่ ไม่นับโควตา) — ส่ง voice/style/model มาลองก่อนบันทึกได้
+apiRouter.post('/tts/test', authenticateToken, isSuperAdmin, aiLimiter, async (req, res) => {
+    try {
+        const b = req.body || {};
+        const override = {};
+        if (b.voice !== undefined) { if (!require('../lib/gemini-tts').VOICE_NAMES.has(b.voice)) return res.status(400).json({ success: false, message: 'ไม่รู้จักเสียงนี้' }); override.voice = b.voice; }
+        if (typeof b.style === 'string' && b.style.trim()) override.style = b.style.trim().slice(0, 500);
+        if (typeof b.model === 'string' && b.model.trim()) override.model = b.model.trim();
+        const text = typeof b.text === 'string' && b.text.trim() ? b.text : 'สวัสดีครับ ผมน้องคิดดี ยินดีที่ได้ช่วยดูแลการบันทึกผลงานตัวชี้วัดนะครับ';
+        const out = await tts.speak({ text, userId: req.user.userId, test: true, override });
+        res.json({ success: true, ...out });
+    } catch (e) { tts.sendTtsError(res, e); }
 });

@@ -6,6 +6,7 @@ import { Router } from '@angular/router';
 import { AuthService } from '../services/auth';
 import { AiSettingsCardComponent } from '../shared/ai-settings-card';
 import { ForecastSettingsCardComponent } from '../shared/forecast-settings-card';
+import { TtsSettingsCardComponent } from '../shared/tts-settings-card';
 import { UserApprovalSettingsCardComponent } from '../shared/user-approval-settings-card';
 import { KhdSsoSettingsCardComponent } from '../shared/khd-sso-settings-card';
 import Swal from 'sweetalert2';
@@ -24,6 +25,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: 'target-lock', label: 'ล็อคการแก้ไขเป้าหมาย', icon: 'fa-bullseye' },
   { id: 'levels', label: 'จำนวนระดับตัวชี้วัด', icon: 'fa-sitemap' },
   { id: 'ai', label: 'ผู้ช่วย AI', icon: 'fa-wand-magic-sparkles', superOnly: true },
+  { id: 'tts', label: 'เสียงพูดน้องคิดดี (Gemini)', icon: 'fa-volume-high', superOnly: true },
   { id: 'forecast', label: 'ระบบเตือนล่วงหน้า', icon: 'fa-triangle-exclamation', superOnly: true },
   { id: 'user-approval', label: 'อนุมัติผู้สมัครอัตโนมัติ', icon: 'fa-user-check', superOnly: true },
   { id: 'khd-sso', label: 'เข้าสู่ระบบจาก KHD', icon: 'fa-right-to-bracket', superOnly: true },
@@ -54,7 +56,7 @@ export function activeSectionAt(box: HTMLElement, ids: string[]): string | null 
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, AiSettingsCardComponent, ForecastSettingsCardComponent, KhdSsoSettingsCardComponent, UserApprovalSettingsCardComponent, MascotFestivalCardComponent],
+  imports: [CommonModule, FormsModule, RouterLink, AiSettingsCardComponent, ForecastSettingsCardComponent, KhdSsoSettingsCardComponent, UserApprovalSettingsCardComponent, MascotFestivalCardComponent, TtsSettingsCardComponent],
   templateUrl: './settings.html'
 })
 export class SettingsComponent implements OnInit {

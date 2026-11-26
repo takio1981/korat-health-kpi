@@ -266,6 +266,11 @@
           <app-ai-settings-card></app-ai-settings-card>
         </div>
 
+        <!-- เสียงพูดน้องคิดดีแบบสด Gemini TTS (26 พ.ย. 2569) — คอมโพเนนต์แยก โหลด/บันทึกผ่าน /tts/settings เอง -->
+        <div id="set-tts" data-settings-section *ngIf="isSuperAdmin" class="mt-8 pt-6 border-t border-gray-100">
+          <app-tts-settings-card></app-tts-settings-card>
+        </div>
+
         <!-- ระบบเตือนล่วงหน้า (8 พ.ย. 2569) — คอมโพเนนต์แยก โหลด/บันทึกผ่าน /forecast/settings เอง -->
         <div id="set-forecast" data-settings-section *ngIf="isSuperAdmin" class="mt-8 pt-6 border-t border-gray-100">
           <app-forecast-settings-card></app-forecast-settings-card>
