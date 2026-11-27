@@ -1,47 +1,38 @@
-import { Component, OnInit, OnDestroy, AfterViewInit, inject, ChangeDetectorRef, ViewChild } from '@angular/core';
+import { Component, OnInit, AfterViewInit, inject, ChangeDetectorRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../services/auth';
-import { DbCompareComponent } from '../db-compare/db-compare';
 import { FormBuilderComponent } from '../form-builder/form-builder';
 import { ExportKpiComponent } from '../export-kpi/export-kpi';
 import Swal from 'sweetalert2';
 
-// ขั้น 1: เทียบโครงสร้างตาราง (DB Compare) — เดิมเป็นขั้น 2
-// ขั้น 2: Export ข้อมูล KPI ลงตารางรายตัวชี้วัด — เดิมเป็นขั้น 3
-// (เทียบชื่อตัวชี้วัด ย้ายไป kpi-manage แล้ว)
-type WizardStep = 1 | 2;
-
+// 27 พ.ย. 2569 (ผู้ใช้สั่ง): รวม "ส่งออกข้อมูล KPI ↔ KHD" (เทียบโครงสร้าง) กับ "Export ลงตารางรายตัวชี้วัด" เป็นหน้าเดียว ตารางเดียว
+// — เดิมเป็น wizard 2 ขั้น และปุ่ม "สร้างตาราง" ของขั้นที่ 1 คัดลอกโครงสร้างจากอีกฝั่งเท่านั้น (ตารางที่ยังไม่มีทั้งสองฝั่งสร้างไม่ได้)
+// ตอนนี้การส่งออกสร้างตารางในระบบให้เอง และตารางใน KHD สร้าง/เพิ่มคอลัมน์จากตารางเดียวกัน (export-kpi)
 @Component({
   selector: 'app-kpi-manager',
   standalone: true,
-  imports: [CommonModule, FormsModule, DbCompareComponent, FormBuilderComponent, ExportKpiComponent],
+  imports: [CommonModule, FormsModule, RouterLink, FormBuilderComponent, ExportKpiComponent],
   templateUrl: './kpi-manager.html'
 })
-export class KpiManagerComponent implements OnInit, AfterViewInit, OnDestroy {
+export class KpiManagerComponent implements OnInit, AfterViewInit {
   private authService = inject(AuthService);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
 
-  @ViewChild(DbCompareComponent) dbCmp?: DbCompareComponent;
   @ViewChild(ExportKpiComponent) exportCmp?: ExportKpiComponent;
 
-  // === Wizard state — 2 ขั้น (Report Compare ย้ายไป kpi-manage แล้ว)
-  //   ขั้น 1: ส่งออกข้อมูล KPI ↔ KHD (DB Compare) — sync structure 2 ทิศทาง
-  //   ขั้น 2: Export ข้อมูล KPI ลงตารางรายตัวชี้วัด — export data + sync KHD + schedule
-  currentStep: WizardStep = 1;
   showWorkflowGuide: boolean = false;
 
-  // ข้อมูล KHD สำหรับส่งจาก DB Compare → Form Builder (embedded)
+  // ข้อมูล KHD สำหรับส่งเข้า Form Builder (embedded)
   khdColumnsForForm: any[] = [];
   khdTableName: string = '';
   khdIndicatorName: string = '';
   khdTrigger: number = 0;
 
   ngOnInit() {
-    // เดิม hardcode เช็ค role !== 'super_admin' ที่นี่ ซ้ำซ้อนกับ pageAccessGuard ที่ route และขัดกับ
-    // ระบบ Role × Page Access — ใช้ canAccessPage() แทนให้ตรงกับ guard
+    // ใช้ canAccessPage() ให้ตรงกับ pageAccessGuard (ระบบ Role × Page Access) — ไม่เช็ค role ตรง
     if (!this.authService.canAccessPage('kpi-manager')) {
       Swal.fire('Access Denied', 'ไม่มีสิทธิ์เข้าถึงหน้านี้', 'error');
       this.router.navigate(['/dashboard']);
@@ -49,75 +40,14 @@ export class KpiManagerComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit() {
-    // ปิด guide ภายในของ sub-components — ใช้ guide รวมที่ kpi-manager แทน
+    // ใช้คำแนะนำรวมของหน้านี้แทนคำแนะนำภายในคอมโพเนนต์ส่งออก
     setTimeout(() => {
-      if (this.dbCmp) this.dbCmp.showGuide = false;
-      if (this.exportCmp) {
-        this.exportCmp.showGuide = false;
-        this.exportCmp.showSyncGuide = false;
-      }
+      if (this.exportCmp) { this.exportCmp.showGuide = false; this.exportCmp.showSyncGuide = false; }
       this.cdr.detectChanges();
     }, 0);
-    // เริ่ม polling เพื่อ refresh step summary จาก sub-components
-    this.startSummaryPolling();
   }
 
-  // === Step status — เก็บใน property แทน getter เพื่อกัน NG0100 (ExpressionChanged...AfterChecked) ===
-  step1Done: boolean = false;
-  step2Done: boolean = false;
-  step1Summary: string = 'ยังไม่ได้เปรียบเทียบโครงสร้าง';
-  step2Summary: string = 'ยังไม่ได้ส่งออก';
-
-  private summaryPollHandle: any = null;
-  private startSummaryPolling() {
-    if (this.summaryPollHandle) return;
-    this.summaryPollHandle = setInterval(() => this.refreshStepStatus(), 1000);
-  }
-  private refreshStepStatus() {
-    // Step 1 — DB Compare (เทียบโครงสร้างตาราง)
-    const dbR = this.dbCmp?.compareResult?.summary;
-    const newStep1Done = !!this.dbCmp?.compareResult;
-    const newStep1Summary = dbR ? `Schema: ตรง ${dbR.match} | ต่าง ${dbR.different}` : 'ยังไม่ได้เปรียบเทียบโครงสร้าง';
-
-    // Step 2 — Export KPI (ส่งออกตารางรายตัวชี้วัด)
-    const expR = this.exportCmp?.exportResult?.summary;
-    const newStep2Done = !!this.exportCmp?.exportResult;
-    const newStep2Summary = expR ? `Export: เพิ่ม ${expR.inserted} | อัปเดต ${expR.updated}` : 'ยังไม่ได้ส่งออก';
-
-    if (newStep1Done !== this.step1Done || newStep1Summary !== this.step1Summary
-      || newStep2Done !== this.step2Done || newStep2Summary !== this.step2Summary) {
-      this.step1Done = newStep1Done;
-      this.step1Summary = newStep1Summary;
-      this.step2Done = newStep2Done;
-      this.step2Summary = newStep2Summary;
-      this.cdr.detectChanges();
-    }
-  }
-
-  ngOnDestroy() {
-    if (this.summaryPollHandle) clearInterval(this.summaryPollHandle);
-  }
-
-  // === Navigation ===
-  goStep(step: WizardStep) {
-    this.currentStep = step;
-    this.cdr.detectChanges();
-    // เลื่อนไป content area เพื่อให้ user เห็นทันที
-    setTimeout(() => {
-      const el = document.getElementById('wizard-section-content');
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 50);
-  }
-
-  nextStep() {
-    if (this.currentStep < 2) this.goStep((this.currentStep + 1) as WizardStep);
-  }
-
-  prevStep() {
-    if (this.currentStep > 1) this.goStep((this.currentStep - 1) as WizardStep);
-  }
-
-  // === DB Compare → Form Builder (embedded) ===
+  // === ตาราง KHD → Form Builder (embedded) ===
   onCreateFormFromKhd(data: { table: string, name: string, columns: any[] }) {
     this.khdTableName = data.table;
     this.khdIndicatorName = data.name;

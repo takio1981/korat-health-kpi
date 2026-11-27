@@ -1,5 +1,6 @@
 /**
- * กติกาการส่ง KHD (ระยะ 3 ของแผน lean งานผู้ดูแล — 22 พ.ย. 2569): ค่าตั้งต้น "ส่งเฉพาะที่อนุมัติ"
+ * กติกาการส่ง KHD (ระยะ 3 ของแผน lean งานผู้ดูแล — 22 พ.ย. 2569) — ค่าตั้งต้นเปลี่ยนเป็น "ส่งทุกค่าที่บันทึก" 27 พ.ย. 2569 (ผู้ใช้เลือก:
+ *   ทั้งระบบยังไม่มีผลงานที่อนุมัติ ตารางส่งออกจึงได้ target/result ว่างทุกแถว) — "ส่งเฉพาะที่อนุมัติ" ยังเลือกได้
  * เดิม: export/sync ไม่ดูสถานะเลย — ผลงานที่ยังไม่ผ่านการตรวจถูกส่งเข้า KHD
  * ตรวจ: ตารางส่งออกเก็บเฉพาะเดือนที่อนุมัติ, checkKpiChanges ตรงกับ performKpiExport, ตั้งค่าเป็น all = ส่งทุกค่า, สิทธิ์ตั้งค่า = super_admin แบบเข้ม
  */
@@ -57,8 +58,24 @@ const exportedRow = async () => (await db.query(`SELECT target, result, m10, m11
 const checkStatus = async () => ((await exportSvc.checkKpiChanges(YEAR, [ind])).details || []).find(d => d.id === ind).status;
 const num = (v) => (v === null || v === undefined ? null : Number(v));
 
-test('ค่าตั้งต้น = approved_only: ส่งออกเฉพาะเดือนที่อนุมัติ (เดิมส่ง พ.ย. ที่ยังรอตรวจด้วย)', async () => {
+test('ค่าตั้งต้น = all: ส่งออกทุกค่าที่บันทึก รวมเดือนที่ยังรอตรวจ (เป้าหมาย + ผลงานไม่ว่าง)', async () => {
+    expect(await policySvc.getKhdSendPolicy()).toBe('all');
+    const r0 = await exportSvc.performKpiExport(YEAR, [ind], null);
+    expect(r0.success).toBe(true);
+    expect(r0.policy).toBe('all');
+    const row0 = await exportedRow();
+    expect(num(row0.m10)).toBe(10);
+    expect(num(row0.m11)).toBe(20);
+    expect(num(row0.result)).toBe(20);
+    expect(num(row0.target)).toBe(50);
+    expect(await checkStatus()).toBe('up_to_date');
+});
+
+test('ตั้งเป็น approved_only: ส่งออกเฉพาะเดือนที่อนุมัติ', async () => {
+    await db.query("INSERT INTO system_settings (setting_key, setting_value) VALUES ('khd_send_policy', 'approved_only') ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+    policySvc.invalidateKhdSyncSettings();
     expect(await policySvc.getKhdSendPolicy()).toBe('approved_only');
+    expect(await checkStatus()).toBe('has_changes');   // พ.ย. ที่ยังไม่อนุมัติต้องหายจากตารางส่งออก
     const r = await exportSvc.performKpiExport(YEAR, [ind], null);
     expect(r.success).toBe(true);
     expect(r.policy).toBe('approved_only');

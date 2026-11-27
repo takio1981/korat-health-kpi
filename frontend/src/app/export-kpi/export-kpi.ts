@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, ChangeDetectorRef, NgZone } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, ChangeDetectorRef, NgZone, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -7,19 +7,58 @@ import { CriteriaTextPipe } from '../shared/criteria-text.pipe';
 import { getCurrentFiscalYear } from '../shared/fiscal-year.util';
 import Swal from 'sweetalert2';
 import { FormulaBadgeComponent } from '../shared/formula-badge';
-import { KhdQuickSendComponent } from '../shared/khd-quick-send';
+import { KhdQuickSendComponent, KHD_POLICY_LABEL } from '../shared/khd-quick-send';
+import { IndicatorBadgesComponent, IndicatorMetaService } from '../shared/indicator-badges';
+import { ITYPES } from '../shared/indicator-types';
+import { AttrFilter, EMPTY_ATTR_FILTER, METHOD_OPTIONS, SOURCE_OPTIONS, activeAttrCount, fiscalYearOptions, matchAttrFilter } from './kpi-attr-filter';
+import { typedConfirmSwal } from '../shared/typed-confirm';
+import { StatusBadge, TableStruct, canPullStructure, canPushStructure, diffText, khdBadge, localBadge, structMapOf, tpKey } from './kpi-table-status';
 
+// 27 พ.ย. 2569 (ผู้ใช้สั่ง): หน้าจัดการข้อมูล KPI รวม "ส่งออกข้อมูล KPI ↔ KHD" (เทียบโครงสร้าง) กับ "Export ลงตารางรายตัวชี้วัด" เป็นตารางเดียว
+// แต่ละแถว: ป้ายการตั้งค่าตัวชี้วัด + ตารางในระบบ (ส่งออก = สร้างให้เอง) + ตารางใน KHD (สร้าง/เพิ่มคอลัมน์ ต้องพิมพ์ยืนยัน) + ข้อมูลที่เปลี่ยน
 @Component({
   selector: 'app-export-kpi',
   standalone: true,
-  imports: [CommonModule, FormsModule, CriteriaTextPipe, FormulaBadgeComponent, KhdQuickSendComponent],
+  imports: [CommonModule, FormsModule, CriteriaTextPipe, FormulaBadgeComponent, KhdQuickSendComponent, IndicatorBadgesComponent],
   templateUrl: './export-kpi.html'
 })
-export class ExportKpiComponent implements OnInit {
+export class ExportKpiComponent implements OnInit, OnDestroy {
   private authService = inject(AuthService);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
   private zone = inject(NgZone);
+
+  /** สร้างแบบฟอร์มบันทึกจากโครงสร้างตาราง KHD (หน้าแม่เปิด Form Builder) */
+  @Output() createFormEvent = new EventEmitter<{ table: string, name: string, columns: any[] }>();
+
+  // === สถานะโครงสร้างตาราง (GET /db-compare?year_bh=) ===
+  structLoading = false;
+  structMap = new Map<string, TableStruct>();
+  khdAvailable = false;
+  khdError = '';
+  structLoadedYear = '';
+  /** ป้ายต่อแถว — คำนวณตอนโหลด (ไม่ใช้ getter ใน template กัน NG0100) */
+  localBadges = new Map<number, StatusBadge>();
+  khdBadges = new Map<number, StatusBadge>();
+  /** ตัวกรองคอลัมน์ตาราง: '' | local:none|empty|blank|ok | khd:none|different|bad_key|match|unknown */
+  filterTable = '';
+
+  // === ตัวกรองคุณสมบัติตัวชี้วัด (27 พ.ย. 2569 — ครบทุกหัวข้อตามป้ายใต้ชื่อ) — คุณสมบัติเต็มจาก IndicatorMetaService (GET /indicators) ===
+  private indicatorMeta = inject(IndicatorMetaService);
+  metaById = new Map<number, any>();
+  attrFilter: AttrFilter = { ...EMPTY_ATTR_FILTER };
+  readonly itypeOptions = ITYPES;
+  readonly methodOptions = METHOD_OPTIONS;
+  readonly sourceOptions = SOURCE_OPTIONS;
+  /** คำนวณตอนโหลดคุณสมบัติ (ไม่ใช้ getter — กัน NG0103) */
+  fyOptions: string[] = [];
+  hostypeOptions: { code: string; name: string }[] = [];
+  attrCount = 0;
+
+  // === กติกาการส่ง KHD (GET/PUT /khd-sync/settings — super_admin แบบเข้ม) ===
+  sendPolicy = '';
+  policyLabel = '';
+  policySaving = false;
 
   // Filters
   exportYear: string = '';
@@ -125,6 +164,179 @@ export class ExportKpiComponent implements OnInit {
     this.loadFilterOptions();
     this.loadExportableIndicators();
     this.loadSchedules();
+    this.loadStructure();
+    this.loadPolicy();
+    this.indicatorMeta.ensure();
+    this.metaSub = this.indicatorMeta.meta$.subscribe(m => {
+      if (!m) return;
+      this.metaById = m.byId;
+      this.fyOptions = fiscalYearOptions([...m.byId.values()]);
+      this.hostypeOptions = [...m.hostype.entries()].map(([code, name]) => ({ code, name })).sort((a, b) => a.code.localeCompare(b.code));
+      this.applyFilters();
+      this.cdr.detectChanges();
+    });
+  }
+
+  private metaSub?: { unsubscribe(): void };
+  ngOnDestroy() { this.metaSub?.unsubscribe(); }
+
+  onAttrFilterChange() {
+    this.attrCount = activeAttrCount(this.attrFilter);
+    this.onFilterChange();
+  }
+
+  // ========== สถานะโครงสร้างตาราง ในระบบ / KHD ==========
+  loadStructure() {
+    this.structLoading = true;
+    const year = this.exportYear;
+    this.authService.dbCompare(year).subscribe({
+      next: (res: any) => {
+        this.structLoading = false;
+        if (res?.success) {
+          this.structMap = structMapOf(res.tables);
+          this.khdAvailable = res.khd_available !== false;
+          this.khdError = res.khd_error || '';
+          this.structLoadedYear = year;
+          this.refreshBadges();
+        }
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        this.structLoading = false;
+        this.khdAvailable = false;
+        this.khdError = err.error?.message || 'ตรวจสถานะตารางไม่สำเร็จ';
+        this.refreshBadges();
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  structOf(ind: any): TableStruct | undefined { return this.structMap.get(tpKey(ind?.table_process)); }
+
+  refreshBadges() {
+    this.localBadges = new Map(); this.khdBadges = new Map();
+    for (const ind of this.exportIndicators) {
+      const s = this.structOf(ind);
+      this.localBadges.set(ind.id, localBadge(s, this.exportYear));
+      this.khdBadges.set(ind.id, khdBadge(s, this.khdAvailable));
+    }
+    this.applyFilters();
+  }
+
+  onYearChange() {
+    this.checkResult = null;
+    this.checkStatusMap.clear();
+    this.loadStructure();
+  }
+
+  canPush(ind: any): boolean { return canPushStructure(this.structOf(ind), this.khdAvailable); }
+  canPull(ind: any): boolean { return canPullStructure(this.structOf(ind), this.khdAvailable); }
+  diffLines(ind: any): string[] { return (this.structOf(ind)?.diff || []).map(diffText); }
+
+  /** ตารางที่เลือกซึ่งสร้าง/เพิ่มคอลัมน์ใน KHD ได้ (ไม่ซ้ำ table_process) */
+  get pushableSelected(): string[] {
+    const set = new Set<string>();
+    for (const ind of this.exportIndicators) if (this.selectedIndicatorIds.has(ind.id) && this.canPush(ind)) set.add(tpKey(ind.table_process));
+    return [...set];
+  }
+
+  pushOne(ind: any) { this.pushStructure([tpKey(ind.table_process)]); }
+  pushSelected() { this.pushStructure(this.pushableSelected); }
+
+  /** สร้างตาราง / เพิ่มคอลัมน์ที่ขาดใน KHD จากโครงสร้างของระบบ (POST /db-compare/create-remote — พิมพ์ยืนยัน) */
+  pushStructure(tables: string[]) {
+    if (!tables.length) { Swal.fire('แจ้งเตือน', 'ไม่มีตารางที่ต้องสร้างหรือเพิ่มคอลัมน์ใน KHD ในรายการที่เลือก', 'info'); return; }
+    const tc = typedConfirmSwal(tables);
+    const list = tables.slice(0, 15).map(t => `<code>${t.replace(/[<>&]/g, '')}</code>`).join(', ') + (tables.length > 15 ? ` และอีก ${tables.length - 15} ตาราง` : '');
+    Swal.fire({
+      title: 'สร้าง/ปรับตารางใน KHD',
+      html: `<p class="text-sm">สร้างตารางที่ยังไม่มี หรือเพิ่มคอลัมน์ที่ขาด ใน KHD ตามโครงสร้างของระบบ <b>${tables.length}</b> ตาราง</p><p class="text-xs text-gray-500 mt-1">${list}</p>`
+        + `<p class="text-xs text-red-500 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>เขียนโครงสร้างลงฐานข้อมูล KHD จริง — ไม่ลบคอลัมน์หรือข้อมูลเดิมใน KHD</p>${tc.footerHtml}`,
+      input: tc.input, inputPlaceholder: tc.inputPlaceholder, inputValidator: tc.inputValidator,
+      icon: 'warning', showCancelButton: true, confirmButtonColor: '#7c3aed',
+      confirmButtonText: '<i class="fas fa-hammer mr-1"></i> สร้าง/ปรับใน KHD', cancelButtonText: 'ยกเลิก',
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      Swal.fire({ title: 'กำลังสร้างใน KHD...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      this.authService.dbCompareCreateRemote(tables, tc.expected).subscribe({
+        next: (res: any) => { this.showStructureResult(res, 'KHD'); this.loadStructure(); },
+        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'สร้างตารางใน KHD ไม่สำเร็จ', 'error'),
+      });
+    });
+  }
+
+  /** เพิ่มคอลัมน์ที่ KHD มีแต่ระบบไม่มี ลงตารางในระบบ (POST /db-compare/create-local — ไม่แตะ KHD) */
+  pullStructure(ind: any) {
+    const t = tpKey(ind.table_process);
+    Swal.fire({
+      title: 'เพิ่มคอลัมน์ตาม KHD', icon: 'question', showCancelButton: true, confirmButtonColor: '#2563eb',
+      html: `<p class="text-sm">เพิ่มคอลัมน์ที่มีใน KHD แต่ยังไม่มีในตาราง <code>${t.replace(/[<>&]/g, '')}</code> ของระบบ</p><p class="text-xs text-gray-500 mt-1">ไม่ลบหรือเปลี่ยนคอลัมน์เดิม</p>`,
+      confirmButtonText: 'เพิ่มคอลัมน์', cancelButtonText: 'ยกเลิก',
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      Swal.fire({ title: 'กำลังปรับตาราง...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      this.authService.dbCompareCreateLocal([t]).subscribe({
+        next: (res: any) => { this.showStructureResult(res, 'ระบบ'); this.loadStructure(); },
+        error: (err: any) => Swal.fire('ผิดพลาด', err.error?.message || 'ปรับตารางไม่สำเร็จ', 'error'),
+      });
+    });
+  }
+
+  /** ผลการสร้าง/ปรับตาราง — แสดงรายการที่ทำไม่ได้พร้อมเหตุผลเสมอ (เดิมแจ้ง "สำเร็จ" แม้สร้างได้ 0 ตาราง) */
+  showStructureResult(res: any, where: string) {
+    const esc = (s: any) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as any)[c]);
+    const created = res?.created || [], altered = res?.altered || [], errors = res?.errors || [];
+    const ok = created.length + altered.length;
+    Swal.fire({
+      icon: errors.length && !ok ? 'error' : errors.length ? 'warning' : ok ? 'success' : 'info',
+      title: ok ? `ปรับตารางใน${where}แล้ว` : `ไม่มีการเปลี่ยนแปลงใน${where}`,
+      html: `<div class="text-left text-sm">`
+        + (created.length ? `<p>สร้างใหม่ ${created.length}: ${created.map(esc).join(', ')}</p>` : '')
+        + (altered.length ? `<p>เพิ่มคอลัมน์ ${altered.length}: ${altered.map((a: any) => `${esc(a.table)} (+${a.added_columns})`).join(', ')}</p>` : '')
+        + (!ok && !errors.length ? '<p class="text-gray-500">โครงสร้างตรงกันอยู่แล้ว</p>' : '')
+        + (errors.length ? `<div class="mt-2 text-xs text-red-600">${errors.map((e: any) => `<b>${esc(e.table)}</b>: ${esc(e.error)}`).join('<br>')}</div>` : '')
+        + '</div>',
+    });
+  }
+
+  /** สร้างแบบฟอร์มบันทึกจากคอลัมน์ของตาราง KHD (เดิมอยู่ในขั้น DB Compare) */
+  createFormFromKhd(ind: any) {
+    const s = this.structOf(ind);
+    if (!s?.remote?.columns?.length) { Swal.fire('แจ้งเตือน', 'ตารางนี้ไม่มีคอลัมน์จาก KHD', 'warning'); return; }
+    this.createFormEvent.emit({ table: tpKey(ind.table_process), name: ind.kpi_indicators_name, columns: s.remote.columns.map((c: any) => ({ ...c, _selected: false })) });
+  }
+
+  // ========== กติกาการส่ง KHD ==========
+  loadPolicy() {
+    if (!this.isSuperAdminStrict) return;
+    this.authService.apiGet('/khd-sync/settings').subscribe({
+      next: (res: any) => { this.setPolicy(res?.data?.khd_send_policy); this.cdr.detectChanges(); },
+      error: () => { /* ไม่มีสิทธิ์/อ่านไม่ได้ = ไม่แสดงแถบ */ },
+    });
+  }
+  private setPolicy(p: string) { this.sendPolicy = p || ''; this.policyLabel = KHD_POLICY_LABEL[p] || p || ''; }
+
+  togglePolicy() {
+    const next = this.sendPolicy === 'all' ? 'approved_only' : 'all';
+    Swal.fire({
+      title: 'เปลี่ยนกติกาการส่ง', icon: 'question', showCancelButton: true, confirmButtonColor: '#10b981',
+      html: `<p class="text-sm">เปลี่ยนเป็น <b>${KHD_POLICY_LABEL[next]}</b></p><p class="text-xs text-gray-500 mt-2">${next === 'approved_only'
+        ? 'ตารางส่งออกจะเก็บเฉพาะเดือนที่อนุมัติแล้ว เดือนที่ยังไม่อนุมัติเป็นค่าว่าง (ไม่ทับค่าใน KHD)'
+        : 'ตารางส่งออกเก็บเป้าหมายและผลงานทุกค่าที่บันทึก รวมเดือนที่ยังไม่อนุมัติ'} — มีผลกับการส่งออกครั้งถัดไป</p>`,
+      confirmButtonText: 'ยืนยัน', cancelButtonText: 'ยกเลิก',
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      this.policySaving = true;
+      this.authService.apiPut('/khd-sync/settings', { khd_send_policy: next }).subscribe({
+        next: (res: any) => {
+          this.policySaving = false; this.setPolicy(res?.data?.khd_send_policy || next);
+          this.checkResult = null; this.checkStatusMap.clear(); this.applyFilters();
+          Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'เปลี่ยนกติกาการส่งแล้ว กดตรวจสอบข้อมูลอีกครั้งเพื่อดูผล', timer: 2500, showConfirmButton: false });
+          this.cdr.detectChanges();
+        },
+        error: (err: any) => { this.policySaving = false; Swal.fire('ผิดพลาด', err.error?.message || 'เปลี่ยนกติกาไม่สำเร็จ', 'error'); this.cdr.detectChanges(); },
+      });
+    });
   }
 
   loadFilterOptions() {
@@ -147,7 +359,7 @@ export class ExportKpiComponent implements OnInit {
       next: (res) => {
         if (res.success) {
           this.exportIndicators = res.data;
-          this.applyFilters();
+          this.refreshBadges();
           this.selectedIndicatorIds = new Set(this.filteredExportIndicators.map((i: any) => i.id));
           this.updateSelectAll();
           // ตั้ง displayCounters เริ่มต้น
@@ -184,11 +396,26 @@ export class ExportKpiComponent implements OnInit {
       });
     }
 
-    const search = this.exportSearch.toLowerCase().trim();
+    // ตัวกรองคุณสมบัติตัวชี้วัด (ประเภท / ประเภทหน่วยบริการ / วิธีคิดผลงาน / แหล่งข้อมูล / ส่ง KHD / ปีงบ / รายละเอียด / เกณฑ์)
+    if (this.attrFilter && activeAttrCount(this.attrFilter) > 0) {
+      list = list.filter((i: any) => matchAttrFilter(i, this.metaById.get(Number(i.id)), this.attrFilter));
+    }
+
+    // ตัวกรองสถานะตาราง (ในระบบ / KHD)
+    if (this.filterTable) {
+      const [side, key] = this.filterTable.split(':');
+      list = list.filter((i: any) => (side === 'local' ? this.localBadges : this.khdBadges).get(i.id)?.key === key);
+    }
+
+    // ค้นชื่อ/ชื่อตาราง — ชื่อตารางเทียบทั้งแบบเดิมและแบบขีดล่าง (tpKey) | รองรับชื่อว่าง
+    // (27 พ.ย. 2569: เดิม i.kpi_indicators_name.toLowerCase() ล้มเมื่อชื่อเป็น null → หลังส่งออก next() หยุดกลางทาง ปุ่มค้าง "กำลังส่งออก...")
+    const search = (this.exportSearch || '').toLowerCase().trim();
     if (search) {
+      const searchKey = tpKey(search);
       list = list.filter((i: any) =>
-        i.kpi_indicators_name.toLowerCase().includes(search) ||
-        i.table_process.toLowerCase().includes(search)
+        String(i.kpi_indicators_name || '').toLowerCase().includes(search) ||
+        String(i.table_process || '').toLowerCase().includes(search) ||
+        tpKey(i.table_process).toLowerCase().includes(searchKey)
       );
     }
 
@@ -301,6 +528,9 @@ export class ExportKpiComponent implements OnInit {
     this.filterDept = '';
     this.filterStatus = '';
     this.filterCheckStatus = '';
+    this.filterTable = '';
+    this.attrFilter = { ...EMPTY_ATTR_FILTER };
+    this.attrCount = 0;
     this.exportSearch = '';
     this.applyFilters();
     this.selectedIndicatorIds = new Set(this.filteredExportIndicators.map((i: any) => i.id));
@@ -490,10 +720,11 @@ export class ExportKpiComponent implements OnInit {
             this.exportResult = res;
 
             if (res.success) {
-              // ล้างผลตรวจสอบเดิม (ให้กดตรวจสอบใหม่เอง)
+              // ล้างผลตรวจสอบเดิม (ให้กดตรวจสอบใหม่เอง) + โหลดสถานะตารางใหม่ (ตารางที่เพิ่งสร้าง/จำนวนแถว)
               this.checkResult = null;
               this.checkStatusMap.clear();
               this.applyFilters();
+              this.loadStructure();
               this.cdr.detectChanges();
 
               // Build table list HTML — ชื่อตาราง + สถานะ + counts

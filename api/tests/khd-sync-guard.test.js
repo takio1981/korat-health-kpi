@@ -44,7 +44,7 @@ beforeAll(async () => {
     await cleanupTestUsers(db);
     const sa = await ensureTestUser(db, { username: 'test_khdsync_sa', role: 'super_admin' });
     saToken = makeToken({ userId: sa.id, username: sa.username, role: 'super_admin', deptId: null, hospcode: null });
-});
+}, 60000); // migration ตอนเริ่มระบบใช้เกิน 5 วินาทีเมื่อเครื่องรับภาระ (27 พ.ย. 2569 — ล้มเป็นระยะในการรันทั้งชุด)
 
 beforeEach(async () => {
     await dropAll();
@@ -172,7 +172,7 @@ describe('POST /sync-to-khd/preview + DB Compare', () => {
         expect(by[T.b]).toMatchObject({ status: 'blocked' });
         expect(by[T.c]).toBeUndefined();
         expect((await rowOf(khd(T.a), '10001', '2569')).target).toBe('12');
-    });
+    }, 60000); // ไล่ทุกตารางส่งออกได้ของฐานทดสอบ — เกิน 5 วินาทีเมื่อฐานทดสอบมีข้อมูลมาก
 
     test('POST /db-compare/sync-to-khd ใช้กติกาเดียวกัน', async () => {
         const res = await as(request(app).post(api('/db-compare/sync-to-khd'))).send({ tables: [T.a, T.b], confirm_text: '2 ตาราง' });
@@ -181,5 +181,5 @@ describe('POST /sync-to-khd/preview + DB Compare', () => {
         expect(res.body.errors[0].table).toBe(T.b);
         expect((await rowOf(khd(T.a), '10002', '2569')).target).toBe('100');
         expect((await rowOf(khd(T.a), '10001', '2569')).result).toBe('16');
-    });
+    }, 60000);
 });

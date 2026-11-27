@@ -20,10 +20,86 @@ describe('ExportKpiComponent — รายละเอียดข้อย่�
     ];
     fixture.detectChanges();
     const el: HTMLElement = fixture.nativeElement;
-    const labels = Array.from(el.querySelectorAll('label')).filter(l => l.textContent?.includes('ตัวชี้วัด'));
-    const withBadge = labels.filter(l => l.textContent?.includes('+ รายละเอียด')).map(l => l.textContent || '');
+    // 27 พ.ย. 2569: รายการเป็นตาราง (1 แถว = 1 ตัวชี้วัด) แทนรายการ label
+    const rows = Array.from(el.querySelectorAll('#kpi-export-table tbody tr[data-ind]'));
+    const withBadge = rows.filter(l => l.textContent?.includes('+ รายละเอียด')).map(l => l.textContent || '');
     expect(withBadge.length).toBe(1);
     expect(withBadge[0]).toContain('ตัวชี้วัด ก');
+  });
+
+  it('ตารางเดียว: แถวแสดงสถานะตารางในระบบ/KHD + ปุ่มสร้างใน KHD เฉพาะที่มีตารางในระบบแล้ว (27 พ.ย. 2569)', () => {
+    component.isSuperAdminStrict = true;
+    component.exportYear = '2570';
+    component.exportIndicators = [
+      { id: 1, kpi_indicators_name: 'ตัวชี้วัด ก', table_process: 'kpi_a_001', upload_excel: 0, is_active: 1 },
+      { id: 2, kpi_indicators_name: 'ตัวชี้วัด ข', table_process: 'kpi-b-001', upload_excel: 1, is_active: 1 },
+    ];
+    component.structMap = new Map<string, any>([
+      ['kpi_a_001', { table: 'kpi_a_001', local: { exists: true, row_count: 32, year_rows: 32, year_filled: 0 }, remote: { exists: false } }],
+    ]);
+    component.khdAvailable = true;
+    component.refreshBadges();
+    fixture.detectChanges();
+    const row = (id: number) => (fixture.nativeElement as HTMLElement).querySelector(`tr[data-ind="${id}"]`) as HTMLElement;
+    expect(row(1).querySelector('[data-local]')!.getAttribute('data-local')).toBe('blank');   // มีแถวแต่ค่าว่าง (กรณีผู้ใช้รายงาน)
+    expect(row(1).querySelector('[data-khd]')!.getAttribute('data-khd')).toBe('none');
+    expect(row(1).querySelector('[data-act="push"]')).toBeTruthy();
+    expect(row(1).textContent).toContain('ส่ง KHD');
+    expect(row(2).querySelector('[data-local]')!.getAttribute('data-local')).toBe('none');   // ยังไม่มีตาราง → ส่งออกแล้วสร้างให้เอง
+    expect(row(2).textContent).toContain('ส่งออกแล้วสร้างให้เอง');
+    expect(row(2).querySelector('[data-act="push"]')).toBeNull();
+    expect(row(2).textContent).toContain('ไม่ส่ง KHD');
+    // ตัวกรองสถานะตาราง
+    component.filterTable = 'local:none';
+    component.applyFilters();
+    expect(component.filteredExportIndicators.map(i => i.id)).toEqual([2]);
+  });
+
+  it('ค้นหา: ตัวชี้วัดที่ชื่อว่างไม่ทำให้ตัวกรองล้ม + ค้นชื่อตารางแบบขีดล่างเจอตารางที่ใช้ขีดกลาง (บั๊กปุ่มค้าง "กำลังส่งออก..." 27 พ.ย. 2569)', () => {
+    component.exportIndicators = [
+      { id: 1, kpi_indicators_name: null, table_process: 'kpi-main-2568-2103', is_active: 1 },
+      { id: 2, kpi_indicators_name: 'ตัวชี้วัด ข', table_process: null, is_active: 1 },
+    ];
+    component.exportSearch = 'kpi_main_2568_2103';
+    expect(() => component.applyFilters()).not.toThrow();
+    expect(component.filteredExportIndicators.map(i => i.id)).toEqual([1]);
+    component.exportSearch = 'ตัวชี้วัด ข';
+    component.applyFilters();
+    expect(component.filteredExportIndicators.map(i => i.id)).toEqual([2]);
+  });
+
+  it('ค้นหาแล้วเลือกเฉพาะรายการที่แสดง — ไม่ส่งออกตัวชี้วัดที่ถูกซ่อนไปด้วย (27 พ.ย. 2569)', () => {
+    component.exportIndicators = [1, 2, 3].map(id => ({ id, kpi_indicators_name: 'ตัวชี้วัด ' + id, table_process: 'kpi_t_00' + id, is_active: 1 }));
+    component.selectedIndicatorIds = new Set([1, 2, 3]);   // เลือกทั้งหมดตอนโหลด
+    component.exportSearch = 'kpi_t_002';
+    component.onFilterChange();                            // ช่องค้นหาเรียก onFilterChange
+    expect([...component.selectedIndicatorIds]).toEqual([2]);
+  });
+
+  it('ตัวกรองคุณสมบัติตัวชี้วัด: ใช้คุณสมบัติเต็มจาก GET /indicators + เลือกเฉพาะที่แสดง + ล้างตัวกรอง (27 พ.ย. 2569)', () => {
+    component.exportIndicators = [
+      { id: 1, kpi_indicators_name: 'ก', table_process: 'kpi_a', upload_excel: 0, is_active: 1 },
+      { id: 2, kpi_indicators_name: 'ข', table_process: 'kpi_b', upload_excel: 1, is_active: 1 },
+      { id: 3, kpi_indicators_name: 'ค', table_process: 'kpi_c', upload_excel: 0, is_active: 1 },
+    ];
+    component.metaById = new Map<number, any>([
+      [1, { id: 1, r9: 1, result_formula: 'SUM(ALL)', khd_fiscal_year: '2570' }],
+      [3, { id: 3, ssj: 1, is_cumulative: 1, khd_fiscal_year: '2569' }],
+    ]);
+    component.selectedIndicatorIds = new Set([1, 2, 3]);
+    component.attrFilter.method = 'formula';
+    component.onAttrFilterChange();
+    expect(component.filteredExportIndicators.map(i => i.id)).toEqual([1]);
+    expect([...component.selectedIndicatorIds]).toEqual([1]);
+    expect(component.attrCount).toBe(1);
+    component.attrFilter.method = '';
+    component.attrFilter.khd = 'on';
+    component.attrFilter.fy = '2569';
+    component.onAttrFilterChange();
+    expect(component.filteredExportIndicators.map(i => i.id)).toEqual([3]);
+    component.clearFilters();
+    expect(component.attrCount).toBe(0);
+    expect(component.filteredExportIndicators.length).toBe(3);
   });
 
   it('สรุปผลส่งออกแสดงจำนวนแถวของตาราง _items และเหตุผลเมื่อข้าม', () => {

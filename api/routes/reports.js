@@ -119,7 +119,19 @@ async function reportByIndicatorRows(user, query = {}) {
             MAX(i.result_formula) AS result_formula,
             MAX(i.target_condition) AS ind_target_condition,
             s.year_bh,
-            MAX(CAST(s.target_value AS DECIMAL(20,4))) AS target_value,
+            -- เป้าหมาย = ยอดรวมเป้าหมายของทุกหน่วยบริการในขอบเขต (27 พ.ย. 2569 ผู้ใช้สั่ง — เดิม MAX = เป้าหมายของหน่วยบริการหนึ่ง)
+            -- นับเฉพาะเป้าหมายที่เป็นตัวเลข (ข้อความ = ไม่รวม) | target_max = ค่าเดิมไว้อ้างอิง
+            -- ลำดับคอลัมน์ = ลำดับในไฟล์ Excel: เป้าหมาย → ผลงานรวม → %สำเร็จ → รพ. → รายเดือน
+            SUM(CASE WHEN TRIM(s.target_value) REGEXP '^-{0,1}[0-9]+([.][0-9]+){0,1}$' THEN CAST(s.target_value AS DECIMAL(20,4)) ELSE 0 END) AS target_value,
+            SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) AS total_actual,
+            CASE WHEN SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) = 0 THEN 0
+                 ELSE ROUND(
+                    SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'), 's.manual_pct')}
+                             THEN 1 ELSE 0 END)
+                    / SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) * 100, 2)
+            END AS achievement_pct,
+            COUNT(DISTINCT s.hospcode) AS hospital_count,
+            MAX(CAST(s.target_value AS DECIMAL(20,4))) AS target_max,
             SUM(CAST(s.oct AS DECIMAL(20,4))) AS oct,
             SUM(CAST(s.nov AS DECIMAL(20,4))) AS nov,
             SUM(CAST(s.dece AS DECIMAL(20,4))) AS dece,
@@ -132,20 +144,11 @@ async function reportByIndicatorRows(user, query = {}) {
             SUM(CAST(s.jul AS DECIMAL(20,4))) AS jul,
             SUM(CAST(s.aug AS DECIMAL(20,4))) AS aug,
             SUM(CAST(s.sep AS DECIMAL(20,4))) AS sep,
-            SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) AS total_actual,
-            COUNT(DISTINCT s.hospcode) AS hospital_count,
             -- จำนวน hospcode ที่มี target — ใช้เทียบความสำเร็จ
             SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) AS hospitals_with_target,
-            -- จำนวน hospcode ที่ผ่านเกณฑ์ (ตามเงื่อนไขเป้าหมาย ≥ > ≤ < = — targetPassSql)
+            -- จำนวน hospcode ที่ผ่านเกณฑ์ (ตามเงื่อนไขเป้าหมาย ≥ > ≤ < = — targetPassSql) — % สำเร็จ (achievement_pct ด้านบน) = passed / with_target × 100
             SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'), 's.manual_pct')}
-                     THEN 1 ELSE 0 END) AS hospitals_passed,
-            -- % สำเร็จ = passed / with_target × 100
-            CASE WHEN SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) = 0 THEN 0
-                 ELSE ROUND(
-                    SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'), 's.manual_pct')}
-                             THEN 1 ELSE 0 END)
-                    / SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) * 100, 2)
-            END AS achievement_pct
+                     THEN 1 ELSE 0 END) AS hospitals_passed
         FROM kpi_summary s
         LEFT JOIN kpi_indicators i ON i.id = s.indicator_id
         ${whereStr}

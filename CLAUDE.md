@@ -286,6 +286,7 @@ users.dept_id → departments.id (FK)
 - ใช้ composite index: `(indicator_id, year_bh, hospcode)`
 - มี `dept_id` + `distid` สำหรับ role-based filtering โดยไม่ต้อง JOIN ตารางอื่น
 - Report endpoints ทั้ง 4 (`/report/by-indicator`, `/report/by-hospital`, `/report/by-district`, `/report/by-year`) ดึงจาก `kpi_summary` ไม่ใช่ `kpi_results`
+  — by-indicator `target_value` = **SUM เป้าหมายตัวเลขของทุกหน่วยบริการ** (27 พ.ย. 2569 — เดิม MAX, ค่าเดิมอยู่ใน `target_max`) ลำดับคอลัมน์ เป้าหมาย → ผลงานรวม → %สำเร็จ → รพ. → เดือน (= ลำดับ Excel) | Test: `report-by-indicator-target.test.js`
 
 ### Shared State (AuthService BehaviorSubjects)
 Layout + Dashboard สื่อสารผ่าน `AuthService` BehaviorSubjects:
@@ -1307,7 +1308,7 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   `/sync-to-khd/execute`, `/db-compare/sync-data|create-remote|sync-to-khd`, `/users/sync-to-khd`, POST/PUT `/export-schedules` + `run-now` — เดิม `isSuperAdmin` ปล่อย role ที่เปิดหน้า kpi-manager ผ่าน → ส่งข้อมูลเข้า KHD ได้
   — **เส้นทางใหม่ที่เขียนข้อมูลลง KHD ต้องใช้ด่านนี้เสมอ** | Test: `api/tests/safety-fixes.test.js`
 - `khdExportableTables()` กรอง `is_active = 1` ด้วย (เดิมหน้าตัวอย่างกรองแต่ตอนส่งจริงไม่กรอง)
-- **กติกาการส่ง (22 พ.ย. 2569 — ผู้ใช้เลือก: ตั้งค่าได้ ค่าตั้งต้นส่งเฉพาะที่อนุมัติ):** `services/khd-policy.js` `system_settings.khd_send_policy` = `approved_only` (ไม่มีค่า = ค่านี้) | `all`
+- **กติกาการส่ง (22 พ.ย. 2569 — ผู้ใช้เลือก: ตั้งค่าได้; ค่าตั้งต้นเปลี่ยนเป็น `all` 27 พ.ย. 2569 — ทั้งระบบยังไม่มีผลงานที่อนุมัติ ตารางส่งออกจึงว่างทั้งหมด):** `services/khd-policy.js` `system_settings.khd_send_policy` = `all` (ไม่มีค่า = ค่านี้) | `approved_only`
   + `khd_sync_batch_size/pause_ms/max_rows/max_seconds`, `khd_query_timeout_ms`, `khd_sync_audit_keep_days` (แคช 60 วินาที, `GET|PUT /khd-sync/settings` requireSuperAdminStrict)
   — approved_only: `checkKpiChanges` + `performKpiExport` (ตรงกัน) เก็บเฉพาะเดือน `is_locked = 1` เดือนอื่น null, หน่วยบริการที่ไม่มีเดือนอนุมัติ = ล้างเป้าหมาย/ฟอร์ม/ผลงานกรอกเอง → ค่าว่างไม่ทับ KHD
   — **ชุดทดสอบที่ตรวจการคำนวณส่งออกด้วยข้อมูลที่ยังไม่อนุมัติต้องครอบ `withKhdPolicy(db, 'all', fn)`** (tests/helpers.js)
@@ -1480,13 +1481,17 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
     และการคัดด้วยจุดกึ่งกลางอยู่ในขอบเขตจังหวัดอย่างเดียวผิด — เคยได้ อ.เนินสง่า จ.ชัยภูมิ แทน อ.เทพารักษ์) — ต้องคงข้อความที่มา (attribution) ใต้แผนที่ไว้เสมอ
   - Test: `shared/district-map.spec.ts`, `chart.spec.ts`
 
-### kpi-manager (Wizard 2 ขั้นตอน)
-- รวม DB Compare / Export ในหน้าเดียว — wizard UI 2 ขั้น (free navigation) — **Report Compare ย้ายไปอยู่ใน
-  kpi-manage แล้ว** (ปุ่ม "เทียบกับ KHD" ต่อแท็บ แทนที่จะเป็น step แยกใน wizard นี้)
-- `currentStep: 1 | 2` + step completion auto-detect จาก ViewChild `compareResult` / `exportResult`
-- Sub-components ใช้ `[hidden]="currentStep !== N"` (ไม่ destroy เพื่อ keep state)
-- ปิด `showGuide` ภายใน sub-components ผ่าน `AfterViewInit` — ใช้ unified guide ที่ kpi-manager
-- Form Builder embed (รับ `createFormEvent` จาก DB Compare) — modal เปิดเมื่อกด "สร้างฟอร์มจาก KHD"
+### kpi-manager (หน้าเดียว ตารางเดียว — 27 พ.ย. 2569 ผู้ใช้สั่ง; เดิม wizard 2 ขั้น DB Compare / Export)
+- หน้า kpi-manager = `<app-export-kpi>` + Form Builder embed — **คอมโพเนนต์ db-compare ถูกลบแล้ว** (ยืนยันพิมพ์ย้ายไป `shared/typed-confirm.ts`) | Report Compare อยู่ที่ kpi-manage
+- แถวต่อตัวชี้วัด: ป้ายการตั้งค่า (table_process, ส่ง/ไม่ส่ง KHD = upload_excel, เกณฑ์, + รายละเอียด, `<app-indicator-badges [tp]="false">`) | ตารางในระบบ | ตารางใน KHD | ข้อมูลปีงบ (checkKpiChanges) | จัดการ
+  — สถานะตาราง = `export-kpi/kpi-table-status.ts` (ฟังก์ชันล้วน: localBadge none/empty/blank/ok, khdBadge unknown/none/bad_key/different/match, canPush/canPull) จาก `GET /db-compare?year_bh=`
+  (นับ `year_rows`/`year_filled`, เชื่อม KHD ไม่ได้ = `khd_available:false` + `remote: null` + status `khd_unknown` — **ไม่ใช่ "ไม่มีใน KHD"**, `remote.key_ok` = คีย์ hospcode+byear)
+- **ตารางในระบบสร้างด้วยการส่งออก** (performKpiExport) — ปุ่มสร้างใน KHD = `/db-compare/create-remote` (พิมพ์ยืนยัน, ต้องมีตารางในระบบก่อน), เพิ่มคอลัมน์ในระบบ = `/db-compare/create-local` (ALTER เท่านั้น)
+  ⚠️ เดิมปุ่ม "สร้างตาราง" คัดลอก DDL จากอีกฝั่ง → ตารางที่ยังไม่มีทั้งสองฝั่งสร้างไม่ได้ และแจ้ง "สำเร็จ" แม้สร้าง 0 ตาราง — `showStructureResult()` แสดงเหตุผลทุกครั้ง
+- **ตัวกรองคุณสมบัติตัวชี้วัด** `#kpi-attr-filters` = `export-kpi/kpi-attr-filter.ts` (ฟังก์ชันล้วน `matchAttrFilter(ind, meta, f)` — meta = แถวเต็มจาก `IndicatorMetaService` ความหมายเดียวกับป้ายใต้ชื่อ): ประเภทตัวชี้วัด, ประเภทหน่วยบริการ (all_required นับทุกประเภท), วิธีคิดผลงาน, แหล่งข้อมูล, ส่ง KHD, ปีงบ, _items, เกณฑ์ — Test: `kpi-attr-filter.spec.ts`
+- แถบกติกาการส่ง `#kpi-send-policy` (PUT /khd-sync/settings) + สถานะเชื่อมต่อ `#kpi-khd-conn` | ตัวกรอง `#filter-table-status` | **ค้นหา = onFilterChange (เลือกเฉพาะที่แสดง)** ค้นชื่อตารางได้ทั้งขีดกลาง/ขีดล่าง
+  ⚠️ เดิมค้นหาไม่ล้างการเลือก → ค้น 1 ตัวแล้วส่งออกทั้งหมด และ `kpi_indicators_name` เป็น null ทำให้ applyFilters ล้มหลังส่งออก ปุ่มค้าง "กำลังส่งออก..." (พบจากการทดสอบหน้าจอ 27 พ.ย. 2569)
+- Test: `api/tests/kpi-manager-export.test.js` (KHD จำลอง), `export-kpi.spec.ts`, `kpi-table-status.spec.ts` | ทดสอบหน้าจอ `tools/video-guide/e2e-kpi-manager.js` + ตรวจทุกตาราง `verify-export-all.js` (ฐานทดสอบ)
 
 ### Form Builder (kpi-manage)
 - ปุ่ม `fa-clipboard-list` (สีม่วง) ในคอลัมน์ "จัดการ" ของแต่ละ indicator (super_admin)

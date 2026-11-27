@@ -766,7 +766,7 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
             <div class="bg-indigo-50 rounded-xl p-4 border border-indigo-200">
               <p class="text-sm font-bold text-indigo-800 mb-1"><i class="fas fa-list-ol mr-2"></i>1. รายข้อตัวชี้วัด</p>
-              <p class="text-xs text-gray-600">สรุปแต่ละตัวชี้วัด: เป้าหมาย, ผลงานรายเดือน (ต.ค.–ก.ย.), ผลงานรวม, จำนวนหน่วยบริการ พร้อมกราฟ Bar เปรียบเทียบเป้าหมาย VS ผลงาน</p>
+              <p class="text-xs text-gray-600">สรุปแต่ละตัวชี้วัด: เป้าหมาย (ยอดรวมเป้าหมายของทุกหน่วยบริการในขอบเขต เฉพาะค่าที่เป็นตัวเลข), ผลงานรวม, %สำเร็จ, จำนวนหน่วยบริการ แล้วต่อด้วยผลงานรายเดือน (ต.ค.–ก.ย.) พร้อมกราฟ Bar เปรียบเทียบเป้าหมาย VS ผลงาน</p>
             </div>
             <div class="bg-green-50 rounded-xl p-4 border border-green-200">
               <p class="text-sm font-bold text-green-800 mb-1"><i class="fas fa-hospital mr-2"></i>2. รายหน่วยบริการ</p>
@@ -1992,28 +1992,25 @@
             <div class="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center"><i class="fas fa-layer-group text-indigo-600"></i></div>
             <div>
               <h2 class="text-xl font-bold text-gray-800">13. จัดการข้อมูล KPI</h2>
-              <p class="text-xs text-gray-400">DB Compare / สร้างแบบฟอร์ม / Export</p>
+              <p class="text-xs text-gray-400">ตารางเดียว: สถานะตาราง / ตรวจข้อมูล / ส่งออก / ส่งเข้า KHD / แบบฟอร์ม</p>
             </div>
           </div>
           <i class="fas text-gray-400 transition-transform" [ngClass]="isCollapsed('kpi-manager') ? 'fa-chevron-down' : 'fa-chevron-up'"></i>
         </div>
         <div [hidden]="isCollapsed('kpi-manager')" class="px-6 pb-6 space-y-4">
-          <p class="text-sm text-gray-600">เมนูสำหรับ <b>super_admin</b> — Wizard <b>2 ขั้นเรียงลำดับ</b> (1 → 2) โฟกัสที่ <b>schema + data</b> เท่านั้น</p>
+          <p class="text-sm text-gray-600">เมนูสำหรับ <b>super_admin</b> — <b>หน้าเดียว ตารางเดียวครบทุกขั้น</b> (27 พ.ย. 2569 — เดิมแยกเป็น 2 ขั้น "ส่งออกข้อมูล KPI ↔ KHD" กับ "Export ลงตารางรายตัวชี้วัด")</p>
 
-          <!-- Wizard Overview -->
+          <!-- ภาพรวมหน้าเดียว -->
           <div class="bg-gradient-to-r from-indigo-50 to-emerald-50 border border-indigo-200 rounded-xl p-4">
-            <h4 class="font-bold text-indigo-800 text-sm mb-2"><i class="fas fa-route mr-2"></i>Workflow 2 ขั้นตอน (เรียงลำดับ)</h4>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-              <div class="bg-white/70 rounded-lg p-2 border border-indigo-200">
-                <p class="font-bold text-indigo-700"><span class="inline-flex items-center justify-center w-5 h-5 bg-indigo-600 text-white rounded-full text-[10px] mr-1">1</span> ส่งออกข้อมูล KPI ↔ KHD</p>
-                <p class="text-gray-600 mt-0.5">เทียบโครงสร้างตาราง 2 ทาง + ลิงก์ไป Form Builder — DB Compare</p>
-              </div>
-              <div class="bg-white/70 rounded-lg p-2 border border-emerald-200">
-                <p class="font-bold text-emerald-700"><span class="inline-flex items-center justify-center w-5 h-5 bg-emerald-600 text-white rounded-full text-[10px] mr-1">2</span> Export ลงตารางรายตัวชี้วัด</p>
-                <p class="text-gray-600 mt-0.5">Export data + ส่งเข้า KHD + Scheduler อัตโนมัติ</p>
-              </div>
-            </div>
-            <p class="text-[10px] text-gray-500 mt-2"><i class="fas fa-info-circle mr-1"></i>แนะนำลำดับ 1 → 2 ในครั้งแรก หลังจากนั้นข้ามไปขั้น 2 ได้เลย — กด Stepper ด้านบน</p>
+            <h4 class="font-bold text-indigo-800 text-sm mb-2"><i class="fas fa-table mr-2"></i>แต่ละแถว = 1 ตัวชี้วัด มีครบในแถวเดียว</h4>
+            <ul class="list-disc ml-5 text-xs text-gray-700 space-y-1">
+              <li><b>ตัวชี้วัด / การตั้งค่า</b> — ชื่อตาราง (table_process), ส่ง KHD / ไม่ส่ง KHD, เกณฑ์, ประเภทตัวชี้วัด, ประเภทหน่วยบริการ, วิธีคิดผลงาน (สะสม/สูตร/รายไตรมาส), แหล่งข้อมูล, ปีงบ, + รายละเอียด — ใช้เลือกรายการก่อนส่งออก</li>
+              <li><b>ตารางในระบบ</b> — ยังไม่มีตาราง (ส่งออกแล้วสร้างให้เอง) / ปีงบนี้ยังไม่มีแถว / <span class="text-red-600 font-bold">มีแถวแต่ค่าว่างทั้งหมด</span> / มีข้อมูล (จำนวนแถวของปีงบ + แถวที่มีข้อมูล)</li>
+              <li><b>ตารางใน KHD</b> — ยังไม่มีใน KHD / โครงสร้างต่าง (บอกคอลัมน์ที่ต่าง) / คีย์ไม่ใช่ hospcode + byear (ส่งไม่ได้) / มีใน KHD / ตรวจ KHD ไม่ได้ (เชื่อมต่อไม่ได้ — ยังส่งออกลงตารางในระบบได้)</li>
+              <li><b>ข้อมูลปีงบ</b> — ผล "ตรวจสอบข้อมูล": มีการเปลี่ยนแปลง (+ใหม่ / ~แก้ไข) / ล่าสุดแล้ว / ไม่มีข้อมูล</li>
+              <li><b>จัดการ</b> — สร้างใน KHD / เพิ่มคอลัมน์ KHD (พิมพ์ยืนยัน) · เพิ่มคอลัมน์ในระบบ (ตามคอลัมน์ที่ KHD มีเพิ่ม เช่น ช่องแบบฟอร์ม) · แบบฟอร์มจาก KHD</li>
+            </ul>
+            <p class="text-[11px] text-gray-500 mt-2"><i class="fas fa-info-circle mr-1"></i>แถบด้านบนบอก <b>กติกาการส่ง</b> (ค่าตั้งต้น ส่งทุกค่าที่บันทึก — กดเปลี่ยนเป็นเฉพาะเดือนที่อนุมัติแล้วได้) และสถานะการเชื่อมต่อ KHD — ตัวกรอง "สถานะตาราง" ช่วยหาตัวชี้วัดที่ยังไม่มีตาราง/ยังไม่มีใน KHD/โครงสร้างต่าง</p>
           </div>
 
           <!-- Note: Report Compare ย้ายไป kpi-manage -->
@@ -2022,25 +2019,23 @@
             <p class="text-gray-700">เคยอยู่ใน wizard ขั้น 1 — ตอนนี้ย้ายไปอยู่ที่หน้า <b>"จัดการตัวชี้วัด" (kpi-manage)</b> tab "ตัวชี้วัด" เพื่อให้ใช้งานร่วมกับ CRUD ปกติได้เลย → ดูรายละเอียดที่ section "จัดการตัวชี้วัด" ด้านล่าง</p>
           </div>
 
-          <!-- ขั้น 1 -->
+          <!-- สร้าง/ปรับตาราง -->
           <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
-            <h4 class="font-bold text-indigo-800 mb-2"><i class="fas fa-database mr-2"></i>ขั้น 1: ส่งออกข้อมูล KPI ↔ KHD (DB Compare — Schema)</h4>
+            <h4 class="font-bold text-indigo-800 mb-2"><i class="fas fa-hammer mr-2"></i>การสร้างและปรับตาราง</h4>
             <ol class="list-decimal ml-5 text-sm text-gray-600 space-y-1">
-              <li>กดปุ่ม <b>"เปรียบเทียบ Structure"</b> → ระบบเชื่อมต่อ KHD แล้วเปรียบเทียบโครงสร้างตาราง</li>
-              <li>ดูสรุป: ตรงกัน / ต่างกัน / ไม่มีใน Local / ไม่มีใน KHD</li>
-              <li>เลือกตาราง (หรือใช้ <b>"เลือก Missing Local"</b> / <b>"เลือก Missing KHD"</b> / <b>"เลือก Different"</b>)</li>
-              <li><b class="text-blue-600"><i class="fas fa-cloud-download-alt mr-1"></i>KHD → Local:</b> กด <b>"สร้าง Local"</b> / <b>"Sync จาก KHD"</b></li>
-              <li><b class="text-purple-600"><i class="fas fa-cloud-upload-alt mr-1"></i>Local → KHD:</b> กด <b>"สร้าง KHD"</b> / <b>"Sync → KHD"</b> <span class="text-[10px] text-red-500">(ต้องมีสิทธิ์ write ใน KHD)</span></li>
-              <li><i class="fas fa-keyboard mr-1 text-red-500"></i>ปุ่ม <b>"Sync จาก KHD"</b> (ทับข้อมูลในระบบ), <b>"สร้าง KHD"</b> และ <b>"Sync → KHD"</b> ต้อง<b>พิมพ์ยืนยัน</b>: เลือก 1 ตาราง = พิมพ์ชื่อตาราง, หลายตาราง = พิมพ์ "จำนวน ตาราง" เช่น <code>3 ตาราง</code> (ระบบตรวจซ้ำที่ server)</li>
-              <li>กดปุ่ม <b>"สร้างฟอร์มจาก KHD"</b> → ส่ง columns ไป Tab 2 เพื่อสร้างแบบฟอร์ม</li>
+              <li><b>ตารางในระบบ</b> ไม่ต้องสร้างแยก — กด <b>"ส่งออกข้อมูล"</b> ระบบสร้างตารางที่ยังไม่มีให้เองพร้อมใส่เป้าหมาย ผลงาน และผลงานรายเดือน (เดิมปุ่ม "สร้างตาราง" คัดลอกโครงสร้างจากอีกฝั่งเท่านั้น ตัวชี้วัดใหม่ที่ยังไม่มีตารางทั้งสองฝั่งจึงสร้างไม่ได้)</li>
+              <li><b>ตารางใน KHD</b> ที่ยังไม่มี หรือ KHD ขาดคอลัมน์: ปุ่ม <b>"สร้างใน KHD" / "เพิ่มคอลัมน์ KHD"</b> ในแถว หรือ <b>"สร้าง/ปรับตารางใน KHD (n)"</b> สำหรับรายการที่เลือก — สร้างตามโครงสร้างของตารางในระบบ (ต้องส่งออกก่อน) ไม่ลบคอลัมน์หรือข้อมูลเดิมใน KHD</li>
+              <li>KHD มีคอลัมน์ที่ระบบไม่มี (เช่น ช่องของแบบฟอร์ม): ปุ่ม <b>"เพิ่มคอลัมน์ในระบบ"</b></li>
+              <li><i class="fas fa-keyboard mr-1 text-red-500"></i>ปุ่มที่เขียนลง KHD ต้อง<b>พิมพ์ยืนยัน</b>: 1 ตาราง = พิมพ์ชื่อตาราง, หลายตาราง = พิมพ์ "จำนวน ตาราง" เช่น <code>3 ตาราง</code> (ระบบตรวจซ้ำที่ server) — ผลการสร้างแสดงตารางที่ทำไม่ได้พร้อมเหตุผลทุกครั้ง</li>
+              <li>ปุ่ม <b>"แบบฟอร์มจาก KHD"</b> → ส่งคอลัมน์ของตาราง KHD ไปสร้างแบบฟอร์มบันทึก</li>
             </ol>
           </div>
           <!-- Form Builder (sub-tool of ขั้น 1) -->
           <div class="bg-purple-50 border border-purple-200 rounded-xl p-4">
-            <h4 class="font-bold text-purple-800 mb-2"><i class="fas fa-wpforms mr-2"></i>ขั้น 1 (ต่อ): สร้างแบบฟอร์ม KPI จาก KHD</h4>
+            <h4 class="font-bold text-purple-800 mb-2"><i class="fas fa-wpforms mr-2"></i>สร้างแบบฟอร์ม KPI จาก KHD</h4>
             <ol class="list-decimal ml-5 text-sm text-gray-600 space-y-1">
               <li>เลือกตัวชี้วัดที่มี <b>table_process</b> → กดปุ่ม <b>"สร้าง"</b></li>
-              <li>ถ้ามาจาก DB Compare → เลือก KHD fields ใน panel → กด <b>"เพิ่ม N ฟิลด์"</b></li>
+              <li>ถ้ามาจากปุ่ม "แบบฟอร์มจาก KHD" ในตาราง → เลือก KHD fields ใน panel → กด <b>"เพิ่ม N ฟิลด์"</b></li>
               <li>สลับ toggle <b>"ฟิลด์เริ่มต้น"</b> ตามต้องการ (id, hospcode, year_bh, ...)</li>
               <li>กำหนดชื่อ, ประเภท, บังคับกรอก → เลือกฟิลด์แสดงใน Dashboard → กด <b>"บันทึกและสร้างตาราง"</b></li>
             </ol>
@@ -2056,21 +2051,21 @@
           </div>
           <!-- ขั้น 2 -->
           <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-            <h4 class="font-bold text-emerald-800 mb-2"><i class="fas fa-file-export mr-2"></i>ขั้น 2: Export ข้อมูล KPI ลงตารางรายตัวชี้วัด</h4>
+            <h4 class="font-bold text-emerald-800 mb-2"><i class="fas fa-file-export mr-2"></i>ตรวจข้อมูล ส่งออก และส่งเข้า KHD</h4>
             <div class="mb-3 bg-indigo-100 rounded-lg p-3 text-xs text-indigo-900">
-              <b><i class="fas fa-paper-plane mr-1"></i>ส่งเข้า KHD ขั้นเดียว (ผู้ดูแลระบบสูงสุด — แนะนำ):</b> กล่องสีคราม "ส่งเข้า KHD ขั้นเดียว" ด้านบนของขั้นนี้ → กด <b>"ส่งเข้า KHD (เฉพาะที่เปลี่ยน)"</b>
+              <b><i class="fas fa-paper-plane mr-1"></i>ส่งเข้า KHD ขั้นเดียว (ผู้ดูแลระบบสูงสุด — แนะนำ):</b> กล่องสีคราม "ส่งเข้า KHD ขั้นเดียว" ด้านบนของหน้า → กด <b>"ส่งเข้า KHD (เฉพาะที่เปลี่ยน)"</b>
               ระบบตรวจการเปลี่ยนแปลงและเตรียมตารางส่งออกของปีงบที่เลือก (ยังไม่แตะ KHD) แล้วแสดงจำนวนตาราง/แถวที่จะเพิ่มและปรับปรุง → กด <b>"ส่งเข้า KHD"</b> ครั้งเดียว
               (ข้อมูลเปลี่ยนระหว่างรอยืนยัน = ระบบให้ตรวจใหม่ก่อนส่ง) — ตารางที่ส่งครบแล้วและข้อมูลไม่เปลี่ยนถูกข้าม ส่งได้ครั้งละงานเดียว
               <ul class="list-disc ml-5 mt-1 space-y-0.5">
-                <li><b>กติกาการส่ง</b> (ปุ่ม "ตั้งค่า"): ค่าตั้งต้น <b>ส่งเฉพาะเดือนที่อนุมัติแล้ว</b> — เดือนที่ยังไม่อนุมัติเป็นค่าว่างในตารางส่งออก จึงไม่ทับค่าเดิมใน KHD และ KHD ได้ค่าใหม่เมื่ออนุมัติแล้ว | เลือก "ส่งทุกค่าที่บันทึก" ได้ + ค่าควบคุมภาระของ KHD (แถวต่อชุด พักระหว่างชุด เพดานแถว/เวลาต่อรอบ — เกินเพดาน = ส่งบางส่วน รอบถัดไปส่งต่อ)</li>
+                <li><b>กติกาการส่ง</b> (แถบด้านบนของหน้า หรือปุ่ม "ตั้งค่า"): ค่าตั้งต้น <b>ส่งทุกค่าที่บันทึก</b> (27 พ.ย. 2569) | เลือก "ส่งเฉพาะเดือนที่อนุมัติแล้ว" ได้ — เดือนที่ยังไม่อนุมัติเป็นค่าว่างในตารางส่งออก จึงไม่ทับค่าเดิมใน KHD (ถ้ายังไม่มีผลงานที่อนุมัติ ตารางส่งออกจะว่างทั้งหมด) + ค่าควบคุมภาระของ KHD (แถวต่อชุด พักระหว่างชุด เพดานแถว/เวลาต่อรอบ — เกินเพดาน = ส่งบางส่วน รอบถัดไปส่งต่อ)</li>
                 <li><b>ประวัติการส่ง</b>: ทุกรอบ (ส่งเอง/ตารางเวลา/ส่งขั้นเดียว/DB Compare) บันทึกค่าก่อน-หลังทุกช่องที่เขียนลง KHD — ปุ่ม <b>"ย้อนกลับ"</b> (พิมพ์เลขรอบยืนยัน) คืนค่าเฉพาะช่องที่ KHD ยังเป็นค่าที่ระบบเขียน มีผู้แก้ต่อแล้วข้าม แถวที่เพิ่มใหม่ไม่ลบ และย้อนกลับได้เฉพาะรอบล่าสุดของตาราง</li>
               </ul>
             </div>
             <ol class="list-decimal ml-5 text-sm text-gray-600 space-y-1">
               <li>เลือกปีงบประมาณ → กดปุ่ม <b>"ตรวจสอบข้อมูล"</b> เพื่อเปรียบเทียบ (แสดง progress bar)</li>
               <li>ดู 6 Card สรุป: ทั้งหมด | <b class="text-orange-600">ตัวชี้วัดที่เพิ่ม/แก้ไข</b> | <b class="text-rose-600">จำนวนข้อมูลที่เปลี่ยนแปลง</b> | ล่าสุดแล้ว | ไม่มีข้อมูล | ยังไม่ตรวจ</li>
-              <li>กรองตามหมวดหมู่ / หน่วยงาน / สถานะ → เลือก checkbox ตัวชี้วัดที่ต้องการ</li>
-              <li>กดปุ่ม <b>"ส่งออกข้อมูล"</b> → สร้าง/อัปเดตตาราง MySQL ใน Local DB (target + actual_value รายเดือน + form fields) — ตัวชี้วัดที่มีป้าย
+              <li>กรองตามสถานะตาราง / หมวดหมู่ / หน่วยงาน และคุณสมบัติตัวชี้วัด (ประเภทตัวชี้วัด, ประเภทหน่วยบริการ, วิธีคิดผลงาน, แหล่งข้อมูล, ส่ง/ไม่ส่ง KHD, ปีงบ, รายละเอียดข้อย่อย, เกณฑ์) หรือค้นหาชื่อ/ชื่อตาราง (พิมพ์ขีดกลางหรือขีดล่างก็ได้) — <b>ตัวกรองและการค้นหาเลือกเฉพาะรายการที่แสดง</b> ปุ่มส่งออกบอกจำนวนที่จะส่งออกเสมอ</li>
+              <li>กดปุ่ม <b>"ส่งออกข้อมูล"</b> → สร้าง (ถ้ายังไม่มี) / อัปเดตตาราง MySQL ใน Local DB (target + actual_value รายเดือน + form fields) — ตัวชี้วัดที่มีป้าย
                 <b class="text-indigo-700"><i class="fas fa-sitemap"></i> + รายละเอียด</b> สร้างตาราง <code>&lt;table_process&gt;_items</code> เพิ่ม และหน้าต่างสรุปผลแสดงเป็นแถว ↳ ใต้ตารางหลัก</li>
               <li>กดปุ่ม <b>"ส่งข้อมูลเข้า KHD"</b> (สีเขียวเข้ม) → Modal ตรวจสอบตาราง + แผนการส่ง (เพิ่ม/อัปเดต/คงค่า KHD) → เลือก → ส่ง (แถวที่มีอยู่แล้วทับเฉพาะเมื่อข้อมูลในระบบใหม่กว่า และช่องว่างไม่ทับค่าใน KHD)</li>
               <li>กดปุ่ม <b>"ตารางเวลา Export อัตโนมัติ"</b> (ไล่สีม่วง-คราม) → Modal ตั้งค่า schedule อัตโนมัติ</li>
@@ -2756,7 +2751,7 @@
           </div>
           <div class="bg-gray-50 rounded-xl p-4">
             <p class="text-sm font-bold text-gray-800">ถาม: "จัดการข้อมูล KPI" มีขั้นตอนอะไรบ้าง?</p>
-            <p class="text-xs text-gray-600 mt-1">ตอบ: Wizard 2 ขั้นตอน — 1) DB Compare (เปรียบเทียบ structure + Sync 2 ทิศทาง KHD↔Local + สร้างแบบฟอร์มจาก Form Builder ฝังในหน้า) 2) Export ข้อมูล (ส่งออกลงตารางรายตัวชี้วัด + Sync + ตารางเวลาอัตโนมัติ) — ส่วน Report Compare (เทียบ reports KHD กับ kpi_indicators) ย้ายไปอยู่ในหน้า "จัดการตัวชี้วัด" แล้ว (ปุ่ม "เทียบกับ KHD" ในแต่ละแท็บ)</p>
+            <p class="text-xs text-gray-600 mt-1">ตอบ: (27 พ.ย. 2569) หน้าเดียว ตารางเดียว — แต่ละแถวบอกสถานะตารางในระบบและใน KHD, ตรวจข้อมูล → ส่งออก (สร้างตารางที่ยังไม่มีให้เอง) → สร้าง/ปรับตารางใน KHD → ส่งเข้า KHD + ตารางเวลาอัตโนมัติ | เดิม: Wizard 2 ขั้นตอน — 1) DB Compare (เปรียบเทียบ structure + Sync 2 ทิศทาง KHD↔Local + สร้างแบบฟอร์มจาก Form Builder ฝังในหน้า) 2) Export ข้อมูล (ส่งออกลงตารางรายตัวชี้วัด + Sync + ตารางเวลาอัตโนมัติ) — ส่วน Report Compare (เทียบ reports KHD กับ kpi_indicators) ย้ายไปอยู่ในหน้า "จัดการตัวชี้วัด" แล้ว (ปุ่ม "เทียบกับ KHD" ในแต่ละแท็บ)</p>
           </div>
           <div class="bg-gray-50 rounded-xl p-4">
             <p class="text-sm font-bold text-gray-800">ถาม: ทำไม Login แล้วได้รับ Email แจ้งเตือน?</p>

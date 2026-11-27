@@ -611,13 +611,13 @@ const SYSTEMS: SopSystem[] = [
     'บังคับ filter ก่อนค้นหาเสมอ เพราะ kpi_results มีข้อมูลจริงหลายแสนแถว — ORDER BY+LIMIT ไม่มี WHERE จะช้ามาก',
   ],
 },{
-  id:'export', icon:'💾', title:'ระบบ Export & Sync KHD', sub:'KPI Manager Wizard',
-  desc:'Wizard 2 ขั้น: DB Compare (Schema + Form Builder) → Export Tables + Sync + Scheduler อัตโนมัติ',
+  id:'export', icon:'💾', title:'ระบบ Export & Sync KHD', sub:'KPI Manager — ตารางเดียว',
+  desc:'หน้าเดียว ตารางเดียว (27 พ.ย. 2569): สถานะตารางในระบบ/KHD → ตรวจข้อมูล → ส่งออก (สร้างตารางที่ขาดให้เอง) → สร้าง/ปรับตาราง KHD → Sync + Scheduler อัตโนมัติ',
   actors:['Super Admin','Backend API','ฐานข้อมูล','KHD Remote DB'],
   nodes:[
     {id:'s',  r:0,c:0,t:'start',   l:'เปิด KPI Manager'},
-    {id:'w1', r:0,c:1,t:'process', l:'Step 1: DB Compare\nSchema + 4 operations'},
-    {id:'w2', r:0,c:2,t:'process', l:'Step 2: Export\nKPI Tables'},
+    {id:'w1', r:0,c:1,t:'process', l:'GET /db-compare?year_bh=\nสถานะตารางในระบบ/KHD'},
+    {id:'w2', r:0,c:2,t:'process', l:'กติกาการส่ง\n(ค่าตั้งต้น ส่งทุกค่า)'},
     {id:'n1', r:1,c:3,t:'process', l:'POST /check-kpi-export\ncheckKpiChanges()'},
     {id:'d1', r:1,c:4,t:'decision',l:'มีการ\nเปลี่ยนแปลง?'},
     {id:'n2', r:1,c:5,t:'process', l:'performKpiExport()\n3 sources merged'},

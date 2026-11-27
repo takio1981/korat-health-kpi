@@ -7,8 +7,9 @@ import { AuthService } from '../services/auth';
 import Swal from 'sweetalert2';
 
 export const KHD_POLICY_LABEL: Record<string, string> = {
-  approved_only: 'ส่งเฉพาะเดือนที่อนุมัติแล้ว (แนะนำ)',
-  all: 'ส่งทุกค่าที่บันทึก (รวมที่ยังไม่อนุมัติ)',
+  // 27 พ.ย. 2569: ค่าตั้งต้น = all (ผู้ใช้เลือก — ทั้งระบบยังไม่มีผลงานที่อนุมัติ)
+  approved_only: 'ส่งเฉพาะเดือนที่อนุมัติแล้ว',
+  all: 'ส่งทุกค่าที่บันทึก (ค่าตั้งต้น)',
 };
 const TRIGGER_TEXT: Record<string, string> = {
   manual: 'ส่งเอง', schedule: 'ตารางเวลา', quick: 'ส่งขั้นเดียว', db_compare: 'DB Compare', rollback: 'ย้อนกลับ',

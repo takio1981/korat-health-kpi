@@ -570,10 +570,12 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
   }
 
   // === DB Compare (KHD) ===
-  dbCompare(): Observable<any> {
+  /** year_bh = นับแถวของปีงบนั้นในตารางของระบบ (หน้าจัดการข้อมูล KPI — 27 พ.ย. 2569) */
+  dbCompare(yearBh?: string): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.get(`${this.apiUrl}/db-compare`, { headers });
+    const params: any = yearBh ? { year_bh: yearBh } : {};
+    return this.http.get(`${this.apiUrl}/db-compare`, { headers, params });
   }
   dbCompareCreateLocal(tables: string[]): Observable<any> {
     const token = localStorage.getItem('kpi_token');

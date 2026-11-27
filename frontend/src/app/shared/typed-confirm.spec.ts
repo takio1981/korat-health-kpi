@@ -1,6 +1,6 @@
-import { confirmTextFor, typedConfirmSwal } from './db-compare';
+import { confirmTextFor, typedConfirmSwal } from './typed-confirm';
 
-describe('DB Compare — ยืนยันปุ่มเสี่ยงด้วยการพิมพ์ (22 พ.ย. 2569)', () => {
+describe('typed-confirm — ยืนยันปุ่มเสี่ยงด้วยการพิมพ์ (22 พ.ย. 2569)', () => {
   it('ข้อความที่ต้องพิมพ์ตรงกับ server (core/validate.js typedConfirmText)', () => {
     expect(confirmTextFor(['kpi_tab_001'])).toBe('kpi_tab_001');
     expect(confirmTextFor(['a', 'b', 'c'])).toBe('3 ตาราง');

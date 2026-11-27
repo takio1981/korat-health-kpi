@@ -5,7 +5,7 @@
 const db = require('../db');
 const { apiRouter } = require('../core/router');
 const { authenticateToken, isSuperAdmin, requireSuperAdminStrict } = require('../core/auth');
-const { diffTableColumns, performSyncToKhd } = require('../services/khd');
+const { diffTableColumns, performSyncToKhd, hasHospYearKeyOnly } = require('../services/khd');
 const { getRemotePool } = require('../db-remote');
 const { getUsersSyncConfig, syncUsersToKhd } = require('../services/users-khd-sync');
 const { typedConfirmOk, typedConfirmText } = require('../core/validate');
@@ -17,10 +17,18 @@ function confirmMissing(req, res, tables) {
     return true;
 }
 
-// GET /db-compare — เปรียบเทียบ structure ตาราง table_process ระหว่าง local กับ khd
+// GET /db-compare?year_bh= — เปรียบเทียบ structure ตาราง table_process ระหว่าง local กับ khd
+// 27 พ.ย. 2569 (หน้าจัดการข้อมูล KPI รวมเป็นตารางเดียว): ?year_bh= นับแถวของปีงบนั้น (year_rows / year_filled = มี target หรือ result)
+// เชื่อม KHD ไม่ได้/ไม่ได้ตั้งค่า = ยังคืนข้อมูลฝั่งระบบ (khd_available: false) — เดิมคืน 400 หรือแสดงว่า "ไม่มีใน KHD" ผิด ๆ
+// remote.key_ok = คีย์ของตาราง KHD เป็น hospcode + byear (กติกาเดียวกับการส่งเข้า KHD — ไม่ใช่ = ส่งไม่ได้)
 apiRouter.get('/db-compare', authenticateToken, isSuperAdmin, async (req, res) => {
-    const remoteDb = getRemotePool();
-    if (!remoteDb) return res.status(400).json({ success: false, message: 'ยังไม่ได้ตั้งค่า Remote DB (KHD) ใน .env (KHD_DB_HOST)' });
+    let remoteDb = getRemotePool();
+    let khdError = remoteDb ? null : 'ยังไม่ได้ตั้งค่า Remote DB (KHD) ใน .env (KHD_DB_HOST)';
+    if (remoteDb) {
+        try { await Promise.race([remoteDb.query('SELECT 1'), new Promise((_, rej) => setTimeout(() => rej(new Error('เชื่อมต่อ KHD ไม่ทันเวลา (10 วินาที)')), 10000))]); }
+        catch (e) { khdError = 'เชื่อมต่อ KHD ไม่ได้: ' + e.message; remoteDb = null; }
+    }
+    const yearBh = /^\d{4}$/.test(String(req.query.year_bh || '')) ? String(req.query.year_bh) : null;
 
     try {
         // 1. ดึง table_process ทั้งหมดจาก kpi_indicators (deduplicate ตาม table_process)
@@ -62,17 +70,30 @@ apiRouter.get('/db-compare', authenticateToken, isSuperAdmin, async (req, res) =
                 const [localCols] = await db.query(`SHOW COLUMNS FROM \`${tableName}\``);
                 const [localCount] = await db.query(`SELECT COUNT(*) AS cnt FROM \`${tableName}\``);
                 item.local = { exists: true, columns: localCols.map(c => ({ field: c.Field, type: c.Type, nullable: c.Null, key: c.Key, default: c.Default })), row_count: localCount[0].cnt };
+                const has = new Set(localCols.map(c => c.Field));
+                if (yearBh && has.has('byear')) {
+                    const filled = ['target', 'result'].filter(c => has.has(c)).map(c => `(\`${c}\` IS NOT NULL AND \`${c}\` <> '')`).join(' OR ') || '0';
+                    const [[yc]] = await db.query(`SELECT COUNT(*) AS n, SUM(${filled}) AS f FROM \`${tableName}\` WHERE byear = ?`, [yearBh]);
+                    item.local.year_rows = Number(yc.n) || 0;
+                    item.local.year_filled = Number(yc.f) || 0;
+                }
             } catch (e) { item.local = { exists: false, columns: [], row_count: 0 }; }
 
-            // Remote structure
-            try {
-                const [remoteCols] = await remoteDb.query(`SHOW COLUMNS FROM \`${tableName}\``);
-                const [remoteCount] = await remoteDb.query(`SELECT COUNT(*) AS cnt FROM \`${tableName}\``);
-                item.remote = { exists: true, columns: remoteCols.map(c => ({ field: c.Field, type: c.Type, nullable: c.Null, key: c.Key, default: c.Default })), row_count: remoteCount[0].cnt };
-            } catch (e) { item.remote = { exists: false, columns: [], row_count: 0 }; }
+            // Remote structure (เชื่อม KHD ไม่ได้ = remote null — ไม่ใช่ "ไม่มีตาราง")
+            if (!remoteDb) item.remote = null;
+            else {
+                try {
+                    const [remoteCols] = await remoteDb.query(`SHOW COLUMNS FROM \`${tableName}\``);
+                    const [remoteCount] = await remoteDb.query(`SELECT COUNT(*) AS cnt FROM \`${tableName}\``);
+                    let keyOk = null;
+                    try { keyOk = hasHospYearKeyOnly((await remoteDb.query(`SHOW KEYS FROM \`${tableName}\``))[0]); } catch (_) { /* อ่านคีย์ไม่ได้ = ไม่ทราบ */ }
+                    item.remote = { exists: true, columns: remoteCols.map(c => ({ field: c.Field, type: c.Type, nullable: c.Null, key: c.Key, default: c.Default })), row_count: remoteCount[0].cnt, key_ok: keyOk };
+                } catch (e) { item.remote = { exists: false, columns: [], row_count: 0 }; }
+            }
 
             // Compare
-            if (!item.local.exists && !item.remote.exists) { item.status = 'missing_both'; }
+            if (!item.remote) { item.status = item.local.exists ? 'khd_unknown' : 'missing_local'; }
+            else if (!item.local.exists && !item.remote.exists) { item.status = 'missing_both'; }
             else if (!item.local.exists) { item.status = 'missing_local'; }
             else if (!item.remote.exists) { item.status = 'missing_remote'; }
             else {
@@ -93,7 +114,7 @@ apiRouter.get('/db-compare', authenticateToken, isSuperAdmin, async (req, res) =
             missing_both: results.filter(r => r.status === 'missing_both').length
         };
 
-        res.json({ success: true, local_db: localDbName, remote_db: remoteDbName, summary, tables: results });
+        res.json({ success: true, local_db: localDbName, remote_db: remoteDbName, summary, tables: results, khd_available: !!remoteDb, khd_error: khdError, year_bh: yearBh });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

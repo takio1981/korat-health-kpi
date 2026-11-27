@@ -330,7 +330,10 @@
                 <th class="px-4 py-3 text-left font-bold">หมวดหมู่หลัก</th>
                 <th class="px-4 py-3 text-left font-bold">ชื่อตัวชี้วัด</th>
                 <th class="px-4 py-3 text-left font-bold">หน่วยงาน</th>
-                <th class="px-4 py-3 text-right font-bold">เป้าหมาย</th>
+                <th class="px-4 py-3 text-right font-bold" title="ยอดรวมเป้าหมายของทุกหน่วยบริการในขอบเขต (เฉพาะเป้าหมายที่เป็นตัวเลข)">เป้าหมาย (รวม)</th>
+                <th class="px-4 py-3 text-right font-bold">ผลงานรวม</th>
+                <th class="px-4 py-3 text-right font-bold">%สำเร็จ</th>
+                <th class="px-4 py-3 text-center font-bold">รพ.</th>
                 <th class="px-4 py-3 text-right font-bold">ต.ค.</th>
                 <th class="px-4 py-3 text-right font-bold">พ.ย.</th>
                 <th class="px-4 py-3 text-right font-bold">ธ.ค.</th>
@@ -343,9 +346,6 @@
                 <th class="px-4 py-3 text-right font-bold">ก.ค.</th>
                 <th class="px-4 py-3 text-right font-bold">ส.ค.</th>
                 <th class="px-4 py-3 text-right font-bold">ก.ย.</th>
-                <th class="px-4 py-3 text-right font-bold">ผลงานรวม</th>
-                <th class="px-4 py-3 text-right font-bold">%สำเร็จ</th>
-                <th class="px-4 py-3 text-center font-bold">รพ.</th>
               </tr>
             </thead>
             <tbody>
@@ -355,6 +355,12 @@
                 <td class="px-4 py-2.5 text-gray-800 font-medium whitespace-normal break-words"><div class="min-w-[240px]">{{ item.kpi_indicators_name }}<span *ngIf="item | criteriaText as crit" class="text-xs font-normal text-amber-600 ml-1">({{ crit }})</span><app-formula-badge class="ml-1" [formula]="item.result_formula"></app-formula-badge><app-indicator-badges class="block mt-0.5" [id]="item.indicator_id ?? item.id"></app-indicator-badges></div></td>
                 <td class="px-4 py-2.5 text-gray-600">{{ item.dept_name }}</td>
                 <td class="px-4 py-2.5 text-right text-gray-700">{{ item._target_display || '-' }}</td>
+                <td class="px-4 py-2.5 text-right font-bold text-green-700">{{ item.total_actual > 0 ? (item.total_actual | number:'1.2-2') : '-' }}</td>
+                <td class="px-4 py-2.5 text-right font-bold" [class]="(item.achievement_pct >= 100) ? 'text-green-600' : ((item.achievement_pct > 0) ? 'text-amber-600' : 'text-red-500')">
+                  {{ (item.achievement_pct | number:'1.2-2') || '0.00' }}%
+                  <span class="text-[10px] text-gray-400 font-normal block">({{ item.hospitals_passed || 0 }}/{{ item.hospitals_with_target || 0 }} รพ.)</span>
+                </td>
+                <td class="px-4 py-2.5 text-center text-gray-600">{{ item.hospital_count }}</td>
                 <td class="px-4 py-2.5 text-right" [class]="item._oct_display && item.oct > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._oct_display || '-' }}</td>
                 <td class="px-4 py-2.5 text-right" [class]="item._nov_display && item.nov > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._nov_display || '-' }}</td>
                 <td class="px-4 py-2.5 text-right" [class]="item._dece_display && item.dece > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._dece_display || '-' }}</td>
@@ -367,12 +373,6 @@
                 <td class="px-4 py-2.5 text-right" [class]="item._jul_display && item.jul > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._jul_display || '-' }}</td>
                 <td class="px-4 py-2.5 text-right" [class]="item._aug_display && item.aug > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._aug_display || '-' }}</td>
                 <td class="px-4 py-2.5 text-right" [class]="item._sep_display && item.sep > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._sep_display || '-' }}</td>
-                <td class="px-4 py-2.5 text-right font-bold text-green-700">{{ item.total_actual > 0 ? (item.total_actual | number:'1.2-2') : '-' }}</td>
-                <td class="px-4 py-2.5 text-right font-bold" [class]="(item.achievement_pct >= 100) ? 'text-green-600' : ((item.achievement_pct > 0) ? 'text-amber-600' : 'text-red-500')">
-                  {{ (item.achievement_pct | number:'1.2-2') || '0.00' }}%
-                  <span class="text-[10px] text-gray-400 font-normal block">({{ item.hospitals_passed || 0 }}/{{ item.hospitals_with_target || 0 }} รพ.)</span>
-                </td>
-                <td class="px-4 py-2.5 text-center text-gray-600">{{ item.hospital_count }}</td>
               </tr>
               <tr *ngIf="viewData.length === 0">
                 <td colspan="20" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>{{ searchQuery ? 'ไม่พบรายการที่ตรงกับคำค้น' : 'ไม่พบข้อมูล' }}</td>
