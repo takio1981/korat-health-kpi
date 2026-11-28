@@ -1,10 +1,10 @@
 /**
  * Integration tests (database ทดสอบ + KHD จำลอง — ไม่เชื่อมต่อ KHD จริง) — 19 ต.ค. 2569
- *   - เพิ่มตัวชี้วัดจาก KHD นำ หน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์ จาก KHD เข้ามาด้วย (เดิม: ใช้เฉพาะค่าที่เลือกในหน้าต่าง)
+ *   - เพิ่มตัวชี้วัดจาก KHD นำ กลุ่มงาน / หมวดหมู่หลัก / ยุทธศาสตร์ จาก KHD เข้ามาด้วย (เดิม: ใช้เฉพาะค่าที่เลือกในหน้าต่าง)
  *     ค่าจาก KHD มาก่อนค่าที่เลือก — ค่าที่เลือกใช้เมื่อ KHD ไม่มีค่า/ยังจับคู่ไม่ได้
  *   - GET/PUT /khd-mappings: รายการค่าใน KHD + ผลการจับคู่ + บันทึกการจับคู่
  *   - ยุทธศาสตร์ของตัวชี้วัดที่ไม่มีหมวดหมู่หลัก แสดงจาก kpi_indicators.main_yut
- *   - แท็บเทียบหน่วยงานจับคู่ด้วยรหัสหน่วยงาน (เดิม: เทียบชื่อ ทั้งที่ KHD เก็บรหัส)
+ *   - แท็บเทียบกลุ่มงานจับคู่ด้วยรหัสกลุ่มงาน (เดิม: เทียบชื่อ ทั้งที่ KHD เก็บรหัส)
  */
 const TP = { r1: 'test_khdmap_tp1', r2: 'test_khdmap_tp2', r3: 'test_khdmap_tp3' };
 const mockReports = [
@@ -77,7 +77,7 @@ afterAll(async () => {
     await cleanupTestUsers(db);
 });
 
-describe('เพิ่มตัวชี้วัดจาก KHD — นำหน่วยงาน/หมวดหมู่หลัก/ยุทธศาสตร์ของ KHD เข้ามา', () => {
+describe('เพิ่มตัวชี้วัดจาก KHD — นำกลุ่มงาน/หมวดหมู่หลัก/ยุทธศาสตร์ของ KHD เข้ามา', () => {
     test('/report-compare แนบผลการจับคู่ของแถวที่ยังไม่มีในระบบ', async () => {
         const res = await as(request(app).get(api('/report-compare?year_bh=2570')));
         expect(res.status).toBe(200);
@@ -149,7 +149,7 @@ describe('หน้าต่างจับคู่ข้อมูล KHD (/khd
     });
 });
 
-describe('ยุทธศาสตร์ของตัวชี้วัด / แท็บเทียบหน่วยงาน', () => {
+describe('ยุทธศาสตร์ของตัวชี้วัด / แท็บเทียบกลุ่มงาน', () => {
     test('ไม่มีหมวดหมู่หลัก → แสดงยุทธศาสตร์จาก kpi_indicators.main_yut (เดิม: ว่าง) และแก้ไขผ่าน PUT /indicators ได้', async () => {
         const ind = await indByTp(TP.r3);
         let res = await as(request(app).get(api('/indicators?include_inactive=1')));
@@ -167,7 +167,7 @@ describe('ยุทธศาสตร์ของตัวชี้วัด / �
         expect(Number(row.yut_id)).toBe(L.y2);
     });
 
-    test('แท็บเทียบหน่วยงานจับคู่ด้วยรหัสหน่วยงานของ KHD (เดิม: ไม่ตรงเลยสักตัว)', async () => {
+    test('แท็บเทียบกลุ่มงานจับคู่ด้วยรหัสกลุ่มงานของ KHD (เดิม: ไม่ตรงเลยสักตัว)', async () => {
         const res = await as(request(app).get(api('/report-compare/departments')));
         expect(res.status).toBe(200);
         const row = res.body.items.find(i => i.khd_dept_name === 'TKM1');

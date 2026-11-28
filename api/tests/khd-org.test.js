@@ -1,5 +1,5 @@
 /**
- * เทียบ/ปรับ "หน่วยงาน" และ "หมวดหมู่หลัก" ของตัวชี้วัดกับ KHD (11 พ.ย. 2569)
+ * เทียบ/ปรับ "กลุ่มงาน" และ "หมวดหมู่หลัก" ของตัวชี้วัดกับ KHD (11 พ.ย. 2569)
  *   - services/khd-org.js: แปลงค่าข้อความของ KHD (reports.dept / main_indicator) เป็น id ด้วยตัวจับคู่เดียวกับเพิ่มตัวชี้วัดจาก KHD
  *     ตรง = true / ต่าง = false / ไม่ระบุ · ยังจับคู่ไม่ได้ · ตั้งว่าไม่ต้องจับคู่ = null (ไม่นับว่าต่าง)
  *   - POST /indicators/apply-khd-org: server อ่าน KHD ใหม่ ปรับเฉพาะส่วนที่เลือก, เทียบไม่ได้ = ข้าม (ไม่ล้างค่าเดิม) — KHD จำลอง (ห้ามเชื่อม KHD จริง)
@@ -91,7 +91,7 @@ describe('POST /indicators/apply-khd-org', () => {
         await cleanupTestUsers(db);
     });
 
-    test('ปรับเฉพาะหน่วยงาน — หมวดหมู่หลักไม่เปลี่ยน', async () => {
+    test('ปรับเฉพาะกลุ่มงาน — หมวดหมู่หลักไม่เปลี่ยน', async () => {
         const res = await apply(saToken, { ids: [ids.a], parts: ['dept'] });
         expect(res.status).toBe(200);
         expect(await row(ids.a)).toEqual({ dept_id: deptId, main_indicator_id: null });

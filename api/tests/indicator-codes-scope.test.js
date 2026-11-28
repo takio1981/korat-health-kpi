@@ -47,7 +47,7 @@ beforeAll(async () => {
 
     const sa = await ensureTestUser(db, { username: 'test_codes_sa', role: 'super_admin', session_id: 'sess-codes-sa' });
     saToken = makeToken({ userId: sa.id, username: sa.username, role: 'super_admin', deptId: null, hospcode: null, sessionId: 'sess-codes-sa' });
-    // admin_hos ของหน่วยบริการประเภท typeOut (เห็นทุกหน่วยงาน แต่ผูกหน่วยบริการเดียว)
+    // admin_hos ของหน่วยบริการประเภท typeOut (เห็นทุกกลุ่มงาน แต่ผูกหน่วยบริการเดียว)
     const ah = await ensureTestUser(db, { username: 'test_codes_hos', role: 'admin_hos', dept_id: deptId, hospcode: hospOut, session_id: 'sess-codes-hos' });
     hosToken = makeToken({ userId: ah.id, username: ah.username, role: 'admin_hos', deptId, hospcode: hospOut, sessionId: 'sess-codes-hos' });
 
@@ -68,7 +68,7 @@ afterAll(async () => {
 });
 
 describe('รหัสตัวชี้วัดอัตโนมัติ', () => {
-    test('✅ suggest-code คืนชื่อตารางตามหน่วยงาน + ลำดับถัดไป และรหัสตัวชี้วัดแบบขีดกลาง', async () => {
+    test('✅ suggest-code คืนชื่อตารางตามกลุ่มงาน + ลำดับถัดไป และรหัสตัวชี้วัดแบบขีดกลาง', async () => {
         const res = await as(saToken, request(app).get(api(`/indicators/suggest-code?dept_id=${deptId}`)));
         expect(res.status).toBe(200);
         const { table_process, kpi_indicators_code } = res.body.data;
@@ -80,7 +80,7 @@ describe('รหัสตัวชี้วัดอัตโนมัติ', (
         expect(dup.n).toBe(0);
     });
 
-    test('✅ ไม่เลือกหน่วยงาน → ใช้ prefix kpi_gen_', async () => {
+    test('✅ ไม่เลือกกลุ่มงาน → ใช้ prefix kpi_gen_', async () => {
         const res = await as(saToken, request(app).get(api('/indicators/suggest-code')));
         expect(res.body.data.table_process).toMatch(/^kpi_gen_\d{3,}$/);
     });

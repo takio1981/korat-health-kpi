@@ -1008,7 +1008,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.selectedDistricts.length > 0) out.push({ label: 'อำเภอ', value: this.selectedDistricts.join(', '), color: 'bg-teal-100 text-teal-700' });
     if (this.selectedHosTypes.length > 0) out.push({ label: 'ประเภท รพ.', value: this.hosTypeLabel(), color: 'bg-cyan-100 text-cyan-700' });
     if (this.selectedHospitals.length > 0) out.push({ label: 'หน่วยบริการ', value: this.selectedHospitals.length === 1 ? this.selectedHospitals[0] : `${this.selectedHospitals.length} รพ.`, color: 'bg-blue-100 text-blue-700' });
-    if (this.selectedDepts.length > 0) out.push({ label: 'หน่วยงาน', value: this.selectedDepts.length === 1 ? this.selectedDepts[0] : `${this.selectedDepts.length} หน่วยงาน`, color: 'bg-amber-100 text-amber-700' });
+    if (this.selectedDepts.length > 0) out.push({ label: 'กลุ่มงาน', value: this.selectedDepts.length === 1 ? this.selectedDepts[0] : `${this.selectedDepts.length} กลุ่มงาน`, color: 'bg-amber-100 text-amber-700' });
     if (this.selectedMain) out.push({ label: 'หมวดหมู่', value: this.selectedMain, color: 'bg-indigo-100 text-indigo-700' });
     if (this.selectedIndicator) out.push({ label: 'ตัวชี้วัด', value: this.selectedIndicator, color: 'bg-indigo-100 text-indigo-700' });
     if (this.selectedIndicatorOffTypes.length > 0) out.push({ label: 'ตัวชี้วัดของ', value: this.indicatorOffTypeLabel(), color: 'bg-cyan-100 text-cyan-700' });
@@ -1135,7 +1135,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         // ระบุประเภท error: timeout/504 vs อื่น
         const isTimeout = err?.name === 'TimeoutError' || err?.status === 504 || err?.status === 408;
         const errMsg = isTimeout
-          ? 'การค้นหาใช้เวลานานเกินไป (Timeout) — กรุณาเลือกตัวกรองให้ละเอียดขึ้น (เช่น เลือกอำเภอ หน่วยงาน หรือตัวชี้วัด)'
+          ? 'การค้นหาใช้เวลานานเกินไป (Timeout) — กรุณาเลือกตัวกรองให้ละเอียดขึ้น (เช่น เลือกอำเภอ กลุ่มงาน หรือตัวชี้วัด)'
           : 'เกิดข้อผิดพลาดในการโหลดข้อมูล';
         this.searchStage = errMsg;
         this.searchProgress = 0;
@@ -1462,7 +1462,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!hasFilter) {
       Swal.fire({
         title: 'กรุณาเลือกตัวกรอง',
-        html: `<p class="text-sm text-gray-600">เลือกอย่างน้อย 1 เงื่อนไข เช่น อำเภอ, ประเภท รพ., หน่วยงาน หรือตัวชี้วัด<br>หรือพิมพ์คำค้น (อย่างน้อย 2 ตัวอักษร) ในช่องค้นหาแล้วกด Enter</p>`,
+        html: `<p class="text-sm text-gray-600">เลือกอย่างน้อย 1 เงื่อนไข เช่น อำเภอ, ประเภท รพ., กลุ่มงาน หรือตัวชี้วัด<br>หรือพิมพ์คำค้น (อย่างน้อย 2 ตัวอักษร) ในช่องค้นหาแล้วกด Enter</p>`,
         icon: 'info',
         confirmButtonText: 'ตกลง',
         confirmButtonColor: '#6366f1',
@@ -2413,7 +2413,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   unlockKpi(item: any) {
     Swal.fire({
       title: 'ยืนยันการปลดล็อค',
-      text: `คุณต้องการปลดล็อคข้อมูลของ ${item.kpi_indicators_name} เพื่อให้หน่วยงานแก้ไขได้ใช่หรือไม่?`,
+      text: `คุณต้องการปลดล็อคข้อมูลของ ${item.kpi_indicators_name} เพื่อให้กลุ่มงานแก้ไขได้ใช่หรือไม่?`,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#f59e0b',
@@ -2496,7 +2496,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     if (!this.selectedYear) this.setDefaultYear();
     Swal.fire({
       title: 'ปลดล็อคทั้งหมด',
-      html: `<p class="text-sm">ปลดล็อคข้อมูลทั้งหมดในปี <b>${this.selectedYear}</b> เพื่อให้หน่วยงานแก้ไขได้?</p>`,
+      html: `<p class="text-sm">ปลดล็อคข้อมูลทั้งหมดในปี <b>${this.selectedYear}</b> เพื่อให้กลุ่มงานแก้ไขได้?</p>`,
       icon: 'warning', showCancelButton: true, confirmButtonColor: '#f59e0b',
       confirmButtonText: '<i class="fas fa-lock-open mr-1"></i> ปลดล็อคทั้งหมด', cancelButtonText: 'ยกเลิก'
     }).then(r => {
@@ -2553,7 +2553,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
 
   loadAddKpiDistrictsAndHospitals() {
     Swal.fire({ title: 'กำลังโหลดข้อมูล...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    // โหลด 3 รายการพร้อมกัน: อำเภอ, หน่วยบริการ, หน่วยงาน
+    // โหลด 3 รายการพร้อมกัน: อำเภอ, หน่วยบริการ, กลุ่มงาน
     this.authService.getDistricts().subscribe({
       next: (distRes) => {
         if (distRes.success) this.addKpiDistrictList = distRes.data;
@@ -2591,7 +2591,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
                   this.cdr.detectChanges();
                 }, 150);
               },
-              error: () => { Swal.close(); Swal.fire('ผิดพลาด', 'ไม่สามารถโหลดข้อมูลหน่วยงานได้', 'error'); }
+              error: () => { Swal.close(); Swal.fire('ผิดพลาด', 'ไม่สามารถโหลดข้อมูลกลุ่มงานได้', 'error'); }
             });
           },
           error: () => { Swal.close(); Swal.fire('ผิดพลาด', 'ไม่สามารถโหลดข้อมูลหน่วยบริการได้', 'error'); }
@@ -2624,17 +2624,17 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     return `อำเภอ: ${this.addKpiSelDistricts.length} อำเภอ`;
   }
-  // หน่วยงาน: map id → dept_name
+  // กลุ่มงาน: map id → dept_name
   addKpiDeptLabel(): string {
-    if (this.addKpiSelDepts.length === 0) return 'หน่วยงาน: ทั้งหมด';
+    if (this.addKpiSelDepts.length === 0) return 'กลุ่มงาน: ทั้งหมด';
     if (this.addKpiSelDepts.length === 1) {
       const d = this.addKpiDeptList.find((x: any) => String(x.id) === this.addKpiSelDepts[0]);
       return d?.dept_name || this.addKpiSelDepts[0];
     }
-    return `หน่วยงาน: ${this.addKpiSelDepts.length} หน่วยงาน`;
+    return `กลุ่มงาน: ${this.addKpiSelDepts.length} กลุ่มงาน`;
   }
 
-  // เลือกทั้งหมด — หน่วยงาน
+  // เลือกทั้งหมด — กลุ่มงาน
   toggleAllAddKpiDepts() {
     const allSel = this.addKpiDeptList.length > 0 && this.addKpiDeptList.every((d: any) => this.addKpiSelDepts.includes(String(d.id)));
     if (allSel) this.addKpiSelDepts = [];
@@ -2695,7 +2695,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     const have = new Set(this.addKpiHospitalList.map((h: any) => String(h.hostype || '')));
     return this.addKpiAllHosTypes.filter((ht: any) => have.has(String(ht.hostypecode)));
   }
-  /** นำตัวกรองของหน้าบันทึกผลงานมาใช้ในหน้าต่าง (หน่วยงานแปลงชื่อ → id หลังโหลดรายการหน่วยงาน: syncAddKpiDeptsFromDashboard) */
+  /** นำตัวกรองของหน้าบันทึกผลงานมาใช้ในหน้าต่าง (กลุ่มงานแปลงชื่อ → id หลังโหลดรายการกลุ่มงาน: syncAddKpiDeptsFromDashboard) */
   applyDashboardFiltersToAddKpi() {
     this.addKpiStatus = 'active';
     this.addKpiIndicatorName = this.selectedIndicator || '';
@@ -2888,7 +2888,7 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     const single = this.addKpiSingleUnit;
     const singleHc = single ? String(this.addKpiHospitalList[0]?.hoscode || this.currentUser?.hospcode || '') : '';
 
-    // กรองตัวชี้วัดตามหน่วยงาน (multi-select)
+    // กรองตัวชี้วัดตามกลุ่มงาน (multi-select)
     let allForDept = template;
     if (adminMode) {
       if (this.addKpiSelDepts.length > 0) {

@@ -55,7 +55,7 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
             ORDER BY i.id
         `);
-        const khdResolver = await loadKhdResolver(db); // จับคู่หน่วยงาน/หมวดหมู่หลัก/ยุทธศาสตร์ของแถวที่ยังไม่มีใน Local
+        const khdResolver = await loadKhdResolver(db); // จับคู่กลุ่มงาน/หมวดหมู่หลัก/ยุทธศาสตร์ของแถวที่ยังไม่มีใน Local
         // จับคู่: รหัสอ้างอิง (kpi_indicators_id) = report_id อย่างเดียว (services/khd-match.js) — ที่เหลือมีรหัสที่แนะนำ (suggestions)
         const matched = matchLocalsToKhd(localRows, khdRows);
         const khdByTp = new Map();
@@ -112,7 +112,7 @@ apiRouter.get('/report-compare', authenticateToken, isSuperAdmin, async (req, re
                 if (typeCmp.hostype_match === false) hostype_different++;
                 const fyCmp = compareFiscalYears(local.local_fy, khdYearsMap.get(khd.report_id));
                 if (fyCmp.fiscal_year_match === false) fiscal_year_different++;
-                // หน่วยงาน + หมวดหมู่หลัก (11 พ.ย. 2569) — services/khd-org.js (ตัวจับคู่ค่าข้อความ KHD → id ของระบบ)
+                // กลุ่มงาน + หมวดหมู่หลัก (11 พ.ย. 2569) — services/khd-org.js (ตัวจับคู่ค่าข้อความ KHD → id ของระบบ)
                 const orgCmp = compareKhdOrg(khdResolver, khd, local);
                 if (orgCmp.dept_match === false) dept_different++;
                 if (orgCmp.main_match === false) main_different++;
@@ -364,7 +364,7 @@ apiRouter.post('/indicators/apply-khd-types', authenticateToken, requireAction('
     }
 });
 
-// POST /indicators/apply-khd-org { ids, parts: ['dept'|'main'] } — ปรับ "หน่วยงาน" (dept_id) และ/หรือ "หมวดหมู่หลัก" (main_indicator_id) ให้ตรงกับ KHD (11 พ.ย. 2569)
+// POST /indicators/apply-khd-org { ids, parts: ['dept'|'main'] } — ปรับ "กลุ่มงาน" (dept_id) และ/หรือ "หมวดหมู่หลัก" (main_indicator_id) ให้ตรงกับ KHD (11 พ.ย. 2569)
 // server อ่านค่าจาก KHD ใหม่เสมอ (ไม่เชื่อค่าจาก client) + แปลงด้วยตัวจับคู่เดียวกับ GET /report-compare — KHD ไม่ได้ระบุ / ยังจับคู่ไม่ได้ = ข้าม (ไม่ล้างค่าเดิม)
 // ยุทธศาสตร์ตามหมวดหมู่หลักอัตโนมัติ (COALESCE(mi.yut_id, i.main_yut)) | คำนวณตารางสรุปใหม่ (kpi_summary เก็บ dept_id/ชื่อหมวดหมู่ไว้)
 apiRouter.post('/indicators/apply-khd-org', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
@@ -373,7 +373,7 @@ apiRouter.post('/indicators/apply-khd-org', authenticateToken, requireAction('kp
     const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.map(Number).filter(n => Number.isInteger(n) && n > 0))] : [];
     if (ids.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตัวชี้วัด' });
     const parts = Array.isArray(req.body?.parts) ? [...new Set(req.body.parts.filter(p => KHD_ORG_PARTS.includes(p)))] : [];
-    if (parts.length === 0) return res.status(400).json({ success: false, message: 'กรุณาระบุสิ่งที่จะปรับ (หน่วยงาน / หมวดหมู่หลัก)' });
+    if (parts.length === 0) return res.status(400).json({ success: false, message: 'กรุณาระบุสิ่งที่จะปรับ (กลุ่มงาน / หมวดหมู่หลัก)' });
     const yearBh = req.body?.year_bh ? String(req.body.year_bh) : String(currentFiscalYear());
     try {
         const [locals] = await db.query('SELECT id, kpi_indicators_name, table_process, dept_id, main_indicator_id FROM kpi_indicators WHERE id IN (?)', [ids]);
@@ -391,13 +391,13 @@ apiRouter.post('/indicators/apply-khd-org', authenticateToken, requireAction('kp
             updated.push({ id: l.id, name: l.kpi_indicators_name, before: Object.fromEntries(cols.map(c => [c, l[c]])), after: set, ...(reason ? { note: reason } : {}) });
         }
         if (updated.length) {
-            // ตารางสรุปเก็บหน่วยงาน/ชื่อหมวดหมู่ไว้ (ใช้กรองตามสิทธิ์และในรายงาน) → คำนวณใหม่ทุกปีงบที่มี
+            // ตารางสรุปเก็บกลุ่มงาน/ชื่อหมวดหมู่ไว้ (ใช้กรองตามสิทธิ์และในรายงาน) → คำนวณใหม่ทุกปีงบที่มี
             const [pairs] = await db.query('SELECT DISTINCT indicator_id, year_bh FROM kpi_summary WHERE indicator_id IN (?)', [updated.map(u => u.id)]);
             scheduleSummaryRefresh(pairs);
         }
         await db.query('INSERT INTO system_logs (user_id, action_type, table_name, new_value, ip_address) VALUES (?, ?, ?, ?, ?)',
             [req.user.userId, 'APPLY_KHD_ORG', 'kpi_indicators', JSON.stringify({ parts, updated, skipped }).slice(0, 60000), req.ip]);
-        const what = parts.map(p => p === 'dept' ? 'หน่วยงาน' : 'หมวดหมู่หลัก').join(' + ');
+        const what = parts.map(p => p === 'dept' ? 'กลุ่มงาน' : 'หมวดหมู่หลัก').join(' + ');
         res.json({ success: true, message: `ปรับ${what}ให้ตรงกับ KHD ${updated.length} ตัวชี้วัด` + (skipped.length ? ` (ข้าม ${skipped.length})` : ''), updated, skipped });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
@@ -735,7 +735,7 @@ apiRouter.post('/report-compare/sync-khd-link', authenticateToken, isSuperAdmin,
     }
 });
 
-// ========== จับคู่ข้อมูล KHD ↔ Local (หน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์) — 19 ต.ค. 2569 ==========
+// ========== จับคู่ข้อมูล KHD ↔ Local (กลุ่มงาน / หมวดหมู่หลัก / ยุทธศาสตร์) — 19 ต.ค. 2569 ==========
 // GET /khd-mappings?kind=dept|main|yut — ค่าที่พบใน KHD reports (data_source='excel') + ผลการจับคู่ปัจจุบัน + รายการของ Local ให้เลือก
 apiRouter.get('/khd-mappings', authenticateToken, isSuperAdmin, async (req, res) => {
     const kind = String(req.query.kind || '');
@@ -846,14 +846,14 @@ apiRouter.get('/report-compare/departments', authenticateToken, isSuperAdmin, as
 // POST /report-compare/add-department — เพิ่ม dept_name ใหม่จาก KHD text
 apiRouter.post('/report-compare/add-department', authenticateToken, isSuperAdmin, async (req, res) => {
     const { dept_name, dept_code } = req.body;
-    if (!dept_name?.trim()) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อหน่วยงาน' });
+    if (!dept_name?.trim()) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อกลุ่มงาน' });
     try {
         const [existing] = await db.query('SELECT id FROM departments WHERE TRIM(LOWER(dept_name)) = TRIM(LOWER(?))', [dept_name]);
-        if (existing.length) return res.status(409).json({ success: false, message: 'มีหน่วยงานชื่อนี้ในระบบแล้ว' });
+        if (existing.length) return res.status(409).json({ success: false, message: 'มีกลุ่มงานชื่อนี้ในระบบแล้ว' });
         const [ins] = await db.query('INSERT INTO departments (dept_name, dept_code) VALUES (?, ?)', [dept_name.trim(), (dept_code || '').trim()]);
         await db.query('INSERT INTO system_logs (user_id, action_type, table_name, record_id, new_value, ip_address) VALUES (?, ?, ?, ?, ?, ?)',
             [req.user.userId, 'ADD_FROM_KHD', 'departments', ins.insertId, JSON.stringify({ dept_name: dept_name.trim(), dept_code }), req.ip]);
-        res.json({ success: true, message: `เพิ่มหน่วยงาน "${dept_name.trim()}" เรียบร้อย`, id: ins.insertId });
+        res.json({ success: true, message: `เพิ่มกลุ่มงาน "${dept_name.trim()}" เรียบร้อย`, id: ins.insertId });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
 });
 

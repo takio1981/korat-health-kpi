@@ -47,7 +47,7 @@
             </div>
         </div>
         <div>
-            <label class="block text-xs font-bold text-gray-500 mb-2 uppercase">หน่วยงาน</label>
+            <label class="block text-xs font-bold text-gray-500 mb-2 uppercase">กลุ่มงาน</label>
             <select [(ngModel)]="selectedDept" (change)="onDeptChange()" [disabled]="!isSuperAdmin" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm hover:border-green-400 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed">
                 <option value="" *ngIf="isSuperAdmin">ทั้งหมด</option>
                 <option *ngFor="let d of departments" [value]="d.id">{{ d.dept_name }}</option>
@@ -75,7 +75,7 @@
               <th class="px-4 py-4 w-48 sticky left-0 bg-green-700 z-20 rounded-tl-xl">หมวดหมู่หลัก</th>
               <th class="px-4 py-4 w-64 sticky left-48 bg-green-700 border-r border-green-600 z-20">ชื่อตัวชี้วัด</th>
               <th class="px-4 py-4 w-24 bg-green-700 border-r border-green-600 text-center">ปีงบฯ</th>
-              <th class="px-4 py-4 w-64 border-r border-green-600">หน่วยงาน</th>
+              <th class="px-4 py-4 w-64 border-r border-green-600">กลุ่มงาน</th>
               <th class="px-3 py-4 text-right bg-green-800">เป้าหมาย</th>
               <th class="px-3 py-4 text-right bg-green-800">ผลงานรวม</th>
               <th class="px-2 py-4 text-center border-x border-green-600 last:rounded-tr-xl" *ngFor="let m of ['ต.ค.','พ.ย.','ธ.ค.','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.']">

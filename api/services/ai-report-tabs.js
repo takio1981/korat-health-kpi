@@ -1,5 +1,5 @@
 // AI สรุปรายงานสรุปผลรายแถบ (15 พ.ย. 2569) — หน้ารายงานสถิติ → รายงานสรุปผล: รายตัวชี้วัด / รายหน่วยบริการ / รายอำเภอ / รายปีงบ /
-// สถานะการบันทึก (รายตัวชี้วัด | รายหน่วยบริการ) / สรุปรายหน่วยงาน
+// สถานะการบันทึก (รายตัวชี้วัด | รายหน่วยบริการ) / สรุปรายกลุ่มงาน
 // ฟังก์ชันล้วน (ไม่แตะฐานข้อมูล): รับผลของตัวคำนวณรายงานเดียวกับหน้าจอ (routes/reports.js) → ตัวเลขรวม/อันดับสำหรับ prompt
 // ⚠️ ไม่ส่งรหัส/ชื่อหน่วยบริการรายแห่งเข้า prompt (หลักการผู้ช่วย AI) — แถบรายหน่วยบริการสรุปเป็นการกระจาย + รายอำเภอ + รายประเภทหน่วยบริการ
 
@@ -35,7 +35,7 @@ function topBottom(items, key = 'pct') {
     return { count: sorted.length, top, bottom };
 }
 
-/** รวมคู่ผ่าน/มีเป้าหมายตามกลุ่ม (หมวดหมู่/หน่วยงาน/อำเภอ/ประเภท) */
+/** รวมคู่ผ่าน/มีเป้าหมายตามกลุ่ม (หมวดหมู่/กลุ่มงาน/อำเภอ/ประเภท) */
 function groupPairs(rows, nameOf, passedOf, targetOf, extra) {
     const m = new Map();
     for (const r of rows) {
@@ -206,14 +206,42 @@ function byDept(out) {
     };
 }
 
+/** สรุปข้อมูลตัวชี้วัดของกลุ่มงาน (28 พ.ย. 2569) — out = summarizeDeptKpi() */
+function byDeptKpi(out) {
+    const rows = out.data || [];
+    const sm = out.summary || {};
+    const withT = rows.filter(g => num(g.pairs_with_target) > 0);
+    const ind = [];
+    for (const g of withT) {
+        for (const r of g.indicators || []) {
+            if (num(r.hospitals_with_target) >= MIN_PAIRS) ind.push({ name: r.kpi_indicators_name, dept: g.dept_name, pct: num(r.achievement_pct), passed: num(r.hospitals_passed), with_target: num(r.hospitals_with_target) });
+        }
+    }
+    return {
+        has_data: rows.length > 0,
+        overall: {
+            departments: num(sm.total_depts), indicators: num(sm.total_indicators), indicators_with_target: num(sm.indicators_with_target),
+            pairs_with_target: num(sm.pairs_with_target), pairs_passed: num(sm.pairs_passed), pass_pct: num(sm.pass_pct),
+            departments_pass_ge_80: num(sm.depts_ge_80), departments_pass_lt_50: num(sm.depts_lt_50),
+        },
+        department_distribution: distribution(withT.map(g => num(g.pass_pct))),
+        departments: rows.map(g => ({
+            name: g.dept_name, indicators: num(g.total_indicators), indicators_with_target: num(g.indicators_with_target),
+            pairs_with_target: num(g.pairs_with_target), pairs_passed: num(g.pairs_passed), pass_pct: num(g.pass_pct),
+            indicators_all_passed: num(g.indicators_all_passed), indicators_none_passed: num(g.indicators_none_passed),
+        })),
+        indicators: topBottom(ind),
+    };
+}
+
 // ---------------- prompt ----------------
 const TAB_SPECS = {
     'by-indicator': {
         label: 'รายตัวชี้วัด',
         build: (data) => byIndicator(data),
-        focus: 'วิเคราะห์ผลการดำเนินงานรายตัวชี้วัด: ตัวชี้วัด/หมวดหมู่หลัก/หน่วยงานที่ผ่านเกณฑ์สูงและต่ำ และการกระจายของร้อยละผ่านเกณฑ์',
+        focus: 'วิเคราะห์ผลการดำเนินงานรายตัวชี้วัด: ตัวชี้วัด/หมวดหมู่หลัก/กลุ่มงานที่ผ่านเกณฑ์สูงและต่ำ และการกระจายของร้อยละผ่านเกณฑ์',
         defs: 'pairs_with_target = คู่ที่มีเป้าหมาย | pass_pct = คู่ที่ผ่าน ÷ คู่ที่มีเป้าหมาย × 100 | indicator_distribution = จำนวนตัวชี้วัดตามช่วงร้อยละผ่านเกณฑ์',
-        sections: '■ ภาพรวม ■ ตัวชี้วัดที่โดดเด่น ■ ตัวชี้วัดที่ควรติดตาม ■ ข้อสังเกตรายหมวดหมู่/หน่วยงาน ■ ข้อเสนอแนะ',
+        sections: '■ ภาพรวม ■ ตัวชี้วัดที่โดดเด่น ■ ตัวชี้วัดที่ควรติดตาม ■ ข้อสังเกตรายหมวดหมู่/กลุ่มงาน ■ ข้อเสนอแนะ',
     },
     'by-hospital': {
         label: 'รายหน่วยบริการ',
@@ -239,9 +267,9 @@ const TAB_SPECS = {
     'recording-status:by-indicator': {
         label: 'สถานะการบันทึก (รายตัวชี้วัด)',
         build: (out) => recordingByIndicator(out),
-        focus: 'วิเคราะห์ความครบถ้วนของการบันทึกผลงานรายตัวชี้วัด: ตัวชี้วัดที่บันทึกครบ/ยังไม่บันทึก หน่วยงานที่บันทึกน้อย',
+        focus: 'วิเคราะห์ความครบถ้วนของการบันทึกผลงานรายตัวชี้วัด: ตัวชี้วัดที่บันทึกครบ/ยังไม่บันทึก กลุ่มงานที่บันทึกน้อย',
         defs: 'recording_pct (pct) = หน่วยบริการที่บันทึกผลงานแล้ว ÷ หน่วยบริการที่ต้องบันทึก × 100 | lowest_indicators = ตัวชี้วัดที่บันทึกน้อยที่สุด (ต้องบันทึก ≥ 3 แห่ง)',
-        sections: '■ ภาพรวมการบันทึก ■ ตัวชี้วัดที่ควรเร่งบันทึก ■ ข้อสังเกตรายหน่วยงาน ■ ข้อเสนอแนะ',
+        sections: '■ ภาพรวมการบันทึก ■ ตัวชี้วัดที่ควรเร่งบันทึก ■ ข้อสังเกตรายกลุ่มงาน ■ ข้อเสนอแนะ',
     },
     'recording-status:by-hospital': {
         label: 'สถานะการบันทึก (รายหน่วยบริการ)',
@@ -251,11 +279,18 @@ const TAB_SPECS = {
         sections: '■ ภาพรวมการบันทึก ■ เปรียบเทียบตามประเภทหน่วยบริการ ■ อำเภอที่ควรติดตาม ■ ข้อเสนอแนะ',
     },
     'by-dept': {
-        label: 'สรุปรายหน่วยงาน',
+        label: 'สรุปรายกลุ่มงาน',
         build: (out) => byDept(out),
-        focus: 'วิเคราะห์ความครอบคลุมการบันทึกผลงานรายหน่วยงาน (กลุ่มงาน): หน่วยงานที่บันทึกครบ/ยังมีตัวชี้วัดที่ไม่มีการบันทึก',
-        defs: 'entered = ตัวชี้วัดที่มีหน่วยบริการบันทึกแล้วอย่างน้อย 1 แห่ง | not_entered = ยังไม่มีการบันทึก | coverage_pct = หน่วยบริการที่บันทึก ÷ หน่วยบริการที่ต้องบันทึก × 100 (รวมทุกตัวชี้วัดของหน่วยงาน)',
-        sections: '■ ภาพรวม ■ หน่วยงานที่บันทึกครอบคลุม ■ หน่วยงานที่ควรติดตาม ■ ข้อเสนอแนะ',
+        focus: 'วิเคราะห์ความครอบคลุมการบันทึกผลงานรายกลุ่มงาน: กลุ่มงานที่บันทึกครบ/ยังมีตัวชี้วัดที่ไม่มีการบันทึก',
+        defs: 'entered = ตัวชี้วัดที่มีหน่วยบริการบันทึกแล้วอย่างน้อย 1 แห่ง | not_entered = ยังไม่มีการบันทึก | coverage_pct = หน่วยบริการที่บันทึก ÷ หน่วยบริการที่ต้องบันทึก × 100 (รวมทุกตัวชี้วัดของกลุ่มงาน)',
+        sections: '■ ภาพรวม ■ กลุ่มงานที่บันทึกครอบคลุม ■ กลุ่มงานที่ควรติดตาม ■ ข้อเสนอแนะ',
+    },
+    'by-dept-kpi': {
+        label: 'สรุปข้อมูลตัวชี้วัดของกลุ่มงาน',
+        build: (out) => byDeptKpi(out),
+        focus: 'วิเคราะห์ผลการดำเนินงานตัวชี้วัดรายกลุ่มงาน: กลุ่มงานที่ผ่านเกณฑ์สูง/ต่ำ จำนวนตัวชี้วัดที่ผ่านทุกหน่วยบริการ/ยังไม่ผ่านเลยของแต่ละกลุ่มงาน และตัวชี้วัดที่ควรติดตาม',
+        defs: 'pairs_with_target = คู่ที่มีเป้าหมาย | pass_pct = คู่ที่ผ่าน ÷ คู่ที่มีเป้าหมาย × 100 ของกลุ่มงาน | indicators_all_passed = ตัวชี้วัดที่ผ่านเกณฑ์ทุกคู่ | indicators_none_passed = ตัวชี้วัดที่ยังไม่มีคู่ผ่าน | department_distribution = จำนวนกลุ่มงานตามช่วงร้อยละผ่านเกณฑ์',
+        sections: '■ ภาพรวม ■ กลุ่มงานที่โดดเด่น ■ กลุ่มงานที่ควรติดตาม ■ ตัวชี้วัดที่ควรติดตาม ■ ข้อเสนอแนะ',
     },
 };
 
@@ -280,8 +315,8 @@ function tabSystemPrompt(key) {
         `รายงานนี้คือ "${spec.label}" — ${spec.focus}`,
         'นิยาม: "คู่" = ตัวชี้วัด 1 ตัว × หน่วยบริการ 1 แห่ง | ' + spec.defs + ' | ช่วงร้อยละ (distribution) = จำนวนรายการในแต่ละช่วง',
         'กติกา: ใช้เฉพาะตัวเลขที่ให้มาเท่านั้น ห้ามเดาหรือสร้างตัวเลขเพิ่ม ห้ามสรุปสาเหตุที่ข้อมูลไม่ได้บอก (ให้เขียนว่า "ควรตรวจสอบ" แทน)',
-        'ระบุชื่อตัวชี้วัด/หมวดหมู่/หน่วยงาน/อำเภอ/ประเภทหน่วยบริการตามข้อมูลทุกตัวอักษร ถ้ากลุ่มใดมีรายการน้อยไม่ต้องจัดอันดับ ถ้ารายการ bottom ว่าง = รายการมีน้อย ไม่ต้องแยกกลุ่มล่าง',
-        'ใช้คำว่า "คู่" กับจำนวนคู่ ตัวชี้วัด × หน่วยบริการ (ห้ามเรียกว่า "หน่วยงาน" หรือ "รายการ")',
+        'ระบุชื่อตัวชี้วัด/หมวดหมู่/กลุ่มงาน/อำเภอ/ประเภทหน่วยบริการตามข้อมูลทุกตัวอักษร ถ้ากลุ่มใดมีรายการน้อยไม่ต้องจัดอันดับ ถ้ารายการ bottom ว่าง = รายการมีน้อย ไม่ต้องแยกกลุ่มล่าง',
+        'ใช้คำว่า "คู่" กับจำนวนคู่ ตัวชี้วัด × หน่วยบริการ (ห้ามเรียกว่า "กลุ่มงาน" "หน่วยงาน" หรือ "รายการ")',
         'เขียนตัวเลขตามข้อมูลทุกหลัก ห้ามปัดเศษหรือประมาณ (เช่น 40016 ห้ามเขียน 40,000) ใช้คำว่า "ร้อยละ" แทน % หรือ เปอร์เซ็นต์',
         `รูปแบบ: ภาษาไทยทางการ ข้อความล้วน ไม่ใช้ Markdown ไม่ใช้ตาราง ไม่ใช้ตัวหนา ความยาวไม่เกิน 300 คำ แบ่งเป็นหัวข้อตามลำดับนี้ (บรรทัดหัวข้อขึ้นต้นด้วย ■):`,
         spec.sections,
@@ -295,5 +330,5 @@ function tabPrompt(input) {
 
 module.exports = {
     TAB_SPECS, tabKey, buildTabInput, tabSystemPrompt, tabPrompt, distribution, topBottom, median,
-    byIndicator, byHospital, byDistrict, byYear, recordingByIndicator, recordingByHospital, byDept,
+    byIndicator, byHospital, byDistrict, byYear, recordingByIndicator, recordingByHospital, byDept, byDeptKpi,
 };

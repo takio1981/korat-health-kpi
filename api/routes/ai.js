@@ -111,7 +111,7 @@ apiRouter.post('/ai/formula-suggest', authenticateToken, requireAnyAction('kpi-m
     }
 });
 
-// ระยะที่ 3: เสนอการจับคู่ค่าใน KHD กับหน่วยงาน/หมวดหมู่หลัก/ยุทธศาสตร์ของระบบ (หน้าต่างจับคู่ข้อมูล KHD — super_admin เท่านั้นเหมือน /khd-mappings)
+// ระยะที่ 3: เสนอการจับคู่ค่าใน KHD กับกลุ่มงาน/หมวดหมู่หลัก/ยุทธศาสตร์ของระบบ (หน้าต่างจับคู่ข้อมูล KHD — super_admin เท่านั้นเหมือน /khd-mappings)
 // คืนเฉพาะ id ที่อยู่ในตัวเลือกจริง ไม่บันทึกให้ — ผู้ดูแลกด "จับคู่" เอง (PUT /khd-mappings)
 apiRouter.post('/ai/khd-mapping-suggest', authenticateToken, isSuperAdmin, aiLimiter, async (req, res) => {
     try {
@@ -150,7 +150,7 @@ apiRouter.post('/ai/data-quality-explain', authenticateToken, isSuperAdmin, aiLi
 });
 
 // ระยะที่ 5 (ข): อธิบายคำเตือนค่าที่อาจผิดปกติของช่องที่กำลังแก้ในหน้าบันทึกผลงาน (ยังไม่บันทึก) — เตือนเท่านั้น ไม่ห้ามบันทึก
-// server คำนวณคำเตือนใหม่ด้วย detectAnomaly() และอ่านชื่อตัวชี้วัดจากฐานข้อมูล (ตามขอบเขตหน่วยงาน) — ไม่ส่งรหัสหน่วยบริการเข้า prompt
+// server คำนวณคำเตือนใหม่ด้วย detectAnomaly() และอ่านชื่อตัวชี้วัดจากฐานข้อมูล (ตามขอบเขตกลุ่มงาน) — ไม่ส่งรหัสหน่วยบริการเข้า prompt
 apiRouter.post('/ai/anomaly-explain', authenticateToken, aiLimiter, async (req, res) => {
     try {
         const b = req.body || {};

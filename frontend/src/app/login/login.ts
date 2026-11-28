@@ -346,7 +346,7 @@ export class LoginComponent implements OnInit, OnDestroy {
                   <div class="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-200 text-xs space-y-1">
                     <p><b><i class="fas fa-info-circle text-amber-600 mr-1"></i>เกิดจากอะไร?</b></p>
                     <ul class="ml-5 list-disc text-gray-600 space-y-0.5">
-                      <li>ออฟฟิศ/หน่วยงานของคุณใช้ IP เดียวกัน หลายคน login ผิด</li>
+                      <li>ออฟฟิศ/กลุ่มงานของคุณใช้ IP เดียวกัน หลายคน login ผิด</li>
                       <li>หรือมี script/bot พยายาม login รัวๆ</li>
                     </ul>
                     <p class="mt-2"><b>ทำยังไง:</b> รอ 15 นาที — หรือถ้าเร่งด่วน ติดต่อผู้ดูแลระบบขอ unblock</p>

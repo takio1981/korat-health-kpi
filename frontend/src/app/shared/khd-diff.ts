@@ -1,11 +1,11 @@
 // รายละเอียดความแตกต่างหลัง "เทียบกับ KHD" (9 พ.ย. 2569) — ฟังก์ชันล้วน สร้างแถวเทียบคู่ ระบบ ↔ KHD จากผลของ GET /report-compare
-// 1 แถว = 1 หัวข้อที่ต่างกันของตัวชี้วัด 1 ตัว (ชื่อ / เกณฑ์ / ประเภทตัวชี้วัด / ประเภทหน่วยบริการ / หน่วยงาน / หมวดหมู่หลัก / สถานะใน KHD)
+// 1 แถว = 1 หัวข้อที่ต่างกันของตัวชี้วัด 1 ตัว (ชื่อ / เกณฑ์ / ประเภทตัวชี้วัด / ประเภทหน่วยบริการ / กลุ่มงาน / หมวดหมู่หลัก / สถานะใน KHD)
 import { KHD_TYPE_KEYS, KHD_TYPE_LABEL, typesText, hostypeText } from './khd-types';
 
 export type KhdDiffKind = 'ref' | 'name' | 'table_process' | 'criteria' | 'types' | 'hostype' | 'fiscal_year' | 'dept' | 'main' | 'status';
 export const KHD_DIFF_KIND_LABEL: Record<KhdDiffKind, string> = {
   ref: 'รหัสอ้างอิง', name: 'ชื่อตัวชี้วัด', table_process: 'table_process', criteria: 'เกณฑ์', types: 'ประเภทตัวชี้วัด', hostype: 'ประเภทหน่วยบริการ', fiscal_year: 'ปีงบประมาณ',
-  dept: 'หน่วยงาน', main: 'หมวดหมู่หลัก', status: 'สถานะใน KHD',
+  dept: 'กลุ่มงาน', main: 'หมวดหมู่หลัก', status: 'สถานะใน KHD',
 };
 
 export interface KhdDiffRow {
@@ -52,12 +52,12 @@ export interface KhdDiffContext {
   criteriaText: (item: any) => string;
   khdCriteriaText: (khd: any) => string;
   hosNames?: Record<string, string>;
-  /** ชื่อหน่วยงาน / หมวดหมู่หลักของระบบจาก id (ค่าปัจจุบันของตัวชี้วัด) */
+  /** ชื่อกลุ่มงาน / หมวดหมู่หลักของระบบจาก id (ค่าปัจจุบันของตัวชี้วัด) */
   deptName?: (id: any) => string;
   mainName?: (id: any) => string;
 }
 
-// ===== หน่วยงาน / หมวดหมู่หลัก (11 พ.ย. 2569) — backend แปลงค่าข้อความของ KHD เป็น id ของระบบ (khd_dept_id / khd_main_id + สถานะการจับคู่) =====
+// ===== กลุ่มงาน / หมวดหมู่หลัก (11 พ.ย. 2569) — backend แปลงค่าข้อความของ KHD เป็น id ของระบบ (khd_dept_id / khd_main_id + สถานะการจับคู่) =====
 export type KhdOrgPart = 'dept' | 'main';
 const ORG_LOCAL_COL: Record<KhdOrgPart, string> = { dept: 'dept_id', main: 'main_indicator_id' };
 /** เทียบค่าปัจจุบันของตัวชี้วัดกับ KHD — null = เทียบไม่ได้ (ยังไม่เทียบ / ไม่มีคู่ใน KHD / KHD ไม่ระบุ / ยังจับคู่ค่าใน KHD ไม่ได้) */

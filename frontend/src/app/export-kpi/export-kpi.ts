@@ -796,7 +796,7 @@ export class ExportKpiComponent implements OnInit, OnDestroy {
     return selectedVisible > 0 && selectedVisible < visibleReady.length;
   }
 
-  // กรองตาม search (table/name) + status + หมวดหมู่หลัก + หน่วยงาน
+  // กรองตาม search (table/name) + status + หมวดหมู่หลัก + กลุ่มงาน
   get filteredSyncPreview(): any[] {
     const q = (this.syncSearch || '').trim().toLowerCase();
     return this.syncPreviewData.filter((t: any) => {
@@ -815,7 +815,7 @@ export class ExportKpiComponent implements OnInit, OnDestroy {
     return value.split(' | ').includes(target);
   }
 
-  // รายการหมวดหมู่หลัก/หน่วยงานที่พบจริงในผลตรวจสอบ ใช้เติม dropdown filter
+  // รายการหมวดหมู่หลัก/กลุ่มงานที่พบจริงในผลตรวจสอบ ใช้เติม dropdown filter
   get syncMainIndicatorOptions(): string[] {
     const set = new Set<string>();
     this.syncPreviewData.forEach((t: any) => (t.main_indicator_name || '').split(' | ').forEach((n: string) => n && set.add(n)));

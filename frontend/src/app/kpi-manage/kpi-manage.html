@@ -5,7 +5,7 @@
       <button (click)="switchTab('indicators')" [class]="activeTab === 'indicators' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="flex-1 py-4 px-6 text-center border-b-2 font-medium text-sm focus:outline-none">ตัวชี้วัด (KPIs)</button>
       <button (click)="switchTab('main-indicators')" [class]="activeTab === 'main-indicators' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="flex-1 py-4 px-6 text-center border-b-2 font-medium text-sm focus:outline-none">หมวดหมู่หลัก</button>
       <button (click)="switchTab('strategies')" [class]="activeTab === 'strategies' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="flex-1 py-4 px-6 text-center border-b-2 font-medium text-sm focus:outline-none">ยุทธศาสตร์</button>
-      <button (click)="switchTab('departments')" [class]="activeTab === 'departments' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="flex-1 py-4 px-6 text-center border-b-2 font-medium text-sm focus:outline-none">หน่วยงาน</button>
+      <button (click)="switchTab('departments')" [class]="activeTab === 'departments' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="flex-1 py-4 px-6 text-center border-b-2 font-medium text-sm focus:outline-none">กลุ่มงาน</button>
       <button (click)="switchTab('hospitals')" [class]="activeTab === 'hospitals' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="flex-1 py-4 px-6 text-center border-b-2 font-medium text-sm focus:outline-none">หน่วยบริการ</button>
       <button (click)="switchTab('zones')" id="tab-zones" [class]="activeTab === 'zones' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="flex-1 py-4 px-6 text-center border-b-2 font-medium text-sm focus:outline-none">โซน</button>
     </div>
@@ -21,10 +21,10 @@
           <div class="relative w-full md:w-64">
             <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">ค้นหา</label>
             <input type="text" [(ngModel)]="searchTerm" (input)="applyFilter()"
-                   [placeholder]="activeTab === 'indicators' ? 'ชื่อ / รหัสตัวชี้วัด...' : activeTab === 'main-indicators' ? 'ชื่อหมวดหมู่หลัก...' : activeTab === 'strategies' ? 'ชื่อยุทธศาสตร์...' : activeTab === 'hospitals' ? 'ชื่อ / hoscode หน่วยบริการ...' : 'ชื่อ / รหัสหน่วยงาน...'"
+                   [placeholder]="activeTab === 'indicators' ? 'ชื่อ / รหัสตัวชี้วัด...' : activeTab === 'main-indicators' ? 'ชื่อหมวดหมู่หลัก...' : activeTab === 'strategies' ? 'ชื่อยุทธศาสตร์...' : activeTab === 'hospitals' ? 'ชื่อ / hoscode หน่วยบริการ...' : 'ชื่อ / รหัสกลุ่มงาน...'"
                    class="w-full pl-4 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-sm hover:border-green-400 transition-colors">
           </div>
-          <!-- Indicators filter: หมวดหมู่หลัก + หน่วยงาน (กว้างคงที่ + ตัดข้อความยาวด้วย truncate กันดันเลย์เอาต์) -->
+          <!-- Indicators filter: หมวดหมู่หลัก + กลุ่มงาน (กว้างคงที่ + ตัดข้อความยาวด้วย truncate กันดันเลย์เอาต์) -->
           <ng-container *ngIf="activeTab === 'indicators'">
             <div class="relative w-40 sm:w-48">
               <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">หมวดหมู่หลัก</label>
@@ -35,10 +35,10 @@
               </select>
             </div>
             <div class="relative w-40 sm:w-48">
-              <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">หน่วยงาน</label>
+              <label class="absolute -top-2 left-3 bg-white px-1 text-xs font-bold text-gray-500 uppercase z-10">กลุ่มงาน</label>
               <select [(ngModel)]="filterDept" (change)="applyFilter()"
                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none truncate">
-                <option value="">ทุกหน่วยงาน</option>
+                <option value="">ทุกกลุ่มงาน</option>
                 <option *ngFor="let d of departments" [value]="d.id">{{ d.dept_name }}</option>
               </select>
             </div>
@@ -179,7 +179,7 @@
           <button *ngIf="isSuperAdmin && ['indicators','main-indicators','strategies','departments'].includes(activeTab)"
                   (click)="openKhdMapping(activeTab === 'main-indicators' ? 'main' : activeTab === 'strategies' ? 'yut' : 'dept')"
                   class="bg-cyan-700 hover:bg-cyan-800 text-white px-4 py-2 rounded-lg shadow-md transition-colors text-sm font-bold whitespace-nowrap"
-                  title="จับคู่หน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์ ของ KHD กับข้อมูลในระบบ — ใช้ตอนเพิ่มตัวชี้วัดจาก KHD">
+                  title="จับคู่กลุ่มงาน / หมวดหมู่หลัก / ยุทธศาสตร์ ของ KHD กับข้อมูลในระบบ — ใช้ตอนเพิ่มตัวชี้วัดจาก KHD">
             <i class="fas fa-right-left"></i><span class="ml-2">จับคู่ข้อมูล KHD</span>
           </button>
           <div *ngIf="canAddData" class="w-px h-8 bg-gray-200 mx-1 hidden sm:block"></div>
@@ -267,7 +267,7 @@
           <button (click)="filterKhdStatus = filterKhdStatus === 'dept' ? '' : 'dept'; applyFilter()" id="btn-khd-filter-dept"
                   [ngClass]="filterKhdStatus === 'dept' ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-700 border border-violet-200'"
                   class="px-2.5 py-1 rounded-lg font-bold transition-all">
-            <i class="fas fa-building mr-1"></i>หน่วยงานต่างกัน ({{ khdCounts.dept }})
+            <i class="fas fa-building mr-1"></i>กลุ่มงานต่างกัน ({{ khdCounts.dept }})
           </button>
           <button (click)="filterKhdStatus = filterKhdStatus === 'main' ? '' : 'main'; applyFilter()" id="btn-khd-filter-main"
                   [ngClass]="filterKhdStatus === 'main' ? 'bg-fuchsia-600 text-white' : 'bg-fuchsia-50 text-fuchsia-700 border border-fuchsia-200'"
@@ -320,10 +320,10 @@
         </div>
       </div>
 
-      <!-- Summary: หน่วยงาน KHD Compare -->
+      <!-- Summary: กลุ่มงาน KHD Compare -->
       <div *ngIf="activeTab === 'departments' && deptCompareSummary" class="mb-4 bg-gradient-to-r from-teal-50 via-white to-teal-50 border border-teal-200 rounded-xl p-3">
         <div class="flex flex-wrap items-center gap-2 text-xs">
-          <span class="font-bold text-teal-800 flex items-center gap-1"><i class="fas fa-cloud text-teal-500"></i> KHD ↔ Local (หน่วยงาน):</span>
+          <span class="font-bold text-teal-800 flex items-center gap-1"><i class="fas fa-cloud text-teal-500"></i> KHD ↔ Local (กลุ่มงาน):</span>
           <button (click)="khdCompareFilter = ''; applyFilter()"
                   [ngClass]="khdCompareFilter === '' ? 'bg-teal-600 text-white ring-2 ring-teal-300' : 'bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100'"
                   class="px-2.5 py-1 rounded-lg font-bold transition-all">ทั้งหมด ({{ deptCompareSummary.total }})</button>
@@ -473,7 +473,7 @@
         </div>
       </div>
 
-      <!-- Banner: หน่วยงาน / หมวดหมู่หลักไม่ตรงกับ KHD (11 พ.ย. 2569) -->
+      <!-- Banner: กลุ่มงาน / หมวดหมู่หลักไม่ตรงกับ KHD (11 พ.ย. 2569) -->
       <div *ngIf="activeTab === 'indicators' && canEditData && (khdDeptDiffItems.length > 0 || khdMainDiffItems.length > 0 || khdOrgUnmatchedCount > 0)" id="khd-org-banner"
            class="mb-4 bg-violet-50 border-2 border-violet-200 rounded-xl p-4">
         <div class="flex flex-wrap items-start gap-3">
@@ -481,9 +481,9 @@
             <i class="fas fa-building text-violet-600 text-lg"></i>
           </div>
           <div class="flex-1 min-w-0">
-            <h4 class="text-sm font-bold text-violet-900">หน่วยงาน / หมวดหมู่หลักไม่ตรงกับ KHD</h4>
+            <h4 class="text-sm font-bold text-violet-900">กลุ่มงาน / หมวดหมู่หลักไม่ตรงกับ KHD</h4>
             <p class="text-xs text-violet-700 mt-1">
-              หน่วยงานต่างกัน <b>{{ khdDeptDiffItems.length }}</b> ตัว · หมวดหมู่หลักต่างกัน <b>{{ khdMainDiffItems.length }}</b> ตัว
+              กลุ่มงานต่างกัน <b>{{ khdDeptDiffItems.length }}</b> ตัว · หมวดหมู่หลักต่างกัน <b>{{ khdMainDiffItems.length }}</b> ตัว
               — ค่าใน KHD เทียบผ่านการจับคู่ข้อมูล KHD (ที่ตั้งไว้ หรือจับคู่อัตโนมัติจากรหัส/ชื่อ) ปรับได้ทีละตัว (ปุ่มในแถว) หรือทั้งหมด
             </p>
             <p *ngIf="khdOrgUnmatchedCount > 0" class="text-xs text-violet-600 mt-1">
@@ -493,7 +493,7 @@
           </div>
           <button *ngIf="khdDeptDiffItems.length > 0" (click)="applyKhdOrg(khdDeptDiffItems, 'dept')" id="btn-khd-apply-dept-all"
                   class="shrink-0 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-bold shadow-md transition-colors">
-            <i class="fas fa-building mr-1"></i>ใช้หน่วยงาน KHD ({{ khdDeptDiffItems.length }})
+            <i class="fas fa-building mr-1"></i>ใช้กลุ่มงาน KHD ({{ khdDeptDiffItems.length }})
           </button>
           <button *ngIf="khdMainDiffItems.length > 0" (click)="applyKhdOrg(khdMainDiffItems, 'main')" id="btn-khd-apply-main-all"
                   class="shrink-0 px-4 py-2 bg-fuchsia-600 hover:bg-fuchsia-700 text-white rounded-xl text-sm font-bold shadow-md transition-colors">
@@ -514,7 +514,7 @@
             <p class="text-xs text-teal-700 mt-1">
               ใช้ table_process ของ KHD ได้ <b>{{ khdTpCounts.apply }}</b> ตัว (ปุ่มในแถว) — table_process ใช้ร่วมกับตัวชี้วัดอื่นได้ (ตารางส่งออกเดียวกัน) จึงไม่ใช้จับคู่กับ KHD
             </p>
-            <p class="text-[11px] text-teal-600 mt-1">ค่าหัวข้ออื่น (เกณฑ์ ประเภท ปีงบ หน่วยงาน หมวดหมู่หลัก) ของคู่ที่จับได้ เทียบกับรายงาน KHD ที่ชื่อเดียวกันแล้ว — ดูได้ในหน้าต่างรายละเอียด</p>
+            <p class="text-[11px] text-teal-600 mt-1">ค่าหัวข้ออื่น (เกณฑ์ ประเภท ปีงบ กลุ่มงาน หมวดหมู่หลัก) ของคู่ที่จับได้ เทียบกับรายงาน KHD ที่ชื่อเดียวกันแล้ว — ดูได้ในหน้าต่างรายละเอียด</p>
           </div>
           <button (click)="openKhdTpDiff()" id="btn-khd-tp-detail"
                   class="shrink-0 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold shadow-md transition-colors">
@@ -590,7 +590,7 @@
                 <button *ngIf="canEditData && khdFiscalYearMatch(item) === false" (click)="applyKhdFiscalYear([item])" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-600 text-white font-bold"><i class="fas fa-arrow-down text-[9px]"></i>ใช้ปีงบ KHD</button>
                 <span *ngIf="khdOrgMatch(item, 'dept') === false" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-violet-50 border border-violet-300 text-violet-700 font-bold"
                       [title]="'ระบบ: ' + localOrgText(item, 'dept')"><i class="fas fa-building text-[9px]"></i>KHD: {{ khdOrgText(item, 'dept') }}</span>
-                <button *ngIf="canEditData && khdOrgMatch(item, 'dept') === false" (click)="applyKhdOrg([item], 'dept')" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-violet-600 text-white font-bold"><i class="fas fa-arrow-down text-[9px]"></i>ใช้หน่วยงาน KHD</button>
+                <button *ngIf="canEditData && khdOrgMatch(item, 'dept') === false" (click)="applyKhdOrg([item], 'dept')" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-violet-600 text-white font-bold"><i class="fas fa-arrow-down text-[9px]"></i>ใช้กลุ่มงาน KHD</button>
                 <span *ngIf="khdOrgMatch(item, 'main') === false" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-fuchsia-50 border border-fuchsia-300 text-fuchsia-700 font-bold"
                       [title]="'ระบบ: ' + localOrgText(item, 'main')"><i class="fas fa-folder-tree text-[9px]"></i>KHD: {{ khdOrgText(item, 'main') }}</span>
                 <button *ngIf="canEditData && khdOrgMatch(item, 'main') === false" (click)="applyKhdOrg([item], 'main')" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-fuchsia-600 text-white font-bold"><i class="fas fa-arrow-down text-[9px]"></i>ใช้หมวดหมู่หลัก KHD</button>
@@ -660,7 +660,7 @@
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider rounded-tl-xl w-14">ID</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'indicators'">ชื่อตัวชี้วัด</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'indicators'">หมวดหมู่หลัก</th>
-              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'indicators'">หน่วยงาน</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'indicators'">กลุ่มงาน</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-32" *ngIf="activeTab === 'indicators' && khdCompareSummary" title="สถานะเทียบกับ KHD">KHD ↔ Local</th>
               <th class="px-4 py-3 text-sm font-bold tracking-wider text-center w-28" *ngIf="activeTab === 'indicators' && canEditData"
                   title="ส่งออกข้อมูลตัวชี้วัดเข้า KHD อัตโนมัติ — เปิด (เขียว) = ระบบส่งให้เอง, ปิด (แดง) = ไม่ส่ง ผู้รับผิดชอบนำข้อมูลเข้า KHD เอง">ส่งออก KHD</th>
@@ -670,7 +670,7 @@
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'strategies'">ชื่อยุทธศาสตร์</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-32" *ngIf="activeTab === 'strategies' && stratCompareSummary">KHD ↔ Local</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'departments'">รหัส</th>
-              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'departments'">ชื่อหน่วยงาน</th>
+              <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'departments'">ชื่อกลุ่มงาน</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider text-center w-32" *ngIf="activeTab === 'departments' && deptCompareSummary">KHD ↔ Local</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'hospitals'">hoscode</th>
               <th class="px-4 py-3 text-sm font-bold uppercase tracking-wider" *ngIf="activeTab === 'hospitals'">ชื่อหน่วยบริการ</th>
@@ -735,7 +735,7 @@
                     </span>
                   </div>
 
-                  <!-- รายละเอียดตัวชี้วัด: เป้าหมาย, เงื่อนไข+เกณฑ์, น้ำหนัก, หน่วยงาน, ประเภทตัวชี้วัด, ประเภทหน่วยบริการ -->
+                  <!-- รายละเอียดตัวชี้วัด: เป้าหมาย, เงื่อนไข+เกณฑ์, น้ำหนัก, กลุ่มงาน, ประเภทตัวชี้วัด, ประเภทหน่วยบริการ -->
                   <div class="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
                     <span *ngIf="item.unit" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-stone-100 border border-stone-200 text-stone-700 font-bold" title="หน่วยนับผลงาน"><i class="fas fa-ruler text-[9px]"></i>หน่วย: {{ item.unit }}</span>
                     <span *ngIf="item.target_percentage != null && item.target_percentage !== ''"
@@ -753,7 +753,7 @@
                     <span *ngIf="item.weight" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-50 border border-orange-200 text-orange-700" title="น้ำหนัก">
                       <i class="fas fa-weight-hanging text-[9px]"></i>{{ item.weight }}
                     </span>
-                    <span *ngIf="item.dept_name" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-50 border border-teal-200 text-teal-700" title="หน่วยงาน">
+                    <span *ngIf="item.dept_name" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-50 border border-teal-200 text-teal-700" title="กลุ่มงาน">
                       <i class="fas fa-building text-[9px]"></i>{{ item.dept_name }}
                     </span>
                     <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold" [ngClass]="getSourceBadge(item).color" [title]="getSourceBadge(item).title">
@@ -890,12 +890,12 @@
                   </button>
                   <div *ngIf="khdOrgMatch(item, 'dept') === false" class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700"
                        [title]="'ระบบ: ' + localOrgText(item, 'dept') + ' | KHD: ' + khdOrgText(item, 'dept')">
-                    <i class="fas fa-building mr-1"></i>หน่วยงานต่างกัน
+                    <i class="fas fa-building mr-1"></i>กลุ่มงานต่างกัน
                   </div>
                   <button *ngIf="canEditData && khdOrgMatch(item, 'dept') === false" (click)="applyKhdOrg([item], 'dept')"
                           class="mt-1 block mx-auto px-2 py-0.5 bg-violet-600 hover:bg-violet-700 text-white rounded text-[10px] font-bold whitespace-nowrap"
                           [title]="'ปรับเป็น ' + khdOrgText(item, 'dept')">
-                    <i class="fas fa-arrow-down mr-1"></i>ใช้หน่วยงาน KHD
+                    <i class="fas fa-arrow-down mr-1"></i>ใช้กลุ่มงาน KHD
                   </button>
                   <div *ngIf="khdOrgMatch(item, 'main') === false" class="mt-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-fuchsia-100 text-fuchsia-700"
                        [title]="'ระบบ: ' + localOrgText(item, 'main') + ' | KHD: ' + khdOrgText(item, 'main')">
@@ -1059,17 +1059,17 @@
         </table>
       </div>
 
-      <!-- หน่วยงานจาก KHD ที่ยังไม่มีใน Local -->
+      <!-- กลุ่มงานจาก KHD ที่ยังไม่มีใน Local -->
       <div id="missing-local-departments"
            *ngIf="activeTab === 'departments' && deptCompareSummary && deptMissingLocalItems.length > 0"
            class="mt-4 border border-cyan-200 rounded-xl overflow-hidden">
         <div class="bg-cyan-50 px-4 py-2.5 flex items-center gap-2 border-b border-cyan-200">
           <i class="fas fa-cloud-arrow-down text-cyan-600"></i>
-          <span class="font-bold text-cyan-800 text-sm">หน่วยงานจาก KHD ที่ยังไม่มีในระบบ ({{ deptMissingLocalItems.length }} รายการ)</span>
+          <span class="font-bold text-cyan-800 text-sm">กลุ่มงานจาก KHD ที่ยังไม่มีในระบบ ({{ deptMissingLocalItems.length }} รายการ)</span>
         </div>
         <table class="w-full text-xs">
           <thead class="bg-cyan-100/60 text-cyan-800"><tr>
-            <th class="px-3 py-2 text-left font-bold">ชื่อหน่วยงาน (KHD)</th>
+            <th class="px-3 py-2 text-left font-bold">ชื่อกลุ่มงาน (KHD)</th>
             <th class="px-3 py-2 text-center font-bold" *ngIf="canAddData">จัดการ</th>
           </tr></thead>
           <tbody>
@@ -1138,7 +1138,7 @@
         <div class="bg-cyan-50 px-4 py-2.5 flex flex-wrap items-center gap-2 border-b border-cyan-200">
           <i class="fas fa-cloud-arrow-down text-cyan-600"></i>
           <span class="font-bold text-cyan-800 text-sm">ตัวชี้วัดจาก KHD ที่ยังไม่มีในระบบ ({{ khdMissingLocalItems.length }} รายการ)</span>
-          <span class="text-xs text-cyan-600 font-normal">— เลือก checkbox แล้วกด "เพิ่มที่เลือก" หรือกด "เพิ่มเข้าระบบ" ทีละตัว — หน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์ นำมาจาก KHD ตามการจับคู่</span>
+          <span class="text-xs text-cyan-600 font-normal">— เลือก checkbox แล้วกด "เพิ่มที่เลือก" หรือกด "เพิ่มเข้าระบบ" ทีละตัว — กลุ่มงาน / หมวดหมู่หลัก / ยุทธศาสตร์ นำมาจาก KHD ตามการจับคู่</span>
           <span *ngIf="khdMissingUnmatchedCount > 0" class="px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full text-[11px] font-bold"
                 title="ค่าใน KHD ที่ยังไม่ตรงกับข้อมูลในระบบ — กดปุ่ม จับคู่ข้อมูล KHD">
             <i class="fas fa-triangle-exclamation mr-1"></i>ยังจับคู่ไม่ครบ {{ khdMissingUnmatchedCount }} รายการ
@@ -1164,7 +1164,7 @@
                 </th>
                 <th class="px-3 py-2 text-left font-bold">table_process</th>
                 <th class="px-3 py-2 text-left font-bold">ชื่อตัวชี้วัด (KHD)</th>
-                <th class="px-3 py-2 text-left font-bold">หน่วยงาน <span class="font-normal">(KHD → ระบบ)</span></th>
+                <th class="px-3 py-2 text-left font-bold">กลุ่มงาน <span class="font-normal">(KHD → ระบบ)</span></th>
                 <th class="px-3 py-2 text-left font-bold">หมวดหมู่หลัก <span class="font-normal">(KHD → ระบบ)</span></th>
                 <th class="px-3 py-2 text-left font-bold">ยุทธศาสตร์ <span class="font-normal">(KHD → ระบบ)</span></th>
                 <th class="px-3 py-2 text-center font-bold">สถานะ KHD</th>
@@ -1252,22 +1252,22 @@
   </div>
 </div>
 
-<!-- Modal: เพิ่มยุทธศาสตร์ / หน่วยงานจาก KHD -->
+<!-- Modal: เพิ่มยุทธศาสตร์ / กลุ่มงานจาก KHD -->
 <div *ngIf="simpleAddModal.open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
   <div class="bg-white rounded-2xl shadow-xl border border-cyan-200 w-full max-w-sm mx-4 p-6">
     <div class="flex items-center gap-2 mb-4">
       <div class="w-9 h-9 rounded-xl bg-cyan-100 flex items-center justify-center shrink-0">
         <i class="fas fa-cloud-arrow-down text-cyan-600"></i>
       </div>
-      <h3 class="font-bold text-gray-800 text-lg">เพิ่ม{{ simpleAddModal.tab === 'strategies' ? 'ยุทธศาสตร์' : 'หน่วยงาน' }}จาก KHD</h3>
+      <h3 class="font-bold text-gray-800 text-lg">เพิ่ม{{ simpleAddModal.tab === 'strategies' ? 'ยุทธศาสตร์' : 'กลุ่มงาน' }}จาก KHD</h3>
     </div>
     <div class="space-y-3">
       <div>
-        <label class="block text-xs font-bold text-gray-600 mb-1">ชื่อ{{ simpleAddModal.tab === 'strategies' ? 'ยุทธศาสตร์' : 'หน่วยงาน' }}</label>
+        <label class="block text-xs font-bold text-gray-600 mb-1">ชื่อ{{ simpleAddModal.tab === 'strategies' ? 'ยุทธศาสตร์' : 'กลุ่มงาน' }}</label>
         <input [(ngModel)]="simpleAddModal.itemName" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
       </div>
       <div *ngIf="simpleAddModal.tab === 'departments'">
-        <label class="block text-xs font-bold text-gray-600 mb-1">รหัสหน่วยงาน <span class="text-gray-400 font-normal">(ไม่บังคับ)</span></label>
+        <label class="block text-xs font-bold text-gray-600 mb-1">รหัสกลุ่มงาน <span class="text-gray-400 font-normal">(ไม่บังคับ)</span></label>
         <input [(ngModel)]="simpleAddModal.deptCode" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="เช่น DEPT01">
       </div>
     </div>
@@ -1329,7 +1329,7 @@
       <!-- ค่าที่จะได้จาก KHD (ผ่านการจับคู่) -->
       <div class="border border-cyan-200 bg-cyan-50/50 rounded-lg p-2.5 text-xs space-y-1">
         <p class="font-bold text-cyan-800"><i class="fas fa-cloud-arrow-down mr-1"></i>ค่าจาก KHD ที่จะใช้</p>
-        <div *ngFor="let f of [['หน่วยงาน','dept','khd_dept'],['หมวดหมู่หลัก','main','khd_main_indicator'],['ยุทธศาสตร์','yut','khd_main_yut']]" class="flex gap-2">
+        <div *ngFor="let f of [['กลุ่มงาน','dept','khd_dept'],['หมวดหมู่หลัก','main','khd_main_indicator'],['ยุทธศาสตร์','yut','khd_main_yut']]" class="flex gap-2">
           <span class="text-gray-500 w-24 shrink-0">{{ f[0] }}:</span>
           <span class="text-gray-500 break-words">{{ khdAddModal.item?.[f[2]] || '-' }}</span>
           <ng-container *ngIf="khdResolvedBadge(khdAddModal.item?.khd_resolved?.detail?.[f[1]]) as b">
@@ -1343,7 +1343,7 @@
       </div>
       <div>
         <label class="block text-xs font-bold text-gray-600 mb-1">
-          หน่วยงาน
+          กลุ่มงาน
           <span class="text-gray-400 font-normal ml-1">(ใช้เมื่อ KHD ไม่มีค่าหรือยังจับคู่ไม่ได้)</span>
         </label>
         <select [(ngModel)]="khdAddModal.deptId" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
@@ -1395,12 +1395,12 @@
       </div>
       <h3 class="font-bold text-gray-800 text-lg">เพิ่มตัวชี้วัดจาก KHD ({{ khdMissingLocalSelected.size }} รายการ)</h3>
     </div>
-    <p class="text-xs text-gray-500 mb-2">หน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์ นำมาจาก KHD ตามการจับคู่ของแต่ละตัวชี้วัด — ค่าด้านล่างใช้กับช่องที่ KHD ไม่มีค่าหรือยังจับคู่ไม่ได้ (แก้ไขแยกทีละตัวได้ภายหลัง)</p>
+    <p class="text-xs text-gray-500 mb-2">กลุ่มงาน / หมวดหมู่หลัก / ยุทธศาสตร์ นำมาจาก KHD ตามการจับคู่ของแต่ละตัวชี้วัด — ค่าด้านล่างใช้กับช่องที่ KHD ไม่มีค่าหรือยังจับคู่ไม่ได้ (แก้ไขแยกทีละตัวได้ภายหลัง)</p>
     <p *ngIf="khdBulkSelectedUnmatchedCount > 0" class="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5 mb-3"><i class="fas fa-triangle-exclamation mr-1"></i>{{ khdBulkSelectedUnmatchedCount }} รายการที่เลือกมีค่าใน KHD ที่ยังจับคู่ไม่ได้ <button *ngIf="isSuperAdmin" type="button" (click)="khdBulkAddModal.open = false; openKhdMapping('yut')" class="underline font-bold ml-1">จับคู่ข้อมูล KHD</button></p>
     <div class="space-y-3">
       <div>
         <label class="block text-xs font-bold text-gray-600 mb-1">
-          หน่วยงาน
+          กลุ่มงาน
           <span class="text-gray-400 font-normal ml-1">(ใช้เมื่อ KHD ไม่มีค่าหรือยังจับคู่ไม่ได้)</span>
         </label>
         <select [(ngModel)]="khdBulkAddModal.deptId" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
@@ -1443,14 +1443,14 @@
   </div>
 </div>
 
-<!-- Modal: จับคู่ข้อมูล KHD ↔ ระบบ (หน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์) -->
+<!-- Modal: จับคู่ข้อมูล KHD ↔ ระบบ (กลุ่มงาน / หมวดหมู่หลัก / ยุทธศาสตร์) -->
 <div *ngIf="khdMapOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
   <div class="bg-white rounded-2xl shadow-xl border border-cyan-200 w-full max-w-5xl mx-4 p-5 flex flex-col max-h-[90vh]">
     <div class="flex items-center gap-2 mb-3">
       <div class="w-9 h-9 rounded-xl bg-cyan-100 flex items-center justify-center shrink-0"><i class="fas fa-right-left text-cyan-700"></i></div>
       <div class="flex-1">
         <h3 class="font-bold text-gray-800 text-lg">จับคู่ข้อมูล KHD กับระบบ</h3>
-        <p class="text-xs text-gray-500">ใช้ตอนเพิ่มตัวชี้วัดจาก KHD — ค่าที่จับคู่แล้วนำมาตั้งเป็นหน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์ของตัวชี้วัดใหม่ให้อัตโนมัติ (ไม่เปลี่ยนตัวชี้วัดที่มีอยู่แล้ว)</p>
+        <p class="text-xs text-gray-500">ใช้ตอนเพิ่มตัวชี้วัดจาก KHD — ค่าที่จับคู่แล้วนำมาตั้งเป็นกลุ่มงาน / หมวดหมู่หลัก / ยุทธศาสตร์ของตัวชี้วัดใหม่ให้อัตโนมัติ (ไม่เปลี่ยนตัวชี้วัดที่มีอยู่แล้ว)</p>
       </div>
       <button (click)="closeKhdMapping()" class="text-gray-400 hover:text-gray-600 text-xl" title="ปิด"><i class="fas fa-times"></i></button>
     </div>
@@ -1509,7 +1509,7 @@
             </td>
             <td class="px-3 py-2">
               <select [(ngModel)]="item._pick" class="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" [disabled]="khdMapSaving === item.khd_value">
-                <option [ngValue]="null">-- เลือก{{ khdMapKind === 'dept' ? 'หน่วยงาน' : khdMapKind === 'main' ? 'หมวดหมู่หลัก' : 'ยุทธศาสตร์' }} --</option>
+                <option [ngValue]="null">-- เลือก{{ khdMapKind === 'dept' ? 'กลุ่มงาน' : khdMapKind === 'main' ? 'หมวดหมู่หลัก' : 'ยุทธศาสตร์' }} --</option>
                 <option *ngFor="let o of khdMapOptions" [ngValue]="o.id">{{ o.name }}{{ o.code ? ' (' + o.code + ')' : '' }}</option>
               </select>
               <div *ngIf="item._ai" class="mt-1 flex items-center gap-1 flex-wrap text-[10px]">
@@ -1547,7 +1547,7 @@
       </table>
     </div>
     <p class="text-[11px] text-gray-500 mt-2">
-      ลำดับการใช้: การจับคู่ที่ตั้งไว้ → ตรงกันอัตโนมัติ (หน่วยงาน: รหัสหน่วยงาน, ชื่อเทียบแบบไม่สนช่องว่าง/ตัวพิมพ์, ยุทธศาสตร์: ตัดจำนวนท้ายชื่อ เช่น "(37)") —
+      ลำดับการใช้: การจับคู่ที่ตั้งไว้ → ตรงกันอัตโนมัติ (กลุ่มงาน: รหัสกลุ่มงาน, ชื่อเทียบแบบไม่สนช่องว่าง/ตัวพิมพ์, ยุทธศาสตร์: ตัดจำนวนท้ายชื่อ เช่น "(37)") —
       ช่องที่ยังจับคู่ไม่ได้ใช้ค่าที่เลือกในหน้าต่างเพิ่มตัวชี้วัดแทน
     </p>
   </div>
@@ -1993,7 +1993,7 @@
             </select>
           </div>
           <div>
-            <label class="block text-xs font-bold text-gray-600 mb-1">หน่วยงาน</label>
+            <label class="block text-xs font-bold text-gray-600 mb-1">กลุ่มงาน</label>
             <select id="indicator-dept" [(ngModel)]="currentItem.dept_id" (change)="onDeptChangeInModal()" class="w-full px-3 py-1.5 border rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-sm">
               <option [ngValue]="null">-- ไม่ระบุ --</option>
               <option *ngFor="let d of departments" [ngValue]="d.id">{{ d.dept_name }}</option>
@@ -2354,7 +2354,7 @@
             </button>
           </div>
           <p *ngIf="!isEditMode && codeAuto" class="text-[11px] text-gray-500 mt-1">
-            ไม่ต้องกรอก — ระบบตั้งรหัสให้ตามหน่วยงานที่เลือกและลำดับถัดไปที่ยังไม่ถูกใช้ (รหัสจริงยืนยันตอนกดบันทึก)
+            ไม่ต้องกรอก — ระบบตั้งรหัสให้ตามกลุ่มงานที่เลือกและลำดับถัดไปที่ยังไม่ถูกใช้ (รหัสจริงยืนยันตอนกดบันทึก)
           </p>
           <div class="flex flex-wrap items-center gap-1.5 mt-2">
             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-mono" title="ชื่อตาราง (table_process)">
@@ -2576,7 +2576,7 @@
       <ng-container *ngIf="activeTab === 'departments'">
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
-            <label class="block text-xs font-bold text-gray-600 mb-1">รหัสหน่วยงาน</label>
+            <label class="block text-xs font-bold text-gray-600 mb-1">รหัสกลุ่มงาน</label>
             <input type="text" [(ngModel)]="currentItem.dept_code" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none">
           </div>
           <div>
@@ -2592,7 +2592,7 @@
           </div>
         </div>
         <div>
-          <label class="block text-xs font-bold text-gray-600 mb-1">ชื่อหน่วยงาน <span class="text-red-500">*</span></label>
+          <label class="block text-xs font-bold text-gray-600 mb-1">ชื่อกลุ่มงาน <span class="text-red-500">*</span></label>
           <input type="text" [(ngModel)]="currentItem.dept_name" class="w-full px-3 py-1.5 border rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none">
         </div>
         <div>
@@ -2723,7 +2723,7 @@
             <i class="fas fa-file-excel text-lg"></i>
             <div class="text-left">
               <p class="leading-tight">template_นำเข้าตัวชี้วัด.xlsx</p>
-              <p class="text-[10px] text-green-200 leading-tight">มี 4 sheets: ข้อมูล + หมวดหมู่ + หน่วยงาน + รหัสหน่วยบริการ</p>
+              <p class="text-[10px] text-green-200 leading-tight">มี 4 sheets: ข้อมูล + หมวดหมู่ + กลุ่มงาน + รหัสหน่วยบริการ</p>
             </div>
           </button>
         </div>
@@ -2768,7 +2768,7 @@
                 <th class="px-3 py-2.5 text-left font-bold text-gray-500 border-b border-gray-200 w-10">#</th>
                 <th class="px-3 py-2.5 text-left font-bold text-gray-600 border-b border-gray-200 min-w-[200px]">ชื่อตัวชี้วัด</th>
                 <th class="px-3 py-2.5 text-left font-bold text-gray-600 border-b border-gray-200">หมวดหมู่หลัก</th>
-                <th class="px-3 py-2.5 text-left font-bold text-gray-600 border-b border-gray-200">หน่วยงาน</th>
+                <th class="px-3 py-2.5 text-left font-bold text-gray-600 border-b border-gray-200">กลุ่มงาน</th>
                 <th class="px-3 py-2.5 text-center font-bold text-gray-600 border-b border-gray-200">เป้าหมาย</th>
                 <th class="px-3 py-2.5 text-center font-bold text-gray-600 border-b border-gray-200">เกณฑ์</th>
                 <th class="px-3 py-2.5 text-left font-bold text-gray-600 border-b border-gray-200">ประเภท</th>

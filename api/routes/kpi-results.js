@@ -29,7 +29,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         if (user.role === 'super_admin') {
             // เห็นทั้งหมด
         } else if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role)) {
-            // admin_ssj / user_ssj: เห็นทุก hospcode แต่เฉพาะหน่วยงานตัวเอง
+            // admin_ssj / user_ssj: เห็นทุก hospcode แต่เฉพาะกลุ่มงานตัวเอง
             if (user.deptId != null) { whereClause = 'WHERE i.dept_id IN (?)'; params.push(deptIdsOf(user)); }
         } else if (ROLE_SCOPE_DISTRICT.includes(user.role)) {
             // admin_cup / user_cup: ทุกตัวชี้วัด ทุก hospcode ในอำเภอ
@@ -72,7 +72,7 @@ apiRouter.get('/kpi-results', authenticateToken, async (req, res) => {
         addMultiFilter('dist.distname', req.query.district);
         if (req.query.indicator) { extraConditions.push('i.kpi_indicators_name = ?'); params.push(req.query.indicator); }
         if (req.query.main) { extraConditions.push('mi.main_indicator_name = ?'); params.push(req.query.main); }
-        // คำค้นจากช่องค้นหา (13 พ.ย. 2569 — ค้นได้โดยไม่ต้องเลือกตัวกรอง): ชื่อตัวชี้วัด/หมวดหมู่หลัก/หน่วยงาน/หน่วยบริการ/อำเภอ/รหัสหน่วยบริการ
+        // คำค้นจากช่องค้นหา (13 พ.ย. 2569 — ค้นได้โดยไม่ต้องเลือกตัวกรอง): ชื่อตัวชี้วัด/หมวดหมู่หลัก/กลุ่มงาน/หน่วยบริการ/อำเภอ/รหัสหน่วยบริการ
         // ขอบเขตตามสิทธิ์ (whereClause ด้านบน) ยังใช้เสมอ — คำค้นแค่จำกัดเพิ่ม | ≥ 2 ตัวอักษร, ทุกคำ (เว้นวรรค) ต้องพบ, % _ \ ในคำค้น = ตัวอักษรธรรมดา (escape)
         const qWords = String(req.query.q || '').trim().split(/\s+/).filter(Boolean).slice(0, 5);
         if (qWords.join('').length >= 2) {
@@ -731,7 +731,7 @@ apiRouter.post('/update-kpi', authenticateToken, async (req, res) => {
                 );
                 const allowedIds = allowed.map(a => a.id);
                 const unauthorizedIds = indicatorIds.filter(id => !allowedIds.includes(id));
-                if (unauthorizedIds.length > 0) throw new Error('ไม่มีสิทธิ์แก้ไขข้อมูลหน่วยงานอื่น');
+                if (unauthorizedIds.length > 0) throw new Error('ไม่มีสิทธิ์แก้ไขข้อมูลกลุ่มงานอื่น');
             }
         }
 

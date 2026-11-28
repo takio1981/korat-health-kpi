@@ -127,7 +127,7 @@ export class KpiManageComponent implements OnInit {
   hospFilterHostype: string = '';
   searchTerm: string = '';
   filterActive: string = ''; // '' = ทั้งหมด, '1' = เปิดใช้งาน, '0' = ปิดใช้งาน
-  // Extra indicators filter — หมวดหมู่หลัก + หน่วยงาน (ค่าเป็น string ของ id เพื่อ match [value] ของ <select>)
+  // Extra indicators filter — หมวดหมู่หลัก + กลุ่มงาน (ค่าเป็น string ของ id เพื่อ match [value] ของ <select>)
   filterMainIndicator: string = '';
   filterDept: string = '';
   // กรองปีงบประมาณ — ค่าเดียวจาก dropdown, match กับ khd_fiscal_year ของแต่ละตัวชี้วัด (comma-list เช่น "2569,2570")
@@ -213,7 +213,7 @@ export class KpiManageComponent implements OnInit {
   stratCompareLoading = false;
   stratCompareSummary: any = null;
   stratCompareItems: any[] = [];
-  // หน่วยงาน compare
+  // กลุ่มงาน compare
   deptCompareLoading = false;
   deptCompareSummary: any = null;
   deptCompareItems: any[] = [];
@@ -233,7 +233,7 @@ export class KpiManageComponent implements OnInit {
   hospCompareItems: any[] = [];
   hospCompareError = '';
 
-  // modal เพิ่มจาก KHD (ใช้ร่วมกัน ยุทธศาสตร์ + หน่วยงาน)
+  // modal เพิ่มจาก KHD (ใช้ร่วมกัน ยุทธศาสตร์ + กลุ่มงาน)
   simpleAddModal: { open: boolean; tab: string; itemName: string; deptCode: string } = { open: false, tab: '', itemName: '', deptCode: '' };
   simpleAddLoading = false;
   // modal เพิ่มหน่วยบริการ
@@ -1388,7 +1388,7 @@ export class KpiManageComponent implements OnInit {
     return dup ? String(dup.kpi_indicators_name || '') : null;
   }
 
-  // ขอรหัสที่ระบบแนะนำ (ตามหน่วยงานที่เลือก) มาแสดงตัวอย่าง — รหัสจริงสร้างที่ backend ตอนบันทึกอีกครั้ง (กันชนกัน)
+  // ขอรหัสที่ระบบแนะนำ (ตามกลุ่มงานที่เลือก) มาแสดงตัวอย่าง — รหัสจริงสร้างที่ backend ตอนบันทึกอีกครั้ง (กันชนกัน)
   refreshSuggestedCodes() {
     if (this.isEditMode || !this.codeAuto || this.activeTab !== 'indicators') return;
     this.codeSuggestLoading = true;
@@ -2147,10 +2147,10 @@ export class KpiManageComponent implements OnInit {
     });
   }
 
-  // ===== จับคู่ข้อมูล KHD ↔ Local (หน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์) — 19 ต.ค. 2569 =====
+  // ===== จับคู่ข้อมูล KHD ↔ Local (กลุ่มงาน / หมวดหมู่หลัก / ยุทธศาสตร์) — 19 ต.ค. 2569 =====
   // ตัวชี้วัดที่เพิ่มจาก KHD ใช้ค่าที่จับคู่ได้ก่อนค่าที่เลือกในหน้าต่างเพิ่มเสมอ (ผู้ใช้เลือกแบบนี้)
   readonly khdMapKinds = [
-    { key: 'dept', label: 'หน่วยงาน', icon: 'fa-building' },
+    { key: 'dept', label: 'กลุ่มงาน', icon: 'fa-building' },
     { key: 'main', label: 'หมวดหมู่หลัก', icon: 'fa-folder-tree' },
     { key: 'yut', label: 'ยุทธศาสตร์', icon: 'fa-chess' },
   ];
@@ -2352,7 +2352,7 @@ export class KpiManageComponent implements OnInit {
           this.khdAddModal.open = false;
           if (res.resolved?.unmatched?.length) {
             Swal.fire({ icon: 'warning', title: 'เพิ่มแล้ว — บางค่ายังจับคู่ไม่ได้',
-              text: `${res.message} แต่หน่วยงาน/หมวดหมู่หลัก/ยุทธศาสตร์บางช่องใน KHD ยังจับคู่ไม่ได้ (ใช้ค่าที่เลือกแทนหรือเว้นว่าง) — ตรวจสอบที่ปุ่ม "จับคู่ข้อมูล KHD"` });
+              text: `${res.message} แต่กลุ่มงาน/หมวดหมู่หลัก/ยุทธศาสตร์บางช่องใน KHD ยังจับคู่ไม่ได้ (ใช้ค่าที่เลือกแทนหรือเว้นว่าง) — ตรวจสอบที่ปุ่ม "จับคู่ข้อมูล KHD"` });
           } else {
             Swal.fire({ icon: 'success', title: 'สำเร็จ', text: res.message, timer: 2000, showConfirmButton: false });
           }
@@ -2413,7 +2413,7 @@ export class KpiManageComponent implements OnInit {
           const skippedText = res.skipped > 0 ? `<p class="text-xs text-amber-600 mt-2">ข้าม ${res.skipped} รายการ: ${(res.skippedNames || []).map(esc).join(', ')}</p>` : '';
           const unmatched = res.unmatchedNames || [];
           const unmatchedText = unmatched.length > 0
-            ? `<p class="text-xs text-rose-600 mt-2">${unmatched.length} รายการมีหน่วยงาน/หมวดหมู่หลัก/ยุทธศาสตร์ใน KHD ที่ยังจับคู่ไม่ได้ (ใช้ค่าที่เลือกในหน้าต่างแทน หรือเว้นว่าง) — ตรวจสอบที่ปุ่ม "จับคู่ข้อมูล KHD"</p>` : '';
+            ? `<p class="text-xs text-rose-600 mt-2">${unmatched.length} รายการมีกลุ่มงาน/หมวดหมู่หลัก/ยุทธศาสตร์ใน KHD ที่ยังจับคู่ไม่ได้ (ใช้ค่าที่เลือกในหน้าต่างแทน หรือเว้นว่าง) — ตรวจสอบที่ปุ่ม "จับคู่ข้อมูล KHD"</p>` : '';
           Swal.fire({ icon: 'success', title: 'สำเร็จ', html: `<p>${esc(res.message)}</p>${skippedText}${unmatchedText}` });
           this.loadAllData();
           this.runKhdCompare();
@@ -2453,7 +2453,7 @@ export class KpiManageComponent implements OnInit {
       { key: 'kpi_indicators_id',   desc: 'รหัสอ้างอิง เช่น 1901 (ไม่จำเป็น)', example: '1901' },
       { key: 'kpi_indicators_code', desc: 'รหัสตัวชี้วัดย่อ เช่น KPI001 (ไม่จำเป็น)', example: 'KPI-NCD-001' },
       { key: 'main_indicator_name', desc: 'ชื่อหมวดหมู่หลัก — ต้องตรงกับระบบ (ดูชีต "หมวดหมู่หลัก")', example: this.mainIndicators[0]?.main_indicator_name || 'งานควบคุมโรค' },
-      { key: 'dept_name',           desc: 'ชื่อหน่วยงาน — ต้องตรงกับระบบ (ดูชีต "หน่วยงาน")', example: this.departments[0]?.dept_name || 'กลุ่มงานโรคไม่ติดต่อ' },
+      { key: 'dept_name',           desc: 'ชื่อกลุ่มงาน — ต้องตรงกับระบบ (ดูชีต "กลุ่มงาน")', example: this.departments[0]?.dept_name || 'กลุ่มงานโรคไม่ติดต่อ' },
       { key: 'target_percentage',   desc: 'เป้าหมาย % เช่น 80 (ตัวเลข ไม่มีเครื่องหมาย)', example: '80' },
       { key: 'target_condition',    desc: 'เงื่อนไข: GTE=มากกว่าเท่ากับ / GT=มากกว่า / LTE=น้อยกว่าเท่ากับ / LT=น้อยกว่า / EQ=เท่ากับ', example: 'GTE' },
       { key: 'weight',              desc: 'น้ำหนัก (ตัวเลข ค่าเริ่มต้น 1)', example: '1' },
@@ -2492,11 +2492,11 @@ export class KpiManageComponent implements OnInit {
 
     // Sheet 3: departments reference
     const ws3 = XLSX.utils.aoa_to_sheet([
-      ['dept_name (ใส่ในคอลัมน์ E)', 'รหัสหน่วยงาน'],
+      ['dept_name (ใส่ในคอลัมน์ E)', 'รหัสกลุ่มงาน'],
       ...this.departments.map(d => [d.dept_name, d.dept_code || '']),
     ]);
     ws3['!cols'] = [{ wch: 40 }, { wch: 15 }];
-    XLSX.utils.book_append_sheet(wb, ws3, 'หน่วยงาน');
+    XLSX.utils.book_append_sheet(wb, ws3, 'กลุ่มงาน');
 
     // Sheet 4: hostype reference
     const ws4 = XLSX.utils.aoa_to_sheet([
@@ -2564,7 +2564,7 @@ export class KpiManageComponent implements OnInit {
           if (obj.dept_name) {
             const found = this.departments.find(d => d.dept_name.trim() === obj.dept_name.trim());
             if (found) obj.dept_id = found.id;
-            else addErr(4, 'dept_name', `ไม่พบหน่วยงาน "${obj.dept_name}" ในระบบ`);
+            else addErr(4, 'dept_name', `ไม่พบกลุ่มงาน "${obj.dept_name}" ในระบบ`);
           }
 
           ['r9','moph','ssj','rmw','other'].forEach(flag => {
@@ -2696,7 +2696,7 @@ export class KpiManageComponent implements OnInit {
     });
   }
 
-  // ===== หน่วยงาน / หมวดหมู่หลัก เทียบกับ KHD (11 พ.ย. 2569) — ค่าใน KHD แปลงเป็น id ที่ backend (services/khd-org.js) เทียบกับค่าปัจจุบัน =====
+  // ===== กลุ่มงาน / หมวดหมู่หลัก เทียบกับ KHD (11 พ.ย. 2569) — ค่าใน KHD แปลงเป็น id ที่ backend (services/khd-org.js) เทียบกับค่าปัจจุบัน =====
   khdOrgMatch(item: any, part: KhdOrgPart): boolean | null { return khdOrgMatch(item, this.getKhdData(item), part); }
   orgName(part: KhdOrgPart, id: any): string {
     if (id === null || id === undefined || id === '') return '';
@@ -2709,7 +2709,7 @@ export class KpiManageComponent implements OnInit {
   khdOrgText(item: any, part: KhdOrgPart): string { return this.getKhdData(item)?.['khd_' + part + '_name'] || '-'; }
   get khdDeptDiffItems(): any[] { return this.indicators.filter(i => this.khdOrgMatch(i, 'dept') === false); }
   get khdMainDiffItems(): any[] { return this.indicators.filter(i => this.khdOrgMatch(i, 'main') === false); }
-  /** ค่าหน่วยงาน/หมวดหมู่หลักใน KHD ที่ยังจับคู่กับระบบไม่ได้ (เทียบไม่ได้จนกว่าจะตั้งที่ "จับคู่ข้อมูล KHD") */
+  /** ค่ากลุ่มงาน/หมวดหมู่หลักใน KHD ที่ยังจับคู่กับระบบไม่ได้ (เทียบไม่ได้จนกว่าจะตั้งที่ "จับคู่ข้อมูล KHD") */
   /** รหัสอ้างอิงตรงแต่ table_process ต่างกัน (ใช้ table_process ของ KHD ได้ทุกคู่ — ใช้ตารางร่วมกันได้) */
   khdTpKind(item: any): KhdTpKind | null { return khdTpKind(this.getKhdData(item)); }
   khdTpDetail(item: any): string { return khdTpDetail(this.getKhdData(item)); }
@@ -2730,7 +2730,7 @@ export class KpiManageComponent implements OnInit {
   }
 
   applyKhdOrg(items: any[], part: KhdOrgPart) {
-    const label = part === 'dept' ? 'หน่วยงาน' : 'หมวดหมู่หลัก';
+    const label = part === 'dept' ? 'กลุ่มงาน' : 'หมวดหมู่หลัก';
     items = items.filter(i => this.khdOrgMatch(i, part) === false);
     if (!items.length) { Swal.fire('แจ้งเตือน', 'ไม่มีตัวชี้วัดที่' + label + 'ต่างจาก KHD', 'info'); return; }
     const esc = (t: any) => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' } as any)[c]);
@@ -2739,7 +2739,7 @@ export class KpiManageComponent implements OnInit {
       `<td class="px-1">→</td><td class="font-bold text-violet-700">${esc(this.khdOrgText(i, part))}</td></tr>`).join('');
     const more = items.length > 10 ? `<p class="text-xs text-gray-500 mt-1">... และอีก ${items.length - 10} ตัว</p>` : '';
     const note = part === 'dept'
-      ? 'หน่วยงานมีผลกับสิทธิ์การเห็นตัวชี้วัดของผู้ใช้ระดับหน่วยงาน ระบบคำนวณตารางสรุปใหม่ให้อัตโนมัติ — ผลงานที่บันทึกแล้วไม่เปลี่ยน'
+      ? 'กลุ่มงานมีผลกับสิทธิ์การเห็นตัวชี้วัดของผู้ใช้ระดับกลุ่มงาน ระบบคำนวณตารางสรุปใหม่ให้อัตโนมัติ — ผลงานที่บันทึกแล้วไม่เปลี่ยน'
       : 'ยุทธศาสตร์ของตัวชี้วัดเปลี่ยนตามหมวดหมู่หลักใหม่ ระบบคำนวณตารางสรุปใหม่ให้อัตโนมัติ — ผลงานที่บันทึกแล้วไม่เปลี่ยน';
     Swal.fire({
       title: 'ใช้' + label + 'ตาม KHD',

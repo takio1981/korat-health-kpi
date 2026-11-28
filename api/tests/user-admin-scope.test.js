@@ -1,6 +1,6 @@
 /**
  * ขอบเขตสิทธิ์ของผู้ดูแลเมื่อเพิ่ม/แก้ไขผู้ใช้ (พบจากการทดสอบทั้งระบบ 25 ต.ค. 2569)
- * - admin_ssj แก้ role ผู้ใช้ในหน่วยงานตัวเองเป็น super_admin ได้ทันที (ไม่ผ่านการอนุมัติ) — ยกระดับสิทธิ์
+ * - admin_ssj แก้ role ผู้ใช้ในกลุ่มงานตัวเองเป็น super_admin ได้ทันที (ไม่ผ่านการอนุมัติ) — ยกระดับสิทธิ์
  * - admin_hos/admin_sso ย้าย hospcode ผู้ใช้ไปหน่วยบริการอื่น / admin_cup ย้ายไปอำเภออื่นได้ (ตรวจเฉพาะ hospcode เดิม)
  * - ส่งข้อมูลไม่ครบ → 500 / แก้ไข-ลบ-รีเซ็ตรหัสผ่านผู้ใช้ที่ไม่มีอยู่ → "สำเร็จ" + บันทึก log ปลอม
  */
@@ -64,7 +64,7 @@ describe('PUT /users/:id — ขอบเขตของผู้ดูแล', 
         expect((await row()).role).toBe('admin_hos');
     });
 
-    test('🛡️ admin_ssj ย้ายผู้ใช้ไปหน่วยงานอื่น → ใช้หน่วยงานของ admin_ssj (ล็อคหน่วยงานเหมือนหน้าจอ)', async () => {
+    test('🛡️ admin_ssj ย้ายผู้ใช้ไปกลุ่มงานอื่น → ใช้กลุ่มงานของ admin_ssj (ล็อคกลุ่มงานเหมือนหน้าจอ)', async () => {
         const r = await put(T.ssj, target.id, { ...base(), dept_id: deptB });
         expect(r.status).toBe(200);
         expect(Number((await row()).dept_id)).toBe(Number(deptA));

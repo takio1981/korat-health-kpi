@@ -204,8 +204,8 @@ apiRouter.post('/indicators/bulk-import', authenticateToken, requireAction('kpi-
 });
 
 // แนะนำรหัสสำหรับตัวชี้วัดใหม่ — ผู้ใช้ไม่ต้องคิดรหัสเอง (11 ต.ค. 2569)
-//   ชื่อตาราง (table_process) = kpi_<หน่วยงาน>_<ลำดับ 3 หลัก> เช่น kpi_dh_001 — <หน่วยงาน> = รหัสย่อหน่วยงานถ้าเป็น a-z/0-9 (dh, ncd, ems)
-//   ไม่งั้นใช้ d<id 2 หลัก> (เช่น d07) / ไม่เลือกหน่วยงาน = gen — ลำดับ = เลขถัดจากค่าสูงสุดที่มีอยู่ของ prefix เดียวกัน (ไม่ซ้ำ)
+//   ชื่อตาราง (table_process) = kpi_<กลุ่มงาน>_<ลำดับ 3 หลัก> เช่น kpi_dh_001 — <กลุ่มงาน> = รหัสย่อกลุ่มงานถ้าเป็น a-z/0-9 (dh, ncd, ems)
+//   ไม่งั้นใช้ d<id 2 หลัก> (เช่น d07) / ไม่เลือกกลุ่มงาน = gen — ลำดับ = เลขถัดจากค่าสูงสุดที่มีอยู่ของ prefix เดียวกัน (ไม่ซ้ำ)
 //   รหัสตัวชี้วัด (kpi_indicators_code) = ชื่อตารางแบบใช้ขีดกลาง (ตามรูปแบบข้อมูลเดิม เช่น excellence-indicator-1-1)
 //   รหัสอ้างอิง (kpi_indicators_id) ไม่สร้างให้ — ในข้อมูลจริงคือเลขรายงานของ KHD ใช้เฉพาะตัวชี้วัดที่มาจาก KHD
 async function suggestIndicatorCodes(conn, deptId) {
@@ -229,7 +229,7 @@ async function suggestIndicatorCodes(conn, deptId) {
 }
 
 // GET /indicators/readiness?year_bh= — ความพร้อมของตัวชี้วัดที่เปิดใช้งาน (22 พ.ย. 2569 — ระยะ 5 lean งานผู้ดูแล)
-// ตรวจแบบกฎ อ่านอย่างเดียว (services/indicator-readiness.js) — ผู้ที่เข้าหน้าจัดการตัวชี้วัดได้, ROLE_SCOPE_OWN_DEPT เห็นเฉพาะหน่วยงานตัวเอง
+// ตรวจแบบกฎ อ่านอย่างเดียว (services/indicator-readiness.js) — ผู้ที่เข้าหน้าจัดการตัวชี้วัดได้, ROLE_SCOPE_OWN_DEPT เห็นเฉพาะกลุ่มงานตัวเอง
 apiRouter.get('/indicators/readiness', authenticateToken, async (req, res) => {
     const user = req.user;
     if (!hasPageAccess(user.role, 'kpi-manage')) return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์เข้าถึงหน้าจัดการตัวชี้วัด' });
@@ -861,10 +861,10 @@ apiRouter.post('/hierarchy-results/save', authenticateToken, async (req, res) =>
         if ((await rolledSubIds(conn, subIds)).size > 0) throw Object.assign(new Error(ROLLED_SUB_MESSAGE), { status: 400 });
 
         const indicatorIds = [...new Set([...subRows.map(r => r.indicator_id), ...actRows.map(r => r.indicator_id)])];
-        // user ทั่วไปบันทึกได้เฉพาะตัวชี้วัดของหน่วยงานตัวเอง (เหมือน /update-kpi)
+        // user ทั่วไปบันทึกได้เฉพาะตัวชี้วัดของกลุ่มงานตัวเอง (เหมือน /update-kpi)
         if (!ROLE_ADMIN_ALL.includes(user.role)) {
             const [allowed] = await conn.query('SELECT id FROM kpi_indicators WHERE id IN (?) AND dept_id IN (?)', [indicatorIds, deptIdsOf(user).length ? deptIdsOf(user) : [-1]]);
-            if (allowed.length !== indicatorIds.length) throw Object.assign(new Error('ไม่มีสิทธิ์แก้ไขข้อมูลหน่วยงานอื่น'), { status: 403 });
+            if (allowed.length !== indicatorIds.length) throw Object.assign(new Error('ไม่มีสิทธิ์แก้ไขข้อมูลกลุ่มงานอื่น'), { status: 403 });
         }
         // ล็อคจากการอนุมัติ "รายเดือน" (22 พ.ย. 2569) — เดือนที่ตัวชี้วัดหลัก/ข้อย่อย/กิจกรรมอนุมัติแล้ว แก้ไม่ได้ เดือนอื่นบันทึกได้ (super_admin ข้ามได้)
         // (เดิม: มีเดือนใดล็อค = แก้ไม่ได้ทั้งปี)

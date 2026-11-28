@@ -2,7 +2,7 @@
  * Integration tests: GET /kpi-template/added — หน่วยบริการที่เพิ่มตัวชี้วัดแล้วในปีงบ (15 พ.ย. 2569) — database ทดสอบ
  *   ใช้ในหน้าต่าง "เพิ่มตัวชี้วัดให้หน่วยบริการ": ป้าย "เพิ่มแล้ว N แห่ง" + ป้ายสรุป "มีอยู่แล้ว"
  *   - คืน { [indicator_id]: hospcode[] } ไม่ซ้ำ เฉพาะปีงบที่ขอ
- *   - ขอบเขต: super_admin ทุกแห่ง / admin_cup อำเภอตัวเอง / user_hos หน่วยบริการตัวเอง / admin_ssj เฉพาะตัวชี้วัดหน่วยงานตัวเอง
+ *   - ขอบเขต: super_admin ทุกแห่ง / admin_cup อำเภอตัวเอง / user_hos หน่วยบริการตัวเอง / admin_ssj เฉพาะตัวชี้วัดกลุ่มงานตัวเอง
  *   - ไม่ส่ง/ส่งปีงบผิดรูปแบบ = 400
  */
 require('./setup');
@@ -70,7 +70,7 @@ test('ขอบเขต: admin_cup = อำเภอตัวเอง / user_h
     expect(hcsOf(await get(tokens.hos, '?year_bh=2570'))).toEqual([h2]);
 });
 
-test('admin_ssj: เฉพาะตัวชี้วัดของหน่วยงานตัวเอง', async () => {
+test('admin_ssj: เฉพาะตัวชี้วัดของกลุ่มงานตัวเอง', async () => {
     expect(hcsOf(await get(tokens.ssj, '?year_bh=2570'))).toEqual([h1, h2, h3].sort());
     const other = await get(tokens.ssj2, '?year_bh=2570');
     expect(other.status).toBe(200);

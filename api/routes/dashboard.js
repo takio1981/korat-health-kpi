@@ -19,7 +19,7 @@ apiRouter.get('/kpi-template', authenticateToken, async (req, res) => {
         const includeInactive = String(req.query.include_inactive || '') === '1' && hasPageAccess(user.role, 'kpi-manage');
         let deptFilter = '';
         const params = [];
-        // กรองตาม dept เฉพาะ role ที่ scope = หน่วยงานตัวเอง (ROLE_SCOPE_OWN_DEPT) — admin_cup/hos/sso เห็นทุกหน่วยงาน
+        // กรองตาม dept เฉพาะ role ที่ scope = กลุ่มงานตัวเอง (ROLE_SCOPE_OWN_DEPT) — admin_cup/hos/sso เห็นทุกกลุ่มงาน
         // แม้บัญชีจะมี dept_id ติดอยู่ก็ตาม (ตาราง Role System ใน CLAUDE.md)
         if (ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null) {
             deptFilter = 'AND i.dept_id IN (?)';
@@ -67,7 +67,7 @@ apiRouter.get('/kpi-template', authenticateToken, async (req, res) => {
 
 // หน่วยบริการที่เพิ่มตัวชี้วัดแล้วในปีงบ (15 พ.ย. 2569) — หน้าต่าง "เพิ่มตัวชี้วัดให้หน่วยบริการ": ป้าย "เพิ่มแล้ว N แห่ง" + ตัวกรอง "มีอยู่แล้ว"
 // "เพิ่มแล้ว" = มีแถวใน kpi_results ของคู่ ตัวชี้วัด × หน่วยบริการ × ปีงบ (กติกาเดียวกับการตรวจ "มีอยู่แล้ว" ของ /update-kpi โหมด setup_insert_new)
-// ขอบเขตเดียวกับ GET /hospitals (หน่วยบริการตัวเอง / อำเภอตัวเอง / ทั้งหมด) + ROLE_SCOPE_OWN_DEPT = เฉพาะตัวชี้วัดของหน่วยงานตัวเอง
+// ขอบเขตเดียวกับ GET /hospitals (หน่วยบริการตัวเอง / อำเภอตัวเอง / ทั้งหมด) + ROLE_SCOPE_OWN_DEPT = เฉพาะตัวชี้วัดของกลุ่มงานตัวเอง
 apiRouter.get('/kpi-template/added', authenticateToken, async (req, res) => {
     try {
         const user = req.user;

@@ -64,7 +64,7 @@ async function runKpiAuditDigest(manual = false) {
     html += `<p><b>ผู้ใช้งานที่บันทึก:</b> ${totalUsers} คน · <b>รายการบันทึกทั้งหมด:</b> ${totalSaves.toLocaleString()} รายการ</p>`;
     html += `<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:13px">`;
     html += `<thead style="background:#10b981;color:#fff"><tr>
-        <th>#</th><th>ผู้ใช้</th><th>หน่วยงาน</th><th>หน่วยบริการ</th>
+        <th>#</th><th>ผู้ใช้</th><th>กลุ่มงาน</th><th>หน่วยบริการ</th>
         <th>KPI หลัก</th><th>Sub</th><th>Dynamic Form</th><th>รวม</th>
     </tr></thead><tbody>`;
     usersList.forEach((u, i) => {

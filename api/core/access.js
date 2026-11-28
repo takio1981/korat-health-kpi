@@ -157,7 +157,7 @@ const PAGE_ACCESS_RULES = [
     { method: 'PUT',  re: /^\/users\/[^/]+\/reset-password$/, pageKey: 'users' },
 
     // kpi-manage — เฉพาะ bulk-add-kpi (isAdmin เดิม) เท่านั้น ตรงกับที่ admin_ssj ใช้ได้จริงวันนี้
-    // (แก้ไข/ลบตัวชี้วัด/หมวดหมู่/หน่วยงาน/หน่วยบริการ/Form Builder ทั้งหมด — kpi-manage.html ซ่อนปุ่มจาก
+    // (แก้ไข/ลบตัวชี้วัด/หมวดหมู่/กลุ่มงาน/หน่วยบริการ/Form Builder ทั้งหมด — kpi-manage.html ซ่อนปุ่มจาก
     // admin_ssj ด้วย *ngIf="isSuperAdmin" อยู่แล้ว จึงคงเป็น isSuperAdmin ตรงๆ ไม่ผ่านระบบนี้)
     { method: 'GET',  path: '/bulk-add-kpi/preview', pageKey: 'kpi-manage' },
     { method: 'POST', path: '/bulk-add-kpi', pageKey: 'kpi-manage' },
@@ -284,7 +284,7 @@ const ROLE_ADMIN_CENTRAL = ['admin_ssj', 'super_admin'];
 const ROLE_ADMIN_LOCAL = ['admin_hos', 'admin_sso', 'admin_cup']; // admin ระดับพื้นที่
 const ROLE_SCOPE_DISTRICT = ['user_cup', 'admin_cup']; // เห็นทุก hospcode ในอำเภอ
 const ROLE_SCOPE_HOSPCODE = ['user', 'user_hos', 'user_sso', 'admin_hos', 'admin_sso']; // เห็นเฉพาะ hospcode ตัวเอง (รวม 'user' เดิม)
-// เห็นทุกหน่วยบริการ ทุกอำเภอ แต่เฉพาะหน่วยงาน (dept) ตัวเอง — user_ssj ย้ายมาจาก ROLE_SCOPE_HOSPCODE เมื่อ 6 พ.ย. 2569 (ผู้ใช้สั่ง)
+// เห็นทุกหน่วยบริการ ทุกอำเภอ แต่เฉพาะกลุ่มงาน (dept) ตัวเอง — user_ssj ย้ายมาจาก ROLE_SCOPE_HOSPCODE เมื่อ 6 พ.ย. 2569 (ผู้ใช้สั่ง)
 const ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT = ['admin_ssj', 'user_ssj'];
 // เห็นเฉพาะ dept ตัวเอง (ตรงข้ามกับ admin_cup/admin_hos/admin_sso ที่เห็น "ทุก dept" แม้จะมี dept_id ติดตัวอยู่ก็ตาม)
 // ใช้แยกจาก ROLE_SCOPE_HOSPCODE เพราะ admin_hos/admin_sso อยู่ใน HOSPCODE (ล็อค hospcode) แต่ไม่ล็อค dept
@@ -310,9 +310,9 @@ function foreignWriteHospcodes(user, hospcodes) {
 }
 
 // Helper: ดึง distid ของ hospcode — ใช้ h.distid (pre-computed) เสมอ ไม่ CONCAT(provcode,distcode) เอง (ดู CLAUDE.md เรื่อง chospital)
-// ตัวชี้วัดที่อยู่นอกหน่วยงานของผู้ใช้ (role ใน ROLE_SCOPE_OWN_DEPT ที่มี dept_id) — คืนรายการ id ที่ไม่มีสิทธิ์ ([] = ผ่านทั้งหมด)
+// ตัวชี้วัดที่อยู่นอกกลุ่มงานของผู้ใช้ (role ใน ROLE_SCOPE_OWN_DEPT ที่มี dept_id) — คืนรายการ id ที่ไม่มีสิทธิ์ ([] = ผ่านทั้งหมด)
 // ใช้กับการอนุมัติ/ส่งคืน/รับ-ปฏิเสธอุทธรณ์ (isAdmin = admin_ssj + super_admin) — เดิมตรวจที่หน้าจออย่างเดียว admin_ssj
-// เรียก API อนุมัติตัวชี้วัดของหน่วยงานอื่นได้ (พบจากการทดสอบทั้งระบบ 25 ต.ค. 2569) | ตัวชี้วัดที่ไม่มีอยู่ = นับว่านอกขอบเขต
+// เรียก API อนุมัติตัวชี้วัดของกลุ่มงานอื่นได้ (พบจากการทดสอบทั้งระบบ 25 ต.ค. 2569) | ตัวชี้วัดที่ไม่มีอยู่ = นับว่านอกขอบเขต
 async function indicatorsOutsideOwnDept(user, indicatorIds) {
     if (!user || !ROLE_SCOPE_OWN_DEPT.includes(user.role) || user.deptId == null) return [];
     const ids = [...new Set((indicatorIds || []).map(Number).filter(Boolean))];
@@ -322,7 +322,7 @@ async function indicatorsOutsideOwnDept(user, indicatorIds) {
     const ok = new Set(rows.filter(r => mine.has(String(r.dept_id))).map(r => Number(r.id)));
     return ids.filter(id => !ok.has(id));
 }
-const OUTSIDE_DEPT_MESSAGE = 'ไม่มีสิทธิ์ดำเนินการกับตัวชี้วัดของหน่วยงานอื่น';
+const OUTSIDE_DEPT_MESSAGE = 'ไม่มีสิทธิ์ดำเนินการกับตัวชี้วัดของกลุ่มงานอื่น';
 
 const getDistrictId = async (hospcode) => {
     if (!hospcode) return null;

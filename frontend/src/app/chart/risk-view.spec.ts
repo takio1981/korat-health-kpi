@@ -17,7 +17,7 @@ const response = (extra: any = {}) => ({
 
 describe('risk-view helpers', () => {
   const none = { status: '', yut: '', dept: '', zone: '', district: '', search: '' };
-  it('filterRiskItems กรองตามระดับ/ยุทธศาสตร์ (ไม่ระบุ = 0)/หน่วยงาน/โซน/อำเภอ/คำค้น', () => {
+  it('filterRiskItems กรองตามระดับ/ยุทธศาสตร์ (ไม่ระบุ = 0)/กลุ่มงาน/โซน/อำเภอ/คำค้น', () => {
     expect(filterRiskItems(items, { ...none, status: 'high' }).map(i => i.indicator_id)).toEqual([1]);
     expect(filterRiskItems(items, { ...none, yut: '0' }).map(i => i.indicator_id)).toEqual([2]);
     expect(filterRiskItems(items, { ...none, zone: '1', district: '3001' }).map(i => i.indicator_id)).toEqual([1, 3]);

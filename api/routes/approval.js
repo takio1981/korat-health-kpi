@@ -1,4 +1,4 @@
-// เส้นทาง: อนุมัติ/ปลดล็อค/อุทธรณ์/ขอแก้ไขเป้าหมาย/ปิดการคีย์ + แจ้งเตือน (+ เพิ่มหน่วยงาน POST /departments ที่อยู่ช่วงเดียวกันในไฟล์เดิม)
+// เส้นทาง: อนุมัติ/ปลดล็อค/อุทธรณ์/ขอแก้ไขเป้าหมาย/ปิดการคีย์ + แจ้งเตือน (+ เพิ่มกลุ่มงาน POST /departments ที่อยู่ช่วงเดียวกันในไฟล์เดิม)
 // ย้ายจาก server.js (ระยะ 4 ของการแยกโมดูล — 25 ต.ค. 2569) แบบคำต่อคำ: ห้ามแก้ตรรกะในการย้าย
 // ลงทะเบียนเส้นทางกับ apiRouter ตอนถูก require — server.js require ไฟล์นี้ที่ตำแหน่งเดิมของเส้นทางชุดนี้ (ลำดับเส้นทางสำคัญ)
 
@@ -21,7 +21,7 @@ apiRouter.post('/approve-kpi', authenticateToken, isAdmin, async (req, res) => {
     if (items.length === 0 || !items[0].indicator_id) {
         return res.status(400).json({ success: false, message: 'No approval data' });
     }
-    // admin_ssj อนุมัติได้เฉพาะตัวชี้วัดของหน่วยงานตัวเอง (เดิมตรวจที่หน้าจออย่างเดียว)
+    // admin_ssj อนุมัติได้เฉพาะตัวชี้วัดของกลุ่มงานตัวเอง (เดิมตรวจที่หน้าจออย่างเดียว)
     if ((await indicatorsOutsideOwnDept(user, items.map(i => i.indicator_id))).length) {
         return res.status(403).json({ success: false, message: OUTSIDE_DEPT_MESSAGE });
     }
@@ -384,7 +384,7 @@ apiRouter.post('/appeal-kpi', authenticateToken, async (req, res) => {
         const indName = indRows[0]?.kpi_indicators_name || `ID ${indicator_id}`;
         const deptId = indRows[0]?.dept_id;
 
-        // แจ้งเตือน admin_ssj ในหน่วยงานเดียวกัน + super_admin ทั้งหมด
+        // แจ้งเตือน admin_ssj ในกลุ่มงานเดียวกัน + super_admin ทั้งหมด
         const [admins] = await db.query(
             "SELECT id, role, dept_id FROM users WHERE (role = 'super_admin') OR (role = 'admin_ssj' AND dept_id = ?)",
             [deptId]
@@ -412,7 +412,7 @@ apiRouter.post('/appeal-kpi', authenticateToken, async (req, res) => {
 apiRouter.post('/appeal-approve', authenticateToken, isAdmin, async (req, res) => {
     const { indicator_id, year_bh, hospcode, comment } = req.body || {};
     const user = req.user;
-    // ข้อมูลไม่ครบ → 400 (เดิม 500 "Column 'indicator_id' cannot be null") + ขอบเขตหน่วยงานของ admin_ssj
+    // ข้อมูลไม่ครบ → 400 (เดิม 500 "Column 'indicator_id' cannot be null") + ขอบเขตกลุ่มงานของ admin_ssj
     if (!indicator_id || !year_bh || !hospcode) return res.status(400).json({ success: false, message: 'ข้อมูลไม่ครบ (ตัวชี้วัด/ปีงบประมาณ/หน่วยบริการ)' });
     if ((await indicatorsOutsideOwnDept(user, [indicator_id])).length) return res.status(403).json({ success: false, message: OUTSIDE_DEPT_MESSAGE });
 
@@ -517,7 +517,7 @@ apiRouter.post('/appeal-edited', authenticateToken, async (req, res) => {
         const [hosRows] = await db.query('SELECT hosname FROM chospital WHERE hoscode = ?', [hospcode]);
         const hosName = hosRows[0]?.hosname || hospcode;
 
-        // แจ้ง admin_ssj ในหน่วยงานเดียวกัน + super_admin ทั้งหมด
+        // แจ้ง admin_ssj ในกลุ่มงานเดียวกัน + super_admin ทั้งหมด
         const [admins] = await db.query(
             "SELECT id FROM users WHERE (role = 'super_admin') OR (role = 'admin_ssj' AND dept_id = ?)",
             [deptId]
@@ -741,7 +741,7 @@ apiRouter.get('/notifications/pending-kpi', authenticateToken, isAdmin, async (r
             AND (r.status = 'Appeal' OR (r.actual_value IS NOT NULL AND TRIM(r.actual_value) <> ''))`;
         let params = [currentFY];
 
-        // ขอบเขตตามบทบาท (22 พ.ย. 2569 — เดิมกรองหน่วยงานกับทุก role ที่ไม่ใช่ super_admin: admin_cup/admin_hos เห็นแค่หน่วยงานที่บัญชีบังเอิญมี)
+        // ขอบเขตตามบทบาท (22 พ.ย. 2569 — เดิมกรองกลุ่มงานกับทุก role ที่ไม่ใช่ super_admin: admin_cup/admin_hos เห็นแค่กลุ่มงานที่บัญชีบังเอิญมี)
         if (ROLE_SCOPE_OWN_DEPT.includes(user.role) && user.deptId != null) {
             whereClause += ' AND i.dept_id IN (?)';
             params.push(deptIdsOf(user));
@@ -788,7 +788,7 @@ apiRouter.get('/notifications/pending-kpi', authenticateToken, isAdmin, async (r
 
 apiRouter.post('/departments', authenticateToken, requireAction('kpi-manage', 'add'), async (req, res) => {
     const { dept_code, dept_name, description, sort_order } = req.body;
-    if (!dept_name) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อหน่วยงาน' });
+    if (!dept_name) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อกลุ่มงาน' });
     try {
         await db.query(
             'INSERT INTO departments (dept_code, dept_name, description, sort_order) VALUES (?, ?, ?, ?)',
@@ -802,7 +802,7 @@ apiRouter.post('/departments', authenticateToken, requireAction('kpi-manage', 'a
 
 apiRouter.put('/departments/:id', authenticateToken, requireAction('kpi-manage', 'edit'), async (req, res) => {
     const { dept_code, dept_name, description, sort_order, is_active } = req.body;
-    if (!dept_name) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อหน่วยงาน' });
+    if (!dept_name) return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อกลุ่มงาน' });
     try {
         await db.query(
             'UPDATE departments SET dept_code=?, dept_name=?, description=?, sort_order=?, is_active=? WHERE id=?',

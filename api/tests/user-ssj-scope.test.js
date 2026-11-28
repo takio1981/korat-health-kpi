@@ -1,6 +1,6 @@
 /**
  * user_ssj เห็นทุกหน่วยบริการ ทุกอำเภอ เฉพาะกลุ่มงานตัวเอง (6 พ.ย. 2569 — เดิมเห็นเฉพาะหน่วยบริการตัวเอง)
- *   - /hospitals, /kpi-results, /report/by-hospital, /dashboard-stats: ทุกหน่วยบริการ แต่เฉพาะตัวชี้วัดของหน่วยงานตัวเอง
+ *   - /hospitals, /kpi-results, /report/by-hospital, /dashboard-stats: ทุกหน่วยบริการ แต่เฉพาะตัวชี้วัดของกลุ่มงานตัวเอง
  *   - บันทึก (update-kpi, sub-results/upsert, dynamic-data): ผู้ใช้ที่ไม่ใช่ผู้ดูแลบันทึกได้เฉพาะหน่วยบริการตัวเอง → 403 FOREIGN_HOSPCODE
  *     (เดิม /update-kpi แทน hospcode ของแถวด้วยของผู้ใช้เงียบๆ — ค่าที่แก้ในแถวหน่วยบริการอื่นไปลงหน่วยบริการตัวเอง)
  */
@@ -15,7 +15,7 @@ const api = (p) => '/khupskpi/api' + p;
 const as = (r, t) => r.set('Authorization', `Bearer ${t}`);
 
 describe('core/access.js', () => {
-    test('user_ssj: ไม่อยู่ใน ROLE_SCOPE_HOSPCODE แต่ยังจำกัดหน่วยงานตัวเอง', () => {
+    test('user_ssj: ไม่อยู่ใน ROLE_SCOPE_HOSPCODE แต่ยังจำกัดกลุ่มงานตัวเอง', () => {
         expect(ROLE_SCOPE_HOSPCODE).not.toContain('user_ssj');
         expect(ROLE_SCOPE_OWN_DEPT).toContain('user_ssj');
         expect(ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT).toEqual(['admin_ssj', 'user_ssj']);
@@ -84,14 +84,14 @@ describe('API ขอบเขต user_ssj', () => {
         expect(d.body.data.map(x => x.distid)).toContain(distB);
     });
 
-    test('GET /kpi-results: ทุกหน่วยบริการ แต่เฉพาะตัวชี้วัดของหน่วยงานตัวเอง', async () => {
+    test('GET /kpi-results: ทุกหน่วยบริการ แต่เฉพาะตัวชี้วัดของกลุ่มงานตัวเอง', async () => {
         const r = await as(request(app).get(api(`/kpi-results?year=${YEAR}`)), ssjToken);
         expect(r.status).toBe(200);
         const mine = r.body.data.filter(x => [indA, indB].includes(Number(x.indicator_id)));
         expect(mine.map(x => `${x.indicator_id}|${x.hospcode}`).sort()).toEqual([`${indA}|${hosA}`, `${indA}|${hosB}`].sort());
     });
 
-    test('GET /report/by-hospital: เห็นหน่วยบริการอื่นของหน่วยงานตัวเอง', async () => {
+    test('GET /report/by-hospital: เห็นหน่วยบริการอื่นของกลุ่มงานตัวเอง', async () => {
         const r = await as(request(app).get(api(`/report/by-hospital?year_bh=${YEAR}`)), ssjToken);
         expect(r.status).toBe(200);
         const codes = (r.body.data || []).map(x => x.hospcode);

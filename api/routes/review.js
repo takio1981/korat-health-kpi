@@ -20,7 +20,7 @@ apiRouter.post('/reject-kpi', authenticateToken, isAdmin, async (req, res) => {
     if (items.length === 0 || !items[0].indicator_id) {
         return res.status(400).json({ success: false, message: 'No rejection data' });
     }
-    // ไม่มีเหตุผล → 400 ก่อนเริ่ม transaction (เดิม throw ในลูป → 500) + admin_ssj ส่งคืนได้เฉพาะหน่วยงานตัวเอง
+    // ไม่มีเหตุผล → 400 ก่อนเริ่ม transaction (เดิม throw ในลูป → 500) + admin_ssj ส่งคืนได้เฉพาะกลุ่มงานตัวเอง
     if (items.some(i => !i || !i.comment || !String(i.comment).trim())) {
         return res.status(400).json({ success: false, message: 'กรุณาระบุเหตุผลการส่งคืนแก้ไข' });
     }
@@ -300,7 +300,7 @@ apiRouter.get('/kpi-replies', authenticateToken, async (req, res) => {
         let params = [];
 
         // super_admin: เห็นทั้งหมด
-        // admin: เฉพาะหน่วยงานตัวเอง (ทุก hospcode)
+        // admin: เฉพาะกลุ่มงานตัวเอง (ทุก hospcode)
         // user: เฉพาะ hospcode + dept ของตัวเอง
         if (user.role === 'super_admin') {
             // ไม่มี filter เพิ่ม

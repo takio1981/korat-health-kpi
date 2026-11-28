@@ -242,7 +242,7 @@ apiRouter.post('/login', loginIpLimiter, loginLimiter, async (req, res) => {
 const _khdJtiUsed = new Map(); // jti → เวลาที่ลบออกได้ (ms)
 setInterval(() => { const now = Date.now(); for (const [k, exp] of _khdJtiUsed) if (exp < now) _khdJtiUsed.delete(k); }, 60000).unref();
 
-// เฉพาะ loginIpLimiter: loginLimiter แยกตามชื่อผู้ใช้ใน body (ไม่มีในคำขอนี้ = 'anonymous') → ลิงก์เสีย 10 ครั้งจาก NAT เดียวจะบล็อกทั้งหน่วยงาน
+// เฉพาะ loginIpLimiter: loginLimiter แยกตามชื่อผู้ใช้ใน body (ไม่มีในคำขอนี้ = 'anonymous') → ลิงก์เสีย 10 ครั้งจาก NAT เดียวจะบล็อกทั้งกลุ่มงาน
 // token ลงนามด้วยรหัสลับ เดาไม่ได้ จึงไม่ต้องจำกัดรายชื่อผู้ใช้
 apiRouter.post('/auth/khd/login', loginIpLimiter, async (req, res) => {
     const { token, force_login } = req.body || {};

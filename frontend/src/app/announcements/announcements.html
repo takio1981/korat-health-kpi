@@ -233,8 +233,8 @@
                  [ngClass]="emailScope === 'dept' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'">
             <input type="radio" name="scope" [(ngModel)]="emailScope" value="dept" class="text-blue-600">
             <div class="flex-1">
-              <p class="font-bold text-sm"><i class="fas fa-building text-green-500 mr-1"></i>หน่วยงาน</p>
-              <p class="text-[10px] text-gray-500">เลือกหน่วยงาน</p>
+              <p class="font-bold text-sm"><i class="fas fa-building text-green-500 mr-1"></i>กลุ่มงาน</p>
+              <p class="text-[10px] text-gray-500">เลือกกลุ่มงาน</p>
             </div>
           </label>
           <label class="flex items-center gap-2 p-3 border-2 rounded-xl cursor-pointer transition-all"
@@ -250,7 +250,7 @@
 
       <!-- Dept selector -->
       <div *ngIf="emailScope === 'dept'" class="border rounded-xl p-3 max-h-[250px] overflow-y-auto">
-        <p class="text-xs font-bold text-gray-600 mb-2">เลือกหน่วยงาน ({{ emailDeptIds.size }} / {{ allDepartments.length }})</p>
+        <p class="text-xs font-bold text-gray-600 mb-2">เลือกกลุ่มงาน ({{ emailDeptIds.size }} / {{ allDepartments.length }})</p>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <label *ngFor="let d of allDepartments" class="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer text-xs">
             <input type="checkbox" [checked]="emailDeptIds.has(d.id)" (change)="toggleDept(d.id)" class="rounded text-green-600">
@@ -276,7 +276,7 @@
                 <th class="px-2 py-2 w-10"></th>
                 <th class="px-2 py-2 text-left">Username</th>
                 <th class="px-2 py-2 text-left">ชื่อ-นามสกุล</th>
-                <th class="px-2 py-2 text-left">หน่วยงาน</th>
+                <th class="px-2 py-2 text-left">กลุ่มงาน</th>
                 <th class="px-2 py-2 text-left">Email</th>
               </tr>
             </thead>

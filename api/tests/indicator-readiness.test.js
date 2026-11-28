@@ -1,7 +1,7 @@
 /**
  * ความพร้อมของตัวชี้วัด (ระยะ 5 ของแผน lean งานผู้ดูแล — 22 พ.ย. 2569)
  *   - evaluateReadiness (ฟังก์ชันล้วน): block/warn/info ตามกฎ + ช่องที่ต้องแก้
- *   - GET /indicators/readiness: ตามขอบเขต (admin_ssj เฉพาะหน่วยงานตัวเอง), ผู้ไม่มีสิทธิ์หน้าจัดการตัวชี้วัด = 403, นับ "ยังไม่ได้เพิ่มให้หน่วยบริการ" ตามปีงบ
+ *   - GET /indicators/readiness: ตามขอบเขต (admin_ssj เฉพาะกลุ่มงานตัวเอง), ผู้ไม่มีสิทธิ์หน้าจัดการตัวชี้วัด = 403, นับ "ยังไม่ได้เพิ่มให้หน่วยบริการ" ตามปีงบ
  *   - /bulk-add-kpi ข้ามตัวชี้วัดที่ยังไม่ตั้งประเภทหน่วยบริการ (เดิม = 4 ประเภทหลัก) และแจ้งจำนวน skipped_unset
  */
 require('./setup');
@@ -34,7 +34,7 @@ describe('evaluateReadiness', () => {
         expect(codes({ result_formula: 'SUM(ALL)' })).toEqual([]);
         expect(evaluateReadiness({ ...base, evaluation_mode: null }).level).toBe('block');
     });
-    test('warn/info: เป้าหมาย/เกณฑ์/หน่วยงาน/หมวดหมู่/ยังไม่เพิ่มให้หน่วยบริการ/ปีงบไม่ตรง/ปิดส่งออก/ไม่เชื่อม KHD', () => {
+    test('warn/info: เป้าหมาย/เกณฑ์/กลุ่มงาน/หมวดหมู่/ยังไม่เพิ่มให้หน่วยบริการ/ปีงบไม่ตรง/ปิดส่งออก/ไม่เชื่อม KHD', () => {
         expect(codes({ target_percentage: '', criterion: null, dept_id: null, main_indicator_id: null })).toEqual(['no_target', 'no_criterion', 'no_dept', 'no_main']);
         expect(codes({ target_percentage: '', target_monthly: 'latest' })).toEqual([]); // เป้าหมายรายเดือน
         expect(codes({}, { assigned: 0 })).toEqual(['not_assigned']);
@@ -55,7 +55,7 @@ describe('GET /indicators/readiness + /bulk-add-kpi', () => {
         db = require('../db');
         await migrationsReady;
         await cleanupTestUsers(db, 'test\\_rdy\\_');
-        // หน่วยงานทดสอบแยก — /bulk-add-kpi เพิ่มให้ทุกตัวชี้วัดของหน่วยงานนั้น (ไม่ให้แตะตัวชี้วัดอื่นในฐานทดสอบ)
+        // กลุ่มงานทดสอบแยก — /bulk-add-kpi เพิ่มให้ทุกตัวชี้วัดของกลุ่มงานนั้น (ไม่ให้แตะตัวชี้วัดอื่นในฐานทดสอบ)
         deptA = (await db.query("INSERT INTO departments (dept_name, dept_code) VALUES ('test_rdy_dept', 'trdy')"))[0].insertId;
         const [[other]] = await db.query('SELECT id FROM departments WHERE id <> ? ORDER BY id LIMIT 1', [deptA]);
         deptB = other.id;
@@ -100,7 +100,7 @@ describe('GET /indicators/readiness + /bulk-add-kpi', () => {
         expect(res.body.data.by_code.hostype_unset).toBeGreaterThanOrEqual(1);
     });
 
-    test('admin_ssj หน่วยงานอื่นไม่เห็น / ผู้ไม่มีสิทธิ์หน้าจัดการตัวชี้วัด = 403 / ปีผิด = 400', async () => {
+    test('admin_ssj กลุ่มงานอื่นไม่เห็น / ผู้ไม่มีสิทธิ์หน้าจัดการตัวชี้วัด = 403 / ปีผิด = 400', async () => {
         const res = await get(T.ssjB);
         expect(res.status).toBe(200);
         expect(res.body.data.items.some(i => i.id === ids.unset || i.id === ids.ready)).toBe(false);

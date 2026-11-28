@@ -106,8 +106,8 @@ describe('khd-diff table_process', () => {
 });
 
 
-// หน่วยงาน / หมวดหมู่หลัก เทียบกับ KHD (11 พ.ย. 2569)
-describe('khd-diff หน่วยงาน/หมวดหมู่หลัก', () => {
+// กลุ่มงาน / หมวดหมู่หลัก เทียบกับ KHD (11 พ.ย. 2569)
+describe('khd-diff กลุ่มงาน/หมวดหมู่หลัก', () => {
   const k = (extra: any) => ({ status: 'match', khd_dept_status: 'auto', khd_dept_id: 2, khd_dept_name: 'กลุ่มงาน ข', khd_dept_value: 'NCD',
     khd_main_status: 'mapped', khd_main_id: 10, khd_main_name: 'หมวด ก', khd_main_value: 'หมวด ก (37)', ...extra });
   it('khdOrgMatch: เทียบค่าปัจจุบัน — จับคู่ไม่ได้/ไม่ระบุ/ยังไม่เทียบ = null', () => {
@@ -120,7 +120,7 @@ describe('khd-diff หน่วยงาน/หมวดหมู่หลัก
     expect(khdOrgMatch({ dept_id: 1 }, k({ status: 'missing_remote' }), 'dept')).toBeNull();
     expect(khdOrgUnmatched(k({ khd_main_status: 'unmatched' }), 'main')).toBe(true);
   });
-  it('buildKhdDiffRows: แถวหน่วยงาน/หมวดหมู่หลัก ระบบ ↔ KHD พร้อมค่าใน KHD และวิธีจับคู่', () => {
+  it('buildKhdDiffRows: แถวกลุ่มงาน/หมวดหมู่หลัก ระบบ ↔ KHD พร้อมค่าใน KHD และวิธีจับคู่', () => {
     const items = [{ id: 1, kpi_indicators_name: 'ก', table_process: 'a', dept_id: 1, main_indicator_id: null }];
     const rows = buildKhdDiffRows(items, { getKhd: () => k({}), criteriaText: () => '-', khdCriteriaText: () => '-',
       deptName: (id: any) => ({ 1: 'กลุ่มงาน ก', 2: 'กลุ่มงาน ข' } as any)[id], mainName: () => '' });

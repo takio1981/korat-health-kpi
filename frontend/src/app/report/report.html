@@ -26,11 +26,14 @@
           <button (click)="switchTab('by-year')" [class]="activeTab === 'by-year' ? 'border-green-500 text-green-600 bg-green-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'" class="flex-1 min-w-[140px] py-3 px-4 text-center border-b-2 font-medium text-sm focus:outline-none transition-colors">
             <i class="fas fa-calendar-alt mr-1.5"></i> รายปีงบประมาณ
           </button>
+          <button id="tab-by-dept-kpi" (click)="switchTab('by-dept-kpi')" [class]="activeTab === 'by-dept-kpi' ? 'border-cyan-500 text-cyan-700 bg-cyan-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'" class="flex-1 min-w-[200px] py-3 px-4 text-center border-b-2 font-medium text-sm focus:outline-none transition-colors">
+            <i class="fas fa-layer-group mr-1.5"></i> สรุปตัวชี้วัดของกลุ่มงาน
+          </button>
           <button *ngIf="canSeeMonitor" (click)="switchTab('recording-status')" [class]="activeTab === 'recording-status' ? 'border-fuchsia-500 text-fuchsia-600 bg-fuchsia-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'" class="flex-1 min-w-[160px] py-3 px-4 text-center border-b-2 font-medium text-sm focus:outline-none transition-colors">
             <i class="fas fa-clipboard-check mr-1.5"></i> สถานะการบันทึก
           </button>
           <button *ngIf="canSeeMonitor" (click)="switchTab('by-dept')" [class]="activeTab === 'by-dept' ? 'border-violet-500 text-violet-600 bg-violet-50' : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'" class="flex-1 min-w-[180px] py-3 px-4 text-center border-b-2 font-medium text-sm focus:outline-none transition-colors">
-            <i class="fas fa-building mr-1.5"></i> สรุปรายหน่วยงาน
+            <i class="fas fa-building mr-1.5"></i> สรุปรายกลุ่มงาน
           </button>
         </div>
       </div>
@@ -46,7 +49,7 @@
             </select>
           </div>
           <div *ngIf="activeTab !== 'by-dept'">
-            <label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase">หน่วยงาน</label>
+            <label class="block text-xs font-bold text-gray-500 mb-1.5 uppercase">กลุ่มงาน</label>
             <select [(ngModel)]="selectedDeptId" (change)="onFilterChange()" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-sm hover:border-green-400 transition-colors">
               <option value="">ทั้งหมด</option>
               <option *ngFor="let d of departments" [value]="d.id">{{ d.dept_name }}</option>
@@ -102,7 +105,7 @@
       </div>
 
       <!-- Summary Cards (existing 4 reports) -->
-      <div *ngIf="activeTab !== 'recording-status' && activeTab !== 'by-dept'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div *ngIf="activeTab !== 'recording-status' && activeTab !== 'by-dept' && activeTab !== 'by-dept-kpi'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div class="bg-gradient-to-br from-green-500 to-green-700 rounded-2xl p-5 text-white shadow-lg">
           <div class="flex items-center justify-between">
             <div>
@@ -224,7 +227,7 @@
       </div>
 
       <!-- Data Table -->
-      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+      <div *ngIf="activeTab !== 'by-dept-kpi'" class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
 
         <!-- ค้นหาในตารางของแถบนี้ (23 พ.ย. 2569) — คำค้นแยกตามแถบ, การ์ดสรุป/กราฟคงคำนวณจากข้อมูลทั้งหมด -->
         <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2 no-print">
@@ -329,7 +332,7 @@
                 <th class="px-4 py-3 text-left font-bold">#</th>
                 <th class="px-4 py-3 text-left font-bold">หมวดหมู่หลัก</th>
                 <th class="px-4 py-3 text-left font-bold">ชื่อตัวชี้วัด</th>
-                <th class="px-4 py-3 text-left font-bold">หน่วยงาน</th>
+                <th class="px-4 py-3 text-left font-bold">กลุ่มงาน</th>
                 <th class="px-4 py-3 text-right font-bold" title="ยอดรวมเป้าหมายของทุกหน่วยบริการในขอบเขต (เฉพาะเป้าหมายที่เป็นตัวเลข)">เป้าหมาย (รวม)</th>
                 <th class="px-4 py-3 text-right font-bold">ผลงานรวม</th>
                 <th class="px-4 py-3 text-right font-bold">%สำเร็จ</th>
@@ -498,7 +501,7 @@
                 <th class="px-4 py-3 text-left font-bold">#</th>
                 <th class="px-4 py-3 text-left font-bold">หมวดหมู่หลัก</th>
                 <th class="px-4 py-3 text-left font-bold">ชื่อตัวชี้วัด</th>
-                <th class="px-4 py-3 text-left font-bold">หน่วยงาน</th>
+                <th class="px-4 py-3 text-left font-bold">กลุ่มงาน</th>
                 <th class="px-4 py-3 text-right font-bold">รพ. ทั้งหมด</th>
                 <th class="px-4 py-3 text-right font-bold">บันทึกแล้ว</th>
                 <th class="px-4 py-3 text-right font-bold">ยังไม่บันทึก</th>
@@ -590,7 +593,7 @@
       </div>
 
       <!-- Charts -->
-      <div *ngIf="!isLoading && reportData.length > 0 && activeTab !== 'recording-status' && activeTab !== 'by-dept'" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+      <div *ngIf="!isLoading && reportData.length > 0 && activeTab !== 'recording-status' && activeTab !== 'by-dept' && activeTab !== 'by-dept-kpi'" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
         <apx-chart
           [series]="barChartOptions.series"
           [chart]="barChartOptions.chart"
@@ -606,12 +609,159 @@
         ></apx-chart>
       </div>
 
+      <!-- ===== Tab: by-dept-kpi — สรุปข้อมูลตัวชี้วัดของกลุ่มงาน (28 พ.ย. 2569) ===== -->
+      <ng-container *ngIf="activeTab === 'by-dept-kpi'">
+        <div *ngIf="!selectedYear && !isLoading" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 mb-6 text-center text-gray-400">
+          <i class="fas fa-calendar-alt text-3xl mb-2 block text-cyan-300"></i>
+          <p class="text-sm font-medium">กรุณาเลือกปีงบประมาณเพื่อดูข้อมูล</p>
+        </div>
+
+        <div id="dept-kpi-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div class="bg-gradient-to-br from-cyan-500 to-cyan-700 rounded-2xl p-5 text-white shadow-lg">
+            <p class="text-cyan-100 text-xs font-medium mb-1">กลุ่มงาน</p>
+            <p class="text-3xl font-bold">{{ deptKpiSummary.total_depts }}</p>
+            <p class="text-cyan-100 text-xs mt-1">ที่มีผลงานตัวชี้วัดในปีงบ {{ selectedYear || '-' }}</p>
+          </div>
+          <div class="bg-gradient-to-br from-green-500 to-green-700 rounded-2xl p-5 text-white shadow-lg">
+            <p class="text-green-100 text-xs font-medium mb-1">ตัวชี้วัด</p>
+            <p class="text-3xl font-bold">{{ deptKpiSummary.total_indicators }}</p>
+            <p class="text-green-100 text-xs mt-1">มีเป้าหมาย {{ deptKpiSummary.indicators_with_target }} ตัว</p>
+          </div>
+          <div class="bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl p-5 text-white shadow-lg">
+            <p class="text-amber-100 text-xs font-medium mb-1">ร้อยละผ่านเกณฑ์ (ทุกกลุ่มงาน)</p>
+            <p class="text-3xl font-bold">{{ deptKpiSummary.pass_pct | number:'1.0-2' }}%</p>
+            <p class="text-amber-100 text-xs mt-1">ผ่าน {{ deptKpiSummary.pairs_passed | number }} จาก {{ deptKpiSummary.pairs_with_target | number }} คู่</p>
+          </div>
+          <div class="bg-gradient-to-br from-violet-500 to-violet-700 rounded-2xl p-5 text-white shadow-lg">
+            <p class="text-violet-100 text-xs font-medium mb-1">กลุ่มงานที่ผ่านเกณฑ์ ≥ 80%</p>
+            <p class="text-3xl font-bold">{{ deptKpiSummary.depts_ge_80 }}</p>
+            <p class="text-violet-100 text-xs mt-1">ต่ำกว่า 50%: {{ deptKpiSummary.depts_lt_50 }} กลุ่มงาน</p>
+          </div>
+        </div>
+
+        <div *ngIf="isLoading" class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+          <app-skeleton-table [rows]="6" [cols]="6"></app-skeleton-table>
+        </div>
+
+        <div *ngIf="!isLoading && selectedYear" id="dept-kpi-table" class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-6">
+          <div class="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2">
+            <i class="fas fa-layer-group text-cyan-600"></i>
+            <span class="font-bold text-gray-700 text-sm">สรุปข้อมูลตัวชี้วัดของกลุ่มงาน</span>
+            <span class="text-xs text-gray-400">ปีงบ {{ selectedYear }} · นับ "คู่" = ตัวชี้วัด × หน่วยบริการ (เกณฑ์เดียวกับแถบรายข้อตัวชี้วัด)</span>
+            <span class="ml-auto flex gap-2 no-print">
+              <button id="btn-dept-kpi-expand" type="button" (click)="expandAllDeptKpi(true)" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-cyan-50 text-cyan-700 hover:bg-cyan-100"><i class="fas fa-angles-down mr-1"></i>ขยายทั้งหมด</button>
+              <button id="btn-dept-kpi-collapse" type="button" (click)="expandAllDeptKpi(false)" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-gray-100 text-gray-600 hover:bg-gray-200"><i class="fas fa-angles-up mr-1"></i>ย่อทั้งหมด</button>
+            </span>
+          </div>
+          <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2 no-print">
+            <div class="relative flex-1 min-w-[220px] max-w-lg">
+              <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+              <input id="report-dept-kpi-search" type="text" [ngModel]="searchQuery" (ngModelChange)="onSearchChange($event)" [placeholder]="searchPlaceholder"
+                     class="w-full pl-9 pr-9 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 outline-none hover:border-cyan-400 transition-colors">
+              <button *ngIf="searchQuery" type="button" (click)="onSearchChange('')" title="ล้างคำค้น"
+                      class="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+                <i class="fas fa-times text-xs"></i>
+              </button>
+            </div>
+            <span id="report-dept-kpi-search-count" class="text-xs text-gray-500">
+              <ng-container *ngIf="searchQuery; else dkAll">พบ <strong class="text-cyan-700">{{ deptKpiViewData.length }}</strong> จาก {{ deptKpiData.length }} กลุ่มงาน</ng-container>
+              <ng-template #dkAll>ทั้งหมด {{ deptKpiData.length }} กลุ่มงาน</ng-template>
+            </span>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm min-w-[860px]">
+              <thead class="bg-cyan-50 text-cyan-800">
+                <tr class="whitespace-nowrap">
+                  <th class="px-3 py-3 text-left text-xs font-bold w-8">#</th>
+                  <th class="px-3 py-3 text-left text-xs font-bold">กลุ่มงาน</th>
+                  <th class="px-3 py-3 text-center text-xs font-bold">ตัวชี้วัด</th>
+                  <th class="px-3 py-3 text-center text-xs font-bold text-emerald-700" title="ผ่านเกณฑ์ทุกหน่วยบริการที่มีเป้าหมาย">ผ่านทุกแห่ง</th>
+                  <th class="px-3 py-3 text-center text-xs font-bold text-amber-700">ผ่านบางแห่ง</th>
+                  <th class="px-3 py-3 text-center text-xs font-bold text-rose-600">ยังไม่ผ่าน</th>
+                  <th class="px-3 py-3 text-center text-xs font-bold text-gray-500">ไม่มีเป้าหมาย</th>
+                  <th class="px-3 py-3 text-center text-xs font-bold">คู่ผ่าน / มีเป้าหมาย</th>
+                  <th class="px-3 py-3 text-left text-xs font-bold min-w-[170px]">ร้อยละผ่านเกณฑ์</th>
+                  <th class="px-3 py-3 w-8"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <ng-container *ngFor="let g of deptKpiViewData; let i = index">
+                  <tr (click)="toggleDeptKpi(g)" class="cursor-pointer border-b border-gray-50 hover:bg-cyan-50 transition-colors" [attr.data-dept]="g.dept_name"
+                      [ngClass]="isDeptKpiOpen(g) ? 'bg-cyan-50 border-l-4 border-l-cyan-500' : ''">
+                    <td class="px-3 py-3 text-gray-400 text-xs">{{ i + 1 }}</td>
+                    <td class="px-3 py-3 font-semibold text-gray-800"><div class="min-w-[220px]">{{ g.dept_name }}</div></td>
+                    <td class="px-3 py-3 text-center font-bold text-gray-700">{{ g.total_indicators }}</td>
+                    <td class="px-3 py-3 text-center font-bold text-emerald-700">{{ g.indicators_all_passed }}</td>
+                    <td class="px-3 py-3 text-center font-bold text-amber-700">{{ g.indicators_partial }}</td>
+                    <td class="px-3 py-3 text-center font-bold text-rose-600">{{ g.indicators_none_passed }}</td>
+                    <td class="px-3 py-3 text-center text-gray-400">{{ g.indicators_no_target }}</td>
+                    <td class="px-3 py-3 text-center text-gray-700">{{ g.pairs_passed | number }} / {{ g.pairs_with_target | number }}</td>
+                    <td class="px-3 py-3">
+                      <div class="flex items-center gap-2">
+                        <div class="flex-1 bg-gray-100 rounded-full h-2.5 overflow-hidden min-w-[80px]">
+                          <div class="h-2.5 rounded-full" [ngClass]="'bg-' + pctTone(g.pass_pct) + '-500'" [style.width.%]="g.pass_pct > 100 ? 100 : g.pass_pct"></div>
+                        </div>
+                        <span class="text-xs font-bold w-14 text-right" [ngClass]="'text-' + pctTone(g.pass_pct) + '-600'">{{ g.pass_pct | number:'1.0-2' }}%</span>
+                      </div>
+                    </td>
+                    <td class="px-3 py-3 text-center"><i class="fas text-cyan-600 text-xs" [ngClass]="isDeptKpiOpen(g) ? 'fa-chevron-up' : 'fa-chevron-down'"></i></td>
+                  </tr>
+                  <tr *ngIf="isDeptKpiOpen(g)" class="border-b border-cyan-200">
+                    <td colspan="10" class="p-0 bg-cyan-50/40">
+                      <div class="px-4 py-3 overflow-x-auto">
+                        <table class="w-full text-xs">
+                          <thead class="text-gray-500">
+                            <tr class="whitespace-nowrap">
+                              <th class="px-2 py-2 text-left font-bold w-6">#</th>
+                              <th class="px-2 py-2 text-left font-bold">ตัวชี้วัด</th>
+                              <th class="px-2 py-2 text-left font-bold">หมวดหมู่หลัก</th>
+                              <th class="px-2 py-2 text-right font-bold">เป้าหมายรวม</th>
+                              <th class="px-2 py-2 text-right font-bold">ผลงานรวม</th>
+                              <th class="px-2 py-2 text-center font-bold">หน่วยบริการ</th>
+                              <th class="px-2 py-2 text-center font-bold">ผ่าน / มีเป้าหมาย</th>
+                              <th class="px-2 py-2 text-right font-bold">ร้อยละผ่านเกณฑ์</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr *ngFor="let r of g.indicators; let j = index" class="border-t border-cyan-100 bg-white/60">
+                              <td class="px-2 py-2 text-gray-400">{{ j + 1 }}</td>
+                              <td class="px-2 py-2">
+                                <div class="min-w-[240px]">
+                                  <span class="font-medium text-gray-800">{{ r.kpi_indicators_name }}</span><span *ngIf="r | criteriaText as crit" class="font-normal text-amber-600 ml-1">({{ crit }})</span><app-formula-badge class="ml-1" [formula]="r.result_formula"></app-formula-badge>
+                                  <app-indicator-badges class="block mt-0.5" [id]="r.indicator_id"></app-indicator-badges>
+                                </div>
+                              </td>
+                              <td class="px-2 py-2 text-gray-500">{{ r.main_indicator_name || '-' }}</td>
+                              <td class="px-2 py-2 text-right">{{ r._target_display || '-' }}</td>
+                              <td class="px-2 py-2 text-right text-green-700 font-bold">{{ r.total_actual | number:'1.0-2' }}</td>
+                              <td class="px-2 py-2 text-center">{{ r.hospital_count }}</td>
+                              <td class="px-2 py-2 text-center">{{ r.hospitals_passed }} / {{ r.hospitals_with_target }}</td>
+                              <td class="px-2 py-2 text-right font-bold" [ngClass]="r.hospitals_with_target > 0 ? 'text-' + pctTone(r.achievement_pct) + '-600' : 'text-gray-400'">
+                                {{ r.hospitals_with_target > 0 ? ((r.achievement_pct | number:'1.0-2') + '%') : 'ไม่มีเป้าหมาย' }}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </td>
+                  </tr>
+                </ng-container>
+                <tr *ngIf="deptKpiViewData.length === 0">
+                  <td colspan="10" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>{{ searchQuery ? 'ไม่พบรายการที่ตรงกับคำค้น' : 'ไม่พบข้อมูล' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </ng-container>
+
       <!-- Tab: by-dept — Summary Cards -->
       <div *ngIf="activeTab === 'by-dept'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div class="bg-gradient-to-br from-violet-500 to-violet-700 rounded-2xl p-5 text-white shadow-lg">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-violet-100 text-xs font-medium mb-1">หน่วยงานทั้งหมด</p>
+              <p class="text-violet-100 text-xs font-medium mb-1">กลุ่มงานทั้งหมด</p>
               <p class="text-3xl font-bold">{{ deptSummarySummary.total_depts }}</p>
               <p class="text-violet-200 text-xs mt-1">กลุ่มงาน / ฝ่าย</p>
             </div>
@@ -621,9 +771,9 @@
         <div class="bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-2xl p-5 text-white shadow-lg">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-emerald-100 text-xs font-medium mb-1">หน่วยงานที่คีย์ครบทุกตัวชี้วัด</p>
+              <p class="text-emerald-100 text-xs font-medium mb-1">กลุ่มงานที่คีย์ครบทุกตัวชี้วัด</p>
               <p class="text-3xl font-bold">{{ deptSummarySummary.fully_covered }}</p>
-              <p class="text-emerald-200 text-xs mt-1">จาก {{ deptSummarySummary.total_depts }} หน่วยงาน</p>
+              <p class="text-emerald-200 text-xs mt-1">จาก {{ deptSummarySummary.total_depts }} กลุ่มงาน</p>
             </div>
             <i class="fas fa-check-circle text-4xl text-emerald-300"></i>
           </div>
@@ -631,7 +781,7 @@
         <div class="bg-gradient-to-br from-rose-500 to-rose-700 rounded-2xl p-5 text-white shadow-lg">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-rose-100 text-xs font-medium mb-1">หน่วยงานที่ยังไม่คีย์เลย</p>
+              <p class="text-rose-100 text-xs font-medium mb-1">กลุ่มงานที่ยังไม่คีย์เลย</p>
               <p class="text-3xl font-bold">{{ deptSummarySummary.not_entered }}</p>
               <p class="text-rose-200 text-xs mt-1">ไม่มีผลงานในระบบ</p>
             </div>
@@ -643,7 +793,7 @@
             <div>
               <p class="text-sky-100 text-xs font-medium mb-1">%ความครอบคลุมเฉลี่ย</p>
               <p class="text-3xl font-bold">{{ deptSummarySummary.avg_coverage_pct | number:'1.0-1' }}%</p>
-              <p class="text-sky-200 text-xs mt-1">เฉลี่ยข้ามทุกหน่วยงาน</p>
+              <p class="text-sky-200 text-xs mt-1">เฉลี่ยข้ามทุกกลุ่มงาน</p>
             </div>
             <i class="fas fa-chart-pie text-4xl text-sky-300"></i>
           </div>
@@ -666,7 +816,7 @@
         <!-- Header -->
         <div class="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
           <i class="fas fa-building text-violet-600"></i>
-          <span class="font-bold text-gray-700 text-sm">สรุปรายหน่วยงาน</span>
+          <span class="font-bold text-gray-700 text-sm">สรุปรายกลุ่มงาน</span>
           <span class="text-xs text-gray-400 ml-1">ปีงบ {{ selectedYear || 'ทั้งหมด' }}</span>
           <span class="ml-auto text-xs text-violet-600 font-medium">คลิกแถวเพื่อดูตัวชี้วัดแต่ละตัว</span>
         </div>
@@ -681,8 +831,8 @@
             </button>
           </div>
           <span id="report-dept-search-count" class="text-xs text-gray-500">
-            <ng-container *ngIf="searchQuery; else deptAllCount">พบ <strong class="text-violet-700">{{ deptViewData.length }}</strong> จาก {{ deptSummaryData.length }} หน่วยงาน</ng-container>
-            <ng-template #deptAllCount>ทั้งหมด {{ deptSummaryData.length }} หน่วยงาน</ng-template>
+            <ng-container *ngIf="searchQuery; else deptAllCount">พบ <strong class="text-violet-700">{{ deptViewData.length }}</strong> จาก {{ deptSummaryData.length }} กลุ่มงาน</ng-container>
+            <ng-template #deptAllCount>ทั้งหมด {{ deptSummaryData.length }} กลุ่มงาน</ng-template>
           </span>
         </div>
 
@@ -692,7 +842,7 @@
             <thead class="bg-violet-50 text-violet-800 sticky top-0 z-10">
               <tr>
                 <th class="px-4 py-3 text-left text-xs font-bold w-8">#</th>
-                <th class="px-4 py-3 text-left text-xs font-bold">หน่วยงาน</th>
+                <th class="px-4 py-3 text-left text-xs font-bold">กลุ่มงาน</th>
                 <th class="px-4 py-3 text-center text-xs font-bold">ตัวชี้วัดทั้งหมด</th>
                 <th class="px-4 py-3 text-center text-xs font-bold text-emerald-700">คีย์แล้ว</th>
                 <th class="px-4 py-3 text-center text-xs font-bold text-rose-600">ยังไม่คีย์</th>
@@ -702,7 +852,7 @@
             </thead>
             <tbody>
               <ng-container *ngFor="let dept of deptViewData; let i = index">
-                <!-- แถวหน่วยงาน -->
+                <!-- แถวกลุ่มงาน -->
                 <tr (click)="openDeptDrilldown(dept)"
                     class="cursor-pointer transition-colors hover:bg-violet-50"
                     [ngClass]="selectedDeptForDrilldown?.dept_id === dept.dept_id
@@ -875,7 +1025,7 @@
               </ng-container>
               <tr *ngIf="deptViewData.length === 0">
                 <td colspan="7" class="px-4 py-8 text-center text-gray-400">
-                  <i class="fas fa-inbox text-3xl mb-2 block"></i>{{ searchQuery ? 'ไม่พบหน่วยงานที่ตรงกับคำค้น' : 'ไม่พบข้อมูล — กรุณาเลือกปีงบประมาณ' }}
+                  <i class="fas fa-inbox text-3xl mb-2 block"></i>{{ searchQuery ? 'ไม่พบกลุ่มงานที่ตรงกับคำค้น' : 'ไม่พบข้อมูล — กรุณาเลือกปีงบประมาณ' }}
                 </td>
               </tr>
             </tbody>
@@ -1017,7 +1167,7 @@
             </div>
           </ng-container>
           <div *ngIf="deptViewData.length === 0" class="p-8 text-center text-gray-400">
-            <i class="fas fa-inbox text-3xl mb-2 block"></i>{{ searchQuery ? 'ไม่พบหน่วยงานที่ตรงกับคำค้น' : 'ไม่พบข้อมูล' }}
+            <i class="fas fa-inbox text-3xl mb-2 block"></i>{{ searchQuery ? 'ไม่พบกลุ่มงานที่ตรงกับคำค้น' : 'ไม่พบข้อมูล' }}
           </div>
         </div>
       </div>
@@ -1068,7 +1218,7 @@
                   <th class="px-3 py-2 text-left text-xs font-bold">#</th>
                   <th class="px-3 py-2 text-left text-xs font-bold">หมวดหมู่หลัก</th>
                   <th class="px-3 py-2 text-left text-xs font-bold">ชื่อตัวชี้วัด</th>
-                  <th class="px-3 py-2 text-left text-xs font-bold">หน่วยงาน</th>
+                  <th class="px-3 py-2 text-left text-xs font-bold">กลุ่มงาน</th>
                   <th class="px-3 py-2 text-right text-xs font-bold">เป้าหมาย</th>
                 </tr>
               </thead>

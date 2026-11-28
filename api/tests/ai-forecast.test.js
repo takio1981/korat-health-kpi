@@ -48,7 +48,7 @@ beforeAll(async () => {
     hosToken = makeToken({ userId: u.id, username: u.username, role: 'user_hos', deptId, hospcode: hs[0].hoscode, sessionId: 'sess-aif-hos' });
     await addRow('test_aif_ตัวชี้วัดเสี่ยงสูง', deptId, hs[0], ['10', '10', '10', '10', '10', '10']);
     await addRow('test_aif_ตัวชี้วัดเฝ้าระวัง', deptId, hs[0], ['75', '75', '75', '75', '75', '75']);
-    await addRow('test_aif_หน่วยงานอื่นเสี่ยง', otherDeptId, hs[1], ['5', '5', '5', '5', '5', '5']);
+    await addRow('test_aif_กลุ่มงานอื่นเสี่ยง', otherDeptId, hs[1], ['5', '5', '5', '5', '5', '5']);
     await db.query("DELETE FROM system_settings WHERE setting_key LIKE 'forecast\\_%'");
 });
 afterAll(async () => {
@@ -73,16 +73,16 @@ describe('POST /report/forecast/ai-explain', () => {
         const { prompt, system, feature } = callLlm.mock.calls[0][0];
         expect(feature).toBe('forecast_explain');
         expect(system).toContain('มีแนวโน้ม');
-        expect(system).toContain('ห้ามเรียกเป็นจำนวนหน่วยงานหรือหน่วยบริการ');   // ทดลองจริง: แบบจำลองเขียน "หน่วยงาน 411 รายการ" แทน 411 คู่
+        expect(system).toContain('ห้ามเรียกเป็นจำนวนกลุ่มงานหรือหน่วยบริการ');   // ทดลองจริง: แบบจำลองเขียน "กลุ่มงาน 411 รายการ" แทน 411 คู่
         expect(prompt).toContain('test_aif_ตัวชี้วัดเสี่ยงสูง');
-        expect(prompt).toContain('test_aif_หน่วยงานอื่นเสี่ยง');
+        expect(prompt).toContain('test_aif_กลุ่มงานอื่นเสี่ยง');
         expect(prompt).toContain('test_อำเภอ');
         expect(prompt).not.toContain(hosp[0].hoscode);
         expect(prompt).not.toContain(hosp[0].hosname);
         expect((await explain(saToken, {})).body.cached).toBe(true);
         expect(callLlm).toHaveBeenCalledTimes(1);
     });
-    test('ตัวกรอง (เฉพาะเฝ้าระวัง) + ขอบเขต user_hos ไม่เห็นหน่วยงานอื่น', async () => {
+    test('ตัวกรอง (เฉพาะเฝ้าระวัง) + ขอบเขต user_hos ไม่เห็นกลุ่มงานอื่น', async () => {
         callLlm.mockResolvedValue(reply('ก'));
         await explain(saToken, { status: 'watch' });
         const p1 = callLlm.mock.calls[0][0].prompt;
@@ -91,7 +91,7 @@ describe('POST /report/forecast/ai-explain', () => {
         await explain(hosToken, {});
         const p2 = callLlm.mock.calls[1][0].prompt;
         expect(p2).toContain('test_aif_ตัวชี้วัดเสี่ยงสูง');
-        expect(p2).not.toContain('test_aif_หน่วยงานอื่นเสี่ยง');
+        expect(p2).not.toContain('test_aif_กลุ่มงานอื่นเสี่ยง');
     });
     test('ไม่มีรายการตามตัวกรอง = ไม่เรียก AI | ปิดผู้ช่วย = 503 | ไม่เข้าสู่ระบบ = 401', async () => {
         const r = await explain(saToken, { district: 'ไม่มีอำเภอนี้' });

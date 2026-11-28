@@ -115,7 +115,7 @@ describe('POST /report/ai-tab-summary', () => {
         expect(input.hospital_types.top.map(t => t.name).join('|')).not.toMatch(/^ประเภท /);   // ใช้ชื่อประเภทจาก chostype
     });
 
-    test('รายอำเภอ / รายปีงบ / สรุปรายหน่วยงาน', async () => {
+    test('รายอำเภอ / รายปีงบ / สรุปรายกลุ่มงาน', async () => {
         const dist = await tabSummary(saToken, { tab: 'by-district' });
         expect(dist.status).toBe(200);
         const di = inputOf(callLlm.mock.calls[0]);

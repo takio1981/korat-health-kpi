@@ -1,5 +1,5 @@
-// เทียบ "หน่วยงาน" และ "หมวดหมู่หลัก" ของตัวชี้วัดกับ KHD (11 พ.ย. 2569 — ผู้ใช้สั่ง) — ฟังก์ชันล้วน
-// KHD เก็บเป็นข้อความ (reports.dept = รหัสหน่วยงาน เช่น NCD, reports.main_indicator = ชื่อหมวดหมู่) → แปลงเป็น id ของระบบด้วยตัวจับคู่เดียวกับ
+// เทียบ "กลุ่มงาน" และ "หมวดหมู่หลัก" ของตัวชี้วัดกับ KHD (11 พ.ย. 2569 — ผู้ใช้สั่ง) — ฟังก์ชันล้วน
+// KHD เก็บเป็นข้อความ (reports.dept = รหัสกลุ่มงาน เช่น NCD, reports.main_indicator = ชื่อหมวดหมู่) → แปลงเป็น id ของระบบด้วยตัวจับคู่เดียวกับ
 // "เพิ่มตัวชี้วัดจาก KHD" (khd-mapping.js buildKhdResolver: การจับคู่ที่ผู้ดูแลตั้งไว้ก่อน แล้วจึงจับคู่อัตโนมัติ)
 // ผลการเทียบ: true = ตรง | false = ต่าง | null = เทียบไม่ได้ (KHD ไม่ได้ระบุ / ตั้งว่าไม่ต้องจับคู่ / ยังจับคู่ไม่ได้ — ไม่นับว่าต่าง)
 
@@ -34,7 +34,7 @@ function khdOrgUpdate(resolver, khd, local, parts) {
     const reasons = [];
     for (const part of parts) {
         const c = comparePart(resolver, khd, local, part);
-        const label = part === 'dept' ? 'หน่วยงาน' : 'หมวดหมู่หลัก';
+        const label = part === 'dept' ? 'กลุ่มงาน' : 'หมวดหมู่หลัก';
         if (c.match === true) { reasons.push(label + 'ตรงกันอยู่แล้ว'); continue; }
         if (c.match === null) {
             reasons.push(c.status === 'unmatched' ? `${label}ใน KHD "${c.value}" ยังจับคู่กับระบบไม่ได้ (ตั้งที่ "จับคู่ข้อมูล KHD")`

@@ -85,7 +85,7 @@ export class KpiSetupComponent implements OnInit {
     // การ +1 ซ้ำแบบเดิมจึงกลายเป็นปีงบปัจจุบันแทนที่จะเป็นปีงบถัดไป)
     this.selectedYear = String(getNextFiscalYear());
 
-    // admin_ssj: ล็อค dept_id เป็นหน่วยงานของตัวเอง
+    // admin_ssj: ล็อค dept_id เป็นกลุ่มงานของตัวเอง
     if (!this.isSuperAdmin && this.loggedInUser?.dept_id) {
       this.selectedDept = this.loggedInUser.dept_id.toString();
     }
@@ -264,7 +264,7 @@ export class KpiSetupComponent implements OnInit {
       html: `<div class="text-left text-sm">
         <p class="mb-2 text-gray-600">บันทึกข้อมูล KPI ปี <b>${this.selectedYear}</b></p>
         <p class="mb-1 text-gray-600">หน่วยบริการ: <b>${hosName}</b></p>
-        <p class="mb-3 text-gray-600">หน่วยงาน: <b>${deptName}</b></p>
+        <p class="mb-3 text-gray-600">กลุ่มงาน: <b>${deptName}</b></p>
         <p class="text-gray-500 text-xs">จำนวนตัวชี้วัด: <b>${this.kpiTemplate.length}</b> รายการ</p>
       </div>`,
       icon: 'question',
@@ -415,7 +415,7 @@ export class KpiSetupComponent implements OnInit {
     Swal.fire({
       title: `เพิ่มตัวชี้วัดให้ ${n} หน่วยบริการ`,
       html: `<div class="text-left text-sm">
-        <p class="mb-1 text-gray-600">ปีงบ <b>${this.selectedYear}</b> · หน่วยงาน: <b>${deptName}</b> · ตัวชี้วัด <b>${this.kpiTemplate.length}</b> รายการ</p>
+        <p class="mb-1 text-gray-600">ปีงบ <b>${this.selectedYear}</b> · กลุ่มงาน: <b>${deptName}</b> · ตัวชี้วัด <b>${this.kpiTemplate.length}</b> รายการ</p>
         <div class="text-xs text-gray-500 bg-gray-50 rounded p-2 max-h-32 overflow-auto">${list}${n > 8 ? `<br>…และอีก ${n - 8} แห่ง` : ''}</div>
         <p class="text-xs text-amber-700 mt-2"><i class="fas fa-info-circle mr-1"></i>เลือกหลายแห่ง = เพิ่มเฉพาะที่ยังไม่มี (ข้อมูลเดิมไม่ถูกแก้ไข) — ข้ามตัวชี้วัดที่ไม่ตรงประเภทหน่วยบริการ/ยังไม่ตั้งประเภท · ต้องการเขียนทับให้เลือกทีละหน่วยบริการ</p>
       </div>`,
@@ -465,8 +465,8 @@ export class KpiSetupComponent implements OnInit {
       return;
     }
     const deptLabel = this.isSuperAdmin
-      ? 'ทุกหน่วยงาน'
-      : (this.departments.find(d => d.id?.toString() === this.selectedDept)?.dept_name || 'หน่วยงานของคุณ');
+      ? 'ทุกกลุ่มงาน'
+      : (this.departments.find(d => d.id?.toString() === this.selectedDept)?.dept_name || 'กลุ่มงานของคุณ');
     Swal.fire({
       title: 'เพิ่ม KPI ทุกหน่วยบริการ',
       html: `<p class="text-sm text-gray-600">เพิ่มตัวชี้วัดของ <b>${deptLabel}</b> ให้ <b>ทุกหน่วยบริการ</b> ในปี <b>${this.selectedYear}</b></p>

@@ -2,7 +2,7 @@
  * ศูนย์งานผู้ดูแล + แจ้งเตือนหน่วยบริการที่ยังไม่ส่งผลงาน (ระยะ 4 ของแผน lean งานผู้ดูแล — 22 พ.ย. 2569)
  *   - กติกาวันที่ (เวลาไทย): เดือนที่ควรส่งแล้ว = เดือนก่อนหน้า (ข้ามปีงบ ต.ค.), กำหนดส่ง = วันที่ N ของเดือนถัดไป, ถึงเวลาเตือน = กำหนดส่ง − k วัน ณ เวลาที่ตั้ง
  *   - ยังไม่ส่ง: เดือนนั้นผลงานว่าง (0 = ส่งแล้ว), มีผลงานข้อย่อยของเดือนนั้น = ส่งแล้ว, ตัวชี้วัดปิดใช้งาน/กรอกเอง = ไม่นับ — ตามขอบเขต role
- *   - คิวรออนุมัติตามขอบเขต (admin_ssj เฉพาะหน่วยงานตัวเอง) | สิทธิ์หน้า work-center (ผู้ใช้ทั่วไป = 403)
+ *   - คิวรออนุมัติตามขอบเขต (admin_ssj เฉพาะกลุ่มงานตัวเอง) | สิทธิ์หน้า work-center (ผู้ใช้ทั่วไป = 403)
  *   - ส่งเตือน (24 พ.ย. 2569): ปีงบปัจจุบันเท่านั้น, ผู้รับแต่ละคนได้เฉพาะตัวชี้วัดของหน่วยบริการ + กลุ่มงานตนเอง (กลุ่มงานเพิ่มเติมนับด้วย,
  *     admin_hos ทุกกลุ่มงาน, ไม่มีกลุ่มงาน = ไม่ได้รับ) ในระบบ/LINE/อีเมลรายผู้รับ, สั่งซ้ำวันเดียวกัน = ไม่ส่งซ้ำ, ดูตัวอย่างไม่ส่ง,
  *     ตั้งค่า/ส่ง = super_admin แบบเข้ม (admin_ssj ที่เข้าหน้าได้ = 403)
@@ -129,13 +129,13 @@ describe('ภาพรวม / ยังไม่ส่ง / คิวรออ�
         const byInd = await get(T.sa, `/work-center/missing?year_bh=${YEAR}&month_bh=10&group=indicator`);
         expect(byInd.body.data.items[0]).toMatchObject({ indicator_id: ids.main, indicator_name: 'test_wc_main' });
     });
-    test('ตามขอบเขต: admin_hos เห็นเฉพาะหน่วยบริการตัวเอง / admin_ssj หน่วยงานอื่นไม่เห็น', async () => {
+    test('ตามขอบเขต: admin_hos เห็นเฉพาะหน่วยบริการตัวเอง / admin_ssj กลุ่มงานอื่นไม่เห็น', async () => {
         expect((await get(T.hos1, `/work-center/summary?year_bh=${YEAR}&month_bh=10`)).body.data.missing.pairs).toBe(1);
         const ssjB = await get(T.ssjB, `/work-center/summary?year_bh=${YEAR}&month_bh=10`);
         expect(ssjB.body.data.missing.pairs).toBe(0);
         expect(ssjB.body.data.review.pending_pairs).toBe(0);
     });
-    test('คิวรออนุมัติ + การ์ดภาพรวม (admin_ssj หน่วยงานตัวเอง)', async () => {
+    test('คิวรออนุมัติ + การ์ดภาพรวม (admin_ssj กลุ่มงานตัวเอง)', async () => {
         const sum = await get(T.ssjA, `/work-center/summary?year_bh=${YEAR}&month_bh=10`);
         expect(sum.status).toBe(200);
         expect(sum.body.data).toMatchObject({ can_review: true, is_super_admin: false, khd: null, review: { pending_pairs: 1, pending_months: 2 } });

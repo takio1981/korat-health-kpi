@@ -861,7 +861,7 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     const qs = includeInactive ? '?include_inactive=1' : '';
     return this.http.get(`${this.apiUrl}/indicators${qs}`, { headers });
   }
-  // รหัสที่ระบบแนะนำสำหรับตัวชี้วัดใหม่ (ชื่อตาราง + รหัสตัวชี้วัด) ตามหน่วยงานที่เลือก
+  // รหัสที่ระบบแนะนำสำหรับตัวชี้วัดใหม่ (ชื่อตาราง + รหัสตัวชี้วัด) ตามกลุ่มงานที่เลือก
   suggestIndicatorCode(deptId: number | null): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
@@ -1191,7 +1191,7 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     return this.http.get(`${this.apiUrl}/report/by-year${queryStr ? '?' + queryStr : ''}`, { headers });
   }
 
-  // กราฟและสถิติ: ผลรวมทุกมิติ (ยุทธศาสตร์/หมวดหมู่/หน่วยงาน/ตัวชี้วัด/อำเภอ/ประเภท/รายเดือน) คำนวณที่ backend
+  // กราฟและสถิติ: ผลรวมทุกมิติ (ยุทธศาสตร์/หมวดหมู่/กลุ่มงาน/ตัวชี้วัด/อำเภอ/ประเภท/รายเดือน) คำนวณที่ backend
   getReportChartStats(params: any = {}): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
@@ -1295,7 +1295,7 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
   applyKhdTypes(ids: number[], year_bh: string, parts: ('types' | 'hostype')[]): Observable<any> {
     return this.apiPost('/indicators/apply-khd-types', { ids, year_bh, parts });
   }
-  // หน่วยงาน / หมวดหมู่หลักให้ตรงกับ KHD (11 พ.ย. 2569) — parts: 'dept' | 'main', server อ่านค่าจาก KHD + ตัวจับคู่เอง
+  // กลุ่มงาน / หมวดหมู่หลักให้ตรงกับ KHD (11 พ.ย. 2569) — parts: 'dept' | 'main', server อ่านค่าจาก KHD + ตัวจับคู่เอง
   applyKhdOrg(ids: number[], parts: ('dept' | 'main')[], year_bh?: string): Observable<any> {
     return this.apiPost('/indicators/apply-khd-org', { ids, parts, ...(year_bh ? { year_bh } : {}) });
   }
@@ -1321,6 +1321,12 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
     const queryStr = new URLSearchParams(params).toString();
     return this.http.get(`${this.apiUrl}/report/recording-missing/by-hospital/${encodeURIComponent(hospcode)}${queryStr ? '?' + queryStr : ''}`, { headers });
+  }
+
+  /** สรุปข้อมูลตัวชี้วัดของกลุ่มงาน (28 พ.ย. 2569) — { summary, data: กลุ่มงาน + indicators } */
+  getReportByDeptKpi(params: any = {}): Observable<any> {
+    const queryStr = new URLSearchParams(params).toString();
+    return this.http.get(`${this.apiUrl}/report/by-dept-kpi${queryStr ? '?' + queryStr : ''}`, { headers: new HttpHeaders({ 'Authorization': `Bearer ${localStorage.getItem('kpi_token')}` }) });
   }
 
   getReportByDeptSummary(params: any = {}): Observable<any> {

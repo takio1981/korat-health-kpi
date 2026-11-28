@@ -1,5 +1,5 @@
 /**
- * Unit tests: จับคู่ค่าข้อความของ KHD (หน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์) กับ Local — api/khd-mapping.js (19 ต.ค. 2569)
+ * Unit tests: จับคู่ค่าข้อความของ KHD (กลุ่มงาน / หมวดหมู่หลัก / ยุทธศาสตร์) กับ Local — api/khd-mapping.js (19 ต.ค. 2569)
  */
 const { buildKhdResolver, normKhd, khdKey } = require('../khd-mapping');
 
@@ -21,7 +21,7 @@ describe('khd-mapping', () => {
         expect(khdKey('NCD ')).toBe(khdKey('ncd'));
     });
 
-    test('หน่วยงาน: KHD เก็บรหัสหน่วยงาน → ตรงกับ dept_code (เดิมเทียบชื่อ ไม่ตรงเลย)', () => {
+    test('กลุ่มงาน: KHD เก็บรหัสกลุ่มงาน → ตรงกับ dept_code (เดิมเทียบชื่อ ไม่ตรงเลย)', () => {
         const r = make();
         expect(r.resolve('dept', 'NCD')).toEqual(expect.objectContaining({ status: 'auto', local_id: 6 }));
         expect(r.resolve('dept', 'ยสต.')).toEqual(expect.objectContaining({ status: 'auto', local_id: 1 }));

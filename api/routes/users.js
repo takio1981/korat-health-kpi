@@ -24,7 +24,7 @@ apiRouter.post('/users', authenticateToken, requireAction('users', 'add'), async
 
     // central admin: เปลี่ยน role+dept ได้, local admin: เปลี่ยน dept ได้แต่ role ไม่ได้
     const finalRole = isCentralAdmin ? (role || 'user_hos') : 'user_hos';
-    // admin_ssj: หน่วยงานของผู้ใช้ใหม่ = หน่วยงานของ admin_ssj เสมอ (หน้าจอล็อค dropdown หน่วยงานไว้แล้ว — 25 ต.ค. 2569 บังคับฝั่ง backend ด้วย)
+    // admin_ssj: กลุ่มงานของผู้ใช้ใหม่ = กลุ่มงานของ admin_ssj เสมอ (หน้าจอล็อค dropdown กลุ่มงานไว้แล้ว — 25 ต.ค. 2569 บังคับฝั่ง backend ด้วย)
     const finalDeptId = (user.role === 'admin_ssj' && user.deptId != null) ? user.deptId
         : (isCentralAdmin || isLocalAdmin) ? (dept_id || null) : user.deptId;
 
@@ -348,7 +348,7 @@ apiRouter.put('/users/:id', authenticateToken, requireAction('users', 'edit'), a
             // admin_ssj: ต้อง dept_id เดียวกัน
             const [target] = await db.query('SELECT dept_id FROM users WHERE id = ?', [userId]);
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
-            if (user.deptId != null && String(target[0].dept_id) !== String(user.deptId)) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์แก้ไขผู้ใช้งานต่างหน่วยงาน' });
+            if (user.deptId != null && String(target[0].dept_id) !== String(user.deptId)) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์แก้ไขผู้ใช้งานต่างกลุ่มงาน' });
         } else if (isDistrictAdmin) {
             const [target] = await db.query(`SELECT h.distid AS distid FROM users u LEFT JOIN chospital h ON u.hospcode = h.hoscode WHERE u.id = ?`, [userId]);
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
@@ -368,7 +368,7 @@ apiRouter.put('/users/:id', authenticateToken, requireAction('users', 'edit'), a
         }
 
         const isLocalAdmin = ROLE_ADMIN_LOCAL.includes(user.role);
-        // admin_ssj: หน่วยงานคงเป็นหน่วยงานของ admin_ssj (หน้าจอล็อค dropdown หน่วยงานไว้แล้ว)
+        // admin_ssj: กลุ่มงานคงเป็นกลุ่มงานของ admin_ssj (หน้าจอล็อค dropdown กลุ่มงานไว้แล้ว)
         const finalDeptId = (user.role === 'admin_ssj' && user.deptId != null) ? user.deptId
             : (isCentralAdmin || isLocalAdmin) ? (dept_id || null) : user.deptId;
 
@@ -425,7 +425,7 @@ apiRouter.delete('/users/:id', authenticateToken, isAnyAdmin, async (req, res) =
         if (user.role === 'admin_ssj') {
             const [target] = await db.query('SELECT dept_id FROM users WHERE id = ?', [userId]);
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
-            if (user.deptId != null && String(target[0].dept_id) !== String(user.deptId)) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์ลบผู้ใช้งานต่างหน่วยงาน' });
+            if (user.deptId != null && String(target[0].dept_id) !== String(user.deptId)) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์ลบผู้ใช้งานต่างกลุ่มงาน' });
         } else if (user.role === 'admin_cup') {
             const [target] = await db.query(`SELECT h.distid AS distid FROM users u LEFT JOIN chospital h ON u.hospcode = h.hoscode WHERE u.id = ?`, [userId]);
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
@@ -475,7 +475,7 @@ apiRouter.put('/users/:id/reset-password', authenticateToken, requireAction('use
         if (user.role === 'admin_ssj') {
             const [target] = await db.query('SELECT dept_id FROM users WHERE id = ?', [userId]);
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });
-            if (user.deptId != null && String(target[0].dept_id) !== String(user.deptId)) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์รีเซ็ตรหัสผ่านผู้ใช้งานต่างหน่วยงาน' });
+            if (user.deptId != null && String(target[0].dept_id) !== String(user.deptId)) return res.status(403).json({ success: false, message: 'คุณไม่มีสิทธิ์รีเซ็ตรหัสผ่านผู้ใช้งานต่างกลุ่มงาน' });
         } else if (user.role === 'admin_cup') {
             const [target] = await db.query(`SELECT h.distid AS distid FROM users u LEFT JOIN chospital h ON u.hospcode = h.hoscode WHERE u.id = ?`, [userId]);
             if (target.length === 0) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้งาน' });

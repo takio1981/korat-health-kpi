@@ -55,7 +55,7 @@
         <ng-template #noKhd>
           <div class="p-4 rounded-2xl border border-gray-200 bg-gray-50">
             <div class="text-xs font-bold text-gray-700"><i class="fas fa-circle-info me-1"></i>ขอบเขตของคุณ</div>
-            <div class="text-[11px] text-gray-600 mt-1">ตัวเลขทั้งหมดนับเฉพาะตัวชี้วัดที่เปิดใช้งานและหน่วยบริการ/หน่วยงานในขอบเขตสิทธิ์ของคุณ<span *ngIf="!summary.can_review"> — การอนุมัติทำโดยผู้ดูแลระดับจังหวัด</span></div>
+            <div class="text-[11px] text-gray-600 mt-1">ตัวเลขทั้งหมดนับเฉพาะตัวชี้วัดที่เปิดใช้งานและหน่วยบริการ/กลุ่มงานในขอบเขตสิทธิ์ของคุณ<span *ngIf="!summary.can_review"> — การอนุมัติทำโดยผู้ดูแลระดับจังหวัด</span></div>
           </div>
         </ng-template>
       </div>
@@ -122,7 +122,7 @@
         <table class="w-full text-xs">
           <thead class="bg-rose-100 text-rose-900 sticky top-0 z-20 shadow-md">
             <tr *ngIf="missingGroup === 'hospital'"><th class="px-3 py-2 text-left">หน่วยบริการ</th><th class="px-3 py-2 text-center">ตัวชี้วัดที่ยังไม่ส่ง</th><th class="px-3 py-2"></th></tr>
-            <tr *ngIf="missingGroup === 'indicator'"><th class="px-3 py-2 text-left">ตัวชี้วัด</th><th class="px-3 py-2 text-left">หน่วยงาน</th><th class="px-3 py-2 text-center">หน่วยบริการที่ยังไม่ส่ง</th><th class="px-3 py-2"></th></tr>
+            <tr *ngIf="missingGroup === 'indicator'"><th class="px-3 py-2 text-left">ตัวชี้วัด</th><th class="px-3 py-2 text-left">กลุ่มงาน</th><th class="px-3 py-2 text-center">หน่วยบริการที่ยังไม่ส่ง</th><th class="px-3 py-2"></th></tr>
           </thead>
           <tbody>
             <ng-container *ngIf="missingGroup === 'hospital'">

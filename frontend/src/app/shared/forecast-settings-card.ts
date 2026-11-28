@@ -48,7 +48,7 @@ export function lastRunText(r: any): string {
         <input type="time" [(ngModel)]="s.digest_time" name="fcTime" class="mt-1 w-full px-3 py-2 border border-gray-200 rounded-xl bg-white">
       </label>
       <div class="md:col-span-2 flex flex-wrap gap-4 text-xs text-gray-700">
-        <label class="flex items-center gap-1"><input type="checkbox" [(ngModel)]="s.digest_inapp" name="fcInapp"> แจ้งเตือนในระบบ (super_admin ภาพรวม · admin_ssj เฉพาะหน่วยงานตน)</label>
+        <label class="flex items-center gap-1"><input type="checkbox" [(ngModel)]="s.digest_inapp" name="fcInapp"> แจ้งเตือนในระบบ (super_admin ภาพรวม · admin_ssj เฉพาะกลุ่มงานตน)</label>
         <label class="flex items-center gap-1"><input type="checkbox" [(ngModel)]="s.digest_email" name="fcEmail"> อีเมลผู้ดูแล</label>
         <label class="flex items-center gap-1"><input type="checkbox" [(ngModel)]="s.digest_telegram" name="fcTg"> Telegram</label>
         <label class="flex items-center gap-1" *ngIf="aiEnabled"><input type="checkbox" [(ngModel)]="s.digest_ai" name="fcAi"> แนบสรุปโดย AI</label>

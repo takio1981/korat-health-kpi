@@ -74,7 +74,7 @@
           <option value="">ทุกประเภทตัวชี้วัด</option><option *ngFor="let t of itypes" [value]="t.key">{{ t.label }}</option>
         </select>
         <select [(ngModel)]="filter.dept" name="fDept" class="px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white max-w-[200px]">
-          <option value="">ทุกหน่วยงาน</option><option *ngFor="let o of options.depts" [value]="o.id">{{ o.label }}</option>
+          <option value="">ทุกกลุ่มงาน</option><option *ngFor="let o of options.depts" [value]="o.id">{{ o.label }}</option>
         </select>
         <select [(ngModel)]="filter.zone" name="fZone" class="px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white">
           <option value="">ทุกโซน</option><option *ngFor="let o of options.zones" [value]="o.id">{{ o.label }}</option>

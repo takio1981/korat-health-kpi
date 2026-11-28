@@ -2,7 +2,7 @@
  * Integration tests: GET /kpi-summary/prev-year-months (database ทดสอบ)
  *   ผลงานรายเดือนของปีงบที่แล้ว ใช้เป็นค่าอ้างอิง "เตือนค่าที่อาจผิดปกติ" ตอนบันทึกผลงาน (frontend/src/app/shared/anomaly.ts)
  *   - คืนข้อมูลของปี year_bh - 1 เท่านั้น
- *   - ขอบเขตตาม role เหมือนรายงาน (user_hos เห็นเฉพาะหน่วยบริการ + หน่วยงานของตน)
+ *   - ขอบเขตตาม role เหมือนรายงาน (user_hos เห็นเฉพาะหน่วยบริการ + กลุ่มงานของตน)
  *   - ไม่รวมตัวชี้วัดที่ปิดใช้งาน, กรองด้วย hospcodes ได้, ต้อง login
  */
 require('./setup');
@@ -53,7 +53,7 @@ beforeAll(async () => {
     await addSummary(ind.a, PREV, hospA, deptId, { oct: '75', nov: '80' });
     await addSummary(ind.a, PREV, hospB, deptId, { oct: '60' });
     await addSummary(ind.a, YEAR, hospA, deptId, { oct: '999' });               // ปีปัจจุบัน — ต้องไม่ถูกคืน
-    await addSummary(ind.otherDept, PREV, hospA, otherDeptId, { oct: '10' });   // หน่วยงานอื่น
+    await addSummary(ind.otherDept, PREV, hospA, otherDeptId, { oct: '10' });   // กลุ่มงานอื่น
     await addSummary(ind.off, PREV, hospA, deptId, { oct: '33' });              // ตัวชี้วัดปิดใช้งาน
 });
 
@@ -85,7 +85,7 @@ describe('GET /kpi-summary/prev-year-months', () => {
         expect(String(rows[0].hospcode)).toBe(String(hospB));
     });
 
-    test('🛡️ user_hos เห็นเฉพาะหน่วยบริการและหน่วยงานของตน แม้ขอหน่วยบริการอื่น', async () => {
+    test('🛡️ user_hos เห็นเฉพาะหน่วยบริการและกลุ่มงานของตน แม้ขอหน่วยบริการอื่น', async () => {
         const res = await as(hosToken, request(app).get(api(`/kpi-summary/prev-year-months?year_bh=${YEAR}&hospcodes=${hospA},${hospB}`)));
         expect(res.status).toBe(200);
         const rows = rowsOf(res);

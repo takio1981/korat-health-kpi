@@ -3,7 +3,7 @@
  *   - ระดับ เสี่ยงสูง/เฝ้าระวัง/ปกติ/ขาดการรายงาน/ข้อมูลไม่พอ จาก kpi_summary + คุณสมบัติตัวชี้วัด (สะสม)
  *   - ดู ณ เดือน (through) ไม่เกินเดือนล่าสุดที่ควรรายงาน | ปีงบที่ปิดแล้วไม่ตรวจขาดการรายงาน
  *   - ตัวชี้วัดรายงานเป็นรอบ (ปีงบที่แล้วรายงาน < 6 เดือน) ไม่ถูกนับขาดการรายงาน
- *   - user_hos เห็นเฉพาะหน่วยบริการ + หน่วยงานของตน, ไม่รวมตัวชี้วัดที่ปิดใช้งาน
+ *   - user_hos เห็นเฉพาะหน่วยบริการ + กลุ่มงานของตน, ไม่รวมตัวชี้วัดที่ปิดใช้งาน
  */
 require('./setup');
 const request = require('supertest');
@@ -53,7 +53,7 @@ beforeAll(async () => {
     ind.stop = await addIndicator('test_fc_หยุดรายงาน', deptId);
     ind.periodic = await addIndicator('test_fc_รายงานเป็นรอบ', deptId);
     ind.off = await addIndicator('test_fc_ปิดใช้งาน', deptId, { active: 0 });
-    ind.other = await addIndicator('test_fc_หน่วยงานอื่น', otherDeptId);
+    ind.other = await addIndicator('test_fc_กลุ่มงานอื่น', otherDeptId);
     const six = (v) => Array(6).fill(v);
     await addSummary(ind.latest, YEAR, hs[0], deptId, '80', six('85'));          // ปกติ
     await addSummary(ind.latest, YEAR, hs[1], deptId, '80', six('75'));          // 93.75% → เฝ้าระวัง
@@ -96,7 +96,7 @@ describe('GET /report/forecast', () => {
         expect(stop).toBeUndefined();                                                          // ผลจริง 80 ≥ 80 = ปกติ
         expect(mine(res.body.items).find(i => i.indicator_id === ind.cum)).toMatchObject({ method: 'actual', projected: '30', confidence: 'actual', status: 'high' });
     });
-    test('ขอบเขต user_hos: เฉพาะหน่วยบริการ + หน่วยงานของตน', async () => {
+    test('ขอบเขต user_hos: เฉพาะหน่วยบริการ + กลุ่มงานของตน', async () => {
         const res = await get(hosToken, `?year_bh=${YEAR}&through=5`);
         expect(res.status).toBe(200);
         const items = mine(res.body.items);

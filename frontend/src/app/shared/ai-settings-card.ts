@@ -45,7 +45,7 @@ export const AI_PRESETS: AiPreset[] = [
   { id: 'cerebras', label: 'Cerebras', provider: 'openai', base_url: 'https://api.cerebras.ai/v1', model: '', needsKey: true, free: 'all',
     note: 'มีโควตาฟรีรายวัน ตอบเร็วมาก · API key จาก cloud.cerebras.ai' },
   { id: 'ollama', label: 'Ollama (โมเดลในเครื่องแม่ข่าย)', provider: 'openai', base_url: 'http://localhost:11434/v1', model: '', needsKey: false, free: 'all',
-    note: 'ข้อมูลไม่ออกนอกหน่วยงาน ไม่มีค่า API — ต้องติดตั้ง Ollama และดาวน์โหลดโมเดลที่รองรับภาษาไทยก่อน (ระบุชื่อรุ่นตามที่ติดตั้ง)' },
+    note: 'ข้อมูลไม่ออกนอกกลุ่มงาน ไม่มีค่า API — ต้องติดตั้ง Ollama และดาวน์โหลดโมเดลที่รองรับภาษาไทยก่อน (ระบุชื่อรุ่นตามที่ติดตั้ง)' },
   { id: 'custom', label: 'กำหนดเอง (OpenAI-compatible)', provider: 'openai', base_url: '', model: '', needsKey: false, free: 'none', note: 'ระบุ Base URL ที่ลงท้ายก่อน /chat/completions' },
 ];
 const FREE_TEXT: Record<AiFree, string> = { all: 'ใช้ฟรีได้', some: 'มีรุ่นฟรี', none: '' };
@@ -184,7 +184,7 @@ export function presetOf(provider: string, baseUrl: string): string {
 
       <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
         <i class="fas fa-triangle-exclamation me-1"></i>บริการแบบฟรีบางรายอาจนำข้อมูลที่ส่งไปใช้พัฒนาโมเดล — ตรวจเงื่อนไขของผู้ให้บริการก่อนเปิดใช้
-        (ถ้าข้อมูลห้ามออกนอกหน่วยงาน ให้ใช้ Ollama ในเครื่อง)
+        (ถ้าข้อมูลห้ามออกนอกกลุ่มงาน ให้ใช้ Ollama ในเครื่อง)
       </div>
 
       <div class="flex flex-wrap gap-2">

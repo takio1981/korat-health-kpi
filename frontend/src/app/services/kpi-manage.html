@@ -93,7 +93,7 @@
           <button (click)="switchTab('indicators')" [class]="activeTab === 'indicators' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="flex-1 py-4 px-6 text-center border-b-2 font-medium text-sm focus:outline-none">ตัวชี้วัด (KPIs)</button>
           <button (click)="switchTab('main-indicators')" [class]="activeTab === 'main-indicators' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="flex-1 py-4 px-6 text-center border-b-2 font-medium text-sm focus:outline-none">หมวดหมู่หลัก</button>
           <button (click)="switchTab('strategies')" [class]="activeTab === 'strategies' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="flex-1 py-4 px-6 text-center border-b-2 font-medium text-sm focus:outline-none">ยุทธศาสตร์</button>
-          <button (click)="switchTab('departments')" [class]="activeTab === 'departments' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="flex-1 py-4 px-6 text-center border-b-2 font-medium text-sm focus:outline-none">หน่วยงาน</button>
+          <button (click)="switchTab('departments')" [class]="activeTab === 'departments' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'" class="flex-1 py-4 px-6 text-center border-b-2 font-medium text-sm focus:outline-none">กลุ่มงาน</button>
         </div>
 
         <div class="p-6">
@@ -112,11 +112,11 @@
                   <th class="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider">ID</th>
                   <th class="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider" *ngIf="activeTab === 'indicators'">ชื่อตัวชี้วัด</th>
                   <th class="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider" *ngIf="activeTab === 'indicators'">หมวดหมู่หลัก</th>
-                  <th class="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider" *ngIf="activeTab === 'indicators'">หน่วยงาน</th>
+                  <th class="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider" *ngIf="activeTab === 'indicators'">กลุ่มงาน</th>
                   <th class="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider" *ngIf="activeTab === 'main-indicators'">ชื่อหมวดหมู่หลัก</th>
                   <th class="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider" *ngIf="activeTab === 'strategies'">ชื่อยุทธศาสตร์</th>
                   <th class="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider" *ngIf="activeTab === 'departments'">รหัส</th>
-                  <th class="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider" *ngIf="activeTab === 'departments'">ชื่อหน่วยงาน</th>
+                  <th class="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider" *ngIf="activeTab === 'departments'">ชื่อกลุ่มงาน</th>
                   <th class="px-6 py-3 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">จัดการ</th>
                 </tr>
               </thead>
@@ -171,7 +171,7 @@
               <option *ngFor="let m of mainIndicators" [value]="m.id">{{ m.indicator_name }}</option>
             </select>
           </div>
-          <div><label class="block text-sm font-medium text-gray-700 mb-1">หน่วยงาน</label>
+          <div><label class="block text-sm font-medium text-gray-700 mb-1">กลุ่มงาน</label>
             <select [(ngModel)]="currentItem.dept_id" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500">
               <option *ngFor="let d of departments" [value]="d.id">{{ d.dept_name }}</option>
             </select>
@@ -199,8 +199,8 @@
 
         <!-- Fields for Departments -->
         <ng-container *ngIf="activeTab === 'departments'">
-          <div><label class="block text-sm font-medium text-gray-700 mb-1">รหัสหน่วยงาน</label><input type="text" [(ngModel)]="currentItem.dept_code" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500"></div>
-          <div><label class="block text-sm font-medium text-gray-700 mb-1">ชื่อหน่วยงาน</label><input type="text" [(ngModel)]="currentItem.dept_name" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500"></div>
+          <div><label class="block text-sm font-medium text-gray-700 mb-1">รหัสกลุ่มงาน</label><input type="text" [(ngModel)]="currentItem.dept_code" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500"></div>
+          <div><label class="block text-sm font-medium text-gray-700 mb-1">ชื่อกลุ่มงาน</label><input type="text" [(ngModel)]="currentItem.dept_name" class="w-full px-4 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-green-500"></div>
         </ng-container>
       </div>
 

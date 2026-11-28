@@ -403,7 +403,7 @@ export class NotificationsComponent implements OnInit {
                   <tr><td style="color:#6b7280">สิทธิ์ที่ขอ</td><td style="font-weight:600">${roleLabel[u.role] || u.role}</td></tr>
                   <tr><td style="color:#6b7280">หน่วยบริการ</td><td style="font-weight:600">${u.hosname || u.hospcode || '-'}</td></tr>
                   <tr><td style="color:#6b7280">เลขบัตรประชาชน</td><td style="font-weight:600;font-family:monospace">${cidFormatted}</td></tr>
-                  <tr><td style="color:#6b7280">หน่วยงาน</td><td style="font-weight:600">${u.dept_name || '-'}</td></tr>
+                  <tr><td style="color:#6b7280">กลุ่มงาน</td><td style="font-weight:600">${u.dept_name || '-'}</td></tr>
                 </table>
               </div>`,
             icon: 'info',

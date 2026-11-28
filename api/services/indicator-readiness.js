@@ -2,7 +2,7 @@
  * ความพร้อมของตัวชี้วัด (ระยะ 5 ของแผน lean งานผู้ดูแล — 22 พ.ย. 2569)
  * บอกผู้ดูแลว่าตัวชี้วัดใด "ยังไม่พร้อม" ใช้งาน/ส่ง KHD และต้องแก้ช่องไหน — ตรวจแบบกฎ อ่านอย่างเดียว ไม่แก้ข้อมูลเอง
  *   block = ใช้งานไม่ได้จริง (ไม่มีชื่อ, ยังไม่ตั้งประเภทหน่วยบริการ = เพิ่มให้หน่วยบริการไม่ได้, ชื่อตารางส่งออกผิด/ไม่มี, สูตรคำนวณไม่ได้)
- *   warn  = ควรตรวจ (ไม่มีเป้าหมาย/เกณฑ์/หน่วยงาน/หมวดหมู่หลัก, ยังไม่ได้เพิ่มให้หน่วยบริการในปีงบนี้, ปีงบของตัวชี้วัดไม่รวมปีนี้)
+ *   warn  = ควรตรวจ (ไม่มีเป้าหมาย/เกณฑ์/กลุ่มงาน/หมวดหมู่หลัก, ยังไม่ได้เพิ่มให้หน่วยบริการในปีงบนี้, ปีงบของตัวชี้วัดไม่รวมปีนี้)
  *   info  = ข้อมูลประกอบ (ปิดส่งออก KHD, ยังไม่เชื่อมรายงาน KHD)
  *   สถานะรายงานใน KHD (warn: รายงานปิดใช้งานในปีงบนี้ / ไม่พบรายงานที่เชื่อมไว้) อ่านจากสำเนา khd_reports_snapshot (services/khd-snapshot.js)
  *   — ไม่อ่าน KHD ทุกคำขอ; ยังไม่มีสำเนา = ไม่ตรวจข้อนี้
@@ -24,7 +24,7 @@ const RULES = {
     bad_formula: { level: 'block', text: 'สูตรคำนวณผลงานคำนวณไม่ได้', field: 'indicator-formula' },
     no_target: { level: 'warn', text: 'ยังไม่ตั้งเป้าหมาย (ค่าเริ่มต้น)', field: 'indicator-target' },
     no_criterion: { level: 'warn', text: 'ยังไม่ตั้งเกณฑ์', field: 'indicator-criterion' },
-    no_dept: { level: 'warn', text: 'ยังไม่ระบุหน่วยงาน', field: 'indicator-dept' },
+    no_dept: { level: 'warn', text: 'ยังไม่ระบุกลุ่มงาน', field: 'indicator-dept' },
     no_main: { level: 'warn', text: 'ยังไม่ระบุหมวดหมู่หลัก', field: 'indicator-main' },
     not_assigned: { level: 'warn', text: 'ยังไม่ได้เพิ่มให้หน่วยบริการในปีงบนี้', field: null },
     year_mismatch: { level: 'warn', text: 'ปีงบของตัวชี้วัดไม่รวมปีงบนี้', field: 'indicator-fiscal-year' },
@@ -63,7 +63,7 @@ function evaluateReadiness(ind, ctx = {}) {
     return { level, issues };
 }
 
-/** ความพร้อมของตัวชี้วัดที่เปิดใช้งาน (ตามหน่วยงานถ้าระบุ) ในปีงบ → { year_bh, counts, items } */
+/** ความพร้อมของตัวชี้วัดที่เปิดใช้งาน (ตามกลุ่มงานถ้าระบุ) ในปีงบ → { year_bh, counts, items } */
 async function indicatorReadiness({ yearBh, deptId = null, includeInactive = false } = {}) {
     const where = [];
     const params = [];

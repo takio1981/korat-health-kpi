@@ -1,6 +1,6 @@
 /**
  * ระบบเตือนล่วงหน้า ระยะที่ 3 (8 พ.ย. 2569): สรุปตัวชี้วัดเสี่ยงรายสัปดาห์ + การตั้งค่า (database ทดสอบ)
- *   - ข้อความสรุป / แจ้งเตือนในระบบของ admin_ssj เฉพาะหน่วยงานตน + super_admin ภาพรวม / ไม่มีความเสี่ยง = ไม่ส่ง
+ *   - ข้อความสรุป / แจ้งเตือนในระบบของ admin_ssj เฉพาะกลุ่มงานตน + super_admin ภาพรวม / ไม่มีความเสี่ยง = ไม่ส่ง
  *   - ตัวตั้งเวลา: วัน + เวลา (ช่วง 2 นาที เวลาไทย) + ไม่ส่งซ้ำวันเดียวกัน
  *   - PUT/GET /forecast/settings + POST /forecast/digest/run (preview) — super_admin เท่านั้น, ตรวจค่า
  *   ⚠️ ฐานทดสอบมีโทเคนจริง — ส่งอีเมล/Telegram ถูกแทนด้วย mock ทั้งหมด
@@ -44,7 +44,7 @@ describe('ข้อความสรุป (buildDigest / buildDeptNotices)', (
         expect(m.tg).not.toContain('<ทารก>');
         expect(buildDigest(fc, { aiSummary: 'สรุปจาก AI' }).text).toContain('— สรุปโดย AI (โปรดตรวจสอบ) —\nสรุปจาก AI');
     });
-    test('แจ้งเตือนรายหน่วยงาน: เฉพาะหน่วยงานที่มีคู่เสี่ยงสูง', () => {
+    test('แจ้งเตือนรายกลุ่มงาน: เฉพาะกลุ่มงานที่มีคู่เสี่ยงสูง', () => {
         const n = buildDeptNotices(fc);
         expect(n.map(x => x.dept_id)).toEqual([5]);
         expect(n[0].title).toBe('เตือนล่วงหน้า: ตัวชี้วัดเสี่ยงสูง 2 คู่ (ปีงบ 2570)');
@@ -99,7 +99,7 @@ describe('ส่งสรุป + ตั้งค่า (ฐานทดสอ�
     test('ปิดอยู่ (ค่าตั้งต้น) = ไม่ส่งจากตัวตั้งเวลา', async () => {
         expect(await runForecastDigest({ now: NOW })).toEqual({ skipped: true, reason: 'disabled' });
     });
-    test('สั่งส่ง: แจ้งเตือนในระบบ admin_ssj หน่วยงานที่มีความเสี่ยง + super_admin, อีเมล/Telegram (mock)', async () => {
+    test('สั่งส่ง: แจ้งเตือนในระบบ admin_ssj กลุ่มงานที่มีความเสี่ยง + super_admin, อีเมล/Telegram (mock)', async () => {
         const r = await runForecastDigest({ manual: true, now: NOW });
         expect(r.year_bh).toBe(YEAR);
         expect(r.counts.high).toBeGreaterThanOrEqual(1);
@@ -109,7 +109,7 @@ describe('ส่งสรุป + ตั้งค่า (ฐานทดสอ�
         const [mine] = await db.query("SELECT user_id, title FROM notifications WHERE year_bh = ? AND title LIKE 'เตือนล่วงหน้า%'", [YEAR]);
         const ids = mine.map(x => x.user_id);
         expect(ids).toContain(ssjUser.id);
-        expect(ids).not.toContain(ssjOther.id);              // หน่วยงานอื่นไม่มีคู่เสี่ยงสูง
+        expect(ids).not.toContain(ssjOther.id);              // กลุ่มงานอื่นไม่มีคู่เสี่ยงสูง
         expect(mine.find(x => x.user_id === ssjUser.id).title).toContain('ตัวชี้วัดเสี่ยงสูง 1 คู่');
     });
     test('PUT /forecast/settings ตรวจค่า + GET คืนค่าที่บันทึก | ผู้ใช้ทั่วไป = 403', async () => {

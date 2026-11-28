@@ -212,6 +212,7 @@
   "POST /khupskpi/api/refresh-summary/finalize :: authenticateToken > isSuperAdmin > handler",
   "GET /khupskpi/api/kpi-summary/prev-year-months :: authenticateToken > handler",
   "GET /khupskpi/api/kpi-summary :: authenticateToken > handler",
+  "GET /khupskpi/api/report/by-dept-kpi :: authenticateToken > handler",
   "GET /khupskpi/api/report/by-indicator :: authenticateToken > handler",
   "GET /khupskpi/api/report/by-hospital :: authenticateToken > handler",
   "GET /khupskpi/api/report/by-district :: authenticateToken > handler",

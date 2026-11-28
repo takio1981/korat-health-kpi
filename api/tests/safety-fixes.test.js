@@ -2,7 +2,7 @@
  * ระยะ 1 ของแผน lean งานผู้ดูแล (22 พ.ย. 2569) — ข้อบกพร่องด้านความปลอดภัยที่พบจากการสำรวจโค้ด (ทุกข้อ fail กับโค้ดเดิม)
  * 1) /update-kpi ไม่ตรวจ "ปิดการคีย์ข้อมูล" (เรียก API ตรงแล้วบันทึกได้)  2) preserve_status:'Approved' จาก client ได้สถานะอนุมัติ
  * 3) admin_hos/admin_cup เขียนผลงานหน่วยบริการนอกขอบเขต  4) อนุมัติทับรายการอุทธรณ์  5) ส่งคืนรายการที่อนุมัติแล้ว (= ปลดล็อค) โดยไม่ใช่ super_admin
- * 6) pending-kpi กรองหน่วยงานกับทุก role  7) ด่าน super_admin แบบเข้มสำหรับเส้นทางที่เขียน KHD  8) ชื่อตัวชี้วัดว่าง  9) ปีงบปัจจุบัน (เวลาไทย)
+ * 6) pending-kpi กรองกลุ่มงานกับทุก role  7) ด่าน super_admin แบบเข้มสำหรับเส้นทางที่เขียน KHD  8) ชื่อตัวชี้วัดว่าง  9) ปีงบปัจจุบัน (เวลาไทย)
  */
 require('./setup');
 const request = require('supertest');
@@ -138,8 +138,8 @@ describe('อนุมัติ / ส่งคืน ตรวจสถานะ
 });
 
 describe('pending-kpi ตามขอบเขต', () => {
-    test('✅ admin_ssj นับทุกหน่วยบริการของหน่วยงานตัวเอง (นับเป็นคู่ + ส่งกลับแก้ไข) — ตัวชี้วัดหน่วยงานอื่นไม่นับ', async () => {
-        // เส้นทางนี้ = isAdmin (ผู้มีสิทธิ์อนุมัติ) — ขอบเขต: admin_ssj = หน่วยงานตัวเองทุกหน่วยบริการ
+    test('✅ admin_ssj นับทุกหน่วยบริการของกลุ่มงานตัวเอง (นับเป็นคู่ + ส่งกลับแก้ไข) — ตัวชี้วัดกลุ่มงานอื่นไม่นับ', async () => {
+        // เส้นทางนี้ = isAdmin (ผู้มีสิทธิ์อนุมัติ) — ขอบเขต: admin_ssj = กลุ่มงานตัวเองทุกหน่วยบริการ
         await db.query('DELETE FROM kpi_results WHERE indicator_id = ? AND hospcode IN (?)', [ind, [hB, hOther]]);
         const count = async () => {
             const r = await request(app).get(api(`/notifications/pending-kpi?year_bh=${YEAR}`)).set('Authorization', `Bearer ${T.ssj}`);

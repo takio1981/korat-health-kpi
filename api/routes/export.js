@@ -94,7 +94,7 @@ apiRouter.post('/khd-sync/unapproved-report', authenticateToken, requireSuperAdm
 
 // ========== Export KPI Tables ==========
 
-// ดึงรายการ KPI indicators ที่มี table_process (สำหรับเลือก export) พร้อมชื่อหมวดหมู่และหน่วยงาน
+// ดึงรายการ KPI indicators ที่มี table_process (สำหรับเลือก export) พร้อมชื่อหมวดหมู่และกลุ่มงาน
 apiRouter.get('/exportable-indicators', authenticateToken, isSuperAdmin, async (req, res) => {
     try {
         // คืน upload_excel ด้วย — UI export-kpi จะใช้กรอง/แสดง badge
@@ -212,7 +212,7 @@ apiRouter.post('/sync-to-khd/preview', authenticateToken, isSuperAdmin, async (r
         if (!reqIds.length) return res.status(400).json({ success: false, message: 'กรุณาเลือกตัวชี้วัดอย่างน้อย 1 รายการ' });
     }
     try {
-        // ดึงตาราง export จาก local (table_process ที่มีข้อมูล) พร้อมหมวดหมู่หลัก + หน่วยงาน สำหรับ filter/แสดงผล
+        // ดึงตาราง export จาก local (table_process ที่มีข้อมูล) พร้อมหมวดหมู่หลัก + กลุ่มงาน สำหรับ filter/แสดงผล
         const [indicators] = await db.query(`
             SELECT i.id, i.kpi_indicators_name, i.table_process,
                    mi.main_indicator_name, d.dept_name
@@ -232,7 +232,7 @@ apiRouter.post('/sync-to-khd/preview', authenticateToken, isSuperAdmin, async (r
                     reason: Number(r.is_active) !== 1 ? 'ปิดใช้งานตัวชี้วัด' : Number(r.upload_excel) === 1 ? 'ปิดส่งออก KHD' : 'ไม่มีชื่อตาราง (table_process)' });
             }
         }
-        // deduplicate ตาม table_process (1 ตารางอาจมีหลายตัวชี้วัด/หลายหมวดหมู่/หลายหน่วยงานรวมกันได้)
+        // deduplicate ตาม table_process (1 ตารางอาจมีหลายตัวชี้วัด/หลายหมวดหมู่/หลายกลุ่มงานรวมกันได้)
         const tableMap = new Map();
         for (const ind of indicators) {
             const tp = ind.table_process.trim().replace(/-/g, '_'); // ชื่อตารางส่งออกจริง (performKpiExport แปลงขีดกลางเป็นขีดล่าง)

@@ -229,7 +229,7 @@
             <h5 class="font-bold text-blue-800 text-sm mb-2"><i class="fas fa-filter mr-1"></i>A. ตัวกรองข้อมูล (Multi-select)</h5>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
               <div class="bg-white rounded-lg p-2 border border-teal-200"><b class="text-teal-700"><i class="fas fa-map-marker-alt mr-1"></i>สถานที่:</b> อำเภอ / ประเภท รพ. / หน่วยบริการ (cascade กัน)</div>
-              <div class="bg-white rounded-lg p-2 border border-amber-200"><b class="text-amber-700"><i class="fas fa-chart-pie mr-1"></i>ตัวชี้วัด:</b> หน่วยงาน / หมวดหมู่หลัก / ตัวชี้วัด</div>
+              <div class="bg-white rounded-lg p-2 border border-amber-200"><b class="text-amber-700"><i class="fas fa-chart-pie mr-1"></i>ตัวชี้วัด:</b> กลุ่มงาน / หมวดหมู่หลัก / ตัวชี้วัด</div>
               <div class="bg-white rounded-lg p-2 border border-gray-200"><b class="text-gray-700"><i class="fas fa-tag mr-1"></i>สถานะ:</b> รอตรวจสอบ / ตรวจสอบแล้ว / ไม่พบข้อมูล (เลือกได้หลายค่า)</div>
               <div class="bg-white rounded-lg p-2 border border-blue-200"><b class="text-blue-700"><i class="fas fa-search mr-1"></i>ค้นหาข้อความ:</b> พิมพ์คำ → กรองตามชื่อตัวชี้วัด</div>
             </div>
@@ -238,7 +238,7 @@
               <div class="bg-gray-100 rounded-lg p-2 text-gray-700"><b><i class="fas fa-undo mr-1"></i>ล้างตัวกรอง</b> — ล้างทุก filter ในคลิกเดียว (อยู่ต่อจากปุ่มค้นหา)</div>
             </div>
             <div class="mt-2 bg-white rounded-lg p-2 border border-teal-200 text-xs">
-              <b class="text-teal-700"><i class="fas fa-check-square mr-1"></i>เลือกทั้งหมด:</b> ทุก dropdown ตัวกรอง (อำเภอ/ประเภท รพ./หน่วยบริการ/สถานะ/หน่วยงาน/ตัวชี้วัดของ/ประเภทตัวชี้วัด) มี checkbox "เลือกทั้งหมด" แถวบนสุด กดครั้งเดียวเลือกทุกตัวเลือก กดซ้ำยกเลิกทั้งหมด
+              <b class="text-teal-700"><i class="fas fa-check-square mr-1"></i>เลือกทั้งหมด:</b> ทุก dropdown ตัวกรอง (อำเภอ/ประเภท รพ./หน่วยบริการ/สถานะ/กลุ่มงาน/ตัวชี้วัดของ/ประเภทตัวชี้วัด) มี checkbox "เลือกทั้งหมด" แถวบนสุด กดครั้งเดียวเลือกทุกตัวเลือก กดซ้ำยกเลิกทั้งหมด
             </div>
           </div>
 
@@ -470,11 +470,11 @@
           <!-- แถว 2: ตัวชี้วัด (indigo) + ปุ่มค้นหา -->
           <div class="flex flex-wrap items-end gap-2">
             <span class="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[9px] font-bold self-center"><i class="fas fa-bullseye mr-0.5"></i>ตัวชี้วัด</span>
-            <!-- หน่วยงาน (multi) -->
+            <!-- กลุ่มงาน (multi) -->
             <div class="relative min-w-[140px] flex-1 max-w-[200px]">
               <button type="button" (click)="toggleDropdown('dept')"
                       class="w-full flex items-center justify-between px-2 py-1 border border-indigo-200 rounded-lg bg-white text-xs hover:border-indigo-400 focus:ring-1 focus:ring-indigo-500 outline-none">
-                <span class="truncate" [class.text-gray-400]="selectedDepts.length === 0">{{ filterLabel(selectedDepts, 'หน่วยงาน: ทั้งหมด') }}</span>
+                <span class="truncate" [class.text-gray-400]="selectedDepts.length === 0">{{ filterLabel(selectedDepts, 'กลุ่มงาน: ทั้งหมด') }}</span>
                 <i class="fas fa-chevron-down ml-1 text-gray-400"></i>
               </button>
               <div *ngIf="openFilterDropdown === 'dept'" class="absolute z-50 top-full left-0 mt-1 w-[min(20rem,calc(100vw-2rem))] bg-white border border-gray-200 rounded-lg shadow-xl max-h-80 overflow-hidden flex flex-col">
@@ -584,7 +584,7 @@
           <div class="relative flex-1">
             <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
             <input type="text" [(ngModel)]="searchTerm" (keyup.enter)="doSearch()"
-                  placeholder="พิมพ์ค้นหาชื่อตัวชี้วัด หน่วยงาน หน่วยบริการ อำเภอ แล้วกด Enter — ไม่ต้องเลือกตัวกรอง (ค้นในขอบเขตสิทธิ์ของคุณ)" id="dashboard-search"
+                  placeholder="พิมพ์ค้นหาชื่อตัวชี้วัด กลุ่มงาน หน่วยบริการ อำเภอ แล้วกด Enter — ไม่ต้องเลือกตัวกรอง (ค้นในขอบเขตสิทธิ์ของคุณ)" id="dashboard-search"
                   class="w-full pl-9 pr-4 py-1.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 outline-none text-xs hover:border-green-400 transition-all">
           </div>
           <div class="text-[10px] text-gray-400 font-medium whitespace-nowrap">
@@ -622,7 +622,7 @@
                   <p class="text-xs font-bold text-indigo-700 flex items-center justify-center gap-1.5">
                     <i class="fas fa-filter"></i>กรุณาเลือกตัวกรองก่อนดูข้อมูล
                   </p>
-                  <p class="text-[10px] text-indigo-500 mt-0.5">เลือก อำเภอ, หน่วยบริการ, หน่วยงาน หรือตัวชี้วัด แล้วกดปุ่ม <b>"ค้นหา"</b></p>
+                  <p class="text-[10px] text-indigo-500 mt-0.5">เลือก อำเภอ, หน่วยบริการ, กลุ่มงาน หรือตัวชี้วัด แล้วกดปุ่ม <b>"ค้นหา"</b></p>
                   <p class="text-[9px] text-indigo-400 mt-0.5">เพื่อประสิทธิภาพการโหลด กรุณาเลือกตัวกรองให้แคบลงก่อนค้นหา</p>
                 </div>
               </div>
@@ -1240,7 +1240,7 @@
                       <span *ngIf="item.table_process" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded text-[10px] font-mono whitespace-nowrap shrink-0" [title]="'table_process: ' + item.table_process">
                         <i class="fas fa-table text-[8px]"></i>{{ item.table_process }}
                       </span>
-                      <span *ngIf="item.dept_name" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded text-[10px] font-semibold whitespace-nowrap shrink-0" [title]="'หน่วยงาน: ' + item.dept_name">
+                      <span *ngIf="item.dept_name" class="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded text-[10px] font-semibold whitespace-nowrap shrink-0" [title]="'กลุ่มงาน: ' + item.dept_name">
                         <i class="fas fa-building text-[8px]"></i>{{ item.dept_name }}
                       </span>
                       <button (click)="openTrendModal(item)" class="text-blue-500 hover:text-blue-700 p-0.5 focus:outline-none shrink-0" title="ดูแนวโน้ม">
@@ -1420,7 +1420,7 @@
             <p class="text-xs font-bold text-indigo-700 flex items-center justify-center gap-1.5">
               <i class="fas fa-filter"></i>กรุณาเลือกตัวกรองก่อนดูข้อมูล
             </p>
-            <p class="text-[10px] text-indigo-500 mt-0.5">เลือก อำเภอ, หน่วยบริการ, หน่วยงาน หรือตัวชี้วัด แล้วกดปุ่ม <b>"ค้นหา"</b></p>
+            <p class="text-[10px] text-indigo-500 mt-0.5">เลือก อำเภอ, หน่วยบริการ, กลุ่มงาน หรือตัวชี้วัด แล้วกดปุ่ม <b>"ค้นหา"</b></p>
             <p class="text-[9px] text-indigo-400 mt-0.5">เพื่อประสิทธิภาพการโหลด กรุณาเลือกตัวกรองให้แคบลงก่อนค้นหา</p>
           </div>
         </div>
@@ -1594,9 +1594,9 @@
           </div>
         </div>
 
-        <!-- หน่วยงาน (multi + เลือกทั้งหมด) -->
+        <!-- กลุ่มงาน (multi + เลือกทั้งหมด) -->
         <div class="space-y-1">
-          <label class="text-xs font-bold text-indigo-600">หน่วยงาน</label>
+          <label class="text-xs font-bold text-indigo-600">กลุ่มงาน</label>
           <div class="relative min-w-[160px]">
             <button type="button" (click)="toggleAddKpiDropdown('dept')"
                     class="w-full flex items-center justify-between px-3 py-2 border border-indigo-300 rounded-lg bg-white text-sm hover:border-indigo-400 outline-none">
@@ -1623,7 +1623,7 @@
           </div>
         </div>
       </ng-container>
-      <!-- User: แสดงข้อมูลหน่วยบริการ/หน่วยงาน อัตโนมัติ -->
+      <!-- User: แสดงข้อมูลหน่วยบริการ/กลุ่มงาน อัตโนมัติ -->
       <ng-container *ngIf="!isAdmin && !isLocalAdmin">
         <div class="space-y-1">
           <label class="text-xs font-bold text-gray-500">หน่วยบริการ</label>
@@ -1632,7 +1632,7 @@
           </div>
         </div>
         <div class="space-y-1">
-          <label class="text-xs font-bold text-gray-500">หน่วยงาน</label>
+          <label class="text-xs font-bold text-gray-500">กลุ่มงาน</label>
           <div class="px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 font-medium">
             <i class="fas fa-building text-blue-500 mr-1"></i>{{ currentUser?.dept_name || '-' }}
           </div>
@@ -1785,7 +1785,7 @@
     <div class="flex flex-wrap items-center gap-2 mb-3">
       <div class="relative flex-1 min-w-[220px]">
         <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
-        <input type="text" [(ngModel)]="addKpiSearch" placeholder="ค้นหาตัวชี้วัด (ชื่อ / หมวดหมู่ / หน่วยงาน / ชื่อตาราง)"
+        <input type="text" [(ngModel)]="addKpiSearch" placeholder="ค้นหาตัวชี้วัด (ชื่อ / หมวดหมู่ / กลุ่มงาน / ชื่อตาราง)"
                class="w-full pl-8 pr-8 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-green-500">
         <button *ngIf="addKpiSearch" type="button" (click)="addKpiSearch = ''" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600" title="ล้างคำค้น">
           <i class="fas fa-times-circle"></i>
@@ -1846,7 +1846,7 @@
             </th>
             <th class="px-3 py-2 font-bold">หมวดหมู่หลัก</th>
             <th class="px-3 py-2 font-bold">ชื่อตัวชี้วัด</th>
-            <th class="px-3 py-2 font-bold">หน่วยงาน</th>
+            <th class="px-3 py-2 font-bold">กลุ่มงาน</th>
             <th class="px-3 py-2 font-bold">หน่วยบริการที่จะเพิ่ม</th>
             <th class="px-2 py-2 font-bold text-center">ปีงบฯ</th>
             <th class="px-3 py-2 font-bold text-right w-28">เป้าหมาย</th>
@@ -1934,7 +1934,7 @@
           </tr>
           <tr *ngIf="filteredNewKpiList.length === 0">
             <td colspan="19" class="px-6 py-8 text-center text-gray-400">
-              <ng-container *ngIf="newKpiList.length === 0">ไม่มีตัวชี้วัดที่สามารถเพิ่มได้สำหรับปีงบประมาณนี้ (อาจมีครบแล้ว หรือลองปรับตัวกรองหน่วยงาน)</ng-container>
+              <ng-container *ngIf="newKpiList.length === 0">ไม่มีตัวชี้วัดที่สามารถเพิ่มได้สำหรับปีงบประมาณนี้ (อาจมีครบแล้ว หรือลองปรับตัวกรองกลุ่มงาน)</ng-container>
               <ng-container *ngIf="newKpiList.length > 0 && filteredNewKpiList.length === 0">
                 <ng-container *ngIf="addKpiListFilter === 'missing' && addKpiChipCounts.missing === 0">เพิ่มตัวชี้วัดครบแล้วทุกรายการ — กด "มีอยู่แล้ว" เพื่อดูรายการ</ng-container>
                 <ng-container *ngIf="!(addKpiListFilter === 'missing' && addKpiChipCounts.missing === 0)">ไม่พบรายการตามคำค้น/หมวดหมู่/สถานะที่เลือก — ลองเปลี่ยนตัวกรอง</ng-container>

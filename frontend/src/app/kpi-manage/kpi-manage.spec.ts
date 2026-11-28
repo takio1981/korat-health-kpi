@@ -84,7 +84,7 @@ describe('KpiManageComponent', () => {
       component.indicators = [{ id: 7, kpi_indicators_name: 'ตัวเดิม', table_process: 'kpi_ncd_001' }];
     });
 
-    it('เปิดเพิ่มใหม่ → ขอรหัสจากระบบมาแสดง และเปลี่ยนหน่วยงานแล้วขอใหม่ตามหน่วยงาน', () => {
+    it('เปิดเพิ่มใหม่ → ขอรหัสจากระบบมาแสดง และเปลี่ยนกลุ่มงานแล้วขอใหม่ตามกลุ่มงาน', () => {
       component.openModal();
       expect(component.codeAuto).toBe(true);
       expect(component.showCodeFields).toBe(false);
@@ -109,7 +109,7 @@ describe('KpiManageComponent', () => {
       expect(req.request.body.kpi_indicators_code).toBe('');
     });
 
-    it('พิมพ์รหัสเอง → เลิกโหมดอัตโนมัติ ไม่ถูกทับเมื่อเปลี่ยนหน่วยงาน และส่งค่าที่พิมพ์', () => {
+    it('พิมพ์รหัสเอง → เลิกโหมดอัตโนมัติ ไม่ถูกทับเมื่อเปลี่ยนกลุ่มงาน และส่งค่าที่พิมพ์', () => {
       component.openModal();
       flushSuggest('kpi_gen_001');
       component.currentItem.table_process = 'my_table';
@@ -457,7 +457,7 @@ describe('KpiManageComponent', () => {
       expect(component.modalFiscalYearAvailable).toContain('2570');
     });
 
-    it('หน่วยงาน/หมวดหมู่หลัก: นับ/กรอง ชิปแยก แถวในหน้าต่างรายละเอียด และปรับค่าในรายการทันทีหลังบันทึก (11 พ.ย. 2569)', () => {
+    it('กลุ่มงาน/หมวดหมู่หลัก: นับ/กรอง ชิปแยก แถวในหน้าต่างรายละเอียด และปรับค่าในรายการทันทีหลังบันทึก (11 พ.ย. 2569)', () => {
       component.departments = [{ id: 1, dept_name: 'กลุ่มงาน ก' }, { id: 2, dept_name: 'กลุ่มงาน ข' }];
       component.mainIndicators = [{ id: 10, main_indicator_name: 'หมวด ก' }];
       component.indicators.push(
@@ -494,7 +494,7 @@ describe('KpiManageComponent', () => {
     });
   });
 
-  // ---- 19 ต.ค. 2569: จับคู่ข้อมูล KHD (หน่วยงาน / หมวดหมู่หลัก / ยุทธศาสตร์) ----
+  // ---- 19 ต.ค. 2569: จับคู่ข้อมูล KHD (กลุ่มงาน / หมวดหมู่หลัก / ยุทธศาสตร์) ----
   describe('จับคู่ข้อมูล KHD', () => {
     let http: HttpTestingController;
     beforeEach(() => { http = TestBed.inject(HttpTestingController); component.isSuperAdmin = true; });

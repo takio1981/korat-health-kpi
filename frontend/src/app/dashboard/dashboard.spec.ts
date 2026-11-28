@@ -337,7 +337,7 @@ describe('DashboardComponent', () => {
     });
 
     // ---- ตัวกรองเพิ่มเติม + นำตัวกรองจากหน้าบันทึกผลงานมาใช้ (11 พ.ย. 2569) ----
-    it('เปิดหน้าต่าง: นำตัวกรองหน่วยงาน/ชื่อตัวชี้วัด/หมวดหมู่/ประเภทหน่วยบริการ/ตัวชี้วัดของ/ประเภทตัวชี้วัด จากหน้าบันทึกผลงานมาใช้', () => {
+    it('เปิดหน้าต่าง: นำตัวกรองกลุ่มงาน/ชื่อตัวชี้วัด/หมวดหมู่/ประเภทหน่วยบริการ/ตัวชี้วัดของ/ประเภทตัวชี้วัด จากหน้าบันทึกผลงานมาใช้', () => {
       component.selectedIndicator = 'อัตราการคัดกรอง';
       component.selectedMain = 'หมวด ก';
       component.selectedHosTypes = ['18'];
@@ -354,7 +354,7 @@ describe('DashboardComponent', () => {
       component.addKpiDeptList = [{ id: 1, dept_name: 'กลุ่มงาน ก' }, { id: 7, dept_name: 'กลุ่มงาน ข' }];
       component.syncAddKpiDeptsFromDashboard();
       expect(component.addKpiSelDepts).toEqual(['7']);
-      // ไม่ได้กรองหน่วยงานไว้ = ไม่เปลี่ยน
+      // ไม่ได้กรองกลุ่มงานไว้ = ไม่เปลี่ยน
       component.selectedDepts = [];
       component.addKpiSelDepts = ['1'];
       component.syncAddKpiDeptsFromDashboard();

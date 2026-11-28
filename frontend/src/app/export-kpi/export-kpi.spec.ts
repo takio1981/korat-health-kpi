@@ -169,7 +169,7 @@ describe('ExportKpiComponent — card สรุปผลตรวจสอบ = 
   let c: ExportKpiComponent;
   const seed = (comp: ExportKpiComponent) => {
     // 2 ตัวชี้วัดใช้ตารางเดียวกัน (เดิม card นับ 1 ตาราง แต่ตารางแสดง 2 แถว), ปิดส่งออก (เดิมนับ "ยังไม่ตรวจ" แต่ตัวกรองไม่มีข้อมูลแสดงรวม),
-    // invalid_name (เดิมไม่อยู่ใน card ใด), หน่วยงานต่างกัน (เดิม card ไม่สนตัวกรองอื่น)
+    // invalid_name (เดิมไม่อยู่ใน card ใด), กลุ่มงานต่างกัน (เดิม card ไม่สนตัวกรองอื่น)
     comp.exportIndicators = [
       { id: 1, kpi_indicators_name: 'ก1', table_process: 'kpi_shared', upload_excel: 0, dept_id: 1 },
       { id: 2, kpi_indicators_name: 'ก2', table_process: 'kpi-shared', upload_excel: 0, dept_id: 1 },
@@ -219,7 +219,7 @@ describe('ExportKpiComponent — card สรุปผลตรวจสอบ = 
     expect(s.tables.has_changes).toBe(2);
   });
 
-  it('ทุก card = จำนวนแถวเมื่อมีตัวกรองอื่น (หน่วยงาน) — card นับตามตัวกรอง', () => {
+  it('ทุก card = จำนวนแถวเมื่อมีตัวกรองอื่น (กลุ่มงาน) — card นับตามตัวกรอง', () => {
     c.filterDept = '1';
     const s = assertCardsMatchRows();
     expect(s).toMatchObject({ total: 6, has_changes: 2, not_exported: 1 });

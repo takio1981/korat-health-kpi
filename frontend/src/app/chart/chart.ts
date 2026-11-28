@@ -153,8 +153,8 @@ export class ChartComponent implements OnInit, OnDestroy {
     this.yutStackChart = buildStatusStack(d.by_yut, 'จำนวนคู่ผ่าน/ไม่ผ่านเกณฑ์ แยกตามยุทธศาสตร์', false, pick('selectedYut', 'gkey'));
     this.mainPctChart = buildPctBar(d.by_main, 'ร้อยละผ่านเกณฑ์ แยกตามหมวดหมู่หลัก', pick('selectedMain', 'gkey'));
     this.mainStackChart = buildStatusStack(d.by_main, 'จำนวนคู่ผ่าน/ไม่ผ่านเกณฑ์ แยกตามหมวดหมู่หลัก', true, pick('selectedMain', 'gkey'));
-    this.deptPctChart = buildPctBar(d.by_dept, 'ร้อยละผ่านเกณฑ์ แยกตามหน่วยงาน', pick('selectedDept', 'gkey'));
-    this.deptStackChart = buildStatusStack(d.by_dept, 'จำนวนคู่ผ่าน/ไม่ผ่านเกณฑ์ แยกตามหน่วยงาน', true, pick('selectedDept', 'gkey'));
+    this.deptPctChart = buildPctBar(d.by_dept, 'ร้อยละผ่านเกณฑ์ แยกตามกลุ่มงาน', pick('selectedDept', 'gkey'));
+    this.deptStackChart = buildStatusStack(d.by_dept, 'จำนวนคู่ผ่าน/ไม่ผ่านเกณฑ์ แยกตามกลุ่มงาน', true, pick('selectedDept', 'gkey'));
     this.distributionChart = buildDistribution(d.distribution);
     this.monthlyChart = buildMonthlyCombo(d.monthly);
     this.districtChart = buildPctBar(d.by_district, 'ร้อยละผ่านเกณฑ์ แยกตามอำเภอ', pick('selectedDistrict', 'gkey'));
@@ -176,7 +176,7 @@ export class ChartComponent implements OnInit, OnDestroy {
     if (!this.data) return;
     const label = this.heatMetric === 'pass' ? 'ร้อยละผ่านเกณฑ์รายเดือน' : 'ร้อยละคู่ที่มีผลงานรายเดือน';
     this.heatMainChart = buildHeatmap(this.data.heatmap_main, `${label} — หมวดหมู่หลัก × เดือน`, this.heatMetric);
-    this.heatDeptChart = buildHeatmap(this.data.heatmap_dept, `${label} — หน่วยงาน × เดือน`, this.heatMetric);
+    this.heatDeptChart = buildHeatmap(this.data.heatmap_dept, `${label} — กลุ่มงาน × เดือน`, this.heatMetric);
   }
 
   setHeatMetric(m: 'pass' | 'record') {
@@ -246,7 +246,7 @@ export class ChartComponent implements OnInit, OnDestroy {
     this.loadChartStats();
   }
 
-  // ตัวเลือกแบบลำดับขั้น: หมวดหมู่ตามยุทธศาสตร์, ตัวชี้วัดตามหมวดหมู่/หน่วยงาน
+  // ตัวเลือกแบบลำดับขั้น: หมวดหมู่ตามยุทธศาสตร์, ตัวชี้วัดตามหมวดหมู่/กลุ่มงาน
   get mainOptions(): any[] {
     return this.options.mains.filter((m: any) => !this.selectedYut || String(m.yut_id ?? '0') === this.selectedYut);
   }
@@ -278,7 +278,7 @@ export class ChartComponent implements OnInit, OnDestroy {
     const chips: { key: FilterKey; label: string; value: string }[] = [];
     if (this.selectedYut) chips.push({ key: 'selectedYut', label: 'ยุทธศาสตร์', value: name(this.options.yuts, this.selectedYut) });
     if (this.selectedMain) chips.push({ key: 'selectedMain', label: 'หมวดหมู่', value: name(this.options.mains, this.selectedMain) });
-    if (this.selectedDept) chips.push({ key: 'selectedDept', label: 'หน่วยงาน', value: name(this.options.depts, this.selectedDept) });
+    if (this.selectedDept) chips.push({ key: 'selectedDept', label: 'กลุ่มงาน', value: name(this.options.depts, this.selectedDept) });
     if (this.selectedIndicator) chips.push({ key: 'selectedIndicator', label: 'ตัวชี้วัด', value: name(this.options.indicators, this.selectedIndicator) });
     if (this.selectedZone) chips.push({ key: 'selectedZone', label: 'โซน', value: zoneLabel(this.selectedZone) });
     if (this.selectedDistrict) chips.push({ key: 'selectedDistrict', label: 'อำเภอ', value: name(this.options.districts, this.selectedDistrict) });

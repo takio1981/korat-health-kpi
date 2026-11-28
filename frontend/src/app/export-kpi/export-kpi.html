@@ -57,7 +57,7 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs text-blue-700">
               <div class="flex gap-2 p-2 bg-white rounded-lg">
                 <span class="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white font-bold shrink-0">1</span>
-                <div><b>เลือกปีงบประมาณ</b> + ตัวกรอง (หมวดหมู่ / หน่วยงาน / สถานะ)</div>
+                <div><b>เลือกปีงบประมาณ</b> + ตัวกรอง (หมวดหมู่ / กลุ่มงาน / สถานะ)</div>
               </div>
               <div class="flex gap-2 p-2 bg-white rounded-lg">
                 <span class="flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white font-bold shrink-0">2</span>
@@ -298,7 +298,7 @@
             </select>
           </div>
           <div>
-            <label class="block text-xs font-bold text-gray-600 mb-1"><i class="fas fa-building me-1 text-green-500"></i>หน่วยงาน</label>
+            <label class="block text-xs font-bold text-gray-600 mb-1"><i class="fas fa-building me-1 text-green-500"></i>กลุ่มงาน</label>
             <select [(ngModel)]="filterDept" (ngModelChange)="onFilterChange()"
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
               <option value="">ทั้งหมด</option>

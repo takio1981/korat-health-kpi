@@ -18,6 +18,7 @@ const { tabKey, buildTabInput, tabSystemPrompt, tabPrompt } = require('../servic
 const { computeForecasts, summarizeByIndicator, summarizeByDistrict } = require('../services/forecast');
 const { explainForecast } = require('../services/ai-forecast');
 const { chartScopeClauses } = require('../services/report-scope');
+const { summarizeDeptKpi } = require('../services/report-dept-kpi');
 
 // GET /kpi-summary — ดึงข้อมูลจาก summary table (เร็วมาก ไม่ต้อง JOIN)
 // ผลงานรายเดือนของปีงบที่แล้ว (year_bh - 1) จาก kpi_summary ตามขอบเขตสิทธิ์เดียวกับรายงาน (chartScopeClauses)
@@ -76,7 +77,7 @@ apiRouter.get('/kpi-summary', authenticateToken, async (req, res) => {
 // ========== Report Summary APIs ==========
 
 // รายงานสรุป: รายข้อตัวชี้วัด
-async function reportByIndicatorRows(user, query = {}) {
+async function reportByIndicatorRows(user, query = {}, opts = {}) {
     const { year_bh, dept_id, distid, hostype } = query;
     let whereClauses = [];
     let params = [];
@@ -115,6 +116,7 @@ async function reportByIndicatorRows(user, query = {}) {
             MAX(s.kpi_indicators_name) AS kpi_indicators_name,
             MAX(s.main_indicator_name) AS main_indicator_name,
             MAX(s.dept_name) AS dept_name,
+            MAX(s.dept_id) AS dept_id,
             MAX(i.criterion) AS ind_criterion,
             MAX(i.result_formula) AS result_formula,
             MAX(i.target_condition) AS ind_target_condition,
@@ -154,11 +156,25 @@ async function reportByIndicatorRows(user, query = {}) {
         ${whereStr}
         GROUP BY s.indicator_id, s.year_bh
         ORDER BY achievement_pct DESC, MAX(s.main_indicator_name), MAX(s.kpi_indicators_name)
-        LIMIT 500
+        ${opts.noLimit ? '' : 'LIMIT 500'}
     `;
     const [rows] = await db.query(sql, params);
     return rows;
 }
+
+// รายงานสรุป: สรุปข้อมูลตัวชี้วัดของกลุ่มงาน (28 พ.ย. 2569) — แถวรายตัวชี้วัดชุดเดียวกับแถบรายข้อตัวชี้วัด (ไม่จำกัด 500 แถว) จัดกลุ่มตามกลุ่มงาน
+async function deptKpiReport(user, query = {}) {
+    return summarizeDeptKpi(await reportByIndicatorRows(user, query, { noLimit: true }));
+}
+apiRouter.get('/report/by-dept-kpi', authenticateToken, async (req, res) => {
+    try {
+        res.json({ success: true, ...(await deptKpiReport(req.user, req.query)) });
+    } catch (error) {
+        if (error.status) return res.status(error.status).json({ success: false, message: error.message });
+        console.error('Report by-dept-kpi error:', error);
+        res.status(500).json({ success: false, message: 'ไม่สามารถดึงข้อมูลสรุปตัวชี้วัดของกลุ่มงานได้' });
+    }
+});
 apiRouter.get('/report/by-indicator', authenticateToken, async (req, res) => {
     try {
         res.json({ success: true, data: await reportByIndicatorRows(req.user, req.query) });
@@ -511,7 +527,7 @@ async function computeChartStats(user, q) {
             db.query(`SELECT ${CHART_METRICS_SQL}, ${CHART_MONTHLY_SQL} ${CHART_FROM_SQL} ${where}`, p),
             groupQuery('COALESCE(y.id, 0)', "COALESCE(MAX(y.yut_name), 'ไม่ระบุยุทธศาสตร์')"),
             groupQuery('COALESCE(mi.id, 0)', "COALESCE(MAX(mi.main_indicator_name), 'ไม่ระบุหมวดหมู่')", ", MAX(y.yut_name) AS yut_name"),
-            groupQuery('COALESCE(s.dept_id, 0)', "COALESCE(MAX(s.dept_name), 'ไม่ระบุหน่วยงาน')"),
+            groupQuery('COALESCE(s.dept_id, 0)', "COALESCE(MAX(s.dept_name), 'ไม่ระบุกลุ่มงาน')"),
             groupQuery('s.indicator_id', 'MAX(i.kpi_indicators_name)',
                 ", MAX(mi.main_indicator_name) AS main_indicator_name, MAX(s.dept_name) AS dept_name, MAX(i.criterion) AS criterion, MAX(i.target_condition) AS target_condition, MAX(i.result_formula) AS result_formula"
                 + ", MAX(i.r9) AS r9, MAX(i.moph) AS moph, MAX(i.ssj) AS ssj, MAX(i.rmw) AS rmw, MAX(i.`other`) AS `other`"),
@@ -519,7 +535,7 @@ async function computeChartStats(user, q) {
             groupQuery("COALESCE(s.hostype, '')", "MAX(s.hostype)"),
             db.query(`SELECT COALESCE(mi.id, 0) AS gkey, COALESCE(MAX(mi.main_indicator_name), 'ไม่ระบุหมวดหมู่') AS gname, COUNT(*) AS pairs, ${CHART_MONTHLY_SQL}
                       ${CHART_FROM_SQL} ${where} GROUP BY COALESCE(mi.id, 0)`, p),
-            db.query(`SELECT COALESCE(s.dept_id, 0) AS gkey, COALESCE(MAX(s.dept_name), 'ไม่ระบุหน่วยงาน') AS gname, COUNT(*) AS pairs, ${CHART_MONTHLY_SQL}
+            db.query(`SELECT COALESCE(s.dept_id, 0) AS gkey, COALESCE(MAX(s.dept_name), 'ไม่ระบุกลุ่มงาน') AS gname, COUNT(*) AS pairs, ${CHART_MONTHLY_SQL}
                       ${CHART_FROM_SQL} ${where} GROUP BY COALESCE(s.dept_id, 0)`, p),
             // ชื่อประเภทหน่วยบริการแยก query (chostype คนละ collation กับ kpi_summary — ไม่ JOIN ตรง)
             db.query('SELECT hostypecode, hostypename FROM chostype'),
@@ -622,7 +638,7 @@ const _thaiFiscalYear = (d = new Date()) => require('../core/fiscal-year').curre
 async function describeReportFilters(q) {
     const f = {};
     const one = async (sql, v) => { try { const [[r]] = await db.query(sql, [v]); return r ? Object.values(r)[0] : null; } catch { return null; } };
-    if (q.dept_id) f['หน่วยงาน'] = (await one('SELECT dept_name FROM departments WHERE id = ?', q.dept_id)) || q.dept_id;
+    if (q.dept_id) f['กลุ่มงาน'] = (await one('SELECT dept_name FROM departments WHERE id = ?', q.dept_id)) || q.dept_id;
     if (q.zone) f['โซน'] = String(q.zone).split(',').map(z => 'โซน ' + z.trim()).join(', ');
     if (q.distid) f['อำเภอ'] = (await one('SELECT distname FROM co_district WHERE distid = ?', q.distid)) || q.distid;
     if (q.itype && itypeLabel(q.itype)) f['ประเภทตัวชี้วัด'] = itypeLabel(q.itype);
@@ -640,7 +656,7 @@ apiRouter.post('/report/ai-tab-summary', authenticateToken, aiLimiter, async (re
             if (b[k] !== undefined && b[k] !== null && b[k] !== '') q[k] = String(b[k]);
         }
         if (key !== 'by-year' && !q.year_bh) return res.status(400).json({ success: false, message: 'กรุณาเลือกปีงบประมาณ' });
-        // ตัวกรองที่แต่ละแถบใช้จริง (ตรงกับหน้าจอ): รายอำเภอไม่ใช้อำเภอ, รายปีไม่ใช้ปีงบ, สรุปรายหน่วยงานใช้เฉพาะปีงบ/ประเภท/โซน
+        // ตัวกรองที่แต่ละแถบใช้จริง (ตรงกับหน้าจอ): รายอำเภอไม่ใช้อำเภอ, รายปีไม่ใช้ปีงบ, สรุปรายกลุ่มงานใช้เฉพาะปีงบ/ประเภท/โซน
         if (key === 'by-district') delete q.distid;
         if (key === 'by-year') delete q.year_bh;
         if (key === 'by-dept') { delete q.dept_id; delete q.distid; }
@@ -653,6 +669,7 @@ apiRouter.post('/report/ai-tab-summary', authenticateToken, aiLimiter, async (re
             case 'recording-status:by-indicator': data = await recordingStatusByIndicator(req.user, q); break;
             case 'recording-status:by-hospital': data = await recordingStatusByHospital(req.user, q); break;
             case 'by-dept': data = await deptSummaryReport(req.user, q); break;
+            case 'by-dept-kpi': data = await deptKpiReport(req.user, q); break;
         }
         const ctx = { year_bh: q.year_bh, filters: await describeReportFilters(q), currentFiscalYear: String(_thaiFiscalYear()) };
         if (key === 'by-hospital') {
@@ -678,7 +695,7 @@ apiRouter.post('/report/ai-tab-summary', authenticateToken, aiLimiter, async (re
 });
 
 // ระบบเตือนล่วงหน้า (ข้อเสนอแนวคิด — 8 พ.ย. 2569) ระยะที่ 2: ตัวชี้วัดเสี่ยง — คาดการณ์ผลงาน ณ สิ้นปีงบของทุกคู่ตามขอบเขตเดียวกับรายงาน
-// คืนเฉพาะคู่ระดับเสี่ยงสูง/เฝ้าระวัง/ขาดการรายงาน (จำนวนทุกระดับใน counts) — ตัวกรองยุทธศาสตร์/หมวดหมู่/หน่วยงาน/อำเภอ ทำที่หน้าจอจากฟิลด์ของแต่ละแถว
+// คืนเฉพาะคู่ระดับเสี่ยงสูง/เฝ้าระวัง/ขาดการรายงาน (จำนวนทุกระดับใน counts) — ตัวกรองยุทธศาสตร์/หมวดหมู่/กลุ่มงาน/อำเภอ ทำที่หน้าจอจากฟิลด์ของแต่ละแถว
 apiRouter.get('/report/forecast', authenticateToken, async (req, res) => {
     try {
         const scope = await chartScopeClauses(req.user);
@@ -982,8 +999,8 @@ apiRouter.get('/report/recording-missing/by-hospital/:hospcode', authenticateTok
     }
 });
 
-// รายงาน: สรุปรายหน่วยงาน (Dept Summary)
-//   - แต่ละหน่วยงาน: ตัวชี้วัดทั้งหมด / คีย์แล้ว (มีอย่างน้อย 1 รพ.บันทึก actual) / ยังไม่คีย์
+// รายงาน: สรุปรายกลุ่มงาน (Dept Summary)
+//   - แต่ละกลุ่มงาน: ตัวชี้วัดทั้งหมด / คีย์แล้ว (มีอย่างน้อย 1 รพ.บันทึก actual) / ยังไม่คีย์
 //   - avg_coverage_pct = % รพ.ที่บันทึกเฉลี่ยข้ามทุกตัวชี้วัดของ dept
 //   สิทธิ์: super_admin ดูทุก dept, admin_ssj ดูเฉพาะ dept ตัวเอง
 async function deptSummaryReport(user, query = {}) {
@@ -1017,7 +1034,7 @@ async function deptSummaryReport(user, query = {}) {
     addItypeFilter(cteWhere, 'r.indicator_id', query.itype);
 
     const cteWhereStr = cteWhere.join(' AND ');
-    // ประเภทตัวชี้วัด: กรองรายการตัวชี้วัดของหน่วยงานด้วย (เดิมกรองเฉพาะส่วนนับการบันทึก — จำนวนตัวชี้วัดไม่เปลี่ยน 20 พ.ย. 2569)
+    // ประเภทตัวชี้วัด: กรองรายการตัวชี้วัดของกลุ่มงานด้วย (เดิมกรองเฉพาะส่วนนับการบันทึก — จำนวนตัวชี้วัดไม่เปลี่ยน 20 พ.ย. 2569)
     const indItype = []; addItypeFilter(indItype, 'i.id', query.itype);
 
     // params สำหรับ query หลัก
@@ -1070,7 +1087,7 @@ apiRouter.get('/report/by-dept-summary', authenticateToken, async (req, res) => 
     } catch (error) {
         if (error.status) return res.status(error.status).json({ success: false, message: error.message });
         console.error('Report by-dept-summary error:', error);
-        res.status(500).json({ success: false, message: 'ไม่สามารถดึงข้อมูลสรุปรายหน่วยงานได้' });
+        res.status(500).json({ success: false, message: 'ไม่สามารถดึงข้อมูลสรุปรายกลุ่มงานได้' });
     }
 });
 
@@ -1121,19 +1138,19 @@ apiRouter.get('/report/by-dept-summary/hospitals', authenticateToken, async (req
     }
 });
 
-// รายงาน: drill-down ตัวชี้วัดของหน่วยงาน (by-dept-summary/indicators)
+// รายงาน: drill-down ตัวชี้วัดของกลุ่มงาน (by-dept-summary/indicators)
 //   - ดูว่าแต่ละตัวชี้วัดใน dept นั้น มีกี่ รพ. คีย์แล้ว / ยังไม่คีย์
 apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (req, res) => {
     try {
         const user = req.user;
         const { year_bh, dept_id, hostype } = req.query;
         if (!year_bh || !dept_id) {
-            return res.status(400).json({ success: false, message: 'ต้องระบุปีงบประมาณและหน่วยงาน' });
+            return res.status(400).json({ success: false, message: 'ต้องระบุปีงบประมาณและกลุ่มงาน' });
         }
 
         // Role check: admin_ssj ดูได้เฉพาะ dept ตัวเอง
         if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(user.role) && user.deptId != null && !deptIdsOf(user).map(String).includes(String(dept_id))) {
-            return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์ดูหน่วยงานอื่น' });
+            return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์ดูกลุ่มงานอื่น' });
         }
 
         let cteWhere = ['r.year_bh = ?'];
@@ -1147,7 +1164,7 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
         addZoneFilter(cteWhere, cteParams, 'r.hospcode', req.query.zone, 'hos');
         addItypeFilter(cteWhere, 'r.indicator_id', req.query.itype);
         const cteWhereStr = cteWhere.join(' AND ');
-        const indItype = []; addItypeFilter(indItype, 'i.id', req.query.itype); // รายการตัวชี้วัดของหน่วยงานตามประเภทด้วย
+        const indItype = []; addItypeFilter(indItype, 'i.id', req.query.itype); // รายการตัวชี้วัดของกลุ่มงานตามประเภทด้วย
 
         const sql = `
             WITH ind_stats AS (
@@ -1182,7 +1199,7 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
         res.json({ success: true, data: rows });
     } catch (error) {
         console.error('Report by-dept-summary/indicators error:', error);
-        res.status(500).json({ success: false, message: 'ไม่สามารถดึงข้อมูลตัวชี้วัดของหน่วยงานได้' });
+        res.status(500).json({ success: false, message: 'ไม่สามารถดึงข้อมูลตัวชี้วัดของกลุ่มงานได้' });
     }
 });
 

@@ -100,7 +100,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
       iconHtml: `<i class="fas ${icon}" style="color:${color}"></i>`,
       title: 'ฟีเจอร์รอการเปิดใช้งาน',
       html: `<div style="text-align:left;font-size:13px;line-height:1.7">
-        <p>การลงทะเบียนด้วย <b style="color:${color}">${providerName}</b> ขณะนี้อยู่ระหว่างขั้นตอนขอใช้บริการกับหน่วยงานเจ้าของระบบ</p>
+        <p>การลงทะเบียนด้วย <b style="color:${color}">${providerName}</b> ขณะนี้อยู่ระหว่างขั้นตอนขอใช้บริการกับกลุ่มงานเจ้าของระบบ</p>
         <p class="text-gray-500" style="margin-top:8px"><i class="fas fa-info-circle mr-1"></i>กรุณาลงทะเบียนด้วยตัวเอง (กรอกแบบฟอร์ม) ไปก่อน</p>
       </div>`,
       confirmButtonText: 'รับทราบ',
@@ -446,7 +446,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
         !this.formData.firstname || !this.formData.lastname ||
         !this.formData.hospcode || !this.formData.phone || !this.formData.dept_id ||
         (needCid && !this.formData.cid)) {
-      Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลให้ครบถ้วนทุกช่อง' + (needCid ? ' (รวมเลขบัตรประชาชนและหน่วยงาน)' : ''), 'warning');
+      Swal.fire('แจ้งเตือน', 'กรุณากรอกข้อมูลให้ครบถ้วนทุกช่อง' + (needCid ? ' (รวมเลขบัตรประชาชนและกลุ่มงาน)' : ''), 'warning');
       return;
     }
 

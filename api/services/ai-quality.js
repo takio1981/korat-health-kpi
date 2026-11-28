@@ -58,7 +58,7 @@ function buildDqInput(scan) {
     const inds = scan._indicators || new Map();
     const top = (scan.by_indicator || []).slice(0, DQ_TOP_INDICATORS).map(e => ({
         ตัวชี้วัด: e.name,
-        หน่วยงาน: e.dept_name || null,
+        กลุ่มงาน: e.dept_name || null,
         จำนวนช่อง: e.count,
         จำนวนหน่วยบริการ: e.hospitals,
         ประเภท: Object.fromEntries(Object.entries(e.kinds).map(([k, n]) => [KIND_LABEL[k], n])),

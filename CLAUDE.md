@@ -1446,6 +1446,10 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 ### Chart + Report
 - รวมเป็นหน้าเดียว (/charts) → 2 tabs: กราฟและสถิติ / รายงานสรุปผล
 - ใช้ `[hidden]` เก็บ state ทั้ง 2 view (ไม่ destroy component)
+- **แถบ "สรุปตัวชี้วัดของกลุ่มงาน" (28 พ.ย. 2569 — ผู้ใช้สั่ง):** key `by-dept-kpi` ทุกสิทธิ์ — `GET /report/by-dept-kpi` = `reportByIndicatorRows(user, q, { noLimit: true })` (คืน `dept_id` แล้ว) → `services/report-dept-kpi.js` `summarizeDeptKpi()` (ฟังก์ชันล้วน: ร้อยละผ่านของกลุ่มงาน = คู่ผ่าน ÷ คู่ที่มีเป้าหมาย ไม่ใช่ค่าเฉลี่ยร้อยละ)
+  | AI สรุปรายแถบ `byDeptKpi()` | frontend `filterDeptKpiGroups()` / `deptKpiExcelRows()` (report.ts) — ต่างจากแถบ `by-dept` (ความครอบคลุมการบันทึก เฉพาะ admin_ssj/super_admin) | Test: `api/tests/report-dept-kpi.test.js`, `report/report.spec.ts`
+- **คำที่แสดงผล "หน่วยงาน" → "กลุ่มงาน" ทั้งระบบ (28 พ.ย. 2569 — ผู้ใช้สั่ง):** ข้อความใหม่ใช้ "กลุ่มงาน" เสมอ (หมายถึง departments) — ตาราง/คอลัมน์/เส้นทาง API ไม่เปลี่ยน, ประวัติการอัปเดตเดิมไม่แก้,
+  "ผู้ดูแลระบบของหน่วยงานท่าน" (หมายถึงองค์กร) คงไว้ | หัวข้ออื่นในไฟล์นี้ที่เขียน "หน่วยงาน" = กลุ่มงาน
 - **ค้นหาในตารางรายงานสรุปผล (23 พ.ย. 2569):** `#report-search` / `#report-dept-search` กรองฝั่งหน้าจอด้วย `filterReportRows(rows, key, q)` (report.ts — ช่องต่อแถบใน `REPORT_SEARCH_FIELDS`, key สถานะการบันทึก = `recording-status:<มุมมอง>`)
   คำค้นแยกตามแถบ `searchByTab`, ตารางใช้ `viewData`/`deptViewData` (คำนวณใน `applySearch()` หลังโหลด — ไม่ใช่ getter) การ์ดสรุป/กราฟ/แผง AI ใช้ข้อมูลทั้งหมด, Excel ส่งออกเฉพาะแถวที่แสดง | Test: `report/report.spec.ts`
 - **แท็บกราฟใช้ `GET /report/chart-stats` เท่านั้น** (ไม่ใช่ `/kpi-summary` ที่ LIMIT 500 — เดิมกราฟคำนวณจาก 500 แถวแรก

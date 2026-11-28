@@ -149,7 +149,7 @@ describe('ตัวเลขสรุป/นับ — ไม่นับตั�
     });
 
     test('dashboard-stats ร้อยละสำเร็จไม่นับตัวที่ปิด', async () => {
-        // user_hos เห็นเฉพาะหน่วยบริการ+หน่วยงานตัวเอง → ตัวที่ปิดเป็นตัวเดียวที่ไม่ผ่านในขอบเขตนี้ (test DB)
+        // user_hos เห็นเฉพาะหน่วยบริการ+กลุ่มงานตัวเอง → ตัวที่ปิดเป็นตัวเดียวที่ไม่ผ่านในขอบเขตนี้ (test DB)
         const rate = async () => Number((await asUser(request(app).get(api(`/dashboard-stats?year=${YEAR}`)))).body.data.successRate);
         const off = await rate();
         await setActive(inactiveId, 1);

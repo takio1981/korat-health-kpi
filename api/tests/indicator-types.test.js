@@ -126,7 +126,7 @@ describe('รายงานสถิติแยกประเภทตัว�
 
 /**
  * ตรวจทุกแถบของรายงานสรุปผลเมื่อกรองประเภทตัวชี้วัด (20 พ.ย. 2569)
- * Regression: สรุปรายหน่วยงาน — จำนวนตัวชี้วัดของหน่วยงานไม่เปลี่ยนเมื่อเลือกประเภท (นับจาก kpi_indicators โดยไม่กรองประเภท)
+ * Regression: สรุปรายกลุ่มงาน — จำนวนตัวชี้วัดของกลุ่มงานไม่เปลี่ยนเมื่อเลือกประเภท (นับจาก kpi_indicators โดยไม่กรองประเภท)
  */
 describe('รายงานสรุปผลทุกแถบกรองประเภทตัวชี้วัดถูกต้อง (integration)', () => {
     const Y = '2503';
@@ -170,7 +170,7 @@ describe('รายงานสรุปผลทุกแถบกรองป�
         await cleanupTestUsers(db);
     });
 
-    test('สรุปรายหน่วยงาน: จำนวนตัวชี้วัดของหน่วยงานตามประเภทที่เลือก (ตรงกับฐานข้อมูล) + หน้าเจาะลึก', async () => {
+    test('สรุปรายกลุ่มงาน: จำนวนตัวชี้วัดของกลุ่มงานตามประเภทที่เลือก (ตรงกับฐานข้อมูล) + หน้าเจาะลึก', async () => {
         const all = await get(`/report/by-dept-summary?year_bh=${Y}`);
         const rmw = await get(`/report/by-dept-summary?year_bh=${Y}&itype=rmw`);
         const [[exp]] = await db.query('SELECT COUNT(*) AS n FROM kpi_indicators WHERE dept_id = ? AND is_active = 1 AND COALESCE(rmw,0) = 1', [dept]);

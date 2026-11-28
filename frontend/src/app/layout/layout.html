@@ -104,7 +104,7 @@
             ผลงานตัวชี้วัด
             <span *ngIf="(isAdmin || isSuperAdmin) && pendingKpiCount > 0"
                   class="flex h-5 min-w-[20px] px-1 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ml-2 animate-pulse shadow-lg"
-                  [title]="'รอตรวจสอบ: ' + pendingStats.indicatorCount + ' ตัวชี้วัด / ' + pendingStats.hosCount + ' หน่วยบริการ / ' + pendingStats.deptCount + ' หน่วยงาน'">
+                  [title]="'รอตรวจสอบ: ' + pendingStats.indicatorCount + ' ตัวชี้วัด / ' + pendingStats.hosCount + ' หน่วยบริการ / ' + pendingStats.deptCount + ' กลุ่มงาน'">
               {{ pendingKpiCount }}
             </span>
           </span>

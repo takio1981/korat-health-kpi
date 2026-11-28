@@ -1,6 +1,6 @@
 /**
- * อนุมัติ/ส่งคืน/อุทธรณ์: ขอบเขตหน่วยงานของ admin_ssj + ตรวจข้อมูลที่ส่งมา (พบจากการทดสอบทั้งระบบ 25 ต.ค. 2569)
- * - admin_ssj (เห็นเฉพาะหน่วยงานตัวเอง) อนุมัติ/ส่งคืน/รับอุทธรณ์ตัวชี้วัดของหน่วยงานอื่นผ่าน API ได้ (หน้าจอกรองให้เท่านั้น)
+ * อนุมัติ/ส่งคืน/อุทธรณ์: ขอบเขตกลุ่มงานของ admin_ssj + ตรวจข้อมูลที่ส่งมา (พบจากการทดสอบทั้งระบบ 25 ต.ค. 2569)
+ * - admin_ssj (เห็นเฉพาะกลุ่มงานตัวเอง) อนุมัติ/ส่งคืน/รับอุทธรณ์ตัวชี้วัดของกลุ่มงานอื่นผ่าน API ได้ (หน้าจอกรองให้เท่านั้น)
  * - ข้อมูลไม่ครบ → 500 "Column 'indicator_id' cannot be null" (appeal-approve, target-edit-request) / ไม่มีเหตุผลส่งคืน → 500
  * - แก้ตารางเวลาสำรองข้อมูลที่ไม่มีอยู่/ข้อมูลไม่ครบ → 500 "Unknown column 'NaN'"
  */
@@ -50,28 +50,28 @@ afterAll(async () => {
 const status = async (ind) => (await db.query('SELECT status, is_locked FROM kpi_results WHERE indicator_id = ? AND year_bh = ? AND hospcode = ?', [ind, YEAR, hos]))[0][0];
 const post = (t, p, body) => request(app).post(api(p)).set('Authorization', `Bearer ${t}`).send(body);
 
-describe('ขอบเขตหน่วยงานของ admin_ssj', () => {
-    test('🛡️ อนุมัติตัวชี้วัดของหน่วยงานอื่น → 403 ไม่เปลี่ยนสถานะ (เดิม: อนุมัติ+ล็อค)', async () => {
+describe('ขอบเขตกลุ่มงานของ admin_ssj', () => {
+    test('🛡️ อนุมัติตัวชี้วัดของกลุ่มงานอื่น → 403 ไม่เปลี่ยนสถานะ (เดิม: อนุมัติ+ล็อค)', async () => {
         const r = await post(T.ssj, '/approve-kpi', [{ indicator_id: indB, year_bh: YEAR, hospcode: hos }]);
         expect(r.status).toBe(403);
         expect((await status(indB)).status).toBe('Pending');
     });
 
-    test('✅ อนุมัติตัวชี้วัดของหน่วยงานตัวเองได้', async () => {
+    test('✅ อนุมัติตัวชี้วัดของกลุ่มงานตัวเองได้', async () => {
         const r = await post(T.ssj, '/approve-kpi', [{ indicator_id: indA, year_bh: YEAR, hospcode: hos }]);
         expect(r.status).toBe(200);
         expect((await status(indA)).status).toBe('Approved');
         await db.query("UPDATE kpi_results SET status='Pending', is_locked=0 WHERE indicator_id = ?", [indA]);
     });
 
-    test('🛡️ ส่งคืนแก้ไข / รับอุทธรณ์ / ปฏิเสธอุทธรณ์ ของหน่วยงานอื่น → 403', async () => {
+    test('🛡️ ส่งคืนแก้ไข / รับอุทธรณ์ / ปฏิเสธอุทธรณ์ ของกลุ่มงานอื่น → 403', async () => {
         expect((await post(T.ssj, '/reject-kpi', [{ indicator_id: indB, year_bh: YEAR, hospcode: hos, comment: 'ทดสอบ' }])).status).toBe(403);
         expect((await post(T.ssj, '/appeal-approve', { indicator_id: indB, year_bh: YEAR, hospcode: hos, comment: 'ทดสอบ' })).status).toBe(403);
         expect((await post(T.ssj, '/appeal-reject', { indicator_id: indB, year_bh: YEAR, hospcode: hos, comment: 'ทดสอบ' })).status).toBe(403);
         expect((await status(indB)).status).toBe('Pending');
     });
 
-    test('✅ super_admin อนุมัติได้ทุกหน่วยงาน', async () => {
+    test('✅ super_admin อนุมัติได้ทุกกลุ่มงาน', async () => {
         expect((await post(T.sa, '/approve-kpi', [{ indicator_id: indB, year_bh: YEAR, hospcode: hos }])).status).toBe(200);
         await db.query("UPDATE kpi_results SET status='Pending', is_locked=0 WHERE indicator_id = ?", [indB]);
     });

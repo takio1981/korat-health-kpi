@@ -19,7 +19,7 @@ import { AiSummaryPanelComponent } from '../shared/ai-summary-panel';
 /** ชื่อแถบรายงานสรุปผลสำหรับหัวข้อแผง AI */
 export const REPORT_TAB_LABELS: Record<string, string> = {
   'by-indicator': 'รายตัวชี้วัด', 'by-hospital': 'รายหน่วยบริการ', 'by-district': 'รายอำเภอ', 'by-year': 'รายปีงบประมาณ',
-  'recording-status': 'สถานะการบันทึก', 'by-dept': 'สรุปรายหน่วยงาน',
+  'recording-status': 'สถานะการบันทึก', 'by-dept': 'สรุปรายกลุ่มงาน', 'by-dept-kpi': 'สรุปข้อมูลตัวชี้วัดของกลุ่มงาน',
 };
 
 /** ช่องที่ค้นหาในแต่ละแถบ (23 พ.ย. 2569) — key = แถบ หรือ 'recording-status:<มุมมอง>' */
@@ -31,17 +31,60 @@ export const REPORT_SEARCH_FIELDS: Record<string, string[]> = {
   'recording-status:by-indicator': ['kpi_indicators_name', 'main_indicator_name', 'dept_name'],
   'recording-status:by-hospital': ['hosname', 'hospcode', 'distname', 'hostypename'],
   'by-dept': ['dept_name', 'dept_code'],
+  'by-dept-kpi': ['dept_name'],   // ค้นจริงด้วย filterDeptKpiGroups (รวมชื่อตัวชี้วัด/หมวดหมู่หลัก)
 };
 
 export const REPORT_SEARCH_PLACEHOLDER: Record<string, string> = {
-  'by-indicator': 'ค้นหาชื่อตัวชี้วัด / หมวดหมู่หลัก / หน่วยงาน',
+  'by-indicator': 'ค้นหาชื่อตัวชี้วัด / หมวดหมู่หลัก / กลุ่มงาน',
   'by-hospital': 'ค้นหาชื่อหรือรหัสหน่วยบริการ / อำเภอ',
   'by-district': 'ค้นหาชื่ออำเภอ',
   'by-year': 'ค้นหาปีงบประมาณ',
-  'recording-status:by-indicator': 'ค้นหาชื่อตัวชี้วัด / หมวดหมู่หลัก / หน่วยงาน',
+  'recording-status:by-indicator': 'ค้นหาชื่อตัวชี้วัด / หมวดหมู่หลัก / กลุ่มงาน',
   'recording-status:by-hospital': 'ค้นหาชื่อหรือรหัสหน่วยบริการ / อำเภอ / ประเภท',
-  'by-dept': 'ค้นหาชื่อหน่วยงาน',
+  'by-dept': 'ค้นหาชื่อกลุ่มงาน',
+  'by-dept-kpi': 'ค้นหาชื่อกลุ่มงาน / ชื่อตัวชี้วัด / หมวดหมู่หลัก',
 };
+
+/** ค้นหาในแถบสรุปข้อมูลตัวชี้วัดของกลุ่มงาน (28 พ.ย. 2569) — ทุกคำต้องพบในชื่อกลุ่มงาน + ชื่อตัวชี้วัด/หมวดหมู่หลัก/table_process
+ *  ชื่อกลุ่มงานตรงทุกคำ = คงตัวชี้วัดทั้งหมด | ไม่งั้นคงเฉพาะตัวชี้วัดที่ตรง (กลุ่มงานที่ไม่เหลือตัวชี้วัด = ตัดออก) — ไม่มีคำค้น = คืน array เดิม */
+export function filterDeptKpiGroups(groups: any[], q: string): any[] {
+  const words = String(q || '').toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (!words.length || !Array.isArray(groups)) return groups || [];
+  const out: any[] = [];
+  for (const g of groups) {
+    const dept = String(g?.dept_name || '').toLowerCase();
+    if (words.every(w => dept.includes(w))) { out.push(g); continue; }
+    const inds = (g?.indicators || []).filter((r: any) => {
+      const hay = [dept, r?.kpi_indicators_name, r?.main_indicator_name].map(v => String(v ?? '')).join(' ').toLowerCase();
+      return words.every(w => hay.includes(w));
+    });
+    if (inds.length) out.push({ ...g, indicators: inds, _filtered: true });
+  }
+  return out;
+}
+
+/** แถวสำหรับไฟล์ Excel ของแถบสรุปข้อมูลตัวชี้วัดของกลุ่มงาน — 1 แถว = 1 ตัวชี้วัด (มีคอลัมน์สรุปของกลุ่มงาน) */
+export function deptKpiExcelRows(groups: any[]): any[] {
+  const rows: any[] = [];
+  for (const g of groups || []) {
+    for (const r of g.indicators || []) {
+      rows.push({
+        กลุ่มงาน: g.dept_name,
+        'ร้อยละผ่านเกณฑ์ของกลุ่มงาน': g.pass_pct,
+        indicator_id: r.indicator_id,
+        kpi_indicators_name: r.kpi_indicators_name,
+        หมวดหมู่หลัก: r.main_indicator_name || '',
+        เป้าหมายรวม: r.target_value,
+        ผลงานรวม: r.total_actual,
+        หน่วยบริการ: r.hospital_count,
+        คู่ที่มีเป้าหมาย: r.hospitals_with_target,
+        คู่ที่ผ่านเกณฑ์: r.hospitals_passed,
+        ร้อยละผ่านเกณฑ์: r.achievement_pct,
+      });
+    }
+  }
+  return rows;
+}
 
 /** กรองแถวรายงานด้วยคำค้น — ทุกคำ (คั่นด้วยช่องว่าง) ต้องพบในช่องของแถบนั้น ไม่สนตัวพิมพ์ — ไม่มีคำค้น = คืน array เดิม */
 export function filterReportRows(rows: any[], key: string, q: string): any[] {
@@ -112,7 +155,25 @@ export class ReportComponent implements OnInit {
   applySearch() {
     this.viewData = filterReportRows(this.reportData, this.searchKey, this.searchQuery);
     this.deptViewData = filterReportRows(this.deptSummaryData, 'by-dept', this.searchByTab['by-dept'] || '');
+    this.deptKpiViewData = filterDeptKpiGroups(this.deptKpiData, this.searchByTab['by-dept-kpi'] || '');
   }
+
+  // === สรุปข้อมูลตัวชี้วัดของกลุ่มงาน (28 พ.ย. 2569) — ทุก role ตามขอบเขตเดียวกับแถบรายข้อตัวชี้วัด ===
+  deptKpiData: any[] = [];
+  deptKpiViewData: any[] = [];
+  deptKpiSummary: any = { total_depts: 0, total_indicators: 0, indicators_with_target: 0, pairs_with_target: 0, pairs_passed: 0, pass_pct: 0, depts_ge_80: 0, depts_lt_50: 0 };
+  /** กลุ่มงานที่ขยายดูรายตัวชี้วัด (key = deptKpiKey) */
+  deptKpiOpen = new Set<string>();
+  deptKpiKey(g: any): string { return g?.dept_id != null ? 'd' + g.dept_id : 'n:' + (g?.dept_name || ''); }
+  isDeptKpiOpen(g: any): boolean { return this.deptKpiOpen.has(this.deptKpiKey(g)) || (!!this.searchByTab['by-dept-kpi'] && !!g?._filtered); }
+  toggleDeptKpi(g: any) {
+    const k = this.deptKpiKey(g);
+    if (this.deptKpiOpen.has(k)) this.deptKpiOpen.delete(k); else this.deptKpiOpen.add(k);
+  }
+  expandAllDeptKpi(open: boolean) {
+    this.deptKpiOpen = new Set(open ? this.deptKpiViewData.map(g => this.deptKpiKey(g)) : []);
+  }
+  pctTone(p: number): string { return p >= 80 ? 'emerald' : p >= 50 ? 'amber' : 'rose'; }
 
   // AI วิเคราะห์และสรุปรายแถบ (15 พ.ย. 2569) — object ใหม่ทุกครั้งที่โหลดรายงาน (แถบ/มุมมอง/ตัวกรองเปลี่ยน → แผงล้างสรุปเดิม)
   aiTabParams: any = {};
@@ -395,6 +456,17 @@ export class ReportComponent implements OnInit {
         }
         observable = this.authService.getReportByDeptSummary(params);
         break;
+      case 'by-dept-kpi':
+        if (!this.selectedYear) {
+          this.isLoading = false;
+          this.deptKpiData = [];
+          this.deptKpiSummary = { total_depts: 0, total_indicators: 0, indicators_with_target: 0, pairs_with_target: 0, pairs_passed: 0, pass_pct: 0, depts_ge_80: 0, depts_lt_50: 0 };
+          this.applySearch();
+          this.cdr.detectChanges();
+          return;
+        }
+        observable = this.authService.getReportByDeptKpi(params);
+        break;
       default: observable = this.authService.getReportByIndicator(params);
     }
 
@@ -419,6 +491,25 @@ export class ReportComponent implements OnInit {
               item.recorded_indicators = Number(item.recorded_indicators) || 0;
               item.missing_indicators = Number(item.missing_indicators) || 0;
             });
+            this.applySearch();
+            this.cdr.detectChanges();
+            return;
+          }
+          if (this.activeTab === 'by-dept-kpi') {
+            this.deptKpiSummary = res.summary || this.deptKpiSummary;
+            this.deptKpiData = (res.data || []).map((g: any) => ({
+              ...g,
+              pass_pct: Number(g.pass_pct) || 0,
+              indicators: (g.indicators || []).map((r: any) => ({
+                ...r,
+                _target_display: r.target_value === null || r.target_value === undefined ? '' : String(Number.isInteger(Number(r.target_value)) ? Number(r.target_value) : Number(r.target_value).toFixed(2)),
+                total_actual: parseFloat(r.total_actual) || 0,
+                achievement_pct: Number(r.achievement_pct) || 0,
+                hospitals_with_target: Number(r.hospitals_with_target) || 0,
+                hospitals_passed: Number(r.hospitals_passed) || 0,
+              })),
+            }));
+            this.deptKpiOpen = new Set();
             this.applySearch();
             this.cdr.detectChanges();
             return;
@@ -600,12 +691,15 @@ export class ReportComponent implements OnInit {
         'by-district': 'รายอำเภอ',
         'by-year': 'รายปีงบประมาณ',
         'recording-status': 'สถานะการบันทึก',
-        'by-dept': 'สรุปรายหน่วยงาน'
+        'by-dept': 'สรุปรายกลุ่มงาน',
+        'by-dept-kpi': 'ตัวชี้วัดของกลุ่มงาน'
       };
       // ส่งออกตามที่แสดงในตาราง (มีคำค้น = เฉพาะแถวที่ตรง)
       // + คอลัมน์ table_process ต่อจากชื่อตัวชี้วัด (26 พ.ย. 2569)
       const byId = this.indicatorMeta.meta$.value?.byId;
-      const exportData = withTableProcess(this.activeTab === 'by-dept' ? this.deptViewData : this.viewData, id => byId?.get(id));
+      const src = this.activeTab === 'by-dept' ? this.deptViewData
+        : this.activeTab === 'by-dept-kpi' ? deptKpiExcelRows(this.deptKpiViewData) : this.viewData;
+      const exportData = withTableProcess(src, id => byId?.get(id));
       const ws = XLSX.utils.json_to_sheet(exportData);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, tabNames[this.activeTab] || 'Report');
