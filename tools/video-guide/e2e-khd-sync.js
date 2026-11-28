@@ -39,7 +39,9 @@ const num = (v) => (v === null || v === undefined || v === '' ? null : String(v)
     await resetSessions('test_vg_super_admin');
     const browser = await launch();
     const state = await loginState(browser, 'test_vg_super_admin', PASSWORD);
-    const ctx = await browser.newContext({ viewport: VIEW, locale: 'th-TH', storageState: state });
+    // VG_BOOK_SHOTS=<โฟลเดอร์> = ถ่ายภาพหน้าจอสำหรับเล่มผลงาน (1400×875 — ขนาดเดียวกับภาพอื่นในภาคผนวก ก)
+    const BOOK = process.env.VG_BOOK_SHOTS || '';
+    const ctx = await browser.newContext({ viewport: BOOK ? { width: 1400, height: 875 } : VIEW, locale: 'th-TH', storageState: state });
     await guardContext(ctx);
     await ctx.addInitScript(() => { try { const u = JSON.parse(localStorage.getItem('kpi_user') || 'null'); localStorage.setItem('kpi_mascot_assistant_off', '1'); if (u) localStorage.setItem('kpi_mascot_assistant_off_' + u.id, '1'); } catch (e) { } });
     const page = await ctx.newPage();
@@ -87,6 +89,14 @@ const num = (v) => (v === null || v === undefined || v === '' ? null : String(v)
     check('มีตัวกรองค้นหา: card ทั้งหมด = แถวที่แสดง', await cardNum('') === await rowCount(), `card ${await cardNum('')} / แถว ${await rowCount()}`);
     await page.screenshot({ path: path.join(OUT, '1-cards.png') });
 
+    if (BOOK) { // ภาพที่ 1: card สรุป + ตาราง (ไม่มีคำค้น กรอง "ตัวชี้วัดที่เพิ่ม/แก้ไข")
+        await page.fill('#export-search', ''); await page.waitForTimeout(400);
+        await page.click('#check-cards [data-card="has_changes"]'); await page.waitForTimeout(500);
+        await page.locator('#check-cards').evaluate(e => e.scrollIntoView({ block: 'start' }));
+        await page.mouse.wheel(0, -120); await page.waitForTimeout(600);
+        await page.screenshot({ path: path.join(BOOK, 'kpi-manager.png') });
+        await page.click('#check-cards [data-card="has_changes"]'); await page.waitForTimeout(300);
+    }
     // ===== 2) เลือก A + B → ส่งออก → ส่งเข้า KHD ในหน้าเดียวกัน =====
     await page.fill('#export-search', '');
     await page.waitForTimeout(400);
@@ -133,6 +143,11 @@ const num = (v) => (v === null || v === undefined || v === '' ? null : String(v)
     const shownLocal = await page.locator('#khd-sync-table tr[data-sync]').evaluateAll(els => els.map(e => [e.getAttribute('data-sync'), Number(e.children[2].textContent.trim())]));
     check('แถวในระบบที่แสดง = จำนวนแถวปีงบนี้ในตารางส่งออก', shownLocal.every(([t, n]) => localRows[t] === n), JSON.stringify(shownLocal));
 
+    if (BOOK) { // ภาพที่ 2: ขั้นที่ 5 พร้อมส่ง
+        await page.locator('#khd-sync-panel').evaluate(e => e.scrollIntoView({ block: 'start' }));
+        await page.mouse.wheel(0, -76); await page.waitForTimeout(600);
+        await page.screenshot({ path: path.join(BOOK, 'a-kpimgr-export.png') });
+    }
     // เปลี่ยนรายการที่เลือก = ต้องตรวจใหม่ก่อนส่ง
     const other = await page.locator('#kpi-export-table tr[data-ind]').evaluateAll((els, ids) => els.map(e => Number(e.getAttribute('data-ind'))).find(id => !ids.includes(id)), picks.map(p => p.id));
     await page.locator(`tr[data-ind="${other}"] input[type=checkbox]`).check();
