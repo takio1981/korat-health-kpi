@@ -1,6 +1,6 @@
 /**
  * รายงานสรุปผล: สรุปข้อมูลตัวชี้วัดของกลุ่มงาน (28 พ.ย. 2569 — ผู้ใช้สั่ง) — GET /report/by-dept-kpi
- * แถวรายตัวชี้วัดชุดเดียวกับแถบรายข้อตัวชี้วัด จัดกลุ่มตามกลุ่มงาน | ร้อยละผ่านเกณฑ์ของกลุ่มงาน = คู่ผ่าน ÷ คู่ที่มีเป้าหมาย
+ * แถวรายตัวชี้วัดชุดเดียวกับแถบรายข้อตัวชี้วัด จัดกลุ่มตามกลุ่มงาน | ร้อยละการบันทึก = คู่ที่มีผลงาน ÷ คู่ที่ต้องกรอก (28 พ.ย. 2569)
  * ขอบเขตตามสิทธิ์เดียวกับรายงาน (ผู้ใช้กลุ่มงาน = เฉพาะกลุ่มงานตัวเอง) + AI สรุปรายแถบรองรับแถบนี้ (ไม่มีรหัสหน่วยบริการใน prompt)
  */
 require('./setup');
@@ -9,27 +9,28 @@ const { ensureTestUser, makeToken, cleanupTestUsers } = require('./helpers');
 const { summarizeDeptKpi } = require('../services/report-dept-kpi');
 const { tabKey, buildTabInput } = require('../services/ai-report-tabs');
 
-describe('summarizeDeptKpi (ฟังก์ชันล้วน)', () => {
-    test('จัดกลุ่ม + นับผ่านทุกแห่ง/บางแห่ง/ยังไม่ผ่าน/ไม่มีเป้าหมาย + ร้อยละจากคู่ (ไม่ใช่ค่าเฉลี่ยร้อยละ)', () => {
+describe('summarizeDeptKpi (ฟังก์ชันล้วน — เน้นการบันทึก 28 พ.ย. 2569)', () => {
+    test('จัดกลุ่ม + บันทึกครบ/บางแห่ง/ยังไม่บันทึก + ร้อยละการบันทึกจากคู่ + ค่าเฉลี่ยร้อยละผลงานของตัวชี้วัดที่มีเป้าหมาย', () => {
         const out = summarizeDeptKpi([
-            { indicator_id: 1, dept_id: 7, dept_name: 'ก', kpi_indicators_name: 'x1', hospitals_with_target: 10, hospitals_passed: 10, achievement_pct: 100 },
-            { indicator_id: 2, dept_id: 7, dept_name: 'ก', kpi_indicators_name: 'x2', hospitals_with_target: 2, hospitals_passed: 0, achievement_pct: 0 },
-            { indicator_id: 3, dept_id: 7, dept_name: 'ก', kpi_indicators_name: 'x3', hospitals_with_target: 0, hospitals_passed: 0, achievement_pct: 0 },
-            { indicator_id: 4, dept_id: 8, dept_name: 'ข', kpi_indicators_name: 'y1', hospitals_with_target: 4, hospitals_passed: 1, achievement_pct: 25 },
-            { indicator_id: 5, dept_id: null, dept_name: null, kpi_indicators_name: 'z', hospitals_with_target: 1, hospitals_passed: 1, achievement_pct: 100 },
+            { indicator_id: 1, dept_id: 7, dept_name: 'ก', kpi_indicators_name: 'x1', hospital_count: 10, recorded_hospitals: 10, target_value: 100, achievement_pct: 90 },
+            { indicator_id: 2, dept_id: 7, dept_name: 'ก', kpi_indicators_name: 'x2', hospital_count: 2, recorded_hospitals: 0, target_value: 20, achievement_pct: 0 },
+            { indicator_id: 3, dept_id: 7, dept_name: 'ก', kpi_indicators_name: 'x3', hospital_count: 4, recorded_hospitals: 2, target_value: 0, achievement_pct: 0 },
+            { indicator_id: 4, dept_id: 8, dept_name: 'ข', kpi_indicators_name: 'y1', hospital_count: 4, recorded_hospitals: 1, target_value: 8, achievement_pct: 25 },
+            { indicator_id: 5, dept_id: null, dept_name: null, kpi_indicators_name: 'z', hospital_count: 1, recorded_hospitals: 1, target_value: 1, achievement_pct: 100 },
         ]);
         const g = Object.fromEntries(out.data.map(d => [d.dept_name, d]));
-        expect(g['ก']).toMatchObject({ dept_id: 7, total_indicators: 3, indicators_all_passed: 1, indicators_partial: 0, indicators_none_passed: 1, indicators_no_target: 1, pairs_with_target: 12, pairs_passed: 10 });
-        expect(g['ก'].pass_pct).toBeCloseTo(83.33, 2);      // 10 / 12 — ไม่ใช่ (100 + 0) / 2
-        expect(g['ก'].avg_indicator_pct).toBe(50);
-        expect(g['ข']).toMatchObject({ indicators_partial: 1, pass_pct: 25 });
+        expect(g['ก']).toMatchObject({ dept_id: 7, total_indicators: 3, total_pairs: 16, recorded_pairs: 12, indicators_all_recorded: 1, indicators_partial: 1, indicators_none_recorded: 1, indicators_with_target: 2 });
+        expect(g['ก'].recording_pct).toBe(75);           // 12 / 16
+        expect(g['ก'].avg_indicator_pct).toBe(45);        // (90 + 0) / 2 — ตัวที่ไม่มีเป้าหมายไม่นับ
+        expect(g['ข']).toMatchObject({ indicators_partial: 1, recording_pct: 25 });
         expect(g['ไม่ระบุกลุ่มงาน']).toBeTruthy();
-        expect(out.data[0].pass_pct).toBeGreaterThanOrEqual(out.data[1].pass_pct);   // เรียงร้อยละมาก → น้อย
-        expect(g['ก'].indicators.map(r => r.indicator_id)).toEqual([1, 2, 3]);
-        expect(out.summary).toMatchObject({ total_depts: 3, total_indicators: 5, indicators_with_target: 4, pairs_with_target: 17, pairs_passed: 12, depts_ge_80: 2, depts_lt_50: 1 });
+        expect(out.data.map(d => d.recording_pct)).toEqual([100, 75, 25]);   // เรียงร้อยละการบันทึกมาก → น้อย
+        expect(g['ก'].indicators.map(r => r.indicator_id)).toEqual([1, 3, 2]); // ตัวชี้วัดเรียงตามร้อยละการบันทึก
+        expect(out.summary).toMatchObject({ total_depts: 3, total_indicators: 5, total_pairs: 21, recorded_pairs: 14, depts_ge_80: 1, depts_lt_50: 1 });
+        expect(out.summary.recording_pct).toBeCloseTo(66.67, 2);
     });
     test('ไม่มีแถว = ว่าง', () => {
-        expect(summarizeDeptKpi([])).toEqual(expect.objectContaining({ data: [], summary: expect.objectContaining({ total_depts: 0, pass_pct: 0 }) }));
+        expect(summarizeDeptKpi([])).toEqual(expect.objectContaining({ data: [], summary: expect.objectContaining({ total_depts: 0, recording_pct: 0 }) }));
     });
 });
 
@@ -79,8 +80,9 @@ test('super_admin: ตัวชี้วัดอยู่ใต้กลุ่�
     expect(b.g.dept_id).toBe(deptB.id);
     expect(Number(a.r.hospitals_passed)).toBe(2);
     expect(Number(b.r.hospitals_passed)).toBe(1);
-    expect(Number(b.r.achievement_pct)).toBe(50);
-    expect(a.g.indicators_all_passed).toBeGreaterThanOrEqual(1);
+    expect(Number(b.r.achievement_pct)).toBe(70);    // ผลงานรวม (3 + 11) ÷ เป้าหมายรวม (10 + 10)
+    expect(a.g.indicators_all_recorded).toBeGreaterThanOrEqual(1);
+    expect(a.g.recording_pct).toBe(100);
     const bi = await request(app).get('/khupskpi/api/report/by-indicator').set('Authorization', `Bearer ${saToken}`).query({ year_bh: YEAR });
     const rowB = bi.body.data.find(x => x.indicator_id === indB);
     expect(Number(rowB.achievement_pct)).toBe(Number(b.r.achievement_pct));

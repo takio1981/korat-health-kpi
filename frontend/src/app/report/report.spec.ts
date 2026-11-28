@@ -85,12 +85,12 @@ describe('ReportComponent — กล่องค้นหา', () => {
 
 describe('สรุปข้อมูลตัวชี้วัดของกลุ่มงาน (28 พ.ย. 2569)', () => {
   const groups = [
-    { dept_id: 1, dept_name: 'กลุ่มงานควบคุมโรค', pass_pct: 80, indicators: [
-      { indicator_id: 11, kpi_indicators_name: 'ร้อยละผู้ป่วยเบาหวาน', main_indicator_name: 'NCD', target_value: 20, total_actual: 30, hospital_count: 2, hospitals_with_target: 2, hospitals_passed: 2, achievement_pct: 100 },
-      { indicator_id: 12, kpi_indicators_name: 'อัตราวัณโรค', main_indicator_name: 'โรคติดต่อ', target_value: 10, total_actual: 1, hospital_count: 2, hospitals_with_target: 2, hospitals_passed: 0, achievement_pct: 0 },
+    { dept_id: 1, dept_name: 'กลุ่มงานควบคุมโรค', recording_pct: 75, indicators: [
+      { indicator_id: 11, kpi_indicators_name: 'ร้อยละผู้ป่วยเบาหวาน', main_indicator_name: 'NCD', target_value: 20, total_actual: 30, hospital_count: 2, recorded_hospitals: 2, achievement_pct: 100 },
+      { indicator_id: 12, kpi_indicators_name: 'อัตราวัณโรค', main_indicator_name: 'โรคติดต่อ', target_value: 10, total_actual: 1, hospital_count: 2, recorded_hospitals: 1, achievement_pct: 10 },
     ] },
-    { dept_id: 2, dept_name: 'กลุ่มงานประกัน', pass_pct: 50, indicators: [
-      { indicator_id: 21, kpi_indicators_name: 'ร้อยละการเบิกจ่าย', main_indicator_name: 'การเงิน', hospital_count: 1, hospitals_with_target: 2, hospitals_passed: 1, achievement_pct: 50 },
+    { dept_id: 2, dept_name: 'กลุ่มงานประกัน', recording_pct: 50, indicators: [
+      { indicator_id: 21, kpi_indicators_name: 'ร้อยละการเบิกจ่าย', main_indicator_name: 'การเงิน', hospital_count: 2, recorded_hospitals: 1, achievement_pct: 50 },
     ] },
   ];
   it('ค้นหา: ชื่อกลุ่มงานตรง = คงทุกตัวชี้วัด | ชื่อตัวชี้วัด/หมวดหมู่ = เฉพาะตัวที่ตรง | ไม่มีคำค้น = array เดิม', () => {
@@ -109,7 +109,7 @@ describe('สรุปข้อมูลตัวชี้วัดของก�
     const rows = deptKpiExcelRows(groups);
     expect(rows.length).toBe(3);
     expect(rows[0]['กลุ่มงาน']).toBe('กลุ่มงานควบคุมโรค');
-    expect(rows[2]).toEqual(expect.objectContaining({ kpi_indicators_name: 'ร้อยละการเบิกจ่าย', 'ร้อยละผ่านเกณฑ์': 50, 'คู่ที่มีเป้าหมาย': 2 }));
+    expect(rows[2]).toEqual(expect.objectContaining({ kpi_indicators_name: 'ร้อยละการเบิกจ่าย', 'ร้อยละ (ผลงาน ÷ เป้าหมาย)': 50, 'หน่วยบริการที่ต้องกรอก': 2, 'หน่วยบริการที่บันทึกแล้ว': 1 }));
     expect(REPORT_TAB_LABELS['by-dept-kpi']).toBe('สรุปข้อมูลตัวชี้วัดของกลุ่มงาน');
   });
   it('โหลดแถบ: เรียก /report/by-dept-kpi + แสดงกลุ่มงาน + คลิกแถวขยายรายตัวชี้วัด', async () => {
@@ -124,11 +124,11 @@ describe('สรุปข้อมูลตัวชี้วัดของก�
     c.switchTab('by-dept-kpi');
     const req = http.expectOne(r => r.url.includes('/report/by-dept-kpi'));
     expect(req.request.url).toContain('year_bh=2570');
-    req.flush({ success: true, summary: { total_depts: 2, total_indicators: 3, indicators_with_target: 3, pairs_with_target: 6, pairs_passed: 3, pass_pct: 50, depts_ge_80: 1, depts_lt_50: 0 }, data: groups });
+    req.flush({ success: true, summary: { total_depts: 2, total_indicators: 3, total_pairs: 6, recorded_pairs: 4, recording_pct: 66.67, depts_ge_80: 0, depts_lt_50: 0 }, data: groups });
     f.detectChanges();
     const el = f.nativeElement as HTMLElement;
     expect(el.querySelector('#tab-by-dept-kpi')).toBeTruthy();           // ทุกสิทธิ์เห็นแถบนี้
-    expect(el.querySelector('#dept-kpi-cards')?.textContent).toContain('50%');
+    expect(el.querySelector('#dept-kpi-cards')?.textContent).toContain('66.67%');
     const rows = el.querySelectorAll('#dept-kpi-table tr[data-dept]');
     expect(rows.length).toBe(2);
     expect(el.textContent).not.toContain('ร้อยละผู้ป่วยเบาหวาน');

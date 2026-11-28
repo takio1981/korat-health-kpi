@@ -70,16 +70,15 @@ export function deptKpiExcelRows(groups: any[]): any[] {
     for (const r of g.indicators || []) {
       rows.push({
         กลุ่มงาน: g.dept_name,
-        'ร้อยละผ่านเกณฑ์ของกลุ่มงาน': g.pass_pct,
+        'ร้อยละการบันทึกของกลุ่มงาน': g.recording_pct,
         indicator_id: r.indicator_id,
         kpi_indicators_name: r.kpi_indicators_name,
         หมวดหมู่หลัก: r.main_indicator_name || '',
         เป้าหมายรวม: r.target_value,
         ผลงานรวม: r.total_actual,
-        หน่วยบริการ: r.hospital_count,
-        คู่ที่มีเป้าหมาย: r.hospitals_with_target,
-        คู่ที่ผ่านเกณฑ์: r.hospitals_passed,
-        ร้อยละผ่านเกณฑ์: r.achievement_pct,
+        'หน่วยบริการที่ต้องกรอก': r.hospital_count,
+        'หน่วยบริการที่บันทึกแล้ว': r.recorded_hospitals,
+        'ร้อยละ (ผลงาน ÷ เป้าหมาย)': r.achievement_pct,
       });
     }
   }
@@ -161,7 +160,7 @@ export class ReportComponent implements OnInit {
   // === สรุปข้อมูลตัวชี้วัดของกลุ่มงาน (28 พ.ย. 2569) — ทุก role ตามขอบเขตเดียวกับแถบรายข้อตัวชี้วัด ===
   deptKpiData: any[] = [];
   deptKpiViewData: any[] = [];
-  deptKpiSummary: any = { total_depts: 0, total_indicators: 0, indicators_with_target: 0, pairs_with_target: 0, pairs_passed: 0, pass_pct: 0, depts_ge_80: 0, depts_lt_50: 0 };
+  deptKpiSummary: any = { total_depts: 0, total_indicators: 0, total_pairs: 0, recorded_pairs: 0, recording_pct: 0, depts_ge_80: 0, depts_lt_50: 0 };
   /** กลุ่มงานที่ขยายดูรายตัวชี้วัด (key = deptKpiKey) */
   deptKpiOpen = new Set<string>();
   deptKpiKey(g: any): string { return g?.dept_id != null ? 'd' + g.dept_id : 'n:' + (g?.dept_name || ''); }
@@ -462,7 +461,7 @@ export class ReportComponent implements OnInit {
         if (!this.selectedYear) {
           this.isLoading = false;
           this.deptKpiData = [];
-          this.deptKpiSummary = { total_depts: 0, total_indicators: 0, indicators_with_target: 0, pairs_with_target: 0, pairs_passed: 0, pass_pct: 0, depts_ge_80: 0, depts_lt_50: 0 };
+          this.deptKpiSummary = { total_depts: 0, total_indicators: 0, total_pairs: 0, recorded_pairs: 0, recording_pct: 0, depts_ge_80: 0, depts_lt_50: 0 };
           this.applySearch();
           this.cdr.detectChanges();
           return;
@@ -501,14 +500,15 @@ export class ReportComponent implements OnInit {
             this.deptKpiSummary = res.summary || this.deptKpiSummary;
             this.deptKpiData = (res.data || []).map((g: any) => ({
               ...g,
-              pass_pct: Number(g.pass_pct) || 0,
+              recording_pct: Number(g.recording_pct) || 0,
               indicators: (g.indicators || []).map((r: any) => ({
                 ...r,
                 _target_display: r.target_value === null || r.target_value === undefined ? '' : String(Number.isInteger(Number(r.target_value)) ? Number(r.target_value) : Number(r.target_value).toFixed(2)),
                 total_actual: parseFloat(r.total_actual) || 0,
                 achievement_pct: Number(r.achievement_pct) || 0,
-                hospitals_with_target: Number(r.hospitals_with_target) || 0,
-                hospitals_passed: Number(r.hospitals_passed) || 0,
+                target_value: Number(r.target_value) || 0,
+                hospital_count: Number(r.hospital_count) || 0,
+                recorded_hospitals: Number(r.recorded_hospitals) || 0,
               })),
             }));
             this.deptKpiOpen = new Set();
@@ -571,36 +571,26 @@ export class ReportComponent implements OnInit {
   }
 
   calculateSummary() {
+    // ยอดรวมทุกหน่วยบริการที่ต้องกรอก (มีผลงาน + ยังไม่มี) — ร้อยละ = ผลงานรวม ÷ เป้าหมายรวม × 100 ทุกแถบ (28 พ.ย. 2569)
+    const sum = (k: string) => this.reportData.reduce((s, d) => s + (Number(d[k]) || 0), 0);
     if (this.activeTab === 'by-indicator') {
       this.summaryStats.totalIndicators = this.reportData.length;
-      this.summaryStats.totalHospitals = new Set(this.reportData.map(d => d.hospital_count)).size;
-      this.summaryStats.totalTarget = this.reportData.reduce((s, d) => s + (Number(d.target_value) || 0), 0);
-      this.summaryStats.totalActual = this.reportData.reduce((s, d) => s + (Number(d.total_actual) || 0), 0);
-      this.summaryStats.avgAchievement = this.summaryStats.totalTarget > 0
-        ? Math.round((this.summaryStats.totalActual / this.summaryStats.totalTarget) * 10000) / 100 : 0;
+      this.summaryStats.totalHospitals = Math.max(0, ...this.reportData.map(d => Number(d.hospital_count) || 0));
+      this.summaryStats.totalTarget = sum('target_value');
     } else if (this.activeTab === 'by-hospital') {
       this.summaryStats.totalHospitals = this.reportData.length;
-      this.summaryStats.totalIndicators = this.reportData.reduce((s, d) => s + (Number(d.indicator_count) || 0), 0);
-      this.summaryStats.totalTarget = this.reportData.reduce((s, d) => s + (Number(d.total_target) || 0), 0);
-      this.summaryStats.totalActual = this.reportData.reduce((s, d) => s + (Number(d.total_actual) || 0), 0);
-      this.summaryStats.avgAchievement = this.reportData.length > 0
-        ? Math.round(this.reportData.reduce((s, d) => s + (Number(d.achievement_pct) || 0), 0) / this.reportData.length * 100) / 100 : 0;
-    } else if (this.activeTab === 'by-district') {
-      this.summaryStats.totalHospitals = this.reportData.reduce((s, d) => s + (Number(d.hospital_count) || 0), 0);
-      this.summaryStats.totalIndicators = this.reportData.reduce((s, d) => s + (Number(d.indicator_count) || 0), 0);
-      this.summaryStats.totalTarget = this.reportData.reduce((s, d) => s + (Number(d.total_target) || 0), 0);
-      this.summaryStats.totalActual = this.reportData.reduce((s, d) => s + (Number(d.total_actual) || 0), 0);
-      this.summaryStats.avgAchievement = this.reportData.length > 0
-        ? Math.round(this.reportData.reduce((s, d) => s + (Number(d.achievement_pct) || 0), 0) / this.reportData.length * 100) / 100 : 0;
+      this.summaryStats.totalIndicators = Math.max(0, ...this.reportData.map(d => Number(d.indicator_count) || 0));
+      this.summaryStats.totalTarget = sum('total_target');
     } else {
-      this.summaryStats.totalIndicators = this.reportData.reduce((s, d) => s + (Number(d.indicator_count) || 0), 0);
-      this.summaryStats.totalHospitals = this.reportData.reduce((s, d) => s + (Number(d.hospital_count) || 0), 0);
-      this.summaryStats.totalTarget = this.reportData.reduce((s, d) => s + (Number(d.total_target) || 0), 0);
-      this.summaryStats.totalActual = this.reportData.reduce((s, d) => s + (Number(d.total_actual) || 0), 0);
-      this.summaryStats.avgAchievement = this.reportData.length > 0
-        ? Math.round(this.reportData.reduce((s, d) => s + (Number(d.achievement_pct) || 0), 0) / this.reportData.length * 100) / 100 : 0;
+      this.summaryStats.totalHospitals = this.activeTab === 'by-district' ? sum('hospital_count') : Math.max(0, ...this.reportData.map(d => Number(d.hospital_count) || 0));
+      this.summaryStats.totalIndicators = Math.max(0, ...this.reportData.map(d => Number(d.indicator_count) || 0));
+      this.summaryStats.totalTarget = sum('total_target');
     }
+    this.summaryStats.totalActual = sum('total_actual');
+    this.summaryStats.avgAchievement = this.summaryStats.totalTarget > 0
+      ? Math.round((this.summaryStats.totalActual / this.summaryStats.totalTarget) * 10000) / 100 : 0;
   }
+
 
   updateChart() {
     switch (this.activeTab) {
@@ -627,14 +617,14 @@ export class ReportComponent implements OnInit {
       case 'by-hospital': {
         const data = this.reportData.slice(0, 25);
         this.barChartOptions = {
-          series: [{ name: '%สำเร็จ', data: data.map(d => Number(d.achievement_pct) || 0) }],
+          series: [{ name: 'ร้อยละ', data: data.map(d => Number(d.achievement_pct) || 0) }],
           chart: { type: 'bar', height: Math.max(400, data.length * 28), fontFamily: 'Sarabun, sans-serif' },
           plotOptions: { bar: { horizontal: true, barHeight: '70%', borderRadius: 4 } },
           dataLabels: { enabled: true, formatter: (v: any) => v.toFixed(2) + '%' },
-          xaxis: { title: { text: '%ผลสำเร็จ' }, max: 200 },
+          xaxis: { title: { text: 'ร้อยละ (ผลงาน ÷ เป้าหมาย)' } },
           yaxis: { labels: { style: { fontSize: '11px' } } },
           colors: ['#10b981'],
-          title: { text: 'อัตราผลสำเร็จ (%สำเร็จ) แยกรายหน่วยบริการ', align: 'left' },
+          title: { text: 'ร้อยละผลงาน (ผลงานรวม ÷ เป้าหมายรวม) แยกรายหน่วยบริการ', align: 'left' },
           labels: data.map(d => (d.hosname || d.hospcode || '').substring(0, 30))
         };
         break;
@@ -644,14 +634,14 @@ export class ReportComponent implements OnInit {
         const values = this.reportData.map(d => Number(d.achievement_pct) || 0);
         const actuals = this.reportData.map(d => Number(d.total_actual) || 0);
         this.barChartOptions = {
-          series: [{ name: '%สำเร็จ', data: values }],
+          series: [{ name: 'ร้อยละ', data: values }],
           chart: { type: 'bar', height: 400, fontFamily: 'Sarabun, sans-serif' },
           plotOptions: { bar: { columnWidth: '60%', borderRadius: 4 } },
           dataLabels: { enabled: true, formatter: (v: any) => v.toFixed(2) + '%' },
           xaxis: { categories: labels, labels: { rotate: -45, style: { fontSize: '10px' } } },
-          yaxis: { title: { text: '%ผลสำเร็จ' } },
+          yaxis: { title: { text: 'ร้อยละ (ผลงาน ÷ เป้าหมาย)' } },
           colors: ['#3b82f6'],
-          title: { text: 'อัตราผลสำเร็จ (%สำเร็จ) แยกรายอำเภอ', align: 'left' }
+          title: { text: 'ร้อยละผลงาน (ผลงานรวม ÷ เป้าหมายรวม) แยกรายอำเภอ', align: 'left' }
         };
         this.pieChartOptions = {
           series: actuals,

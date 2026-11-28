@@ -96,8 +96,12 @@ describe('POST /report/ai-tab-summary', () => {
         const rows = (await report(saToken, '/report/by-indicator')).body.data;
         const input = inputOf(callLlm.mock.calls[0]);
         expect(input.overall.indicators).toBe(rows.length);
-        expect(input.overall.pairs_passed).toBe(rows.reduce((s, r) => s + Number(r.hospitals_passed), 0));
-        expect(input.overall.pairs_with_target).toBe(rows.reduce((s, r) => s + Number(r.hospitals_with_target), 0));
+        // 28 พ.ย. 2569: เน้นการบันทึก — คู่ที่ต้องกรอก/บันทึกแล้ว (ไม่ใช่ผ่านเกณฑ์)
+        expect(input.overall.pairs_total).toBe(rows.reduce((s, r) => s + Number(r.hospital_count), 0));
+        expect(input.overall.pairs_recorded).toBe(rows.reduce((s, r) => s + Number(r.recorded_hospitals), 0));
+        expect(input.overall.pairs_total).toBe(4);
+        expect(input.overall.pairs_recorded).toBe(3);
+        expect(input.overall.pass_pct).toBeUndefined();
         expect(input.year_bh).toBe(YEAR);
         expect(callLlm.mock.calls[0][0].system).toContain('รายตัวชี้วัด');
     });
@@ -109,8 +113,8 @@ describe('POST /report/ai-tab-summary', () => {
         for (const v of [hospA, hospB, hosA.hosname, hosB.hosname]) expect(p).not.toContain(v);
         const input = inputOf(callLlm.mock.calls[0]);
         expect(input.overall.hospitals).toBe(2);
-        expect(input.overall.pairs_passed).toBe(1);
-        expect(input.overall.pairs_with_target).toBe(4);
+        expect(input.overall.pairs_total).toBe(4);
+        expect(input.overall.pairs_recorded).toBe(3);
         expect(input.hospital_types.count).toBe(2);
         expect(input.hospital_types.top.map(t => t.name).join('|')).not.toMatch(/^ประเภท /);   // ใช้ชื่อประเภทจาก chostype
     });
@@ -153,8 +157,8 @@ describe('POST /report/ai-tab-summary', () => {
         const res = await tabSummary(hosToken, { tab: 'by-indicator' });
         expect(res.status).toBe(200);
         const input = inputOf(callLlm.mock.calls[0]);
-        expect(input.overall.pairs_with_target).toBe(2);   // ind1 + ind2 ของ hospA
-        expect(input.overall.pairs_passed).toBe(1);
+        expect(input.overall.pairs_total).toBe(2);   // ind1 + ind2 ของ hospA
+        expect(input.overall.pairs_recorded).toBe(2);
     });
 
     test('ไม่มีข้อมูลตามตัวกรอง = 400 ไม่เรียก AI | แคชต่อชุดข้อมูล', async () => {
@@ -172,7 +176,7 @@ describe('เส้นทางรายงานเดิมหลังแย�
     test('ผลรูปแบบเดิม + by-hospital คืนประเภทหน่วยบริการ', async () => {
         const byInd = await report(saToken, '/report/by-indicator');
         expect(byInd.status).toBe(200);
-        expect(byInd.body.data.find(r => Number(r.indicator_id) === ind1)).toEqual(expect.objectContaining({ hospitals_passed: expect.anything(), achievement_pct: expect.anything() }));
+        expect(byInd.body.data.find(r => Number(r.indicator_id) === ind1)).toEqual(expect.objectContaining({ recorded_hospitals: 2, hospital_count: 2, achievement_pct: expect.anything() }));
         const byHos = await report(saToken, '/report/by-hospital');
         expect(byHos.body.data.find(r => r.hospcode === hospA).hostype).toBe('07');
         const rec = await report(saToken, '/report/recording-status');

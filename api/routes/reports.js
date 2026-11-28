@@ -19,6 +19,7 @@ const { computeForecasts, summarizeByIndicator, summarizeByDistrict } = require(
 const { explainForecast } = require('../services/ai-forecast');
 const { chartScopeClauses } = require('../services/report-scope');
 const { summarizeDeptKpi } = require('../services/report-dept-kpi');
+const { reportPairsSql, SUM_TARGET, SUM_ACTUAL, RATIO_PCT, RECORDED } = require('../services/report-pairs');
 
 // GET /kpi-summary — ดึงข้อมูลจาก summary table (เร็วมาก ไม่ต้อง JOIN)
 // ผลงานรายเดือนของปีงบที่แล้ว (year_bh - 1) จาก kpi_summary ตามขอบเขตสิทธิ์เดียวกับรายงาน (chartScopeClauses)
@@ -110,6 +111,8 @@ async function reportByIndicatorRows(user, query = {}, opts = {}) {
     whereClauses.push(activeIndicatorSql('s.indicator_id')); // เฉพาะตัวชี้วัดที่เปิดใช้งาน
 
     const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+    // ทุกหน่วยบริการที่ต้องกรอก (มีผลงาน + ยังไม่มีผลงาน — 28 พ.ย. 2569) ดู services/report-pairs.js
+    const src = reportPairsSql(year_bh);
     const sql = `
         SELECT
             s.indicator_id,
@@ -121,19 +124,15 @@ async function reportByIndicatorRows(user, query = {}, opts = {}) {
             MAX(i.result_formula) AS result_formula,
             MAX(i.target_condition) AS ind_target_condition,
             s.year_bh,
-            -- เป้าหมาย = ยอดรวมเป้าหมายของทุกหน่วยบริการในขอบเขต (27 พ.ย. 2569 ผู้ใช้สั่ง — เดิม MAX = เป้าหมายของหน่วยบริการหนึ่ง)
-            -- นับเฉพาะเป้าหมายที่เป็นตัวเลข (ข้อความ = ไม่รวม) | target_max = ค่าเดิมไว้อ้างอิง
-            -- ลำดับคอลัมน์ = ลำดับในไฟล์ Excel: เป้าหมาย → ผลงานรวม → %สำเร็จ → รพ. → รายเดือน
-            SUM(CASE WHEN TRIM(s.target_value) REGEXP '^-{0,1}[0-9]+([.][0-9]+){0,1}$' THEN CAST(s.target_value AS DECIMAL(20,4)) ELSE 0 END) AS target_value,
-            SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) AS total_actual,
-            CASE WHEN SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) = 0 THEN 0
-                 ELSE ROUND(
-                    SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'), 's.manual_pct')}
-                             THEN 1 ELSE 0 END)
-                    / SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) * 100, 2)
-            END AS achievement_pct,
+            -- ยอดรวมของทุกหน่วยบริการที่ต้องกรอก (มีผลงาน + ยังไม่มีผลงาน — 28 พ.ย. 2569 ผู้ใช้สั่ง) เป้าหมาย/ผลงานที่ไม่ใช่ตัวเลข = ไม่นับ
+            -- ร้อยละ (achievement_pct) = ผลงานรวม ÷ เป้าหมายรวม × 100 (เดิม = ร้อยละหน่วยบริการที่ผ่านเกณฑ์ เฉพาะที่มีผลงาน)
+            -- ลำดับคอลัมน์ = ลำดับในไฟล์ Excel: เป้าหมาย → ผลงานรวม → ร้อยละ → รพ. → รายเดือน
+            ${SUM_TARGET} AS target_value,
+            ${SUM_ACTUAL} AS total_actual,
+            ${RATIO_PCT} AS achievement_pct,
             COUNT(DISTINCT s.hospcode) AS hospital_count,
-            MAX(CAST(s.target_value AS DECIMAL(20,4))) AS target_max,
+            COUNT(DISTINCT CASE WHEN ${RECORDED} THEN s.hospcode END) AS recorded_hospitals,
+            MAX(CASE WHEN TRIM(s.target_value) REGEXP '^-{0,1}[0-9]+([.][0-9]+){0,1}$' THEN CAST(s.target_value AS DECIMAL(20,4)) END) AS target_max,
             SUM(CAST(s.oct AS DECIMAL(20,4))) AS oct,
             SUM(CAST(s.nov AS DECIMAL(20,4))) AS nov,
             SUM(CAST(s.dece AS DECIMAL(20,4))) AS dece,
@@ -151,14 +150,14 @@ async function reportByIndicatorRows(user, query = {}, opts = {}) {
             -- จำนวน hospcode ที่ผ่านเกณฑ์ (ตามเงื่อนไขเป้าหมาย ≥ > ≤ < = — targetPassSql) — % สำเร็จ (achievement_pct ด้านบน) = passed / with_target × 100
             SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'), 's.manual_pct')}
                      THEN 1 ELSE 0 END) AS hospitals_passed
-        FROM kpi_summary s
+        FROM ${src.sql} s
         LEFT JOIN kpi_indicators i ON i.id = s.indicator_id
         ${whereStr}
         GROUP BY s.indicator_id, s.year_bh
         ORDER BY achievement_pct DESC, MAX(s.main_indicator_name), MAX(s.kpi_indicators_name)
         ${opts.noLimit ? '' : 'LIMIT 500'}
     `;
-    const [rows] = await db.query(sql, params);
+    const [rows] = await db.query(sql, [...src.params, ...params]);
     return rows;
 }
 
@@ -219,6 +218,8 @@ async function reportByHospitalRows(user, query = {}) {
     whereClauses.push(activeIndicatorSql('s.indicator_id')); // เฉพาะตัวชี้วัดที่เปิดใช้งาน
 
     const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+    // ทุกหน่วยบริการที่ต้องกรอก (มีผลงาน + ยังไม่มีผลงาน — 28 พ.ย. 2569) ดู services/report-pairs.js
+    const src = reportPairsSql(year_bh);
     const sql = `
         SELECT
             s.hospcode,
@@ -228,28 +229,25 @@ async function reportByHospitalRows(user, query = {}) {
             MAX(s.hostype) AS hostype,
             s.year_bh,
             COUNT(DISTINCT s.indicator_id) AS indicator_count,
-            SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4))) AS total_target,
-            SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) AS total_actual,
+            ${SUM_TARGET} AS total_target,
+            ${SUM_ACTUAL} AS total_actual,
+            COUNT(DISTINCT CASE WHEN ${RECORDED} THEN s.indicator_id END) AS recorded_indicators,
             -- จำนวนตัวชี้วัดที่มี target (ใช้เป็นตัวหารของ % สำเร็จ)
             SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) AS indicators_with_target,
             -- จำนวนตัวชี้วัดที่ผ่านเกณฑ์ (ตามเงื่อนไขเป้าหมาย ≥ > ≤ < = — targetPassSql)
             SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'), 's.manual_pct')}
                      THEN 1 ELSE 0 END) AS indicators_passed,
             -- % สำเร็จ = passed / with_target × 100 (ไม่ใช่ SUM(actual)/SUM(target))
-            CASE WHEN SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) = 0 THEN 0
-                 ELSE ROUND(
-                    SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'), 's.manual_pct')}
-                             THEN 1 ELSE 0 END)
-                    / SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) * 100, 2)
-            END AS achievement_pct,
+            -- ร้อยละ = ผลงานรวม ÷ เป้าหมายรวม × 100 (28 พ.ย. 2569 — เดิมนับคู่ที่ผ่านเกณฑ์)
+            ${RATIO_PCT} AS achievement_pct,
             SUM(CASE WHEN s.indicator_status = 'Approved' THEN 1 ELSE 0 END) AS approved_count,
             SUM(s.pending_count) AS pending_count
-        FROM kpi_summary s
+        FROM ${src.sql} s
         ${whereStr}
         GROUP BY s.hospcode, s.year_bh
         ORDER BY achievement_pct DESC, MAX(s.distname), MAX(s.hosname)
     `;
-    const [rows] = await db.query(sql, params);
+    const [rows] = await db.query(sql, [...src.params, ...params]);
     return rows;
 }
 apiRouter.get('/report/by-hospital', authenticateToken, async (req, res) => {
@@ -296,6 +294,8 @@ async function reportByDistrictRows(user, query = {}) {
     whereClauses.push(activeIndicatorSql('s.indicator_id')); // เฉพาะตัวชี้วัดที่เปิดใช้งาน
 
     const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+    // ทุกหน่วยบริการที่ต้องกรอก (มีผลงาน + ยังไม่มีผลงาน — 28 พ.ย. 2569) ดู services/report-pairs.js
+    const src = reportPairsSql(year_bh);
     const sql = `
         SELECT
             s.distid,
@@ -303,24 +303,22 @@ async function reportByDistrictRows(user, query = {}) {
             s.year_bh,
             COUNT(DISTINCT s.hospcode) AS hospital_count,
             COUNT(DISTINCT s.indicator_id) AS indicator_count,
-            SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4))) AS total_target,
-            SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) AS total_actual,
+            ${SUM_TARGET} AS total_target,
+            ${SUM_ACTUAL} AS total_actual,
+            COUNT(DISTINCT CASE WHEN ${RECORDED} THEN CONCAT(s.indicator_id, '|', s.hospcode) END) AS recorded_pairs,
+            COUNT(DISTINCT CONCAT(s.indicator_id, '|', s.hospcode)) AS total_pairs,
             -- count-based achievement (ไม่ใช่ SUM ratio)
             SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) AS pairs_with_target,
             SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'), 's.manual_pct')}
                      THEN 1 ELSE 0 END) AS pairs_passed,
-            CASE WHEN SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) = 0 THEN 0
-                 ELSE ROUND(
-                    SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'), 's.manual_pct')}
-                             THEN 1 ELSE 0 END)
-                    / SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) * 100, 2)
-            END AS achievement_pct
-        FROM kpi_summary s
+            -- ร้อยละ = ผลงานรวม ÷ เป้าหมายรวม × 100 (28 พ.ย. 2569 — เดิมนับคู่ที่ผ่านเกณฑ์)
+            ${RATIO_PCT} AS achievement_pct
+        FROM ${src.sql} s
         ${whereStr}
         GROUP BY s.distid, s.year_bh
         ORDER BY achievement_pct DESC, MAX(s.distname)
     `;
-    const [rows] = await db.query(sql, params);
+    const [rows] = await db.query(sql, [...src.params, ...params]);
     return rows;
 }
 apiRouter.get('/report/by-district', authenticateToken, async (req, res) => {
@@ -366,31 +364,31 @@ async function reportByYearRows(user, query = {}) {
     whereClauses.push(activeIndicatorSql('s.indicator_id')); // เฉพาะตัวชี้วัดที่เปิดใช้งาน
 
     const whereStr = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+    // ทุกหน่วยบริการที่ต้องกรอก (มีผลงาน + ยังไม่มีผลงาน — 28 พ.ย. 2569) ดู services/report-pairs.js
+    const src = reportPairsSql(null);
     const sql = `
         SELECT
             s.year_bh,
             COUNT(DISTINCT s.indicator_id) AS indicator_count,
             COUNT(DISTINCT s.hospcode) AS hospital_count,
-            SUM(CAST(COALESCE(s.target_value, 0) AS DECIMAL(20,4))) AS total_target,
-            SUM(CAST(COALESCE(s.last_actual, 0) AS DECIMAL(20,4))) AS total_actual,
+            ${SUM_TARGET} AS total_target,
+            ${SUM_ACTUAL} AS total_actual,
+            COUNT(DISTINCT CASE WHEN ${RECORDED} THEN CONCAT(s.indicator_id, '|', s.hospcode) END) AS recorded_pairs,
+            COUNT(DISTINCT CONCAT(s.indicator_id, '|', s.hospcode)) AS total_pairs,
             -- count-based achievement (ไม่ใช่ SUM ratio)
             SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) AS pairs_with_target,
             SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'), 's.manual_pct')}
                      THEN 1 ELSE 0 END) AS pairs_passed,
-            CASE WHEN SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) = 0 THEN 0
-                 ELSE ROUND(
-                    SUM(CASE WHEN ${targetPassSql('s.last_actual', 's.target_value', targetCondOf('s'), 's.manual_pct')}
-                             THEN 1 ELSE 0 END)
-                    / SUM(CASE WHEN ${targetHasSql('s.target_value', targetCondOf('s'), 's.manual_pct')} THEN 1 ELSE 0 END) * 100, 2)
-            END AS achievement_pct,
+            -- ร้อยละ = ผลงานรวม ÷ เป้าหมายรวม × 100 (28 พ.ย. 2569 — เดิมนับคู่ที่ผ่านเกณฑ์)
+            ${RATIO_PCT} AS achievement_pct,
             SUM(CASE WHEN s.indicator_status = 'Approved' THEN 1 ELSE 0 END) AS approved_count,
             SUM(s.pending_count) AS pending_count
-        FROM kpi_summary s
+        FROM ${src.sql} s
         ${whereStr}
         GROUP BY s.year_bh
         ORDER BY achievement_pct DESC, s.year_bh DESC
     `;
-    const [rows] = await db.query(sql, params);
+    const [rows] = await db.query(sql, [...src.params, ...params]);
     return rows;
 }
 apiRouter.get('/report/by-year', authenticateToken, async (req, res) => {

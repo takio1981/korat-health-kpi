@@ -134,7 +134,7 @@
         <div class="bg-gradient-to-br from-yellow-500 to-orange-600 rounded-2xl p-5 text-white shadow-lg">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-xs font-bold text-yellow-100 uppercase">%ผลสำเร็จเฉลี่ย</p>
+              <p class="text-xs font-bold text-yellow-100 uppercase" title="ร้อยละ = ผลงานรวม ÷ เป้าหมายรวม × 100 (รวมทุกหน่วยบริการที่ต้องกรอก ทั้งที่มีผลงานแล้วและยังไม่มีผลงาน)">ร้อยละผลงานรวม (ผลงาน ÷ เป้าหมาย)</p>
               <p class="text-3xl font-extrabold mt-1">{{ summaryStats.avgAchievement }}%</p>
             </div>
             <div class="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
@@ -249,6 +249,9 @@
           </span>
         </div>
 
+        <p *ngIf="['by-indicator','by-hospital','by-district','by-year'].includes(activeTab)" id="report-total-note" class="px-4 pt-3 text-xs text-gray-500 no-print">
+          <i class="fas fa-circle-info text-green-600 mr-1"></i>ยอดรวมเป้าหมาย/ผลงานนับทุกหน่วยบริการที่ต้องกรอก (ถูกเพิ่มตัวชี้วัดแล้ว) ทั้งที่มีผลงานแล้วและยังไม่มีผลงาน (ยังไม่มีผลงาน = 0) · ร้อยละ = ผลงานรวม ÷ เป้าหมายรวม × 100
+        </p>
         <!-- === Mobile Card View (ทุก tab) === -->
         <div class="md:hidden p-3 space-y-2">
           <div *ngFor="let item of viewData; let i = index" class="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
@@ -338,8 +341,8 @@
                 <th class="px-4 py-3 text-left font-bold">กลุ่มงาน</th>
                 <th class="px-4 py-3 text-right font-bold" title="ยอดรวมเป้าหมายของทุกหน่วยบริการในขอบเขต (เฉพาะเป้าหมายที่เป็นตัวเลข)">เป้าหมาย (รวม)</th>
                 <th class="px-4 py-3 text-right font-bold">ผลงานรวม</th>
-                <th class="px-4 py-3 text-right font-bold">%สำเร็จ</th>
-                <th class="px-4 py-3 text-center font-bold">รพ.</th>
+                <th class="px-4 py-3 text-right font-bold" title="ร้อยละ = ผลงานรวม ÷ เป้าหมายรวม × 100 (รวมทุกหน่วยบริการที่ต้องกรอก ทั้งที่มีผลงานแล้วและยังไม่มีผลงาน)">ร้อยละ<span class="block text-[10px] font-normal">ผลงาน ÷ เป้าหมาย</span></th>
+                <th class="px-4 py-3 text-center font-bold" title="หน่วยบริการที่บันทึกผลงานแล้ว / หน่วยบริการที่ต้องกรอกทั้งหมด">รพ.<span class="block text-[10px] font-normal">บันทึก / ทั้งหมด</span></th>
                 <th class="px-4 py-3 text-right font-bold">ต.ค.</th>
                 <th class="px-4 py-3 text-right font-bold">พ.ย.</th>
                 <th class="px-4 py-3 text-right font-bold">ธ.ค.</th>
@@ -362,11 +365,11 @@
                 <td class="px-4 py-2.5 text-gray-600">{{ item.dept_name }}</td>
                 <td class="px-4 py-2.5 text-right text-gray-700">{{ item._target_display || '-' }}</td>
                 <td class="px-4 py-2.5 text-right font-bold text-green-700">{{ item.total_actual > 0 ? (item.total_actual | number:'1.2-2') : '-' }}</td>
-                <td class="px-4 py-2.5 text-right font-bold" [class]="(item.achievement_pct >= 100) ? 'text-green-600' : ((item.achievement_pct > 0) ? 'text-amber-600' : 'text-red-500')">
+                <td class="px-4 py-2.5 text-right font-bold" [class]="(item.achievement_pct >= 100) ? 'text-green-600' : 'text-gray-800'">
                   {{ (item.achievement_pct | number:'1.2-2') || '0.00' }}%
-                  <span class="text-[10px] text-gray-400 font-normal block">({{ item.hospitals_passed || 0 }}/{{ item.hospitals_with_target || 0 }} รพ.)</span>
+
                 </td>
-                <td class="px-4 py-2.5 text-center text-gray-600">{{ item.hospital_count }}</td>
+                <td class="px-4 py-2.5 text-center text-gray-600 whitespace-nowrap"><span class="font-bold" [class]="item.recorded_hospitals >= item.hospital_count ? 'text-emerald-600' : 'text-amber-600'">{{ item.recorded_hospitals || 0 }}</span> / {{ item.hospital_count }}</td>
                 <td class="px-4 py-2.5 text-right" [class]="item._oct_display && item.oct > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._oct_display || '-' }}</td>
                 <td class="px-4 py-2.5 text-right" [class]="item._nov_display && item.nov > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._nov_display || '-' }}</td>
                 <td class="px-4 py-2.5 text-right" [class]="item._dece_display && item.dece > 0 ? 'text-green-600 font-medium' : 'text-gray-400'">{{ item._dece_display || '-' }}</td>
@@ -396,10 +399,10 @@
                 <th class="px-4 py-3 text-left font-bold">รหัส รพ.</th>
                 <th class="px-4 py-3 text-left font-bold">ชื่อหน่วยบริการ</th>
                 <th class="px-4 py-3 text-left font-bold">อำเภอ</th>
-                <th class="px-4 py-3 text-right font-bold">จำนวนตัวชี้วัด</th>
+                <th class="px-4 py-3 text-right font-bold" title="ตัวชี้วัดที่บันทึกผลงานแล้ว / ตัวชี้วัดที่ต้องกรอกทั้งหมด">ตัวชี้วัด<span class="block text-[10px] font-normal">บันทึก / ทั้งหมด</span></th>
                 <th class="px-4 py-3 text-right font-bold">เป้าหมายรวม</th>
                 <th class="px-4 py-3 text-right font-bold">ผลงานรวม</th>
-                <th class="px-4 py-3 text-right font-bold">%สำเร็จ</th>
+                <th class="px-4 py-3 text-right font-bold" title="ร้อยละ = ผลงานรวม ÷ เป้าหมายรวม × 100 (รวมทุกหน่วยบริการที่ต้องกรอก ทั้งที่มีผลงานแล้วและยังไม่มีผลงาน)">ร้อยละ<span class="block text-[10px] font-normal">ผลงาน ÷ เป้าหมาย</span></th>
                 <th class="px-4 py-3 text-right font-bold">อนุมัติ</th>
                 <th class="px-4 py-3 text-right font-bold">รออนุมัติ</th>
               </tr>
@@ -410,10 +413,10 @@
                 <td class="px-4 py-2.5 text-gray-600 font-mono text-xs">{{ item.hospcode }}</td>
                 <td class="px-4 py-2.5 text-gray-800 font-medium">{{ item.hosname }} <app-zone-badge [hospcode]="item.hospcode"></app-zone-badge></td>
                 <td class="px-4 py-2.5 text-gray-600">{{ item.distname }}</td>
-                <td class="px-4 py-2.5 text-right text-gray-700">{{ item.indicator_count }}</td>
+                <td class="px-4 py-2.5 text-right text-gray-700 whitespace-nowrap"><span class="font-bold" [class]="item.recorded_indicators >= item.indicator_count ? 'text-emerald-600' : 'text-amber-600'">{{ item.recorded_indicators || 0 }}</span> / {{ item.indicator_count }}</td>
                 <td class="px-4 py-2.5 text-right text-gray-700">{{ (item.total_target | number:'1.2-2') || '0.00' }}</td>
                 <td class="px-4 py-2.5 text-right font-bold text-green-700">{{ (item.total_actual | number:'1.2-2') || '0.00' }}</td>
-                <td class="px-4 py-2.5 text-right font-bold" [class]="(item.achievement_pct >= 100) ? 'text-green-600' : 'text-red-500'">
+                <td class="px-4 py-2.5 text-right font-bold" [class]="(item.achievement_pct >= 100) ? 'text-green-600' : 'text-gray-800'">
                   {{ (item.achievement_pct | number:'1.2-2') || '0.00' }}%
                 </td>
                 <td class="px-4 py-2.5 text-right text-green-600">{{ item.approved_count }}</td>
@@ -435,9 +438,10 @@
                 <th class="px-4 py-3 text-left font-bold">อำเภอ</th>
                 <th class="px-4 py-3 text-right font-bold">จำนวน รพ.</th>
                 <th class="px-4 py-3 text-right font-bold">จำนวนตัวชี้วัด</th>
+                <th class="px-4 py-3 text-right font-bold" title="คู่ตัวชี้วัด × หน่วยบริการ ที่บันทึกผลงานแล้ว / ที่ต้องกรอกทั้งหมด">บันทึกแล้ว<span class="block text-[10px] font-normal">คู่ที่บันทึก / ต้องกรอก</span></th>
                 <th class="px-4 py-3 text-right font-bold">เป้าหมายรวม</th>
                 <th class="px-4 py-3 text-right font-bold">ผลงานรวม</th>
-                <th class="px-4 py-3 text-right font-bold">%สำเร็จ</th>
+                <th class="px-4 py-3 text-right font-bold" title="ร้อยละ = ผลงานรวม ÷ เป้าหมายรวม × 100 (รวมทุกหน่วยบริการที่ต้องกรอก ทั้งที่มีผลงานแล้วและยังไม่มีผลงาน)">ร้อยละ<span class="block text-[10px] font-normal">ผลงาน ÷ เป้าหมาย</span></th>
               </tr>
             </thead>
             <tbody>
@@ -446,14 +450,15 @@
                 <td class="px-4 py-2.5 text-gray-800 font-medium">{{ item.distname || item.distid }}</td>
                 <td class="px-4 py-2.5 text-right text-gray-700">{{ item.hospital_count }}</td>
                 <td class="px-4 py-2.5 text-right text-gray-700">{{ item.indicator_count }}</td>
+                <td class="px-4 py-2.5 text-right text-gray-700 whitespace-nowrap"><span class="font-bold" [class]="item.recorded_pairs >= item.total_pairs ? 'text-emerald-600' : 'text-amber-600'">{{ item.recorded_pairs || 0 }}</span> / {{ item.total_pairs || 0 }}</td>
                 <td class="px-4 py-2.5 text-right text-gray-700">{{ (item.total_target | number:'1.2-2') || '0.00' }}</td>
                 <td class="px-4 py-2.5 text-right font-bold text-green-700">{{ (item.total_actual | number:'1.2-2') || '0.00' }}</td>
-                <td class="px-4 py-2.5 text-right font-bold" [class]="(item.achievement_pct >= 100) ? 'text-green-600' : 'text-red-500'">
+                <td class="px-4 py-2.5 text-right font-bold" [class]="(item.achievement_pct >= 100) ? 'text-green-600' : 'text-gray-800'">
                   {{ (item.achievement_pct | number:'1.2-2') || '0.00' }}%
                 </td>
               </tr>
               <tr *ngIf="viewData.length === 0">
-                <td colspan="7" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>{{ searchQuery ? 'ไม่พบรายการที่ตรงกับคำค้น' : 'ไม่พบข้อมูล' }}</td>
+                <td colspan="8" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>{{ searchQuery ? 'ไม่พบรายการที่ตรงกับคำค้น' : 'ไม่พบข้อมูล' }}</td>
               </tr>
             </tbody>
           </table>
@@ -468,9 +473,10 @@
                 <th class="px-4 py-3 text-left font-bold">ปีงบประมาณ</th>
                 <th class="px-4 py-3 text-right font-bold">จำนวนตัวชี้วัด</th>
                 <th class="px-4 py-3 text-right font-bold">จำนวน รพ.</th>
+                <th class="px-4 py-3 text-right font-bold" title="คู่ตัวชี้วัด × หน่วยบริการ ที่บันทึกผลงานแล้ว / ที่ต้องกรอกทั้งหมด">บันทึกแล้ว<span class="block text-[10px] font-normal">คู่ที่บันทึก / ต้องกรอก</span></th>
                 <th class="px-4 py-3 text-right font-bold">เป้าหมายรวม</th>
                 <th class="px-4 py-3 text-right font-bold">ผลงานรวม</th>
-                <th class="px-4 py-3 text-right font-bold">%สำเร็จ</th>
+                <th class="px-4 py-3 text-right font-bold" title="ร้อยละ = ผลงานรวม ÷ เป้าหมายรวม × 100 (รวมทุกหน่วยบริการที่ต้องกรอก ทั้งที่มีผลงานแล้วและยังไม่มีผลงาน)">ร้อยละ<span class="block text-[10px] font-normal">ผลงาน ÷ เป้าหมาย</span></th>
                 <th class="px-4 py-3 text-right font-bold">อนุมัติ</th>
                 <th class="px-4 py-3 text-right font-bold">รออนุมัติ</th>
               </tr>
@@ -481,16 +487,17 @@
                 <td class="px-4 py-2.5 text-gray-800 font-bold text-base">{{ item.year_bh }}</td>
                 <td class="px-4 py-2.5 text-right text-gray-700">{{ item.indicator_count }}</td>
                 <td class="px-4 py-2.5 text-right text-gray-700">{{ item.hospital_count }}</td>
+                <td class="px-4 py-2.5 text-right text-gray-700 whitespace-nowrap"><span class="font-bold" [class]="item.recorded_pairs >= item.total_pairs ? 'text-emerald-600' : 'text-amber-600'">{{ item.recorded_pairs || 0 }}</span> / {{ item.total_pairs || 0 }}</td>
                 <td class="px-4 py-2.5 text-right text-gray-700">{{ (item.total_target | number:'1.2-2') || '0.00' }}</td>
                 <td class="px-4 py-2.5 text-right font-bold text-green-700">{{ (item.total_actual | number:'1.2-2') || '0.00' }}</td>
-                <td class="px-4 py-2.5 text-right font-bold" [class]="(item.achievement_pct >= 100) ? 'text-green-600' : 'text-red-500'">
+                <td class="px-4 py-2.5 text-right font-bold" [class]="(item.achievement_pct >= 100) ? 'text-green-600' : 'text-gray-800'">
                   {{ (item.achievement_pct | number:'1.2-2') || '0.00' }}%
                 </td>
                 <td class="px-4 py-2.5 text-right text-green-600">{{ item.approved_count }}</td>
                 <td class="px-4 py-2.5 text-right text-orange-500">{{ item.pending_count }}</td>
               </tr>
               <tr *ngIf="viewData.length === 0">
-                <td colspan="9" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>{{ searchQuery ? 'ไม่พบรายการที่ตรงกับคำค้น' : 'ไม่พบข้อมูล' }}</td>
+                <td colspan="10" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>{{ searchQuery ? 'ไม่พบรายการที่ตรงกับคำค้น' : 'ไม่พบข้อมูล' }}</td>
               </tr>
             </tbody>
           </table>
@@ -623,20 +630,20 @@
           <div class="bg-gradient-to-br from-cyan-500 to-cyan-700 rounded-2xl p-5 text-white shadow-lg">
             <p class="text-cyan-100 text-xs font-medium mb-1">กลุ่มงาน</p>
             <p class="text-3xl font-bold">{{ deptKpiSummary.total_depts }}</p>
-            <p class="text-cyan-100 text-xs mt-1">ที่มีผลงานตัวชี้วัดในปีงบ {{ selectedYear || '-' }}</p>
+            <p class="text-cyan-100 text-xs mt-1">ที่มีตัวชี้วัดให้หน่วยบริการกรอกในปีงบ {{ selectedYear || '-' }}</p>
           </div>
           <div class="bg-gradient-to-br from-green-500 to-green-700 rounded-2xl p-5 text-white shadow-lg">
             <p class="text-green-100 text-xs font-medium mb-1">ตัวชี้วัด</p>
             <p class="text-3xl font-bold">{{ deptKpiSummary.total_indicators }}</p>
-            <p class="text-green-100 text-xs mt-1">มีเป้าหมาย {{ deptKpiSummary.indicators_with_target }} ตัว</p>
+            <p class="text-green-100 text-xs mt-1">หน่วยบริการต้องกรอก {{ deptKpiSummary.total_pairs | number }} คู่</p>
           </div>
           <div class="bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl p-5 text-white shadow-lg">
-            <p class="text-amber-100 text-xs font-medium mb-1">ร้อยละผ่านเกณฑ์ (ทุกกลุ่มงาน)</p>
-            <p class="text-3xl font-bold">{{ deptKpiSummary.pass_pct | number:'1.0-2' }}%</p>
-            <p class="text-amber-100 text-xs mt-1">ผ่าน {{ deptKpiSummary.pairs_passed | number }} จาก {{ deptKpiSummary.pairs_with_target | number }} คู่</p>
+            <p class="text-amber-100 text-xs font-medium mb-1">ร้อยละการบันทึกผลงาน (ทุกกลุ่มงาน)</p>
+            <p class="text-3xl font-bold">{{ deptKpiSummary.recording_pct | number:'1.0-2' }}%</p>
+            <p class="text-amber-100 text-xs mt-1">บันทึกแล้ว {{ deptKpiSummary.recorded_pairs | number }} จาก {{ deptKpiSummary.total_pairs | number }} คู่</p>
           </div>
           <div class="bg-gradient-to-br from-violet-500 to-violet-700 rounded-2xl p-5 text-white shadow-lg">
-            <p class="text-violet-100 text-xs font-medium mb-1">กลุ่มงานที่ผ่านเกณฑ์ ≥ 80%</p>
+            <p class="text-violet-100 text-xs font-medium mb-1">กลุ่มงานที่บันทึกแล้ว ≥ 80%</p>
             <p class="text-3xl font-bold">{{ deptKpiSummary.depts_ge_80 }}</p>
             <p class="text-violet-100 text-xs mt-1">ต่ำกว่า 50%: {{ deptKpiSummary.depts_lt_50 }} กลุ่มงาน</p>
           </div>
@@ -650,7 +657,7 @@
           <div class="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2">
             <i class="fas fa-layer-group text-cyan-600"></i>
             <span class="font-bold text-gray-700 text-sm">สรุปข้อมูลตัวชี้วัดของกลุ่มงาน</span>
-            <span class="text-xs text-gray-400">ปีงบ {{ selectedYear }} · นับ "คู่" = ตัวชี้วัด × หน่วยบริการ (เกณฑ์เดียวกับแถบรายข้อตัวชี้วัด)</span>
+            <span class="text-xs text-gray-400">ปีงบ {{ selectedYear }} · "คู่" = ตัวชี้วัด × หน่วยบริการที่ต้องกรอก (ทั้งที่มีผลงานแล้วและยังไม่มี)</span>
             <span class="ml-auto flex gap-2 no-print">
               <button id="btn-dept-kpi-expand" type="button" (click)="expandAllDeptKpi(true)" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-cyan-50 text-cyan-700 hover:bg-cyan-100"><i class="fas fa-angles-down mr-1"></i>ขยายทั้งหมด</button>
               <button id="btn-dept-kpi-collapse" type="button" (click)="expandAllDeptKpi(false)" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-gray-100 text-gray-600 hover:bg-gray-200"><i class="fas fa-angles-up mr-1"></i>ย่อทั้งหมด</button>
@@ -679,12 +686,12 @@
                   <th class="px-3 py-3 text-left text-xs font-bold w-8">#</th>
                   <th class="px-3 py-3 text-left text-xs font-bold">กลุ่มงาน</th>
                   <th class="px-3 py-3 text-center text-xs font-bold">ตัวชี้วัด</th>
-                  <th class="px-3 py-3 text-center text-xs font-bold text-emerald-700" title="ผ่านเกณฑ์ทุกหน่วยบริการที่มีเป้าหมาย">ผ่านทุกแห่ง</th>
-                  <th class="px-3 py-3 text-center text-xs font-bold text-amber-700">ผ่านบางแห่ง</th>
-                  <th class="px-3 py-3 text-center text-xs font-bold text-rose-600">ยังไม่ผ่าน</th>
-                  <th class="px-3 py-3 text-center text-xs font-bold text-gray-500">ไม่มีเป้าหมาย</th>
-                  <th class="px-3 py-3 text-center text-xs font-bold">คู่ผ่าน / มีเป้าหมาย</th>
-                  <th class="px-3 py-3 text-left text-xs font-bold min-w-[170px]">ร้อยละผ่านเกณฑ์</th>
+                  <th class="px-3 py-3 text-center text-xs font-bold text-emerald-700" title="ทุกหน่วยบริการที่ต้องกรอกบันทึกผลงานแล้ว">บันทึกครบทุกแห่ง</th>
+                  <th class="px-3 py-3 text-center text-xs font-bold text-amber-700">บันทึกบางแห่ง</th>
+                  <th class="px-3 py-3 text-center text-xs font-bold text-rose-600">ยังไม่มีผู้บันทึก</th>
+                  <th class="px-3 py-3 text-center text-xs font-bold">คู่ที่บันทึก / ต้องกรอก</th>
+                  <th class="px-3 py-3 text-left text-xs font-bold min-w-[170px]">ร้อยละการบันทึก</th>
+                  <th class="px-3 py-3 text-right text-xs font-bold" title="ค่าเฉลี่ยของร้อยละผลงาน (ผลงานรวม ÷ เป้าหมายรวม) ของตัวชี้วัดที่มีเป้าหมาย">ร้อยละผลงานเฉลี่ย</th>
                   <th class="px-3 py-3 w-8"></th>
                 </tr>
               </thead>
@@ -695,23 +702,23 @@
                     <td class="px-3 py-3 text-gray-400 text-xs">{{ i + 1 }}</td>
                     <td class="px-3 py-3 font-semibold text-gray-800"><div class="min-w-[220px]">{{ g.dept_name }}</div></td>
                     <td class="px-3 py-3 text-center font-bold text-gray-700">{{ g.total_indicators }}</td>
-                    <td class="px-3 py-3 text-center font-bold text-emerald-700">{{ g.indicators_all_passed }}</td>
+                    <td class="px-3 py-3 text-center font-bold text-emerald-700">{{ g.indicators_all_recorded }}</td>
                     <td class="px-3 py-3 text-center font-bold text-amber-700">{{ g.indicators_partial }}</td>
-                    <td class="px-3 py-3 text-center font-bold text-rose-600">{{ g.indicators_none_passed }}</td>
-                    <td class="px-3 py-3 text-center text-gray-400">{{ g.indicators_no_target }}</td>
-                    <td class="px-3 py-3 text-center text-gray-700">{{ g.pairs_passed | number }} / {{ g.pairs_with_target | number }}</td>
+                    <td class="px-3 py-3 text-center font-bold text-rose-600">{{ g.indicators_none_recorded }}</td>
+                    <td class="px-3 py-3 text-center text-gray-700">{{ g.recorded_pairs | number }} / {{ g.total_pairs | number }}</td>
                     <td class="px-3 py-3">
                       <div class="flex items-center gap-2">
                         <div class="flex-1 bg-gray-100 rounded-full h-2.5 overflow-hidden min-w-[80px]">
-                          <div class="h-2.5 rounded-full" [ngClass]="'bg-' + pctTone(g.pass_pct) + '-500'" [style.width.%]="g.pass_pct > 100 ? 100 : g.pass_pct"></div>
+                          <div class="h-2.5 rounded-full" [ngClass]="'bg-' + pctTone(g.recording_pct) + '-500'" [style.width.%]="g.recording_pct > 100 ? 100 : g.recording_pct"></div>
                         </div>
-                        <span class="text-xs font-bold w-14 text-right" [ngClass]="'text-' + pctTone(g.pass_pct) + '-600'">{{ g.pass_pct | number:'1.0-2' }}%</span>
+                        <span class="text-xs font-bold w-14 text-right" [ngClass]="'text-' + pctTone(g.recording_pct) + '-600'">{{ g.recording_pct | number:'1.0-2' }}%</span>
                       </div>
                     </td>
+                    <td class="px-3 py-3 text-right text-gray-700">{{ g.indicators_with_target ? ((g.avg_indicator_pct | number:'1.0-2') + '%') : '-' }}</td>
                     <td class="px-3 py-3 text-center"><i class="fas text-cyan-600 text-xs" [ngClass]="isDeptKpiOpen(g) ? 'fa-chevron-up' : 'fa-chevron-down'"></i></td>
                   </tr>
                   <tr *ngIf="isDeptKpiOpen(g)" class="border-b border-cyan-200">
-                    <td colspan="10" class="p-0 bg-cyan-50/40">
+                    <td colspan="11" class="p-0 bg-cyan-50/40">
                       <div class="px-4 py-3 overflow-x-auto">
                         <table class="w-full text-xs">
                           <thead class="text-gray-500">
@@ -721,9 +728,8 @@
                               <th class="px-2 py-2 text-left font-bold">หมวดหมู่หลัก</th>
                               <th class="px-2 py-2 text-right font-bold">เป้าหมายรวม</th>
                               <th class="px-2 py-2 text-right font-bold">ผลงานรวม</th>
-                              <th class="px-2 py-2 text-center font-bold">หน่วยบริการ</th>
-                              <th class="px-2 py-2 text-center font-bold">ผ่าน / มีเป้าหมาย</th>
-                              <th class="px-2 py-2 text-right font-bold">ร้อยละผ่านเกณฑ์</th>
+                              <th class="px-2 py-2 text-center font-bold">หน่วยบริการ บันทึก / ต้องกรอก</th>
+                              <th class="px-2 py-2 text-right font-bold" title="ผลงานรวม ÷ เป้าหมายรวม × 100">ร้อยละ (ผลงาน ÷ เป้าหมาย)</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -738,10 +744,9 @@
                               <td class="px-2 py-2 text-gray-500">{{ r.main_indicator_name || '-' }}</td>
                               <td class="px-2 py-2 text-right">{{ r._target_display || '-' }}</td>
                               <td class="px-2 py-2 text-right text-green-700 font-bold">{{ r.total_actual | number:'1.0-2' }}</td>
-                              <td class="px-2 py-2 text-center">{{ r.hospital_count }}</td>
-                              <td class="px-2 py-2 text-center">{{ r.hospitals_passed }} / {{ r.hospitals_with_target }}</td>
-                              <td class="px-2 py-2 text-right font-bold" [ngClass]="r.hospitals_with_target > 0 ? 'text-' + pctTone(r.achievement_pct) + '-600' : 'text-gray-400'">
-                                {{ r.hospitals_with_target > 0 ? ((r.achievement_pct | number:'1.0-2') + '%') : 'ไม่มีเป้าหมาย' }}
+                              <td class="px-2 py-2 text-center"><span class="font-bold" [class]="r.recorded_hospitals >= r.hospital_count ? 'text-emerald-600' : 'text-amber-600'">{{ r.recorded_hospitals }}</span> / {{ r.hospital_count }}</td>
+                              <td class="px-2 py-2 text-right font-bold" [ngClass]="r.target_value > 0 ? 'text-gray-800' : 'text-gray-400'">
+                                {{ r.target_value > 0 ? ((r.achievement_pct | number:'1.0-2') + '%') : 'ไม่มีเป้าหมาย' }}
                               </td>
                             </tr>
                           </tbody>
@@ -751,7 +756,7 @@
                   </tr>
                 </ng-container>
                 <tr *ngIf="deptKpiViewData.length === 0">
-                  <td colspan="10" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>{{ searchQuery ? 'ไม่พบรายการที่ตรงกับคำค้น' : 'ไม่พบข้อมูล' }}</td>
+                  <td colspan="11" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><br>{{ searchQuery ? 'ไม่พบรายการที่ตรงกับคำค้น' : 'ไม่พบข้อมูล' }}</td>
                 </tr>
               </tbody>
             </table>

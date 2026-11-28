@@ -106,12 +106,12 @@ test('ตารางสรุป + รายงาน: ผ่านเกณฑ
     await summaryRefreshIdle();
     expect(await summaryRow(indId, hosp)).toEqual({ last_actual: '65', manual_pct: '95.5' });
     let rep = await reportRow();
-    expect([Number(rep.hospitals_with_target), Number(rep.hospitals_passed)]).toEqual([1, 0]);   // hosp2 ยังไม่มีแถว (ไม่มีข้อมูล)
+    expect([Number(rep.hospitals_with_target), Number(rep.hospitals_passed)]).toEqual([2, 0]);   // hosp2 ยังไม่มีผลงาน — นับเป็นหน่วยที่ต้องกรอก (28 พ.ย. 2569)
     // ร้อยละ 100 = ผ่าน แม้ผลงานที่กรอก (10) ต่ำกว่าเป้าหมาย (80) — ไม่คำนวณจากผลงาน/เป้าหมาย
     expect((await as(userToken)(request(app).post(api('/update-kpi'))).send({ updates: [{ indicator_id: indId, year_bh: YEAR, target_value: '80', oct: '70', nov: '90', manual_result: '10', manual_pct: '100' }] })).status).toBe(200);
     await summaryRefreshIdle();
     rep = await reportRow();
-    expect([Number(rep.hospitals_with_target), Number(rep.hospitals_passed)]).toEqual([1, 1]);
+    expect([Number(rep.hospitals_with_target), Number(rep.hospitals_passed)]).toEqual([2, 1]);   // รวม hosp2 ที่ยังไม่มีผลงาน (28 พ.ย. 2569)
 });
 
 test('คู่ที่มีแต่ค่าที่กรอกเอง (ไม่มีผลงานรายเดือน) ขึ้นในตารางสรุป / ล้างค่า = ว่าง ไม่ใช้ค่าที่คำนวณ', async () => {

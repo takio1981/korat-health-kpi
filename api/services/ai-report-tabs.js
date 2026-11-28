@@ -35,89 +35,88 @@ function topBottom(items, key = 'pct') {
     return { count: sorted.length, top, bottom };
 }
 
-/** รวมคู่ผ่าน/มีเป้าหมายตามกลุ่ม (หมวดหมู่/กลุ่มงาน/อำเภอ/ประเภท) */
-function groupPairs(rows, nameOf, passedOf, targetOf, extra) {
+// ---------------- รายแถบ ----------------
+// ⚠️ 28 พ.ย. 2569 (ผู้ใช้สั่ง): รายงานสรุปผลนับทุกหน่วยบริการที่ต้องกรอก (มีผลงาน + ยังไม่มีผลงาน) และ achievement_pct = ผลงานรวม ÷ เป้าหมายรวม
+// → ข้อมูลเข้า prompt เน้นการบันทึกผลงาน (recording_pct = คู่ที่มีผลงาน ÷ คู่ที่ต้องกรอก) + ร้อยละผลงานต่อเป้าหมาย ไม่ใช้ผ่าน/ไม่ผ่านเกณฑ์
+const recPct = (rec, total) => pct(rec, total);
+function groupRec(rows, nameOf, recOf, totalOf, ratioOf) {
     const m = new Map();
     for (const r of rows) {
         const name = nameOf(r) || 'ไม่ระบุ';
-        const g = m.get(name) || { name, items: 0, passed: 0, with_target: 0 };
-        g.items++;
-        g.passed += num(passedOf(r));
-        g.with_target += num(targetOf(r));
-        if (extra) extra(g, r);
+        const g = m.get(name) || { name, items: 0, recorded: 0, total: 0, ratioSum: 0, ratioN: 0 };
+        g.items++; g.recorded += num(recOf(r)); g.total += num(totalOf(r));
+        const rt = ratioOf ? ratioOf(r) : null; if (rt != null) { g.ratioSum += rt; g.ratioN++; }
         m.set(name, g);
     }
-    return [...m.values()].map(g => ({ ...g, pct: pct(g.passed, g.with_target) }));
+    return [...m.values()].map(g => ({ name: g.name, items: g.items, recorded: g.recorded, total: g.total, pct: recPct(g.recorded, g.total),
+        avg_result_pct: g.ratioN ? Math.round(g.ratioSum / g.ratioN * 100) / 100 : null }));
 }
+const ratioIf = (r, tCol) => (num(r[tCol]) > 0 ? num(r.achievement_pct) : null);
 
-// ---------------- รายแถบ ----------------
 function byIndicator(rows) {
-    const withT = rows.filter(r => num(r.hospitals_with_target) > 0);
-    const passed = rows.reduce((s, r) => s + num(r.hospitals_passed), 0);
-    const withTarget = rows.reduce((s, r) => s + num(r.hospitals_with_target), 0);
-    const ind = withT.filter(r => num(r.hospitals_with_target) >= MIN_PAIRS)
-        .map(r => ({ name: r.kpi_indicators_name, pct: num(r.achievement_pct), passed: num(r.hospitals_passed), with_target: num(r.hospitals_with_target), main: r.main_indicator_name || '' }));
-    const mains = groupPairs(withT, r => r.main_indicator_name, r => r.hospitals_passed, r => r.hospitals_with_target).filter(g => g.with_target >= MIN_PAIRS);
-    const depts = groupPairs(withT, r => r.dept_name, r => r.hospitals_passed, r => r.hospitals_with_target).filter(g => g.with_target >= MIN_PAIRS);
+    const total = rows.reduce((s, r) => s + num(r.hospital_count), 0);
+    const rec = rows.reduce((s, r) => s + num(r.recorded_hospitals), 0);
+    const ind = rows.filter(r => num(r.hospital_count) >= MIN_PAIRS).map(r => ({
+        name: r.kpi_indicators_name, pct: recPct(r.recorded_hospitals, r.hospital_count), recorded: num(r.recorded_hospitals), total: num(r.hospital_count),
+        result_pct: ratioIf(r, 'target_value'), main: r.main_indicator_name || '' }));
+    const withT = rows.filter(r => num(r.target_value) > 0);
+    const depts = groupRec(rows, r => r.dept_name, r => r.recorded_hospitals, r => r.hospital_count, r => ratioIf(r, 'target_value')).filter(g => g.total >= MIN_PAIRS);
     return {
         has_data: rows.length > 0,
         overall: {
             indicators: rows.length,
+            pairs_total: total,
+            pairs_recorded: rec,
+            recording_pct: recPct(rec, total),
+            indicators_all_recorded: rows.filter(r => num(r.hospital_count) > 0 && num(r.recorded_hospitals) >= num(r.hospital_count)).length,
+            indicators_none_recorded: rows.filter(r => num(r.recorded_hospitals) === 0).length,
             indicators_with_target: withT.length,
-            indicators_no_target: rows.length - withT.length,
-            pairs_with_target: withTarget,
-            pairs_passed: passed,
-            pass_pct: pct(passed, withTarget),
-            indicators_all_passed: withT.filter(r => num(r.achievement_pct) >= 100).length,
-            indicators_none_passed: withT.filter(r => num(r.achievement_pct) <= 0).length,
         },
-        indicator_distribution: distribution(withT.map(r => num(r.achievement_pct))),
+        recording_distribution: distribution(rows.filter(r => num(r.hospital_count) > 0).map(r => recPct(r.recorded_hospitals, r.hospital_count))),
+        result_pct_distribution: distribution(withT.map(r => num(r.achievement_pct))),
         indicators: topBottom(ind),
-        main_categories: topBottom(mains.map(({ name, pct: p, passed: ps, with_target, items }) => ({ name, pct: p, passed: ps, with_target, indicators: items }))),
-        departments: topBottom(depts.map(({ name, pct: p, passed: ps, with_target, items }) => ({ name, pct: p, passed: ps, with_target, indicators: items }))),
+        departments: topBottom(depts.map(({ name, pct: p, recorded, total: t, items, avg_result_pct }) => ({ name, pct: p, recorded, total: t, indicators: items, avg_result_pct }))),
     };
 }
 
 function byHospital(rows, ctx) {
     const typeName = (c) => (ctx.hostypeNames || {})[c] || (c ? 'ประเภท ' + c : 'ไม่ระบุประเภท');
-    const withT = rows.filter(r => num(r.indicators_with_target) > 0);
-    const passed = rows.reduce((s, r) => s + num(r.indicators_passed), 0);
-    const withTarget = rows.reduce((s, r) => s + num(r.indicators_with_target), 0);
-    const hosPct = withT.map(r => num(r.achievement_pct));
-    const pick = (g) => ({ name: g.name, hospitals: g.items, pct: g.pct, passed: g.passed, with_target: g.with_target, avg_hospital_pct: Math.round(g.sumPct / Math.max(1, g.items) * 100) / 100, hospitals_below_50: g.below50 });
-    const acc = (g, r) => { g.sumPct = (g.sumPct || 0) + num(r.achievement_pct); g.below50 = (g.below50 || 0) + (num(r.achievement_pct) < 50 ? 1 : 0); };
+    const total = rows.reduce((s, r) => s + num(r.indicator_count), 0);
+    const rec = rows.reduce((s, r) => s + num(r.recorded_indicators), 0);
+    const hosPct = rows.filter(r => num(r.indicator_count) > 0).map(r => recPct(r.recorded_indicators, r.indicator_count));
+    const pick = (g) => ({ name: g.name, hospitals: g.items, recorded: g.recorded, total: g.total, pct: g.pct, avg_result_pct: g.avg_result_pct });
     return {
         has_data: rows.length > 0,
         overall: {
             hospitals: rows.length,
-            hospitals_with_target: withT.length,
-            pairs_with_target: withTarget,
-            pairs_passed: passed,
-            pass_pct: pct(passed, withTarget),
-            avg_hospital_pct: hosPct.length ? Math.round(hosPct.reduce((s, v) => s + v, 0) / hosPct.length * 100) / 100 : 0,
-            median_hospital_pct: median(hosPct),
+            pairs_total: total,
+            pairs_recorded: rec,
+            recording_pct: recPct(rec, total),
+            hospitals_not_recorded: rows.filter(r => num(r.recorded_indicators) === 0).length,
+            hospitals_complete: rows.filter(r => num(r.indicator_count) > 0 && num(r.recorded_indicators) >= num(r.indicator_count)).length,
+            median_hospital_recording_pct: median(hosPct),
             pending_review_months: rows.reduce((s, r) => s + num(r.pending_count), 0),
         },
         hospital_distribution: distribution(hosPct),
-        hospital_types: topBottom(groupPairs(withT, r => typeName(r.hostype), r => r.indicators_passed, r => r.indicators_with_target, acc).map(pick)),
-        districts: topBottom(groupPairs(withT, r => r.distname, r => r.indicators_passed, r => r.indicators_with_target, acc).map(pick)),
+        hospital_types: topBottom(groupRec(rows, r => typeName(r.hostype), r => r.recorded_indicators, r => r.indicator_count, r => ratioIf(r, 'total_target')).map(pick)),
+        districts: topBottom(groupRec(rows, r => r.distname, r => r.recorded_indicators, r => r.indicator_count, r => ratioIf(r, 'total_target')).map(pick)),
     };
 }
 
 function byDistrict(rows) {
-    const withT = rows.filter(r => num(r.pairs_with_target) > 0);
-    const passed = rows.reduce((s, r) => s + num(r.pairs_passed), 0);
-    const withTarget = rows.reduce((s, r) => s + num(r.pairs_with_target), 0);
-    const list = withT.map(r => ({ name: r.distname || r.distid, pct: num(r.achievement_pct), passed: num(r.pairs_passed), with_target: num(r.pairs_with_target), hospitals: num(r.hospital_count), indicators: num(r.indicator_count) }))
-        .sort((a, b) => b.pct - a.pct || a.name.localeCompare(b.name, 'th'));
+    const total = rows.reduce((s, r) => s + num(r.total_pairs), 0);
+    const rec = rows.reduce((s, r) => s + num(r.recorded_pairs), 0);
+    const list = rows.map(r => ({ name: r.distname || r.distid, pct: recPct(r.recorded_pairs, r.total_pairs), recorded: num(r.recorded_pairs), total: num(r.total_pairs),
+        result_pct: ratioIf(r, 'total_target'), hospitals: num(r.hospital_count), indicators: num(r.indicator_count) }))
+        .sort((a, b) => b.pct - a.pct || String(a.name).localeCompare(String(b.name), 'th'));
     const pcts = list.map(d => d.pct);
     return {
         has_data: rows.length > 0,
         overall: {
             districts: rows.length,
-            pairs_with_target: withTarget,
-            pairs_passed: passed,
-            pass_pct: pct(passed, withTarget),
+            pairs_total: total,
+            pairs_recorded: rec,
+            recording_pct: recPct(rec, total),
             max_pct: pcts.length ? Math.max(...pcts) : 0,
             min_pct: pcts.length ? Math.min(...pcts) : 0,
             median_pct: median(pcts),
@@ -129,8 +128,8 @@ function byDistrict(rows) {
 
 function byYear(rows, ctx) {
     const list = rows.map(r => ({
-        year_bh: String(r.year_bh), pct: num(r.achievement_pct), passed: num(r.pairs_passed), with_target: num(r.pairs_with_target),
-        indicators: num(r.indicator_count), hospitals: num(r.hospital_count), pending_review_months: num(r.pending_count),
+        year_bh: String(r.year_bh), recording_pct: recPct(r.recorded_pairs, r.total_pairs), recorded: num(r.recorded_pairs), total: num(r.total_pairs),
+        result_pct: ratioIf(r, 'total_target'), indicators: num(r.indicator_count), hospitals: num(r.hospital_count), pending_review_months: num(r.pending_count),
     })).sort((a, b) => a.year_bh.localeCompare(b.year_bh));
     return {
         has_data: rows.length > 0,
@@ -206,29 +205,26 @@ function byDept(out) {
     };
 }
 
-/** สรุปข้อมูลตัวชี้วัดของกลุ่มงาน (28 พ.ย. 2569) — out = summarizeDeptKpi() */
+/** สรุปข้อมูลตัวชี้วัดของกลุ่มงาน (28 พ.ย. 2569) — out = summarizeDeptKpi() (เน้นการบันทึก) */
 function byDeptKpi(out) {
     const rows = out.data || [];
     const sm = out.summary || {};
-    const withT = rows.filter(g => num(g.pairs_with_target) > 0);
     const ind = [];
-    for (const g of withT) {
+    for (const g of rows) {
         for (const r of g.indicators || []) {
-            if (num(r.hospitals_with_target) >= MIN_PAIRS) ind.push({ name: r.kpi_indicators_name, dept: g.dept_name, pct: num(r.achievement_pct), passed: num(r.hospitals_passed), with_target: num(r.hospitals_with_target) });
+            if (num(r.hospital_count) >= MIN_PAIRS) ind.push({ name: r.kpi_indicators_name, dept: g.dept_name, pct: recPct(r.recorded_hospitals, r.hospital_count), recorded: num(r.recorded_hospitals), total: num(r.hospital_count) });
         }
     }
     return {
         has_data: rows.length > 0,
         overall: {
-            departments: num(sm.total_depts), indicators: num(sm.total_indicators), indicators_with_target: num(sm.indicators_with_target),
-            pairs_with_target: num(sm.pairs_with_target), pairs_passed: num(sm.pairs_passed), pass_pct: num(sm.pass_pct),
-            departments_pass_ge_80: num(sm.depts_ge_80), departments_pass_lt_50: num(sm.depts_lt_50),
+            departments: num(sm.total_depts), indicators: num(sm.total_indicators), pairs_total: num(sm.total_pairs), pairs_recorded: num(sm.recorded_pairs),
+            recording_pct: num(sm.recording_pct), departments_recording_ge_80: num(sm.depts_ge_80), departments_recording_lt_50: num(sm.depts_lt_50),
         },
-        department_distribution: distribution(withT.map(g => num(g.pass_pct))),
+        department_distribution: distribution(rows.filter(g => num(g.total_pairs) > 0).map(g => num(g.recording_pct))),
         departments: rows.map(g => ({
-            name: g.dept_name, indicators: num(g.total_indicators), indicators_with_target: num(g.indicators_with_target),
-            pairs_with_target: num(g.pairs_with_target), pairs_passed: num(g.pairs_passed), pass_pct: num(g.pass_pct),
-            indicators_all_passed: num(g.indicators_all_passed), indicators_none_passed: num(g.indicators_none_passed),
+            name: g.dept_name, indicators: num(g.total_indicators), pairs_total: num(g.total_pairs), pairs_recorded: num(g.recorded_pairs), recording_pct: num(g.recording_pct),
+            indicators_all_recorded: num(g.indicators_all_recorded), indicators_none_recorded: num(g.indicators_none_recorded), avg_result_pct: num(g.avg_indicator_pct),
         })),
         indicators: topBottom(ind),
     };
@@ -239,29 +235,29 @@ const TAB_SPECS = {
     'by-indicator': {
         label: 'รายตัวชี้วัด',
         build: (data) => byIndicator(data),
-        focus: 'วิเคราะห์ผลการดำเนินงานรายตัวชี้วัด: ตัวชี้วัด/หมวดหมู่หลัก/กลุ่มงานที่ผ่านเกณฑ์สูงและต่ำ และการกระจายของร้อยละผ่านเกณฑ์',
-        defs: 'pairs_with_target = คู่ที่มีเป้าหมาย | pass_pct = คู่ที่ผ่าน ÷ คู่ที่มีเป้าหมาย × 100 | indicator_distribution = จำนวนตัวชี้วัดตามช่วงร้อยละผ่านเกณฑ์',
-        sections: '■ ภาพรวม ■ ตัวชี้วัดที่โดดเด่น ■ ตัวชี้วัดที่ควรติดตาม ■ ข้อสังเกตรายหมวดหมู่/กลุ่มงาน ■ ข้อเสนอแนะ',
+        focus: 'วิเคราะห์การบันทึกผลงานรายตัวชี้วัด: ตัวชี้วัด/กลุ่มงานที่หน่วยบริการบันทึกครบและยังบันทึกน้อย และสัดส่วนผลงานรวมต่อเป้าหมายรวม — ไม่ประเมินผ่าน/ไม่ผ่านเกณฑ์',
+        defs: 'pairs_total/total = คู่ที่ต้องกรอก (หน่วยบริการที่ถูกเพิ่มตัวชี้วัด) | pairs_recorded/recorded = คู่ที่บันทึกผลงานแล้ว | recording_pct (pct) = คู่ที่บันทึกแล้ว ÷ คู่ที่ต้องกรอก × 100 | result_pct/avg_result_pct = ผลงานรวม ÷ เป้าหมายรวม × 100 (ไม่ใช่ผ่านเกณฑ์) | recording_distribution = จำนวนตัวชี้วัดตามช่วงร้อยละการบันทึก',
+        sections: '■ ภาพรวมการบันทึก ■ ตัวชี้วัดที่บันทึกครบ ■ ตัวชี้วัดที่ควรเร่งบันทึก ■ ข้อสังเกตรายกลุ่มงาน ■ ข้อเสนอแนะ',
     },
     'by-hospital': {
         label: 'รายหน่วยบริการ',
         build: (data, ctx) => byHospital(data, ctx),
-        focus: 'วิเคราะห์ผลการดำเนินงานของหน่วยบริการในภาพรวม: การกระจายของร้อยละผ่านเกณฑ์รายหน่วยบริการ เปรียบเทียบตามประเภทหน่วยบริการและอำเภอ (ข้อมูลไม่มีชื่อหน่วยบริการรายแห่ง ห้ามระบุชื่อหน่วยบริการ)',
-        defs: 'pairs_with_target = คู่ที่มีเป้าหมาย | pass_pct = คู่ที่ผ่าน ÷ คู่ที่มีเป้าหมาย × 100 | avg_hospital_pct = ค่าเฉลี่ยร้อยละของแต่ละหน่วยบริการ | hospitals_below_50 = จำนวนหน่วยบริการที่ผ่านเกณฑ์ต่ำกว่าร้อยละ 50 | pending_review_months = จำนวนช่องผลงานรายเดือนที่รอตรวจสอบ (นับเป็นช่อง/เดือน ไม่ใช่คู่)',
-        sections: '■ ภาพรวม ■ การกระจายของหน่วยบริการ ■ เปรียบเทียบตามประเภทหน่วยบริการ ■ อำเภอที่ควรติดตาม ■ ข้อเสนอแนะ',
+        focus: 'วิเคราะห์การบันทึกผลงานของหน่วยบริการในภาพรวม: การกระจายของร้อยละการบันทึก เปรียบเทียบตามประเภทหน่วยบริการและอำเภอ (ข้อมูลไม่มีชื่อหน่วยบริการรายแห่ง ห้ามระบุชื่อหน่วยบริการ)',
+        defs: 'pairs_total/total = คู่ที่ต้องกรอก (หน่วยบริการที่ถูกเพิ่มตัวชี้วัด) | pairs_recorded/recorded = คู่ที่บันทึกผลงานแล้ว | recording_pct (pct) = คู่ที่บันทึกแล้ว ÷ คู่ที่ต้องกรอก × 100 | result_pct/avg_result_pct = ผลงานรวม ÷ เป้าหมายรวม × 100 (ไม่ใช่ผ่านเกณฑ์) | hospitals_not_recorded = หน่วยบริการที่ยังไม่บันทึกเลย | pending_review_months = จำนวนช่องผลงานรายเดือนที่รอตรวจสอบ (นับเป็นช่อง/เดือน ไม่ใช่คู่)',
+        sections: '■ ภาพรวมการบันทึก ■ การกระจายของหน่วยบริการ ■ เปรียบเทียบตามประเภทหน่วยบริการ ■ อำเภอที่ควรติดตาม ■ ข้อเสนอแนะ',
     },
     'by-district': {
         label: 'รายอำเภอ',
         build: (data) => byDistrict(data),
-        focus: 'วิเคราะห์ผลการดำเนินงานรายอำเภอ: อำเภอที่ผ่านเกณฑ์สูง/ต่ำ ความเหลื่อมล้ำระหว่างอำเภอ (ส่วนต่างสูงสุด–ต่ำสุด, ค่ากลาง)',
-        defs: 'pairs_with_target = คู่ที่มีเป้าหมาย | pass_pct = คู่ที่ผ่าน ÷ คู่ที่มีเป้าหมาย × 100 | districts เรียงจากร้อยละมากไปน้อย',
-        sections: '■ ภาพรวม ■ อำเภอที่โดดเด่น ■ อำเภอที่ควรติดตาม ■ ความเหลื่อมล้ำระหว่างอำเภอ ■ ข้อเสนอแนะ',
+        focus: 'วิเคราะห์การบันทึกผลงานรายอำเภอ: อำเภอที่บันทึกครบ/บันทึกน้อย ความแตกต่างระหว่างอำเภอ (ส่วนต่างสูงสุด–ต่ำสุด, ค่ากลาง)',
+        defs: 'pairs_total/total = คู่ที่ต้องกรอก (หน่วยบริการที่ถูกเพิ่มตัวชี้วัด) | pairs_recorded/recorded = คู่ที่บันทึกผลงานแล้ว | recording_pct (pct) = คู่ที่บันทึกแล้ว ÷ คู่ที่ต้องกรอก × 100 | result_pct/avg_result_pct = ผลงานรวม ÷ เป้าหมายรวม × 100 (ไม่ใช่ผ่านเกณฑ์) | districts เรียงจากร้อยละการบันทึกมากไปน้อย',
+        sections: '■ ภาพรวมการบันทึก ■ อำเภอที่บันทึกครบ ■ อำเภอที่ควรติดตาม ■ ความแตกต่างระหว่างอำเภอ ■ ข้อเสนอแนะ',
     },
     'by-year': {
         label: 'รายปีงบประมาณ',
         build: (data, ctx) => byYear(data, ctx),
-        focus: 'วิเคราะห์แนวโน้มผลการดำเนินงานข้ามปีงบประมาณ (เรียงจากปีเก่าไปใหม่) เทียบร้อยละผ่านเกณฑ์ จำนวนตัวชี้วัดและหน่วยบริการ — ปีงบปัจจุบัน (current_fiscal_year) ยังไม่ครบปี ต้องระบุว่าเป็นผลระหว่างปี',
-        defs: 'pass_pct (pct) = คู่ที่ผ่าน ÷ คู่ที่มีเป้าหมาย × 100 ของปีนั้น | pending_review_months = จำนวนช่องผลงานรายเดือนที่รอตรวจสอบ (นับเป็นช่อง/เดือน ไม่ใช่คู่)',
+        focus: 'วิเคราะห์แนวโน้มการบันทึกผลงานข้ามปีงบประมาณ (เรียงจากปีเก่าไปใหม่) เทียบร้อยละการบันทึก ผลงานรวมต่อเป้าหมายรวม จำนวนตัวชี้วัดและหน่วยบริการ — ปีงบปัจจุบัน (current_fiscal_year) ยังไม่ครบปี ต้องระบุว่าเป็นผลระหว่างปี',
+        defs: 'pairs_total/total = คู่ที่ต้องกรอก (หน่วยบริการที่ถูกเพิ่มตัวชี้วัด) | pairs_recorded/recorded = คู่ที่บันทึกผลงานแล้ว | recording_pct (pct) = คู่ที่บันทึกแล้ว ÷ คู่ที่ต้องกรอก × 100 | result_pct/avg_result_pct = ผลงานรวม ÷ เป้าหมายรวม × 100 (ไม่ใช่ผ่านเกณฑ์) | pending_review_months = จำนวนช่องผลงานรายเดือนที่รอตรวจสอบ (นับเป็นช่อง/เดือน ไม่ใช่คู่)',
         sections: '■ ภาพรวม ■ แนวโน้มรายปี ■ จุดที่ควรติดตาม ■ ข้อเสนอแนะ',
     },
     'recording-status:by-indicator': {
@@ -288,9 +284,9 @@ const TAB_SPECS = {
     'by-dept-kpi': {
         label: 'สรุปข้อมูลตัวชี้วัดของกลุ่มงาน',
         build: (out) => byDeptKpi(out),
-        focus: 'วิเคราะห์ผลการดำเนินงานตัวชี้วัดรายกลุ่มงาน: กลุ่มงานที่ผ่านเกณฑ์สูง/ต่ำ จำนวนตัวชี้วัดที่ผ่านทุกหน่วยบริการ/ยังไม่ผ่านเลยของแต่ละกลุ่มงาน และตัวชี้วัดที่ควรติดตาม',
-        defs: 'pairs_with_target = คู่ที่มีเป้าหมาย | pass_pct = คู่ที่ผ่าน ÷ คู่ที่มีเป้าหมาย × 100 ของกลุ่มงาน | indicators_all_passed = ตัวชี้วัดที่ผ่านเกณฑ์ทุกคู่ | indicators_none_passed = ตัวชี้วัดที่ยังไม่มีคู่ผ่าน | department_distribution = จำนวนกลุ่มงานตามช่วงร้อยละผ่านเกณฑ์',
-        sections: '■ ภาพรวม ■ กลุ่มงานที่โดดเด่น ■ กลุ่มงานที่ควรติดตาม ■ ตัวชี้วัดที่ควรติดตาม ■ ข้อเสนอแนะ',
+        focus: 'วิเคราะห์การบันทึกผลงานตัวชี้วัดรายกลุ่มงาน: กลุ่มงานที่หน่วยบริการบันทึกครบ/บันทึกน้อย จำนวนตัวชี้วัดที่บันทึกครบทุกแห่ง/ยังไม่มีผู้บันทึก และตัวชี้วัดที่ควรเร่งบันทึก — ไม่ประเมินผ่าน/ไม่ผ่านเกณฑ์',
+        defs: 'pairs_total/total = คู่ที่ต้องกรอก (หน่วยบริการที่ถูกเพิ่มตัวชี้วัด) | pairs_recorded/recorded = คู่ที่บันทึกผลงานแล้ว | recording_pct (pct) = คู่ที่บันทึกแล้ว ÷ คู่ที่ต้องกรอก × 100 | result_pct/avg_result_pct = ผลงานรวม ÷ เป้าหมายรวม × 100 (ไม่ใช่ผ่านเกณฑ์) | indicators_all_recorded = ตัวชี้วัดที่ทุกหน่วยบริการบันทึกแล้ว | indicators_none_recorded = ยังไม่มีหน่วยบริการบันทึก | department_distribution = จำนวนกลุ่มงานตามช่วงร้อยละการบันทึก',
+        sections: '■ ภาพรวมการบันทึก ■ กลุ่มงานที่บันทึกครบ ■ กลุ่มงานที่ควรติดตาม ■ ตัวชี้วัดที่ควรเร่งบันทึก ■ ข้อเสนอแนะ',
     },
 };
 

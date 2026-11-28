@@ -45,7 +45,8 @@ test('เป้าหมาย = ผลรวมเป้าหมายตั�
     expect(Number(row.total_actual)).toBe(33);          // 25 + 5 + 3
     expect(Number(row.hospital_count)).toBe(3);
     expect(Number(row.hospitals_passed)).toBe(1);
-    expect(Number(row.achievement_pct)).toBe(50);       // ผ่าน 1 จาก 2 แห่งที่มีเป้าหมายตัวเลข
+    expect(Number(row.achievement_pct)).toBe(94.29);    // ร้อยละ = ผลงานรวม 33 ÷ เป้าหมายรวม 35 (28 พ.ย. 2569 — เดิม = ผ่าน 1 จาก 2 แห่ง)
+    expect(Number(row.recorded_hospitals)).toBe(3);
     // ลำดับคอลัมน์ (= ลำดับในไฟล์ Excel)
     const keys = Object.keys(row);
     const at = (k) => keys.indexOf(k);
