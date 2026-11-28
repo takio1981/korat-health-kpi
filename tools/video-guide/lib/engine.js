@@ -108,6 +108,24 @@ function makeHelpers(page, warn, uncovered) {
 
 const speak = (page, text, audio) => page.evaluate(([t, env, ms]) => { if (!window.__vg) return; window.__vg.caption(t); window.__vg.say(env, ms); }, [text, audio.env, audio.ms]).catch(() => {});
 
+/** คืนเวลา (วินาที) ของเฟรมที่จุด 4×4 มุมซ้ายบนเปลี่ยนสีดำ↔ขาว ในวิดีโอดิบ */
+function detectMarkFlips(raw) {
+    try {
+        const buf = execFileSync(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-i', raw, '-vf', 'crop=2:2:1:1,format=gray', '-vsync', 'passthrough', '-f', 'rawvideo', '-'], { maxBuffer: 1 << 28 });
+        let probe = '';
+        try { execFileSync(FFMPEG, ['-hide_banner', '-i', raw], { stdio: 'pipe' }); } catch (e) { probe = String(e.stderr || ''); }
+        const fps = Number((/([0-9.]+) fps/.exec(probe) || [])[1]) || 25;
+        const out = []; let prev = null;
+        for (let i = 0; i * 4 + 3 < buf.length; i++) {
+            const v = (buf[i * 4] + buf[i * 4 + 1] + buf[i * 4 + 2] + buf[i * 4 + 3]) / 4;
+            const bit = v > 160 ? 1 : v < 90 ? 0 : prev;
+            if (prev !== null && bit !== prev) out.push(i / fps);
+            prev = bit;
+        }
+        return out;
+    } catch (e) { return null; }
+}
+
 /**
  * spec = { id, title, kicker, roleLabel, start, storageState, steps: [{ say, do?, keepSwal?, pause? }], outName, mascot }
  * คืน { file, ms, size, warnings }
@@ -136,6 +154,19 @@ async function record(browser, spec) {
         } catch (e) { /* หน้าไม่มี localStorage */ }
     });
     await ctx.addInitScript(overlayInit, spec.mascot);
+    // จุดสัญญาณเวลา (27 พ.ย. 2569): ภาพของ Playwright ยืดช้ากว่าเวลาจริงเมื่อหน้าเรนเดอร์หนัก (หน้ากราฟเลื่อน ~6 วินาที)
+    // → สลับสีจุด 4×4 px มุมซ้ายบนทุกครั้งที่เริ่มคำบรรยาย แล้ววางเสียงตามเฟรมที่ตรวจพบในวิดีโอจริง ไม่ใช่เวลานาฬิกา
+    await ctx.addInitScript(() => {
+        // สีคงอยู่ข้ามการเปลี่ยนหน้า (sessionStorage) กันสัญญาณปลอมเมื่อขั้นตอนเปิดหน้าใหม่
+        const paint = (c) => {
+            let d = document.getElementById('__vg_mark');
+            if (!d) { d = document.createElement('div'); d.id = '__vg_mark'; d.style.cssText = 'position:fixed;left:0;top:0;width:4px;height:4px;z-index:2147483647;pointer-events:none'; document.documentElement.appendChild(d); }
+            d.style.background = c;
+        };
+        window.__vgMark = (c) => { try { sessionStorage.setItem('__vg_mark', c); } catch (e) { } paint(c); };
+        const restore = () => { let c = null; try { c = sessionStorage.getItem('__vg_mark'); } catch (e) { } if (c) paint(c); };
+        if (document.documentElement) restore(); else document.addEventListener('DOMContentLoaded', restore);
+    });
     const page = await ctx.newPage();
     const t0 = Date.now();
     const uncovered = [];
@@ -145,10 +176,16 @@ async function record(browser, spec) {
     if (await page.locator('vite-error-overlay').count()) { await ctx.close(); throw new Error('frontend แสดง error overlay (คอมไพล์ไม่ผ่าน) — แก้โค้ดแล้วถ่ายใหม่'); }
     await page.evaluate(([k, t, s]) => window.__vg.card(k, t, s), [spec.kicker || CARD_KICKER, spec.title, spec.roleLabel]);
     await sleep(700); // ให้ตัวละครเคลื่อนเข้าตำแหน่งก่อนเริ่มภาพ
+    let markN = 0;
+    const mark = () => page.evaluate((c) => { window.__vgMark(c); return new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); }, (++markN) % 2 ? '#fff' : '#000').catch(() => {});
+    await page.evaluate(() => window.__vgMark('#000')).catch(() => {}); // สร้างจุด (ดำ) ก่อนเริ่ม
+    await sleep(400);
+    await mark();               // สลับครั้งแรก = จุดเริ่มวิดีโอ
     const tStart = Date.now() - t0;
     const cues = [];
     for (const [i, s] of steps.entries()) {
         if (!s.keepSwal) await closeSwal(page, 2); // ปิดกล่องข้อความที่ค้างจากขั้นก่อน (เว้นขั้นที่ตั้งใจกดในกล่อง)
+        await mark();
         cues.push({ at: Date.now() - t0 - tStart, file: s.audio.file });
         await speak(page, s.say, s.audio);
         const act = (async () => { if (s.do) { try { await s.do(h); } catch (e) { warn('step ' + i + ': ' + e.message.split('\n')[0]); } } })();
@@ -158,19 +195,40 @@ async function record(browser, spec) {
     }
     await page.evaluate(([k]) => window.__vg.card(k, 'ขอบคุณที่รับชมครับ', 'ดูหัวข้ออื่นได้ที่เมนู คู่มือการใช้งาน'), [CARD_KICKER]).catch(() => {});
     await sleep(500);
+    await mark();
     cues.push({ at: Date.now() - t0 - tStart, file: outro.file });
     await speak(page, OUTRO, outro);
     await sleep(outro.ms + 900);
-    const total = Date.now() - t0 - tStart;
+    await mark();               // สลับครั้งสุดท้าย = จุดจบวิดีโอ
+    await sleep(300);
+    let total = Date.now() - t0 - tStart;
     if (await page.locator('vite-error-overlay').count()) { await ctx.close(); throw new Error('frontend แสดง error overlay ระหว่างถ่าย — ถ่ายใหม่'); }
     const video = page.video();
     await ctx.close();
     const raw = await video.path();
+    if (process.env.VG_DEBUG) {
+        let probe = '';
+        try { execFileSync(FFMPEG, ['-hide_banner', '-i', raw], { stdio: 'pipe' }); } catch (e) { probe = String(e.stderr || ''); }
+        console.log('    [debug] wall', ((Date.now() - t0) / 1000).toFixed(1), 's, raw', (/Duration: ([0-9:.]+)/.exec(probe) || [])[1], 'cues', cues.map(c => (c.at / 1000).toFixed(1)).join(','));
+    }
+
+    // ตรวจเฟรมที่จุดสัญญาณสลับสี → เวลาในวิดีโอจริงของแต่ละคำบรรยาย (ตรวจไม่ครบ = ใช้เวลานาฬิกาเดิม + เตือน)
+    let ss = tStart / 1000;
+    const flips = detectMarkFlips(raw);
+    const need = cues.length + 2;
+    if (flips && flips.length >= need) {
+        if (flips.length > need + 1) warn(`จุดสัญญาณเวลาเกิน (${flips.length}/${need}) — ใช้ชุดท้ายสุด`);
+        const f = flips.slice(-need);
+        const base = f[0];
+        cues.forEach((c, i) => { c.at = Math.max(0, (f[i + 1] - base) * 1000); });
+        ss = base; total = (f[need - 1] - base) * 1000;
+        if (process.env.VG_DEBUG) console.log('    [debug] video cues', cues.map(c => (c.at / 1000).toFixed(1)).join(','), 'total', (total / 1000).toFixed(1));
+    } else warn(`ตรวจจุดสัญญาณเวลาได้ ${flips ? flips.length : 0}/${need} — ใช้เวลานาฬิกา (เสียงอาจไม่ตรงภาพ)`);
 
     // รวมภาพ + เสียง
     const out = path.join(OUT, spec.outName);
     fs.mkdirSync(path.dirname(out), { recursive: true });
-    const args = ['-y', '-hide_banner', '-loglevel', 'error', '-ss', (tStart / 1000).toFixed(3), '-i', raw];
+    const args = ['-y', '-hide_banner', '-loglevel', 'error', '-ss', ss.toFixed(3), '-i', raw];
     cues.forEach(c => args.push('-i', c.file));
     const filt = cues.map((c, i) => `[${i + 1}:a]adelay=${Math.round(c.at)}:all=1[a${i}]`).join(';')
         + ';' + cues.map((_, i) => `[a${i}]`).join('') + `amix=inputs=${cues.length}:normalize=0:dropout_transition=0,apad[aout]`;
