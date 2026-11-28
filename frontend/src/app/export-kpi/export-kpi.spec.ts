@@ -136,14 +136,17 @@ describe('ExportKpiComponent — แถวตารางรายละเอ�
 });
 
 // ส่งเข้า KHD อย่างปลอดภัย (6 พ.ย. 2569): ตารางที่คีย์ KHD ไม่ใช่ hospcode + byear = "ส่งไม่ได้" ไม่ถูกเลือกอัตโนมัติ + แสดงแผนรายแถว
-describe('ExportKpiComponent — หน้าต่างส่งข้อมูลเข้า KHD', () => {
+describe('ExportKpiComponent — ส่งข้อมูลเข้า KHD (ขั้นที่ 5 ในหน้าเดียวกัน)', () => {
   it('เลือกอัตโนมัติเฉพาะตารางพร้อมส่ง, ตาราง blocked แสดงเหตุผล และแสดงแผน เพิ่ม/อัปเดต/คงค่า KHD', async () => {
     await TestBed.configureTestingModule({ imports: [ExportKpiComponent], providers: testProviders }).compileComponents();
     const fixture = TestBed.createComponent(ExportKpiComponent);
     const c = fixture.componentInstance;
     const { HttpTestingController } = await import('@angular/common/http/testing');
     const http = TestBed.inject(HttpTestingController);
-    c.openSyncToKhd();
+    c.exportYear = '2570';
+    c.exportIndicators = [{ id: 1, kpi_indicators_name: 'ก', table_process: 'kpi_a_001', upload_excel: 0 }, { id: 2, kpi_indicators_name: 'ข', table_process: 'i_kpi_30', upload_excel: 0 }];
+    c.selectedIndicatorIds = new Set([1, 2]);
+    c.openSyncToKhd(false);
     http.expectOne(r => r.url.endsWith('/sync-to-khd/preview')).flush({ success: true, tables: [
       { table: 'kpi_a_001', name: 'ก', status: 'ready', local_rows: 5, remote_rows: 4, sync_columns: ['hospcode', 'byear', 'target'],
         plan: { insert: 1, update: 1, khd_newer: 2, no_time: 0, unchanged: 1, kept_blank: 1 } },
@@ -158,5 +161,133 @@ describe('ExportKpiComponent — หน้าต่างส่งข้อม�
     expect(text).toContain('+1');
     expect(text).toContain('↻1');
     expect(text).toContain('⏸2');
+  });
+});
+
+// 28 พ.ย. 2569 (ผู้ใช้แจ้ง): ตัวเลขใน card หลังตรวจสอบไม่เท่ากับจำนวนแถวเมื่อกดกรอง
+describe('ExportKpiComponent — card สรุปผลตรวจสอบ = จำนวนแถวที่กรองได้', () => {
+  let c: ExportKpiComponent;
+  const seed = (comp: ExportKpiComponent) => {
+    // 2 ตัวชี้วัดใช้ตารางเดียวกัน (เดิม card นับ 1 ตาราง แต่ตารางแสดง 2 แถว), ปิดส่งออก (เดิมนับ "ยังไม่ตรวจ" แต่ตัวกรองไม่มีข้อมูลแสดงรวม),
+    // invalid_name (เดิมไม่อยู่ใน card ใด), หน่วยงานต่างกัน (เดิม card ไม่สนตัวกรองอื่น)
+    comp.exportIndicators = [
+      { id: 1, kpi_indicators_name: 'ก1', table_process: 'kpi_shared', upload_excel: 0, dept_id: 1 },
+      { id: 2, kpi_indicators_name: 'ก2', table_process: 'kpi-shared', upload_excel: 0, dept_id: 1 },
+      { id: 3, kpi_indicators_name: 'ข', table_process: 'kpi_b', upload_excel: 0, dept_id: 1 },
+      { id: 4, kpi_indicators_name: 'ค', table_process: 'kpi_c', upload_excel: 0, dept_id: 2 },
+      { id: 5, kpi_indicators_name: 'ง', table_process: 'kpi_d', upload_excel: 1, dept_id: 1 },
+      { id: 6, kpi_indicators_name: 'จ', table_process: 'bad name', upload_excel: 0, dept_id: 1 },
+      { id: 7, kpi_indicators_name: 'ฉ', table_process: 'kpi_f', upload_excel: 0, dept_id: 1 },
+    ];
+    comp.checkStatusMap = new Map<number, any>([
+      [1, { id: 1, status: 'has_changes', new_count: 3, changed_count: 2 }],
+      [2, { id: 2, status: 'has_changes', new_count: 3, changed_count: 2 }],
+      [3, { id: 3, status: 'up_to_date' }],
+      [4, { id: 4, status: 'has_changes', new_count: 1, changed_count: 0 }],
+      [6, { id: 6, status: 'invalid_name' }],
+      [7, { id: 7, status: 'no_data' }],
+    ]);
+  };
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({ imports: [ExportKpiComponent], providers: testProviders }).compileComponents();
+    c = TestBed.createComponent(ExportKpiComponent).componentInstance;
+    seed(c);
+  });
+
+  const cards = ['has_changes', 'up_to_date', 'no_data', 'not_exported', 'unchecked'] as const;
+  const assertCardsMatchRows = () => {
+    c.filterCheckStatus = '';
+    c.applyFilters();
+    const s = { ...c.summary };
+    expect(c.filteredExportIndicators.length).toBe(s.total);
+    expect(cards.reduce((n, k) => n + s[k], 0)).toBe(s.total);
+    for (const k of cards) {
+      c.setCheckFilter(k);
+      expect(c.filteredExportIndicators.length).toBe(s[k]);
+      expect(c.selectedIndicatorIds.size).toBe(s[k]);       // กด card = เลือกเฉพาะรายการนั้น
+      expect(c.summary[k]).toBe(s[k]);                       // ตัวเลขใน card ไม่เปลี่ยนเมื่อกรองตัวเอง
+      c.setCheckFilter(k);                                   // กดซ้ำ = ยกเลิก
+      expect(c.filteredExportIndicators.length).toBe(s.total);
+    }
+    return s;
+  };
+
+  it('ทุก card = จำนวนแถวเมื่อกด (ไม่มีตัวกรองอื่น)', () => {
+    const s = assertCardsMatchRows();
+    expect(s).toMatchObject({ total: 7, has_changes: 3, up_to_date: 1, no_data: 2, not_exported: 1, unchecked: 0 });
+    expect(s.data_changes).toBe(6);            // ตารางใช้ร่วม (kpi_shared) นับครั้งเดียว: 5 + 1
+    expect(s.tables.has_changes).toBe(2);
+  });
+
+  it('ทุก card = จำนวนแถวเมื่อมีตัวกรองอื่น (หน่วยงาน) — card นับตามตัวกรอง', () => {
+    c.filterDept = '1';
+    const s = assertCardsMatchRows();
+    expect(s).toMatchObject({ total: 6, has_changes: 2, not_exported: 1 });
+    expect(s.data_changes).toBe(5);
+  });
+
+  it('ยังไม่ตรวจ: card ยังไม่ตรวจสอบ = ตัวชี้วัดที่ส่งออกได้ทั้งหมด, ปิดส่งออกแยก card', () => {
+    c.checkStatusMap = new Map();
+    const s = assertCardsMatchRows();
+    expect(s).toMatchObject({ total: 7, unchecked: 6, not_exported: 1, has_changes: 0 });
+  });
+
+  it('กด card บนหน้าจอ = ตารางแสดงเฉพาะกลุ่มนั้น', () => {
+    const fixture = TestBed.createComponent(ExportKpiComponent);
+    const comp = fixture.componentInstance;
+    seed(comp);
+    comp.applyFilters();
+    fixture.detectChanges();
+    const el: HTMLElement = fixture.nativeElement;
+    const card = (k: string) => el.querySelector(`#check-cards [data-card="${k}"]`) as HTMLElement;
+    expect(card('has_changes').textContent).toContain('3');
+    card('not_exported').click();
+    fixture.detectChanges();
+    expect(el.querySelectorAll('#kpi-export-table tr[data-ind]').length).toBe(1);
+    expect(el.querySelector('#kpi-export-table tr[data-ind="5"]')).toBeTruthy();
+  });
+});
+
+// 28 พ.ย. 2569 (ผู้ใช้สั่ง): ส่งข้อมูลเข้า KHD = ตัวชี้วัดที่เลือกในขั้นที่ 3 แสดงในหน้าเดียวกัน (ไม่ใช่ modal ทุกตาราง)
+describe('ExportKpiComponent — ขอบเขตการส่ง KHD จากรายการที่เลือก', () => {
+  it('ส่ง indicator_ids ที่เลือก + ปีงบ, ปิดส่งออกแยกเป็นส่งไม่ได้, เปลี่ยนรายการ/ปีงบ = ต้องตรวจใหม่ก่อนส่ง', async () => {
+    await TestBed.configureTestingModule({ imports: [ExportKpiComponent], providers: testProviders }).compileComponents();
+    const fixture = TestBed.createComponent(ExportKpiComponent);
+    const c = fixture.componentInstance;
+    const { HttpTestingController } = await import('@angular/common/http/testing');
+    const http = TestBed.inject(HttpTestingController);
+    c.exportYear = '2570';
+    c.isSuperAdminStrict = true;
+    c.exportIndicators = [
+      { id: 1, kpi_indicators_name: 'ก', table_process: 'kpi-a-001', upload_excel: 0 },
+      { id: 2, kpi_indicators_name: 'ข', table_process: 'kpi_b_001', upload_excel: 1 },
+      { id: 3, kpi_indicators_name: 'ค', table_process: 'kpi_c_001', upload_excel: 0 },
+    ];
+    c.selectedIndicatorIds = new Set([1, 2]);
+    c.openSyncToKhd(false);
+    const req = http.expectOne(r => r.url.endsWith('/sync-to-khd/preview'));
+    expect(req.request.body).toEqual({ indicator_ids: [1], year_bh: '2570' });
+    expect(c.syncScope!.tables).toEqual(['kpi_a_001']);
+    expect(c.syncScope!.excluded.map(e => e.id)).toEqual([2]);
+    req.flush({ success: true, year_bh: '2570', excluded: [], tables: [
+      { table: 'kpi_a_001', name: 'ก', status: 'ready', local_rows: 3, remote_rows: 0, sync_columns: ['hospcode', 'byear', 'target'], plan: { insert: 3, update: 0, khd_newer: 0, no_time: 0, kept_blank: 0 } },
+    ] });
+    fixture.detectChanges();
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.querySelector('#khd-sync-panel')).toBeTruthy();
+    expect(el.querySelector('#khd-sync-excluded')!.textContent).toContain('ปิดส่งออก KHD');
+    expect(c.syncStale).toBe(false);
+    const dirty = () => (c as any).cdr.markForCheck(); // เรียกตรง (ไม่ผ่านเหตุการณ์ในแม่แบบ) ต้องบอกว่าเปลี่ยนแล้ว
+    c.toggleIndicator(3); dirty();             // เปลี่ยนรายการที่เลือกหลังตรวจแผน
+    fixture.detectChanges();
+    expect(c.syncStale).toBe(true);
+    expect(el.querySelector('#khd-sync-stale')).toBeTruthy();
+    expect((el.querySelector('#btn-khd-sync-execute') as HTMLButtonElement).disabled).toBe(true);
+    c.toggleIndicator(3); dirty();
+    fixture.detectChanges();
+    expect(c.syncStale).toBe(false);
+    expect((el.querySelector('#btn-khd-sync-execute') as HTMLButtonElement).disabled).toBe(false);
+    c.exportYear = '2569';                     // เปลี่ยนปีงบ = ต้องตรวจใหม่
+    expect(c.syncStale).toBe(true);
   });
 });

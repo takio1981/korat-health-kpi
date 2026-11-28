@@ -13,6 +13,8 @@ import { ITYPES } from '../shared/indicator-types';
 import { AttrFilter, EMPTY_ATTR_FILTER, METHOD_OPTIONS, SOURCE_OPTIONS, activeAttrCount, fiscalYearOptions, matchAttrFilter } from './kpi-attr-filter';
 import { typedConfirmSwal } from '../shared/typed-confirm';
 import { StatusBadge, TableStruct, canPullStructure, canPushStructure, diffText, khdBadge, localBadge, structMapOf, tpKey } from './kpi-table-status';
+import { CheckFilter, CheckSummary, EMPTY_SUMMARY, matchCheckFilter, summarizeCheck } from './check-summary';
+import { KhdSyncScope, khdSyncScope, syncScopeKey as scopeKeyOf } from './khd-sync-scope';
 
 // 27 พ.ย. 2569 (ผู้ใช้สั่ง): หน้าจัดการข้อมูล KPI รวม "ส่งออกข้อมูล KPI ↔ KHD" (เทียบโครงสร้าง) กับ "Export ลงตารางรายตัวชี้วัด" เป็นตารางเดียว
 // แต่ละแถว: ป้ายการตั้งค่าตัวชี้วัด + ตารางในระบบ (ส่งออก = สร้างให้เอง) + ตารางใน KHD (สร้าง/เพิ่มคอลัมน์ ต้องพิมพ์ยืนยัน) + ข้อมูลที่เปลี่ยน
@@ -68,7 +70,7 @@ export class ExportKpiComponent implements OnInit, OnDestroy {
   filterMainIndicator: string = '';
   filterDept: string = '';
   filterStatus: string = '';
-  filterCheckStatus: string = '';  // '' | 'has_changes' | 'up_to_date' | 'no_data'
+  filterCheckStatus: CheckFilter = '';  // กลุ่มเดียวกับ card สรุป (check-summary.ts)
   exportSearch: string = '';
 
   // Filter options
@@ -87,11 +89,8 @@ export class ExportKpiComponent implements OnInit, OnDestroy {
   checkStatusMap: Map<number, any> = new Map();
   checkProgress = { total: 0, done: 0, percent: 0 };
 
-  // Live counters (อัปเดตระหว่างตรวจสอบ)
-  // has_changes = จำนวนตัวชี้วัดที่มีการเปลี่ยนแปลง
-  // data_changes = จำนวนแถวข้อมูลรวมที่เพิ่ม/แก้ไข (new_count + changed_count)
-  liveCounters = { total: 0, has_changes: 0, data_changes: 0, up_to_date: 0, no_data: 0, unchecked: 0 };
-  displayCounters = { total: 0, has_changes: 0, data_changes: 0, up_to_date: 0, no_data: 0, unchecked: 0 };
+  // ตัวเลขใน card — นับต่อตัวชี้วัด บนรายการที่ผ่านตัวกรองอื่นแล้ว (กด card = แถวเท่ากับตัวเลขเสมอ) อัปเดตทุก batch ระหว่างตรวจ
+  summary: CheckSummary = { ...EMPTY_SUMMARY, tables: { ...EMPTY_SUMMARY.tables } };
 
   // UI state
   showGuide: boolean = true;
@@ -100,9 +99,14 @@ export class ExportKpiComponent implements OnInit, OnDestroy {
   exportLoading: boolean = false;
   exportResult: any = null;
 
-  // Sync to KHD
-  showSyncGuide: boolean = true;
-  showSyncModal: boolean = false;
+  // Sync to KHD — แสดงเป็นขั้นที่ 5 ต่อท้ายในหน้าเดียวกัน (28 พ.ย. 2569 — เดิมเป็น modal แสดงทุกตารางของระบบ)
+  // ขอบเขต = ตัวชี้วัดที่เลือกในขั้นที่ 3 + ปีงบในขั้นที่ 1 (ส่งเฉพาะแถว byear ของปีนั้น)
+  showSyncGuide: boolean = false;
+  syncPanelOpen: boolean = false;
+  syncScope: KhdSyncScope | null = null;
+  /** ลายเซ็นของรายการที่เลือก + ปีงบ ตอนตรวจแผน — เปลี่ยนแล้วต้องตรวจใหม่ก่อนส่ง */
+  syncScopeKey = '';
+  syncYear = '';
   syncPreviewData: any[] = [];
   syncLoading: boolean = false;
   syncSelectedTables = new Set<string>();
@@ -188,6 +192,7 @@ export class ExportKpiComponent implements OnInit, OnDestroy {
   // ========== สถานะโครงสร้างตาราง ในระบบ / KHD ==========
   loadStructure() {
     this.structLoading = true;
+    this.cdr.markForCheck(); // ถูกเรียกจาก callback ของคำขออื่น (zoneless) — ไม่แจ้งแล้วได้ NG0100 / หน้าจอค้างสถานะเดิม (พบจากทดสอบหน้าจอ 28 พ.ย. 2569)
     const year = this.exportYear;
     this.authService.dbCompare(year).subscribe({
       next: (res: any) => {
@@ -362,10 +367,6 @@ export class ExportKpiComponent implements OnInit, OnDestroy {
           this.refreshBadges();
           this.selectedIndicatorIds = new Set(this.filteredExportIndicators.map((i: any) => i.id));
           this.updateSelectAll();
-          // ตั้ง displayCounters เริ่มต้น
-          const total = res.data.length;
-          this.displayCounters = { total, has_changes: 0, data_changes: 0, up_to_date: 0, no_data: 0, unchecked: total };
-          this.liveCounters = { ...this.displayCounters };
         }
         this.cdr.detectChanges();
       }
@@ -385,15 +386,6 @@ export class ExportKpiComponent implements OnInit, OnDestroy {
       list = list.filter((i: any) => i.is_active === 1);
     } else if (this.filterStatus === 'inactive') {
       list = list.filter((i: any) => i.is_active === 0);
-    }
-
-    // กรองตามสถานะตรวจสอบ (ถ้ามีผลการตรวจสอบแล้ว)
-    if (this.filterCheckStatus && this.checkStatusMap.size > 0) {
-      list = list.filter((i: any) => {
-        const chk = this.checkStatusMap.get(i.id);
-        if (!chk) return this.filterCheckStatus === 'no_data';
-        return chk.status === this.filterCheckStatus;
-      });
     }
 
     // ตัวกรองคุณสมบัติตัวชี้วัด (ประเภท / ประเภทหน่วยบริการ / วิธีคิดผลงาน / แหล่งข้อมูล / ส่ง KHD / ปีงบ / รายละเอียด / เกณฑ์)
@@ -417,6 +409,13 @@ export class ExportKpiComponent implements OnInit, OnDestroy {
         String(i.table_process || '').toLowerCase().includes(search) ||
         tpKey(i.table_process).toLowerCase().includes(searchKey)
       );
+    }
+
+    // card สรุปนับจากรายการที่ผ่านตัวกรองอื่นทั้งหมดแล้ว แล้วจึงกรองสถานะตรวจสอบด้วยกติกาเดียวกัน (check-summary.ts)
+    // → ตัวเลขใน card = จำนวนแถวที่แสดงเมื่อกด card นั้นเสมอ
+    this.summary = summarizeCheck(list, (id) => this.checkStatusMap.get(id));
+    if (this.filterCheckStatus) {
+      list = list.filter((i: any) => matchCheckFilter(i, this.checkStatusMap.get(i.id), this.filterCheckStatus));
     }
 
     this.filteredExportIndicators = list;
@@ -459,68 +458,10 @@ export class ExportKpiComponent implements OnInit, OnDestroy {
     return this.checkStatusMap.get(id);
   }
 
-  // อัปเดต liveCounters จาก checkStatusMap (เรียกทุกรอบ batch)
-  // นับตาม unique table_process (หลาย indicator ที่ใช้ table_process เดียวกันนับเป็น 1)
-  private updateLiveCounters() {
-    // Map indicator_id → table_process
-    const idToTp = new Map<number, string>();
-    for (const ind of this.exportIndicators) idToTp.set(ind.id, ind.table_process);
-
-    const changedTables = new Set<string>();
-    const upToDateTables = new Set<string>();
-    const noDataTables = new Set<string>();
-    // data_changes: นับจากแต่ละ table_process (หนึ่งครั้ง) เพราะ indicators ที่ share table มีค่าเดียวกัน
-    const dataChangesPerTable = new Map<string, number>();
-
-    for (const [id, chk] of this.checkStatusMap) {
-      const tp = idToTp.get(id);
-      if (!tp) continue;
-      if (chk.status === 'has_changes') {
-        changedTables.add(tp);
-        if (!dataChangesPerTable.has(tp)) {
-          dataChangesPerTable.set(tp, (chk.new_count || 0) + (chk.changed_count || 0));
-        }
-      } else if (chk.status === 'up_to_date') {
-        if (!changedTables.has(tp)) upToDateTables.add(tp);
-      } else {
-        if (!changedTables.has(tp) && !upToDateTables.has(tp)) noDataTables.add(tp);
-      }
-    }
-
-    const total = this.exportIndicators.length;
-    const hasChanges = changedTables.size;
-    const dataChanges = Array.from(dataChangesPerTable.values()).reduce((s, n) => s + n, 0);
-    const upToDate = upToDateTables.size;
-    const noData = noDataTables.size;
-    this.liveCounters = { total, has_changes: hasChanges, data_changes: dataChanges, up_to_date: upToDate, no_data: noData, unchecked: total - this.checkStatusMap.size };
-  }
-
-  // Animated counter: นับจาก current ไปหา target
-  private animateCounters(target: { total: number; has_changes: number; data_changes: number; up_to_date: number; no_data: number; unchecked: number }) {
-    const duration = 600; // ms
-    const steps = 30;
-    const interval = duration / steps;
-    const start = { ...this.displayCounters };
-    let step = 0;
-
-    const timer = setInterval(() => {
-      step++;
-      const progress = step / steps;
-      this.displayCounters = {
-        total: Math.round(start.total + (target.total - start.total) * progress),
-        has_changes: Math.round(start.has_changes + (target.has_changes - start.has_changes) * progress),
-        data_changes: Math.round(start.data_changes + (target.data_changes - start.data_changes) * progress),
-        up_to_date: Math.round(start.up_to_date + (target.up_to_date - start.up_to_date) * progress),
-        no_data: Math.round(start.no_data + (target.no_data - start.no_data) * progress),
-        unchecked: Math.round(start.unchecked + (target.unchecked - start.unchecked) * progress)
-      };
-      this.cdr.detectChanges();
-      if (step >= steps) {
-        clearInterval(timer);
-        this.displayCounters = { ...target };
-        this.cdr.detectChanges();
-      }
-    }, interval);
+  /** กด card สรุป = กรองกลุ่มนั้น (กดซ้ำ = ยกเลิก) และเลือกเฉพาะรายการที่แสดง เหมือนตัวกรองอื่น */
+  setCheckFilter(f: CheckFilter) {
+    this.filterCheckStatus = this.filterCheckStatus === f ? '' : f;
+    this.onFilterChange();
   }
 
   clearFilters() {
@@ -550,9 +491,7 @@ export class ExportKpiComponent implements OnInit, OnDestroy {
     this.applyFilters();
     this.selectedIndicatorIds = new Set(this.filteredExportIndicators.map((i: any) => i.id));
     this.selectAll = true;
-    const total = this.exportIndicators.length;
-    this.liveCounters = { total, has_changes: 0, data_changes: 0, up_to_date: 0, no_data: 0, unchecked: total };
-    this.animateCounters(this.liveCounters);
+    this.closeSyncPanel();
   }
 
   // === ตรวจสอบเปรียบเทียบข้อมูล (ทีละ batch แสดง progress + เลขวิ่ง) ===
@@ -571,8 +510,7 @@ export class ExportKpiComponent implements OnInit, OnDestroy {
 
     const total = allIds.length;
     this.checkProgress = { total, done: 0, percent: 0 };
-    this.liveCounters = { total, has_changes: 0, data_changes: 0, up_to_date: 0, no_data: 0, unchecked: total };
-    this.displayCounters = { ...this.liveCounters };
+    this.applyFilters();
     this.cdr.detectChanges();
 
     const allDetails: any[] = [];
@@ -591,40 +529,18 @@ export class ExportKpiComponent implements OnInit, OnDestroy {
         this.checkProgress.done += batch.length;
         this.checkProgress.percent = Math.round((this.checkProgress.done / this.checkProgress.total) * 100);
 
-        // อัปเดต live counters ทุก batch
-        this.updateLiveCounters();
-        this.displayCounters = { ...this.liveCounters };
+        // อัปเดต card ทุก batch (กติกาเดียวกับตัวกรอง)
+        this.applyFilters();
         this.cdr.detectChanges();
       }
 
-      // สรุปผล — dedupe ตาม table_process (หลาย indicator ใช้ table เดียวกันนับเป็น 1)
-      const idToTp = new Map<number, string>();
-      for (const ind of this.exportIndicators) idToTp.set(ind.id, ind.table_process);
-
-      const changedSet = new Set<string>(), upToDateSet = new Set<string>(), noDataSet = new Set<string>();
-      const dataChangesPerTp = new Map<string, number>();
-      for (const r of allDetails) {
-        const tp = idToTp.get(r.id);
-        if (!tp) continue;
-        if (r.status === 'has_changes') {
-          changedSet.add(tp);
-          if (!dataChangesPerTp.has(tp)) dataChangesPerTp.set(tp, (r.new_count || 0) + (r.changed_count || 0));
-        } else if (r.status === 'up_to_date') {
-          if (!changedSet.has(tp)) upToDateSet.add(tp);
-        } else {
-          if (!changedSet.has(tp) && !upToDateSet.has(tp)) noDataSet.add(tp);
-        }
-      }
-      const totalChanges = changedSet.size;
-      const totalUpToDate = upToDateSet.size;
-      const totalNoData = noDataSet.size;
-      const totalDataChanges = Array.from(dataChangesPerTp.values()).reduce((s, n) => s + n, 0);
-
+      // สรุปทั้งหมดของปีงบ (ไม่ขึ้นกับตัวกรองที่ตั้งอยู่) — กติกาเดียวกับ card
+      const all = summarizeCheck(this.exportIndicators, (id) => this.checkStatusMap.get(id));
       this.checkResult = {
         success: true,
         check_date: checkDate || new Date().toISOString(),
         year_bh: this.exportYear,
-        summary: { total: allDetails.length, has_changes: totalChanges, up_to_date: totalUpToDate, no_data: totalNoData },
+        summary: all,
         details: allDetails
       };
 
@@ -632,27 +548,25 @@ export class ExportKpiComponent implements OnInit, OnDestroy {
       this.applyFilters();
       this.cdr.detectChanges();
 
-      // SweetAlert สรุปผล — หลังปิด alert ให้ animate counters ใน NgZone
+      const row = (label: string, n: number, color = '', tables?: number) =>
+        `<tr style="${color ? `color:${color};` : ''}"><td style="padding:4px 8px;">${label}</td><td style="padding:4px 8px; text-align:right; font-weight:bold;">${n}${tables !== undefined && tables !== n ? ` <span style="font-weight:normal;font-size:11px;color:#9ca3af">(${tables} ตาราง)</span>` : ''}</td></tr>`;
       Swal.fire({
         title: 'ตรวจสอบเสร็จสิ้น',
         html: `<div style="text-align:left; font-size:14px;">
-          <div style="margin-bottom:8px;">ปีงบประมาณ: <b>${this.exportYear}</b></div>
+          <div style="margin-bottom:8px;">ปีงบประมาณ: <b>${this.exportYear}</b> — นับเป็นจำนวนตัวชี้วัด (ตรงกับจำนวนแถวเมื่อกด card)</div>
           <table style="width:100%; border-collapse:collapse;">
-            <tr><td style="padding:4px 8px;">ตัวชี้วัดทั้งหมด</td><td style="padding:4px 8px; text-align:right; font-weight:bold;">${allDetails.length}</td></tr>
-            <tr style="color:#ea580c;"><td style="padding:4px 8px;">ตัวชี้วัดที่เพิ่ม/แก้ไข</td><td style="padding:4px 8px; text-align:right; font-weight:bold;">${totalChanges}</td></tr>
-            <tr style="color:#e11d48;"><td style="padding:4px 8px;">จำนวนข้อมูลที่เปลี่ยนแปลง</td><td style="padding:4px 8px; text-align:right; font-weight:bold;">${totalDataChanges}</td></tr>
-            <tr style="color:#16a34a;"><td style="padding:4px 8px;">ข้อมูลล่าสุดแล้ว</td><td style="padding:4px 8px; text-align:right; font-weight:bold;">${totalUpToDate}</td></tr>
-            <tr style="color:#9ca3af;"><td style="padding:4px 8px;">ไม่มีข้อมูล</td><td style="padding:4px 8px; text-align:right; font-weight:bold;">${totalNoData}</td></tr>
+            ${row('ตัวชี้วัดทั้งหมด', all.total, '', all.tables.total)}
+            ${row('ตัวชี้วัดที่เพิ่ม/แก้ไข', all.has_changes, '#ea580c', all.tables.has_changes)}
+            ${row('จำนวนข้อมูลที่เปลี่ยนแปลง (แถว)', all.data_changes, '#e11d48')}
+            ${row('ข้อมูลล่าสุดแล้ว', all.up_to_date, '#16a34a', all.tables.up_to_date)}
+            ${row('ไม่มีข้อมูล', all.no_data, '#9ca3af', all.tables.no_data)}
+            ${all.not_exported ? row('ปิดส่งออก KHD (ไม่ตรวจ)', all.not_exported, '#dc2626') : ''}
+            ${all.unchecked ? row('ยังไม่ตรวจสอบ', all.unchecked, '#64748b') : ''}
           </table>
         </div>`,
-        icon: totalChanges > 0 ? 'info' : 'success',
+        icon: all.has_changes > 0 ? 'info' : 'success',
         confirmButtonText: 'ปิด',
         confirmButtonColor: '#6366f1'
-      }).then(() => {
-        this.zone.run(() => {
-          const finalCounters = { total, has_changes: totalChanges, data_changes: totalDataChanges, up_to_date: totalUpToDate, no_data: totalNoData, unchecked: 0 };
-          this.animateCounters(finalCounters);
-        });
       });
 
     } catch (err: any) {
@@ -725,6 +639,7 @@ export class ExportKpiComponent implements OnInit, OnDestroy {
               this.checkStatusMap.clear();
               this.applyFilters();
               this.loadStructure();
+              if (this.syncPanelOpen && !this.syncStale) this.openSyncToKhd(false); // ตารางส่งออกเปลี่ยน → แผนการส่ง KHD ต้องคำนวณใหม่
               this.cdr.detectChanges();
 
               // Build table list HTML — ชื่อตาราง + สถานะ + counts
@@ -798,34 +713,58 @@ export class ExportKpiComponent implements OnInit, OnDestroy {
     });
   }
 
-  // === Sync to KHD ===
-  openSyncToKhd() {
-    this.syncLoading = true;
-    this.showSyncModal = true;
+  // === Sync to KHD (ขั้นที่ 5 ในหน้าเดียวกัน) ===
+  /** เปิด/โหลดแผนการส่งของตัวชี้วัดที่เลือกในขั้นที่ 3 + ปีงบในขั้นที่ 1 แล้วเลื่อนลงไปที่ตาราง */
+  openSyncToKhd(scroll = true) {
+    const scope = khdSyncScope(this.exportIndicators, this.selectedIndicatorIds);
+    if (this.selectedIndicatorIds.size === 0) { Swal.fire('แจ้งเตือน', 'กรุณาเลือกตัวชี้วัดในขั้นที่ 3 อย่างน้อย 1 รายการ', 'warning'); return; }
+    this.syncPanelOpen = true;
+    this.syncScope = scope;
+    this.syncScopeKey = scopeKeyOf(this.exportYear, this.selectedIndicatorIds);
+    this.syncYear = this.exportYear;
     this.syncPreviewData = [];
     this.syncSelectedTables.clear();
-    this.syncSearch = '';
-    this.syncStatusFilter = '';
-    this.syncMainIndicatorFilter = '';
-    this.syncDeptFilter = '';
+    this.clearSyncFilters();
     this.cdr.detectChanges();
+    if (scroll) setTimeout(() => document.getElementById('khd-sync-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    if (!scope.ids.length) { this.syncLoading = false; this.cdr.detectChanges(); return; } // ทุกรายการที่เลือกส่ง KHD ไม่ได้ — แสดงเหตุผล
 
-    this.authService.syncToKhdPreview().subscribe({
+    this.syncLoading = true;
+    this.cdr.markForCheck();
+    const key = this.syncScopeKey;
+    this.authService.syncToKhdPreview({ indicator_ids: scope.ids, year_bh: this.exportYear }).subscribe({
       next: (res: any) => {
+        if (key !== this.syncScopeKey) return; // มีการตรวจรอบใหม่แล้ว
         this.syncLoading = false;
         if (res.success) {
-          this.syncPreviewData = res.tables;
-          res.tables.forEach((t: any) => { if (t.status === 'ready') this.syncSelectedTables.add(t.table); });
+          this.syncPreviewData = res.tables || [];
+          // เหตุผลจาก backend (ปิดใช้งาน / ยังไม่มีตารางในระบบ) ต่อท้ายเหตุผลฝั่งหน้าจอ
+          const seen = new Set(scope.excluded.map(e => e.id));
+          for (const e of res.excluded || []) if (!seen.has(e.id)) scope.excluded.push(e);
+          this.syncPreviewData.forEach((t: any) => { if (t.status === 'ready') this.syncSelectedTables.add(t.table); });
         }
         this.cdr.detectChanges();
       },
       error: (err: any) => {
+        if (key !== this.syncScopeKey) return;
         this.syncLoading = false;
-        this.showSyncModal = false;
         Swal.fire('ผิดพลาด', err.error?.message || 'ไม่สามารถตรวจสอบได้', 'error');
         this.cdr.detectChanges();
       }
     });
+  }
+
+  closeSyncPanel() {
+    this.syncPanelOpen = false;
+    this.syncScope = null;
+    this.syncScopeKey = '';
+    this.syncPreviewData = [];
+    this.syncSelectedTables.clear();
+  }
+
+  /** รายการที่เลือก/ปีงบเปลี่ยนหลังตรวจแผน — ต้องตรวจใหม่ก่อนส่ง (กันส่งตารางที่ไม่ตรงกับที่เลือก) */
+  get syncStale(): boolean {
+    return this.syncPanelOpen && this.syncScopeKey !== scopeKeyOf(this.exportYear, this.selectedIndicatorIds);
   }
 
   toggleSyncTable(table: string) {
@@ -905,14 +844,16 @@ export class ExportKpiComponent implements OnInit, OnDestroy {
   }
 
   executeSyncToKhd() {
+    if (this.syncStale) { Swal.fire('แจ้งเตือน', 'รายการตัวชี้วัดที่เลือกหรือปีงบเปลี่ยนไปหลังตรวจแผนการส่ง — กด "ตรวจแผนใหม่" ก่อนส่ง', 'warning'); return; }
     if (this.syncSelectedTables.size === 0) { Swal.fire('แจ้งเตือน', 'กรุณาเลือกตารางอย่างน้อย 1 รายการ', 'warning'); return; }
     const tables = this.syncPreviewData
-      .filter((t: any) => this.syncSelectedTables.has(t.table))
+      .filter((t: any) => this.syncSelectedTables.has(t.table) && t.status === 'ready')
       .map((t: any) => ({ table: t.table, sync_columns: t.sync_columns }));
+    const year = this.syncYear;
 
     Swal.fire({
       title: 'ยืนยันส่งข้อมูลเข้า KHD',
-      html: `<p class="text-sm">ส่ง <b>${tables.length}</b> ตาราง เข้า KHD?</p>
+      html: `<p class="text-sm">ส่ง <b>${tables.length}</b> ตาราง เข้า KHD เฉพาะข้อมูล<b>ปีงบ ${year}</b>?</p>
              <p class="text-xs text-teal-600 mt-2"><i class="fas fa-info-circle mr-1"></i>จับคู่ด้วย hospcode + byear — แถวที่มีแล้วทับเฉพาะเมื่อข้อมูลในระบบใหม่กว่า (update_date) และช่องว่างไม่ทับค่าใน KHD</p>`,
       icon: 'question', showCancelButton: true, confirmButtonColor: '#0d9488',
       confirmButtonText: '<i class="fas fa-upload mr-1"></i> ส่งข้อมูล', cancelButtonText: 'ยกเลิก'
@@ -921,15 +862,17 @@ export class ExportKpiComponent implements OnInit, OnDestroy {
         this.syncLoading = true;
         this.cdr.detectChanges();
         Swal.fire({ title: 'กำลังส่งข้อมูล...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        this.authService.syncToKhdExecute(tables).subscribe({
+        this.authService.syncToKhdExecute(tables, year).subscribe({
           next: (res: any) => {
             this.syncLoading = false;
-            this.showSyncModal = false;
             this.cdr.detectChanges();
-            const successCount = res.results?.filter((x: any) => x.status === 'success').length || 0;
+            // แผนหลังส่ง (แถวที่ส่งแล้วกลายเป็นคงค่า) + สถานะตารางใน KHD
+            this.openSyncToKhd(false);
+            this.loadStructure();
+            const ok = res.results?.filter((x: any) => x.status === 'success' || x.status === 'partial') || [];
+            const successCount = ok.length;
             const errorCount = res.results?.filter((x: any) => x.status === 'error').length || 0;
-            const totalRows = res.results?.filter((x: any) => x.status === 'success').reduce((s: number, x: any) => s + x.rows, 0) || 0;
-            const ok = res.results?.filter((x: any) => x.status === 'success') || [];
+            const totalRows = ok.reduce((s: number, x: any) => s + (Number(x.rows) || 0), 0);
             const sum = (k: string) => ok.reduce((s: number, x: any) => s + (Number(x[k]) || 0), 0);
             const skipped = res.results?.filter((x: any) => x.status === 'skipped') || [];
             Swal.fire({

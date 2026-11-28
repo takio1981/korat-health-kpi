@@ -1389,16 +1389,17 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
     return this.http.get(`${this.apiUrl}/export-schedules/${id}/logs`, { headers });
   }
 
-  syncToKhdPreview(): Observable<any> {
+  /** opts.indicator_ids = เฉพาะตัวชี้วัดที่เลือก, opts.year_bh = นับ/วางแผนเฉพาะปีงบนั้น (ไม่ส่ง = ทุกตาราง/ทุกปี) */
+  syncToKhdPreview(opts: { indicator_ids?: number[]; year_bh?: string } = {}): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.post(`${this.apiUrl}/sync-to-khd/preview`, {}, { headers });
+    return this.http.post(`${this.apiUrl}/sync-to-khd/preview`, opts, { headers });
   }
 
-  syncToKhdExecute(tables: any[]): Observable<any> {
+  syncToKhdExecute(tables: any[], yearBh?: string): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });
-    return this.http.post(`${this.apiUrl}/sync-to-khd/execute`, { tables }, { headers });
+    return this.http.post(`${this.apiUrl}/sync-to-khd/execute`, yearBh ? { tables, year_bh: yearBh } : { tables }, { headers });
   }
 
   // === KPI Summary (fast) ===

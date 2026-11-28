@@ -55,8 +55,9 @@ const keySignature = (keyRows) => Object.entries(uniqueKeysOf(keyRows)).map(([n,
 async function khdExportableTables(names) {
     if (!names.length) return new Set();
     const [rows] = await db.query(
-        `SELECT DISTINCT TRIM(table_process) AS tp FROM kpi_indicators
-         WHERE TRIM(table_process) IN (?) AND is_active = 1 AND (upload_excel IS NULL OR upload_excel = 0)`, [names]);
+        // ชื่อตารางส่งออกจริง = table_process ที่แปลงขีดกลางเป็นขีดล่าง (performKpiExport) — 28 พ.ย. 2569: เดิมเทียบชื่อดิบ ตัวชี้วัดที่ table_process มีขีดกลางส่ง KHD ไม่ได้เลย
+        `SELECT DISTINCT REPLACE(TRIM(table_process), '-', '_') AS tp FROM kpi_indicators
+         WHERE REPLACE(TRIM(table_process), '-', '_') IN (?) AND is_active = 1 AND (upload_excel IS NULL OR upload_excel = 0)`, [names]);
     return new Set(rows.map(r => r.tp));
 }
 

@@ -198,11 +198,21 @@ apiRouter.get('/export-schedules/:id/logs', authenticateToken, isSuperAdmin, asy
 });
 
 // POST /sync-to-khd/preview — ตรวจสอบข้อมูลก่อนส่ง KHD
+// 28 พ.ย. 2569: รับ indicator_ids (ตัวชี้วัดที่เลือกในหน้าจัดการข้อมูล KPI) + year_bh (นับ/วางแผนเฉพาะแถว byear ของปีงบนั้น)
+//   ไม่ส่ง = ทุกตาราง/ทุกปีแบบเดิม | ตัวชี้วัดที่ขอแต่ส่ง KHD ไม่ได้ คืนใน excluded พร้อมเหตุผล
 apiRouter.post('/sync-to-khd/preview', authenticateToken, isSuperAdmin, async (req, res) => {
     const remoteDb = getRemotePool();
     if (!remoteDb) return res.status(400).json({ success: false, message: 'ไม่ได้ตั้งค่า Remote DB (KHD)' });
+    const yearBh = req.body.year_bh == null || req.body.year_bh === '' ? null : String(req.body.year_bh);
+    if (yearBh !== null && !/^\d{4}$/.test(yearBh)) return res.status(400).json({ success: false, message: 'ปีงบประมาณต้องเป็นตัวเลข 4 หลัก' });
+    let reqIds = null;
+    if (req.body.indicator_ids !== undefined) {
+        if (!Array.isArray(req.body.indicator_ids)) return res.status(400).json({ success: false, message: 'indicator_ids ต้องเป็นรายการ' });
+        reqIds = [...new Set(req.body.indicator_ids.map(Number).filter(n => Number.isInteger(n) && n > 0))];
+        if (!reqIds.length) return res.status(400).json({ success: false, message: 'กรุณาเลือกตัวชี้วัดอย่างน้อย 1 รายการ' });
+    }
     try {
-        // ดึงตาราง export ทั้งหมดจาก local (table_process ที่มีข้อมูล) พร้อมหมวดหมู่หลัก + หน่วยงาน สำหรับ filter/แสดงผล
+        // ดึงตาราง export จาก local (table_process ที่มีข้อมูล) พร้อมหมวดหมู่หลัก + หน่วยงาน สำหรับ filter/แสดงผล
         const [indicators] = await db.query(`
             SELECT i.id, i.kpi_indicators_name, i.table_process,
                    mi.main_indicator_name, d.dept_name
@@ -210,12 +220,22 @@ apiRouter.post('/sync-to-khd/preview', authenticateToken, isSuperAdmin, async (r
             LEFT JOIN kpi_main_indicators mi ON i.main_indicator_id = mi.id
             LEFT JOIN departments d ON i.dept_id = d.id
             WHERE i.is_active = 1 AND i.table_process IS NOT NULL AND i.table_process != ''
-              AND (i.upload_excel IS NULL OR i.upload_excel = 0)
-        `);
+              AND (i.upload_excel IS NULL OR i.upload_excel = 0)${reqIds ? ' AND i.id IN (?)' : ''}
+        `, reqIds ? [reqIds] : []);
+        const excluded = [];
+        if (reqIds) {
+            const got = new Set(indicators.map(r => Number(r.id)));
+            const missing = reqIds.filter(id => !got.has(id));
+            if (missing.length) {
+                const [rows] = await db.query('SELECT id, kpi_indicators_name, table_process, is_active, upload_excel FROM kpi_indicators WHERE id IN (?)', [missing]);
+                for (const r of rows) excluded.push({ id: r.id, name: r.kpi_indicators_name, table: r.table_process,
+                    reason: Number(r.is_active) !== 1 ? 'ปิดใช้งานตัวชี้วัด' : Number(r.upload_excel) === 1 ? 'ปิดส่งออก KHD' : 'ไม่มีชื่อตาราง (table_process)' });
+            }
+        }
         // deduplicate ตาม table_process (1 ตารางอาจมีหลายตัวชี้วัด/หลายหมวดหมู่/หลายหน่วยงานรวมกันได้)
         const tableMap = new Map();
         for (const ind of indicators) {
-            const tp = ind.table_process.trim();
+            const tp = ind.table_process.trim().replace(/-/g, '_'); // ชื่อตารางส่งออกจริง (performKpiExport แปลงขีดกลางเป็นขีดล่าง)
             if (!tableMap.has(tp)) tableMap.set(tp, { table: tp, names: [], ids: [], mainIndicatorNames: new Set(), deptNames: new Set() });
             const entry = tableMap.get(tp);
             entry.names.push(ind.kpi_indicators_name);
@@ -227,24 +247,30 @@ apiRouter.post('/sync-to-khd/preview', authenticateToken, isSuperAdmin, async (r
         for (const [tp, info] of tableMap) {
             if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(tp)) continue;
             const item = {
-                table: tp, name: info.names.join(' | '),
+                table: tp, name: info.names.join(' | '), indicator_ids: info.ids,
                 main_indicator_name: Array.from(info.mainIndicatorNames).join(' | ') || null,
                 dept_name: Array.from(info.deptNames).join(' | ') || null,
                 local_rows: 0, remote_rows: 0, local_columns: [], remote_columns: [], status: 'unknown'
             };
             // ตรวจ local table
             try {
-                const [localCount] = await db.query(`SELECT COUNT(*) AS cnt FROM \`${tp}\``);
-                item.local_rows = localCount[0].cnt;
                 const [localCols] = await db.query(`SHOW COLUMNS FROM \`${tp}\``);
                 item.local_columns = localCols.map(c => c.Field);
-            } catch (e) { item.status = 'no_local'; continue; }
+                const byYear = yearBh && item.local_columns.includes('byear');
+                const [localCount] = await db.query(`SELECT COUNT(*) AS cnt FROM \`${tp}\`${byYear ? ' WHERE `byear` = ?' : ''}`, byYear ? [yearBh] : []);
+                item.local_rows = localCount[0].cnt;
+            } catch (e) {
+                // ตารางที่ขอแต่ยังไม่มีในระบบ = แจ้งเหตุผล (เดิมข้ามเงียบ ไม่รู้ว่าตัวชี้วัดที่เลือกหายไปไหน)
+                if (reqIds) excluded.push({ id: info.ids[0], name: info.names.join(' | '), table: tp, reason: 'ยังไม่มีตารางในระบบ — กดส่งออกข้อมูลก่อน' });
+                continue;
+            }
             // ตรวจ remote table
             try {
-                const [remoteCount] = await remoteDb.query(`SELECT COUNT(*) AS cnt FROM \`${tp}\``);
-                item.remote_rows = remoteCount[0].cnt;
                 const [remoteCols] = await remoteDb.query(`SHOW COLUMNS FROM \`${tp}\``);
                 item.remote_columns = remoteCols.map(c => c.Field);
+                const byYear = yearBh && item.remote_columns.includes('byear');
+                const [remoteCount] = await remoteDb.query(`SELECT COUNT(*) AS cnt FROM \`${tp}\`${byYear ? ' WHERE `byear` = ?' : ''}`, byYear ? [yearBh] : []);
+                item.remote_rows = remoteCount[0].cnt;
             } catch (e) { item.status = 'no_remote'; }
             if (item.status === 'unknown') {
                 item.status = item.local_rows > 0 ? 'ready' : 'empty';
@@ -256,14 +282,14 @@ apiRouter.post('/sync-to-khd/preview', authenticateToken, isSuperAdmin, async (r
             // แผนการส่งรายแถว (คีย์ hospcode + byear, update_date ใหม่กว่า, ค่าว่างไม่ทับ) — กติกาเดียวกับตอนส่งจริง
             if (item.status === 'ready') {
                 try {
-                    const plan = await planKhdTableSync(remoteDb, tp, item.sync_columns);
+                    const plan = await planKhdTableSync(remoteDb, tp, item.sync_columns, { byear: yearBh });
                     if (plan.skip) { item.status = 'blocked'; item.reason = plan.skip; }
                     else item.plan = plan.counts;
                 } catch (e) { item.status = 'blocked'; item.reason = e.message; }
             }
             tables.push(item);
         }
-        res.json({ success: true, tables });
+        res.json({ success: true, tables, excluded, year_bh: yearBh });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
@@ -273,7 +299,10 @@ apiRouter.post('/sync-to-khd/preview', authenticateToken, isSuperAdmin, async (r
 apiRouter.post('/sync-to-khd/execute', authenticateToken, requireSuperAdminStrict, async (req, res) => {
     const { tables } = req.body;
     if (!Array.isArray(tables) || tables.length === 0) return res.status(400).json({ success: false, message: 'กรุณาเลือกตารางที่ต้องการ' });
-    const out = await performSyncToKhd(tables, req.user.userId, { trigger: 'manual' });
+    // year_bh (28 พ.ย. 2569) = ส่งเฉพาะแถว byear ของปีงบนั้น ตรงกับแผนที่หน้าจอแสดง | ไม่ส่ง = ทุกปีแบบเดิม
+    const yearBh = req.body.year_bh == null || req.body.year_bh === '' ? undefined : String(req.body.year_bh);
+    if (yearBh !== undefined && !/^\d{4}$/.test(yearBh)) return res.status(400).json({ success: false, message: 'ปีงบประมาณต้องเป็นตัวเลข 4 หลัก' });
+    const out = await performSyncToKhd(tables, req.user.userId, { trigger: 'manual', yearBh });
     if (out.code === 'KHD_SYNC_BUSY') return res.status(409).json(out);
     if (!out.success && out.results.length === 0) return res.status(400).json(out);
     res.json(out);
