@@ -143,3 +143,52 @@ describe('สรุปข้อมูลตัวชี้วัดของก�
     localStorage.removeItem('kpi_user');
   });
 });
+
+describe('ตัวกรองรายงานสรุปผล ทุกแถบ (28 พ.ย. 2569)', () => {
+  const TABS: [string, string][] = [
+    ['by-indicator', '/report/by-indicator'], ['by-hospital', '/report/by-hospital'], ['by-district', '/report/by-district'],
+    ['by-year', '/report/by-year'], ['by-dept-kpi', '/report/by-dept-kpi'], ['recording-status', '/report/recording-status'],
+    ['by-dept', '/report/by-dept-summary'],
+  ];
+  const FILTERS: [string, string, string][] = [   // [id ช่อง, ค่า, พารามิเตอร์]
+    ['#report-dept', '5', 'dept_id'], ['#report-zone', '2', 'zone'], ['#report-district', '3002', 'distid'],
+    ['#report-itype', 'r9', 'itype'], ['#report-hostype', '07', 'hostype'],
+  ];
+  afterEach(() => localStorage.removeItem('kpi_user'));
+
+  it('ทุกแถบแสดงตัวกรองครบ เลือกแล้วส่งพารามิเตอร์ไปที่ server (รายปีงบซ่อนปีงบ)', async () => {
+    localStorage.setItem('kpi_user', JSON.stringify({ role: 'super_admin' }));
+    await TestBed.configureTestingModule({ imports: [ReportComponent], providers: testProviders }).compileComponents();
+    const f = TestBed.createComponent(ReportComponent);
+    const http = TestBed.inject(HttpTestingController);
+    const c = f.componentInstance;
+    f.detectChanges();
+    const flushOthers = () => { for (let k = 0; k < 4; k++) http.match(() => true).forEach(r => r.flush({ success: true, data: [] })); };
+    flushOthers();
+    c.departments = [{ id: 5, dept_name: 'ก' }];
+    c.districts = [{ distid: '3002', distname: 'อ.ข', zone: '2' }];
+    c.hosTypes = [{ hostypecode: '07', hostypename: 'รพช.' }];
+    c.filterYears = ['2570'];
+    c.selectedYear = '2570';
+    const el = f.nativeElement as HTMLElement;
+    for (const [tab, url] of TABS) {
+      c.clearFilters(); c.selectedYear = '2570';
+      c.switchTab(tab);
+      flushOthers();
+      (c as any).cdr.markForCheck(); f.detectChanges();
+      expect([tab, !!el.querySelector('#report-year')]).toEqual([tab, tab !== 'by-year']);
+      expect([tab, !!el.querySelector('#report-year-note')]).toEqual([tab, tab === 'by-year']);
+      for (const [id, value, param] of FILTERS) {
+        const s = el.querySelector(id) as HTMLSelectElement;
+        expect([tab, id, !!s]).toEqual([tab, id, true]);
+        s.value = [...s.options].find(o => o.value.endsWith(value) || o.value === value)!.value;
+        s.dispatchEvent(new Event('change'));
+        const reqs = http.match(r => r.url.includes(url));
+        expect([tab, param, reqs.length > 0 && reqs[reqs.length - 1].request.urlWithParams.includes(param + '=' + value)]).toEqual([tab, param, true]);
+        reqs.forEach(r => r.flush({ success: true, data: [], summary: {} }));
+        flushOthers();
+        (c as any).cdr.markForCheck(); f.detectChanges();
+      }
+    }
+  });
+});

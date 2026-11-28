@@ -264,7 +264,7 @@ apiRouter.get('/report/by-hospital', authenticateToken, async (req, res) => {
 
 // รายงานสรุป: รายอำเภอ
 async function reportByDistrictRows(user, query = {}) {
-    const { year_bh, dept_id, hostype } = query;
+    const { year_bh, dept_id, distid, hostype } = query;
     let whereClauses = [];
     let params = [];
 
@@ -289,6 +289,7 @@ async function reportByDistrictRows(user, query = {}) {
     }
     if (year_bh) { whereClauses.push('s.year_bh = ?'); params.push(year_bh); }
     if (dept_id) { whereClauses.push('s.dept_id = ?'); params.push(dept_id); }
+    if (distid) { whereClauses.push('s.distid = ?'); params.push(distid); } // ตัวกรองอำเภอ (28 พ.ย. 2569 — เดิมไม่ใช้ เลือกอำเภอแล้วตารางไม่เปลี่ยน)
     if (hostype) { whereClauses.push('s.hostype = ?'); params.push(hostype); }
     addZoneFilter(whereClauses, params, 's.distid', query.zone);
     addItypeFilter(whereClauses, 's.indicator_id', query.itype); // ประเภทตัวชี้วัด (20 พ.ย. 2569)
@@ -656,10 +657,8 @@ apiRouter.post('/report/ai-tab-summary', authenticateToken, aiLimiter, async (re
             if (b[k] !== undefined && b[k] !== null && b[k] !== '') q[k] = String(b[k]);
         }
         if (key !== 'by-year' && !q.year_bh) return res.status(400).json({ success: false, message: 'กรุณาเลือกปีงบประมาณ' });
-        // ตัวกรองที่แต่ละแถบใช้จริง (ตรงกับหน้าจอ): รายอำเภอไม่ใช้อำเภอ, รายปีไม่ใช้ปีงบ, สรุปรายกลุ่มงานใช้เฉพาะปีงบ/ประเภท/โซน
-        if (key === 'by-district') delete q.distid;
+        // ตัวกรองที่แต่ละแถบใช้จริง (ตรงกับหน้าจอ — 28 พ.ย. 2569): รายปีงบไม่ใช้ปีงบ (แสดงทุกปี) นอกนั้นใช้ทุกตัวกรอง
         if (key === 'by-year') delete q.year_bh;
-        if (key === 'by-dept') { delete q.dept_id; delete q.distid; }
         let data;
         switch (key) {
             case 'by-indicator': data = await reportByIndicatorRows(req.user, q); break;
@@ -1004,7 +1003,7 @@ apiRouter.get('/report/recording-missing/by-hospital/:hospcode', authenticateTok
 //   - avg_coverage_pct = % รพ.ที่บันทึกเฉลี่ยข้ามทุกตัวชี้วัดของ dept
 //   สิทธิ์: super_admin ดูทุก dept, admin_ssj ดูเฉพาะ dept ตัวเอง
 async function deptSummaryReport(user, query = {}) {
-    const { year_bh, hostype } = query;
+    const { year_bh, hostype, dept_id, distid } = query;
     if (!year_bh) {
         return { summary: { total_depts: 0, fully_covered: 0, not_entered: 0, avg_coverage_pct: 0 }, data: [] };
     }
@@ -1030,6 +1029,8 @@ async function deptSummaryReport(user, query = {}) {
         cteWhere.push('ch.hostype = ?');
         cteParams.push(hostype);
     }
+    // อำเภอ (28 พ.ย. 2569 — เดิมแถบนี้ไม่มีตัวกรองอำเภอ/กลุ่มงาน)
+    if (distid) { cteWhere.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)'); cteParams.push(distid); }
     addZoneFilter(cteWhere, cteParams, 'r.hospcode', query.zone, 'hos');
     addItypeFilter(cteWhere, 'r.indicator_id', query.itype);
 
@@ -1040,6 +1041,8 @@ async function deptSummaryReport(user, query = {}) {
     // params สำหรับ query หลัก
     const queryParams = [...cteParams];
     if (deptFilterParam != null) queryParams.push(deptFilterParam);
+    let deptPick = '';
+    if (dept_id) { deptPick = 'AND d.id = ?'; queryParams.push(dept_id); }
 
     const sql = `
         WITH ind_stats AS (
@@ -1064,7 +1067,7 @@ async function deptSummaryReport(user, query = {}) {
         FROM departments d
         JOIN kpi_indicators i ON i.dept_id = d.id AND i.is_active = 1
         LEFT JOIN ind_stats ist ON ist.indicator_id = i.id
-        WHERE 1=1 ${deptFilter} ${indItype.map(c => 'AND ' + c).join(' ')}
+        WHERE 1=1 ${deptFilter} ${deptPick} ${indItype.map(c => 'AND ' + c).join(' ')}
         GROUP BY d.id, d.dept_name
         ORDER BY d.dept_name
     `;
@@ -1102,10 +1105,16 @@ apiRouter.get('/report/by-dept-summary/hospitals', authenticateToken, async (req
             return res.status(400).json({ success: false, message: 'ต้องระบุปีงบประมาณและตัวชี้วัด' });
         }
 
+        // ขอบเขต: role ที่เห็นเฉพาะกลุ่มงานตัวเอง ดูได้เฉพาะตัวชี้วัดของกลุ่มงานตัวเอง (28 พ.ย. 2569 — เดิมไม่ตรวจ)
+        if (ROLE_SCOPE_ALL_HOSPCODE_OWN_DEPT.includes(req.user.role) && req.user.deptId != null) {
+            const [[ind]] = await db.query('SELECT dept_id FROM kpi_indicators WHERE id = ?', [indicator_id]);
+            if (!ind || !deptIdsOf(req.user).map(String).includes(String(ind.dept_id))) return res.status(403).json({ success: false, message: 'ไม่มีสิทธิ์ดูตัวชี้วัดของกลุ่มงานอื่น' });
+        }
         let whereClauses = ['r.indicator_id = ?', 'r.year_bh = ?'];
         let params = [indicator_id, year_bh];
 
         if (hostype) { whereClauses.push('h.hostype = ?'); params.push(hostype); }
+        if (req.query.distid) { whereClauses.push('h.distid = ?'); params.push(req.query.distid); }
         addZoneFilter(whereClauses, params, 'r.hospcode', req.query.zone, 'hos');
 
         let having = '';
@@ -1161,6 +1170,7 @@ apiRouter.get('/report/by-dept-summary/indicators', authenticateToken, async (re
             cteWhere.push('ch.hostype = ?');
             cteParams.push(hostype);
         }
+        if (req.query.distid) { cteWhere.push('r.hospcode IN (SELECT hoscode FROM chospital WHERE distid = ?)'); cteParams.push(req.query.distid); }
         addZoneFilter(cteWhere, cteParams, 'r.hospcode', req.query.zone, 'hos');
         addItypeFilter(cteWhere, 'r.indicator_id', req.query.itype);
         const cteWhereStr = cteWhere.join(' AND ');

@@ -1448,6 +1448,9 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 - ใช้ `[hidden]` เก็บ state ทั้ง 2 view (ไม่ destroy component)
 - **แถบ "สรุปตัวชี้วัดของกลุ่มงาน" (28 พ.ย. 2569 — ผู้ใช้สั่ง):** key `by-dept-kpi` ทุกสิทธิ์ — `GET /report/by-dept-kpi` = `reportByIndicatorRows(user, q, { noLimit: true })` (คืน `dept_id` แล้ว) → `services/report-dept-kpi.js` `summarizeDeptKpi()` (ฟังก์ชันล้วน: ร้อยละผ่านของกลุ่มงาน = คู่ผ่าน ÷ คู่ที่มีเป้าหมาย ไม่ใช่ค่าเฉลี่ยร้อยละ)
   | AI สรุปรายแถบ `byDeptKpi()` | frontend `filterDeptKpiGroups()` / `deptKpiExcelRows()` (report.ts) — ต่างจากแถบ `by-dept` (ความครอบคลุมการบันทึก เฉพาะ admin_ssj/super_admin) | Test: `api/tests/report-dept-kpi.test.js`, `report/report.spec.ts`
+- **ตัวกรองรายงานสรุปผลครบทุกแถบ (28 พ.ย. 2569 — ผู้ใช้แจ้งเลือกแล้วตารางไม่เปลี่ยน):** ทุกแถบแสดงและใช้ year_bh/dept_id/zone/distid/itype/hostype (select ใช้ `(ngModelChange)`, id `#report-year|dept|zone|district|itype|hostype`)
+  ยกเว้นรายปีงบ = ซ่อนปีงบ (`#report-year-note`) — ⚠️ เดิม: by-district ไม่ใช้ distid, by-dept ไม่ใช้ dept_id/distid, by-dept-summary/indicators|hospitals ไม่ใช้ distid (hospitals ไม่ตรวจกลุ่มงานด้วย — แก้แล้ว 403)
+  — **เพิ่มแถบ/ตัวกรองใหม่ต้องเพิ่มเคสใน `api/tests/report-filters.test.js`** (ทุกแถบ × ทุกตัวกรอง เทียบคำตอบที่คำนวณจากชุดข้อมูล) + `report.spec.ts` + `tools/video-guide/e2e-report-filters.js` (ฐานทดสอบ)
 - **คำที่แสดงผล "หน่วยงาน" → "กลุ่มงาน" ทั้งระบบ (28 พ.ย. 2569 — ผู้ใช้สั่ง):** ข้อความใหม่ใช้ "กลุ่มงาน" เสมอ (หมายถึง departments) — ตาราง/คอลัมน์/เส้นทาง API ไม่เปลี่ยน, ประวัติการอัปเดตเดิมไม่แก้,
   "ผู้ดูแลระบบของหน่วยงานท่าน" (หมายถึงองค์กร) คงไว้ | หัวข้ออื่นในไฟล์นี้ที่เขียน "หน่วยงาน" = กลุ่มงาน
 - **ค้นหาในตารางรายงานสรุปผล (23 พ.ย. 2569):** `#report-search` / `#report-dept-search` กรองฝั่งหน้าจอด้วย `filterReportRows(rows, key, q)` (report.ts — ช่องต่อแถบใน `REPORT_SEARCH_FIELDS`, key สถานะการบันทึก = `recording-status:<มุมมอง>`)

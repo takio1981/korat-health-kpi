@@ -327,6 +327,7 @@ export class ReportComponent implements OnInit {
     this.hospDrilldownLoading = true;
     const params: any = { year_bh: this.selectedYear, indicator_id: ind.indicator_id, filter };
     if (this.selectedHosType) params.hostype = this.selectedHosType;
+    if (this.selectedDistId) params.distid = this.selectedDistId;
     if (this.selectedItype) params.itype = this.selectedItype;
     if (this.selectedZone) params.zone = this.selectedZone;
     this.authService.getReportByDeptSummaryHospitals(params).subscribe({
@@ -353,6 +354,7 @@ export class ReportComponent implements OnInit {
     this.deptDrilldownLoading = true;
     const params: any = { year_bh: this.selectedYear, dept_id: dept.dept_id };
     if (this.selectedHosType) params.hostype = this.selectedHosType;
+    if (this.selectedDistId) params.distid = this.selectedDistId;
     if (this.selectedItype) params.itype = this.selectedItype;
     if (this.selectedZone) params.zone = this.selectedZone;
     this.authService.getReportByDeptSummaryIndicators(params).subscribe({
