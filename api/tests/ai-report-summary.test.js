@@ -15,7 +15,7 @@ const { callLlm } = require('../services/ai');
 const { buildSummaryInput, rank, TOP_N } = require('../services/ai-report');
 
 const YEAR = '2502';
-let app, db, saToken, hosToken, deptId, hospA, hospB;
+let app, db, saToken, hosToken, deptId, hospA, hospB, saId;
 const created = { indicators: [], mains: [], yuts: [] };
 const api = (p) => '/khupskpi/api' + p;
 const promptInput = (call) => JSON.parse(call[0].prompt.match(/\{[\s\S]*\}/)[0]);
@@ -31,6 +31,8 @@ async function addSummary(indicatorId, hospcode, target, last) {
         `INSERT INTO kpi_summary (indicator_id, year_bh, hospcode, dept_id, dept_name, hosname, distid, distname, hostype, target_value, last_actual, oct)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
         [indicatorId, YEAR, hospcode, deptId, 'test_aisum_dept', h.hosname, h.distid, 'test_aisum_dist', h.hostype, target, last, last]);
+    // แถบกราฟ = รายงานการบันทึก (28 พ.ย. 2569) อ่านคู่ที่ต้องกรอกจาก kpi_results
+    await db.query("INSERT INTO kpi_results (indicator_id, year_bh, month_bh, user_id, status, hospcode, target_value, actual_value) VALUES (?, ?, '10', ?, 'Pending', ?, ?, ?)", [indicatorId, YEAR, saId, hospcode, target, last]);
 }
 
 let ind1, ind2;
@@ -44,6 +46,7 @@ beforeAll(async () => {
     const hs = (await db.query('SELECT hoscode FROM chospital WHERE distid IS NOT NULL ORDER BY hoscode LIMIT 2'))[0];
     deptId = d.id; hospA = hs[0].hoscode; hospB = hs[1].hoscode;
     const sa = await ensureTestUser(db, { username: 'test_aisum_sa', role: 'super_admin', session_id: 'sess-aisum-sa' });
+    saId = sa.id;
     saToken = makeToken({ userId: sa.id, username: sa.username, role: 'super_admin', deptId: null, hospcode: null, sessionId: 'sess-aisum-sa' });
     const u = await ensureTestUser(db, { username: 'test_aisum_hos', role: 'user_hos', dept_id: deptId, hospcode: hospA, session_id: 'sess-aisum-hos' });
     hosToken = makeToken({ userId: u.id, username: u.username, role: 'user_hos', deptId, hospcode: hospA, sessionId: 'sess-aisum-hos' });
@@ -60,6 +63,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
     await db.query('DELETE FROM kpi_summary WHERE year_bh = ?', [YEAR]);
+    if (created.indicators.length) await db.query('DELETE FROM kpi_results WHERE indicator_id IN (?)', [created.indicators]);
     if (created.indicators.length) await db.query('DELETE FROM kpi_indicators WHERE id IN (?)', [created.indicators]);
     if (created.mains.length) await db.query('DELETE FROM kpi_main_indicators WHERE id IN (?)', [created.mains]);
     if (created.yuts.length) await db.query('DELETE FROM main_yut WHERE id IN (?)', [created.yuts]);
@@ -69,7 +73,7 @@ afterAll(async () => {
 beforeEach(() => callLlm.mockClear());
 
 const summary = (token, body) => request(app).post(api('/report/ai-summary')).set('Authorization', `Bearer ${token}`).send({ year_bh: YEAR, ...body });
-const chartStats = (token, qs = '') => request(app).get(api(`/report/chart-stats?year_bh=${YEAR}${qs}`)).set('Authorization', `Bearer ${token}`);
+const chartStats = (token, qs = '') => request(app).get(api(`/report/recording-stats?year_bh=${YEAR}${qs}`)).set('Authorization', `Bearer ${token}`);
 
 describe('POST /report/ai-summary', () => {
     test('super_admin: ตัวเลขใน prompt ตรงกับหน้ากราฟ และคืนข้อความสรุป', async () => {
@@ -81,8 +85,11 @@ describe('POST /report/ai-summary', () => {
         expect(callLlm.mock.calls[0][0].feature).toBe('report_summary');
         const input = promptInput(callLlm.mock.calls[0]);
         const cs = (await chartStats(saToken, `&indicator_id=${ind1}`)).body.overall;
-        expect(input.overall).toMatchObject({ pairs: cs.pairs, with_target: cs.with_target, passed: cs.passed, achievement_pct: cs.achievement_pct });
-        expect(input.overall).toMatchObject({ pairs: 2, passed: 1, achievement_pct: 50 });
+        // 28 พ.ย. 2569: สรุปการบันทึก (ตรงกับ GET /report/recording-stats) — ไม่มีผ่าน/ไม่ผ่านเกณฑ์
+        expect(input.overall).toMatchObject({ pairs: cs.pairs, recorded_pairs: cs.recorded_pairs, recording_pct: cs.recording_pct, completeness_pct: cs.completeness_pct });
+        expect(input.overall).toMatchObject({ pairs: 2, recorded_pairs: 2, recording_pct: 100 });
+        expect(input.overall.achievement_pct).toBeUndefined();
+        expect(callLlm.mock.calls[0][0].system).toContain('ห้ามประเมินว่าตัวชี้วัดผ่านหรือไม่ผ่านเกณฑ์');
         expect(input.filters['ตัวชี้วัด']).toBe('test_aisum_ind1');
     });
 
@@ -92,7 +99,7 @@ describe('POST /report/ai-summary', () => {
         const input = promptInput(callLlm.mock.calls[0]);
         const cs = (await chartStats(hosToken)).body.overall;
         expect(input.overall.hospitals).toBe(1);
-        expect(input.overall).toMatchObject({ pairs: cs.pairs, passed: cs.passed, with_target: cs.with_target });
+        expect(input.overall).toMatchObject({ pairs: cs.pairs, recorded_pairs: cs.recorded_pairs });
         const raw = callLlm.mock.calls[0][0].prompt;
         expect(raw).not.toContain(hospA);
         expect(raw).not.toContain(hospB);

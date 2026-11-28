@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../services/auth';
@@ -10,23 +10,37 @@ import { FormulaBadgeComponent } from '../shared/formula-badge';
 import { DistrictMapComponent } from '../shared/district-map';
 import { RiskViewComponent } from './risk-view';
 import { AiSummaryPanelComponent } from '../shared/ai-summary-panel';
+import { ZoneBadgeComponent } from '../shared/zone-badge';
 import { zoneLabel, inZone } from '../shared/zone';
 import {
-  ChartGroupRow, ChartMonthRow, buildPctBar, buildStatusStack, buildOverallDonut, buildOverallRadial,
-  buildMonthlyCombo, buildHeatmap, buildDistribution, pctColor, buildTypeMonthly
-} from './chart-builders';
-import { ITYPES, itypeInfo, itypesOfRow } from '../shared/indicator-types';
+  RecRow, buildQualityBars, buildRecordStack, buildRecordDonut, buildQualityRadial, buildReviewDonut,
+  buildMonthlyRecording, buildCompletenessHeatmap, buildHospitalDistribution, pctColor
+} from './recording-builders';
+import { ITYPES, itypeInfo } from '../shared/indicator-types';
 import { IndicatorBadgesComponent } from '../shared/indicator-badges';
 
 type FilterKey = 'selectedYut' | 'selectedMain' | 'selectedDept' | 'selectedIndicator' | 'selectedZone' | 'selectedDistrict' | 'selectedHostype' | 'selectedItype';
 
+/** ค้นหา/เรียงตารางรายงานการบันทึก (ฟังก์ชันล้วน) — คีย์ที่เป็นตัวเลข null = น้อยสุด */
+export function sortRecRows(rows: RecRow[], key: string, dir: 1 | -1, q = ''): RecRow[] {
+  const words = String(q || '').toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const list = words.length ? rows.filter(r => { const h = [r.gname, r['hospcode'], r['dept_name'], r['distname']].map(v => String(v ?? '')).join(' ').toLowerCase(); return words.every(w => h.includes(w)); }) : rows;
+  return [...list].sort((a, b) => {
+    const va = a[key], vb = b[key];
+    if (typeof va === 'number' || typeof vb === 'number' || va == null || vb == null) return ((va ?? -1) - (vb ?? -1)) * dir;
+    return String(va).localeCompare(String(vb), 'th') * dir;
+  });
+}
+
+// แถบ "กราฟและสถิติ" = รายงานการบันทึกผลงานตัวชี้วัดของหน่วยบริการ เชิงปริมาณ + คุณภาพ (28 พ.ย. 2569 — ผู้ใช้สั่ง แทนกราฟผ่าน/ไม่ผ่านเกณฑ์ทั้งหมด)
+// ข้อมูล: GET /report/recording-stats (services/recording-stats.js)
 @Component({
   selector: 'app-chart',
   standalone: true,
-  imports: [CommonModule, RouterModule, FormsModule, ReportComponent, IndicatorBadgesComponent, ApexBoxComponent, FormulaBadgeComponent, DistrictMapComponent, AiSummaryPanelComponent, RiskViewComponent],
+  imports: [CommonModule, RouterModule, FormsModule, ReportComponent, IndicatorBadgesComponent, ApexBoxComponent, FormulaBadgeComponent, DistrictMapComponent, AiSummaryPanelComponent, RiskViewComponent, ZoneBadgeComponent],
   templateUrl: './chart.html'
 })
-export class ChartComponent implements OnInit, OnDestroy {
+export class ChartComponent implements OnInit {
   private authService = inject(AuthService);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
@@ -35,7 +49,6 @@ export class ChartComponent implements OnInit, OnDestroy {
   isLoading = true;
   loadError = '';
 
-  // ตัวกรอง (ค่า = id จาก /report/chart-stats options; '0' = "ไม่ระบุ")
   selectedYear = '';
   selectedYut = '';
   selectedMain = '';
@@ -44,57 +57,50 @@ export class ChartComponent implements OnInit, OnDestroy {
   selectedZone = '';
   selectedDistrict = '';
   selectedHostype = '';
-  /** ประเภทตัวชี้วัด r9/moph/ssj/rmw/other/none (20 พ.ย. 2569) */
   selectedItype = '';
   zoneLabel = zoneLabel;
   readonly itypes = ITYPES;
   itypeInfo = itypeInfo;
-  itypesOfRow = itypesOfRow;
 
   options: any = { years: [], yuts: [], mains: [], depts: [], indicators: [], districts: [], zones: [], hostypes: [] };
-  data: any = null; // ผลดิบจาก API
-  riskOpened = false; // แท็บตัวชี้วัดเสี่ยง — โหลดเมื่อเปิดครั้งแรก (ไม่เพิ่มคำขอตอนเปิดหน้ากราฟ)
+  data: any = null;
+  riskOpened = false;
   openRisk() { this.riskOpened = true; this.activeView = 'risk'; }
-  aiParams: any = {}; // ตัวกรองของข้อมูลที่แสดงอยู่ — ส่งให้แผงสรุปโดย AI (เปลี่ยน = ล้างสรุปเดิม)
+  aiParams: any = {};
 
-  // options ของแต่ละกราฟ
-  donutChart: any = {}; radialChart: any = {};
-  yutPctChart: any = {}; yutStackChart: any = {};
-  mainPctChart: any = {}; mainStackChart: any = {};
-  deptPctChart: any = {}; deptStackChart: any = {};
-  indicatorChart: any = {}; distributionChart: any = {};
-  monthlyChart: any = {};
-  heatMainChart: any = {}; heatDeptChart: any = {};
-  districtChart: any = {}; hostypeChart: any = {};
-  itypePctChart: any = {}; itypeStackChart: any = {}; itypeMonthlyChart: any = {};
-  /** แถวสรุปรายประเภทตัวชี้วัด (by_itype + สี/ชื่อย่อ) — คำนวณตอนโหลด ไม่ใช่ getter (กัน NG0103) */
+  // กราฟ
+  recordDonut: any = {}; qualityRadial: any = {}; reviewDonut: any = {}; hospitalDist: any = {};
+  deptBars: any = {}; deptStack: any = {};
+  indicatorBars: any = {};
+  monthlyChart: any = {}; heatDept: any = {};
+  districtBars: any = {}; hostypeBars: any = {}; zoneBars: any = {}; itypeBars: any = {};
+  /** การ์ดประเภทตัวชี้วัด — คำนวณตอนโหลด (ไม่ใช่ getter กัน NG0103) */
   itypeRows: any[] = [];
-
-  heatMetric: 'pass' | 'record' = 'pass';
-  indicatorView: 'all' | 'top' | 'bottom' = 'all';
-  indicatorSearch = '';
-  tableSort: { key: string; dir: 1 | -1 } = { key: 'achievement_pct', dir: -1 };
   districtMapData: any[] = [];
-  /** มุมมองของการ์ด "ผลงานรายอำเภอ": แผนที่จริง (ค่าเริ่มต้น) หรือการ์ดรายอำเภอ (อ่านง่ายบนจอเล็ก) */
   districtView: 'map' | 'cards' = 'map';
 
-  // การ์ดสถิติ (GET /dashboard-stats เดิม)
-  stats: any = { successRate: 0, recordedCount: 0, totalDepts: 0, pendingCount: 0, rank: 0, totalHospitals: 0 };
-  private animationTimer: any;
+  // ตาราง (คำนวณตอนโหลด/เปลี่ยนการเรียง — ไม่ใช่ getter)
+  indicatorView: 'low' | 'high' = 'low';
+  indicatorSearch = '';
+  indicatorSort: { key: string; dir: 1 | -1 } = { key: 'recording_pct', dir: 1 };
+  indicatorRows: RecRow[] = [];
+  deptSort: { key: string; dir: 1 | -1 } = { key: 'recording_pct', dir: 1 };
+  deptRows: RecRow[] = [];
+  hospitalSearch = '';
+  hospitalSort: { key: string; dir: 1 | -1 } = { key: 'recording_pct', dir: 1 };
+  hospitalAll = false;
+  hospitalRows: RecRow[] = [];
+  hospitalTotal = 0;
   private reqSeq = 0;
 
   ngOnInit() {
     const currentUrl = this.router.url;
     if (currentUrl === '/' || currentUrl === '') { this.router.navigate(['/dashboard']); return; }
     this.selectedYear = String(getCurrentFiscalYear());
-    this.loadChartStats(true);
+    this.loadStats(true);
   }
 
-  ngOnDestroy() {
-    if (this.animationTimer) clearInterval(this.animationTimer);
-  }
-
-  private buildParams(): any {
+  buildParams(): any {
     const p: any = {};
     if (this.selectedYear) p.year_bh = this.selectedYear;
     if (this.selectedYut) p.yut_id = this.selectedYut;
@@ -108,28 +114,25 @@ export class ChartComponent implements OnInit, OnDestroy {
     return p;
   }
 
-  // first = โหลดครั้งแรก: ถ้าปีงบปัจจุบันยังไม่มีข้อมูล ให้ถอยไปปีล่าสุดที่มีข้อมูล
-  loadChartStats(first = false) {
+  /** first = โหลดครั้งแรก: ปีงบปัจจุบันยังไม่มีข้อมูล → ปีล่าสุดที่มีข้อมูล */
+  loadStats(first = false) {
     const seq = ++this.reqSeq;
     this.isLoading = true;
     this.loadError = '';
-    this.authService.getReportChartStats(this.buildParams()).subscribe({
+    this.authService.getReportRecordingStats(this.buildParams()).subscribe({
       next: (res) => {
-        if (seq !== this.reqSeq) return; // ผลของคำขอเก่าที่ช้ากว่า — ทิ้ง
+        if (seq !== this.reqSeq) return;
         if (res?.success) {
-          this.options = res.options;
-          if (first && res.options.years.length && !res.options.years.includes(this.selectedYear)) {
+          this.options = res.options || this.options;
+          if (first && res.options?.years?.length && !res.options.years.includes(this.selectedYear)) {
             this.selectedYear = res.options.years[0];
-            // แจ้ง change detection ทันทีที่เปลี่ยนปี — ไม่งั้นค่าที่ผูกกับ template เปลี่ยนโดยไม่มีการวาดใหม่ (NG0100 แบบสุ่มในโหมด dev
-            // พบจากการทดสอบหน้าจอจริง 11 ต.ค. 2569 เมื่อปีงบปัจจุบัน 2570 ยังไม่มีข้อมูล)
             this.cdr.detectChanges();
-            this.loadChartStats();
+            this.loadStats();
             return;
           }
           this.data = res;
           this.aiParams = { ...this.buildParams(), year_bh: res.year_bh };
           this.buildCharts();
-          this.loadDashboardStats();
         }
         this.isLoading = false;
         this.cdr.detectChanges();
@@ -137,7 +140,7 @@ export class ChartComponent implements OnInit, OnDestroy {
       error: (err) => {
         if (seq !== this.reqSeq) return;
         this.isLoading = false;
-        this.loadError = err.error?.message || 'ไม่สามารถโหลดข้อมูลกราฟได้';
+        this.loadError = err.error?.message || 'ไม่สามารถโหลดข้อมูลการบันทึกผลงานได้';
         this.cdr.detectChanges();
       }
     });
@@ -146,116 +149,76 @@ export class ChartComponent implements OnInit, OnDestroy {
   buildCharts() {
     const d = this.data;
     if (!d) return;
-    const pick = (key: FilterKey, field: string) => (row: ChartGroupRow) => this.drillDown(key, String(row[field]));
-    this.donutChart = buildOverallDonut(d.overall);
-    this.radialChart = buildOverallRadial(d.overall);
-    this.yutPctChart = buildPctBar(d.by_yut, 'ร้อยละผ่านเกณฑ์ แยกตามยุทธศาสตร์', pick('selectedYut', 'gkey'));
-    this.yutStackChart = buildStatusStack(d.by_yut, 'จำนวนคู่ผ่าน/ไม่ผ่านเกณฑ์ แยกตามยุทธศาสตร์', false, pick('selectedYut', 'gkey'));
-    this.mainPctChart = buildPctBar(d.by_main, 'ร้อยละผ่านเกณฑ์ แยกตามหมวดหมู่หลัก', pick('selectedMain', 'gkey'));
-    this.mainStackChart = buildStatusStack(d.by_main, 'จำนวนคู่ผ่าน/ไม่ผ่านเกณฑ์ แยกตามหมวดหมู่หลัก', true, pick('selectedMain', 'gkey'));
-    this.deptPctChart = buildPctBar(d.by_dept, 'ร้อยละผ่านเกณฑ์ แยกตามกลุ่มงาน', pick('selectedDept', 'gkey'));
-    this.deptStackChart = buildStatusStack(d.by_dept, 'จำนวนคู่ผ่าน/ไม่ผ่านเกณฑ์ แยกตามกลุ่มงาน', true, pick('selectedDept', 'gkey'));
-    this.distributionChart = buildDistribution(d.distribution);
-    this.monthlyChart = buildMonthlyCombo(d.monthly);
-    this.districtChart = buildPctBar(d.by_district, 'ร้อยละผ่านเกณฑ์ แยกตามอำเภอ', pick('selectedDistrict', 'gkey'));
-    this.hostypeChart = buildPctBar(d.by_hostype, 'ร้อยละผ่านเกณฑ์ แยกตามประเภทหน่วยบริการ', pick('selectedHostype', 'gkey'));
-    // ประเภทตัวชี้วัด (20 พ.ย. 2569) — ครบทุกประเภท แม้ไม่มีข้อมูล
-    this.itypeRows = ((d.by_itype || []) as ChartGroupRow[]).map(r => ({ ...r, color: itypeInfo(String(r.gkey))?.color, short: itypeInfo(String(r.gkey))?.short || r.gname }));
-    const withData = this.itypeRows.filter(r => r.pairs > 0);
-    this.itypePctChart = buildPctBar(withData.filter(r => r.with_target > 0), 'ร้อยละผ่านเกณฑ์ แยกตามประเภทตัวชี้วัด', pick('selectedItype', 'gkey'));
-    this.itypeStackChart = buildStatusStack(withData, 'จำนวนคู่ผ่าน/ไม่ผ่านเกณฑ์ แยกตามประเภทตัวชี้วัด', true, pick('selectedItype', 'gkey'));
-    this.itypeMonthlyChart = buildTypeMonthly(withData);
-    this.districtMapData = (d.by_district as ChartGroupRow[])
-      .filter(r => r.gkey && r.with_target > 0)
-      .map(r => ({ id: r.gkey, name: r.gname, pct: r.achievement_pct, passed: r.passed, total: r.with_target }));
-    this.buildHeatmaps();
-    this.buildIndicatorChart();
+    const pick = (key: FilterKey) => (row: RecRow) => this.drillDown(key, String(row.gkey));
+    this.recordDonut = buildRecordDonut(d.overall);
+    this.qualityRadial = buildQualityRadial(d.overall);
+    this.reviewDonut = buildReviewDonut(d.overall);
+    this.hospitalDist = buildHospitalDistribution(d.hospital_distribution);
+    this.deptBars = buildQualityBars(d.by_dept, 'การบันทึกผลงาน แยกตามกลุ่มงาน (เรียงจากบันทึกน้อยสุด)', pick('selectedDept'));
+    this.deptStack = buildRecordStack(d.by_dept, 'จำนวนคู่ที่บันทึกแล้ว / ยังไม่บันทึก แยกตามกลุ่มงาน', pick('selectedDept'));
+    this.monthlyChart = buildMonthlyRecording(d.months);
+    this.heatDept = buildCompletenessHeatmap(d.heatmap_dept, 'ความครบถ้วนรายเดือน — กลุ่มงาน × เดือน');
+    this.districtBars = buildQualityBars(d.by_district, 'การบันทึกผลงาน แยกตามอำเภอ', pick('selectedDistrict'));
+    this.hostypeBars = buildQualityBars(d.by_hostype, 'การบันทึกผลงาน แยกตามประเภทหน่วยบริการ', pick('selectedHostype'));
+    this.zoneBars = buildQualityBars(d.by_zone, 'การบันทึกผลงาน แยกตามโซน', pick('selectedZone'));
+    this.itypeRows = ((d.by_itype || []) as RecRow[]).map(r => ({ ...r, color: itypeInfo(String(r.gkey))?.color || '#64748b', short: itypeInfo(String(r.gkey))?.short || r.gname }));
+    this.itypeBars = buildQualityBars(this.itypeRows.filter(r => r.pairs > 0), 'การบันทึกผลงาน แยกตามประเภทตัวชี้วัด', pick('selectedItype'));
+    this.districtMapData = ((d.by_district || []) as RecRow[]).filter(r => r.gkey && r.gkey !== '0' && r.pairs > 0)
+      .map(r => ({ id: r.gkey, name: r.gname, pct: r.recording_pct, passed: r.recorded_pairs, total: r.pairs }));
+    this.refreshIndicators();
+    this.refreshDepts();
+    this.refreshHospitals();
   }
 
-  buildHeatmaps() {
+  // ===== รายตัวชี้วัด =====
+  refreshIndicators() {
     if (!this.data) return;
-    const label = this.heatMetric === 'pass' ? 'ร้อยละผ่านเกณฑ์รายเดือน' : 'ร้อยละคู่ที่มีผลงานรายเดือน';
-    this.heatMainChart = buildHeatmap(this.data.heatmap_main, `${label} — หมวดหมู่หลัก × เดือน`, this.heatMetric);
-    this.heatDeptChart = buildHeatmap(this.data.heatmap_dept, `${label} — กลุ่มงาน × เดือน`, this.heatMetric);
+    const sorted = sortRecRows(this.data.by_indicator || [], this.indicatorSort.key, this.indicatorSort.dir, this.indicatorSearch);
+    this.indicatorRows = sorted;
+    const forChart = sortRecRows(this.data.by_indicator || [], 'recording_pct', this.indicatorView === 'low' ? 1 : -1, this.indicatorSearch).slice(0, 15);
+    const title = this.indicatorView === 'low' ? 'ตัวชี้วัด 15 อันดับที่บันทึกน้อยที่สุด (ควรเร่งรัด)' : 'ตัวชี้วัด 15 อันดับที่บันทึกครบที่สุด';
+    this.indicatorBars = buildQualityBars(forChart, title, (row) => this.drillDown('selectedIndicator', String(row.gkey)));
+  }
+  setIndicatorView(v: 'low' | 'high') { this.indicatorView = v; this.refreshIndicators(); }
+  onIndicatorSearch() { this.refreshIndicators(); }
+  sortIndicators(key: string) { this.indicatorSort = this.nextSort(this.indicatorSort, key); this.refreshIndicators(); }
+
+  // ===== กลุ่มงาน =====
+  refreshDepts() { if (this.data) this.deptRows = sortRecRows(this.data.by_dept || [], this.deptSort.key, this.deptSort.dir); }
+  sortDepts(key: string) { this.deptSort = this.nextSort(this.deptSort, key); this.refreshDepts(); }
+
+  // ===== หน่วยบริการ =====
+  refreshHospitals() {
+    if (!this.data) return;
+    const all = sortRecRows(this.data.by_hospital || [], this.hospitalSort.key, this.hospitalSort.dir, this.hospitalSearch);
+    this.hospitalTotal = all.length;
+    this.hospitalRows = this.hospitalAll ? all : all.slice(0, 20);
+  }
+  onHospitalSearch() { this.refreshHospitals(); }
+  sortHospitals(key: string) { this.hospitalSort = this.nextSort(this.hospitalSort, key); this.refreshHospitals(); }
+  toggleHospitalAll() { this.hospitalAll = !this.hospitalAll; this.refreshHospitals(); }
+
+  private nextSort(cur: { key: string; dir: 1 | -1 }, key: string): { key: string; dir: 1 | -1 } {
+    return cur.key === key ? { key, dir: (cur.dir * -1) as 1 | -1 } : { key, dir: key === 'gname' ? 1 : -1 };
+  }
+  sortIcon(cur: { key: string; dir: 1 | -1 }, key: string): string {
+    return cur.key !== key ? 'fa-sort text-gray-300' : (cur.dir === 1 ? 'fa-sort-up' : 'fa-sort-down');
   }
 
-  setHeatMetric(m: 'pass' | 'record') {
-    this.heatMetric = m;
-    this.buildHeatmaps();
-    this.cdr.detectChanges();
-  }
-
-  get indicatorRows(): ChartGroupRow[] {
-    if (!this.data) return [];
-    const q = this.indicatorSearch.trim().toLowerCase();
-    let rows: ChartGroupRow[] = this.data.by_indicator.filter((r: ChartGroupRow) => r.with_target > 0);
-    if (q) rows = rows.filter(r => String(r.gname).toLowerCase().includes(q));
-    if (this.indicatorView === 'top') rows = rows.slice(0, 10);
-    if (this.indicatorView === 'bottom') rows = [...rows].sort((a, b) => a.achievement_pct - b.achievement_pct || b.with_target - a.with_target).slice(0, 10);
-    return rows;
-  }
-
-  buildIndicatorChart() {
-    const titles = { all: 'ร้อยละผ่านเกณฑ์ รายตัวชี้วัด (ทั้งหมด)', top: 'ตัวชี้วัด 10 อันดับผลสำเร็จสูงสุด', bottom: 'ตัวชี้วัด 10 อันดับที่ต้องเร่งรัด (ต่ำสุด)' };
-    this.indicatorChart = buildPctBar(this.indicatorRows, titles[this.indicatorView], (row) => this.drillDown('selectedIndicator', String(row.gkey)));
-  }
-
-  setIndicatorView(v: 'all' | 'top' | 'bottom') {
-    this.indicatorView = v;
-    this.buildIndicatorChart();
-    this.cdr.detectChanges();
-  }
-
-  onIndicatorSearch() {
-    this.buildIndicatorChart();
-    this.cdr.detectChanges();
-  }
-
-  // ตารางรายละเอียดรายตัวชี้วัด (รวมตัวที่ไม่มีเป้าหมาย)
-  get tableRows(): ChartGroupRow[] {
-    if (!this.data) return [];
-    const q = this.indicatorSearch.trim().toLowerCase();
-    const rows: ChartGroupRow[] = this.data.by_indicator.filter((r: ChartGroupRow) => !q || String(r.gname).toLowerCase().includes(q));
-    const { key, dir } = this.tableSort;
-    return [...rows].sort((a, b) => {
-      const va = a[key], vb = b[key];
-      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
-      return String(va ?? '').localeCompare(String(vb ?? ''), 'th') * dir;
-    });
-  }
-
-  sortTable(key: string) {
-    this.tableSort = this.tableSort.key === key ? { key, dir: (this.tableSort.dir * -1) as 1 | -1 } : { key, dir: key === 'gname' ? 1 : -1 };
-  }
-
-  /** คลิกการ์ดประเภทตัวชี้วัด: กรองประเภทนั้น — คลิกซ้ำ = ยกเลิก */
-  pickItype(key: string) {
-    this.drillDown('selectedItype', this.selectedItype === key ? '' : key);
-  }
-
-  // คลิกแท่งกราฟ → กรองเจาะลึก
-  /** คลิกอำเภอบนแผนที่: กรองอำเภอนั้น — คลิกอำเภอที่กรองอยู่อีกครั้ง = ยกเลิกการกรอง */
-  onMapPick(distid: string) {
-    this.drillDown('selectedDistrict', String(this.selectedDistrict) === String(distid) ? '' : String(distid));
-  }
+  pickItype(key: string) { this.drillDown('selectedItype', this.selectedItype === key ? '' : key); }
+  onMapPick(distid: string) { this.drillDown('selectedDistrict', String(this.selectedDistrict) === String(distid) ? '' : String(distid)); }
 
   drillDown(key: FilterKey, value: string) {
     (this as any)[key] = value;
     if (key === 'selectedYut') { this.selectedMain = ''; this.selectedIndicator = ''; }
     if (key === 'selectedMain' || key === 'selectedDept') this.selectedIndicator = '';
-    this.loadChartStats();
+    this.loadStats();
   }
 
-  // ตัวเลือกแบบลำดับขั้น: หมวดหมู่ตามยุทธศาสตร์, ตัวชี้วัดตามหมวดหมู่/กลุ่มงาน
-  get mainOptions(): any[] {
-    return this.options.mains.filter((m: any) => !this.selectedYut || String(m.yut_id ?? '0') === this.selectedYut);
-  }
-  /** อำเภอในตัวกรอง — เฉพาะอำเภอในโซนที่เลือก */
-  get districtOptions(): any[] {
-    return (this.options.districts || []).filter((d: any) => inZone(d, this.selectedZone));
-  }
+  get mainOptions(): any[] { return (this.options.mains || []).filter((m: any) => !this.selectedYut || String(m.yut_id ?? '0') === this.selectedYut); }
+  get districtOptions(): any[] { return (this.options.districts || []).filter((d: any) => inZone(d, this.selectedZone)); }
   get indicatorOptions(): any[] {
-    return this.options.indicators.filter((i: any) =>
+    return (this.options.indicators || []).filter((i: any) =>
       (!this.selectedMain || String(i.main_id ?? '0') === this.selectedMain) &&
       (!this.selectedDept || String(i.dept_id ?? '0') === this.selectedDept));
   }
@@ -264,17 +227,17 @@ export class ChartComponent implements OnInit, OnDestroy {
     if (changed === 'selectedYut') { this.selectedMain = ''; this.selectedIndicator = ''; }
     if (changed === 'selectedMain' || changed === 'selectedDept') this.selectedIndicator = '';
     if (changed === 'selectedZone' && this.selectedDistrict && !this.districtOptions.some((d: any) => String(d.id) === String(this.selectedDistrict))) this.selectedDistrict = '';
-    this.loadChartStats();
+    this.loadStats();
   }
 
   clearFilters() {
     this.selectedYut = this.selectedMain = this.selectedDept = this.selectedIndicator = this.selectedZone = this.selectedDistrict = this.selectedHostype = this.selectedItype = '';
-    this.indicatorSearch = '';
-    this.loadChartStats();
+    this.indicatorSearch = ''; this.hospitalSearch = '';
+    this.loadStats();
   }
 
   get activeFilterChips(): { key: FilterKey; label: string; value: string }[] {
-    const name = (list: any[], id: string) => list.find((x: any) => String(x.id ?? '0') === id)?.name || (id === '0' ? 'ไม่ระบุ' : id);
+    const name = (list: any[], id: string) => (list || []).find((x: any) => String(x.id ?? '0') === id)?.name || (id === '0' ? 'ไม่ระบุ' : id);
     const chips: { key: FilterKey; label: string; value: string }[] = [];
     if (this.selectedYut) chips.push({ key: 'selectedYut', label: 'ยุทธศาสตร์', value: name(this.options.yuts, this.selectedYut) });
     if (this.selectedMain) chips.push({ key: 'selectedMain', label: 'หมวดหมู่', value: name(this.options.mains, this.selectedMain) });
@@ -286,57 +249,20 @@ export class ChartComponent implements OnInit, OnDestroy {
     if (this.selectedItype) chips.push({ key: 'selectedItype', label: 'ประเภทตัวชี้วัด', value: itypeInfo(this.selectedItype)?.label || this.selectedItype });
     return chips;
   }
+  removeChip(key: FilterKey) { (this as any)[key] = ''; this.onFilterChange(key); }
 
-  removeChip(key: FilterKey) {
-    (this as any)[key] = '';
-    this.onFilterChange(key);
+  pctText(v: number | null | undefined): string { return v == null ? '–' : `${v}%`; }
+  pctColor(v: number | null | undefined): string { return v == null ? '#94a3b8' : pctColor(v); }
+  pctClass(v: number | null | undefined): string {
+    if (v == null) return 'text-gray-400';
+    if (v >= 80) return 'text-emerald-700 bg-emerald-50';
+    if (v >= 50) return 'text-amber-700 bg-amber-50';
+    return 'text-red-700 bg-red-50';
   }
-
-  // === การ์ดสถิติ (ตามปีงบที่เลือก) ===
-  loadDashboardStats() {
-    if (!this.selectedYear) return;
-    this.authService.getDashboardStats(this.selectedYear).subscribe({
-      next: (res) => { if (res?.success) this.animateStats(res.data); },
-      error: (err) => console.error('Error loading stats:', err)
-    });
-  }
-
-  animateStats(target: any) {
-    if (this.animationTimer) clearInterval(this.animationTimer);
-    const steps = 60, interval = 1500 / steps;
-    const keys = ['successRate', 'recordedCount', 'totalDepts', 'pendingCount', 'rank', 'totalHospitals'];
-    const start: any = {};
-    keys.forEach(k => start[k] = Number(this.stats[k]) || 0);
-    let step = 0;
-    this.animationTimer = setInterval(() => {
-      step++;
-      const ease = 1 - Math.pow(1 - step / steps, 4);
-      keys.forEach(k => {
-        const v = start[k] + (Number(target[k]) - start[k]) * ease;
-        this.stats[k] = k === 'successRate' ? v.toFixed(1) : Math.round(v);
-      });
-      if (step >= steps) { clearInterval(this.animationTimer); this.stats = target; }
-      this.cdr.detectChanges();
-    }, interval);
-  }
-
-  // === แผนที่อำเภอ ===
-  getDistrictColor(pct: number): string { return pctColor(pct); }
   getDistrictBg(pct: number): string {
     if (pct >= 80) return 'bg-green-100 border-green-400 text-green-800';
     if (pct >= 50) return 'bg-yellow-100 border-yellow-400 text-yellow-800';
     return 'bg-red-100 border-red-400 text-red-800';
-  }
-  countDistricts(level: string): number {
-    if (level === 'green') return this.districtMapData.filter(d => d.pct >= 80).length;
-    if (level === 'yellow') return this.districtMapData.filter(d => d.pct >= 50 && d.pct < 80).length;
-    return this.districtMapData.filter(d => d.pct < 50).length;
-  }
-
-  pctClass(p: number): string {
-    if (p >= 80) return 'text-emerald-700 bg-emerald-50';
-    if (p >= 50) return 'text-amber-700 bg-amber-50';
-    return 'text-red-700 bg-red-50';
   }
 
   goBack() { this.router.navigate(['/dashboard']); }

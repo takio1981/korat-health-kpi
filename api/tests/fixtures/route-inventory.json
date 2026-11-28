@@ -217,6 +217,7 @@
   "GET /khupskpi/api/report/by-hospital :: authenticateToken > handler",
   "GET /khupskpi/api/report/by-district :: authenticateToken > handler",
   "GET /khupskpi/api/report/by-year :: authenticateToken > handler",
+  "GET /khupskpi/api/report/recording-stats :: authenticateToken > handler",
   "GET /khupskpi/api/report/chart-stats :: authenticateToken > handler",
   "POST /khupskpi/api/report/ai-summary :: authenticateToken > aiLimiter > handler",
   "POST /khupskpi/api/report/ai-tab-summary :: authenticateToken > aiLimiter > handler",

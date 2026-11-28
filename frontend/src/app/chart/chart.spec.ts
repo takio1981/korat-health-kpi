@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpTestingController } from '@angular/common/http/testing';
-import { ChartComponent } from './chart';
+import { ChartComponent, sortRecRows } from './chart';
+import { buildQualityBars, buildRecordDonut, buildMonthlyRecording, buildCompletenessHeatmap, RecRow } from './recording-builders';
 import { testProviders } from '../testing/test-providers';
 import { buildPctBar, buildHeatmap, buildMonthlyCombo, buildOverallDonut, pctColor, wrapLabel, ChartGroupRow } from './chart-builders';
 
@@ -62,18 +63,65 @@ describe('chart-builders', () => {
   });
 });
 
-describe('ChartComponent', () => {
+// ===== แถบกราฟและสถิติ = รายงานการบันทึกผลงาน (28 พ.ย. 2569 — แทนกราฟผ่าน/ไม่ผ่านเกณฑ์) =====
+const rec = (gkey: any, gname: string, pairs: number, recorded: number, extra: Partial<RecRow> = {}): RecRow => ({
+  gkey, gname, pairs, recorded_pairs: recorded, not_recorded_pairs: pairs - recorded, recording_pct: pairs ? Math.round(recorded / pairs * 10000) / 100 : 0,
+  due_cells: pairs, filled_due_cells: recorded, completeness_pct: pairs ? Math.round(recorded / pairs * 10000) / 100 : null,
+  filled_cells: recorded, timed_cells: recorded, ontime_cells: recorded, timeliness_pct: recorded ? 100 : null,
+  approved_cells: 0, pending_cells: recorded, returned_cells: 0, approved_pct: recorded ? 0 : null, anomaly_cells: 0,
+  indicator_count: 1, hospital_count: pairs, ...extra,
+});
+const months = () => ['ต.ค.', 'พ.ย.', 'ธ.ค.', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.'].map((label, i) => ({
+  month: 'm' + i, label, is_due: i === 0, due_pairs: i === 0 ? 4 : 0, filled_due_pairs: i === 0 ? 3 : 0, filled_pairs: i === 0 ? 3 : 0,
+  completeness_pct: i === 0 ? 75 : null, filled_cells: i === 0 ? 3 : 0, timed_cells: i === 0 ? 3 : 0, ontime_cells: i === 0 ? 2 : 0, timeliness_pct: i === 0 ? 66.67 : null,
+}));
+
+describe('recording-builders', () => {
+  it('buildQualityBars: 3 ชุด (บันทึก/ครบถ้วน/ทันเวลา) ตัดกลุ่มที่ไม่มีคู่ และคลิกแท่ง = ส่งแถวกลับ', () => {
+    const picked: any[] = [];
+    const o = buildQualityBars([rec('1', 'ก', 4, 3), rec('2', 'ข', 0, 0)], 't', r => picked.push(r));
+    expect(o.series.map((x: any) => x.name)).toEqual(['ร้อยละหน่วยบริการที่บันทึก', 'ความครบถ้วนรายเดือน', 'ความทันเวลา']);
+    expect(o.series[0].data).toEqual([75]);
+    o.chart.events.dataPointSelection(null, null, { dataPointIndex: 0 });
+    expect(picked[0].gname).toBe('ก');
+    expect(buildQualityBars([], 't').series).toEqual([]);
+  });
+  it('buildRecordDonut: บันทึกแล้ว/ยังไม่บันทึก | ไม่มีข้อมูล = ว่าง', () => {
+    expect(buildRecordDonut(rec('all', 'ทั้งหมด', 4, 3)).series).toEqual([3, 1]);
+    expect(buildRecordDonut(null).series).toEqual([]);
+  });
+  it('buildMonthlyRecording: เดือนที่ยังไม่ถึงกำหนด = null (ไม่ลากเส้นเป็น 0)', () => {
+    const o = buildMonthlyRecording(months());
+    expect(o.series[1].data[0]).toBe(75);
+    expect(o.series[1].data[5]).toBeNull();
+  });
+  it('buildCompletenessHeatmap: เดือนที่ไม่มีคู่ = -1 (เทา) แถวแรกอยู่บนสุด', () => {
+    const o = buildCompletenessHeatmap([{ gname: 'ก', months: [{ label: 'ต.ค.', due: 2, filled: 1, pct: 50 }, { label: 'พ.ย.', due: 0, filled: 0, pct: null }] },
+      { gname: 'ข', months: [{ label: 'ต.ค.', due: 1, filled: 1, pct: 100 }, { label: 'พ.ย.', due: 0, filled: 0, pct: null }] }], 't');
+    expect(o.series[1].name).toBe('ก');
+    expect(o.series[1].data.map((d: any) => d.y)).toEqual([50, -1]);
+  });
+  it('sortRecRows: ค้นหาทุกคำ + เรียงตัวเลข (null น้อยสุด)', () => {
+    const rows = [rec('1', 'ร้อยละเบาหวาน', 4, 1, { completeness_pct: null }), rec('2', 'อัตราวัณโรค', 4, 4), rec('3', 'ร้อยละความดัน', 4, 2)];
+    expect(sortRecRows(rows, 'recording_pct', 1).map(r => r.gkey)).toEqual(['1', '3', '2']);
+    expect(sortRecRows(rows, 'completeness_pct', 1)[0].gkey).toBe('1');
+    expect(sortRecRows(rows, 'recording_pct', -1, 'ร้อยละ').map(r => r.gkey)).toEqual(['3', '1']);
+  });
+});
+
+describe('ChartComponent (รายงานการบันทึกผลงาน)', () => {
   let component: ChartComponent;
   let fixture: ComponentFixture<ChartComponent>;
   let http: HttpTestingController;
-
   const response = (years: string[], extra: any = {}) => ({
-    success: true, year_bh: years[0] || '',
-    options: { years, yuts: [], mains: [{ id: 1, name: 'M1', yut_id: 9 }, { id: 2, name: 'M2', yut_id: 8 }], depts: [], indicators: [], districts: [], hostypes: [] },
-    overall: row(0, 'all', 4, 3), monthly: [], by_yut: [], by_main: [], by_dept: [], by_indicator: [], by_district: [], by_hostype: [],
-    heatmap_main: [], heatmap_dept: [], distribution: [], ...extra,
+    success: true, year_bh: years[0] || '', through: 0, through_label: 'ต.ค.', due_day: 10,
+    options: { years, yuts: [], mains: [{ id: '1', name: 'M1', yut_id: 9 }, { id: '2', name: 'M2', yut_id: 8 }], depts: [], indicators: [], districts: [], zones: [], hostypes: [] },
+    overall: rec('all', 'ทั้งหมด', 4, 3), months: months(), by_dept: [rec('5', 'กลุ่มงานควบคุมโรค', 4, 3)], by_main: [], by_yut: [],
+    by_indicator: [rec(11, 'ร้อยละเบาหวาน', 2, 1, { dept_name: 'ก' }), rec(12, 'อัตราวัณโรค', 2, 2, { dept_name: 'ก' })],
+    by_district: [], by_zone: [], by_hostype: [], by_itype: [rec('r9', 'R9 เขต 9', 4, 3), rec('moph', 'MOPH กระทรวง', 0, 0)],
+    by_hospital: [rec('H1', 'รพ.ก', 2, 2, { hospcode: '10669' }), rec('H2', 'รพ.ข', 2, 1, { hospcode: '10670' })],
+    hospital_distribution: [{ key: '0', label: '0%', count: 0 }], heatmap_dept: [], ...extra,
   });
-
   beforeEach(async () => {
     await TestBed.configureTestingModule({ imports: [ChartComponent], providers: testProviders }).compileComponents();
     fixture = TestBed.createComponent(ChartComponent);
@@ -81,127 +129,73 @@ describe('ChartComponent', () => {
     http = TestBed.inject(HttpTestingController);
   });
 
-  it('should create', () => {
-    expect(component).toBeTruthy();
-  });
-
-  it('ปีงบปัจจุบันยังไม่มีข้อมูล → ถอยไปปีล่าสุดที่มีข้อมูลอัตโนมัติ', () => {
+  it('ใช้ /report/recording-stats + ปีงบปัจจุบันยังไม่มีข้อมูล → ถอยไปปีล่าสุด (template วาดใหม่ทันที)', () => {
     component.selectedYear = '2599';
-    component.loadChartStats(true);
-    http.expectOne(r => r.url.includes('/report/chart-stats') && r.url.includes('year_bh=2599')).flush(response(['2569', '2568']));
+    fixture.detectChanges();
+    component.loadStats(true);
+    http.expectOne(r => r.url.includes('/report/recording-stats') && r.url.includes('year_bh=2599')).flush(response(['2569', '2568']));
     expect(component.selectedYear).toBe('2569');
-    http.expectOne(r => r.url.includes('year_bh=2569')).flush(response(['2569', '2568']));
+    expect(() => fixture.checkNoChanges()).not.toThrow();
+    http.expectOne(r => r.url.includes('year_bh=2569')).flush(response(['2569']));
     expect(component.data.year_bh).toBe('2569');
   });
 
-  // Regression (11 ต.ค. 2569): ถอยปีงบแล้วไม่แจ้ง change detection → NG0100 แบบสุ่มบนหน้าจอจริง
-  it('ถอยไปปีล่าสุดแล้ว template ต้องถูกวาดใหม่ทันที (ไม่ค้างค่าปีเดิม)', () => {
-    component.selectedYear = '2599';
+  it('การ์ด/ตาราง/กราฟแสดงข้อมูลการบันทึก — ไม่มีคำว่าผ่านเกณฑ์', () => {
+    component.selectedYear = '2569';
     fixture.detectChanges();
-    component.loadChartStats(true);
-    http.expectOne(r => r.url.includes('/report/chart-stats') && r.url.includes('year_bh=2599')).flush(response(['2569']));
-    expect(component.selectedYear).toBe('2569');
-    expect(() => fixture.checkNoChanges()).not.toThrow();
+    component.loadStats();
+    for (let k = 0; k < 4; k++) http.match(() => true).forEach(r => r.flush(r.request.url.includes('/report/recording-stats') ? response(['2569']) : { success: true, data: [] }));
+    (component as any).cdr.markForCheck(); fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('#rec-cards')?.textContent).toContain('75%');
+    expect(el.querySelector('#rec-cards')?.textContent).toContain('ต.ค.');
+    expect(el.querySelectorAll('#rec-dept-table tr[data-dept]').length).toBe(1);
+    expect(el.querySelectorAll('#rec-ind-table tr[data-ind]').length).toBe(2);
+    expect(el.querySelectorAll('#rec-hos-table tr[data-hos]').length).toBe(2);
+    expect(component.indicatorRows[0].gkey).toBe(11);              // บันทึกน้อยสุดก่อน
+    expect(el.querySelector('#rec-method')?.textContent).toContain('ไม่ได้ประเมินว่าผ่านหรือไม่ผ่านเกณฑ์');
+    expect(component.deptBars.series.length).toBe(3);
   });
 
-  it('ส่งตัวกรองทุกมิติไปที่ API และเปลี่ยนยุทธศาสตร์แล้วล้างหมวดหมู่/ตัวชี้วัด', () => {
+  it('ส่งตัวกรองไป API + เปลี่ยนยุทธศาสตร์ล้างหมวดหมู่/ตัวชี้วัด + ผลคำขอเก่าที่ช้ากว่าถูกทิ้ง', () => {
     component.selectedYear = '2569';
-    component.selectedMain = '1'; component.selectedIndicator = '5';
-    component.selectedYut = '9';
+    component.selectedMain = '1'; component.selectedIndicator = '5'; component.selectedYut = '9';
     component.onFilterChange('selectedYut');
-    const req = http.expectOne(r => r.url.includes('/report/chart-stats'));
+    const req = http.expectOne(r => r.url.includes('/report/recording-stats'));
     expect(req.request.url).toContain('yut_id=9');
     expect(req.request.url).not.toContain('main_id');
     expect(req.request.url).not.toContain('indicator_id');
-  });
-
-  it('ตัวเลือกหมวดหมู่กรองตามยุทธศาสตร์ที่เลือก', () => {
-    component.options = response(['2569']).options;
-    component.selectedYut = '8';
-    expect(component.mainOptions.map(m => m.name)).toEqual(['M2']);
-  });
-
-  it('ผลของคำขอเก่าที่มาช้ากว่าถูกทิ้ง (ไม่ทับผลล่าสุด)', () => {
-    component.selectedYear = '2569';
-    component.loadChartStats();
-    component.loadChartStats();
-    const reqs = http.match(r => r.url.includes('/report/chart-stats'));
+    component.loadStats(); component.loadStats();
+    const reqs = http.match(r => r.url.includes('/report/recording-stats'));
     reqs[1].flush(response(['2569'], { year_bh: 'ใหม่' }));
     reqs[0].flush(response(['2569'], { year_bh: 'เก่า' }));
     expect(component.data.year_bh).toBe('ใหม่');
   });
 
-  // แผนที่รายอำเภอ (11 ต.ค. 2569): เดิมการ์ด "แผนที่ผลงานรายอำเภอ" เป็นเพียงตารางการ์ด ไม่มีรูปร่างพื้นที่จริง
-  it('แผนที่รายอำเภอ: ระบายสีจากข้อมูลรายอำเภอของ API และคลิกอำเภอ = กรอง / คลิกซ้ำ = ยกเลิก', () => {
+  it('คลิกแถวตัวชี้วัด/การ์ดประเภทตัวชี้วัด/อำเภอบนแผนที่ = กรองเจาะลึก', () => {
     component.selectedYear = '2569';
-    component.loadChartStats();
-    http.expectOne(r => r.url.includes('/report/chart-stats')).flush(response(['2569'], {
-      by_district: [row('3001', 'เมืองนครราชสีมา', 10, 9), row('3021', 'ปากช่อง', 10, 2), row('3002', 'ครบุรี', 0, 0, 3)],
-    }));
-    const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelectorAll('app-district-map g.district path').length).toBe(32);
-    const fill = (id: string) => el.querySelector('app-district-map g.district[data-distid="' + id + '"] path')!.getAttribute('fill');
-    expect(fill('3001')).toBe(pctColor(90));
-    expect(fill('3021')).toBe(pctColor(20));
-    expect(fill('3002')).not.toBe(pctColor(0));          // ไม่มีเป้าหมาย → สีเทา (ไม่ใช่แดง 0%)
-
-    component.onMapPick('3021');
-    expect(component.selectedDistrict).toBe('3021');
-    expect(http.expectOne(r => r.url.includes('/report/chart-stats')).request.url).toContain('distid=3021');
-    component.onMapPick('3021');
-    expect(component.selectedDistrict).toBe('');
-    expect(http.expectOne(r => r.url.includes('/report/chart-stats')).request.url).not.toContain('distid');
+    component.loadStats();
+    http.expectOne(r => r.url.includes('/report/recording-stats')).flush(response(['2569'], { by_district: [rec('3001', 'เมืองนครราชสีมา', 10, 9)] }));
+    expect(component.districtMapData[0]).toEqual(expect.objectContaining({ id: '3001', pct: 90, passed: 9, total: 10 }));
+    component.drillDown('selectedIndicator', '12');
+    expect(http.expectOne(r => r.url.includes('indicator_id=12')).request.url).toContain('/report/recording-stats');
+    component.pickItype('r9');
+    http.expectOne(r => r.url.includes('itype=r9')).flush(response(['2569']));
+    expect(component.activeFilterChips.some(c => c.label === 'ประเภทตัวชี้วัด')).toBe(true);
+    component.onMapPick('3001');
+    expect(http.expectOne(r => r.url.includes('/report/recording-stats')).request.url).toContain('distid=3001');
   });
 
-  it('สลับมุมมองการ์ดรายอำเภอได้ (มุมมองเดิมยังอยู่)', () => {
+  it('ตารางหน่วยบริการ: ค้นหา + แสดง 20/ทั้งหมด', () => {
     component.selectedYear = '2569';
-    component.loadChartStats();
-    http.expectOne(r => r.url.includes('/report/chart-stats')).flush(response(['2569'], { by_district: [row('3001', 'เมืองนครราชสีมา', 10, 9)] }));
-    const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('app-district-map')).toBeTruthy();
-    component.districtView = 'cards';
-    (component as any).cdr.detectChanges();
-    expect(el.querySelector('app-district-map')).toBeNull();
-    expect(el.textContent).toContain('ทั้งหมด 1 อำเภอ');
-  });
-});
-
-describe('ChartComponent — ประเภทตัวชี้วัด (20 พ.ย. 2569)', () => {
-  let component: ChartComponent;
-  let http: HttpTestingController;
-  const r = (gkey: string, gname: string, wt: number, p: number) => ({ ...row(gkey, gname, wt, p), months: [] });
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({ imports: [ChartComponent], providers: testProviders }).compileComponents();
-    const fixture = TestBed.createComponent(ChartComponent);
-    component = fixture.componentInstance;
-    http = TestBed.inject(HttpTestingController);
-  });
-  const resp = () => ({
-    success: true, year_bh: '2569',
-    options: { years: ['2569'], yuts: [], mains: [], depts: [], indicators: [], districts: [], hostypes: [], itypes: [] },
-    overall: row(0, 'all', 4, 3), monthly: [], by_yut: [], by_main: [], by_dept: [], by_indicator: [], by_district: [], by_hostype: [],
-    by_itype: [r('r9', 'R9 เขต 9', 4, 3), r('moph', 'MOPH กระทรวง', 0, 0), r('ssj', 'SSJ สสจ.', 2, 2), r('rmw', 'RMW ผู้ว่าฯ', 0, 0), r('other', 'อื่น ๆ', 0, 0)],
-    heatmap_main: [], heatmap_dept: [], distribution: [],
-  });
-
-  it('แสดงครบทุกประเภท มีสีและชื่อย่อ / กราฟใช้เฉพาะประเภทที่มีข้อมูล', () => {
-    component.selectedYear = '2569';
-    component.loadChartStats();
-    http.expectOne(q => q.url.includes('/report/chart-stats')).flush(resp());
-    expect(component.itypeRows.map(t => t.gkey)).toEqual(['r9', 'moph', 'ssj', 'rmw', 'other']);
-    expect(component.itypeRows[0].short).toBe('R9');
-    expect(component.itypeRows[0].color).toBe('#2563eb');
-    expect(component.itypePctChart.series[0].data).toEqual([75, 100]);
-  });
-
-  it('คลิกการ์ดประเภท = ส่ง itype ไป API + ชิปตัวกรอง, คลิกซ้ำ = ยกเลิก', () => {
-    component.selectedYear = '2569';
-    component.pickItype('rmw');
-    http.expectOne(q => q.url.includes('/report/chart-stats') && q.url.includes('itype=rmw')).flush(resp());
-    expect(component.activeFilterChips.some(c => c.label === 'ประเภทตัวชี้วัด' && c.value === 'RMW ผู้ว่าฯ')).toBe(true);
-    component.pickItype('rmw');
-    const req = http.expectOne(q => q.url.includes('/report/chart-stats'));
-    expect(req.request.url).not.toContain('itype=');
-    req.flush(resp());
+    component.loadStats();
+    const many = Array.from({ length: 25 }, (_, i) => rec('H' + i, 'รพ.' + i, 2, i % 3, { hospcode: String(10000 + i) }));
+    http.expectOne(r => r.url.includes('/report/recording-stats')).flush(response(['2569'], { by_hospital: many }));
+    expect(component.hospitalRows.length).toBe(20);
+    expect(component.hospitalTotal).toBe(25);
+    component.toggleHospitalAll();
+    expect(component.hospitalRows.length).toBe(25);
+    component.hospitalSearch = '10024'; component.onHospitalSearch();
+    expect(component.hospitalRows.map(r => r['hospcode'])).toEqual(['10024']);
   });
 });

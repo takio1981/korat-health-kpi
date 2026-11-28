@@ -13,7 +13,8 @@ const { districtZoneMap } = require('../services/zones');
 const crypto = require('crypto');
 const { aiLimiter } = require('../core/security');
 const { callLlm, sendAiError, createAiCache, ensureAiArea, AiError } = require('../services/ai');
-const { buildSummaryInput, SUMMARY_SYSTEM_PROMPT, summaryPrompt } = require('../services/ai-report');
+const { buildRecordingSummaryInput, RECORDING_SYSTEM_PROMPT, summaryPrompt } = require('../services/ai-report');
+const { loadRecordingStats } = require('../services/recording-stats');
 const { tabKey, buildTabInput, tabSystemPrompt, tabPrompt } = require('../services/ai-report-tabs');
 const { computeForecasts, summarizeByIndicator, summarizeByDistrict } = require('../services/forecast');
 const { explainForecast } = require('../services/ai-forecast');
@@ -594,6 +595,17 @@ async function computeChartStats(user, q) {
         };
 }
 
+// แถบกราฟและสถิติ = รายงานการบันทึกผลงาน เชิงปริมาณ + คุณภาพ (28 พ.ย. 2569 — ผู้ใช้สั่ง แทน chart-stats ผ่าน/ไม่ผ่านเกณฑ์ในหน้าจอ)
+apiRouter.get('/report/recording-stats', authenticateToken, async (req, res) => {
+    try {
+        res.json({ success: true, ...(await loadRecordingStats(req.user, req.query)) });
+    } catch (error) {
+        if (error.status) return res.status(error.status).json({ success: false, message: error.message });
+        console.error('Report recording-stats error:', error);
+        res.status(500).json({ success: false, message: 'ไม่สามารถดึงข้อมูลการบันทึกผลงานได้' });
+    }
+});
+
 apiRouter.get('/report/chart-stats', authenticateToken, async (req, res) => {
     try {
         res.json(await computeChartStats(req.user, req.query));
@@ -613,15 +625,16 @@ apiRouter.post('/report/ai-summary', authenticateToken, aiLimiter, async (req, r
         for (const k of ['year_bh', 'yut_id', 'main_id', 'dept_id', 'indicator_id', 'distid', 'hostype', 'zone', 'itype']) {
             if (req.body?.[k] !== undefined && req.body[k] !== null && req.body[k] !== '') q[k] = String(req.body[k]);
         }
-        const stats = await computeChartStats(req.user, q);
-        const input = buildSummaryInput(stats, q);
-        if (!input.overall.pairs) return res.status(400).json({ success: false, message: 'ไม่มีข้อมูลผลงานตามตัวกรองนี้ — ยังสรุปไม่ได้' });
+        // 28 พ.ย. 2569: แถบกราฟ = รายงานการบันทึกผลงาน (services/recording-stats.js) ไม่ใช่ผ่าน/ไม่ผ่านเกณฑ์
+        const stats = await loadRecordingStats(req.user, q);
+        const input = buildRecordingSummaryInput(stats, q);
+        if (!input.overall.pairs) return res.status(400).json({ success: false, message: 'ไม่มีข้อมูลการบันทึกตามตัวกรองนี้ — ยังสรุปไม่ได้' });
         const key = crypto.createHash('sha256').update(JSON.stringify(input)).digest('hex');
         if (!req.body?.refresh) {
             const hit = _aiSummaryCache.get(key);
             if (hit) return res.json({ success: true, ...hit, cached: true });
         }
-        const out = await callLlm({ feature: 'report_summary', userId: req.user.userId, system: SUMMARY_SYSTEM_PROMPT, prompt: summaryPrompt(input), maxTokens: 2500 });
+        const out = await callLlm({ feature: 'report_summary', userId: req.user.userId, system: RECORDING_SYSTEM_PROMPT, prompt: summaryPrompt(input), maxTokens: 2500 });
         const result = { summary: out.text, model: out.model, generated_at: new Date().toISOString(), year_bh: input.year_bh, scope: input.filters };
         _aiSummaryCache.set(key, result);
         res.json({ success: true, ...result, cached: false });

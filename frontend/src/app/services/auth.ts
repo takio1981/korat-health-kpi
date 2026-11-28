@@ -1192,6 +1192,12 @@ setMaintenanceMode(enabled: boolean, message: string): Observable<any> {
   }
 
   // กราฟและสถิติ: ผลรวมทุกมิติ (ยุทธศาสตร์/หมวดหมู่/กลุ่มงาน/ตัวชี้วัด/อำเภอ/ประเภท/รายเดือน) คำนวณที่ backend
+  /** แถบกราฟและสถิติ = รายงานการบันทึกผลงาน เชิงปริมาณ + คุณภาพ (28 พ.ย. 2569) */
+  getReportRecordingStats(params: any = {}): Observable<any> {
+    const queryStr = new URLSearchParams(params).toString();
+    return this.http.get(`${this.apiUrl}/report/recording-stats${queryStr ? '?' + queryStr : ''}`, { headers: new HttpHeaders({ 'Authorization': `Bearer ${localStorage.getItem('kpi_token')}` }) });
+  }
+
   getReportChartStats(params: any = {}): Observable<any> {
     const token = localStorage.getItem('kpi_token');
     const headers = new HttpHeaders({ 'Authorization': `Bearer ${token}` });

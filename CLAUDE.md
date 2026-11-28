@@ -1455,7 +1455,14 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
   "ผู้ดูแลระบบของหน่วยงานท่าน" (หมายถึงองค์กร) คงไว้ | หัวข้ออื่นในไฟล์นี้ที่เขียน "หน่วยงาน" = กลุ่มงาน
 - **ค้นหาในตารางรายงานสรุปผล (23 พ.ย. 2569):** `#report-search` / `#report-dept-search` กรองฝั่งหน้าจอด้วย `filterReportRows(rows, key, q)` (report.ts — ช่องต่อแถบใน `REPORT_SEARCH_FIELDS`, key สถานะการบันทึก = `recording-status:<มุมมอง>`)
   คำค้นแยกตามแถบ `searchByTab`, ตารางใช้ `viewData`/`deptViewData` (คำนวณใน `applySearch()` หลังโหลด — ไม่ใช่ getter) การ์ดสรุป/กราฟ/แผง AI ใช้ข้อมูลทั้งหมด, Excel ส่งออกเฉพาะแถวที่แสดง | Test: `report/report.spec.ts`
-- **แท็บกราฟใช้ `GET /report/chart-stats` เท่านั้น** (ไม่ใช่ `/kpi-summary` ที่ LIMIT 500 — เดิมกราฟคำนวณจาก 500 แถวแรก
+- **⚠️ 28 พ.ย. 2569 (ผู้ใช้สั่ง) แถบ "กราฟและสถิติ" = รายงานการบันทึกผลงาน เชิงปริมาณ + คุณภาพ — ไม่แสดงผ่าน/ไม่ผ่านเกณฑ์แล้ว:** `GET /report/recording-stats` → `services/recording-stats.js`
+  (`loadRecordingStats` โหลดคู่จาก kpi_results ตาม `resultScopeFor` + ผลงานข้อย่อย/กรอกเองจาก kpi_summary, ตัวกรองทำในหน่วยความจำ, `computeRecordingStats`/`pairStats` ฟังก์ชันล้วน)
+  ตัวชี้วัด: ร้อยละที่บันทึก (คู่ที่มีผลงาน ÷ คู่ที่ต้องกรอก) / ความครบถ้วน (เดือน ≤ `throughIndex` ไม่นับเดือนกลางไตรมาส 'quarter' และ result_manual) / ความทันเวลา (created_at ≤ สิ้นวันกำหนดส่ง `reminder_due_day` — เทียบตัวเลข YYYYMMDDhhmmss ไม่แปลง timezone)
+  / สถานะตรวจสอบ (ล็อค/Approved, Resubmit+Rejected, อื่น = รอตรวจ) / ค่าผิดปกติ (`evaluatePairs` ของ data-quality) | หน้าจอ `chart/chart.ts` + `chart/recording-builders.ts`, AI สรุป `buildRecordingSummaryInput` + `RECORDING_SYSTEM_PROMPT`
+  | `/report/chart-stats` (ด้านล่าง) ยังอยู่ให้ชุดทดสอบ/ระบบอื่น แต่หน้าจอไม่ใช้ | Test: `api/tests/recording-stats.test.js`, `chart.spec.ts`
+- **⚠️ 28 พ.ย. 2569 ยอดรวมรายงานสรุปผล = ทุกหน่วยบริการที่ต้องกรอก:** `services/report-pairs.js` `reportPairsSql(year)` (kpi_summary UNION คู่ใน kpi_results ที่ยังไม่มีผลงาน — chospital ต้อง CONVERT collation) ใช้ใน by-indicator/hospital/district/year/by-dept-kpi
+  ร้อยละ `achievement_pct` = ผลงานรวม ÷ เป้าหมายรวม × 100 (ไม่ใช่ผ่านเกณฑ์) + `recorded_hospitals`/`recorded_indicators`/`recorded_pairs` | Test: `api/tests/report-pairs.test.js`
+- **แท็บกราฟใช้ `GET /report/chart-stats` เท่านั้น** (ก่อน 28 พ.ย. 2569) (ไม่ใช่ `/kpi-summary` ที่ LIMIT 500 — เดิมกราฟคำนวณจาก 500 แถวแรก
   และ SUM ค่าดิบต่างหน่วยนับข้ามตัวชี้วัด ผิดทั้งคู่ แก้แล้ว 7 ต.ค. 2569) — aggregate ใน SQL ทุกมิติในคำขอเดียว: overall,
   by_yut/by_main/by_dept/by_indicator/by_district/by_hostype, monthly, heatmap_main/heatmap_dept, distribution + options
   (ตัวเลือก dropdown ตามขอบเขต role+ปี) — scope เหมือน `/report/by-indicator` (`chartScopeClauses()`) + `i.is_active = 1`

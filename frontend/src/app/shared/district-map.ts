@@ -55,10 +55,10 @@ export function districtColor(pct: number | null | undefined): string {
             <p class="text-sm font-bold text-gray-800"><i class="fas fa-map-marker-alt text-green-600 mr-1"></i>อ.{{ s.name }}</p>
             <ng-container *ngIf="datum(s.distid) as d; else noData">
               <p class="text-3xl font-extrabold leading-tight" [style.color]="fill(s.distid)">{{ d.pct | number:'1.0-1' }}%</p>
-              <p class="text-xs text-gray-600">ผ่านเกณฑ์ <b>{{ d.passed | number }}</b> จาก <b>{{ d.total | number }}</b> คู่ที่มีเป้าหมาย</p>
+              <p class="text-xs text-gray-600">{{ metricLabel }} <b>{{ d.passed | number }}</b> จาก <b>{{ d.total | number }}</b> {{ totalLabel }}</p>
               <p class="text-[11px] text-gray-400 mt-1">คลิกที่อำเภอเพื่อ{{ isSelected(s.distid) ? 'ยกเลิกการกรอง' : 'กรองทั้งหน้าเฉพาะอำเภอนี้' }}</p>
             </ng-container>
-            <ng-template #noData><p class="text-xs text-gray-500 mt-1">ไม่มีข้อมูลที่มีเป้าหมายในขอบเขตสิทธิ์/ตัวกรองที่เลือก</p></ng-template>
+            <ng-template #noData><p class="text-xs text-gray-500 mt-1">ไม่มีข้อมูลในขอบเขตสิทธิ์/ตัวกรองที่เลือก</p></ng-template>
           </ng-container>
           <ng-template #hint>
             <p class="text-xs text-gray-500"><i class="fas fa-hand-pointer mr-1"></i>ชี้ที่อำเภอเพื่อดูรายละเอียด<br>คลิกเพื่อกรองทั้งหน้าเฉพาะอำเภอนั้น</p>
@@ -75,6 +75,9 @@ export function districtColor(pct: number | null | undefined): string {
 })
 export class DistrictMapComponent implements OnChanges {
   @Input() data: DistrictDatum[] = [];
+  /** ป้ายตัวเลข (28 พ.ย. 2569 — แถบกราฟใช้ร้อยละการบันทึก): passed = metricLabel, total = totalLabel */
+  @Input() metricLabel = 'ผ่านเกณฑ์';
+  @Input() totalLabel = 'คู่ที่มีเป้าหมาย';
   /** distid ของอำเภอที่กำลังกรองอยู่ ('' = ไม่กรอง) */
   @Input() selected: any = '';
   /** คลิกอำเภอที่มีข้อมูล → ส่ง distid (หน้าแม่ตัดสินใจกรอง/ยกเลิกเอง) */
@@ -106,7 +109,7 @@ export class DistrictMapComponent implements OnChanges {
   }
   tooltip(s: DistrictShape): string {
     const d = this.datum(s.distid);
-    return d ? `อ.${s.name} — ผ่านเกณฑ์ ${d.pct}% (${d.passed}/${d.total} คู่)` : `อ.${s.name} — ไม่มีข้อมูล`;
+    return d ? `อ.${s.name} — ${this.metricLabel} ${d.pct}% (${d.passed}/${d.total} คู่)` : `อ.${s.name} — ไม่มีข้อมูล`;
   }
   count(level: 'pass' | 'mid' | 'fail' | 'none'): number {
     const target = this.colors[level];
