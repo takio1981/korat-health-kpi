@@ -1,10 +1,22 @@
 @echo off
 setlocal enabledelayedexpansion
+REM UTF-8 console: Thai commit messages / Thai dates from tools\build-info.ps1
+chcp 65001 >nul
+set "BUILDINFO=powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\build-info.ps1""
+
+REM build.bat info = show last update + changes since last deploy only (no build)
+if /i "%~1"=="info" (
+    %BUILDINFO% -Mode info
+    endlocal
+    goto :eof
+)
+
+for /f %%i in ('powershell -NoProfile -Command "[DateTimeOffset]::Now.ToUnixTimeSeconds()"') do set BUILD_START=%%i
 
 echo ===================================================
 echo      KORAT HEALTH KPI - BUILD ^& DEPLOY SCRIPT
 echo ===================================================
-echo.
+%BUILDINFO% -Mode info
 
 echo [1/6] Cleaning up old distribution artifacts...
 echo      -^> Targeting 'frontend\dist'...
@@ -105,7 +117,9 @@ if exist ".env" (
 ) else (
     echo   [!!] .env file NOT FOUND - copy from .env.example
 )
-echo.
+
+REM --- Build time / last update / work since last deploy ---
+%BUILDINFO% -Mode summary -Start %BUILD_START% -Frontend %FRONTEND_OK% -Api %API_OK%
 
 REM --- If build failed, stop here ---
 if %FRONTEND_OK%==0 goto :buildfailed
@@ -153,6 +167,7 @@ echo   [DONE] Deploy successful!
 echo   Frontend : http://localhost:8881/khupskpi/
 echo   API      : http://localhost:8830/khupskpi/api
 echo ===================================================
+%BUILDINFO% -Mode record -Start %BUILD_START% -Result success
 echo.
 
 endlocal
@@ -162,6 +177,7 @@ goto :eof
 echo ===================================================
 echo   [NOT READY] Fix the errors above before deploying.
 echo ===================================================
+%BUILDINFO% -Mode record -Start %BUILD_START% -Result failed
 echo.
 endlocal
 exit /b 1

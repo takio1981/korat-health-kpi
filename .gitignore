@@ -77,3 +77,7 @@ tools/video-guide/*.log
 /videos-backup*/
 /videos-next-old/
 /videos-prev-*/
+
+# สรุปการ build/deploy ของเครื่องนี้ (build.bat → tools/build-info.ps1)
+/build-history.log
+/.last-deploy

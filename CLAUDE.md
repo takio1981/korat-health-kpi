@@ -1694,6 +1694,9 @@ CSS: `dashboard.css` — ใช้ `position: sticky; z-index: 20;` สำหร
 build.bat
 ```
 
+**สรุปการ build (28 พ.ย. 2569 — ผู้ใช้สั่ง):** `build.bat` เรียก `tools/build-info.ps1` แสดงวันเวลา (ปฏิทินไทย) ที่อัปเดตล่าสุด = commit ล่าสุด, ไฟล์ที่ยังไม่ commit, และรายการ commit ตั้งแต่ deploy สำเร็จครั้งก่อน ทั้งตอนเริ่มและท้ายสรุป (+ เวลาเริ่ม/เสร็จ/ใช้เวลา)
+— deploy สำเร็จ = บันทึก `.last-deploy` + ต่อท้าย `build-history.log` (ล้มเหลวบันทึกด้วย, ทั้ง 2 ไฟล์ gitignore) | `build.bat info` = ดูสรุปอย่างเดียว ไม่ build
+
 **⚠️ สำคัญมาก — Docker ไม่ได้ build จาก source โดยตรง:** `api/Dockerfile` copy `api/dist/`
 (ไม่ใช่ `api/server.js`) และ `frontend/Dockerfile` copy `frontend/dist/` (ไม่ใช่ผลลัพธ์ดิบจาก
 `ng build` ที่อยู่ใน `dist/kpi-web/browser/`) — ทั้งสองเป็นไฟล์ **pre-built ที่ต้องเตรียมเองก่อน**
